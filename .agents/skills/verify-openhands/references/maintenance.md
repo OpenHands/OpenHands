@@ -3,7 +3,9 @@
 A feature map rots the moment the app changes. This pass keeps it honest and
 answers three separate questions about the interval since the last pass:
 **Is each feature present? Does it work and look right? Was each change
-documented and intended?** A merged PR proves none of the last two.
+documented and intended?** A merged PR proves none of the last two. Between
+passes, [daily.md](daily.md) drives the changed families each day without
+moving the baseline this pass sets.
 
 The unit of rigor is the feature: every feature file gets source coverage and
 live coverage, without re-proving every sentence. This is a procedure, not a
@@ -59,9 +61,11 @@ to justify a change after the fact.
 
 ## 3. Index hygiene and source wave
 
-Run `control-openhands map check` and `map coverage`; fix missing, duplicate and
-dead entries (`map check --fix-counts` refreshes the index counts). Then give one read-only reader per feature file (parallel if
-delegation is available). Each reads current source for that feature and returns:
+Run `control-openhands map check`, `map coverage` and `map testids`; fix
+missing, duplicate and dead entries, `Source:` paths that are gone, `E2E:`
+specs that moved and test ids no literal in `src/` accounts for (`map check
+--fix-counts` refreshes the index counts). Then give one read-only reader per
+feature file (parallel if delegation is available). Each reads current source for that feature and returns:
 summary, source entry points, likely drift with citations (or none), new
 surfaces missing from the map, and one live recipe. Readers never edit files or
 drive the browser.
@@ -72,10 +76,13 @@ re-drive any that a current verb can now reach (compare with
 `control-openhands --help` and `help browser`).
 
 Map **every changed path** in BASE..TARGET to a feature ID or an explicit
-non-user-facing reason. For shared components, CSS, API clients, settings
-schemas and dependency bumps, expand to their consumers rather than sampling one
-convenient screen. A new surface needs a concrete source path before it is
-called missing; then add it per [mapping.md](mapping.md).
+non-user-facing reason: `control-openhands map affected --base "$BASE" --target
+"$TARGET"` does the first cut from the `Source:` lines and lists the `E2E:`
+specs the hit families cite. Its `shared` paths (components, CSS, API clients,
+hooks, stores, settings schemas, dependency bumps) expand to their consumers
+rather than sampling one convenient screen; its `unmapped` paths under `src/`
+are map gaps. A new surface needs a concrete source path before it is called
+missing; then add it per [mapping.md](mapping.md).
 
 ## 4. Live pass
 
@@ -121,7 +128,9 @@ automatically a bug and a zero difference does not prove behavior.
 
 Use [the report contract](report.md): verdict first, then family and check
 counts, intent gaps, defects with issue links, blocked checks with their
-prerequisites. For **changed**, open at most one PR from current `main`, re-read
+prerequisites (`control-openhands evidence report --baseline <previous run>`
+renders the counts, the blocked rows' notes and what changed since the last
+accepted ledger). For **changed**, open at most one PR from current `main`, re-read
 every changed file first, and follow the repository's PR template. Finish with
 `control-openhands stop`, retained evidence paths, and the exact inputs needed to
 unblock what was blocked. Name the proposed next baseline; never replace an

@@ -9,6 +9,8 @@ conversation, jumps to usage and deletes it.
 
 Source: `src/routes/conversation.tsx`, `src/components/features/conversation/`, `src/components/features/conversation-panel/`, `src/components/features/controls/server-status-context-menu.tsx`, `src/hooks/use-conversation-name-context-menu.ts`.
 
+E2E: `tests/e2e/live/real-agent-server-conversation.spec.ts` (F07.open-by-url), `tests/e2e/mock-llm/conversations/mock-llm-conversation.spec.ts` (F07.open-by-url), `tests/e2e/mock-llm/files/mock-llm-files-and-git.spec.ts` (F07.overview-toggle), `tests/e2e/mock-llm/settings/mock-llm-acp-agent.spec.ts` (F07.open-by-url), `tests/e2e/mock-llm/skills/mock-llm-skills.spec.ts` (F07.skills-modal-project).
+
 ## Sub-features
 
 - `F07.open-by-url`: `/conversations/<id>` shows header, history and composer, and remembers the id as the backend's last conversation.

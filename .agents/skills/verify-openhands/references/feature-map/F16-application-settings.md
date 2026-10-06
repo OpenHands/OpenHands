@@ -10,6 +10,8 @@ checklist and voice input apply instantly and live in this browser only.
 
 Source: `src/routes/app-settings.tsx`, `src/components/features/settings/app-settings/`, `src/components/features/settings/settings-switch.tsx`, `src/themes/color-theme/`, `src/utils/transcription-endpoint-storage.ts`, `src/api/settings-service/settings-service.api.ts`.
 
+E2E: `tests/e2e/settings-responsive.spec.ts` (F16.phone).
+
 ## Sub-features
 
 - `F16.open`: the page opens from the settings navigation, the command menu and the direct URL; every section renders and **Save Changes** is disabled while nothing has changed.

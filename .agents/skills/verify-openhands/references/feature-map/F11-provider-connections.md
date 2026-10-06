@@ -10,6 +10,8 @@ delete a connection that a profile or the active settings still reference.
 
 Source: `src/components/features/settings/llm-profiles/provider-connections-manager.tsx`, `src/components/features/settings/llm-profiles/provider-connection-row.tsx`, `src/components/features/settings/llm-profiles/provider-connection-actions-menu.tsx`, `src/components/features/settings/llm-profiles/provider-connection-modal.tsx`, `src/components/features/settings/llm-profiles/delete-provider-connection-modal.tsx`, `src/components/features/settings/llm-profiles/llm-profiles-manager.tsx`, `src/api/provider-connections-service/`.
 
+E2E: `tests/e2e/mock-llm/settings/mock-llm-provider-connection-selector.spec.ts` (F11.provider-picker, F11.list).
+
 ## Sub-features
 
 - `F11.list-empty`: with no connections the section shows the heading `Provider connections`, the subline `Share one API key across multiple models.`, **Add connection** and `No provider connections yet. Add one to share an API key across models.`

@@ -12,6 +12,8 @@ Files tab has no upload, download or edit.
 
 Source: `src/components/features/conversation/conversation-tabs/`, `src/components/features/conversation/right-panel-toggle.tsx`, `src/components/features/conversation/conversation-main/`, `src/routes/conversation.tsx`, `src/hooks/use-conversation-panel-route.ts`, `src/routes/conversation-panel.tsx`, `src/routes/files-tab.tsx`, `src/components/features/files-tab/`, `src/hooks/query/use-workspace-files.ts`, `src/hooks/query/use-workspace-file-content.ts`, `src/hooks/use-auto-refresh-files-on-edit.ts`, `src/routes/commits-tab.tsx`, `src/components/features/diff-viewer/`, `src/services/canvas-ui.ts`.
 
+E2E: `tests/e2e/mock-llm/files/mock-llm-files-and-git.spec.ts` (F08.panel-toggle, F08.tab-bar, F08.tabs-menu, F08.files-no-selection, F08.files-tree).
+
 ## Sub-features
 
 - `F08.panel-toggle`: the chat-header toggle (`Show panel`/`Hide panel`, `aria-pressed`) opens and closes the drawer; the first open shows Files.

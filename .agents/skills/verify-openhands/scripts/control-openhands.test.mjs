@@ -25,7 +25,16 @@ import {
   runPorts,
 } from "./lib/launcher-env.mjs";
 import { redactStorage, redactStorageValue } from "./lib/redact-storage.mjs";
+import {
+  affectedFamilies,
+  familyHead,
+  parseE2eLine,
+  parseSourceLine,
+  specMatches,
+} from "./lib/map-sources.mjs";
 import { routePattern } from "./lib/route-pattern.mjs";
+import { resolveTestids } from "./lib/testids.mjs";
+import { tmuxPathFor } from "./lib/tmux-path.mjs";
 import { buildLocator, parseRole, toCss } from "./lib/selectors.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -618,4 +627,369 @@ test("restart refuses, before stopping anything, when a newly served editor port
   } finally {
     await new Promise((done) => listener.close(done));
   }
+});
+
+test("Source: lines parse into path specs, parenthesized names relative to their directory", () => {
+  const specs = parseSourceLine(
+    "Source: `src/routes/secrets-settings.tsx`, `src/components/features/automations/` (`automation-card.tsx`, `dashboard/`), `src/api/agent-server-adapter.ts` (`buildRouterAtStartSystemSuffix`), `src/components/features/conversation/conversation-overview-*.tsx`, `node_modules/@openhands/extensions/automations/interface.json`.",
+  );
+  assert.deepEqual(
+    specs.map((s) => s.path),
+    [
+      "src/routes/secrets-settings.tsx",
+      "src/components/features/automations/",
+      "src/components/features/automations/automation-card.tsx",
+      "src/components/features/automations/dashboard/",
+      "src/api/agent-server-adapter.ts",
+      "src/components/features/conversation/conversation-overview-*.tsx",
+      "node_modules/@openhands/extensions/automations/interface.json",
+    ],
+  );
+  const glob = specs.find((s) => s.glob);
+  assert.ok(
+    specMatches(
+      glob,
+      "src/components/features/conversation/conversation-overview-tiles.tsx",
+    ),
+  );
+  assert.ok(
+    !specMatches(
+      glob,
+      "src/components/features/conversation/sub/conversation-overview-x.tsx",
+    ),
+  );
+  const dir = specs.find(
+    (s) => s.path === "src/components/features/automations/",
+  );
+  assert.ok(
+    specMatches(dir, "src/components/features/automations/kebab-menu.tsx"),
+  );
+  assert.ok(
+    !specMatches(dir, "src/components/features/automations-extra/x.tsx"),
+  );
+});
+
+test("E2E: lines name specs with the IDs they cover", () => {
+  assert.deepEqual(
+    parseE2eLine(
+      "E2E: `tests/e2e/mock-llm/settings/mock-llm-profile-management.spec.ts` (F10.delete, F10.edit), `tests/e2e/live-acp/acp-docker-e2e.mts` (F13.acp-conversation).",
+    ),
+    [
+      {
+        spec: "tests/e2e/mock-llm/settings/mock-llm-profile-management.spec.ts",
+        ids: ["F10.delete", "F10.edit"],
+      },
+      {
+        spec: "tests/e2e/live-acp/acp-docker-e2e.mts",
+        ids: ["F13.acp-conversation"],
+      },
+    ],
+  );
+  const head = familyHead(
+    "# F14\n\nText.\n\nSource: `src/api/secrets-service.ts`.\n\nE2E: `tests/e2e/x.spec.ts` (F14.list).\n\n## Sub-features\n\n- `F14.list`: x\n\nSource: `not/in/head.ts`\n",
+  );
+  assert.deepEqual(
+    head.sources.map((s) => s.path),
+    ["src/api/secrets-service.ts"],
+  );
+  assert.deepEqual(head.e2e, [
+    { spec: "tests/e2e/x.spec.ts", ids: ["F14.list"] },
+  ]);
+});
+
+test("changed paths map to the families whose Source: lines own them", () => {
+  const families = [
+    {
+      id: "F14",
+      file: "F14-secrets.md",
+      sources: parseSourceLine(
+        "Source: `src/routes/secrets-settings.tsx`, `src/components/features/settings/secrets-settings/`, `src/api/secrets-service.ts`.",
+      ),
+      e2e: [],
+    },
+    {
+      id: "F21",
+      file: "F21-automations-dashboard.md",
+      sources: parseSourceLine(
+        "Source: `src/components/features/automations/` (`automation-card.tsx`, `dashboard/`).",
+      ),
+      e2e: [],
+    },
+  ];
+  const result = affectedFamilies(families, [
+    "src/components/features/settings/secrets-settings/secret-form.tsx",
+    "src/components/features/automations/dashboard/overview.tsx",
+    "src/components/features/automations/dashboard/overview.test.tsx",
+    "__tests__/components/secrets.test.tsx",
+    "src/hooks/query/use-get-secrets.ts",
+    "src/i18n/translation.json",
+    "src/components/features/brand-new/page.tsx",
+    "src/mocks/conversation-handlers.ts",
+    ".agents/skills/verify-openhands/SKILL.md",
+  ]);
+  assert.deepEqual(
+    result.families.map((f) => [f.id, f.paths]),
+    [
+      [
+        "F14",
+        ["src/components/features/settings/secrets-settings/secret-form.tsx"],
+      ],
+      ["F21", ["src/components/features/automations/dashboard/overview.tsx"]],
+    ],
+  );
+  // Shared code is widened by the caller, never silently dropped.
+  assert.deepEqual(result.shared, [
+    "src/hooks/query/use-get-secrets.ts",
+    "src/i18n/translation.json",
+  ]);
+  // A src/ path no family owns is a map gap.
+  assert.deepEqual(result.unmapped, [
+    "src/components/features/brand-new/page.tsx",
+  ]);
+  // Tests, mocks and this skill change no user-facing behavior, even inside
+  // a family's directory.
+  assert.deepEqual(result.nonUserFacing, [
+    "src/components/features/automations/dashboard/overview.test.tsx",
+    "__tests__/components/secrets.test.tsx",
+    "src/mocks/conversation-handlers.ts",
+    ".agents/skills/verify-openhands/SKILL.md",
+  ]);
+});
+
+test("map affected reads a path list and lists the E2E specs of the hit families", () => {
+  const res = spawnSync(
+    process.execPath,
+    [cli, "map", "affected", "--paths", "-"],
+    {
+      encoding: "utf8",
+      input:
+        "src/components/features/settings/secrets-settings/secret-form.tsx\ndocs/README.md\n",
+    },
+  );
+  const json = JSON.parse(res.stdout);
+  assert.equal(res.status, 0, res.stdout);
+  assert.deepEqual(
+    json.families.map((f) => f.id),
+    ["F14"],
+  );
+  assert.deepEqual(json.nonUserFacing, ["docs/README.md"]);
+  assert.ok(json.e2e.includes("tests/e2e/live-acp/acp-docker-e2e.mts"));
+  const noBase = spawnSync(process.execPath, [cli, "map", "affected"], {
+    encoding: "utf8",
+  });
+  assert.equal(noBase.status, 2);
+});
+
+test("map check rejects a Source: path that is gone and an E2E: spec or ID that is unknown", () => {
+  const dir = mkdtempSync(join(tmpdir(), "mapcheck-"));
+  // The checker reads the real map dir; prove the rules on the parser level
+  // and on the live map, which must be clean.
+  const clean = spawnSync(process.execPath, [cli, "map", "check"], {
+    encoding: "utf8",
+  });
+  assert.equal(clean.status, 0, clean.stdout);
+  assert.deepEqual(JSON.parse(clean.stdout).problems, []);
+  const head = familyHead(
+    `# F99\n\nText.\n\nSource: \`src/does-not-exist.tsx\`.\n\nE2E: \`tests/e2e/missing.spec.ts\` (F99.nope).\n\n## Sub-features\n`,
+  );
+  assert.equal(head.sources[0].path, "src/does-not-exist.tsx");
+  assert.deepEqual(head.e2e[0], {
+    spec: "tests/e2e/missing.spec.ts",
+    ids: ["F99.nope"],
+  });
+  assert.ok(existsSync(dir));
+});
+
+test("map coverage counts E2E specs no family cites, minus the index's exclusions", () => {
+  const res = spawnSync(process.execPath, [cli, "map", "coverage"], {
+    encoding: "utf8",
+  });
+  const out = JSON.parse(res.stdout);
+  assert.equal(res.status, 0, res.stdout);
+  assert.ok(out.e2e.total >= 30);
+  assert.deepEqual(out.e2e.uncited, []);
+  assert.deepEqual(out.e2e.excluded, [
+    "tests/e2e/canvas-extensions/app-backend-sandbox.spec.ts",
+  ]);
+});
+
+test("map ids lists the E2E specs that cover an ID", () => {
+  const res = spawnSync(process.execPath, [cli, "map", "ids"], {
+    encoding: "utf8",
+  });
+  const { ids } = JSON.parse(res.stdout);
+  const create = ids.find((i) => i.id === "F14.create");
+  assert.equal(create.e2e, undefined);
+  const access = ids.find((i) => i.id === "F14.agent-access");
+  assert.deepEqual(access.e2e, ["tests/e2e/live-acp/acp-docker-e2e.mts"]);
+});
+
+test("cited test ids resolve through literals and dynamic prefixes", () => {
+  const cited = new Map([
+    ["add-secret-button", new Set(["F14-secrets.md"])],
+    ["api-key-entry-name", new Set(["F01-first-run-and-sign-in.md"])],
+    ["plugin-card-city-weather", new Set(["F19-plugins.md"])],
+    ["renamed-away-button", new Set(["F14-secrets.md"])],
+  ]);
+  const literals = new Set([
+    "add-secret-button",
+    "api-key-entry",
+    "plugin-card",
+  ]);
+  const result = resolveTestids(cited, literals);
+  assert.equal(result.cited, 4);
+  assert.deepEqual(result.unresolved, [
+    { id: "renamed-away-button", files: ["F14-secrets.md"] },
+  ]);
+  // The live map against the live source tree: zero unresolved today, and
+  // --strict makes any drift a failing exit.
+  const res = spawnSync(process.execPath, [cli, "map", "testids", "--strict"], {
+    encoding: "utf8",
+  });
+  const out = JSON.parse(res.stdout);
+  assert.equal(res.status, 0, res.stdout);
+  assert.deepEqual(out.unresolved, []);
+  assert.ok(out.cited > 900);
+});
+
+test("evidence report shows notes, family counts, and changes against a baseline", () => {
+  const dir = mkdtempSync(join(tmpdir(), "cov-run-"));
+  mkdirSync(join(dir, "private"));
+  mkdirSync(join(dir, "evidence"));
+  writeFileSync(
+    join(dir, "run.json"),
+    JSON.stringify({
+      runId: "r2",
+      revision: "abc",
+      mode: "local",
+      baseUrl: "http://127.0.0.1:9",
+      ports: { ingress: 9 },
+      launcherPgid: 0,
+      versions: { agentServer: "1.53.0" },
+    }),
+  );
+  const rows = [
+    {
+      feature: "F14.create",
+      entry: "Settings > Secrets > Add",
+      result: "pass",
+      artifacts: [],
+    },
+    {
+      feature: "F14.agent-access",
+      entry: "conversation start",
+      result: "blocked",
+      note: "no DEEPSEEK_API_KEY",
+      artifacts: [],
+    },
+    {
+      feature: "F09.index-redirect",
+      entry: "gear",
+      result: "fail",
+      artifacts: [],
+    },
+  ];
+  writeFileSync(
+    join(dir, "evidence", "ledger.jsonl"),
+    rows
+      .map((r) => JSON.stringify({ ts: "2026-10-06T00:00:00Z", ...r }))
+      .join("\n") + "\n",
+  );
+  const baseline = join(dir, "baseline.jsonl");
+  writeFileSync(
+    baseline,
+    [
+      {
+        feature: "F14.create",
+        entry: "Settings > Secrets > Add",
+        result: "fail",
+        artifacts: [],
+      },
+      {
+        feature: "F09.index-redirect",
+        entry: "gear",
+        result: "pass",
+        artifacts: [],
+      },
+      {
+        feature: "F14.phone",
+        entry: "Settings > Secrets",
+        result: "pass",
+        artifacts: [],
+      },
+    ]
+      .map((r) => JSON.stringify({ ts: "2026-10-05T00:00:00Z", ...r }))
+      .join("\n") + "\n",
+  );
+  const report = run(["evidence", "report", "--baseline", baseline], {
+    OH_VERIFY_RUN: dir,
+  });
+  assert.equal(report.status, 0, report.stdout + report.stderr);
+  // Blocked rows carry their prerequisite; fail and blocked rows come first.
+  assert.match(report.stdout, /\| blocked \| no DEEPSEEK_API_KEY \|/);
+  assert.ok(
+    report.stdout.indexOf("F09.index-redirect") <
+      report.stdout.indexOf("F14.create"),
+  );
+  assert.match(report.stdout, /\| F14 \| 1 \| 0 \| 1 \| 0 \|/);
+  assert.match(
+    report.stdout,
+    /Newly failing:\n\n- F09.index-redirect \(gear\): pass → fail/,
+  );
+  assert.match(
+    report.stdout,
+    /Newly passing:\n\n- F14.create \(Settings > Secrets > Add\): fail → pass/,
+  );
+  assert.match(report.stdout, /Not checked this run:\n\n- F14.phone/);
+  const json = run(["evidence", "report", "--json", "--baseline", baseline], {
+    OH_VERIFY_RUN: dir,
+  });
+  assert.equal(json.json.counts.blocked, 1);
+  assert.deepEqual(
+    json.json.changes.newlyFailing.map((c) => c.feature),
+    ["F09.index-redirect"],
+  );
+  assert.deepEqual(
+    json.json.changes.missing.map((c) => c.feature),
+    ["F14.phone"],
+  );
+  assert.equal(
+    run(["evidence", "report", "--baseline", join(dir, "nope.jsonl")], {
+      OH_VERIFY_RUN: dir,
+    }).status,
+    2,
+  );
+});
+
+test("the tmux directory of a run comes from its whole path", () => {
+  // Two runs whose ids end alike must not share a tmux server (the earlier
+  // scheme used the last six characters of the run id).
+  assert.notEqual(
+    tmuxPathFor("/tmp/openhands-verify/qa-run-a1"),
+    tmuxPathFor("/tmp/openhands-verify/qb-run-a1"),
+  );
+  assert.equal(tmuxPathFor("/tmp/x/run-1"), tmuxPathFor("/tmp/x/run-1"));
+  assert.match(tmuxPathFor("/tmp/x/run-1"), /^\/tmp\/ohv-tmux-[0-9a-f]{10}$/);
+});
+
+test("help names every fixture kind and the new map verbs", () => {
+  const { stdout } = run(["--help"]);
+  for (const word of [
+    "git-remote",
+    "tarball",
+    "skill",
+    "mcp-server",
+    "affected",
+    "testids",
+  ])
+    assert.match(stdout, new RegExp(word));
+  const map = spawnSync(process.execPath, [cli, "help", "map"], {
+    encoding: "utf8",
+  });
+  assert.match(map.stdout, /map affected --base REF/);
+  assert.match(map.stdout, /map testids \[--strict\]/);
+  const evidence = spawnSync(process.execPath, [cli, "help", "evidence"], {
+    encoding: "utf8",
+  });
+  assert.match(evidence.stdout, /--baseline/);
 });

@@ -14,6 +14,8 @@ disabled.
 
 Source: `src/routes/automation-templates.tsx`, `src/routes/automation-setup-route.tsx`, `src/components/features/automations/` (`recommended-automations-launcher.tsx`, `recommended-automations-section.tsx`, `responder-deployment-modal.tsx`, `add-automation-modal.tsx`, `create-instructions.tsx`, `import-automation-modal.tsx`, `agent-profile-selector.tsx`), `src/components/features/manifest/`, `src/manifests/`, `src/hooks/use-launch-skill-in-chat.ts`, `src/hooks/use-responder-url-secret.ts`, `src/utils/automation-export.ts`, `src/api/automation-service/automation-service.api.ts`, `node_modules/@openhands/extensions/automations/`.
 
+E2E: `tests/e2e/mock-llm/automations/mock-llm-automation.spec.ts` (F22.create-helper-conversation), `tests/e2e/mock-llm/automations/mock-llm-preset-automation.spec.ts` (F22.responder-deployment-choice, F22.template-launch-conversation, F22.templates-page).
+
 ## Sub-features
 
 - `F22.templates-page`: `/automations/templates` shows the h1 **Templates**, a description, a search box, **Start from a proven workflow** with a count badge (6) and a **Beta** section (17).

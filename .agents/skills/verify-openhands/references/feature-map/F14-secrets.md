@@ -6,6 +6,8 @@ shown again, and every new conversation receives them as environment variables.
 
 Source: `src/routes/secrets-settings.tsx`, `src/components/features/settings/secrets-settings/`, `src/api/secrets-service.ts`.
 
+E2E: `tests/e2e/live-acp/acp-docker-e2e.mts` (F14.agent-access).
+
 ## Sub-features
 
 - `F14.list`: the Secrets page lists each secret's name and description with Edit and Delete actions; the launcher-seeded `OPENHANDS_AUTOMATION_API_KEY` is always present.

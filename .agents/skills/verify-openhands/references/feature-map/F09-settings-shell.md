@@ -12,6 +12,8 @@ started checklist, composer pickers). The individual pages are other families
 
 Source: `src/routes.ts`, `src/routes/settings.tsx`, `src/routes/settings-index.tsx`, `src/routes/agent-settings.tsx`, `src/constants/settings-nav.tsx`, `src/hooks/use-settings-nav-items.ts`, `src/utils/settings-utils.ts`, `src/components/features/settings/settings-layout.tsx`, `src/components/features/settings/settings-desktop-sidebar.tsx`, `src/components/features/settings/settings-mobile-hub.tsx`, `src/components/features/settings/backend-synced-settings-badge.tsx`, `src/components/features/settings/agent-canvas-update-card.tsx`, `src/components/features/settings/agent-canvas-version-tile.tsx`, `src/utils/mobile-section-nav.ts`, `src/components/features/command-menu/command-menu-items.tsx`.
 
+E2E: `tests/e2e/settings-responsive.spec.ts` (F09.phone-hub, F09.desktop-nav).
+
 ## Sub-features
 
 - `F09.entry-gear`: the sidebar gear opens Settings on the Agent page; the gear is marked active on every settings URL; at phone width the drawer's gear opens the hub and closes the drawer.

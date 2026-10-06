@@ -12,6 +12,8 @@ secondary drawer), and two client tools the agent can call to drive the UI:
 
 Source: `src/components/features/terminal/`, `src/hooks/use-terminal.ts`, `src/components/features/browser/`, `src/routes/browser-tab.tsx`, `src/routes/planner-tab.tsx`, `src/components/features/conversation/conversation-tabs/conversation-planner-build-bar.tsx`, `src/hooks/use-handle-plan-click.ts`, `src/hooks/use-handle-build-plan-click.ts`, `src/routes/task-list-tab.tsx`, `src/routes/usage-tab.tsx`, `src/components/features/conversation/usage-panel/`, `src/components/features/chat/components/context-window-meter.tsx`, `src/components/features/conversation/conversation-overview-*.tsx`, `src/services/canvas-ui.ts`, `src/api/canvas-ui-client-tool.ts`, `src/services/child-conversation-launch.ts`, `src/components/features/conversation-panel/` (info modals).
 
+E2E: `tests/e2e/mock-llm/files/mock-llm-files-and-git.spec.ts` (F27.browser-empty).
+
 ## Sub-features
 
 - `F27.terminal-empty`: with the runtime active and no command run yet, the Terminal tab reads "No terminal output yet. Commands run by the agent will appear here."

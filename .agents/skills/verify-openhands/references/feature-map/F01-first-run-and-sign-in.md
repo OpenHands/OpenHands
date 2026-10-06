@@ -12,6 +12,8 @@ conversation.
 
 Source: `src/root.tsx`, `src/components/features/onboarding/`, `src/components/features/analytics/telemetry-consent-banner.tsx`, `src/components/features/backends/api-key-entry-screen.tsx`, `src/routes/root-layout.tsx`, `src/routes/not-found.tsx`, `src/hooks/use-app-title.ts`.
 
+E2E: `tests/e2e/mock-llm/backends/mock-llm-auth-modes.spec.ts` (F01.first-run-gate, F01.onboarding-choose-agent, F01.onboarding-backend-step, F01.onboarding-skip, F01.api-key-entry), `tests/e2e/mock-llm/backends/mock-llm-cross-connect.spec.ts` (F01.onboarding-backend-step), `tests/e2e/mock-llm/onboarding/mock-llm-onboarding-happy-path.spec.ts` (F01.first-run-gate, F01.onboarding-modal, F01.onboarding-choose-agent, F01.onboarding-setup-llm, F01.onboarding-say-hello), `tests/e2e/mock-llm/onboarding/mock-llm-onboarding-regressions.spec.ts` (F01.onboarding-modal, F01.onboarding-skip, F01.onboarding-setup-llm).
+
 ## Sub-features
 
 - `F01.first-run-gate`: with no `openhands-onboarded` flag in localStorage, any URL (including `/conversations`) shows only `first-run-onboarding-screen` with the onboarding modal. There is no sidebar. Finishing or skipping sets the flag, and the app stays revealed after a reload.

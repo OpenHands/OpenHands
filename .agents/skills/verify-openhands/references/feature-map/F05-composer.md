@@ -10,6 +10,8 @@ can be viewed and built; Ctrl/Cmd+Enter builds it.
 
 Source: `src/components/features/chat/`, `src/components/features/controls/tools-context-menu.tsx`, `src/components/features/controls/agent-status.tsx`, `src/hooks/chat/`, `src/utils/constants.ts`.
 
+E2E: `tests/e2e/live/real-agent-server-conversation.spec.ts` (F05.send-message), `tests/e2e/mock-llm/automations/mock-llm-preset-automation.spec.ts` (F05.send-message), `tests/e2e/mock-llm/conversations/mock-llm-conversation.spec.ts` (F05.send-message), `tests/e2e/mock-llm/conversations/mock-llm-image-upload.spec.ts` (F05.attach-files), `tests/e2e/mock-llm/settings/mock-llm-model-switch.spec.ts` (F05.slash-model, F05.llm-profile-picker, F05.queued-message), `tests/e2e/mock-llm/settings/mock-llm-profile-management.spec.ts` (F05.llm-profile-picker).
+
 ## Sub-features
 
 - `F05.send-message`: Send is disabled while the field is empty; Shift+Enter inserts a newline; Enter sends, clears the field and the message persists after reload.

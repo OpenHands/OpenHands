@@ -10,6 +10,8 @@ activity list of enabled automations with per-item actions.
 
 Source: `src/routes/home.tsx`, `src/routes/index-home.tsx`, `src/components/features/home/`, `src/components/features/plugins/plugin-picker-modal.tsx`, `src/components/features/automations/recommended-automations-launcher.tsx`, `src/hooks/use-home-pinned-automations.ts`, `src/hooks/use-home-automation-actions.ts`, `src/utils/recommended-automation-rail.ts`, `src/components/features/automations/responder-deployment-modal.tsx`.
 
+E2E: `tests/e2e/mock-llm/automations/mock-llm-automation.spec.ts` (F03.launch-without-workspace), `tests/e2e/mock-llm/conversations/mock-llm-conversation.spec.ts` (F03.launch-without-workspace), `tests/e2e/mock-llm/home/mock-llm-folder-workspace.spec.ts` (F03.open-workspace-dialog, F03.folder-browser, F03.folder-browser-locations, F03.launch-in-workspace), `tests/e2e/mock-llm/regressions/mock-llm-ui-regressions.spec.ts` (F03.selection-after-reload), `tests/e2e/mock-llm/skills/mock-llm-skills.spec.ts` (F03.open-workspace-dialog, F03.launch-in-workspace).
+
 ## Sub-features
 
 Starting work:

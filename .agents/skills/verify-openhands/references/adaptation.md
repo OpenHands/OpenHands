@@ -36,6 +36,16 @@ OpenHands-specific decisions:
 - Weekly maintenance adds what OpenHands needs beyond pstack: a frozen
   BASE/TARGET, a PR-intent ledger, and intent kept separate from runtime results,
   with multi-repository attribution (Canvas, Agent Server/SDK, automation).
+- pstack's guide asks for the maintenance pass "at least once a day" but
+  prescribes no tiers, time budget, sharding or map-to-test linkage.
+  [daily.md](daily.md) adds those for a map this size: static checks first
+  (`map check`, `map coverage`, `map testids`), the changed families from
+  `map affected` (the `Source:` lines as a change-to-feature index, in the
+  spirit of `tests/e2e/mock-llm/test-mapping.json`), a smoke row per family,
+  a weekly rotation, and `evidence report --baseline` as the day's verdict.
+  The `E2E:` lines link each family to the Playwright specs that assert its
+  behaviors in CI, so a green suite is a cheap input and the live pass can
+  spend its time where no test looks.
 - Not imported: Cursor plugin configuration, model routing,
   `disable-model-invocation`, autonomous shipping or merge authority, and the
   zero-pixel-difference rule (deliberate weekly product changes are expected).

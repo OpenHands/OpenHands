@@ -9,7 +9,9 @@ launches a skill into chat, and reads how to add one with `/add-skill`; after th
 agent installs a skill in a conversation, a banner offers a fresh conversation
 that loads it.
 
-Source: `src/routes/skills-settings.tsx`, `src/components/features/skills/`, `src/hooks/use-skill-enablement.ts`, `src/utils/skill-enablement.ts`, `src/hooks/use-launch-skill-in-chat.ts`, `src/api/skills-service.ts`, `src/components/features/chat/skill-install-restart-banner.tsx`, `src/utils/skill-install-events.ts`.
+Source: `src/routes/skills-settings.tsx`, `src/components/features/skills/`, `src/constants/skills-docs.ts`, `src/hooks/use-skill-enablement.ts`, `src/utils/skill-enablement.ts`, `src/hooks/use-launch-skill-in-chat.ts`, `src/api/skills-service.ts`, `src/components/features/chat/skill-install-restart-banner.tsx`, `src/utils/skill-install-events.ts`.
+
+E2E: `tests/e2e/mock-llm/automations/mock-llm-preset-automation.spec.ts` (F18.skill-in-chat), `tests/e2e/mock-llm/skills/mock-llm-skills.spec.ts` (F18.skill-in-chat), `tests/e2e/settings-responsive.spec.ts` (F18.phone).
 
 ## Sub-features
 

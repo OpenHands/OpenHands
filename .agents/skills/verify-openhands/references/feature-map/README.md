@@ -209,8 +209,13 @@ that every row passes today; the run's evidence ledger is.
 ## Feature entry contract
 
 Each feature file starts with an H1 title, a short paragraph describing the
-user-visible behavior and a `Source:` line. It then uses exactly four H2 sections
-in this order (`control-openhands map check` enforces it):
+user-visible behavior and a `Source:` line whose paths must exist. An optional
+`E2E:` line follows it, naming the Playwright specs under `tests/e2e/` that
+exercise the family and, in parentheses, the sub-feature IDs each one covers
+(`control-openhands map ids` shows them per ID; `map coverage` lists specs no
+family cites). A cited spec is a cheap first signal and a selector reference,
+never a substitute for the live recipe. The file then uses exactly four H2
+sections in this order (`control-openhands map check` enforces it):
 
 1. `Sub-features`: one bullet per stable ID (`` `Fnn.slug` ``) and behavior.
 2. `How to get to it (user POV)`: every user entry point.
@@ -274,3 +279,4 @@ Everything else a user can reach is mapped. These are left out on purpose:
 - Locked-to-Cloud deployments: `scripts/static-server.mjs --lock-to-cloud` exists, but `bin/agent-canvas.mjs` does not forward it, so `control-openhands launch` cannot start that mode.
 - Page-local load errors (for example the LLM profiles or apps list failing while the rest of the backend works) need fault injection; stopping a service with `service stop` replaces the whole app with the backend-unavailable screen instead. The pages' empty and error copy is mapped where reachable.
 - Real microphone dictation, native file dialogs outside the browser, and Electron window chrome beyond what F26 drives.
+- `tests/e2e/canvas-extensions/app-backend-sandbox.spec.ts`: a browser-platform check of the app-backend iframe sandbox (origin and cookies kept for fetch, WebSocket and Worker requests); it drives no Canvas behavior, so no family cites it.
