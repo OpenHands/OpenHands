@@ -11,16 +11,9 @@ export function PendingStopIcon({ className }: { className?: string }) {
         cx="12"
         cy="12"
         r="10"
-        className="fill-[var(--oh-foreground)] transition-colors duration-150 group-hover:fill-[var(--oh-text-secondary)]"
+        className="fill-foreground transition-colors duration-150 group-hover:fill-text-secondary"
       />
-      <rect
-        x="9"
-        y="9"
-        width="6"
-        height="6"
-        rx="1"
-        className="fill-[var(--oh-color-tertiary)]"
-      />
+      <rect x="9" y="9" width="6" height="6" rx="1" className="fill-tertiary" />
     </svg>
   );
 }

@@ -1,4 +1,5 @@
 import { screen, fireEvent, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithProviders } from "test-utils";
 import ProviderConnectionsService, {
@@ -12,6 +13,27 @@ const displaySuccessToast = vi.hoisted(() => vi.fn());
 vi.mock("#/utils/custom-toast-handlers", () => ({
   displayErrorToast,
   displaySuccessToast,
+}));
+
+vi.mock("#/hooks/query/use-search-providers", () => ({
+  useSearchProviders: () => ({
+    data: [
+      { name: "openai", verified: true },
+      { name: "anthropic", verified: true },
+      { name: "openhands", verified: true },
+      { name: "azure", verified: false },
+    ],
+  }),
+}));
+
+// The add-models modal hydrates its list through useProviderModels, which
+// pages ConfigService.searchModels; stub it to an empty list so the modal
+// renders its empty state without hitting a backend. The returned array is
+// module-level so its reference is stable across renders — the modal's row
+// effect keys off `data`, so a fresh array each render would loop forever.
+const STUB_MODELS: unknown[] = [];
+vi.mock("#/hooks/query/use-provider-models", () => ({
+  useProviderModels: () => ({ data: STUB_MODELS, isLoading: false }),
 }));
 
 const renderWith = (ui: React.ReactElement) => renderWithProviders(ui);
@@ -42,6 +64,7 @@ describe("ProviderConnectionsManager", () => {
         connections={[]}
         linkedCountById={{}}
         isLoading={false}
+        onAddModels={vi.fn()}
         loadError={null}
       />,
     );
@@ -51,12 +74,88 @@ describe("ProviderConnectionsManager", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows supported providers in the create-connection selector", async () => {
+    const user = userEvent.setup();
+
+    renderWith(
+      <ProviderConnectionsManager
+        connections={[]}
+        linkedCountById={{}}
+        isLoading={false}
+        onAddModels={vi.fn()}
+        loadError={null}
+      />,
+    );
+
+    await user.click(screen.getByTestId("add-provider-connection"));
+
+    const providerSelector = screen.getByRole("combobox", {
+      name: /provider/i,
+    });
+    await user.click(providerSelector);
+
+    expect(screen.getByText("OpenAI")).toBeInTheDocument();
+    expect(screen.getByText("Anthropic")).toBeInTheDocument();
+    expect(screen.getByText("OpenHands")).toBeInTheDocument();
+    expect(screen.getByText("Azure")).toBeInTheDocument();
+
+    await user.click(screen.getByText("Anthropic"));
+    expect(providerSelector).toHaveValue("Anthropic");
+  });
+
+  it("submits the raw provider id when creating a connection", async () => {
+    const user = userEvent.setup();
+    const createSpy = vi
+      .spyOn(ProviderConnectionsService, "create")
+      .mockResolvedValue({
+        ...connection,
+        id: "conn-anthropic",
+        display_name: "My Anthropic",
+        provider: "anthropic",
+      });
+
+    renderWith(
+      <ProviderConnectionsManager
+        connections={[]}
+        linkedCountById={{}}
+        isLoading={false}
+        onAddModels={vi.fn()}
+        loadError={null}
+      />,
+    );
+
+    await user.click(screen.getByTestId("add-provider-connection"));
+    await user.type(
+      screen.getByTestId("provider-connection-name-input"),
+      "My Anthropic",
+    );
+
+    const providerSelector = screen.getByRole("combobox", {
+      name: /provider/i,
+    });
+    await user.click(providerSelector);
+    await user.click(screen.getByTestId("provider-item-anthropic"));
+
+    await user.type(
+      screen.getByTestId("provider-connection-api-key-input"),
+      "test-key",
+    );
+    await user.click(screen.getByTestId("provider-connection-submit"));
+
+    await waitFor(() => {
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ provider: "anthropic" }),
+      );
+    });
+  });
+
   it("lists a row per connection with its display name and provider", () => {
     renderWith(
       <ProviderConnectionsManager
         connections={[connection]}
         linkedCountById={{ "conn-1": 3 }}
         isLoading={false}
+        onAddModels={vi.fn()}
         loadError={null}
       />,
     );
@@ -64,6 +163,72 @@ describe("ProviderConnectionsManager", () => {
     expect(screen.getByTestId("provider-connection-row")).toBeInTheDocument();
     expect(screen.getByText("My OpenAI")).toBeInTheDocument();
     expect(screen.getByText("openai")).toBeInTheDocument();
+  });
+
+  it("renders a bulk-add-models action in each connection's menu", async () => {
+    const user = userEvent.setup();
+    renderWith(
+      <ProviderConnectionsManager
+        connections={[connection]}
+        linkedCountById={{}}
+        isLoading={false}
+        onAddModels={vi.fn()}
+        loadError={null}
+      />,
+    );
+
+    await user.click(screen.getByTestId("provider-connection-menu-trigger"));
+    expect(
+      await screen.findByTestId("provider-connection-add-models"),
+    ).toBeInTheDocument();
+  });
+
+  it("calls onAddModels with the clicked connection (parent opens the modal)", async () => {
+    const user = userEvent.setup();
+    const onAddModels = vi.fn();
+    renderWith(
+      <ProviderConnectionsManager
+        connections={[connection]}
+        linkedCountById={{}}
+        isLoading={false}
+        loadError={null}
+        onAddModels={onAddModels}
+      />,
+    );
+
+    await user.click(screen.getByTestId("provider-connection-menu-trigger"));
+    await user.click(screen.getByTestId("provider-connection-add-models"));
+
+    // The modal itself is owned by the parent (one shared instance for both
+    // entry points), so the row's job is to hand the clicked connection up.
+    expect(onAddModels).toHaveBeenCalledWith(connection);
+  });
+
+  it("shows supported providers in the edit-connection selector", async () => {
+    const user = userEvent.setup();
+
+    renderWith(
+      <ProviderConnectionsManager
+        connections={[connection]}
+        linkedCountById={{}}
+        isLoading={false}
+        onAddModels={vi.fn()}
+        loadError={null}
+      />,
+    );
+
+    await user.click(screen.getByTestId("provider-connection-menu-trigger"));
+    await user.click(screen.getByTestId("provider-connection-edit"));
+
+    const providerSelector = screen.getByRole("combobox", {
+      name: /provider/i,
+    });
+    expect(providerSelector).toHaveValue("OpenAI");
+
+    await user.click(providerSelector);
+
+    expect(screen.getByText("Anthropic")).toBeInTheDocument();
+    expect(screen.getByText("OpenHands")).toBeInTheDocument();
   });
 
   it("surfaces the server message when deleting a referenced connection fails", async () => {
@@ -81,10 +246,12 @@ describe("ProviderConnectionsManager", () => {
         connections={[connection]}
         linkedCountById={{ "conn-1": 1 }}
         isLoading={false}
+        onAddModels={vi.fn()}
         loadError={null}
       />,
     );
 
+    fireEvent.click(screen.getByTestId("provider-connection-menu-trigger"));
     fireEvent.click(screen.getByTestId("provider-connection-delete"));
     fireEvent.click(screen.getByTestId("delete-provider-connection-confirm"));
 

@@ -1,4 +1,8 @@
 import { I18nKey } from "#/i18n/declaration";
+import type {
+  OnboardingLinkDestinationType,
+  OnboardingLinkId,
+} from "#/hooks/use-tracking";
 
 const SCHEDULED_TASKS_DOCS_URL =
   "https://docs.openhands.dev/openhands/usage/agent-canvas/prebuilt-automations";
@@ -47,6 +51,31 @@ export const SIDEBAR_ONBOARDING_CHECKLIST_ROUTES: Record<
   "start-conversation": "/conversations",
   "schedule-task": "/automations",
   "customize-agent": "/settings/agents",
+};
+
+/** Semantic `link_id` values for `onboarding_link_clicked` (no `open_docs`). */
+export const SIDEBAR_ONBOARDING_CHECKLIST_LINK_IDS: Record<
+  SidebarOnboardingChecklistItemId,
+  Exclude<OnboardingLinkId, "open_docs">
+> = {
+  "configure-llm": "configure_llm",
+  "start-conversation": "start_conversation",
+  "schedule-task": "schedule_task",
+  "customize-agent": "customize_agent",
+  "connect-mcp": "connect_mcp",
+  "join-slack": "join_slack",
+};
+
+export const SIDEBAR_ONBOARDING_CHECKLIST_DESTINATION_TYPES: Record<
+  SidebarOnboardingChecklistItemId,
+  OnboardingLinkDestinationType
+> = {
+  "configure-llm": "settings",
+  "start-conversation": "conversation",
+  "schedule-task": "automation",
+  "customize-agent": "settings",
+  "connect-mcp": "integration",
+  "join-slack": "community",
 };
 
 export function isExternalSidebarOnboardingChecklistItem(

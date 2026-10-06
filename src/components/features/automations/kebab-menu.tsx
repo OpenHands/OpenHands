@@ -36,22 +36,35 @@ export function KebabMenu({ items, triggerClassName }: KebabMenuProps) {
       if (!rect) return;
 
       const gap = 4;
+      // The real height is only measurable once the portal has painted; the
+      // first pass falls back to an items-derived estimate (~36px per row).
+      const measured = menuRef.current?.getBoundingClientRect().height ?? 0;
+      const menuHeight = measured || items.length * 36;
+      const overflowsBelow =
+        rect.bottom + gap + menuHeight > window.innerHeight;
+
       setPortalStyle({
         position: "fixed",
         zIndex: 9999,
-        top: rect.bottom + gap,
+        // Flip above the trigger when the menu would clip at the viewport
+        // bottom. Bottom-anchoring keeps it hugging the trigger at any height.
+        ...(overflowsBelow
+          ? { bottom: window.innerHeight - rect.top + gap }
+          : { top: rect.bottom + gap }),
         right: window.innerWidth - rect.right,
       });
     };
 
     updatePosition();
+    const frame = window.requestAnimationFrame(updatePosition);
     window.addEventListener("resize", updatePosition);
     window.addEventListener("scroll", updatePosition, true);
     return () => {
+      window.cancelAnimationFrame(frame);
       window.removeEventListener("resize", updatePosition);
       window.removeEventListener("scroll", updatePosition, true);
     };
-  }, [open]);
+  }, [open, items.length]);
 
   useEffect(() => {
     if (!open) return undefined;

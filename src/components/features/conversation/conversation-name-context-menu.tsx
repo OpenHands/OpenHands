@@ -6,6 +6,7 @@ import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
 import { useBreakpoint } from "#/hooks/use-breakpoint";
+import { clampLeftToViewport } from "#/hooks/use-popover-fixed-placement";
 import { cn } from "#/utils/utils";
 import { ContextMenu } from "#/ui/context-menu";
 import { ContextMenuListItem } from "../context-menu/context-menu-list-item";
@@ -43,7 +44,8 @@ interface ConversationNameContextMenuProps {
    * Element the menu should anchor against. When provided, the menu renders
    * into a portal at the document body using fixed positioning so it cannot be
    * clipped by ancestors with `overflow: hidden` (e.g. the chat panel that
-   * sits next to the right-side tabs panel).
+   * sits next to the right-side tabs panel). Pass the trigger itself: Escape
+   * returns focus to it.
    */
   anchorRef?: React.RefObject<HTMLElement | null>;
 }
@@ -71,7 +73,7 @@ function PublicShareToggle({
         aria-hidden
         className={cn(
           "inline-flex h-3.5 w-7 items-center rounded-full px-0.5 py-px transition-colors duration-200 ease-in-out",
-          isPublic ? "bg-white" : "bg-base-secondary",
+          isPublic ? "bg-contrast" : "bg-base-secondary",
         )}
       >
         <span
@@ -114,6 +116,9 @@ export function ConversationNameContextMenu({
 
   const anchorElement = anchorRef?.current ?? null;
   const [portalStyle, setPortalStyle] = React.useState<React.CSSProperties>();
+  // The menu's width is only measurable once it is in the portal, so placement
+  // runs again right after the first positioned render, still before paint.
+  const isMenuMounted = portalStyle !== undefined;
   React.useLayoutEffect(() => {
     if (!anchorElement) return undefined;
 
@@ -130,7 +135,10 @@ export function ConversationNameContextMenu({
       } else {
         style.top = rect.bottom + gap;
       }
-      style.left = rect.left;
+      // At phone width the trigger sits near the right edge: keep the whole
+      // menu, and every label, inside the viewport.
+      const menuWidth = ref.current?.getBoundingClientRect().width ?? 0;
+      style.left = clampLeftToViewport(rect.left, menuWidth);
       setPortalStyle(style);
     };
 
@@ -141,7 +149,18 @@ export function ConversationNameContextMenu({
       window.removeEventListener("resize", updatePosition);
       window.removeEventListener("scroll", updatePosition, true);
     };
-  }, [anchorElement, position]);
+  }, [anchorElement, position, isMenuMounted, ref]);
+
+  React.useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      onClose();
+      anchorElement?.focus();
+    };
+
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [onClose, anchorElement]);
   const hasTools = Boolean(onShowAgentTools || onShowSkills || onShowHooks);
   const hasInfo = Boolean(onDisplayCost);
   const hasControl = Boolean(onStop || onDelete);
@@ -165,7 +184,9 @@ export function ConversationNameContextMenu({
       position={position}
       alignment="left"
       className={cn(
-        isMobile ? "right-0 translate-x-[34%] left-auto" : "",
+        // The mobile offset only applies to the inline, absolutely positioned
+        // menu; the portaled menu gets its coordinates from `portalStyle`.
+        !isPortaled && isMobile ? "right-0 translate-x-[34%] left-auto" : "",
         portalClassName,
       )}
     >
@@ -273,11 +294,8 @@ export function ConversationNameContextMenu({
       )}
 
       {shouldShowPublicSharing && onTogglePublic && (
-        <li className="flex w-full items-center gap-2 rounded px-2 py-2 hover:bg-[var(--oh-interactive-hover)]">
-          <span
-            className="flex shrink-0 items-center text-[var(--oh-muted)]"
-            aria-hidden
-          >
+        <li className="flex w-full items-center gap-2 rounded px-2 py-2 hover:bg-interactive-hover">
+          <span className="flex shrink-0 items-center text-muted" aria-hidden>
             <Share2 size={16} />
           </span>
           <span className="min-w-0 flex-1 truncate text-sm">
@@ -290,7 +308,7 @@ export function ConversationNameContextMenu({
                   type="button"
                   data-testid="copy-share-link-button"
                   onClick={onCopyShareLink}
-                  className="rounded p-0.5 text-[var(--oh-muted)] hover:bg-[var(--oh-interactive-selected)] hover:text-[var(--oh-foreground)] cursor-pointer [&_svg]:text-current"
+                  className="rounded p-0.5 text-muted hover:bg-interactive-selected hover:text-foreground cursor-pointer [&_svg]:text-current"
                   title={t(I18nKey.BUTTON$COPY_TO_CLIPBOARD)}
                 >
                   <CopyIcon width={14} height={14} />
@@ -301,7 +319,7 @@ export function ConversationNameContextMenu({
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={(event) => event.stopPropagation()}
-                  className="rounded p-0.5 text-[var(--oh-muted)] no-underline visited:text-[var(--oh-muted)] hover:bg-[var(--oh-interactive-selected)] hover:text-[var(--oh-foreground)] cursor-pointer [&_svg]:text-current"
+                  className="rounded p-0.5 text-muted no-underline visited:text-muted hover:bg-interactive-selected hover:text-foreground cursor-pointer [&_svg]:text-current"
                   title={t(I18nKey.BUTTON$OPEN_IN_NEW_TAB)}
                 >
                   <ExternalLink size={14} aria-hidden />

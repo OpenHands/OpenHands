@@ -12,11 +12,8 @@
  */
 import React from "react";
 import { getLanguageFromPath } from "#/utils/get-language-from-path";
-import { toWorkspaceRelativePath } from "#/utils/workspace-relative-path";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
-import { useActiveConversation } from "#/hooks/query/use-active-conversation";
-import { useSelectConversationTab } from "#/hooks/use-select-conversation-tab";
-import { useFilesTabStore } from "#/stores/files-tab-store";
+import { openWorkspaceFile } from "#/services/canvas-ui";
 import type {
   FileEditorAction,
   StrReplaceEditorAction,
@@ -160,30 +157,19 @@ function FileEditorCardBody({
 
 /**
  * Conversation-scoped wrapper: owns the Files-drawer deep link. Split from the
- * card so the conversation-only hooks below never run outside a conversation
- * route (they throw on a missing conversation id).
+ * card so conversation-only navigation never runs outside a conversation route.
  */
 function FileEditorCardWithDrawerLink({
   conversationId,
   ...props
 }: FileEditorCardProps & { conversationId: string }) {
-  const { navigateToTab } = useSelectConversationTab();
-  const setSelectedPath = useFilesTabStore((state) => state.setSelectedPath);
-  const { data: conversation } = useActiveConversation();
   const path = resolvePath(props);
-  const workingDir = conversation?.workspace?.working_dir;
 
   // Only deep-link once the observation exists — the file is not guaranteed
   // to be on disk while the create action is still in flight.
   const onOpenFile =
     path && props.observation
-      ? () => {
-          setSelectedPath(
-            toWorkspaceRelativePath(path, workingDir),
-            conversationId,
-          );
-          navigateToTab("files");
-        }
+      ? () => openWorkspaceFile(path, conversationId)
       : undefined;
 
   return <FileEditorCardBody {...props} onOpenFile={onOpenFile} />;

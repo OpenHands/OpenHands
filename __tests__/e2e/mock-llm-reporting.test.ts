@@ -1,10 +1,11 @@
 // @vitest-environment node
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { renderReport } from "../../tests/e2e/mock-llm/scripts/render-mock-llm-report.mjs";
 import {
   buildCommentBody,
   findMatchingJobComments,
+  upsertJobComment,
 } from "../../tests/e2e/mock-llm/scripts/upsert-pr-comment.mjs";
 
 const MOCK_MARKER = "<!-- agent-canvas-mock-llm-e2e-report -->";
@@ -85,5 +86,60 @@ describe("mock-LLM E2E reporting", () => {
     expect(matching.map((comment: { id: number }) => comment.id)).toEqual([
       1, 2,
     ]);
+  });
+
+  it("edits the existing report in place instead of reposting it", async () => {
+    const requests: { method: string; path: string }[] = [];
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (url, init) => {
+        const method = init?.method ?? "GET";
+        const path =
+          new URL(String(url)).pathname + new URL(String(url)).search;
+        requests.push({ method, path });
+
+        if (method === "GET") {
+          return new Response(
+            JSON.stringify(
+              path.includes("page=1")
+                ? [
+                    { id: 11, body: "unrelated", user: { type: "User" } },
+                    {
+                      id: 22,
+                      body: `${MOCK_MARKER}\n## ✅ Mock-LLM E2E Tests`,
+                      user: { login: "github-actions[bot]", type: "Bot" },
+                    },
+                  ]
+                : [],
+            ),
+            { status: 200 },
+          );
+        }
+        return new Response(JSON.stringify({ id: 22 }), { status: 200 });
+      });
+
+    const result = await upsertJobComment({
+      repo: "OpenHands/OpenHands",
+      issueNumber: "16521",
+      token: "t",
+      body: "## ✅ Mock-LLM E2E Tests\n\n**62/62 passed**",
+      marker: MOCK_MARKER,
+      legacyTitle: "Mock-LLM E2E Tests",
+    });
+
+    expect(result).toMatchObject({ updated: true, deleted: 0 });
+    expect(requests.filter((r) => r.method === "PATCH")).toEqual([
+      {
+        method: "PATCH",
+        path: "/repos/OpenHands/OpenHands/issues/comments/22",
+      },
+    ]);
+    expect(requests.some((r) => r.method === "POST")).toBe(false);
+    expect(requests.some((r) => r.method === "DELETE")).toBe(false);
+    fetchMock.mockRestore();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 });

@@ -7,16 +7,14 @@ Additional checks:
   checked.
 - If frontend code was touched, the description must include a screenshot or
   video.
-- If the PR is marked as a Bug fix, the description must include a screenshot
-  or video showing reproduction evidence — regardless of whether frontend
-  code was touched.
+- Bug-fix and feature PRs require running-Canvas screenshots or video even
+  outside frontend paths. Reviewers verify before/after behavior and authenticity.
 - The body must reference at least one issue (e.g. `Fixes #123`) and at least
   one referenced issue must carry the `ready-for-dev` label. The API lookup is
   only performed in CI (when GITHUB_EVENT_PATH and GITHUB_TOKEN are available).
 - The PR's Type checkbox must match the linked issue's labels: a "Bug fix" PR
   should link an issue with the `bug` label; a "Feature" PR should link one
-  with the `enhancement` label. This prevents a contributor from bypassing
-  bug-specific requirements by mislabeling the PR type.
+  with the `enhancement` label.
 
 Local usage example:
     python .github/scripts/check_pr_description.py --body-file /tmp/pr-body.md \
@@ -32,6 +30,8 @@ import re
 import sys
 from pathlib import Path
 
+from markdown_sections import find_headings, without_fenced_code_blocks
+
 
 # Reject placeholders while allowing a concise human-written sentence.
 MIN_HUMAN_NOTE_CHARS = 20
@@ -39,9 +39,12 @@ MIN_HUMAN_NOTE_CHARS = 20
 REQUIRED_TEMPLATE_FIELDS: tuple[str, ...] = ("Why", "Summary", "How to Test")
 
 HTML_COMMENT_RE = re.compile(r"<!--[\s\S]*?-->")
-HEADING_RE = re.compile(r"(?m)^##\s+(.+?)\s*$")
-HUMAN_HEADING_RE = re.compile(r"(?im)^\s*HUMAN:\s*$")
-AGENT_HEADING_RE = re.compile(r"(?im)^\s*AGENT:\s*$")
+HEADING_RE = re.compile(r"(?m)^##[ \t]+(.+?)[ \t]*$")
+# `\r?$` rather than `\s*$` for the same reason as HEADING_RE above: these run
+# against masked text too, and there is no capture group here to absorb the `\r`
+# of a CRLF body, so it has to be matched explicitly.
+HUMAN_HEADING_RE = re.compile(r"(?im)^[ \t]*HUMAN:[ \t]*\r?$")
+AGENT_HEADING_RE = re.compile(r"(?im)^[ \t]*AGENT:[ \t]*\r?$")
 
 # A file counts as frontend code if its path is under one of these prefixes or
 # has one of these extensions. This mirrors the paths the E2E workflows treat as
@@ -132,7 +135,7 @@ def first_visible_line(text: str) -> str:
 
 
 def extract_sections(body: str) -> dict[str, str]:
-    matches = list(HEADING_RE.finditer(body))
+    matches = find_headings(body, HEADING_RE)
     sections: dict[str, str] = {}
     for index, match in enumerate(matches):
         start = match.end()
@@ -142,12 +145,19 @@ def extract_sections(body: str) -> dict[str, str]:
 
 
 def extract_human_note(body: str) -> str:
-    """Return human-written text in the required location before `AGENT:`."""
-    human_match = HUMAN_HEADING_RE.search(body)
+    """Return human-written text in the required location before `AGENT:`.
+
+    The markers are located outside fenced code blocks so that quoting the
+    template does not stand in for filling it out. Offsets are preserved by the
+    masking, so the note itself is still read from the original body.
+    """
+    outside_fences = without_fenced_code_blocks(body)
+
+    human_match = HUMAN_HEADING_RE.search(outside_fences)
     if human_match is None:
         return ""
 
-    agent_match = AGENT_HEADING_RE.search(body, human_match.end())
+    agent_match = AGENT_HEADING_RE.search(outside_fences, human_match.end())
     if agent_match is None:
         return ""
 
@@ -208,36 +218,17 @@ def validate_human_tested_checkbox(body: str) -> list[str]:
 
 
 def validate_frontend_screenshot(body: str, files: list[str]) -> list[str]:
-    """Require a screenshot/video in the body when frontend code was touched."""
-    if not touches_frontend(files):
+    """Require media for frontend edits and declared functional changes."""
+    frontend = touches_frontend(files)
+    if not frontend and extract_pr_type(body) not in (BUG_LABEL, ENHANCEMENT_LABEL):
         return []
     if has_screenshot_or_video(body):
         return []
+    change = "touches frontend code" if frontend else "declares a functional change"
     return [
-        "This PR touches frontend code but the description has no screenshot or "
-        "video. Add one under `## Video/Screenshots` (drag a file into the editor "
-        "or paste a video link)."
-    ]
-
-
-def validate_bug_fix_evidence(body: str) -> list[str]:
-    """Require reproduction evidence when the PR is marked as a Bug fix.
-
-    A bug-fix PR must include a screenshot or video showing the bug reproduced
-    and then fixed. This applies regardless of whether frontend code was touched
-    — a terminal screenshot showing the error before and the fix after is just
-    as valid as a UI screenshot.
-    """
-    pr_type = extract_pr_type(body)
-    if pr_type != BUG_LABEL:
-        return []
-    if has_screenshot_or_video(body):
-        return []
-    return [
-        "This PR is marked as a Bug fix but the description has no screenshot or "
-        "video. Add reproduction evidence under `## Video/Screenshots` showing the "
-        "bug before the fix and the result after (drag a file into the editor or "
-        "paste a video link)."
+        f"This PR {change} but the description has no screenshot or video. "
+        "Add evidence from a running Canvas under `## Video/Screenshots`; "
+        "for bug fixes, demonstrate failure before and success after the change."
     ]
 
 
@@ -387,7 +378,7 @@ def validate_pr_body(body: str, files: list[str] | None = None) -> list[str]:
     if len(human_note) < MIN_HUMAN_NOTE_CHARS:
         errors.append("Add a short human-written note between `HUMAN:` and `AGENT:`.")
 
-    if AGENT_HEADING_RE.search(body) is None:
+    if AGENT_HEADING_RE.search(without_fenced_code_blocks(body)) is None:
         errors.append("Keep the `AGENT:` marker from the PR template.")
 
     sections = extract_sections(body)
@@ -399,7 +390,6 @@ def validate_pr_body(body: str, files: list[str] | None = None) -> list[str]:
 
     errors.extend(validate_human_tested_checkbox(body))
     errors.extend(validate_frontend_screenshot(body, files or []))
-    errors.extend(validate_bug_fix_evidence(body))
 
     return errors
 

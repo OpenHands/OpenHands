@@ -1,4 +1,12 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  type MockInstance,
+  vi,
+} from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -19,6 +27,7 @@ import {
   type NavigationContextValue,
 } from "#/context/navigation-context";
 import { I18nKey } from "#/i18n/declaration";
+import * as telemetry from "#/services/telemetry";
 
 const mockUsePaginatedConversations = vi.fn();
 const mockUseAutomationHealth = vi.fn();
@@ -55,20 +64,24 @@ function renderChecklist() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
+  const navigate = vi.fn();
   const navigation: NavigationContextValue = {
     currentPath: "/",
     conversationId: null,
     isNavigating: false,
-    navigate: vi.fn(),
+    navigate,
   };
 
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <NavigationProvider value={navigation}>
-        <SidebarOnboardingChecklist collapsed={false} />
-      </NavigationProvider>
-    </QueryClientProvider>,
-  );
+  return {
+    ...render(
+      <QueryClientProvider client={queryClient}>
+        <NavigationProvider value={navigation}>
+          <SidebarOnboardingChecklist collapsed={false} />
+        </NavigationProvider>
+      </QueryClientProvider>,
+    ),
+    navigate,
+  };
 }
 
 describe("SidebarOnboardingChecklist", () => {
@@ -284,5 +297,109 @@ describe("SidebarOnboardingChecklist", () => {
     expect(
       screen.queryByTestId("sidebar-onboarding-checklist"),
     ).not.toBeInTheDocument();
+  });
+
+  describe("onboarding link tracking", () => {
+    let captureMock: MockInstance<typeof telemetry.trackEvent>;
+
+    beforeEach(() => {
+      captureMock = vi
+        .spyOn(telemetry, "trackEvent")
+        .mockResolvedValue(undefined);
+    });
+
+    afterEach(() => {
+      captureMock.mockRestore();
+    });
+
+    const linkClickEvents = () =>
+      captureMock.mock.calls.filter(
+        ([name]) => name === "onboarding_link_clicked",
+      );
+
+    it("captures a single onboarding_link_clicked when the Join Slack row is clicked", async () => {
+      const user = userEvent.setup();
+      renderChecklist();
+
+      await user.click(
+        screen.getByTestId("sidebar-onboarding-checklist-item-join-slack"),
+      );
+
+      expect(linkClickEvents()).toHaveLength(1);
+      expect(linkClickEvents()[0][1]).toMatchObject({
+        link_id: "join_slack",
+        destination_type: "community",
+        surface: "landing_checklist",
+        checklist_item: "join_slack",
+        is_external: true,
+      });
+    });
+
+    it("captures onboarding_link_clicked for an internal row and still navigates", async () => {
+      const user = userEvent.setup();
+      const { navigate } = renderChecklist();
+
+      await user.click(
+        screen.getByTestId("sidebar-onboarding-checklist-item-configure-llm"),
+      );
+
+      expect(linkClickEvents()).toHaveLength(1);
+      expect(linkClickEvents()[0][1]).toMatchObject({
+        link_id: "configure_llm",
+        destination_type: "settings",
+        surface: "landing_checklist",
+        checklist_item: "configure_llm",
+        is_external: false,
+      });
+      expect(navigate).toHaveBeenCalledWith("/settings/llm", {
+        replace: false,
+      });
+    });
+
+    it("captures open_docs with the owning checklist item when a preview docs link is clicked", async () => {
+      const user = userEvent.setup();
+      renderChecklist();
+
+      await user.hover(
+        screen.getByTestId("sidebar-onboarding-checklist-item-connect-mcp"),
+      );
+      await user.click(
+        await screen.findByTestId(
+          "sidebar-onboarding-checklist-preview-docs-connect-mcp",
+        ),
+      );
+
+      expect(linkClickEvents()).toHaveLength(1);
+      expect(linkClickEvents()[0][1]).toMatchObject({
+        link_id: "open_docs",
+        destination_type: "documentation",
+        surface: "landing_checklist",
+        checklist_item: "connect_mcp",
+        is_external: true,
+      });
+    });
+
+    it("captures the row's link_id when a preview action CTA is clicked", async () => {
+      const user = userEvent.setup();
+      renderChecklist();
+
+      await user.hover(
+        screen.getByTestId("sidebar-onboarding-checklist-item-schedule-task"),
+      );
+      await user.click(
+        await screen.findByTestId(
+          "sidebar-onboarding-checklist-preview-action-schedule-task",
+        ),
+      );
+
+      expect(linkClickEvents()).toHaveLength(1);
+      expect(linkClickEvents()[0][1]).toMatchObject({
+        link_id: "schedule_task",
+        destination_type: "automation",
+        surface: "landing_checklist",
+        checklist_item: "schedule_task",
+        is_external: false,
+      });
+    });
   });
 });

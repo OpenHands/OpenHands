@@ -1,11 +1,8 @@
 import React from "react";
 import { Pin } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { useTracking } from "#/hooks/use-tracking";
 import { cn } from "#/utils/utils";
 import { I18nKey } from "#/i18n/declaration";
-import { transformVSCodeUrl } from "#/utils/vscode-url-helper";
-import ConversationService from "#/api/conversation-service/conversation-service.api";
 import { getDisplayConversationTags } from "#/api/agent-server-adapter";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
@@ -35,6 +32,12 @@ interface ConversationCardProps {
   onUnarchive?: () => void;
   onStop?: () => void;
   onChangeTitle?: (title: string) => void;
+  /**
+   * Opens the tag editor for this conversation. Local agent-server backends
+   * only — Cloud conversations don't carry server-side tags, so the panel
+   * leaves this undefined there and the menu item disappears.
+   */
+  onEditTags?: () => void;
   showOptions?: boolean;
   title: string;
   selectedRepository: RepositorySelection | null;
@@ -69,6 +72,7 @@ export function ConversationCard({
   onUnarchive,
   onStop,
   onChangeTitle,
+  onEditTags,
   showOptions,
   title,
   selectedRepository,
@@ -94,9 +98,12 @@ export function ConversationCard({
   alwaysShowPinIcon = false,
 }: ConversationCardProps) {
   const { t } = useTranslation("openhands");
-  const { trackDownloadVsCodeButtonClicked } = useTracking();
   const [titleMode, setTitleMode] = React.useState<"view" | "edit">("view");
   const { mutateAsync: downloadConversation } = useDownloadConversation();
+
+  const displayTags = getDisplayConversationTags(tags);
+  const hasDisplayTags = displayTags.length > 0;
+  const showTagChipRow = showTags && hasDisplayTags;
 
   const onTitleSave = (newTitle: string) => {
     if (newTitle !== "" && newTitle !== title) {
@@ -140,29 +147,10 @@ export function ConversationCard({
     onContextMenuToggle?.(false);
   };
 
-  const handleDownloadViaVSCode = async (
-    event: React.MouseEvent<HTMLButtonElement>,
-  ) => {
+  const handleEditTags = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
     event.stopPropagation();
-    trackDownloadVsCodeButtonClicked();
-
-    // Fetch the VS Code URL from the API
-    if (conversationId) {
-      try {
-        const data = await ConversationService.getVSCodeUrl(conversationId);
-        if (data.vscode_url) {
-          const transformedUrl = transformVSCodeUrl(data.vscode_url);
-          if (transformedUrl) {
-            window.open(transformedUrl, "_blank");
-          }
-        }
-        // VS Code URL not available
-      } catch {
-        // Failed to fetch VS Code URL
-      }
-    }
-
+    onEditTags?.();
     onContextMenuToggle?.(false);
   };
 
@@ -173,7 +161,12 @@ export function ConversationCard({
     event.stopPropagation();
 
     if (conversationId) {
-      await downloadConversation(conversationId);
+      try {
+        await downloadConversation(conversationId);
+      } catch {
+        // useDownloadConversation already showed the error toast; close the
+        // menu as on success instead of leaking the rejection.
+      }
     }
     onContextMenuToggle?.(false);
   };
@@ -201,7 +194,7 @@ export function ConversationCard({
       onClick={handleTogglePin}
       className={cn(
         "flex shrink-0 cursor-pointer items-center justify-center rounded-md p-1",
-        "text-[var(--oh-muted)] hover:bg-white/10 hover:text-white",
+        "text-muted hover:bg-contrast/10 hover:text-contrast",
       )}
     >
       <Pin
@@ -216,6 +209,7 @@ export function ConversationCard({
     onArchive ||
     onUnarchive ||
     onChangeTitle ||
+    onEditTags ||
     showOptions
   );
   const hasHoverActions = hasContextMenu || !!onTogglePin;
@@ -224,7 +218,7 @@ export function ConversationCard({
     showRepositoryMetadata ||
     isArchived ||
     (showLlmProfiles && (agentKind === "acp" || !!llmModel)) ||
-    (showTags && getDisplayConversationTags(tags).length > 0);
+    (showTagChipRow && displayTags.length > 0);
 
   return (
     <div
@@ -234,8 +228,8 @@ export function ConversationCard({
       onClick={onClick}
       className={cn(
         "group relative h-auto w-full cursor-pointer rounded-md py-1 pl-2 pr-1 transition-colors",
-        !contextMenuOpen && "hover:bg-[var(--oh-surface)]",
-        (isActive || contextMenuOpen) && "bg-[var(--oh-surface)]",
+        !contextMenuOpen && "hover:bg-surface",
+        (isActive || contextMenuOpen) && "bg-surface",
       )}
     >
       <div className="flex items-center w-full min-w-0">
@@ -251,6 +245,7 @@ export function ConversationCard({
         </div>
 
         <div
+          data-testid="conversation-card-trailing-slot"
           className={cn(
             "relative ml-auto pl-2 flex items-center justify-end shrink-0",
             // The hover action overlay (pin + ellipsis) is absolutely
@@ -267,7 +262,7 @@ export function ConversationCard({
           {!showPersistentPinIcon && (createdAt ?? lastUpdatedAt) && (
             <p
               className={cn(
-                "text-xs text-[var(--oh-muted)] text-right whitespace-nowrap transition-opacity -translate-x-1.5",
+                "text-xs text-muted text-right whitespace-nowrap transition-opacity -translate-x-1.5",
                 hasHoverActions && hoverRevealYieldClassName(contextMenuOpen),
               )}
             >
@@ -277,6 +272,7 @@ export function ConversationCard({
 
           {hasHoverActions ? (
             <div
+              data-testid="conversation-card-hover-actions"
               className={cn(
                 "absolute right-0 top-1/2 flex -translate-y-1/2 items-center gap-0.5 transition-opacity",
                 showPersistentPinIcon
@@ -298,17 +294,16 @@ export function ConversationCard({
                       onUnarchive={onUnarchive && handleUnarchive}
                       onStop={onStop && handleStop}
                       onEdit={onChangeTitle && handleEdit}
-                      onDownloadViaVSCode={handleDownloadViaVSCode}
+                      onEditTags={onEditTags && handleEditTags}
                       onDownloadConversation={handleDownloadConversation}
                       executionStatus={executionStatus}
                       conversationId={conversationId}
-                      showOptions={showOptions}
                     />
                   </div>
                   <p
                     className={cn(
                       "pointer-events-none absolute inset-0 items-center justify-end",
-                      "text-xs text-[var(--oh-muted)] whitespace-nowrap -translate-x-1.5",
+                      "text-xs text-muted whitespace-nowrap -translate-x-1.5",
                       hoverRevealPinnedTimestampClassName(contextMenuOpen),
                     )}
                   >
@@ -325,11 +320,10 @@ export function ConversationCard({
                   onUnarchive={onUnarchive && handleUnarchive}
                   onStop={onStop && handleStop}
                   onEdit={onChangeTitle && handleEdit}
-                  onDownloadViaVSCode={handleDownloadViaVSCode}
+                  onEditTags={onEditTags && handleEditTags}
                   onDownloadConversation={handleDownloadConversation}
                   executionStatus={executionStatus}
                   conversationId={conversationId}
-                  showOptions={showOptions}
                 />
               ) : null}
             </div>
@@ -351,7 +345,7 @@ export function ConversationCard({
           agentKind={agentKind}
           acpServer={acpServer}
           tags={tags}
-          showTags={showTags}
+          showTags={showTagChipRow}
           isArchived={isArchived}
         />
       )}

@@ -36,6 +36,7 @@ import prettierPlugin from "eslint-plugin-prettier";
 import prettierConfig from "eslint-config-prettier";
 import unusedImportsPlugin from "eslint-plugin-unused-imports";
 import tanstackQueryPlugin from "@tanstack/eslint-plugin-query";
+import { plugin as shadcnPlugin } from "@shadcn/lint";
 import globals from "globals";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -108,6 +109,9 @@ export default [
       "test-results/**",
       "test-results-live/**",
       "public/mockServiceWorker.js",
+      // Self-contained browser ES module served to extensions at runtime;
+      // not part of the TypeScript project.
+      "src/fixtures/canvas-extensions/**/*.js",
       "src/i18n/declaration.d.ts",
     ],
   },
@@ -385,5 +389,52 @@ export default [
       "react-hooks/exhaustive-deps": "off",
       "react/react-in-jsx-scope": "off",
     },
+  },
+
+  // @shadcn/lint — design-system linter for Tailwind v4.
+  // Rules: https://github.com/shadcn-ui/lint/blob/main/docs/rules.md
+  // `no-arbitrary-values` stays at "warn": the remaining hits are one-offs
+  // (raw hex, vh/vw, calc(), grid templates) with no theme-scale equivalent.
+  // Class existence does not need component contracts. With no remaining
+  // unknown utilities, new findings fail lint; styling policy remains opt-in.
+  // Canvas primitives use #/ui, not the plugin's default components/ui path.
+  // require-static-classes is enabled for those consumers; 0.2.0 still cannot
+  // read imported constants, so its documented narrow exceptions remain.
+  // Next: audit no-raw-colors against our themes (0.2.0 fixes text/shadow token
+  // false positives), then define component contracts for no-restyle and audit
+  // dynamic style usage before enabling no-inline-styles.
+  // 0.2.0 also improves render-prop, destructuring, barrel-export, and custom
+  // animation recognition. Vue/Svelte support adds no new rule names or parsers
+  // to this React project; keep this upgrade separate from rule activation.
+  {
+    files: ["src/**/*.{ts,tsx}"],
+    plugins: { shadcn: shadcnPlugin },
+    rules: {
+      "shadcn/no-arbitrary-values": "warn",
+      "shadcn/no-restyle": "off",
+      "shadcn/no-raw-colors": "off",
+      "shadcn/no-inline-styles": "off",
+      "shadcn/require-static-classes": [
+        "error",
+        { componentImports: ["^#/ui(/|$)"] },
+      ],
+      "shadcn/no-unknown-classes": [
+        "error",
+        {
+          allow: [
+            // src/index.css owns the overlay animation outside the theme graph.
+            "environment-switch-overlay",
+            // Selector target for has-[.conversation-overview-diffs-git-action:hover].
+            "conversation-overview-diffs-git-action",
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // Primitive implementations own variant helpers that this rule cannot
+    // resolve. Token and unknown-class checks still apply to their definitions.
+    files: ["src/ui/**/*.{ts,tsx}"],
+    rules: { "shadcn/require-static-classes": "off" },
   },
 ];

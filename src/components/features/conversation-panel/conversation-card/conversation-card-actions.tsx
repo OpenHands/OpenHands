@@ -16,11 +16,10 @@ interface ConversationCardActionsProps {
   onUnarchive?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onStop?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onEdit?: (event: React.MouseEvent<HTMLButtonElement>) => void;
-  onDownloadViaVSCode?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onEditTags?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDownloadConversation?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   executionStatus?: ExecutionStatus | null;
   conversationId?: string;
-  showOptions?: boolean;
 }
 
 export function ConversationCardActions({
@@ -31,11 +30,10 @@ export function ConversationCardActions({
   onUnarchive,
   onStop,
   onEdit,
-  onDownloadViaVSCode,
+  onEditTags,
   onDownloadConversation,
   executionStatus,
   conversationId,
-  showOptions,
 }: ConversationCardActionsProps) {
   const { t } = useTranslation("openhands");
   const isPaused = isExecutionPaused(executionStatus);
@@ -118,9 +116,7 @@ export function ConversationCardActions({
               onUnarchive={onUnarchive}
               onStop={isActive ? onStop : undefined}
               onEdit={onEdit}
-              onDownloadViaVSCode={
-                conversationId && showOptions ? onDownloadViaVSCode : undefined
-              }
+              onEditTags={onEditTags}
               onDownloadConversation={
                 conversationId ? onDownloadConversation : undefined
               }

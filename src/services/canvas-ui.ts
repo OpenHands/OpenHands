@@ -1,9 +1,11 @@
+import ConversationService from "#/api/conversation-service/conversation-service.api";
 import {
   ConversationTab,
   useConversationStore,
 } from "#/stores/conversation-store";
 import { useFilesTabStore } from "#/stores/files-tab-store";
 import type { CanvasUIAction } from "#/types/agent-server/core";
+import { toFilesTabPath } from "#/utils/path-utils";
 
 const VALID_TABS: ReadonlySet<ConversationTab> = new Set<ConversationTab>([
   "files",
@@ -29,20 +31,43 @@ function isValidTab(value: string): value is ConversationTab {
   return VALID_TABS.has(value as ConversationTab);
 }
 
+/**
+ * Chat path click → same as agent `navigate_to_file`.
+ * Optional `conversationId` tags the selection so FilesTab accepts it.
+ */
+export function openWorkspaceFile(
+  path: string,
+  conversationId?: string | null,
+): void {
+  const conversation = ConversationService.getCurrentConversation();
+  handleCanvasUIAction(
+    {
+      kind: "CanvasUIAction",
+      command: "navigate_to_file",
+      path,
+    } as CanvasUIAction,
+    conversationId ?? conversation?.id ?? null,
+  );
+}
+
 export function handleCanvasUIAction(
   action: CanvasUIAction,
   conversationId: string | null = null,
 ): void {
   switch (action.command) {
     case "navigate_to_file":
-    case "show_preview":
+    case "show_preview": {
       navigateToTab("files");
-      if (action.path) {
-        useFilesTabStore
-          .getState()
-          .setSelectedPath(action.path, conversationId);
-      }
+      if (!action.path) return;
+
+      const workingDir =
+        ConversationService.getCurrentConversation()?.workspace?.working_dir;
+      const path = toFilesTabPath(action.path, workingDir);
+      if (!path) return;
+
+      useFilesTabStore.getState().setSelectedPath(path, conversationId);
       return;
+    }
     case "open_tab":
       if (action.tab === "vscode") {
         // The in-app VS Code tab was removed — on cloud backends VS Code

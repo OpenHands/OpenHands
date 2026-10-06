@@ -4,6 +4,10 @@ import { useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { buildAutomationMetadataPills } from "#/components/features/automations/build-automation-pills";
 import { EditAutomationModal } from "#/components/features/automations/detail/edit-automation-modal";
+import {
+  RunPhase,
+  shouldShowRunPhase,
+} from "#/components/features/automations/detail/run-phase";
 import { RunStatusBadge } from "#/components/features/automations/detail/run-status-badge";
 import { AutomationRunStats } from "#/components/features/automations/automation-run-insights";
 import { toRunSummaryState } from "#/components/features/automations/to-latest-run-state";
@@ -17,6 +21,7 @@ import { getDemoConversationTitle } from "#/fixtures/home-automations-demo";
 import { useUserConversation } from "#/hooks/query/use-user-conversation";
 import { I18nKey } from "#/i18n/declaration";
 import { AutomationRunStatus, type Automation } from "#/types/automation";
+import { getAutomationRunDisplay } from "#/utils/automation-run-display";
 import { formatRelativeTime } from "#/utils/format-relative-time";
 import { cn } from "#/utils/utils";
 import { automationCardStatusStripClassName } from "#/components/features/automations/automation-view-mode";
@@ -29,8 +34,8 @@ import { buildPinnedAutomationMenuItems } from "./build-pinned-automation-menu-i
 import { HomeAutomationMenu } from "./home-automation-menu";
 import {
   getLastRunTimestamp,
-  shortenAutomationErrorDetail,
-  shouldShowAutomationErrorHovercard,
+  shortenAutomationRunSummary,
+  shouldShowAutomationRunSummaryHovercard,
 } from "./automation-run-health";
 
 interface PinnedAutomationCardProps {
@@ -88,17 +93,14 @@ export function PinnedAutomationCard({
     () => buildAutomationMetadataPills(automation, scheduleLabel),
     [automation, scheduleLabel],
   );
-  const errorDetail =
-    latestRun?.status === AutomationRunStatus.FAILED
-      ? latestRun.error_detail?.trim() || null
-      : null;
-  const shortErrorDetail = errorDetail
-    ? shortenAutomationErrorDetail(errorDetail)
-    : null;
-  const showErrorHovercard =
-    errorDetail != null &&
-    shortErrorDetail != null &&
-    shouldShowAutomationErrorHovercard(errorDetail, shortErrorDetail);
+  const showPhase = shouldShowRunPhase(latestRun?.status);
+  const display = latestRun ? getAutomationRunDisplay(latestRun) : null;
+  const summary = display?.summary ?? null;
+  const shortSummary = summary ? shortenAutomationRunSummary(summary) : null;
+  const showSummaryHovercard =
+    summary != null &&
+    shortSummary != null &&
+    shouldShowAutomationRunSummaryHovercard(summary, shortSummary);
   const disableAnimation = import.meta.env.MODE === "test";
   const cardRef = useRef<HTMLElement>(null);
   const insights = getDashboardSpec()?.insights;
@@ -107,14 +109,13 @@ export function PinnedAutomationCard({
     automation,
     t,
     canManage: actions.canManage,
-    canEdit: actions.canEdit,
     isRunPending: actions.isRunPending,
     isCancelPending: actions.isCancelPending,
     canCancel: actions.canCancel,
     onRunNow: actions.runNow,
     onCancelRun: actions.cancelRun,
     onView: actions.viewDetails,
-    onEdit: actions.canEdit ? actions.openEdit : undefined,
+    onEdit: actions.openEdit,
     onTurnOff: actions.requestTurnOff,
     onUnpin: () => onUnpin(automation.id),
   });
@@ -194,7 +195,7 @@ export function PinnedAutomationCard({
             role="link"
             tabIndex={0}
             title={t(I18nKey.FEATURED_AUTOMATIONS$VIEW_DETAILS)}
-            className="h-8 min-w-0 flex-1 cursor-pointer truncate text-sm font-semibold leading-8 text-[var(--oh-foreground)] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--oh-focus)]"
+            className="h-8 min-w-0 flex-1 cursor-pointer truncate text-sm font-semibold leading-8 text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
             onClick={() => actions.viewDetails()}
             onKeyDown={(event) => {
               if (event.key === "Enter" || event.key === " ") {
@@ -219,7 +220,7 @@ export function PinnedAutomationCard({
           </div>
         </div>
         {automation.prompt ? (
-          <p className="line-clamp-2 text-xs leading-relaxed text-[var(--oh-text-secondary)]">
+          <p className="line-clamp-2 text-xs leading-relaxed text-text-secondary">
             {automation.prompt}
           </p>
         ) : null}
@@ -260,13 +261,13 @@ export function PinnedAutomationCard({
           ) : null}
 
           {!isLoading && isError ? (
-            <p className="truncate text-[var(--oh-text-secondary)]">
+            <p className="truncate text-text-secondary">
               {t(I18nKey.FEATURED_AUTOMATIONS$STATUS_UNAVAILABLE)}
             </p>
           ) : null}
 
           {!isLoading && !isError && !latestRun ? (
-            <p className="truncate text-[var(--oh-text-secondary)]">
+            <p className="truncate text-text-secondary">
               {t(I18nKey.AUTOMATIONS$DETAIL$NO_RUNS)}
             </p>
           ) : null}
@@ -274,7 +275,7 @@ export function PinnedAutomationCard({
           {latestRun ? (
             <>
               <RunStatusBadge
-                status={latestRun.status}
+                status={display?.badgeStatus ?? latestRun.status}
                 iconOnly
                 showLabel={
                   latestRun.status === AutomationRunStatus.PENDING ||
@@ -284,26 +285,35 @@ export function PinnedAutomationCard({
                 }
               />
 
-              {shortErrorDetail ? (
-                showErrorHovercard && errorDetail ? (
+              {showPhase ? (
+                <RunPhase
+                  status={latestRun.status}
+                  code={latestRun.phase_code}
+                  label={latestRun.phase_label}
+                  updatedAt={latestRun.phase_updated_at}
+                />
+              ) : null}
+
+              {shortSummary ? (
+                showSummaryHovercard && summary ? (
                   <Tooltip
                     content={
                       <p className="max-w-xs whitespace-pre-wrap break-words p-2 text-xs">
-                        {errorDetail}
+                        {summary}
                       </p>
                     }
                     placement="top"
                     closeDelay={100}
                     disableAnimation={disableAnimation}
-                    className="rounded-xl border border-[var(--oh-border)] bg-base-secondary p-0 text-white shadow-xl"
+                    className="rounded-xl border border-border bg-base-secondary p-0 text-contrast shadow-xl"
                   >
-                    <span className="min-w-0 flex-1 cursor-default truncate text-[var(--oh-status-error)]">
-                      {shortErrorDetail}
+                    <span className="min-w-0 flex-1 cursor-default truncate text-text-secondary">
+                      {shortSummary}
                     </span>
                   </Tooltip>
                 ) : (
-                  <p className="min-w-0 flex-1 truncate text-[var(--oh-status-error)]">
-                    {shortErrorDetail}
+                  <p className="min-w-0 flex-1 truncate text-text-secondary">
+                    {shortSummary}
                   </p>
                 )
               ) : null}
@@ -313,7 +323,7 @@ export function PinnedAutomationCard({
                   to={`/conversations/${conversationId}`}
                   aria-label={conversationTitle}
                   title={conversationTitle}
-                  className="group/conversation inline-flex min-w-0 items-center gap-1 text-[var(--oh-foreground)] hover:text-[var(--oh-text-secondary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--oh-focus)]"
+                  className="group/conversation inline-flex min-w-0 items-center gap-1 text-foreground hover:text-text-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                 >
                   <span className="truncate">{conversationTitle}</span>
                   <ExternalLink
@@ -324,7 +334,7 @@ export function PinnedAutomationCard({
               ) : null}
 
               {!conversationId && isTerminal ? (
-                <p className="min-w-0 truncate text-[var(--oh-text-secondary)]">
+                <p className="min-w-0 truncate text-text-secondary">
                   {t(I18nKey.AUTOMATIONS$DETAIL$NO_CONVERSATION)}
                 </p>
               ) : null}
@@ -333,7 +343,7 @@ export function PinnedAutomationCard({
         </div>
 
         {timestamp ? (
-          <span className="shrink-0 text-[var(--oh-text-secondary)]">
+          <span className="shrink-0 text-text-secondary">
             {formatRelativeTime(timestamp, i18n.language, t)}
           </span>
         ) : null}

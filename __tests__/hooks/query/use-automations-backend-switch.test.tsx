@@ -12,6 +12,7 @@ import {
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import {
   useAutomations,
+  useCancelAutomationRun,
   useDispatchAutomation,
   useDeleteAutomation,
   useToggleAutomation,
@@ -37,11 +38,16 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
     getAutomation: vi.fn(),
     getAutomationRuns: vi.fn(),
     dispatchAutomation: vi.fn(),
+    cancelAutomationRun: vi.fn(),
     deleteAutomation: vi.fn(),
     updateAutomation: vi.fn(),
     toggleAutomation: vi.fn(),
   },
 }));
+
+// Mirrors the non-terminal poll interval returned by `useAutomationRuns`
+// (`refetchInterval` in src/hooks/query/use-automation-detail.ts).
+const RUNS_POLL_INTERVAL_MS = 3000;
 
 let captureMock: ReturnType<typeof vi.spyOn>;
 
@@ -116,6 +122,10 @@ beforeEach(() => {
   vi.mocked(AutomationService.dispatchAutomation).mockResolvedValue(
     automationRun,
   );
+  vi.mocked(AutomationService.cancelAutomationRun).mockReset();
+  vi.mocked(AutomationService.cancelAutomationRun).mockResolvedValue(
+    automationRun,
+  );
   vi.mocked(AutomationService.deleteAutomation).mockReset();
   vi.mocked(AutomationService.updateAutomation).mockReset();
   vi.mocked(AutomationService.toggleAutomation).mockReset();
@@ -138,10 +148,9 @@ afterEach(() => {
 describe("automation hooks — backend switch", () => {
   it("useAutomations refetches when the active backend changes", async () => {
     // Arrange — mount under the local backend; capture the initial fetch.
-    const { result } = renderHook(
-      () => useAutomations({ limit: 50, offset: 0 }),
-      { wrapper: makeWrapper() },
-    );
+    const { result } = renderHook(() => useAutomations(), {
+      wrapper: makeWrapper(),
+    });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(AutomationService.getAutomations).toHaveBeenCalledTimes(1);
 
@@ -154,6 +163,26 @@ describe("automation hooks — backend switch", () => {
     await waitFor(() => {
       expect(AutomationService.getAutomations).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it("useAutomations shows no automations of the previous backend while the next one loads", async () => {
+    // Arrange — the local backend's list is loaded; the cloud one never settles.
+    const { result } = renderHook(() => useAutomations(), {
+      wrapper: makeWrapper(),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    vi.mocked(AutomationService.getAutomations).mockReturnValue(
+      new Promise(() => {}),
+    );
+
+    // Act
+    act(() => setActiveSelection({ backendId: cloudBackend.id }));
+
+    // Assert
+    await waitFor(() =>
+      expect(AutomationService.getAutomations).toHaveBeenCalledTimes(2),
+    );
+    expect(result.current.data).toBeUndefined();
   });
 
   it("useAutomationDetail refetches when the active backend changes", async () => {
@@ -203,23 +232,29 @@ describe("useAutomationRuns — polling", () => {
     completed_at: "2026-01-02T00:00:30Z",
   };
 
-  it(
-    "re-fetches while a run is non-terminal, and stops once all runs are terminal",
-    async () => {
-      // Arrange: first fetch returns a PENDING run (polling should engage);
-      // subsequent fetches return a COMPLETED run (polling should then stop).
-      const pendingResponse: AutomationRunsResponse = {
-        runs: [pendingRun],
-        total: 1,
-      };
-      const completedResponse: AutomationRunsResponse = {
-        runs: [completedRun],
-        total: 1,
-      };
-      vi.mocked(AutomationService.getAutomationRuns)
-        .mockResolvedValueOnce(pendingResponse)
-        .mockResolvedValue(completedResponse);
+  it("re-fetches while a run is non-terminal, and stops once all runs are terminal", async () => {
+    // Arrange: first fetch returns a PENDING run (polling should engage);
+    // subsequent fetches return a COMPLETED run (polling should then stop).
+    const pendingResponse: AutomationRunsResponse = {
+      runs: [pendingRun],
+      total: 1,
+    };
+    const completedResponse: AutomationRunsResponse = {
+      runs: [completedRun],
+      total: 1,
+    };
+    vi.mocked(AutomationService.getAutomationRuns)
+      .mockResolvedValueOnce(pendingResponse)
+      .mockResolvedValue(completedResponse);
 
+    // Drive the poll window with fake timers: the contract under test is
+    // "one refetch per window while non-terminal, none once terminal", and
+    // advancing the clock asserts exactly that without paying for it in
+    // real time. `advanceTimersByTimeAsync` is required rather than the
+    // synchronous form because each refetch settles through microtasks
+    // between timer callbacks.
+    vi.useFakeTimers();
+    try {
       // Act
       renderHook(
         () => useAutomationRuns({ id: "auto-1", limit: 20, offset: 0 }),
@@ -227,29 +262,96 @@ describe("useAutomationRuns — polling", () => {
       );
 
       // Assert: the initial fetch fires once.
-      await waitFor(() => {
-        expect(AutomationService.getAutomationRuns).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
       });
+      expect(AutomationService.getAutomationRuns).toHaveBeenCalledTimes(1);
 
       // The cached data still contains a PENDING run, so refetchInterval
-      // engages and a second fetch arrives within the poll window.
-      await waitFor(
-        () => {
-          expect(AutomationService.getAutomationRuns).toHaveBeenCalledTimes(2);
-        },
-        { timeout: 5000 },
-      );
-
-      // The second fetch returned a COMPLETED run, so polling should stop.
-      // Give the would-be next poll window plenty of slack and assert no
-      // further calls happen.
-      await new Promise((resolve) => {
-        setTimeout(resolve, 4000);
+      // engages and a second fetch arrives one poll window later.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(RUNS_POLL_INTERVAL_MS);
       });
       expect(AutomationService.getAutomationRuns).toHaveBeenCalledTimes(2);
-    },
-    15000,
-  );
+
+      // The second fetch returned a COMPLETED run, so polling should stop:
+      // several further poll windows elapse with no additional calls.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(RUNS_POLL_INTERVAL_MS * 3);
+      });
+      expect(AutomationService.getAutomationRuns).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("run mutations — sidebar conversation refresh", () => {
+  // The sidebar's conversation poll is paused on automation routes, so these
+  // mutations are what keep the sidebar list current for a run's conversation.
+  function makeClientWrapper() {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    function Wrapper({ children }: { children: React.ReactNode }) {
+      return (
+        <QueryClientProvider client={queryClient}>
+          <ActiveBackendProvider>{children}</ActiveBackendProvider>
+        </QueryClientProvider>
+      );
+    }
+    return { queryClient, Wrapper };
+  }
+
+  const conversationsKey = [
+    "user",
+    "conversations",
+    "paginated",
+    20,
+    "local-1",
+    null,
+  ];
+
+  it("invalidates the cached conversation list after a successful dispatch", async () => {
+    // Arrange — a sidebar list already sits in the cache.
+    const { queryClient, Wrapper } = makeClientWrapper();
+    queryClient.setQueryData(conversationsKey, { pages: [], pageParams: [] });
+    const { result } = renderHook(() => useDispatchAutomation(), {
+      wrapper: Wrapper,
+    });
+
+    // Act
+    await act(async () => {
+      await result.current.mutateAsync("auto-1");
+    });
+
+    // Assert
+    expect(queryClient.getQueryState(conversationsKey)?.isInvalidated).toBe(
+      true,
+    );
+  });
+
+  it("invalidates the cached conversation list after a successful cancel", async () => {
+    // Arrange
+    const { queryClient, Wrapper } = makeClientWrapper();
+    queryClient.setQueryData(conversationsKey, { pages: [], pageParams: [] });
+    const { result } = renderHook(() => useCancelAutomationRun(), {
+      wrapper: Wrapper,
+    });
+
+    // Act
+    await act(async () => {
+      await result.current.mutateAsync({
+        automationId: "auto-1",
+        runId: "run-1",
+      });
+    });
+
+    // Assert
+    expect(queryClient.getQueryState(conversationsKey)?.isInvalidated).toBe(
+      true,
+    );
+  });
 });
 
 describe("automation mutation hooks — analytics tracking", () => {

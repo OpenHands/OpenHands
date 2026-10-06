@@ -28,7 +28,7 @@
  *
  * Environment variables:
  *   - PORT: Ingress port (default: 8000)
- *   - OH_AUTOMATION_GIT_REF: Git ref for automation (default: main)
+ *   - OH_AUTOMATION_GIT_REF: Git ref for automation (overrides default version)
  *   - OH_AGENT_SERVER_LOCAL_PATH: Absolute path to a local software-agent-sdk
  *     checkout. Highest precedence for agent-server source selection: rebuilds
  *     the agent-server from local source and installs openhands-sdk,
@@ -71,6 +71,12 @@ import {
   signalProcessTree,
 } from "./dev-process-utils.mjs";
 import { fileLog, stripAnsi } from "./logger.mjs";
+import {
+  applySessionKeyPolicy,
+  bindHostArgs,
+  isLoopbackBind,
+  resolveBindHost,
+} from "./bind-host.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(__dirname, "..");
@@ -176,6 +182,7 @@ function parseArgs() {
     public: false,
     frontendOnly: false,
     backendOnly: false,
+    host: null,
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -215,6 +222,10 @@ function parseArgs() {
       case "--backend-only":
         config.backendOnly = true;
         break;
+      case "-H":
+      case "--host":
+        config.host = args[++i];
+        break;
       case "-h":
       case "--help":
         showHelp();
@@ -237,6 +248,9 @@ USAGE:
 
 OPTIONS:
   -p, --port <port>           Ingress port (default: 8000)
+  -H, --host <host>           Bind address for ingress/static (default: 127.0.0.1).
+                              Use 0.0.0.0 or :: to listen on all interfaces; the
+                              session key will not be injected into HTML.
   --automation-ref <ref>      Git ref for automation (branch/tag/SHA)
   --automation-repo <url>     Git repo URL (default: ${DEFAULT_AUTOMATION_REPO})
   --static                    Serve an existing production build instead of Vite
@@ -250,6 +264,7 @@ OPTIONS:
 
 ENVIRONMENT VARIABLES:
   PORT                        Alternative to --port
+  OH_BIND_HOST                Alternative to --host (default: 127.0.0.1)
   OH_AUTOMATION_GIT_REF       Git ref for automation (overrides default version)
   OH_AUTOMATION_VERSION       Specific PyPI version for automation (default: ${DEFAULT_AUTOMATION_VERSION})
   OH_AUTOMATION_LOCAL_PATH    Absolute path to a local automation checkout (overridden only by --automation-git-ref)
@@ -445,7 +460,8 @@ async function buildConfig(args, env = process.env) {
   logStep("ports", "Checking ports...");
   await assertPortsFree(requiredPorts);
 
-  const vscodePort = preferredBackendPort + 1000;
+  const vscodePort =
+    env.OH_CANVAS_ENABLE_VSCODE === "true" ? preferredBackendPort + 1000 : null;
 
   // API key — shared by both agent-server and automation backend.
   // Both validate it via the `X-Session-API-Key` header.
@@ -459,7 +475,9 @@ async function buildConfig(args, env = process.env) {
     ...env,
     OH_CANVAS_SAFE_STATE_DIR: stateDir,
     OH_CANVAS_SAFE_BACKEND_PORT: preferredBackendPort.toString(),
-    OH_CANVAS_SAFE_VSCODE_PORT: vscodePort.toString(),
+    ...(vscodePort
+      ? { OH_CANVAS_SAFE_VSCODE_PORT: vscodePort.toString() }
+      : {}),
   });
   const sessionApiKey = safeConfig.sessionApiKey;
 
@@ -476,6 +494,20 @@ async function buildConfig(args, env = process.env) {
     );
   }
 
+  const bindHost = resolveBindHost({
+    flag: args.host,
+    env:
+      env.OH_BIND_HOST ||
+      (env.OH_CONVERSATION_RUNTIME === "docker" ? "0.0.0.0" : undefined),
+  });
+  if (!isLoopbackBind(bindHost) && !isPublic) {
+    logService(
+      "auth",
+      `Bind host ${bindHost} is not loopback — session key will not be injected into HTML`,
+      c.yellow,
+    );
+  }
+
   return {
     // Ingress port (main entry point)
     ingressPort: preferredIngressPort,
@@ -485,6 +517,10 @@ async function buildConfig(args, env = process.env) {
     autoBackendPort: preferredAutomationPort,
     vitePort: preferredVitePort,
     vscodePort,
+    // Prefix the editor is served under on the ingress origin. Carried on the
+    // config so the route table and the agent-server env are built from one
+    // value (see getLocalServiceRoutes / buildAgentServerEnv).
+    vscodeBasePath: safeConfig.vscodeBasePath,
 
     // Paths
     canvasPath: projectRoot,
@@ -512,6 +548,7 @@ async function buildConfig(args, env = process.env) {
     launchAutomation,
 
     verbose: args.verbose,
+    bindHost,
   };
 }
 
@@ -757,6 +794,20 @@ function getLocalServiceRoutes(config) {
     for (const prefix of AGENT_SERVER_ROUTE_PREFIXES) {
       routes.push([prefix, getAgentServerBaseUrl(config)]);
     }
+
+    // The editor is a separate process on its own port, but it is reached
+    // through the same origin as the canvas so no second port has to be
+    // published. The prefix is deliberately preserved rather than stripped:
+    // agent-server launches openvscode-server with `--server-base-path`, so
+    // the editor generates its own HTTP and WebSocket URLs beneath the prefix
+    // and only answers there. `createRouter` matches the longest prefix and
+    // the proxy forwards the original path, so both are already handled.
+    if (config.vscodeBasePath) {
+      routes.push([
+        config.vscodeBasePath,
+        `http://127.0.0.1:${config.vscodePort}`,
+      ]);
+    }
   }
 
   return routes;
@@ -764,6 +815,32 @@ function getLocalServiceRoutes(config) {
 
 function buildRouteArgs(routes) {
   return routes.flatMap(([prefix, url]) => ["--route", `${prefix}=${url}`]);
+}
+
+/**
+ * The editor prefix, if this mode serves it, as `--no-referrer-prefix` args.
+ *
+ * agent-server hands the editor a connection token derived from its session
+ * key and advertises it in the URL's query string, so the workbench document
+ * must not leak a Referer to the subresources it loads.
+ */
+function getNoReferrerPrefixArgs(config) {
+  if (!config.launchAgentServer || !config.vscodeBasePath) return [];
+  return ["--no-referrer-prefix", config.vscodeBasePath];
+}
+
+/**
+ * The editor prefix, if this mode serves it, as `--vscode-base-path` args.
+ *
+ * Gated on exactly the same condition as the editor route in
+ * `getLocalServiceRoutes`, because they answer the same question: an origin
+ * advertises the editor if and only if it routes it. static-server enforces
+ * that pairing at startup, so a future edit that breaks it fails loudly rather
+ * than shipping a control that opens the SPA.
+ */
+function getVSCodeAdvertiseArgs(config) {
+  if (!config.launchAgentServer || !config.vscodeBasePath) return [];
+  return ["--vscode-base-path", config.vscodeBasePath];
 }
 
 /**
@@ -779,6 +856,12 @@ function getRejectPrefixes(config) {
   if (!config.launchAgentServer) {
     for (const prefix of AGENT_SERVER_ROUTE_PREFIXES) {
       prefixes.push(prefix);
+    }
+    // No agent-server means no editor behind this prefix either. Reject it
+    // rather than SPA-fallbacking to index.html, which would answer an editor
+    // request with the canvas shell.
+    if (config.vscodeBasePath) {
+      prefixes.push(config.vscodeBasePath);
     }
   }
   return prefixes;
@@ -868,11 +951,18 @@ function startAgentServer(config) {
     ...process.env,
     OH_CANVAS_SAFE_STATE_DIR: config.stateDir,
     OH_CANVAS_SAFE_BACKEND_PORT: config.agentServerPort.toString(),
-    OH_CANVAS_SAFE_VSCODE_PORT: config.vscodePort.toString(),
+    ...(config.vscodePort
+      ? { OH_CANVAS_SAFE_VSCODE_PORT: config.vscodePort.toString() }
+      : {}),
   });
 
   const agentServerEnv = {
-    ...buildAgentServerEnv(safeConfig),
+    // Opt into prefix-mode: `getLocalServiceRoutes` registers the matching
+    // route on both the static server and the ingress, so the prefix this
+    // advertises resolves to the editor port on the canvas origin.
+    ...buildAgentServerEnv(safeConfig, {
+      vscodeBasePath: config.vscodeBasePath,
+    }),
     ...buildAgentServerAutomationEnv(config),
     OPENHANDS_REMOTE_WS_READY_REQUIRED:
       process.env.OPENHANDS_REMOTE_WS_READY_REQUIRED || "false",
@@ -1057,10 +1147,12 @@ function startIngress(config) {
       ingressScript,
       "--port",
       config.ingressPort.toString(),
+      ...bindHostArgs(config.bindHost),
       ...(runtimeServicesInfo
         ? ["--runtime-services-info", runtimeServicesInfo]
         : []),
       ...buildRouteArgs(getLocalServiceRoutes(config)),
+      ...getNoReferrerPrefixArgs(config),
       ...(frontendBackend ? ["--default", frontendBackend] : []),
     ],
     {
@@ -1076,10 +1168,12 @@ function startIngress(config) {
  * frontend connected to the backend can populate the agent's
  * `<RUNTIME_SERVICES>` system-prompt block.
  */
-export function buildAutomationRuntimeServicesInfo(config) {
+export function buildAutomationRuntimeServicesInfo(config, env = process.env) {
+  const dockerConversationRuntime = env.OH_CONVERSATION_RUNTIME === "docker";
+  const agentHostAlias = config.agentHostAlias ?? getAgentHostAlias(env);
   return buildRuntimeServicesInfo({
     mode: config.mode ?? "dev:automation",
-    agentHostAlias: config.agentHostAlias ?? "localhost",
+    agentHostAlias,
     agentServerPort: config.agentServerPort,
     ingressPort: config.ingressPort,
     frontendPort: config.launchFrontend ? config.vitePort : undefined,
@@ -1088,35 +1182,77 @@ export function buildAutomationRuntimeServicesInfo(config) {
     // description shown to the agent matches reality.
     frontendKind: config.frontendKind ?? "vite",
     automation: config.launchAutomation
-      ? { port: config.autoBackendPort }
+      ? dockerConversationRuntime
+        ? { url: `http://${agentHostAlias}:${config.ingressPort}` }
+        : { port: config.autoBackendPort }
       : undefined,
   });
+}
+
+export function getAgentHostAlias(env = process.env) {
+  return env.OH_CONVERSATION_RUNTIME === "docker"
+    ? "host.docker.internal"
+    : "localhost";
+}
+
+function buildViteFrontendEnv(config) {
+  /** @type {Record<string, string>} */
+  const viteEnv = {
+    // Full-stack mode points Vite at this launcher's ingress. Frontend-only
+    // mode uses the separately running backend ingress instead.
+    ...buildViteBackendEnv(config),
+    VITE_FRONTEND_PORT: config.vitePort.toString(),
+    VITE_BIND_HOST: config.bindHost,
+  };
+  if (config.viteWorkingDir) {
+    viteEnv.VITE_WORKING_DIR = config.viteWorkingDir;
+  }
+
+  // Vite serves the HTML for this mode's browser origin, so this is where the
+  // editor-capability advertisement has to be baked. The ingress in front of it
+  // routes the prefix but is a pure proxy — it injects nothing into the
+  // document, so it cannot tell the frontend what it serves.
+  //
+  // Both variables or neither: `vite.config.ts` only registers the editor proxy
+  // when it has a target as well as a prefix, and this stack has two supported
+  // browser origins — the ingress and Vite's own port, which is why the latter
+  // is in AUTOMATION_CORS_ORIGINS. On the ingress the prefix is routed by the
+  // ingress itself; on the Vite origin only this proxy can serve it. Baking the
+  // prefix alone would advertise an editor on the Vite origin whose URL then
+  // falls through to the SPA — the dead button this gating exists to prevent.
+  if (config.launchAgentServer && config.vscodeBasePath) {
+    viteEnv.VITE_VSCODE_BASE_PATH = config.vscodeBasePath;
+    viteEnv.VITE_VSCODE_TARGET = `http://127.0.0.1:${config.vscodePort}`;
+  }
+
+  // The Vite origin is directly reachable on its own port, so it must use the
+  // same bind/key policy as ingress and the static server. Local loopback mode
+  // keeps transparent auth; public or off-loopback mode serves no credential
+  // and shows the API-key entry screen.
+  const policy = applySessionKeyPolicy({
+    host: config.bindHost,
+    sessionApiKey:
+      config.launchAgentServer && !config.isPublic
+        ? config.sessionApiKey
+        : null,
+    authRequired: Boolean(config.launchAgentServer && config.isPublic),
+    warn: (msg) => logService("vite", msg, c.yellow),
+  });
+  if (policy.authRequired) {
+    viteEnv.VITE_AUTH_REQUIRED = "true";
+  }
+  if (policy.sessionApiKey) {
+    viteEnv.VITE_SESSION_API_KEY = policy.sessionApiKey;
+  }
+
+  return viteEnv;
 }
 
 function startVite(config) {
   logService("vite", `Starting on port ${config.vitePort}...`, c.magenta);
 
   const frontendCommand = buildNpmScriptCommand("dev:frontend");
-
-  const viteEnv = {
-    // Full-stack mode points Vite at this launcher's ingress. Frontend-only
-    // mode uses the separately running backend ingress instead.
-    ...buildViteBackendEnv(config),
-    VITE_FRONTEND_PORT: config.vitePort.toString(),
-  };
-  if (config.viteWorkingDir) {
-    viteEnv.VITE_WORKING_DIR = config.viteWorkingDir;
-  }
-
-  // In local mode, bake the session key into the frontend so the user
-  // never has to paste it. In public mode, omit the key and set
-  // VITE_AUTH_REQUIRED so the frontend shows the API key entry screen
-  // immediately (no network round-trip needed).
-  if (config.launchAgentServer && config.isPublic) {
-    viteEnv.VITE_AUTH_REQUIRED = "true";
-  } else if (config.launchAgentServer) {
-    viteEnv.VITE_SESSION_API_KEY = config.sessionApiKey;
-  }
+  const viteEnv = buildViteFrontendEnv(config);
 
   spawnService("vite", frontendCommand.command, frontendCommand.args, {
     cwd: config.canvasPath,
@@ -1329,7 +1465,7 @@ async function main(options = {}) {
     buildStaticFrontend,
     staticDir: staticDirOverride,
     // Hostname the agent uses to reach services running on the host.
-    agentHostAlias = "localhost",
+    agentHostAlias = getAgentHostAlias(),
     // Human-readable label for the dev mode, surfaced in the agent's
     // <RUNTIME_SERVICES> system-prompt block.
     mode = "dev:automation",
@@ -1553,24 +1689,43 @@ function startStaticFrontend(config, staticDir) {
       staticDir,
       "--port",
       String(config.vitePort),
+      ...bindHostArgs(config.bindHost),
       ...(process.env.VITE_BASE_PATH
         ? ["--base-path", process.env.VITE_BASE_PATH]
         : []),
-      // In local mode, inject the API key so the pre-built frontend can
-      // authenticate transparently. In public mode, pass --auth-required
-      // so the frontend shows the API key entry screen instead.
-      ...(config.launchAgentServer && !config.isPublic && config.sessionApiKey
-        ? ["--session-api-key", config.sessionApiKey]
-        : []),
-      ...(config.launchAgentServer && config.isPublic
-        ? ["--auth-required"]
-        : []),
+      // In local mode on loopback, inject the API key so the pre-built
+      // frontend can authenticate transparently. Off-loopback binds (and
+      // public mode) use the API key entry screen instead.
+      ...(() => {
+        const policy = applySessionKeyPolicy({
+          host: config.bindHost,
+          sessionApiKey:
+            config.launchAgentServer && !config.isPublic
+              ? config.sessionApiKey
+              : null,
+          authRequired: Boolean(config.launchAgentServer && config.isPublic),
+          warn: (msg) => logService("static", msg, c.yellow),
+        });
+        const flags = [];
+        if (policy.sessionApiKey) {
+          flags.push("--session-api-key", policy.sessionApiKey);
+        }
+        if (policy.authRequired) {
+          flags.push("--auth-required");
+        }
+        return flags;
+      })(),
       // Inject runtime-services info so the agent knows what's reachable.
       ...(runtimeServicesInfo
         ? ["--runtime-services-info", runtimeServicesInfo]
         : []),
       // Proxy routes only to services that this launch mode started.
       ...buildRouteArgs(getLocalServiceRoutes(config)),
+      // Only the static server injects into the document, so only it can tell
+      // the frontend this origin serves the editor. The ingress routes the same
+      // prefix but proxies the HTML through untouched.
+      ...getVSCodeAdvertiseArgs(config),
+      ...getNoReferrerPrefixArgs(config),
       // Reject known API prefixes that have no backend — returns 503
       // instead of SPA-fallbacking to index.html.
       ...buildRejectPrefixArgs(getRejectPrefixes(config)),
@@ -1593,9 +1748,13 @@ export {
   buildConfig,
   buildRouteArgs,
   buildViteBackendEnv,
+  buildViteFrontendEnv,
   getAgentServerBaseUrl,
   getFrontendBackend,
   getLocalServiceRoutes,
+  getNoReferrerPrefixArgs,
+  getRejectPrefixes,
+  getVSCodeAdvertiseArgs,
   main,
   registerShutdownHook,
   spawnService,

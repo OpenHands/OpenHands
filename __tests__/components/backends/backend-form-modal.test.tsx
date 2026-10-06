@@ -16,11 +16,17 @@ import {
 import { BackendFormModal } from "#/components/features/backends/backend-form-modal";
 
 const getServerInfoMock = vi.hoisted(() => vi.fn());
+const getSettingsMock = vi.hoisted(() => vi.fn().mockResolvedValue({}));
 
 vi.mock("@openhands/typescript-client/clients", () => ({
   ServerClient: vi.fn(function ServerClientMock() {
     return {
       getServerInfo: getServerInfoMock,
+    };
+  }),
+  SettingsClient: vi.fn(function SettingsClientMock() {
+    return {
+      getSettings: getSettingsMock,
     };
   }),
 }));
@@ -63,7 +69,7 @@ function TestSeed({
 beforeEach(() => {
   window.localStorage.clear();
   getServerInfoMock.mockReset();
-  getServerInfoMock.mockResolvedValue({ version: "1.28.0" });
+  getServerInfoMock.mockResolvedValue({ version: "1.52.0" });
   __resetActiveStoreForTests();
 });
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AgentProfilesManager } from "./agent-profiles-manager";
+import { GlobalToolsNotice } from "./global-tools-notice";
 import { mergeAgentProfileSaveInput } from "./merge-agent-profile-save-input";
 import { ProfileNameInput } from "#/components/features/settings/llm-profiles/profile-name-input";
 import { BrandButton } from "#/components/features/settings/brand-button";
@@ -10,6 +11,7 @@ import {
   type AgentSettingsSaveControl,
 } from "#/routes/agent-settings";
 import AgentProfilesService, {
+  WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME,
   type AgentProfile,
   type AgentProfileSummary,
   type AgentProfileSaveInput,
@@ -41,9 +43,12 @@ type ViewMode = "list" | "create" | "edit";
 function toAgentSettingsOverride(
   profile: AgentProfile,
 ): Record<string, SettingsValue> {
+  const secretRefs = profile.secret_refs ?? null;
   if (profile.agent_kind === "acp") {
     return {
       agent_kind: "acp",
+      mcp_server_refs: profile.mcp_server_refs ?? null,
+      secret_refs: secretRefs,
       acp_server: profile.acp_server,
       acp_command: profile.acp_command ? parseCommand(profile.acp_command) : [],
       acp_args: profile.acp_args ?? [],
@@ -52,8 +57,12 @@ function toAgentSettingsOverride(
   }
   return {
     agent_kind: "openhands",
-    enable_sub_agents: profile.enable_sub_agents,
+    mcp_server_refs: profile.mcp_server_refs ?? null,
+    tools: (profile.tools as SettingsValue) ?? null,
     tool_concurrency_limit: profile.tool_concurrency_limit,
+    secret_refs: secretRefs,
+    persona: profile.persona ?? null,
+    system_message_suffix: profile.system_message_suffix ?? null,
   };
 }
 
@@ -256,10 +265,13 @@ export function AgentProfilesLocalView() {
 
   if (viewMode === "list") {
     return (
-      <AgentProfilesManager
-        onAddProfile={handleAddProfile}
-        onEditProfile={handleEditProfile}
-      />
+      <div className="flex flex-col gap-4">
+        <GlobalToolsNotice />
+        <AgentProfilesManager
+          onAddProfile={handleAddProfile}
+          onEditProfile={handleEditProfile}
+        />
+      </div>
     );
   }
 
@@ -272,6 +284,18 @@ export function AgentProfilesLocalView() {
       ? t(I18nKey.SETTINGS$PROFILE_LOADED, { name: editingProfile.name })
       : t(I18nKey.SETTINGS$PROFILE_SAVE_HINT);
   const isOpenHands = saveControl?.agentType !== "acp";
+  const nameDirty = viewMode === "edit" && profileName !== editingProfile?.name;
+  const loadedLlmRef =
+    editingProfile?.agent_kind === "openhands"
+      ? editingProfile.llm_profile_ref
+      : "";
+  const llmRefDirty =
+    viewMode === "edit" && isOpenHands && llmProfileRef !== loadedLlmRef;
+  const hasUnsavedChanges =
+    viewMode === "create" ||
+    Boolean(saveControl?.isDirty) ||
+    nameDirty ||
+    llmRefDirty;
 
   return (
     <div className="flex flex-col gap-6">
@@ -303,9 +327,11 @@ export function AgentProfilesLocalView() {
       {/* Reuse the existing Agent settings form to define the agent. */}
       <AgentSettingsScreen
         key={viewMode === "edit" ? `edit-${editingProfile?.id}` : "new-profile"}
-        embedded
         agentSettingsOverride={override}
         onSaveControlChange={setSaveControl}
+        isDefaultProfile={
+          profileName.trim() === WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME
+        }
       />
 
       {/* OpenHands profiles reference an LLM profile (required). */}
@@ -345,7 +371,12 @@ export function AgentProfilesLocalView() {
           type="button"
           variant="primary"
           onClick={handleSave}
-          isDisabled={!isNameValid || isSaving || !saveControl?.isValid}
+          isDisabled={
+            !isNameValid ||
+            isSaving ||
+            !saveControl?.isValid ||
+            !hasUnsavedChanges
+          }
           aria-busy={isSaving}
         >
           {isSaving ? t(I18nKey.SETTINGS$SAVING) : t(I18nKey.BUTTON$SAVE)}

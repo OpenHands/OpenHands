@@ -16,6 +16,7 @@ import process from "node:process";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { applySessionKeyPolicy } from "./bind-host.mjs";
 import {
   getProcessTreeSpawnOptions,
   isProcessRunning,
@@ -37,6 +38,8 @@ const SHARED_DEFAULTS = JSON.parse(
 );
 
 const DEFAULT_BACKEND_PORT = SHARED_DEFAULTS.ports.agentServer;
+export const VSCODE_BASE_PATH = "/vscode";
+const VSCODE_ENABLED_ENV = "OH_CANVAS_ENABLE_VSCODE";
 const DEFAULT_VITE_PORT = 3001;
 const DEFAULT_WAIT_TIMEOUT_MS = 30_000;
 const DEFAULT_AGENT_SERVER_PACKAGE = SHARED_DEFAULTS.packages.agentServer;
@@ -48,11 +51,6 @@ const LOCAL_AGENT_SERVER_SUBDIRS = [
   "openhands-workspace",
 ];
 const DEFAULT_AGENT_SERVER_VERSION = SHARED_DEFAULTS.versions.agentServer;
-// Temporary transitive-dep pin: openhands-sdk 1.40.1 leaves agent-client-protocol
-// unbounded (>=0.10.1), but acp 0.11.0 reordered the ACP prompt() args and breaks
-// the SDK's ACP client. Hold acp <0.11 until a fixed SDK ships. See config/defaults.json.
-const AGENT_CLIENT_PROTOCOL_CONSTRAINT =
-  SHARED_DEFAULTS.constraints?.agentClientProtocol;
 const DEFAULT_AGENT_SERVER_TELEMETRY_POSTHOG_API_KEY =
   SHARED_DEFAULTS.telemetry.posthogApiKey;
 const DEFAULT_AGENT_SERVER_TELEMETRY_POSTHOG_HOST =
@@ -397,6 +395,16 @@ export function validateFrontendDependencies(
 }
 
 /**
+ * Modules the agent-server imports at startup (`--import-modules`). They are
+ * resolved from `tools/`, which `buildAgentServerEnv` exposes through
+ * OH_EXTRA_PYTHON_PATH. Importing `canvas_ui_tool` eagerly registers the SDK's
+ * builtin FinishTool so automation presets (openhands-automation >= 1.9.0) can
+ * resolve it on the remote conversations they dispatch — see the note at the
+ * bottom of tools/canvas_ui_tool.py.
+ */
+export const AGENT_SERVER_IMPORT_MODULES = "canvas_ui_tool";
+
+/**
  * Build the uvx command and arguments for running agent-server.
  *
  * Environment variables (highest precedence first):
@@ -406,7 +414,7 @@ export function validateFrontendDependencies(
  *   edits are picked up without a manual reinstall. The agent-server itself
  *   is rebuilt from local source on each invocation (--reinstall).
  * - OH_AGENT_SERVER_GIT_REF: Git commit SHA or branch name
- * - OH_AGENT_SERVER_VERSION: Specific PyPI version (e.g., "1.42.1")
+ * - OH_AGENT_SERVER_VERSION: Specific PyPI version (e.g., "1.53.0")
  *
  * If none are set, defaults to the released version specified by
  * DEFAULT_AGENT_SERVER_VERSION. Set OH_AGENT_SERVER_GIT_REF to use a
@@ -484,9 +492,6 @@ export function buildAgentServerCommand(env = process.env) {
       "--with",
       `openhands-workspace==${version}`,
     );
-    if (AGENT_CLIENT_PROTOCOL_CONSTRAINT) {
-      uvxArgs.push("--with", AGENT_CLIENT_PROTOCOL_CONSTRAINT);
-    }
     uvxArgs.push("--with", AGENT_SERVER_POSTHOG_CONSTRAINT);
     uvxArgs.push("agent-server");
     source = `PyPI (${version})`;
@@ -503,13 +508,14 @@ export function buildAgentServerCommand(env = process.env) {
       "--with",
       `openhands-workspace==${DEFAULT_AGENT_SERVER_VERSION}`,
     );
-    if (AGENT_CLIENT_PROTOCOL_CONSTRAINT) {
-      uvxArgs.push("--with", AGENT_CLIENT_PROTOCOL_CONSTRAINT);
-    }
     uvxArgs.push("--with", AGENT_SERVER_POSTHOG_CONSTRAINT);
     uvxArgs.push("agent-server");
     source = `PyPI (${DEFAULT_AGENT_SERVER_VERSION}, default)`;
   }
+
+  // Everything after the executable name is an agent-server CLI argument.
+  // Import the registration module before any conversation is created.
+  uvxArgs.push("--import-modules", AGENT_SERVER_IMPORT_MODULES);
 
   return {
     command: "uvx",
@@ -552,9 +558,21 @@ export function buildSafeDevConfig(cwd = process.cwd(), env = process.env) {
     env.OH_CANVAS_SAFE_BACKEND_PORT,
     DEFAULT_BACKEND_PORT,
   );
-  const vscodePort = parsePort(env.OH_CANVAS_SAFE_VSCODE_PORT, backendPort + 1);
+  const vscodePort =
+    env[VSCODE_ENABLED_ENV] === "true"
+      ? parsePort(env.OH_CANVAS_SAFE_VSCODE_PORT, backendPort + 1)
+      : null;
 
   return buildConfigFromPorts({ backendPort, vscodePort }, cwd, env);
+}
+
+export function getViteSessionApiKey(config, env = process.env) {
+  return (
+    applySessionKeyPolicy({
+      host: env.VITE_BIND_HOST || "127.0.0.1",
+      sessionApiKey: config.sessionApiKey,
+    }).sessionApiKey || ""
+  );
 }
 
 /**
@@ -576,16 +594,16 @@ export async function buildSafeDevConfigAsync(
     env.OH_CANVAS_SAFE_BACKEND_PORT,
     DEFAULT_BACKEND_PORT,
   );
-  const preferredVscodePort = parsePort(
-    env.OH_CANVAS_SAFE_VSCODE_PORT,
-    preferredBackendPort + 1,
-  );
+  const preferredVscodePort =
+    env[VSCODE_ENABLED_ENV] === "true"
+      ? parsePort(env.OH_CANVAS_SAFE_VSCODE_PORT, preferredBackendPort + 1)
+      : null;
 
-  // Fail fast if any required port is already in use.
-  await assertPortsFree([
-    { name: "agent-server", port: preferredBackendPort },
-    { name: "vscode", port: preferredVscodePort },
-  ]);
+  const requiredPorts = [{ name: "agent-server", port: preferredBackendPort }];
+  if (preferredVscodePort) {
+    requiredPorts.push({ name: "vscode", port: preferredVscodePort });
+  }
+  await assertPortsFree(requiredPorts);
 
   return buildConfigFromPorts(
     { backendPort: preferredBackendPort, vscodePort: preferredVscodePort },
@@ -598,7 +616,8 @@ export async function buildSafeDevConfigAsync(
  * @typedef {object} SafeDevConfig
  * @property {string} cwd
  * @property {number} backendPort
- * @property {number} vscodePort
+ * @property {number | null} vscodePort
+ * @property {string | null} vscodeBasePath
  * @property {string} stateDir
  * @property {string} tmuxTmpDir
  * @property {string} conversationsPath
@@ -657,6 +676,7 @@ function buildConfigFromPorts(ports, cwd, env) {
     cwd,
     backendPort,
     vscodePort,
+    vscodeBasePath: vscodePort ? VSCODE_BASE_PATH : null,
     stateDir,
     // tmux socket directory. Defaults to <stateDir>/tmux (under
     // ~/.openhands/agent-canvas), matching where the rest of dev state lives
@@ -688,13 +708,13 @@ function buildConfigFromPorts(ports, cwd, env) {
 }
 
 /**
- * Build the environment variables object for spawning the agent-server process.
+ * Telemetry-related env vars for the agent-server process.
  *
- * This is exported so downstream consumers (e.g., automation service) can use
- * the same env vars without duplicating the mapping logic.
+ * Split out from `buildAgentServerEnv` so callers that assemble their own
+ * agent-server environment can reuse the same mapping.
  *
- * @param {ReturnType<typeof buildSafeDevConfig>} config - Config from buildSafeDevConfig
- * @returns {Record<string, string>} Environment variables for agent-server
+ * @param {Record<string, string | undefined>} [env] - Source environment.
+ * @returns {Record<string, string>} Telemetry env vars for agent-server
  */
 export function buildAgentServerTelemetryEnv(env = process.env) {
   const telemetryDisabled =
@@ -739,9 +759,54 @@ export function buildAgentServerTelemetryEnv(env = process.env) {
   return result;
 }
 
-export function buildAgentServerEnv(config, env = process.env) {
+/**
+ * Build the environment variables object for spawning the agent-server process.
+ *
+ * This is exported so downstream consumers (e.g., automation service) can use
+ * the same env vars without duplicating the mapping logic.
+ *
+ * `vscodeBasePath` is an explicit opt-in rather than a field read off `config`,
+ * and that is deliberate. Setting it changes the URL `/api/vscode/url`
+ * advertises: agent-server appends the prefix to the browser origin the
+ * frontend sends, so the editor is only reachable if the same origin also
+ * routes that prefix to the editor port. A launcher that sets it without
+ * registering the route advertises `<origin>/vscode/…`, which serves the
+ * canvas SPA shell instead of the editor.
+ *
+ * Requiring the caller to name it makes the pairing greppable: every call site
+ * that passes `vscodeBasePath` must also register a matching route, and
+ * `__tests__/scripts/vscode-base-path-opt-in.test.ts` asserts that no launcher
+ * opts in without one.
+ *
+ * @param {ReturnType<typeof buildSafeDevConfig>} config - Config from buildSafeDevConfig
+ * @param {{vscodeBasePath?: string | null, env?: Record<string, string | undefined>}} [options]
+ * @param {string | null} [options.vscodeBasePath] - Opt into prefix-mode by
+ *   passing the path prefix the caller also routes to `config.vscodePort`.
+ * @param {Record<string, string | undefined>} [options.env] - Source
+ *   environment for the telemetry mapping (defaults to `process.env`).
+ * @returns {Record<string, string>} Environment variables for agent-server
+ */
+export function buildAgentServerEnv(config, options = {}) {
+  const { vscodeBasePath = null, env = process.env } = options;
+  const conversationRuntimeEnv = Object.fromEntries(
+    [
+      "OH_CONVERSATION_RUNTIME",
+      "OH_CONVERSATION_IMAGE",
+      "OH_CONVERSATION_IMAGE_HAS_BROWSER",
+      "OH_CONVERSATION_CONTAINER_MEMORY",
+      "OH_CONVERSATION_CONTAINER_CPUS",
+      "OH_CONVERSATION_CONTAINER_PIDS_LIMIT",
+      "OH_CONVERSATION_CONTAINER_STARTUP_TIMEOUT",
+    ]
+      .filter((key) => env[key] !== undefined)
+      .map((key) => [key, env[key]]),
+  );
   return {
     ...buildAgentServerTelemetryEnv(env),
+    ...conversationRuntimeEnv,
+    ...(env.VITE_ENABLE_BROWSER_TOOLS === "false"
+      ? { OH_ENABLE_BROWSER: env.OH_ENABLE_BROWSER || "false" }
+      : {}),
     // Force Python to use UTF-8 for all file I/O and streams.
     //
     // On Windows, Python defaults to the system ANSI codepage (e.g. cp1252).
@@ -758,7 +823,14 @@ export function buildAgentServerEnv(config, env = process.env) {
     OH_PERSISTENCE_DIR: path.dirname(config.stateDir),
     OH_CONVERSATIONS_PATH: config.conversationsPath,
     OH_BASH_EVENTS_DIR: config.bashEventsDir,
-    OH_VSCODE_PORT: String(config.vscodePort),
+    ...(config.vscodePort ? { OH_VSCODE_PORT: String(config.vscodePort) } : {}),
+    // Serve the editor under a path prefix on the canvas origin rather than on
+    // its own published port. agent-server passes this to openvscode-server as
+    // --server-base-path and includes it in the URL from /api/vscode/url, which
+    // matches the ingress route the caller registers for the same prefix.
+    //
+    // Omitted unless the caller opts in — see the note on this function.
+    ...(vscodeBasePath ? { OH_VSCODE_BASE_PATH: vscodeBasePath } : {}),
     OH_SECRET_KEY: config.secretKey,
     // Use OH_SESSION_API_KEYS_0 for agent-server V1 config format
     OH_SESSION_API_KEYS_0: config.sessionApiKey,
@@ -954,7 +1026,12 @@ async function main() {
       cwd: config.cwd,
       env: {
         ...process.env,
-        ...buildAgentServerEnv(config),
+        // Opt into prefix-mode: the Vite dev server proxies the same prefix to
+        // `config.vscodePort` (see VITE_VSCODE_TARGET below), so the advertised
+        // URL resolves on the frontend origin the browser is actually on.
+        ...buildAgentServerEnv(config, {
+          vscodeBasePath: config.vscodeBasePath,
+        }),
       },
     },
   );
@@ -986,6 +1063,12 @@ async function main() {
 
   process.on("SIGINT", () => shutdown("SIGINT"));
   process.on("SIGTERM", () => shutdown("SIGTERM"));
+  // Services are spawned detached, so a SIGHUP that kills this launcher (terminal
+  // or multiplexer death) would otherwise leave the whole tree running. Forward
+  // SIGTERM rather than SIGHUP: uvicorn only handles SIGINT/SIGTERM, so a
+  // forwarded SIGHUP would terminate the agent-server by default action instead
+  // of shutting it down gracefully.
+  process.on("SIGHUP", () => shutdown("SIGTERM"));
 
   const backendErrored = new Promise((_, reject) => {
     backend.once("error", (error) => reject(error));
@@ -1021,8 +1104,13 @@ async function main() {
       VITE_BACKEND_HOST: config.backendHost,
       VITE_BACKEND_BASE_URL: config.backendBaseUrl,
       VITE_WORKING_DIR: config.workingDir,
-      // Pass session API key so frontend can authenticate with agent-server
-      VITE_SESSION_API_KEY: config.sessionApiKey,
+      VITE_SESSION_API_KEY: getViteSessionApiKey(config),
+      // This mode has no static server or ingress in front of Vite, so Vite's
+      // own proxy is the only thing that can serve the editor prefix on the
+      // frontend origin. The editor is a separate process on a port of its
+      // own, so it needs its own proxy target rather than VITE_BACKEND_HOST.
+      VITE_VSCODE_BASE_PATH: config.vscodeBasePath,
+      VITE_VSCODE_TARGET: `http://127.0.0.1:${config.vscodePort}`,
       // dev:minimal deliberately does NOT supply runtime-services info (the
       // frontend here talks straight to the agent-server over
       // VITE_BACKEND_BASE_URL — there is no ingress or static-server in front

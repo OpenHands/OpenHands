@@ -92,6 +92,14 @@ the agent (step 3) and access the UI through an SSH tunnel. If you also want
 to reach it from a browser without tunneling, you'll open ports 80 and 443
 in step 4.
 
+> [!NOTE]
+> **Editor support is opt-in and default-off.** Prefer installing the VS Code
+> Canvas App, which uses the managed App-backend bridge and a separate browser
+> origin. `OH_CANVAS_ENABLE_VSCODE=true` enables the legacy bundled editor only
+> for compatibility testing. That legacy route shares the Canvas browser origin
+> (`/vscode` by default), so it does not provide the App bridge's origin
+> isolation. Tracked in [#16492](https://github.com/OpenHands/OpenHands/issues/16492).
+
 ## 3. Run Agent Canvas
 
 Install the prerequisites on the machine. On Ubuntu:
@@ -99,7 +107,7 @@ Install the prerequisites on the machine. On Ubuntu:
 ```bash
 apt-get update
 apt-get install -y curl git
-# Node.js 22.x (use nvm, asdf, or NodeSource — whatever you prefer)
+# Node.js 24.x (use nvm, asdf, or NodeSource — whatever you prefer)
 # uv (for the agent-server uvx runtime):
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```

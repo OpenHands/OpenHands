@@ -1,6 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createCommandMenuItems } from "#/components/features/command-menu/command-menu-items";
+import { OSS_NAV_ITEMS } from "#/constants/settings-nav";
 
 /**
  * The automation entry's title, description, and keywords are the interface
@@ -21,5 +22,68 @@ describe("the command menu without an admitted interface manifest", () => {
     // Assert
     expect(items.some((item) => item.id === "automations")).toBe(false);
     expect(items.some((item) => item.id === "new-chat")).toBe(true);
+  });
+});
+
+const settingsItemIds = (items: ReturnType<typeof createCommandMenuItems>) =>
+  items.filter((item) => item.group === "settings").map((item) => item.id);
+
+/**
+ * Locked to a Cloud host (SaaS / self-hosted OHE) the settings sidebar lists
+ * only the Application page; the command menu must not re-expose the pages
+ * that sidebar unlists.
+ */
+describe("the command menu settings group", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("lists every settings page when not locked to a Cloud host", () => {
+    // Act
+    const items = createCommandMenuItems({ toggleSidebar: vi.fn() });
+
+    // Assert
+    expect(settingsItemIds(items)).toEqual([
+      "settings",
+      "agent-settings",
+      "llm-settings",
+      "meta-llm-settings",
+      "condenser-settings",
+      "agent-context-settings",
+      "verification-settings",
+      "app-settings",
+      "secrets-settings",
+    ]);
+  });
+
+  it("offers an entry for every page the settings nav lists", () => {
+    // Act
+    const routes = createCommandMenuItems({ toggleSidebar: vi.fn() }).map(
+      (item) => item.to,
+    );
+
+    // Assert
+    expect(routes).toEqual(
+      expect.arrayContaining(OSS_NAV_ITEMS.map((navItem) => navItem.to)),
+    );
+  });
+
+  it("keeps only Settings and Application when locked to a Cloud host", () => {
+    // Arrange
+    vi.stubEnv("VITE_LOCK_TO_CLOUD", "https://app.all-hands.dev");
+
+    // Act
+    const items = createCommandMenuItems({ toggleSidebar: vi.fn() });
+
+    // Assert
+    expect(settingsItemIds(items)).toEqual(["settings", "app-settings"]);
+    expect(items.map((item) => item.id)).toEqual([
+      "new-chat",
+      "customize",
+      "mcp",
+      "settings",
+      "app-settings",
+      "toggle-sidebar",
+    ]);
   });
 });

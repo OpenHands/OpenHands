@@ -340,17 +340,6 @@ describe("useTracking", () => {
     });
   });
 
-  describe("trackDownloadVsCodeButtonClicked", () => {
-    it("captures download_via_vscode_button_clicked with commonProperties", () => {
-      getTracking().trackDownloadVsCodeButtonClicked();
-
-      expect(captureMock).toHaveBeenCalledWith(
-        "download_via_vscode_button_clicked",
-        expect.objectContaining(COMMON),
-      );
-    });
-  });
-
   describe("trackSettingsSaved", () => {
     it("captures settings_saved with all properties using SCREAMING_SNAKE_CASE keys", () => {
       getTracking().trackSettingsSaved({
@@ -410,12 +399,35 @@ describe("useTracking", () => {
       expect(captureMock).toHaveBeenCalledWith("backend_added", {
         ...COMMON,
         backend_kind: "cloud",
+        deployment_kind: "remote",
         connection_method: "cloud_login",
         has_api_key: true,
         source: "add_backend_modal",
         agent_server_version: "1.36.1",
         automation_sdk_version: "unknown",
         backend_version: "1.36.1",
+      });
+    });
+  });
+
+  describe("trackOnboardingLinkClicked", () => {
+    it("captures onboarding_link_clicked with the typed link contract and commonProperties", () => {
+      getTracking().trackOnboardingLinkClicked({
+        linkId: "join_slack",
+        destinationType: "community",
+        surface: "landing_checklist",
+        checklistItem: "join_slack",
+        isExternal: true,
+      });
+
+      expect(captureMock).toHaveBeenCalledWith("onboarding_link_clicked", {
+        link_id: "join_slack",
+        destination_type: "community",
+        surface: "landing_checklist",
+        checklist_item: "join_slack",
+        step_id: undefined,
+        is_external: true,
+        ...COMMON,
       });
     });
   });

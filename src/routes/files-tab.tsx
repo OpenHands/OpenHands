@@ -23,6 +23,7 @@ import { FileTreeView } from "#/components/features/files-tab/file-tree-view";
 import { FileContentViewer } from "#/components/features/files-tab/file-content-viewer";
 import { SegmentedToggle } from "#/components/features/files-tab/segmented-toggle";
 import { WorkspacePath } from "#/components/features/files-tab/workspace-path";
+import { WorkspaceFileDiscoverySettings } from "#/components/features/files-tab/workspace-file-discovery-settings";
 import type { ViewMode } from "#/components/features/files-tab/view-mode";
 import {
   FILES_TAB_TREE_DEFAULT_WIDTH_PX,
@@ -146,22 +147,25 @@ function FilesTab() {
   };
 
   const quickRowActions = (
-    <button
-      type="button"
-      onClick={refreshFiles}
-      disabled={isRefreshing}
-      aria-label={t(I18nKey.FILES$REFRESH)}
-      title={t(I18nKey.FILES$REFRESH)}
-      data-testid="files-tab-refresh"
-      className="flex items-center justify-center w-[26px] py-1 rounded-[7px] hover:enabled:bg-[var(--oh-interactive-hover)] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-    >
-      <RefreshIcon
-        width={12.75}
-        height={15}
-        color="#ffffff"
-        className={isRefreshing ? "animate-spin" : ""}
-      />
-    </button>
+    <>
+      <WorkspaceFileDiscoverySettings workingDir={workspacePath?.trim()} />
+      <button
+        type="button"
+        onClick={refreshFiles}
+        disabled={isRefreshing}
+        aria-label={t(I18nKey.FILES$REFRESH)}
+        title={t(I18nKey.FILES$REFRESH)}
+        data-testid="files-tab-refresh"
+        className="flex items-center justify-center w-6.5 py-1 rounded-[7px] hover:enabled:bg-interactive-hover cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        <RefreshIcon
+          width={12.75}
+          height={15}
+          color="#ffffff"
+          className={isRefreshing ? "animate-spin" : ""}
+        />
+      </button>
+    </>
   );
 
   return (
@@ -170,8 +174,16 @@ function FilesTab() {
       data-testid="files-tab"
     >
       <WorkspacePath path={workspacePath} />
+      {filesQuery.isTruncated && (
+        <p
+          role="status"
+          className="border-b border-border px-3 py-2 text-xs text-muted"
+        >
+          {t(I18nKey.FILES$DISCOVERY_TRUNCATED, { count: paths.length })}
+        </p>
+      )}
       {filesQuery.isLoading ? (
-        <div className="flex flex-1 items-center justify-center text-sm text-[var(--oh-muted)]">
+        <div className="flex flex-1 items-center justify-center text-sm text-muted">
           {t(I18nKey.FILES$LOADING_FILES)}
         </div>
       ) : (
@@ -189,7 +201,7 @@ function FilesTab() {
             {isTreeVisible && (
               <>
                 <aside
-                  className="shrink-0 border-r border-[var(--oh-border)] overflow-y-auto custom-scrollbar-always"
+                  className="shrink-0 border-r border-border overflow-y-auto custom-scrollbar-always"
                   data-testid="files-tab-tree"
                   style={{ width: `${treeWidth}px` }}
                 >
@@ -212,7 +224,7 @@ function FilesTab() {
             >
               {selectedPath ? (
                 <>
-                  <div className="flex items-center gap-3 px-3 py-1.5 border-b border-[var(--oh-border)]">
+                  <div className="flex items-center gap-3 px-3 py-1.5 border-b border-border">
                     <SegmentedToggle<ViewMode>
                       ariaLabel={t(I18nKey.FILES$RICH)}
                       testId="files-tab-content-mode-toggle"
@@ -231,7 +243,7 @@ function FilesTab() {
                         aria-label={t(I18nKey.FILES$OPEN_IN_NEW_WINDOW)}
                         title={t(I18nKey.FILES$OPEN_IN_NEW_WINDOW)}
                         data-testid="files-tab-open-in-new-window"
-                        className="ml-auto flex items-center justify-center w-[26px] py-1 rounded-[7px] hover:bg-[var(--oh-interactive-hover)] cursor-pointer text-white"
+                        className="ml-auto flex items-center justify-center w-6.5 py-1 rounded-[7px] hover:bg-interactive-hover cursor-pointer text-contrast"
                       >
                         <LinkExternalIcon width={14} height={14} />
                       </a>
