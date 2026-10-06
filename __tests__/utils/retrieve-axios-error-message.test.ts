@@ -99,7 +99,7 @@ describe("retrieveAxiosErrorMessage", () => {
     },
     {
       description: "an axios error's own message when the body has neither",
-      error: createAxiosErrorWithBody({ detail: "Ignored detail" }),
+      error: createAxiosErrorWithBody({ unexpected: true }),
       expected: "Request failed with status code 400",
     },
     {
