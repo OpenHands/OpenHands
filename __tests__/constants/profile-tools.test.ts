@@ -87,4 +87,32 @@ describe("buildProfileToolsValue", () => {
     const { mode, selected, params } = readProfileTools(stored);
     expect(buildProfileToolsValue({ mode, selected, params })).toEqual(stored);
   });
+
+  it.each(["task_tool_set", "workflow_tool_set"])(
+    "adds task_tracker when %s is selected without it",
+    (delegate) => {
+      expect(
+        buildProfileToolsValue({
+          mode: "custom",
+          selected: ["terminal", delegate],
+        }),
+      ).toEqual([
+        { name: "terminal", params: {} },
+        { name: delegate, params: {} },
+        { name: "task_tracker", params: {} },
+      ]);
+    },
+  );
+
+  it("does not duplicate task_tracker or add it without a delegation tool", () => {
+    expect(
+      buildProfileToolsValue({
+        mode: "custom",
+        selected: ["task_tool_set", "task_tracker"],
+      }),
+    ).toHaveLength(2);
+    expect(
+      buildProfileToolsValue({ mode: "custom", selected: ["terminal"] }),
+    ).toEqual([{ name: "terminal", params: {} }]);
+  });
 });

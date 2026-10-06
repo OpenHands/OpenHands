@@ -16,7 +16,6 @@ import { cn } from "#/utils/utils";
 import { useConversationLocalStorageState } from "#/utils/conversation-local-storage";
 import { CONVERSATION_TAB_LABEL_KEYS } from "./conversation-tab-ids";
 import { ConversationTabNav } from "./conversation-tab-nav";
-import { DrawerVSCodeLink } from "./drawer-vscode-link";
 import { ChatActionTooltip } from "../../chat/chat-action-tooltip";
 import { I18nKey } from "#/i18n/declaration";
 import { useConversationStore } from "#/stores/conversation-store";
@@ -25,7 +24,6 @@ import { ConversationPlannerBuildBar } from "./conversation-planner-build-bar";
 import { useConversationId } from "#/hooks/use-conversation-id";
 import { useSelectConversationTab } from "#/hooks/use-select-conversation-tab";
 import { useTaskList } from "#/hooks/use-task-list";
-import { useActiveBackend } from "#/contexts/active-backend-context";
 import { mobileTopBarIconClassName } from "#/utils/mobile-top-bar-icon-button-classes";
 
 export function ConversationTabs({
@@ -45,7 +43,6 @@ export function ConversationTabs({
     useConversationLocalStorageState(conversationId);
 
   const { hasTaskList } = useTaskList();
-  const { backend } = useActiveBackend();
 
   const {
     selectTab,
@@ -167,7 +164,6 @@ export function ConversationTabs({
   const tabsRowInnerRef = useRef<HTMLDivElement>(null);
   const measureRowRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const vscodeButtonRef = useRef<HTMLDivElement>(null);
   const anchorRef = useRef<HTMLButtonElement>(null);
   const [inlineTabCount, setInlineTabCount] = useState(visibleTabs.length);
 
@@ -175,8 +171,7 @@ export function ConversationTabs({
     const rowInner = tabsRowInnerRef.current;
     const measureRow = measureRowRef.current;
     const menuEl = menuRef.current;
-    const vscodeEl = vscodeButtonRef.current;
-    if (!rowInner || !measureRow || !menuEl || !vscodeEl) return undefined;
+    if (!rowInner || !measureRow || !menuEl) return undefined;
 
     const measure = () => {
       const measureButtons = measureRow.querySelectorAll<HTMLButtonElement>(
@@ -200,14 +195,13 @@ export function ConversationTabs({
       }
 
       const menuWidth = menuEl.getBoundingClientRect().width;
-      const vscodeWidth = vscodeEl.getBoundingClientRect().width;
       const gapCss =
         getComputedStyle(rowInner).columnGap || getComputedStyle(rowInner).gap;
       const gapPx = parseFloat(gapCss) || 6;
 
       let nextCount = 0;
       for (let k = tabCount; k >= 0; k -= 1) {
-        let total = menuWidth + vscodeWidth;
+        let total = menuWidth;
         for (let i = 0; i < k; i += 1) {
           total += widths[i] ?? 0;
         }
@@ -227,18 +221,11 @@ export function ConversationTabs({
     if (typeof ResizeObserver === "undefined") return undefined;
     const ro = new ResizeObserver(measure);
     ro.observe(rowInner);
-    // The editor button's presence is resolved asynchronously (the hook probes
-    // /api/vscode/status), and it sits inside an `ml-auto shrink-0` wrapper, so
-    // it appearing or disappearing does not change `rowInner`'s own box and
-    // would not otherwise re-measure. Its width is folded into the fit
-    // calculation above, so a stale value permanently costs an inline tab.
-    ro.observe(vscodeEl);
     return () => ro.disconnect();
   }, [
     unpinnedSignature,
     visibleTabs.length,
     hasTaskList,
-    backend.kind,
     selectedTab,
     isRightPanelShown,
     i18n.language,
@@ -410,11 +397,6 @@ export function ConversationTabs({
                 />
               </div>
             </div>
-          </div>
-          {/* The ref'd wrapper must stay mounted — the overflow measurement
-              effect above bails if it's missing. */}
-          <div ref={vscodeButtonRef} className="ml-auto shrink-0 pr-1">
-            <DrawerVSCodeLink />
           </div>
         </div>
       </div>

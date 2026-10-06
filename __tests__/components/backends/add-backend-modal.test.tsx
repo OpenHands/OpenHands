@@ -95,7 +95,7 @@ beforeEach(() => {
     interval: 5,
   });
   deviceFlowMocks.pollForToken.mockReset();
-  deviceFlowMocks.pollForToken.mockImplementation(() => new Promise(() => { }));
+  deviceFlowMocks.pollForToken.mockImplementation(() => new Promise(() => {}));
   __resetActiveStoreForTests();
 });
 
