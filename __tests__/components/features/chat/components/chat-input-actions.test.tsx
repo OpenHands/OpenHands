@@ -1,5 +1,11 @@
 import React from "react";
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithProviders } from "test-utils";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
@@ -387,5 +393,106 @@ describe("ChatInputActions — Switch agent profile gate (OSS-5735)", () => {
     expect(
       screen.queryByTestId("switch-agent-profile-button"),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("ChatInputActions — More input actions overflow menu (#17925)", () => {
+  // Agent Canvas hydrates on `document`, so the trigger's stopPropagation()
+  // cannot keep a real click away from document-level listeners, and the
+  // browser drains React's microtask flush between listeners: the outside-click
+  // listener sees the opening click only after the menu has mounted. RTL roots
+  // React below `document` and dispatches synchronously, so capture the
+  // document click listeners and deliver the trigger click to them afterwards.
+  let documentClickListeners: EventListener[] = [];
+
+  beforeEach(() => {
+    documentClickListeners = [];
+    const addEventListener = document.addEventListener.bind(document);
+    vi.spyOn(document, "addEventListener").mockImplementation(
+      (type, listener, options) => {
+        if (type === "click" && typeof listener === "function") {
+          documentClickListeners.push(listener);
+        }
+        addEventListener(type, listener, options);
+      },
+    );
+    // Every measured element is wider than the row leaves room for, so the
+    // model pill collapses into the overflow menu as it does at 320 px.
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+
+        unobserve() {}
+
+        disconnect() {}
+      },
+    );
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
+      DOMRect.fromRect({ x: 0, y: 600, width: 100, height: 24 }),
+    );
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    window.localStorage.clear();
+    __resetActiveStoreForTests();
+  });
+
+  const getTrigger = () =>
+    screen.getByRole("button", { name: "CHAT_INTERFACE$MORE_INPUT_ACTIONS" });
+
+  const clickTrigger = () => {
+    const icon = getTrigger().querySelector("svg") ?? getTrigger();
+    fireEvent.click(icon);
+    act(() => {
+      const click = new MouseEvent("click", { bubbles: true });
+      Object.defineProperty(click, "target", { value: icon });
+      documentClickListeners.forEach((listener) => listener(click));
+    });
+  };
+
+  it("stays open after the opening click reaches document listeners", () => {
+    renderWithProviders(<ChatInputActions disabled={false} />);
+
+    clickTrigger();
+
+    expect(getTrigger()).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByTestId("chat-input-overflow-menu")).toBeInTheDocument();
+    expect(screen.getByTestId("overflow-model-button")).toBeInTheDocument();
+  });
+
+  it("closes on a second trigger click and on a click outside", () => {
+    renderWithProviders(<ChatInputActions disabled={false} />);
+
+    clickTrigger();
+    clickTrigger();
+
+    expect(getTrigger()).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.queryByTestId("chat-input-overflow-menu"),
+    ).not.toBeInTheDocument();
+
+    clickTrigger();
+    fireEvent.click(document.body);
+
+    expect(getTrigger()).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.queryByTestId("chat-input-overflow-menu"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens the Model submenu with the profile list", () => {
+    renderWithProviders(<ChatInputActions disabled={false} />);
+
+    clickTrigger();
+    fireEvent.click(screen.getByTestId("overflow-model-button"));
+
+    const submenu = screen.getByTestId("overflow-model-submenu");
+    expect(submenu.parentElement).toHaveClass("visible");
+    expect(
+      within(submenu).getByTestId("llm-profile-menu-stub"),
+    ).toBeInTheDocument();
   });
 });

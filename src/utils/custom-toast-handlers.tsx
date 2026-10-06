@@ -11,8 +11,10 @@ import {
   isCorsOrNetworkErrorMessage,
 } from "./user-facing-error";
 import { buildAgentCanvasPath } from "#/utils/base-path";
-import { getApiErrorBody, getApiErrorMessage } from "./api-error-message";
-import { retrieveAxiosErrorMessage } from "./retrieve-axios-error-message";
+import {
+  getApiOrConnectionErrorMessage,
+  hasApiErrorResponse,
+} from "./api-error-message";
 
 // react-hot-toast accepts only CSSProperties via the style option — cannot use className
 const TOAST_STYLE: CSSProperties = {
@@ -121,10 +123,11 @@ export const displayErrorToast = (error: string | null | undefined) => {
  * gets the shared "Disconnected" wording.
  */
 export const displayApiErrorToast = (error: unknown, fallback: string) => {
-  if (getApiErrorBody(error)) {
-    showErrorToast(getApiErrorMessage(error, fallback));
+  const message = getApiOrConnectionErrorMessage(error, fallback);
+  if (hasApiErrorResponse(error)) {
+    showErrorToast(message);
   } else {
-    displayErrorToast(retrieveAxiosErrorMessage(error) || fallback);
+    displayErrorToast(message);
   }
 };
 

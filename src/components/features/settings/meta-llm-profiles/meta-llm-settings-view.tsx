@@ -324,7 +324,7 @@ export function MetaLlmSettingsView() {
         ) : null}
 
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-base font-medium text-white">
+          <h2 className="text-base font-medium text-contrast">
             {t(I18nKey.SETTINGS$META_PROFILES_AVAILABLE)}
           </h2>
           <BrandButton
