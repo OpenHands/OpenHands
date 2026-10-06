@@ -28,8 +28,18 @@ Record the UTC run time, budget (model, spend), accounts available and permitted
 side effects. Fetch `main` and freeze its full SHA as TARGET. Check
 `git rev-parse --is-shallow-repository`; deepen until BASE is present (an empty
 log from a shallow clone is not "no changes"). BASE is the previous completed
-pass's recorded TARGET; on a first run, the last first-parent commit before the
-agreed cutoff (`git rev-list --first-parent -1 --before="$CUTOFF" "$TARGET"`).
+pass's recorded TARGET, kept on the `Maintenance baseline` line of
+[the map index](feature-map/README.md); on a first run, the last first-parent
+commit before the agreed cutoff
+(`git rev-list --first-parent -1 --before="$CUTOFF" "$TARGET"`). A pass that
+changes the map updates that line to its TARGET in its PR, so merging the PR
+accepts the new baseline.
+
+A daily pass may be a **delta pass**: source and live coverage only for the
+features whose paths changed in BASE..TARGET (§3) and for rows that link an
+issue closed since BASE. It says "delta" in its report. A full pass is still
+needed now and then (weekly, or before a release), because Agent Server and
+automation releases change behavior without touching this repository.
 
 ```sh
 git merge-base --is-ancestor "$BASE" "$TARGET"
