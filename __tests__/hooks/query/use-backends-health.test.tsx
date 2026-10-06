@@ -200,7 +200,10 @@ describe("useBackendsHealth", () => {
       apiKey: "",
       authMode: "cookie",
     };
-    getCloudOrganizationsMock.mockResolvedValue({ items: [], currentOrgId: null });
+    getCloudOrganizationsMock.mockResolvedValue({
+      items: [],
+      currentOrgId: null,
+    });
 
     const { result } = renderHook(() => useBackendsHealth([cookieBackend]), {
       wrapper,

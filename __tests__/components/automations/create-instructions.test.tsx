@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -116,8 +116,9 @@ describe("CreateInstructions", () => {
     await user.click(screen.getByTestId("automations-create-automation"));
 
     expect(navigate).toHaveBeenCalledWith("/conversations");
-    await waitFor(() => {
-      expect(setMessageToSend).toHaveBeenCalledWith("Create an automation");
-    });
+    expect(setMessageToSend).toHaveBeenCalledWith(
+      "Create an automation",
+      "home",
+    );
   });
 });
