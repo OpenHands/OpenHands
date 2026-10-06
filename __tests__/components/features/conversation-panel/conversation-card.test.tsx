@@ -363,6 +363,29 @@ describe("ConversationCard", () => {
     expect(onContextMenuToggle).toHaveBeenCalledWith(false);
   });
 
+  it("closes the context menu with Escape and returns focus to its trigger", async () => {
+    const user = userEvent.setup();
+    const onContextMenuToggle = vi.fn();
+    renderWithProviders(
+      <ConversationCard
+        onDelete={onDelete}
+        onChangeTitle={onChangeTitle}
+        title="Conversation 1"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        contextMenuOpen
+        onContextMenuToggle={onContextMenuToggle}
+      />,
+    );
+    const menu = screen.getByTestId("context-menu");
+    within(menu).getByTestId("delete-button").focus();
+
+    await user.keyboard("{Escape}");
+
+    expect(onContextMenuToggle).toHaveBeenCalledWith(false);
+    expect(screen.getByTestId("ellipsis-button")).toHaveFocus();
+  });
+
   it("should call onDelete when the delete button is clicked", async () => {
     const user = userEvent.setup();
     const onContextMenuToggle = vi.fn();

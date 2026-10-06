@@ -5,6 +5,7 @@ import { cn } from "#/utils/utils";
 import { I18nKey } from "#/i18n/declaration";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import { isExecutionActive, isExecutionPaused } from "#/utils/status";
+import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { ConversationCardContextMenu } from "./conversation-card-context-menu";
 import { EllipsisButton } from "../ellipsis-button";
 
@@ -40,6 +41,11 @@ export function ConversationCardActions({
   const isActive = isExecutionActive(executionStatus);
   const anchorRef = useRef<HTMLButtonElement>(null);
   const [, bumpPosition] = useReducer((i: number) => i + 1, 0);
+  useCloseOnEscape(
+    contextMenuOpen,
+    () => onContextMenuToggle(false),
+    anchorRef,
+  );
 
   useLayoutEffect(() => {
     if (!contextMenuOpen) return undefined;
