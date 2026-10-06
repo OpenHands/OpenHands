@@ -29,7 +29,7 @@ function ActivityHeader() {
   );
 }
 
-function ActivityEmptyState() {
+function ActivityEmptyState({ exhausted }: { exhausted: boolean }) {
   const { t } = useTranslation("openhands");
 
   return (
@@ -39,10 +39,14 @@ function ActivityEmptyState() {
     >
       <Radio className="size-10 text-muted" aria-hidden />
       <p className="mt-4 text-sm font-medium text-content">
-        {t(I18nKey.ACTIVITY$EMPTY_TITLE)}
+        {exhausted
+          ? t(I18nKey.ACTIVITY$EMPTY_TITLE)
+          : t(I18nKey.ACTIVITY$EMPTY_PAGE_TITLE)}
       </p>
       <p className="mt-1 text-sm text-muted">
-        {t(I18nKey.ACTIVITY$EMPTY_BODY)}
+        {exhausted
+          ? t(I18nKey.ACTIVITY$EMPTY_BODY)
+          : t(I18nKey.ACTIVITY$EMPTY_PAGE_BODY)}
       </p>
     </div>
   );
@@ -174,7 +178,7 @@ export function ActivityView() {
         {header}
         <div className="mt-6 flex flex-col gap-3">
           {activeConversations.length === 0 ? (
-            <ActivityEmptyState />
+            <ActivityEmptyState exhausted={!hasNextPage} />
           ) : (
             activeConversations.map((conversation, index) => {
               const events = tails[index] ?? [];
@@ -190,7 +194,10 @@ export function ActivityView() {
           )}
         </div>
 
-        {hasNextPage && activeConversations.length > 0 && (
+        {/* The list is sorted by update time, not by status, so a page can be
+            entirely inactive while later pages still hold running agents. The
+            control must stay available whenever more pages exist. */}
+        {hasNextPage && (
           <div className="mt-4 flex justify-center">
             <BrandButton
               type="button"

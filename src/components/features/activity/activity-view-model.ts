@@ -116,7 +116,7 @@ export function selectActiveConversations(
 export type SubagentStatus = "running" | "completed" | "error";
 
 export interface SubagentActivity {
-  /** The `task` tool call id, used to pair the action with its observation. */
+  /** The `task` tool call id, exposed as the delegation's public id. */
   id: string;
   /** The specialized subagent the parent delegated to. */
   name: string;
@@ -125,22 +125,27 @@ export interface SubagentActivity {
 
 /**
  * Derive the in-process `task`-tool delegations for one conversation from its
- * event stream. A `TaskAction` opens a delegation keyed by its tool-call id;
- * the matching `TaskObservation` (paired by `action_id`) closes it as
- * completed or errored. Delegations with no observation yet stay "running".
+ * event stream. A `TaskAction` opens a delegation; the matching
+ * `TaskObservation` closes it as completed or errored. Delegations with no
+ * observation yet stay "running".
+ *
+ * Pairing is by event identity, not by tool-call id: a `TaskObservation`
+ * references its action through `action_id` (an event id), while the action's
+ * `tool_call_id` is a separate value. Delegations are therefore keyed by the
+ * action event's `id`, and `tool_call_id` is only the public id handed to the
+ * row.
  */
 // @spec LAV-003 — Subagent fan-out is derived from the event stream
 export function deriveSubagents(events: OpenHandsEvent[]): SubagentActivity[] {
   const order: string[] = [];
-  const byId = new Map<string, SubagentActivity>();
+  const byActionEventId = new Map<string, SubagentActivity>();
 
   for (const event of events) {
     if (isActionEvent(event) && event.action.kind === "TaskAction") {
-      const id = event.tool_call_id;
-      if (!byId.has(id)) {
-        order.push(id);
-        byId.set(id, {
-          id,
+      if (!byActionEventId.has(event.id)) {
+        order.push(event.id);
+        byActionEventId.set(event.id, {
+          id: event.tool_call_id,
           name: event.action.subagent_type,
           status: "running",
         });
@@ -149,7 +154,7 @@ export function deriveSubagents(events: OpenHandsEvent[]): SubagentActivity[] {
       isObservationEvent(event) &&
       event.observation.kind === "TaskObservation"
     ) {
-      const entry = byId.get(event.action_id);
+      const entry = byActionEventId.get(event.action_id);
       if (entry) {
         entry.status = event.observation.is_error ? "error" : "completed";
       }
@@ -157,8 +162,60 @@ export function deriveSubagents(events: OpenHandsEvent[]): SubagentActivity[] {
   }
 
   return order
-    .map((id) => byId.get(id))
+    .map((actionEventId) => byActionEventId.get(actionEventId))
     .filter((entry): entry is SubagentActivity => entry !== undefined);
+}
+
+/** Action event ids that a `TaskObservation` in `events` has resolved. */
+function resolvedTaskActionEventIds(events: OpenHandsEvent[]): Set<string> {
+  const resolved = new Set<string>();
+  for (const event of events) {
+    if (
+      isObservationEvent(event) &&
+      event.observation.kind === "TaskObservation"
+    ) {
+      resolved.add(event.action_id);
+    }
+  }
+  return resolved;
+}
+
+/** `task` actions in `events` that no `TaskObservation` has resolved yet. */
+function unresolvedTaskActions(events: OpenHandsEvent[]): OpenHandsEvent[] {
+  const resolved = resolvedTaskActionEventIds(events);
+
+  return events.filter(
+    (event) =>
+      isActionEvent(event) &&
+      event.action.kind === "TaskAction" &&
+      !resolved.has(event.id),
+  );
+}
+
+/**
+ * Carry unresolved `task` delegations forward across polls. The fetched tail
+ * only holds the newest events, so a task action that started more than a
+ * window ago is no longer in `next` even though its delegation is still
+ * running. The previous tail's still-unresolved task actions are prepended so
+ * `deriveSubagents` can reconstruct them. Keeping the action also lets a later
+ * `TaskObservation` pair with it (closing the delegation) even though the
+ * action itself scrolled out. An action already present in `next` is left to
+ * `next` alone. The carried set is bounded by the number of concurrently
+ * running delegations, not the tail size.
+ */
+// @spec LAV-004 — Data is bounded and read-only
+export function mergeActivityTail(
+  previous: OpenHandsEvent[] | undefined,
+  next: OpenHandsEvent[],
+): OpenHandsEvent[] {
+  if (!previous?.length) return next;
+
+  const nextEventIds = new Set(next.map((event) => event.id));
+  const carried = unresolvedTaskActions(previous).filter(
+    (event) => !nextEventIds.has(event.id),
+  );
+
+  return carried.length > 0 ? [...carried, ...next] : next;
 }
 
 function messageText(event: MessageEvent): string | null {
@@ -173,23 +230,25 @@ function messageText(event: MessageEvent): string | null {
 }
 
 /**
- * The newest thing a conversation is doing: its most recent action/tool
- * rendered through the shared action-title descriptor, falling back to the
- * last assistant message text. Returns null when neither exists so the row
+ * The newest thing a conversation is doing: its most recent action/tool or
+ * assistant message, whichever is later in the stream, rendered through the
+ * shared action-title descriptor. Returns null when neither exists so the row
  * can show a defined "no activity" state instead of a blank.
+ *
+ * The tail is chronological, so a single reverse scan is what makes "latest"
+ * true: an earlier action must not win over a later assistant message (and
+ * vice versa). A separate scan for actions would always prefer an old action.
  */
 export function pickLatestActivity(
   events: OpenHandsEvent[],
 ): EventTitleDescriptor | null {
   for (let i = events.length - 1; i >= 0; i -= 1) {
     const event = events[i];
+
     if (isActionEvent(event) && event.tool_name) {
       return getActionEventTitleDescriptor(event);
     }
-  }
 
-  for (let i = events.length - 1; i >= 0; i -= 1) {
-    const event = events[i];
     if (isMessageEvent(event) && event.llm_message.role === "assistant") {
       const text = messageText(event);
       if (text) {

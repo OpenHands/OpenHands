@@ -3,13 +3,16 @@ import type { AppConversation } from "#/api/conversation-service/agent-server-co
 import EventService from "#/api/event-service/event-service.api";
 import type { OpenHandsEvent } from "#/types/agent-server/core";
 import { useActiveBackend } from "#/contexts/active-backend-context";
+import { mergeActivityTail } from "#/components/features/activity/activity-view-model";
 import { CONVERSATION_QUERY_KEYS } from "./query-keys";
 
 /**
  * How many recent events per conversation the activity view fetches to show
  * the current step and the subagent fan-out. The newest action and its
- * delegations are always at the tail, so a short window is enough; the view
- * refreshes it on the same cadence as the conversation list.
+ * delegations are at the tail; unresolved task actions that scroll out of the
+ * window are carried forward across polls (see `mergeActivityTail`), so this
+ * window bounds only the per-poll transfer, not the visible delegation
+ * history. The view refreshes it on the same cadence as the conversation list.
  */
 export const ACTIVITY_TAIL_LIMIT = 30;
 
@@ -37,30 +40,42 @@ export function useActivityEventTails(
   const enabled = conversations.length > 0;
 
   const results = useQueries({
-    queries: conversations.map((conversation) => ({
-      queryKey: [
+    queries: conversations.map((conversation) => {
+      const queryKey = [
         ...CONVERSATION_QUERY_KEYS.activityTail,
         conversation.id,
         active.backend.id,
         active.orgId,
-      ],
-      queryFn: async (): Promise<OpenHandsEvent[]> => {
-        if (!conversation.conversation_url) return [];
-        const page = await EventService.searchEvents(
-          conversation.id,
-          conversation.conversation_url,
-          conversation.session_api_key,
-          { limit: ACTIVITY_TAIL_LIMIT, sortOrder: "TIMESTAMP_DESC" },
-        );
-        return [...page.items].reverse();
-      },
-      enabled,
-      refetchInterval: ACTIVITY_TAIL_REFETCH_MS,
-      refetchIntervalInBackground: false,
-      staleTime: ACTIVITY_TAIL_STALE_MS,
-      gcTime: ACTIVITY_TAIL_GC_MS,
-      retry: false,
-    })),
+        // The runtime host identifies the sandbox that produced the tail. A
+        // re-provisioned cloud conversation keeps its id but gets a new URL,
+        // so including it starts a fresh entry instead of reusing the previous
+        // sandbox's last action. (The session key is secret material and is
+        // deliberately kept out of the cache key.)
+        conversation.conversation_url ?? null,
+      ] as const;
+
+      return {
+        queryKey,
+        queryFn: async ({ client }): Promise<OpenHandsEvent[]> => {
+          if (!conversation.conversation_url) return [];
+          const page = await EventService.searchEvents(
+            conversation.id,
+            conversation.conversation_url,
+            conversation.session_api_key,
+            { limit: ACTIVITY_TAIL_LIMIT, sortOrder: "TIMESTAMP_DESC" },
+          );
+          const next = [...page.items].reverse();
+          const previous = client.getQueryData<OpenHandsEvent[]>(queryKey);
+          return mergeActivityTail(previous, next);
+        },
+        enabled,
+        refetchInterval: ACTIVITY_TAIL_REFETCH_MS,
+        refetchIntervalInBackground: false,
+        staleTime: ACTIVITY_TAIL_STALE_MS,
+        gcTime: ACTIVITY_TAIL_GC_MS,
+        retry: false,
+      };
+    }),
   });
 
   return results.map((result) => result.data);

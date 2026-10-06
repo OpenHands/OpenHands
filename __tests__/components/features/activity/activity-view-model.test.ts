@@ -6,13 +6,24 @@ import {
   deriveSubagents,
   getActivityMetrics,
   getActivityStatusDescriptor,
+  mergeActivityTail,
   pickLatestActivity,
   selectActiveConversations,
 } from "#/components/features/activity/activity-view-model";
 
-const taskAction = (toolCallId: string, subagentType: string): OpenHandsEvent =>
+/**
+ * A task action's event `id` and its `tool_call_id` are distinct values on the
+ * wire, and its observation references the action through `action_id` (the
+ * event id), not the tool-call id. Defaults here model that so the pairing is
+ * exercised realistically; callers can force a collision.
+ */
+const taskAction = (
+  toolCallId: string,
+  subagentType: string,
+  eventId: string = `action-${toolCallId}`,
+): OpenHandsEvent =>
   ({
-    id: `action-${toolCallId}`,
+    id: eventId,
     timestamp: "2026-10-06T00:00:00Z",
     source: "agent",
     action: { kind: "TaskAction", subagent_type: subagentType },
@@ -20,14 +31,18 @@ const taskAction = (toolCallId: string, subagentType: string): OpenHandsEvent =>
     tool_call_id: toolCallId,
   }) as unknown as OpenHandsEvent;
 
-const taskObservation = (actionId: string, isError: boolean): OpenHandsEvent =>
+const taskObservation = (
+  actionId: string,
+  isError: boolean,
+  toolCallId: string = actionId,
+): OpenHandsEvent =>
   ({
     id: `observation-${actionId}`,
     timestamp: "2026-10-06T00:00:01Z",
     source: "environment",
     action_id: actionId,
     tool_name: "task",
-    tool_call_id: actionId,
+    tool_call_id: toolCallId,
     observation: { kind: "TaskObservation", is_error: isError },
   }) as unknown as OpenHandsEvent;
 
@@ -124,21 +139,58 @@ describe("deriveSubagents", () => {
   });
 
   it("closes a delegation as completed or errored from its observation", () => {
+    // The observations reference the action event id, not the tool-call id.
     const subagents = deriveSubagents([
-      taskAction("c1", "explorer"),
-      taskObservation("c1", false),
-      taskAction("c2", "coder"),
-      taskObservation("c2", true),
+      taskAction("task-call-1", "explorer", "task-action-1"),
+      taskObservation("task-action-1", false, "task-call-1"),
+      taskAction("task-call-2", "coder", "task-action-2"),
+      taskObservation("task-action-2", true, "task-call-2"),
     ]);
 
     expect(subagents).toEqual([
-      { id: "c1", name: "explorer", status: "completed" },
-      { id: "c2", name: "coder", status: "error" },
+      { id: "task-call-1", name: "explorer", status: "completed" },
+      { id: "task-call-2", name: "coder", status: "error" },
     ]);
   });
 
   it("ignores observations that do not pair with a task action", () => {
     expect(deriveSubagents([taskObservation("missing", false)])).toEqual([]);
+  });
+});
+
+// @spec LAV-004 — Data is bounded and read-only
+describe("mergeActivityTail", () => {
+  it("carries an unresolved task action forward when it leaves the window", () => {
+    const task = taskAction("task-call-1", "explorer", "task-action-1");
+    const previous = [task, bashAction("c1")];
+    const next = [bashAction("c2"), bashAction("c3")];
+
+    const merged = mergeActivityTail(previous, next);
+
+    expect(merged).toEqual([task, ...next]);
+    expect(deriveSubagents(merged)).toEqual([
+      { id: "task-call-1", name: "explorer", status: "running" },
+    ]);
+  });
+
+  it("closes a carried delegation when its observation arrives later", () => {
+    const task = taskAction("task-call-1", "explorer", "task-action-1");
+    const previous = [task];
+    const observation = taskObservation("task-action-1", false, "task-call-1");
+
+    const merged = mergeActivityTail(previous, [observation]);
+
+    // The action is retained so the observation can pair with it and close
+    // the delegation as completed rather than dropping the row's subagent.
+    expect(merged).toEqual([task, observation]);
+    expect(deriveSubagents(merged)).toEqual([
+      { id: "task-call-1", name: "explorer", status: "completed" },
+    ]);
+  });
+
+  it("returns the fetched tail unchanged when there is no prior tail", () => {
+    const next = [bashAction("c1")];
+    expect(mergeActivityTail(undefined, next)).toBe(next);
   });
 });
 
@@ -154,6 +206,18 @@ describe("pickLatestActivity", () => {
       kind: "translation",
       key: "ACTION_MESSAGE$RUN",
       values: { command: "npm test" },
+    });
+  });
+
+  it("prefers a newer assistant message over an earlier action", () => {
+    const descriptor = pickLatestActivity([
+      bashAction("c1"),
+      assistantMessage("Tests passed; inspecting the diff."),
+    ]);
+
+    expect(descriptor).toEqual({
+      kind: "text",
+      text: "Tests passed; inspecting the diff.",
     });
   });
 

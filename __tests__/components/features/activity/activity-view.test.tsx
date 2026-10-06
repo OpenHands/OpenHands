@@ -172,6 +172,30 @@ describe("ActivityView", () => {
     expect(screen.queryByTestId("activity-row")).not.toBeInTheDocument();
   });
 
+  // @spec LAV-001 — Only actively executing agents are listed
+  it("keeps Load more available when the first page has no running agents", async () => {
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({
+      items: [
+        conversation({
+          id: "finished",
+          title: "Finished agent",
+          execution_status: ExecutionStatus.FINISHED,
+        }),
+      ],
+      next_page_id: "page-2",
+    });
+
+    renderActivity();
+
+    // The fetched page is empty of active rows, but later pages may hold
+    // running agents, so the control must remain reachable.
+    expect(await screen.findByTestId("activity-empty")).toBeInTheDocument();
+    expect(await screen.findByText("ACTIVITY$LOAD_MORE")).toBeInTheDocument();
+  });
+
   // @spec LAV-005 — The view is reachable and has defined states
   it("renders an error state with a retry affordance on a failed load", async () => {
     vi.spyOn(
