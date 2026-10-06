@@ -99,8 +99,9 @@ leading inline block (`mergeReasoning` drops an exact duplicate), and
 `EventMessage` renders explicit reasoning only when `ThoughtEventMessage` does
 not own it — on the action path, the observation replacement path, and the
 hoisted-thought path in `messages.tsx`. `getActionNarration` uses the same split,
-so a downloaded transcript no longer writes raw `think` tags or repeated
-reasoning.
+so a downloaded transcript no longer writes raw `think` tags, dedupes explicit
+vs inline reasoning, and still keeps the visible message even when its text
+matches the reasoning.
 
 Verification for this follow-up is deterministic at the component level rather
 than a second screenshot, because the mock trajectory cannot emit

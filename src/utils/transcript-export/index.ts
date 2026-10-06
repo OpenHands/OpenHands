@@ -30,7 +30,6 @@ import {
 } from "#/components/conversation-events/chat/event-content-helpers/get-acp-tool-call-content";
 import { groupEvents } from "#/components/conversation-events/chat/group-events";
 import {
-  mergeReasoning,
   splitActionNarration,
   splitInlineThink,
 } from "#/components/conversation-events/chat/event-thought-helpers";
@@ -254,11 +253,12 @@ const getHookDetails = (event: OpenHandsEvent): string => {
 };
 
 // Mirrors the chat: split a leading inline reasoning block out of the action
-// thought and merge it with explicit reasoning (deduped), so a downloaded
-// transcript never shows raw reasoning tags or the same reasoning twice.
+// thought and merge it with explicit reasoning. `splitActionNarration` already
+// dedupes reasoning fragments; reasoning and the visible message are distinct
+// parts of the action, so both are kept even when their text matches.
 const getActionNarration = (event: ActionEvent): string => {
   const { reasoning, message } = splitActionNarration(event);
-  return mergeReasoning(reasoning, message);
+  return [reasoning, message].filter(Boolean).join("\n\n");
 };
 
 const canRenderActionNarration = (event: ActionEvent): boolean =>
