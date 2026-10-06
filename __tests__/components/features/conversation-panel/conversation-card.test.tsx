@@ -53,9 +53,7 @@ vi.mock("react-i18next", async () => {
 });
 
 vi.mock("#/hooks/use-tracking", () => ({
-  useTracking: () => ({
-    trackDownloadVsCodeButtonClicked: vi.fn(),
-  }),
+  useTracking: () => ({}),
 }));
 
 describe("ConversationCard", () => {

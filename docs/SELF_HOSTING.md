@@ -93,15 +93,12 @@ to reach it from a browser without tunneling, you'll open ports 80 and 443
 in step 4.
 
 > [!NOTE]
-> **The bundled editor shares the canvas's browser origin.** OpenVSCode is
-> served under a path prefix (`/vscode` by default) on the proxy port rather
-> than on a published port of its own — that is what keeps the deployment to a
-> single port, but a path prefix routes requests, it does not isolate them.
-> Script running anywhere on that origin, including editor content reached
-> through an extension or a compromised asset, can read the canvas's
-> `localStorage`, which holds the SESSION API key of _every_ backend registered
-> in that browser. Tracked in
-> [#16492](https://github.com/OpenHands/OpenHands/issues/16492).
+> **Editor support is opt-in and default-off.** Prefer installing the VS Code
+> Canvas App, which uses the managed App-backend bridge and a separate browser
+> origin. `OH_CANVAS_ENABLE_VSCODE=true` enables the legacy bundled editor only
+> for compatibility testing. That legacy route shares the Canvas browser origin
+> (`/vscode` by default), so it does not provide the App bridge's origin
+> isolation. Tracked in [#16492](https://github.com/OpenHands/OpenHands/issues/16492).
 
 ## 3. Run Agent Canvas
 
