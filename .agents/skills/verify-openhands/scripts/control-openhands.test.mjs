@@ -24,7 +24,7 @@ import {
   portsAfterRestart,
   runPorts,
 } from "./lib/launcher-env.mjs";
-import { redactStorage } from "./lib/redact-storage.mjs";
+import { redactStorage, redactStorageValue } from "./lib/redact-storage.mjs";
 import { routePattern } from "./lib/route-pattern.mjs";
 import { buildLocator, parseRole, toCss } from "./lib/selectors.mjs";
 
@@ -319,12 +319,31 @@ test("map coverage maps parameterized routes by path, not only by file", () => {
 });
 
 test("storage values hide secrets stored as plain strings and inside JSON", () => {
+  const sidebar = JSON.stringify({ collapsed: true, width: 280, tabs: ["a"] });
   const out = redactStorage({
     "openhands-transcription-api-key": "sk-dummy-123",
     "openhands-session-key": JSON.stringify("abc"),
     "openhands-backends": JSON.stringify([
       { name: "Local", apiKey: "k-1", host: "http://127.0.0.1:1" },
     ]),
+    "qa-profile": JSON.stringify({
+      name: "Local",
+      apiKey: { value: "k-2", rotated: false },
+      tokens: ["k-3"],
+      sessionKeys: { "k-4": { label: "laptop" } },
+      password: 123456,
+      refreshTokens: [],
+      authenticated: true,
+      connectionRevision: 3,
+    }),
+    // The zustand persist shape: the secret sits two objects deep.
+    "qa-persisted": JSON.stringify({
+      state: { apiKey: "k-5", authenticated: true },
+      version: 0,
+    }),
+    "qa-sidebar": sidebar,
+    "qa-json-string": JSON.stringify("local"),
+    "qa-number": "42",
     "openhands-onboarded": "1",
     "openhands-theme": "light-plus",
   });
@@ -333,8 +352,43 @@ test("storage values hide secrets stored as plain strings and inside JSON", () =
   assert.deepEqual(JSON.parse(out["openhands-backends"]), [
     { name: "Local", apiKey: "<redacted>", host: "http://127.0.0.1:1" },
   ]);
+  // A secret-named field holding a number or a non-empty string, array or
+  // object is hidden whole, property names included; empty values and
+  // booleans next to it stay.
+  assert.deepEqual(JSON.parse(out["qa-profile"]), {
+    name: "Local",
+    apiKey: "<redacted>",
+    tokens: "<redacted>",
+    sessionKeys: "<redacted>",
+    password: "<redacted>",
+    refreshTokens: [],
+    authenticated: true,
+    connectionRevision: 3,
+  });
+  assert.deepEqual(JSON.parse(out["qa-persisted"]), {
+    state: { apiKey: "<redacted>", authenticated: true },
+    version: 0,
+  });
+  assert.equal(out["qa-sidebar"], sidebar);
+  assert.equal(out["qa-json-string"], JSON.stringify("local"));
+  assert.equal(out["qa-number"], "42");
   assert.equal(out["openhands-onboarded"], "1");
   assert.equal(out["openhands-theme"], "light-plus");
+  // Under a secret-looking storage key the whole value is hidden, whatever
+  // its shape; only an empty value stays as it is.
+  for (const value of [
+    JSON.stringify(["sk-dummy-123"]),
+    JSON.stringify({ v: "sk-dummy-123" }),
+    "12345",
+  ])
+    assert.equal(
+      redactStorageValue("openhands-transcription-api-key", value),
+      "<redacted>",
+    );
+  assert.equal(redactStorageValue("openhands-transcription-api-key", ""), "");
+  // Storage keys and JSON fields share one pattern.
+  for (const key of ["openhands-llm-key", "qa-auth", "credentials", "passwd"])
+    assert.equal(redactStorageValue(key, "sk-dummy-123"), "<redacted>");
 });
 
 test("launch refuses a run id that already exists or escapes the run home", () => {

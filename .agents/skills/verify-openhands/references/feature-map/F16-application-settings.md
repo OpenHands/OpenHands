@@ -83,7 +83,7 @@ Preconditions:
 - `conversation start` leaves the browser on the conversation page, which also has a `testid=submit-button`; `goto /settings/app` before the next settings step or clicks hit the composer.
 - Which profile actually generated a title is not visible in the UI, the conversation API or the stack logs; `F16.title-model` proves the preference is stored and a title appears, not which model wrote it.
 - `onboard --skip` stores analytics off, so a fresh run starts with the switch unchecked even though the code defaults to on when the preference is missing.
-- `browser storage` lists `localStorage` only; read the voice-input key with `eval` on `sessionStorage`. That key disappears in a new tab or browser session by design.
+- `browser storage` lists `localStorage`, and `browser storage --session` lists `sessionStorage`, where the voice-input key lives. With `--values` that key prints as `<redacted>`, so the recipe reads its dummy value with `eval`. The key disappears in a new tab or browser session by design.
 - Deleting a profile through the LLM settings UI clears a matching title preference itself; only a profile removed outside the UI leaves a stale `title_llm_profile` that this page shows as Automatic.
 - The Title generation model combobox has a clear (×) button with no accessible name (`- button` in the snapshot, visible as × at phone width). At desktop width it only takes clicks after `browser hover` on the input (`F16.title-model-clear`); otherwise use the Automatic option.
 - `browser eval` wraps its argument as an expression: statements separated by `;` fail with `SyntaxError: Unexpected token ';'`; wrap them in `(() => { ...; return x; })()`.
