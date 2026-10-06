@@ -32,6 +32,7 @@ import {
   portsAfterRestart,
   runPorts,
 } from "./lib/launcher-env.mjs";
+import { parseBaseline, withBaseline } from "./lib/baseline.mjs";
 import { affectedFamilies, familyHead } from "./lib/map-sources.mjs";
 import { routePattern } from "./lib/route-pattern.mjs";
 import {
@@ -3159,6 +3160,17 @@ function mapCheck({ only } = {}) {
     ? readFileSync(join(mapDir, "README.md"), "utf8")
     : "";
   if (!index) problems.push("references/feature-map/README.md is missing");
+  // The baseline line, when present, must carry a full SHA and a date:
+  // map affected and the passes read it.
+  const baselineLine = /^Maintenance baseline:.*$/m.exec(index)?.[0];
+  if (baselineLine && !parseBaseline(index))
+    problems.push(
+      "README.md: the Maintenance baseline line must read `Maintenance baseline: main@<sha> (<YYYY-MM-DD>)`",
+    );
+  else if (baselineLine && !/main@[0-9a-f]{40} /.test(baselineLine))
+    problems.push(
+      "README.md: the Maintenance baseline line must carry the full 40-character SHA",
+    );
   const files = featureFiles();
   const e2eRefs = new Map();
   for (const file of files) {
@@ -3459,9 +3471,44 @@ function mapIdList() {
   return ids;
 }
 
+// The map index (references/feature-map/README.md), home of the baseline line.
+function indexText() {
+  const path = join(mapDir, "README.md");
+  return existsSync(path) ? readFileSync(path, "utf8") : "";
+}
+
+// The recorded baseline, with where it stands relative to HEAD.
+function baselineInfo() {
+  const recorded = parseBaseline(indexText());
+  if (!recorded) return null;
+  let known = false;
+  let ancestorOfHead = false;
+  let commitsSince;
+  try {
+    execFileSync("git", ["cat-file", "-e", `${recorded.sha}^{commit}`], {
+      cwd: repoRoot,
+      stdio: "ignore",
+    });
+    known = true;
+    ancestorOfHead =
+      spawnSync("git", ["merge-base", "--is-ancestor", recorded.sha, "HEAD"], {
+        cwd: repoRoot,
+      }).status === 0;
+    if (ancestorOfHead)
+      commitsSince = Number(
+        git(["rev-list", "--first-parent", "--count", `${recorded.sha}..HEAD`]),
+      );
+  } catch {
+    // Not in this clone (shallow, or a SHA from another branch).
+  }
+  return { ...recorded, known, ancestorOfHead, commitsSince };
+}
+
 // Changed paths between two revisions (or from a file), mapped to families.
 function mapAffected(flags) {
   let changed;
+  let range;
+  let baseSource = "--base";
   if (flags.paths && flags.paths !== true) {
     const text =
       String(flags.paths) === "-"
@@ -3472,18 +3519,37 @@ function mapAffected(flags) {
       .map((l) => l.trim())
       .filter(Boolean);
   } else {
-    const base =
+    // Without --base, the range starts at the maintenance baseline the map
+    // index records (the previous pass's TARGET), so a daily pass needs no
+    // memory of yesterday.
+    let base =
       flags.base && flags.base !== true ? String(flags.base) : undefined;
-    if (!base)
-      usage(
-        "map affected needs --base REF [--target REF] or --paths FILE|-",
-        "control-openhands map affected --base origin/main",
-      );
+    if (!base) {
+      const recorded = parseBaseline(indexText());
+      if (!recorded)
+        usage(
+          "map affected needs --base REF [--target REF] or --paths FILE|-: the map index has no `Maintenance baseline:` line to start from",
+          "control-openhands map affected --base origin/main",
+        );
+      base = recorded.sha;
+      baseSource = "map index baseline";
+    }
     const target =
       flags.target && flags.target !== true ? String(flags.target) : "HEAD";
-    changed = git(["diff", "--name-only", `${base}..${target}`])
-      .split("\n")
-      .filter(Boolean);
+    try {
+      changed = git(["diff", "--name-only", `${base}..${target}`])
+        .split("\n")
+        .filter(Boolean);
+    } catch (error) {
+      throw new CliError(
+        `git diff ${base}..${target} failed: ${String(error.message).split("\n")[0]}`,
+        {
+          code: 3,
+          hint: "A shallow clone may not hold the baseline: fetch main and deepen until it is present (maintenance.md step 1).",
+        },
+      );
+    }
+    range = { base, target, baseSource };
   }
   const families = familyList();
   const result = affectedFamilies(families, changed);
@@ -3493,6 +3559,7 @@ function mapAffected(flags) {
     for (const e of family?.e2e ?? []) specs.add(e.spec);
   }
   return {
+    ...(range ? { range } : {}),
     changed: changed.length,
     families: result.families,
     // Playwright specs the affected families cite: cheap to run before the
@@ -3550,6 +3617,55 @@ async function cmdMap({ positional, flags }) {
     out({ ok: true, ...result });
     return;
   }
+  if (sub === "baseline") {
+    if (flags.set !== undefined) {
+      // Move the line to a commit's full SHA and committer date: what a pass
+      // that changed the map does before opening its PR.
+      const ref = flags.set === true ? "HEAD" : String(flags.set);
+      let sha;
+      let date;
+      try {
+        sha = git(["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]);
+        date = git(["show", "-s", "--format=%cs", sha]);
+      } catch {
+        throw new CliError(`${ref} is not a commit in this clone.`, {
+          code: 2,
+          hint: "control-openhands map baseline --set <sha|ref> (defaults to HEAD)",
+        });
+      }
+      const path = join(mapDir, "README.md");
+      const before = parseBaseline(indexText());
+      let text;
+      try {
+        text = withBaseline(indexText(), sha, date);
+      } catch (error) {
+        throw new CliError(error.message, {
+          code: 2,
+          hint: "Add the line after the index's intro paragraph: `Maintenance baseline: main@<sha> (<date>). The next maintenance pass starts from this commit; a pass proposes the next baseline in its PR, and merging that PR accepts it.`",
+        });
+      }
+      writeFileSync(path, text);
+      out({
+        ok: true,
+        baseline: { sha, date },
+        previous: before,
+        file: relative(repoRoot, path),
+        note: "Proposed in this checkout only: the baseline moves when the PR that carries this line merges.",
+      });
+      return;
+    }
+    const info = baselineInfo();
+    out({
+      ok: true,
+      baseline: info,
+      ...(info
+        ? {}
+        : {
+            hint: "The map index has no `Maintenance baseline:` line; map affected then needs --base.",
+          }),
+    });
+    return;
+  }
   if (sub === "testids") {
     const result = resolveTestids(
       citedTestids(mapDir, featureFiles()),
@@ -3568,7 +3684,7 @@ async function cmdMap({ positional, flags }) {
     return;
   }
   usage(
-    "Usage: control-openhands map check|coverage|ids|routes|affected|testids",
+    "Usage: control-openhands map check|coverage|ids|routes|affected|testids|baseline",
     "control-openhands map coverage",
   );
 }
@@ -3635,7 +3751,7 @@ Drive and observe
 
 Evidence and map
   evidence      add | list | report — the run's pass/fail/blocked/not-run ledger
-  map           check | coverage | ids | routes | affected | testids — keep the feature map honest
+  map           check | coverage | ids | routes | affected | testids | baseline — keep the feature map honest
 
 Run state lives in $OH_VERIFY_HOME (default: $TMPDIR/openhands-verify); the
 current run is the 'current' symlink there, or --run / $OH_VERIFY_RUN.
@@ -3854,16 +3970,22 @@ control-openhands map check --fix-counts   rewrite the index's sub-feature count
 control-openhands map coverage   routes in src/routes.ts and src/components/features/* dirs not yet mapped
 control-openhands map ids        every sub-feature ID with its file (and the E2E: specs that cover it)
 control-openhands map routes     the route registry as path → route module
-control-openhands map affected --base REF [--target REF] | --paths FILE|-
+control-openhands map affected [--base REF] [--target REF] | --paths FILE|-
                                  changed paths mapped to the families whose Source: lines own them,
                                  the E2E: specs those families cite, shared code to widen, src/ paths
-                                 no family owns (map gaps) and non-user-facing paths
+                                 no family owns (map gaps) and non-user-facing paths; without --base
+                                 the range starts at the index's Maintenance baseline line
+control-openhands map baseline [--set REF]
+                                 the recorded baseline (sha, date, whether HEAD descends from it and
+                                 by how many commits); --set moves the line to REF's full SHA and
+                                 committer date (default HEAD) in this checkout, for the pass's PR
 control-openhands map testids [--strict]
                                  test ids the map drives that no literal or prefix in src/ accounts for
                                  (a cheap drift check before launching; --strict exits 1 on any)
 
-check also verifies every Source: path exists and every E2E: spec exists and
-names declared IDs; coverage lists Playwright specs no family cites.
+check also verifies every Source: path exists, every E2E: spec exists and
+names declared IDs, and the baseline line's shape; coverage lists Playwright
+specs no family cites.
 `,
 };
 

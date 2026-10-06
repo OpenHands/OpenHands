@@ -4,8 +4,8 @@ A feature map rots the moment the app changes. This pass keeps it honest and
 answers three separate questions about the interval since the last pass:
 **Is each feature present? Does it work and look right? Was each change
 documented and intended?** A merged PR proves none of the last two. Between
-passes, [daily.md](daily.md) drives the changed families each day without
-moving the baseline this pass sets.
+full passes, [daily.md](daily.md) runs the delta pass each day against the
+same `Maintenance baseline` line of the map index, and moves it the same way.
 
 The unit of rigor is the feature: every feature file gets source coverage and
 live coverage, without re-proving every sentence. This is a procedure, not a

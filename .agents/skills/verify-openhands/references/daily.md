@@ -5,7 +5,8 @@ A daily pass cannot: 27 families and 700-odd sub-features take longer than one
 agent's day, and most of the map did not change since yesterday. The daily
 pass answers a narrower question with the same rigor: **did anything that
 merged since the last pass change what a user sees, and does the rest still
-hold where it is cheapest to look?** It never advances the weekly baseline.
+hold where it is cheapest to look?** It is the delta pass that
+[maintenance.md](maintenance.md) allows, and it moves the same baseline.
 
 This is a procedure, not a scheduler: run it from whatever runs you daily, do
 not create automations or post externally unless asked, and hand what you
@@ -13,12 +14,28 @@ found to a person.
 
 ## Inputs and hand-off
 
-Each pass starts from the previous one. Keep, per pass, outside the repository:
+A scheduled pass starts in a fresh session with no memory of yesterday, so
+everything it needs from the previous pass lives in the repository or on an
+open PR:
 
-- `TARGET`: the full `main` SHA the pass drove (today's `BASE` is yesterday's
-  `TARGET`; on the first pass, the last completed weekly pass's `TARGET`).
-- The run's `evidence/ledger.jsonl` (today's `--baseline`).
-- The rotation position (which families got their turn, below).
+- `BASE` is the `Maintenance baseline: main@<sha> (<date>)` line of
+  [the map index](feature-map/README.md), the previous pass's `TARGET`.
+  `control-openhands map baseline` reads it and says how far `HEAD` is from
+  it; `map affected` starts there when no `--base` is given. Fetch `main`
+  and freeze its full SHA as `TARGET`; deepen a shallow clone until `BASE` is
+  present.
+- A pass that changes the map or the CLI proposes `TARGET` as the next
+  baseline in its PR (`control-openhands map baseline --set "$TARGET"` moves
+  the line), and merging that PR accepts it. A pass that changes nothing
+  leaves the line alone, so the next pass covers a longer range. If an
+  earlier pass's PR is still open, the next pass continues on that branch and
+  takes `BASE` from the line there.
+- The rotation position (which families get their full recipe today) is
+  derived from the date, below, so no state carries it.
+- Yesterday's `evidence/ledger.jsonl` is an optional input: when the previous
+  run's ledger is at hand (a CI artifact, a shared directory), pass it to
+  `evidence report --baseline`; without it the report has no "Changes since
+  baseline" section and the verdict rests on today's fail and blocked rows.
 
 Record the UTC time, model and spend budget, and the accounts and keys
 available, as the weekly pass does. A pass that runs out of time says so and
@@ -36,8 +53,9 @@ cheaper than the next and catches a different kind of rot.
    accounts for is drift found before any browser opens. Fix it in the map
    with a live drive later today, or report it. Zero unresolved test ids is
    the normal state; treat a new one as a rename until a drive says otherwise.
-2. **Changed (the core).** `control-openhands map affected --base $BASE
-   --target $TARGET`. Launch, doctor, then drive **every** sub-feature the
+2. **Changed (the core).** `control-openhands map affected --target $TARGET`
+   (`--base` defaults to the recorded baseline). Launch, doctor, then drive
+   **every** sub-feature the
    listed families map for the changed paths, on each entry point the family
    lists, at desktop and phone viewports for UI changes. Widen `shared` paths
    to their consumers (an API client or store change touches every page that
@@ -54,10 +72,13 @@ cheaper than the next and catches a different kind of rot.
    sub-feature ID that bullet names. This catches a page that stopped loading
    without re-proving every row.
 4. **Rotation (depth over the week).** Drive the full recipe of about a
-   seventh of the families (four each day, in ID order, continuing from
-   yesterday's position), so every family gets a full live pass once a week
-   between weekly maintenance passes. Model-backed bullets run only inside the
-   LLM budget; without a key they are `blocked` with the missing prerequisite.
+   seventh of the families, four a day, so every family gets a full live pass
+   once a week between weekly maintenance passes. The day's slice comes from
+   the date, not from yesterday's notes: with `d` the UTC day of the year,
+   today's families are the ones at positions `(d mod 7) * 4` to
+   `(d mod 7) * 4 + 3` of the index table, in ID order (position 24 onwards
+   holds F25 to F27). Model-backed bullets run only inside the LLM budget;
+   without a key they are `blocked` with the missing prerequisite.
 
 The `E2E:` specs that `map affected` lists are a cheap signal before tier 2
 (run them with the suite's own command when the machine can; their green is
@@ -65,8 +86,9 @@ an input, never a pass in the ledger), and a selector reference while driving.
 
 ## Reading the result
 
-Render `control-openhands evidence report --baseline <yesterday's ledger>`.
-The "Changes since baseline" section is the daily verdict:
+Render `control-openhands evidence report`, with `--baseline <yesterday's
+ledger>` when that ledger is at hand. Fail and blocked rows come first; the
+"Changes since baseline" section, when present, is the daily verdict:
 
 - **Newly failing** on a family that tier 2 drove for a changed path: an
   introduced-in-range candidate. Re-drive the same minimal recipe on `BASE`
@@ -77,12 +99,18 @@ The "Changes since baseline" section is the daily verdict:
   it: an undocumented change; cite the commit and ask.
 - **Not checked this run** rows are the rotation moving on, not regressions;
   the family table shows which families got depth today.
+- Without yesterday's ledger, read today's fail rows the same way: a fail on a
+  family tier 2 drove for a changed path is a candidate to re-drive on
+  `BASE`; elsewhere it is a finding to triage, with the family's last known
+  state taken from the map (a bullet's Known failure note, a linked issue).
 
 Triage as the skill does: map drift (fix, with live evidence), harness gap
 (extend the CLI, re-drive), product defect (keep the evidence, search issues,
 file in the owning repository, keep it out of the map PR), blocked (name the
 prerequisite and the route). At most one PR of proven map and CLI corrections
-per pass, from current `main`; never edit product code in a pass.
+per pass, from current `main` (or from the previous pass's branch while its
+PR is open), carrying the moved baseline line and saying "delta" in its
+report; never edit product code in a pass.
 
 ## Several agents
 
@@ -93,9 +121,12 @@ names no run, revision or entry point does not count; a gap is not a pass.
 
 ## What the daily pass is not
 
-- Not the weekly pass: it does not re-prove every bullet or move the accepted
-  baseline. When tier 2 finds that most of the map is affected (a shared
-  component or style change), say so and run the weekly procedure instead.
+- Not the full pass: it does not re-prove every bullet, and the baseline it
+  moves says only that the day's changes were covered. When tier 2 finds that
+  most of the map is affected (a shared component or style change), say so
+  and run the full procedure instead. A full pass is still needed weekly or
+  before a release, because Agent Server and automation releases change
+  behavior without touching this repository.
 - Not CI: a green Playwright run or a passing `map check` is an input to a
   verdict, never the verdict.
 - Not a bug-fix lane: product defects are filed, not fixed, inside the pass.

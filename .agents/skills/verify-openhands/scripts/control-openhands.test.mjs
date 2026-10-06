@@ -25,6 +25,7 @@ import {
   runPorts,
 } from "./lib/launcher-env.mjs";
 import { redactStorage, redactStorageValue } from "./lib/redact-storage.mjs";
+import { parseBaseline, withBaseline } from "./lib/baseline.mjs";
 import {
   affectedFamilies,
   familyHead,
@@ -986,10 +987,89 @@ test("help names every fixture kind and the new map verbs", () => {
   const map = spawnSync(process.execPath, [cli, "help", "map"], {
     encoding: "utf8",
   });
-  assert.match(map.stdout, /map affected --base REF/);
+  assert.match(map.stdout, /map affected \[--base REF\]/);
   assert.match(map.stdout, /map testids \[--strict\]/);
   const evidence = spawnSync(process.execPath, [cli, "help", "evidence"], {
     encoding: "utf8",
   });
   assert.match(evidence.stdout, /--baseline/);
+});
+
+test("the maintenance baseline line is read and moved in place", () => {
+  const index =
+    "# Map\n\nIntro.\n\nMaintenance baseline: main@ed815e141409c7b52991ab8d13c553b595da9165 (2026-10-06). The next maintenance pass starts from this commit; a pass proposes the next baseline in its PR, and merging that PR accepts it.\n\n## Baseline preconditions\n";
+  assert.deepEqual(parseBaseline(index), {
+    sha: "ed815e141409c7b52991ab8d13c553b595da9165",
+    date: "2026-10-06",
+  });
+  assert.equal(parseBaseline("# Map\n\nno line here\n"), null);
+  const sha = "7cd6496040dd74d75e93feecaea528c6c50efef7";
+  const moved = withBaseline(index, sha, "2026-10-07");
+  assert.match(
+    moved,
+    /^Maintenance baseline: main@7cd6496040dd74d75e93feecaea528c6c50efef7 \(2026-10-07\)\. The next maintenance pass starts from this commit/m,
+  );
+  // Only the SHA and date move; the prose and the rest of the index stay.
+  assert.equal(
+    moved.replace(sha, "X").replace("2026-10-07", "D"),
+    index.replace(/ed815e1[0-9a-f]+/, "X").replace("2026-10-06", "D"),
+  );
+  assert.throws(
+    () => withBaseline(index, "7cd6496", "2026-10-07"),
+    /full 40-hex SHA/,
+  );
+  assert.throws(
+    () => withBaseline("# Map\n", sha, "2026-10-07"),
+    /no `Maintenance baseline/,
+  );
+});
+
+test("map baseline reads the index line, and map affected starts from it by default", () => {
+  const baseline = spawnSync(process.execPath, [cli, "map", "baseline"], {
+    encoding: "utf8",
+  });
+  assert.equal(baseline.status, 0, baseline.stdout);
+  const { baseline: recorded, hint } = JSON.parse(baseline.stdout);
+  const affected = spawnSync(process.execPath, [cli, "map", "affected"], {
+    encoding: "utf8",
+  });
+  const json = JSON.parse(affected.stdout);
+  if (recorded === null) {
+    // Until the index carries the line (OpenHands/OpenHands#18085), the
+    // default range cannot be computed and the usage error says so.
+    assert.match(hint, /no `Maintenance baseline:` line/);
+    assert.equal(affected.status, 2, affected.stdout);
+    assert.match(json.error, /Maintenance baseline/);
+  } else {
+    assert.match(recorded.sha, /^[0-9a-f]{40}$/);
+    assert.match(recorded.date, /^\d{4}-\d{2}-\d{2}$/);
+    assert.equal(affected.status, 0, affected.stdout);
+    assert.equal(json.range.base, recorded.sha);
+    assert.equal(json.range.baseSource, "map index baseline");
+  }
+  // An explicit --base never consults the line.
+  const explicit = JSON.parse(
+    spawnSync(
+      process.execPath,
+      [cli, "map", "affected", "--base", "HEAD~1", "--target", "HEAD"],
+      {
+        encoding: "utf8",
+      },
+    ).stdout,
+  );
+  assert.equal(explicit.range.baseSource, "--base");
+  assert.equal(explicit.range.target, "HEAD");
+  // --set refuses a ref that is not a commit, before touching the index.
+  const bad = spawnSync(
+    process.execPath,
+    [cli, "map", "baseline", "--set", "not-a-ref-xyz"],
+    {
+      encoding: "utf8",
+    },
+  );
+  assert.equal(bad.status, 2);
+  const help = spawnSync(process.execPath, [cli, "help", "map"], {
+    encoding: "utf8",
+  });
+  assert.match(help.stdout, /map baseline \[--set REF\]/);
 });

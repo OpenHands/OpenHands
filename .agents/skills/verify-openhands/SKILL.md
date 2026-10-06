@@ -164,9 +164,12 @@ prerequisite; never substitute a mock and call it a pass.
   [the report contract](references/report.md).
 - **Run the daily pass**: follow [references/daily.md](references/daily.md):
   static checks (`map check`, `map coverage`, `map testids`), the changed
-  families since yesterday's `TARGET`, a smoke row per family, and a rotation
-  that gives every family a full live pass once a week; compare with
-  `evidence report --baseline`.
+  families since the `Maintenance baseline` line of the map index
+  (`control-openhands map baseline`; `map affected` starts there by default),
+  a smoke row per family, and a date-derived rotation that gives every family
+  a full live pass once a week. A pass that changes the map proposes its
+  `TARGET` as the next baseline with `map baseline --set` in its PR; compare
+  ledgers with `evidence report --baseline` when yesterday's is at hand.
 - **Create or extend the map**: follow [references/mapping.md](references/mapping.md).
   It teaches how to discover features, write entries against the CLI and prove
   each one live. `control-openhands map coverage` measures what is still unmapped
