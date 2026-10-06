@@ -172,9 +172,15 @@ describe("AutomationService", () => {
         offset: 5,
       });
 
-      expect(mockGet).toHaveBeenCalledWith("/api/automation/v1", {
-        params: { limit: 10, offset: 5 },
-      });
+      expect(mockGet).toHaveBeenCalledWith(
+        "/api/automation/v1",
+        expect.objectContaining({
+          params: { limit: 10, offset: 5 },
+          headers: expect.objectContaining({
+            "X-Session-API-Key": localBackend.apiKey,
+          }),
+        }),
+      );
       expect(result).toEqual(response);
     });
 
@@ -187,9 +193,35 @@ describe("AutomationService", () => {
 
       await AutomationService.listAutomations();
 
-      expect(mockGet).toHaveBeenCalledWith("/api/automation/v1", {
-        params: { limit: 50, offset: 0 },
-      });
+      expect(mockGet).toHaveBeenCalledWith(
+        "/api/automation/v1",
+        expect.objectContaining({
+          params: { limit: 50, offset: 0 },
+          headers: expect.objectContaining({
+            "X-Session-API-Key": localBackend.apiKey,
+          }),
+        }),
+      );
+    });
+
+    it("falls back to no session header when no local backend is available", async () => {
+      const response: AutomationsResponse = {
+        automations: [],
+        total: 0,
+      };
+      mockGet.mockResolvedValue({ data: response });
+      mockGetEffectiveLocal.mockReturnValueOnce(null);
+
+      await AutomationService.listAutomations({ limit: 1, offset: 0 });
+
+      expect(mockGet).toHaveBeenCalledWith(
+        "/api/automation/v1",
+        expect.objectContaining({
+          headers: expect.not.objectContaining({
+            "X-Session-API-Key": expect.anything(),
+          }),
+        }),
+      );
     });
 
     it("sends the creator filter as created_by", async () => {
@@ -197,9 +229,15 @@ describe("AutomationService", () => {
 
       await AutomationService.listAutomations({ createdBy: "others" });
 
-      expect(mockGet).toHaveBeenCalledWith("/api/automation/v1", {
-        params: { limit: 50, offset: 0, created_by: "others" },
-      });
+      expect(mockGet).toHaveBeenCalledWith(
+        "/api/automation/v1",
+        expect.objectContaining({
+          params: { limit: 50, offset: 0, created_by: "others" },
+          headers: expect.objectContaining({
+            "X-Session-API-Key": localBackend.apiKey,
+          }),
+        }),
+      );
     });
   });
 
