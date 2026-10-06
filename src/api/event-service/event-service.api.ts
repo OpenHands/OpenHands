@@ -1,6 +1,7 @@
 import { ConversationClient } from "@openhands/typescript-client/clients";
 import { RemoteEventsList } from "@openhands/typescript-client/events/remote-events-list";
 import { OpenHandsEvent } from "#/types/agent-server/core";
+import { isSdkHttpError } from "#/utils/sdk-http-error";
 import { getActiveBackend } from "../backend-registry/active-store";
 import { callCloudProxy } from "../cloud/proxy";
 import {
@@ -15,6 +16,11 @@ import type {
 } from "./event-service.types";
 
 function isMissingEventFileError(err: unknown): boolean {
+  if (isSdkHttpError(err) && (err as any).status === 500) {
+    const body = (err as any).response?.body || (err as any).body;
+    const bodyStr = typeof body === 'string' ? body : JSON.stringify(body);
+    if (bodyStr && bodyStr.includes("Missing event file")) return true;
+  }
   return err instanceof Error && err.message.includes("Missing event file");
 }
 
