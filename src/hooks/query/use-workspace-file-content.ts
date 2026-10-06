@@ -143,12 +143,14 @@ export function useWorkspaceFileContent(relativePath: string | null) {
   const { data: conversation } = useActiveConversation();
   const runtimeIsReady = useRuntimeIsReady({ allowAgentError: true });
   const { data: workspaceSession } = useWorkspaceSession();
-  // Bump on every agent-side file mutation so the query refetches the
-  // currently-selected file's body even when the *path* hasn't changed.
+  // Bumped on every agent file-editor mutation (not shell commands) and on
+  // the Files tab Refresh, so the query refetches the currently-selected
+  // file's body even when the *path* hasn't changed.
   // The iframe / <img> cache-busting for the rich preview is handled at
   // the consumer (FileContentViewer / files-tab) by appending the same
   // counter to the staticUrl, so a single tick refreshes both the
-  // decoded text and the iframe-rendered HTML's sibling assets.
+  // decoded text and the top-level file the iframe / <img> renders (its
+  // sibling assets keep their own URLs and are not cache-busted).
   const workspaceMutationCount = useWorkspaceMutationCounter(
     (state) => state.count,
   );
@@ -263,8 +265,15 @@ export function useWorkspaceFileContent(relativePath: string | null) {
       // (it travels because we opt in to credentialed requests). This
       // matches the auth path the iframe / <img> uses, and avoids a CORS
       // preflight for a custom header.
+      //
+      // `cache: "no-cache"` makes the browser revalidate (ETag /
+      // Last-Modified) on every read. The fileserver sends no
+      // Cache-Control, so with the default mode an old file's cached body
+      // stays heuristically fresh and Refresh, an agent edit or even a page
+      // reload keeps showing it (#17921).
       const response = await fetch(staticUrl, {
         credentials: "include",
+        cache: "no-cache",
       });
       if (!response.ok) {
         throw new Error(`Failed to read ${relativePath}: ${response.status}`);

@@ -449,6 +449,24 @@ describe("ConversationTabs localStorage behavior", () => {
       ).toBeDisabled();
     });
 
+    it("leaves the build bar out of the compact tab row, which sits in the fixed-height phone top bar", () => {
+      setActiveTabState("planner");
+      useConversationStore.setState({
+        planContent: "# Plan content",
+      });
+
+      render(<ConversationTabs variant="compact" />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      expect(
+        screen.getByTestId("conversation-tab-planner"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("planner-tab-build-button"),
+      ).not.toBeInTheDocument();
+    });
+
     it("calls the build handler when the build button is clicked", async () => {
       const user = userEvent.setup();
       setActiveTabState("planner");

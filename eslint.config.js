@@ -400,9 +400,10 @@ export default [
   // Canvas primitives use #/ui, not the plugin's default components/ui path.
   // require-static-classes is enabled for those consumers; 0.2.0 still cannot
   // read imported constants, so its documented narrow exceptions remain.
-  // Next: audit no-raw-colors against our themes (0.2.0 fixes text/shadow token
-  // false positives), then define component contracts for no-restyle and audit
-  // dynamic style usage before enabling no-inline-styles.
+  // no-raw-colors starts at warn while existing palette colors are migrated
+  // and checked across themes (#18004). Keep verified plugin/config tokens exempt below.
+  // Next: finish that migration before promoting to error, then define component
+  // contracts for no-restyle and audit dynamic styles for no-inline-styles.
   // 0.2.0 also improves render-prop, destructuring, barrel-export, and custom
   // animation recognition. Vue/Svelte support adds no new rule names or parsers
   // to this React project; keep this upgrade separate from rule activation.
@@ -412,7 +413,25 @@ export default [
     rules: {
       "shadcn/no-arbitrary-values": "warn",
       "shadcn/no-restyle": "off",
-      "shadcn/no-raw-colors": "off",
+      "shadcn/no-raw-colors": [
+        "warn",
+        {
+          // 0.2.0 reads CSS @theme tokens, but not these JS-config/plugin tokens.
+          // Exact classes only: do not exempt raw palettes or whole namespaces.
+          allow: [
+            // hero.ts / @heroui/theme: semantic colors and the medium font size.
+            "bg-background",
+            "bg-content1",
+            "text-primary-foreground",
+            "text-medium",
+            // tailwind.config.js: existing named tokens, pending theme migration.
+            "bg-status-fail-bg",
+            "text-status-fail-text",
+            "text-content-muted",
+            "text-modal-muted",
+          ],
+        },
+      ],
       "shadcn/no-inline-styles": "off",
       "shadcn/require-static-classes": [
         "error",

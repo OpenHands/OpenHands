@@ -101,6 +101,14 @@ export function AgentStatus({
     setShouldShownAgentLoading(!!shouldShownAgentLoading);
   }, [shouldShownAgentLoading, setShouldShownAgentLoading]);
 
+  // This status is the flag's only writer, and the phone panel page renders
+  // the drawer without it. Clear the flag on unmount so a value captured while
+  // the chat was still connecting cannot cover the panel's tab content.
+  useEffect(
+    () => () => setShouldShownAgentLoading(false),
+    [setShouldShownAgentLoading],
+  );
+
   useEffect(() => {
     if (!isTransientCheckStatus) {
       setShouldRenderDoneStatus(true);

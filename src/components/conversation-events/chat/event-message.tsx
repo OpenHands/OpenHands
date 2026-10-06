@@ -217,7 +217,7 @@ function EventMessageComponent({
     isConversationStateUpdateEvent(event) &&
     isGoalConversationStateUpdateEvent(event)
   ) {
-    return <GoalStatusContent status={event.value} />;
+    return <GoalStatusContent status={event.value} eventId={event.id} />;
   }
 
   // Agent error events

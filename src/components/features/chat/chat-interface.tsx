@@ -141,8 +141,9 @@ export function ChatInterface() {
   // Global keyboard shortcut for Build button (Cmd+Enter / Ctrl+Enter)
   // This is placed here instead of PlanPreview to avoid duplicate listeners
   // when multiple PlanPreview components exist in the chat.
-  // Gated on the same conditions as the Build button (ConversationTabs'
-  // `isBuildDisabled`) so it cannot fire outside the plan flow.
+  // Gated on the same conditions as the Build button
+  // (ConversationPlannerBuildBar's `isBuildDisabled`) so it cannot fire
+  // outside the plan flow.
   React.useEffect(() => {
     if (isAgentRunning || conversationMode !== "plan" || !planContent) {
       return undefined;

@@ -4,6 +4,7 @@ import { Search, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { useNavigation } from "#/context/navigation-context";
+import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { useCommandMenuStore } from "#/stores/command-menu-store";
 import { useSidebarStore } from "#/stores/sidebar-store";
 import { cn } from "#/utils/utils";
@@ -25,7 +26,6 @@ const COMMAND_MENU_SHORTCUT_KEY = "k";
 const COMMAND_MENU_ARROW_DOWN_KEY = "ArrowDown";
 const COMMAND_MENU_ARROW_UP_KEY = "ArrowUp";
 const COMMAND_MENU_ENTER_KEY = "Enter";
-const COMMAND_MENU_ESCAPE_KEY = "Escape";
 const EMPTY_QUERY = "";
 const EMPTY_RESULTS_ACTIVE_INDEX = -1;
 
@@ -85,6 +85,9 @@ export function CommandMenu() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [open]);
 
+  // Escape closes the modal from any element inside it, not only the input.
+  useCloseOnEscape(isOpen, close);
+
   React.useEffect(() => {
     if (!isOpen) {
       setQuery(EMPTY_QUERY);
@@ -93,8 +96,18 @@ export function CommandMenu() {
       return undefined;
     }
 
+    // Return focus to whatever had it (for example the composer) on close.
+    const previouslyFocused =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
     const frame = requestAnimationFrame(() => inputRef.current?.focus());
-    return () => cancelAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(frame);
+      if (previouslyFocused?.isConnected) {
+        previouslyFocused.focus();
+      }
+    };
   }, [isOpen]);
 
   const items = React.useMemo(
@@ -174,12 +187,6 @@ export function CommandMenu() {
     if (event.key === COMMAND_MENU_ENTER_KEY) {
       event.preventDefault();
       runItem(filteredItems[activeIndex]);
-      return;
-    }
-
-    if (event.key === COMMAND_MENU_ESCAPE_KEY) {
-      event.preventDefault();
-      close();
     }
   };
 
