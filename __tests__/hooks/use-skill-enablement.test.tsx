@@ -61,6 +61,116 @@ describe("useSkillEnablement", () => {
     );
   }
 
+  it.each(["local", "cloud"])(
+    "preserves the last successful %s save when refetch is pending and the next save fails",
+    async (kind) => {
+      active.backend.kind = kind;
+      const secondSkill = { name: CATALOG_SKILL_NAMES[1] } as SkillInfo;
+      settings = {
+        ...settings,
+        enabled_skills: [skill.name, secondSkill.name],
+        disabled_skills: [],
+      };
+      let finishRefetch!: (value: Settings) => void;
+      vi.mocked(SettingsService.getSettings)
+        .mockResolvedValueOnce(settings)
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              finishRefetch = resolve;
+            }),
+        );
+      const save = vi
+        .spyOn(SettingsService, "saveSettings")
+        .mockImplementationOnce(async (update) => {
+          settings = { ...settings, ...update };
+          return true;
+        })
+        .mockRejectedValueOnce(new Error("Second save failed"));
+      const { result } = renderHook(
+        () => {
+          const query = useSettings();
+          return { ...useSkillEnablement(), settingsLoaded: query.isSuccess };
+        },
+        { wrapper },
+      );
+      await waitFor(() => expect(result.current.settingsLoaded).toBe(true));
+
+      act(() => result.current.setEnabled(skill.name, false));
+      // PATCH has succeeded, but the real mutation hook is awaiting GET.
+      await waitFor(() =>
+        expect(SettingsService.getSettings).toHaveBeenCalledTimes(2),
+      );
+      act(() => result.current.setEnabled(secondSkill.name, false));
+
+      await waitFor(() => expect(displayErrorToast).toHaveBeenCalledTimes(1));
+      expect(result.current.isEnabled(skill)).toBe(false);
+      expect(result.current.isEnabled(secondSkill)).toBe(true);
+      expect(save).toHaveBeenCalledTimes(2);
+      await act(async () => finishRefetch(settings));
+    },
+  );
+
+  it("rolls back to a successful overlapping save without waiting for refetch", async () => {
+    const secondSkill = { name: CATALOG_SKILL_NAMES[1] } as SkillInfo;
+    settings = {
+      ...settings,
+      enabled_skills: [skill.name, secondSkill.name],
+      disabled_skills: [],
+    };
+    let finishSave!: () => void;
+    let rejectSecondSave!: (error: Error) => void;
+    let finishRefetch!: (value: Settings) => void;
+    vi.mocked(SettingsService.getSettings)
+      .mockResolvedValueOnce(settings)
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishRefetch = resolve;
+          }),
+      );
+    const save = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockImplementationOnce(
+        (update) =>
+          new Promise((resolve) => {
+            finishSave = () => {
+              settings = { ...settings, ...update };
+              resolve(true);
+            };
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((_, reject) => {
+            rejectSecondSave = reject;
+          }),
+      );
+    const { result } = renderHook(
+      () => {
+        const query = useSettings();
+        return { ...useSkillEnablement(), settingsLoaded: query.isSuccess };
+      },
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.settingsLoaded).toBe(true));
+    act(() => result.current.setEnabled(skill.name, false));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    act(() => result.current.setEnabled(secondSkill.name, false));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+    act(() => finishSave());
+    await waitFor(() =>
+      expect(SettingsService.getSettings).toHaveBeenCalledTimes(2),
+    );
+
+    act(() => rejectSecondSave(new Error("Second save failed")));
+
+    await waitFor(() => expect(displayErrorToast).toHaveBeenCalledTimes(1));
+    expect(result.current.isEnabled(skill)).toBe(false);
+    expect(result.current.isEnabled(secondSkill)).toBe(true);
+    await act(async () => finishRefetch(settings));
+  });
+
   it("does not roll back refreshed settings when an older save fails", async () => {
     let rejectSave!: (error: Error) => void;
     const save = vi.spyOn(SettingsService, "saveSettings").mockImplementation(
