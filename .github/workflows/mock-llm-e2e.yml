@@ -87,6 +87,9 @@ jobs:
           # before the automation backend finishes installing (~60-90s).
           uvx --from "openhands-automation==$AUTOMATION_VERSION" python -c "from openhands.automation.app import app; print('automation package cached')"
 
+      - name: Test mock LLM title isolation
+        run: .mock-llm-venv/bin/python3 -m unittest discover -s tests/e2e/mock-llm/scripts -p 'test_*.py'
+
       - name: Verify mock LLM server starts
         run: |
           .mock-llm-venv/bin/python3 tests/e2e/mock-llm/scripts/mock-llm-server.py --port 9998 &

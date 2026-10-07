@@ -151,6 +151,9 @@ jobs:
           uv venv .mock-llm-venv
           uv pip install -p .mock-llm-venv "openhands-sdk==$AGENT_SERVER_VERSION"
 
+      - name: Test mock LLM title isolation
+        run: .mock-llm-venv/bin/python3 -m unittest discover -s tests/e2e/mock-llm/scripts -p 'test_*.py'
+
       - name: Verify mock LLM server starts
         run: |
           .mock-llm-venv/bin/python3 tests/e2e/mock-llm/scripts/mock-llm-server.py --port 9998 &

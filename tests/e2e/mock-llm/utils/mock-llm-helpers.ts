@@ -809,7 +809,8 @@ export async function openAgentProfileEditor(page: Page, profileName: string) {
   await expect(row).toBeVisible({ timeout: 10_000 });
   await row.getByTestId("agent-profile-menu-trigger").click();
   await waitForTestId(page, "agent-profile-actions-menu");
-  await page.getByTestId("agent-profile-edit").click();
+  // Activate the focused menu item without a pointer hit during portal layout.
+  await page.getByTestId("agent-profile-edit").press("Enter");
   await waitForTestId(page, "agent-settings-screen");
 }
 

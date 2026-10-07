@@ -12,10 +12,9 @@
  * with the agent-server while creating files on the host (volume-mounted).
  */
 
-import { resolve, join } from "path";
+import { resolve, join, dirname } from "path";
 import { mkdirSync, writeFileSync, rmSync, existsSync } from "fs";
 import { execSync } from "child_process";
-import { homedir } from "os";
 
 // ── Paths ────────────────────────────────────────────────────────────
 
@@ -40,12 +39,14 @@ export const SKILL_REPOS_AGENT_DIR =
 
 /**
  * User-level skills directory — HOST-side (for file creation/removal).
+ * npm launchers set OH_PERSISTENCE_DIR to dirname(STATE_DIR); mirror that
+ * here so the real Agent Server loads the fixture without touching user files.
  * In Docker mode, we use a local temp dir that is volume-mounted into the
  * container at the agent-server's expected `~/.openhands/skills/` path.
  */
 export const USER_SKILLS_DIR = process.env.MOCK_LLM_USER_SKILLS_HOST_DIR
   ? resolve(process.env.MOCK_LLM_USER_SKILLS_HOST_DIR)
-  : join(homedir(), ".openhands", "skills");
+  : join(dirname(STATE_DIR), "skills");
 
 // ── Skill content builders ───────────────────────────────────────────
 
