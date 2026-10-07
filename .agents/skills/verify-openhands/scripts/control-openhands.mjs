@@ -2750,6 +2750,22 @@ async function cmdBrowser({ positional, flags }) {
         fullPage: Boolean(flags["full-page"]),
       });
       break;
+    case "clock":
+      if (
+        !flags["offset-ms"] &&
+        flags.system === undefined &&
+        flags.fixed === undefined
+      )
+        usage(
+          "browser clock needs --offset-ms N | --system ISO|+MS | --fixed ISO|+MS",
+          "control-openhands browser clock --offset-ms 300000   # five minutes ahead",
+        );
+      result = await browserCall(run, "clock", {
+        offsetMs: flags["offset-ms"],
+        system: flags.system,
+        fixed: flags.fixed,
+      });
+      break;
     case "viewport":
       need(
         1,
@@ -3126,6 +3142,7 @@ const BROWSER_VERBS = new Set([
   "testids",
   "screenshot",
   "viewport",
+  "clock",
   "errors",
   "events",
   "eval",
@@ -3878,6 +3895,8 @@ Verbs
   testids [<sel>] [--hidden] [--filter part]                 discover on-screen data-testid handles (--hidden adds hidden/off-screen)
   screenshot [<sel>] --feature ID --name N [--full-page]     PNG under evidence/<ID>/
   viewport desktop|phone|narrow|tablet|WxH                    1440x1000, 390x844, 320x700, 820x1180
+  clock --offset-ms N | --system ISO|+MS | --fixed ISO|+MS    skew the page's clock (install before the goto
+                                         whose page should see it; the server's clock is untouched)
   errors [--clear] [--all] [--app-only] [--no-warnings]        page/console/HTTP errors since last clear
                                          (--clear prints the list, then empties it: run it before the action)
   events [--kinds pageerror,dialog,download] [--last N]

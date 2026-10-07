@@ -814,6 +814,31 @@ const handlers = {
     else await activePage.screenshot({ path, fullPage: Boolean(fullPage) });
     return { path, url: activePage.url(), viewport: activePage.viewportSize() };
   },
+  async clock({ offsetMs, system, fixed }) {
+    // The page's clock, for states that depend on the browser's time
+    // differing from the server's (a message stamped in the future). The
+    // app's own timers keep running; install before the navigation whose
+    // page should see the skewed time.
+    const when = (value) =>
+      /^[+-]\d+$/.test(String(value))
+        ? Date.now() + Number(value)
+        : new Date(value).getTime();
+    if (fixed !== undefined) {
+      await activePage.clock.setFixedTime(when(fixed));
+      return { clock: "fixed", time: new Date(when(fixed)).toISOString() };
+    }
+    if (system !== undefined) {
+      await activePage.clock.setSystemTime(when(system));
+      return { clock: "system", time: new Date(when(system)).toISOString() };
+    }
+    const time = Date.now() + Number(offsetMs ?? 0);
+    await activePage.clock.install({ time });
+    return {
+      clock: "installed",
+      offsetMs: Number(offsetMs ?? 0),
+      time: new Date(time).toISOString(),
+    };
+  },
   async viewport({ size }) {
     const preset = VIEWPORTS[size];
     let next = preset;
