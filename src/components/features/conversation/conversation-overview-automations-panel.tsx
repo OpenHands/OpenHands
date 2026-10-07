@@ -28,8 +28,6 @@ export function ConversationOverviewAutomationsPanel({
     refetch: refetchHealth,
   } = useAutomationHealth();
   const { data, isLoading, isError, refetch } = useAutomations({
-    limit: 50,
-    offset: 0,
     enabled: health?.status === "ok",
   });
 

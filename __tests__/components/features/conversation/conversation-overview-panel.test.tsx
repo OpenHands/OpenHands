@@ -214,6 +214,21 @@ describe("ConversationOverviewPanel", () => {
     );
   });
 
+  it("closes the overflow menu with Escape and returns focus to its trigger", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+    const trigger = screen.getByTestId("conversation-overview-ellipsis");
+
+    await user.click(trigger);
+    screen.getByTestId("conversation-overview-menu-pin-git").focus();
+    await user.keyboard("{Escape}");
+
+    expect(
+      screen.queryByTestId("conversation-overview-context-menu"),
+    ).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+
   it("lets users pin and unpin git changes from the overflow menu", async () => {
     const user = userEvent.setup();
     renderPanel();

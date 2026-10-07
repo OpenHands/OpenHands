@@ -43,6 +43,7 @@ function getDotStatus(health: McpServerHealth): string {
 function getStatusLabel(
   t: TFunction<"openhands">,
   health: McpServerHealth,
+  serverType: MCPServerConfig["type"],
 ): string {
   switch (health.status) {
     case "checking":
@@ -52,7 +53,7 @@ function getStatusLabel(
         ? t(I18nKey.MCP$HEALTH_STATUS_VERIFIED, { count: health.toolCount })
         : t(I18nKey.MCP$HEALTH_STATUS_CONNECTIVITY_ONLY);
     case "failed":
-      return makeMcpTestErrorMessage(t, health.kind, health.error);
+      return makeMcpTestErrorMessage(t, health.kind, health.error, serverType);
     default:
       return t(I18nKey.MCP$HEALTH_STATUS_UNCHECKED);
   }
@@ -82,7 +83,7 @@ export function McpServerHealthSection({
 
   const isChecking = health.status === "checking";
   const isFailed = health.status === "failed";
-  const label = getStatusLabel(t, health);
+  const label = getStatusLabel(t, health, server.type);
 
   const handleReauthorize = async () => {
     const result = await reauthorize();

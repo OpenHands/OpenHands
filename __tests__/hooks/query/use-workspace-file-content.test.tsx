@@ -146,9 +146,12 @@ describe("useWorkspaceFileContent", () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
+    // Revalidate instead of trusting the browser HTTP cache: the fileserver
+    // sends no Cache-Control, so an old file's body stays heuristically
+    // fresh and a Refresh would otherwise keep showing it (#17921).
     expect(fetchMock).toHaveBeenCalledWith(
       `${BASE_URL}docs/readme.md`,
-      expect.objectContaining({ credentials: "include" }),
+      expect.objectContaining({ credentials: "include", cache: "no-cache" }),
     );
     expect(result.current.data).toEqual({
       path: "docs/readme.md",
