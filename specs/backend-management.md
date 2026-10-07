@@ -19,4 +19,5 @@
 - [x] Cloud backends expose no `/server_info`, so they render no mode badge even when they share a host and key with a local backend.
 - [x] The badge shall refresh when the backend health poll observes new server info, so a server that restarts in a different mode is reflected without reopening the modal.
 - [x] A successful health probe of the effective local backend shall also refresh the module-level bootstrap cache that conversation creation reads, so a restart that changes the mode drives the next workspace request — not just the badge.
+- [x] The bootstrap cache shall compare and store hosts normalized the same way as the agent-server client options (trailing slashes removed), so a persisted backend host ending in `/` still hits the cache instead of re-probing.
 - [x] The mode label shall be localized through `src/i18n/translation.json`.
