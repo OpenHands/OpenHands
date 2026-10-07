@@ -32,7 +32,15 @@ import {
   portsAfterRestart,
   runPorts,
 } from "./lib/launcher-env.mjs";
+import { baselineLines, parseBaseline, withBaseline } from "./lib/baseline.mjs";
+import { affectedFamilies, familyHead } from "./lib/map-sources.mjs";
 import { routePattern } from "./lib/route-pattern.mjs";
+import {
+  citedTestids,
+  resolveTestids,
+  sourceLiterals,
+} from "./lib/testids.mjs";
+import { tmuxPathFor } from "./lib/tmux-path.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const skillDir = resolve(here, "..");
@@ -545,8 +553,21 @@ async function cmdLaunch({ flags }) {
     );
   }
 
-  const existing = flags.new ? undefined : loadRun(flags, { required: false });
-  if (existing && !flags.new && groupAlive(existing.launcherPgid)) {
+  let existing;
+  if (!flags.new) {
+    try {
+      existing = loadRun(flags, { required: false });
+    } catch (error) {
+      // Several live runs: reuse none of them, say how to start another.
+      if (!(error instanceof CliError) || !/runs are alive/.test(error.message))
+        throw error;
+      throw new CliError(error.message, {
+        code: error.code,
+        hint: `${error.hint} To start another independent run, pass --new.`,
+      });
+    }
+  }
+  if (existing && groupAlive(existing.launcherPgid)) {
     out({
       ok: true,
       alreadyRunning: true,
@@ -778,7 +799,19 @@ async function cmdLaunch({ flags }) {
   saveRun(run);
 
   let browser;
-  if (!flags["no-browser"]) browser = await startBrowser(run);
+  if (!flags["no-browser"]) {
+    try {
+      browser = await startBrowser(run);
+    } catch (error) {
+      if (!(error instanceof CliError)) throw error;
+      // The stack is up and the run is saved: only the browser is missing.
+      throw new CliError(error.message, {
+        code: error.code,
+        hint: `${error.hint} The stack is running: export OH_VERIFY_RUN=${dir}, fix the browser, then \`control-openhands browser start\` (or \`stop\` the run).`,
+        extra: { ...(error.extra ?? {}), run: dir, baseUrl: run.baseUrl },
+      });
+    }
+  }
 
   if (flags["print-run"]) {
     // For: export OH_VERIFY_RUN=$(control-openhands launch --new --print-run)
@@ -1222,7 +1255,7 @@ async function cmdDoctor({ flags }) {
 }
 
 function tmuxDirFor(runDir) {
-  const dir = join("/tmp", `ohv-tmux-${basename(runDir).slice(-6)}`);
+  const dir = tmuxPathFor(runDir);
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   return dir;
 }
@@ -1240,10 +1273,7 @@ async function cmdStop({ flags }) {
   result.launcherStopped = !groupAlive(pgid);
   if (result.launcherStopped) {
     releaseClaim(run);
-    rmSync(join("/tmp", `ohv-tmux-${basename(run.dir).slice(-6)}`), {
-      recursive: true,
-      force: true,
-    });
+    rmSync(tmuxPathFor(run.dir), { recursive: true, force: true });
   }
   result.ports = ports;
   run.stoppedAt = new Date().toISOString();
@@ -2720,6 +2750,22 @@ async function cmdBrowser({ positional, flags }) {
         fullPage: Boolean(flags["full-page"]),
       });
       break;
+    case "clock":
+      if (
+        !flags["offset-ms"] &&
+        flags.system === undefined &&
+        flags.fixed === undefined
+      )
+        usage(
+          "browser clock needs --offset-ms N | --system ISO|+MS | --fixed ISO|+MS",
+          "control-openhands browser clock --offset-ms 300000   # five minutes ahead",
+        );
+      result = await browserCall(run, "clock", {
+        offsetMs: flags["offset-ms"],
+        system: flags.system,
+        fixed: flags.fixed,
+      });
+      break;
     case "viewport":
       need(
         1,
@@ -2785,6 +2831,50 @@ async function cmdBrowser({ positional, flags }) {
 // Commands: evidence ledger.
 // ---------------------------------------------------------------------------
 const RESULTS = ["pass", "fail", "blocked", "not-run"];
+
+// The ledger is append-only: the report shows each check's latest row,
+// keyed by feature and entry point, minus retractions.
+function latestRows(rows) {
+  const latest = new Map();
+  for (const row of rows) {
+    const key = `${row.feature}|${row.entry ?? ""}`;
+    if (row.retracted) {
+      // A retraction without --entry drops every row of that feature.
+      for (const k of [...latest.keys()]) {
+        if (k === key || (!row.entry && k.startsWith(`${row.feature}|`)))
+          latest.delete(k);
+      }
+    } else latest.set(key, row);
+  }
+  return latest;
+}
+
+// What changed between two ledgers' latest rows (same feature and entry).
+function compareLedgers(before, after) {
+  const newlyFailing = [];
+  const newlyPassing = [];
+  const other = [];
+  const missing = [];
+  const entry = (row) => ({
+    feature: row.feature,
+    entry: row.entry,
+    note: row.note,
+  });
+  for (const [key, row] of after) {
+    const prev = before.get(key);
+    if (prev?.result === row.result) continue;
+    const change = { ...entry(row), before: prev?.result, after: row.result };
+    if (row.result === "fail" && prev?.result !== "fail")
+      newlyFailing.push(change);
+    else if (row.result === "pass" && prev && prev.result !== "pass")
+      newlyPassing.push(change);
+    else other.push(change);
+  }
+  for (const [key, row] of before)
+    if (!after.has(key))
+      missing.push({ ...entry(row), before: row.result, after: undefined });
+  return { newlyFailing, newlyPassing, other, missing };
+}
 
 async function cmdEvidence({ positional, flags }) {
   const run = loadRun(flags);
@@ -2866,38 +2956,112 @@ async function cmdEvidence({ positional, flags }) {
     return;
   }
   if (sub === "report") {
-    const latest = new Map();
-    for (const row of rows) {
-      const key = `${row.feature}|${row.entry ?? ""}`;
-      if (row.retracted) {
-        // A retraction without --entry drops every row of that feature.
-        for (const k of [...latest.keys()]) {
-          if (k === key || (!row.entry && k.startsWith(`${row.feature}|`)))
-            latest.delete(k);
-        }
-      } else latest.set(key, row);
-    }
+    const latest = latestRows(rows);
     const counts = Object.fromEntries(RESULTS.map((r) => [r, 0]));
     for (const row of latest.values()) counts[row.result] += 1;
+    // Per family: the denominator the report contract asks for.
+    const families = new Map();
+    for (const row of latest.values()) {
+      const id = row.feature.slice(0, 3);
+      if (!families.has(id))
+        families.set(id, Object.fromEntries(RESULTS.map((r) => [r, 0])));
+      families.get(id)[row.result] += 1;
+    }
+    // --baseline PATH: another run's ledger.jsonl (or run directory). Rows
+    // are compared by feature and entry point; what changed is listed first.
+    let changes;
+    if (flags.baseline && flags.baseline !== true) {
+      let path = resolve(String(flags.baseline));
+      if (existsSync(join(path, "evidence", "ledger.jsonl")))
+        path = join(path, "evidence", "ledger.jsonl");
+      if (!existsSync(path))
+        throw new CliError(`No ledger at ${path}`, { code: 2 });
+      const before = latestRows(
+        readFileSync(path, "utf8")
+          .trim()
+          .split("\n")
+          .filter(Boolean)
+          .map((l) => JSON.parse(l)),
+      );
+      changes = compareLedgers(before, latest);
+    }
+    if (flags.json) {
+      out({
+        ok: true,
+        run: run.runId,
+        revision: run.revision,
+        checks: latest.size,
+        counts,
+        families: Object.fromEntries(
+          [...families.entries()].sort(([a], [b]) => a.localeCompare(b)),
+        ),
+        rows: [...latest.values()],
+        ...(changes ? { changes } : {}),
+      });
+      return;
+    }
+    const cell = (v) =>
+      String(v ?? "")
+        .replace(/\|/g, "\\|")
+        .replace(/\n/g, " ");
     const lines = [
       `# Verification ledger — run ${run.runId}`,
       "",
       `Revision \`${run.revision}\`, ${run.mode} mode, Agent Server ${run.versions?.agentServer ?? "?"}, base ${run.baseUrl}.`,
       "",
-      `Checks: ${latest.size} — ${RESULTS.map((r) => `${r} ${counts[r]}`).join(", ")}.`,
+      `Checks: ${latest.size} — ${RESULTS.map((r) => `${r} ${counts[r]}`).join(", ")}. Families: ${families.size}.`,
       "",
-      "| Feature/check | Entry point | Expected → actual | Result | Evidence |",
-      "|---|---|---|---|---|",
     ];
-    const cell = (v) =>
-      String(v ?? "")
-        .replace(/\|/g, "\\|")
-        .replace(/\n/g, " ");
-    for (const row of [...latest.values()].sort((a, b) =>
-      a.feature.localeCompare(b.feature),
+    if (changes) {
+      lines.push(`## Changes since baseline`, "");
+      const section = (title, list) => {
+        if (!list.length) return;
+        lines.push(`${title}:`, "");
+        for (const c of list)
+          lines.push(
+            `- ${c.feature}${c.entry ? ` (${c.entry})` : ""}: ${c.before ?? "absent"} → ${c.after ?? "absent"}${c.note ? ` — ${c.note}` : ""}`,
+          );
+        lines.push("");
+      };
+      section("Newly failing", changes.newlyFailing);
+      section("Newly passing", changes.newlyPassing);
+      section("Other changes", changes.other);
+      section("Not checked this run", changes.missing);
+      if (
+        !changes.newlyFailing.length &&
+        !changes.newlyPassing.length &&
+        !changes.other.length &&
+        !changes.missing.length
+      )
+        lines.push("No result changed against the baseline.", "");
+    }
+    lines.push(
+      "## Families",
+      "",
+      "| Family | pass | fail | blocked | not-run |",
+      "|---|---|---|---|---|",
+    );
+    for (const [id, c] of [...families.entries()].sort(([a], [b]) =>
+      a.localeCompare(b),
+    ))
+      lines.push(
+        `| ${id} | ${c.pass} | ${c.fail} | ${c.blocked} | ${c["not-run"]} |`,
+      );
+    lines.push(
+      "",
+      "## Checks",
+      "",
+      "| Feature/check | Entry point | Expected → actual | Result | Note | Evidence |",
+      "|---|---|---|---|---|---|",
+    );
+    // Fail and blocked rows first (report.md), then by feature ID.
+    const order = { fail: 0, blocked: 1, "not-run": 2, pass: 3 };
+    for (const row of [...latest.values()].sort(
+      (a, b) =>
+        order[a.result] - order[b.result] || a.feature.localeCompare(b.feature),
     )) {
       lines.push(
-        `| ${cell(row.feature)} | ${cell(row.entry)} | ${cell(row.expected)} → ${cell(row.actual)} | ${row.result} | ${row.artifacts.map((a) => `\`${cell(relative(run.dir, resolve(run.dir, a)))}\``).join(" ")} |`,
+        `| ${cell(row.feature)} | ${cell(row.entry)} | ${cell(row.expected)} → ${cell(row.actual)} | ${row.result} | ${cell(row.note)} | ${row.artifacts.map((a) => `\`${cell(relative(run.dir, resolve(run.dir, a)))}\``).join(" ")} |`,
       );
     }
     process.stdout.write(`${lines.join("\n")}\n`);
@@ -2978,6 +3142,7 @@ const BROWSER_VERBS = new Set([
   "testids",
   "screenshot",
   "viewport",
+  "clock",
   "errors",
   "events",
   "eval",
@@ -3012,6 +3177,23 @@ function mapCheck({ only } = {}) {
     ? readFileSync(join(mapDir, "README.md"), "utf8")
     : "";
   if (!index) problems.push("references/feature-map/README.md is missing");
+  // The baseline line, when present, must be the only one (a merge can leave
+  // two) and carry a full SHA and a date: map affected and the passes read it.
+  const baselines = baselineLines(index);
+  if (baselines.length > 1)
+    problems.push(
+      `README.md: ${baselines.length} Maintenance baseline lines; keep the one the latest pass proposed`,
+    );
+  for (const line of baselines) {
+    if (!parseBaseline(line))
+      problems.push(
+        "README.md: the Maintenance baseline line must read `Maintenance baseline: main@<sha> (<YYYY-MM-DD>)`",
+      );
+    else if (!/main@[0-9a-f]{40} /.test(line))
+      problems.push(
+        "README.md: the Maintenance baseline line must carry the full 40-character SHA",
+      );
+  }
   const files = featureFiles();
   for (const file of files) {
     const text = readFileSync(join(mapDir, file), "utf8");
@@ -3054,6 +3236,16 @@ function mapCheck({ only } = {}) {
     for (const m of text.matchAll(/\]\((\.\.\/[^)#]+)/g)) {
       const target = resolve(mapDir, m[1]);
       if (!existsSync(target)) problems.push(`${file}: dead link ${m[1]}`);
+    }
+    // The Source: line is what drift checks and `map affected` read: every
+    // path it names must exist (node_modules content is not checked out).
+    const head = familyHead(text);
+    if (!head.sources.length)
+      problems.push(`${file}: no Source: line with implementation paths`);
+    for (const s of head.sources) {
+      if (s.path.startsWith("node_modules/")) continue;
+      if (!sourcePathExists(s))
+        problems.push(`${file}: Source: path ${s.path} does not exist`);
     }
   }
   // References (`Fnn.slug` in prose, --feature Fnn.slug in recipes) must name
@@ -3130,6 +3322,31 @@ function fixIndexCounts() {
       `${featureFiles().length} families, ${total} sub-features`,
     );
   writeFileSync(path, text);
+}
+
+// A Source: path spec exists when the file or directory is there, or, for a
+// `name-*.tsx` glob, when at least one file in its directory matches.
+function sourcePathExists(s) {
+  const full = join(repoRoot, s.path);
+  if (!s.glob) return existsSync(full);
+  const dir = dirname(full);
+  if (!existsSync(dir)) return false;
+  const [head, tail = ""] = basename(s.path).split("*");
+  return readdirSync(dir).some(
+    (name) => name.startsWith(head) && name.endsWith(tail),
+  );
+}
+
+// Families with their parsed Source: lines.
+function familyList() {
+  return featureFiles().map((file) => {
+    const text = readFileSync(join(mapDir, file), "utf8");
+    return {
+      id: /^(F\d{2})/.exec(file)?.[1] ?? file,
+      file,
+      ...familyHead(text),
+    };
+  });
 }
 
 function routePaths() {
@@ -3229,6 +3446,139 @@ function mapIdList() {
   return ids;
 }
 
+// The map index (references/feature-map/README.md), home of the baseline line.
+function indexText() {
+  const path = join(mapDir, "README.md");
+  return existsSync(path) ? readFileSync(path, "utf8") : "";
+}
+
+// The recorded baseline, with where it stands relative to HEAD.
+// Two baseline lines (a merge kept both sides) are nobody's baseline.
+function assertOneBaselineLine(index) {
+  const lines = baselineLines(index);
+  if (lines.length > 1)
+    throw new CliError(
+      `The map index has ${lines.length} Maintenance baseline lines.`,
+      {
+        code: 2,
+        hint: "Remove the line that is not the latest pass's proposal (a merge kept both sides), then re-run.",
+      },
+    );
+}
+
+function baselineInfo() {
+  const index = indexText();
+  assertOneBaselineLine(index);
+  const recorded = parseBaseline(index);
+  if (!recorded) return null;
+  let known = false;
+  let ancestorOfHead = false;
+  let commitsSince;
+  try {
+    execFileSync("git", ["cat-file", "-e", `${recorded.sha}^{commit}`], {
+      cwd: repoRoot,
+      stdio: "ignore",
+    });
+    known = true;
+    ancestorOfHead =
+      spawnSync("git", ["merge-base", "--is-ancestor", recorded.sha, "HEAD"], {
+        cwd: repoRoot,
+      }).status === 0;
+    if (ancestorOfHead)
+      commitsSince = Number(
+        git(["rev-list", "--first-parent", "--count", `${recorded.sha}..HEAD`]),
+      );
+  } catch {
+    // Not in this clone (shallow, or a SHA from another branch).
+  }
+  return { ...recorded, known, ancestorOfHead, commitsSince };
+}
+
+// Changed paths between two revisions (or from a file), mapped to families.
+function mapAffected(flags) {
+  let changed;
+  let range;
+  let baseSource = "--base";
+  if (flags.paths && flags.paths !== true) {
+    const text =
+      String(flags.paths) === "-"
+        ? readFileSync(0, "utf8")
+        : readFileSync(resolve(String(flags.paths)), "utf8");
+    changed = text
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean);
+  } else {
+    // Without --base, the range starts at the maintenance baseline the map
+    // index records (the previous pass's TARGET), so a daily pass needs no
+    // memory of yesterday.
+    let base =
+      flags.base && flags.base !== true ? String(flags.base) : undefined;
+    if (!base) {
+      const index = indexText();
+      assertOneBaselineLine(index);
+      const recorded = parseBaseline(index);
+      if (!recorded)
+        usage(
+          "map affected needs --base REF [--target REF] or --paths FILE|-: the map index has no `Maintenance baseline:` line to start from",
+          "control-openhands map affected --base origin/main",
+        );
+      base = recorded.sha;
+      baseSource = "map index baseline";
+    }
+    const target =
+      flags.target && flags.target !== true ? String(flags.target) : "HEAD";
+    try {
+      changed = git(["diff", "--name-only", `${base}..${target}`])
+        .split("\n")
+        .filter(Boolean);
+    } catch (error) {
+      // Say which end is missing, and why: a shallow clone that lacks the
+      // commit is deepened; a commit that is not an ancestor of the target
+      // was recorded from a branch, or the target is not main.
+      const known = (ref) =>
+        spawnSync("git", ["cat-file", "-e", `${ref}^{commit}`], {
+          cwd: repoRoot,
+        }).status === 0;
+      let reason;
+      let hint;
+      if (!known(base)) {
+        reason = `${base} is not in this clone`;
+        hint =
+          "A shallow clone may not hold the baseline: fetch main and deepen until it is present (maintenance.md step 1).";
+      } else if (!known(target)) {
+        reason = `${target} is not in this clone`;
+        hint = "Fetch the target ref first (git fetch origin main).";
+      } else {
+        reason = `${base} is not an ancestor of ${target}`;
+        hint =
+          baseSource === "map index baseline"
+            ? "The recorded baseline is not on this history: it was set from a branch, or the target is not main. Pass --base with a commit on main, and fix the line with map baseline --set <main commit>."
+            : "Pick a base that the target descends from.";
+      }
+      throw new CliError(`git diff ${base}..${target} failed: ${reason}.`, {
+        code: 3,
+        hint,
+        extra: { git: String(error.message).split("\n")[0] },
+      });
+    }
+    range = { base, target, baseSource };
+  }
+  const result = affectedFamilies(familyList(), changed);
+  return {
+    ...(range ? { range } : {}),
+    changed: changed.length,
+    families: result.families,
+    // Shared code (API clients, hooks, stores, styles, i18n): widen to the
+    // consumers rather than sampling one screen (maintenance.md step 3).
+    shared: result.shared,
+    // Under src/ but owned by no family's Source: line: a map gap, or a
+    // Source: line to extend.
+    unmapped: result.unmapped,
+    nonUserFacing: result.nonUserFacing,
+  };
+}
+
 async function cmdMap({ positional, flags }) {
   const [sub] = positional;
   if (sub === "check") {
@@ -3265,8 +3615,110 @@ async function cmdMap({ positional, flags }) {
     out({ ok: true, routes: routePaths() });
     return;
   }
+  if (sub === "affected") {
+    const result = mapAffected(flags);
+    out({ ok: true, ...result });
+    return;
+  }
+  if (sub === "baseline") {
+    if (flags.set !== undefined) {
+      // Move the line to a main commit's full SHA and committer date: what a
+      // pass that finished its range does before opening its PR. The line
+      // reads main@<sha>, so the commit must be on main: a pass's branch tip
+      // (a merge commit, the PR's own fixes) never is.
+      if (flags.set === true)
+        usage(
+          "map baseline --set needs the frozen TARGET (a commit on main)",
+          'control-openhands map baseline --set "$TARGET"',
+        );
+      const ref = String(flags.set);
+      let sha;
+      let date;
+      try {
+        sha = git(["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]);
+        date = git(["show", "-s", "--format=%cs", sha]);
+      } catch {
+        throw new CliError(`${ref} is not a commit in this clone.`, {
+          code: 2,
+          hint: 'control-openhands map baseline --set "$TARGET" (a commit on main; fetch origin main first)',
+        });
+      }
+      const mainRef = ["origin/main", "main"].find(
+        (r) =>
+          spawnSync("git", ["rev-parse", "--verify", "--quiet", r], {
+            cwd: repoRoot,
+          }).status === 0,
+      );
+      let warning;
+      if (mainRef) {
+        const onMain =
+          spawnSync("git", ["merge-base", "--is-ancestor", sha, mainRef], {
+            cwd: repoRoot,
+          }).status === 0;
+        if (!onMain && !flags.force)
+          throw new CliError(`${sha.slice(0, 12)} is not on ${mainRef}.`, {
+            code: 2,
+            hint: 'The line records main@<sha>: pass the frozen TARGET (control-openhands map baseline --set "$TARGET"), not the pass branch\'s HEAD. --force records it anyway.',
+          });
+      } else {
+        warning =
+          "Neither origin/main nor main is in this clone, so the commit could not be checked against main.";
+      }
+      const path = join(mapDir, "README.md");
+      const index = indexText();
+      assertOneBaselineLine(index);
+      const before = parseBaseline(index);
+      let text;
+      try {
+        text = withBaseline(index, sha, date);
+      } catch (error) {
+        throw new CliError(error.message, {
+          code: 2,
+          hint: "Add the line after the index's intro paragraph: `Maintenance baseline: main@<sha> (<date>). The next maintenance pass starts from this commit; a pass proposes the next baseline in its PR, and merging that PR accepts it.`",
+        });
+      }
+      writeFileSync(path, text);
+      out({
+        ok: true,
+        baseline: { sha, date },
+        previous: before,
+        file: relative(repoRoot, path),
+        ...(warning ? { warning } : {}),
+        note: "Proposed in this checkout only: the baseline moves when the PR that carries this line merges.",
+      });
+      return;
+    }
+    const info = baselineInfo();
+    out({
+      ok: true,
+      baseline: info,
+      ...(info
+        ? {}
+        : {
+            hint: "The map index has no `Maintenance baseline:` line; map affected then needs --base.",
+          }),
+    });
+    return;
+  }
+  if (sub === "testids") {
+    const result = resolveTestids(
+      citedTestids(mapDir, featureFiles()),
+      sourceLiterals(join(repoRoot, "src")),
+    );
+    const ok = !flags.strict || result.unresolved.length === 0;
+    out({
+      ok,
+      ...result,
+      note:
+        result.unresolved.length === 0
+          ? "every cited test id is accounted for in src/"
+          : "unresolved ids are candidates for drift (a rename), or built in a way this check misses; confirm with a live drive before editing the map",
+    });
+    if (!ok) process.exitCode = 1;
+    return;
+  }
   usage(
-    "Usage: control-openhands map check|coverage|ids|routes",
+    "Usage: control-openhands map check|coverage|ids|routes|affected|testids|baseline",
     "control-openhands map coverage",
   );
 }
@@ -3320,7 +3772,7 @@ Lifecycle
 Arrange (preconditions, never UI proof)
   api           Call this run's API with its session key (writes need --write)
   llm           show | set | preset deepseek | check — configure LLM profiles from an env key
-  fixture       git-repo | folder | image | file — disposable fixtures in the run
+  fixture       git-repo | git-remote | folder | image | file | tarball | skill | mcp-server — disposable fixtures in the run
 
 Essential pathways (driven through the real UI)
   login         Public mode: enter the session key on the API-key screen
@@ -3333,7 +3785,7 @@ Drive and observe
 
 Evidence and map
   evidence      add | list | report — the run's pass/fail/blocked/not-run ledger
-  map           check | coverage | ids | routes — keep the feature map honest
+  map           check | coverage | ids | routes | affected | testids | baseline — keep the feature map honest
 
 Run state lives in $OH_VERIFY_HOME (default: $TMPDIR/openhands-verify); the
 current run is the 'current' symlink there, or --run / $OH_VERIFY_RUN.
@@ -3512,6 +3964,8 @@ Verbs
   testids [<sel>] [--hidden] [--filter part]                 discover on-screen data-testid handles (--hidden adds hidden/off-screen)
   screenshot [<sel>] --feature ID --name N [--full-page]     PNG under evidence/<ID>/
   viewport desktop|phone|narrow|tablet|WxH                    1440x1000, 390x844, 320x700, 820x1180
+  clock --offset-ms N | --system ISO|+MS | --fixed ISO|+MS    skew the page's clock (install before the goto
+                                         whose page should see it; the server's clock is untouched)
   errors [--clear] [--all] [--app-only] [--no-warnings]        page/console/HTTP errors since last clear
                                          (--clear prints the list, then empties it: run it before the action)
   events [--kinds pageerror,dialog,download] [--last N]
@@ -3539,13 +3993,35 @@ Failures return {ok:false,error,hint,failureScreenshot} and exit 1.
         [--entry "UI path"] [--expected TEXT] [--actual TEXT] [--artifact path[,path]] [--note TEXT]
 control-openhands evidence retract --feature ID [--entry "UI path"] [--note why]   drop a wrong row from the report
 control-openhands evidence list [--feature F05]
-control-openhands evidence report > report.md
+control-openhands evidence report [--baseline RUN_DIR|ledger.jsonl] [--json] > report.md
+
+'report' renders the latest row per feature and entry point: a family count
+table, then every check with fail and blocked rows first and the --note column
+(where blocked rows name their missing prerequisite). --baseline compares with
+another run's ledger and lists newly failing, newly passing and unchecked rows
+first (a daily pass against yesterday's run). --json prints the same data.
 `,
   map: `control-openhands map check [--file Fnn-name.md]   lint the map (or one entry, skipping index links): four H2s, unique IDs, links, known commands, index counts
 control-openhands map check --fix-counts   rewrite the index's sub-feature counts and total from the files, then lint
 control-openhands map coverage   routes in src/routes.ts and src/components/features/* dirs not yet mapped
 control-openhands map ids        every sub-feature ID with its file
 control-openhands map routes     the route registry as path → route module
+control-openhands map affected [--base REF] [--target REF] | --paths FILE|-
+                                 changed paths mapped to the families whose Source: lines own them,
+                                 shared code to widen, src/ paths no family owns (map gaps) and
+                                 non-user-facing paths; without --base
+                                 the range starts at the index's Maintenance baseline line
+control-openhands map baseline [--set TARGET [--force]]
+                                 the recorded baseline (sha, date, whether HEAD descends from it and
+                                 by how many commits); --set moves the line to TARGET's full SHA and
+                                 committer date in this checkout, for the pass's PR. TARGET must be a
+                                 commit on origin/main (the line reads main@<sha>); a pass branch's
+                                 HEAD is refused unless --force
+control-openhands map testids [--strict]
+                                 test ids the map drives that no literal or prefix in src/ accounts for
+                                 (a cheap drift check before launching; --strict exits 1 on any)
+
+check also verifies every Source: path exists and the baseline line's shape.
 `,
 };
 

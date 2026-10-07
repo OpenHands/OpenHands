@@ -1,6 +1,6 @@
 import axios from "axios";
-import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
 import { isSdkHttpError } from "#/utils/sdk-http-error";
+import { getUserFacingConnectionErrorMessage } from "#/utils/user-facing-error";
 
 /**
  * Extract the parsed response body from a failed API call.
@@ -125,5 +125,5 @@ export function getApiOrConnectionErrorMessage(
   if (hasApiErrorResponse(error)) {
     return getApiErrorMessage(error, fallback);
   }
-  return retrieveAxiosErrorMessage(error) || fallback;
+  return getUserFacingConnectionErrorMessage(error) || fallback;
 }

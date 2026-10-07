@@ -44,8 +44,12 @@ candidate. Sources, roughly in order of yield:
 6. **Backends and modes**: local vs Cloud backend, public vs local auth, ACP
    agents, partial stacks (`agent-canvas --help`), Electron, Docker, and the
    embeddable library (`src/index.ts` / `build:lib`).
-7. **Docs and specs**: `README.md`, `docs/*.md`, `specs/*.md` describe intended
-   behavior; mock-LLM specs in `tests/e2e/mock-llm/` are selector references only.
+7. **Docs, specs and tests**: `README.md`, `docs/*.md`, `specs/*.md` describe
+   intended behavior. The Playwright suites under `tests/e2e/` (mock-LLM, live,
+   bind-policy, live-acp) assert behaviors a user sees too: read them for
+   selectors and for behaviors the map lacks, then map those behaviors as
+   sub-features with their own recipes. The map never cites a spec: the
+   suites run differently and prove a commit, not this run.
 8. **Strings**: `src/i18n/translation.json` keys reveal user-visible states
    (empty, error, disabled, confirmation) that a happy path never shows.
 
@@ -78,10 +82,12 @@ that ID instead of re-mapping it.
 
 Each file starts with an H1 title, one paragraph describing the user-visible
 behavior, and one `Source:` line with the main implementation paths (for drift
-checks; keep other implementation detail out). For a family spread over many
-files, list the route modules and top-level component directories, not every
-file. Then exactly four H2 sections, in
-this order:
+checks and `map affected`; keep other implementation detail out). Every path
+must exist (`map check` verifies it); a directory ends with `/`, names in
+parentheses after a directory are relative to it, and `name-*.tsx` matches by
+prefix. For a family spread over many files, list the route modules and
+top-level component directories, not every file. Then exactly four H2
+sections, in this order:
 
 1. `## Sub-features`: one bullet per ID: `` - `F14.create`: add a dummy secret; it persists after reload. ``
 2. `## How to get to it (user POV)`: every entry point, in user language: the

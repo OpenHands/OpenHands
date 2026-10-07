@@ -10,7 +10,7 @@ Electron desktop app and an embeddable React library. Launchers tell the agent
 which services exist through `/server_info.runtime_services` and a
 `<RUNTIME_SERVICES>` block in every new conversation's system prompt.
 
-Source: `bin/agent-canvas.mjs`, `scripts/dev-with-automation.mjs`, `scripts/bind-host.mjs`, `scripts/static-server.mjs`, `scripts/ingress.mjs`, `scripts/runtime-services-info.mjs`, `config/defaults.json`, `src/api/agent-server-adapter.ts`, `src/api/backend-registry/`, `docker/`, `electron/`, `helm/agent-canvas/`, `src/lib/index.ts`, `docs/SELF_HOSTING.md`.
+Source: `bin/agent-canvas.mjs`, `scripts/dev-with-automation.mjs`, `scripts/dev-safe.mjs`, `scripts/dev-static.mjs`, `scripts/dev-extra-backend.mjs`, `scripts/bind-host.mjs`, `scripts/static-server.mjs`, `scripts/ingress.mjs`, `scripts/runtime-services-info.mjs`, `config/defaults.json`, `src/api/agent-server-adapter.ts`, `src/api/backend-registry/`, `docker/`, `electron/`, `helm/agent-canvas/`, `src/lib/index.ts`, `docs/SELF_HOSTING.md`.
 
 ## Sub-features
 
