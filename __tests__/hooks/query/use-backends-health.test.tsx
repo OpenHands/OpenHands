@@ -24,6 +24,7 @@ import {
   clearCachedAgentServerInfo,
   getCachedAgentServerInfo,
 } from "#/api/agent-server-compatibility";
+import { getConversationServerInfo } from "#/api/conversation-workspace";
 import type { Backend } from "#/api/backend-registry/types";
 import {
   CLOUD_BACKEND_LOGGED_OUT_ERROR,
@@ -492,6 +493,44 @@ describe("useBackendsHealth", () => {
         getCachedAgentServerInfo({ host: localBackend.host }),
       ).toMatchObject({ conversation_runtime: "docker" }),
     );
+  });
+
+  it("normalizes a persisted trailing-slash host so conversation creation hits the cache", async () => {
+    // A stored host may carry a trailing slash (`isValidBackend` only checks
+    // that it is a string). The health probe and every reader compare against
+    // the host `getAgentServerClientOptions` normalizes, so the writer must
+    // store the normalized form or conversation creation misses the cache and
+    // re-probes — falling back to a local workspace if that probe fails.
+    const slashed: Backend = {
+      ...localBackend,
+      host: "http://localhost:18000/",
+    };
+    setRegisteredBackends([slashed]);
+    setActiveSelection({ backendId: slashed.id });
+    getSettingsMock.mockResolvedValue({});
+    getServerInfoMock.mockResolvedValue({
+      version: "1.52.0",
+      conversation_runtime: "docker",
+    });
+
+    const { result } = renderHook(() => useBackendsHealth([slashed]), {
+      wrapper,
+    });
+    await waitFor(() =>
+      expect(result.current[slashed.id].isConnected).toBe(true),
+    );
+
+    // The reader normalizes the host, so it must still hit the cache.
+    expect(
+      getCachedAgentServerInfo({ host: "http://localhost:18000" }),
+    ).toMatchObject({ conversation_runtime: "docker" });
+
+    // Conversation creation reading the effective backend must reuse the
+    // cached mode without another probe.
+    const callsAfterProbe = getServerInfoMock.mock.calls.length;
+    const info = await getConversationServerInfo();
+    expect(info).toMatchObject({ conversation_runtime: "docker" });
+    expect(getServerInfoMock.mock.calls.length).toBe(callsAfterProbe);
   });
 
   it("does not point the bootstrap cache at a non-effective local backend", async () => {

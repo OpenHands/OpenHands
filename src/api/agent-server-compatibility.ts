@@ -3,7 +3,10 @@ import {
   SettingsClient,
 } from "@openhands/typescript-client/clients";
 import type { ServerInfo as BaseServerInfo } from "@openhands/typescript-client";
-import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
+import {
+  getAgentServerClientOptions,
+  normalizeHost,
+} from "#/api/agent-server-client-options";
 import { isAuthRequired } from "#/api/agent-server-config";
 import {
   getActiveBackend,
@@ -153,7 +156,10 @@ export function clearCachedAgentServerInfo() {
 export function getCachedAgentServerInfo(options?: {
   host?: string | null;
 }): AgentServerInfo | null {
-  if (options?.host && options.host !== cachedAgentServerInfoHost) {
+  if (
+    options?.host &&
+    normalizeHost(options.host) !== cachedAgentServerInfoHost
+  ) {
     return null;
   }
   return cachedAgentServerInfo;
@@ -171,7 +177,11 @@ export function getCachedAgentServerInfo(options?: {
  *
  * Only the *effective local backend* owns the cache: a probe of any other
  * registered backend (or a cloud row) is ignored, so it cannot point the
- * local-protocol services at a different host.
+ * local-protocol services at a different host. Hosts are compared and stored
+ * normalized (trailing slashes removed) to match
+ * {@link getAgentServerClientOptions}, so a persisted host with a trailing
+ * slash does not miss the cache and fall back to a fresh — possibly failing —
+ * probe during conversation creation.
  */
 export function setCachedAgentServerInfo(
   serverInfo: AgentServerInfo,
@@ -179,9 +189,10 @@ export function setCachedAgentServerInfo(
 ): void {
   const effectiveHost = getEffectiveLocalBackend()?.host;
   if (!effectiveHost) return;
-  if (options?.host && options.host !== effectiveHost) return;
+  const normalized = normalizeHost(effectiveHost);
+  if (options?.host && normalizeHost(options.host) !== normalized) return;
   cachedAgentServerInfo = serverInfo;
-  cachedAgentServerInfoHost = effectiveHost;
+  cachedAgentServerInfoHost = normalized;
 }
 
 export { isSdkHttpError };
