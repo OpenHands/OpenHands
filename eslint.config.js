@@ -445,6 +445,9 @@ export default [
             "environment-switch-overlay",
             // Selector target for has-[.conversation-overview-diffs-git-action:hover].
             "conversation-overview-diffs-git-action",
+            // src/index.css owns the app shell's safe-area insets: the values are
+            // env() display cutouts, not theme scale, so there is no token to use.
+            "oh-app-shell",
           ],
         },
       ],
