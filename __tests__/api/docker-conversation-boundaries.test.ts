@@ -22,11 +22,17 @@ const paths: string[] = [];
 let isolated = true;
 let capabilities = true;
 let reportOnlyExecutionRuntime = false;
+// When true, the server reports BOTH runtime fields with conflicting values:
+// `execution_runtime: "local"` vs `conversation_runtime: "docker"`. The
+// forward-looking `execution_runtime` must win, so a conflicting server yields
+// the local (non-isolated) workspace.
+let conflictRuntimeFields = false;
 
 beforeEach(() => {
   isolated = true;
   capabilities = true;
   reportOnlyExecutionRuntime = false;
+  conflictRuntimeFields = false;
   paths.length = 0;
   clearCachedAgentServerInfo();
   clearAgentServerHomeDirCache();
@@ -56,9 +62,11 @@ beforeEach(() => {
           capabilities: capabilities ? ["conversation_runtime_routes_v1"] : [],
           // The forward-looking `execution_runtime` field, when present, is
           // authoritative over `conversation_runtime`.
-          ...(reportOnlyExecutionRuntime
-            ? { execution_runtime: isolated ? "docker" : "local" }
-            : { conversation_runtime: isolated ? "docker" : "local" }),
+          ...(conflictRuntimeFields
+            ? { execution_runtime: "local", conversation_runtime: "docker" }
+            : reportOnlyExecutionRuntime
+              ? { execution_runtime: isolated ? "docker" : "local" }
+              : { conversation_runtime: isolated ? "docker" : "local" }),
           runtime_services: { mode: isolated ? "dev:automation" : "docker" },
         });
       if (url.pathname === "/api/file/home")
@@ -206,8 +214,19 @@ describe("conversation runtime boundaries", () => {
   });
 
   it("reads execution_runtime when the server provides both fields", async () => {
-    reportOnlyExecutionRuntime = true;
-    expect(await fetchBackendExecutionRuntime()).toBe("docker");
+    // Conflicting values: `execution_runtime: "local"` must win over
+    // `conversation_runtime: "docker"`, so both the badge/adapter and the
+    // workspace resolver agree on local.
+    conflictRuntimeFields = true;
+    expect(await fetchBackendExecutionRuntime()).toBe("local");
+    clearCachedAgentServerInfo();
+    expect(
+      await resolveNewConversationWorkspace({ conversationId: cid }),
+    ).toEqual({
+      workingDir: expect.any(String),
+      hooksProjectDir: expect.any(String),
+      isolated: false,
+    });
   });
 
   it("routes legacy git service changes and diff to the conversation", async () => {

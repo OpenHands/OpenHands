@@ -9,6 +9,7 @@ import {
 import {
   INVALID_BACKEND_API_KEY_ERROR,
   probeLocalBackendServerInfo,
+  setCachedAgentServerInfo,
   type AgentServerInfo,
 } from "#/api/agent-server-compatibility";
 import { backendVersionQueryKey } from "#/hooks/query/use-backend-server-info";
@@ -264,6 +265,12 @@ export function useBackendsHealth(
                 backendVersionQueryKey(b),
                 result.serverInfo,
               );
+              // Also refresh the bootstrap cache conversation creation reads,
+              // so a restarted server's new mode drives the *next* workspace
+              // request instead of only the badge (BM-004).
+              if (b.kind === "local") {
+                setCachedAgentServerInfo(result.serverInfo, { host: b.host });
+              }
             }
             return result;
           } catch (err) {

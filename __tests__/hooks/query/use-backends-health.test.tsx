@@ -15,6 +15,15 @@ import {
   __resetHealthStoreForTests,
   resetBackendHealth,
 } from "#/api/backend-registry/health-store";
+import {
+  __resetActiveStoreForTests,
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
+import {
+  clearCachedAgentServerInfo,
+  getCachedAgentServerInfo,
+} from "#/api/agent-server-compatibility";
 import type { Backend } from "#/api/backend-registry/types";
 import {
   CLOUD_BACKEND_LOGGED_OUT_ERROR,
@@ -76,12 +85,19 @@ beforeEach(() => {
   vi.mocked(SettingsClient).mockClear();
   window.localStorage.clear();
   __resetHealthStoreForTests();
+  clearCachedAgentServerInfo();
+  // Make the module-local bootstrap cache writable: only the effective local
+  // backend may publish to it.
+  setRegisteredBackends([localBackend]);
+  setActiveSelection({ backendId: localBackend.id });
 });
 
 afterEach(() => {
   vi.useRealTimers();
   window.localStorage.clear();
   __resetHealthStoreForTests();
+  __resetActiveStoreForTests();
+  clearCachedAgentServerInfo();
 });
 
 describe("useBackendsHealth", () => {
@@ -427,5 +443,84 @@ describe("useBackendsHealth", () => {
     expect(
       client.getQueryData(backendVersionQueryKey(localBackend)),
     ).toMatchObject({ conversation_runtime: "docker" });
+  });
+
+  it("refreshes the bootstrap cache so a restarted backend's new mode reaches conversation creation", async () => {
+    // A server that restarts in a different mode: the first probe reports
+    // local, the second (next poll) reports docker. The badge alone updating
+    // would leave conversation creation asking for the old workspace kind, so
+    // the health poll must also publish into the bootstrap cache
+    // (`getConversationServerInfo` / `fetchBackendServerInfo` read it).
+    getSettingsMock.mockResolvedValue({});
+    getServerInfoMock.mockResolvedValueOnce({
+      version: "1.52.0",
+      conversation_runtime: "local",
+    });
+    getServerInfoMock.mockResolvedValueOnce({
+      version: "1.52.0",
+      conversation_runtime: "docker",
+    });
+
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const { result } = renderHook(() => useBackendsHealth([localBackend]), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      ),
+    });
+
+    await waitFor(() =>
+      expect(result.current[localBackend.id].isConnected).toBe(true),
+    );
+    expect(getCachedAgentServerInfo({ host: localBackend.host })).toMatchObject(
+      {
+        conversation_runtime: "local",
+      },
+    );
+
+    // Force the next poll to re-probe the now-restarted server.
+    await act(async () => {
+      await client.refetchQueries({
+        queryKey: ["backend-health"],
+        type: "all",
+      });
+    });
+
+    await waitFor(() =>
+      expect(
+        getCachedAgentServerInfo({ host: localBackend.host }),
+      ).toMatchObject({ conversation_runtime: "docker" }),
+    );
+  });
+
+  it("does not point the bootstrap cache at a non-effective local backend", async () => {
+    // The cache belongs to the *effective* local backend only; probing any
+    // other registered backend must not redirect local-protocol services.
+    const otherLocalBackend: Backend = {
+      ...localBackend,
+      id: "other-local",
+      host: "http://localhost:19000",
+    };
+    setRegisteredBackends([localBackend, otherLocalBackend]);
+    getSettingsMock.mockResolvedValue({});
+    getServerInfoMock.mockResolvedValue({
+      version: "1.52.0",
+      conversation_runtime: "docker",
+    });
+
+    const { result } = renderHook(
+      () => useBackendsHealth([otherLocalBackend]),
+      {
+        wrapper,
+      },
+    );
+
+    await waitFor(() =>
+      expect(result.current[otherLocalBackend.id].isConnected).toBe(true),
+    );
+    expect(
+      getCachedAgentServerInfo({ host: otherLocalBackend.host }),
+    ).toBeNull();
   });
 });

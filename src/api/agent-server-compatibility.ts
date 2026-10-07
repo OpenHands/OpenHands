@@ -159,6 +159,31 @@ export function getCachedAgentServerInfo(options?: {
   return cachedAgentServerInfo;
 }
 
+/**
+ * Publish a freshly probed `/server_info` into the bootstrap cache.
+ *
+ * The cache is otherwise written only by {@link loadAgentServerInfo} at app
+ * bootstrap, so a server that restarts in a different execution mode would
+ * keep feeding conversation creation the old mode even though the badge (read
+ * from the React Query cache) had updated. The backend health poll calls this
+ * on each successful probe so the displayed boundary and the workspace the next
+ * conversation requests cannot diverge (BM-004).
+ *
+ * Only the *effective local backend* owns the cache: a probe of any other
+ * registered backend (or a cloud row) is ignored, so it cannot point the
+ * local-protocol services at a different host.
+ */
+export function setCachedAgentServerInfo(
+  serverInfo: AgentServerInfo,
+  options?: { host?: string | null },
+): void {
+  const effectiveHost = getEffectiveLocalBackend()?.host;
+  if (!effectiveHost) return;
+  if (options?.host && options.host !== effectiveHost) return;
+  cachedAgentServerInfo = serverInfo;
+  cachedAgentServerInfoHost = effectiveHost;
+}
+
 export { isSdkHttpError };
 
 /**
