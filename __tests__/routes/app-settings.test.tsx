@@ -12,6 +12,18 @@ const activeBackendState = vi.hoisted(() => ({
   kind: "local" as "local" | "cloud",
 }));
 
+const conversationWorkspaceState = vi.hoisted(() => ({
+  isolated: false,
+  dockerSelectable: false,
+}));
+
+vi.mock("#/hooks/query/use-conversation-workspace", () => ({
+  useConversationWorkspace: () => ({
+    ...conversationWorkspaceState,
+    unsupportedMessage: null,
+  }),
+}));
+
 vi.mock("#/contexts/active-backend-context", () => ({
   useActiveBackend: () => ({
     backend: { kind: activeBackendState.kind },
@@ -54,6 +66,8 @@ describe("AppSettingsScreen", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     activeBackendState.kind = "local";
+    conversationWorkspaceState.isolated = false;
+    conversationWorkspaceState.dockerSelectable = false;
   });
 
   it("renders the OSS application settings form", async () => {
@@ -198,5 +212,57 @@ describe("AppSettingsScreen", () => {
         }),
       );
     });
+  });
+
+  it("saves docker as the default workspace mode when the server offers it", async () => {
+    conversationWorkspaceState.dockerSelectable = true;
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
+    const saveSettingsSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+
+    renderAppSettingsScreen();
+
+    expect(
+      await screen.findByText("SETTINGS$DOCKER_RUNTIME_AVAILABLE"),
+    ).toBeInTheDocument();
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByRole("combobox", {
+        name: "SETTINGS$DEFAULT_WORKSPACE_MODE",
+      }),
+    );
+    await user.click(
+      await screen.findByText("COMMON$WORKSPACE_MODE_DOCKER_CONTAINER"),
+    );
+    await user.click(screen.getByTestId("submit-button"));
+
+    await waitFor(() => {
+      expect(saveSettingsSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ default_workspace_mode: "docker_container" }),
+      );
+    });
+  });
+
+  it("offers only local modes and explains how to enable docker", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
+
+    renderAppSettingsScreen();
+
+    expect(
+      await screen.findByText("SETTINGS$DOCKER_RUNTIME_UNAVAILABLE"),
+    ).toBeInTheDocument();
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByRole("combobox", {
+        name: "SETTINGS$DEFAULT_WORKSPACE_MODE",
+      }),
+    );
+    expect(
+      await screen.findByText("COMMON$WORKSPACE_MODE_NEW_WORKTREE"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("COMMON$WORKSPACE_MODE_DOCKER_CONTAINER"),
+    ).toBeNull();
   });
 });

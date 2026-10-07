@@ -1,5 +1,6 @@
 import { useConversationWorkspace } from "#/hooks/query/use-conversation-workspace";
 import { useState } from "react";
+import { useSettings } from "#/hooks/query/use-settings";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { CustomChatInput } from "#/components/features/chat/custom-chat-input";
@@ -57,9 +58,15 @@ export function HomeChatLauncher() {
     useState<GitRepository | null>(null);
   const [pendingBranch, setPendingBranch] = useState<Branch | null>(null);
   const [pendingProvider, setPendingProvider] = useState<Provider | null>(null);
-  const [workspaceMode, setWorkspaceModeState] = useState<WorkspaceMode>(() =>
-    readStoredLocalWorkspaceMode(),
-  );
+  const { data: settings } = useSettings();
+  const [lastUsedWorkspaceMode] = useState(readStoredLocalWorkspaceMode);
+  const [pickedWorkspaceMode, setWorkspaceModeState] =
+    useState<WorkspaceMode | null>(null);
+  // Picked here > Settings default > last used in this browser.
+  const workspaceMode =
+    pickedWorkspaceMode ??
+    (isLocal ? settings?.default_workspace_mode : null) ??
+    lastUsedWorkspaceMode;
   const [selectedPlugins, setSelectedPlugins] = useState<PluginSpec[]>([]);
   const [isPluginPickerOpen, setIsPluginPickerOpen] = useState(false);
 

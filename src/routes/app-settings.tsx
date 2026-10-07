@@ -26,8 +26,12 @@ import { useFreeModels } from "#/hooks/query/use-free-models";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { formatModelNameForDisplay } from "#/utils/format-model-name";
 import { getLockedCloudHost } from "#/api/agent-server-config";
+import type { WorkspaceMode } from "#/api/conversation-metadata-store";
+import { useConversationWorkspace } from "#/hooks/query/use-conversation-workspace";
+import { getWorkspaceModeI18nKey } from "#/utils/workspace-mode";
 
 const AUTOMATIC_TITLE_LLM_PROFILE_KEY = "__automatic__";
+const LAST_USED_WORKSPACE_MODE_KEY = "__last_used__";
 
 export function AppSettingsScreen() {
   const { t } = useTranslation("openhands");
@@ -39,6 +43,7 @@ export function AppSettingsScreen() {
   const { data: llmProfiles, isLoading: areLlmProfilesLoading } =
     useLlmProfiles();
   const freeModels = useFreeModels();
+  const { isolated, dockerSelectable } = useConversationWorkspace();
 
   const [languageInputHasChanged, setLanguageInputHasChanged] =
     React.useState(false);
@@ -55,6 +60,29 @@ export function AppSettingsScreen() {
   const [titleLlmProfileInput, setTitleLlmProfileInput] = React.useState<
     string | null | undefined
   >(undefined);
+  const [workspaceModeInput, setWorkspaceModeInput] = React.useState<
+    WorkspaceMode | null | undefined
+  >(undefined);
+  const storedWorkspaceMode = settings?.default_workspace_mode ?? null;
+  const selectedWorkspaceMode =
+    workspaceModeInput === undefined ? storedWorkspaceMode : workspaceModeInput;
+  const workspaceModeItems = React.useMemo(() => {
+    const modes: WorkspaceMode[] = ["local_repo", "new_worktree"];
+    // Keep a saved docker default visible even if this server stopped offering it.
+    if (dockerSelectable || storedWorkspaceMode === "docker_container") {
+      modes.push("docker_container");
+    }
+    return [
+      {
+        key: LAST_USED_WORKSPACE_MODE_KEY,
+        label: t(I18nKey.SETTINGS$WORKSPACE_MODE_LAST_USED),
+      },
+      ...modes.map((mode) => ({
+        key: mode,
+        label: t(getWorkspaceModeI18nKey(mode, "local")),
+      })),
+    ];
+  }, [dockerSelectable, storedWorkspaceMode, t]);
 
   const storedTitleLlmProfile = React.useMemo(() => {
     const preference = settings?.title_llm_profile ?? null;
@@ -116,6 +144,9 @@ export function AppSettingsScreen() {
         git_user_name: gitUserName,
         git_user_email: gitUserEmail,
         title_llm_profile: selectedTitleLlmProfile,
+        ...(!isCloudBackend && {
+          default_workspace_mode: selectedWorkspaceMode,
+        }),
       },
       {
         onSuccess: () => {
@@ -133,6 +164,7 @@ export function AppSettingsScreen() {
           setGitUserNameHasChanged(false);
           setGitUserEmailHasChanged(false);
           setTitleLlmProfileInput(undefined);
+          setWorkspaceModeInput(undefined);
         },
       },
     );
@@ -177,6 +209,7 @@ export function AppSettingsScreen() {
     !analyticsSwitchHasChanged &&
     !soundNotificationsSwitchHasChanged &&
     selectedTitleLlmProfile === storedTitleLlmProfile &&
+    selectedWorkspaceMode === storedWorkspaceMode &&
     !gitUserNameHasChanged &&
     !gitUserEmailHasChanged;
 
@@ -262,6 +295,51 @@ export function AppSettingsScreen() {
               </NavigationLink>
             )}
           </div>
+
+          {!isCloudBackend && (
+            <div
+              className="border-t border-border pt-6 mt-2"
+              data-testid="conversation-workspace-settings"
+            >
+              <h3 className="text-lg font-medium mb-2">
+                {t(I18nKey.SETTINGS$CONVERSATION_WORKSPACE)}
+              </h3>
+              <p className="mb-4 text-sm leading-5 text-tertiary-light">
+                {t(I18nKey.SETTINGS$CONVERSATION_WORKSPACE_DESCRIPTION)}
+              </p>
+              {!isolated && (
+                <SettingsDropdownInput
+                  testId="default-workspace-mode-input"
+                  name="default-workspace-mode-input"
+                  label={t(I18nKey.SETTINGS$DEFAULT_WORKSPACE_MODE)}
+                  items={workspaceModeItems}
+                  selectedKey={
+                    selectedWorkspaceMode ?? LAST_USED_WORKSPACE_MODE_KEY
+                  }
+                  onSelectionChange={(key) => {
+                    const value = key?.toString();
+                    setWorkspaceModeInput(
+                      !value || value === LAST_USED_WORKSPACE_MODE_KEY
+                        ? null
+                        : (value as WorkspaceMode),
+                    );
+                  }}
+                />
+              )}
+              <p
+                className="mt-3 text-sm leading-5 text-tertiary-light"
+                data-testid="docker-runtime-status"
+              >
+                {t(
+                  isolated
+                    ? I18nKey.SETTINGS$DOCKER_RUNTIME_ONLY
+                    : dockerSelectable
+                      ? I18nKey.SETTINGS$DOCKER_RUNTIME_AVAILABLE
+                      : I18nKey.SETTINGS$DOCKER_RUNTIME_UNAVAILABLE,
+                )}
+              </p>
+            </div>
+          )}
 
           <VoiceInputSettings />
 

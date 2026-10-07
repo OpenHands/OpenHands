@@ -21,6 +21,7 @@ const enqueueHomeTaskPendingMessage = vi.fn();
 const mockDisplayErrorToast = vi.fn();
 const mockUseLlmConfigured = vi.fn();
 const mockUseConversationWorkspace = vi.fn();
+const mockUseSettings = vi.fn();
 
 let mockImages: File[] = [];
 let mockFiles: File[] = [];
@@ -73,6 +74,10 @@ vi.mock("#/contexts/active-backend-context", () => ({
 
 vi.mock("#/hooks/use-llm-configured", () => ({
   useLlmConfigured: () => mockUseLlmConfigured(),
+}));
+
+vi.mock("#/hooks/query/use-settings", () => ({
+  useSettings: () => mockUseSettings(),
 }));
 
 vi.mock("#/hooks/query/use-conversation-workspace", () => ({
@@ -341,6 +346,7 @@ describe("HomeChatLauncher", () => {
       timestamp: "2020-01-01T00:00:00.000Z",
     });
     window.localStorage.removeItem(LAST_LOCAL_WORKSPACE_MODE_STORAGE_KEY);
+    mockUseSettings.mockReturnValue({ data: undefined });
     vi.spyOn(WorkspacesService, "listWorkspaces").mockResolvedValue({
       workspaces: [],
       workspaceParents: [],
@@ -537,6 +543,28 @@ describe("HomeChatLauncher", () => {
       await screen.findByTestId("stub-workspace-dialog-confirm"),
     );
 
+    expect(screen.getByTestId("stub-workspace-mode")).toHaveTextContent(
+      "local:local_repo",
+    );
+  });
+
+  it("starts on the Settings default over the last used mode", async () => {
+    writeStoredLocalWorkspaceMode("local_repo");
+    mockUseSettings.mockReturnValue({
+      data: { default_workspace_mode: "new_worktree" },
+    });
+    renderLauncher();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByTestId("open-workspace-button"));
+    await user.click(
+      await screen.findByTestId("stub-workspace-dialog-confirm"),
+    );
+
+    expect(screen.getByTestId("stub-workspace-mode")).toHaveTextContent(
+      "local:new_worktree",
+    );
+    await user.click(screen.getByTestId("stub-workspace-mode-local-repo"));
     expect(screen.getByTestId("stub-workspace-mode")).toHaveTextContent(
       "local:local_repo",
     );

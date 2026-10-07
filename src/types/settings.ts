@@ -2,6 +2,7 @@ import type { MCPConfig } from "@openhands/typescript-client";
 export type { MCPConfig } from "@openhands/typescript-client";
 import type { SkillCategoryId } from "@openhands/extensions/skills";
 import type { WorkspaceFileDiscovery } from "#/utils/workspace-file-discovery";
+import type { WorkspaceMode } from "#/api/conversation-metadata-store";
 
 export const ProviderOptions = {
   github: "github",
@@ -162,6 +163,8 @@ export type Settings = {
   git_user_name?: string;
   git_user_email?: string;
   title_llm_profile?: string | null;
+  /** Workspace mode the home launcher starts on; null means last used. */
+  default_workspace_mode?: WorkspaceMode | null;
   agent_settings_schema?: SettingsSchema | null;
   agent_settings?: Record<string, SettingsValue> | null;
   conversation_settings_schema?: SettingsSchema | null;
