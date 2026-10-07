@@ -66,12 +66,12 @@
     <header class="title">
       <div class="eyebrow">Agent Canvas · feature · issue #18101</div>
       <h1>Show a run's trigger reason in the conversation list</h1>
-      <p class="sub">Canvas already receives <em>why</em> a conversation started — Cloud stamps <code>trigger: "automation"</code>, the local agent-server stamps automation tags — but only used it as a boolean. This change turns that existing field into a localized, presentational label on the conversation row and its hover preview. No new endpoint, request field, or response field; no change to filtering, the automation-name facet, or the reserved-tag set.</p>
+      <p class="sub">Canvas already receives <em>why</em> a conversation started — Cloud stamps <code>trigger: "automation"</code>, the local agent-server stamps automation tags — but only used it as a boolean. This change turns that existing field into a localized, presentational label on the conversation row, its hover preview, and the compact sidebar row's hover preview. No new endpoint, request field, or response field; no change to filtering, the automation-name facet, or the reserved-tag set.</p>
     </header>
 
     <section id="sec1">
       <h2><span class="num">1</span>What changed, decision first</h2>
-      <p>One new pure helper maps the existing <code>AppConversation.trigger</code> to a localized <code>I18nKey</code>, falling back to the automation tags the SDK workspace stamps on local rows, and returning <code>null</code> for absent or unrecognized values so the row renders exactly as today. Two call sites consume it: the card metadata chip row and the hover preview.</p>
+      <p>One new pure helper maps the existing <code>AppConversation.trigger</code> to a localized <code>I18nKey</code>, falling back to the automation tags the SDK workspace stamps on local rows, and returning <code>null</code> for absent or unrecognized values so the row renders exactly as today. Three call sites consume it: the card metadata chip row, the hover preview, and the compact sidebar row's hover preview (which renders through the same footer).</p>
       <div class="callout">★ <strong>Presentational only, and additive.</strong> The helper is the single source of truth for the label; <code>isAutomationConversation</code>, the automation-name facet, the tag filters, and <code>RESERVED_CONVERSATION_TAG_KEYS</code> are untouched. <a class="src" href="https://github.com/OpenHands/OpenHands/blob/9a4705a54faa0eed229f737dfc54977cbcbb12bb/src/components/features/conversation-panel/conversation-panel-list-helpers.ts#L254">conversation-panel-list-helpers.ts:254</a></div>
       <table>
         <tr><th>Axis</th><th>Before</th><th>After</th></tr>
@@ -80,7 +80,7 @@
         <tr><td>Unknown / absent</td><td>No chip</td><td>No chip — byte-for-byte same render</td></tr>
         <tr><td>Agent Server contract</td><td>—</td><td>Unchanged; <code>minimumAgentServer</code> not raised</td></tr>
       </table>
-      <p>Stats: <span class="pill">9 files</span> <span class="pill add">+400 / −3</span> — 4 source files, 3 test files, 1 translation file, 1 wiring file.</p>
+      <p>Stats: <span class="pill">10 files</span> <span class="pill add">+430 / −3</span> — source files, test files, a translation file, and the wiring in the panel.</p>
     </section>
 
     <section id="sec2">
@@ -175,6 +175,12 @@
         <li><a class="src" href="https://github.com/OpenHands/OpenHands/blob/9a4705a54faa0eed229f737dfc54977cbcbb12bb/src/components/features/conversation-panel/conversation-card/conversation-card-preview.tsx#L237">conversation-card-preview.tsx:237</a> — renders the preview row under a localized "Trigger" heading.</li>
         <li><a class="src" href="https://github.com/OpenHands/OpenHands/blob/9a4705a54faa0eed229f737dfc54977cbcbb12bb/src/components/features/conversation-panel/conversation-card/conversation-card.tsx#L263">conversation-card.tsx:263</a> — a non-null label forces the footer to render, so the chip is never silently dropped.</li>
         <li><a class="src" href="https://github.com/OpenHands/OpenHands/blob/9a4705a54faa0eed229f737dfc54977cbcbb12bb/src/components/features/conversation-panel/conversation-panel.tsx#L926">conversation-panel.tsx:926</a> — threads <code>conversation.trigger</code> into both sites.</li>
+      </ul>
+      <p>A follow-up review finding: the collapsed sidebar renders its own <code>CompactConversationRow</code>, whose hover preview uses <code>ConversationCardFooter</code> directly, so it bypassed the two call sites above and dropped the label. Fixed by threading <code>trigger</code> into the compact row and deriving the label there with the same helper.</p>
+      <ul>
+        <li><a class="src" href="https://github.com/OpenHands/OpenHands/blob/HEAD/src/components/features/conversation-panel/compact-conversation-row.tsx">compact-conversation-row.tsx</a> — derives the label from <code>trigger</code>/<code>tags</code> and passes it to the shared footer.</li>
+        <li><a class="src" href="https://github.com/OpenHands/OpenHands/blob/HEAD/src/components/features/conversation-panel/conversation-panel.tsx">conversation-panel.tsx</a> — forwards <code>conversation.trigger</code> into <code>CompactConversationRow</code>.</li>
+        <li><a class="src" href="https://github.com/OpenHands/OpenHands/blob/HEAD/__tests__/components/features/conversation-panel/compact-conversation-row.test.tsx">compact-conversation-row.test.tsx</a> — covers the compact hover path (recognized trigger, automation-tag fallback, unknown trigger).</li>
       </ul>
     </section>
 

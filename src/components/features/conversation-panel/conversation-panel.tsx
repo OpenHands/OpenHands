@@ -883,6 +883,7 @@ export function ConversationPanel({
             agentKind={conversation.agent_kind}
             acpServer={conversation.acp_server}
             tags={conversation.tags}
+            trigger={conversation.trigger}
             showTags={showTagsMetadata}
           />
         );
