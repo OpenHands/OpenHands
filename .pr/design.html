@@ -182,11 +182,11 @@
       <h2><span class="num">4</span>Proof: live Canvas</h2>
       <p>Captured from a real local stack (<code>npm run dev:minimal</code>: agent-server on <code>127.0.0.1:18010</code>, Vite on <code>:3001</code>) with three conversations created through the real <code>POST /api/conversations</code> API: a plain row, a row tagged <code>automationname=Daily digest</code>, and a row tagged <code>automationid=auto-42</code>.</p>
       <figure class="fig">
-        <img class="shot" src="evidence/conversation-list.png" alt="Conversation list showing 'Started by an automation' on the two automation-tagged rows and no chip on the plain row.">
+        <img class="shot" src="https://raw.githubusercontent.com/analisaperlengkapan/OpenHands/feat/conversation-trigger-reason-label/.pr/evidence/conversation-list.png" alt="Conversation list showing 'Started by an automation' on the two automation-tagged rows and no chip on the plain row.">
         <figcaption>Fig 2 · Two automation-tagged rows show "Started by an automation"; the plain row shows no trigger chip. The automation name stays a filter facet — unchanged.</figcaption>
       </figure>
       <figure class="fig">
-        <img class="shot" src="evidence/hover-preview.png" alt="Hover preview of an automation-tagged conversation showing the localized Trigger row.">
+        <img class="shot" src="https://raw.githubusercontent.com/analisaperlengkapan/OpenHands/feat/conversation-trigger-reason-label/.pr/evidence/hover-preview.png" alt="Hover preview of an automation-tagged conversation showing the localized Trigger row.">
         <figcaption>Fig 3 · The hover preview carries the same label under a localized "Trigger" heading.</figcaption>
       </figure>
       <div class="callout note">ⓘ Local agent-server conversations always have <code>trigger: null</code>, so these rows exercise the automation-tag fallback path. The <code>gui</code>/<code>resolver</code>/… direct values are covered by the helper unit test and render through the same map.</div>
