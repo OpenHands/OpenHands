@@ -45,9 +45,11 @@ export function HookMatcherContent({ matcher }: HookMatcherContentProps) {
               <span className={HOOK_PILL_CLASS}>
                 {t(I18nKey.HOOKS_MODAL$TYPE, { type: hook.type })}
               </span>
-              <span className={HOOK_PILL_CLASS}>
-                {t(I18nKey.HOOKS_MODAL$TIMEOUT, { timeout: hook.timeout })}
-              </span>
+              {hook.timeout !== undefined ? (
+                <span className={HOOK_PILL_CLASS}>
+                  {t(I18nKey.HOOKS_MODAL$TIMEOUT, { timeout: hook.timeout })}
+                </span>
+              ) : null}
               {hook.async ? (
                 <span className={HOOK_PILL_CLASS}>
                   {t(I18nKey.HOOKS_MODAL$ASYNC)}

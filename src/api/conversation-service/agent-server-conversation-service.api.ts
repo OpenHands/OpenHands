@@ -2,17 +2,23 @@ import {
   ConversationSortOrder,
   type ForkConversationRequest,
   type LLMConfig,
+  type VSCodeStatusResponse,
 } from "@openhands/typescript-client";
 import {
   ConversationClient,
   FileClient,
   ProfilesClient,
+  VSCodeClient,
 } from "@openhands/typescript-client/clients";
 import { v4 as uuidv4 } from "uuid";
 import { AgentKind, Provider } from "#/types/settings";
 import type { ConversationRuntimeContext } from "#/api/conversation-file-upload.api";
 import { getAgentServerWorkingDir } from "../agent-server-config";
-import { resolveNewConversationWorkspace } from "../conversation-workspace";
+import {
+  resolveConversationHooksProjectDir,
+  resolveNewConversationWorkspace,
+} from "../conversation-workspace";
+import HooksService from "../hooks-service";
 import {
   getActiveBackend,
   getEffectiveLocalBackend,
@@ -41,7 +47,9 @@ import {
   getDefaultConversationTitle,
   toAppConversation,
   toConversationPage,
+  toHooksResponse,
 } from "../agent-server-adapter";
+import { GetVSCodeUrlResponse } from "../open-hands.types";
 import {
   getAgentServerClientOptions,
   NoBackendAvailableError,
@@ -728,6 +736,56 @@ class AgentServerConversationService {
     return null;
   }
 
+  static async getVSCodeUrl(
+    conversationId: string,
+    conversationUrl: string | null | undefined,
+    sessionApiKey?: string | null,
+  ): Promise<GetVSCodeUrlResponse> {
+    // Local-only path. Cloud conversations read the VSCode URL straight
+    // from the cloud-computed `sandbox.exposed_urls` (see
+    // `useUnifiedVSCodeUrl` + `useCloudSandbox`); the runtime's own
+    // `/api/vscode/url` only knows its internal `localhost:8001`, which
+    // the user's browser can't reach.
+    const workspaceDir =
+      await this.resolveConversationWorkingDir(conversationId);
+    // Local mode: the typescript-client targets the local agent-server
+    // directly via the conversationUrl override.
+    const vscodeUrl = await new VSCodeClient(
+      getAgentServerClientOptions({
+        conversationId,
+        conversationUrl,
+        sessionApiKey,
+      }),
+    ).getUrl({
+      baseUrl:
+        typeof window !== "undefined" ? window.location.origin : undefined,
+      workspaceDir,
+    });
+
+    return { vscode_url: vscodeUrl };
+  }
+
+  /**
+   * Read the editor's capability state from the agent-server.
+   *
+   * `/api/vscode/status` answers 200 with `enabled: false` when the
+   * deployment set `enable_vscode: false`, which distinguishes "this
+   * deployment offers no editor" from a transport, auth, or server
+   * failure — `/api/vscode/url` answers 503 for the former and so
+   * cannot be told apart from the latter.
+   */
+  static async getVSCodeStatus(
+    conversationUrl: string | null | undefined,
+    sessionApiKey?: string | null,
+  ): Promise<VSCodeStatusResponse> {
+    return new VSCodeClient(
+      getAgentServerClientOptions({
+        conversationUrl,
+        sessionApiKey,
+      }),
+    ).getStatus();
+  }
+
   static async resolveConversationWorkingDir(
     conversationId: string,
   ): Promise<string> {
@@ -823,11 +881,20 @@ class AgentServerConversationService {
     );
   }
 
+  /**
+   * Hooks of the workspace a local conversation runs in, re-read on each call
+   * so the dialog's Refresh picks up `.openhands/hooks.json` edits. Cloud has
+   * no per-conversation hooks route, so it keeps an empty list.
+   */
   static async getHooks(conversationId: string): Promise<GetHooksResponse> {
-    if (!conversationId) {
+    if (!conversationId || !getEffectiveLocalBackend()) {
       return emptyHooksResponse();
     }
-    return emptyHooksResponse();
+    const projectDir = await resolveConversationHooksProjectDir(
+      getStoredConversationMetadata(conversationId)?.selected_workspace,
+    );
+    if (projectDir === null) return emptyHooksResponse();
+    return toHooksResponse(await HooksService.fetchWorkspaceHooks(projectDir));
   }
 
   static async getRuntimeConversation(

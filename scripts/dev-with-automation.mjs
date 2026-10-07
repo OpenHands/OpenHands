@@ -460,8 +460,7 @@ async function buildConfig(args, env = process.env) {
   logStep("ports", "Checking ports...");
   await assertPortsFree(requiredPorts);
 
-  const vscodePort =
-    env.OH_CANVAS_ENABLE_VSCODE === "true" ? preferredBackendPort + 1000 : null;
+  const vscodePort = preferredBackendPort + 1000;
 
   // API key — shared by both agent-server and automation backend.
   // Both validate it via the `X-Session-API-Key` header.
@@ -475,9 +474,7 @@ async function buildConfig(args, env = process.env) {
     ...env,
     OH_CANVAS_SAFE_STATE_DIR: stateDir,
     OH_CANVAS_SAFE_BACKEND_PORT: preferredBackendPort.toString(),
-    ...(vscodePort
-      ? { OH_CANVAS_SAFE_VSCODE_PORT: vscodePort.toString() }
-      : {}),
+    OH_CANVAS_SAFE_VSCODE_PORT: vscodePort.toString(),
   });
   const sessionApiKey = safeConfig.sessionApiKey;
 
@@ -951,9 +948,7 @@ function startAgentServer(config) {
     ...process.env,
     OH_CANVAS_SAFE_STATE_DIR: config.stateDir,
     OH_CANVAS_SAFE_BACKEND_PORT: config.agentServerPort.toString(),
-    ...(config.vscodePort
-      ? { OH_CANVAS_SAFE_VSCODE_PORT: config.vscodePort.toString() }
-      : {}),
+    OH_CANVAS_SAFE_VSCODE_PORT: config.vscodePort.toString(),
   });
 
   const agentServerEnv = {

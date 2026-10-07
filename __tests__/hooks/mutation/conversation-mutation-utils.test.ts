@@ -410,6 +410,7 @@ describe("conversation cache synchronization", () => {
       [{ queryKey: ["user", "conversation", CONV_ID] }],
       [{ queryKey: ["user", "conversations"] }],
       [{ queryKey: ["v1-batch-get-app-conversations"] }],
+      [{ queryKey: ["unified", "vscode_url"] }],
     ]);
   });
 });

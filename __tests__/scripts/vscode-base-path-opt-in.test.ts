@@ -86,28 +86,9 @@ describe("editor base path is opt-in", () => {
     // Not "" or undefined-but-present: agent-server reads the variable's
     // presence, so an empty string would still put it into prefix-mode.
     expect(env).not.toHaveProperty("OH_VSCODE_BASE_PATH");
-  });
-
-  it("omits the editor port until the editor is enabled", () => {
-    // The editor is now opt-in as a whole: with no OH_CANVAS_ENABLE_VSCODE the
-    // launcher does not allocate a port for it, so nothing is advertised and
-    // agent-server does not start one.
-    const disabled = buildSafeDevConfig(process.cwd(), {
-      OH_SESSION_API_KEY_PATH: path.join(repoRoot, "node_modules", ".test-key"),
-    });
-    expect(disabled.vscodePort).toBeNull();
-    expect(buildAgentServerEnv(disabled)).not.toHaveProperty("OH_VSCODE_PORT");
-
-    // Enabled, the port becomes unconditional — which is what lets the editor
-    // be advertised on its own port rather than under a prefix.
-    const enabled = buildSafeDevConfig(process.cwd(), {
-      OH_SESSION_API_KEY_PATH: path.join(repoRoot, "node_modules", ".test-key"),
-      OH_CANVAS_ENABLE_VSCODE: "true",
-    });
-    expect(enabled.vscodePort).not.toBeNull();
-    expect(buildAgentServerEnv(enabled).OH_VSCODE_PORT).toBe(
-      String(enabled.vscodePort),
-    );
+    // The port is unconditional — the editor still runs, it is just advertised
+    // on its own port rather than under a prefix.
+    expect(env.OH_VSCODE_PORT).toBe(String(config.vscodePort));
   });
 
   it("sets OH_VSCODE_BASE_PATH to exactly what the caller passed", () => {
