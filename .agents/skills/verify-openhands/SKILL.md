@@ -166,9 +166,10 @@ prerequisite; never substitute a mock and call it a pass.
   families since the `Maintenance baseline` line of the map index
   (`control-openhands map baseline`; `map affected` starts there by default),
   a smoke row per family, and a date-derived rotation that gives every family
-  a full live pass once a week. A pass that changes the map proposes its
-  `TARGET` as the next baseline with `map baseline --set` in its PR; compare
-  ledgers with `evidence report --baseline` when yesterday's is at hand.
+  a full live pass once a week. A pass that finished its changed families
+  proposes `TARGET` as the next baseline with `map baseline --set "$TARGET"`
+  in its PR; compare ledgers with `evidence report --baseline` when
+  yesterday's is at hand.
 - **Create or extend the map**: follow [references/mapping.md](references/mapping.md).
   It teaches how to discover features, write entries against the CLI and prove
   each one live. `control-openhands map coverage` measures what is still unmapped.

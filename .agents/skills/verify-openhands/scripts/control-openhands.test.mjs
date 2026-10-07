@@ -1024,7 +1024,8 @@ test("map baseline reads the index line, and map affected starts from it by defa
   assert.equal(explicit.range.baseSource, "--base");
   assert.equal(explicit.range.target, "HEAD");
   assert.equal(explicit.changed, 0);
-  // --set refuses a ref that is not a commit, before touching the index.
+  // --set refuses a ref that is not a commit, and a bare --set, before
+  // touching the index.
   const bad = spawnSync(
     process.execPath,
     [cli, "map", "baseline", "--set", "not-a-ref-xyz"],
@@ -1033,8 +1034,37 @@ test("map baseline reads the index line, and map affected starts from it by defa
     },
   );
   assert.equal(bad.status, 2);
+  const bare = spawnSync(process.execPath, [cli, "map", "baseline", "--set"], {
+    encoding: "utf8",
+  });
+  assert.equal(bare.status, 2);
+  assert.match(JSON.parse(bare.stdout).hint, /\$TARGET/);
+  // The line reads main@<sha>: a commit that is not on main is refused when
+  // main is in the clone (a PR branch's HEAD, here), so a pass cannot record
+  // its own branch tip by mistake.
+  const repo = resolve(here, "../../../..");
+  const mainRef = ["origin/main", "main"].find(
+    (r) =>
+      spawnSync("git", ["rev-parse", "--verify", "--quiet", r], {
+        cwd: repo,
+      }).status === 0,
+  );
+  const headOnMain =
+    mainRef &&
+    spawnSync("git", ["merge-base", "--is-ancestor", "HEAD", mainRef], {
+      cwd: repo,
+    }).status === 0;
+  if (mainRef && !headOnMain) {
+    const branchTip = spawnSync(
+      process.execPath,
+      [cli, "map", "baseline", "--set", "HEAD"],
+      { encoding: "utf8" },
+    );
+    assert.equal(branchTip.status, 2, branchTip.stdout);
+    assert.match(JSON.parse(branchTip.stdout).error, /is not on/);
+  }
   const help = spawnSync(process.execPath, [cli, "help", "map"], {
     encoding: "utf8",
   });
-  assert.match(help.stdout, /map baseline \[--set REF\]/);
+  assert.match(help.stdout, /map baseline \[--set TARGET \[--force\]\]/);
 });

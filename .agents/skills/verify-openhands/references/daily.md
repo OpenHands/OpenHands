@@ -24,10 +24,15 @@ open PR:
   it; `map affected` starts there when no `--base` is given. Fetch `main`
   and freeze its full SHA as `TARGET`; deepen a shallow clone until `BASE` is
   present.
-- A pass that changes the map or the CLI proposes `TARGET` as the next
-  baseline in its PR (`control-openhands map baseline --set "$TARGET"` moves
-  the line), and merging that PR accepts it. A pass that changes nothing
-  leaves the line alone, so the next pass covers a longer range. If an
+- A pass proposes `TARGET` as the next baseline in its PR
+  (`control-openhands map baseline --set "$TARGET"` moves the line; the SHA
+  must be on `main`) only when tier 2 finished: every family `map affected`
+  listed was driven, every commit in `BASE..TARGET` was resolved to its PR,
+  and the closed-issue rows below were re-driven. Merging that PR accepts the
+  baseline. A pass that ran out of time or was blocked in tier 2 leaves the
+  line where it was, even when its PR carries other map or CLI fixes, and says
+  so in its report (maintenance.md's blocked/partial outcome); a pass that
+  changes nothing leaves it too, so the next pass covers a longer range. If an
   earlier pass's PR is still open, the next pass continues on that branch and
   takes `BASE` from the line there.
 - The rotation position (which families get their full recipe today) is
@@ -64,7 +69,11 @@ cheaper than the next and catches a different kind of rot.
    surface to map per [mapping.md](mapping.md), or a `Source:` line to extend.
    Resolve each merged commit in `BASE..TARGET` to its PR and keep intent
    (`documented`, `undocumented`, `contradictory`) separate from runtime
-   results, as [maintenance.md](maintenance.md) step 2 describes.
+   results, as [maintenance.md](maintenance.md) step 2 describes. The delta
+   pass has a second half: every bullet whose Gotchas or Known failure note
+   links an issue that closed since `BASE` (check each linked issue's state)
+   is re-driven too, its row recorded and its note updated. A fix that landed
+   in the Agent Server or the automation service shows up only this way.
 3. **Smoke (every family, cheaply).** For each family not already driven in
    tier 2: open its first entry point, run the family's `errors --app-only`
    sweep, and drive the one bullet that proves the page's main state (a list
@@ -118,7 +127,8 @@ names no run, revision or entry point does not count; a gap is not a pass.
 ## What the daily pass is not
 
 - Not the full pass: it does not re-prove every bullet, and the baseline it
-  moves says only that the day's changes were covered. When tier 2 finds that
+  moves says only that the day's changes were covered, which is why an
+  unfinished tier 2 never moves it. When tier 2 finds that
   most of the map is affected (a shared component or style change), say so
   and run the full procedure instead. A full pass is still needed weekly or
   before a release, because Agent Server and automation releases change

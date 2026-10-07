@@ -3453,8 +3453,23 @@ function indexText() {
 }
 
 // The recorded baseline, with where it stands relative to HEAD.
+// Two baseline lines (a merge kept both sides) are nobody's baseline.
+function assertOneBaselineLine(index) {
+  const lines = baselineLines(index);
+  if (lines.length > 1)
+    throw new CliError(
+      `The map index has ${lines.length} Maintenance baseline lines.`,
+      {
+        code: 2,
+        hint: "Remove the line that is not the latest pass's proposal (a merge kept both sides), then re-run.",
+      },
+    );
+}
+
 function baselineInfo() {
-  const recorded = parseBaseline(indexText());
+  const index = indexText();
+  assertOneBaselineLine(index);
+  const recorded = parseBaseline(index);
   if (!recorded) return null;
   let known = false;
   let ancestorOfHead = false;
@@ -3500,7 +3515,9 @@ function mapAffected(flags) {
     let base =
       flags.base && flags.base !== true ? String(flags.base) : undefined;
     if (!base) {
-      const recorded = parseBaseline(indexText());
+      const index = indexText();
+      assertOneBaselineLine(index);
+      const recorded = parseBaseline(index);
       if (!recorded)
         usage(
           "map affected needs --base REF [--target REF] or --paths FILE|-: the map index has no `Maintenance baseline:` line to start from",
@@ -3516,13 +3533,34 @@ function mapAffected(flags) {
         .split("\n")
         .filter(Boolean);
     } catch (error) {
-      throw new CliError(
-        `git diff ${base}..${target} failed: ${String(error.message).split("\n")[0]}`,
-        {
-          code: 3,
-          hint: "A shallow clone may not hold the baseline: fetch main and deepen until it is present (maintenance.md step 1).",
-        },
-      );
+      // Say which end is missing, and why: a shallow clone that lacks the
+      // commit is deepened; a commit that is not an ancestor of the target
+      // was recorded from a branch, or the target is not main.
+      const known = (ref) =>
+        spawnSync("git", ["cat-file", "-e", `${ref}^{commit}`], {
+          cwd: repoRoot,
+        }).status === 0;
+      let reason;
+      let hint;
+      if (!known(base)) {
+        reason = `${base} is not in this clone`;
+        hint =
+          "A shallow clone may not hold the baseline: fetch main and deepen until it is present (maintenance.md step 1).";
+      } else if (!known(target)) {
+        reason = `${target} is not in this clone`;
+        hint = "Fetch the target ref first (git fetch origin main).";
+      } else {
+        reason = `${base} is not an ancestor of ${target}`;
+        hint =
+          baseSource === "map index baseline"
+            ? "The recorded baseline is not on this history: it was set from a branch, or the target is not main. Pass --base with a commit on main, and fix the line with map baseline --set <main commit>."
+            : "Pick a base that the target descends from.";
+      }
+      throw new CliError(`git diff ${base}..${target} failed: ${reason}.`, {
+        code: 3,
+        hint,
+        extra: { git: String(error.message).split("\n")[0] },
+      });
     }
     range = { base, target, baseSource };
   }
@@ -3584,9 +3622,16 @@ async function cmdMap({ positional, flags }) {
   }
   if (sub === "baseline") {
     if (flags.set !== undefined) {
-      // Move the line to a commit's full SHA and committer date: what a pass
-      // that changed the map does before opening its PR.
-      const ref = flags.set === true ? "HEAD" : String(flags.set);
+      // Move the line to a main commit's full SHA and committer date: what a
+      // pass that finished its range does before opening its PR. The line
+      // reads main@<sha>, so the commit must be on main: a pass's branch tip
+      // (a merge commit, the PR's own fixes) never is.
+      if (flags.set === true)
+        usage(
+          "map baseline --set needs the frozen TARGET (a commit on main)",
+          'control-openhands map baseline --set "$TARGET"',
+        );
+      const ref = String(flags.set);
       let sha;
       let date;
       try {
@@ -3595,14 +3640,37 @@ async function cmdMap({ positional, flags }) {
       } catch {
         throw new CliError(`${ref} is not a commit in this clone.`, {
           code: 2,
-          hint: "control-openhands map baseline --set <sha|ref> (defaults to HEAD)",
+          hint: 'control-openhands map baseline --set "$TARGET" (a commit on main; fetch origin main first)',
         });
       }
+      const mainRef = ["origin/main", "main"].find(
+        (r) =>
+          spawnSync("git", ["rev-parse", "--verify", "--quiet", r], {
+            cwd: repoRoot,
+          }).status === 0,
+      );
+      let warning;
+      if (mainRef) {
+        const onMain =
+          spawnSync("git", ["merge-base", "--is-ancestor", sha, mainRef], {
+            cwd: repoRoot,
+          }).status === 0;
+        if (!onMain && !flags.force)
+          throw new CliError(`${sha.slice(0, 12)} is not on ${mainRef}.`, {
+            code: 2,
+            hint: 'The line records main@<sha>: pass the frozen TARGET (control-openhands map baseline --set "$TARGET"), not the pass branch\'s HEAD. --force records it anyway.',
+          });
+      } else {
+        warning =
+          "Neither origin/main nor main is in this clone, so the commit could not be checked against main.";
+      }
       const path = join(mapDir, "README.md");
-      const before = parseBaseline(indexText());
+      const index = indexText();
+      assertOneBaselineLine(index);
+      const before = parseBaseline(index);
       let text;
       try {
-        text = withBaseline(indexText(), sha, date);
+        text = withBaseline(index, sha, date);
       } catch (error) {
         throw new CliError(error.message, {
           code: 2,
@@ -3615,6 +3683,7 @@ async function cmdMap({ positional, flags }) {
         baseline: { sha, date },
         previous: before,
         file: relative(repoRoot, path),
+        ...(warning ? { warning } : {}),
         note: "Proposed in this checkout only: the baseline moves when the PR that carries this line merges.",
       });
       return;
@@ -3942,10 +4011,12 @@ control-openhands map affected [--base REF] [--target REF] | --paths FILE|-
                                  shared code to widen, src/ paths no family owns (map gaps) and
                                  non-user-facing paths; without --base
                                  the range starts at the index's Maintenance baseline line
-control-openhands map baseline [--set REF]
+control-openhands map baseline [--set TARGET [--force]]
                                  the recorded baseline (sha, date, whether HEAD descends from it and
-                                 by how many commits); --set moves the line to REF's full SHA and
-                                 committer date (default HEAD) in this checkout, for the pass's PR
+                                 by how many commits); --set moves the line to TARGET's full SHA and
+                                 committer date in this checkout, for the pass's PR. TARGET must be a
+                                 commit on origin/main (the line reads main@<sha>); a pass branch's
+                                 HEAD is refused unless --force
 control-openhands map testids [--strict]
                                  test ids the map drives that no literal or prefix in src/ accounts for
                                  (a cheap drift check before launching; --strict exits 1 on any)
