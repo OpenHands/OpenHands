@@ -6,6 +6,11 @@
 const LINE =
   /^Maintenance baseline: main@([0-9a-f]{7,40}) \((\d{4}-\d{2}-\d{2})\)(.*)$/m;
 
+/** Every line that starts like the baseline line, well-formed or not. */
+export function baselineLines(indexText) {
+  return indexText.match(/^Maintenance baseline:.*$/gm) ?? [];
+}
+
 /** @returns {{ sha: string, date: string } | null} */
 export function parseBaseline(indexText) {
   const m = LINE.exec(indexText);
@@ -21,6 +26,11 @@ export function withBaseline(indexText, sha, date) {
   if (!LINE.test(indexText))
     throw new Error(
       "the map index has no `Maintenance baseline: main@<sha> (<date>)` line",
+    );
+  // A merge can leave two lines; moving one of them would hide the other.
+  if (baselineLines(indexText).length > 1)
+    throw new Error(
+      "the map index has more than one `Maintenance baseline:` line; keep one",
     );
   return indexText.replace(
     LINE,

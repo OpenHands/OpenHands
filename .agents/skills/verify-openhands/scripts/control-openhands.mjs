@@ -32,7 +32,7 @@ import {
   portsAfterRestart,
   runPorts,
 } from "./lib/launcher-env.mjs";
-import { parseBaseline, withBaseline } from "./lib/baseline.mjs";
+import { baselineLines, parseBaseline, withBaseline } from "./lib/baseline.mjs";
 import { affectedFamilies, familyHead } from "./lib/map-sources.mjs";
 import { routePattern } from "./lib/route-pattern.mjs";
 import {
@@ -3160,17 +3160,23 @@ function mapCheck({ only } = {}) {
     ? readFileSync(join(mapDir, "README.md"), "utf8")
     : "";
   if (!index) problems.push("references/feature-map/README.md is missing");
-  // The baseline line, when present, must carry a full SHA and a date:
-  // map affected and the passes read it.
-  const baselineLine = /^Maintenance baseline:.*$/m.exec(index)?.[0];
-  if (baselineLine && !parseBaseline(index))
+  // The baseline line, when present, must be the only one (a merge can leave
+  // two) and carry a full SHA and a date: map affected and the passes read it.
+  const baselines = baselineLines(index);
+  if (baselines.length > 1)
     problems.push(
-      "README.md: the Maintenance baseline line must read `Maintenance baseline: main@<sha> (<YYYY-MM-DD>)`",
+      `README.md: ${baselines.length} Maintenance baseline lines; keep the one the latest pass proposed`,
     );
-  else if (baselineLine && !/main@[0-9a-f]{40} /.test(baselineLine))
-    problems.push(
-      "README.md: the Maintenance baseline line must carry the full 40-character SHA",
-    );
+  for (const line of baselines) {
+    if (!parseBaseline(line))
+      problems.push(
+        "README.md: the Maintenance baseline line must read `Maintenance baseline: main@<sha> (<YYYY-MM-DD>)`",
+      );
+    else if (!/main@[0-9a-f]{40} /.test(line))
+      problems.push(
+        "README.md: the Maintenance baseline line must carry the full 40-character SHA",
+      );
+  }
   const files = featureFiles();
   const e2eRefs = new Map();
   for (const file of files) {

@@ -25,7 +25,7 @@ import {
   runPorts,
 } from "./lib/launcher-env.mjs";
 import { redactStorage, redactStorageValue } from "./lib/redact-storage.mjs";
-import { parseBaseline, withBaseline } from "./lib/baseline.mjs";
+import { baselineLines, parseBaseline, withBaseline } from "./lib/baseline.mjs";
 import {
   affectedFamilies,
   familyHead,
@@ -1020,6 +1020,13 @@ test("the maintenance baseline line is read and moved in place", () => {
     () => withBaseline("# Map\n", sha, "2026-10-07"),
     /no `Maintenance baseline/,
   );
+  // A merge that kept both sides' lines: nothing moves until one is removed.
+  const twice = `${index}\nMaintenance baseline: main@${sha} (2026-10-07). Other.\n`;
+  assert.equal(baselineLines(twice).length, 2);
+  assert.throws(
+    () => withBaseline(twice, sha, "2026-10-08"),
+    /more than one `Maintenance baseline:` line/,
+  );
 });
 
 test("map baseline reads the index line, and map affected starts from it by default", () => {
@@ -1041,15 +1048,24 @@ test("map baseline reads the index line, and map affected starts from it by defa
   } else {
     assert.match(recorded.sha, /^[0-9a-f]{40}$/);
     assert.match(recorded.date, /^\d{4}-\d{2}-\d{2}$/);
-    assert.equal(affected.status, 0, affected.stdout);
-    assert.equal(json.range.base, recorded.sha);
-    assert.equal(json.range.baseSource, "map index baseline");
+    if (recorded.known) {
+      assert.equal(affected.status, 0, affected.stdout);
+      assert.equal(json.range.base, recorded.sha);
+      assert.equal(json.range.baseSource, "map index baseline");
+    } else {
+      // A shallow clone (CI checks out at depth 1) does not hold the
+      // baseline commit: an environment error with the deepening hint, not
+      // a stack trace.
+      assert.equal(affected.status, 3, affected.stdout);
+      assert.match(json.hint, /shallow clone/);
+    }
   }
-  // An explicit --base never consults the line.
+  // An explicit --base never consults the line. HEAD..HEAD is the one range
+  // every clone can resolve, shallow ones included.
   const explicit = JSON.parse(
     spawnSync(
       process.execPath,
-      [cli, "map", "affected", "--base", "HEAD~1", "--target", "HEAD"],
+      [cli, "map", "affected", "--base", "HEAD", "--target", "HEAD"],
       {
         encoding: "utf8",
       },
@@ -1057,6 +1073,7 @@ test("map baseline reads the index line, and map affected starts from it by defa
   );
   assert.equal(explicit.range.baseSource, "--base");
   assert.equal(explicit.range.target, "HEAD");
+  assert.equal(explicit.changed, 0);
   // --set refuses a ref that is not a commit, before touching the index.
   const bad = spawnSync(
     process.execPath,
