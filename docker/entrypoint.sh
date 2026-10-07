@@ -174,6 +174,11 @@ VSCODE_ROUTE="${VSCODE_BASE_PATH}=http://127.0.0.1:${VSCODE_PORT}"
 OPENHANDS_DIR="${HOME}/.openhands"
 STATE_DIR="${OPENHANDS_DIR}/${CONFIG_STATE_SUBDIR:-agent-canvas}"
 export OH_PERSISTENCE_DIR="${OH_PERSISTENCE_DIR:-${OPENHANDS_DIR}}"
+# >>> docker-browser-tools
+if [ "${VITE_ENABLE_BROWSER_TOOLS:-}" = "false" ]; then
+  export OH_ENABLE_BROWSER="${OH_ENABLE_BROWSER:-false}"
+fi
+# <<< docker-browser-tools
 export OH_CONVERSATIONS_PATH="${OH_CONVERSATIONS_PATH:-${OPENHANDS_DIR}/${CONFIG_CONVERSATIONS:-agent-canvas/conversations}}"
 export OH_BASH_EVENTS_DIR="${OH_BASH_EVENTS_DIR:-${OPENHANDS_DIR}/${CONFIG_BASH_EVENTS:-agent-canvas/bash_events}}"
 

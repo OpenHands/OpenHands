@@ -8,6 +8,7 @@ import { useSettings } from "#/hooks/query/use-settings";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useLlmConfigured } from "#/hooks/use-llm-configured";
 import { parseMcpConfig } from "#/utils/mcp-config";
+import { getLockedCloudHost } from "#/api/agent-server-config";
 import {
   isCustomizeChecklistPath,
   SIDEBAR_ONBOARDING_CHECKLIST_ITEM_IDS,
@@ -111,13 +112,22 @@ export function useSidebarOnboardingChecklist() {
     settings?.agent_settings?.mcp_config,
   ]);
 
+  // Locked-to-Cloud blocks the Canvas LLM and Agent settings pages these two
+  // items link to, and "customize-agent" only completes by visiting one
+  // (OHE-3457).
+  const isLockedToCloud = getLockedCloudHost() !== null;
+
   const items = useMemo(
     (): SidebarOnboardingChecklistItemState[] =>
-      SIDEBAR_ONBOARDING_CHECKLIST_ITEM_IDS.map((id) => ({
+      SIDEBAR_ONBOARDING_CHECKLIST_ITEM_IDS.filter(
+        (id) =>
+          !isLockedToCloud ||
+          (id !== "configure-llm" && id !== "customize-agent"),
+      ).map((id) => ({
         id,
         isComplete: completionById[id],
       })),
-    [completionById],
+    [completionById, isLockedToCloud],
   );
 
   const completedCount = items.filter((item) => item.isComplete).length;

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 import { useTracking } from "#/hooks/use-tracking";
 import { useTranslation } from "react-i18next";
 import { isAcpAuthErrorCode } from "#/utils/acp-error-codes";
+import { getLockedCloudHost } from "#/api/agent-server-config";
 import { convertImageToBase64 } from "#/utils/convert-image-to-base-64";
 import { createChatMessage } from "#/services/chat-service";
 import { BtwMessages } from "./btw-messages";
@@ -140,8 +141,9 @@ export function ChatInterface() {
   // Global keyboard shortcut for Build button (Cmd+Enter / Ctrl+Enter)
   // This is placed here instead of PlanPreview to avoid duplicate listeners
   // when multiple PlanPreview components exist in the chat.
-  // Gated on the same conditions as the Build button (ConversationTabs'
-  // `isBuildDisabled`) so it cannot fire outside the plan flow.
+  // Gated on the same conditions as the Build button
+  // (ConversationPlannerBuildBar's `isBuildDisabled`) so it cannot fire
+  // outside the plan flow.
   React.useEffect(() => {
     if (isAgentRunning || conversationMode !== "plan" || !planContent) {
       return undefined;
@@ -611,8 +613,10 @@ export function ChatInterface() {
                     ? () => conversationWebSocket?.reconnect()
                     : undefined
                 }
+                // Locked-to-Cloud blocks the Canvas agent settings page
+                // (OHE-3457).
                 onReauth={
-                  isAcpAuthErrorCode(errorCode)
+                  isAcpAuthErrorCode(errorCode) && getLockedCloudHost() === null
                     ? () => navigate("/settings/agents")
                     : undefined
                 }

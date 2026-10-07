@@ -464,6 +464,7 @@ describe("buildAgentServerTelemetryEnv", () => {
       env: {
         OH_CONVERSATION_RUNTIME: "docker",
         OH_CONVERSATION_IMAGE: "agent-server:test",
+        OH_CONVERSATION_IMAGE_HAS_BROWSER: "true",
         OH_CONVERSATION_CONTAINER_MEMORY: "2g",
         OH_CONVERSATION_CONTAINER_CPUS: "1",
         OH_CONVERSATION_CONTAINER_PIDS_LIMIT: "256",
@@ -474,6 +475,7 @@ describe("buildAgentServerTelemetryEnv", () => {
     expect(configured).toMatchObject({
       OH_CONVERSATION_RUNTIME: "docker",
       OH_CONVERSATION_IMAGE: "agent-server:test",
+      OH_CONVERSATION_IMAGE_HAS_BROWSER: "true",
       OH_CONVERSATION_CONTAINER_MEMORY: "2g",
       OH_CONVERSATION_CONTAINER_CPUS: "1",
       OH_CONVERSATION_CONTAINER_PIDS_LIMIT: "256",
@@ -482,6 +484,25 @@ describe("buildAgentServerTelemetryEnv", () => {
     expect(
       buildAgentServerEnv(agentServerConfig, { env: {} }),
     ).not.toHaveProperty("OH_CONVERSATION_RUNTIME");
+  });
+
+  it("turns the browser off on the agent-server when browser tools are disabled", () => {
+    expect(
+      buildAgentServerEnv(agentServerConfig, {
+        env: { VITE_ENABLE_BROWSER_TOOLS: "false" },
+      }),
+    ).toMatchObject({ OH_ENABLE_BROWSER: "false" });
+    expect(
+      buildAgentServerEnv(agentServerConfig, { env: {} }),
+    ).not.toHaveProperty("OH_ENABLE_BROWSER");
+  });
+
+  it("keeps an explicit OH_ENABLE_BROWSER when browser tools are disabled", () => {
+    expect(
+      buildAgentServerEnv(agentServerConfig, {
+        env: { VITE_ENABLE_BROWSER_TOOLS: "false", OH_ENABLE_BROWSER: "true" },
+      }),
+    ).toMatchObject({ OH_ENABLE_BROWSER: "true" });
   });
 });
 
@@ -493,20 +514,20 @@ describe("buildAgentServerCommand", () => {
     // Defaults to the released PyPI version with all SDK packages pinned to same version
     expect(cmd.args).toEqual([
       "--from",
-      "openhands-agent-server==1.50.1",
+      "openhands-agent-server==1.53.0",
       "--with",
-      "openhands-sdk==1.50.1",
+      "openhands-sdk==1.53.0",
       "--with",
-      "openhands-tools==1.50.1",
+      "openhands-tools==1.53.0",
       "--with",
-      "openhands-workspace==1.50.1",
+      "openhands-workspace==1.53.0",
       "--with",
       "posthog>=6,<7",
       "agent-server",
       "--import-modules",
       "canvas_ui_tool",
     ]);
-    expect(cmd.source).toBe("PyPI (1.50.1, default)");
+    expect(cmd.source).toBe("PyPI (1.53.0, default)");
   });
 
   it("uses specific PyPI version when OH_AGENT_SERVER_VERSION is set with all packages pinned", () => {

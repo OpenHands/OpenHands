@@ -229,16 +229,29 @@ export async function fetchCloudConversationSettingsSchema(): Promise<unknown> {
   });
 }
 
-/**
- * The git providers whose native (OAuth) integration this cloud instance has
- * enabled — what its Settings > Integrations page offers to connect.
- */
-export async function fetchCloudProvidersConfigured(): Promise<Provider[]> {
+/** What this cloud instance's Settings > Integrations page offers to connect. */
+export interface CloudIntegrationsConfig {
+  /** The git providers whose native (OAuth) integration is enabled. */
+  providersConfigured: Provider[];
+  /** Whether the built-in Jira Cloud integration is enabled. */
+  isJiraEnabled: boolean;
+  /** Whether the built-in Linear integration is enabled. */
+  isLinearEnabled: boolean;
+}
+
+export async function fetchCloudIntegrationsConfig(): Promise<CloudIntegrationsConfig> {
   const backend = getActiveCloudBackend();
-  const config = await callCloudProxy<{ providers_configured?: Provider[] }>({
+  const config = await callCloudProxy<{
+    providers_configured?: Provider[];
+    feature_flags?: { enable_jira?: boolean; enable_linear?: boolean };
+  }>({
     backend,
     method: "GET",
     path: "/api/v1/web-client/config",
   });
-  return config.providers_configured ?? [];
+  return {
+    providersConfigured: config.providers_configured ?? [],
+    isJiraEnabled: config.feature_flags?.enable_jira === true,
+    isLinearEnabled: config.feature_flags?.enable_linear === true,
+  };
 }

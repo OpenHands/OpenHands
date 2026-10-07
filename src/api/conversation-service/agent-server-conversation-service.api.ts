@@ -14,7 +14,11 @@ import { v4 as uuidv4 } from "uuid";
 import { AgentKind, Provider } from "#/types/settings";
 import type { ConversationRuntimeContext } from "#/api/conversation-file-upload.api";
 import { getAgentServerWorkingDir } from "../agent-server-config";
-import { resolveNewConversationWorkspace } from "../conversation-workspace";
+import {
+  resolveConversationHooksProjectDir,
+  resolveNewConversationWorkspace,
+} from "../conversation-workspace";
+import HooksService from "../hooks-service";
 import {
   getActiveBackend,
   getEffectiveLocalBackend,
@@ -43,6 +47,7 @@ import {
   getDefaultConversationTitle,
   toAppConversation,
   toConversationPage,
+  toHooksResponse,
 } from "../agent-server-adapter";
 import { GetVSCodeUrlResponse } from "../open-hands.types";
 import {
@@ -320,6 +325,22 @@ function requireDirectConversationItems(
     throw invalidConversationResponse();
   }
   return items.map(requireDirectConversationInfo);
+}
+
+/**
+ * Validates a `GET /api/conversations?ids=...` response. The agent server
+ * answers `null` for each id it does not have, so a `null` entry means "not
+ * found" (the caller decides how to report it), not an incompatible response.
+ */
+function requireDirectConversationBatch(
+  items: unknown,
+): (DirectConversationInfo | null)[] {
+  if (!Array.isArray(items)) {
+    throw invalidConversationResponse();
+  }
+  return items.map((item) =>
+    item === null ? null : requireDirectConversationInfo(item),
+  );
 }
 
 function requireConversationSearchPage(page: unknown): {
@@ -787,8 +808,8 @@ class AgentServerConversationService {
       getAgentServerClientOptions(),
     ).getConversations<DirectConversationInfo>(ids);
 
-    return requireDirectConversationItems(data).map((item) =>
-      toAppConversation(item),
+    return requireDirectConversationBatch(data).map((item) =>
+      item ? toAppConversation(item) : null,
     );
   }
 
@@ -860,11 +881,20 @@ class AgentServerConversationService {
     );
   }
 
+  /**
+   * Hooks of the workspace a local conversation runs in, re-read on each call
+   * so the dialog's Refresh picks up `.openhands/hooks.json` edits. Cloud has
+   * no per-conversation hooks route, so it keeps an empty list.
+   */
   static async getHooks(conversationId: string): Promise<GetHooksResponse> {
-    if (!conversationId) {
+    if (!conversationId || !getEffectiveLocalBackend()) {
       return emptyHooksResponse();
     }
-    return emptyHooksResponse();
+    const projectDir = await resolveConversationHooksProjectDir(
+      getStoredConversationMetadata(conversationId)?.selected_workspace,
+    );
+    if (projectDir === null) return emptyHooksResponse();
+    return toHooksResponse(await HooksService.fetchWorkspaceHooks(projectDir));
   }
 
   static async getRuntimeConversation(
