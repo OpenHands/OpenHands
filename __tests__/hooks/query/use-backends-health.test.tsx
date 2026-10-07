@@ -216,6 +216,35 @@ describe("useBackendsHealth", () => {
     expect(getCurrentCloudApiKeyMock).not.toHaveBeenCalled();
   });
 
+  it("polls cloud health less frequently than local health", async () => {
+    vi.useFakeTimers();
+    getCurrentCloudApiKeyMock.mockResolvedValue({
+      orgId: "org-1",
+      isLegacyKey: false,
+    });
+
+    const { result } = renderHook(() => useBackendsHealth([cloudBackend]), {
+      wrapper,
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+      await Promise.resolve();
+    });
+    expect(result.current[cloudBackend.id].isConnected).toBe(true);
+    expect(getCurrentCloudApiKeyMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    expect(getCurrentCloudApiKeyMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(270_000);
+    });
+    expect(getCurrentCloudApiKeyMock).toHaveBeenCalledTimes(2);
+  });
+
   it("reports disconnected when the cloud probe throws", async () => {
     getCurrentCloudApiKeyMock.mockRejectedValue(new Error("Network Error"));
 
