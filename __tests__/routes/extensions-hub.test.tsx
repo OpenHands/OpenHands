@@ -11,7 +11,8 @@ vi.mock("react-router", () => ({
   },
 }));
 
-vi.mock("#/hooks/use-breakpoint", () => ({
+vi.mock("#/hooks/use-breakpoint", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#/hooks/use-breakpoint")>()),
   useBreakpoint: () => mockUseBreakpoint(),
 }));
 

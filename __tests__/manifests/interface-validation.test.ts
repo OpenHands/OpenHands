@@ -318,6 +318,28 @@ describe("validateInterfaceManifest", () => {
       }),
     ],
     [
+      "a creator filter value this host does not implement",
+      (manifest) => ({
+        ...manifest,
+        pages: {
+          ...manifest.pages,
+          list: {
+            ...manifest.pages.list,
+            filters: [
+              {
+                id: "created_by",
+                label: "Filter widgets by maker",
+                options: [
+                  { value: "all", label: "Any maker" },
+                  { value: "my-team" as "me", label: "My team's widgets" },
+                ],
+              },
+            ],
+          },
+        },
+      }),
+    ],
+    [
       "a sort default the options do not offer",
       (manifest) => ({
         ...manifest,

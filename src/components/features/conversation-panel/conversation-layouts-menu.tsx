@@ -57,10 +57,9 @@ const LAYOUT_PRESETS: LayoutPreset[] = [
     id: "recent-activity",
     icon: Clock3,
     labelKey: I18nKey.CONVERSATION_PANEL$LAYOUT_RECENT_ACTIVITY,
-    settings: {
-      ...DEFAULT_LAYOUT_SETTINGS,
-      showOlderConversations: false,
-    },
+    // Exactly the default bundle, so a profile that never changed a layout
+    // preference reads as Recent rather than Custom.
+    settings: DEFAULT_LAYOUT_SETTINGS,
   },
   {
     id: "focused",

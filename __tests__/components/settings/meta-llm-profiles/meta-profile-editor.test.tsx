@@ -229,6 +229,69 @@ describe("MetaProfileEditor", () => {
     expect(onSave).toHaveBeenCalledWith("fast", FILLED, null);
   });
 
+  it("keeps an explicit don't create choice over the template's default connection", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    renderWithProviders(
+      <MetaProfileEditor
+        mode="create"
+        initialConfig={FILLED}
+        providerConnections={CONNECTIONS}
+        selectRouterConnectionByDefault
+        availableProfiles={AVAILABLE}
+        isSaving={false}
+        onSave={onSave}
+        onCancel={vi.fn()}
+      />,
+    );
+    const picker = screen.getByTestId("meta-profile-router-connection");
+
+    await user.click(picker);
+    await user.click(
+      screen.getByRole("option", {
+        name: "SETTINGS$META_PROFILE_ROUTER_CONNECTION_NONE",
+      }),
+    );
+
+    expect(picker).toHaveValue("SETTINGS$META_PROFILE_ROUTER_CONNECTION_NONE");
+    await user.click(screen.getByTestId("meta-profile-save"));
+    expect(onSave).toHaveBeenCalledWith(
+      DEFAULT_ROUTER_PRO_META_PROFILE_NAME,
+      FILLED,
+      null,
+    );
+  });
+
+  it("preselects the first connection when connections load after the editor opens", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    const editor = (providerConnections: typeof CONNECTIONS) => (
+      <MetaProfileEditor
+        mode="create"
+        initialConfig={FILLED}
+        providerConnections={providerConnections}
+        selectRouterConnectionByDefault
+        availableProfiles={AVAILABLE}
+        isSaving={false}
+        onSave={onSave}
+        onCancel={vi.fn()}
+      />
+    );
+    const { rerender } = renderWithProviders(editor([]));
+    const picker = screen.getByTestId("meta-profile-router-connection");
+    expect(picker).toHaveValue("SETTINGS$META_PROFILE_ROUTER_CONNECTION_NONE");
+
+    rerender(editor(CONNECTIONS));
+
+    expect(picker).toHaveValue("OpenHands (openhands)");
+    await user.click(screen.getByTestId("meta-profile-save"));
+    expect(onSave).toHaveBeenCalledWith(
+      DEFAULT_ROUTER_PRO_META_PROFILE_NAME,
+      FILLED,
+      "conn-openhands",
+    );
+  });
+
   it("allows the existing name in edit mode (no duplicate warning)", () => {
     renderWithProviders(
       <MetaProfileEditor
@@ -264,5 +327,38 @@ describe("MetaProfileEditor", () => {
 
     await user.click(screen.getByTestId("meta-profile-cancel"));
     expect(onCancel).toHaveBeenCalled();
+  });
+
+  it("preselects the template classifier when no LLM profiles exist yet", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    renderWithProviders(
+      <MetaProfileEditor
+        mode="create"
+        providerConnections={CONNECTIONS}
+        selectRouterConnectionByDefault
+        availableProfiles={[]}
+        isSaving={false}
+        onSave={onSave}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    // The classifier named by the template must be shown even before any LLM
+    // profile exists, so it survives into the saved config and gets created.
+    expect(screen.getByTestId("meta-profile-classifier-input")).toHaveValue(
+      DEFAULT_ROUTER_PRO_META_PROFILE_DEFAULT.classifier_model,
+    );
+    expect(screen.getByTestId("meta-profile-save")).toBeEnabled();
+
+    await user.click(screen.getByTestId("meta-profile-save"));
+    expect(onSave).toHaveBeenCalledWith(
+      DEFAULT_ROUTER_PRO_META_PROFILE_NAME,
+      expect.objectContaining({
+        classifier_model:
+          DEFAULT_ROUTER_PRO_META_PROFILE_DEFAULT.classifier_model,
+      }),
+      "conn-openhands",
+    );
   });
 });

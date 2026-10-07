@@ -111,6 +111,13 @@ describe("conversation runtime boundaries", () => {
     expect(paths).toEqual(["/server_info"]);
   });
 
+  it("lists no hooks for an isolated conversation without reading host hooks", async () => {
+    expect(await AgentServerConversationService.getHooks(cid)).toEqual({
+      hooks: [],
+    });
+    expect(paths).toEqual(["/server_info"]);
+  });
+
   it.each(["/home/user/project", "/workspace", "relative/project"])(
     "rejects selected host folder %s rather than discarding it",
     async (workingDir) => {
