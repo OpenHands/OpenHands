@@ -160,7 +160,7 @@ describe("SuperAdminSetupGuide", () => {
     );
     expect(
       screen.getByTestId("super-admin-setup-guide-step-add-integration"),
-    ).toHaveAttribute("href", `${CLOUD_HOST}/settings/mcp?org=${GUIDE_ORG_ID}`);
+    ).toHaveAttribute("href", "/mcp");
     expect(
       screen.getByTestId("super-admin-setup-guide-step-invite-users"),
     ).toHaveAttribute(
@@ -177,6 +177,72 @@ describe("SuperAdminSetupGuide", () => {
       "href",
       `${CLOUD_HOST}/super-admin/setup`,
     );
+  });
+
+  it("opens the next step from Start", async () => {
+    activateBackend(cloudBackend);
+    serveSetupGuide({
+      setupState: () => HttpResponse.json(guideState({ org_llm: true })),
+    });
+
+    renderGuide();
+
+    expect(
+      await screen.findByTestId("super-admin-setup-guide-start"),
+    ).toHaveAttribute("href", "/automations/templates");
+  });
+
+  it("opens the Canvas MCP page from Start for the integration step", async () => {
+    activateBackend(cloudBackend);
+    serveSetupGuide({
+      setupState: () =>
+        HttpResponse.json(guideState({ org_llm: true, automation: true })),
+    });
+
+    renderGuide();
+
+    expect(
+      await screen.findByTestId("super-admin-setup-guide-start"),
+    ).toHaveAttribute("href", "/mcp");
+  });
+
+  it("opens an enterprise step from Start on the guide's organization", async () => {
+    activateBackend(cloudBackend);
+    serveSetupGuide({
+      setupState: () =>
+        HttpResponse.json(
+          guideState({ org_llm: true, automation: true, mcp_server: true }),
+        ),
+    });
+
+    renderGuide();
+
+    expect(
+      await screen.findByTestId("super-admin-setup-guide-start"),
+    ).toHaveAttribute(
+      "href",
+      `${CLOUD_HOST}/settings/org-members?org=${GUIDE_ORG_ID}`,
+    );
+  });
+
+  it("closes the panel from Start, even on the next step's own page", async () => {
+    activateBackend(cloudBackend);
+    serveSetupGuide({
+      setupState: () => HttpResponse.json(guideState({ org_llm: true })),
+    });
+    const user = userEvent.setup();
+    renderGuide("/automations/templates");
+
+    await user.click(
+      await screen.findByTestId("super-admin-setup-guide-start"),
+    );
+
+    expect(
+      screen.queryByTestId("super-admin-setup-guide-panel"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("super-admin-setup-guide-toggle"),
+    ).toHaveAttribute("aria-expanded", "false");
   });
 
   it("re-reads progress when the admin moves to another page", async () => {
