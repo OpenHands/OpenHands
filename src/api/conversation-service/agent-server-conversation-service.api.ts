@@ -1,4 +1,5 @@
 import {
+  type ACPModelInfo,
   ConversationSortOrder,
   type ForkConversationRequest,
   type LLMConfig,
@@ -107,6 +108,20 @@ function numberOrZero(value: unknown): number {
 
 function stringOrNull(value: unknown): string | null {
   return typeof value === "string" ? value : null;
+}
+
+function normalizeAcpModels(value: unknown): ACPModelInfo[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!isRecord(entry) || typeof entry.model_id !== "string") return [];
+    return [
+      {
+        model_id: entry.model_id,
+        name: stringOrNull(entry.name),
+        description: stringOrNull(entry.description),
+      },
+    ];
+  });
 }
 
 function readTimestamp(
@@ -315,6 +330,7 @@ function requireDirectConversationInfo(item: unknown): DirectConversationInfo {
     // omit these — adapter handles ``undefined`` / ``null`` gracefully.
     current_model_id: stringOrNull(item.current_model_id),
     current_model_name: stringOrNull(item.current_model_name),
+    available_models: normalizeAcpModels(item.available_models),
   };
 }
 
