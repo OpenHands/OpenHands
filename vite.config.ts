@@ -295,7 +295,6 @@ export default defineConfig(({ mode }) => {
         "@heroui/react",
         "lucide-react",
         "@microlink/react-json-view",
-        "socket.io-client",
         // These are discovered when launching conversations:
         "react-icons/vsc",
         "react-icons/lu",

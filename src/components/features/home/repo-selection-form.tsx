@@ -160,7 +160,6 @@ function ScopedRepositorySelectionForm({
         placeholder="user/repo"
         disabled={!selectedProvider || isLoadingSettings}
         onChange={handleRepoSelection}
-        className="max-w-auto"
       />
     );
   };

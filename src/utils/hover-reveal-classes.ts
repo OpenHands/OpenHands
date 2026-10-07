@@ -8,7 +8,7 @@ import { cn } from "#/utils/utils";
  * scanner can emit the arbitrary-variant rules (dynamic prefix concatenation
  * is not discoverable).
  */
-export const FINE_HOVER_ACTION_CLASSES = [
+const FINE_HOVER_ACTION_CLASSES = [
   "[@media(hover:hover)_and_(pointer:fine)]:pointer-events-none",
   "[@media(hover:hover)_and_(pointer:fine)]:invisible",
   "[@media(hover:hover)_and_(pointer:fine)]:opacity-0",
@@ -20,19 +20,19 @@ export const FINE_HOVER_ACTION_CLASSES = [
   "[@media(hover:hover)_and_(pointer:fine)]:group-focus-within:opacity-100",
 ] as const;
 
-export const FINE_HOVER_YIELD_CLASSES = [
+const FINE_HOVER_YIELD_CLASSES = [
   "[@media(hover:hover)_and_(pointer:fine)]:opacity-100",
   "[@media(hover:hover)_and_(pointer:fine)]:group-hover:opacity-0",
   "[@media(hover:hover)_and_(pointer:fine)]:group-focus-within:opacity-0",
 ] as const;
 
-export const FINE_HOVER_RESERVE_CLASSES = [
+const FINE_HOVER_RESERVE_CLASSES = [
   "[@media(hover:hover)_and_(pointer:fine)]:min-w-0",
   "[@media(hover:hover)_and_(pointer:fine)]:group-hover:min-w-[3.75rem]",
   "[@media(hover:hover)_and_(pointer:fine)]:group-focus-within:min-w-[3.75rem]",
 ] as const;
 
-export const FINE_HOVER_PINNED_TIMESTAMP_CLASSES = [
+const FINE_HOVER_PINNED_TIMESTAMP_CLASSES = [
   "[@media(hover:hover)_and_(pointer:fine)]:flex",
   "[@media(hover:hover)_and_(pointer:fine)]:group-hover:hidden",
   "[@media(hover:hover)_and_(pointer:fine)]:group-focus-within:hidden",

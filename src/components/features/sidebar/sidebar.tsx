@@ -11,6 +11,7 @@ import { cn } from "#/utils/utils";
 import { useSidebarMobileNav } from "./sidebar-mobile-nav-context";
 import { useSidebarStore } from "#/stores/sidebar-store";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
+import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { useBackendsHealth } from "#/hooks/query/use-backends-health";
 // The LLM settings modal is only mounted when the settings query 404s and
 // LLM settings aren't hidden — keep it out of the sidebar's eager graph.
@@ -95,20 +96,8 @@ export function Sidebar() {
     return () => window.clearTimeout(timer);
   }, [isMobileNavOpen]);
 
-  React.useEffect(() => {
-    if (!isMobileNavOpen) {
-      return undefined;
-    }
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        closeMobileNav();
-      }
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [isMobileNavOpen, closeMobileNav]);
+  // A menu or the command menu opened over the drawer takes Escape first.
+  useCloseOnEscape(isMobileNavOpen, closeMobileNav);
 
   React.useEffect(() => {
     if (currentPath === "/settings") {

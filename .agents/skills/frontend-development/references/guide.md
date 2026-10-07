@@ -9,6 +9,10 @@ Bundled catalog skills use the persisted `enabled_skills` allow-list defaulted f
 
 Home launch targets belong to one backend connection and organization. Use `getHomeLaunchScope()` for confirmed targets, picker state and persisted recent repositories. Reset picker state on scope changes without remounting the prompt editor. Legacy unscoped recents and workspace selections must not be attributed to the currently active backend. The Local workspace-mode preference remains browser-wide.
 
+## Workspace files
+
+Local Files discovery preferences belong to `misc_settings.app_preferences.workspace_file_discovery`, keyed by working directory on the active backend. `useWorkspaceFileDiscovery` reads the settings cache and saves sparse workspace patches. Preserve default exclusions and the 2,000-file cap when no configuration exists. Fetch one extra result to distinguish truncation from an exact-size list. Cloud keeps its server-side listing contract without these controls. See `specs/workspace-file-discovery.md`.
+
 ## No Magic Strings
 
 Avoid inline string literals when they represent reusable user-facing copy or shared program identifiers. The `i18next/no-literal-string` rule is set to `"error"` for configured JSX text and attributes, and targeted `no-restricted-syntax` rules enforce shared translation and query-key patterns. Do not claim broader lint enforcement than `eslint.config.js` provides.

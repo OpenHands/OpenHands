@@ -123,7 +123,7 @@ export default function SkillsPluginsScreen() {
   return (
     <div
       data-testid="skills-plugins-screen"
-      className="flex h-full gap-4 md:gap-6 md:pl-8 lg:gap-10 lg:pl-10"
+      className="flex h-full gap-4 lg:gap-10 lg:pl-10"
     >
       <ExtensionsNavigation />
       <main className={cn(settingsLikeMainScrollClassName, "h-full")}>

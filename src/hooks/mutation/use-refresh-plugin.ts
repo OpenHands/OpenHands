@@ -4,10 +4,9 @@ import PluginsManagementService from "#/api/plugins-management-service";
 import { PLUGINS_QUERY_KEYS } from "#/hooks/query/query-keys";
 import { I18nKey } from "#/i18n/declaration";
 import {
-  displayErrorToast,
+  displayApiErrorToast,
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
-import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
 
 /**
  * Update an installed plugin from its source. Version / resolved coordinates may
@@ -18,15 +17,13 @@ export function useRefreshPlugin() {
   const { t } = useTranslation("openhands");
 
   return useMutation({
+    // This hook toasts the server's reason itself; skip the global toast.
+    meta: { disableToast: true },
     mutationFn: (name: string) => PluginsManagementService.refreshPlugin(name),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: PLUGINS_QUERY_KEYS.installed });
       displaySuccessToast(t(I18nKey.SETTINGS$PLUGINS_REFRESH_SUCCESS));
     },
-    onError: (error) => {
-      displayErrorToast(
-        retrieveAxiosErrorMessage(error) || t(I18nKey.ERROR$GENERIC),
-      );
-    },
+    onError: (error) => displayApiErrorToast(error, t(I18nKey.ERROR$GENERIC)),
   });
 }

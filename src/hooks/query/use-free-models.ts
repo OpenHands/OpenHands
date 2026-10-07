@@ -5,6 +5,7 @@ import type { LLMModel } from "#/api/config-service/config-service.types";
 import type { FreeModelSet } from "#/utils/format-model-name";
 import { useFreeModelsStore } from "#/stores/free-models-store";
 import { useActiveBackend } from "#/contexts/active-backend-context";
+import { isNoBackend } from "#/api/backend-registry/active-store";
 import {
   VERIFIED_MODELS_GC_TIME,
   VERIFIED_MODELS_QUERY_KEY,
@@ -63,9 +64,12 @@ async function fetchAllOpenHandsModels(
 
 /**
  * Fetches the `openhands` provider's models with their DB-driven `free` /
- * `default` flags (the same channel that carries `verified`).
+ * `default` flags (the same channel that carries `verified`). Disabled while
+ * no backend is configured (first-run onboarding, the API-key screen): there
+ * is nothing to ask, and the request would only fail with
+ * `NoBackendAvailableError` and raise the global error toast.
  */
-const useOpenHandsModels = () => {
+const useOpenHandsModels = (hasBackend: boolean) => {
   const { backend, orgId } = useActiveBackend();
   const backendScope = [
     backend.id,
@@ -89,6 +93,7 @@ const useOpenHandsModels = () => {
       });
       return fetchAllOpenHandsModels(verifiedByProvider, null, new Set(), 0);
     },
+    enabled: hasBackend,
     staleTime: VERIFIED_MODELS_STALE_TIME,
     gcTime: VERIFIED_MODELS_GC_TIME,
   });
@@ -103,7 +108,8 @@ const useOpenHandsModels = () => {
  */
 export const useHydrateFreeModels = (): void => {
   const { backend, orgId } = useActiveBackend();
-  const { data, isError } = useOpenHandsModels();
+  const hasBackend = !isNoBackend(backend);
+  const { data, isError } = useOpenHandsModels(hasBackend);
   const setFlags = useFreeModelsStore((state) => state.setFlags);
   const markDefaultModelReady = useFreeModelsStore(
     (state) => state.markDefaultModelReady,
@@ -130,9 +136,11 @@ export const useHydrateFreeModels = (): void => {
     });
   }, [data, setFlags]);
 
+  // With no backend there are no flags to wait for, so the default model is
+  // settled (as null) right away.
   React.useEffect(() => {
-    if (isError) markDefaultModelReady();
-  }, [isError, markDefaultModelReady]);
+    if (isError || !hasBackend) markDefaultModelReady();
+  }, [isError, hasBackend, markDefaultModelReady]);
 };
 
 /**

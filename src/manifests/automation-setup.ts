@@ -141,6 +141,15 @@ export function selectedActionKind(
   return "prompt";
 }
 
+/** 判断当前创建端点是否接受 Agent profile。 */
+export function supportsAgentProfile(
+  entry: SetupEntry,
+  selectedAction?: string | null,
+): boolean {
+  const kind = selectedActionKind(entry, selectedAction);
+  return kind === "upload" || kind === "bundle";
+}
+
 /**
  * The `tarball_path` a preflight draft carries.
  *
@@ -272,10 +281,14 @@ function optionalCreateProperties(
   setup: SetupBlock,
   values: SetupFormValues,
   selectedAction?: string | null,
+  includeAgentProfile = false,
 ): SetupRequestBody {
   return Object.fromEntries(
     OPTIONAL_CREATE_PROPERTIES.flatMap((name) => {
-      if (name === "model" && values.agent_profile_id) return [];
+      if (name === "agent_profile_id" && !includeAgentProfile) return [];
+      if (name === "model" && includeAgentProfile && values.agent_profile_id) {
+        return [];
+      }
       const field = collectFields(setup, null, selectedAction)[name];
       const value = fieldPayloadValue(field?.type, values[name]);
       return hasPayloadValue(value) ? [[name, value]] : [];
@@ -416,7 +429,12 @@ function buildActionPayload(
 
   Object.assign(
     payload,
-    optionalCreateProperties(setup, values, selectedActionKey),
+    optionalCreateProperties(
+      setup,
+      values,
+      selectedActionKey,
+      kind === "upload",
+    ),
   );
 
   if (kind === "upload") {
@@ -557,7 +575,7 @@ function buildBundlePayload(
 
   const payload: SetupRequestBody = {
     name: deriveName(entry, values),
-    ...optionalCreateProperties(entry.setup, values),
+    ...optionalCreateProperties(entry.setup, values, undefined, true),
   };
 
   const trigger = buildTrigger(entry, values, selectedTrigger);

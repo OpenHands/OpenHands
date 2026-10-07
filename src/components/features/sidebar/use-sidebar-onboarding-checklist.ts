@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useOnboardingCompletion } from "#/components/features/onboarding/use-onboarding-completion";
+import { useSuperAdminSetupGuide } from "#/components/features/setup-guide/use-super-admin-setup-guide";
 import { useNavigation } from "#/context/navigation-context";
 import { useAutomations } from "#/hooks/query/use-automations";
 import { useAutomationHealth } from "#/hooks/query/use-automation-health";
@@ -8,6 +9,7 @@ import { useSettings } from "#/hooks/query/use-settings";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useLlmConfigured } from "#/hooks/use-llm-configured";
 import { parseMcpConfig } from "#/utils/mcp-config";
+import { getLockedCloudHost } from "#/api/agent-server-config";
 import {
   isCustomizeChecklistPath,
   SIDEBAR_ONBOARDING_CHECKLIST_ITEM_IDS,
@@ -37,6 +39,7 @@ function hasConfiguredMcpServers(mcpConfig: unknown): boolean {
 
 export function useSidebarOnboardingChecklist() {
   const { isCompleted: onboardingCompleted } = useOnboardingCompletion();
+  const setupGuide = useSuperAdminSetupGuide();
   const { currentPath } = useNavigation();
   const isDismissed = useSyncExternalStore(
     subscribeSidebarOnboardingChecklistDismissed,
@@ -111,19 +114,34 @@ export function useSidebarOnboardingChecklist() {
     settings?.agent_settings?.mcp_config,
   ]);
 
+  // Locked-to-Cloud blocks the Canvas LLM and Agent settings pages these two
+  // items link to, and "customize-agent" only completes by visiting one
+  // (OHE-3457).
+  const isLockedToCloud = getLockedCloudHost() !== null;
+
   const items = useMemo(
     (): SidebarOnboardingChecklistItemState[] =>
-      SIDEBAR_ONBOARDING_CHECKLIST_ITEM_IDS.map((id) => ({
+      SIDEBAR_ONBOARDING_CHECKLIST_ITEM_IDS.filter(
+        (id) =>
+          !isLockedToCloud ||
+          (id !== "configure-llm" && id !== "customize-agent"),
+      ).map((id) => ({
         id,
         isComplete: completionById[id],
       })),
-    [completionById],
+    [completionById, isLockedToCloud],
   );
 
   const completedCount = items.filter((item) => item.isComplete).length;
   const isAllComplete = completedCount === items.length;
 
-  const isVisible = onboardingCompleted && !isDismissed && !isAllComplete;
+  // The Super Admin setup guide replaces this checklist while it is shown.
+  const isVisible =
+    onboardingCompleted &&
+    !isDismissed &&
+    !isAllComplete &&
+    !setupGuide.isLoading &&
+    !setupGuide.visible;
 
   const dismiss = () => {
     writeSidebarOnboardingChecklistDismissed(true);
