@@ -6,6 +6,7 @@ import { MemoryRouter } from "react-router";
 
 import FilesTab from "#/routes/files-tab";
 import { useFilesTabStore } from "#/stores/files-tab-store";
+import { useWorkspaceMutationCounter } from "#/stores/use-workspace-mutation-counter";
 import { NavigationProvider } from "#/context/navigation-context";
 import {
   LOCAL_STORAGE_KEYS,
@@ -63,6 +64,7 @@ describe("FilesTab", () => {
       selectedConversationId: null,
       openPaths: [],
     });
+    useWorkspaceMutationCounter.setState({ count: 0 });
     localStorage.clear();
 
     useWorkspaceFilesMock.mockReset();
@@ -347,6 +349,47 @@ describe("FilesTab", () => {
     const iframe = await screen.findByTestId("file-content-viewer-iframe");
     expect(iframe).toHaveAttribute("src", `${staticUrl}?v=0`);
     expect(iframe).toHaveAttribute("sandbox", "allow-same-origin");
+  });
+
+  it("re-requests the rich preview and the new-window link on Refresh", async () => {
+    useWorkspaceFilesMock.mockReturnValue({
+      data: ["index.html"],
+      isLoading: false,
+    });
+    const staticUrl =
+      "https://agent.example.com/api/conversations/conv-1/workspace/index.html";
+    useWorkspaceFileContentMock.mockReturnValue({
+      data: {
+        path: "index.html",
+        kind: "text",
+        text: "<!doctype html><body>hi</body>",
+        staticUrl,
+        mimeType: "text/html",
+      },
+      isLoading: false,
+      isError: false,
+    });
+    const user = userEvent.setup();
+
+    openFile("index.html");
+    renderTab();
+    const iframe = await screen.findByTestId("file-content-viewer-iframe");
+    const srcBefore = iframe.getAttribute("src");
+
+    await user.click(screen.getByTestId("files-tab-refresh"));
+
+    // A new URL is the only way to make an <iframe>/<img> skip a cached
+    // response, so Refresh must change it (#17921).
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("file-content-viewer-iframe").getAttribute("src"),
+      ).not.toBe(srcBefore);
+    });
+    expect(
+      screen.getByTestId("files-tab-open-in-new-window").getAttribute("href"),
+    ).toBe(
+      screen.getByTestId("file-content-viewer-iframe").getAttribute("src"),
+    );
   });
 
   it("switches between rich and plain content modes", async () => {
