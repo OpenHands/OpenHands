@@ -15,7 +15,9 @@
  *     the same port to two independent listeners. No manual bookkeeping
  *     needed here beyond recording which port each session ended up with.
  *   - Reuse: calling attach() again for a session that already has a live
- *     tunnel returns that tunnel instead of opening a duplicate.
+ *     tunnel returns that tunnel instead of opening a duplicate — after
+ *     waking the session again, since it may have idle-paused (or been
+ *     paused by hand) since the tunnel opened.
  *   - Targeted teardown: detach() stops one session's tunnel without
  *     touching any other session's.
  *   - Concurrent-attach dedup: two attach() calls for the same session
@@ -39,8 +41,8 @@
  *     attach() to reuse it) or surface as disconnected is Ticket 3's job
  *     (MARSOHS-1429), which owns that comparison. This registry only
  *     provides the primitive that makes it possible: attach() accepts an
- *     optional `localPort` to re-request a specific port instead of always
- *     letting the OS pick a new one.
+ *     optional `localPort` to re-request a specific port, falling back to
+ *     an OS-picked one when something else has taken it in the meantime.
  *   - Wiring into Electron's app lifecycle (app quit, session pause/end).
  *     That's also Ticket 3 — this module is a standalone, directly testable
  *     piece, following the same shape as Ticket 1.
@@ -48,6 +50,20 @@
 
 import { startPortForwardTunnel } from "./tunnel-client.mjs";
 import { ensureSessionAwake } from "./mars-session.mjs";
+import { createMarsApiClient } from "./mars-api.mjs";
+
+/**
+ * @param {{ sessionId: string, apiUrl?: string, getAccessToken: () => string | null }} options
+ */
+function wakeSession({ sessionId, apiUrl, getAccessToken }) {
+  return ensureSessionAwake({
+    api: createMarsApiClient({
+      baseUrl: apiUrl,
+      getToken: async () => getAccessToken(),
+    }),
+    sessionId,
+  });
+}
 
 /**
  * @typedef {{
@@ -63,13 +79,15 @@ import { ensureSessionAwake } from "./mars-session.mjs";
 /**
  * @param {object} [options]
  * @param {typeof startPortForwardTunnel} [options.startTunnel] Override for tests
- * @param {typeof ensureSessionAwake} [options.ensureAwake] Override for tests
+ * @param {(options: { sessionId: string, apiUrl?: string, getAccessToken: () => string | null }) => Promise<unknown>} [options.ensureAwake]
+ *   Resolves once the session is READY. Defaults to ensureSessionAwake over
+ *   a client authenticated with the tunnel's own token.
  */
 export function createTunnelRegistry({
   startTunnel = startPortForwardTunnel,
-  ensureAwake = ensureSessionAwake,
+  ensureAwake = wakeSession,
 } = {}) {
-  /** @type {Map<string, { status: "connecting" | "connected" | "error", remotePort: number, tunnel: object | null, error: Error | null, promise: Promise<void> | null }>} */
+  /** @type {Map<string, { status: "connecting" | "connected" | "error", remotePort: number, apiUrl: string | undefined, getAccessToken: () => string | null, owner: string | undefined, tunnel: object | null, error: Error | null, promise: Promise<void> | null }>} */
   const entries = new Map();
 
   function snapshot(sessionId) {
@@ -86,6 +104,19 @@ export function createTunnelRegistry({
   }
 
   /**
+   * A restored Backend asks for the port it had before the restart, which
+   * another process may have bound since.
+   */
+  async function startOnPreferredPort(options) {
+    try {
+      return await startTunnel(options);
+    } catch (error) {
+      if (!options.localPort || error?.code !== "EADDRINUSE") throw error;
+      return startTunnel({ ...options, localPort: 0 });
+    }
+  }
+
+  /**
    * Attach (or reuse) the tunnel for one session. Resolves once the tunnel
    * is up, or rejects if dialing it failed — either way, the outcome is
    * also queryable afterward via get(sessionId).
@@ -93,20 +124,20 @@ export function createTunnelRegistry({
    * @param {object} options
    * @param {string} options.sessionId
    * @param {number} options.remotePort
-   * @param {string} options.accessToken
+   * @param {() => string | null} options.getAccessToken Read on every dial,
+   *   so a tunnel keeps using whichever credential it was opened with and
+   *   stops working once that credential is gone.
    * @param {string} [options.apiUrl]
    * @param {number} [options.localPort] Reuse a specific local port (e.g. the
    *   one a previously persisted Backend recorded) instead of letting the OS
    *   pick a new one.
+   * @param {string} [options.owner] Opaque tag for detachOwnedBy(), e.g. the
+   *   credential the tunnel dials with.
    * @returns {Promise<TunnelEntrySnapshot>}
    */
-  async function attach({
-    sessionId,
-    remotePort,
-    accessToken,
-    apiUrl,
-    localPort,
-  }) {
+  async function attach(options) {
+    const { sessionId, remotePort, getAccessToken, apiUrl, localPort, owner } =
+      options;
     if (!sessionId) {
       throw new Error("sessionId is required");
     }
@@ -114,6 +145,11 @@ export function createTunnelRegistry({
     const existing = entries.get(sessionId);
     if (existing) {
       if (existing.status === "connected") {
+        await ensureAwake({
+          sessionId,
+          apiUrl: existing.apiUrl,
+          getAccessToken: existing.getAccessToken,
+        });
         return snapshot(sessionId);
       }
       if (existing.status === "connecting") {
@@ -121,13 +157,7 @@ export function createTunnelRegistry({
         // settles (either way), re-run attach() to either reuse the tunnel
         // it produced or retry after its failure.
         await existing.promise.catch(() => {});
-        return attach({
-          sessionId,
-          remotePort,
-          accessToken,
-          apiUrl,
-          localPort,
-        });
+        return attach(options);
       }
       // status === "error": fall through and retry below.
     }
@@ -135,6 +165,9 @@ export function createTunnelRegistry({
     const entry = {
       status: "connecting",
       remotePort,
+      apiUrl,
+      getAccessToken,
+      owner,
       tunnel: null,
       error: null,
       promise: null,
@@ -146,11 +179,11 @@ export function createTunnelRegistry({
       // can't have generated any activity to prevent that — so a session
       // being attached to for the first time in a while may need waking
       // before dialing it can succeed at all.
-      await ensureAwake({ apiUrl, sessionId, accessToken });
-      const tunnel = await startTunnel({
+      await ensureAwake({ sessionId, apiUrl, getAccessToken });
+      const tunnel = await startOnPreferredPort({
         sessionId,
         remotePort,
-        accessToken,
+        getAccessToken,
         apiUrl,
         localPort,
       });
@@ -195,5 +228,14 @@ export function createTunnelRegistry({
     );
   }
 
-  return { attach, get, list, detach, detachAll };
+  /** Tear down every tunnel attached with the given `owner`. */
+  async function detachOwnedBy(owner) {
+    await Promise.all(
+      [...entries]
+        .filter(([, entry]) => entry.owner === owner)
+        .map(([sessionId]) => detach(sessionId)),
+    );
+  }
+
+  return { attach, get, list, detach, detachAll, detachOwnedBy };
 }

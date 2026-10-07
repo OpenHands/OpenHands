@@ -13,6 +13,13 @@ import {
 import { createCredentialStore } from "../../scripts/mars-credentials.mjs";
 
 const VALID_PAT = `dop_v1_${"a".repeat(64)}`;
+const OTHER_PAT = `dop_v1_${"b".repeat(64)}`;
+const THIRD_PAT = `dop_v1_${"c".repeat(64)}`;
+
+type AuthState = {
+  connections: { id: string }[];
+  active: { id: string } | null;
+};
 const API_URL = "https://api.example.test";
 
 /** A fake ipcMain that just records handlers so tests can invoke them directly. */
@@ -52,6 +59,7 @@ function fakeRegistry() {
     ),
     detach: vi.fn(async () => {}),
     detachAll: vi.fn(async () => {}),
+    detachOwnedBy: vi.fn(async () => {}),
     get: vi.fn(() => undefined),
     list: vi.fn(() => []),
   };
@@ -147,8 +155,8 @@ describe("createMarsTunnelBridge", () => {
     );
   });
 
-  it("openTunnel sources the token from the active connection and pins the guest port", async () => {
-    const { registry, ipcMain } = setup();
+  it("openTunnel binds the tunnel to the active connection and pins the guest port", async () => {
+    const { registry, credentials, ipcMain } = setup();
     await ipcMain.invoke(MARS_TUNNEL_IPC.savePat, { token: VALID_PAT });
 
     const result = await ipcMain.invoke(MARS_TUNNEL_IPC.openTunnel, {
@@ -159,11 +167,35 @@ describe("createMarsTunnelBridge", () => {
     expect(registry.attach).toHaveBeenCalledWith({
       sessionId: "sess_a",
       remotePort: 8000,
-      accessToken: VALID_PAT,
+      getAccessToken: expect.any(Function),
       apiUrl: API_URL,
       localPort: 51000,
+      owner: credentials.getActive()?.id,
     });
     expect(result).toMatchObject({ sessionId: "sess_a", localPort: 51000 });
+  });
+
+  it("a tunnel keeps its own connection's token after switching, and loses it on sign-out", async () => {
+    // Arrange
+    const { registry, ipcMain } = setup();
+    const first = (await ipcMain.invoke(MARS_TUNNEL_IPC.savePat, {
+      token: VALID_PAT,
+    })) as AuthState;
+    const firstId = first.active!.id;
+    await ipcMain.invoke(MARS_TUNNEL_IPC.openTunnel, { sessionId: "sess_a" });
+    const { getAccessToken } = registry.attach.mock.calls[0][0] as unknown as {
+      getAccessToken: () => string | null;
+    };
+
+    // Act
+    await ipcMain.invoke(MARS_TUNNEL_IPC.savePat, { token: OTHER_PAT });
+    const tokenAfterSwitch = getAccessToken();
+    await ipcMain.invoke(MARS_TUNNEL_IPC.signOut, firstId);
+
+    // Assert
+    expect(tokenAfterSwitch).toBe(VALID_PAT);
+    expect(registry.detachOwnedBy).toHaveBeenCalledWith(firstId);
+    expect(getAccessToken()).toBeNull();
   });
 
   it("openTunnel refuses to dial while signed out", async () => {
@@ -203,6 +235,25 @@ describe("createMarsTunnelBridge", () => {
     expect(api.verifyAccess).not.toHaveBeenCalled();
   });
 
+  it("a rejected token leaves the previously active connection active", async () => {
+    const { api, ipcMain } = setup();
+    await ipcMain.invoke(MARS_TUNNEL_IPC.savePat, { token: VALID_PAT });
+    const second = (await ipcMain.invoke(MARS_TUNNEL_IPC.savePat, {
+      token: OTHER_PAT,
+    })) as AuthState;
+    api.verifyAccess.mockRejectedValueOnce(new Error("403 mars_preview"));
+
+    await expect(
+      ipcMain.invoke(MARS_TUNNEL_IPC.savePat, { token: THIRD_PAT }),
+    ).rejects.toThrow(/mars_preview/);
+    const state = (await ipcMain.invoke(
+      MARS_TUNNEL_IPC.getAuthState,
+    )) as AuthState;
+
+    expect(state.connections).toHaveLength(2);
+    expect(state.active?.id).toBe(second.active?.id);
+  });
+
   it("createSession resolves only once the new session is ready", async () => {
     const { api, ensureAwake, ipcMain } = setup();
     await ipcMain.invoke(MARS_TUNNEL_IPC.savePat, { token: VALID_PAT });
@@ -218,11 +269,7 @@ describe("createMarsTunnelBridge", () => {
       "agent-abc123",
     );
     expect(ensureAwake).toHaveBeenCalledWith(
-      expect.objectContaining({
-        sessionId: "sess_new",
-        accessToken: VALID_PAT,
-        apiUrl: API_URL,
-      }),
+      expect.objectContaining({ api, sessionId: "sess_new" }),
     );
     expect(session).toMatchObject({ status: "SESSION_STATUS_READY" });
   });

@@ -149,7 +149,11 @@ export function createMarsApiClient({
   deviceId = null,
   fetchImpl = globalThis.fetch,
 }) {
-  async function request(method, path, { query, timeoutMs, body } = {}) {
+  async function request(
+    method,
+    path,
+    { query, timeoutMs, body, signal } = {},
+  ) {
     const token = await getToken();
     if (!token) {
       throw new MarsApiError("Not signed in to DigitalOcean.", { status: 401 });
@@ -159,13 +163,14 @@ export function createMarsApiClient({
     if (deviceId) headers[DEVICE_ID_HEADER] = deviceId;
     if (body !== undefined) headers["Content-Type"] = "application/json";
 
+    const timeout = AbortSignal.timeout(timeoutMs ?? DEFAULT_TIMEOUT_MS);
     let response;
     try {
       response = await fetchImpl(buildMarsUrl(baseUrl, path, query), {
         method,
         headers,
         body: body === undefined ? undefined : JSON.stringify(body),
-        signal: AbortSignal.timeout(timeoutMs ?? DEFAULT_TIMEOUT_MS),
+        signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
       });
     } catch (error) {
       throw new MarsApiError(
@@ -197,8 +202,11 @@ export function createMarsApiClient({
       };
     },
 
-    async getSession(sessionId) {
-      const body = await request("GET", `${SESSIONS_PATH}/${sessionId}`);
+    /** @param {{ signal?: AbortSignal }} [options] */
+    async getSession(sessionId, { signal } = {}) {
+      const body = await request("GET", `${SESSIONS_PATH}/${sessionId}`, {
+        signal,
+      });
       return body?.session ?? null;
     },
 
@@ -270,8 +278,11 @@ export function createMarsApiClient({
       await request("POST", `${SESSIONS_PATH}/${sessionId}/pause`);
     },
 
-    async resumeSession(sessionId) {
-      await request("POST", `${SESSIONS_PATH}/${sessionId}/resume`);
+    /** @param {{ signal?: AbortSignal }} [options] */
+    async resumeSession(sessionId, { signal } = {}) {
+      await request("POST", `${SESSIONS_PATH}/${sessionId}/resume`, {
+        signal,
+      });
     },
 
     /**

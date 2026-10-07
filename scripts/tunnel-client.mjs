@@ -72,7 +72,10 @@ function buildTunnelWsUrl(apiUrl, sessionId, remotePort) {
  * @param {object} options
  * @param {string} options.sessionId MARS session id
  * @param {number} options.remotePort Port inside the guest sandbox
- * @param {string} options.accessToken Bearer token for the tunnel
+ * @param {string} [options.accessToken] Bearer token for the tunnel
+ * @param {() => string | null} [options.getAccessToken] Read on every local
+ *   connection instead of `accessToken`, so a rotated or revoked credential
+ *   takes effect on the next dial. Returning null refuses the connection.
  * @param {string} [options.apiUrl] harness-api base URL (http(s)://...); translated to ws(s)://
  * @param {number} [options.localPort] Local port to listen on (0 lets the OS pick one)
  * @param {string} [options.address] Local bind address
@@ -84,6 +87,7 @@ export async function startPortForwardTunnel({
   sessionId,
   remotePort,
   accessToken,
+  getAccessToken,
   apiUrl = "https://api.digitalocean.com/",
   localPort = 0,
   address = "127.0.0.1",
@@ -96,12 +100,12 @@ export async function startPortForwardTunnel({
   if (!Number.isInteger(remotePort) || remotePort <= 0 || remotePort > 65535) {
     throw new Error(`Invalid remote port: ${remotePort}`);
   }
-  if (!accessToken) {
+  if (!accessToken && typeof getAccessToken !== "function") {
     throw new Error("accessToken is required");
   }
+  const readToken = getAccessToken ?? (() => accessToken);
 
   const wsUrl = buildTunnelWsUrl(apiUrl, sessionId, remotePort);
-  const headers = { Authorization: `Bearer ${accessToken}` };
   const activeSockets = new Set();
   /**
    * Each local connection is its own upstream dial, so a failure never
@@ -117,7 +121,20 @@ export async function startPortForwardTunnel({
     activeSockets.add(localSocket);
     localSocket.once("close", () => activeSockets.delete(localSocket));
 
-    const ws = new WebSocketImpl(wsUrl, { headers });
+    const token = readToken();
+    if (!token) {
+      lastUpstreamFailure = {
+        closeCode: null,
+        httpStatus: 401,
+        message: "Not signed in to DigitalOcean.",
+      };
+      localSocket.end();
+      return;
+    }
+
+    const ws = new WebSocketImpl(wsUrl, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
     let rejected = false;
 
     // Fires when the server answers the handshake with a non-101 status

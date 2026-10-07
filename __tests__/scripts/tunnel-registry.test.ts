@@ -48,7 +48,7 @@ describe("createTunnelRegistry", () => {
     const result = await registry.attach({
       sessionId: "sess_a",
       remotePort: 8000,
-      accessToken: "token",
+      getAccessToken: () => "token",
     });
 
     expect(result).toMatchObject({ sessionId: "sess_a", status: "connected" });
@@ -66,12 +66,12 @@ describe("createTunnelRegistry", () => {
     const first = await registry.attach({
       sessionId: "sess_a",
       remotePort: 8000,
-      accessToken: "t",
+      getAccessToken: () => "t",
     });
     const second = await registry.attach({
       sessionId: "sess_a",
       remotePort: 8000,
-      accessToken: "t",
+      getAccessToken: () => "t",
     });
 
     expect(second.localPort).toBe(first.localPort);
@@ -98,12 +98,12 @@ describe("createTunnelRegistry", () => {
     const attempt1 = registry.attach({
       sessionId: "sess_a",
       remotePort: 8000,
-      accessToken: "t",
+      getAccessToken: () => "t",
     });
     const attempt2 = registry.attach({
       sessionId: "sess_a",
       remotePort: 8000,
-      accessToken: "t",
+      getAccessToken: () => "t",
     });
     gate.resolve();
 
@@ -123,12 +123,12 @@ describe("createTunnelRegistry", () => {
       registry.attach({
         sessionId: "sess_a",
         remotePort: 8000,
-        accessToken: "t",
+        getAccessToken: () => "t",
       }),
       registry.attach({
         sessionId: "sess_b",
         remotePort: 8000,
-        accessToken: "t",
+        getAccessToken: () => "t",
       }),
     ]);
 
@@ -152,12 +152,12 @@ describe("createTunnelRegistry", () => {
     await registry.attach({
       sessionId: "sess_a",
       remotePort: 8000,
-      accessToken: "t",
+      getAccessToken: () => "t",
     });
     await registry.attach({
       sessionId: "sess_b",
       remotePort: 8000,
-      accessToken: "t",
+      getAccessToken: () => "t",
     });
 
     await registry.detach("sess_a");
@@ -178,12 +178,12 @@ describe("createTunnelRegistry", () => {
     await registry.attach({
       sessionId: "sess_a",
       remotePort: 8000,
-      accessToken: "t",
+      getAccessToken: () => "t",
     });
     await registry.attach({
       sessionId: "sess_b",
       remotePort: 8000,
-      accessToken: "t",
+      getAccessToken: () => "t",
     });
 
     await registry.detachAll();
@@ -222,13 +222,13 @@ describe("createTunnelRegistry", () => {
     await registry.attach({
       sessionId: "sess_ok",
       remotePort: 8000,
-      accessToken: "t",
+      getAccessToken: () => "t",
     });
     await expect(
       registry.attach({
         sessionId: "sess_bad",
         remotePort: 8000,
-        accessToken: "wrong",
+        getAccessToken: () => "wrong",
       }),
     ).rejects.toThrow(/invalid token/);
 
@@ -242,9 +242,75 @@ describe("createTunnelRegistry", () => {
     const retried = await registry.attach({
       sessionId: "sess_bad",
       remotePort: 8000,
-      accessToken: "t",
+      getAccessToken: () => "t",
     });
     expect(retried.status).toBe("connected");
+  });
+
+  it("wakes the session again when reusing a connected tunnel", async () => {
+    const ensureAwake = vi.fn(noopEnsureAwake);
+    const { fn } = fakeStartTunnel();
+    const registry = createTunnelRegistry({ startTunnel: fn, ensureAwake });
+    const params = {
+      sessionId: "sess_a",
+      remotePort: 8000,
+      getAccessToken: () => "t",
+    };
+
+    await registry.attach(params);
+    await registry.attach(params);
+
+    expect(ensureAwake).toHaveBeenCalledTimes(2);
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to an OS-picked port when the requested one is taken", async () => {
+    const { fn } = fakeStartTunnel();
+    fn.mockImplementationOnce(async () => {
+      throw Object.assign(new Error("listen EADDRINUSE"), {
+        code: "EADDRINUSE",
+      });
+    });
+    const registry = createTunnelRegistry({
+      startTunnel: fn,
+      ensureAwake: noopEnsureAwake,
+    });
+
+    const result = await registry.attach({
+      sessionId: "sess_a",
+      remotePort: 8000,
+      getAccessToken: () => "t",
+      localPort: 51000,
+    });
+
+    expect(fn).toHaveBeenLastCalledWith(
+      expect.objectContaining({ localPort: 0 }),
+    );
+    expect(result).toMatchObject({ status: "connected", localPort: 40000 });
+  });
+
+  it("detachOwnedBy() tears down only that owner's tunnels", async () => {
+    const { fn } = fakeStartTunnel();
+    const registry = createTunnelRegistry({
+      startTunnel: fn,
+      ensureAwake: noopEnsureAwake,
+    });
+    await registry.attach({
+      sessionId: "sess_a",
+      remotePort: 8000,
+      getAccessToken: () => "t",
+      owner: "conn_a",
+    });
+    await registry.attach({
+      sessionId: "sess_b",
+      remotePort: 8000,
+      getAccessToken: () => "t",
+      owner: "conn_b",
+    });
+
+    await registry.detachOwnedBy("conn_a");
+
+    expect(registry.list().map((e) => e.sessionId)).toEqual(["sess_b"]);
   });
 
   it("rejects when sessionId is missing", async () => {
@@ -255,7 +321,7 @@ describe("createTunnelRegistry", () => {
     });
     await expect(
       // @ts-expect-error deliberately omitting a required field to test runtime validation
-      registry.attach({ remotePort: 8000, accessToken: "t" }),
+      registry.attach({ remotePort: 8000, getAccessToken: () => "t" }),
     ).rejects.toThrow(/sessionId/);
   });
 
@@ -281,12 +347,12 @@ describe("createTunnelRegistry", () => {
     await registry.attach({
       sessionId: "sess_a",
       remotePort: 8000,
-      accessToken: "t",
+      getAccessToken: () => "t",
     });
 
     expect(order).toEqual(["ensureAwake", "startTunnel"]);
     expect(ensureAwake).toHaveBeenCalledWith(
-      expect.objectContaining({ sessionId: "sess_a", accessToken: "t" }),
+      expect.objectContaining({ sessionId: "sess_a" }),
     );
   });
 
@@ -303,7 +369,7 @@ describe("createTunnelRegistry", () => {
       registry.attach({
         sessionId: "sess_a",
         remotePort: 8000,
-        accessToken: "t",
+        getAccessToken: () => "t",
       }),
     ).rejects.toThrow(/SESSION_STATUS_FAILED/);
 
@@ -391,13 +457,13 @@ describe("createTunnelRegistry (real tunnel client)", () => {
         registry.attach({
           sessionId: "sess_a",
           remotePort: 8000,
-          accessToken: "token-a",
+          getAccessToken: () => "token-a",
           apiUrl: `http://127.0.0.1:${harnessA.port}`,
         }),
         registry.attach({
           sessionId: "sess_b",
           remotePort: 8000,
-          accessToken: "token-b",
+          getAccessToken: () => "token-b",
           apiUrl: `http://127.0.0.1:${harnessB.port}`,
         }),
       ]);

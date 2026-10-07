@@ -114,7 +114,8 @@ export function useMarsTunnelBackend() {
  * Backend records pointing at them persist. Re-open the *active* MARS
  * backend's tunnel — at startup and whenever the user switches to one —
  * on its previous local port when still free, so every query keyed to that
- * host survives the restart.
+ * host survives the restart. When another process has taken that port, the
+ * tunnel comes up on a new one and the Backend's host is updated to match.
  *
  * Only the active one: opening a tunnel resumes a paused session, so
  * restoring every registered session would wake (and bill) sandboxes the

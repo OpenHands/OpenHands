@@ -105,7 +105,7 @@ export function readMarsConfig(
  * @param {Record<string, string | undefined>} [options.env]
  */
 export function createMarsTunnelBridge({
-  registry = createTunnelRegistry(),
+  registry: registryOverride,
   credentials,
   api,
   userDataPath,
@@ -117,12 +117,19 @@ export function createMarsTunnelBridge({
   const config = readMarsConfig(env);
   const store =
     credentials ?? createCredentialStore({ userDataPath, safeStorage });
-  const client =
-    api ??
+  /** @param {() => string | null} getToken */
+  const clientFor = (getToken) =>
     createMarsApiClient({
       baseUrl: config.apiBaseUrl,
       deviceId: store.deviceId,
-      getToken: async () => store.getActiveToken(),
+      getToken: async () => getToken(),
+    });
+  const client = api ?? clientFor(() => store.getActiveToken());
+  const registry =
+    registryOverride ??
+    createTunnelRegistry({
+      ensureAwake: ({ sessionId, getAccessToken }) =>
+        ensureAwake({ api: clientFor(getAccessToken), sessionId }),
     });
 
   /** Configs are immutable, so a config's agent never needs re-reading. */
@@ -154,24 +161,27 @@ export function createMarsTunnelBridge({
     };
   }
 
-  function requireToken() {
-    const token = store.getActiveToken();
-    if (!token) {
+  function requireActiveConnectionId() {
+    const id = store.getActive()?.id;
+    if (!id || !store.getToken(id)) {
       throw new MarsApiError("Sign in to DigitalOcean first.", { status: 401 });
     }
-    return token;
+    return id;
   }
 
   /**
    * A well-formed token can still be refused by the MARS feature flippers, so
-   * a new credential only sticks once a real API call has accepted it.
+   * a new credential only sticks once a real API call has accepted it. A
+   * rejected one leaves the previously active connection active.
    */
   async function saveVerified(connection) {
-    store.save(connection);
+    const previousId = store.getActive()?.id ?? null;
+    const saved = store.save(connection);
     try {
       await client.verifyAccess();
     } catch (error) {
-      store.remove(store.getActive().id);
+      store.remove(saved.id);
+      if (previousId) store.setActive(previousId);
       throw error;
     }
     return authState();
@@ -209,6 +219,10 @@ export function createMarsTunnelBridge({
       });
     },
 
+    /**
+     * Open tunnels are left alone: each keeps dialing with the connection
+     * that opened it, since its session belongs to that connection's team.
+     */
     setActiveConnection(id) {
       store.setActive(id);
       return authState();
@@ -217,6 +231,7 @@ export function createMarsTunnelBridge({
     async signOut(id) {
       const target = id ?? store.getActive()?.id;
       if (!target) return authState();
+      await registry.detachOwnedBy(target);
       const isActive = store.getActive()?.id === target;
       const kind = store.list().find((c) => c.id === target)?.kind;
       if (isActive && kind === CREDENTIAL_KIND_OAUTH) {
@@ -279,9 +294,8 @@ export function createMarsTunnelBridge({
         throw new MarsApiError("DigitalOcean returned no session.");
       }
       return ensureAwake({
-        apiUrl: config.apiBaseUrl,
+        api: client,
         sessionId,
-        accessToken: requireToken(),
         timeoutMs: CREATE_SESSION_READY_TIMEOUT_MS,
       });
     },
@@ -289,15 +303,19 @@ export function createMarsTunnelBridge({
     /**
      * Open (or reuse) the tunnel to a session's agent-server. The guest port
      * is fixed here rather than accepted over IPC so the renderer cannot dial
-     * arbitrary ports inside the sandbox.
+     * arbitrary ports inside the sandbox. The tunnel is bound to the active
+     * connection: it reads that connection's current token on every dial and
+     * is torn down when that connection signs out.
      */
     openTunnel({ sessionId, localPort } = {}) {
+      const connectionId = requireActiveConnectionId();
       return registry.attach({
         sessionId,
         remotePort: AGENT_SERVER_GUEST_PORT,
-        accessToken: requireToken(),
+        getAccessToken: () => store.getToken(connectionId),
         apiUrl: config.apiBaseUrl,
         localPort,
+        owner: connectionId,
       });
     },
 

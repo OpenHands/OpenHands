@@ -155,7 +155,12 @@ export function createCredentialStore({ userDataPath, safeStorage = null }) {
     },
 
     getActiveToken() {
-      const connection = find(state.activeConnectionId);
+      return this.getToken(state.activeConnectionId);
+    },
+
+    /** Token of one connection, or null once it is removed or expired. */
+    getToken(id) {
+      const connection = find(id);
       if (!connection || isExpired(connection)) return null;
       return decrypt(connection);
     },

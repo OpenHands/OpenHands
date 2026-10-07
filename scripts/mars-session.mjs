@@ -10,111 +10,85 @@
  * resumes a paused session before opening a tunnel the same way `launch`/
  * `attach` already do.
  *
- * Endpoints (godo's hosted_agents.go, the doctl client's own backing library):
- *   GET  /v2/agents/sessions/{id}          -> { session: { status, ... } }
- *   POST /v2/agents/sessions/{id}/resume   -> 204, no body
+ * Built on mars-api.mjs's client so these calls carry the same auth, device
+ * id, and per-request timeout as every other MARS request.
  */
 
-const READY = "SESSION_STATUS_READY";
-const PAUSED = "SESSION_STATUS_PAUSED";
+import { setTimeout as sleep } from "node:timers/promises";
+import {
+  SESSION_STATUS_PAUSED,
+  SESSION_STATUS_READY,
+  isTerminalSessionStatus,
+} from "./mars-api.mjs";
 
-// Statuses a session can never leave — waiting them out is pointless.
-const TERMINAL_STATUSES = new Set([
-  "SESSION_STATUS_DESTROYING",
-  "SESSION_STATUS_DESTROYED",
-  "SESSION_STATUS_FAILED",
-]);
-
-const DEFAULT_API_URL = "https://api.digitalocean.com/";
 const DEFAULT_POLL_INTERVAL_MS = 2_000;
 const DEFAULT_TIMEOUT_MS = 120_000;
 
-function sessionUrl(apiUrl, sessionId, suffix = "") {
-  const url = new URL(apiUrl);
-  url.pathname =
-    url.pathname.replace(/\/$/, "") +
-    `/v2/agents/sessions/${sessionId}${suffix}`;
-  return url.toString();
-}
-
-async function getSession(apiUrl, sessionId, accessToken, fetchImpl) {
-  const res = await fetchImpl(sessionUrl(apiUrl, sessionId), {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  if (!res.ok) {
-    throw new Error(`Failed to get session ${sessionId}: HTTP ${res.status}`);
+async function readSession(api, sessionId, signal) {
+  const session = await api.getSession(sessionId, { signal });
+  if (!session) {
+    throw new Error(`DigitalOcean returned no session ${sessionId}.`);
   }
-  const body = await res.json();
-  return body.session;
+  return session;
 }
 
-async function resumeSession(apiUrl, sessionId, accessToken, fetchImpl) {
-  const res = await fetchImpl(sessionUrl(apiUrl, sessionId, "/resume"), {
-    method: "POST",
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  if (!res.ok) {
+async function waitUntilReady(api, sessionId, pollIntervalMs, signal) {
+  let session = await readSession(api, sessionId, signal);
+  if (isTerminalSessionStatus(session.status)) {
     throw new Error(
-      `Failed to resume session ${sessionId}: HTTP ${res.status}`,
+      `Session ${sessionId} is ${session.status} and cannot be connected to.`,
     );
   }
-}
+  if (session.status === SESSION_STATUS_READY) {
+    return session;
+  }
+  if (session.status === SESSION_STATUS_PAUSED) {
+    await api.resumeSession(sessionId, { signal });
+  }
 
-function delay(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  for (;;) {
+    await sleep(pollIntervalMs, undefined, { signal });
+    session = await readSession(api, sessionId, signal);
+    if (session.status === SESSION_STATUS_READY) {
+      return session;
+    }
+    if (isTerminalSessionStatus(session.status)) {
+      throw new Error(
+        `Session ${sessionId} became ${session.status} while resuming.`,
+      );
+    }
+  }
 }
 
 /**
  * Resolve once the session is SESSION_STATUS_READY, resuming it first if
  * it's paused. Throws if the session is (or becomes) terminal, or if it
- * doesn't reach ready within timeoutMs.
+ * doesn't reach ready within timeoutMs. The deadline bounds the whole wait,
+ * including any request still in flight when it passes.
  *
  * @param {object} options
- * @param {string} [options.apiUrl]
+ * @param {Pick<ReturnType<typeof import("./mars-api.mjs").createMarsApiClient>, "getSession" | "resumeSession">} options.api
  * @param {string} options.sessionId
- * @param {string} options.accessToken
  * @param {number} [options.pollIntervalMs]
  * @param {number} [options.timeoutMs]
- * @param {typeof fetch} [options.fetchImpl] Override for tests
  * @returns {Promise<{status: string, [key: string]: any}>} the session, once ready
  */
 export async function ensureSessionAwake({
-  apiUrl = DEFAULT_API_URL,
+  api,
   sessionId,
-  accessToken,
   pollIntervalMs = DEFAULT_POLL_INTERVAL_MS,
   timeoutMs = DEFAULT_TIMEOUT_MS,
-  fetchImpl = fetch,
 }) {
-  let session = await getSession(apiUrl, sessionId, accessToken, fetchImpl);
-  if (TERMINAL_STATUSES.has(session.status)) {
-    throw new Error(
-      `Session ${sessionId} is ${session.status} and cannot be connected to.`,
-    );
-  }
-  if (session.status === READY) {
-    return session;
-  }
-  if (session.status === PAUSED) {
-    await resumeSession(apiUrl, sessionId, accessToken, fetchImpl);
-  }
-
-  const deadline = Date.now() + timeoutMs;
-  for (;;) {
-    await delay(pollIntervalMs);
-    session = await getSession(apiUrl, sessionId, accessToken, fetchImpl);
-    if (session.status === READY) {
-      return session;
-    }
-    if (TERMINAL_STATUSES.has(session.status)) {
-      throw new Error(
-        `Session ${sessionId} became ${session.status} while resuming.`,
-      );
-    }
-    if (Date.now() >= deadline) {
+  const deadline = AbortSignal.timeout(timeoutMs);
+  try {
+    return await waitUntilReady(api, sessionId, pollIntervalMs, deadline);
+  } catch (error) {
+    if (deadline.aborted) {
       throw new Error(
         `Timed out waiting for session ${sessionId} to become ready.`,
+        { cause: error },
       );
     }
+    throw error;
   }
 }

@@ -77,7 +77,6 @@ describe("startPortForwardTunnel", () => {
 
   it("rejects when accessToken is missing", async () => {
     await expect(
-      // @ts-expect-error deliberately omitting a required field to test runtime validation
       startPortForwardTunnel({ sessionId, remotePort }),
     ).rejects.toThrow(/accessToken/);
   });
@@ -209,6 +208,39 @@ describe("startPortForwardTunnel", () => {
       /server rejected tunnel \(403.*invalid token/,
     );
     expect(tunnel.getLastUpstreamFailure()).toMatchObject({ httpStatus: 403 });
+  });
+
+  it("reads the token on every connection, refusing one once it is gone", async () => {
+    harness = await startFakeHarness({ expectToken: "test-token" });
+    let currentToken: string | null = "test-token";
+    tunnel = await startPortForwardTunnel({
+      sessionId,
+      remotePort,
+      getAccessToken: () => currentToken,
+      apiUrl: `http://127.0.0.1:${harness.port}`,
+      log: () => {},
+    });
+    const exchange = () =>
+      new Promise<string>((resolve) => {
+        const socket = net.connect(
+          { port: tunnel!.localPort, host: "127.0.0.1" },
+          () => socket.write("ping"),
+        );
+        socket.once("data", (data: Buffer) => {
+          socket.destroy();
+          resolve(data.toString());
+        });
+        socket.once("close", () => resolve(""));
+        socket.once("error", () => resolve(""));
+      });
+
+    const beforeSignOut = await exchange();
+    currentToken = null;
+    const afterSignOut = await exchange();
+
+    expect(beforeSignOut).toBe("echo:ping");
+    expect(afterSignOut).toBe("");
+    expect(tunnel.getLastUpstreamFailure()).toMatchObject({ httpStatus: 401 });
   });
 
   it("records a guest-port close code so callers can explain the failure", async () => {
