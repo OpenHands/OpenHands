@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>OpenCode preset — Go configuration verification</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: system-ui, sans-serif;
+      }
+      body {
+        margin: 0;
+        background: light-dark(#f5f6f8, #101216);
+        color: light-dark(#202631, #e2e6ec);
+        line-height: 1.6;
+      }
+      main {
+        max-width: 1000px;
+        margin: auto;
+        padding: 36px 24px 70px;
+      }
+      h1 {
+        font-size: clamp(26px, 4vw, 38px);
+        line-height: 1.2;
+        letter-spacing: -0.03em;
+      }
+      h2 {
+        margin-top: 38px;
+        font-size: 21px;
+      }
+      a {
+        color: light-dark(#285caa, #8fb9f4);
+      }
+      code,
+      pre {
+        font-family: ui-monospace, monospace;
+        font-size: 0.9em;
+        overflow-wrap: anywhere;
+      }
+      pre {
+        white-space: pre-wrap;
+        padding: 18px;
+        background: light-dark(#e9edf3, #20252d);
+        border-radius: 10px;
+      }
+      .notice {
+        border-left: 4px solid #b28734;
+        padding: 12px 18px;
+        background: light-dark(#fff5dc, #30291b);
+      }
+      .table {
+        overflow-x: auto;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+      th,
+      td {
+        text-align: left;
+        vertical-align: top;
+        padding: 12px;
+        border-bottom: 1px solid light-dark(#d8dee6, #343b46);
+      }
+      .pass {
+        color: light-dark(#236044, #88d4aa);
+        white-space: nowrap;
+      }
+      .blocked {
+        color: light-dark(#886006, #e8c273);
+      }
+      .gallery {
+        display: grid;
+        grid-template-columns: 2fr 1fr;
+        gap: 22px;
+        align-items: start;
+      }
+      figure {
+        margin: 0;
+      }
+      img {
+        width: 100%;
+        border-radius: 10px;
+        border: 1px solid #464b53;
+      }
+      figcaption,
+      .meta {
+        font-size: 13px;
+        opacity: 0.8;
+        margin: 10px 0;
+      }
+      @media (max-width: 650px) {
+        .gallery {
+          grid-template-columns: 1fr;
+        }
+        main {
+          padding: 24px 16px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="meta">PR #17758 · Verification on 2026-10-08 (Asia/Shanghai)</p>
+      <h1>One OpenCode preset, with a choice of Go models</h1>
+      <p>
+        I checked the question raised by
+        <a
+          href="https://github.com/OpenHands/OpenHands/issues/17696#issuecomment-6043223137"
+          >ArneNostitz</a
+        >: does using OpenCode Go require setting up every model separately?
+      </p>
+      <div class="notice">
+        <strong
+          >Verdict: configuration is verified; paid Go inference is not.</strong
+        >
+        The existing preset accepts Go model IDs, keeps its registry-owned
+        command, and saves one provider secret. I also ran a real OpenCode ACP
+        conversation with Big Pickle. I do not have a Go subscription
+        credential, so that conversation is not evidence of paid Go access.
+      </div>
+
+      <h2>What a user needs to set up</h2>
+      <ol>
+        <li>
+          Choose <strong>ACP (external subprocess) → OpenCode</strong> in
+          Settings → Agent.
+        </li>
+        <li>
+          Configure the provider once. The registry exposes
+          <code>OPENCODE_API_KEY</code>; existing credentials belong on the
+          machine running the agent-server, not necessarily the browser machine.
+        </li>
+        <li>
+          Select <strong>Model → Custom</strong> and enter an exact ID from
+          OpenCode, such as <code>opencode-go/kimi-k3</code>. Keep the OpenCode
+          preset and default command.
+        </li>
+        <li>
+          Edit that same profile to choose a different model for new
+          conversations. Separate profiles are optional saved preferences, not
+          separate provider integrations.
+        </li>
+      </ol>
+      <p>
+        The official
+        <a href="https://opencode.ai/docs/go/">Go guide</a> describes connecting
+        Go once and using <code>/models</code> to select a model. The
+        <a href="https://opencode.ai/docs/cli/#models">CLI model command</a>
+        lists configured providers. The model catalog currently declares
+        <code>OPENCODE_API_KEY</code> for <code>opencode-go</code>.
+      </p>
+      <p>
+        <strong>Boundary:</strong> Canvas's conversation picker uses the SDK's
+        static suggestions. This PR does not automatically synchronize the
+        entire Go catalog or add every Go model to that picker. A custom model
+        ID is supported in the profile editor; live switching among arbitrary Go
+        models was not verified. Go and Zen model namespaces must not be
+        confused: <code>opencode-go/…</code> versus <code>opencode/…</code>.
+      </p>
+
+      <h2>Run identity</h2>
+      <p>
+        Repository: <code>OpenHands/OpenHands</code>. Base:
+        <code>6e8157147936768bf358903a6341bc01e0ce1ac9</code>. Tested production
+        revision: <code>2102d523774a0f2bd7d51295384f084e72688f00</code>. This
+        follow-up adds two regression cases and review evidence only; it does
+        not change the production bundle.
+      </p>
+      <p>
+        Isolated run <code>pr17758-go-check</code>, starting 2026-10-07 18:24:55
+        UTC; teardown recorded in the private run ledger. Node 26.0.0, macOS
+        arm64, Chromium 153.0.8010.12 (Playwright build 1243), dark theme,
+        system fonts. Agent Server and TypeScript SDK 1.53.0, automation 1.19.0.
+        Ports: ingress 18800, agent-server 18801, automation 18802, frontend
+        18803, reserved editor 19801. Launcher defaults were used; no version
+        overrides. <code>npm run build:app</code> produced the served bundle;
+        doctor confirmed the build fingerprint, backend compatibility,
+        authenticated API and rejected unauthenticated requests.
+      </p>
+      <p>
+        No host login or user workspace was copied. Telemetry was disabled. The
+        Go catalog check and secret-storage check used a clearly invalid
+        placeholder, never a subscription key. One short real inference used the
+        available Big Pickle route; no paid Go call or purchase was made.
+      </p>
+
+      <h2>Coverage ledger</h2>
+      <p>
+        Two affected feature families (F01, F13), not an exhaustive audit of
+        either family. Twelve scoped checks:
+        <strong>10 pass, 0 fail, 1 blocked, 1 outside scope/not-run.</strong>
+      </p>
+      <div class="table">
+        <table>
+          <thead>
+            <tr>
+              <th>Check / entry point</th>
+              <th>Actual observation</th>
+              <th>Result</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Paid Go inference</td>
+              <td>
+                No approved subscription key/entitlement supplied. Repeat with
+                the user's Go account before claiming paid model access.
+              </td>
+              <td class="blocked">Blocked</td>
+            </tr>
+            <tr>
+              <td>Automatic Go catalog in conversation picker</td>
+              <td>
+                Outside this preset PR. Existing picker uses static SDK
+                suggestions; automatic discovery would be follow-up work.
+              </td>
+              <td>Not-run</td>
+            </tr>
+            <tr>
+              <td>F01 desktop onboarding, 1440×1000</td>
+              <td>
+                OpenCode is a selectable first-class option and advances to
+                credentials.
+              </td>
+              <td class="pass">Pass</td>
+            </tr>
+            <tr>
+              <td>F01 phone onboarding, 390×844</td>
+              <td>
+                Selection and credentials steps are usable; exactly one optional
+                OPENCODE_API_KEY field.
+              </td>
+              <td class="pass">Pass</td>
+            </tr>
+            <tr>
+              <td>F13 create Go profile</td>
+              <td>
+                UI save persisted opencode-go/kimi-k3, acp_server=opencode,
+                acp_command=null.
+              </td>
+              <td class="pass">Pass</td>
+            </tr>
+            <tr>
+              <td>F13 reload/edit</td>
+              <td>
+                After reload, the UI and real API both retained the same Go
+                model.
+              </td>
+              <td class="pass">Pass</td>
+            </tr>
+            <tr>
+              <td>F13 change model</td>
+              <td>
+                Saved opencode-go/glm-5.3-flash in the same profile ID; preset
+                and null command retained.
+              </td>
+              <td class="pass">Pass</td>
+            </tr>
+            <tr>
+              <td>F13 phone editor</td>
+              <td>
+                358px-wide form at 390px viewport; no page horizontal overflow.
+                Model can be edited and saved.
+              </td>
+              <td class="pass">Pass</td>
+            </tr>
+            <tr>
+              <td>F13 provider secret storage</td>
+              <td>
+                One placeholder secret saved. Reopening showed “Already saved —
+                leave blank to keep”, a blank masked field, and configured
+                banner. This checks storage, not authentication.
+              </td>
+              <td class="pass">Pass</td>
+            </tr>
+            <tr>
+              <td>F13 real ACP conversation</td>
+              <td>
+                Expected opencode-acp-verified reply, finish ActionEvent and
+                finished state. Initial 60s poll expired during cold start;
+                actual finish was about 72s after submission.
+              </td>
+              <td class="pass">Pass</td>
+            </tr>
+            <tr>
+              <td>F13 phone reply</td>
+              <td>
+                Actual completed reply and Big Pickle chip readable at 390×844.
+                Layout-only check of that completed conversation.
+              </td>
+              <td class="pass">Pass</td>
+            </tr>
+            <tr>
+              <td>Pinned CLI Go catalog</td>
+              <td>
+                opencode-ai@1.18.23 listed 29 Go models after configuring the
+                placeholder env key and refreshing. With no credential it
+                reported Provider not found. Neither result tests
+                authentication.
+              </td>
+              <td class="pass">Pass</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2>Fresh, real application screenshots</h2>
+      <p>
+        No mocked API, DOM mutation or generated image. Images were captured
+        with the repository's verification CLI and reviewed before publication.
+      </p>
+      <div class="gallery">
+        <figure>
+          <img
+            src="go-model-desktop.png"
+            alt="Reloaded OpenCode profile showing its default command and custom Go model"
+          />
+          <figcaption>
+            Saved and reopened Go model, desktop form capture.
+          </figcaption>
+        </figure>
+        <figure>
+          <img
+            src="go-model-phone.png"
+            alt="OpenCode profile edited at phone width with a Go model ID"
+          />
+          <figcaption>
+            Same profile, phone editor; blank credential field.
+          </figcaption>
+        </figure>
+        <figure>
+          <img
+            src="go-check-acp-reply.png"
+            alt="Real Big Pickle ACP response in Agent Canvas"
+          />
+          <figcaption>
+            Actual Big Pickle ACP reply. Not a paid Go model test.
+          </figcaption>
+        </figure>
+        <figure>
+          <img
+            src="go-check-acp-reply-phone.png"
+            alt="The completed ACP reply at phone width"
+          />
+          <figcaption>Completed reply at phone width.</figcaption>
+        </figure>
+      </div>
+      <details>
+        <summary>First-class OpenCode onboarding</summary>
+        <img
+          src="go-check-onboarding.png"
+          alt="OpenCode selected in real onboarding"
+        />
+      </details>
+
+      <h2>Regression and CI evidence</h2>
+      <p>
+        Added two profile-editor regression cases for Go IDs outside the static
+        suggestions: reopening and changing the model must preserve the OpenCode
+        preset and registry command.
+      </p>
+      <ul>
+        <li>
+          Seven focused suites: <strong>189 tests passed</strong>. Agent
+          settings alone: 50 passed.
+        </li>
+        <li>
+          Full lint/typecheck/format command: passed, 0 errors and 528 existing
+          warnings. Diff whitespace check passed.
+        </li>
+        <li>
+          Production app build passed in this run. App/library builds and
+          locale-completeness checks also passed in the preceding merge
+          validation.
+        </li>
+        <li>
+          GitHub Ubuntu and Windows test-and-build checks passed on production
+          revision 2102d5237. CI for the follow-up commit is separate; do not
+          treat the prior run as that commit's CI.
+        </li>
+        <li>
+          Full local suite from merge validation: 8,538 tests passed, 2 failed,
+          7 todo. The two failures are unchanged Docker session-key policy tests
+          on macOS Bash 3.2; upstream reproduces the same exit-127 failure. See
+          MERGE-VALIDATION.txt. The full local suite is not claimed all-green.
+        </li>
+        <li>
+          PR-description check still fails for the linked issue's missing
+          enhancement label. It is not the required test-and-build check; no
+          human-authored PR section was modified.
+        </li>
+      </ul>
+      <pre>
+npm test -- src/constants/acp-providers.test.ts __tests__/constants/acp-providers.test.ts __tests__/routes/agent-settings.test.tsx __tests__/components/onboarding/choose-agent-step.test.tsx __tests__/components/onboarding/setup-acp-secrets-step.test.tsx src/api/agent-server-compatibility.test.ts src/api/no-direct-agent-server-calls.test.ts
+npm run lint
+OPENCODE_API_KEY=verification-placeholder-not-a-real-key npx --yes --prefer-offline opencode-ai@1.18.23 models opencode-go --refresh</pre
+      >
+
+      <h2>Teardown and remaining work</h2>
+      <p>
+        Deleted the run-owned placeholder secret and QA Go profile through the
+        UI. Stopped only this run's browser and launcher; the verification CLI
+        confirmed all five reserved/listening ports closed. Screenshots and the
+        private evidence ledger were retained, and a retained PNG was checked
+        after shutdown. No browser errors or app warnings were recorded during
+        the tested paths.
+      </p>
+      <p>
+        Remaining prerequisite: approved Go credentials for subscription-backed
+        inference. Remaining optional enhancement: provider-backed discovery of
+        the Go catalog for the live model picker. No claim that all providers,
+        all Go models, tools, permissions, or every settings entry point were
+        exercised.
+      </p>
+      <footer class="meta">
+        Prepared with AI assistance. These checks and screenshots were executed
+        by Codex on behalf of the contributor; this is not a maintainer
+        endorsement or a claim of manual human testing.
+      </footer>
+    </main>
+  </body>
+</html>

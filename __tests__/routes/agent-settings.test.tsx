@@ -250,6 +250,44 @@ describe("AgentSettingsScreen", () => {
     },
   );
 
+  it.each(["opencode-go/kimi-k3", "opencode-go/glm-5.3-flash"])(
+    "preserves the OpenCode preset when reopening and changing Go model %s",
+    async (model) => {
+      const user = userEvent.setup();
+      const { control } = renderAgentSettingsScreen({
+        agentSettingsOverride: {
+          agent_kind: "acp",
+          acp_server: "opencode",
+          acp_command: null,
+          acp_model: model,
+        },
+      });
+
+      expect(await screen.findByTestId("agent-preset-selector")).toHaveValue(
+        "OpenCode",
+      );
+      expect(screen.getByTestId("agent-model-input")).toHaveValue(model);
+      expect(control().buildAgentProfileFields()).toMatchObject({
+        acp_server: "opencode",
+        acp_command: null,
+        acp_model: model,
+      });
+
+      // Go IDs need not be in the SDK's static model suggestions. Changing
+      // the model must not turn the provider into a Custom ACP command.
+      await user.clear(screen.getByTestId("agent-model-input"));
+      await user.type(
+        screen.getByTestId("agent-model-input"),
+        "opencode-go/deepseek-v4-flash",
+      );
+      expect(control().buildAgentProfileFields()).toMatchObject({
+        acp_server: "opencode",
+        acp_command: null,
+        acp_model: "opencode-go/deepseek-v4-flash",
+      });
+    },
+  );
+
   it("clears the model when switching from a built-in provider to Custom", async () => {
     // Picking Custom must not leak the built-in default model onto an
     // unrelated wrapper.
