@@ -1,7 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
-import { cn } from "#/utils/utils";
-import { isApplePlatform } from "#/utils/is-apple-platform";
+import { cn, isApplePlatform } from "#/utils/utils";
 import { StyledTooltip } from "./buttons/styled-tooltip";
 
 const SHORTCUT_HINTS = {

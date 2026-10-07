@@ -35,6 +35,10 @@ export function ConversationConfirmationButtons() {
       return curAgentState === AgentState.AWAITING_USER_CONFIRMATION;
     });
 
+  const hasSubmitted =
+    awaitingAction?.id !== undefined &&
+    submittedEventIds.includes(awaitingAction.id);
+
   const handleConfirmation = useCallback(
     (accept: boolean) => {
       if (!awaitingAction || !conversation) {
@@ -59,7 +63,9 @@ export function ConversationConfirmationButtons() {
 
   // Handle keyboard shortcuts
   useEffect(() => {
-    if (!awaitingAction) {
+    // Ignore shortcuts once a response was sent, so a second press cannot
+    // submit another (or the opposite) answer before the server update arrives
+    if (!awaitingAction || hasSubmitted) {
       return undefined;
     }
 
@@ -82,6 +88,7 @@ export function ConversationConfirmationButtons() {
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat) return;
       // Cancel: Shift+Cmd+Backspace (Mac) or Shift+Ctrl+Backspace (Windows/Linux)
       handleCancelShortcut(event);
       // Continue: Cmd+Enter (Mac) or Ctrl+Enter (Windows/Linux)
@@ -91,14 +98,13 @@ export function ConversationConfirmationButtons() {
     document.addEventListener("keydown", handleKeyDown);
 
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [awaitingAction, handleConfirmation]);
+  }, [awaitingAction, hasSubmitted, handleConfirmation]);
 
   // Only show if agent is waiting for confirmation and we haven't already submitted
   if (
     curAgentState !== AgentState.AWAITING_USER_CONFIRMATION ||
     !awaitingAction ||
-    (awaitingAction.id !== undefined &&
-      submittedEventIds.includes(awaitingAction.id))
+    hasSubmitted
   ) {
     return null;
   }
