@@ -35257,6 +35257,23 @@
     "tr": "Eklenti kuruldu.",
     "uk": "Плагін встановлено."
   },
+  "SETTINGS$PLUGINS_ALREADY_INSTALLED": {
+    "en": "This plugin is already installed. Open its card to Update or Uninstall it.",
+    "ja": "このプラグインはすでにインストールされています。カードを開いて「更新」または「アンインストール」してください。",
+    "zh-CN": "此插件已安装。请打开其卡片进行“更新”或“卸载”。",
+    "zh-TW": "此外掛程式已安裝。請開啟其卡片以「更新」或「解除安裝」。",
+    "ko-KR": "이 플러그인은 이미 설치되어 있습니다. 카드를 열어 업데이트 또는 제거하세요.",
+    "no": "Denne plugin-en er allerede installert. Åpne kortet for å oppdatere eller avinstallere.",
+    "ar": "هذه الإضافة مثبتة بالفعل. افتح بطاقتها للتحديث أو إلغاء التثبيت.",
+    "de": "Dieses Plugin ist bereits installiert. Öffne seine Karte, um es zu aktualisieren oder zu deinstallieren.",
+    "fr": "Ce plugin est déjà installé. Ouvrez sa carte pour le mettre à jour ou le désinstaller.",
+    "it": "Questo plugin è già installato. Apri la sua scheda per Aggiornare o Disinstallare.",
+    "pt": "Este plugin já está instalado. Abra o cartão dele para Atualizar ou Desinstalar.",
+    "es": "Este complemento ya está instalado. Abre su tarjeta para Actualizarlo o Desinstalarlo.",
+    "ca": "Aquest connector ja està instal·lat. Obre'n la targeta per actualitzar-lo o desinstal·lar-lo.",
+    "tr": "Bu eklenti zaten yüklü. Güncellemek veya kaldırmak için kartını açın.",
+    "uk": "Цей плагін уже встановлено. Відкрийте його картку, щоб оновити або видалити."
+  },
   "SETTINGS$PLUGINS_UNINSTALL_SUCCESS": {
     "en": "Plugin uninstalled.",
     "ja": "プラグインをアンインストールしました。",
