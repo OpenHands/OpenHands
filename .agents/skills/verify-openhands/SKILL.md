@@ -3,9 +3,10 @@ name: verify-openhands
 description: >
   This skill should be used to "verify OpenHands features", "test the Canvas UI
   like a user", "drive Agent Canvas", "check a UI change in the real app",
-  "create or update the feature map", or "run the weekly feature audit". Ships
-  control-openhands (launch, doctor, browser, LLM profiles, conversations,
-  evidence, cleanup) and the maintained map of every user-facing feature.
+  "create or update the feature map", "run the daily pass" or "run the weekly
+  feature audit". Ships control-openhands (launch, doctor, browser, LLM
+  profiles, conversations, evidence, map tooling, cleanup) and the maintained
+  map of every user-facing feature.
 triggers:
 - /verify-openhands
 - feature map
@@ -42,8 +43,9 @@ control-openhands --help                # then: control-openhands <command> --he
 Requirements: Node >=24 (the launcher's engine), npm dependencies installed
 (`npm ci --ignore-scripts`), `uv`/`uvx`, and a Chromium Playwright can launch
 (set `CONTROL_OPENHANDS_BROWSER=/path/to/chrome` when the pinned browser is not
-installed). Every command prints one JSON object; exit 0 ok, 1 action failed,
-2 usage, 3 environment.
+installed; `launch` then reports the running stack and `browser start` picks it
+up). Every command prints one JSON object; exit 0 ok, 1 action failed, 2 usage,
+3 environment.
 
 If a user path cannot be driven with the CLI, that is a **harness gap**: extend
 `scripts/control-openhands.mjs` (keep it executable, document the verb in
@@ -127,7 +129,9 @@ control-openhands stop                         # stops only this run; evidence s
   ledger `<run>/evidence/ledger.jsonl`. Nothing is overwritten: a repeated
   screenshot name is saved as `<name>-2.png`, so cite the path the command
   prints; `evidence report` renders the table from
-  [the report contract](references/report.md). Keys, logs, browser profile and
+  [the report contract](references/report.md), fail and blocked rows first with
+  their `--note` (a blocked row names its missing prerequisite there), and
+  `--baseline <yesterday's run>` lists what changed since that ledger. Keys, logs, browser profile and
   downloads stay in `<run>/private/`. Evidence is not automatically public:
   review every image before publishing it. The CLI masks password fields in
   `snapshot`, `value` and `testids`; a screenshot of a visible key field is
@@ -151,9 +155,21 @@ prerequisite; never substitute a mock and call it a pass.
 
 ## Choose the job
 
-- **Verify a change or a PR**: map the changed paths to feature IDs (the map's
-  `Source:` lines help), drive every entry point those features list at desktop
-  and phone viewports, and report with [the report contract](references/report.md).
+- **Verify a change or a PR**: `control-openhands map affected --base <ref>`
+  (or `--paths` with the PR's file list) maps the changed paths to the
+  families whose `Source:` lines own them, and separates shared code to widen,
+  `src/` paths no family owns (a map gap) and non-user-facing paths. Drive every entry point those features list at
+  desktop and phone viewports, and report with
+  [the report contract](references/report.md).
+- **Run the daily pass**: follow [references/daily.md](references/daily.md):
+  static checks (`map check`, `map coverage`, `map testids`), the changed
+  families since the `Maintenance baseline` line of the map index
+  (`control-openhands map baseline`; `map affected` starts there by default),
+  a smoke row per family, and a date-derived rotation that gives every family
+  a full live pass once a week. A pass that finished its changed families
+  proposes `TARGET` as the next baseline with `map baseline --set "$TARGET"`
+  in its PR; compare ledgers with `evidence report --baseline` when
+  yesterday's is at hand.
 - **Create or extend the map**: follow [references/mapping.md](references/mapping.md).
   It teaches how to discover features, write entries against the CLI and prove
   each one live. `control-openhands map coverage` measures what is still unmapped.

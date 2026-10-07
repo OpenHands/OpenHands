@@ -1,8 +1,9 @@
 import { render, screen } from "@testing-library/react";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ConversationTabsContextMenu } from "#/components/features/conversation/conversation-tabs/conversation-tabs-context-menu";
+import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { useConversationStore } from "#/stores/conversation-store";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { __resetActiveStoreForTests } from "#/api/backend-registry/active-store";
@@ -110,6 +111,41 @@ const renderAnchoredMenu = (rect: {
   return document.querySelector<HTMLElement>('div[style*="position: fixed"]');
 };
 
+/** The ⋮ trigger toggles and anchors the menu, as in ConversationTabs. */
+function MenuWithTrigger() {
+  const [isOpen, setIsOpen] = useState(false);
+  const anchorRef = useRef<HTMLButtonElement>(null);
+  return (
+    <>
+      <button
+        type="button"
+        ref={anchorRef}
+        data-testid="tabs-menu-trigger"
+        onClick={() => setIsOpen(!isOpen)}
+      />
+      <ConversationTabsContextMenu
+        isOpen={isOpen}
+        onClose={() => setIsOpen(false)}
+        ignoreOutsideClickRef={anchorRef}
+        anchorRef={anchorRef}
+      />
+    </>
+  );
+}
+
+// Stands in for a layer opened over the menu without an outside click, such
+// as the command menu opened with Ctrl+K.
+function LayerOverMenu({
+  isOpen,
+  onClose,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+}) {
+  useCloseOnEscape(isOpen, onClose);
+  return null;
+}
+
 describe("ConversationTabsContextMenu", () => {
   beforeEach(() => {
     localStorage.clear();
@@ -171,7 +207,9 @@ describe("ConversationTabsContextMenu", () => {
 
     render(<ConversationTabsContextMenu isOpen={true} onClose={vi.fn()} />);
 
-    await user.click(screen.getByTestId("conversation-tabs-menu-open-terminal"));
+    await user.click(
+      screen.getByTestId("conversation-tabs-menu-open-terminal"),
+    );
 
     expect(useConversationStore.getState().selectedTab).toBe("terminal");
     const storedState = JSON.parse(
@@ -228,6 +266,51 @@ describe("ConversationTabsContextMenu", () => {
 
     const storeState = useConversationStore.getState();
     expect(storeState.hasRightPanelToggled).toBe(true);
+  });
+
+  it.each(["tabs-menu-trigger", "conversation-tabs-menu-open-files"])(
+    "closes with Escape from %s and returns focus to its trigger",
+    async (focusedTestId) => {
+      const user = userEvent.setup();
+      render(<MenuWithTrigger />);
+      const trigger = screen.getByTestId("tabs-menu-trigger");
+
+      await user.click(trigger);
+      screen.getByTestId(focusedTestId).focus();
+      await user.keyboard("{Escape}");
+
+      expect(
+        screen.queryByTestId("conversation-tabs-menu-open-files"),
+      ).not.toBeInTheDocument();
+      expect(trigger).toHaveFocus();
+    },
+  );
+
+  it("stays open while a layer opened over it takes Escape", async () => {
+    const user = userEvent.setup();
+    const closeLayer = vi.fn();
+    const renderWithLayer = (isLayerOpen: boolean) => (
+      <>
+        <MenuWithTrigger />
+        <LayerOverMenu isOpen={isLayerOpen} onClose={closeLayer} />
+      </>
+    );
+    const { rerender } = render(renderWithLayer(false));
+    await user.click(screen.getByTestId("tabs-menu-trigger"));
+    rerender(renderWithLayer(true));
+
+    await user.keyboard("{Escape}");
+    expect(closeLayer).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByTestId("conversation-tabs-menu-open-files"),
+    ).toBeInTheDocument();
+
+    // Once the layer above has closed, the next Escape reaches the menu.
+    rerender(renderWithLayer(false));
+    await user.keyboard("{Escape}");
+    expect(
+      screen.queryByTestId("conversation-tabs-menu-open-files"),
+    ).not.toBeInTheDocument();
   });
 
   describe("with tasklist", () => {

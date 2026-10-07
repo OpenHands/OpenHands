@@ -3,7 +3,9 @@
 A feature map rots the moment the app changes. This pass keeps it honest and
 answers three separate questions about the interval since the last pass:
 **Is each feature present? Does it work and look right? Was each change
-documented and intended?** A merged PR proves none of the last two.
+documented and intended?** A merged PR proves none of the last two. Between
+full passes, [daily.md](daily.md) runs the delta pass each day against the
+same `Maintenance baseline` line of the map index, and moves it the same way.
 
 The unit of rigor is the feature: every feature file gets source coverage and
 live coverage, without re-proving every sentence. This is a procedure, not a
@@ -28,8 +30,18 @@ Record the UTC run time, budget (model, spend), accounts available and permitted
 side effects. Fetch `main` and freeze its full SHA as TARGET. Check
 `git rev-parse --is-shallow-repository`; deepen until BASE is present (an empty
 log from a shallow clone is not "no changes"). BASE is the previous completed
-pass's recorded TARGET; on a first run, the last first-parent commit before the
-agreed cutoff (`git rev-list --first-parent -1 --before="$CUTOFF" "$TARGET"`).
+pass's recorded TARGET, kept on the `Maintenance baseline` line of
+[the map index](feature-map/README.md); on a first run, the last first-parent
+commit before the agreed cutoff
+(`git rev-list --first-parent -1 --before="$CUTOFF" "$TARGET"`). A pass that
+changes the map updates that line to its TARGET in its PR, so merging the PR
+accepts the new baseline.
+
+A daily pass may be a **delta pass**: source and live coverage only for the
+features whose paths changed in BASE..TARGET (§3) and for rows that link an
+issue closed since BASE. It says "delta" in its report. A full pass is still
+needed now and then (weekly, or before a release), because Agent Server and
+automation releases change behavior without touching this repository.
 
 ```sh
 git merge-base --is-ancestor "$BASE" "$TARGET"
@@ -59,9 +71,11 @@ to justify a change after the fact.
 
 ## 3. Index hygiene and source wave
 
-Run `control-openhands map check` and `map coverage`; fix missing, duplicate and
-dead entries (`map check --fix-counts` refreshes the index counts). Then give one read-only reader per feature file (parallel if
-delegation is available). Each reads current source for that feature and returns:
+Run `control-openhands map check`, `map coverage` and `map testids`; fix
+missing, duplicate and dead entries, `Source:` paths that are gone and test
+ids no literal in `src/` accounts for (`map check --fix-counts` refreshes the
+index counts). Then give one read-only reader per
+feature file (parallel if delegation is available). Each reads current source for that feature and returns:
 summary, source entry points, likely drift with citations (or none), new
 surfaces missing from the map, and one live recipe. Readers never edit files or
 drive the browser.
@@ -72,10 +86,12 @@ re-drive any that a current verb can now reach (compare with
 `control-openhands --help` and `help browser`).
 
 Map **every changed path** in BASE..TARGET to a feature ID or an explicit
-non-user-facing reason. For shared components, CSS, API clients, settings
-schemas and dependency bumps, expand to their consumers rather than sampling one
-convenient screen. A new surface needs a concrete source path before it is
-called missing; then add it per [mapping.md](mapping.md).
+non-user-facing reason: `control-openhands map affected --base "$BASE" --target
+"$TARGET"` does the first cut from the `Source:` lines. Its `shared` paths (components, CSS, API clients,
+hooks, stores, settings schemas, dependency bumps) expand to their consumers
+rather than sampling one convenient screen; its `unmapped` paths under `src/`
+are map gaps. A new surface needs a concrete source path before it is called
+missing; then add it per [mapping.md](mapping.md).
 
 ## 4. Live pass
 
@@ -121,7 +137,9 @@ automatically a bug and a zero difference does not prove behavior.
 
 Use [the report contract](report.md): verdict first, then family and check
 counts, intent gaps, defects with issue links, blocked checks with their
-prerequisites. For **changed**, open at most one PR from current `main`, re-read
+prerequisites (`control-openhands evidence report --baseline <previous run>`
+renders the counts, the blocked rows' notes and what changed since the last
+accepted ledger). For **changed**, open at most one PR from current `main`, re-read
 every changed file first, and follow the repository's PR template. Finish with
 `control-openhands stop`, retained evidence paths, and the exact inputs needed to
 unblock what was blocked. Name the proposed next baseline; never replace an

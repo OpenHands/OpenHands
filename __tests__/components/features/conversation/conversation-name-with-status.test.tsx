@@ -6,6 +6,7 @@ import {
   OH_STATUS_ERROR_COLOR,
   OH_STATUS_SUCCESS_COLOR,
 } from "#/constants/status-colors";
+import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { AgentState } from "#/types/agent-state";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 
@@ -86,26 +87,20 @@ vi.mock("#/components/features/controls/server-status-context-menu", () => ({
       data-is-pausing={String(isPausing)}
       data-position={position}
     >
-      <button type="button" data-testid="close-status-menu" onClick={onClose}>
-        close
-      </button>
+      <button type="button" data-testid="close-status-menu" onClick={onClose} />
       {onStopServer && (
         <button
           type="button"
           data-testid="stop-server-button"
           onClick={onStopServer}
-        >
-          stop
-        </button>
+        />
       )}
       {onStartServer && (
         <button
           type="button"
           data-testid="start-server-button"
           onClick={onStartServer}
-        >
-          start
-        </button>
+        />
       )}
     </div>
   ),
@@ -136,6 +131,27 @@ function renderSubject(onParentClick = vi.fn()) {
  */
 function openStatusMenu() {
   fireEvent.click(screen.getByTestId("server-status-menu-trigger"));
+}
+
+function hoverStatusMenu() {
+  fireEvent.pointerEnter(
+    screen.getByTestId("server-status-menu-trigger")
+      .parentElement as HTMLElement,
+    { pointerType: "mouse" },
+  );
+}
+
+function pressEscape() {
+  fireEvent.keyDown(document.activeElement ?? document.body, {
+    key: "Escape",
+  });
+}
+
+// Stands in for a layer opened before the status menu, such as the
+// context-window popover.
+function LayerUnderMenu({ onClose }: { onClose: () => void }) {
+  useCloseOnEscape(true, onClose);
+  return null;
 }
 
 describe("conversation name status controls", () => {
@@ -276,6 +292,63 @@ describe("conversation name status controls", () => {
     expect(
       screen.queryByTestId("server-status-context-menu"),
     ).not.toBeInTheDocument();
+  });
+
+  it.each(["server-status-menu-trigger", "stop-server-button"])(
+    "closes a clicked-open menu with Escape from %s and returns focus to the dot",
+    (focusedTestId) => {
+      renderSubject();
+      const trigger = screen.getByTestId("server-status-menu-trigger");
+
+      openStatusMenu();
+      screen.getByTestId(focusedTestId).focus();
+      pressEscape();
+
+      expect(
+        screen.queryByTestId("server-status-context-menu"),
+      ).not.toBeInTheDocument();
+      expect(trigger).toHaveAttribute("aria-expanded", "false");
+      expect(trigger).toHaveFocus();
+    },
+  );
+
+  it("closes a hover-opened menu with Escape without moving focus", () => {
+    render(
+      <>
+        <textarea data-testid="composer" />
+        <ConversationNameWithStatus />
+      </>,
+    );
+    const composer = screen.getByTestId("composer");
+    composer.focus();
+
+    hoverStatusMenu();
+    pressEscape();
+
+    expect(
+      screen.queryByTestId("server-status-context-menu"),
+    ).not.toBeInTheDocument();
+    expect(composer).toHaveFocus();
+  });
+
+  it("closes a menu opened over another layer before that layer", () => {
+    const closeLayer = vi.fn();
+    render(
+      <>
+        <LayerUnderMenu onClose={closeLayer} />
+        <ConversationNameWithStatus />
+      </>,
+    );
+
+    hoverStatusMenu();
+    pressEscape();
+    expect(
+      screen.queryByTestId("server-status-context-menu"),
+    ).not.toBeInTheDocument();
+    expect(closeLayer).not.toHaveBeenCalled();
+
+    pressEscape();
+    expect(closeLayer).toHaveBeenCalledTimes(1);
   });
 
   it.each([
