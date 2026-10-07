@@ -518,4 +518,96 @@ describe("ChatInputActions — More input actions overflow menu (#17925)", () =>
       within(submenu).getByTestId("llm-profile-menu-stub"),
     ).toBeInTheDocument();
   });
+
+  describe("viewport-aware submenu placement (#18063)", () => {
+    // The trigger sits near the right edge at 320 px, so a submenu opened to
+    // the right of its row runs past the viewport. Row geometry: right edge
+    // 268, top 571. Submenu: 220×190.
+    const stubGeometry = () => {
+      const row = screen.getByTestId("overflow-model-button")
+        .parentElement as HTMLDivElement;
+      row.getBoundingClientRect = () =>
+        DOMRect.fromRect({ x: 68, y: 571, width: 200, height: 34 });
+      // The menu is absolutely positioned inside a zero-size anchor div; the
+      // hook measures the menu itself (the anchor's child) and the anchor.
+      const content = screen.getByTestId("overflow-model-submenu");
+      content.getBoundingClientRect = () =>
+        DOMRect.fromRect({ x: 0, y: 0, width: 220, height: 190 });
+      const wrapper = content.parentElement as HTMLDivElement;
+      wrapper.getBoundingClientRect = () =>
+        DOMRect.fromRect({ x: 0, y: 0, width: 0, height: 0 });
+      return wrapper;
+    };
+
+    it("pins the open submenu inside a 320 px viewport instead of overflowing it", () => {
+      renderWithProviders(<ChatInputActions disabled={false} />);
+      clickTrigger();
+      const wrapper = stubGeometry();
+      vi.stubGlobal("innerWidth", 320);
+      vi.stubGlobal("innerHeight", 700);
+
+      fireEvent.click(screen.getByTestId("overflow-model-button"));
+
+      // rowRect.right + 1 = 269 would end at 489 px in a 320 px viewport;
+      // clamped to viewport − margin − width = 92. rowRect.top − 4 = 567 has
+      // no room below either: clamped to 700 − 8 − 190 = 502. The inline
+      // offsets are relative to the row, so add its origin (68 / 571) back
+      // to check where the submenu actually lands on screen.
+      expect(68 + parseFloat(wrapper.style.left)).toBe(92);
+      expect(571 + parseFloat(wrapper.style.top)).toBe(502);
+      // `ml-px` is folded into the measured offsets; the margin must not
+      // shift the pinned menu past the clamped target.
+      expect(wrapper.style.marginLeft).toBe("0px");
+    });
+
+    it("with room to the right, keeps the class-based desktop placement", () => {
+      renderWithProviders(<ChatInputActions disabled={false} />);
+      clickTrigger();
+      const wrapper = stubGeometry();
+      vi.stubGlobal("innerWidth", 1024);
+      vi.stubGlobal("innerHeight", 768);
+
+      fireEvent.click(screen.getByTestId("overflow-model-button"));
+
+      // Offsets relative to the row: 201 = row width (200) + the `ml-px` 1px
+      // gap, −4 = the `top-[-4px]` class — identical to the class-based
+      // placement, so desktop open-in-place is unchanged.
+      expect(wrapper.style.left).toBe("201px");
+      expect(wrapper.style.top).toBe("-4px");
+    });
+
+    it("clamps to the viewport margin instead of negative coordinates on a tiny viewport", () => {
+      renderWithProviders(<ChatInputActions disabled={false} />);
+      clickTrigger();
+      const wrapper = stubGeometry();
+      vi.stubGlobal("innerWidth", 200);
+      vi.stubGlobal("innerHeight", 150);
+
+      fireEvent.click(screen.getByTestId("overflow-model-button"));
+
+      // 200 − 8 − 220 and 150 − 8 − 190 are both negative → floor at the
+      // 8 px margin rather than a negative coordinate: 8 − rowRect.left(68)
+      // and 8 − rowRect.top(571) as row-relative offsets.
+      expect(68 + parseFloat(wrapper.style.left)).toBe(8);
+      expect(571 + parseFloat(wrapper.style.top)).toBe(8);
+    });
+
+    it("releases the pinned placement when the submenu closes", () => {
+      renderWithProviders(<ChatInputActions disabled={false} />);
+      clickTrigger();
+      const wrapper = stubGeometry();
+      vi.stubGlobal("innerWidth", 320);
+      vi.stubGlobal("innerHeight", 700);
+
+      fireEvent.click(screen.getByTestId("overflow-model-button"));
+      expect(wrapper.style.left).not.toBe("");
+
+      fireEvent.click(screen.getByTestId("overflow-model-button"));
+
+      // Closed → no inline pinning; the class-based placement (hover path)
+      // takes over again.
+      expect(wrapper.style.left).toBe("");
+      expect(wrapper.style.top).toBe("");
+    });
+  });
 });
