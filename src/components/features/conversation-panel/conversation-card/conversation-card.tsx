@@ -9,7 +9,10 @@ import ConversationService from "#/api/conversation-service/conversation-service
 import { getDisplayConversationTags } from "#/api/agent-server-adapter";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
-import { RepositorySelection } from "#/api/open-hands.types";
+import {
+  RepositorySelection,
+  type ConversationTrigger,
+} from "#/api/open-hands.types";
 import { formatTimeDelta } from "#/utils/format-time-delta";
 import {
   hoverRevealActionClassName,
@@ -22,6 +25,7 @@ import { ConversationCardActions } from "./conversation-card-actions";
 import { ConversationCardFooter } from "./conversation-card-footer";
 import { ConversationStatusBadges } from "./conversation-status-badges";
 import { useDownloadConversation } from "#/hooks/use-download-conversation";
+import { getConversationTriggerLabel } from "../conversation-panel-list-helpers";
 
 interface ConversationCardProps {
   onClick?: () => void;
@@ -61,6 +65,13 @@ interface ConversationCardProps {
   tags?: Record<string, string> | null;
   /** Gates the tag-chip row; wired to the panel's "Tags" metadata toggle. */
   showTags?: boolean;
+  /**
+   * Server-side trigger provenance (``AppConversation.trigger``). Rendered as a
+   * localized "why did this run start" chip via
+   * ``getConversationTriggerLabel``; local agent-server rows fall back to the
+   * automation tags in ``tags``.
+   */
+  trigger?: ConversationTrigger | null;
   isArchived?: boolean;
   isPinned?: boolean;
   onTogglePin?: () => void;
@@ -95,6 +106,7 @@ export function ConversationCard({
   acpServer = null,
   tags = null,
   showTags = false,
+  trigger = null,
   isArchived = false,
   isPinned = false,
   onTogglePin,
@@ -108,6 +120,7 @@ export function ConversationCard({
   const displayTags = getDisplayConversationTags(tags);
   const hasDisplayTags = displayTags.length > 0;
   const showTagChipRow = showTags && hasDisplayTags;
+  const triggerLabelKey = getConversationTriggerLabel({ trigger, tags });
 
   const onTitleSave = (newTitle: string) => {
     if (newTitle !== "" && newTitle !== title) {
@@ -247,6 +260,7 @@ export function ConversationCard({
   const shouldRenderFooter =
     showRepositoryMetadata ||
     isArchived ||
+    triggerLabelKey !== null ||
     (showLlmProfiles && (agentKind === "acp" || !!llmModel)) ||
     (showTagChipRow && displayTags.length > 0);
 
@@ -381,6 +395,7 @@ export function ConversationCard({
           tags={tags}
           showTags={showTagChipRow}
           isArchived={isArchived}
+          triggerLabelKey={triggerLabelKey}
         />
       )}
     </div>

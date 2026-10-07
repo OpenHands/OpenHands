@@ -43,6 +43,13 @@ vi.mock("react-i18next", async () => {
           CONVERSATION$ACP_AGENT_GENERIC: "ACP",
           CONVERSATION_PANEL$PIN_CONVERSATION: "Pin conversation",
           CONVERSATION_PANEL$UNPIN_CONVERSATION: "Unpin conversation",
+          CONVERSATION_PANEL$TRIGGER_USER: "Started by you",
+          CONVERSATION_PANEL$TRIGGER_AUTOMATION: "Started by an automation",
+          CONVERSATION_PANEL$TRIGGER_RESOLVER: "Started by a resolver",
+          CONVERSATION_PANEL$TRIGGER_SUGGESTED_TASK:
+            "Started from a suggested task",
+          CONVERSATION_PANEL$TRIGGER_MICROAGENT_MANAGEMENT:
+            "Started from microagent management",
         };
         return translations[key] || key;
       },
@@ -1263,5 +1270,90 @@ describe("ConversationCard", () => {
       screen.getByTestId("conversation-pin-toggle-conversation-1"),
     ).toBeVisible();
     expect(screen.getByRole("time")).toBeInTheDocument();
+  });
+
+  it("shows the localized trigger-reason label for a recognized trigger", () => {
+    const { rerender } = renderWithProviders(
+      <ConversationCard
+        title="Conversation 1"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        trigger="gui"
+      />,
+    );
+
+    expect(
+      screen.getByTestId("conversation-card-trigger-reason"),
+    ).toHaveTextContent("Started by you");
+
+    rerender(
+      <ConversationCard
+        title="Conversation 1"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        trigger="automation"
+      />,
+    );
+
+    expect(
+      screen.getByTestId("conversation-card-trigger-reason"),
+    ).toHaveTextContent("Started by an automation");
+  });
+
+  it("falls back to the automation label for a local row with an automation tag", () => {
+    renderWithProviders(
+      <ConversationCard
+        title="Conversation 1"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        trigger={null}
+        tags={{ automationname: "Nightly Audit" }}
+      />,
+    );
+
+    expect(
+      screen.getByTestId("conversation-card-trigger-reason"),
+    ).toHaveTextContent("Started by an automation");
+  });
+
+  it("renders no trigger-reason label for null, absent, or unknown triggers", () => {
+    const { rerender } = renderWithProviders(
+      <ConversationCard
+        title="Conversation 1"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("conversation-card-trigger-reason"),
+    ).not.toBeInTheDocument();
+
+    rerender(
+      <ConversationCard
+        title="Conversation 1"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        trigger={null}
+        tags={{ origin: "slack" }}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("conversation-card-trigger-reason"),
+    ).not.toBeInTheDocument();
+
+    rerender(
+      <ConversationCard
+        title="Conversation 1"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        trigger={"standing_intent" as never}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("conversation-card-trigger-reason"),
+    ).not.toBeInTheDocument();
   });
 });
