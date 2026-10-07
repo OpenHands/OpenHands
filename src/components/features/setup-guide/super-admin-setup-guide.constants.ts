@@ -39,8 +39,9 @@ export interface SuperAdminSetupStep {
 }
 
 /**
- * Mirrors the enterprise guide's steps, order and destinations so both apps
- * show the same progress.
+ * Mirrors the enterprise guide's steps and order so both apps show the same
+ * progress. Steps that Canvas can do itself (automation templates, MCP
+ * servers) open in Canvas; the rest open the enterprise app.
  */
 export const SUPER_ADMIN_SETUP_STEPS: readonly SuperAdminSetupStep[] = [
   {
@@ -63,7 +64,8 @@ export const SUPER_ADMIN_SETUP_STEPS: readonly SuperAdminSetupStep[] = [
     id: "add-integration",
     labelKey: I18nKey.ONBOARDING$SETUP_GUIDE_STEP_INTEGRATION,
     completion: "mcp_server",
-    destination: { kind: "cloud", path: "/settings/mcp", withOrg: true },
+    // Canvas's MCP page saves to the same cloud settings the step checks.
+    destination: { kind: "canvas", path: "/mcp" },
   },
   {
     id: "invite-users",
