@@ -33,6 +33,10 @@ export const AGENT_PROFILES_QUERY_KEYS = {
     ["agent-profiles", backendId, orgId, "detail", name] as const,
 } as const;
 
+export const TOOL_CATALOG_QUERY_KEYS = {
+  all: ["tool-catalog"] as const,
+} as const;
+
 export const PROVIDER_CONNECTIONS_QUERY_KEYS = {
   all: ["provider-connections"] as const,
 } as const;
@@ -89,6 +93,14 @@ export const CANVAS_EXTENSIONS_QUERY_KEYS = {
       connectionRevision,
       name,
     ] as const,
+} as const;
+
+export const SUPER_ADMIN_SETUP_QUERY_KEYS = {
+  /** Every backend's setup-guide state, for invalidation. */
+  all: ["super-admin-setup-state"] as const,
+  /** Enterprise Super Admin setup-guide state for a cloud backend. */
+  state: (backendId: string, connectionRevision: number) =>
+    ["super-admin-setup-state", backendId, connectionRevision] as const,
 } as const;
 
 export const SETUP_QUERY_KEYS = {

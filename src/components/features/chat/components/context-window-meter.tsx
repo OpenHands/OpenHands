@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useContextWindowUsage } from "#/hooks/use-context-window-usage";
 import { useSelectConversationTab } from "#/hooks/use-select-conversation-tab";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
+import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { useCompactContextAction } from "#/hooks/use-compact-context-action";
 import { ContextMenuListItem } from "#/components/features/context-menu/context-menu-list-item";
 import { ConversationNameContextMenuIconText } from "#/components/features/conversation/conversation-name-context-menu-icon-text";
@@ -44,6 +45,7 @@ export function ContextWindowMeter() {
     () => setIsPopoverOpen(false),
     triggerRef,
   );
+  useCloseOnEscape(isPopoverOpen, () => setIsPopoverOpen(false), triggerRef);
   const { handleCompact, isCompacting, isDisabled } = useCompactContextAction(
     usage?.perTurnToken ?? 0,
   );
@@ -72,6 +74,9 @@ export function ContextWindowMeter() {
       <StyledTooltip
         content={t(I18nKey.CHAT_INTERFACE$SHOW_CONTEXT)}
         placement="top"
+        // While the popover is open the hint is redundant, and an open
+        // tooltip would swallow the Escape meant for the popover.
+        isDisabled={isPopoverOpen}
       >
         <button
           ref={triggerRef}

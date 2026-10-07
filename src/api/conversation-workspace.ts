@@ -72,10 +72,38 @@ export async function resolveNewConversationWorkspace(options: {
       clientOptions.host,
     );
   const workingDir = await resolveAbsoluteAgentServerPath(base);
-  const hooksProjectDir = options.workingDir
-    ? workingDir
-    : await resolveAbsoluteAgentServerPath(
-        getWorkspaceRootForBackend(clientOptions.host),
-      );
+  const hooksProjectDir = await resolveHooksProjectDir(
+    options.workingDir,
+    clientOptions.host,
+  );
   return { workingDir, hooksProjectDir, isolated: false };
+}
+
+/**
+ * Workspace root whose `.openhands/hooks.json` a host-workspace conversation
+ * loads: the folder the user attached, else the backend's workspace root,
+ * never the per-conversation working dir or worktree (#16907).
+ */
+function resolveHooksProjectDir(
+  selectedWorkspace: string | null | undefined,
+  host: string,
+): Promise<string> {
+  return resolveAbsoluteAgentServerPath(
+    selectedWorkspace || getWorkspaceRootForBackend(host),
+  );
+}
+
+/**
+ * The hooks project dir of an existing conversation, resolved as
+ * `resolveNewConversationWorkspace()` resolved it at start from the workspace
+ * the user attached. `null` on an isolated (Docker) backend, whose
+ * conversations never load host hooks.
+ */
+export async function resolveConversationHooksProjectDir(
+  selectedWorkspace: string | null | undefined,
+): Promise<string | null> {
+  const clientOptions = getAgentServerClientOptions();
+  const info = await getConversationServerInfo(clientOptions);
+  if (usesIsolatedWorkspace(info)) return null;
+  return resolveHooksProjectDir(selectedWorkspace, clientOptions.host);
 }

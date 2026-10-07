@@ -73,6 +73,15 @@ export const isMobileUserAgent = (): boolean =>
   );
 
 /**
+ * Detect an Apple platform (macOS, iOS, iPadOS), whose keyboard shortcuts use
+ * ⌘ where other platforms use Ctrl. iPadOS Safari reports a Mac user agent,
+ * which this matches too.
+ */
+export const isApplePlatform = (): boolean =>
+  typeof navigator !== "undefined" &&
+  /Macintosh|Mac OS X|iPhone|iPad|iPod/.test(navigator.userAgent);
+
+/**
  * Detect if the user is on a mobile device.
  * Touch support alone is not sufficient — touchscreen laptops have touch
  * but use a mouse/trackpad as primary input. We check that the primary

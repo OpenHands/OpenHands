@@ -61,3 +61,25 @@ export interface CloudGitUser {
   name: string | null;
   email: string | null;
 }
+
+/**
+ * Server-derived Super Admin setup-guide steps, from
+ * `GET /api/admin/setup-state` on an OpenHands Enterprise backend.
+ */
+export interface CloudSetupGuideSteps {
+  org_llm: boolean;
+  mcp_server: boolean;
+  automation: boolean;
+  invite: boolean;
+}
+
+/**
+ * Subset of the enterprise setup-state the GUI reads. `guide_steps` is
+ * non-null only for the first Super Admin while the guide has an
+ * organization and has not been dismissed.
+ */
+export interface CloudSetupState {
+  guide_org_id: string | null;
+  guide_dismissed: boolean;
+  guide_steps: CloudSetupGuideSteps | null;
+}

@@ -1,4 +1,5 @@
 import {
+  act,
   render,
   screen,
   fireEvent,
@@ -272,6 +273,27 @@ describe("Sidebar", () => {
     });
   });
 
+  it("leaves the mobile drawer open when a menu inside it already handled Escape", () => {
+    renderSidebar("/conversations");
+    const toggle = screen.getByTestId("sidebar-mobile-menu-toggle");
+    fireEvent.click(toggle);
+
+    const handledEscape = new KeyboardEvent("keydown", {
+      key: "Escape",
+      bubbles: true,
+      cancelable: true,
+    });
+    handledEscape.preventDefault();
+    act(() => {
+      document.body.dispatchEvent(handledEscape);
+    });
+
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+  });
+
   it("toggles between expanded and collapsed states and persists the choice", () => {
     const { unmount } = renderSidebar("/conversations");
 
@@ -508,6 +530,29 @@ describe("Sidebar", () => {
       "Automate",
     );
   });
+
+  it.each(["/customize", "/mcp", "/skills", "/plugins", "/apps"])(
+    "marks the Customize row as the current page on %s",
+    (path) => {
+      renderSidebar(path);
+
+      expect(screen.getByTestId("sidebar-skills-link")).toHaveAttribute(
+        "aria-current",
+        "page",
+      );
+    },
+  );
+
+  it.each(["/conversations", "/automations"])(
+    "does not mark the Customize row as current on %s",
+    (path) => {
+      renderSidebar(path);
+
+      expect(screen.getByTestId("sidebar-skills-link")).not.toHaveAttribute(
+        "aria-current",
+      );
+    },
+  );
 
   it("pins and unpins a sidebar page as the home route without navigating", () => {
     // Arrange: the mocked active backend is `local` with no org.
