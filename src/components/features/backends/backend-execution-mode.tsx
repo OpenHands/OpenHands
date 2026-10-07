@@ -18,12 +18,17 @@ const MODE_LABEL_KEYS: Record<BackendExecutionModeValue, I18nKey> = {
  * agent-server runs conversations in. Renders nothing when the server does not
  * report a mode, so older servers are visually unchanged.
  *
+ * Gated to local backends: cloud backends have no `/server_info`, and a cloud
+ * row that happens to share a host and key with a local backend must not
+ * inherit the local backend's cached mode.
+ *
  * @spec BM-004 — Display the active backend's execution mode
  */
 export function BackendExecutionMode({ backend }: { backend: Backend }) {
   const { t } = useTranslation("openhands");
   const { data: serverInfo } = useBackendServerInfo(backend);
-  const mode = getBackendExecutionMode(serverInfo);
+  const mode =
+    backend.kind === "local" ? getBackendExecutionMode(serverInfo) : null;
 
   if (!mode) return null;
 

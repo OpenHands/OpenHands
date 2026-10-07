@@ -336,21 +336,22 @@ export function assertAgentServerVersionIsSupported(
 }
 
 /**
- * Validates a local agent-server backend with a two-step probe:
+ * Probes a local agent-server backend with a two-step request:
  *  1. GET /api/settings — authenticates the configured session API key;
  *     a 401 throws an Error with message {@link INVALID_BACKEND_API_KEY_ERROR}.
  *  2. GET /server_info  — asserts the server meets the minimum version floor.
  *
- * Returns the display version string reported by the server, or `null` when
- * the server does not report a parseable version. Throws on any failure.
+ * Returns the raw server info so callers can read both the display version
+ * ({@link getDisplayAgentServerVersion}) and the execution mode
+ * ({@link getBackendExecutionMode}) from one response. Throws on any failure.
  *
  * Used by both the backend health poller and the backend-form connection test
  * so that auth-check semantics (status codes, error messages) stay in one place.
  */
-export async function validateLocalBackend(
+export async function probeLocalBackendServerInfo(
   backend: Pick<Backend, "host" | "apiKey">,
   timeout: number,
-): Promise<string | null> {
+): Promise<AgentServerInfo> {
   const clientOptions = getAgentServerClientOptions({
     host: backend.host,
     sessionApiKey: backend.apiKey || null,
@@ -361,13 +362,21 @@ export async function validateLocalBackend(
     await new SettingsClient(clientOptions).getSettings();
     const serverInfo = await new ServerClient(clientOptions).getServerInfo();
     assertAgentServerVersionIsSupported(serverInfo);
-    return getDisplayAgentServerVersion(serverInfo);
+    return serverInfo as AgentServerInfo;
   } catch (error) {
     if (isSdkHttpStatusError(error, 401)) {
       throw new Error(INVALID_BACKEND_API_KEY_ERROR);
     }
     throw error;
   }
+}
+
+export async function validateLocalBackend(
+  backend: Pick<Backend, "host" | "apiKey">,
+  timeout: number,
+): Promise<string | null> {
+  const serverInfo = await probeLocalBackendServerInfo(backend, timeout);
+  return getDisplayAgentServerVersion(serverInfo);
 }
 
 export async function loadAgentServerInfo() {

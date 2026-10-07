@@ -956,7 +956,9 @@ describe("BackendExecutionMode", () => {
     // Assert: the probe resolves, then the badge stays absent.
     await waitFor(() => expect(getServerInfoMock).toHaveBeenCalled());
     expect(
-      screen.queryByTestId(`manage-backends-execution-mode-${localBackend.name}`),
+      screen.queryByTestId(
+        `manage-backends-execution-mode-${localBackend.name}`,
+      ),
     ).not.toBeInTheDocument();
   });
 
@@ -971,6 +973,48 @@ describe("BackendExecutionMode", () => {
       ),
     ).not.toBeInTheDocument();
     expect(getServerInfoMock).not.toHaveBeenCalled();
+  });
+
+  it("does not render a cached local mode on a cloud row that shares host and key", async () => {
+    // Arrange: a local and a cloud backend sharing the same host + key, under
+    // one QueryClient, exactly as the Manage Backends modal renders them.
+    getServerInfoMock.mockResolvedValue({
+      version: "1.50.0",
+      conversation_runtime: "docker",
+    });
+    const sharedHost = "http://localhost:7777";
+    const sharedKey = "shared-key";
+    const local = {
+      ...localBackend,
+      id: "shared-local",
+      name: "Shared Local",
+      host: sharedHost,
+      apiKey: sharedKey,
+    };
+    const cloud = {
+      ...cloudBackend,
+      id: "shared-cloud",
+      name: "Shared Cloud",
+      host: sharedHost,
+      apiKey: sharedKey,
+    };
+
+    // Act: the local row's probe seeds the shared key; the cloud row is
+    // disabled but shares that same query key.
+    renderInQueryClient(
+      <>
+        <BackendExecutionMode backend={local} />
+        <BackendExecutionMode backend={cloud} />
+      </>,
+    );
+
+    // Assert: the local row shows the mode; the cloud row must not inherit it.
+    expect(
+      await screen.findByTestId(`manage-backends-execution-mode-${local.name}`),
+    ).toHaveAttribute("data-execution-mode", "docker");
+    expect(
+      screen.queryByTestId(`manage-backends-execution-mode-${cloud.name}`),
+    ).not.toBeInTheDocument();
   });
 });
 

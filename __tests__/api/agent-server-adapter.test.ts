@@ -87,9 +87,16 @@ vi.mock("#/api/agent-server-config", () => ({
   syncBakedSessionApiKey: vi.fn(),
 }));
 
-vi.mock("#/api/agent-server-compatibility", () => ({
-  getCachedAgentServerInfo: mockGetCachedAgentServerInfo,
-}));
+vi.mock("#/api/agent-server-compatibility", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("#/api/agent-server-compatibility")>();
+  return {
+    // Keep the real (pure) execution-mode resolver so the builder and the
+    // badge read the same field; stub only the I/O-bound dependencies.
+    getBackendExecutionMode: actual.getBackendExecutionMode,
+    getCachedAgentServerInfo: mockGetCachedAgentServerInfo,
+  };
+});
 
 vi.mock("#/api/backend-registry/active-store", () => ({
   getEffectiveLocalBackend: mockGetEffectiveLocalBackend,

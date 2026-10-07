@@ -20,6 +20,7 @@ import {
   CLOUD_BACKEND_LOGGED_OUT_ERROR,
   useBackendsHealth,
 } from "#/hooks/query/use-backends-health";
+import { backendVersionQueryKey } from "#/hooks/query/use-backend-server-info";
 
 const getSettingsMock = vi.fn();
 const getServerInfoMock = vi.fn();
@@ -401,5 +402,30 @@ describe("useBackendsHealth", () => {
     );
     expect(getSettingsMock).toHaveBeenCalled();
     expect(window.localStorage.getItem(BACKEND_HEALTH_STORAGE_KEY)).toBeNull();
+  });
+
+  // @spec BM-004 — Display the active backend's execution mode
+  it("seeds the shared version/execution-mode query from a successful probe", async () => {
+    getSettingsMock.mockResolvedValue({});
+    getServerInfoMock.mockResolvedValue({
+      version: "1.52.0",
+      conversation_runtime: "docker",
+    });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    const { result } = renderHook(() => useBackendsHealth([localBackend]), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      ),
+    });
+
+    await waitFor(() =>
+      expect(result.current[localBackend.id].isConnected).toBe(true),
+    );
+    expect(
+      client.getQueryData(backendVersionQueryKey(localBackend)),
+    ).toMatchObject({ conversation_runtime: "docker" });
   });
 });
