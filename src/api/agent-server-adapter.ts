@@ -30,6 +30,7 @@ import {
   PluginSpec,
   AppConversation,
   AppConversationPage,
+  AcpRuntimeModel,
   RuntimeConversationStats,
   SandboxStatus,
 } from "./conversation-service/agent-server-conversation-service.types";
@@ -120,6 +121,15 @@ export interface DirectConversationInfo {
   } | null;
   current_model_id?: string | null;
   current_model_name?: string | null;
+  /**
+   * Runtime ACP model catalogue for this conversation's session
+   * (``ConversationInfo.available_models``, agent-server >= 1.51.0). Read by
+   * {@link toAppConversation} to feed the in-conversation model picker, which
+   * prefers it over the static provider registry. Absent on older
+   * agent-servers and empty/absent for servers that don't surface the
+   * capability.
+   */
+  available_models?: AcpRuntimeModel[] | null;
   workspace?: {
     working_dir?: string | null;
   } | null;
@@ -445,6 +455,10 @@ export function toAppConversation(
           sdkLlm: info.agent?.llm?.model,
         })
       : (info.agent?.llm?.model ?? DEFAULT_SETTINGS.llm_model),
+    // Runtime model catalogue is ACP-session state; like ``acp_server``,
+    // only surface it for ACP conversations so a stray wire value can't
+    // reach non-ACP model UI.
+    available_models: isAcp ? (info.available_models ?? null) : null,
     metrics: info.metrics
       ? {
           accumulated_cost: info.metrics.accumulated_cost ?? null,

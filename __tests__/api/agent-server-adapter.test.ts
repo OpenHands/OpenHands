@@ -1321,6 +1321,36 @@ describe("toAppConversation", () => {
     expect(result.agent_kind).toBe("openhands");
     expect(result.acp_server).toBeNull();
   });
+
+  it("passes the runtime ACP model catalogue through for ACP conversations (#18053)", () => {
+    // The in-conversation model picker prefers this runtime list over the
+    // static registry — it is the only source that can list models for a
+    // ``custom`` ACP profile, so the adapter must carry it verbatim.
+    const result = toAppConversation({
+      ...baseInfo,
+      available_models: [
+        { model_id: "swe-2-high", name: "SWE 2 High" },
+        { model_id: "model-b", name: null },
+      ],
+      agent: { kind: "ACPAgent", llm: { model: "acp-managed" } },
+    });
+    expect(result.available_models).toEqual([
+      { model_id: "swe-2-high", name: "SWE 2 High" },
+      { model_id: "model-b", name: null },
+    ]);
+  });
+
+  it("nulls the runtime ACP model catalogue for OpenHands conversations", () => {
+    // Like ``acp_server``, the runtime catalogue is ACP-session state — a
+    // stray wire value must not reach non-ACP model UI.
+    const result = toAppConversation({
+      ...baseInfo,
+      available_models: [{ model_id: "swe-2-high", name: "SWE 2 High" }],
+      agent: { kind: "Agent", llm: { model: "claude-sonnet-4-6" } },
+    });
+    expect(result.agent_kind).toBe("openhands");
+    expect(result.available_models).toBeNull();
+  });
 });
 
 describe("buildRuntimeServicesSystemSuffix", () => {
