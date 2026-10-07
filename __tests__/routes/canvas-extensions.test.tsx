@@ -15,7 +15,7 @@ import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import type { InstalledCanvasExtensionInfo } from "#/types/canvas-extension";
 
-vi.mock("#/context/navigation-context", () => ({
+vi.mock("#/contexts/navigation-context", () => ({
   useNavigation: () => ({
     navigate: vi.fn(),
     currentPath: "/apps",
