@@ -195,7 +195,12 @@
         <img class="shot" src="https://raw.githubusercontent.com/analisaperlengkapan/OpenHands/feat/conversation-trigger-reason-label/.pr/evidence/hover-preview.png" alt="Hover preview of an automation-tagged conversation showing the localized Trigger row.">
         <figcaption>Fig 3 · The hover preview carries the same label under a localized "Trigger" heading.</figcaption>
       </figure>
+      <figure class="fig">
+        <img class="shot" src="https://raw.githubusercontent.com/analisaperlengkapan/OpenHands/feat/conversation-trigger-reason-label/.pr/evidence/compact-row-hover-preview.png" alt="Compact sidebar row's hover preview showing 'Started by an automation'.">
+        <figcaption>Fig 4 · The compact (collapsed sidebar) row's hover preview shows the same localized label, sourced through the shared footer.</figcaption>
+      </figure>
       <div class="callout note">ⓘ Local agent-server conversations always have <code>trigger: null</code>, so these rows exercise the automation-tag fallback path. The <code>gui</code>/<code>resolver</code>/… direct values are covered by the helper unit test and render through the same map.</div>
+      <div class="callout note">ⓘ The compact row (<code>ConversationPanel compact</code>) is only reachable in tests, so Fig 4 was captured by mounting the real <code>CompactConversationRow</code> in the running dev server (mock mode) with the app's real CSS, then hovering it in Chromium — the same component and tooltip path the collapsed sidebar would use.</div>
     </section>
 
     <section id="sec5">
