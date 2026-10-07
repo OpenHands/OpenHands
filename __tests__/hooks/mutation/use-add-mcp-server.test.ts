@@ -4,6 +4,7 @@ import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { useAddMcpServer } from "#/hooks/mutation/use-add-mcp-server";
+import { SUPER_ADMIN_SETUP_QUERY_KEYS } from "#/hooks/query/query-keys";
 
 const useSettingsMock = vi.fn();
 vi.mock("#/hooks/query/use-settings", () => ({
@@ -85,6 +86,31 @@ describe("useAddMcpServer", () => {
       transport: "stdio",
       command: "npx",
     });
+  });
+
+  it("marks the Super Admin setup guide's progress stale after adding a server", async () => {
+    vi.spyOn(SettingsService, "createMcpServer").mockResolvedValue(true);
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    const setupStateKey = SUPER_ADMIN_SETUP_QUERY_KEYS.state("cloud-1", 0);
+    client.setQueryData(setupStateKey, { guide_steps: { mcp_server: false } });
+    const { result } = renderHook(() => useAddMcpServer(), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client }, children),
+    });
+
+    await result.current.mutateAsync({
+      id: "",
+      type: "shttp",
+      name: "docs",
+      url: "https://docs.example/mcp",
+    });
+
+    expect(client.getQueryState(setupStateKey)?.isInvalidated).toBe(true);
   });
 
   it("fails instead of reporting a successful install before settings load", async () => {
