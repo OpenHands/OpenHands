@@ -21,4 +21,32 @@ describe("WorkspaceModeSelector", () => {
 
     expect(onChange).toHaveBeenCalledWith("new_worktree");
   });
+
+  it("offers docker only when passed as an option", () => {
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <WorkspaceModeSelector
+        value="local_repo"
+        backendKind="local"
+        onChange={onChange}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("workspace-mode-selector"));
+    expect(
+      screen.queryByTestId("workspace-mode-selector-option-docker_container"),
+    ).toBeNull();
+
+    rerender(
+      <WorkspaceModeSelector
+        value="local_repo"
+        backendKind="local"
+        options={["local_repo", "new_worktree", "docker_container"]}
+        onChange={onChange}
+      />,
+    );
+    fireEvent.click(
+      screen.getByTestId("workspace-mode-selector-option-docker_container"),
+    );
+    expect(onChange).toHaveBeenCalledWith("docker_container");
+  });
 });

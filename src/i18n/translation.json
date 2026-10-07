@@ -27301,6 +27301,23 @@
     "uk": "Нове робоче дерево",
     "ca": "Nou worktree"
   },
+  "COMMON$WORKSPACE_MODE_DOCKER_CONTAINER": {
+    "en": "Docker Container",
+    "ja": "Docker コンテナ",
+    "zh-CN": "Docker 容器",
+    "zh-TW": "Docker 容器",
+    "ko-KR": "Docker 컨테이너",
+    "fr": "Conteneur Docker",
+    "es": "Contenedor Docker",
+    "de": "Docker-Container",
+    "it": "Container Docker",
+    "pt": "Contêiner Docker",
+    "ar": "حاوية Docker",
+    "no": "Docker-container",
+    "tr": "Docker kapsayıcısı",
+    "uk": "Контейнер Docker",
+    "ca": "Contenidor Docker"
+  },
   "COMMON$OPEN_REPOSITORY": {
     "en": "Open Repository",
     "ja": "リポジトリを開く",

@@ -21,6 +21,16 @@ export function usesIsolatedWorkspace(
   return info?.conversation_runtime === "docker";
 }
 
+/** Whether a start request may pick `conversation_runtime: "docker"`. */
+export function supportsDockerConversations(
+  info: ServerInfo | null | undefined,
+): boolean {
+  const runtimes = (
+    info as { available_conversation_runtimes?: string[] } | null | undefined
+  )?.available_conversation_runtimes;
+  return !!runtimes?.includes("docker");
+}
+
 export async function getConversationServerInfo(
   overrides: AgentServerClientOverrides = {},
 ): Promise<ServerInfo | null> {

@@ -555,6 +555,7 @@ class AgentServerConversationService {
       });
     const resolvedWorkspaceMode =
       workspaceMode ?? (workingDirOverride ? "local_repo" : "new_worktree");
+    const inContainer = resolvedWorkspaceMode === "docker_container";
 
     // Use encrypted settings to avoid exposing secrets in the browser
     const payload = await buildStartConversationRequestWithEncryptedSettings({
@@ -569,7 +570,8 @@ class AgentServerConversationService {
       // older than 1.37.1 ignore the field and create an unlinked conversation.
       parentConversationId,
       workingDir,
-      hooksProjectDir,
+      // A container does not see host paths, so host hooks do not apply.
+      hooksProjectDir: inContainer ? null : hooksProjectDir,
       worktree: !isolated && resolvedWorkspaceMode === "new_worktree",
       agentProfileId,
       agentProfileKind,
@@ -581,6 +583,7 @@ class AgentServerConversationService {
       getAgentServerClientOptions({ timeout: CREATE_CONVERSATION_TIMEOUT_MS }),
     ).createConversation<DirectConversationInfo>({
       ...payload,
+      ...(inContainer ? { conversation_runtime: "docker" } : {}),
       ...(telemetryDistinctId ? { user_id: telemetryDistinctId } : {}),
     });
     const localBackend = getEffectiveLocalBackend();

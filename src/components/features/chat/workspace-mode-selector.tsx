@@ -16,16 +16,21 @@ interface WorkspaceModeSelectorProps {
   value: WorkspaceMode;
   backendKind: BackendKind;
   onChange: (value: WorkspaceMode) => void;
+  options?: WorkspaceMode[];
   disabled?: boolean;
   testId?: string;
 }
 
-const WORKSPACE_MODE_OPTIONS: WorkspaceMode[] = ["local_repo", "new_worktree"];
+export const WORKSPACE_MODE_OPTIONS: WorkspaceMode[] = [
+  "local_repo",
+  "new_worktree",
+];
 
 export function WorkspaceModeSelector({
   value,
   backendKind,
   onChange,
+  options = WORKSPACE_MODE_OPTIONS,
   disabled = false,
   testId = "workspace-mode-selector",
 }: WorkspaceModeSelectorProps) {
@@ -97,7 +102,7 @@ export function WorkspaceModeSelector({
             dropdownMenuListClassName,
           )}
         >
-          {WORKSPACE_MODE_OPTIONS.map((option) => {
+          {options.map((option) => {
             const optionLabel = t(getWorkspaceModeI18nKey(option, backendKind));
             return (
               <button

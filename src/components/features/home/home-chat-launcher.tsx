@@ -27,6 +27,7 @@ import {
 } from "#/utils/custom-toast-handlers";
 import { getWorkspacesUnsupportedMessage } from "#/utils/workspaces-compatibility";
 import {
+  DEFAULT_WORKSPACE_MODE,
   readStoredLocalWorkspaceMode,
   writeStoredLocalWorkspaceMode,
 } from "#/utils/workspace-mode";
@@ -41,6 +42,7 @@ import { OpenLauncherButton } from "./open-launcher-button";
 import { OpenWorkspaceDialog } from "./open-workspace-dialog";
 import { OpenRepositoryDialog } from "./open-repository-dialog";
 import { HomeGitControlBarPreview } from "./home-git-control-bar-preview";
+import { WORKSPACE_MODE_OPTIONS } from "#/components/features/chat/workspace-mode-selector";
 
 export function HomeChatLauncher() {
   const { t } = useTranslation("openhands");
@@ -74,8 +76,18 @@ export function HomeChatLauncher() {
     useConversationStore();
   const { handleUpload } = useChatAttachmentUpload();
   const { error: workspacesError } = useLocalWorkspaces({ enabled: isLocal });
-  const { isolated, unsupportedMessage: runtimeWorkspaceMessage } =
-    useConversationWorkspace();
+  const {
+    isolated,
+    dockerSelectable,
+    unsupportedMessage: runtimeWorkspaceMessage,
+  } = useConversationWorkspace();
+  const workspaceModes: WorkspaceMode[] = dockerSelectable
+    ? [...WORKSPACE_MODE_OPTIONS, "docker_container"]
+    : WORKSPACE_MODE_OPTIONS;
+  // A remembered mode the current server no longer offers falls back.
+  const effectiveWorkspaceMode = workspaceModes.includes(workspaceMode)
+    ? workspaceMode
+    : DEFAULT_WORKSPACE_MODE;
   const workspacesUnsupportedMessage =
     runtimeWorkspaceMessage ??
     (isLocal ? getWorkspacesUnsupportedMessage(workspacesError, t) : null);
@@ -123,7 +135,7 @@ export function HomeChatLauncher() {
       variables = {
         ...variables,
         workingDir: pendingWorkspace.path,
-        workspaceMode,
+        workspaceMode: effectiveWorkspaceMode,
       };
     } else if (!isLocal && pendingRepository && pendingBranch) {
       variables = {
@@ -277,7 +289,8 @@ export function HomeChatLauncher() {
               repository={pendingRepository}
               branch={pendingBranch}
               provider={pendingProvider}
-              workspaceMode={workspaceMode}
+              workspaceMode={effectiveWorkspaceMode}
+              workspaceModes={workspaceModes}
               backendKind={backend.kind}
               onRepoClick={() => setIsDialogOpen(true)}
               onWorkspaceModeChange={setWorkspaceMode}

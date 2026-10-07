@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import {
   getConversationServerInfo,
+  supportsDockerConversations,
   usesIsolatedWorkspace,
 } from "#/api/conversation-workspace";
 
@@ -27,6 +28,8 @@ export function useConversationWorkspace() {
     backend.kind === "local" && usesIsolatedWorkspace(query.data);
   return {
     isolated,
+    dockerSelectable:
+      backend.kind === "local" && supportsDockerConversations(query.data),
     unsupportedMessage: isolated
       ? t(I18nKey.HOME$ISOLATED_WORKSPACE_NOTICE)
       : null,

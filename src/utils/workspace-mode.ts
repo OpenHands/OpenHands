@@ -8,7 +8,11 @@ export const LAST_LOCAL_WORKSPACE_MODE_STORAGE_KEY =
   "openhands-last-local-workspace-mode";
 
 function isWorkspaceMode(value: string | null): value is WorkspaceMode {
-  return value === "local_repo" || value === "new_worktree";
+  return (
+    value === "local_repo" ||
+    value === "new_worktree" ||
+    value === "docker_container"
+  );
 }
 
 export function readStoredLocalWorkspaceMode(): WorkspaceMode {
@@ -40,6 +44,9 @@ export function getWorkspaceModeI18nKey(
 ): I18nKey {
   if (mode === "new_worktree") {
     return I18nKey.COMMON$WORKSPACE_MODE_NEW_WORKTREE;
+  }
+  if (mode === "docker_container") {
+    return I18nKey.COMMON$WORKSPACE_MODE_DOCKER_CONTAINER;
   }
   return backendKind === "cloud"
     ? I18nKey.COMMON$WORKSPACE_MODE_CLOUD_REPO

@@ -495,7 +495,10 @@ async function buildConfig(args, env = process.env) {
     flag: args.host,
     env:
       env.OH_BIND_HOST ||
-      (env.OH_CONVERSATION_RUNTIME === "docker" ? "0.0.0.0" : undefined),
+      (env.OH_CONVERSATION_RUNTIME === "docker" ||
+      env.OH_CONVERSATION_RUNTIME_SELECTABLE
+        ? "0.0.0.0"
+        : undefined),
   });
   if (!isLoopbackBind(bindHost) && !isPublic) {
     logService(
