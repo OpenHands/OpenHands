@@ -35,6 +35,7 @@ import { pathToFileURL } from "node:url";
 import sirv from "sirv";
 
 import { applySessionKeyPolicy, DEFAULT_BIND_HOST } from "./bind-host.mjs";
+import { createMarsWebBridge, isMarsWebEnabled } from "./mars-web-bridge.mjs";
 import {
   createProxyHandlers,
   createRouter,
@@ -679,9 +680,13 @@ export function startStaticServer(config) {
   const staticMiddleware = createStaticMiddleware(dirAbs);
 
   const uninstallDiagnostics = proxy.installDiagnostics();
+  // DigitalOcean Managed Agents for the browser: this server hosts the MARS
+  // bridge and proxies to sessions' ingress URLs (see mars-web-bridge.mjs).
+  const marsWeb = isMarsWebEnabled() ? createMarsWebBridge() : null;
 
   const server = createServer((req, res) => {
     const url = req.url ?? "/";
+    if (marsWeb?.handleHttp(req, res)) return;
     const backend = route(url);
     if (backend) {
       // The editor is advertised as `<origin><prefix>/?tkn=<token>`, and that
@@ -720,6 +725,7 @@ export function startStaticServer(config) {
   });
 
   server.on("upgrade", (req, socket, head) => {
+    if (marsWeb?.handleUpgrade(req, socket, head)) return;
     const backend = route(req.url ?? "/");
     if (backend) {
       proxy.proxyWebSocket(req, socket, head, backend);
@@ -728,6 +734,9 @@ export function startStaticServer(config) {
     socket.destroy();
   });
   server.on("close", uninstallDiagnostics);
+  server.on("close", () => {
+    void marsWeb?.dispose().catch(() => {});
+  });
 
   return new Promise((resolveListen) => {
     server.listen(config.port, config.host, () => {

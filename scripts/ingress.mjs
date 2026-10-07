@@ -26,6 +26,7 @@ import process from "node:process";
 import { pathToFileURL } from "node:url";
 
 import { DEFAULT_BIND_HOST, resolveBindHost } from "./bind-host.mjs";
+import { createMarsWebBridge, isMarsWebEnabled } from "./mars-web-bridge.mjs";
 import {
   createProxyHandlers,
   createRouter,
@@ -174,11 +175,15 @@ export function startIngress(config) {
   const route = createRouter(config.routes, config.defaultBackend);
   const proxy = createProxyHandlers({ label: `ingress:${config.port}` });
   const uninstallDiagnostics = proxy.installDiagnostics();
+  // DigitalOcean Managed Agents for the browser: this server hosts the MARS
+  // bridge and proxies to sessions' ingress URLs (see mars-web-bridge.mjs).
+  const marsWeb = isMarsWebEnabled() ? createMarsWebBridge() : null;
 
   const noReferrerPrefixes = config.noReferrerPrefixes ?? [];
 
   const server = createServer((req, res) => {
     const url = req.url ?? "/";
+    if (marsWeb?.handleHttp(req, res)) return;
     const backend = route(url);
 
     if (!backend) {
@@ -208,6 +213,7 @@ export function startIngress(config) {
 
   // Handle WebSocket upgrades
   server.on("upgrade", (req, socket, head) => {
+    if (marsWeb?.handleUpgrade(req, socket, head)) return;
     const backend = route(req.url ?? "/");
 
     if (!backend) {
@@ -231,6 +237,9 @@ export function startIngress(config) {
     }
   });
   server.on("close", uninstallDiagnostics);
+  server.on("close", () => {
+    void marsWeb?.dispose().catch(() => {});
+  });
 
   server.listen(config.port, config.host || DEFAULT_BIND_HOST, () => {
     console.log("");

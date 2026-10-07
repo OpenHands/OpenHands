@@ -9,10 +9,12 @@
  * loopback for sessions that cannot. Either way the far end is a plain
  * agent-server, so the backend is `kind: "local"`.
  *
- * `window.marsBridge` only exists in the Electron desktop build: harness-api
- * sends no CORS headers and the token must live in a main process, so the
- * browser and library builds cannot offer MARS at all. Callers gate on
- * `getMarsBridge()` rather than catching per-call failures.
+ * `window.marsBridge` comes from Electron's preload in the desktop build, or
+ * from the Agent Canvas server in the web build (src/api/mars/mars-web-bridge.ts,
+ * installed before first render when the server hosts it). harness-api sends
+ * no CORS headers and the token must live in a trusted process, so a page
+ * with neither cannot offer MARS at all. Callers gate on `getMarsBridge()`
+ * rather than catching per-call failures.
  */
 
 import { ConversationSortOrder } from "@openhands/typescript-client";
@@ -189,7 +191,7 @@ function requireMarsBridge(): MarsBridge {
   const bridge = getMarsBridge();
   if (!bridge) {
     throw new Error(
-      "window.marsBridge is unavailable — MARS tunnels only work in the Electron desktop build.",
+      "window.marsBridge is unavailable — Managed Agents need the Electron desktop build or an Agent Canvas server that hosts the MARS bridge.",
     );
   }
   return bridge;
