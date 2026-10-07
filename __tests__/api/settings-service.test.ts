@@ -232,6 +232,45 @@ describe("SettingsService", () => {
     ]);
   });
 
+  it("round-trips runtime settings through misc_settings.runtime", async () => {
+    const patchBodies: Array<Record<string, unknown>> = [];
+    server.use(
+      http.patch("*/api/settings", async ({ request }) => {
+        patchBodies.push((await request.json()) as Record<string, unknown>);
+        return HttpResponse.json({
+          agent_settings: {},
+          conversation_settings: {},
+          llm_api_key_is_set: false,
+        });
+      }),
+      http.get("*/api/settings", () =>
+        HttpResponse.json({
+          agent_settings: {},
+          conversation_settings: {},
+          llm_api_key_is_set: false,
+          misc_settings: { runtime: { docker_memory: "8g" } },
+        }),
+      ),
+    );
+
+    await SettingsService.saveSettings({
+      default_workspace_mode: "new_worktree",
+      runtime_settings: { docker_memory: "8g" },
+    });
+    SettingsService.invalidateCache();
+    const settings = await SettingsService.getSettings();
+
+    expect(patchBodies).toEqual([
+      {
+        misc_settings_diff: {
+          app_preferences: { default_workspace_mode: "new_worktree" },
+          runtime: { docker_memory: "8g" },
+        },
+      },
+    ]);
+    expect(settings.runtime_settings).toEqual({ docker_memory: "8g" });
+  });
+
   it("treats omitted app-preferences analytics consent as unset", async () => {
     server.use(
       http.get("*/api/settings", () =>

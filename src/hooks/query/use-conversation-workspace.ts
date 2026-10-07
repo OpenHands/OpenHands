@@ -30,6 +30,9 @@ export function useConversationWorkspace() {
     isolated,
     dockerSelectable:
       backend.kind === "local" && supportsDockerConversations(query.data),
+    runtimeSettingsApplied: !!query.data?.capabilities?.includes(
+      "runtime_settings_v1",
+    ),
     unsupportedMessage: isolated
       ? t(I18nKey.HOME$ISOLATED_WORKSPACE_NOTICE)
       : null,

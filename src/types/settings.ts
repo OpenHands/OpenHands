@@ -4,6 +4,25 @@ import type { SkillCategoryId } from "@openhands/extensions/skills";
 import type { WorkspaceFileDiscovery } from "#/utils/workspace-file-discovery";
 import type { WorkspaceMode } from "#/api/conversation-metadata-store";
 
+/**
+ * Mirrors agent-server `RuntimeSettings` (`runtime_settings.py`). The
+ * `docker_image` and `worktree_location` previews are stored but not applied.
+ */
+export interface ConversationRuntimeSettings {
+  docker_retention_days?: number | null;
+  docker_disk_budget?: number | null;
+  docker_idle_stop_minutes?: number | null;
+  docker_memory?: string | null;
+  docker_cpus?: number | null;
+  docker_browser?: boolean | null;
+  docker_image?: string | null;
+  worktree_retention_days?: number | null;
+  worktree_remove_on_delete?: boolean;
+  worktree_delete_branch?: boolean;
+  worktree_base?: "default_branch" | "head";
+  worktree_location?: string | null;
+}
+
 export const ProviderOptions = {
   github: "github",
   gitlab: "gitlab",
@@ -165,6 +184,8 @@ export type Settings = {
   title_llm_profile?: string | null;
   /** Workspace mode the home launcher starts on; null means last used. */
   default_workspace_mode?: WorkspaceMode | null;
+  /** Agent-server `misc_settings.runtime`; unset fields keep server config. */
+  runtime_settings?: ConversationRuntimeSettings | null;
   agent_settings_schema?: SettingsSchema | null;
   agent_settings?: Record<string, SettingsValue> | null;
   conversation_settings_schema?: SettingsSchema | null;
