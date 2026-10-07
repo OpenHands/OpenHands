@@ -48,6 +48,14 @@ vi.mock("#/hooks/use-can-manage-org-profiles", () => ({
   useCanManageOrgProfiles: () => useCanManageOrgProfilesMock(),
 }));
 
+const useAcpModelDiscoveryMock = vi.fn();
+vi.mock("#/hooks/query/use-acp-model-discovery", () => ({
+  useAcpModelDiscovery: (...args: unknown[]) =>
+    useAcpModelDiscoveryMock(...args),
+}));
+
+const NO_LIVE_MODELS = { models: [], defaultModelId: null };
+
 // `getAcpProvider`/`labelForAcpModel`/`resolveEffectiveAcpModel` are exercised
 // for real (not mocked) so the test pins the actual registry-sourced model
 // list the picker shows.
@@ -83,6 +91,111 @@ describe("useChatInputModelState", () => {
     useActiveAcpProfileDetailMock.mockReturnValue(null);
     useCanManageOrgProfilesMock.mockReset();
     useCanManageOrgProfilesMock.mockReturnValue(true);
+    useAcpModelDiscoveryMock.mockReset();
+    useAcpModelDiscoveryMock.mockReturnValue(NO_LIVE_MODELS);
+  });
+
+  it("active ACP: lists the models the conversation's session reported", () => {
+    const live = [
+      { id: "default", label: "Default (recommended)" },
+      { id: "claude-fable-5[1m]", label: "Fable 5 (1M)" },
+    ];
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "c1",
+        agent_kind: "acp",
+        acp_server: "claude-code",
+        llm_model: "claude-fable-5[1m]",
+        acp_available_models: live,
+      },
+    });
+    useAcpModelContextMock.mockReturnValue(
+      acpContext({ isActiveAcpConversation: true, isAcpContext: true }),
+    );
+
+    const { result } = renderHook(() => useChatInputModelState());
+
+    expect(result.current.availableAcpModels).toEqual(live);
+    expect(result.current.displayModel).toBe("Fable 5 (1M)");
+  });
+
+  it("active ACP: a custom server's session list makes the picker selectable", () => {
+    const live = [
+      { id: "swe-2-high", label: "SWE-2 High" },
+      { id: "swe-2-low", label: "SWE-2 Low" },
+    ];
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "c1",
+        agent_kind: "acp",
+        acp_server: "custom",
+        llm_model: "swe-2-high",
+        acp_available_models: live,
+      },
+    });
+    useAcpModelContextMock.mockReturnValue(
+      acpContext({ isActiveAcpConversation: true, isAcpContext: true }),
+    );
+
+    const { result } = renderHook(() => useChatInputModelState());
+
+    expect(result.current.availableAcpModels).toEqual(live);
+    expect(result.current.displayModel).toBe("SWE-2 High");
+    expect(result.current.showAcpPicker).toBe(true);
+    expect(useAcpModelDiscoveryMock).toHaveBeenCalledWith(null);
+  });
+
+  it("active ACP: uses the agent's reported list until the session reports its own", () => {
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "c1",
+        agent_kind: "acp",
+        acp_server: "codex",
+        llm_model: "gpt-5.6-terra",
+        acp_available_models: [],
+      },
+    });
+    useAcpModelContextMock.mockReturnValue(
+      acpContext({ isActiveAcpConversation: true, isAcpContext: true }),
+    );
+    const live = [
+      { id: "gpt-6-astra", label: "GPT-6 Astra" },
+      { id: "gpt-5.6-terra", label: "GPT-5.6 Terra" },
+    ];
+    useAcpModelDiscoveryMock.mockReturnValue({
+      models: live,
+      defaultModelId: "gpt-6-astra",
+    });
+
+    const { result } = renderHook(() => useChatInputModelState());
+
+    expect(useAcpModelDiscoveryMock).toHaveBeenCalledWith("codex");
+    expect(result.current.availableAcpModels).toEqual(live);
+    expect(result.current.currentModelId).toBe("gpt-5.6-terra");
+  });
+
+  it("home ACP: lists the models the agent reported and shows its own default", () => {
+    useSettingsMock.mockReturnValue({
+      data: { agent_settings: { acp_server: "pi", acp_model: null } },
+    });
+    useAcpModelContextMock.mockReturnValue(
+      acpContext({ isHomeAcp: true, isAcpContext: true }),
+    );
+    const live = [
+      { id: "anthropic/claude-opus-4-8", label: "Claude Opus 4.8" },
+      { id: "anthropic/claude-sonnet-5", label: "Claude Sonnet 5" },
+    ];
+    useAcpModelDiscoveryMock.mockReturnValue({
+      models: live,
+      defaultModelId: "anthropic/claude-opus-4-8",
+    });
+
+    const { result } = renderHook(() => useChatInputModelState());
+
+    expect(useAcpModelDiscoveryMock).toHaveBeenCalledWith("pi");
+    expect(result.current.availableAcpModels).toEqual(live);
+    expect(result.current.currentModelId).toBe("anthropic/claude-opus-4-8");
+    expect(result.current.displayModel).toBe("Claude Opus 4.8");
   });
 
   it("non-ACP: shows the conversation/settings llm_model with no picker", () => {

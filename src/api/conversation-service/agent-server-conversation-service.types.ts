@@ -2,6 +2,7 @@ import { ConversationTrigger } from "../open-hands.types";
 import { Provider } from "#/types/settings";
 import { SuggestedTask } from "#/utils/types";
 import { ExecutionStatus } from "#/types/agent-server/core";
+import type { ACPModelOption } from "#/constants/acp-providers";
 
 /**
  * Lifecycle state of a cloud sandbox. Mirrors OpenHands' V1SandboxStatus.
@@ -173,6 +174,11 @@ export interface AppConversation {
    * "ACP" chip when the key is unknown or null.
    */
   acp_server?: string | null;
+  /**
+   * Models the conversation's ACP session offers, as its server reported them.
+   * Empty before the session starts and on servers that don't report models.
+   */
+  acp_available_models?: ACPModelOption[] | null;
   /**
    * Server-side key-value tags from the agent-server's
    * ``ConversationInfo.tags`` (settable at creation and via

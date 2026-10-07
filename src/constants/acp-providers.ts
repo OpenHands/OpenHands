@@ -1,4 +1,7 @@
-import { getAcpProvider as getClientAcpProvider } from "@openhands/typescript-client";
+import {
+  getAcpProvider as getClientAcpProvider,
+  type ACPModelInfo,
+} from "@openhands/typescript-client";
 import type { BackendKind } from "#/api/backend-registry/types";
 import { I18nKey } from "#/i18n/declaration";
 
@@ -510,11 +513,35 @@ export function resolveAcpProviderIcon(
 export function labelForAcpModel(
   serverKey: string | null | undefined,
   modelId: string | null | undefined,
+  liveModels: readonly ACPModelOption[] = [],
 ): string | null {
   if (!modelId) return null;
   const provider = getAcpProvider(serverKey);
-  const match = provider?.available_models?.find((m) => m.id === modelId);
+  const match = [...liveModels, ...(provider?.available_models ?? [])].find(
+    (m) => m.id === modelId,
+  );
   return match?.label ?? modelId;
+}
+
+/** Picker options for the models an ACP server reported. */
+export function toAcpModelOptions(
+  models: readonly ACPModelInfo[] | null | undefined,
+): ACPModelOption[] {
+  return (models ?? [])
+    .filter(({ model_id }) => model_id)
+    .map(({ model_id, name }) => ({
+      id: model_id,
+      label: name?.trim() || model_id,
+    }));
+}
+
+/** The models the server reported, else the registry's curated list. */
+export function getAcpModelOptions(
+  key: string | null | undefined,
+  liveModels: readonly ACPModelOption[] | null | undefined,
+): ACPModelOption[] {
+  if (liveModels?.length) return [...liveModels];
+  return getAcpProvider(key)?.available_models ?? [];
 }
 
 /**

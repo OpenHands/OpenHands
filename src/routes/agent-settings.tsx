@@ -26,12 +26,16 @@ import {
 } from "#/utils/sdk-settings-schema";
 import {
   ACP_CUSTOM_PRESET_KEY,
+  getAcpModelOptions,
   getAcpPreferredDefaultModel,
   getAcpProvider,
   getAcpProvidersForBackend,
   getAcpProviderSecrets,
+  labelForAcpModel,
+  type ACPModelOption,
   type ACPProviderConfig,
 } from "#/constants/acp-providers";
+import { useAcpModelDiscovery } from "#/hooks/query/use-acp-model-discovery";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { parseCommand, formatCommand } from "#/utils/acp-command";
 import {
@@ -69,6 +73,7 @@ const SYSTEM_MESSAGE_SUFFIX_KEY = "system_message_suffix";
 const SYSTEM_PROMPT_MAX_LENGTH = 65536;
 const COMMAND_PLACEHOLDER_FALLBACK = "npx -y <package-name>";
 const ACP_CUSTOM_MODEL_KEY = "__custom_model__";
+const ACP_AGENT_DEFAULT_MODEL_KEY = "__agent_default_model__";
 const EMPTY_AGENT_SETTINGS_SNAPSHOT: AgentSettingsSnapshot = {
   agentType: "openhands",
   commandText: "",
@@ -117,6 +122,22 @@ function isKnownAcpModel(
   return (
     provider?.available_models?.some(({ id }) => id === model.trim()) ?? false
   );
+}
+
+/**
+ * The models a server reported (else the curated list), keeping a saved
+ * curated model selectable when the server no longer lists it.
+ */
+function buildModelSuggestions(
+  provider: ACPProviderConfig | undefined,
+  liveModels: readonly ACPModelOption[],
+  selectedModel: string,
+): ACPModelOption[] {
+  const options = getAcpModelOptions(provider?.key, liveModels);
+  const model = selectedModel.trim();
+  const curated = provider?.available_models?.find(({ id }) => id === model);
+  if (!curated || options.some(({ id }) => id === model)) return options;
+  return [...options, curated];
 }
 
 /**
@@ -723,22 +744,42 @@ export function AgentSettingsScreen({
     stableCredReset,
   ]);
 
-  if (isLoading) return null;
-
   const isAcp = agentType === "acp";
   const commandTokens = parseCommand(commandText);
   const selectedPreset = detectPreset(commandText, acpProviders);
   const selectedProvider = getAcpProvider(selectedPreset);
-  const modelSuggestions = selectedProvider?.available_models ?? [];
-  const hasModelSuggestions = modelSuggestions.length > 0;
-  const selectedModelIsSuggestion = isKnownAcpModel(selectedProvider, acpModel);
-  const selectedModelKey =
-    isCustomAcpModel || !selectedModelIsSuggestion
-      ? ACP_CUSTOM_MODEL_KEY
-      : acpModel;
   const isDefaultProviderCommand =
     !!selectedProvider &&
     commandTokens.join(" ") === selectedProvider.default_command.join(" ");
+  const liveModels = useAcpModelDiscovery(
+    isAcp && isDefaultProviderCommand ? selectedPreset : null,
+  );
+
+  if (isLoading) return null;
+
+  const modelSuggestions = buildModelSuggestions(
+    selectedProvider,
+    liveModels.models,
+    isCustomAcpModel ? "" : acpModel,
+  );
+  const agentDefaultModelLabel = labelForAcpModel(
+    selectedPreset,
+    liveModels.defaultModelId,
+    liveModels.models,
+  );
+  // Without a registry default the agent picks its own, so name that choice.
+  const offersAgentDefault =
+    !!selectedProvider && !getAcpPreferredDefaultModel(selectedPreset);
+  const hasModelSuggestions = modelSuggestions.length > 0;
+  const selectedModelIsSuggestion = modelSuggestions.some(
+    ({ id }) => id === acpModel.trim(),
+  );
+  let selectedModelKey = acpModel;
+  if (offersAgentDefault && !isCustomAcpModel && !acpModel.trim()) {
+    selectedModelKey = ACP_AGENT_DEFAULT_MODEL_KEY;
+  } else if (isCustomAcpModel || !selectedModelIsSuggestion) {
+    selectedModelKey = ACP_CUSTOM_MODEL_KEY;
+  }
   const commandPlaceholder =
     formatCommand(acpProviders[0]?.default_command ?? []) ||
     COMMAND_PLACEHOLDER_FALLBACK;
@@ -1227,9 +1268,27 @@ export function AgentSettingsScreen({
                 name="agent-model"
                 label={t(I18nKey.SETTINGS$AGENT_MODEL)}
                 items={[
+                  ...(offersAgentDefault
+                    ? [
+                        {
+                          key: ACP_AGENT_DEFAULT_MODEL_KEY,
+                          label: agentDefaultModelLabel
+                            ? t(I18nKey.SETTINGS$AGENT_MODEL_AGENT_DEFAULT_IS, {
+                                model: agentDefaultModelLabel,
+                              })
+                            : t(I18nKey.SETTINGS$AGENT_MODEL_AGENT_DEFAULT),
+                        },
+                      ]
+                    : []),
                   ...modelSuggestions.map((model) => ({
                     key: model.id,
-                    label: model.label,
+                    label:
+                      !offersAgentDefault &&
+                      model.id === liveModels.defaultModelId
+                        ? t(I18nKey.SETTINGS$AGENT_MODEL_IS_AGENT_DEFAULT, {
+                            model: model.label,
+                          })
+                        : model.label,
                   })),
                   {
                     key: ACP_CUSTOM_MODEL_KEY,
@@ -1242,6 +1301,9 @@ export function AgentSettingsScreen({
                   const modelKey = String(key);
                   if (modelKey === ACP_CUSTOM_MODEL_KEY) {
                     setIsCustomAcpModel(true);
+                    setAcpModel("");
+                  } else if (modelKey === ACP_AGENT_DEFAULT_MODEL_KEY) {
+                    setIsCustomAcpModel(false);
                     setAcpModel("");
                   } else {
                     setIsCustomAcpModel(false);
@@ -1267,6 +1329,27 @@ export function AgentSettingsScreen({
                 }}
               />
             )}
+            {liveModels.isDiscovering && selectedProvider && (
+              <Typography.Text
+                testId="agent-model-discovering"
+                className="text-xs text-[#717888]"
+              >
+                {t(I18nKey.SETTINGS$AGENT_MODEL_DISCOVERING, {
+                  agent: selectedProvider.display_name,
+                })}
+              </Typography.Text>
+            )}
+            {liveModels.discovery?.error?.code === "ACPAuthRequired" &&
+              selectedProvider && (
+                <Typography.Text
+                  testId="agent-model-discovery-needs-auth"
+                  className="text-xs text-[#717888]"
+                >
+                  {t(I18nKey.SETTINGS$AGENT_MODEL_DISCOVERY_NEEDS_AUTH, {
+                    agent: selectedProvider.display_name,
+                  })}
+                </Typography.Text>
+              )}
             <Typography.Text className="text-xs text-[#717888]">
               {t(I18nKey.SETTINGS$AGENT_MODEL_HINT)}
             </Typography.Text>
@@ -1280,6 +1363,9 @@ export function AgentSettingsScreen({
           <AcpCredentialsSection
             form={acpCredentialForm}
             providerKey={selectedPreset}
+            loginRejected={
+              liveModels.discovery?.error?.code === "ACPAuthRequired"
+            }
           />
         </>
       )}

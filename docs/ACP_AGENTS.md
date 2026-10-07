@@ -253,7 +253,20 @@ Open **Settings → Agent** at any time:
   API keys are _not_ entered here — they live in the Secrets panel.
 - **Model** — choose a suggested model for the provider or enter a custom model
   override. Built-in providers save a concrete model rather than leaving it
-  blank — except Pi, which picks its own from the configured credential.
+  blank — except Pi, which picks its own from the configured credential
+  (shown as **Agent default**).
+
+On a local backend the model list comes from the agent itself: Canvas asks the
+agent-server (`POST /api/acp/models`) to start the provider with your saved
+credentials and report the models it offers and the one it uses by default,
+marked _agent default_. Account-dependent catalogues (a ChatGPT plan's Codex
+models, a Claude subscription's aliases, OpenCode's free tier versus a Zen key)
+therefore show what you can actually run. The first lookup can take a few
+seconds while the provider starts; results are cached. If the agent rejects its
+login, Settings says so instead of showing a stale "signed in" banner. Cloud,
+older agent-servers and failed lookups fall back to the curated list. Inside a
+conversation the model picker lists the models that conversation's session
+reported.
 
 Saving writes an `agent_settings_diff` (`agent_kind`, `acp_server`,
 `acp_command`, `acp_model`) to `PATCH /api/settings`. A running conversation
