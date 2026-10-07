@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { DEFAULT_WORKING_DIR } from "#/api/agent-server-config";
-import { getGitPath } from "#/utils/get-git-path";
+import { getCloudWorkspaceRoot, getGitPath } from "#/utils/get-git-path";
 
 describe("getGitPath", () => {
   it("should return the default working dir when no repository is selected", () => {
@@ -48,5 +48,24 @@ describe("getGitPath", () => {
         `${DEFAULT_WORKING_DIR}/software-agent-sdk`,
       );
     });
+  });
+});
+
+describe("getCloudWorkspaceRoot", () => {
+  it("uses the whole workspace root when no repo or working dir is known", () => {
+    expect(getCloudWorkspaceRoot(null)).toBe("/workspace");
+    expect(getCloudWorkspaceRoot(undefined, "  ")).toBe("/workspace");
+  });
+
+  it("prefers an explicit working dir", () => {
+    expect(getCloudWorkspaceRoot(null, "/workspace/project/my-repo")).toBe(
+      "/workspace/project/my-repo",
+    );
+  });
+
+  it("anchors at the repo clone, with a leading slash, when a repo is selected", () => {
+    expect(getCloudWorkspaceRoot("OpenHands/OpenHands")).toBe(
+      "/workspace/project/OpenHands",
+    );
   });
 });
