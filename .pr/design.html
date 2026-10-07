@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>BM-004 · Show the active execution mode in Agent Canvas</title>
+<style>
+  :root {
+    --ink: #16181d;
+    --muted: #5b6270;
+    --line: #e4e7ec;
+    --bg: #f7f8fa;
+    --card: #ffffff;
+    --accent: #c2410c;
+    --added: #0f7b3f;
+    --added-bg: #e9f7ef;
+    --removed: #b42318;
+    --removed-bg: #fdeceb;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 940px; margin: 0 auto; padding: 48px 24px 96px; }
+  header h1 { font-size: 30px; line-height: 1.25; margin: 0 0 8px; letter-spacing: -0.02em; }
+  header .sub { color: var(--muted); margin: 0 0 24px; }
+  .tag {
+    display: inline-block; font: 600 12px/1 var(--mono); letter-spacing: .04em;
+    text-transform: uppercase; color: var(--accent); background: #fff1e9;
+    border: 1px solid #f6d5c3; border-radius: 999px; padding: 5px 10px; margin-bottom: 14px;
+  }
+  .lead { font-size: 17px; }
+  .callout {
+    background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--accent);
+    border-radius: 10px; padding: 16px 20px; margin: 24px 0;
+  }
+  .callout .star { color: var(--accent); font-weight: 700; }
+  .stats { color: var(--muted); font: 13px/1.5 var(--mono); }
+  h2 { font-size: 21px; margin: 44px 0 6px; letter-spacing: -0.01em; }
+  h2 .n { color: var(--muted); font-weight: 400; }
+  h3 { font-size: 16px; margin: 0 0 4px; }
+  p { margin: 10px 0; }
+  code, .mono { font-family: var(--mono); font-size: 13.5px; }
+  code { background: #eef0f4; padding: 1px 5px; border-radius: 5px; }
+  a { color: #1d4ed8; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 20px 22px; margin: 16px 0;
+  }
+  .card .path { font: 12.5px/1.5 var(--mono); color: var(--muted); word-break: break-all; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 12px; }
+  @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+  .panel { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .panel .cap { font: 600 12px/1 var(--mono); letter-spacing: .05em; text-transform: uppercase;
+    padding: 9px 12px; background: #f1f3f6; color: var(--muted); border-bottom: 1px solid var(--line); }
+  .panel.before .cap { background: var(--removed-bg); color: var(--removed); }
+  .panel.after .cap { background: var(--added-bg); color: var(--added); }
+  .panel .body { padding: 14px 12px; }
+  .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+  .chip {
+    font: 600 12px/1 var(--mono); border-radius: 999px; padding: 5px 9px; border: 1px solid;
+  }
+  .chip.name { background: #fff; border-color: var(--line); color: var(--ink); }
+  .chip.ver { background: #eef0f4; border-color: #dfe3ea; color: var(--muted); }
+  .chip.mode { background: #ecfdf3; border-color: #b7ebc9; color: var(--added); }
+  .chip.absent { background: #fff; border-color: var(--removed); color: var(--removed); border-style: dashed; }
+  .flow { display: flex; flex-direction: column; gap: 10px; }
+  .step { display: flex; gap: 10px; align-items: flex-start; }
+  .step .k { font: 700 12px/1.4 var(--mono); color: var(--muted); min-width: 66px; }
+  .step .v { font-size: 14px; }
+  ul { margin: 10px 0; padding-left: 20px; }
+  li { margin: 5px 0; }
+  .legend { color: var(--muted); font-size: 13px; margin-top: 10px; }
+  .delt { color: var(--accent); font-weight: 600; }
+  footer { margin-top: 56px; color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); padding-top: 18px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="tag">Spec BM-004 · Agent Canvas</div>
+    <h1>Show the active backend's execution mode (local / Docker)</h1>
+    <p class="sub">Issue <a href="https://github.com/OpenHands/OpenHands/issues/18099">#18099</a> · read-only display of a value the agent server already returns.</p>
+  </header>
+
+  <p class="lead">
+    Canvas already reads the server's runtime boundary to pick a conversation workspace, but
+    operators cannot see it. This PR surfaces that value as a badge next to the existing version
+    badge in the Manage backends view. <span class="delt">No new endpoint, field, or contract</span>:
+    the only new code reads a value the server already reports.
+  </p>
+
+  <div class="callout">
+    <p style="margin-top:0">
+      <span class="star">★</span> <strong>Compatibility note.</strong> The shipped agent server
+      (v1.50.1) reports the boundary as <code>conversation_runtime</code>, not the
+      <code>execution_runtime</code> named in the issue. The display reads either — preferring
+      <code>execution_runtime</code> when present — and renders nothing when neither is reported, so
+      old servers are unchanged. <code>compatibility.minimumAgentServer</code> is <em>not</em> raised.
+    </p>
+    <p style="margin-bottom:0" class="stats">
+      ground: <span class="mono">src/api/agent-server-compatibility.ts</span> ·
+      <span class="mono">src/components/features/backends/backend-execution-mode.tsx</span>
+    </p>
+  </div>
+
+  <h2><span class="n">01</span> · Before → after</h2>
+  <p>One <code>/server_info</code> response already cached for the version badge now also feeds the
+  mode badge. In the row, nothing changes except the added chip.</p>
+
+  <div class="grid">
+    <div class="panel before">
+      <div class="cap">Before</div>
+      <div class="body">
+        <div class="row">
+          <span class="chip name">Local</span>
+          <span class="chip ver">v1.50.1</span>
+        </div>
+        <p class="legend">The runtime boundary is consumed only for workspace selection; the operator sees no mode.</p>
+      </div>
+    </div>
+    <div class="panel after">
+      <div class="cap">After</div>
+      <div class="body">
+        <div class="row">
+          <span class="chip name">Local</span>
+          <span class="chip ver">v1.50.1</span>
+          <span class="chip mode">Runs locally</span>
+        </div>
+        <p class="legend">The same cached response also resolves a localized mode label.</p>
+      </div>
+    </div>
+  </div>
+
+  <h2><span class="n">02</span> · Data flow</h2>
+  <div class="card">
+    <div class="flow">
+      <div class="step"><span class="k">server</span><span class="v"><code>GET /server_info</code> → <code>{ version, conversation_runtime: "local" | "docker" }</code></span></div>
+      <div class="step"><span class="k">hook</span><span class="v"><code>useBackendServerInfo(backend)</code> — one TanStack Query key <code>["backend-version", host, apiKey]</code> shared with the version badge; gated to <code>kind === "local"</code></span></div>
+      <div class="step"><span class="k">resolve</span><span class="v"><code>getBackendExecutionMode(info)</code> → <code>"local" | "docker" | null</code> (single reader of both field names)</span></div>
+      <div class="step"><span class="k">render</span><span class="v"><code>&lt;BackendExecutionMode&gt;</code> → localized chip, or <code>null</code> when the server reports no mode</span></div>
+    </div>
+  </div>
+
+  <h2><span class="n">03</span> · Changed files</h2>
+
+  <div class="card">
+    <h3>🟢 <span class="mono">src/api/agent-server-compatibility.ts</span> · new resolver</h3>
+    <p class="path">+ <code>getBackendExecutionMode()</code>, + <code>BackendExecutionMode</code> type</p>
+    <div class="grid">
+      <div class="panel before"><div class="cap">Before</div><div class="body"><p class="legend">No single reader of the runtime boundary; <code>execution_runtime</code> was declared but unread.</p></div></div>
+      <div class="panel after"><div class="cap">After</div><div class="body"><p class="legend"><code>getBackendExecutionMode()</code> returns the mode or <code>null</code>, preferring <code>execution_runtime</code> and falling back to <code>conversation_runtime</code>.</p></div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>🟢 <span class="mono">src/hooks/query/use-backend-server-info.ts</span> · shared probe</h3>
+    <p class="path">extracts the <code>/server_info</code> probe so version + mode share one cached response</p>
+    <p>Also exports <code>backendVersionQueryKey()</code>; the backend form's status badge now imports the same key, keeping one cache shape for the shared key.</p>
+  </div>
+
+  <div class="card">
+    <h3>🟢 <span class="mono">src/components/features/backends/backend-execution-mode.tsx</span> · the badge</h3>
+    <p class="path">renders the localized mode chip; returns <code>null</code> when no mode is reported</p>
+  </div>
+
+  <div class="card">
+    <h3>✏️ <span class="mono">src/components/features/backends/backend-row.tsx</span></h3>
+    <p class="path">renders <code>&lt;BackendExecutionMode&gt;</code> beside <code>&lt;BackendVersion&gt;</code>; both are gated to local backends</p>
+  </div>
+
+  <div class="card">
+    <h3>⚙️ mechanical</h3>
+    <ul>
+      <li><span class="mono">backend-version.tsx</span> — reads the shared hook instead of its own <code>useQuery</code>.</li>
+      <li><span class="mono">backend-form-modal.tsx</span> — status badge uses <code>useBackendVersion()</code> and the shared query key.</li>
+      <li><span class="mono">src/i18n/translation.json</span> — two new keys translated for all 15 locales.</li>
+      <li><span class="mono">specs/backend-management.md</span> — BM-004 acceptance criteria.</li>
+    </ul>
+  </div>
+
+  <h2><span class="n">04</span> · Acceptance criteria → evidence</h2>
+  <ul>
+    <li><strong>Mode visible next to the version</strong> — live run shows <code>Local v1.50.1 Runs locally</code>; row test asserts the chip.</li>
+    <li><strong>Read from the existing field, no new contract</strong> — <code>getBackendExecutionMode()</code> reads <code>conversation_runtime</code>/<code>execution_runtime</code> from <code>/server_info</code>.</li>
+    <li><strong>Missing field renders nothing</strong> — helper + component tests cover the absent path.</li>
+    <li><strong>Cloud renders no mode</strong> — probe is gated on <code>kind === "local"</code>; test asserts no fetch.</li>
+    <li><strong>Localized</strong> — <code>npm run check-translation-completeness</code> passes with all locales present.</li>
+    <li><strong>minimumAgentServer not raised</strong> — <code>config/defaults.json</code> unchanged.</li>
+  </ul>
+
+  <footer>
+    Design doc for review only — lives under <code>.pr/</code> and is removed before merge.
+  </footer>
+</div>
+</body>
+</html>
