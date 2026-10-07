@@ -308,6 +308,9 @@ test.describe("same-model profile identity", () => {
       model: SHARED_MODEL,
     });
     await activateProfileViaUI(page, PROFILE_BETA);
+    // A launch from the named agent profile runs its llm_profile_ref, not the
+    // standalone active LLM profile, so point it at BETA too.
+    await ensureMockLLMAgentProfile(page.request, PROFILE_BETA);
 
     // Register a trajectory for the conversation.
     // Turn 0 is padding: the agent-server makes an internal LLM call
