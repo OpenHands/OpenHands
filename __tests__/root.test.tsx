@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createRoutesStub } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { http, HttpResponse } from "msw";
-import App, { links } from "#/root";
+import App, { links, meta } from "#/root";
 import { server } from "#/mocks/node";
 import { __resetActiveStoreForTests } from "#/api/backend-registry/active-store";
 import { LOCKED_CLOUD_BACKEND_ID } from "#/api/backend-registry/default-backend";
@@ -907,6 +907,31 @@ describe("App root document links", () => {
     });
   });
 
+  // Without this link the manifest is never fetched and the browser never
+  // evaluates Canvas for installation, however complete the manifest itself is.
+  it("links the web app manifest so the browser can offer installation", () => {
+    // Act
+    const documentLinks = links();
+
+    // Assert
+    expect(documentLinks).toContainEqual({
+      rel: "manifest",
+      href: "/site.webmanifest",
+    });
+  });
+
+  it("declares the apple-touch-icon iOS reads for a home-screen install", () => {
+    // Act
+    const documentLinks = links();
+
+    // Assert
+    expect(documentLinks).toContainEqual({
+      rel: "apple-touch-icon",
+      sizes: "180x180",
+      href: "/apple-touch-icon.png",
+    });
+  });
+
   it("prefixes document links when Canvas is mounted under a base path", () => {
     // Arrange
     vi.stubEnv("VITE_BASE_PATH", "/canvas");
@@ -920,7 +945,64 @@ describe("App root document links", () => {
       type: "image/svg+xml",
       href: "/canvas/favicon.svg",
     });
+    expect(documentLinks).toContainEqual({
+      rel: "manifest",
+      href: "/canvas/site.webmanifest",
+    });
+    expect(documentLinks).toContainEqual({
+      rel: "apple-touch-icon",
+      sizes: "180x180",
+      href: "/canvas/apple-touch-icon.png",
+    });
 
     vi.unstubAllEnvs();
+  });
+});
+
+describe("App root document meta", () => {
+  // iOS below 17.4 ignores the manifest's `display` member, so these are what
+  // make a home-screen launch open standalone instead of in Safari.
+  it("declares the iOS standalone meta tags", () => {
+    // Act
+    const documentMeta = meta({} as Parameters<typeof meta>[0]) ?? [];
+
+    // Assert
+    expect(documentMeta).toContainEqual({
+      name: "apple-mobile-web-app-capable",
+      content: "yes",
+    });
+    expect(documentMeta).toContainEqual({
+      name: "apple-mobile-web-app-status-bar-style",
+      content: "black-translucent",
+    });
+    // Asserted as present and non-empty rather than pinned to exact copy: the
+    // home-screen label is a branding call, and the manifest's `short_name` is
+    // the value it tracks.
+    expect(
+      documentMeta.find(
+        (descriptor) =>
+          "name" in descriptor &&
+          descriptor.name === "apple-mobile-web-app-title",
+      ),
+    ).toEqual({
+      name: "apple-mobile-web-app-title",
+      content: expect.stringMatching(/\S/),
+    });
+  });
+
+  // The color theme runtime owns that tag so it can follow the selected
+  // palette; a static descriptor here would have React fight it on every
+  // head re-render.
+  it("leaves theme-color to the color theme runtime", () => {
+    // Act
+    const documentMeta = meta({} as Parameters<typeof meta>[0]) ?? [];
+
+    // Assert
+    expect(
+      documentMeta.some(
+        (descriptor) =>
+          "name" in descriptor && descriptor.name === "theme-color",
+      ),
+    ).toBe(false);
   });
 });

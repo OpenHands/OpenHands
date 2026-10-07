@@ -129,7 +129,7 @@ function MainAppContent() {
         <SidebarMobileNavProvider>
           <div
             data-testid="root-layout"
-            className="h-screen lg:min-w-5xl flex flex-col md:flex-row bg-base overflow-hidden p-0"
+            className="oh-app-shell h-screen lg:min-w-5xl flex flex-col md:flex-row bg-base overflow-hidden"
           >
             <title>{appTitle}</title>
             <Sidebar />

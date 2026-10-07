@@ -52,6 +52,26 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/*
+ * The app shell owns the display cutout.
+ *
+ * `viewport-fit=cover` (see root.tsx) makes an installed window paint under the
+ * notch, Dynamic Island and home indicator, so the shell insets its own content
+ * back out of them. Padding — not margin — because the shell is the element
+ * painting `bg-base`: the color still runs edge to edge behind the system UI
+ * while the sidebar and chat stay reachable. Preflight's border-box sizing keeps
+ * the padded shell exactly one viewport tall, so nothing scrolls underneath.
+ *
+ * Insets are 0px in a browser tab and on hardware without a cutout, which makes
+ * this a no-op everywhere else.
+ */
+.oh-app-shell {
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+}
+
 code {
   font-family:
     source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
