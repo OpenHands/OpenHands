@@ -1,7 +1,7 @@
 # Agent Canvas docs
 
 This directory contains the project documentation.
-
+- [Non-interactive tasks](../README.md#non-interactive-tasks): supported SDK/API interfaces, legacy CLI status, Docker setup, and caller responsibilities for results.
 - [Architecture](./architecture.md): system boundaries, runtime modes, and quality gates.
 - [Using ACP agents](./ACP_AGENTS.md): onboard and configure external agents (Claude Code, Codex, Gemini CLI).
 - [Development guide](./DEVELOPMENT.md)

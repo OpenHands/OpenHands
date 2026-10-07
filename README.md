@@ -145,18 +145,23 @@ Docker listens on all container interfaces so port publishing works, but does no
 
 ## Non-interactive tasks
 
-For non-interactive tasks and orchestrator integrations, use the
-[Python SDK](https://docs.openhands.dev/sdk/getting-started) or
+The supported long-term non-interactive integration surface is the
+[Python SDK](https://docs.openhands.dev/sdk/getting-started) and
 [Agent Server API](https://docs.openhands.dev/sdk/guides/agent-server/overview).
 Your program submits a conversation, waits for completion, collects the
 results, and determines its own exit status. See the
 [Docker sandbox guide](https://docs.openhands.dev/sdk/guides/agent-server/docker-sandbox)
 for an existing example.
 
-The legacy [OpenHands CLI](https://github.com/OpenHands/OpenHands-CLI#project-status),
-including `--headless`, `-t`/`--file`, `--always-approve`, and
-`--override-with-envs`, is no longer actively maintained. Use the
-Python SDK or Agent Server API for new orchestrator integrations.
+The legacy [OpenHands CLI](https://github.com/OpenHands/OpenHands-CLI#project-status)
+is no longer actively maintained. Its headless mode remains available but
+is not the recommended stable orchestrator contract. This includes
+`--headless`, `--always-approve`, and `--override-with-envs`.
+
+For legacy CLI headless, prompts may be supplied with `-t`/`--task` or
+`-f`/`--file`; for SDK/API integrations, the caller sends the message body
+programmatically. Use the Python SDK or Agent Server API for new
+orchestrator integrations.
 
 For a one-shot task, configure an agent and Docker workspace using the
 guide above. Send one message with `conversation.send_message()`, then
@@ -170,12 +175,12 @@ For example, ask the agent to create `result.txt` containing
 
 The orchestrator collects and checks the results as follows:
 
-| Result | Python SDK approach |
+| Result | Caller responsibility and Python SDK approach |
 |---|---|
-| Exit status | Read `conversation.state.execution_status`. For this example, return `0` only when it is `finished` and the expected outputs pass verification; otherwise return non-zero. |
-| Logs/events | Pass `callbacks=[events.append]` when creating the conversation, then save events using `event.model_dump_json()`. Tool events include terminal output. |
-| Artifacts | Download files using `workspace.file_download(source, destination)` and check the returned `.success`. |
-| Workspace diff | Run `workspace.execute_command("git diff", cwd=workspace.working_dir)`, check its `.exit_code`, and save its `.stdout`. |
+| Exit status | Set by the caller after checking `conversation.state.execution_status` and required outputs. OpenHands does not currently emit a standardized process exit code for SDK/API runs. For this example, return `0` only when the status is `finished` and expected outputs pass verification; otherwise return non-zero. |
+| Logs/events | The caller collects events using `callbacks=[events.append]` and saves them using `event.model_dump_json()`. Tool events include terminal output. Collect any additional required logs from the workspace/server you created. |
+| Artifacts | The caller selects and downloads workspace files using `workspace.file_download(source, destination)` and checks the returned `.success`. |
+| Workspace diff | The caller runs `workspace.execute_command("git diff", cwd=workspace.working_dir)`, checks its `.exit_code`, and saves its `.stdout`. |
 
 # Architecture
 
