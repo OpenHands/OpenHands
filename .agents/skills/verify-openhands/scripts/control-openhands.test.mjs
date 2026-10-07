@@ -35,6 +35,7 @@ import {
 import { routePattern } from "./lib/route-pattern.mjs";
 import { resolveTestids } from "./lib/testids.mjs";
 import { tmuxPathFor } from "./lib/tmux-path.mjs";
+import { browserCallLimit } from "./lib/call-limit.mjs";
 import { buildLocator, parseRole, toCss } from "./lib/selectors.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -908,6 +909,18 @@ test("evidence report shows notes, family counts, and changes against a baseline
     }).status,
     2,
   );
+});
+
+test("a browser call waits for the verb's own deadline plus a margin", () => {
+  // The daemon runs one Playwright waitFor with the verb's --timeout; the
+  // client used to abort every call at 120 s, so `wait --timeout 150000`
+  // failed with an aborted request while the page kept waiting.
+  assert.equal(browserCallLimit({}), 120_000);
+  assert.equal(browserCallLimit({ timeout: 30_000 }), 120_000);
+  assert.equal(browserCallLimit({ timeout: 150_000 }), 160_000);
+  assert.equal(browserCallLimit({ observeMs: 130_000 }), 140_000);
+  assert.equal(browserCallLimit({ timeout: "125000" }), 135_000);
+  assert.equal(browserCallLimit({ timeout: undefined }), 120_000);
 });
 
 test("the tmux directory of a run comes from its whole path", () => {
