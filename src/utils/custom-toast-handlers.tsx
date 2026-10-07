@@ -11,6 +11,10 @@ import {
   isCorsOrNetworkErrorMessage,
 } from "./user-facing-error";
 import { buildAgentCanvasPath } from "#/utils/base-path";
+import {
+  getApiOrConnectionErrorMessage,
+  hasApiErrorResponse,
+} from "./api-error-message";
 
 // react-hot-toast accepts only CSSProperties via the style option — cannot use className
 const TOAST_STYLE: CSSProperties = {
@@ -94,6 +98,14 @@ export const ERROR_TOAST_OPTIONS: ToastOptions = {
   style: ERROR_TOAST_STYLE,
 };
 
+function showErrorToast(message: string) {
+  const duration = calculateToastDuration(message, 4000);
+  toast(<ErrorToastContent message={message} />, {
+    ...ERROR_TOAST_OPTIONS,
+    duration,
+  });
+}
+
 export const displayErrorToast = (error: string | null | undefined) => {
   let errorMessage = error || i18n.t(I18nKey.STATUS$ERROR);
   if (isCorsOrNetworkErrorMessage(errorMessage)) {
@@ -101,11 +113,22 @@ export const displayErrorToast = (error: string | null | undefined) => {
   } else if (isBackendRequestTimeoutMessage(errorMessage)) {
     errorMessage = i18n.t(I18nKey.ERROR$BACKEND_REQUEST_TIMEOUT);
   }
-  const duration = calculateToastDuration(errorMessage, 4000);
-  toast(<ErrorToastContent message={errorMessage} />, {
-    ...ERROR_TOAST_OPTIONS,
-    duration,
-  });
+  showErrorToast(errorMessage);
+};
+
+/**
+ * Toast a failed API call. When the server answered, its own reason (see
+ * `getApiErrorMessage`) is shown as sent, even if it happens to mention
+ * "Failed to fetch"; only a failure with no response (network, CORS, timeout)
+ * gets the shared "Disconnected" wording.
+ */
+export const displayApiErrorToast = (error: unknown, fallback: string) => {
+  const message = getApiOrConnectionErrorMessage(error, fallback);
+  if (hasApiErrorResponse(error)) {
+    showErrorToast(message);
+  } else {
+    displayErrorToast(message);
+  }
 };
 
 export const displaySuccessToast = (message: string) => {

@@ -1,8 +1,9 @@
 import React from "react";
-import { useNavigate, useLocation, useMatch } from "react-router";
+import { useNavigate, useLocation } from "react-router";
 import { useTranslation } from "react-i18next";
 
 import { useConversationId } from "#/hooks/use-conversation-id";
+import { useConversationPanelRoute } from "#/hooks/use-conversation-panel-route";
 import { useCommandStore } from "#/stores/command-store";
 import { useConversationStore } from "#/stores/conversation-store";
 import { useAgentStore } from "#/stores/agent-store";
@@ -34,7 +35,7 @@ import { resumeCloudSandbox } from "#/api/cloud/conversation-service.api";
 function AppContent() {
   const { t } = useTranslation("openhands");
   const { conversationId } = useConversationId();
-  const panelViewMatch = useMatch("/conversations/:conversationId/panel");
+  const showsMobilePanelPage = useConversationPanelRoute(conversationId);
 
   const { isTask, taskStatus, taskDetail } = useTaskPollingController();
 
@@ -216,7 +217,7 @@ function AppContent() {
     <EventHandler>
       <ConversationOverviewDrawerProvider>
         <div data-testid="app-route" className="flex h-full flex-col">
-          {panelViewMatch ? (
+          {showsMobilePanelPage ? (
             <ConversationMobilePanelPage
               onNavigateBack={() =>
                 navigate(`/conversations/${conversationId}`)

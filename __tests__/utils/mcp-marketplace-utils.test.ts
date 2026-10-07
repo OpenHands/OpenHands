@@ -31,7 +31,7 @@ function optionTransport(entry: typeof slackEntry, optionId = "api") {
 }
 
 describe("findInstalledMatch", () => {
-  it("matches stdio servers by name", () => {
+  it("matches stdio servers by command and args", () => {
     const result = findInstalledMatch(optionTransport(slackEntry), [
       {
         id: "stdio-0",
@@ -44,7 +44,7 @@ describe("findInstalledMatch", () => {
     expect(result).toEqual(expect.objectContaining({ id: "stdio-0" }));
   });
 
-  it("does not match a different stdio name", () => {
+  it("does not match a stdio server running a different package", () => {
     const result = findInstalledMatch(optionTransport(slackEntry), [
       {
         id: "stdio-0",
@@ -57,7 +57,7 @@ describe("findInstalledMatch", () => {
     expect(result).toBeNull();
   });
 
-  it("matches Tavily as a stdio server by name", () => {
+  it("matches Tavily as a stdio server", () => {
     // Tavily lives in the catalog as a stdio MCP entry (the previous
     // tavily-builtin / search_api_key flow never persisted anywhere
     // and silently dropped the key); confirm the now-uniform match.
@@ -291,12 +291,64 @@ describe("findCatalogEntryForServer", () => {
         type: "stdio",
         name: "slack",
         command: "npx",
-        args: [],
+        args: ["-y", "@zencoderai/slack-mcp-server"],
       },
       mcpMarketplace,
     );
     expect(match?.id).toBe("slack");
   });
+
+  it.each(["time_1", "work_time"])(
+    "keeps the catalog identity of a stdio copy named %s",
+    (name) => {
+      // A second library install is stored under a suffixed key (time_1)
+      // and users may rename a copy; both still run the catalog command.
+      const match = findCatalogEntryForServer(
+        {
+          id: name,
+          type: "stdio",
+          name,
+          command: "uvx",
+          args: ["mcp-server-time"],
+        },
+        mcpMarketplace,
+      );
+      expect(match?.id).toBe("time");
+    },
+  );
+
+  it.each([
+    [
+      "filesystem",
+      "npx",
+      ["-y", "@modelcontextprotocol/server-filesystem", "/a", "/b"],
+    ],
+    ["git", "uvx", ["mcp-server-git", "--repository", "/repo"]],
+  ])(
+    "matches %s with its argument-field tokens appended",
+    (id, command, args) => {
+      const match = findCatalogEntryForServer(
+        { id, type: "stdio", name: id, command, args },
+        mcpMarketplace,
+      );
+      expect(match?.id).toBe(id);
+    },
+  );
+
+  it.each([
+    ["a different command", "npx", ["mcp-server-time"]],
+    ["different args", "uvx", ["my-own-time-server"]],
+    ["missing args", "uvx", undefined],
+  ])(
+    "does not match a stdio server named after a catalog entry with %s",
+    (_case, command, args) => {
+      const match = findCatalogEntryForServer(
+        { id: "time", type: "stdio", name: "time", command, args },
+        mcpMarketplace,
+      );
+      expect(match).toBeUndefined();
+    },
+  );
 
   it("returns undefined for unknown servers", () => {
     expect(

@@ -6,10 +6,9 @@ import PluginsManagementService, {
 import { PLUGINS_QUERY_KEYS } from "#/hooks/query/query-keys";
 import { I18nKey } from "#/i18n/declaration";
 import {
-  displayErrorToast,
+  displayApiErrorToast,
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
-import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
 
 /**
  * Install a plugin from a git source or local path. Installing flips a catalog
@@ -21,6 +20,8 @@ export function useInstallPlugin() {
   const { t } = useTranslation("openhands");
 
   return useMutation({
+    // This hook toasts the server's reason itself; skip the global toast.
+    meta: { disableToast: true },
     mutationFn: (request: InstallPluginRequest) =>
       PluginsManagementService.installPlugin(request),
     onSuccess: () => {
@@ -30,10 +31,6 @@ export function useInstallPlugin() {
       });
       displaySuccessToast(t(I18nKey.SETTINGS$PLUGINS_INSTALL_SUCCESS));
     },
-    onError: (error) => {
-      displayErrorToast(
-        retrieveAxiosErrorMessage(error) || t(I18nKey.ERROR$GENERIC),
-      );
-    },
+    onError: (error) => displayApiErrorToast(error, t(I18nKey.ERROR$GENERIC)),
   });
 }

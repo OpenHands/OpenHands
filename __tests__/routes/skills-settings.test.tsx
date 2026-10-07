@@ -467,7 +467,7 @@ Full skill body.`,
     const modal = await screen.findByTestId("add-skill-modal");
     expect(modal).toBeInTheDocument();
     expect(screen.getByTestId("add-skill-modal-example")).toHaveTextContent(
-      "/add-skill https://github.com/OpenHands/extensions/tree/main/skills/codereview",
+      "/add-skill https://github.com/OpenHands/extensions/tree/main/skills/code-review",
     );
     expect(screen.getByTestId("add-skill-modal-docs-link")).toHaveAttribute(
       "href",
