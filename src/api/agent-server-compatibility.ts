@@ -35,8 +35,18 @@ export const INVALID_BACKEND_API_KEY_ERROR = "Invalid API key";
 export interface AgentServerInfo extends BaseServerInfo {
   sdk_version?: string;
   runtime_services?: unknown;
+  /**
+   * Execution boundary the server runs conversations in.
+   *
+   * The shipped agent-server reports this as `conversation_runtime` (inherited
+   * from the SDK's `ServerInfo`); `execution_runtime` is the forward-looking
+   * name Canvas also accepts, so the display keeps working if the server starts
+   * emitting it. `getBackendExecutionMode()` is the single reader of both.
+   */
   execution_runtime?: "local" | "docker";
 }
+
+export type BackendExecutionMode = "local" | "docker";
 
 let cachedAgentServerInfo: AgentServerInfo | null = null;
 let cachedAgentServerInfoHost: string | null = null;
@@ -210,6 +220,26 @@ export function getDisplayAgentServerSdkVersion(
     return null;
   }
   return version;
+}
+
+/**
+ * Resolve the execution boundary a backend's agent-server runs conversations in.
+ *
+ * Reads `execution_runtime` when present, falling back to the field the shipped
+ * server actually returns, `conversation_runtime`. Returns `null` when neither
+ * is reported (older servers), so callers can render nothing and leave the UI
+ * unchanged.
+ *
+ * @spec BM-004 — Display the active backend's execution mode
+ */
+export function getBackendExecutionMode(
+  serverInfo: AgentServerInfo | null | undefined,
+): BackendExecutionMode | null {
+  const raw =
+    serverInfo?.execution_runtime ??
+    (serverInfo as { conversation_runtime?: unknown } | null | undefined)
+      ?.conversation_runtime;
+  return raw === "local" || raw === "docker" ? raw : null;
 }
 
 export function getCachedAgentServerSdkVersion(

@@ -21,6 +21,7 @@ import {
 } from "#/context/navigation-context";
 import { ManageBackendsModal } from "#/components/features/backends/manage-backends-modal";
 import { BackendVersion } from "#/components/features/backends/backend-version";
+import { BackendExecutionMode } from "#/components/features/backends/backend-execution-mode";
 import { BackendRow } from "#/components/features/backends/backend-row";
 import { type Backend } from "#/api/backend-registry/types";
 import { CLOUD_BACKEND_LOGGED_OUT_ERROR } from "#/hooks/query/use-backends-health";
@@ -899,7 +900,117 @@ describe("BackendVersion", () => {
   });
 });
 
+const localBackend: Backend = {
+  id: "backend-local",
+  name: "Local Box",
+  host: "http://localhost:3000",
+  apiKey: "local-test-key",
+  kind: "local",
+};
+
+// @spec BM-004 — Display the active backend's execution mode
+describe("BackendExecutionMode", () => {
+  it("shows the Docker mode when the server reports conversation_runtime=docker", async () => {
+    // Arrange: the shipped server reports the field as `conversation_runtime`.
+    getServerInfoMock.mockResolvedValue({
+      version: "1.50.0",
+      conversation_runtime: "docker",
+    });
+
+    // Act
+    renderInQueryClient(<BackendExecutionMode backend={localBackend} />);
+
+    // Assert
+    const badge = await screen.findByTestId(
+      `manage-backends-execution-mode-${localBackend.name}`,
+    );
+    expect(badge).toHaveTextContent("BACKEND$EXECUTION_MODE_DOCKER");
+    expect(badge).toHaveAttribute("data-execution-mode", "docker");
+  });
+
+  it("shows the local mode when the server reports execution_runtime=local", async () => {
+    // Arrange: a server that has adopted the forward-looking field name.
+    getServerInfoMock.mockResolvedValue({
+      version: "1.50.0",
+      execution_runtime: "local",
+    });
+
+    // Act
+    renderInQueryClient(<BackendExecutionMode backend={localBackend} />);
+
+    // Assert
+    const badge = await screen.findByTestId(
+      `manage-backends-execution-mode-${localBackend.name}`,
+    );
+    expect(badge).toHaveTextContent("BACKEND$EXECUTION_MODE_LOCAL");
+    expect(badge).toHaveAttribute("data-execution-mode", "local");
+  });
+
+  it("renders no badge when the server omits the runtime field", async () => {
+    // Arrange: an older server that reports only a version.
+    getServerInfoMock.mockResolvedValue({ version: "1.44.0" });
+
+    // Act
+    renderInQueryClient(<BackendExecutionMode backend={localBackend} />);
+
+    // Assert: the probe resolves, then the badge stays absent.
+    await waitFor(() => expect(getServerInfoMock).toHaveBeenCalled());
+    expect(
+      screen.queryByTestId(`manage-backends-execution-mode-${localBackend.name}`),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders no badge and skips the probe for a cloud backend", () => {
+    // Arrange / Act: cloud backends do not expose `/server_info`.
+    renderInQueryClient(<BackendExecutionMode backend={cloudBackend} />);
+
+    // Assert
+    expect(
+      screen.queryByTestId(
+        `manage-backends-execution-mode-${cloudBackend.name}`,
+      ),
+    ).not.toBeInTheDocument();
+    expect(getServerInfoMock).not.toHaveBeenCalled();
+  });
+});
+
 describe("BackendRow", () => {
+  it("renders the execution-mode badge next to the version badge", async () => {
+    // Arrange: a connected local backend whose server reports a mode.
+    getServerInfoMock.mockResolvedValue({
+      version: "1.50.0",
+      conversation_runtime: "docker",
+    });
+
+    // Act
+    renderInQueryClient(
+      <ul>
+        <BackendRow
+          backend={localBackend}
+          health={{
+            isConnected: true,
+            consecutiveFailures: 0,
+            lastError: null,
+            disabled: false,
+          }}
+          onSelect={vi.fn()}
+          onEdit={vi.fn()}
+          onRemove={vi.fn()}
+        />
+      </ul>,
+    );
+
+    // Assert
+    expect(
+      await screen.findByTestId(`manage-backends-version-${localBackend.name}`),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByTestId(
+        `manage-backends-execution-mode-${localBackend.name}`,
+      ),
+    ).toHaveTextContent("BACKEND$EXECUTION_MODE_DOCKER");
+  });
+
   it("disables row selection when the backend is not connected", () => {
     renderInQueryClient(
       <ul>
