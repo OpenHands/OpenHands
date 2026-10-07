@@ -1,0 +1,36 @@
+OpenCode preset: upstream conflict resolution
+
+I merged upstream/main at 6e8157147936768bf358903a6341bc01e0ce1ac9 into
+fix/openhands-opencode-acp-preset without rewriting the PR history.
+
+Resolution:
+- docs/ACP_AGENTS.md: retain upstream table formatting and the OpenCode
+  command/authentication row, with optional base URL only where the registry
+  defines one. The installed 1.53.0 client still advertises OpenCode 1.18.23.
+- src/api/agent-server-compatibility.test.ts: retain the upstream 1.51.0 floor
+  and its boundary tests, plus the pre-OpenCode 1.28.0/1.44.99 regression cases.
+- Review auto-merged profile tests and translations relative to upstream/main;
+  the profile tests retain current upstream behavior and all OpenCode cases.
+
+Verification (macOS arm64, Node 26.0.0, npm ci from the merged lockfile):
+- Seven focused suites: 187 tests passed.
+- npm run lint: passed, including typecheck and formatting; 0 errors,
+  528 warnings. These warnings remain visible; lint was not disabled.
+- npm run check-translation-completeness: passed, all locale keys covered.
+- npm run build: passed.
+- npm run build:lib: passed, including TypeScript declaration emit.
+- npm test: 791 files passed, 1 failed; 8,538 tests passed, 2 failed, 7 todo.
+  Both failures are in __tests__/scripts/docker-session-key-policy.test.ts,
+  which and its docker/entrypoint.sh input are identical to upstream/main.
+  Running the policy block extracted with git show upstream/main:docker/entrypoint.sh
+  through macOS Bash 3.2 reproduces exit 127 for unset and "1" opt-in values:
+  STATIC_SERVER_SESSION_KEY_ARGS[@]: unbound variable.
+  The explicit "true" case exits 0. This is not a green full-suite result.
+- git diff --check and staged conflict-marker checks: passed.
+
+Focused command:
+npm test -- src/constants/acp-providers.test.ts __tests__/constants/acp-providers.test.ts __tests__/routes/agent-settings.test.tsx __tests__/components/onboarding/choose-agent-step.test.tsx __tests__/components/onboarding/setup-acp-secrets-step.test.tsx src/api/agent-server-compatibility.test.ts src/api/no-direct-agent-server-calls.test.ts
+
+This update resolves merge conflicts, not a new UI/runtime feature. The prior
+live UI evidence is historical; I did not rerun a real-provider GUI session
+for this merge. The updated head still needs its new GitHub CI run.

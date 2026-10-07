@@ -5,6 +5,11 @@ import XCircle from "#/icons/x-circle-solid.svg?react";
 import { I18nKey } from "#/i18n/declaration";
 import { GoalStatus } from "#/types/agent-server/core/events/conversation-state-event";
 import { useGoalStore } from "#/stores/goal-store";
+import { useEventStore, type OHEvent } from "#/stores/use-event-store";
+import {
+  isConversationStateUpdateEvent,
+  isGoalConversationStateUpdateEvent,
+} from "#/types/agent-server/type-guards";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import {
   pauseConversation,
@@ -26,6 +31,20 @@ const STATUS_LABEL_KEY: Record<GoalStatus["status"], I18nKey> = {
   interrupted: I18nKey.GOAL$STATUS_INTERRUPTED,
 };
 
+/** Id of the newest goal status event in the (timestamp-sorted) event list. */
+const findLatestGoalEventId = (events: OHEvent[]): string | undefined => {
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    const event = events[i];
+    if (
+      isConversationStateUpdateEvent(event) &&
+      isGoalConversationStateUpdateEvent(event)
+    ) {
+      return event.id;
+    }
+  }
+  return undefined;
+};
+
 /**
  * Goal-status row: objective, round count, status word, the judge's score, the
  * judge's "missing" note (expandable), and an indicator — spinner while running,
@@ -35,15 +54,25 @@ const STATUS_LABEL_KEY: Record<GoalStatus["status"], I18nKey> = {
  * Also exposes the loop controls at the end of the row: a Stop button while the
  * loop is active and a Resume button once it is interrupted. Stop both cancels
  * the loop (`stopGoal`) and interrupts the conversation, because the backend's
- * stop deliberately leaves the in-flight agent turn running.
+ * stop deliberately leaves the in-flight agent turn running. Only the latest
+ * goal status offers Resume: the backend resumes the conversation's last goal,
+ * so an interrupted row that a later goal status superseded has nothing left to
+ * resume (it answers `no_resumable_goal`).
  *
  * Used in two places: the live bottom banner (GoalStatusBanner) while a loop is
  * active, and inline in the message timeline for the terminal status, so a
  * finished `/goal` settles into the conversation. Because the inline copy mounts
  * fresh once terminal, `initiallyExpanded={!active}` expands the note there
- * without any re-mount trickery.
+ * without any re-mount trickery. Inline rows pass their `eventId` so a row can
+ * tell whether a later goal status superseded it.
  */
-export function GoalStatusContent({ status }: { status: GoalStatus }) {
+export function GoalStatusContent({
+  status,
+  eventId,
+}: {
+  status: GoalStatus;
+  eventId?: string;
+}) {
   const { t } = useTranslation("openhands");
   const { conversationId } = useOptionalConversationId();
   // Whether *some* goal loop is currently live for this conversation. Used to
@@ -53,6 +82,12 @@ export function GoalStatusContent({ status }: { status: GoalStatus }) {
     conversationId
       ? Boolean(s.statusByConversation[conversationId]?.active)
       : false,
+  );
+  // Read from the event list rather than the goal store: the store is only fed
+  // by live WebSocket events, so after a reload it is empty while the history
+  // (REST) still holds the newer running/capped/complete status.
+  const isLatestGoalStatus = useEventStore(
+    (s) => eventId === undefined || findLatestGoalEventId(s.events) === eventId,
   );
   const [pending, setPending] = useState(false);
   const {
@@ -110,7 +145,12 @@ export function GoalStatusContent({ status }: { status: GoalStatus }) {
         {t(I18nKey.GOAL$STOP)}
       </button>
     );
-  } else if (conversationId && status.status === "interrupted" && !goalActive) {
+  } else if (
+    conversationId &&
+    status.status === "interrupted" &&
+    isLatestGoalStatus &&
+    !goalActive
+  ) {
     actionButton = (
       <button
         type="button"

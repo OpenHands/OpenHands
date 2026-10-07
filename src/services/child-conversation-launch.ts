@@ -40,6 +40,9 @@ import {
 const CLOUD_START_POLL_INTERVAL_MS = 3_000;
 const CLOUD_START_POLL_TIMEOUT_MS = 180_000;
 
+/** Cloud and self-hosted Enterprise serve Agent Canvas here; the host root is the legacy UI. */
+const CLOUD_AGENT_CANVAS_BASE_PATH = "/canvas";
+
 const LEDGER_STORAGE_KEY_PREFIX = "openhands-child-conversation-launches:";
 
 interface LaunchSuccess {
@@ -458,7 +461,7 @@ async function launchCloudChild(
     target: "cloud",
     conversation_id: conversationId,
     url: conversationId
-      ? `${backend.host.replace(/\/$/, "")}/conversations/${conversationId}`
+      ? `${backend.host.replace(/\/$/, "")}${CLOUD_AGENT_CANVAS_BASE_PATH}/conversations/${conversationId}`
       : null,
     initial_status: settled.status,
     title: params.title,

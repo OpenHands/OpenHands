@@ -252,7 +252,7 @@ export interface GetSkillsResponse {
 export interface HookDefinition {
   type: string; // 'command' or 'prompt'
   command: string;
-  timeout: number;
+  timeout?: number; // Omitted when a server leaves the SDK default implicit
   async?: boolean;
 }
 

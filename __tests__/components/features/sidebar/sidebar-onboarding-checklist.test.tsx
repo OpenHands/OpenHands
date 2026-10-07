@@ -10,6 +10,15 @@ import {
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { http, HttpResponse } from "msw";
+import {
+  __resetActiveStoreForTests,
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
+import SuperAdminSetupGuide from "#/components/features/setup-guide/super-admin-setup-guide";
+import { ActiveBackendProvider } from "#/contexts/active-backend-context";
+import { server } from "#/mocks/node";
 import { ONBOARDING_COMPLETED_STORAGE_KEY } from "#/components/features/onboarding/use-onboarding-completion";
 import { SidebarOnboardingChecklist } from "#/components/features/sidebar/sidebar-onboarding-checklist";
 import {
@@ -400,6 +409,101 @@ describe("SidebarOnboardingChecklist", () => {
         checklist_item: "schedule_task",
         is_external: false,
       });
+    });
+  });
+
+  describe("with the Super Admin setup guide", () => {
+    function serveCloudUser(permissions: string[]) {
+      server.use(
+        http.get("*/api/organizations/:orgId/me", ({ params }) =>
+          HttpResponse.json({
+            org_id: params.orgId,
+            user_id: "user-1",
+            role: "owner",
+            permissions,
+          }),
+        ),
+        http.get("*/api/admin/setup-state", () =>
+          HttpResponse.json({
+            wizard_pending: false,
+            guide_org_id: "org-1",
+            guide_dismissed: false,
+            guide_steps: {
+              org_llm: false,
+              mcp_server: false,
+              automation: false,
+              invite: false,
+            },
+          }),
+        ),
+      );
+    }
+
+    function renderOnCloud() {
+      const navigation: NavigationContextValue = {
+        currentPath: "/",
+        conversationId: null,
+        isNavigating: false,
+        navigate: vi.fn(),
+      };
+      render(
+        <QueryClientProvider
+          client={
+            new QueryClient({ defaultOptions: { queries: { retry: false } } })
+          }
+        >
+          <ActiveBackendProvider>
+            <NavigationProvider value={navigation}>
+              <SidebarOnboardingChecklist collapsed={false} />
+              <SuperAdminSetupGuide />
+            </NavigationProvider>
+          </ActiveBackendProvider>
+        </QueryClientProvider>,
+      );
+    }
+
+    beforeEach(() => {
+      __resetActiveStoreForTests();
+      setRegisteredBackends([
+        {
+          id: "cloud-1",
+          name: "OHE",
+          host: "https://ohe.example.com",
+          apiKey: "",
+          kind: "cloud",
+        },
+      ]);
+      setActiveSelection({ backendId: "cloud-1", orgId: "org-1" });
+    });
+
+    afterEach(() => {
+      __resetActiveStoreForTests();
+    });
+
+    it("steps aside while the setup guide is shown", async () => {
+      serveCloudUser(["manage_super_admins"]);
+
+      renderOnCloud();
+
+      expect(
+        await screen.findByTestId("super-admin-setup-guide"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("sidebar-onboarding-checklist"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("stays for cloud users who have no setup guide", async () => {
+      serveCloudUser(["view_automations"]);
+
+      renderOnCloud();
+
+      expect(
+        await screen.findByTestId("sidebar-onboarding-checklist"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("super-admin-setup-guide"),
+      ).not.toBeInTheDocument();
     });
   });
 });

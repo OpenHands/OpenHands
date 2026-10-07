@@ -18,10 +18,15 @@ export const useClickOutsideElement = <T extends HTMLElement>(
 
   React.useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Node;
       if (!ref.current) return;
-      if (ref.current.contains(target)) return;
-      if (ignoreOutsideClickRef?.current?.contains(target)) return;
+      // Check the path recorded when the click was dispatched rather than
+      // `contains(event.target)`: an inside element that unmounts in its own
+      // click handler (a menu option closing its menu) is already detached
+      // when this document listener runs, but was clicked inside.
+      const path = event.composedPath();
+      if (path.includes(ref.current)) return;
+      const ignoredElement = ignoreOutsideClickRef?.current;
+      if (ignoredElement && path.includes(ignoredElement)) return;
       callbackRef.current();
     };
 

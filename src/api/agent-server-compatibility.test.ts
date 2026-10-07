@@ -85,28 +85,32 @@ describe("agent-server version compatibility", () => {
 
   // OpenCode enters ACPServerKind in 1.45.0. Reject pre-OpenCode servers
   // before settings can be saved, even if they satisfy Canvas's former floor.
-  it.each(["0.99.99", "1.27.999", "1.28.0", "1.44.99", "1.47.0-rc.1"])(
-    "rejects older version %s",
-    (version) => {
-      const error = getThrownError(() =>
-        assertAgentServerVersionIsSupported(serverInfo(version)),
-      );
+  it.each([
+    "0.99.99",
+    "1.27.999",
+    "1.28.0",
+    "1.44.99",
+    "1.50.1",
+    "1.51.0-rc.1",
+  ])("rejects older version %s", (version) => {
+    const error = getThrownError(() =>
+      assertAgentServerVersionIsSupported(serverInfo(version)),
+    );
 
-      expect(error).toBeInstanceOf(AgentServerUnsupportedVersionError);
-      expect(error).toMatchObject({
-        actualVersion: version,
-        code: AGENT_SERVER_UNSUPPORTED_VERSION_ERROR_CODE,
-        requiredVersion: MINIMUM_COMPATIBLE_AGENT_SERVER_VERSION,
-      });
-    },
-  );
+    expect(error).toBeInstanceOf(AgentServerUnsupportedVersionError);
+    expect(error).toMatchObject({
+      actualVersion: version,
+      code: AGENT_SERVER_UNSUPPORTED_VERSION_ERROR_CODE,
+      requiredVersion: MINIMUM_COMPATIBLE_AGENT_SERVER_VERSION,
+    });
+  });
 
   it.each([
     MINIMUM_COMPATIBLE_AGENT_SERVER_VERSION,
-    "1.47.1",
-    "1.48.0",
+    "1.51.1",
+    "1.52.0",
     "2.0.0",
-    " v1.47.0+build.7 ",
+    " v1.51.0+build.7 ",
   ])("accepts compatible version %s", (version) => {
     expect(() =>
       assertAgentServerVersionIsSupported(serverInfo(version)),
