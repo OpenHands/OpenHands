@@ -417,7 +417,7 @@ export const AGENT_SERVER_IMPORT_MODULES = "canvas_ui_tool";
  *   edits are picked up without a manual reinstall. The agent-server itself
  *   is rebuilt from local source on each invocation (--reinstall).
  * - OH_AGENT_SERVER_GIT_REF: Git commit SHA or branch name
- * - OH_AGENT_SERVER_VERSION: Specific PyPI version (e.g., "1.50.1")
+ * - OH_AGENT_SERVER_VERSION: Specific PyPI version (e.g., "1.53.0")
  *
  * If none are set, defaults to the released version specified by
  * DEFAULT_AGENT_SERVER_VERSION. Set OH_AGENT_SERVER_GIT_REF to use a
@@ -792,6 +792,7 @@ export function buildAgentServerEnv(config, options = {}) {
     [
       "OH_CONVERSATION_RUNTIME",
       "OH_CONVERSATION_IMAGE",
+      "OH_CONVERSATION_IMAGE_HAS_BROWSER",
       "OH_CONVERSATION_CONTAINER_MEMORY",
       "OH_CONVERSATION_CONTAINER_CPUS",
       "OH_CONVERSATION_CONTAINER_PIDS_LIMIT",
@@ -803,6 +804,9 @@ export function buildAgentServerEnv(config, options = {}) {
   return {
     ...buildAgentServerTelemetryEnv(env),
     ...conversationRuntimeEnv,
+    ...(env.VITE_ENABLE_BROWSER_TOOLS === "false"
+      ? { OH_ENABLE_BROWSER: env.OH_ENABLE_BROWSER || "false" }
+      : {}),
     // Force Python to use UTF-8 for all file I/O and streams.
     //
     // On Windows, Python defaults to the system ANSI codepage (e.g. cp1252).

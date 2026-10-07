@@ -9,6 +9,9 @@ import {
 } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
 import { callCloudProxy } from "#/api/cloud/proxy";
+import { ActiveBackendProvider } from "#/contexts/active-backend-context";
+import { createAgentServerQueryClient } from "#/query-client-config";
+import * as ToastHandlers from "#/utils/custom-toast-handlers";
 import {
   useDefaultModel,
   useFreeModels,
@@ -33,6 +36,21 @@ const wrapper = ({ children }: { children: React.ReactNode }) => {
     defaultOptions: { queries: { retry: false } },
   });
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+};
+
+// The app's providers: its query client (with the global error toast
+// handler) and the registry-backed active backend.
+const appProvidersWrapper = () => {
+  const client = createAgentServerQueryClient();
+  client.setDefaultOptions({ queries: { retry: false } });
+  function AppProviders({ children }: { children: React.ReactNode }) {
+    return (
+      <QueryClientProvider client={client}>
+        <ActiveBackendProvider>{children}</ActiveBackendProvider>
+      </QueryClientProvider>
+    );
+  }
+  return AppProviders;
 };
 
 function useHydratedFreeModelState() {
@@ -64,6 +82,7 @@ describe("useHydrateFreeModels", () => {
       defaultModel: null,
     });
     vi.mocked(callCloudProxy).mockReset();
+    vi.restoreAllMocks();
   });
 
   it("fetches OpenHands model flags with the backend-compatible page limit", async () => {
@@ -98,5 +117,36 @@ describe("useHydrateFreeModels", () => {
       expect(result.current.freeModels.has("openhands/glm-5.2")).toBe(true),
     );
     expect(result.current.defaultModel).toBe("openhands/glm-5.2");
+  });
+
+  it("settles without fetching or toasting while no backend is configured", async () => {
+    const toastSpy = vi.spyOn(ToastHandlers, "displayErrorToast");
+    setRegisteredBackends([]);
+
+    renderHook(() => useHydratedFreeModelState(), {
+      wrapper: appProvidersWrapper(),
+    });
+
+    await waitFor(() =>
+      expect(useFreeModelsStore.getState().defaultModelReady).toBe(true),
+    );
+    expect(toastSpy).not.toHaveBeenCalled();
+    expect(useFreeModelsStore.getState().defaultModel).toBeNull();
+  });
+
+  it("still toasts a real backend failure once a backend is configured", async () => {
+    const toastSpy = vi.spyOn(ToastHandlers, "displayErrorToast");
+    vi.mocked(callCloudProxy).mockRejectedValue(
+      new Error("Model search is unavailable"),
+    );
+
+    renderHook(() => useHydratedFreeModelState(), {
+      wrapper: appProvidersWrapper(),
+    });
+
+    await waitFor(() =>
+      expect(toastSpy).toHaveBeenCalledWith("Model search is unavailable"),
+    );
+    expect(useFreeModelsStore.getState().defaultModelReady).toBe(true);
   });
 });

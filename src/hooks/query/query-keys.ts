@@ -33,6 +33,10 @@ export const AGENT_PROFILES_QUERY_KEYS = {
     ["agent-profiles", backendId, orgId, "detail", name] as const,
 } as const;
 
+export const TOOL_CATALOG_QUERY_KEYS = {
+  all: ["tool-catalog"] as const,
+} as const;
+
 export const PROVIDER_CONNECTIONS_QUERY_KEYS = {
   all: ["provider-connections"] as const,
 } as const;
@@ -74,6 +78,20 @@ export const CANVAS_EXTENSIONS_QUERY_KEYS = {
       backendId,
       orgId,
       connectionRevision,
+    ] as const,
+  icon: (
+    backendId: string,
+    orgId: string | null,
+    connectionRevision: number,
+    name: string,
+  ) =>
+    [
+      "canvas-extensions",
+      "icon",
+      backendId,
+      orgId,
+      connectionRevision,
+      name,
     ] as const,
 } as const;
 

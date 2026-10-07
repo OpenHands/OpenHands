@@ -36,6 +36,8 @@ import {
 import { isResponderAutomation } from "#/utils/responder-deployment";
 import { useAutomations } from "#/hooks/query/use-automations";
 import { useNativeGitIntegrations } from "#/hooks/query/use-native-git-integrations";
+import { cloudIntegrationsUrl } from "#/utils/cloud-integrations-url";
+import { BuiltInIntegrationChoiceModal } from "./built-in-integration-choice-modal";
 import { RecommendedAutomationsRail } from "./recommended-automations-rail";
 import { RecommendedAutomationsSection } from "./recommended-automations-section";
 import { ResponderDeploymentModal } from "./responder-deployment-modal";
@@ -64,6 +66,22 @@ function getRequiredEntries(automation: RecommendedAutomation) {
     .filter((entry): entry is MarketplaceEntry => !!entry);
 }
 
+/**
+ * The 'Issue to PR' automations a built-in integration (Settings >
+ * Integrations) already provides out of the box, keyed to that integration's
+ * catalog entry.
+ */
+const BUILT_IN_INTEGRATION_ID_BY_AUTOMATION_ID: Record<string, string> = {
+  "github-issue-to-pr": "github",
+  "gitlab-issue-to-mr": "gitlab",
+  "jira-issue-to-pr": "jira",
+  "jira-issue-to-gitlab-mr": "jira",
+  "jira-issue-to-bitbucket-pr": "jira",
+  "linear-issue-to-github-pr": "linear",
+  "linear-issue-to-gitlab-mr": "linear",
+  "linear-issue-to-bitbucket-pr": "linear",
+};
+
 export function RecommendedAutomationsLauncher({
   query,
   onLaunched,
@@ -85,6 +103,10 @@ export function RecommendedAutomationsLauncher({
     useState<RecommendedAutomation | null>(null);
   const [deploymentChoiceAutomation, setDeploymentChoiceAutomation] =
     useState<RecommendedAutomation | null>(null);
+  const [builtInChoice, setBuiltInChoice] = useState<{
+    automation: RecommendedAutomation;
+    integration: MarketplaceEntry;
+  } | null>(null);
   const [installQueue, setInstallQueue] = useState<MarketplaceEntry[]>([]);
   const completedInstallRef = useRef(false);
   const launchInFlightRef = useRef(false);
@@ -94,8 +116,12 @@ export function RecommendedAutomationsLauncher({
   const isRail = variant === "rail";
   const { data: automationsData, isLoading: isAutomationsLoading } =
     useAutomations({ enabled: isRail });
-  const { getNativeIntegration, isLoading: isNativeIntegrationsLoading } =
-    useNativeGitIntegrations();
+  const {
+    getNativeIntegration,
+    isJiraEnabled,
+    isLinearEnabled,
+    isLoading: isNativeIntegrationsLoading,
+  } = useNativeGitIntegrations();
 
   const installedMcpConfig = useMemo(
     () =>
@@ -194,13 +220,28 @@ export function RecommendedAutomationsLauncher({
     setInstallQueue(missingEntries);
   };
 
+  const isBuiltInIntegrationEnabled = (entryId: string) => {
+    if (entryId === "jira") return isJiraEnabled;
+    if (entryId === "linear") return isLinearEnabled;
+    return getNativeIntegration(entryId) !== null;
+  };
+
+  // The built-in integration that already gives the user this automation's
+  // 'Issue to PR' workflow, when the cloud instance has it enabled.
+  const getBuiltInIntegration = (automation: RecommendedAutomation) => {
+    const entryId = BUILT_IN_INTEGRATION_ID_BY_AUTOMATION_ID[automation.id];
+    if (!entryId || !isBuiltInIntegrationEnabled(entryId)) return null;
+    return getMarketplaceEntryById(entryId, MCP_MARKETPLACE) ?? null;
+  };
+
   const handleSelectAutomation = (automation: RecommendedAutomation) => {
     if (
       launchInFlightRef.current ||
       createConversation.isPending ||
       isCreatingConversation ||
       installQueue.length > 0 ||
-      deploymentChoiceAutomation !== null
+      deploymentChoiceAutomation !== null ||
+      builtInChoice !== null
     ) {
       return;
     }
@@ -216,7 +257,34 @@ export function RecommendedAutomationsLauncher({
       return;
     }
 
+    // A built-in integration already covers this workflow; let the user choose
+    // between connecting it and setting up the polling automation.
+    const builtInIntegration = getBuiltInIntegration(automation);
+    if (builtInIntegration) {
+      setBuiltInChoice({ automation, integration: builtInIntegration });
+      return;
+    }
+
     proceedWithLocalLaunch(automation);
+  };
+
+  const handleBuiltInChoiceClose = () => {
+    setBuiltInChoice(null);
+  };
+
+  const handleUseBuiltInIntegration = () => {
+    setBuiltInChoice(null);
+    window.open(
+      cloudIntegrationsUrl(activeBackend.backend, activeBackend.orgId),
+      "_blank",
+      "noopener,noreferrer",
+    );
+  };
+
+  const handleContinuePollingSetup = () => {
+    const automation = builtInChoice?.automation;
+    setBuiltInChoice(null);
+    if (automation) proceedWithLocalLaunch(automation);
   };
 
   const handleDeploymentContinueLocal = async () => {
@@ -313,6 +381,16 @@ export function RecommendedAutomationsLauncher({
           existingServers={installedMcpConfig}
           onClose={cancelInstallFlow}
           onSuccess={handleInstallSuccess}
+          mcpOnly
+        />
+      )}
+
+      {builtInChoice && (
+        <BuiltInIntegrationChoiceModal
+          integration={builtInChoice.integration}
+          onClose={handleBuiltInChoiceClose}
+          onUseBuiltIn={handleUseBuiltInIntegration}
+          onContinuePolling={handleContinuePollingSetup}
         />
       )}
 

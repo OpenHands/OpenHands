@@ -720,9 +720,11 @@ describe("InstallServerModal", () => {
 
     fireEvent.click(screen.getByTestId("mcp-install-submit"));
 
-    // Error message must appear.
+    // The remote-server connection message must appear.
     await waitFor(() =>
-      expect(screen.getByTestId("mcp-install-modal-error")).toBeInTheDocument(),
+      expect(screen.getByTestId("mcp-install-modal-error")).toHaveTextContent(
+        "MCP$TEST_ERROR_CONNECTION",
+      ),
     );
 
     // Save must never have been called.
@@ -731,6 +733,33 @@ describe("InstallServerModal", () => {
     // Modal must stay open.
     expect(onClose).not.toHaveBeenCalled();
     expect(screen.getByTestId("mcp-install-modal")).toBeInTheDocument();
+  });
+
+  it("explains a stdio pre-flight connection failure as a command that could not start", async () => {
+    // Arrange: a stdio catalog entry whose command the Agent Server cannot spawn.
+    vi.spyOn(McpService, "testServer").mockResolvedValue({
+      ok: false,
+      error: "Client failed to connect: [Errno 2] No such file or directory",
+      error_kind: "connection",
+    });
+    const saveSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+    const time = MCP_MARKETPLACE.find((e) => e.id === "time")!;
+    renderWith(<InstallServerModal existingServers={[]} entry={time} onClose={vi.fn()} />);
+    await screen.findByTestId("mcp-install-modal");
+    await waitFor(() => expect(SettingsService.getSettings).toHaveBeenCalled());
+
+    // Act
+    fireEvent.click(screen.getByTestId("mcp-install-submit"));
+
+    // Assert: the stdio-specific message, not the URL hint, and nothing saved.
+    await waitFor(() =>
+      expect(screen.getByTestId("mcp-install-modal-error")).toHaveTextContent(
+        "MCP$TEST_ERROR_STDIO_START",
+      ),
+    );
+    expect(saveSpy).not.toHaveBeenCalled();
   });
 
   it("shows the credential-specific message when the pre-flight test reports invalid credentials", async () => {
