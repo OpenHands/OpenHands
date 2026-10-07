@@ -44,6 +44,7 @@
   <ol>
     <li><a href="#readme">Task guidance</a></li>
     <li><a href="#architecture">Canvas positioning</a></li>
+    <li><a href="#docs-index">Documentation discovery</a></li>
     <li><a href="#validation">Validation</a></li>
     <li><a href="#scope">Scope and follow-up</a></li>
   </ol>
@@ -53,21 +54,26 @@
 <header>
   <p class="meta">
     <a href="https://github.com/OpenHands/OpenHands/issues/18000">Issue #18000</a>
-    · Documentation change · 2 files · +41 lines
+    · Documentation change · 3 documentation files · +47 / −1 lines
   </p>
   <h1>Clarify the non-interactive task interface</h1>
   <p>
-    Direct orchestrator users to the Python SDK or Agent Server API,
-    explain a small one-shot workflow, and clarify Agent Canvas's UI role.
+    Name the Python SDK and Agent Server API as the supported long-term
+    integration surface, distinguish legacy CLI prompt input from programmatic
+    messages, and explain the caller's result responsibilities. The docs index
+    links to the task guidance, and the architecture note explains Canvas's UI role.
   </p>
   <p class="callout">
-    The change documents existing interfaces. Runtime behavior and API
-    compatibility remain unchanged.
+    SDK/API runs do not currently emit a standardized process exit code.
+    The caller verifies the outputs, collects events, files, logs, and workspace
+    diffs, and chooses its process exit code.
+    <a href="https://github.com/ragtag2/OpenHands/blob/8d140f04f4c6cee13d3c0764ea6aafee78e97063/README.md#L180">README.md:180</a>
   </p>
   <p class="sources">
+    <!-- Source links are stamped with the documentation revision before this page is committed. -->
     Documentation revision:
-    <a href="https://github.com/ragtag2/OpenHands/commit/114aa727050b33bb3ddf1d3589f022cf6307af17">
-      114aa7270
+    <a href="https://github.com/ragtag2/OpenHands/commit/8d140f04f4c6cee13d3c0764ea6aafee78e97063">
+      8d140f04f4c6cee13d3c0764ea6aafee78e97063
     </a>
   </p>
 </header>
@@ -75,11 +81,11 @@
 <section id="readme">
   <h2>README gives task users a programmatic route</h2>
   <p class="sources">
-    Edited documentation · +35 lines ·
+    Edited documentation · +40 lines ·
     <a href="https://github.com/OpenHands/OpenHands/blob/53ad0012f366d738af3d09b3137cd57288395c9f/README.md#L146">
       Before: README.md:146
     </a> ·
-    <a href="https://github.com/ragtag2/OpenHands/blob/114aa727050b33bb3ddf1d3589f022cf6307af17/README.md#L146">
+    <a href="https://github.com/ragtag2/OpenHands/blob/8d140f04f4c6cee13d3c0764ea6aafee78e97063/README.md#L146">
       After: README.md:146
     </a>
   </p>
@@ -92,17 +98,75 @@
         a dedicated explanation of non-interactive task usage.
       </td>
       <td>
-        A section recommends the SDK or Agent Server API, links the Docker
-        guide, explicitly identifies the legacy CLI flags as unmaintained,
-        and documents exit-code selection, events, artifacts, and workspace diffs.
+        A section names the SDK and Agent Server API as the supported long-term
+        surface and links the Docker guide. It explains that legacy CLI headless
+        remains available but is not the recommended stable orchestrator contract,
+        maps CLI task/file input to programmatic messages, and specifies which
+        results the caller must collect and verify.
       </td>
     </tr></tbody>
+  </table>
+
+  <h3>Review refinements make support and result responsibilities explicit</h3>
+  <p class="sources">
+    <a href="https://github.com/ragtag2/OpenHands/blob/114aa727050b33bb3ddf1d3589f022cf6307af17/README.md#L148">Before review refinements: README.md:148</a>
+    · <a href="https://github.com/ragtag2/OpenHands/blob/8d140f04f4c6cee13d3c0764ea6aafee78e97063/README.md#L148">After review refinements: README.md:148</a>
+  </p>
+  <table>
+    <thead><tr><th>Topic</th><th>Before review refinements</th><th>After review refinements</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Support horizon</td>
+        <td>Recommends the SDK or Agent Server API without an explicit support horizon.</td>
+        <td>Names both as the supported long-term integration surface. <a href="https://github.com/ragtag2/OpenHands/blob/8d140f04f4c6cee13d3c0764ea6aafee78e97063/README.md#L148">README.md:148</a></td>
+      </tr>
+      <tr>
+        <td>Legacy CLI and prompt input</td>
+        <td>Identifies the CLI as unmaintained, with abbreviated task/file options.</td>
+        <td>States the legacy mode's availability and recommendation status; names <code>-t/--task</code> and <code>-f/--file</code> and contrasts them with SDK/API message bodies. <a href="https://github.com/ragtag2/OpenHands/blob/8d140f04f4c6cee13d3c0764ea6aafee78e97063/README.md#L156">README.md:156</a></td>
+      </tr>
+      <tr>
+        <td>Result responsibilities</td>
+        <td>Describes collection methods and example exit codes.</td>
+        <td>States that the process exit code and collection of events, logs, artifacts, and diffs are caller-owned. <a href="https://github.com/ragtag2/OpenHands/blob/8d140f04f4c6cee13d3c0764ea6aafee78e97063/README.md#L178">README.md:178</a></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>The caller owns result collection and verification</h3>
+  <table>
+    <thead><tr><th>Result</th><th>Caller responsibility</th><th>Source</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Process exit status</td>
+        <td>Check <code>conversation.state.execution_status</code> and required outputs, then choose an exit code. SDK/API runs do not currently emit a standardized process exit code.</td>
+        <td><a href="https://github.com/ragtag2/OpenHands/blob/8d140f04f4c6cee13d3c0764ea6aafee78e97063/README.md#L180">README.md:180</a></td>
+      </tr>
+      <tr>
+        <td>Events and logs</td>
+        <td>Collect events with <code>callbacks=[events.append]</code>, serialize with <code>event.model_dump_json()</code>, and collect additional required logs from the workspace/server.</td>
+        <td><a href="https://github.com/ragtag2/OpenHands/blob/8d140f04f4c6cee13d3c0764ea6aafee78e97063/README.md#L181">README.md:181</a></td>
+      </tr>
+      <tr>
+        <td>Artifacts</td>
+        <td>Select workspace files, download with <code>workspace.file_download(source, destination)</code>, and check <code>.success</code>.</td>
+        <td><a href="https://github.com/ragtag2/OpenHands/blob/8d140f04f4c6cee13d3c0764ea6aafee78e97063/README.md#L182">README.md:182</a></td>
+      </tr>
+      <tr>
+        <td>Workspace diff</td>
+        <td>Run <code>git diff</code> through <code>workspace.execute_command()</code>, check <code>.exit_code</code>, and save <code>.stdout</code>.</td>
+        <td><a href="https://github.com/ragtag2/OpenHands/blob/8d140f04f4c6cee13d3c0764ea6aafee78e97063/README.md#L183">README.md:183</a></td>
+      </tr>
+    </tbody>
   </table>
 
   <p>
     The example distinguishes a waiting timeout from an iteration limit.
     It uses 60 seconds and four iterations as illustrative values and
     tells callers to verify outputs before choosing their exit code.
+  </p>
+  <p class="sources">
+    <a href="https://github.com/ragtag2/OpenHands/blob/8d140f04f4c6cee13d3c0764ea6aafee78e97063/README.md#L166">README.md:166</a>
   </p>
 
   <details>
@@ -122,7 +186,7 @@
     <a href="https://github.com/OpenHands/OpenHands/blob/53ad0012f366d738af3d09b3137cd57288395c9f/docs/architecture.md#L5">
       Before: docs/architecture.md:5
     </a> ·
-    <a href="https://github.com/ragtag2/OpenHands/blob/114aa727050b33bb3ddf1d3589f022cf6307af17/docs/architecture.md#L21">
+    <a href="https://github.com/ragtag2/OpenHands/blob/8d140f04f4c6cee13d3c0764ea6aafee78e97063/docs/architecture.md#L21">
       After: docs/architecture.md:21
     </a>
   </p>
@@ -149,6 +213,26 @@
 +[Python SDK or Agent Server API](https://docs.openhands.dev/sdk/guides/agent-server/overview)
 +directly. Agent Canvas does not currently provide a dedicated one-shot task
 +command.</pre>
+  </details>
+</section>
+
+<section id="docs-index">
+  <h2>The documentation index makes task guidance discoverable</h2>
+  <p class="sources">
+    Edited documentation · +1 / −1 lines ·
+    <a href="https://github.com/OpenHands/OpenHands/blob/53ad0012f366d738af3d09b3137cd57288395c9f/docs/README.md#L3">Before: docs/README.md:3</a>
+    · <a href="https://github.com/ragtag2/OpenHands/blob/8d140f04f4c6cee13d3c0764ea6aafee78e97063/docs/README.md#L4">After: docs/README.md:4</a>
+  </p>
+  <table>
+    <thead><tr><th>Before</th><th>After</th></tr></thead>
+    <tbody><tr>
+      <td>The docs index lists architecture, development, and self-hosting guidance without a non-interactive task link.</td>
+      <td>A link to the README's <code>Non-interactive tasks</code> section names SDK/API support, legacy CLI status, Docker setup, and caller result responsibilities.</td>
+    </tr></tbody>
+  </table>
+  <details>
+    <summary>Documentation index link — diff excerpt</summary>
+    <pre>+- [Non-interactive tasks](../README.md#non-interactive-tasks): supported SDK/API interfaces, legacy CLI status, Docker setup, and caller responsibilities for results.</pre>
   </details>
 </section>
 
@@ -180,9 +264,10 @@ $LASTEXITCODE</pre>
   </details>
 
   <p>
-    The incorrect-output case confirms that the caller verifies
+    The previously reported incorrect-output case demonstrates that the caller verifies
     artifacts before choosing its exit code, even when the conversation
-    status is <code>finished</code>.
+    status is <code>finished</code>. These are results of the example's caller
+    verification logic, rather than standardized SDK/API process exit codes.
   </p>
   <p class="meta">
     Evidence is saved under .tmp/headless-demo/results/ and
@@ -195,14 +280,13 @@ $LASTEXITCODE</pre>
 <section id="scope">
   <h2>Keep the contribution in the existing Canvas documentation</h2>
   <p>
-    The two-file change uses existing documentation locations and links
+    The changes to three documentation files use existing locations and link
     canonical SDK/API setup guidance. Updating the legacy headless guide
     in OpenHands/docs is a separate follow-up.
   </p>
   <p>
-    The issue also asks for the one-shot Canvas entrypoint plan. The
-    architecture note documents current availability; the plan still
-    needs maintainer confirmation.
+    The architecture note documents current availability only. A future
+    one-shot Canvas entrypoint plan still needs maintainer confirmation.
   </p>
   <p class="meta">
     This HTML page is a temporary review artifact under .pr/.
@@ -211,7 +295,7 @@ $LASTEXITCODE</pre>
   </p>
   <p>
   No new CLI command, Agent Canvas subcommand, or Agent Server endpoint
-  is added.
+  is added. Any new entrypoint requires an explicit maintainer decision.
   </p>
 </section>
 </main>
