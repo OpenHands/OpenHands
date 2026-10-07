@@ -80,12 +80,14 @@ export default function SuperAdminSetupGuide() {
     testId: string,
     className: string,
     children: ReactNode,
+    onClick?: () => void,
   ) =>
     step.destination.kind === "canvas" ? (
       <NavigationLink
         to={step.destination.path}
         data-testid={testId}
         className={className}
+        onClick={onClick}
       >
         {children}
       </NavigationLink>
@@ -95,6 +97,7 @@ export default function SuperAdminSetupGuide() {
         {...cloudLinkProps}
         data-testid={testId}
         className={className}
+        onClick={onClick}
       >
         {children}
       </a>
@@ -211,11 +214,15 @@ export default function SuperAdminSetupGuide() {
                   step: t(nextStep.labelKey),
                 })}
               </p>
+              {/* Like the enterprise Start, close the panel before opening
+                  the step, so Start does something even when the admin is
+                  already on that step's page. */}
               {renderStepLink(
                 nextStep,
                 START_TEST_ID,
                 START_BUTTON_CLASS,
                 t(I18nKey.ONBOARDING$SETUP_GUIDE_START),
+                () => setOpen(false),
               )}
             </div>
           ) : null}
