@@ -3,7 +3,6 @@ import { getDisplayConversationTags } from "#/api/agent-server-adapter";
 import { cn } from "#/utils/utils";
 import {
   formatConversationTagTooltip,
-  getConversationTagLabel,
   truncateTagChipValue,
 } from "../conversation-panel/conversation-card/conversation-tag-display";
 import {
@@ -105,7 +104,7 @@ export function ConversationChannelOriginIndicator({
       data-testid="conversation-channel-origin"
       data-tag-key={origin.key}
       title={formatConversationTagTooltip(origin.key, origin.value, t)}
-      aria-label={getConversationTagLabel(origin.key, t)}
+      aria-label={formatConversationTagTooltip(origin.key, origin.value, t)}
       className={cn(
         CONVERSATION_CARD_META_CHIP_CLASSNAME,
         "shrink min-w-0",

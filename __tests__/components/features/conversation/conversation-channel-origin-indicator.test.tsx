@@ -58,6 +58,9 @@ describe("ConversationChannelOriginIndicator", () => {
     const indicator = screen.getByTestId("conversation-channel-origin");
     expect(indicator).toHaveTextContent("Origin: slack");
     expect(indicator).toHaveAttribute("title", "Origin: slack");
+    // The accessible name must carry the channel value, not just the key, or a
+    // screen reader would read only "Origin".
+    expect(indicator).toHaveAttribute("aria-label", "Origin: slack");
     expect(indicator).toHaveAttribute("data-tag-key", "origin");
 
     const icon = screen.getByTestId("conversation-channel-origin-icon");
