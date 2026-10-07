@@ -17,9 +17,10 @@ interface AgentProfilesBodyProps {
   profiles: AgentProfileSummary[];
   activeId: string | null;
   /**
-   * The account-wide active LLM profile on local backends, which is what a
-   * home launch really runs — `null` on cloud (and while the list loads), where
-   * the pinned `llm_profile_ref` is authoritative and cannot drift.
+   * The account-wide active LLM profile, when a home launch of the active
+   * agent profile really runs it instead of the pinned `llm_profile_ref` —
+   * `null` wherever the pin is authoritative and cannot drift (cloud, a
+   * secret-scoped active profile, or while either is still loading).
    */
   activeLlmProfile: string | null;
   /** When false, rows are read-only and the actions menu is hidden. */

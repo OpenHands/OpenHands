@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -262,6 +262,9 @@ describe("AgentProfilesManager", () => {
       profiles: [],
       active_profile: "other-llm",
     });
+    vi.mocked(AgentProfilesService.getProfile).mockResolvedValue({
+      profile: { ...mockProfiles[0], secret_refs: null },
+    } as never);
 
     renderManager();
 
@@ -270,6 +273,32 @@ describe("AgentProfilesManager", () => {
       "title",
       'Runs on "other-llm", not "default".',
     );
+  });
+
+  it("does not warn when a secret scope keeps the launch on the pinned LLM profile", async () => {
+    vi.mocked(AgentProfilesService.listProfiles).mockResolvedValue({
+      profiles: mockProfiles,
+      active_agent_profile_id: "id-oh",
+    });
+    vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
+      profiles: [],
+      active_profile: "other-llm",
+    });
+    vi.mocked(AgentProfilesService.getProfile).mockResolvedValue({
+      profile: { ...mockProfiles[0], secret_refs: ["GITHUB_TOKEN"] },
+    } as never);
+
+    renderManager();
+
+    await screen.findByText("my-openhands");
+    await waitFor(() =>
+      expect(AgentProfilesService.getProfile).toHaveBeenCalledWith(
+        "my-openhands",
+      ),
+    );
+    expect(
+      screen.queryByTestId("agent-profile-llm-drift-badge"),
+    ).not.toBeInTheDocument();
   });
 
   it("does not warn on an inactive profile whose pinned LLM profile still applies", async () => {

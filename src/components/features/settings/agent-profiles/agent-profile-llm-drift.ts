@@ -1,4 +1,7 @@
-import { type AgentProfileSummary } from "#/api/agent-profiles-service/agent-profiles-service.api";
+import {
+  type AgentProfile,
+  type AgentProfileSummary,
+} from "#/api/agent-profiles-service/agent-profiles-service.api";
 
 /**
  * The LLM profile a home-launched conversation will really run on when it
@@ -14,8 +17,9 @@ import { type AgentProfileSummary } from "#/api/agent-profiles-service/agent-pro
  * ref, and nothing surfaces the disagreement (#16265). An inactive profile's
  * ref stays authoritative for the in-conversation picker, so it never drifts.
  *
- * `activeLlmProfile` is the caller's local-only signal: pass `null` on cloud,
- * where the pinned ref IS what launches (the server resolves by profile id).
+ * `activeLlmProfile` is the caller's signal that the downgrade applies: pass
+ * `null` on cloud, where the pinned ref IS what launches (the server resolves
+ * by profile id), and for a profile that fails {@link allowsAgentSettingsLaunch}.
  */
 export function getAgentProfileLlmDrift(
   profile: AgentProfileSummary,
@@ -28,4 +32,18 @@ export function getAgentProfileLlmDrift(
     return null;
   }
   return profile.llm_profile_ref === activeLlmProfile ? null : activeLlmProfile;
+}
+
+/**
+ * Whether `useCreateConversation` may downgrade this profile's home launch to
+ * `agent_settings`. A profile with a secret scope (`secret_refs` is an array,
+ * even an empty one) always keeps its profile id — an `agent_settings` launch
+ * carries no profile identity for Agent Server to enforce the allow-list
+ * against — so its pinned `llm_profile_ref` is what runs and it cannot drift.
+ * An unread profile (`undefined`) fails closed, as the launch does.
+ */
+export function allowsAgentSettingsLaunch(
+  profile: AgentProfile | undefined,
+): boolean {
+  return profile !== undefined && !Array.isArray(profile.secret_refs);
 }

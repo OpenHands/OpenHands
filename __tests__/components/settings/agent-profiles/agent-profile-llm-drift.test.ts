@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { getAgentProfileLlmDrift } from "#/components/features/settings/agent-profiles/agent-profile-llm-drift";
-import { type AgentProfileSummary } from "#/api/agent-profiles-service/agent-profiles-service.api";
+import {
+  allowsAgentSettingsLaunch,
+  getAgentProfileLlmDrift,
+} from "#/components/features/settings/agent-profiles/agent-profile-llm-drift";
+import {
+  type AgentProfile,
+  type AgentProfileSummary,
+} from "#/api/agent-profiles-service/agent-profiles-service.api";
 
 const openHandsProfile = (
   llmProfileRef: string | null,
@@ -58,4 +64,18 @@ describe("getAgentProfileLlmDrift", () => {
       ).toBeNull();
     },
   );
+});
+
+describe("allowsAgentSettingsLaunch", () => {
+  const storedProfile = (secretRefs: string[] | null) =>
+    ({ ...openHandsProfile("profile-a"), secret_refs: secretRefs }) as AgentProfile;
+
+  it.each([
+    ["has no secret scope", storedProfile(null), true],
+    ["restricts its secrets", storedProfile(["GITHUB_TOKEN"]), false],
+    ["allows no secrets at all", storedProfile([]), false],
+    ["has not been read yet", undefined, false],
+  ])("when the profile %s", (_case, profile, expected) => {
+    expect(allowsAgentSettingsLaunch(profile)).toBe(expected);
+  });
 });
