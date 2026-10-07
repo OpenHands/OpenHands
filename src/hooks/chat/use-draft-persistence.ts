@@ -55,6 +55,11 @@ export const useDraftPersistence = (
   // React 18 (refs are cleared during the synchronous commit phase, before
   // passive effects fire), so we can't read from the DOM there.
   const lastHomeTextRef = useRef<string>("");
+  // Tracks any pending debounced conversation draft that should be flushed on unmount
+  const pendingConversationDraftRef = useRef<{
+    conversationId: string;
+    text: string | null;
+  } | null>(null);
 
   // IMPORTANT: This effect must run FIRST when conversation changes.
   // It handles three concerns:
@@ -198,20 +203,31 @@ export const useDraftPersistence = (
 
     // Capture the conversationId at the time of input
     const capturedConversationId = conversationId;
+    const element = chatInputRef.current;
+    if (element) {
+      const text = getTextContent(element).trim();
+      pendingConversationDraftRef.current = {
+        conversationId: capturedConversationId,
+        text: text || null,
+      };
+    }
 
     saveTimeoutRef.current = setTimeout(() => {
+      // Clear pending draft ref since debounce is executing
+      pendingConversationDraftRef.current = null;
+
       // Verify we're still on the same conversation before saving
       // This prevents saving draft to wrong conversation if user switched quickly
       if (capturedConversationId !== currentConversationIdRef.current) {
         return;
       }
 
-      const element = chatInputRef.current;
-      if (!element) {
+      const currentElement = chatInputRef.current;
+      if (!currentElement) {
         return;
       }
 
-      const text = getTextContent(element).trim();
+      const text = getTextContent(currentElement).trim();
       // Only save if content has changed
       if (text !== (state.draftMessage || "")) {
         setDraftMessage(text || null);
@@ -226,6 +242,7 @@ export const useDraftPersistence = (
       clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = null;
     }
+    pendingConversationDraftRef.current = null;
     if (!conversationId) {
       // Home page: clear sessionStorage
       try {
@@ -267,6 +284,13 @@ export const useDraftPersistence = (
         } catch {
           // sessionStorage not available
         }
+      } else if (
+        pendingConversationDraftRef.current?.conversationId ===
+        currentConversationIdRef.current
+      ) {
+        const { conversationId: targetId, text } =
+          pendingConversationDraftRef.current;
+        setConversationState(targetId, { draftMessage: text });
       }
     },
     [],
