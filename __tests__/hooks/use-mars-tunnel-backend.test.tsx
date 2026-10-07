@@ -97,6 +97,26 @@ function fakeMarsBridge(localPort = 51000) {
   };
 }
 
+/** A bridge that reaches the session over its public ingress URL. */
+function fakeIngressBridge(host: string) {
+  const bridge = fakeMarsBridge();
+  bridge.openTunnel = vi.fn(
+    async ({ sessionId }: OpenMarsTunnelParams): Promise<MarsTunnelStatus> => ({
+      sessionId,
+      status: "connected",
+      transport: "ingress",
+      host,
+      ingressUrlId: "ing-1",
+      remotePort: 8000,
+      localPort: undefined,
+      error: undefined,
+      upstreamFailure: null,
+    }),
+  );
+  return bridge;
+}
+
+const INGRESS_HOST = "https://ing-1.nyc3.sandbox.ondigitalocean.com";
 const SESSION = { sessionId: "sess_abc", name: "Agent · sess-1" };
 
 beforeEach(() => {
@@ -262,6 +282,28 @@ describe("useMarsTunnelBackend", () => {
       result.current.active.backends.find((b) => b.id === backend!.id),
     ).toBeDefined();
   });
+
+  it("attach() registers an ingress-connected session at its public URL and probes it there", async () => {
+    window.marsBridge = fakeIngressBridge(INGRESS_HOST);
+    const { result } = renderHook(useCombined, { wrapper: makeWrapper() });
+
+    await act(async () => {
+      await result.current.tunnel.attach({ ...SESSION, configId: "cfg_1" });
+    });
+
+    expect(validateLocalBackend).toHaveBeenCalledWith(
+      { host: INGRESS_HOST, apiKey: "" },
+      expect.any(Number),
+    );
+    expect(result.current.active.active.backend).toMatchObject({
+      host: INGRESS_HOST,
+      kind: "local",
+      authMode: "api-key",
+      apiKey: "",
+      marsSessionId: "sess_abc",
+      marsConfigId: "cfg_1",
+    });
+  });
 });
 
 describe("useRestoreMarsTunnels", () => {
@@ -354,5 +396,47 @@ describe("useRestoreMarsTunnels", () => {
     // Assert
     expect(pendingWhileBooting).toBe(true);
     await waitFor(() => expect(result.current).toBe(false));
+  });
+
+  it("re-resolves an ingress-connected session's URL and follows a hostname change", async () => {
+    // The hostname is revoked on pause and lock and changes after rollback,
+    // so the persisted host must never be reused as-is.
+    window.localStorage.setItem(
+      BACKENDS_STORAGE_KEY,
+      JSON.stringify([
+        {
+          id: "mars-1",
+          name: "Agent · sess-1",
+          host: "https://ing-old.nyc3.sandbox.ondigitalocean.com",
+          apiKey: "",
+          kind: "local",
+          marsSessionId: "sess_abc",
+        },
+      ]),
+    );
+    window.localStorage.setItem(
+      ACTIVE_BACKEND_STORAGE_KEY,
+      JSON.stringify({ backendId: "mars-1", orgId: null }),
+    );
+    __resetActiveStoreForTests();
+    window.marsBridge = fakeIngressBridge(INGRESS_HOST);
+
+    const { result } = renderHook(
+      () => {
+        useRestoreMarsTunnels();
+        return useActiveBackendContext();
+      },
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() =>
+      expect(result.current.backends.find((b) => b.id === "mars-1")?.host).toBe(
+        INGRESS_HOST,
+      ),
+    );
+    expect(window.marsBridge!.openTunnel).toHaveBeenCalledWith({
+      sessionId: "sess_abc",
+      localPort: undefined,
+    });
   });
 });

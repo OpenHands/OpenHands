@@ -47,6 +47,7 @@ import {
   nativeImage,
   nativeTheme,
   safeStorage,
+  session,
   shell,
 } from "electron";
 import { chmodSync, existsSync } from "node:fs";
@@ -314,7 +315,7 @@ async function waitForAgentServer(
 
 let loadingWin = null;
 let mainWin = null;
-/** MARS port-forward tunnel bridge (MARSOHS-1429) — created in app.whenReady(). */
+/** MARS session bridge (ingress + port-forward tunnels, MARSOHS-1429) — created in app.whenReady(). */
 let marsTunnelBridge = null;
 
 // Collapsed splash size — loading.html's .container height must match. The
@@ -721,7 +722,7 @@ app.whenReady().then(async () => {
 
   // Registered before the window loads so the renderer's first paint can
   // already reach the bridge (MARSOHS-1429). Independent of the agent-server
-  // stack below — MARS tunnels don't need the bundled backend to be up.
+  // stack below — MARS sessions don't need the bundled backend to be up.
   const { createMarsTunnelBridge } = await import(
     pathToFileURL(join(scriptsDir, "mars-tunnel-bridge.mjs")).href
   );
@@ -731,6 +732,11 @@ app.whenReady().then(async () => {
     openExternal: (url) => shell.openExternal(url),
   });
   marsTunnelBridge.registerIpc(ipcMain);
+  // A session's public ingress URL is PAT-authenticated on every request,
+  // WebSocket handshake included, and the renderer must never hold that
+  // token — so the main process stamps it onto the renderer's requests to
+  // connected ingress hosts here.
+  marsTunnelBridge.registerRequestAuth(session.defaultSession);
 
   if (!uvxAvailable()) {
     dialog.showErrorBox(
@@ -819,11 +825,12 @@ app.on("before-quit", (event) => {
   cleanupStarted = true;
   event.preventDefault();
 
-  // MARS tunnels are plain in-process listeners (no OS subprocess to signal
-  // and wait on), so this doesn't need the SIGTERM-based cleanup path below —
-  // just tear them down directly. Best-effort: quitting must not hang on it.
+  // MARS connections are in-process state (ingress hosts to forget, tunnel
+  // listeners to close; no OS subprocess to signal and wait on), so this
+  // doesn't need the SIGTERM-based cleanup path below — just tear them down
+  // directly. Best-effort: quitting must not hang on it.
   void marsTunnelBridge?.dispose().catch((err) => {
-    console.warn("[desktop] Failed to close MARS tunnels:", err);
+    console.warn("[desktop] Failed to close MARS connections:", err);
   });
 
   console.log("[desktop] Stopping backend services…");

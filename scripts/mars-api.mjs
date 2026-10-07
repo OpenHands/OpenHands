@@ -40,6 +40,10 @@ const TERMINAL_STATUSES = new Set([
 export const SESSION_STATUS_READY = "SESSION_STATUS_READY";
 export const SESSION_STATUS_PAUSED = "SESSION_STATUS_PAUSED";
 
+/** A session's public ingress URL is servable; until then it is PENDING. */
+export const INGRESS_URL_STATE_READY = "INGRESS_URL_STATE_READY";
+const INGRESS_SUBPATH = "/ingress";
+
 export function isTerminalSessionStatus(status) {
   return TERMINAL_STATUSES.has(status);
 }
@@ -275,6 +279,23 @@ export function createMarsApiClient({
         timeoutMs: CREATE_SESSION_TIMEOUT_MS,
       });
       return body?.session ?? null;
+    },
+
+    /**
+     * The session's public HTTPS URL to its OpenHands Agent Server, published
+     * on first call: `{ingress_url_id, session_id, port, url, state,
+     * created_at}`. 409 while the session is not running (PAUSED included),
+     * 501 when the session can never have one. See mars-ingress.mjs.
+     *
+     * @param {{ signal?: AbortSignal }} [options]
+     */
+    async getIngressURL(sessionId, { signal } = {}) {
+      const body = await request(
+        "GET",
+        `${SESSIONS_PATH}/${sessionId}${INGRESS_SUBPATH}`,
+        { signal },
+      );
+      return body?.ingress_url ?? null;
     },
 
     async pauseSession(sessionId) {

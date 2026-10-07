@@ -1,11 +1,11 @@
 import React from "react";
 import {
-  buildMarsBackendHost,
   buildMarsBackendInput,
   closeMarsTunnel,
   fetchLatestMarsConversationId,
   getMarsBackendLocalPort,
   getMarsBridge,
+  getMarsConnectionHost,
   openMarsTunnel,
   waitForMarsAgentServer,
 } from "#/api/mars/mars-tunnel-backend";
@@ -19,7 +19,7 @@ export interface AttachMarsSessionParams {
   /** Display name for the registered backend. */
   name: string;
   configId?: string;
-  /** Fired once the tunnel is up and the agent-server probe begins. */
+  /** Fired once the session is reachable and the agent-server probe begins. */
   onTunnelReady?: () => void;
 }
 
@@ -29,25 +29,30 @@ export interface AttachMarsSessionResult {
   latestConversationId: string | null;
 }
 
-async function openHealthyTunnel(
+/**
+ * Connect to the session and return the base URL to register: its public
+ * ingress URL, or the loopback tunnel for a session that cannot have one.
+ */
+async function openHealthyConnection(
   sessionId: string,
   localPort?: number,
-): Promise<number> {
-  const tunnel = await openMarsTunnel({ sessionId, localPort });
-  if (tunnel.status === "error" || tunnel.localPort === undefined) {
+): Promise<string> {
+  const connection = await openMarsTunnel({ sessionId, localPort });
+  const host = getMarsConnectionHost(connection);
+  if (connection.status === "error" || host === undefined) {
     throw new Error(
-      tunnel.error ?? `Failed to open a tunnel for session ${sessionId}`,
+      connection.error ?? `Failed to connect to session ${sessionId}`,
     );
   }
-  return tunnel.localPort;
+  return host;
 }
 
 /**
  * Registration/lifecycle wiring between MARS sessions and the backend
- * registry. `attach()` opens the session's tunnel, waits for its
- * agent-server to answer, and registers it as an ordinary local `Backend`
- * (or re-points the existing one for that session), making it active.
- * `detach()` tears the tunnel down and removes the Backend again.
+ * registry. `attach()` connects to the session, waits for its agent-server
+ * to answer, and registers it as an ordinary local `Backend` (or re-points
+ * the existing one for that session), making it active. `detach()` forgets
+ * the connection and removes the Backend again.
  */
 export function useMarsTunnelBackend() {
   const { backends, addBackend, removeBackend, updateBackend, setActive } =
@@ -60,14 +65,13 @@ export function useMarsTunnelBackend() {
       configId,
       onTunnelReady,
     }: AttachMarsSessionParams): Promise<AttachMarsSessionResult> => {
-      const localPort = await openHealthyTunnel(sessionId);
-      const host = buildMarsBackendHost(localPort);
+      const host = await openHealthyConnection(sessionId);
       onTunnelReady?.();
       try {
         await waitForMarsAgentServer(host, { sessionId });
       } catch (error) {
-        // A listener bound to a session nobody can use would keep failing
-        // the health probe every tick.
+        // A connection to a session nobody can use would keep failing the
+        // health probe every tick (and, over the tunnel, hold a listener).
         await closeMarsTunnel(sessionId).catch(() => {});
         throw error;
       }
@@ -87,7 +91,7 @@ export function useMarsTunnelBackend() {
       }
       return {
         backend: addBackend(
-          buildMarsBackendInput({ name, localPort, sessionId, configId }),
+          buildMarsBackendInput({ name, host, sessionId, configId }),
         ),
         latestConversationId,
       };
@@ -97,9 +101,9 @@ export function useMarsTunnelBackend() {
 
   const detach = React.useCallback(
     async (backend: Backend): Promise<void> => {
-      // Close the tunnel before removing the Backend entry: if closing fails,
-      // the (now stale but still visible) Backend is a better failure mode
-      // than silently leaking an open local listener behind a vanished one.
+      // Forget the connection before removing the Backend entry: if that
+      // fails, the (now stale but still visible) Backend is a better failure
+      // mode than silently leaking a tunnel listener behind a vanished one.
       if (backend.marsSessionId) {
         await closeMarsTunnel(backend.marsSessionId);
       }
@@ -112,20 +116,22 @@ export function useMarsTunnelBackend() {
 }
 
 /**
- * Tunnels live in the Electron main process and die with it, while the
- * Backend records pointing at them persist. Re-open the *active* MARS
- * backend's tunnel — at startup and whenever the user switches to one —
- * on its previous local port when still free, so every query keyed to that
- * host survives the restart. When another process has taken that port, the
- * tunnel comes up on a new one and the Backend's host is updated to match.
+ * Connections live in the Electron main process and die with it, while the
+ * Backend records pointing at them persist. Re-connect the *active* MARS
+ * backend — at startup and whenever the user switches to one — and update
+ * its host when the address changed. Over ingress that is expected: the
+ * hostname is revoked on pause and lock and changes after rollback, so the
+ * URL is always re-resolved. Over the tunnel the previous local port is
+ * asked for again so queries keyed to that host survive the restart, and a
+ * port another process has since taken yields a new one.
  *
- * Only the active one: opening a tunnel resumes a paused session, so
- * restoring every registered session would wake (and bill) sandboxes the
- * user is not using.
+ * Only the active one: connecting resumes a paused session, so restoring
+ * every registered session would wake (and bill) sandboxes the user is not
+ * using.
  *
- * Returns true while the tunnel of the backend active at launch is still
- * being restored, so the bootstrap can wait for it instead of probing a dead
- * port and flashing the "unreachable backend" recovery screen.
+ * Returns true while the backend active at launch is still being
+ * reconnected, so the bootstrap can wait for it instead of probing a dead
+ * host and flashing the "unreachable backend" recovery screen.
  */
 export function useRestoreMarsTunnels(): boolean {
   const { active, updateBackend } = useActiveBackendContext();
@@ -142,10 +148,9 @@ export function useRestoreMarsTunnels(): boolean {
     }
     attempted.current.add(backend.id);
 
-    void openHealthyTunnel(sessionId, getMarsBackendLocalPort(backend))
-      .then(async (localPort) => {
-        const host = buildMarsBackendHost(localPort);
-        // A paused sandbox wakes on the tunnel dial; its agent-server
+    void openHealthyConnection(sessionId, getMarsBackendLocalPort(backend))
+      .then(async (host) => {
+        // A paused sandbox is woken by the connect; its agent-server
         // answers only once booted.
         await waitForMarsAgentServer(host, { sessionId });
         if (host === backend.host) {

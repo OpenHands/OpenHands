@@ -1,12 +1,18 @@
 /**
  * Renderer-side view of the DigitalOcean MARS bridge exposed by
- * `electron/preload-main.cjs`, plus the helpers that turn a MARS session's
- * port-forward tunnel into an ordinary local backend.
+ * `electron/preload-main.cjs`, plus the helpers that turn a connected MARS
+ * session into an ordinary local backend.
+ *
+ * A session is reached over its public ingress URL when it has one (the main
+ * process stamps the DigitalOcean token onto this renderer's requests to that
+ * host, WebSocket handshake included), or over a port-forward tunnel on
+ * loopback for sessions that cannot. Either way the far end is a plain
+ * agent-server, so the backend is `kind: "local"`.
  *
  * `window.marsBridge` only exists in the Electron desktop build: harness-api
- * sends no CORS headers and the tunnel needs a local main process to hold
- * it, so the browser and library builds cannot offer MARS at all. Callers
- * gate on `getMarsBridge()` rather than catching per-call failures.
+ * sends no CORS headers and the token must live in a main process, so the
+ * browser and library builds cannot offer MARS at all. Callers gate on
+ * `getMarsBridge()` rather than catching per-call failures.
  */
 
 import { ConversationSortOrder } from "@openhands/typescript-client";
@@ -107,10 +113,22 @@ export interface MarsUpstreamFailure {
   message: string;
 }
 
+/**
+ * How a connected session is reached: directly at its public ingress URL, or
+ * through a loopback port-forward tunnel for sessions that cannot have one.
+ */
+export type MarsTransport = "ingress" | "tunnel";
+
 export interface MarsTunnelStatus {
   sessionId: string;
   status: "connecting" | "connected" | "error";
+  transport?: MarsTransport;
+  /** Base URL the renderer registers as the backend host. */
+  host?: string;
+  /** harness-api's id for the ingress URL; absent over the tunnel. */
+  ingressUrlId?: string;
   remotePort: number;
+  /** Loopback listener port; only set over the tunnel. */
   localPort: number | undefined;
   error: string | undefined;
   upstreamFailure?: MarsUpstreamFailure | null;
@@ -177,14 +195,19 @@ function requireMarsBridge(): MarsBridge {
   return bridge;
 }
 
-/** Opens (or reuses) the port-forward tunnel for one MARS session. */
+/**
+ * Connects to one MARS session — public ingress first, tunnel otherwise —
+ * waking it if paused. The ingress hostname is revoked on pause and lock and
+ * changes after rollback, so this always re-resolves rather than reusing a
+ * host the renderer remembered.
+ */
 export function openMarsTunnel(
   params: OpenMarsTunnelParams,
 ): Promise<MarsTunnelStatus> {
   return requireMarsBridge().openTunnel(params);
 }
 
-/** Closes the tunnel for one MARS session, if any. */
+/** Forgets the connection for one MARS session (closing its tunnel, if any). */
 export function closeMarsTunnel(sessionId: string): Promise<void> {
   return requireMarsBridge().closeTunnel(sessionId);
 }
@@ -233,7 +256,7 @@ export function getSessionPhase(
   return "starting";
 }
 
-/** READY or PAUSED — the tunnel resumes a paused session on dial. */
+/** READY or PAUSED — connecting resumes a paused session first. */
 export function isConnectableSession(session: MarsSession): boolean {
   const phase = getSessionPhase(session.status);
   return phase === "ready" || phase === "paused";
@@ -258,8 +281,9 @@ export function buildNewSessionName(configName: string | null | undefined) {
 
 /**
  * The in-guest agent-server's session key is set by the sandbox template, not
- * by us. The tunnel itself is the authorization boundary: dialing it requires
- * a team-scoped DigitalOcean token.
+ * by us. The DigitalOcean token is the authorization boundary instead: the
+ * ingress gateway requires it on every request (the main process injects it),
+ * and dialing the tunnel requires it too.
  */
 export const MARS_GUEST_API_KEY = "";
 
@@ -395,10 +419,31 @@ export function buildMarsBackendHost(localPort: number): string {
   return `http://127.0.0.1:${localPort}`;
 }
 
-/** Local port a persisted MARS backend's tunnel was listening on. */
+/**
+ * The base URL a connection status says to register. Over ingress it is the
+ * public URL; over the tunnel the loopback listener. A status from a bridge
+ * that predates `host` is still honoured through its `localPort`.
+ */
+export function getMarsConnectionHost(
+  status: MarsTunnelStatus,
+): string | undefined {
+  if (status.host) return status.host;
+  return status.localPort === undefined
+    ? undefined
+    : buildMarsBackendHost(status.localPort);
+}
+
+/**
+ * Local port a persisted MARS backend's tunnel was listening on, so a
+ * restore can ask for it again. Undefined for an ingress-connected backend
+ * (its host carries no explicit port), which is right: the public URL is
+ * re-resolved rather than reused.
+ */
 export function getMarsBackendLocalPort(backend: Backend): number | undefined {
   try {
-    const port = Number.parseInt(new URL(backend.host).port, 10);
+    const url = new URL(backend.host);
+    if (url.hostname !== "127.0.0.1") return undefined;
+    const port = Number.parseInt(url.port, 10);
     return Number.isInteger(port) && port > 0 ? port : undefined;
   } catch {
     return undefined;
@@ -406,26 +451,27 @@ export function getMarsBackendLocalPort(backend: Backend): number | undefined {
 }
 
 /**
- * Build the Backend record for a session's now-healthy tunnel. The far end
- * really is an ordinary agent-server, so this is a `kind: "local"` backend
- * like any other.
+ * Build the Backend record for a session that now answers at `host`. The far
+ * end really is an ordinary agent-server, so this is a `kind: "local"`
+ * backend like any other, whether `host` is a public ingress URL or a
+ * loopback tunnel.
  */
 export function buildMarsBackendInput({
   name,
-  localPort,
+  host,
   sessionId,
   configId,
   apiKey = MARS_GUEST_API_KEY,
 }: {
   name: string;
-  localPort: number;
+  host: string;
   sessionId: string;
   configId?: string;
   apiKey?: string;
 }): Omit<Backend, "id" | "connectionRevision"> {
   return {
     name,
-    host: buildMarsBackendHost(localPort),
+    host,
     apiKey,
     kind: "local",
     authMode: "api-key",
