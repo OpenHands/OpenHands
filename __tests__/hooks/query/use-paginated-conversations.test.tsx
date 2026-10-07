@@ -7,6 +7,10 @@ import { NavigationProvider } from "#/context/navigation-context";
 import { usePaginatedConversations } from "#/hooks/query/use-paginated-conversations";
 import type { AppConversationPage } from "#/api/conversation-service/agent-server-conversation-service.types";
 
+const { useActiveBackendMock } = vi.hoisted(() => ({
+  useActiveBackendMock: vi.fn(),
+}));
+
 vi.mock(
   "#/api/conversation-service/agent-server-conversation-service.api",
   () => ({
@@ -17,10 +21,7 @@ vi.mock(
 );
 
 vi.mock("#/contexts/active-backend-context", () => ({
-  useActiveBackend: () => ({
-    backend: { id: "test-backend", kind: "local" },
-    orgId: null,
-  }),
+  useActiveBackend: useActiveBackendMock,
 }));
 
 const emptyPage: AppConversationPage = { items: [], next_page_id: null };
@@ -56,6 +57,11 @@ describe("usePaginatedConversations — interval polling", () => {
     vi.mocked(
       AgentServerConversationService.searchConversations,
     ).mockResolvedValue(emptyPage);
+    useActiveBackendMock.mockReset();
+    useActiveBackendMock.mockReturnValue({
+      backend: { id: "test-backend", kind: "local" },
+      orgId: null,
+    });
   });
 
   afterEach(() => {
@@ -97,5 +103,21 @@ describe("usePaginatedConversations — interval polling", () => {
     expect(
       AgentServerConversationService.searchConversations,
     ).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not search Cloud conversations before an org is selected", async () => {
+    useActiveBackendMock.mockReturnValue({
+      backend: { id: "cloud-backend", kind: "cloud" },
+      orgId: null,
+    });
+
+    renderHook(() => usePaginatedConversations(), {
+      wrapper: createWrapper("/"),
+    });
+    await flushAsync();
+
+    expect(
+      AgentServerConversationService.searchConversations,
+    ).not.toHaveBeenCalled();
   });
 });
