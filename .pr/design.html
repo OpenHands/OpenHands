@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Show a run's trigger reason in Agent Canvas</title>
+<style>
+  :root{
+    --fg:#1a1a1a; --muted:#5a5a5a; --subtle:#8a8a82;
+    --bg:#fdfdfb; --card:#ffffff; --elevated:#f7f6f1;
+    --accent:#2b4eaa; --accent-soft:#e6ecfa;
+    --rule:#e2e2dc; --rule-strong:#bdbcb4;
+    --code-bg:#f3f1ec; --warn:#b25b0e; --ok:#2f7a3a; --crit:#a02020;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box} html,body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans)}
+  body{line-height:1.6;font-size:16px}
+  .wrap{display:grid;grid-template-columns:250px minmax(0,1fr);gap:48px;max-width:1200px;margin:0 auto;padding:32px 28px 96px}
+  nav.toc{position:sticky;top:24px;align-self:start;font-size:13px}
+  nav.toc h2{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+  nav.toc ol{list-style:none;padding:0;margin:0;counter-reset:toc}
+  nav.toc li{counter-increment:toc;margin:5px 0}
+  nav.toc li::before{content:counter(toc) ". ";color:var(--muted)}
+  nav.toc a{color:var(--fg);text-decoration:none} nav.toc a:hover{color:var(--accent)}
+  header.title{border-bottom:1px solid var(--rule);padding-bottom:22px;margin-bottom:28px}
+  header.title .eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700}
+  header.title h1{font-size:32px;margin:6px 0 4px;letter-spacing:-.01em}
+  header.title .sub{color:var(--muted);max-width:760px}
+  h2{font-size:22px;margin:44px 0 10px} h2 .num{color:var(--muted);font-weight:500;margin-right:8px}
+  h3{font-size:16px;margin:22px 0 8px}
+  code{font-family:var(--mono);font-size:.88em;background:var(--code-bg);padding:1px 5px;border-radius:3px}
+  pre{font-family:var(--mono);font-size:12.5px;background:var(--code-bg);padding:14px 16px;border-radius:6px;overflow-x:auto;border:1px solid var(--rule)}
+  pre code{background:transparent;padding:0}
+  .kw{color:#7048a8}.str{color:var(--ok)}.com{color:var(--subtle);font-style:italic}
+  table{border-collapse:collapse;width:100%;font-size:14px;margin:12px 0}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--rule);vertical-align:top}
+  th{font-weight:600;background:var(--code-bg)}
+  .callout{border-left:3px solid var(--accent);background:var(--accent-soft);padding:10px 14px;margin:14px 0;border-radius:0 4px 4px 0;font-size:14.5px}
+  .callout.warn{border-color:var(--warn);background:#fbf1e6} .callout.note{border-color:var(--muted);background:#f3f1ec}
+  .fig{margin:18px 0 22px}
+  .fig svg{display:block;max-width:100%;height:auto;background:#fff;border:1px solid var(--rule);border-radius:6px}
+  .fig figcaption{font-size:13px;color:var(--muted);margin-top:6px;text-align:center}
+  a.src{font-family:var(--mono);font-size:12px;color:var(--accent);text-decoration:none;border-bottom:1px dotted var(--accent)}
+  details{border:1px solid var(--rule);border-radius:6px;margin:12px 0}
+  details>summary{cursor:pointer;padding:8px 12px;color:var(--muted);font-size:13px;list-style:none}
+  details>summary::-webkit-details-marker{display:none}
+  details>summary::before{content:"▸ "} details[open]>summary::before{content:"▾ "}
+  .ba{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+  .pill{display:inline-block;font-family:var(--mono);font-size:11px;padding:1px 7px;border-radius:10px;border:1px solid var(--rule-strong);background:var(--elevated);color:var(--muted)}
+  .pill.add{color:var(--ok);border-color:var(--ok)}
+  .shot{width:100%;border:1px solid var(--rule);border-radius:6px;display:block}
+  @media(max-width:820px){.wrap{grid-template-columns:1fr}.ba{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="toc"><h2>Contents</h2><ol>
+    <li><a href="#sec1">What changed, decision first</a></li>
+    <li><a href="#sec2">API before → after</a></li>
+    <li><a href="#sec3">Render path &amp; call sites</a></li>
+    <li><a href="#sec4">Proof: live Canvas</a></li>
+    <li><a href="#sec5">Risk &amp; follow-ups</a></li>
+  </ol></nav>
+  <main>
+    <header class="title">
+      <div class="eyebrow">Agent Canvas · feature · issue #18101</div>
+      <h1>Show a run's trigger reason in the conversation list</h1>
+      <p class="sub">Canvas already receives <em>why</em> a conversation started — Cloud stamps <code>trigger: "automation"</code>, the local agent-server stamps automation tags — but only used it as a boolean. This change turns that existing field into a localized, presentational label on the conversation row and its hover preview. No new endpoint, request field, or response field; no change to filtering, the automation-name facet, or the reserved-tag set.</p>
+    </header>
+
+    <section id="sec1">
+      <h2><span class="num">1</span>What changed, decision first</h2>
+      <p>One new pure helper maps the existing <code>AppConversation.trigger</code> to a localized <code>I18nKey</code>, falling back to the automation tags the SDK workspace stamps on local rows, and returning <code>null</code> for absent or unrecognized values so the row renders exactly as today. Two call sites consume it: the card metadata chip row and the hover preview.</p>
+      <div class="callout">★ <strong>Presentational only, and additive.</strong> The helper is the single source of truth for the label; <code>isAutomationConversation</code>, the automation-name facet, the tag filters, and <code>RESERVED_CONVERSATION_TAG_KEYS</code> are untouched. <a class="src" href="https://github.com/OpenHands/OpenHands/blob/9a4705a54faa0eed229f737dfc54977cbcbb12bb/src/components/features/conversation-panel/conversation-panel-list-helpers.ts#L254">conversation-panel-list-helpers.ts:254</a></div>
+      <table>
+        <tr><th>Axis</th><th>Before</th><th>After</th></tr>
+        <tr><td>Row metadata</td><td>Automation is a hidden boolean + name facet</td><td>Localized trigger-reason chip for every recognized value</td></tr>
+        <tr><td>Local backend (<code>trigger === null</code>)</td><td>No reason surfaced</td><td>Automation tags drive the same label (fallback)</td></tr>
+        <tr><td>Unknown / absent</td><td>No chip</td><td>No chip — byte-for-byte same render</td></tr>
+        <tr><td>Agent Server contract</td><td>—</td><td>Unchanged; <code>minimumAgentServer</code> not raised</td></tr>
+      </table>
+      <p>Stats: <span class="pill">9 files</span> <span class="pill add">+400 / −3</span> — 4 source files, 3 test files, 1 translation file, 1 wiring file.</p>
+    </section>
+
+    <section id="sec2">
+      <h2><span class="num">2</span>API before → after</h2>
+      <p>The change adds one exported function and reuses the trigger union already declared in the app types. <span class="pill add">additive</span> — no existing signature changes; <code>isAutomationConversation</code> only narrows its parameter to the fields it actually reads.</p>
+      <div class="ba">
+        <div>
+          <h3>Before</h3>
+          <pre><code><span class="com">// conversation-panel-list-helpers.ts</span>
+<span class="kw">export function</span> isAutomationConversation(
+  conversation: AppConversation,
+): <span class="kw">boolean</span> {
+  <span class="kw">if</span> (conversation.trigger === <span class="str">"automation"</span>) <span class="kw">return true</span>;
+  <span class="com">// …automation tags…</span>
+}
+
+<span class="com">// ConversationTrigger (open-hands.types.ts)</span>
+<span class="kw">type</span> ConversationTrigger =
+  | <span class="str">"resolver"</span> | <span class="str">"gui"</span> | <span class="str">"suggested_task"</span>
+  | <span class="str">"microagent_management"</span> | <span class="str">"automation"</span>;</code></pre>
+        </div>
+        <div>
+          <h3>After</h3>
+          <pre><code><span class="com">// conversation-panel-list-helpers.ts:254</span>
+<span class="kw">export function</span> getConversationTriggerLabel(
+  conversation: Pick&lt;AppConversation,
+    <span class="str">"trigger"</span> | <span class="str">"tags"</span>&gt;,
+): I18nKey | <span class="kw">null</span> {
+  <span class="kw">const</span> trigger = conversation.trigger;
+  <span class="kw">if</span> (trigger &amp;&amp; Object.hasOwn(
+      CONVERSATION_TRIGGER_LABELS, trigger))
+    <span class="kw">return</span> CONVERSATION_TRIGGER_LABELS[trigger];
+  <span class="kw">if</span> (isAutomationConversation(conversation))
+    <span class="kw">return</span> I18nKey.CONVERSATION_PANEL$TRIGGER_AUTOMATION;
+  <span class="kw">return null</span>;
+}</code></pre>
+        </div>
+      </div>
+      <div class="callout note">ⓘ The map is typed <code>Record&lt;ConversationTrigger, I18nKey&gt;</code>, so a future trigger (e.g. <code>standing_intent</code>) is a compile error until it gets a label — exactly the acceptance criterion "add the enum member and its localized string, nothing else".</div>
+    </section>
+
+    <section id="sec3">
+      <h2><span class="num">3</span>Render path &amp; call sites</h2>
+      <figure class="fig">
+        <svg viewBox="0 0 960 300" role="img" aria-labelledby="f1-t f1-d">
+          <title id="f1-t">Trigger label data flow: payload to two render sites</title>
+          <desc id="f1-d">AppConversation.trigger and tags feed getConversationTriggerLabel, whose result feeds the card footer chip and the hover preview row.</desc>
+          <defs>
+            <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="var(--subtle)"/></marker>
+            <marker id="arr-chg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="var(--warn)"/></marker>
+            <style>
+              .existing{fill:var(--code-bg);stroke:var(--subtle);stroke-width:1.4;stroke-dasharray:5 3}
+              .ex-title{font:700 12.5px var(--sans);fill:var(--muted)} .ex-detail{font:11px var(--mono);fill:var(--subtle)}
+              .new{fill:var(--accent-soft);stroke:var(--accent);stroke-width:2}
+              .new-title{font:800 12.5px var(--sans);fill:var(--accent)} .detail{font:11px var(--mono);fill:var(--fg)}
+              .edge{stroke:var(--subtle);stroke-width:1.5;stroke-dasharray:5 3;fill:none}
+              .edge-chg{stroke:var(--warn);stroke-width:1.8;fill:none;stroke-dasharray:5 3}
+              .lbl{font:600 10px var(--mono);fill:var(--accent)} .gap{font:700 10px var(--mono);fill:var(--warn)}
+            </style>
+          </defs>
+          <g>
+            <rect class="existing" x="20" y="110" width="180" height="70" rx="6"/>
+            <text class="ex-title" x="110" y="140" text-anchor="middle">AppConversation</text>
+            <text class="ex-detail" x="110" y="160" text-anchor="middle">trigger + tags · wire</text>
+          </g>
+          <g>
+            <rect class="new" x="290" y="100" width="220" height="90" rx="6"/>
+            <text class="new-title" x="400" y="132" text-anchor="middle">getConversationTriggerLabel</text>
+            <text class="detail" x="400" y="152" text-anchor="middle">trigger → label</text>
+            <text class="ex-detail" x="400" y="170" text-anchor="middle">tags → fallback</text>
+          </g>
+          <path class="edge-chg" d="M200,145 L290,145" marker-end="url(#arr-chg)"/>
+          <g>
+            <rect class="new" x="600" y="40" width="240" height="70" rx="6"/>
+            <text class="new-title" x="720" y="68" text-anchor="middle">ConversationCardFooter</text>
+            <text class="detail" x="720" y="88" text-anchor="middle">chip row · data-testid</text>
+          </g>
+          <g>
+            <rect class="new" x="600" y="180" width="240" height="70" rx="6"/>
+            <text class="new-title" x="720" y="208" text-anchor="middle">ConversationCardPreview</text>
+            <text class="detail" x="720" y="228" text-anchor="middle">hover row</text>
+          </g>
+          <path class="edge-chg" d="M510,130 C555,130 555,75 600,75" marker-end="url(#arr-chg)"/>
+          <path class="edge-chg" d="M510,160 C555,160 555,215 600,215" marker-end="url(#arr-chg)"/>
+          <rect x="519" y="44" width="72" height="16" rx="5" fill="var(--elevated)" stroke="var(--rule)"/>
+          <text class="gap" x="555" y="56" text-anchor="middle">label key</text>
+        </svg>
+        <figcaption>Fig 1 · One helper derives the label from the payload; both render sites consume the same key, so the card and its hover preview can never disagree.</figcaption>
+      </figure>
+      <ul>
+        <li><a class="src" href="https://github.com/OpenHands/OpenHands/blob/9a4705a54faa0eed229f737dfc54977cbcbb12bb/src/components/features/conversation-panel/conversation-card/conversation-card-footer.tsx#L202">conversation-card-footer.tsx:202</a> — renders the chip in the metadata row (only when <code>triggerLabelKey</code> is non-null).</li>
+        <li><a class="src" href="https://github.com/OpenHands/OpenHands/blob/9a4705a54faa0eed229f737dfc54977cbcbb12bb/src/components/features/conversation-panel/conversation-card/conversation-card-preview.tsx#L237">conversation-card-preview.tsx:237</a> — renders the preview row under a localized "Trigger" heading.</li>
+        <li><a class="src" href="https://github.com/OpenHands/OpenHands/blob/9a4705a54faa0eed229f737dfc54977cbcbb12bb/src/components/features/conversation-panel/conversation-card/conversation-card.tsx#L263">conversation-card.tsx:263</a> — a non-null label forces the footer to render, so the chip is never silently dropped.</li>
+        <li><a class="src" href="https://github.com/OpenHands/OpenHands/blob/9a4705a54faa0eed229f737dfc54977cbcbb12bb/src/components/features/conversation-panel/conversation-panel.tsx#L926">conversation-panel.tsx:926</a> — threads <code>conversation.trigger</code> into both sites.</li>
+      </ul>
+    </section>
+
+    <section id="sec4">
+      <h2><span class="num">4</span>Proof: live Canvas</h2>
+      <p>Captured from a real local stack (<code>npm run dev:minimal</code>: agent-server on <code>127.0.0.1:18010</code>, Vite on <code>:3001</code>) with three conversations created through the real <code>POST /api/conversations</code> API: a plain row, a row tagged <code>automationname=Daily digest</code>, and a row tagged <code>automationid=auto-42</code>.</p>
+      <figure class="fig">
+        <img class="shot" src="evidence/conversation-list.png" alt="Conversation list showing 'Started by an automation' on the two automation-tagged rows and no chip on the plain row.">
+        <figcaption>Fig 2 · Two automation-tagged rows show "Started by an automation"; the plain row shows no trigger chip. The automation name stays a filter facet — unchanged.</figcaption>
+      </figure>
+      <figure class="fig">
+        <img class="shot" src="evidence/hover-preview.png" alt="Hover preview of an automation-tagged conversation showing the localized Trigger row.">
+        <figcaption>Fig 3 · The hover preview carries the same label under a localized "Trigger" heading.</figcaption>
+      </figure>
+      <div class="callout note">ⓘ Local agent-server conversations always have <code>trigger: null</code>, so these rows exercise the automation-tag fallback path. The <code>gui</code>/<code>resolver</code>/… direct values are covered by the helper unit test and render through the same map.</div>
+    </section>
+
+    <section id="sec5">
+      <h2><span class="num">5</span>Risk &amp; follow-ups</h2>
+      <p>No durable state, no secrets, no lifecycle. The label is read-only display derived at render time; it creates, forks, stops, and reroutes nothing. The one compatibility question — does Canvas now require a new Agent Server field? — is <strong>no</strong>: <code>trigger</code> is already on the payload Canvas receives, and unknown future values degrade to no chip.</p>
+      <div class="callout warn">⚠ The runtime half (reporting new reasons such as <code>standing_intent</code> and a stop reason) belongs to <code>OpenHands/software-agent-sdk</code> / <code>OpenHands/automation</code>. This PR is the Canvas-only slice and does not add a wire field.</div>
+    </section>
+  </main>
+</div>
+</body>
+</html>
