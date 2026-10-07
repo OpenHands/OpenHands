@@ -253,8 +253,9 @@ How to write and prove new entries: [../mapping.md](../mapping.md).
 | F25 | [Backends, Cloud and sharing](F25-backends-and-cloud.md) | add, edit, remove and switch backends, per-backend consent, Cloud login, shared pages | backend selector | a second stack; Cloud account (blocked) | 27 |
 | F26 | [Launcher modes, Docker, desktop and library](F26-runtime-variants.md) | launcher flags, partial stacks, LAN bind, Docker, Electron, embeddable library | a terminal | Docker/Electron where available | 27 |
 | F27 | [Workspace tools](F27-workspace-tools.md) | terminal, browser, planner, task list, usage, `canvas_ui_control` | drawer tabs | LLM | 29 |
+| F28 | [Live activity view](F28-live-activity-view.md) | running/waiting agents list, status chips, latest action, subagent fan-out, cost and tokens, empty/error/unavailable states, home pin | sidebar **Activity** link, `/activity` | LLM; a running conversation | 10 |
 
-27 families, 716 sub-features. `control-openhands map ids` lists every ID with its file.
+28 families, 726 sub-features. `control-openhands map ids` lists every ID with its file.
 
 ### Neighbouring families
 
@@ -266,6 +267,7 @@ Several pages are shared. Each behavior has one owner; the others reference its 
 - Automations: dashboard F21, creation F22, detail and runs F23, Git Sync F24.
 - Customize: MCP F17, skills F18, plugins F19, apps F20; the hub and its navigation are in F17.
 - Backends: adding and switching backends is F25; launcher flags that create them are F26.
+- Activity: the cross-conversation live overview is F28; what happens inside one conversation's stream (live chip, stop/resume, confirmation) is F06.
 
 ## Not mapped
 
