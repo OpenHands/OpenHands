@@ -1,8 +1,8 @@
-import { FileClient } from "@openhands/typescript-client/clients";
 import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
 import { resolveAbsoluteAgentServerPath } from "#/api/agent-server-home";
 import { getActiveBackend } from "#/api/backend-registry/active-store";
 import { resolveConversationRuntime } from "#/api/conversation-file-upload.api";
+import { downloadRuntimeFile } from "#/api/runtime-service/file-download";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 
 // @spec FD-001 — Download original bytes from the conversation's runtime
@@ -41,11 +41,6 @@ export async function downloadConversationFile(
     `${workingDir.replace(/[/\\]+$/, "")}/${path}`,
     { ...overrides, host: options.host, apiKey: options.apiKey },
   );
-  const client = new FileClient(options);
-  try {
-    const bytes = await client.downloadFile(absolutePath);
-    return new Blob([bytes], { type: "application/octet-stream" });
-  } finally {
-    client.close();
-  }
+  const bytes = await downloadRuntimeFile(options, absolutePath);
+  return new Blob([bytes], { type: "application/octet-stream" });
 }
