@@ -1,10 +1,13 @@
 import { getAcpProvider as getClientAcpProvider } from "@openhands/typescript-client";
+import type { BackendKind } from "#/api/backend-registry/types";
 import { I18nKey } from "#/i18n/declaration";
 
 export type ACPProviderIcon =
   | "claude-code"
   | "codex"
   | "gemini"
+  | "pi"
+  | "opencode"
   | "cli-generic";
 
 export const ACP_PROVIDER_FALLBACK_ICON: ACPProviderIcon = "cli-generic";
@@ -96,7 +99,7 @@ export interface ACPProviderConfig {
    * still enter a custom override in Settings -> Agent.
    */
   available_models?: ACPModelOption[];
-  /** Model ID preselected for built-in providers so Canvas never saves blank. */
+  /** Model ID preselected for the provider; absent when it picks its own. */
   default_model?: string;
   /**
    * i18n key for the one-line provider description rendered under the
@@ -111,6 +114,8 @@ export interface ACPProviderConfig {
    * parse this registry without importing React components.
    */
   icon?: ACPProviderIcon;
+  /** Offered only on local backends; Cloud runs a fixed set of providers. */
+  local_only?: boolean;
 }
 
 export interface ACPModelOption {
@@ -128,7 +133,7 @@ export interface ACPModelOption {
 // offers — see {@link SURFACED_ACP_PROVIDERS}.
 const ACP_PROVIDER_UI: Record<
   string,
-  { icon: ACPProviderIcon; description_key: I18nKey }
+  { icon: ACPProviderIcon; description_key: I18nKey; local_only?: boolean }
 > = {
   "claude-code": {
     icon: "claude-code",
@@ -141,6 +146,16 @@ const ACP_PROVIDER_UI: Record<
   "gemini-cli": {
     icon: "gemini",
     description_key: I18nKey.ONBOARDING$AGENT_GEMINI_CLI_DESCRIPTION,
+  },
+  pi: {
+    icon: "pi",
+    description_key: I18nKey.ONBOARDING$AGENT_PI_DESCRIPTION,
+    local_only: true,
+  },
+  opencode: {
+    icon: "opencode",
+    description_key: I18nKey.ONBOARDING$AGENT_OPENCODE_DESCRIPTION,
+    local_only: true,
   },
 };
 
@@ -175,8 +190,18 @@ export const ACP_PROVIDERS: ACPProviderConfig[] = Object.entries(
     default_model: info?.default_model ?? undefined,
     description_key: ui.description_key,
     icon: ui.icon,
+    local_only: ui.local_only,
   };
 });
+
+/** The built-in ACP providers a backend of ``kind`` can launch. */
+export function getAcpProvidersForBackend(
+  kind: BackendKind,
+): ACPProviderConfig[] {
+  return kind === "cloud"
+    ? ACP_PROVIDERS.filter((provider) => !provider.local_only)
+    : ACP_PROVIDERS;
+}
 
 export const ACP_CUSTOM_PRESET_KEY = "custom";
 
@@ -265,6 +290,24 @@ const ACP_RESERVED_CREDENTIALS: Record<string, ACPProviderSecretField[]> = {
     {
       name: "GOOGLE_GENAI_USE_VERTEXAI",
       hint_key: I18nKey.ONBOARDING$ACP_SECRET_VERTEXAI_FLAG_HINT,
+    },
+  ],
+  pi: [
+    {
+      name: "PI_AUTH_JSON",
+      secret: true,
+      multiline: true,
+      hint_key: I18nKey.ONBOARDING$ACP_SECRET_FILE_BLOB_HINT,
+      hint_values: { file: "~/.pi/agent/auth.json" },
+    },
+  ],
+  opencode: [
+    {
+      name: "OPENCODE_AUTH_CONTENT",
+      secret: true,
+      multiline: true,
+      hint_key: I18nKey.ONBOARDING$ACP_SECRET_AUTH_CONTENT_HINT,
+      hint_values: { file: "~/.local/share/opencode/auth.json" },
     },
   ],
 };

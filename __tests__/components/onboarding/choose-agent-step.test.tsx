@@ -2,13 +2,19 @@ import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   AgentOptionIcon,
   ChooseAgentStep,
   type OnboardingAgentId,
 } from "#/components/features/onboarding/steps/choose-agent-step";
 import SettingsService from "#/api/settings-service/settings-service.api";
+import {
+  __resetActiveStoreForTests,
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
+import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import {
   ACP_PROVIDERS,
   getAcpPreferredDefaultModel,
@@ -80,6 +86,23 @@ describe("ChooseAgentStep", () => {
       within(gemini).queryByTestId("onboarding-agent-icon-codex"),
     ).not.toBeInTheDocument();
   });
+
+  it.each([
+    ["pi", "pi"],
+    ["opencode", "opencode"],
+  ])(
+    "offers the %s tile with its brand mark on a local backend",
+    async (id, icon) => {
+      const { onSelect } = renderStep();
+      const tile = screen.getByTestId(`onboarding-agent-option-${id}`);
+
+      expect(
+        within(tile).getByTestId(`onboarding-agent-icon-${icon}`),
+      ).toBeInTheDocument();
+      await userEvent.setup().click(tile);
+      expect(onSelect).toHaveBeenLastCalledWith(id);
+    },
+  );
 
   it("falls back to the generic CLI icon for a registry provider without an icon", () => {
     ACP_PROVIDERS.push({
@@ -281,5 +304,56 @@ describe("ChooseAgentStep", () => {
       { timeout: 1000 },
     );
     expect(onNext).not.toHaveBeenCalled();
+  });
+});
+
+describe("ChooseAgentStep on a cloud backend", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    __resetActiveStoreForTests();
+    setRegisteredBackends([
+      {
+        id: "cloud-1",
+        name: "Cloud",
+        host: "https://app.example.com",
+        apiKey: "key",
+        kind: "cloud",
+      },
+    ]);
+    setActiveSelection({ backendId: "cloud-1", orgId: null });
+  });
+  afterEach(() => {
+    window.localStorage.clear();
+    __resetActiveStoreForTests();
+  });
+
+  it("hides local-only agents and drops a selection Cloud can't run", () => {
+    const onSelect = vi.fn();
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <ActiveBackendProvider>
+          <ChooseAgentStep
+            selectedAgentId="pi"
+            onSelect={onSelect}
+            onNext={vi.fn()}
+          />
+        </ActiveBackendProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(
+      screen.getByTestId("onboarding-agent-option-claude-code"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("onboarding-agent-option-pi"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("onboarding-agent-option-opencode"),
+    ).not.toBeInTheDocument();
+    expect(onSelect).toHaveBeenCalledWith("openhands");
   });
 });

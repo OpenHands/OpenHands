@@ -7,7 +7,7 @@
     <strong>The self-hosted developer control center for coding agents and automations.</strong>
   </p>
   <p align="center">
-    Run OpenHands, Claude Code, Codex, Gemini, or any ACP-compatible agent across local, remote, and cloud backends.
+    Run OpenHands, Claude Code, Codex, Gemini, Pi, OpenCode, or any ACP-compatible agent across local, remote, and cloud backends.
   </p>
 </div>
 <div align="center">

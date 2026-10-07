@@ -1,3 +1,7 @@
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { BashOutput } from "@openhands/typescript-client";
 import AcpService from "#/api/acp-service/acp-service.api";
@@ -116,6 +120,49 @@ describe("AcpService.getAuthStatus", () => {
     it("→ unauthenticated when the creds file is absent", async () => {
       executeCommand.mockResolvedValue(bashOutput({ stdout: "absent\n" }));
       await expect(AcpService.getAuthStatus("gemini-cli")).resolves.toBe(
+        "unauthenticated",
+      );
+    });
+  });
+
+  describe("pi (auth.json entry or registry api key)", () => {
+    it("→ authenticated when a credential is present", async () => {
+      executeCommand.mockResolvedValue(bashOutput({ stdout: "present\n" }));
+      await expect(AcpService.getAuthStatus("pi")).resolves.toBe(
+        "authenticated",
+      );
+    });
+
+    it("reports pi's seeded empty auth.json as absent", async () => {
+      executeCommand.mockResolvedValue(bashOutput({ stdout: "absent\n" }));
+      await AcpService.getAuthStatus("pi");
+      const command = executeCommand.mock.calls[0][0] as string;
+      const agentDir = mkdtempSync(join(tmpdir(), "pi-probe-"));
+      const probe = (env: Record<string, string> = {}) =>
+        execFileSync("sh", ["-c", command], {
+          env: {
+            PATH: process.env.PATH,
+            PI_CODING_AGENT_DIR: agentDir,
+            ...env,
+          },
+        })
+          .toString()
+          .trim();
+
+      expect(probe()).toBe("absent");
+      writeFileSync(join(agentDir, "auth.json"), "{}");
+      expect(probe()).toBe("absent");
+      expect(probe({ ANTHROPIC_API_KEY: "sk-ant-test" })).toBe("present");
+      writeFileSync(
+        join(agentDir, "auth.json"),
+        JSON.stringify({ anthropic: { type: "api_key", key: "k" } }),
+      );
+      expect(probe()).toBe("present");
+    });
+
+    it("→ unauthenticated when no credential is present", async () => {
+      executeCommand.mockResolvedValue(bashOutput({ stdout: "absent\n" }));
+      await expect(AcpService.getAuthStatus("pi")).resolves.toBe(
         "unauthenticated",
       );
     });
