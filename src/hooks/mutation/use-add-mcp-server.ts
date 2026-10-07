@@ -7,7 +7,10 @@ import {
   parseMcpConfig,
   toCanonicalMcpServer,
 } from "#/utils/mcp-config";
-import { SETTINGS_QUERY_KEYS } from "#/hooks/query/query-keys";
+import {
+  SETTINGS_QUERY_KEYS,
+  SUPER_ADMIN_SETUP_QUERY_KEYS,
+} from "#/hooks/query/query-keys";
 
 // @spec MCP-001 — Sparse mutations preserve sibling servers
 export function useAddMcpServer() {
@@ -36,6 +39,11 @@ export function useAddMcpServer() {
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: SETTINGS_QUERY_KEYS.personal(),
+      });
+      // The enterprise setup guide's "Add an integration" step counts MCP
+      // servers, and adding one does not change the page that re-reads it.
+      queryClient.invalidateQueries({
+        queryKey: SUPER_ADMIN_SETUP_QUERY_KEYS.all,
       });
     },
   });

@@ -43179,6 +43179,23 @@
     "tr": "Sıradaki: {{step}}",
     "uk": "Далі: {{step}}"
   },
+  "ONBOARDING$SETUP_GUIDE_START": {
+    "en": "Start",
+    "ja": "開始",
+    "zh-CN": "开始",
+    "zh-TW": "開始",
+    "ko-KR": "시작",
+    "no": "Start",
+    "ar": "ابدأ",
+    "de": "Starten",
+    "fr": "Commencer",
+    "it": "Inizia",
+    "pt": "Começar",
+    "es": "Empezar",
+    "ca": "Comença",
+    "tr": "Başla",
+    "uk": "Почати"
+  },
   "AUTOMATIONS$GIT_SYNC$NAV_BUTTON": {
     "en": "Git Sync",
     "ja": "Git同期",

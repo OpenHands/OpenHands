@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowUpRight, Check, ClipboardList, X } from "lucide-react";
 import { getLockedCloudHost } from "#/api/agent-server-config";
@@ -6,8 +6,12 @@ import { NavigationLink } from "#/components/shared/navigation-link";
 import { useNavigation } from "#/context/navigation-context";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { I18nKey } from "#/i18n/declaration";
+import { formControlButtonClassName } from "#/utils/form-control-classes";
 import { cn } from "#/utils/utils";
-import { SUPER_ADMIN_SETUP_GUIDE_PAGE_PATH } from "./super-admin-setup-guide.constants";
+import {
+  SUPER_ADMIN_SETUP_GUIDE_PAGE_PATH,
+  type SuperAdminSetupStep,
+} from "./super-admin-setup-guide.constants";
 import { useSuperAdminSetupGuide } from "./use-super-admin-setup-guide";
 
 const ICON_BUTTON_CLASS = cn(
@@ -17,6 +21,15 @@ const ICON_BUTTON_CLASS = cn(
 
 const STEP_ROW_CLASS =
   "flex w-full min-w-0 items-center gap-2.5 rounded-md px-2.5 py-1.5 hover:bg-surface";
+
+// The enterprise guide's primary button: light on dark. Canvas's `primary`
+// is its gold accent, so this uses `foreground` like the enterprise app.
+const START_BUTTON_CLASS = cn(
+  formControlButtonClassName,
+  "w-full bg-foreground font-medium text-on-primary hover:opacity-80",
+);
+
+const START_TEST_ID = "super-admin-setup-guide-start";
 
 /**
  * Floating lower-right setup guide for the enterprise Super Admin, matching
@@ -61,6 +74,34 @@ export default function SuperAdminSetupGuide() {
     withOrg && guideOrgId
       ? `${cloudHost}${path}?org=${encodeURIComponent(guideOrgId)}`
       : `${cloudHost}${path}`;
+  // A step row and Start open the same page for a step.
+  const renderStepLink = (
+    step: SuperAdminSetupStep,
+    testId: string,
+    className: string,
+    children: ReactNode,
+    onClick?: () => void,
+  ) =>
+    step.destination.kind === "canvas" ? (
+      <NavigationLink
+        to={step.destination.path}
+        data-testid={testId}
+        className={className}
+        onClick={onClick}
+      >
+        {children}
+      </NavigationLink>
+    ) : (
+      <a
+        href={cloudUrl(step.destination.path, step.destination.withOrg)}
+        {...cloudLinkProps}
+        data-testid={testId}
+        className={className}
+        onClick={onClick}
+      >
+        {children}
+      </a>
+    );
 
   const title = t(I18nKey.ONBOARDING$SETUP_GUIDE_TITLE);
   const progressPct = Math.round((completedCount / totalCount) * 100);
@@ -114,7 +155,7 @@ export default function SuperAdminSetupGuide() {
               aria-label={title}
             >
               <div
-                className="h-full rounded-full bg-primary transition-all duration-300"
+                className="h-full rounded-full bg-foreground transition-all duration-300"
                 style={{ width: `${progressPct}%` }}
               />
             </div>
@@ -132,7 +173,7 @@ export default function SuperAdminSetupGuide() {
                     className={cn(
                       "inline-flex size-4 shrink-0 items-center justify-center rounded-full border",
                       step.done
-                        ? "border-primary bg-primary text-on-primary"
+                        ? "border-foreground bg-foreground text-on-primary"
                         : "border-border bg-transparent",
                     )}
                   >
@@ -157,41 +198,33 @@ export default function SuperAdminSetupGuide() {
               );
               return (
                 <li key={step.id}>
-                  {step.destination.kind === "canvas" ? (
-                    <NavigationLink
-                      to={step.destination.path}
-                      data-testid={testId}
-                      className={rowClassName}
-                    >
-                      {label}
-                    </NavigationLink>
-                  ) : (
-                    <a
-                      href={cloudUrl(
-                        step.destination.path,
-                        step.destination.withOrg,
-                      )}
-                      {...cloudLinkProps}
-                      data-testid={testId}
-                      className={rowClassName}
-                    >
-                      {label}
-                    </a>
-                  )}
+                  {renderStepLink(step, testId, rowClassName, label)}
                 </li>
               );
             })}
           </ul>
 
           {nextStep ? (
-            <p
-              className="text-xs text-muted"
-              data-testid="super-admin-setup-guide-next"
-            >
-              {t(I18nKey.ONBOARDING$SETUP_GUIDE_NEXT, {
-                step: t(nextStep.labelKey),
-              })}
-            </p>
+            <div className="flex flex-col gap-2">
+              <p
+                className="text-xs text-muted"
+                data-testid="super-admin-setup-guide-next"
+              >
+                {t(I18nKey.ONBOARDING$SETUP_GUIDE_NEXT, {
+                  step: t(nextStep.labelKey),
+                })}
+              </p>
+              {/* Like the enterprise Start, close the panel before opening
+                  the step, so Start does something even when the admin is
+                  already on that step's page. */}
+              {renderStepLink(
+                nextStep,
+                START_TEST_ID,
+                START_BUTTON_CLASS,
+                t(I18nKey.ONBOARDING$SETUP_GUIDE_START),
+                () => setOpen(false),
+              )}
+            </div>
           ) : null}
         </div>
       ) : null}
