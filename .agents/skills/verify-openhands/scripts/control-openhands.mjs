@@ -41,6 +41,7 @@ import {
   sourceLiterals,
 } from "./lib/testids.mjs";
 import { tmuxPathFor } from "./lib/tmux-path.mjs";
+import { browserCallLimit } from "./lib/call-limit.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const skillDir = resolve(here, "..");
@@ -383,7 +384,7 @@ async function browserCall(run, cmd, args = {}, { timeout = 120_000 } = {}) {
       "x-control-token": info.token,
     },
     body: JSON.stringify({ cmd, args }),
-    signal: AbortSignal.timeout(timeout),
+    signal: AbortSignal.timeout(browserCallLimit(args, timeout)),
   });
   const result = await response.json();
   if (!result.ok) {
@@ -2191,8 +2192,35 @@ async function cmdFixture({ positional, flags }) {
       : undefined;
   if (kind === "git-repo") {
     const dir = join(workspace, name ?? "qa-repo");
+    const remote =
+      flags.remote && flags.remote !== true ? String(flags.remote) : undefined;
     if (existsSync(join(dir, ".git"))) {
-      out({ ok: true, path: dir, existed: true });
+      // The repo is kept as it is, except that --remote still means "origin
+      // is this URL": a family that needs repo links on a repo another family
+      // made gets them, and says so in its output.
+      let remoteChanged = false;
+      if (remote) {
+        const current = spawnSync("git", ["remote", "get-url", "origin"], {
+          cwd: dir,
+          encoding: "utf8",
+        });
+        const existing =
+          current.status === 0 ? current.stdout.trim() : undefined;
+        if (existing !== remote) {
+          execFileSync(
+            "git",
+            ["remote", existing ? "set-url" : "add", "origin", remote],
+            { cwd: dir },
+          );
+          remoteChanged = true;
+        }
+      }
+      out({
+        ok: true,
+        path: dir,
+        existed: true,
+        ...(remote ? { remote, remoteChanged } : {}),
+      });
       return;
     }
     mkdirSync(join(dir, "src"), { recursive: true });
@@ -2222,8 +2250,6 @@ async function cmdFixture({ positional, flags }) {
     ]) {
       execFileSync("git", args, { cwd: dir, env: gitEnv });
     }
-    const remote =
-      flags.remote && flags.remote !== true ? String(flags.remote) : undefined;
     // A remote URL lets the UI show repo/branch links and Pull/Push chips;
     // nothing is fetched or pushed.
     if (remote)
@@ -3904,7 +3930,8 @@ Examples:
   control-openhands conversation events <id> --last 10
 `,
   fixture: `control-openhands fixture git-repo [--name qa-repo] [--remote https://github.com/qa-example/qa-repo.git]
-        # git repo in <run>/workspace (README, src/calc.py, test); --remote only sets origin
+        # git repo in <run>/workspace (README, src/calc.py, test); --remote only sets origin,
+        # also on a repo that already exists (the output then carries existed and remoteChanged)
 control-openhands fixture git-remote [--name qa-remote]   # bare repo <run>/workspace/qa-remote.git to push to
 control-openhands fixture mcp-server [--name qa-mcp]      # stdio MCP server (tool qa_echo); prints command and args
 control-openhands fixture folder [--name qa-folder]

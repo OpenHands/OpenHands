@@ -41,6 +41,9 @@ const CommandMenu = React.lazy(() =>
     default: m.CommandMenu,
   })),
 );
+const SuperAdminSetupGuide = React.lazy(
+  () => import("#/components/features/setup-guide/super-admin-setup-guide"),
+);
 
 export function ErrorBoundary() {
   const error = useRouteError();
@@ -158,6 +161,9 @@ function MainAppContent() {
           <React.Suspense fallback={null}>
             <EnvironmentSwitchOverlay />
             <CommandMenu />
+          </React.Suspense>
+          <React.Suspense fallback={null}>
+            <SuperAdminSetupGuide />
           </React.Suspense>
           {showOnboardingPreview ? <OnboardingHost /> : null}
         </SidebarMobileNavProvider>
