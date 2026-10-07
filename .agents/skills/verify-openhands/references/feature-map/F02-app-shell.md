@@ -12,8 +12,6 @@ Failed requests show error toasts.
 
 Source: `src/components/features/sidebar/`, `src/components/features/command-menu/`, `src/stores/sidebar-store.ts`, `src/stores/command-menu-store.ts`, `src/hooks/use-pinned-home-route.ts`, `src/routes/index-home.tsx`, `src/utils/mobile-section-nav.ts`, `src/components/features/settings/agent-canvas-version-tile.tsx`, `src/components/features/alerts/alert-banner.tsx`, `src/utils/custom-toast-handlers.tsx`.
 
-E2E: `tests/e2e/mock-llm/conversations/mock-llm-conversation.spec.ts` (F02.conversation-list), `tests/e2e/mock-llm/conversations/mock-llm-message-confirmation.spec.ts` (F02.nav-links), `tests/e2e/mock-llm/skills/mock-llm-skills.spec.ts` (F02.nav-links).
-
 ## Sub-features
 
 - `F02.nav-links`: the logo and **New Chat** open `/conversations`. **Customize** opens `/customize`, which redirects to `/mcp` on desktop, and stays highlighted and marked `aria-current="page"` on `/skills`, `/plugins`, `/apps` and `/mcp`. **Automate** opens `/automations`. Canvas extension pages add their own rows (`sidebar-canvas-extension-<ext>-<id>`).

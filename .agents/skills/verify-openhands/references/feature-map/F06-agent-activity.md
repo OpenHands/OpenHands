@@ -12,8 +12,6 @@ can be branched into a new conversation.
 
 Source: `src/components/features/chat/chat-interface.tsx`, `src/components/conversation-events/chat/`, `src/components/features/chat/` (messages, banners, `tool-visualizers/`, `task-tracking/`), `src/components/features/markdown/`, `src/components/features/images/`, `src/components/features/suggestions/`, `src/components/shared/buttons/conversation-confirmation-buttons.tsx`, `src/components/features/controls/agent-status.tsx`, `src/hooks/use-load-older-events.ts`, `src/hooks/mutation/use-fork-conversation.ts`.
 
-E2E: `tests/e2e/conversation-markdown-render-performance.spec.ts` (F06.markdown-rendering), `tests/e2e/live/real-agent-server-conversation.spec.ts` (F06.user-and-agent-messages, F06.tool-visualizers, F06.event-groups, F06.critic-result), `tests/e2e/mock-llm/conversations/mock-llm-conversation.spec.ts` (F06.user-and-agent-messages, F06.events-match), `tests/e2e/mock-llm/conversations/mock-llm-image-upload.spec.ts` (F06.image-attachments), `tests/e2e/mock-llm/conversations/mock-llm-message-confirmation.spec.ts` (F06.pending-messages), `tests/e2e/mock-llm/regressions/mock-llm-ui-regressions.spec.ts` (F06.critic-result, F06.load-older-history).
-
 ## Sub-features
 
 - `F06.empty-state-suggestions`: an empty conversation shows "Let's start building!" with four suggestion chips; a chip fills the composer with its prompt.

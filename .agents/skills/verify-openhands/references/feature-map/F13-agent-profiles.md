@@ -9,8 +9,6 @@ Home launch from it.
 
 Source: `src/routes/agent-profiles-settings.tsx`, `src/routes/agent-settings.tsx`, `src/components/features/settings/agent-profiles/`, `src/components/features/settings/acp-credentials-section.tsx`, `src/constants/acp-providers.ts`, `src/hooks/mutation/use-create-conversation.ts`.
 
-E2E: `tests/e2e/live-acp/acp-docker-app-e2e.mts` (F13.acp-conversation, F13.acp-form), `tests/e2e/live-acp/acp-docker-e2e.mts` (F13.acp-conversation, F13.acp-credentials, F13.acp-preset-credentials), `tests/e2e/mock-llm/settings/mock-llm-acp-agent.spec.ts` (F13.edit, F13.acp-form, F13.active-drives-conversation, F13.acp-conversation), `tests/e2e/mock-llm/settings/mock-llm-acp-auth-banner.spec.ts` (F13.acp-credentials, F13.acp-preset-credentials).
-
 ## Sub-features
 
 - `F13.list`: under **Available Profiles**, rows (sorted by name) show the profile name, then its LLM profile (OpenHands) or `ACP (external subprocess)`, a **Default** badge on the active profile and a `...` menu (Edit, Set as active, Delete).

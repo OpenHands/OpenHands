@@ -13,8 +13,6 @@ dialog changes name, prompt, agent and LLM profile, timeout and the schedule.
 
 Source: `src/routes/automation-detail.tsx`, `src/components/features/automations/detail/`, `src/components/features/automations/delete-confirmation-modal.tsx`, `src/hooks/query/use-automation-detail.ts`, `src/utils/automation-preset-sources.ts`, `src/hooks/query/use-bash-command-logs.ts`, `src/hooks/query/use-automation-tarball-files.ts`, `src/utils/automation-schedule.ts`, `src/utils/automation-timeout.ts`, `src/utils/automation-disabled-reason.ts`, `src/utils/automation-activity-log-export.ts`.
 
-E2E: `tests/e2e/mock-llm/automations/mock-llm-automation.spec.ts` (F23.header, F23.configuration, F23.activity-log, F23.run-linked-conversation, F23.open-detail, F23.run-status-polling).
-
 ## Sub-features
 
 - `F23.open-detail`: a dashboard card, a list row, the kebab **View** and a direct URL open `/automations/<id>`; browser Back from a run's conversation returns to it.

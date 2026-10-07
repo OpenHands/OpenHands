@@ -12,8 +12,6 @@ which services exist through `/server_info.runtime_services` and a
 
 Source: `bin/agent-canvas.mjs`, `scripts/dev-with-automation.mjs`, `scripts/dev-safe.mjs`, `scripts/dev-static.mjs`, `scripts/dev-extra-backend.mjs`, `scripts/bind-host.mjs`, `scripts/static-server.mjs`, `scripts/ingress.mjs`, `scripts/runtime-services-info.mjs`, `config/defaults.json`, `src/api/agent-server-adapter.ts`, `src/api/backend-registry/`, `docker/`, `electron/`, `helm/agent-canvas/`, `src/lib/index.ts`, `docs/SELF_HOSTING.md`.
 
-E2E: `tests/e2e/bind-policy/loopback-bind.spec.ts` (F26.host-bind-lan), `tests/e2e/mock-llm/automations/mock-llm-automation.spec.ts` (F26.runtime-services), `tests/e2e/mock-llm/backends/mock-llm-auth-modes.spec.ts` (F26.seeded-local-backend, F26.session-key-pinned), `tests/e2e/mock-llm/backends/mock-llm-cross-connect.spec.ts` (F26.frontend-only, F26.cross-connect, F26.remote-backend), `tests/e2e/mock-llm/backends/mock-llm-partial-stack.spec.ts` (F26.frontend-only, F26.backend-only, F26.cli-port-in-use), `tests/e2e/mock-llm/regressions/mock-llm-ui-regressions.spec.ts` (F26.lib-style-scope).
-
 ## Sub-features
 
 - `F26.cli-version`: `--version` and `-v` print the package version and exit 0.

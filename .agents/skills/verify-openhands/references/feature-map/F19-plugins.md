@@ -11,8 +11,6 @@ requires a trust checkbox before it creates the conversation.
 
 Source: `src/routes/skills-plugins.tsx`, `src/routes/launch.tsx`, `src/components/features/plugins/`, `src/components/features/launch/`, `src/utils/plugin-launch-url.ts`, `src/hooks/mutation/use-install-plugin.ts`, `src/hooks/mutation/use-set-plugin-enabled.ts`, `src/hooks/mutation/use-uninstall-plugin.ts`, `src/hooks/mutation/use-refresh-plugin.ts`.
 
-E2E: `tests/e2e/settings-responsive.spec.ts` (F19.phone).
-
 ## Sub-features
 
 - `F19.page`: `/plugins` shows the **Plugins** heading, the description "Browse, install, enable, and uninstall plugins. Enabled plugins load automatically into new conversations.", an enabled **Add plugin** button on a local backend, and the catalog as cards.

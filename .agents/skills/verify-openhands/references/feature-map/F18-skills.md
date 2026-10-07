@@ -11,8 +11,6 @@ that loads it.
 
 Source: `src/routes/skills-settings.tsx`, `src/components/features/skills/`, `src/constants/skills-docs.ts`, `src/hooks/use-skill-enablement.ts`, `src/utils/skill-enablement.ts`, `src/hooks/use-launch-skill-in-chat.ts`, `src/api/skills-service.ts`, `src/components/features/chat/skill-install-restart-banner.tsx`, `src/utils/skill-install-events.ts`.
 
-E2E: `tests/e2e/mock-llm/automations/mock-llm-preset-automation.spec.ts` (F18.skill-in-chat), `tests/e2e/mock-llm/skills/mock-llm-skills.spec.ts` (F18.skill-in-chat), `tests/e2e/settings-responsive.spec.ts` (F18.phone).
-
 ## Sub-features
 
 - `F18.page`: the page shows the title, description, the notice "Skill changes apply to new conversations only.", an **Add skill** button, a result count, the facet rail and the card grid. (Empty state "No skills found." and loading skeletons are not reachable on a local backend.)

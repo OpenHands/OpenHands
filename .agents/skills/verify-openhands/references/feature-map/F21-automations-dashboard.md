@@ -12,8 +12,6 @@ manifest from `@openhands/extensions` is admitted.
 
 Source: `src/routes/automations-list.tsx`, `src/components/features/automations/` (`automation-card.tsx`, `automation-list-row.tsx`, `kebab-menu.tsx`, `build-automation-menu-items.tsx`, `delete-confirmation-modal.tsx`, `automation-view-toggle.tsx`, `empty-state.tsx`, `dashboard/`), `src/components/features/manifest/manifest-subpage-layout.tsx`, `src/components/features/manifest/manifest-overview-tiles.tsx`, `src/manifests/automation-insights.ts`, `src/manifests/automation-interface.ts`, `src/hooks/query/use-automations.ts`, `src/hooks/use-pinned-home-route.ts`, `node_modules/@openhands/extensions/automations/interface.json`.
 
-E2E: `tests/e2e/automations-filters-popover.spec.ts` (F21.filters), `tests/e2e/mock-llm/automations/mock-llm-automation.spec.ts` (F21.card-grid, F21.open-detail).
-
 ## Sub-features
 
 - `F21.sidebar-entry`: the sidebar **Automate** item opens `/automations` with the heading **Dashboard** and the Automate sub-page aside.

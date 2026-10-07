@@ -13,8 +13,6 @@ localStorage.
 
 Source: `src/components/features/sidebar/sidebar-conversation-list.tsx`, `src/components/features/conversation-panel/` (panel, layouts menu, advanced options modal, new-thread picker, folder list/row, pinned section, active filter chips, confirm and tags modals, `conversation-card/`), `src/stores/conversation-panel-preferences-store.ts`, `src/stores/pinned-conversations-store.ts`, `src/stores/archived-conversations-store.ts`, `src/hooks/query/use-paginated-conversations.ts`, `src/hooks/use-download-conversation.ts`, `src/api/conversation-metadata-store.ts`.
 
-E2E: `tests/e2e/mock-llm/backends/mock-llm-cross-connect.spec.ts` (F04.card), `tests/e2e/mock-llm/conversations/mock-llm-conversation.spec.ts` (F04.card), `tests/e2e/mock-llm/settings/mock-llm-acp-agent.spec.ts` (F04.card).
-
 ## Sub-features
 
 - `F04.empty-state`: with no conversations (By date) the list shows `No conversations found`.

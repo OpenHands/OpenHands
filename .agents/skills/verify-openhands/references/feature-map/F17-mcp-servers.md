@@ -11,8 +11,6 @@ conversation's agent.
 
 Source: `src/routes/extensions-hub.tsx`, `src/routes/mcp.tsx`, `src/components/features/skills/extensions-navigation.tsx`, `src/components/features/skills/extensions-mobile-hub.tsx`, `src/components/features/mcp-page/`, `src/components/features/settings/mcp-settings/mcp-server-form.tsx`, `src/utils/mcp-marketplace-utils.ts`, `src/api/mcp-health/`, `src/utils/mobile-section-nav.ts`.
 
-E2E: `tests/e2e/mock-llm/mcp/mock-llm-mcp-github.spec.ts` (F17.page-states, F17.library-catalog, F17.install-remote, F17.custom-add, F17.custom-edit, F17.delete-server, F17.test-connection), `tests/e2e/mock-llm/mcp/mock-llm-mcp-slack-credentials.spec.ts` (F17.install-error, F17.test-connection), `tests/e2e/settings-responsive.spec.ts` (F17.mobile-hub, F17.desktop-subnav, F17.search, F17.page-states, F17.library-catalog).
-
 ## Sub-features
 
 - `F17.customize-redirect`: on desktop, the sidebar **Customize** link, the URL `/customize` and the command-menu items **Customize** and **MCP servers** all land on `/mcp`.

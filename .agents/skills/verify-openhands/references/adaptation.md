@@ -43,9 +43,9 @@ OpenHands-specific decisions:
   `map affected` (the `Source:` lines as a change-to-feature index, in the
   spirit of `tests/e2e/mock-llm/test-mapping.json`), a smoke row per family,
   a weekly rotation, and `evidence report --baseline` as the day's verdict.
-  The `E2E:` lines link each family to the Playwright specs that assert its
-  behaviors in CI, so a green suite is a cheap input and the live pass can
-  spend its time where no test looks.
+  The Playwright suites under `tests/e2e/` are not referenced from the map
+  (they run differently and prove a commit, not this run); the behaviors they
+  assert are mapped as sub-features with their own live recipes instead.
 - Not imported: Cursor plugin configuration, model routing,
   `disable-model-invocation`, autonomous shipping or merge authority, and the
   zero-pixel-difference rule (deliberate weekly product changes are expected).

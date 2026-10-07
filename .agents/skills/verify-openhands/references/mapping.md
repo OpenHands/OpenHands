@@ -45,17 +45,17 @@ candidate. Sources, roughly in order of yield:
    agents, partial stacks (`agent-canvas --help`), Electron, Docker, and the
    embeddable library (`src/index.ts` / `build:lib`).
 7. **Docs, specs and tests**: `README.md`, `docs/*.md`, `specs/*.md` describe
-   intended behavior. The Playwright specs under `tests/e2e/` (mock-LLM, live,
+   intended behavior. The Playwright suites under `tests/e2e/` (mock-LLM, live,
    bind-policy, live-acp) assert behaviors a user sees too: read them for
-   selectors and for behaviors the map lacks, and cite them on the family's
-   `E2E:` line (below). They are evidence that CI saw a behavior on some
-   commit, never a live proof for this run.
+   selectors and for behaviors the map lacks, then map those behaviors as
+   sub-features with their own recipes. The map never cites a spec: the
+   suites run differently and prove a commit, not this run.
 8. **Strings**: `src/i18n/translation.json` keys reveal user-visible states
    (empty, error, disabled, confirmation) that a happy path never shows.
 
-`control-openhands map coverage` lists routes, `src/components/features/*`
-directories and Playwright specs no entry references yet. Drive it to zero, or
-list each exclusion with its reason in the index's "Not mapped" section.
+`control-openhands map coverage` lists routes and `src/components/features/*`
+directories no entry references yet. Drive it to zero, or list each exclusion
+with its reason in the index's "Not mapped" section.
 
 ## 2. Group into families
 
@@ -86,17 +86,8 @@ checks and `map affected`; keep other implementation detail out). Every path
 must exist (`map check` verifies it); a directory ends with `/`, names in
 parentheses after a directory are relative to it, and `name-*.tsx` matches by
 prefix. For a family spread over many files, list the route modules and
-top-level component directories, not every file. An optional `E2E:` line
-follows, naming each Playwright spec that exercises the family with the
-sub-feature IDs it covers in parentheses:
-
-```markdown
-E2E: `tests/e2e/mock-llm/settings/mock-llm-profile-management.spec.ts` (F10.delete, F10.edit), `tests/e2e/live/real-agent-server-conversation.spec.ts` (F05.send-message).
-```
-
-Cite a spec only for behaviors its assertions cover from the user's side
-(not its arrange steps or an API it seeds through), and keep the IDs on the
-family's own line. Then exactly four H2 sections, in this order:
+top-level component directories, not every file. Then exactly four H2
+sections, in this order:
 
 1. `## Sub-features`: one bullet per ID: `` - `F14.create`: add a dummy secret; it persists after reload. ``
 2. `## How to get to it (user POV)`: every entry point, in user language: the

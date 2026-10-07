@@ -72,9 +72,9 @@ to justify a change after the fact.
 ## 3. Index hygiene and source wave
 
 Run `control-openhands map check`, `map coverage` and `map testids`; fix
-missing, duplicate and dead entries, `Source:` paths that are gone, `E2E:`
-specs that moved and test ids no literal in `src/` accounts for (`map check
---fix-counts` refreshes the index counts). Then give one read-only reader per
+missing, duplicate and dead entries, `Source:` paths that are gone and test
+ids no literal in `src/` accounts for (`map check --fix-counts` refreshes the
+index counts). Then give one read-only reader per
 feature file (parallel if delegation is available). Each reads current source for that feature and returns:
 summary, source entry points, likely drift with citations (or none), new
 surfaces missing from the map, and one live recipe. Readers never edit files or
@@ -87,8 +87,7 @@ re-drive any that a current verb can now reach (compare with
 
 Map **every changed path** in BASE..TARGET to a feature ID or an explicit
 non-user-facing reason: `control-openhands map affected --base "$BASE" --target
-"$TARGET"` does the first cut from the `Source:` lines and lists the `E2E:`
-specs the hit families cite. Its `shared` paths (components, CSS, API clients,
+"$TARGET"` does the first cut from the `Source:` lines. Its `shared` paths (components, CSS, API clients,
 hooks, stores, settings schemas, dependency bumps) expand to their consumers
 rather than sampling one convenient screen; its `unmapped` paths under `src/`
 are map gaps. A new surface needs a concrete source path before it is called

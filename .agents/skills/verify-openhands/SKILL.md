@@ -157,9 +157,8 @@ prerequisite; never substitute a mock and call it a pass.
 
 - **Verify a change or a PR**: `control-openhands map affected --base <ref>`
   (or `--paths` with the PR's file list) maps the changed paths to the
-  families whose `Source:` lines own them, lists the `E2E:` specs they cite,
-  and separates shared code to widen, `src/` paths no family owns (a map gap)
-  and non-user-facing paths. Drive every entry point those features list at
+  families whose `Source:` lines own them, and separates shared code to widen,
+  `src/` paths no family owns (a map gap) and non-user-facing paths. Drive every entry point those features list at
   desktop and phone viewports, and report with
   [the report contract](references/report.md).
 - **Run the daily pass**: follow [references/daily.md](references/daily.md):
@@ -172,8 +171,7 @@ prerequisite; never substitute a mock and call it a pass.
   ledgers with `evidence report --baseline` when yesterday's is at hand.
 - **Create or extend the map**: follow [references/mapping.md](references/mapping.md).
   It teaches how to discover features, write entries against the CLI and prove
-  each one live. `control-openhands map coverage` measures what is still unmapped
-  (routes, feature component directories and Playwright specs no family cites).
+  each one live. `control-openhands map coverage` measures what is still unmapped.
 - **Maintain the map (periodic or weekly)**: follow
   [references/maintenance.md](references/maintenance.md): index hygiene, a source
   wave, one live pass over every feature, PR-intent reconciliation for the week's

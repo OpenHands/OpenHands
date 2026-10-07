@@ -48,9 +48,9 @@ Run the tiers in this order and stop when the budget runs out; each tier is
 cheaper than the next and catches a different kind of rot.
 
 1. **Static (minutes, no stack).** `control-openhands map check`,
-   `map coverage` and `map testids`. A `Source:` path that is gone, an `E2E:`
-   spec that moved, or a test id the map drives that no literal in `src/`
-   accounts for is drift found before any browser opens. Fix it in the map
+   `map coverage` and `map testids`. A `Source:` path that is gone, or a test
+   id the map drives that no literal in `src/` accounts for, is drift found
+   before any browser opens. Fix it in the map
    with a live drive later today, or report it. Zero unresolved test ids is
    the normal state; treat a new one as a rename until a drive says otherwise.
 2. **Changed (the core).** `control-openhands map affected --target $TARGET`
@@ -79,10 +79,6 @@ cheaper than the next and catches a different kind of rot.
    `(d mod 7) * 4 + 3` of the index table, in ID order (position 24 onwards
    holds F25 to F27). Model-backed bullets run only inside the LLM budget;
    without a key they are `blocked` with the missing prerequisite.
-
-The `E2E:` specs that `map affected` lists are a cheap signal before tier 2
-(run them with the suite's own command when the machine can; their green is
-an input, never a pass in the ledger), and a selector reference while driving.
 
 ## Reading the result
 

@@ -1,5 +1,5 @@
-// The feature map's `Source:` and `E2E:` lines, read for drift checks and for
-// mapping a set of changed paths to the families that own them.
+// The feature map's `Source:` lines, read for drift checks and for mapping a
+// set of changed paths to the families that own them.
 //
 // A `Source:` line lists the main implementation paths of a family in
 // backticks. Two shapes carry paths:
@@ -9,10 +9,6 @@
 // before them. A backticked token with no `/` and no file extension (a
 // function name such as `buildRouterAtStartSystemSuffix`) is a symbol, not a
 // path, and is ignored. A trailing `*` in a file name matches by prefix.
-//
-// An `E2E:` line, when a family has one, lists the Playwright specs that
-// cover it, each followed by the sub-feature IDs it exercises:
-//   E2E: `tests/e2e/mock-llm/settings/mock-llm-profile-management.spec.ts` (F10.create, F10.delete)
 
 const FILE_EXT = /\.(tsx?|m?[jc]s|json|css|md|ya?ml|sh|html|toml|py|txt)$/;
 
@@ -67,32 +63,11 @@ export function specMatches(s, changed) {
   return changed === s.path;
 }
 
-/**
- * Parse one `E2E:` line.
- * @returns {Array<{ spec: string, ids: string[] }>}
- */
-export function parseE2eLine(line) {
-  const body = line.replace(/^E2E:\s*/, "");
-  const out = [];
-  for (const m of body.matchAll(/`([^`]+)`(?:\s*\(([^)]*)\))?/g)) {
-    const ids = (m[2] ?? "")
-      .split(/[,\s]+/)
-      .map((s) => s.replace(/`/g, "").trim())
-      .filter((s) => /^F\d{2}\.[a-z0-9-]+$/.test(s));
-    out.push({ spec: m[1].trim(), ids });
-  }
-  return out;
-}
-
-/** The `Source:` and `E2E:` lines of a feature file's head (before the first H2). */
+/** The `Source:` line of a feature file's head (before the first H2). */
 export function familyHead(text) {
   const head = text.split(/^## /m)[0];
   const source = head.match(/^Source:.*$/m)?.[0] ?? "";
-  const e2e = head.match(/^E2E:.*$/m)?.[0] ?? "";
-  return {
-    sources: source ? parseSourceLine(source) : [],
-    e2e: e2e ? parseE2eLine(e2e) : [],
-  };
+  return { sources: source ? parseSourceLine(source) : [] };
 }
 
 // Paths outside the frontend build and the launcher are not user-facing on
@@ -152,7 +127,7 @@ const SHARED_PREFIXES = [
 
 /**
  * Map changed paths to families.
- * @param {Array<{ id: string, file: string, sources: object[], e2e: object[] }>} families
+ * @param {Array<{ id: string, file: string, sources: object[] }>} families
  * @param {string[]} changed repo-relative paths
  */
 export function affectedFamilies(families, changed) {

@@ -29,7 +29,6 @@ import { baselineLines, parseBaseline, withBaseline } from "./lib/baseline.mjs";
 import {
   affectedFamilies,
   familyHead,
-  parseE2eLine,
   parseSourceLine,
   specMatches,
 } from "./lib/map-sources.mjs";
@@ -670,32 +669,14 @@ test("Source: lines parse into path specs, parenthesized names relative to their
   );
 });
 
-test("E2E: lines name specs with the IDs they cover", () => {
-  assert.deepEqual(
-    parseE2eLine(
-      "E2E: `tests/e2e/mock-llm/settings/mock-llm-profile-management.spec.ts` (F10.delete, F10.edit), `tests/e2e/live-acp/acp-docker-e2e.mts` (F13.acp-conversation).",
-    ),
-    [
-      {
-        spec: "tests/e2e/mock-llm/settings/mock-llm-profile-management.spec.ts",
-        ids: ["F10.delete", "F10.edit"],
-      },
-      {
-        spec: "tests/e2e/live-acp/acp-docker-e2e.mts",
-        ids: ["F13.acp-conversation"],
-      },
-    ],
-  );
+test("only the Source: line in a file's head counts", () => {
   const head = familyHead(
-    "# F14\n\nText.\n\nSource: `src/api/secrets-service.ts`.\n\nE2E: `tests/e2e/x.spec.ts` (F14.list).\n\n## Sub-features\n\n- `F14.list`: x\n\nSource: `not/in/head.ts`\n",
+    "# F14\n\nText.\n\nSource: `src/api/secrets-service.ts`.\n\n## Sub-features\n\n- `F14.list`: x\n\nSource: `not/in/head.ts`\n",
   );
   assert.deepEqual(
     head.sources.map((s) => s.path),
     ["src/api/secrets-service.ts"],
   );
-  assert.deepEqual(head.e2e, [
-    { spec: "tests/e2e/x.spec.ts", ids: ["F14.list"] },
-  ]);
 });
 
 test("changed paths map to the families whose Source: lines own them", () => {
@@ -706,7 +687,6 @@ test("changed paths map to the families whose Source: lines own them", () => {
       sources: parseSourceLine(
         "Source: `src/routes/secrets-settings.tsx`, `src/components/features/settings/secrets-settings/`, `src/api/secrets-service.ts`.",
       ),
-      e2e: [],
     },
     {
       id: "F21",
@@ -714,7 +694,6 @@ test("changed paths map to the families whose Source: lines own them", () => {
       sources: parseSourceLine(
         "Source: `src/components/features/automations/` (`automation-card.tsx`, `dashboard/`).",
       ),
-      e2e: [],
     },
   ];
   const result = affectedFamilies(families, [
@@ -757,7 +736,7 @@ test("changed paths map to the families whose Source: lines own them", () => {
   ]);
 });
 
-test("map affected reads a path list and lists the E2E specs of the hit families", () => {
+test("map affected reads a path list and classifies its paths", () => {
   const res = spawnSync(
     process.execPath,
     [cli, "map", "affected", "--paths", "-"],
@@ -774,12 +753,11 @@ test("map affected reads a path list and lists the E2E specs of the hit families
     ["F14"],
   );
   assert.deepEqual(json.nonUserFacing, ["docs/README.md"]);
-  assert.ok(json.e2e.includes("tests/e2e/live-acp/acp-docker-e2e.mts"));
   // What `map affected` does with no flags depends on the index's baseline
   // line; the baseline test below covers both states.
 });
 
-test("map check rejects a Source: path that is gone and an E2E: spec or ID that is unknown", () => {
+test("map check rejects a Source: path that is gone, and the shipped map is clean", () => {
   const dir = mkdtempSync(join(tmpdir(), "mapcheck-"));
   // The checker reads the real map dir; prove the rules on the parser level
   // and on the live map, which must be clean.
@@ -789,38 +767,10 @@ test("map check rejects a Source: path that is gone and an E2E: spec or ID that 
   assert.equal(clean.status, 0, clean.stdout);
   assert.deepEqual(JSON.parse(clean.stdout).problems, []);
   const head = familyHead(
-    `# F99\n\nText.\n\nSource: \`src/does-not-exist.tsx\`.\n\nE2E: \`tests/e2e/missing.spec.ts\` (F99.nope).\n\n## Sub-features\n`,
+    `# F99\n\nText.\n\nSource: \`src/does-not-exist.tsx\`.\n\n## Sub-features\n`,
   );
   assert.equal(head.sources[0].path, "src/does-not-exist.tsx");
-  assert.deepEqual(head.e2e[0], {
-    spec: "tests/e2e/missing.spec.ts",
-    ids: ["F99.nope"],
-  });
   assert.ok(existsSync(dir));
-});
-
-test("map coverage counts E2E specs no family cites, minus the index's exclusions", () => {
-  const res = spawnSync(process.execPath, [cli, "map", "coverage"], {
-    encoding: "utf8",
-  });
-  const out = JSON.parse(res.stdout);
-  assert.equal(res.status, 0, res.stdout);
-  assert.ok(out.e2e.total >= 30);
-  assert.deepEqual(out.e2e.uncited, []);
-  assert.deepEqual(out.e2e.excluded, [
-    "tests/e2e/canvas-extensions/app-backend-sandbox.spec.ts",
-  ]);
-});
-
-test("map ids lists the E2E specs that cover an ID", () => {
-  const res = spawnSync(process.execPath, [cli, "map", "ids"], {
-    encoding: "utf8",
-  });
-  const { ids } = JSON.parse(res.stdout);
-  const create = ids.find((i) => i.id === "F14.create");
-  assert.equal(create.e2e, undefined);
-  const access = ids.find((i) => i.id === "F14.agent-access");
-  assert.deepEqual(access.e2e, ["tests/e2e/live-acp/acp-docker-e2e.mts"]);
 });
 
 test("cited test ids resolve through literals and dynamic prefixes", () => {

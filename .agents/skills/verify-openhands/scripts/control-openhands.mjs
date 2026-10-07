@@ -3178,7 +3178,6 @@ function mapCheck({ only } = {}) {
       );
   }
   const files = featureFiles();
-  const e2eRefs = new Map();
   for (const file of files) {
     const text = readFileSync(join(mapDir, file), "utf8");
     // --file checks one entry while the index is being written by someone else.
@@ -3231,21 +3230,6 @@ function mapCheck({ only } = {}) {
       if (!sourcePathExists(s))
         problems.push(`${file}: Source: path ${s.path} does not exist`);
     }
-    for (const { spec, ids: specIds } of head.e2e) {
-      if (!existsSync(join(repoRoot, spec)))
-        problems.push(`${file}: E2E: spec ${spec} does not exist`);
-      if (!specIds.length)
-        problems.push(`${file}: E2E: ${spec} names no sub-feature IDs`);
-    }
-    e2eRefs.set(file, head.e2e);
-  }
-  // E2E: IDs must be declared, in this family or another.
-  for (const [file, refs] of e2eRefs) {
-    if (only && file !== only) continue;
-    for (const { spec, ids: specIds } of refs)
-      for (const id of specIds)
-        if (!ids.has(id))
-          problems.push(`${file}: E2E: ${spec} names unknown ID ${id}`);
   }
   // References (`Fnn.slug` in prose, --feature Fnn.slug in recipes) must name
   // a declared ID once that family's file exists.
@@ -3336,17 +3320,7 @@ function sourcePathExists(s) {
   );
 }
 
-// Playwright specs under tests/e2e (the live-acp harness is .mts).
-function e2eSpecFiles() {
-  const root = join(repoRoot, "tests", "e2e");
-  if (!existsSync(root)) return [];
-  return listFiles(root)
-    .filter((p) => /\.spec\.ts$|-e2e\.mts$/.test(p))
-    .map((p) => relative(repoRoot, p))
-    .sort();
-}
-
-// Families with their parsed Source: and E2E: lines.
+// Families with their parsed Source: lines.
 function familyList() {
   return featureFiles().map((file) => {
     const text = readFileSync(join(mapDir, file), "utf8");
@@ -3422,21 +3396,7 @@ function mapCoverage() {
     mapped: corpus.includes(`components/features/${name}`),
     excluded: notMapped.includes(`components/features/${name}`),
   }));
-  const citedSpecs = new Set(
-    familyList().flatMap((f) => f.e2e.map((e) => e.spec)),
-  );
-  const specs = e2eSpecFiles();
-  const uncitedSpecs = specs.filter((s) => !citedSpecs.has(s));
   return {
-    e2e: {
-      total: specs.length,
-      cited: specs.filter((s) => citedSpecs.has(s)).length,
-      // Specs no family's E2E: line names: behaviors the map may lack, or a
-      // line to add (see mapping.md). Test-only specs are listed in the
-      // index's "Not mapped" section with a reason, like routes.
-      uncited: uncitedSpecs.filter((s) => !notMapped.includes(s)),
-      excluded: uncitedSpecs.filter((s) => notMapped.includes(s)),
-    },
     routes: {
       total: routes.length,
       unmapped: routes.filter((r) => !r.mapped && !r.excluded),
@@ -3463,16 +3423,8 @@ function mapIdList() {
     const text = readFileSync(join(mapDir, file), "utf8");
     const section =
       text.split(/^## /m).find((s) => s.startsWith("Sub-features")) ?? "";
-    const e2e = new Map();
-    for (const { spec, ids: specIds } of familyHead(text).e2e)
-      for (const id of specIds) e2e.set(id, [...(e2e.get(id) ?? []), spec]);
     for (const m of section.matchAll(/^- `(F\d{2}\.[a-z0-9-]+)`:?\s*(.*)$/gm))
-      ids.push({
-        id: m[1],
-        file,
-        summary: m[2].slice(0, 100),
-        ...(e2e.has(m[1]) ? { e2e: e2e.get(m[1]) } : {}),
-      });
+      ids.push({ id: m[1], file, summary: m[2].slice(0, 100) });
   }
   return ids;
 }
@@ -3557,20 +3509,11 @@ function mapAffected(flags) {
     }
     range = { base, target, baseSource };
   }
-  const families = familyList();
-  const result = affectedFamilies(families, changed);
-  const specs = new Set();
-  for (const f of result.families) {
-    const family = families.find((x) => x.id === f.id);
-    for (const e of family?.e2e ?? []) specs.add(e.spec);
-  }
+  const result = affectedFamilies(familyList(), changed);
   return {
     ...(range ? { range } : {}),
     changed: changed.length,
     families: result.families,
-    // Playwright specs the affected families cite: cheap to run before the
-    // live pass, never a substitute for it.
-    e2e: [...specs].sort(),
     // Shared code (API clients, hooks, stores, styles, i18n): widen to the
     // consumers rather than sampling one screen (maintenance.md step 3).
     shared: result.shared,
@@ -3603,8 +3546,7 @@ async function cmdMap({ positional, flags }) {
     const result = mapCoverage();
     const ok =
       result.routes.unmapped.length === 0 &&
-      result.featureComponentDirs.unmapped.length === 0 &&
-      result.e2e.uncited.length === 0;
+      result.featureComponentDirs.unmapped.length === 0;
     out({ ok, ...result });
     if (!ok) process.exitCode = 1;
     return;
@@ -3974,12 +3916,12 @@ first (a daily pass against yesterday's run). --json prints the same data.
   map: `control-openhands map check [--file Fnn-name.md]   lint the map (or one entry, skipping index links): four H2s, unique IDs, links, known commands, index counts
 control-openhands map check --fix-counts   rewrite the index's sub-feature counts and total from the files, then lint
 control-openhands map coverage   routes in src/routes.ts and src/components/features/* dirs not yet mapped
-control-openhands map ids        every sub-feature ID with its file (and the E2E: specs that cover it)
+control-openhands map ids        every sub-feature ID with its file
 control-openhands map routes     the route registry as path → route module
 control-openhands map affected [--base REF] [--target REF] | --paths FILE|-
                                  changed paths mapped to the families whose Source: lines own them,
-                                 the E2E: specs those families cite, shared code to widen, src/ paths
-                                 no family owns (map gaps) and non-user-facing paths; without --base
+                                 shared code to widen, src/ paths no family owns (map gaps) and
+                                 non-user-facing paths; without --base
                                  the range starts at the index's Maintenance baseline line
 control-openhands map baseline [--set REF]
                                  the recorded baseline (sha, date, whether HEAD descends from it and
@@ -3989,9 +3931,7 @@ control-openhands map testids [--strict]
                                  test ids the map drives that no literal or prefix in src/ accounts for
                                  (a cheap drift check before launching; --strict exits 1 on any)
 
-check also verifies every Source: path exists, every E2E: spec exists and
-names declared IDs, and the baseline line's shape; coverage lists Playwright
-specs no family cites.
+check also verifies every Source: path exists and the baseline line's shape.
 `,
 };
 

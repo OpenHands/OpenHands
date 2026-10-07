@@ -11,8 +11,6 @@ on. Provider connections themselves (add, edit, delete) are F11.
 
 Source: `src/routes/llm-settings.tsx`, `src/components/features/settings/llm-profiles/`, `src/components/shared/modals/settings/model-selector.tsx`, `src/components/features/settings/llm-settings/openai-subscription-auth-card.tsx`, `src/components/features/settings/sdk-settings/`, `src/api/profiles-service/profiles-service.api.ts`.
 
-E2E: `tests/e2e/mock-llm/conversations/mock-llm-conversation.spec.ts` (F10.create, F10.custom-model, F10.set-default, F10.actions-menu), `tests/e2e/mock-llm/onboarding/mock-llm-onboarding-regressions.spec.ts` (F10.model-picker), `tests/e2e/mock-llm/settings/mock-llm-cloud-providers-pagination.spec.ts` (F10.model-picker), `tests/e2e/mock-llm/settings/mock-llm-profile-management.spec.ts` (F10.actions-menu, F10.delete, F10.delete-default, F10.default-used, F10.edit).
-
 ## Sub-features
 
 - `F10.list`: the "Available Profiles" list shows each row's name, model, a `Default` badge on the active profile and a `...` menu, sorted by name; reachable from the sidebar, the direct URL and the command menu.

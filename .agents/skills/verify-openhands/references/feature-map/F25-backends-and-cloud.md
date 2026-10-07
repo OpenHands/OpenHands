@@ -14,8 +14,6 @@ Everything except the Cloud account itself can be driven locally with a second
 
 Source: `src/components/features/backends/`, `src/contexts/active-backend-context.tsx`, `src/api/backend-registry/`, `src/hooks/query/use-backends-health.ts`, `src/routes/device-verify.tsx`, `src/routes/shared-conversation.tsx`, `src/components/features/conversation/conversation-name-context-menu.tsx`, `src/api/cloud/`, `specs/backend-management.md`.
 
-E2E: `tests/e2e/mock-llm/backends/mock-llm-cross-connect.spec.ts` (F25.selector-dropdown, F25.add-backend-modal, F25.add-agent-server, F25.switch-backend, F25.manage-backends, F25.backend-pinned-url), `tests/e2e/mock-llm/backends/mock-llm-partial-stack.spec.ts` (F25.recovery-gate).
-
 ## Sub-features
 
 - `F25.selector-dropdown`: clicking (or hovering) the selector opens a listbox of backends, each option named `<status> <name>` with a status dot, and a footer with **Add Backend** and **Manage Backends**.
