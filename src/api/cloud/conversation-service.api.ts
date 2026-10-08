@@ -17,9 +17,9 @@ import { callCloudProxy } from "./proxy";
  * Connect Repo saves the selection on the server
  * (`updateCloudConversationRepository`) and also caches it in local storage
  * (see `AgentServerConversationService.updateConversationRepository`). The
- * cache is overlaid here for conversations whose server value is empty:
- * older conversations connected before the server save existed, and
- * repositories that the server rejected.
+ * cache is overlaid here for each field whose server value is empty: for
+ * example older conversations connected before the server save existed, or
+ * a repository the server rejected when the conversation had none.
  *
  * Server values take precedence whenever they're populated; the
  * local-storage fallback only fills in fields the server returned as
