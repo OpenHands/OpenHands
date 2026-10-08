@@ -137,9 +137,16 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
  * renderers.
  *
  * Pass a falsy `relativePath` to disable the query (e.g. when no file is
- * selected yet).
+ * selected yet). Pass `{ enabled: false }` to hold the read entirely — e.g. the
+ * inline preview defers the load of a large artifact until the user expands it,
+ * so scrolling past the card does not download the whole file. The additional
+ * runtime/session guards below still apply when enabled.
  */
-export function useWorkspaceFileContent(relativePath: string | null) {
+export function useWorkspaceFileContent(
+  relativePath: string | null,
+  options?: { enabled?: boolean },
+) {
+  const enabledOption = options?.enabled ?? true;
   const { data: conversation } = useActiveConversation();
   const runtimeIsReady = useRuntimeIsReady({ allowAgentError: true });
   const { data: workspaceSession } = useWorkspaceSession();
@@ -300,6 +307,7 @@ export function useWorkspaceFileContent(relativePath: string | null) {
       };
     },
     enabled:
+      enabledOption &&
       runtimeIsReady &&
       !!conversationId &&
       !!relativePath &&

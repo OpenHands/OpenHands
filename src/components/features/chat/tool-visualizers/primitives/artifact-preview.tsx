@@ -31,10 +31,11 @@ import { cn } from "#/utils/utils";
 
 /**
  * Largest artifact body mounted inline without an explicit Expand. Above this
- * the card shows a placeholder until the user expands it, so a multi-megabyte
- * HTML/SVG document is not loaded just because its row scrolled into view.
+ * the card shows a placeholder and defers the workspace read entirely until the
+ * user expands it, so a multi-megabyte HTML/SVG document is neither downloaded
+ * nor loaded just because its row scrolled into view.
  */
-export const ARTIFACT_PREVIEW_INLINE_MAX_BYTES = 512 * 1024;
+const ARTIFACT_PREVIEW_INLINE_MAX_BYTES = 512 * 1024;
 
 interface ArtifactPreviewProps {
   path: string;
@@ -73,7 +74,12 @@ export function ArtifactPreview({
   const [copied, setCopied] = React.useState(false);
   const placeholderRef = React.useRef<HTMLDivElement>(null);
 
-  const query = useWorkspaceFileContent(fetchPath);
+  // An artifact above the threshold defers its workspace read (and therefore
+  // its frame) until Expand; everything else reads as soon as it is near the
+  // viewport. Gating `enabled` here — not just the frame mount — is what stops
+  // ten 4 MiB cards from downloading all ten files before any is expanded.
+  const shouldLoad = inView && (!exceedsInlineLimit || expanded);
+  const query = useWorkspaceFileContent(fetchPath, { enabled: shouldLoad });
   // Refetch the frame after every agent-side edit so a rewrite of this file
   // (or a sibling asset it references) is reflected without a manual reload.
   const mutationCounter = useWorkspaceMutationCounter((state) => state.count);
@@ -106,8 +112,6 @@ export function ArtifactPreview({
     return () => observer.disconnect();
   }, []);
 
-  // An artifact above the threshold is held back until Expand; everything else
-  // mounts as soon as it has a URL and is near the viewport.
   const heldForSize = exceedsInlineLimit && !expanded;
   const frameUrl = staticUrl && inView && !heldForSize ? staticUrl : null;
 

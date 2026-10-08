@@ -11,7 +11,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 const useWorkspaceSessionMock = vi.fn();
 vi.mock("#/hooks/query/use-workspace-session", async (importOriginal) => {
   const real =
-    await importOriginal<typeof import("#/hooks/query/use-workspace-session")>();
+    await importOriginal<
+      typeof import("#/hooks/query/use-workspace-session")
+    >();
   return {
     ...real,
     useWorkspaceSession: () => useWorkspaceSessionMock(),
@@ -39,10 +41,7 @@ vi.mock("#/api/cloud/conversation-service.api", () => ({
     readCloudConversationFileMock(...args),
 }));
 
-import {
-  ArtifactPreview,
-  ARTIFACT_PREVIEW_INLINE_MAX_BYTES,
-} from "#/components/features/chat/tool-visualizers/primitives/artifact-preview";
+import { ArtifactPreview } from "#/components/features/chat/tool-visualizers/primitives/artifact-preview";
 
 const fetchMock = vi.fn();
 const BASE_URL =
@@ -321,12 +320,13 @@ describe("ArtifactPreview", () => {
     renderPreview(
       <ArtifactPreview path="report.html" content="<h1>Hello</h1>" />,
     );
-    expect(
-      await screen.findByTestId("artifact-preview-frame"),
-    ).toHaveAttribute("title", "report.html");
+    expect(await screen.findByTestId("artifact-preview-frame")).toHaveAttribute(
+      "title",
+      "report.html",
+    );
   });
 
-  it("holds an oversized artifact until the card is expanded", async () => {
+  it("does not read an oversized artifact until the card is expanded", async () => {
     fetchMock.mockResolvedValue({
       ok: true,
       status: 200,
@@ -343,7 +343,8 @@ describe("ArtifactPreview", () => {
       unobserve() {}
     }
     vi.stubGlobal("IntersectionObserver", MockIntersectionObserver);
-    const huge = `<h1>${"x".repeat(ARTIFACT_PREVIEW_INLINE_MAX_BYTES)}</h1>`;
+    // A real body above the 512 KiB inline limit, not a mirrored constant.
+    const huge = `<h1>${"x".repeat(600_000)}</h1>`;
 
     try {
       renderPreview(<ArtifactPreview path="big.html" content={huge} />);
@@ -351,7 +352,9 @@ describe("ArtifactPreview", () => {
         observed.forEach((callback) => callback([{ isIntersecting: true }]));
       });
 
-      // In view, but over the threshold: no frame yet, just the placeholder.
+      // In view, but over the limit: no frame, the placeholder shows, and the
+      // workspace read is deferred — so scrolling past large cards does not
+      // download every file the threshold is meant to keep off the wire.
       // (The test i18n mock returns the key as the translation.)
       expect(
         screen.queryByTestId("artifact-preview-frame"),
@@ -359,12 +362,14 @@ describe("ArtifactPreview", () => {
       expect(
         screen.getByText("ARTIFACT$LARGE_FILE_EXPAND_TO_PREVIEW"),
       ).toBeInTheDocument();
+      expect(fetchMock).not.toHaveBeenCalled();
 
-      // Expand mounts it.
+      // Expand starts the read and mounts the frame.
       await userEvent.click(screen.getByTestId("artifact-preview-expand"));
       expect(
         await screen.findByTestId("artifact-preview-frame"),
       ).toBeInTheDocument();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
     } finally {
       vi.unstubAllGlobals();
     }
