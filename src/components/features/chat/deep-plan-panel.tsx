@@ -126,6 +126,16 @@ export function DeepPlanPanel() {
   // loop forever when the file is genuinely gone.
   const showRestoreRetry =
     unavailable.failed.length > 0 || visibleFailure?.kind === "restore-failed";
+  // A Confirm captures the failure it described in `visibleFailure`, but a
+  // Retry clears that before the new read and re-populates `restoreFailed` if
+  // the read fails again. Fall back to the store's recorded failures so the
+  // returned Retry button still explains itself; suppress the fallback while a
+  // read is in flight, when the "Restoring…" line is the truth instead.
+  const shownFailure: ConfirmFailure | null =
+    visibleFailure ??
+    (unavailable.failed.length > 0 && unavailable.pending.length === 0
+      ? { kind: "restore-failed", phases: unavailable.failed }
+      : null);
   const formatPhases = (phases: DeepPlanPhaseId[]) =>
     phases
       .map(
@@ -208,30 +218,30 @@ export function DeepPlanPanel() {
           </Typography.Text>
         )}
 
-        {visibleFailure && (
+        {shownFailure && (
           <Typography.Text className="text-xs" testId="deep-plan-error">
-            {visibleFailure.kind === "blocked"
+            {shownFailure.kind === "blocked"
               ? t(I18nKey.DEEP_PLAN$CONFIRM_BLOCKED, {
-                  phase: t(DEEP_PLAN_PHASE_LABEL_KEY[visibleFailure.phase]),
+                  phase: t(DEEP_PLAN_PHASE_LABEL_KEY[shownFailure.phase]),
                 })
-              : visibleFailure.kind === "missing-output"
+              : shownFailure.kind === "missing-output"
                 ? t(I18nKey.DEEP_PLAN$CONFIRM_MISSING_OUTPUT, {
                     document:
-                      getDeepPlanPhase(visibleFailure.phase).outputFile ??
-                      t(DEEP_PLAN_PHASE_LABEL_KEY[visibleFailure.phase]),
+                      getDeepPlanPhase(shownFailure.phase).outputFile ??
+                      t(DEEP_PLAN_PHASE_LABEL_KEY[shownFailure.phase]),
                   })
-                : visibleFailure.kind === "restoring"
+                : shownFailure.kind === "restoring"
                   ? t(I18nKey.DEEP_PLAN$CONFIRM_RESTORING, {
-                      document: formatPhases(visibleFailure.phases),
+                      document: formatPhases(shownFailure.phases),
                     })
-                  : visibleFailure.kind === "restore-failed"
+                  : shownFailure.kind === "restore-failed"
                     ? t(I18nKey.DEEP_PLAN$CONFIRM_RESTORE_FAILED, {
-                        document: formatPhases(visibleFailure.phases),
+                        document: formatPhases(shownFailure.phases),
                       })
-                    : `${makeRefIssueMessage(t, visibleFailure.issue)}${
-                        visibleFailure.extraCount > 0
+                    : `${makeRefIssueMessage(t, shownFailure.issue)}${
+                        shownFailure.extraCount > 0
                           ? t(I18nKey.DEEP_PLAN$CONFIRM_MORE_ISSUES, {
-                              count: visibleFailure.extraCount,
+                              count: shownFailure.extraCount,
                             })
                           : ""
                       }`}

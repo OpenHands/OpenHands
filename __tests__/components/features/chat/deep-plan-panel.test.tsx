@@ -297,4 +297,39 @@ describe("DeepPlanPanel", () => {
     expect(screen.queryByTestId("deep-plan-error")).not.toBeInTheDocument();
     expect(screen.getByTestId("deep-plan-restoring")).toBeInTheDocument();
   });
+
+  it("explains the failure again when the retry itself fails", async () => {
+    // The retry re-reads the document; if the file is still missing the read
+    // fails again and the Retry button returns. No Confirm has run since, so
+    // the panel must explain the failure from the store's recorded failures
+    // rather than leaving the returned Retry button unexplained.
+    act(() =>
+      useConversationStore.setState({
+        deepPlan: {
+          activePhase: "database",
+          confirmed: ["analysis", "requirements"],
+          documents: { database: "## 2.1 Users [Req 3.1]\n" },
+          documentHashes: { requirements: "req-hash", database: "db-hash" },
+          restoreFailed: ["requirements"],
+        },
+      }),
+    );
+
+    renderWithProviders(<DeepPlanPanel />);
+
+    await userEvent.click(screen.getByTestId("deep-plan-confirm"));
+    await userEvent.click(screen.getByTestId("deep-plan-restore-retry"));
+    expect(screen.queryByTestId("deep-plan-error")).not.toBeInTheDocument();
+
+    act(() =>
+      useConversationStore.setState((state) => ({
+        deepPlan: { ...state.deepPlan, restoreFailed: ["requirements"] },
+      })),
+    );
+
+    expect(screen.getByTestId("deep-plan-error")).toHaveTextContent(
+      "Could not reload requirements.md from disk.",
+    );
+    expect(screen.getByTestId("deep-plan-restore-retry")).toBeInTheDocument();
+  });
 });
