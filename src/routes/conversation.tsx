@@ -30,14 +30,7 @@ import { ConversationOverviewDrawerProvider } from "#/components/features/conver
 import { WebSocketProviderWrapper } from "#/contexts/websocket-provider-wrapper";
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import { I18nKey } from "#/i18n/declaration";
-import { resumeCloudSandbox } from "#/api/cloud/conversation-service.api";
-import {
-  clearCloudAutoResumeSuppression,
-  consumeCloudAutoResumeSuppression,
-} from "#/api/cloud/cloud-sandbox-resume-suppression";
-
-const CLOUD_RESUME_RETRY_DELAY_MS =
-  import.meta.env.MODE === "test" ? 10 : 10_000;
+import { useCloudSandboxAutoResume } from "#/hooks/mutation/use-cloud-sandbox-auto-resume";
 
 function AppContent() {
   const { t } = useTranslation("openhands");
@@ -169,110 +162,13 @@ function AppContent() {
     setLastConversationId(active.backend.id, active.orgId, conversationId);
   }, [conversationId, backendChanged, active.backend.id, active.orgId]);
 
-  // Cloud conversation resume: mirrors OpenHands' useSandboxRecovery.
-  //
-  // When the cloud API reports sandbox_status === "PAUSED" the sandbox is
-  // sleeping. The correct wake-up call is POST /api/v1/sandboxes/{id}/resume
-  // (a lightweight unpause). The previous approach — creating a new start task
-  // via POST /api/v1/app-conversations — was wrong: it tries to provision a
-  // fresh conversation in the sandbox and is subject to a 120-second cold-start
-  // timeout that can fail. The resume endpoint simply unpauses the existing one.
-  //
-  // After calling resume we stay on the current URL. The 3-second refetch
-  // interval in useActiveConversation (active while conversation_url is null)
-  // polls until conversation_url populates, then the WebSocket connects.
-  //
-  const resumeAttemptRef = React.useRef<{
-    key: string;
-    state: "pending" | "succeeded" | "failed";
-  } | null>(null);
-  const resumeRetryTimerRef = React.useRef<number | null>(null);
-  const [resumeRetryTick, setResumeRetryTick] = React.useState(0);
-
-  React.useEffect(
-    () => () => {
-      if (resumeRetryTimerRef.current !== null) {
-        window.clearTimeout(resumeRetryTimerRef.current);
-      }
-    },
-    [],
-  );
-
-  React.useEffect(
-    () => () => {
-      clearCloudAutoResumeSuppression(conversationId);
-    },
-    [conversationId],
-  );
-
-  React.useEffect(() => {
-    if (backendChanged) return;
-    if (!isFetched || !conversation) return;
-    if (active.backend.kind !== "cloud") return;
-    if (conversation.sandbox_status !== "PAUSED") return;
-    if (!conversation.sandbox_id) return;
-    if (consumeCloudAutoResumeSuppression(conversation.id)) return;
-
-    const resumeKey = `${conversation.id}:${conversation.sandbox_id}`;
-    const currentAttempt = resumeAttemptRef.current;
-    if (
-      currentAttempt?.key === resumeKey &&
-      (currentAttempt.state === "pending" ||
-        currentAttempt.state === "succeeded")
-    ) {
-      return;
-    }
-
-    if (resumeRetryTimerRef.current !== null) {
-      window.clearTimeout(resumeRetryTimerRef.current);
-      resumeRetryTimerRef.current = null;
-    }
-
-    let didCancel = false;
-    resumeAttemptRef.current = { key: resumeKey, state: "pending" };
-
-    resumeCloudSandbox(conversation.sandbox_id)
-      .then(() => {
-        if (didCancel) return;
-        if (resumeAttemptRef.current?.key === resumeKey) {
-          resumeAttemptRef.current = { key: resumeKey, state: "succeeded" };
-        }
-      })
-      .catch(() => {
-        if (didCancel) return;
-        if (resumeAttemptRef.current?.key === resumeKey) {
-          resumeAttemptRef.current = { key: resumeKey, state: "failed" };
-          resumeRetryTimerRef.current = window.setTimeout(() => {
-            resumeRetryTimerRef.current = null;
-            setResumeRetryTick((tick) => tick + 1);
-          }, CLOUD_RESUME_RETRY_DELAY_MS);
-        }
-        displayErrorToast(t(I18nKey.CONVERSATION$FAILED_TO_START_FROM_TASK));
-      });
-
-    return () => {
-      didCancel = true;
-      if (
-        resumeAttemptRef.current?.key === resumeKey &&
-        resumeAttemptRef.current.state !== "succeeded"
-      ) {
-        resumeAttemptRef.current = null;
-      }
-      if (resumeRetryTimerRef.current !== null) {
-        window.clearTimeout(resumeRetryTimerRef.current);
-        resumeRetryTimerRef.current = null;
-      }
-    };
-  }, [
+  useCloudSandboxAutoResume({
     backendChanged,
+    backendKind: active.backend.kind,
+    conversation,
+    conversationId,
     isFetched,
-    conversation?.id,
-    conversation?.sandbox_status,
-    conversation?.sandbox_id,
-    active.backend.kind,
-    resumeRetryTick,
-    t,
-  ]);
+  });
 
   // A backend switch is in flight (BackendSelector flips the active backend
   // and redirects to /conversations on the next tick). The conversationId in
