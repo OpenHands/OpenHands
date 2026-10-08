@@ -66,9 +66,9 @@ describe("conversation localStorage utilities", () => {
     });
 
     it("defaults rightPanelShown to false and drops corrupt values", () => {
-      expect(getConversationState("conv-right-panel-default").rightPanelShown).toBe(
-        false,
-      );
+      expect(
+        getConversationState("conv-right-panel-default").rightPanelShown,
+      ).toBe(false);
 
       const conversationId = "conv-right-panel-corrupt";
       const key = `${LOCAL_STORAGE_KEYS.CONVERSATION_STATE}-${conversationId}`;
@@ -153,7 +153,12 @@ describe("conversation localStorage utilities", () => {
     it("persists and sanitizes unpinnedOverviewSections", () => {
       const conversationId = "conv-overview-pins";
       setConversationState(conversationId, {
-        unpinnedOverviewSections: ["skills", "not-a-section", "mcp", "workspace"],
+        unpinnedOverviewSections: [
+          "skills",
+          "not-a-section",
+          "mcp",
+          "workspace",
+        ],
       });
 
       const state = getConversationState(conversationId);
@@ -687,6 +692,60 @@ describe("conversation localStorage utilities", () => {
       expect(state.filesTabTreeVisible).toBe(true);
       expect(state.filesTabOpenPaths).toEqual(["ok.ts"]);
       expect(state.filesTabSelectedPath).toBeNull();
+    });
+  });
+
+  describe("deep plan persistence", () => {
+    const key = (id: string) =>
+      `${LOCAL_STORAGE_KEYS.CONVERSATION_STATE}-${id}`;
+
+    it("round-trips a persisted phase machine without document bodies", () => {
+      const conversationId = "deep-plan-roundtrip";
+      localStorage.setItem(
+        key(conversationId),
+        JSON.stringify({
+          deepPlan: {
+            activePhase: "database",
+            confirmed: ["analysis", "requirements"],
+            documentHashes: { requirements: "abc" },
+          },
+        }),
+      );
+
+      const state = getConversationState(conversationId);
+
+      expect(state.deepPlan).toEqual({
+        activePhase: "database",
+        confirmed: ["analysis", "requirements"],
+        documentHashes: { requirements: "abc" },
+      });
+      expect(state.deepPlan).not.toHaveProperty("documents");
+    });
+
+    it("drops a phase machine whose persisted shape is corrupt", () => {
+      const conversationId = "deep-plan-corrupt";
+      localStorage.setItem(
+        key(conversationId),
+        JSON.stringify({ deepPlan: { activePhase: "nope", confirmed: [] } }),
+      );
+
+      expect(getConversationState(conversationId).deepPlan).toBeUndefined();
+    });
+
+    it("drops a phase machine whose document hashes are not strings", () => {
+      const conversationId = "deep-plan-bad-hashes";
+      localStorage.setItem(
+        key(conversationId),
+        JSON.stringify({
+          deepPlan: {
+            activePhase: "requirements",
+            confirmed: ["analysis"],
+            documentHashes: { requirements: 42 },
+          },
+        }),
+      );
+
+      expect(getConversationState(conversationId).deepPlan).toBeUndefined();
     });
   });
 });

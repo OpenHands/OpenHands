@@ -81,7 +81,10 @@ import {
   invalidateConversationQueries,
   updateConversationLlmModelInCache,
 } from "#/hooks/mutation/conversation-mutation-utils";
-import { isPlanFilePath } from "#/utils/plan-file";
+import {
+  findPhasePlannerConversationId,
+  isPlanFilePath,
+} from "#/utils/plan-file";
 import {
   matchDeepPlanDocumentFile,
   type DeepPlanPhaseId,
@@ -296,6 +299,25 @@ export function ConversationWebSocketProvider({
   const latestDeepPlanFileEventsRef = useRef<
     Map<DeepPlanPhaseId, { path: string; conversationId: string }>
   >(new Map());
+
+  // Resolve the planner conversation the phase document should be read from.
+  // Deep Planning runs one planner per phase, each pinned to that phase's
+  // document; every planner shares the parent's workspace, so the file can be
+  // fetched through any of them — but resolving the phase's own planner keeps
+  // the read scoped to a conversation that legitimately owns the file and
+  // avoids assuming the phase-tagged planner is always first in the list.
+  const resolvePhaseConversationId = useCallback(
+    (phase: DeepPlanPhaseId, fallbackId: string): string => {
+      return (
+        findPhasePlannerConversationId(
+          subConversations,
+          conversationId,
+          phase,
+        ) ?? fallbackId
+      );
+    },
+    [subConversations, conversationId],
+  );
 
   const handleNonErrorEvent = useCallback(() => {
     // A normal event means connectivity recovered: clear a transient connection
@@ -607,12 +629,12 @@ export function ConversationWebSocketProvider({
     const pending = latestDeepPlanFileEventsRef.current;
     if (pending.size === 0) return;
     latestDeepPlanFileEventsRef.current = new Map();
-    for (const [
-      phase,
-      { path, conversationId: planningConversationId },
-    ] of pending) {
+    for (const [phase, { path, conversationId: fallbackId }] of pending) {
       readConversationFile(
-        { conversationId: planningConversationId, filePath: path },
+        {
+          conversationId: resolvePhaseConversationId(phase, fallbackId),
+          filePath: path,
+        },
         {
           onSuccess: (fileContent) => setDeepPlanDocument(phase, fileContent),
           onError: (error) => {
@@ -621,7 +643,12 @@ export function ConversationWebSocketProvider({
         },
       );
     }
-  }, [isLoadingHistoryPlanning, readConversationFile, setDeepPlanDocument]);
+  }, [
+    isLoadingHistoryPlanning,
+    readConversationFile,
+    setDeepPlanDocument,
+    resolvePhaseConversationId,
+  ]);
 
   useEffect(() => {
     hasConnectedRefMain.current = false;
@@ -1087,15 +1114,22 @@ export function ConversationWebSocketProvider({
             const deepPlanPhase = matchDeepPlanDocumentFile(path);
 
             if (deepPlanPhase && planningConversationId && path) {
+              // Read the phase's own document through the planner pinned to it,
+              // not the first sub-conversation (Deep Planning has one planner
+              // per phase).
+              const readConversationId = resolvePhaseConversationId(
+                deepPlanPhase,
+                planningConversationId,
+              );
               if (isLoadingHistoryPlanning) {
                 // Only the newest write per phase matters.
                 latestDeepPlanFileEventsRef.current.set(deepPlanPhase, {
                   path,
-                  conversationId: planningConversationId,
+                  conversationId: readConversationId,
                 });
               } else {
                 readConversationFile(
-                  { conversationId: planningConversationId, filePath: path },
+                  { conversationId: readConversationId, filePath: path },
                   {
                     onSuccess: (fileContent) =>
                       setDeepPlanDocument(deepPlanPhase, fileContent),
@@ -1155,6 +1189,7 @@ export function ConversationWebSocketProvider({
       readConversationFile,
       setPlanContent,
       setDeepPlanDocument,
+      resolvePhaseConversationId,
       updateMetricsFromStats,
       handleNonErrorEvent,
     ],

@@ -1907,6 +1907,64 @@ describe("Conversation websocket behavior", () => {
     );
   });
 
+  it("re-reads a phase document through the planner pinned to that phase", async () => {
+    // Deep Planning runs one planner per phase, each tagged with the phase it
+    // writes. `subConversations[0]` may be another phase's planner, so reading
+    // the database document through it would fetch from the wrong owner.
+    vi.spyOn(EventService, "getEventCount").mockResolvedValue(0);
+    useConversationStore.setState({
+      deepPlan: { activePhase: null, confirmed: [], documents: {} },
+    });
+    socketCapture.readConversationFile.mockImplementation(
+      (_variables, callbacks) => callbacks.onSuccess("# Loaded database"),
+    );
+    renderProvider({
+      subConversations: [
+        makeSubConversation({
+          id: "conv-planning-req",
+          tags: { plannerparent: "conv-main", plannerphase: "requirements" },
+        }),
+        makeSubConversation({
+          id: "conv-planning-db",
+          tags: { plannerparent: "conv-main", plannerphase: "database" },
+        }),
+      ],
+      subConversationIds: ["conv-planning-req", "conv-planning-db"],
+    });
+
+    await act(async () => {
+      await planningOptions().onOpen?.(new Event("open"));
+    });
+
+    dispatchPlanning(
+      makeObservationEvent(
+        "70",
+        {
+          kind: "PlanningFileEditorObservation",
+          content: [],
+          is_error: false,
+          command: "create",
+          path: "/workspace/database-design.md",
+          prev_exist: false,
+          old_content: null,
+          new_content: "## 2.1 Users [Req 3.1]\n",
+        },
+        "planning_file_editor",
+      ),
+    );
+
+    expect(socketCapture.readConversationFile).toHaveBeenCalledWith(
+      {
+        conversationId: "conv-planning-db",
+        filePath: "/workspace/database-design.md",
+      },
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    );
+    expect(useConversationStore.getState().deepPlan.documents.database).toBe(
+      "# Loaded database",
+    );
+  });
+
   it("falls through planning history when event counting fails", async () => {
     vi.spyOn(EventService, "getEventCount").mockRejectedValue(
       new Error("count unavailable"),

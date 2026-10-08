@@ -3,9 +3,12 @@ import {
   canEnterPhase,
   confirmPhase,
   EMPTY_DEEP_PLAN_STATE,
+  hashDeepPlanDocument,
+  hydrateDeepPlanState,
   invalidateFrom,
   isPhaseConfirmed,
   startDeepPlan,
+  toPersistedDeepPlan,
   type DeepPlanState,
 } from "#/utils/deep-plan-machine";
 
@@ -99,6 +102,52 @@ describe("confirmPhase", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(isPhaseConfirmed(result.state, "database")).toBe(true);
+  });
+
+  it("refuses a phase that must produce a document when none exists yet", () => {
+    // `requirements` writes `requirements.md`; confirming it before the
+    // planner has produced the file would advance the chain on no evidence.
+    const state: DeepPlanState = {
+      ...startDeepPlan(),
+      activePhase: "requirements",
+      confirmed: ["analysis"],
+      documents: {},
+    };
+
+    const result = confirmPhase(state, "requirements");
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.failure).toEqual({
+      kind: "missing-output",
+      phase: "requirements",
+    });
+  });
+
+  it("confirms a document-producing phase once its document exists", () => {
+    const state: DeepPlanState = {
+      ...startDeepPlan(),
+      activePhase: "requirements",
+      confirmed: ["analysis"],
+      documents: { requirements },
+    };
+
+    const result = confirmPhase(state, "requirements");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(isPhaseConfirmed(result.state, "requirements")).toBe(true);
+    expect(result.state.activePhase).toBe("database");
+  });
+
+  it("confirms a pure-conversation phase without any document", () => {
+    // `analysis` and `implementation` have no output file, so the missing-output
+    // gate must not apply to them.
+    const analysis = confirmPhase(startDeepPlan(), "analysis");
+
+    expect(analysis.ok).toBe(true);
+    if (!analysis.ok) return;
+    expect(isPhaseConfirmed(analysis.state, "analysis")).toBe(true);
   });
 
   it("refuses a phase whose predecessor is unconfirmed", () => {
@@ -222,5 +271,49 @@ describe("invalidateFrom", () => {
     const state = invalidateFrom(confirmedChain, "tasks");
 
     expect(state).toBe(confirmedChain);
+  });
+});
+
+describe("persisted deep-plan shape", () => {
+  it("drops document bodies but keeps the phase, confirmations and hashes", () => {
+    const state: DeepPlanState = {
+      ...startDeepPlan(),
+      activePhase: "database",
+      confirmed: ["analysis", "requirements"],
+      documents: { requirements },
+      documentHashes: { requirements: hashDeepPlanDocument(requirements) },
+    };
+
+    const persisted = toPersistedDeepPlan(state);
+
+    expect(persisted).toEqual({
+      activePhase: "database",
+      confirmed: ["analysis", "requirements"],
+      documentHashes: { requirements: hashDeepPlanDocument(requirements) },
+    });
+    expect(persisted).not.toHaveProperty("documents");
+  });
+
+  it("rebuilds the machine with empty bodies from a persisted blob", () => {
+    const state: DeepPlanState = {
+      ...startDeepPlan(),
+      activePhase: "database",
+      confirmed: ["analysis", "requirements"],
+      documents: { requirements },
+      documentHashes: { requirements: hashDeepPlanDocument(requirements) },
+    };
+
+    const restored = hydrateDeepPlanState(toPersistedDeepPlan(state));
+
+    expect(restored.activePhase).toBe("database");
+    expect(restored.confirmed).toEqual(["analysis", "requirements"]);
+    expect(restored.documents).toEqual({});
+    expect(restored.documentHashes).toEqual({
+      requirements: hashDeepPlanDocument(requirements),
+    });
+  });
+
+  it("returns the empty machine for a missing persisted blob", () => {
+    expect(hydrateDeepPlanState(undefined)).toEqual(EMPTY_DEEP_PLAN_STATE);
   });
 });

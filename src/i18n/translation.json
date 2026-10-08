@@ -27594,7 +27594,7 @@
     "en": "Build a gated chain of documents, each citing the upstream sections it derives from.",
     "ja": "派生元の上流セクションを引用する文書の連鎖を、段階的に構築します。",
     "zh-CN": "构建带关卡把关的文档链，每份文档都引用其上游章节。",
-    "zh-TW": "建立帶關卡把關的文件鏈，每份文件都引用其上遊章節。",
+    "zh-TW": "建立帶關卡把關的文件鏈，每份文件都引用其上游章節。",
     "ko-KR": "각 문서가 파생된 상위 섹션을 인용하는 단계별 문서 체인을 만듭니다.",
     "no": "Bygg en gated dokumentkjede der hvert dokument siterer de oppstrøms avsnittene det bygger på.",
     "it": "Crea una catena di documenti a fasi, ognuno cita le sezioni a monte da cui deriva.",
@@ -43892,5 +43892,22 @@
     "de": " (+{{count}} weitere)",
     "uk": " (+{{count}} ще)",
     "ca": " (+{{count}} més)"
+  },
+  "DEEP_PLAN$CONFIRM_MISSING_OUTPUT": {
+    "en": "Run the planner to produce {{document}} before confirming this phase.",
+    "ja": "このフェーズを確定する前に、プランナーを実行して {{document}} を作成してください。",
+    "zh-CN": "请先运行规划器生成 {{document}}，再确认此阶段。",
+    "zh-TW": "請先執行規劃器產生 {{document}}，再確認此階段。",
+    "ko-KR": "이 단계를 확인하기 전에 플래너를 실행하여 {{document}}을(를) 생성하세요.",
+    "no": "Kjør planleggeren for å produsere {{document}} før du bekrefter denne fasen.",
+    "it": "Esegui il planner per produrre {{document}} prima di confermare questa fase.",
+    "pt": "Execute o planejador para produzir {{document}} antes de confirmar esta fase.",
+    "es": "Ejecuta el planificador para producir {{document}} antes de confirmar esta fase.",
+    "ar": "شغّل المخطّط لإنتاج {{document}} قبل تأكيد هذه المرحلة.",
+    "fr": "Exécutez le planificateur pour produire {{document}} avant de confirmer cette phase.",
+    "tr": "Bu aşamayı onaylamadan önce {{document}} dosyasını oluşturmak için planlayıcıyı çalıştırın.",
+    "de": "Führe den Planer aus, um {{document}} zu erstellen, bevor du diese Phase bestätigst.",
+    "uk": "Запустіть планувальник, щоб створити {{document}}, перш ніж підтвердити цю фазу.",
+    "ca": "Executa el planificador per produir {{document}} abans de confirmar aquesta fase."
   }
 }

@@ -10,6 +10,7 @@
 import {
   DEEP_PLAN_PHASE_IDS,
   type DeepPlanPhaseId,
+  getDeepPlanPhase,
   nextDeepPlanPhase,
 } from "#/utils/deep-plan";
 import {
@@ -25,12 +26,71 @@ export interface DeepPlanState {
   confirmed: DeepPlanPhaseId[];
   /** Document contents, keyed by the phase that produced them. */
   documents: DeepPlanDocuments;
+  /**
+   * Fingerprint of each document's bytes, keyed by phase. Persisted (unlike the
+   * bodies) so that after a reload `setDeepPlanDocument` can tell a history
+   * replay of the same bytes from a real edit and keep the confirmations the
+   * persisted chain vouches for. Optional because a state built before the
+   * hashes were recorded still has to typecheck.
+   */
+  documentHashes?: DeepPlanDocuments;
+}
+
+/**
+ * The phase machine as persisted to localStorage. Document *bodies* are
+ * deliberately omitted: they are re-read from disk on reload via history
+ * replay, and keeping full documents in the consolidated blob risks hitting the
+ * localStorage quota. The per-document hashes are kept so rehydrate detection
+ * survives the reload.
+ */
+export interface PersistedDeepPlanState {
+  activePhase: DeepPlanPhaseId | null;
+  confirmed: DeepPlanPhaseId[];
+  documentHashes?: DeepPlanDocuments;
+}
+
+/**
+ * Stable non-cryptographic fingerprint (djb2, 32-bit) of a document's bytes.
+ * Used only to compare two revisions for equality, never as a security
+ * primitive, so a cheap hash is appropriate.
+ */
+export function hashDeepPlanDocument(content: string): string {
+  let hash = 5381;
+  for (let i = 0; i < content.length; i += 1) {
+    hash = (hash * 33) ^ content.charCodeAt(i);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+/** Restore the in-memory machine from its persisted form, bodies left empty. */
+export function hydrateDeepPlanState(
+  persisted: PersistedDeepPlanState | undefined,
+): DeepPlanState {
+  if (!persisted) return EMPTY_DEEP_PLAN_STATE;
+  return {
+    activePhase: persisted.activePhase,
+    confirmed: persisted.confirmed,
+    documents: {},
+    documentHashes: persisted.documentHashes ?? {},
+  };
+}
+
+/** Drop the document bodies for storage; keep phase, confirmations and hashes. */
+export function toPersistedDeepPlan(
+  state: DeepPlanState,
+): PersistedDeepPlanState {
+  return {
+    activePhase: state.activePhase,
+    confirmed: state.confirmed,
+    documentHashes: state.documentHashes ?? {},
+  };
 }
 
 export const EMPTY_DEEP_PLAN_STATE: DeepPlanState = {
   activePhase: null,
   confirmed: [],
   documents: {},
+  documentHashes: {},
 };
 
 export const startDeepPlan = (): DeepPlanState => ({
@@ -91,6 +151,13 @@ export function invalidateFrom(
 export type ConfirmFailure =
   /** An earlier phase is still unconfirmed and must be confirmed first. */
   | { kind: "blocked"; phase: DeepPlanPhaseId }
+  /**
+   * The phase must produce a document but `documents[phase]` is still absent.
+   * Confirming without it would advance the chain on no evidence — the very
+   * document the checkpoint is meant to vouch for. Pure-conversation phases
+   * (`outputFile === null`) are unaffected.
+   */
+  | { kind: "missing-output"; phase: DeepPlanPhaseId }
   /** The reference chain is invalid; `issue` names the offending citation. */
   | { kind: "invalid-chain"; issue: RefIssue; extraCount: number };
 
@@ -113,6 +180,14 @@ export function confirmPhase(
       DEEP_PLAN_PHASE_IDS.indexOf(phase),
     ).find((earlier) => !isPhaseConfirmed(state, earlier));
     return { ok: false, failure: { kind: "blocked", phase: blocking! } };
+  }
+
+  // A phase that must produce a document cannot be confirmed before that
+  // document exists: there would be nothing to validate, so the checkpoint
+  // would advance the chain on no evidence. Pure-conversation phases
+  // (`outputFile === null`) legitimately have no document to require.
+  if (getDeepPlanPhase(phase).outputFile && !state.documents[phase]) {
+    return { ok: false, failure: { kind: "missing-output", phase } };
   }
 
   // Validate the chain only through the phase being confirmed. Later documents

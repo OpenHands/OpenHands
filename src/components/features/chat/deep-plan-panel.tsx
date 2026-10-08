@@ -179,13 +179,19 @@ export function DeepPlanPanel() {
               ? t(I18nKey.DEEP_PLAN$CONFIRM_BLOCKED, {
                   phase: t(DEEP_PLAN_PHASE_LABEL_KEY[visibleFailure.phase]),
                 })
-              : `${makeRefIssueMessage(t, visibleFailure.issue)}${
-                  visibleFailure.extraCount > 0
-                    ? t(I18nKey.DEEP_PLAN$CONFIRM_MORE_ISSUES, {
-                        count: visibleFailure.extraCount,
-                      })
-                    : ""
-                }`}
+              : visibleFailure.kind === "missing-output"
+                ? t(I18nKey.DEEP_PLAN$CONFIRM_MISSING_OUTPUT, {
+                    document:
+                      getDeepPlanPhase(visibleFailure.phase).outputFile ??
+                      t(DEEP_PLAN_PHASE_LABEL_KEY[visibleFailure.phase]),
+                  })
+                : `${makeRefIssueMessage(t, visibleFailure.issue)}${
+                    visibleFailure.extraCount > 0
+                      ? t(I18nKey.DEEP_PLAN$CONFIRM_MORE_ISSUES, {
+                          count: visibleFailure.extraCount,
+                        })
+                      : ""
+                  }`}
           </Typography.Text>
         )}
 

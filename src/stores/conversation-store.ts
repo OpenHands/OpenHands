@@ -8,8 +8,11 @@ import {
   EMPTY_DEEP_PLAN_STATE,
   canEnterPhase,
   confirmPhase,
+  hashDeepPlanDocument,
+  hydrateDeepPlanState,
   invalidateFrom,
   startDeepPlan as createDeepPlanState,
+  toPersistedDeepPlan,
   type ConfirmFailure,
   type DeepPlanState,
 } from "#/utils/deep-plan-machine";
@@ -158,7 +161,9 @@ const getInitialDeepPlanState = (): DeepPlanState => {
     return EMPTY_DEEP_PLAN_STATE;
   }
 
-  return getConversationState(conversationId).deepPlan ?? EMPTY_DEEP_PLAN_STATE;
+  // Only phase/confirmations/hashes are persisted; the bodies are re-read from
+  // disk via history replay, so the machine starts with empty documents.
+  return hydrateDeepPlanState(getConversationState(conversationId).deepPlan);
 };
 
 /**
@@ -175,9 +180,14 @@ const persistDeepPlan = (
 ): void => {
   const conversationId = getConversationIdFromLocation();
   if (conversationId) {
+    // Persist the slim form: document bodies live on disk and are re-read on
+    // reload, so storing them here only risks the localStorage quota.
+    const persisted = toPersistedDeepPlan(deepPlan);
     setConversationState(
       conversationId,
-      conversationMode ? { deepPlan, conversationMode } : { deepPlan },
+      conversationMode
+        ? { deepPlan: persisted, conversationMode }
+        : { deepPlan: persisted },
     );
   }
 };
@@ -502,24 +512,35 @@ export const useConversationStore = create<ConversationStore>()(
         ),
 
       setDeepPlanDocument: (phase, content) => {
+        const current = useConversationStore.getState().deepPlan;
         // History replay re-reads the persisted documents after a refresh;
         // re-hydrating identical bytes is not an edit, so it must not drop the
         // confirmations the user already earned. Only a real change invalidates
         // the phase and everything built on it.
-        if (
-          useConversationStore.getState().deepPlan.documents[phase] === content
-        ) {
+        if (current.documents[phase] === content) {
           return;
         }
+        // After a reload the bodies start empty but the persisted per-document
+        // hashes remain, so a replay of the bytes the persisted chain vouches
+        // for is recognized as a rehydrate (not an edit) even though the body
+        // is not yet in memory. The body is still stored so the panel can
+        // render it and the validator can read it.
+        const isRehydrate =
+          current.documentHashes?.[phase] === hashDeepPlanDocument(content);
         set(
           (state) => {
-            const deepPlan = invalidateFrom(
-              {
-                ...state.deepPlan,
-                documents: { ...state.deepPlan.documents, [phase]: content },
-              },
-              phase,
-            );
+            const documentHashes = {
+              ...state.deepPlan.documentHashes,
+              [phase]: hashDeepPlanDocument(content),
+            };
+            const withDocument = {
+              ...state.deepPlan,
+              documents: { ...state.deepPlan.documents, [phase]: content },
+              documentHashes,
+            };
+            const deepPlan = isRehydrate
+              ? withDocument
+              : invalidateFrom(withDocument, phase);
             persistDeepPlan(deepPlan);
             return { deepPlan };
           },

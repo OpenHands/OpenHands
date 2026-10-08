@@ -33,6 +33,8 @@ const TRANSLATIONS: Record<string, string> = {
     "{{document}} cites [{{ref}}], but that document has not been produced yet.",
   [I18nKey.DEEP_PLAN$CONFIRM_BLOCKED]: "Confirm {{phase}} before continuing.",
   [I18nKey.DEEP_PLAN$CONFIRM_MORE_ISSUES]: " (+{{count}} more)",
+  [I18nKey.DEEP_PLAN$CONFIRM_MISSING_OUTPUT]:
+    "Run the planner to produce {{document}} before confirming this phase.",
 };
 
 vi.mock("react-i18next", async (importOriginal) => {
@@ -97,6 +99,26 @@ describe("DeepPlanPanel", () => {
     );
     expect(useConversationStore.getState().deepPlan.activePhase).toBe(
       "database",
+    );
+  });
+
+  it("refuses the checkpoint until the phase document exists", async () => {
+    const store = useConversationStore.getState();
+    act(() => {
+      store.startDeepPlan();
+      store.confirmDeepPlanPhase("analysis");
+      store.setDeepPlanPhase("requirements");
+    });
+
+    renderWithProviders(<DeepPlanPanel />);
+
+    await userEvent.click(screen.getByTestId("deep-plan-confirm"));
+
+    expect(screen.getByTestId("deep-plan-error")).toHaveTextContent(
+      "Run the planner to produce requirements.md before confirming this phase.",
+    );
+    expect(useConversationStore.getState().deepPlan.activePhase).toBe(
+      "requirements",
     );
   });
 

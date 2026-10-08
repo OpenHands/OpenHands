@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { hashDeepPlanDocument } from "#/utils/deep-plan-machine";
 
 let useConversationStore: (typeof import("#/stores/conversation-store"))["useConversationStore"];
 
@@ -9,7 +10,8 @@ const defaultConversationState: {
   deepPlan?: {
     activePhase: string | null;
     confirmed: string[];
-    documents: Record<string, string>;
+    documents?: Record<string, string>;
+    documentHashes?: Record<string, string>;
   };
 } = {
   selectedTab: "files" as const,
@@ -370,6 +372,57 @@ describe("conversation store", () => {
         "analysis",
         "requirements",
       ]);
+    });
+
+    it("persists the phase machine without the document bodies", () => {
+      // Bodies are re-read from disk on reload; keeping them in the blob only
+      // risks the localStorage quota.
+      const store = useConversationStore.getState();
+      store.startDeepPlan();
+      store.setDeepPlanDocument("requirements", "## 3.1 Authentication\n");
+
+      const lastCall = mockSetConversationState.mock.calls.at(-1);
+      expect(lastCall?.[1].deepPlan).toEqual({
+        activePhase: "analysis",
+        confirmed: [],
+        documentHashes: {
+          requirements: hashDeepPlanDocument("## 3.1 Authentication\n"),
+        },
+      });
+      expect(lastCall?.[1].deepPlan).not.toHaveProperty("documents");
+    });
+
+    it("keeps confirmations when history replays the persisted documents after reload", async () => {
+      // A reload cannot carry the bodies in memory: they come back from disk
+      // via history replay. The persisted per-document hash must let the store
+      // recognize that replay as a rehydrate rather than an edit.
+      const requirementsDoc = "## 3.1 Authentication\n";
+      mockGetConversationState.mockReturnValue({
+        selectedTab: "files",
+        unpinnedTabs: [],
+        conversationMode: "deep-plan",
+        deepPlan: {
+          activePhase: "requirements",
+          confirmed: ["analysis"],
+          documentHashes: {
+            requirements: hashDeepPlanDocument(requirementsDoc),
+          },
+        },
+      });
+      vi.resetModules();
+      const { useConversationStore: freshStore } =
+        await import("#/stores/conversation-store");
+
+      expect(freshStore.getState().deepPlan.documents).toEqual({});
+
+      freshStore
+        .getState()
+        .setDeepPlanDocument("requirements", requirementsDoc);
+
+      expect(freshStore.getState().deepPlan.confirmed).toEqual(["analysis"]);
+      expect(freshStore.getState().deepPlan.documents.requirements).toBe(
+        requirementsDoc,
+      );
     });
 
     it("restores the phase machine from persisted state on load", async () => {
