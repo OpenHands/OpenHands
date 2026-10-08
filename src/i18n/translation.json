@@ -30123,6 +30123,23 @@
     "uk": "Зупинка",
     "ca": "Atura"
   },
+  "HOOKS_MODAL$FETCH_ERROR": {
+    "en": "Failed to fetch hooks. Please try again later.",
+    "ja": "フックの取得に失敗しました。後でもう一度お試しください。",
+    "zh-CN": "获取钩子失败。请稍后再试。",
+    "zh-TW": "取得鉤子失敗。請稍後再試。",
+    "ko-KR": "훅을 가져오지 못했습니다. 나중에 다시 시도해주세요.",
+    "no": "Kunne ikke hente kroker. Prøv igjen senere.",
+    "ar": "فشل في جلب الخطافات. يرجى المحاولة لاحقًا.",
+    "de": "Die Hooks konnten nicht abgerufen werden. Bitte versuchen Sie es später erneut.",
+    "fr": "Échec de la récupération des hooks. Veuillez réessayer plus tard.",
+    "it": "Impossibile recuperare gli hook. Riprova più tardi.",
+    "pt": "Falha ao buscar os hooks. Por favor, tente novamente mais tarde.",
+    "es": "No se pudieron obtener los hooks. Por favor, inténtalo de nuevo más tarde.",
+    "tr": "Kancalar alınamadı. Lütfen daha sonra tekrar deneyin.",
+    "uk": "Не вдалося отримати хуки. Будь ласка, спробуйте пізніше.",
+    "ca": "No s'han pogut obtenir els hooks. Torneu-ho a intentar més tard."
+  },
   "HOOK$HOOK_LABEL": {
     "en": "Hook",
     "ja": "フック",
