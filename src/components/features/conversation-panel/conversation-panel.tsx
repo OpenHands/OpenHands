@@ -61,6 +61,8 @@ import {
 import { useArchivedConversationsStore } from "#/stores/archived-conversations-store";
 import { usePinnedConversationsStore } from "#/stores/pinned-conversations-store";
 import { uniqueById } from "#/utils/unique-by-id";
+import { isEffectivelyArchivedConversation } from "#/utils/conversation-archive-status";
+import type { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
 
 interface ConversationPanelProps {
   onClose?: () => void;
@@ -198,6 +200,20 @@ export function ConversationPanel({
     (state) => state.removeArchivedConversation,
   );
 
+  // The one predicate every archived presentation reads: a row is effectively
+  // archived when the user archived it, or when its runtime is missing and
+  // non-resumable. List visibility, the "Archived" chip, the dimmed title, and
+  // the archive/unarchive menu direction all derive from this so they cannot
+  // disagree. (`sandbox_status: "ERROR"` is intentionally not archived.)
+  const isRowArchived = React.useCallback(
+    (conversation: { id: string; sandbox_status?: SandboxStatus | null }) =>
+      isEffectivelyArchivedConversation(
+        conversation.sandbox_status,
+        archivedIdSet.has(conversation.id),
+      ),
+    [archivedIdSet],
+  );
+
   const toggleGroupCollapsed = React.useCallback((groupId: string) => {
     setCollapsedGroupIds((prev) => {
       const next = new Set(prev);
@@ -289,16 +305,17 @@ export function ConversationPanel({
     return pageById;
   }, [data]);
 
-  // Display collection: same loaded pages, with archived rows filtered out
-  // unless the user has opted into "Show archived".
+  // Display collection: same loaded pages, with effectively-archived rows
+  // (explicitly archived or missing-runtime) filtered out unless the user has
+  // opted into "Show archived".
   const conversations = React.useMemo(() => {
     if (showArchivedConversations) {
       return allLoadedConversations;
     }
     return allLoadedConversations.filter(
-      (conversation) => !archivedIdSet.has(conversation.id),
+      (conversation) => !isRowArchived(conversation),
     );
-  }, [allLoadedConversations, archivedIdSet, showArchivedConversations]);
+  }, [allLoadedConversations, isRowArchived, showArchivedConversations]);
 
   // Facets derive from the unfiltered list so the automation-name rows in the
   // advanced-options modal don't vanish while a narrowing selection is active.
@@ -855,7 +872,7 @@ export function ConversationPanel({
       options?: { inPinnedSection?: boolean },
     ) => {
       const isPinned = pinnedIds.includes(conversation.id);
-      const isArchived = archivedIdSet.has(conversation.id);
+      const isArchived = isRowArchived(conversation);
       if (compact) {
         return (
           <CompactConversationRow
@@ -884,6 +901,7 @@ export function ConversationPanel({
             acpServer={conversation.acp_server}
             tags={conversation.tags}
             showTags={showTagsMetadata}
+            isArchived={isArchived}
           />
         );
       }
@@ -999,7 +1017,6 @@ export function ConversationPanel({
     [
       activeBackend.id,
       activeBackend.kind,
-      archivedIdSet,
       compact,
       currentConversationId,
       handleArchiveProject,
@@ -1008,6 +1025,7 @@ export function ConversationPanel({
       handleEditTags,
       handleStopConversation,
       handleUnarchiveProject,
+      isRowArchived,
       onClose,
       openContextMenuId,
       pinnedIds,

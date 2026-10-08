@@ -29,6 +29,8 @@ interface CompactConversationRowProps {
   acpServer?: string | null;
   tags?: Record<string, string> | null;
   showTags?: boolean;
+  /** Effective archived state; renders the "Archived" chip in the preview. */
+  isArchived?: boolean;
 }
 
 /**
@@ -54,6 +56,7 @@ export function CompactConversationRow({
   acpServer = null,
   tags = null,
   showTags = false,
+  isArchived = false,
 }: CompactConversationRowProps) {
   const { t } = useTranslation("openhands");
   const backendScopedPath = useBackendScopedPath();
@@ -87,6 +90,7 @@ export function CompactConversationRow({
         acpServer={acpServer}
         tags={tags}
         showTags={showTags}
+        isArchived={isArchived}
       />
     </div>
   );

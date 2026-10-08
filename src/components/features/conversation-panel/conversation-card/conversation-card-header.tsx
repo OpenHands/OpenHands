@@ -1,6 +1,6 @@
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
-import { isArchivedSandboxStatus } from "#/utils/conversation-archive-status";
+import { isMissingSandboxStatus } from "#/utils/conversation-archive-status";
 import { ConversationCardTitle } from "./conversation-card-title";
 import { ConversationStatusDot } from "../conversation-status-dot";
 
@@ -19,7 +19,10 @@ export function ConversationCardHeader({
   executionStatus,
   sandboxStatus,
 }: ConversationCardHeaderProps) {
-  const isArchived = isArchivedSandboxStatus(sandboxStatus);
+  // The dimmed title matches the status dot's archived presentation: a missing
+  // (non-resumable) sandbox. An ERROR sandbox keeps its red indicator and is
+  // not dimmed.
+  const isArchived = isMissingSandboxStatus(sandboxStatus);
   return (
     <div className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden">
       {executionStatus !== undefined && (

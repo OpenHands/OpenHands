@@ -69,4 +69,24 @@ describe("ConversationStatusDot", () => {
       "COMMON$ARCHIVED",
     );
   });
+
+  it("renders the error dot, not the archive icon, when sandbox is ERROR", () => {
+    renderWithProviders(
+      <ConversationStatusDot
+        executionStatus={ExecutionStatus.FINISHED}
+        sandboxStatus="ERROR"
+      />,
+    );
+
+    expect(
+      screen.getByTestId("conversation-status-error"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("conversation-status-archived"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("styled-tooltip")).toHaveAttribute(
+      "data-content",
+      "COMMON$ERROR",
+    );
+  });
 });

@@ -3,6 +3,7 @@ import { FaArchive } from "react-icons/fa";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
+import { isMissingSandboxStatus } from "#/utils/conversation-archive-status";
 
 interface ConversationStatusDotProps {
   executionStatus: ExecutionStatus | null | undefined;
@@ -124,7 +125,7 @@ export function ConversationStatusDot({
   // sandbox_status === "MISSING" → show archived (gray) dot
   // sandbox_status === "ERROR"   → show error (red) dot
   // Otherwise fall through to the execution-status visual.
-  const isArchived = sandboxStatus === "MISSING";
+  const isArchived = isMissingSandboxStatus(sandboxStatus);
   const effectiveVisual: Visual =
     sandboxStatus === "ERROR"
       ? "error"
