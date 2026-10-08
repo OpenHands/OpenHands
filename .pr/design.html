@@ -1,0 +1,219 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inline Mermaid rendering — #18143</title>
+<style>
+  :root{
+    --fg:#1a1a1a; --muted:#5a5a5a; --subtle:#8a8a82;
+    --bg:#fdfdfb; --card:#ffffff; --elevated:#f7f6f1;
+    --accent:#2b4eaa; --accent-soft:#e6ecfa;
+    --rule:#e2e2dc; --rule-strong:#bdbcb4;
+    --code-bg:#f3f1ec; --warn:#b25b0e; --ok:#2f7a3a; --crit:#a02020;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box} html,body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans)}
+  body{line-height:1.6;font-size:16px}
+  .wrap{display:grid;grid-template-columns:230px minmax(0,1fr);gap:44px;max-width:1180px;margin:0 auto;padding:32px 28px 96px}
+  nav.toc{position:sticky;top:24px;align-self:start;font-size:13px}
+  nav.toc h2{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+  nav.toc ol{list-style:none;padding:0;margin:0;counter-reset:toc}
+  nav.toc li{counter-increment:toc;margin:4px 0}
+  nav.toc li::before{content:counter(toc) ". ";color:var(--muted)}
+  nav.toc a{color:var(--fg);text-decoration:none} nav.toc a:hover{color:var(--accent)}
+  header.title{border-bottom:1px solid var(--rule);padding-bottom:22px;margin-bottom:28px}
+  header.title .eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700}
+  header.title h1{font-size:32px;margin:6px 0 4px;letter-spacing:-.01em}
+  header.title .sub{color:var(--muted);max-width:740px}
+  h2{font-size:22px;margin:44px 0 10px} h2 .num{color:var(--muted);font-weight:500;margin-right:8px}
+  h3{font-size:16px;margin:22px 0 8px}
+  code{font-family:var(--mono);font-size:.88em;background:var(--code-bg);padding:1px 5px;border-radius:3px}
+  pre{font-family:var(--mono);font-size:13px;background:var(--code-bg);padding:14px 16px;border-radius:6px;overflow-x:auto;border:1px solid var(--rule)}
+  pre code{background:transparent;padding:0}
+  table{border-collapse:collapse;width:100%;font-size:14px;margin:12px 0}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--rule);vertical-align:top}
+  th{font-weight:600;background:var(--code-bg)}
+  .callout{border-left:3px solid var(--accent);background:var(--accent-soft);padding:10px 14px;margin:14px 0;border-radius:0 4px 4px 0;font-size:14.5px}
+  .callout.warn{border-color:var(--warn);background:#fbf1e6} .callout.note{border-color:var(--muted);background:#f3f1ec}
+  .fig{margin:18px 0 22px}
+  .fig svg{display:block;max-width:100%;height:auto;background:#fff;border:1px solid var(--rule);border-radius:6px}
+  .fig figcaption{font-size:13px;color:var(--muted);margin-top:6px;text-align:center}
+  a.src{font-family:var(--mono);font-size:12px;color:var(--accent);text-decoration:none;border-bottom:1px dotted var(--accent)}
+  details{border:1px solid var(--rule);border-radius:6px;margin:12px 0}
+  details>summary{cursor:pointer;padding:8px 12px;color:var(--muted);font-size:13px;list-style:none}
+  details>summary::-webkit-details-marker{display:none}
+  details>summary::before{content:"\25B8 "} details[open]>summary::before{content:"\25BE "}
+  .ba{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+  .ba h4{margin:0 0 8px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  @media(max-width:760px){.wrap{grid-template-columns:1fr}.ba{grid-template-columns:1fr}}
+</style></head><body>
+<div class="wrap">
+  <nav class="toc"><h2>Contents</h2><ol>
+    <li><a href="#sec1">What changed</a></li>
+    <li><a href="#sec2">The render pipeline</a></li>
+    <li><a href="#sec3">Where it plugs in</a></li>
+    <li><a href="#sec4">Safety &amp; bundle cost</a></li>
+    <li><a href="#sec5">File index</a></li>
+    <li><a href="#sec6">Evidence</a></li>
+  </ol></nav>
+  <main>
+    <header class="title"><div class="eyebrow">Feature · Agent Canvas</div>
+      <h1>Render Mermaid diagrams inline in the conversation</h1>
+      <p class="sub">Agents emit Mermaid (flowcharts, sequence, ER diagrams) as fenced
+      code blocks, and users create <code>.mmd</code>/<code>.mermaid</code> files. Both
+      used to show as raw source. This PR turns them into real diagrams in the chat
+      stream and the Files tab, keeps the source one click away, and never breaks a
+      message when a diagram is invalid.</p></header>
+
+    <section id="sec1"><h2><span class="num">1</span> What changed</h2>
+      <div class="callout">★ <b>One-time, lazy, and defensive.</b> Mermaid is loaded
+      through a dynamic <code>import()</code> only when a diagram is rendered
+      (<a class="src" href="https://github.com/adminypc/OpenHands/blob/c69cf6240122e8a5d77afa4244367f480ebdd14d/src/components/features/markdown/mermaid-renderer.ts#L30">mermaid-renderer.ts:30</a>),
+      so a conversation with no Mermaid block downloads zero extra bytes. Its output is
+      sanitized before it reaches the DOM and an invalid diagram falls back to its source.</div>
+      <div class="ba">
+        <div>
+          <h4>Before</h4>
+          <pre><code>```mermaid
+graph TD;
+  A[User]--&gt;B[Agent];
+```</code></pre>
+          <p class="sub">A <code>```mermaid</code> block rendered through the ordinary
+          code path: syntax-highlighted text with a copy button
+          (<a class="src" href="https://github.com/adminypc/OpenHands/blob/3f98684763a4e17e6e2faf8dd8f1cfc3969b020c/src/components/features/markdown/code.tsx#L28">code.tsx @ base</a>).</p>
+        </div>
+        <div>
+          <h4>After</h4>
+          <p class="sub">A diagram card: SVG in the body, a footer naming the artifact
+          with <b>View source</b>, <b>Copy</b>, and <b>Download SVG</b>. Same card for a
+          <code>.mmd</code> file
+          (<a class="src" href="https://github.com/adminypc/OpenHands/blob/c69cf6240122e8a5d77afa4244367f480ebdd14d/src/components/features/markdown/mermaid-diagram.tsx#L42">mermaid-diagram.tsx:42</a>).</p>
+          <div class="callout note" style="font-size:13px">ⓘ Invalid diagram → the raw source is shown with a short note; the message is untouched.</div>
+        </div>
+      </div>
+
+      <div class="fig">
+        <svg viewBox="0 0 960 250" role="img" aria-labelledby="ov-t ov-d">
+          <title id="ov-t">Fenced Mermaid block: before vs after call path</title>
+          <desc id="ov-d">Before, code.tsx always renders a code block. After, code.tsx detects a Mermaid fence and renders MermaidDiagram, which lazily loads the renderer.</desc>
+          <defs>
+            <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="var(--subtle)"/></marker>
+            <marker id="arrchg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="var(--warn)"/></marker>
+            <style>
+              .existing{fill:var(--code-bg);stroke:var(--subtle);stroke-width:1.4;stroke-dasharray:5 3}
+              .ex-title{font:700 12.5px var(--sans);fill:var(--muted)} .ex-detail{font:11px var(--mono);fill:var(--subtle)}
+              .new{fill:var(--accent-soft);stroke:var(--accent);stroke-width:2}
+              .new-title{font:800 12.5px var(--sans);fill:var(--accent)} .detail{font:11px var(--mono);fill:var(--fg)}
+              .edge{stroke:var(--subtle);stroke-width:1.5;stroke-dasharray:5 3;fill:none}
+              .edgechg{stroke:var(--warn);stroke-width:1.8;fill:none}
+              .lbl{font:600 10.5px var(--mono);fill:var(--accent)}
+            </style>
+          </defs>
+          <text class="ex-title" x="24" y="24">BEFORE</text>
+          <rect class="existing" x="24" y="40" width="180" height="70" rx="6"/>
+          <text class="ex-title" x="114" y="68" text-anchor="middle">code.tsx</text>
+          <text class="ex-detail" x="114" y="88" text-anchor="middle">renders &lt;Code&gt;</text>
+          <text class="ex-detail" x="114" y="102" text-anchor="middle">for every fence</text>
+          <line class="edge" x1="204" y1="75" x2="300" y2="75" marker-end="url(#arr)"/>
+          <rect class="existing" x="300" y="40" width="170" height="70" rx="6"/>
+          <text class="ex-title" x="385" y="72" text-anchor="middle">highlighted block</text>
+          <text class="ex-detail" x="385" y="92" text-anchor="middle">+ copy button</text>
+
+          <line x1="490" y1="20" x2="490" y2="230" stroke="var(--rule-strong)" stroke-width="1"/>
+
+          <text class="new-title" x="516" y="24">AFTER</text>
+          <rect class="new" x="516" y="40" width="170" height="70" rx="6"/>
+          <text class="new-title" x="601" y="66" text-anchor="middle">code.tsx</text>
+          <text class="detail" x="601" y="84" text-anchor="middle">detects language</text>
+          <text class="detail" x="601" y="98" text-anchor="middle">mermaid | mmd</text>
+          <line class="edgechg" x1="686" y1="75" x2="754" y2="75" marker-end="url(#arrchg)"/>
+          <text class="lbl" x="720" y="67" text-anchor="middle">match</text>
+          <rect class="new" x="754" y="40" width="182" height="70" rx="6"/>
+          <text class="new-title" x="845" y="66" text-anchor="middle">MermaidDiagram</text>
+          <text class="detail" x="845" y="84" text-anchor="middle">renderMermaidToSafeSvg()</text>
+          <text class="detail" x="845" y="98" text-anchor="middle">lazy import("mermaid")</text>
+          <line class="edgechg" x1="601" y1="110" x2="601" y2="160" marker-end="url(#arrchg)"/>
+          <rect class="new" x="516" y="160" width="420" height="60" rx="6"/>
+          <text class="new-title" x="726" y="185" text-anchor="middle">InlineArtifactCard · sanitized SVG</text>
+          <text class="detail" x="726" y="204" text-anchor="middle">View source · Copy · Download SVG</text>
+        </svg>
+        <figcaption>The delta lives at the fence: an ordinary code path becomes a
+        language-aware branch into a self-contained diagram card.</figcaption>
+      </div>
+    </section>
+
+    <section id="sec2"><h2><span class="num">2</span> The render pipeline</h2>
+      <p>Three small pieces, each with one job (all in
+      <a class="src" href="https://github.com/adminypc/OpenHands/blob/c69cf6240122e8a5d77afa4244367f480ebdd14d/src/components/features/markdown/mermaid-renderer.ts">mermaid-renderer.ts</a>):</p>
+      <table>
+        <tr><th>Step</th><th>Call</th><th>Why</th></tr>
+        <tr><td>load once</td><td><code>loadMermaid()</code> — <a class="src" href="https://github.com/adminypc/OpenHands/blob/c69cf6240122e8a5d77afa4244367f480ebdd14d/src/components/features/markdown/mermaid-renderer.ts#L30">:30</a></td><td>memoized dynamic import; initialized once with <code>securityLevel:"strict"</code>, <code>htmlLabels:false</code></td></tr>
+        <tr><td>validate</td><td><code>mermaid.parse()</code> — <a class="src" href="https://github.com/adminypc/OpenHands/blob/c69cf6240122e8a5d77afa4244367f480ebdd14d/src/components/features/markdown/mermaid-renderer.ts#L73">:73</a></td><td>reject invalid diagrams so the caller can show the source, instead of returning partial output</td></tr>
+        <tr><td>render</td><td><code>mermaid.render()</code> — <a class="src" href="https://github.com/adminypc/OpenHands/blob/c69cf6240122e8a5d77afa4244367f480ebdd14d/src/components/features/markdown/mermaid-renderer.ts#L74">:74</a></td><td>produce the SVG string</td></tr>
+        <tr><td>sanitize</td><td><code>sanitizeMermaidSvg()</code> — <a class="src" href="https://github.com/adminypc/OpenHands/blob/c69cf6240122e8a5d77afa4244367f480ebdd14d/src/components/features/markdown/mermaid-renderer.ts#L55">:55</a></td><td>DOMPurify SVG profile; forbids <code>script</code>/<code>foreignObject</code> and <code>on*</code> handlers</td></tr>
+      </table>
+      <div class="callout warn">⚠ The input is agent/model output. Richer modes
+      (<code>loose</code>) are never used; the raw SVG never reaches
+      <code>dangerouslySetInnerHTML</code> without the DOMPurify pass
+      (<a class="src" href="https://github.com/adminypc/OpenHands/blob/c69cf6240122e8a5d77afa4244367f480ebdd14d/src/components/features/markdown/mermaid-diagram.tsx#L132">mermaid-diagram.tsx:132</a>).</div>
+    </section>
+
+    <section id="sec3"><h2><span class="num">3</span> Where it plugs in</h2>
+      <table>
+        <tr><th>Surface</th><th>Behavior change</th><th>Code</th></tr>
+        <tr><td>Chat fenced block</td><td><code>language-mermaid</code>/<code>mmd</code> → diagram instead of highlighted code</td><td><a class="src" href="https://github.com/adminypc/OpenHands/blob/c69cf6240122e8a5d77afa4244367f480ebdd14d/src/components/features/markdown/code.tsx#L35">code.tsx:35</a></td></tr>
+        <tr><td>Created artifact</td><td>a created <code>.mmd</code>/<code>.mermaid</code> file gets a rich preview card</td><td><a class="src" href="https://github.com/adminypc/OpenHands/blob/c69cf6240122e8a5d77afa4244367f480ebdd14d/src/components/features/chat/tool-visualizers/file-editor/file-editor.tsx#L90">file-editor.tsx:90</a></td></tr>
+        <tr><td>Chat grouping</td><td>Mermaid artifacts stay expanded, not collapsed into an action group</td><td><a class="src" href="https://github.com/adminypc/OpenHands/blob/c69cf6240122e8a5d77afa4244367f480ebdd14d/src/components/conversation-events/chat/group-events.ts#L34">group-events.ts:34</a></td></tr>
+        <tr><td>Files tab</td><td>rich mode renders the diagram; plain mode keeps raw source</td><td><a class="src" href="https://github.com/adminypc/OpenHands/blob/c69cf6240122e8a5d77afa4244367f480ebdd14d/src/components/features/files-tab/file-content-viewer.tsx#L192">file-content-viewer.tsx:192</a></td></tr>
+      </table>
+      <div class="callout note">ⓘ Detection and event-shape logic is shared:
+      <code>isMermaidFilePath</code> (<a class="src" href="https://github.com/adminypc/OpenHands/blob/c69cf6240122e8a5d77afa4244367f480ebdd14d/src/utils/is-mermaid-file-path.ts">is-mermaid-file-path.ts</a>),
+      <code>isInlinePreviewFileEditorEvent</code> (<a class="src" href="https://github.com/adminypc/OpenHands/blob/c69cf6240122e8a5d77afa4244367f480ebdd14d/src/components/features/chat/tool-visualizers/primitives/markdown-file-preview.tsx#L58">markdown-file-preview.tsx:58</a>),
+      and the card chrome <code>InlineArtifactCard</code> (<a class="src" href="https://github.com/adminypc/OpenHands/blob/c69cf6240122e8a5d77afa4244367f480ebdd14d/src/components/features/markdown/inline-artifact-card.tsx#L50">inline-artifact-card.tsx:50</a>) —
+      the same shape the artifact-preview work (#18113) can reuse for HTML/SVG.</div>
+    </section>
+
+    <section id="sec4"><h2><span class="num">4</span> Safety &amp; bundle cost</h2>
+      <div class="ba">
+        <div><h4>Security posture</h4>
+          <ul><li>strict Mermaid mode + HTML labels off</li><li>DOMPurify SVG profile as a second pass</li>
+          <li><code>script</code>, <code>foreignObject</code>, <code>on*</code> forbidden</li>
+          <li>invalid diagram → source fallback, never a crash</li></ul></div>
+        <div><h4>Bundle</h4>
+          <p><code>npm run build:app</code> emits <code>vendor~mermaid.*</code> as separate
+          lazy chunks only for conversations that render a diagram. Mermaid is pinned to
+          <code>11.17.2</code>; <code>dompurify</code> is <code>3.4.14</code>.</p></div>
+      </div>
+    </section>
+
+    <section id="sec5"><h2><span class="num">5</span> File index</h2>
+      <table>
+        <tr><th>File</th><th>Tag</th><th>+/−</th><th>Role</th></tr>
+        <tr><td><code>src/components/features/markdown/mermaid-renderer.ts</code></td><td>🟢 added</td><td>+83</td><td>lazy, strict, sanitized render</td></tr>
+        <tr><td><code>src/components/features/markdown/mermaid-diagram.tsx</code></td><td>🟢 added</td><td>+140</td><td>diagram card + source toggle/actions</td></tr>
+        <tr><td><code>src/components/features/markdown/inline-artifact-card.tsx</code></td><td>🟢 added</td><td>+172</td><td>shared preview chrome + actions</td></tr>
+        <tr><td><code>src/components/features/chat/tool-visualizers/primitives/file-editor-event.ts</code></td><td>🟢 added</td><td>+116</td><td>shared path/command resolution</td></tr>
+        <tr><td><code>src/utils/is-mermaid-file-path.ts</code></td><td>🟢 added</td><td>+11</td><td>extension allow-list</td></tr>
+        <tr><td><code>…/primitives/markdown-file-preview.tsx</code></td><td>✏️ changed</td><td>+54 / −118</td><td>reuse shared helpers; add MermaidFilePreview</td></tr>
+        <tr><td><code>src/components/features/markdown/code.tsx</code></td><td>✏️ changed</td><td>+9</td><td>fence → diagram branch</td></tr>
+        <tr><td><code>…/file-editor/file-editor.tsx</code></td><td>✏️ changed</td><td>+11 / −3</td><td>rich preview for created Mermaid artifacts</td></tr>
+        <tr><td><code>…/files-tab/file-content-viewer.tsx</code></td><td>✏️ changed</td><td>+20</td><td>render in rich mode</td></tr>
+        <tr><td><code>…/chat/group-events.ts</code>, <code>…/generic-event-message-wrapper.tsx</code></td><td>✏️ changed</td><td>+5 / −5</td><td>keep artifacts ungrouped</td></tr>
+        <tr><td><code>src/utils/get-language-from-path.ts</code></td><td>✏️ changed</td><td>+3</td><td>mmd/mermaid → "mermaid"</td></tr>
+        <tr><td><code>src/i18n/translation.json</code></td><td>✏️ changed</td><td>+119</td><td>6 keys × 15 locales</td></tr>
+        <tr><td>tests (5 files)</td><td>🟢 added / ✏️ changed</td><td>—</td><td>unit + integration coverage</td></tr>
+        <tr><td><code>package.json</code>, <code>package-lock.json</code></td><td>⚙️ mechanical</td><td>+1 / lock</td><td>add <code>mermaid</code> dependency</td></tr>
+      </table>
+    </section>
+
+    <section id="sec6"><h2><span class="num">6</span> Evidence</h2>
+      <details><summary>Commands run on this branch</summary>
+        <pre><code>npx vitest run  # 68 tests pass on the touched suites
+npm run lint    # 0 errors (typecheck + eslint + prettier)
+npm run build:app  # succeeds; vendor~mermaid.* emitted as lazy chunks</code></pre></details>
+      <p class="sub">Suites: <code>is-mermaid-file-path</code>, <code>mermaid-renderer</code>,
+      <code>mermaid-diagram</code>, <code>code</code>, <code>file-editor</code>,
+      <code>file-content-viewer</code>, <code>group-events</code>. A running-Canvas
+      screenshot/video is added to the PR description by a human reviewer.</p>
+    </section>
+  </main>
+</div></body></html>
