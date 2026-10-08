@@ -20,6 +20,12 @@ export const isPlanningMode = (
   deepPlanPhase: DeepPlanPhaseId | null = null,
 ): boolean => {
   if (mode === "plan") return true;
-  if (mode === "deep-plan") return deepPlanPhase !== "implementation";
+  if (mode === "deep-plan") {
+    // No active phase means no planner has been provisioned yet
+    // (`ensureDeepPlanPlanner` / `handlePlanClick` bail on a null phase), so a
+    // message routed to the planner here would target an empty id. Until a
+    // phase starts, Deep Plan messages belong to the main agent.
+    return deepPlanPhase !== null && deepPlanPhase !== "implementation";
+  }
   return false;
 };

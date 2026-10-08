@@ -492,7 +492,11 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
       await waitFor(() => expect(getContext()).not.toBeNull());
       useConversationStore.setState({
         conversationMode: "deep-plan",
-        deepPlan: { activePhase: "implementation", confirmed: [], documents: {} },
+        deepPlan: {
+          activePhase: "implementation",
+          confirmed: [],
+          documents: {},
+        },
       });
 
       await act(async () => {
@@ -526,6 +530,31 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
 
       expect(sendEventMock).toHaveBeenCalledWith(
         "planning-1",
+        expect.anything(),
+        expect.anything(),
+      );
+    });
+
+    it("routes a Deep Plan message with no active phase to the code agent", async () => {
+      // Deep Plan entered but before any phase starts: no planner has been
+      // provisioned, so `planningConversationId` is empty. Routing to the
+      // planner here targets an empty id; the message belongs to the parent.
+      const getContext = renderPlanMode(["planning-1"]);
+      await waitFor(() => expect(getContext()).not.toBeNull());
+      useConversationStore.setState({
+        conversationMode: "deep-plan",
+        deepPlan: { activePhase: null, confirmed: [], documents: {} },
+      });
+
+      await act(async () => {
+        await getContext().sendMessage({
+          role: "user",
+          content: [{ type: "text", text: "start deep planning" }],
+        });
+      });
+
+      expect(sendEventMock).toHaveBeenCalledWith(
+        "conv-parent",
         expect.anything(),
         expect.anything(),
       );

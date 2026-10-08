@@ -542,11 +542,14 @@ export const useConversationStore = create<ConversationStore>()(
       },
 
       resetDeepPlan: () => {
-        persistDeepPlan(EMPTY_DEEP_PLAN_STATE);
+        // Persist `"code"` explicitly: `startDeepPlan` wrote `"deep-plan"` to
+        // storage, so re-deriving the mode from storage (the mount-time reset
+        // path) would leave the user stuck in Deep Plan after a reset.
+        persistDeepPlan(EMPTY_DEEP_PLAN_STATE, "code");
         set(
           {
             deepPlan: EMPTY_DEEP_PLAN_STATE,
-            conversationMode: getInitialConversationMode(),
+            conversationMode: "code",
           },
           false,
           "resetDeepPlan",

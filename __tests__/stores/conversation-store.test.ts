@@ -213,16 +213,16 @@ describe("conversation store", () => {
       );
     });
 
-    it("clears the mode when the machine is reset, without re-persisting it", () => {
-      // `resetDeepPlan` shares the persistence helper. It must not inherit the
-      // "persist deep-plan" behavior, or cancelling would immediately re-arm
-      // the mode it just cleared.
+    it("clears the mode when the machine is reset, overriding persisted deep-plan", () => {
+      // `startDeepPlan` writes `conversationMode: "deep-plan"` to storage. A
+      // reset must not re-derive the mode from that storage, or the user stays
+      // stuck in Deep Plan after cancelling; it must persist `"code"` instead.
       useConversationStore.getState().startDeepPlan();
       mockSetConversationState.mockClear();
       mockGetConversationState.mockReturnValue({
         selectedTab: "files",
         unpinnedTabs: [],
-        conversationMode: "code",
+        conversationMode: "deep-plan",
       });
 
       useConversationStore.getState().resetDeepPlan();
@@ -231,6 +231,7 @@ describe("conversation store", () => {
       expect(useConversationStore.getState().deepPlan.activePhase).toBeNull();
       expect(mockSetConversationState).toHaveBeenCalledWith(CONV_ID, {
         deepPlan: expect.objectContaining({ activePhase: null }),
+        conversationMode: "code",
       });
     });
 

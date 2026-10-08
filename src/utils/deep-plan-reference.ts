@@ -170,7 +170,7 @@ export function validateDocumentChain(
     for (const section of requirementSections) {
       if (!citedByTasks.has(section)) uncovered.push(section);
     }
-    uncovered.sort();
+    uncovered.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   }
 
   return { ok: issues.length === 0, issues, uncovered };

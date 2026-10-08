@@ -187,6 +187,27 @@ describe("validateDocumentChain", () => {
     expect(report.ok).toBe(true);
   });
 
+  it("orders uncovered section numbers numerically, not lexically", () => {
+    // `p10` is covered; `p2` and `p10.1` are not. A lexical sort would list
+    // "10.1" before "2", so this pins the natural-number order.
+    const documents: DeepPlanDocuments = {
+      requirements: [
+        "# Requirements",
+        "",
+        "## 2 Two",
+        "",
+        "## 10.1 Ten one",
+        "",
+        "## 10.2 Ten two",
+      ].join("\n"),
+      tasks: "# Tasks\n\n- [ ] T1 [Req 10.2]",
+    };
+
+    const report = validateDocumentChain(documents);
+
+    expect(report.uncovered).toEqual(["2", "10.1"]);
+  });
+
   it("stays silent about coverage when there is no tasks document yet", () => {
     const documents = validChain();
     delete documents.tasks;
