@@ -1792,15 +1792,19 @@ export function toHooksResponse(
         matchers: hookConfig[eventType].map(({ matcher, hooks }) => ({
           // The SDK's own defaults for fields a hooks.json may omit.
           matcher: matcher ?? "*",
-          hooks: hooks.map((hook) => ({
-            type: hook.type ?? HookType.COMMAND,
-            command: hook.command,
-            prompt: (hook as { prompt?: string | null }).prompt ?? null,
-            system_prompt:
-              (hook as { system_prompt?: string | null }).system_prompt ?? null,
-            timeout: hook.timeout,
-            async: hook.async,
-          })),
+          hooks: hooks.map((hook) => {
+            const prompt = (hook as { prompt?: string | null }).prompt;
+            const systemPrompt = (hook as { system_prompt?: string | null })
+              .system_prompt;
+            return {
+              type: hook.type ?? HookType.COMMAND,
+              command: hook.command,
+              ...(prompt != null ? { prompt } : {}),
+              ...(systemPrompt != null ? { system_prompt: systemPrompt } : {}),
+              timeout: hook.timeout,
+              async: hook.async,
+            };
+          }),
         })),
       })),
   };
