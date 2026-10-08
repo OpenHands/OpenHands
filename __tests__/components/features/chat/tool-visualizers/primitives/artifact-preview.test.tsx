@@ -247,6 +247,28 @@ describe("ArtifactPreview", () => {
     expect(container).toHaveClass("h-[32rem]");
   });
 
+  it("expands from the keyboard", async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      arrayBuffer: () => Promise.resolve(textBytes("<h1>Hello</h1>")),
+    });
+    renderPreview(
+      <ArtifactPreview path="index.html" content="<h1>Hello</h1>" />,
+    );
+    const container = screen.getByTestId("artifact-preview-frame-container");
+    const expand = screen.getByTestId("artifact-preview-expand");
+
+    // Native button: reachable by Tab and activated with Enter, no manual
+    // roving tabindex needed.
+    expect(expand.tagName).toBe("BUTTON");
+    expect(expand).not.toHaveAttribute("tabindex", "-1");
+    expand.focus();
+    expect(expand).toHaveFocus();
+    await userEvent.keyboard("{Enter}");
+    expect(container).toHaveClass("h-[32rem]");
+  });
+
   it("hides the View affordance when no handler is provided", () => {
     fetchMock.mockResolvedValue({
       ok: true,
