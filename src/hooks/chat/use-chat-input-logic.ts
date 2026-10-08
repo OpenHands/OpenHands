@@ -48,15 +48,25 @@ export const useChatInputLogic = () => {
       ? rawMessageToSend
       : null;
 
-  // Restore a cancelled pending send back into the input only when empty.
+  // Restore a cancelled pending send (or, on the home page, a prompt whose
+  // launch failed) back into the input only when empty.
   useEffect(() => {
-    if (!conversationId || !messageRestoreIfEmpty) {
+    if (!messageRestoreIfEmpty) {
       return;
     }
 
-    const currentText = getTextContent(chatInputRef.current).trim();
+    const element = chatInputRef.current;
+    const currentText = getTextContent(element).trim();
     if (currentText.length === 0) {
-      setMessageToSend(messageRestoreIfEmpty.text);
+      if (conversationId) {
+        setMessageToSend(messageRestoreIfEmpty.text);
+      } else if (element) {
+        // Write the text directly rather than queueing it as messageToSend:
+        // the input event runs the same path as typing (resize, draft save
+        // and submit-button state).
+        element.textContent = messageRestoreIfEmpty.text;
+        element.dispatchEvent(new InputEvent("input", { bubbles: true }));
+      }
     }
     clearMessageRestoreIfEmpty();
   }, [

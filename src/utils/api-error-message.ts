@@ -59,11 +59,11 @@ const AGENT_SERVER_GENERIC_DETAIL = "Internal Server Error";
 /**
  * Extract a human-readable message from a failed API call. Prefers the
  * server-provided `message`/`detail`/`exception`/`error` fields (including a
- * FastAPI validation `detail` array), then the `Error` message, then
- * `fallback`. `exception` is used only when `detail` is missing, empty or the
- * Agent Server's generic "Internal Server Error", so a specific `detail`
- * always wins over the technical `exception` text. The shared client's
- * `HttpError` message is the raw transport text
+ * FastAPI validation `detail` array and a structured `detail.message`), then
+ * the `Error` message, then `fallback`. `exception` is used only when `detail`
+ * is missing, empty or the Agent Server's generic "Internal Server Error", so
+ * a specific `detail` always wins over the technical `exception` text. The
+ * shared client's `HttpError` message is the raw transport text
  * (`HTTP request failed (status): {json}`), so it is never shown: an
  * `HttpError` without a usable body yields `fallback`.
  */
@@ -83,10 +83,19 @@ export function getApiErrorMessage(error: unknown, fallback: string): string {
       error?: unknown;
     };
     if (typeof message === "string" && message) return message;
+    const validationMessage = getValidationDetailMessage(detail);
+    const structuredDetailMessage =
+      detail && typeof detail === "object" && !Array.isArray(detail)
+        ? (detail as { message?: unknown }).message
+        : undefined;
     const detailMessage =
       typeof detail === "string" && detail
         ? detail
-        : getValidationDetailMessage(detail);
+        : validationMessage ||
+          (typeof structuredDetailMessage === "string" &&
+          structuredDetailMessage
+            ? structuredDetailMessage
+            : undefined);
     if (
       typeof exception === "string" &&
       exception &&

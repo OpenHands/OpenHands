@@ -664,3 +664,8 @@ button.extension-module-card-interactive {
     0px 4px 6px -4px rgba(0, 0, 0, 0.1),
     0px 10px 15px -3px rgba(0, 0, 0, 0.1);
 }
+
+/* Window drag handle for the macOS desktop app's hidden title bar. */
+@utility app-region-drag {
+  -webkit-app-region: drag;
+}

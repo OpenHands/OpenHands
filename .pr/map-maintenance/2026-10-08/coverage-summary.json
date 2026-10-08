@@ -1,0 +1,16 @@
+{
+  "reviewed_at": "2026-10-08T07:04:32.322254+00:00",
+  "families": 27,
+  "mapped_behaviors": 736,
+  "counts": {
+    "pass": 0,
+    "fail": 0,
+    "blocked": 736,
+    "not-run": 0
+  },
+  "live_entrypoints_exercised": 0,
+  "live_viewports_exercised": 0,
+  "launched_runs": 0,
+  "model_spend_usd": 0,
+  "limitation": "Behavior inventory with literal family prerequisites and entry points, not an executed entry-point/viewport ledger. No launched run exists, so CLI evidence add/report has no valid run to attach to."
+}
