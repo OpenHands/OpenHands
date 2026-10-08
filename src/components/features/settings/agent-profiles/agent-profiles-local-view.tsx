@@ -282,7 +282,7 @@ export function AgentProfilesLocalView() {
   const editorDescription =
     viewMode === "edit" && editingProfile
       ? t(I18nKey.SETTINGS$PROFILE_LOADED, { name: editingProfile.name })
-      : t(I18nKey.SETTINGS$PROFILE_SAVE_HINT);
+      : t(I18nKey.SETTINGS$AGENT_PROFILE_SAVE_HINT);
   const isOpenHands = saveControl?.agentType !== "acp";
   const nameDirty = viewMode === "edit" && profileName !== editingProfile?.name;
   const loadedLlmRef =

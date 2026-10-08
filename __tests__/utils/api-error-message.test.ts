@@ -23,6 +23,65 @@ describe("getApiErrorMessage", () => {
     );
   });
 
+  it("returns the reason from an Agent Server unhandled-error body, not its generic `detail`", () => {
+    // Arrange — the Agent Server answers unhandled errors with a fixed
+    // `detail` and the actual reason under `exception`.
+    const error = new HttpError(500, "Internal Server Error", {
+      detail: "Internal Server Error",
+      exception: "Local extension path does not exist: /plugins/magic-test",
+      error_id: "0dd795f8",
+    });
+
+    // Act + Assert
+    expect(getApiErrorMessage(error, "fallback")).toBe(
+      "Local extension path does not exist: /plugins/magic-test",
+    );
+  });
+
+  it("prefers a specific `detail` over a technical `exception`", () => {
+    // Arrange — a friendly `detail` is the server's wording for users.
+    const error = new HttpError(500, "Internal Server Error", {
+      detail: "Plugin source could not be reached. Check the URL.",
+      exception: "ConnectError: [Errno 111] Connection refused",
+    });
+
+    // Act + Assert
+    expect(getApiErrorMessage(error, "fallback")).toBe(
+      "Plugin source could not be reached. Check the URL.",
+    );
+  });
+
+  it("prefers a validation `detail` array over `exception`", () => {
+    const error = new HttpError(422, "Unprocessable Entity", {
+      detail: [{ loc: ["body", "source"], msg: "Field required" }],
+      exception: "RequestValidationError",
+    });
+
+    expect(getApiErrorMessage(error, "fallback")).toBe("Field required");
+  });
+
+  it.each([
+    { state: "missing", body: {} },
+    { state: "empty", body: { detail: "" } },
+  ])("returns `exception` when `detail` is $state", ({ body }) => {
+    const error = new HttpError(500, "Internal Server Error", {
+      ...body,
+      exception: "Local extension path does not exist: /plugins/magic-test",
+    });
+
+    expect(getApiErrorMessage(error, "fallback")).toBe(
+      "Local extension path does not exist: /plugins/magic-test",
+    );
+  });
+
+  it("returns the generic `detail` when there is no `exception`", () => {
+    const error = new HttpError(500, "Internal Server Error", {
+      detail: "Internal Server Error",
+    });
+
+    expect(getApiErrorMessage(error, "fallback")).toBe("Internal Server Error");
+  });
+
   it("returns the `msg` of a single-entry FastAPI validation `detail` array", () => {
     // Arrange — a provider connection name over 128 characters (#17937).
     const error = new HttpError(422, "Unprocessable Entity", {

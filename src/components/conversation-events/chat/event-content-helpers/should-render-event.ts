@@ -42,6 +42,14 @@ const isGoalLoopReprompt = (event: MessageEvent): boolean => {
   return GOAL_REPROMPT_PREFIXES.some((prefix) => text.startsWith(prefix));
 };
 
+// SDK empty-response nudge (`_send_corrective_nudge`); keep in sync with the SDK.
+const CORRECTIVE_NUDGE_PREFIX =
+  "Your last response did not include a function call or a message.";
+
+export const isCorrectiveNudge = (event: MessageEvent): boolean =>
+  event.source === "environment" &&
+  (userMessageText(event)?.startsWith(CORRECTIVE_NUDGE_PREFIX) ?? false);
+
 // The frontend posts the outcome of a `launch_child_conversation` call back as
 // a `user` message because client tools have no result channel (see
 // `services/child-conversation-launch.ts`). It is a JSON payload addressed to
