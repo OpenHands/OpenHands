@@ -427,9 +427,56 @@ describe("ArtifactPreview", () => {
 
       await userEvent.click(downloadButton);
 
-      // Download requests the bytes on demand — same read, no Expand needed.
+      // Download reads the bytes on demand — same read, no Expand needed.
       await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(1));
       expect(fetchMock).toHaveBeenCalled();
+      expect(revokeObjectURL).toHaveBeenCalledWith("blob:mock");
+      expect(click).toHaveBeenCalled();
+    } finally {
+      click.mockRestore();
+      vi.unstubAllGlobals();
+      vi.stubGlobal("fetch", fetchMock);
+    }
+  });
+
+  it("retries a failed download read on the next click", async () => {
+    // First workspace GET fails (e.g. 503); the query sets `retry: false`, so
+    // without an explicit retry the card could never save the file.
+    fetchMock
+      .mockResolvedValueOnce({ ok: false, status: 503 })
+      .mockResolvedValue({
+        ok: true,
+        status: 200,
+        arrayBuffer: () => Promise.resolve(textBytes("<h1>hi</h1>")),
+        blob: () => Promise.resolve(new Blob(["<h1>hi</h1>"])),
+      });
+    const createObjectURL = vi.fn().mockReturnValue("blob:mock");
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal("URL", {
+      ...URL,
+      createObjectURL,
+      revokeObjectURL,
+    });
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => {});
+    const huge = `<h1>${"x".repeat(600_000)}</h1>`;
+
+    try {
+      renderPreview(<ArtifactPreview path="big.html" content={huge} />);
+      const downloadButton = screen.getByTestId("artifact-preview-download");
+
+      // First click: the read runs and rejects. No file saves.
+      await userEvent.click(downloadButton);
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+      expect(createObjectURL).not.toHaveBeenCalled();
+      // The read failed but the button must remain usable.
+      expect(downloadButton).toBeEnabled();
+
+      // Service recovered: the next click starts a fresh read and saves.
+      await userEvent.click(downloadButton);
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3)); // GET + GET + blob
+      await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(1));
       expect(revokeObjectURL).toHaveBeenCalledWith("blob:mock");
       expect(click).toHaveBeenCalled();
     } finally {

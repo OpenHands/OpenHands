@@ -72,20 +72,17 @@ export function ArtifactPreview({
   const [expanded, setExpanded] = React.useState(false);
   const [inView, setInView] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
-  const [downloadRequested, setDownloadRequested] = React.useState(false);
   const placeholderRef = React.useRef<HTMLDivElement>(null);
 
   // An artifact above the threshold defers its workspace read (and therefore
   // its frame) until Expand; nothing else reads until it is near the viewport.
   // Gating `enabled` here — not just the frame mount — is what stops ten 4 MiB
   // cards from downloading all ten files before any is expanded. Download is
-  // kept independent: `force` starts the same read on demand, so an oversized
-  // collapsed card can still be saved without expanding it first.
+  // kept independent: it calls `refetch()` directly to read the bytes on
+  // demand, so an oversized collapsed card can still be saved without
+  // expanding it first.
   const shouldLoad = inView && (!exceedsInlineLimit || expanded);
-  const query = useWorkspaceFileContent(fetchPath, {
-    enabled: shouldLoad,
-    force: downloadRequested,
-  });
+  const query = useWorkspaceFileContent(fetchPath, { enabled: shouldLoad });
   // Refetch the frame after every agent-side edit so a rewrite of this file
   // (or a sibling asset it references) is reflected without a manual reload.
   const mutationCounter = useWorkspaceMutationCounter((state) => state.count);
@@ -165,22 +162,20 @@ export function ArtifactPreview({
     [fileName],
   );
 
-  const download = React.useCallback(() => {
-    // Download is available the moment the card renders, even while the read is
-    // still deferred: request the bytes on demand instead of requiring an
-    // Expand first. The effect below fires once the read resolves.
-    if (staticUrl) {
-      void runDownload(staticUrl);
-      return;
+  const download = React.useCallback(async () => {
+    // Download works the moment the card renders, even while the read is still
+    // deferred behind the size/visibility gate: read the bytes on demand rather
+    // than requiring an Expand first. `refetch()` resolves with the fresh
+    // result, so this also serves as the retry path after a failed read — the
+    // query sets `retry: false`, so a transient failure would otherwise never
+    // be re-attempted and the button would stay dead for the life of the card.
+    let url = staticUrl;
+    if (!url) {
+      const result = await query.refetch();
+      url = result.data?.staticUrl ?? null;
     }
-    setDownloadRequested(true);
-  }, [staticUrl, runDownload]);
-
-  React.useEffect(() => {
-    if (!downloadRequested || !staticUrl) return;
-    setDownloadRequested(false);
-    void runDownload(staticUrl);
-  }, [downloadRequested, staticUrl, runDownload]);
+    if (url) void runDownload(url);
+  }, [staticUrl, query.refetch, runDownload]);
 
   return (
     <div
