@@ -13,7 +13,10 @@ import {
 import type { Backend } from "#/api/backend-registry/types";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { AUTOMATIONS_QUERY_KEY } from "#/hooks/query/use-automations";
-import { AUTOMATION_DETAIL_QUERY_KEY } from "#/hooks/query/use-automation-detail";
+import {
+  AUTOMATION_DETAIL_QUERY_KEY,
+  useAutomationDetail,
+} from "#/hooks/query/use-automation-detail";
 import { useHomeAutomationActions } from "#/hooks/use-home-automation-actions";
 import { createAgentServerQueryClient } from "#/query-client-config";
 import * as telemetry from "#/services/telemetry";
@@ -27,6 +30,7 @@ import * as ToastHandlers from "#/utils/custom-toast-handlers";
 vi.mock("#/api/automation-service/automation-service.api", () => ({
   default: {
     dispatchAutomation: vi.fn(),
+    getAutomation: vi.fn(),
     cancelAutomationRun: vi.fn(),
     toggleAutomation: vi.fn(),
   },
@@ -41,7 +45,8 @@ vi.mock("#/hooks/use-automation-permissions", () => ({
   useIsAutomationOwner: () => true,
 }));
 
-vi.mock("#/hooks/query/use-settings", () => ({
+vi.mock("#/hooks/query/use-settings", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#/hooks/query/use-settings")>()),
   useSettings: () => ({ data: { user_consents_to_analytics: false } }),
 }));
 
@@ -217,6 +222,32 @@ describe("useHomeAutomationActions — failed Run now", () => {
       expect(queryClient.getQueryState(detailKey)?.isInvalidated).toBe(true);
     },
   );
+
+  it("a 404 refetches the mounted detail query without a second toast", async () => {
+    // Arrange
+    vi.mocked(AutomationService.getAutomation)
+      .mockResolvedValueOnce(automation)
+      .mockRejectedValue(notFound);
+    const queryClient = createAgentServerQueryClient();
+    // Fail the refetch at once instead of after the default retries.
+    queryClient.setQueryDefaults(AUTOMATION_DETAIL_QUERY_KEY, { retry: false });
+    const { result } = renderHook(
+      () => ({
+        actions: useHomeAutomationActions(automation, runningRun),
+        detail: useAutomationDetail({ id: automation.id }),
+      }),
+      { wrapper: makeAppClientWrapper(queryClient) },
+    );
+    await waitFor(() => expect(result.current.detail.data).toEqual(automation));
+
+    // Act
+    act(() => result.current.actions.runNow());
+
+    // Assert
+    await waitFor(() => expect(result.current.detail.isError).toBe(true));
+    expect(errorToast).toHaveBeenCalledTimes(1);
+    expect(errorToast).toHaveBeenCalledWith("Automation not found");
+  });
 
   it("a non-404 failure leaves the loaded automation in place", async () => {
     // Arrange
