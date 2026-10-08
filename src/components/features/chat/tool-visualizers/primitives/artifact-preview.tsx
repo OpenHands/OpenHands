@@ -72,14 +72,20 @@ export function ArtifactPreview({
   const [expanded, setExpanded] = React.useState(false);
   const [inView, setInView] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
+  const [downloadRequested, setDownloadRequested] = React.useState(false);
   const placeholderRef = React.useRef<HTMLDivElement>(null);
 
   // An artifact above the threshold defers its workspace read (and therefore
-  // its frame) until Expand; everything else reads as soon as it is near the
-  // viewport. Gating `enabled` here — not just the frame mount — is what stops
-  // ten 4 MiB cards from downloading all ten files before any is expanded.
+  // its frame) until Expand; nothing else reads until it is near the viewport.
+  // Gating `enabled` here — not just the frame mount — is what stops ten 4 MiB
+  // cards from downloading all ten files before any is expanded. Download is
+  // kept independent: `force` starts the same read on demand, so an oversized
+  // collapsed card can still be saved without expanding it first.
   const shouldLoad = inView && (!exceedsInlineLimit || expanded);
-  const query = useWorkspaceFileContent(fetchPath, { enabled: shouldLoad });
+  const query = useWorkspaceFileContent(fetchPath, {
+    enabled: shouldLoad,
+    force: downloadRequested,
+  });
   // Refetch the frame after every agent-side edit so a rewrite of this file
   // (or a sibling asset it references) is reflected without a manual reload.
   const mutationCounter = useWorkspaceMutationCounter((state) => state.count);
@@ -126,36 +132,55 @@ export function ArtifactPreview({
     }
   }, [content]);
 
-  const download = React.useCallback(async () => {
-    if (!staticUrl) return;
-    // An anchor's `download` attribute is ignored for cross-origin HTTP URLs
-    // (Canvas and the workspace fileserver can be different origins), which
-    // would navigate to the artifact instead of saving it. Fetch the bytes and
-    // hand the browser a same-origin blob URL instead.
-    if (!staticUrl.startsWith("data:")) {
-      try {
-        const response = await fetch(staticUrl, { credentials: "include" });
-        if (response.ok) {
-          const blob = await response.blob();
-          const objectUrl = URL.createObjectURL(blob);
-          const anchor = document.createElement("a");
-          anchor.href = objectUrl;
-          anchor.download = fileName;
-          anchor.rel = "noopener";
-          anchor.click();
-          URL.revokeObjectURL(objectUrl);
-          return;
+  const runDownload = React.useCallback(
+    async (url: string) => {
+      // An anchor's `download` attribute is ignored for cross-origin HTTP URLs
+      // (Canvas and the workspace fileserver can be different origins), which
+      // would navigate to the artifact instead of saving it. Fetch the bytes and
+      // hand the browser a same-origin blob URL instead.
+      if (!url.startsWith("data:")) {
+        try {
+          const response = await fetch(url, { credentials: "include" });
+          if (response.ok) {
+            const blob = await response.blob();
+            const objectUrl = URL.createObjectURL(blob);
+            const anchor = document.createElement("a");
+            anchor.href = objectUrl;
+            anchor.download = fileName;
+            anchor.rel = "noopener";
+            anchor.click();
+            URL.revokeObjectURL(objectUrl);
+            return;
+          }
+        } catch {
+          // Network/CORS failure: fall back to the plain anchor below.
         }
-      } catch {
-        // Network/CORS failure: fall back to the plain anchor below.
       }
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = fileName;
+      anchor.rel = "noopener";
+      anchor.click();
+    },
+    [fileName],
+  );
+
+  const download = React.useCallback(() => {
+    // Download is available the moment the card renders, even while the read is
+    // still deferred: request the bytes on demand instead of requiring an
+    // Expand first. The effect below fires once the read resolves.
+    if (staticUrl) {
+      void runDownload(staticUrl);
+      return;
     }
-    const anchor = document.createElement("a");
-    anchor.href = staticUrl;
-    anchor.download = fileName;
-    anchor.rel = "noopener";
-    anchor.click();
-  }, [staticUrl, fileName]);
+    setDownloadRequested(true);
+  }, [staticUrl, runDownload]);
+
+  React.useEffect(() => {
+    if (!downloadRequested || !staticUrl) return;
+    setDownloadRequested(false);
+    void runDownload(staticUrl);
+  }, [downloadRequested, staticUrl, runDownload]);
 
   return (
     <div
@@ -229,7 +254,6 @@ export function ArtifactPreview({
           <button
             type="button"
             onClick={download}
-            disabled={!staticUrl}
             aria-label={t(I18nKey.BUTTON$DOWNLOAD)}
             title={t(I18nKey.BUTTON$DOWNLOAD)}
             className="flex cursor-pointer items-center gap-1 text-contrast transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"

@@ -397,6 +397,48 @@ describe("ArtifactPreview", () => {
     }
   });
 
+  it("downloads a collapsed oversized artifact without expanding it", async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      arrayBuffer: () => Promise.resolve(textBytes("<h1>hi</h1>")),
+      blob: () => Promise.resolve(new Blob(["<h1>hi</h1>"])),
+    });
+    const createObjectURL = vi.fn().mockReturnValue("blob:mock");
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal("URL", {
+      ...URL,
+      createObjectURL,
+      revokeObjectURL,
+    });
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => {});
+    const huge = `<h1>${"x".repeat(600_000)}</h1>`;
+
+    try {
+      renderPreview(<ArtifactPreview path="big.html" content={huge} />);
+
+      // Oversized and collapsed: the read is held, yet Download stays enabled
+      // so the user can save the file without opening a preview first.
+      expect(fetchMock).not.toHaveBeenCalled();
+      const downloadButton = screen.getByTestId("artifact-preview-download");
+      expect(downloadButton).toBeEnabled();
+
+      await userEvent.click(downloadButton);
+
+      // Download requests the bytes on demand — same read, no Expand needed.
+      await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(1));
+      expect(fetchMock).toHaveBeenCalled();
+      expect(revokeObjectURL).toHaveBeenCalledWith("blob:mock");
+      expect(click).toHaveBeenCalled();
+    } finally {
+      click.mockRestore();
+      vi.unstubAllGlobals();
+      vi.stubGlobal("fetch", fetchMock);
+    }
+  });
+
   it("calls onView when provided", async () => {
     fetchMock.mockResolvedValue({
       ok: true,

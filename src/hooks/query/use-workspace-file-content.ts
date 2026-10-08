@@ -141,12 +141,19 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
  * inline preview defers the load of a large artifact until the user expands it,
  * so scrolling past the card does not download the whole file. The additional
  * runtime/session guards below still apply when enabled.
+ *
+ * `{ force: true }` (used by the preview's Download action) overrides the size
+ * gate without disturbing it: react-query keys the `enabled` result, so
+ * flipping `force` on is enough to start the read when the user actually asks
+ * for the bytes. This keeps an oversized card from downloading its whole body
+ * on scroll while still letting the user save it with one click.
  */
 export function useWorkspaceFileContent(
   relativePath: string | null,
-  options?: { enabled?: boolean },
+  options?: { enabled?: boolean; force?: boolean },
 ) {
   const enabledOption = options?.enabled ?? true;
+  const force = options?.force ?? false;
   const { data: conversation } = useActiveConversation();
   const runtimeIsReady = useRuntimeIsReady({ allowAgentError: true });
   const { data: workspaceSession } = useWorkspaceSession();
@@ -307,7 +314,7 @@ export function useWorkspaceFileContent(
       };
     },
     enabled:
-      enabledOption &&
+      (enabledOption || force) &&
       runtimeIsReady &&
       !!conversationId &&
       !!relativePath &&
