@@ -1,0 +1,51 @@
+{
+  "variant": "positive-control",
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "route": "http://127.0.0.1:19440/conversations/11111111111111111111111111111111",
+  "vscodeControlCount": 1,
+  "sandbox": {
+    "id": "synthetic-sandbox",
+    "created_by_user_id": null,
+    "sandbox_spec_id": "synthetic",
+    "status": "RUNNING",
+    "session_api_key": null,
+    "created_at": "2026-10-08T12:00:00Z",
+    "exposed_urls": [
+      {
+        "name": "APP",
+        "url": "http://127.0.0.1:19440/synthetic-app"
+      },
+      {
+        "name": "VSCODE",
+        "url": "http://127.0.0.1:19440/synthetic-editor"
+      }
+    ]
+  },
+  "requests": [
+    "/api/v1/config/models/search?limit=100&provider__eq=openhands",
+    "/api/keys/current",
+    "/api/organizations",
+    "/api/keys/current",
+    "/api/v1/settings",
+    "/api/organizations/synthetic-org/profiles",
+    "/api/agent-profiles",
+    "/api/organizations/synthetic-org/meta-profiles",
+    "/api/organizations/synthetic-org/me",
+    "/api/v1/app-conversations?ids=11111111111111111111111111111111",
+    "/api/v1/config/models/search?limit=100&provider__eq=openhands",
+    "/api/automation/health",
+    "/api/automation/sdk-version",
+    "/api/conversations/11111111111111111111111111111111",
+    "/api/v1/app-conversations/11111111111111111111111111111111/skills",
+    "/api/v1/app-conversations/11111111111111111111111111111111/files?path=%2Fworkspace%2Fproject",
+    "/api/conversations/11111111111111111111111111111111/events/count",
+    "/api/v1/sandboxes?id=synthetic-sandbox",
+    "/api/v1/app-conversations/search?limit=20&sort_order=UPDATED_AT_DESC",
+    "/api/v1/app-conversations/search?limit=1&sort_order=UPDATED_AT_DESC",
+    "/api/v1/conversation/11111111111111111111111111111111/events/search?limit=50&sort_order=TIMESTAMP_DESC"
+  ],
+  "errors": []
+}
