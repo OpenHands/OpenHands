@@ -24,7 +24,7 @@ import {
 import { getInvokeSkillItems } from "../event-content-helpers/get-invoke-skill-items";
 import { SkillReadyContentList } from "./skill-ready-content-list";
 import SkillsIcon from "#/icons/skills.svg?react";
-import { isMarkdownFileEditorEvent } from "#/components/features/chat/tool-visualizers/primitives/markdown-file-preview";
+import { isInlinePreviewFileEditorEvent } from "#/components/features/chat/tool-visualizers/primitives/markdown-file-preview";
 
 interface GenericEventMessageWrapperProps {
   event: OpenHandsEvent | SkillReadyEvent;
@@ -106,7 +106,7 @@ export function GenericEventMessageWrapper({
   // default so the artifact is visible without an extra chevron click.
   const initiallyExpanded =
     !isSkillReadyEvent(event) &&
-    isMarkdownFileEditorEvent(event, correspondingAction);
+    isInlinePreviewFileEditorEvent(event, correspondingAction);
 
   return (
     <div>

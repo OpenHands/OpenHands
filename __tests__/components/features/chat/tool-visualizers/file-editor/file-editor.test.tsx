@@ -1,6 +1,15 @@
-import { beforeEach, describe, it, expect } from "vitest";
-import { screen } from "@testing-library/react";
+import { beforeEach, describe, it, expect, vi } from "vitest";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+
+vi.mock("mermaid", () => ({
+  default: {
+    initialize: vi.fn(),
+    parse: vi.fn(async () => ({})),
+    render: vi.fn(async () => ({ svg: "<svg><text>diagram</text></svg>" })),
+  },
+}));
+
 import ConversationService from "#/api/conversation-service/conversation-service.api";
 import { fileEditorVisualizer } from "#/components/features/chat/tool-visualizers/file-editor/file-editor";
 import { useConversationStore } from "#/stores/conversation-store";
@@ -305,5 +314,62 @@ describe("fileEditorVisualizer", () => {
       selectedPath: "docs/report.md",
       selectedConversationId: "test-conversation-id",
     });
+  });
+
+  it("renders a .mmd create as an inline Mermaid diagram", async () => {
+    renderVisualizer(
+      <Body
+        observation={fileEditorObservation({
+          command: "create",
+          path: "flow.mmd",
+          new_content: "graph TD;\n  A-->B;",
+        })}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("mermaid-file-preview")).toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByTestId("markdown-file-preview"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders a .mermaid create as an inline Mermaid diagram", async () => {
+    renderVisualizer(
+      <Body
+        observation={fileEditorObservation({
+          command: "create",
+          path: "architecture.mermaid",
+          new_content: "graph TD; A-->B;",
+        })}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("mermaid-file-preview")).toBeInTheDocument(),
+    );
+  });
+
+  it("keeps a .mmd view observation as a CodeBlock, not a diagram", () => {
+    const { container } = renderVisualizer(
+      <Body
+        observation={fileEditorObservation({
+          command: "view",
+          path: "/workspace/flow.mmd",
+          content: [
+            {
+              type: "text",
+              text: "Here's the result of running `cat -n`:\n     1\tgraph TD;",
+            },
+          ],
+        })}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("mermaid-file-preview"),
+    ).not.toBeInTheDocument();
+    expect(container).toHaveTextContent("graph TD;");
   });
 });

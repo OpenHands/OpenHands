@@ -1,10 +1,15 @@
 /**
- * Inline markdown artifact preview for chat tool cards.
+ * Inline artifact previews for chat tool cards.
  *
- * Shows a height-limited scrollable rich preview so long reports stay compact
- * in the stream; the footer View action deep-links into the Files drawer for
- * the full document. Markdown *create* file-editor events stay expanded and
- * ungrouped so the preview is visible without an extra click.
+ * Markdown: a height-limited scrollable rich preview so long reports stay
+ * compact in the stream; the footer View action deep-links into the Files
+ * drawer for the full document.
+ *
+ * Mermaid (`.mmd` / `.mermaid`): renders the file contents as an inline
+ * diagram via {@link MermaidDiagram}, with the same View affordance.
+ *
+ * Created artifact file-editor events stay expanded and ungrouped so the
+ * preview is visible without an extra click.
  */
 import { useTranslation } from "react-i18next";
 import { ArrowUpRight } from "lucide-react";
@@ -12,36 +17,15 @@ import FileIcon from "#/icons/file.svg?react";
 import { I18nKey } from "#/i18n/declaration";
 import { MarkdownRenderer } from "#/components/features/markdown/markdown-renderer";
 import { planComponents } from "#/components/features/markdown/plan-components";
+import { MermaidDiagram } from "#/components/features/markdown/mermaid-diagram";
 import { Typography } from "#/ui/typography";
 import { isMarkdownFilePath } from "#/utils/is-markdown-file-path";
-import type {
-  ActionEvent,
-  ObservationEvent,
-  OpenHandsEvent,
-} from "#/types/agent-server/core";
-import {
-  isActionEvent,
-  isObservationEvent,
-} from "#/types/agent-server/type-guards";
-import type {
-  FileEditorAction,
-  StrReplaceEditorAction,
-} from "#/types/agent-server/core/base/action";
-import type {
-  FileEditorObservation,
-  StrReplaceEditorObservation,
-} from "#/types/agent-server/core/base/observation";
+import { isMermaidFilePath } from "#/utils/is-mermaid-file-path";
+import type { ActionEvent, OpenHandsEvent } from "#/types/agent-server/core";
+import { isFileEditorCreateFor } from "./file-editor-event";
 
 export { isMarkdownFilePath } from "#/utils/is-markdown-file-path";
-
-const FILE_EDITOR_ACTION_KINDS = new Set([
-  "FileEditorAction",
-  "StrReplaceEditorAction",
-]);
-const FILE_EDITOR_OBSERVATION_KINDS = new Set([
-  "FileEditorObservation",
-  "StrReplaceEditorObservation",
-]);
+export { isMermaidFilePath } from "#/utils/is-mermaid-file-path";
 
 interface MarkdownFilePreviewProps {
   content: string;
@@ -51,103 +35,34 @@ interface MarkdownFilePreviewProps {
 }
 
 /**
- * Resolves the file path for a file-editor action/observation, including the
- * observation's originating action when the observation omits `path`.
- */
-function getFileEditorEventPath(
-  event: OpenHandsEvent,
-  correspondingAction?: ActionEvent,
-): string | null {
-  if (isActionEvent(event) && FILE_EDITOR_ACTION_KINDS.has(event.action.kind)) {
-    return (
-      (event as ActionEvent<FileEditorAction | StrReplaceEditorAction>).action
-        .path || null
-    );
-  }
-
-  if (
-    isObservationEvent(event) &&
-    FILE_EDITOR_OBSERVATION_KINDS.has(event.observation.kind)
-  ) {
-    const path = (
-      event as ObservationEvent<
-        FileEditorObservation | StrReplaceEditorObservation
-      >
-    ).observation.path;
-    if (path) return path;
-    if (
-      correspondingAction &&
-      FILE_EDITOR_ACTION_KINDS.has(correspondingAction.action.kind)
-    ) {
-      return (
-        (
-          correspondingAction as ActionEvent<
-            FileEditorAction | StrReplaceEditorAction
-          >
-        ).action.path || null
-      );
-    }
-  }
-
-  return null;
-}
-
-/**
- * Resolves the file-editor command (`create` / `view` / …), including the
- * observation's originating action when the observation omits `command`.
- */
-function getFileEditorEventCommand(
-  event: OpenHandsEvent,
-  correspondingAction?: ActionEvent,
-): string | null {
-  if (isActionEvent(event) && FILE_EDITOR_ACTION_KINDS.has(event.action.kind)) {
-    return (
-      (event as ActionEvent<FileEditorAction | StrReplaceEditorAction>).action
-        .command || null
-    );
-  }
-
-  if (
-    isObservationEvent(event) &&
-    FILE_EDITOR_OBSERVATION_KINDS.has(event.observation.kind)
-  ) {
-    const command = (
-      event as ObservationEvent<
-        FileEditorObservation | StrReplaceEditorObservation
-      >
-    ).observation.command;
-    if (command) return command;
-    if (
-      correspondingAction &&
-      FILE_EDITOR_ACTION_KINDS.has(correspondingAction.action.kind)
-    ) {
-      return (
-        (
-          correspondingAction as ActionEvent<
-            FileEditorAction | StrReplaceEditorAction
-          >
-        ).action.command || null
-      );
-    }
-  }
-
-  return null;
-}
-
-/**
  * True for file-editor *create* events whose path is a markdown artifact.
  *
  * Used to keep those cards expanded and outside collapsed action groups so
  * the clipped preview is visible by default. Reads/edits of `.md` files stay
  * on the normal groupable path.
  */
-export function isMarkdownFileEditorEvent(
+export const isMarkdownFileEditorEvent =
+  isFileEditorCreateFor(isMarkdownFilePath);
+
+/**
+ * True for file-editor *create* events whose path is a Mermaid artifact.
+ * Same grouping/expansion intent as {@link isMarkdownFileEditorEvent}.
+ */
+export const isMermaidFileEditorEvent =
+  isFileEditorCreateFor(isMermaidFilePath);
+
+/**
+ * True for a created markdown *or* Mermaid artifact. Both render an inline
+ * preview card and are kept expanded/ungrouped.
+ */
+export function isInlinePreviewFileEditorEvent(
   event: OpenHandsEvent,
   correspondingAction?: ActionEvent,
 ): boolean {
-  const path = getFileEditorEventPath(event, correspondingAction);
-  const command = getFileEditorEventCommand(event, correspondingAction);
-  return Boolean(path && command === "create" && isMarkdownFilePath(path));
+  return (
+    isMarkdownFileEditorEvent(event, correspondingAction) ||
+    isMermaidFileEditorEvent(event, correspondingAction)
+  );
 }
 
 /**
@@ -202,5 +117,26 @@ export function MarkdownFilePreview({
         ) : null}
       </div>
     </div>
+  );
+}
+
+/**
+ * Inline Mermaid file preview. The filename comes from the workspace path so
+ * the downloaded SVG is named after the artifact.
+ */
+export function MermaidFilePreview({
+  content,
+  path,
+}: {
+  content: string;
+  path: string;
+}) {
+  const fileName = path.split("/").pop() || path;
+  return (
+    <MermaidDiagram
+      source={content}
+      fileName={fileName}
+      testId="mermaid-file-preview"
+    />
   );
 }

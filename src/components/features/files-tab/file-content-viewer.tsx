@@ -8,7 +8,9 @@ import {
   withWorkspaceCacheBuster,
 } from "#/stores/use-workspace-mutation-counter";
 import { MarkdownRenderer } from "#/components/features/markdown/markdown-renderer";
+import { MermaidDiagram } from "#/components/features/markdown/mermaid-diagram";
 import { isMarkdownFilePath } from "#/utils/is-markdown-file-path";
+import { isMermaidFilePath } from "#/utils/is-mermaid-file-path";
 import { COLOR_THEMES } from "#/themes/color-themes";
 import { cn } from "#/utils/utils";
 import { HighlightedSourceView } from "./highlighted-source-view";
@@ -184,6 +186,24 @@ export function FileContentViewer({ path, viewMode }: FileContentViewerProps) {
         data-testid="file-content-viewer-iframe"
         className="h-full w-full bg-white"
       />
+    );
+  }
+
+  if (kind === "text" && isMermaidFilePath(path)) {
+    // Render the diagram source as an actual inline diagram, matching the
+    // chat artifact preview. Raw source stays available via `plain` mode.
+    return (
+      <div
+        data-testid="file-content-viewer-mermaid"
+        className="h-full w-full overflow-auto bg-surface text-foreground custom-scrollbar-always [--oh-scroll-fade-from:var(--oh-surface)] p-4"
+      >
+        <MermaidDiagram
+          source={text ?? ""}
+          fileName={path}
+          clipped={false}
+          testId="file-viewer-mermaid"
+        />
+      </div>
     );
   }
 
