@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { createServer } from "node:net";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -83,6 +84,37 @@ describe("signInWithDigitalOcean", () => {
 
     expect(grant.accessToken).toBe("tok-2");
     expect(openExternal).toHaveBeenCalledOnce();
+  });
+
+  it("explains a busy redirect port and leaves no rejection behind", async () => {
+    // Arrange
+    const blocker = createServer();
+    await new Promise<void>((resolve) =>
+      blocker.listen(OAUTH_REDIRECT_PORT, "127.0.0.1", resolve),
+    );
+    const unhandled = vi.fn();
+    process.on("unhandledRejection", unhandled);
+    const openExternal = vi.fn();
+
+    try {
+      // Act
+      const attempt = signInWithDigitalOcean({
+        clientId: "client-1",
+        openExternal,
+        timeoutMs: 20,
+      });
+
+      // Assert
+      await expect(attempt).rejects.toThrow(
+        `Port ${OAUTH_REDIRECT_PORT} is already in use`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      expect(unhandled).not.toHaveBeenCalled();
+      expect(openExternal).not.toHaveBeenCalled();
+    } finally {
+      process.off("unhandledRejection", unhandled);
+      await new Promise((resolve) => blocker.close(resolve));
+    }
   });
 
   it("explains that a token is the way forward when no OAuth client is built in", async () => {

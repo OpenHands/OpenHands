@@ -193,7 +193,11 @@ export async function signInWithDigitalOcean({
 
       res.writeHead(404).end();
     });
+  });
 
+  // One handler for listen and runtime errors; racing it everywhere keeps the
+  // EADDRINUSE explanation from being shadowed by the raw listen error.
+  const failed = new Promise((_, reject) => {
     server.on("error", (error) => {
       reject(
         error.code === "EADDRINUSE"
@@ -205,25 +209,27 @@ export async function signInWithDigitalOcean({
     });
   });
 
+  let timer;
   const timeout = new Promise((_, reject) => {
-    setTimeout(
+    timer = setTimeout(
       () => reject(new Error("Timed out waiting for DigitalOcean sign-in.")),
       timeoutMs,
-    ).unref?.();
+    );
+    timer.unref?.();
   });
 
   try {
-    await new Promise((resolve, reject) => {
-      server.once("error", reject);
-      server.listen(OAUTH_REDIRECT_PORT, "127.0.0.1", () => {
-        server.off("error", reject);
-        resolve();
-      });
-    });
+    await Promise.race([
+      new Promise((resolve) =>
+        server.listen(OAUTH_REDIRECT_PORT, "127.0.0.1", resolve),
+      ),
+      failed,
+    ]);
 
     await openExternal(buildAuthorizeUrl({ clientId, state }));
-    return await Promise.race([grant, timeout]);
+    return await Promise.race([grant, failed, timeout]);
   } finally {
+    clearTimeout(timer);
     server.close();
   }
 }
