@@ -40,20 +40,14 @@ interface MessagesProps {
  * Row count at which the list switches from plain rendering to virtualization.
  * Below this, rendering every row is cheaper than the virtualizer's
  * measurement churn, and short conversations stay byte-identical.
+ *
+ * 150, not the ~50 first sketched in #18102: a rendered row is a *grouped* row,
+ * not one event, so 150 rows is already a multi-hundred-event conversation. At
+ * that size the plain list is still only ~1.6k DOM nodes, so it stays cheap
+ * enough that the virtualizer's measurement churn is not worth paying for
+ * earlier; above it the mounted window is bounded regardless of history.
  */
 const VIRTUALIZATION_THRESHOLD = 150;
-/**
- * Dev-only escape hatch used by the capture harness in `.tmp/`: `?virtualize=0`
- * raises the threshold so the same conversation can be filmed with and without
- * virtualization. Never set in production builds, so behavior is unchanged.
- */
-const virtualizationThreshold = () => {
-  if (!import.meta.env.DEV || typeof window === "undefined") {
-    return VIRTUALIZATION_THRESHOLD;
-  }
-  const flag = new URLSearchParams(window.location.search).get("virtualize");
-  return flag === "0" ? Number.POSITIVE_INFINITY : VIRTUALIZATION_THRESHOLD;
-};
 /** Rows to keep mounted beyond the viewport on each side. */
 const OVERSCAN = 8;
 /** Pre-measurement row height guess, corrected once rows mount. */
@@ -194,7 +188,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     // every row for a frame.
     const shouldVirtualize = Boolean(
       scrollParent !== undefined &&
-      renderedItems.length >= virtualizationThreshold(),
+      renderedItems.length >= VIRTUALIZATION_THRESHOLD,
     );
 
     // A collapsed history (or a switch to another conversation) must not keep
