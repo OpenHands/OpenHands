@@ -3,5 +3,12 @@ import type { SandboxStatus } from "#/api/conversation-service/agent-server-conv
 export function isArchivedSandboxStatus(
   sandboxStatus: SandboxStatus | null | undefined,
 ): boolean {
-  return sandboxStatus === "MISSING" || sandboxStatus === "ERROR";
+  return sandboxStatus === "MISSING";
+}
+
+export function isConversationArchived(
+  sandboxStatus: SandboxStatus | null | undefined,
+  isExplicitlyArchived: boolean,
+): boolean {
+  return isExplicitlyArchived || isArchivedSandboxStatus(sandboxStatus);
 }

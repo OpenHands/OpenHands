@@ -6,6 +6,7 @@ import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { RepositorySelection } from "#/api/open-hands.types";
 import { cn } from "#/utils/utils";
+import { isConversationArchived } from "#/utils/conversation-archive-status";
 import { ConversationStatusDot } from "./conversation-status-dot";
 import { ConversationCardFooter } from "./conversation-card/conversation-card-footer";
 import { I18nKey } from "#/i18n/declaration";
@@ -29,6 +30,7 @@ interface CompactConversationRowProps {
   acpServer?: string | null;
   tags?: Record<string, string> | null;
   showTags?: boolean;
+  isArchived?: boolean;
 }
 
 /**
@@ -54,10 +56,15 @@ export function CompactConversationRow({
   acpServer = null,
   tags = null,
   showTags = false,
+  isArchived = false,
 }: CompactConversationRowProps) {
   const { t } = useTranslation("openhands");
   const backendScopedPath = useBackendScopedPath();
   const disableAnimation = import.meta.env.MODE === "test";
+  const isEffectivelyArchived = isConversationArchived(
+    sandboxStatus,
+    isArchived,
+  );
 
   const preview = (
     <div className="w-65 p-3">
@@ -87,6 +94,7 @@ export function CompactConversationRow({
         acpServer={acpServer}
         tags={tags}
         showTags={showTags}
+        isArchived={isEffectivelyArchived}
       />
     </div>
   );
