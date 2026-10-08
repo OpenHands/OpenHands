@@ -689,9 +689,6 @@ export function ConversationWebSocketProvider({
     if (!conversationUrl || isLoadingHistoryPlanning) return;
     if (conversationMode !== "deep-plan") return;
 
-    const targetIds = subConversationIds ?? [];
-    if (targetIds.length === 0) return;
-
     // A conversation switch swaps the store contents; drop the previous
     // conversation's in-flight tracking so its documents are restored anew.
     if (restoreAttemptedConversationRef.current !== conversationId) {
@@ -702,13 +699,15 @@ export function ConversationWebSocketProvider({
     const { pending } = deepPlanUnavailableDocuments(deepPlan);
     if (pending.length === 0) return;
 
+    const targetIds = subConversationIds ?? [];
+    const latestEvents = latestDeepPlanFileEventsRef.current;
     const toRead = pending.filter(
       (phase) => !restoreAttemptedRef.current.has(phase),
     );
 
     for (const phase of toRead) {
       const path =
-        latestDeepPlanFileEventsRef.current.get(phase)?.path ??
+        latestEvents.get(phase)?.path ??
         (deepPlanWorkingDir
           ? buildPhasePlanPath(deepPlanWorkingDir, phase)
           : null);
@@ -716,8 +715,15 @@ export function ConversationWebSocketProvider({
       // in yet, leave the phase unattempted so the effect retries on the render
       // that carries it — a premature fail would strand the checkpoint.
       if (!path) continue;
+      // Read through the phase's own planner when it exists, but fall back to
+      // the parent when the wrapper exposes none. Deep Planning selects only
+      // the *active* phase's planner, and Implementation runs in the code agent
+      // with no planner at all — yet the parent shares the same workspace, so it
+      // can still read every phase document. Without the parent fallback the
+      // restore never runs for Implementation and its checkpoint stays
+      // disabled.
+      const fallbackId = targetIds[0] ?? conversationId;
       restoreAttemptedRef.current.add(phase);
-      const fallbackId = targetIds[0];
       readConversationFile(
         {
           conversationId: resolvePhaseConversationId(phase, fallbackId),
@@ -737,7 +743,6 @@ export function ConversationWebSocketProvider({
     conversationUrl,
     isLoadingHistoryPlanning,
     conversationMode,
-    subConversationIds,
     deepPlan,
     deepPlanWorkingDir,
     readConversationFile,

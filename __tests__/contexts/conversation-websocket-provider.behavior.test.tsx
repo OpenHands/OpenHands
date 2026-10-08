@@ -2017,6 +2017,58 @@ describe("Conversation websocket behavior", () => {
     ).toBe(requirementsBody);
   });
 
+  it("restores persisted phase documents at a phase that has no planner", async () => {
+    // Reload regression at Implementation: the wrapper selects only the active
+    // phase's planner, and Implementation runs in the code agent, so there is no
+    // planner and `subConversationIds` is empty. The upstream documents still
+    // have to be re-read from disk, so the restore must fall back to the parent
+    // conversation (which shares the workspace) instead of bailing out — before
+    // the fix `targetIds.length === 0` returned early and left `documents`
+    // empty, permanently disabling the checkpoint.
+    vi.spyOn(EventService, "getEventCount").mockResolvedValue(0);
+    const requirementsBody = "## 3.1 Authentication\n";
+    useConversationStore.setState({
+      conversationMode: "deep-plan",
+      deepPlan: {
+        activePhase: "implementation",
+        confirmed: [
+          "analysis",
+          "requirements",
+          "database",
+          "backend",
+          "frontend",
+          "tasks",
+        ],
+        documents: {},
+        documentHashes: {
+          requirements: hashDeepPlanDocument(requirementsBody),
+        },
+      },
+    });
+    socketCapture.readConversationFile.mockImplementation(
+      (_variables, callbacks) => callbacks.onSuccess(requirementsBody),
+    );
+
+    renderProvider({
+      subConversations: [],
+      subConversationIds: [],
+      deepPlanWorkingDir: "/workspace/project",
+    });
+
+    await waitFor(() =>
+      expect(socketCapture.readConversationFile).toHaveBeenCalledWith(
+        {
+          conversationId: "conv-main",
+          filePath: "/workspace/project/.agents_tmp/requirements.md",
+        },
+        expect.objectContaining({ onSuccess: expect.any(Function) }),
+      ),
+    );
+    expect(
+      useConversationStore.getState().deepPlan.documents.requirements,
+    ).toBe(requirementsBody);
+  });
+
   it("falls through planning history when event counting fails", async () => {
     vi.spyOn(EventService, "getEventCount").mockRejectedValue(
       new Error("count unavailable"),
