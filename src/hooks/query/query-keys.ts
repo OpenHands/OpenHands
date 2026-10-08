@@ -115,6 +115,8 @@ export const APP_UPDATE_QUERY_KEYS = {
 
 export const CONVERSATION_QUERY_KEYS = {
   subConversations: ["v1", "sub-conversations"] as const,
+  /** Pinned conversations fetched by id, outside the loaded list pages. */
+  pinnedConversations: ["v1", "pinned-conversations"] as const,
 } as const;
 
 export const LOCAL_PLANNER_MUTATION_KEYS = {

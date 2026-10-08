@@ -8,7 +8,7 @@ import i18n from "i18next";
 import { NavigationProvider } from "#/context/navigation-context";
 import { I18nKey } from "#/i18n/declaration";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
-import { renderWithProviders } from "test-utils";
+import { renderWithProviders, createAxiosError } from "test-utils";
 import { describe, expect, it, vi } from "vitest";
 import {
   setupConversationPanelTest,
@@ -761,6 +761,208 @@ describe("ConversationPanel list loading", () => {
           "conversation-panel-pinned-view-more",
         ),
       ).toHaveTextContent("CONVERSATION_PANEL$MORE");
+    });
+
+    it("keeps a pin whose conversation is not among the loaded pages", async () => {
+      // F04.pin lands on the oldest conversation, which sits beyond the first
+      // page after a reload. Pagination must not make the panel read "not
+      // loaded yet" as "gone": the pin has to survive the reload and render
+      // from the backend even though the row is not in the loaded pages.
+      const olderConversation = createMockConversation({
+        id: "older-conversation",
+        title: "Older Conversation",
+      });
+      const batchGetSpy = vi
+        .spyOn(AgentServerConversationService, "batchGetAppConversations")
+        .mockResolvedValue([olderConversation]);
+      vi.spyOn(
+        AgentServerConversationService,
+        "searchConversations",
+      ).mockResolvedValue({
+        items: [...mockConversations],
+        next_page_id: "page-2",
+      });
+      usePinnedConversationsStore
+        .getState()
+        .pinConversation(SEEDED_DEFAULT_BACKEND_ID, olderConversation.id);
+
+      renderConversationPanel();
+
+      const pinnedSection = await screen.findByTestId(
+        "conversation-panel-pinned-section",
+      );
+      expect(
+        within(pinnedSection).getByText("Older Conversation"),
+      ).toBeInTheDocument();
+      expect(
+        within(pinnedSection).getByTestId(
+          "conversation-pin-toggle-older-conversation",
+        ),
+      ).toHaveAttribute("aria-pressed", "true");
+      // The row is rendered exactly once (from the backend), not duplicated.
+      expect(screen.getAllByText("Older Conversation")).toHaveLength(1);
+      expect(batchGetSpy).toHaveBeenCalledWith([olderConversation.id]);
+      // The pin survives in the persisted store for the next load.
+      expect(
+        usePinnedConversationsStore.getState().pinsByBackendId[
+          SEEDED_DEFAULT_BACKEND_ID
+        ],
+      ).toEqual([olderConversation.id]);
+    });
+
+    it("keeps pins while pages are still left to fetch", async () => {
+      // With a next page outstanding, a pin outside the loaded pages may
+      // simply live on a page the user has not reached. It must not be
+      // dropped as missing.
+      vi.spyOn(
+        AgentServerConversationService,
+        "searchConversations",
+      ).mockResolvedValue({
+        items: [...mockConversations],
+        next_page_id: "page-2",
+      });
+      vi.spyOn(
+        AgentServerConversationService,
+        "batchGetAppConversations",
+      ).mockResolvedValue([null]);
+      usePinnedConversationsStore
+        .getState()
+        .pinConversation(SEEDED_DEFAULT_BACKEND_ID, "gone-conversation");
+
+      renderConversationPanel();
+
+      await screen.findAllByTestId("conversation-card");
+      await waitFor(() => {
+        expect(
+          usePinnedConversationsStore.getState().pinsByBackendId[
+            SEEDED_DEFAULT_BACKEND_ID
+          ],
+        ).toEqual(["gone-conversation"]);
+      });
+    });
+
+    it("drops a pin the backend reports missing once every page is loaded", async () => {
+      // The whole list is loaded (no next page) and the batch lookup returns
+      // no conversation for the id, so it is genuinely gone.
+      vi.spyOn(
+        AgentServerConversationService,
+        "searchConversations",
+      ).mockResolvedValue({
+        items: [...mockConversations],
+        next_page_id: null,
+      });
+      vi.spyOn(
+        AgentServerConversationService,
+        "batchGetAppConversations",
+      ).mockResolvedValue([null]);
+      usePinnedConversationsStore
+        .getState()
+        .pinConversation(SEEDED_DEFAULT_BACKEND_ID, "gone-conversation");
+
+      renderConversationPanel();
+
+      await screen.findAllByTestId("conversation-card");
+      await waitFor(() => {
+        expect(
+          usePinnedConversationsStore.getState().pinsByBackendId[
+            SEEDED_DEFAULT_BACKEND_ID
+          ],
+        ).toEqual([]);
+      });
+    });
+
+    it("does not drop pins when the conversation list fails to load", async () => {
+      // `isFetched` is true after a failed fetch too. An empty result set must
+      // not be read as "every conversation is gone" — that would wipe every
+      // pin on a transient backend error.
+      const pinnedConversation = createMockConversation({
+        id: "pinned-1",
+        title: "Pinned Conversation",
+      });
+      vi.spyOn(
+        AgentServerConversationService,
+        "searchConversations",
+      ).mockRejectedValue(createAxiosError(500, "Internal Server Error", {}));
+      vi.spyOn(
+        AgentServerConversationService,
+        "batchGetAppConversations",
+      ).mockResolvedValue([pinnedConversation]);
+      usePinnedConversationsStore
+        .getState()
+        .pinConversation(SEEDED_DEFAULT_BACKEND_ID, pinnedConversation.id);
+
+      renderConversationPanel();
+
+      const pinnedSection = await screen.findByTestId(
+        "conversation-panel-pinned-section",
+      );
+      expect(
+        within(pinnedSection).getByText("Pinned Conversation"),
+      ).toBeInTheDocument();
+      expect(
+        usePinnedConversationsStore.getState().pinsByBackendId[
+          SEEDED_DEFAULT_BACKEND_ID
+        ],
+      ).toEqual([pinnedConversation.id]);
+    });
+
+    it("keeps pins attributed to the backend and org that set them", async () => {
+      setRegisteredBackends([cloudBackend]);
+      setActiveSelection({ backendId: cloudBackend.id, orgId: "org-2" });
+      // Pin the same conversation under the active org, and one under the
+      // bare backend id (a different org context).
+      usePinnedConversationsStore
+        .getState()
+        .pinConversation(`${cloudBackend.id}:org-2`, "2");
+      usePinnedConversationsStore
+        .getState()
+        .pinConversation(cloudBackend.id, "1");
+
+      const ScopedRouterStub = createRoutesStub([
+        {
+          Component: () => <ConversationPanel onClose={onCloseMock} />,
+          path: "/",
+        },
+        {
+          Component: () => null,
+          path: "/conversations/:conversationId",
+        },
+      ]);
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <I18nextProvider i18n={i18n}>
+            <ActiveBackendProvider>
+              <NavigationProvider
+                value={{
+                  currentPath: "/",
+                  conversationId: null,
+                  isNavigating: false,
+                  navigate: vi.fn(),
+                }}
+              >
+                <ScopedRouterStub />
+              </NavigationProvider>
+            </ActiveBackendProvider>
+          </I18nextProvider>
+        </QueryClientProvider>,
+      );
+
+      const pinnedSection = await screen.findByTestId(
+        "conversation-panel-pinned-section",
+      );
+      expect(
+        within(pinnedSection).getAllByTestId("conversation-card"),
+      ).toHaveLength(1);
+      expect(
+        within(pinnedSection).getByTestId("conversation-pin-toggle-2"),
+      ).toBeInTheDocument();
+      expect(
+        within(pinnedSection).queryByTestId("conversation-pin-toggle-1"),
+      ).not.toBeInTheDocument();
     });
   });
 });
