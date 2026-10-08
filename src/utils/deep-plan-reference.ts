@@ -46,14 +46,10 @@ export interface RefReport {
 const REFERENCE_PATTERN = /\[(Req|DB|BE|FE)\s+([0-9]+(?:\.[0-9]+)*)\]/g;
 const HEADING_PATTERN = /^#{1,6}\s+(.*)$/;
 /**
- * A heading whose leading section number is wrapped in a supported inline
- * Markdown delimiter — bold (`**`/`__`), italic (`*`/`_`) or a code span
- * (`` ` ``) — e.g. `## **3.1** Authentication`. The backreference requires the
- * *same* opening delimiter to close right after the number: an unmatched
- * marker (`## *3.1 Authentication`) renders literally in Markdown, so the
- * displayed heading does not start with the number and defines nothing.
+ * An inline Markdown delimiter that may wrap a heading's leading section
+ * number: bold (`**`/`__`), italic (`*`/`_`) or a code span (`` ` ``).
  */
-const WRAPPED_NUMBER_HEADING = /^(\*\*|__|\*|_|`)([0-9]+(?:\.[0-9]+)*)\1/;
+const LEADING_MARKDOWN_WRAPPER = /^(\*\*|__|\*|_|`)/;
 /**
  * A heading that leads with its section number, e.g. `## 3.1 Authentication`
  * defines `3.1`. Only a *leading* number counts: a title like
@@ -70,14 +66,34 @@ const OWN_LABEL_HEADING = /^\[(?:Req|DB|BE|FE)\s+([0-9]+(?:\.[0-9]+)*)\]/;
 export type DeepPlanDocuments = Partial<Record<DeepPlanPhaseId, string>>;
 
 /**
+ * Strips leading inline Markdown delimiters so the leading-token check sees the
+ * rendered heading. A delimiter is only a wrapper when the same marker also
+ * closes the span somewhere later in the heading — Markdown then hides it, so
+ * `## **3.1 Authentication**` displays section `3.1`. An unmatched marker
+ * (`## *3.1 Authentication`) is shown literally, so the visible heading starts
+ * with the marker and nothing is stripped.
+ */
+function stripClosedWrapper(title: string): string {
+  let visible = title;
+  for (;;) {
+    const marker = LEADING_MARKDOWN_WRAPPER.exec(visible)?.[1];
+    if (!marker) return visible;
+    const rest = visible.slice(marker.length);
+    if (!rest.includes(marker)) return visible;
+    visible = rest;
+  }
+}
+
+/**
  * Section numbers a document defines, taken from its numbered headings
  * (`## 3.1 Authentication` defines `3.1`; `### 3.1.1 Login` defines `3.1.1`).
  * Only a number that *leads* the heading is a definition, so prose numbers in
  * a title (`## 3.1 Response under 200 ms` → `3.1`, not `200`) and version-like
  * titles (`## Version 1.2` → nothing) are ignored. A supported inline Markdown
- * wrapper around that leading token (`## **3.1** Authentication`) does not hide
- * it — the displayed section number is still `3.1` — but only when the wrapper
- * is closed, since an unmatched marker stays literal text.
+ * wrapper — around the number (`## **3.1** Authentication`) or the whole title
+ * (`## **3.1 Authentication**`) — does not hide it, since the rendered heading
+ * still starts with the number; an unmatched marker stays literal and defines
+ * nothing.
  *
  * A heading may instead spell its own label out (`## [Req 3.1] Authentication`),
  * in which case the leading citation is the definition. An unnumbered heading
@@ -90,13 +106,7 @@ export function extractDefinedSections(content: string): Set<string> {
   for (const line of content.split("\n")) {
     const heading = HEADING_PATTERN.exec(line);
     if (!heading) continue;
-    const title = heading[1].trimStart();
-    // A wrapped number only counts when its delimiter closes after the number.
-    const wrapped = WRAPPED_NUMBER_HEADING.exec(title);
-    if (wrapped) {
-      sections.add(wrapped[2]);
-      continue;
-    }
+    const title = stripClosedWrapper(heading[1].trimStart());
     const leadingNumber = LEADING_NUMBER_HEADING.exec(title);
     if (leadingNumber) {
       sections.add(leadingNumber[1]);

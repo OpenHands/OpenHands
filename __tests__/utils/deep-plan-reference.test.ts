@@ -103,6 +103,20 @@ describe("extractDefinedSections", () => {
     expect([...extractDefinedSections("### *3.1.1* Login")]).toEqual(["3.1.1"]);
   });
 
+  it("sees a leading number when a wrapper spans the whole title", () => {
+    // The closing delimiter follows the title, not the number; the rendered
+    // heading still starts with `3.1`.
+    expect([...extractDefinedSections("## **3.1 Authentication**")]).toEqual([
+      "3.1",
+    ]);
+    expect([...extractDefinedSections("## *3.1 Authentication*")]).toEqual([
+      "3.1",
+    ]);
+    expect([...extractDefinedSections("## `3.1 Authentication`")]).toEqual([
+      "3.1",
+    ]);
+  });
+
   it("does not treat a wrapped prose number as a definition", () => {
     // Wrapping does not lift the leading-token constraint: `**200**` is still
     // prose, not a section.
@@ -250,6 +264,24 @@ describe("validateDocumentChain", () => {
 
     expect(report.issues).toEqual([]);
     expect(report.ok).toBe(true);
+  });
+
+  it("resolves a citation to a heading wrapped around the whole title", () => {
+    // `## **3.1 Authentication**` (and code spans) render the number at the
+    // start even though the closing delimiter follows the title.
+    for (const requirements of [
+      "## **3.1 Authentication**",
+      "## `3.1 Authentication`",
+    ]) {
+      const report = validateDocumentChain({
+        requirements,
+        database: "## 2.1 Users [Req 3.1]",
+        tasks: "# Tasks",
+      });
+
+      expect(report.issues).toEqual([]);
+      expect(report.ok).toBe(true);
+    }
   });
 
   it("reports a citation to a heading with an unmatched marker as dangling", () => {
