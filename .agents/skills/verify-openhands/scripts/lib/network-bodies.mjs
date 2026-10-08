@@ -3,10 +3,10 @@
 // The daemon keeps the body of every app-origin write request it sees, so a
 // recipe can prove what the page sent (an edited field, a stored secret
 // reused behind its placeholder) without a mock. Nothing secret survives the
-// redaction: a value under a key that names a credential, and every value of
-// an `env` or `headers` map, is replaced by its length; the settings API's own
-// `**********` placeholder is kept, so a recipe can tell "the placeholder was
-// sent" from "a real value was sent".
+// redaction: everything under a key that names a credential or an `env` or
+// `headers` map (strings, nested objects, arrays) is replaced by its length;
+// the settings API's own `**********` placeholder is kept, so a recipe can
+// tell "the placeholder was sent" from "a real value was sent".
 
 const SECRET_KEY = /key|token|secret|auth|pass|session|sig|credential/i;
 const SECRET_MAP = /^(env|headers|environment)$/i;
@@ -19,17 +19,18 @@ export function redactBodyValue(value) {
   return `<redacted ${value.length} chars>`;
 }
 
-function redactNode(node, underSecretMap = false) {
-  if (Array.isArray(node))
-    return node.map((v) => redactNode(v, underSecretMap));
+// `secret` is inherited by the whole subtree: a string in an array under
+// `api_keys`, an object under `credentials`, every value of an `env` map.
+function redactNode(node, secret = false) {
+  if (typeof node === "string") return secret ? redactBodyValue(node) : node;
+  if (Array.isArray(node)) return node.map((v) => redactNode(v, secret));
   if (node && typeof node === "object") {
     const out = {};
-    for (const [key, value] of Object.entries(node)) {
-      const secret = underSecretMap || SECRET_KEY.test(key);
-      if (typeof value === "string")
-        out[key] = secret ? redactBodyValue(value) : value;
-      else out[key] = redactNode(value, SECRET_MAP.test(key) || underSecretMap);
-    }
+    for (const [key, value] of Object.entries(node))
+      out[key] = redactNode(
+        value,
+        secret || SECRET_KEY.test(key) || SECRET_MAP.test(key),
+      );
     return out;
   }
   return node;
@@ -51,7 +52,7 @@ export function redactBody(text, { limit = BODY_LIMIT, all = false } = {}) {
     if (/^[^=&\s]+=[^&]*(&[^=&\s]+=[^&]*)*$/.test(raw)) {
       const params = new URLSearchParams(raw);
       for (const key of [...params.keys()])
-        if (SECRET_KEY.test(key)) params.set(key, "<redacted>");
+        if (all || SECRET_KEY.test(key)) params.set(key, "<redacted>");
       shown = params.toString();
     } else {
       return `<non-JSON body, ${raw.length} chars>`;

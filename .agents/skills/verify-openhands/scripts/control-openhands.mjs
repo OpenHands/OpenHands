@@ -1994,29 +1994,6 @@ async function cmdConversation({ positional, flags }) {
   if (sub === "events") {
     if (!id) usage("conversation events <id> [--last N]");
     const last = intFlag(flags.last, 25);
-    // The server pages at 100 events; read pages until `last` rows are
-    // in hand (lib/events-paging.mjs), so --last 500 or --grep over a long
-    // conversation sees past the newest page.
-    const order = flags["from-start"] ? "TIMESTAMP" : "TIMESTAMP_DESC";
-    const {
-      items: fetched,
-      more,
-      pages,
-    } = await collectEvents(async (pageId) => {
-      const res = await http(
-        run,
-        "GET",
-        `/api/conversations/${encodeURIComponent(id)}/events/search?limit=100&sort_order=${order}${pageId ? `&page_id=${encodeURIComponent(pageId)}` : ""}`,
-      );
-      if (!res.ok)
-        throw new CliError(
-          `events: HTTP ${res.status} ${res.text.slice(0, 200)}`,
-        );
-      return res.json ?? {};
-    }, last);
-    const items = flags["from-start"]
-      ? fetched.slice(0, last)
-      : fetched.slice(0, last).reverse();
     const grep =
       flags.grep && flags.grep !== true
         ? String(flags.grep).toLowerCase()
@@ -2025,48 +2002,75 @@ async function cmdConversation({ positional, flags }) {
       flags.kinds && flags.kinds !== true
         ? String(flags.kinds).split(",")
         : null;
-    const shown = items
-      .filter((e) => !kinds || kinds.includes(e.kind))
-      .map((e) => {
-        const text = eventText(e);
-        const max = flags.full ? 4000 : 160;
-        const row = {
-          kind: e.kind,
-          source: e.source,
-          tool: e.tool_name ?? e.action?.kind,
-          text: text.slice(0, max),
-          truncated: text.length > max || undefined,
-          skills: e.activated_skills?.length ? e.activated_skills : undefined,
-          images:
-            countImages(e.llm_message?.content ?? e.message?.content) ||
-            undefined,
-          tools: Array.isArray(e.tools)
-            ? e.tools.map((tool) => tool.title || tool.name || tool.kind)
-            : undefined,
-          ts: e.timestamp,
-        };
-        if (grep) {
-          // Search the whole event (system prompt, tool args, extended
-          // content), not only the summarized text.
-          const raw = JSON.stringify(e);
-          const lower = raw.toLowerCase();
-          const excerpts = [];
-          let at = lower.indexOf(grep);
-          let matches = 0;
-          while (at >= 0) {
-            matches += 1;
-            if (excerpts.length < 3)
-              excerpts.push(
-                raw.slice(Math.max(0, at - 60), at + grep.length + 60),
-              );
-            at = lower.indexOf(grep, at + grep.length);
-          }
-          row.matches = matches;
-          row.excerpts = excerpts.length ? excerpts : undefined;
+    // --kinds and --grep filter before --last counts: `--kinds MessageEvent
+    // --last 3` is the three newest messages. The server pages at 100
+    // events; pages are read until `last` matching rows are in hand
+    // (lib/events-paging.mjs), so a grep reaches past the newest page.
+    const keep = (e) =>
+      (!kinds || kinds.includes(e.kind)) &&
+      (!grep || JSON.stringify(e).toLowerCase().includes(grep));
+    const order = flags["from-start"] ? "TIMESTAMP" : "TIMESTAMP_DESC";
+    const {
+      items: fetched,
+      more,
+      pages,
+    } = await collectEvents(
+      async (pageId) => {
+        const res = await http(
+          run,
+          "GET",
+          `/api/conversations/${encodeURIComponent(id)}/events/search?limit=100&sort_order=${order}${pageId ? `&page_id=${encodeURIComponent(pageId)}` : ""}`,
+        );
+        if (!res.ok)
+          throw new CliError(
+            `events: HTTP ${res.status} ${res.text.slice(0, 200)}`,
+          );
+        return res.json ?? {};
+      },
+      last,
+      keep,
+    );
+    const selected = fetched.filter(keep).slice(0, last);
+    const items = flags["from-start"] ? selected : selected.reverse();
+    const shown = items.map((e) => {
+      const text = eventText(e);
+      const max = flags.full ? 4000 : 160;
+      const row = {
+        kind: e.kind,
+        source: e.source,
+        tool: e.tool_name ?? e.action?.kind,
+        text: text.slice(0, max),
+        truncated: text.length > max || undefined,
+        skills: e.activated_skills?.length ? e.activated_skills : undefined,
+        images:
+          countImages(e.llm_message?.content ?? e.message?.content) ||
+          undefined,
+        tools: Array.isArray(e.tools)
+          ? e.tools.map((tool) => tool.title || tool.name || tool.kind)
+          : undefined,
+        ts: e.timestamp,
+      };
+      if (grep) {
+        // Search the whole event (system prompt, tool args, extended
+        // content), not only the summarized text.
+        const raw = JSON.stringify(e);
+        const lower = raw.toLowerCase();
+        const excerpts = [];
+        let at = lower.indexOf(grep);
+        let matches = 0;
+        while (at >= 0) {
+          matches += 1;
+          if (excerpts.length < 3)
+            excerpts.push(
+              raw.slice(Math.max(0, at - 60), at + grep.length + 60),
+            );
+          at = lower.indexOf(grep, at + grep.length);
         }
-        return row;
-      })
-      .filter((row) => !grep || row.matches > 0);
+        row.matches = matches;
+        row.excerpts = excerpts.length ? excerpts : undefined;
+      }
+      return row;
+    });
     out({
       ok: true,
       total: fetched.length,
@@ -2453,23 +2457,33 @@ async function cmdFixture({ positional, flags }) {
           .toString()
           .trim();
         if (pending) {
-          execFileSync("git", ["commit", "-q", "-m", message], {
-            cwd: root,
-            env: gitEnv,
-          });
+          // Only the skill's path: whatever else is staged in the fixture
+          // repo (F08 stages files there) stays staged.
+          execFileSync(
+            "git",
+            [
+              "commit",
+              "-q",
+              "-m",
+              message,
+              "--",
+              `.agents/skills/${skillName}`,
+            ],
+            { cwd: root, env: gitEnv },
+          );
           committed = { sha: head(), message };
         } else {
           // A re-run of the recipe: the skill is already in the history.
           committed = { sha: head(), unchanged: true };
         }
       } catch (error) {
-        throw new CliError(
-          `Could not commit the skill in ${root}: ${String(error.message).split("\n")[0]}`,
-          {
-            code: 1,
-            hint: "Is it a git repo (fixture git-repo)? Is the skill already committed?",
-          },
-        );
+        const reason =
+          error.stderr?.toString().trim().split("\n")[0] ||
+          String(error.message).split("\n")[0];
+        throw new CliError(`Could not commit the skill in ${root}: ${reason}`, {
+          code: 1,
+          hint: "The repo must be a git checkout (control-openhands fixture git-repo --name NAME).",
+        });
       }
     }
     out({
@@ -4026,7 +4040,7 @@ Answers the telemetry consent form (analytics off by default) and then either
 skips the onboarding modal (--skip) or walks it: choose agent → keep current LLM
 settings → close at say-hello. Skipping is not proof that onboarding works.
 `,
-  conversation: `control-openhands conversation start --prompt TEXT [--wait] [--until STATES] [--timeout SEC] [--stay] [--workspace PATH]
+  conversation: `control-openhands conversation start --prompt TEXT [--wait] [--until STATES] [--timeout SEC] [--stay] [--workspace PATH [--mode local_repo|new_worktree]]
 control-openhands conversation wait ID [--until finished,idle] [--timeout SEC] [--fresh]
         (--fresh after sending a message: ignore the previous run's terminal status)
 control-openhands conversation send ID --prompt TEXT [--wait]   follow-up message through the composer
@@ -4039,15 +4053,17 @@ control-openhands conversation events ID [--last N] [--kinds MessageEvent,Action
         (texts are cut at 160 chars with truncated:true; --full keeps up to 4000;
          --grep searches whole events, e.g. the SystemPromptEvent with --from-start;
          rows show activated skills, image attachments (images: N) and, for the
-         system prompt, the tool names; the server pages at 100 events and the verb
-         reads as many pages as --last needs: total is the number read, more:true
-         says older pages exist)
+         system prompt, the tool names; --kinds and --grep filter before --last
+         counts (--kinds MessageEvent --last 3 is the three newest messages); the
+         server pages at 100 events and the verb reads pages until --last matching
+         rows are in hand: total is the number of events read, more:true says further
+         pages exist (older, or newer with --from-start))
 
 'start' types into the home composer (testid=chat-input), presses
 testid=submit-button and returns the new /conversations/<id>. --stay uses the
 current page's composer instead of navigating home first. --workspace PATH
 first picks that folder through Open Workspace (see 'workspace open'), so the
-conversation runs in it. 'wait' polls the
+conversation runs in it; --mode picks Local Repo or New Worktree there. 'wait' polls the
 conversation's execution_status until one of --until (default: any terminal).
 
 Examples:

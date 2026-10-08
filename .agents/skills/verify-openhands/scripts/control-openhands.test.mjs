@@ -36,7 +36,7 @@ import { routePattern } from "./lib/route-pattern.mjs";
 import { resolveTestids } from "./lib/testids.mjs";
 import { tmuxPathFor } from "./lib/tmux-path.mjs";
 import { browserCallLimit } from "./lib/call-limit.mjs";
-import { collectEvents, countImages } from "./lib/events-paging.mjs";
+import { MAX_PAGES, collectEvents, countImages } from "./lib/events-paging.mjs";
 import { redactBody } from "./lib/network-bodies.mjs";
 import { buildLocator, parseRole, toCss } from "./lib/selectors.mjs";
 
@@ -1111,6 +1111,41 @@ test("request bodies are shown with credentials and env maps redacted", () => {
   // Form bodies redact by key; anything else is described, never shown.
   assert.equal(redactBody("a=1&api_key=zzz"), "a=1&api_key=%3Credacted%3E");
   assert.equal(redactBody("--boundary\r\nraw"), "<non-JSON body, 15 chars>");
+  // Secrets inside arrays, under a credential-named key, or at the top level
+  // of a credential endpoint's payload never come back in clear.
+  assert.deepEqual(
+    JSON.parse(
+      redactBody(
+        JSON.stringify({
+          env: ["TOKEN=abc123"],
+          api_keys: ["sk-live-1"],
+          credentials: { value: "p4ss", nested: ["x"] },
+          values: ["kept"],
+        }),
+      ),
+    ),
+    {
+      env: ["<redacted 12 chars>"],
+      api_keys: ["<redacted 9 chars>"],
+      credentials: {
+        value: "<redacted 4 chars>",
+        nested: ["<redacted 1 chars>"],
+      },
+      values: ["kept"],
+    },
+  );
+  assert.equal(
+    redactBody(JSON.stringify("hunter2"), { all: true }),
+    '"<redacted 7 chars>"',
+  );
+  assert.equal(
+    redactBody(JSON.stringify(["hunter2"]), { all: true }),
+    '["<redacted 7 chars>"]',
+  );
+  assert.equal(
+    redactBody("grant_type=x&code=SECRET", { all: true }),
+    "grant_type=%3Credacted%3E&code=%3Credacted%3E",
+  );
   // A credential endpoint redacts every string, whatever the field is called.
   assert.deepEqual(
     JSON.parse(
@@ -1157,6 +1192,22 @@ test("conversation events reads pages until the rows asked for are in hand", asy
     more: false,
     pages: 1,
   });
+  // A filter counts only the rows that pass it, so a kind that is rare keeps
+  // the walk going; a server that never ends paging stops at MAX_PAGES.
+  const mixed = async (id) => ({
+    items: [{ kind: "State" }, { kind: "State" }, { kind: "Message" }],
+    next_page_id:
+      id === "p3" ? null : `p${(Number(String(id).slice(1)) || 1) + 1}`,
+  });
+  const filtered = await collectEvents(mixed, 3, (e) => e.kind === "Message");
+  assert.equal(filtered.pages, 3);
+  assert.equal(filtered.items.filter((e) => e.kind === "Message").length, 3);
+  const endless = await collectEvents(
+    async () => ({ items: [{ kind: "x" }], next_page_id: "again" }),
+    1000,
+  );
+  assert.equal(endless.pages, MAX_PAGES);
+  assert.equal(endless.more, true);
 });
 
 test("image attachments are counted from a message's content blocks", () => {
@@ -1265,6 +1316,29 @@ test("fixture skill --commit records the project skill once and reports a re-run
   assert.equal(again.status, 0, again.stdout);
   assert.equal(again.json.committed.sha, first.json.committed.sha);
   assert.equal(again.json.committed.unchanged, true);
+  // Only the skill's path is committed: a file staged beforehand stays staged.
+  const repo = join(dir, "workspace", "qa-t");
+  writeFileSync(join(repo, "other.txt"), "staged elsewhere\n");
+  spawnSync("git", ["-C", repo, "add", "other.txt"]);
+  const third = run(
+    ["fixture", "skill", "--repo", "qa-t", "--name", "qa-v", "--commit"],
+    env,
+  );
+  assert.equal(third.status, 0, third.stdout);
+  const files = spawnSync(
+    "git",
+    ["-C", repo, "show", "--name-only", "--format=", "HEAD"],
+    { encoding: "utf8" },
+  ).stdout.trim();
+  assert.equal(files, ".agents/skills/qa-v/SKILL.md");
+  const staged = spawnSync(
+    "git",
+    ["-C", repo, "diff", "--cached", "--name-only"],
+    {
+      encoding: "utf8",
+    },
+  ).stdout.trim();
+  assert.equal(staged, "other.txt");
   // Without --commit nothing is recorded; a personal skill cannot be committed.
   const plain = run(
     ["fixture", "skill", "--repo", "qa-t", "--name", "qa-u"],

@@ -382,6 +382,19 @@ async function startObserver(observe) {
   return { observer, poller };
 }
 
+// The action failed: stop watching without a report, so the poller does not
+// outlive the request and the page's MutationObserver is disconnected.
+async function abandonObserver(watching) {
+  if (!watching) return;
+  const { observer, poller } = watching;
+  if (observer)
+    await observer.evaluate(({ mo }) => mo.disconnect()).catch(() => {});
+  if (poller) {
+    poller.running = false;
+    await poller.done.catch(() => {});
+  }
+}
+
 async function finishObserver(watching, observeMs) {
   if (!watching) return {};
   const { observer, poller } = watching;
@@ -614,28 +627,33 @@ const handlers = {
   }) {
     const before = activePage.url();
     const watching = await startObserver(observe);
-    if (hoverFirst) {
-      // Hover-driven controls re-render on pointerenter and swallow a click
-      // that moves and presses at once.
-      await locate(selector).hover({ timeout });
-      await activePage.waitForTimeout(Number(hoverFirst) || 150);
-    }
-    await locate(selector).click({
-      timeout,
-      force,
-      button,
-      modifiers,
-      position,
-    });
-    if (expectUrl) {
-      await activePage.waitForURL(new RegExp(expectUrl), { timeout });
-    }
-    if (expectNewUrl) {
-      const re = new RegExp(expectNewUrl);
-      await activePage.waitForURL(
-        (u) => u.toString() !== before && re.test(u.toString()),
-        { timeout },
-      );
+    try {
+      if (hoverFirst) {
+        // Hover-driven controls re-render on pointerenter and swallow a click
+        // that moves and presses at once.
+        await locate(selector).hover({ timeout });
+        await activePage.waitForTimeout(Number(hoverFirst) || 150);
+      }
+      await locate(selector).click({
+        timeout,
+        force,
+        button,
+        modifiers,
+        position,
+      });
+      if (expectUrl) {
+        await activePage.waitForURL(new RegExp(expectUrl), { timeout });
+      }
+      if (expectNewUrl) {
+        const re = new RegExp(expectNewUrl);
+        await activePage.waitForURL(
+          (u) => u.toString() !== before && re.test(u.toString()),
+          { timeout },
+        );
+      }
+    } catch (error) {
+      await abandonObserver(watching);
+      throw error;
     }
     return {
       url: activePage.url(),
@@ -716,7 +734,13 @@ const handlers = {
     // `--observe SEL` records what SEL shows while the scroll's effects
     // play out (a loading row, a fetched page), as `click --observe` does.
     const watching = await startObserver(observe);
-    const result = await scrollOnce({ selector, by, x, timeout });
+    let result;
+    try {
+      result = await scrollOnce({ selector, by, x, timeout });
+    } catch (error) {
+      await abandonObserver(watching);
+      throw error;
+    }
     return { ...result, ...(await finishObserver(watching, observeMs)) };
   },
   async wait({ selector, state, timeout }) {
@@ -957,10 +981,12 @@ const handlers = {
   async "new-tab"({ target, allowExternal }) {
     // A plain new tab, as a user opening the app in a second tab: no
     // opener, no sessionStorage, the localStorage of the same profile.
+    // Resolve the target first: a refused URL must not leave a blank tab
+    // open and active.
+    const url = target ? assertAppUrl(target, allowExternal) : undefined;
     const page = await context.newPage();
     activePage = page;
-    if (target) {
-      const url = assertAppUrl(target, allowExternal);
+    if (url) {
       await page.goto(url, { waitUntil: "domcontentloaded" });
       await page
         .waitForLoadState("networkidle", { timeout: 10_000 })

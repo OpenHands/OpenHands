@@ -2,22 +2,27 @@
 //
 // The Agent Server's events/search answers at most 100 events per page and
 // rejects a larger limit, so a conversation longer than that is read page by
-// page (`next_page_id`) until the rows asked for are in hand or the pages run
-// out. `fetchPage(pageId)` returns one page `{ items, next_page_id }`.
+// page (`next_page_id`) until `want` rows that pass `keep` (a kind or grep
+// filter) are in hand or the pages run out. `fetchPage(pageId)` returns
+// one page `{ items, next_page_id }`; every event read is returned, the
+// caller filters and slices.
 
 export const PAGE_LIMIT = 100;
-const MAX_PAGES = 200;
+export const MAX_PAGES = 200;
 
-export async function collectEvents(fetchPage, want) {
+export async function collectEvents(fetchPage, want, keep = () => true) {
   const items = [];
   let pageId;
   let pages = 0;
+  let kept = 0;
   do {
     const page = (await fetchPage(pageId)) ?? {};
     pages += 1;
-    items.push(...(Array.isArray(page.items) ? page.items : []));
+    const got = Array.isArray(page.items) ? page.items : [];
+    items.push(...got);
+    kept += got.filter(keep).length;
     pageId = page.next_page_id ?? null;
-  } while (pageId && items.length < want && pages < MAX_PAGES);
+  } while (pageId && kept < want && pages < MAX_PAGES);
   return { items, more: Boolean(pageId), pages };
 }
 
