@@ -1,21 +1,22 @@
 # F28 — Live activity view
 
 A single read-only page, `/activity`, that lists every conversation on the active
-backend whose agent is actively executing: running or waiting for confirmation.
-Each row shows the conversation title, a status chip, the latest action the agent
-took, a relative timestamp, the accumulated cost and token count, and — when the
-agent fanned out through the `task` tool — the number of running or finished
-subagents. The page polls the conversation list and a bounded event tail per
-running conversation; it never starts, stops, or otherwise mutates a conversation.
+backend whose agent is actively executing or needs attention: running, waiting for
+confirmation, error, or stuck. Each row shows the conversation title, a status
+chip, the latest action the agent took, a relative timestamp, the accumulated cost
+and token count, and — when the agent fanned out through the `task` tool — the
+number of running or finished subagents. The page polls the conversation list and
+a bounded event tail per active conversation; it never starts, stops, or otherwise
+mutates a conversation.
 
 Source: `src/routes/activity.tsx`, `src/components/features/activity/`, `src/hooks/query/use-activity-event-tails.ts`, `src/constants/activity.ts`.
 
 ## Sub-features
 
 - `F28.entry`: the sidebar rail shows an **Activity** link to `/activity`; the page header reads "Activity" with the subtitle "Every running agent and subagent at a glance".
-- `F28.active-only`: only conversations whose `execution_status` is `RUNNING` or `WAITING_FOR_CONFIRMATION` appear as rows; idle, paused, finished, error and unknown conversations are omitted (a finished conversation disappears from the list on the next poll).
-- `F28.row-content`: a row shows the title, a status chip (`Running` / `Waiting`), the latest action title (falling back to the last assistant message, else "Waiting for the next step…"), a relative timestamp, `$<cost>` and `<n> tokens`.
-- `F28.needs-attention`: a waiting or error row is flagged with a **Needs attention** chip and a warning border.
+- `F28.active-only`: only conversations whose `execution_status` is `RUNNING`, `WAITING_FOR_CONFIRMATION`, `ERROR`, or `STUCK` appear as rows; idle, paused, finished and unknown conversations are omitted (a finished conversation disappears from the list on the next poll).
+- `F28.row-content`: a row shows the title, a status chip (`Running` / `Waiting` / `Error`), the latest action title (falling back to the last assistant message, else "Waiting for the next step…"), a relative timestamp, `$<cost>` and `<n> tokens`.
+- `F28.needs-attention`: a waiting, error or stuck row is flagged with a **Needs attention** chip and a warning border. This is reachable because error and stuck conversations are kept in the active list (they are exactly the states a user must act on).
 - `F28.row-links-into-conversation`: clicking a row opens that conversation (`/conversations/<id>`) and mutates nothing.
 - `F28.subagents`: a `task`-tool delegation shows as a "<n> subagents" chip once the conversation's event tail contains a `TaskAction`. On gapless polls an unresolved delegation is carried across the bounded tail (`mergeActivityTail`), so the chip **persists** while it runs; a later `TaskObservation` still closes it as completed or errored. It can only drop when a poll is partial — the action scrolls out of the window while the range was not fully read — which is the exception, not the expectation.
 - `F28.empty`: with no running conversation the page shows "No agents are running" / "Start a conversation and it will appear here while it works." The paged variant ("No running agents on this page" / "Load more to check the older conversations.") shows when the loaded page holds no active agent but more pages exist, and a **Load more** button stays available whenever more pages exist.
@@ -55,4 +56,5 @@ Preconditions:
 - The Activity pin toggle is hover-revealed, not always clickable: reach it with `browser click --hover-first` (or focus the row), never a bare click.
 - The page-local `F28.error` and `F28.backend-unavailable` states are `blocked`: stopping the agent server reaches the app-wide backend-unavailable screen instead, and there is no verb to fail only the conversation-list request. `F28.needs-attention`, `F28.subagents` and the paged empty variant are also `blocked` in a fresh single-run session: they each need a multi-conversation, multi-minute or arranged state the baseline recipe does not create. Record them in the evidence ledger as `blocked`, never `pass`.
 - `/activity` is one of the pinnable home routes; a pinned `/activity` makes a later `browser goto /` leave the page, so clear the pin before recipes that expect the default home.
+- Cloud note: the Cloud app-conversation *search* response can omit `conversation_url`, so the activity tail resolves it from the App API (`/api/v1/app-conversations`) before fetching. Without that, a running Cloud agent would render with no current step and no subagent count while still claiming support. Cloud events themselves are searched through the App API (`/api/v1/conversation/<id>/events/search`), not the runtime sandbox.
 - A row click navigates and removes the list from the DOM; `browser back` then needs a `browser wait 'testid=activity-row'` before counting, because the list remounts a moment after the URL changes.

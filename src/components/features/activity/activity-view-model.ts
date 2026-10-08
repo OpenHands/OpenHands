@@ -16,7 +16,7 @@ import {
   type EventTitleDescriptor,
 } from "#/components/conversation-events/chat/event-content-helpers/get-action-event-title";
 
-// @spec LAV-001 — Only actively executing agents are listed
+// @spec LAV-001 — Only executing or needs-attention agents are listed
 
 export type ActivityStatusKind =
   | "running"
@@ -38,7 +38,7 @@ export interface ActivityStatusDescriptor {
 /**
  * Map an `ExecutionStatus` onto the activity view's presentation model.
  * `needsAttention` is the visual contract that separates "running" from
- * "blocked": waiting-for-confirmation and error/stuck demand user action,
+ * "blocked": waiting-for-confirmation, error, and stuck demand user action,
  * while running/paused/finished/idle do not.
  */
 export function getActivityStatusDescriptor(
@@ -92,16 +92,21 @@ export function getActivityStatusDescriptor(
 }
 
 /**
- * A conversation belongs in the live list only while it is actively
- * executing. Idle, paused, finished, error and unknown are excluded here and
- * shown through the conversation list instead.
+ * A conversation belongs in the live list while it is actively executing or
+ * blocked on the user. Running and waiting for confirmation are the ordinary
+ * live states; error and stuck are included because they are precisely the
+ * states a user must act on, so the needs-attention chip is reachable. Idle,
+ * paused, finished and unknown are excluded and shown through the
+ * conversation list instead.
  */
 export function isActiveActivityStatus(
   status: ExecutionStatus | null | undefined,
 ): boolean {
   return (
     status === ExecutionStatus.RUNNING ||
-    status === ExecutionStatus.WAITING_FOR_CONFIRMATION
+    status === ExecutionStatus.WAITING_FOR_CONFIRMATION ||
+    status === ExecutionStatus.ERROR ||
+    status === ExecutionStatus.STUCK
   );
 }
 
@@ -570,9 +575,14 @@ export function getActivityMetrics(
 /**
  * Resolve an action-title descriptor to a plain, localized string for the row.
  * The shared helper's translation templates embed styling-only component tags
- * (`<cmd>`, `<path>`, …) that `getEventContent` renders through `<Trans>`; the
- * activity row needs text inside a link, so the tags are stripped and only
+ * (`<cmd>`, `<path>`) that `getEventContent` renders through `<Trans>`; the
+ * activity row needs text inside a link, so those wrappers are stripped and only
  * their inner content is kept.
+ *
+ * Only the known wrapper tags are removed. A blanket `<[^>]+>` strip would also
+ * eat a literal angle-bracket segment in an interpolated value (e.g. the
+ * `grep '<div>' index.html` pattern renders as `Running grep '' index.html`),
+ * so the value is preserved intact.
  */
 export function resolveDescriptorText(
   descriptor: EventTitleDescriptor,
@@ -585,5 +595,7 @@ export function resolveDescriptorText(
     return descriptor.key;
   }
 
-  return i18n.t(descriptor.key, descriptor.values).replace(/<[^>]+>/g, "");
+  return i18n
+    .t(descriptor.key, descriptor.values)
+    .replace(/<\/?(?:cmd|path)>/g, "");
 }

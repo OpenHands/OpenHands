@@ -7,6 +7,7 @@ import type {
   EventSearchPage,
 } from "#/api/event-service/event-service.types";
 import type { OpenHandsEvent } from "#/types/agent-server/core";
+import { batchGetCloudConversations } from "#/api/cloud/conversation-service.api";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { sessionGeneration } from "#/utils/session-generation";
 import {
@@ -40,12 +41,14 @@ export function activityTailQueryKey(
   conversation: AppConversation,
   backendId: string,
   orgId: string | null,
+  backendKind: string,
 ): readonly unknown[] {
   return [
     ...CONVERSATION_QUERY_KEYS.activityTail,
     conversation.id,
     backendId,
     orgId,
+    backendKind,
     // The runtime host identifies the sandbox that produced the tail. A
     // re-provisioned cloud conversation keeps its id but gets a new URL, so
     // including it starts a fresh entry instead of reusing the previous
@@ -68,6 +71,47 @@ async function sessionIdentity(
   return generation === null
     ? null
     : `${conversation.conversation_url ?? ""}#${generation}`;
+}
+
+/**
+ * Resolve the runtime URL and session key a tail request needs.
+ *
+ * Cloud events are searched through the App API (`EventService.searchEvents`
+ * branches on the active backend kind), so the runtime URL is not needed to
+ * authorize the request — only local, WebSocket-based runtimes require it.
+ * A cloud list can report a null `conversation_url` (the runtime URL may be
+ * omitted from `/api/v1/app-conversations/search`), but the tail would then
+ * never fan out and the row would silently lose its current step and subagent
+ * count. Resolving it from the App API keeps Cloud a supported backend rather
+ * than a silently degraded one.
+ *
+ * Returns the conversation unchanged for local backends (the list entry
+ * already carries the runtime URL) and for a cloud entry that already has one,
+ * so the common poll path makes no extra request.
+ */
+async function resolveRuntimeConversation(
+  conversation: AppConversation,
+  isCloud: boolean,
+): Promise<AppConversation> {
+  if (!isCloud || conversation.conversation_url) {
+    return conversation;
+  }
+
+  try {
+    const [resolved] = await batchGetCloudConversations([conversation.id]);
+    const conversationUrl = resolved?.conversation_url?.trim() ?? null;
+    const sessionApiKey = resolved?.session_api_key?.trim() ?? null;
+    if (!conversationUrl) return conversation;
+    return {
+      ...conversation,
+      conversation_url: conversationUrl,
+      session_api_key: sessionApiKey,
+    };
+  } catch {
+    // The runtime may still be provisioning. Fall back to an empty tail rather
+    // than failing the whole view.
+    return conversation;
+  }
 }
 
 /**
@@ -110,9 +154,15 @@ export function useActivityEventTails(
             conversation,
             active.backend.id,
             active.orgId,
+            active.backend.kind,
           ),
           conversationUrl: conversation.conversation_url,
-          identity: await sessionIdentity(conversation),
+          identity: await sessionIdentity(
+            await resolveRuntimeConversation(
+              conversation,
+              active.backend.kind === "cloud",
+            ),
+          ),
         })),
       );
       if (cancelled) return;
@@ -137,11 +187,11 @@ export function useActivityEventTails(
 
   const results = useQueries({
     queries: conversations.map((conversation) => {
-      const sessionApiKey = conversation.session_api_key ?? null;
       const queryKey = activityTailQueryKey(
         conversation,
         active.backend.id,
         active.orgId,
+        active.backend.kind,
       );
 
       return {
@@ -150,12 +200,21 @@ export function useActivityEventTails(
           client,
           queryKey: resolvedKey,
         }): Promise<ActivityTailBuffer> => {
-          const conversationUrl = conversation.conversation_url;
+          // Cloud list entries may omit the runtime URL; resolve it before
+          // gating, since cloud event search goes through the App API and only
+          // needs the URL for the identity/rotation check. Local backends
+          // already carry it and are returned unchanged.
+          const runtimeConversation = await resolveRuntimeConversation(
+            conversation,
+            active.backend.kind === "cloud",
+          );
+          const conversationUrl = runtimeConversation.conversation_url;
           if (!conversationUrl) {
             return { events: [] };
           }
+          const sessionApiKey = runtimeConversation.session_api_key ?? null;
 
-          const identity = await sessionIdentity(conversation);
+          const identity = await sessionIdentity(runtimeConversation);
           const cached = client.getQueryData<ActivityTailBuffer>(resolvedKey);
           // A cached tail fetched under a different (or unknown) session
           // identity belongs to another credential: start fresh rather than

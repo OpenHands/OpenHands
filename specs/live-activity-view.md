@@ -2,12 +2,13 @@
 
 ---
 
-### LAV-001: Only actively executing agents are listed
+### LAV-001: Only executing or needs-attention agents are listed
 
-- [x] The activity view shall list a conversation only while its
-      `execution_status` is `RUNNING` or `WAITING_FOR_CONFIRMATION`.
-- [x] Idle, paused, finished, error, and unknown conversations shall be omitted
-      from the live list and remain reachable through the conversation list.
+- [x] The activity view shall list a conversation while its
+      `execution_status` is `RUNNING`, `WAITING_FOR_CONFIRMATION`, `ERROR`, or
+      `STUCK`.
+- [x] Idle, paused, finished, and unknown conversations shall be omitted from
+      the live list and remain reachable through the conversation list.
 - [x] The view shall read only conversations belonging to the active backend.
 
 ### LAV-002: A row conveys status, current step, and spend
@@ -55,7 +56,10 @@
       history, so a task action carried across the window still reads as
       completed (or errored) rather than reopening as running.
 - [x] A conversation without a resolved `conversation_url` shall render with an
-      empty tail rather than a failing request.
+      empty tail rather than a failing request, and a cloud conversation whose
+      list entry omits the runtime URL shall resolve it from the App API first,
+      so a running cloud agent is not silently rendered without a current step
+      or subagent count.
 - [x] The event tail's cache identity shall include the conversation's runtime
       URL, and a rotated session key shall reset the cached tail immediately —
       including when the conversation left the active list or the view

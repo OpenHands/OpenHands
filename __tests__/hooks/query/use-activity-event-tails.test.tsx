@@ -29,6 +29,12 @@ vi.mock("#/api/event-service/event-service.api", () => ({
   },
 }));
 
+const batchGetCloudConversations = vi.hoisted(() => vi.fn());
+vi.mock("#/api/cloud/conversation-service.api", () => ({
+  batchGetCloudConversations: (...args: unknown[]) =>
+    batchGetCloudConversations(...args),
+}));
+
 const conversation = (
   overrides: Partial<AppConversation> = {},
 ): AppConversation =>
@@ -228,6 +234,7 @@ describe("useActivityEventTails", () => {
       conversation({ conversation_url: url }),
       "local-1",
       null,
+      "local",
     );
     const oldEvent = taskAction("old-action", "2026-10-06T12:00:00Z");
     // Seed a stale tail left by session A, which stamped its identity and
@@ -475,6 +482,7 @@ describe("useActivityEventTails", () => {
       "conv-1",
       "local-1",
       null,
+      "local",
       "http://runtime/conv-1",
     ];
     const partial = client.getQueryData<{
@@ -706,5 +714,58 @@ describe("useActivityEventTails", () => {
     expect(result.current[0]).not.toContainEqual(
       expect.objectContaining({ id: "old-action" }),
     );
+  });
+
+  // @spec LAV-004 — Data is bounded and read-only
+  it("resolves a missing cloud runtime URL so cloud rows still get a tail", async () => {
+    backendMock.current = {
+      backend: { id: "cloud-1", kind: "cloud" },
+      orgId: null,
+    };
+    const client = newClient();
+    const task = taskAction("task-action-1");
+    searchEvents.mockResolvedValue({ items: [task] });
+    // The cloud list reports a null conversation_url, as the App API search
+    // fixture does; the runtime URL must be resolved from the App API so the
+    // tail is not silently empty.
+    batchGetCloudConversations.mockResolvedValue([
+      {
+        id: "conv-1",
+        conversation_url: "http://runtime/cloud-conv-1",
+        session_api_key: "cloud-key",
+      },
+    ]);
+
+    const { result } = renderHook(
+      () => useActivityEventTails([conversation({ conversation_url: null })]),
+      { wrapper: makeWrapper(client) },
+    );
+
+    await waitFor(() => expect(result.current[0]).toEqual([task]));
+    expect(batchGetCloudConversations).toHaveBeenCalledWith(["conv-1"]);
+    // The resolved URL is what authorizes the request.
+    expect(searchEvents.mock.calls[0][1]).toBe("http://runtime/cloud-conv-1");
+  });
+
+  it("renders an empty cloud tail while the runtime URL cannot be resolved", async () => {
+    backendMock.current = {
+      backend: { id: "cloud-1", kind: "cloud" },
+      orgId: null,
+    };
+    const client = newClient();
+    // The runtime is still provisioning: the App API answers without a URL.
+    batchGetCloudConversations.mockResolvedValue([
+      { id: "conv-1", conversation_url: null, session_api_key: null },
+    ]);
+
+    const { result } = renderHook(
+      () => useActivityEventTails([conversation({ conversation_url: null })]),
+      { wrapper: makeWrapper(client) },
+    );
+
+    // No failing request: the row renders with an empty tail instead.
+    await waitFor(() => expect(result.current[0]).toEqual([]));
+    expect(batchGetCloudConversations).toHaveBeenCalled();
+    expect(searchEvents).not.toHaveBeenCalled();
   });
 });

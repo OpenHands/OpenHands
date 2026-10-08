@@ -73,8 +73,9 @@ describe("ActivityView", () => {
     __resetActiveStoreForTests();
   });
 
-  // @spec LAV-001 — Only actively executing agents are listed
-  it("lists only actively executing conversations and links into them", async () => {
+  // @spec LAV-001 — Only executing or needs-attention agents are listed
+  // @spec LAV-002 — A row conveys status, current step, and spend
+  it("lists running, waiting and needs-attention conversations and links into them", async () => {
     vi.spyOn(
       AgentServerConversationService,
       "searchConversations",
@@ -85,6 +86,11 @@ describe("ActivityView", () => {
           id: "waiting",
           title: "Waiting agent",
           execution_status: ExecutionStatus.WAITING_FOR_CONFIRMATION,
+        }),
+        conversation({
+          id: "errored",
+          title: "Errored agent",
+          execution_status: ExecutionStatus.ERROR,
         }),
         conversation({
           id: "finished",
@@ -102,6 +108,9 @@ describe("ActivityView", () => {
 
     expect(await screen.findByText("Running agent")).toBeInTheDocument();
     expect(await screen.findByText("Waiting agent")).toBeInTheDocument();
+    // An errored conversation is a state the user must act on, so it is listed
+    // with the needs-attention flag rather than filtered out.
+    expect(await screen.findByText("Errored agent")).toBeInTheDocument();
     expect(screen.queryByText("Finished agent")).not.toBeInTheDocument();
 
     const runningRow = (await screen.findByText("Running agent")).closest("a");
@@ -172,7 +181,7 @@ describe("ActivityView", () => {
     expect(screen.queryByTestId("activity-row")).not.toBeInTheDocument();
   });
 
-  // @spec LAV-001 — Only actively executing agents are listed
+  // @spec LAV-001 — Only executing or needs-attention agents are listed
   it("keeps Load more available when the first page has no running agents", async () => {
     vi.spyOn(
       AgentServerConversationService,

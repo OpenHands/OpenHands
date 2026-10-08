@@ -8,6 +8,7 @@ import {
   getActivityStatusDescriptor,
   mergeActivityTail,
   pickLatestActivity,
+  resolveDescriptorText,
   selectActiveConversations,
 } from "#/components/features/activity/activity-view-model";
 
@@ -102,9 +103,10 @@ describe("getActivityStatusDescriptor", () => {
   });
 });
 
-// @spec LAV-001 — Only actively executing agents are listed
+// @spec LAV-001 — Only executing or needs-attention agents are listed
+// @spec LAV-002 — A row conveys status, current step, and spend
 describe("selectActiveConversations", () => {
-  it("keeps running and waiting conversations and drops the rest", () => {
+  it("keeps running, waiting, error and stuck conversations and drops the rest", () => {
     const conversations = [
       conversation({ id: "run", execution_status: ExecutionStatus.RUNNING }),
       conversation({
@@ -118,9 +120,11 @@ describe("selectActiveConversations", () => {
       conversation({ id: "stuck", execution_status: ExecutionStatus.STUCK }),
     ];
 
+    // ERROR/STUCK are kept: they are the states a user must act on, so the
+    // needs-attention chip is reachable from the list (LAV-002).
     expect(
       selectActiveConversations(conversations).map((entry) => entry.id),
-    ).toEqual(["run", "wait"]);
+    ).toEqual(["run", "wait", "err", "stuck"]);
   });
 });
 
@@ -505,5 +509,48 @@ describe("getActivityMetrics", () => {
       cost: null,
       totalTokens: null,
     });
+  });
+});
+
+// @spec LAV-002 — A row conveys status, current step, and spend
+describe("resolveDescriptorText", () => {
+  it("strips the styling wrappers but keeps angle brackets in the value", async () => {
+    const { createAgentServerI18n, setI18n, waitForI18n } =
+      await import("#/i18n");
+    const instance = createAgentServerI18n();
+    await waitForI18n(instance);
+    instance.addResourceBundle(
+      "en",
+      "openhands",
+      {
+        ACTION_MESSAGE$RUN: "Running <cmd>{{command}}</cmd>",
+        ACTION_MESSAGE$READ: "Reading <path>{{path}}</path>",
+      },
+      true,
+      true,
+    );
+    setI18n(instance);
+
+    try {
+      // The <cmd>/<path> wrappers are dropped, but an angle-bracket segment
+      // inside the interpolated command (grep '<div>') must survive.
+      expect(
+        resolveDescriptorText({
+          kind: "translation",
+          key: "ACTION_MESSAGE$RUN",
+          values: { command: "grep '<div>' index.html" },
+        }),
+      ).toBe("Running grep '<div>' index.html");
+
+      expect(
+        resolveDescriptorText({
+          kind: "translation",
+          key: "ACTION_MESSAGE$READ",
+          values: { path: "src/a<b>.ts" },
+        }),
+      ).toBe("Reading src/a<b>.ts");
+    } finally {
+      setI18n(null);
+    }
   });
 });

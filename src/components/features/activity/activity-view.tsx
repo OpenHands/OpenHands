@@ -110,7 +110,7 @@ function ActivityUnavailableState({ onRetry }: { onRetry: () => void }) {
  * tail. It performs no conversation mutations and reads only the active
  * backend's conversations.
  */
-// @spec LAV-001 — Only actively executing agents are listed
+// @spec LAV-001 — Only executing or needs-attention agents are listed
 // @spec LAV-005 — The view is reachable and has defined states
 export function ActivityView() {
   const { t } = useTranslation("openhands");
