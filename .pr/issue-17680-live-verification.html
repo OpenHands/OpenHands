@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Issue #17680 — live verification</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        background: #09090b;
+        color: #f4f4f5;
+      }
+      body {
+        margin: 0;
+        padding: 48px 24px;
+      }
+      main {
+        max-width: 960px;
+        margin: 0 auto;
+      }
+      h1,
+      h2 {
+        letter-spacing: -0.025em;
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 36px;
+      }
+      h2 {
+        margin: 0 0 12px;
+        font-size: 20px;
+      }
+      p,
+      li {
+        color: #d4d4d8;
+        line-height: 1.6;
+      }
+      .lede {
+        margin: 0 0 32px;
+        color: #a1a1aa;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 16px;
+        margin: 20px 0 32px;
+      }
+      .card {
+        border: 1px solid #27272a;
+        border-radius: 16px;
+        padding: 20px;
+        background: #111113;
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        padding: 5px 10px;
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .success {
+        color: #86efac;
+        background: #052e16;
+      }
+      .review {
+        color: #fde68a;
+        background: #422006;
+      }
+      code,
+      pre {
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      }
+      code {
+        color: #e4e4e7;
+      }
+      pre {
+        overflow-x: auto;
+        border: 1px solid #27272a;
+        border-radius: 12px;
+        padding: 16px;
+        background: #09090b;
+        color: #e4e4e7;
+        line-height: 1.5;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 16px 0 32px;
+      }
+      th,
+      td {
+        border-bottom: 1px solid #27272a;
+        padding: 12px;
+        text-align: left;
+        vertical-align: top;
+      }
+      th {
+        color: #a1a1aa;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      .note {
+        border-left: 3px solid #f59e0b;
+        padding-left: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Narrow “Needs review” to genuine review cases</h1>
+      <p class="lede">
+        Reviewer evidence for OpenHands/OpenHands issue #17680. Verified on the
+        real local Agent Canvas, Agent Server, and automation service stack on
+        September 24, 2026.
+      </p>
+
+      <h2>Behavior change</h2>
+      <div class="grid">
+        <section class="card">
+          <span class="badge review">Before: Needs review</span>
+          <p>
+            Any completed run with a finish response but no recognized
+            <code>status</code> was treated as unknown, including a response
+            containing only <code>outcome_summary</code>.
+          </p>
+        </section>
+        <section class="card">
+          <span class="badge success">After: Successful</span>
+          <p>
+            A completed run now defaults to success when the response omits
+            <code>status</code>. The outcome summary is still displayed.
+            Explicit unrecognized status strings still require review.
+          </p>
+        </section>
+      </div>
+
+      <h2>Decision table</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Completed run response</th>
+            <th>Badge</th>
+            <th>Summary</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>{ "outcome_summary": "Report published" }</code></td>
+            <td><span class="badge success">Successful</span></td>
+            <td>Report published</td>
+          </tr>
+          <tr>
+            <td><code>{ "status": "unexpected", ... }</code></td>
+            <td><span class="badge review">Needs review</span></td>
+            <td>Preserved when provided</td>
+          </tr>
+          <tr>
+            <td>No finish response</td>
+            <td><span class="badge success">Successful</span></td>
+            <td>None</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>Real-stack verification</h2>
+      <section class="card">
+        <p>
+          Created the isolated prompt automation
+          <code>PR 17680 live verification</code>
+          (<code>0d36598c-537d-4deb-92e5-ec2bcf680a33</code>) and manually
+          dispatched run <code>e1d6e30f-1556-439c-bbae-605377679acf</code>. The
+          prompt prohibited network, repository, secret, plugin, integration,
+          and file access. The automation was disabled after the run.
+        </p>
+        <p>
+          The live SDK (1.49.5) rejected a summary-only FinishTool call because
+          its schema requires <code>status</code>. The resulting fallback
+          metadata remained visibly marked
+          <span class="badge review">Needs review</span>, confirming that
+          explicit unknown/unrecognized outcomes retain the conservative state.
+          Existing real completed script runs with no finish response remained
+          <span class="badge success">Successful</span>.
+        </p>
+        <p class="note">
+          The live service cannot produce the exact backward-compatibility
+          payload from this issue because its current FinishTool schema requires
+          <code>status</code>. The summary-only and custom-metadata cases are
+          therefore exercised through the frontend's real display helper and
+          component tests, without changing the backend or its stored data.
+        </p>
+      </section>
+
+      <h2>Verification completed</h2>
+      <ul>
+        <li>
+          Focused display, modal, health-card, and manifest tests: 67 passed.
+        </li>
+        <li>Full test suite under UTC: 7,774 passed, 7 todo.</li>
+        <li>Application and library production builds passed.</li>
+        <li>Lint passed with pre-existing warnings and no errors.</li>
+      </ul>
+    </main>
+  </body>
+</html>

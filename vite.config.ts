@@ -25,6 +25,18 @@ const LIB_EXTERNALS = [
 ];
 const APP_CHUNK_MAX_BYTES = 450 * 1024;
 
+// Suites verified to be DOM-free: they import pure functions only, touch no
+// DOM, Web Storage, timers or network, and therefore need neither the jsdom
+// environment nor the shared `vitest.setup.ts`. They run in a separate Node
+// project instead, which is measurably faster. See docs/DEVELOPMENT.md →
+// "Unit test environments" for the classification rules a suite must meet
+// before it is added here, and for how to roll the pilot back.
+const NODE_ENV_PILOT_TESTS = [
+  "__tests__/utils/file-language.test.ts",
+  "__tests__/utils/format-model-name.test.ts",
+  "__tests__/utils/parse-terminal-output.test.ts",
+];
+
 const normalizeBasePath = (value?: string) => {
   const raw = value?.trim();
   if (!raw || raw === "/") return "/";
@@ -93,6 +105,7 @@ export default defineConfig(({ mode }) => {
     VITE_BACKEND_HOST = "127.0.0.1:8000",
     VITE_USE_TLS = "false",
     VITE_FRONTEND_PORT = "3001",
+    VITE_BIND_HOST = "127.0.0.1",
     VITE_INSECURE_SKIP_VERIFY = "false",
     VITE_BASE_PATH,
     VITE_VSCODE_BASE_PATH,
@@ -282,7 +295,6 @@ export default defineConfig(({ mode }) => {
         "@heroui/react",
         "lucide-react",
         "@microlink/react-json-view",
-        "socket.io-client",
         // These are discovered when launching conversations:
         "react-icons/vsc",
         "react-icons/lu",
@@ -390,7 +402,7 @@ export default defineConfig(({ mode }) => {
     server: {
       port: FE_PORT,
       strictPort: true, // Fail if port is busy (dynamic allocation handles fallback)
-      host: true,
+      host: VITE_BIND_HOST,
       allowedHosts: true,
       proxy: {
         "/api": {
@@ -471,9 +483,34 @@ export default defineConfig(({ mode }) => {
     },
     clearScreen: false,
     test: {
-      environment: "jsdom",
-      setupFiles: ["vitest.setup.ts"],
-      exclude: [...configDefaults.exclude, "tests"],
+      projects: [
+        {
+          extends: true,
+          test: {
+            name: "jsdom",
+            environment: "jsdom",
+            setupFiles: ["vitest.setup.ts"],
+            // The pilot suites are excluded here so they run exactly once,
+            // in the Node project below.
+            exclude: [
+              ...configDefaults.exclude,
+              "tests",
+              ...NODE_ENV_PILOT_TESTS,
+            ],
+          },
+        },
+        {
+          extends: true,
+          test: {
+            name: "node",
+            environment: "node",
+            include: [...NODE_ENV_PILOT_TESTS],
+            // These suites exercise pure functions, so they need none of the
+            // jsdom / Testing Library / MSW wiring in vitest.setup.ts.
+            setupFiles: [],
+          },
+        },
+      ],
       // The full suite runs many DOM-heavy tests in parallel, which can
       // push individual `userEvent`-driven tests past Vitest's 5000ms
       // default on busy machines (the skills-settings and i18n

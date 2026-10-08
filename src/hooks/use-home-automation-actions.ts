@@ -50,7 +50,8 @@ export function useHomeAutomationActions(
   const isDemo = isHomeAutomationsDemoEnabled();
 
   const dispatchMutation = useDispatchAutomation();
-  const toggleMutation = useToggleAutomation();
+  // Turn off renders its own error toast with the API message.
+  const toggleMutation = useToggleAutomation({ disableToast: true });
   const cancelMutation = useCancelAutomationRun();
 
   const [editOpen, setEditOpen] = useState(false);

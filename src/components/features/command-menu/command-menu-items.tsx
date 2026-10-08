@@ -1,11 +1,13 @@
 import React from "react";
 import {
   Bot,
+  Brain,
   Home,
   Keyboard,
   KeyRound,
   ListTodo,
   PanelsTopLeft,
+  Route,
   Search,
   Settings,
   ShieldCheck,
@@ -21,6 +23,7 @@ import {
 } from "#/manifests/automation-interface";
 import { getLockedCloudHost } from "#/api/agent-server-config";
 import { LOCKED_CLOUD_SETTINGS_NAV_PATH } from "#/constants/settings-nav";
+import { isApplePlatform } from "#/utils/utils";
 
 const ICON_SIZE = 18;
 
@@ -32,7 +35,9 @@ export const COMMAND_MENU_ROUTE = {
   settings: "/settings",
   agentSettings: "/settings/agents",
   llmSettings: "/settings/llm",
+  metaLlmSettings: "/settings/meta-llm",
   condenserSettings: "/settings/condenser",
+  agentContextSettings: "/settings/agent-context",
   verificationSettings: "/settings/verification",
   appSettings: "/settings/app",
   secretsSettings: "/settings/secrets",
@@ -47,7 +52,9 @@ export type CommandMenuItemId =
   | "settings"
   | "agent-settings"
   | "llm-settings"
+  | "meta-llm-settings"
   | "condenser-settings"
+  | "agent-context-settings"
   | "verification-settings"
   | "app-settings"
   | "secrets-settings"
@@ -80,6 +87,16 @@ export function commandMenuItemCopy(
 ): string {
   if (literal !== undefined) return literal;
   return key === undefined ? "" : translate(key);
+}
+
+/**
+ * The open-menu shortcut as the platform spells it: ⌘K on Apple platforms,
+ * Ctrl+K elsewhere. The key handler accepts either modifier everywhere.
+ */
+export function getCommandMenuShortcutKey(): I18nKey {
+  return isApplePlatform()
+    ? I18nKey.COMMAND_MENU$SHORTCUT
+    : I18nKey.COMMAND_MENU$SHORTCUT_CTRL;
 }
 
 export const COMMAND_MENU_GROUP_LABELS: Record<CommandMenuGroupId, I18nKey> = {
@@ -170,6 +187,15 @@ export const createCommandMenuItems = ({
       to: COMMAND_MENU_ROUTE.llmSettings,
     },
     {
+      id: "meta-llm-settings",
+      group: "settings",
+      titleKey: I18nKey.SETTINGS$NAV_META_LLM,
+      descriptionKey: I18nKey.SETTINGS$PAGE_META_LLM_SUBLINE,
+      keywordsKey: I18nKey.COMMAND_MENU$META_LLM_SETTINGS_KEYWORDS,
+      icon: <Route size={ICON_SIZE} />,
+      to: COMMAND_MENU_ROUTE.metaLlmSettings,
+    },
+    {
       id: "condenser-settings",
       group: "settings",
       titleKey: I18nKey.COMMAND_MENU$CONDENSER_SETTINGS_TITLE,
@@ -177,6 +203,15 @@ export const createCommandMenuItems = ({
       keywordsKey: I18nKey.COMMAND_MENU$CONDENSER_SETTINGS_KEYWORDS,
       icon: <ListTodo size={ICON_SIZE} />,
       to: COMMAND_MENU_ROUTE.condenserSettings,
+    },
+    {
+      id: "agent-context-settings",
+      group: "settings",
+      titleKey: I18nKey.SETTINGS$NAV_AGENT_CONTEXT,
+      descriptionKey: I18nKey.SETTINGS$PAGE_AGENT_CONTEXT_SUBLINE,
+      keywordsKey: I18nKey.COMMAND_MENU$AGENT_CONTEXT_SETTINGS_KEYWORDS,
+      icon: <Brain size={ICON_SIZE} />,
+      to: COMMAND_MENU_ROUTE.agentContextSettings,
     },
     {
       id: "verification-settings",

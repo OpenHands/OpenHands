@@ -5,7 +5,9 @@ import { AxiosError } from "axios";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { useActiveBackend } from "#/contexts/active-backend-context";
+import { isRateLimitError } from "#/utils/rate-limit-retry";
 
+const MAX_RATE_LIMIT_RETRIES = 2;
 const FIVE_MINUTES = 1000 * 60 * 5;
 const FIFTEEN_MINUTES = 1000 * 60 * 15;
 
@@ -39,6 +41,8 @@ export const useUserConversation = (
     origin.current = { cid, backendId: active.backend.id };
   }
   const backendChanged = origin.current.backendId !== active.backend.id;
+  const hasConversationScope =
+    active.backend.kind !== "cloud" || !!active.orgId;
 
   return useQuery({
     // Include the active backend identity so each (backend, org) pair
@@ -57,8 +61,22 @@ export const useUserConversation = (
         await AgentServerConversationService.batchGetAppConversations([cid]);
       return results[0] ?? null;
     },
-    enabled: !!cid && !cid.startsWith("task-") && !backendChanged,
-    retry: false,
+    enabled:
+      !!cid &&
+      !cid.startsWith("task-") &&
+      !backendChanged &&
+      hasConversationScope,
+    // Rate limits (429) are transient and worth a couple of backed-off
+    // retries; any other failure (404, 5xx, network) fails immediately as
+    // before rather than masking a real problem.
+    retry: (failureCount, error) =>
+      failureCount < MAX_RATE_LIMIT_RETRIES && isRateLimitError(error),
+    // Freshness while it matters is already covered by `refetchInterval`
+    // above. Refetching on every window focus too means every open
+    // conversation tab/browser tab fires a request the instant it regains
+    // focus — a burst that's a prime way to trip a rate limiter when
+    // several tabs are open.
+    refetchOnWindowFocus: false,
     refetchInterval,
     staleTime: FIVE_MINUTES,
     gcTime: FIFTEEN_MINUTES,

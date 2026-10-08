@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { RenameProfileModal } from "./rename-profile-modal";
 import { DeleteProfileModal } from "./delete-profile-modal";
+import { AddModelsModal } from "./add-models-modal";
 import { ProfilesBody } from "./profiles-body";
 import { ProviderConnectionsManager } from "./provider-connections-manager";
 import ProfilesService, {
@@ -10,6 +11,7 @@ import ProfilesService, {
   type SaveProfileRequest,
 } from "#/api/profiles-service/profiles-service.api";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
+import { useModelCatalogWarning } from "#/hooks/use-model-catalog-warning";
 import { useProviderConnections } from "#/hooks/query/use-provider-connections";
 import { useActivateLlmProfile } from "#/hooks/mutation/use-activate-llm-profile";
 import { useSaveLlmProfile } from "#/hooks/mutation/use-save-llm-profile";
@@ -32,6 +34,7 @@ export function LlmProfilesManager({
 }: LlmProfilesManagerProps) {
   const { t } = useTranslation("openhands");
   const { data, isLoading, error } = useLlmProfiles();
+  const isModelUnlisted = useModelCatalogWarning();
   const activateProfile = useActivateLlmProfile();
   const saveProfile = useSaveLlmProfile();
   // Cloud members are view-only; only owners/admins (and all local users) may
@@ -54,6 +57,14 @@ export function LlmProfilesManager({
   const [profileToDelete, setProfileToDelete] = useState<ProfileInfo | null>(
     null,
   );
+  // One AddModelsModal serves both entry points: the top "Add from provider
+  // connections" button (chooser — no preselect) and a connection row's "..."
+  // (preselect to that connection). `addModelsConnectionId` is null in chooser
+  // mode and the connection id in preselect mode.
+  const [showAddModels, setShowAddModels] = useState(false);
+  const [addModelsConnectionId, setAddModelsConnectionId] = useState<
+    string | null
+  >(null);
 
   const profiles = data?.profiles ?? [];
   const active = data?.active_profile ?? null;
@@ -129,17 +140,31 @@ export function LlmProfilesManager({
             <h2 className="text-base font-medium text-contrast">
               {t(I18nKey.SETTINGS$AVAILABLE_PROFILES)}
             </h2>
-            {onAddProfile && canManage ? (
-              <BrandButton
-                testId="add-llm-profile"
-                type="button"
-                variant="secondary"
-                className="ml-auto"
-                onClick={onAddProfile}
-              >
-                {t(I18nKey.SETTINGS$ADD_LLM_PROFILE)}
-              </BrandButton>
-            ) : null}
+            <div className="ml-auto flex items-center gap-2">
+              {canManage && supportsConnections ? (
+                <BrandButton
+                  testId="add-models-from-provider"
+                  type="button"
+                  variant="tertiary"
+                  onClick={() => {
+                    setAddModelsConnectionId(null);
+                    setShowAddModels(true);
+                  }}
+                >
+                  {t(I18nKey.SETTINGS$ADD_MODELS_FROM_PROVIDER)}
+                </BrandButton>
+              ) : null}
+              {onAddProfile && canManage ? (
+                <BrandButton
+                  testId="add-llm-profile"
+                  type="button"
+                  variant="secondary"
+                  onClick={onAddProfile}
+                >
+                  {t(I18nKey.SETTINGS$ADD_LLM_PROFILE)}
+                </BrandButton>
+              ) : null}
+            </div>
           </div>
 
           <ProfilesBody
@@ -155,6 +180,7 @@ export function LlmProfilesManager({
             onDuplicate={handleDuplicate}
             onDelete={setProfileToDelete}
             isActivating={activateProfile.isPending}
+            isModelUnlisted={isModelUnlisted}
           />
         </div>
 
@@ -164,6 +190,10 @@ export function LlmProfilesManager({
             linkedCountById={linkedCountById}
             isLoading={isLoadingConnections}
             loadError={connectionsError ?? null}
+            onAddModels={(connection) => {
+              setAddModelsConnectionId(connection.id);
+              setShowAddModels(true);
+            }}
           />
         ) : null}
       </div>
@@ -175,6 +205,13 @@ export function LlmProfilesManager({
       <DeleteProfileModal
         profile={profileToDelete}
         onClose={() => setProfileToDelete(null)}
+      />
+      <AddModelsModal
+        isOpen={showAddModels}
+        connections={connectionList}
+        initialConnectionId={addModelsConnectionId}
+        existingNames={profiles.map((p) => p.name)}
+        onClose={() => setShowAddModels(false)}
       />
     </>
   );

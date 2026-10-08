@@ -1,4 +1,3 @@
-import React, { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import XMarkIcon from "#/icons/x-mark.svg?react";
 import { BrandButton } from "#/components/features/settings/brand-button";
@@ -18,6 +17,7 @@ import {
   ConversationOverviewGitItemsPanel,
 } from "./conversation-overview-git-items-panel";
 import { useConversationOverviewStats } from "#/hooks/use-conversation-overview-stats";
+import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import {
   CONVERSATION_SECONDARY_DRAWER_CLOSE_BUTTON_CLASSNAME,
   CONVERSATION_SECONDARY_DRAWER_HEADER_ACTION_CLASSNAME,
@@ -149,22 +149,9 @@ export function ConversationOverviewDrawerContent({
   const { section, openAdd, closeDrawer } = useConversationOverviewDrawer();
   const { workspaceName } = useConversationOverviewStats();
 
-  useEffect(() => {
-    if (!section) {
-      return undefined;
-    }
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        closeDrawer();
-      }
-    };
-
-    document.addEventListener("keydown", handleEscape);
-    return () => {
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, [closeDrawer, section]);
+  // A menu opened after the drawer (such as the Overview ⋯ menu) takes
+  // Escape first.
+  useCloseOnEscape(Boolean(section), closeDrawer);
 
   if (!section) {
     return null;

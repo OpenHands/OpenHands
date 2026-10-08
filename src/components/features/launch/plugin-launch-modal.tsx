@@ -121,9 +121,11 @@ export function PluginLaunchModal({
     onStartConversation(pluginConfigs, message);
   };
 
+  // The generic title already includes the verb ("Launch Plugin"), so only a
+  // single plugin's display name is prefixed with "Launch".
   const modalTitle =
     pluginConfigs.length === 1
-      ? getPluginDisplayName(pluginConfigs[0])
+      ? `${t(I18nKey.LAUNCH$MODAL_TITLE)} ${getPluginDisplayName(pluginConfigs[0])}`
       : t(I18nKey.LAUNCH$MODAL_TITLE_GENERIC);
 
   return (
@@ -137,9 +139,7 @@ export function PluginLaunchModal({
         )}
       >
         <ModalCloseButton onClose={onClose} testId="close-button" />
-        <Typography.H2 className="pr-6">
-          {t(I18nKey.LAUNCH$MODAL_TITLE)} {modalTitle}
-        </Typography.H2>
+        <Typography.H2 className="pr-6">{modalTitle}</Typography.H2>
 
         {message && <p className="text-sm text-contrast">{message}</p>}
 
@@ -203,7 +203,7 @@ export function PluginLaunchModal({
               className="mt-1 h-4 w-4 flex-shrink-0"
             />
             <label htmlFor="trust-checkbox" className="text-sm text-contrast">
-              {t(I18nKey.LAUNCH$TRUST_SKILL_CHECKBOX, {
+              {t(I18nKey.LAUNCH$TRUST_PLUGIN_CHECKBOX, {
                 sources: getUniqueSources().join(", "),
                 interpolation: { escapeValue: false },
               })}

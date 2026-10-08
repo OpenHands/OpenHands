@@ -27,8 +27,9 @@
  * - Injecting window.__AGENT_CANVAS_DO_NOT_TRACK__ = true at runtime, which the
  *   static server does from AGENT_CANVAS_DISABLE_TELEMETRY=1 (or the equivalent
  *   --disable-telemetry flag) so a precompiled bundle can opt out without
- *   VITE_DO_NOT_TRACK baked into the image. Under this flag the PostHog client
- *   is never initialized, so consent mirrored from a backend cannot opt it in.
+ *   VITE_DO_NOT_TRACK baked into the image.
+ * Under any of these the PostHog client is never initialized, so it makes no
+ * network requests and consent mirrored from a backend cannot opt it in.
  */
 
 import type { BootstrapConfig, CaptureResult, PostHog } from "posthog-js";
@@ -58,6 +59,8 @@ const TELEMETRY_CONSENT_PENDING_LOCAL_REVOCATION_KEY =
 const TELEMETRY_CONSENT_CHANGE_EVENT = "openhands-telemetry-consent-change";
 const TELEMETRY_FIRST_USE_KEY = "openhands-telemetry-first-use";
 const TELEMETRY_SESSION_KEY = "openhands-telemetry-session";
+const POSTHOG_BOOTSTRAP_STORAGE_PREFIX = "posthog_bootstrap";
+
 const POSTHOG_INSTANCE_NAME = "agent-canvas";
 const POSTHOG_PAGEVIEW_CAPTURE_MODE = "history_change";
 
@@ -87,6 +90,19 @@ export interface TelemetryConfig {
   uiHost?: string;
 }
 
+export type WebsiteHandoffAttribution = Partial<
+  Record<
+    | "utm_source"
+    | "utm_medium"
+    | "utm_campaign"
+    | "landing_page_category"
+    | "cta_id"
+    | "cta_surface"
+    | "referring_domain_category",
+    string
+  >
+>;
+
 export type TelemetryConfiguration = TelemetryConfig | false;
 
 export type TelemetryConsent = "granted" | "denied" | "pending";
@@ -102,6 +118,19 @@ let initializationPromise: Promise<PostHog | null> | null = null;
 let pendingBootstrap: BootstrapConfig | undefined;
 let telemetryConfig: TelemetryConfig = {};
 let telemetryDisabled = false;
+
+function removeStorageKeysWithPrefix(storage: Storage, prefix: string): void {
+  const keysToRemove: string[] = [];
+
+  for (let index = 0; index < storage.length; index += 1) {
+    const key = storage.key(index);
+    if (key?.startsWith(prefix)) keysToRemove.push(key);
+  }
+
+  for (const key of keysToRemove) {
+    storage.removeItem(key);
+  }
+}
 
 /** Deployment-level opt-out injected by static-server.mjs (see file header). */
 function isRuntimeDoNotTrackEnabled(): boolean {
@@ -152,6 +181,13 @@ function getEventDeploymentKind(
 
 let telemetryBackendContext = getBackendTelemetryProperties({});
 let telemetryCloudContext = getCloudTelemetryProperties();
+let telemetryWebsiteAttribution: WebsiteHandoffAttribution = {};
+
+export function setTelemetryWebsiteAttribution(
+  attribution: WebsiteHandoffAttribution | undefined,
+): void {
+  telemetryWebsiteAttribution = attribution ?? {};
+}
 
 export function setTelemetryBackendContext(
   context: BackendTelemetryContextInput,
@@ -173,6 +209,7 @@ function addCanvasEventProperties(
   const properties = {
     ...telemetryBackendContext,
     ...telemetryCloudContext,
+    ...telemetryWebsiteAttribution,
     ...event.properties,
   };
 
@@ -272,7 +309,9 @@ export function configureTelemetry(config: TelemetryConfiguration): void {
 }
 
 function getResolvedTelemetryConfig(): Required<TelemetryConfig> | null {
-  if (isTelemetryHardDisabled()) return null;
+  // Do Not Track pins consent to "denied", so a client could never capture;
+  // initializing one anyway would still fetch remote config and flags.
+  if (isDoNotTrackEnabled()) return null;
 
   return {
     apiKey: telemetryConfig.apiKey || DEFAULT_POSTHOG_API_KEY,
@@ -887,18 +926,24 @@ export async function clearTelemetryData(): Promise<void> {
     );
     localStorage.removeItem(TELEMETRY_CONSENT_KEY);
     localStorage.removeItem(TELEMETRY_FIRST_USE_KEY);
+    removeStorageKeysWithPrefix(localStorage, POSTHOG_BOOTSTRAP_STORAGE_PREFIX);
   } catch {
     // Continue clearing the in-memory and SDK identity if storage is blocked.
   }
   clearPendingCloudTelemetryConsent();
   try {
     sessionStorage.removeItem(TELEMETRY_SESSION_KEY);
+    removeStorageKeysWithPrefix(
+      sessionStorage,
+      POSTHOG_BOOTSTRAP_STORAGE_PREFIX,
+    );
   } catch {
     // Continue clearing the in-memory and SDK identity if storage is blocked.
   }
 
   telemetryBackendContext = getBackendTelemetryProperties({});
   telemetryCloudContext = getCloudTelemetryProperties();
+  telemetryWebsiteAttribution = {};
   desiredTelemetryIdentity = null;
   desiredIdentityRevision += 1;
   appliedIdentityRevision = -1;
