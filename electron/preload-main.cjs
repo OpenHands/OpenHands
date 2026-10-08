@@ -70,6 +70,12 @@ contextBridge.exposeInMainWorld("marsBridge", {
     ipcRenderer.invoke("mars:pauseSession", sessionId),
   resumeSession: (sessionId) =>
     ipcRenderer.invoke("mars:resumeSession", sessionId),
+  /** Ends the session and its sandbox for good; drops any live connection first. */
+  destroySession: (sessionId) =>
+    ipcRenderer.invoke("mars:destroySession", sessionId),
+  /** Soft-deletes the agent; the renderer only offers it when no session is live. */
+  deleteAgentConfig: (configId) =>
+    ipcRenderer.invoke("mars:deleteAgentConfig", configId),
 
   /**
    * Connects to a session's agent-server — over its public ingress URL when

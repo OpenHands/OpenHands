@@ -69,6 +69,8 @@ const RPC_METHODS = new Set([
   "createSession",
   "pauseSession",
   "resumeSession",
+  "destroySession",
+  "deleteAgentConfig",
   "openTunnel",
   "closeTunnel",
   "getTunnel",
@@ -275,6 +277,11 @@ export function createMarsWebBridge({
     createSession: (configId, name) => bridge.createSession(configId, name),
     pauseSession: (sessionId) => bridge.pauseSession(sessionId),
     resumeSession: (sessionId) => bridge.resumeSession(sessionId),
+    async destroySession(sessionId) {
+      upstreams.delete(sessionId);
+      await bridge.destroySession(sessionId);
+    },
+    deleteAgentConfig: (configId) => bridge.deleteAgentConfig(configId),
     async openTunnel(req, params) {
       return rewriteStatus(req, await bridge.openTunnel(params));
     },

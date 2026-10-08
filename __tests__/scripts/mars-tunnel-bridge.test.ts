@@ -110,6 +110,8 @@ function fakeApi() {
     })),
     pauseSession: vi.fn(async () => {}),
     resumeSession: vi.fn(async () => {}),
+    destroySession: vi.fn(async () => {}),
+    deleteAgentConfig: vi.fn(async () => {}),
     getSession: vi.fn(async () => null),
     getIngressURL: vi.fn(async () => null),
   };
@@ -523,5 +525,34 @@ describe("createMarsTunnelBridge", () => {
 
     expect(registry.detachAll).toHaveBeenCalledTimes(1);
     expect(bridge.ingressAuthorizationHeader(`${INGRESS_URL}/api`)).toBeNull();
+  });
+
+  it("destroySession drops the live connection before asking harness-api to destroy", async () => {
+    const { registry, api, ipcMain } = setup();
+    await ipcMain.invoke(MARS_TUNNEL_IPC.savePat, { token: VALID_PAT });
+    await ipcMain.invoke(MARS_TUNNEL_IPC.openTunnel, { sessionId: "sess_1" });
+    expect(
+      await ipcMain.invoke(MARS_TUNNEL_IPC.getTunnel, "sess_1"),
+    ).toBeDefined();
+
+    await ipcMain.invoke(MARS_TUNNEL_IPC.destroySession, "sess_1");
+
+    expect(registry.detach).toHaveBeenCalledWith("sess_1");
+    expect(api.destroySession).toHaveBeenCalledWith("sess_1");
+    expect(registry.detach.mock.invocationCallOrder[0]).toBeLessThan(
+      api.destroySession.mock.invocationCallOrder[0],
+    );
+    expect(
+      await ipcMain.invoke(MARS_TUNNEL_IPC.getTunnel, "sess_1"),
+    ).toBeUndefined();
+  });
+
+  it("deleteAgentConfig is a plain pass-through", async () => {
+    const { api, ipcMain } = setup();
+    await ipcMain.invoke(MARS_TUNNEL_IPC.savePat, { token: VALID_PAT });
+
+    await ipcMain.invoke(MARS_TUNNEL_IPC.deleteAgentConfig, "cfg_1");
+
+    expect(api.deleteAgentConfig).toHaveBeenCalledWith("cfg_1");
   });
 });

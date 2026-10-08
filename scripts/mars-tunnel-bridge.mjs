@@ -60,6 +60,8 @@ export const MARS_TUNNEL_IPC = {
   createSession: "mars:createSession",
   pauseSession: "mars:pauseSession",
   resumeSession: "mars:resumeSession",
+  destroySession: "mars:destroySession",
+  deleteAgentConfig: "mars:deleteAgentConfig",
 };
 
 /**
@@ -351,6 +353,17 @@ export function createMarsTunnelBridge({
     resumeSession: (sessionId) => client.resumeSession(sessionId),
 
     /**
+     * Drop any live connection first so a backend does not keep probing a
+     * sandbox that is being torn down, then destroy the session.
+     */
+    async destroySession(sessionId) {
+      ingressSessions.delete(sessionId);
+      await registry.detach(sessionId);
+      await client.destroySession(sessionId);
+    },
+    deleteAgentConfig: (configId) => client.deleteAgentConfig(configId),
+
+    /**
      * Create an OpenHands Agent Config. The manifest is built here rather
      * than accepted over IPC so the renderer can only ever create OpenHands
      * agents; it contributes just the name and an optional LLM key.
@@ -499,6 +512,12 @@ export function createMarsTunnelBridge({
       );
       handle(MARS_TUNNEL_IPC.resumeSession, (sessionId) =>
         this.resumeSession(sessionId),
+      );
+      handle(MARS_TUNNEL_IPC.destroySession, (sessionId) =>
+        this.destroySession(sessionId),
+      );
+      handle(MARS_TUNNEL_IPC.deleteAgentConfig, (configId) =>
+        this.deleteAgentConfig(configId),
       );
     },
 

@@ -94,6 +94,8 @@ export function createMarsWebBridge(
     createSession: call("createSession"),
     pauseSession: call("pauseSession"),
     resumeSession: call("resumeSession"),
+    destroySession: call("destroySession"),
+    deleteAgentConfig: call("deleteAgentConfig"),
     openTunnel: call("openTunnel"),
     closeTunnel: call("closeTunnel"),
     getTunnel: call("getTunnel"),

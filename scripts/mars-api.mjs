@@ -310,6 +310,24 @@ export function createMarsApiClient({
     },
 
     /**
+     * End a session for good: harness-api tears down its sandbox and
+     * checkpoints. 204 on success; 409 while a checkpoint, fork or rollback
+     * holds the session (retry later); 423 for a staff-locked session.
+     */
+    async destroySession(sessionId) {
+      await request("DELETE", `${SESSIONS_PATH}/${sessionId}`);
+    },
+
+    /**
+     * Soft-delete an Agent Config. harness-api does not check for live
+     * sessions, so the caller guards that; existing sessions keep running
+     * but no new ones can be created from the config.
+     */
+    async deleteAgentConfig(configId) {
+      await request("DELETE", `${CONFIGS_PATH}/${configId}`);
+    },
+
+    /**
      * Cheapest authenticated call that proves the token is valid AND that the
      * caller actually has MARS access. A well-formed token can still be
      * refused by the `mars_preview` / `mars_access_ric1` feature flippers, so

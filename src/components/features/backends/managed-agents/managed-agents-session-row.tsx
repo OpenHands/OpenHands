@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { Loader2, Pause, Unplug } from "lucide-react";
+import { Loader2, Pause, Square, Unplug } from "lucide-react";
 
 import {
   getSessionPhase,
@@ -47,13 +47,15 @@ interface ManagedAgentsSessionRowProps {
   isConnected: boolean;
   /** Set while this row's connect flow is running. */
   connectStage: MarsConnectStage | null;
-  /** Another row is connecting or this row has a pause in flight. */
+  /** Another row is connecting or this row has a pause or stop in flight. */
   isBusy: boolean;
   error: string | null;
   onConnect: () => void;
   onOpen: () => void;
   onDisconnect: () => void;
   onPause: () => void;
+  /** Ends the session for good; the parent confirms before calling. */
+  onStop: () => void;
 }
 
 export function ManagedAgentsSessionRow({
@@ -66,6 +68,7 @@ export function ManagedAgentsSessionRow({
   onOpen,
   onDisconnect,
   onPause,
+  onStop,
 }: ManagedAgentsSessionRowProps) {
   const { t, i18n } = useTranslation("openhands");
   const phase = getSessionPhase(session.status);
@@ -79,6 +82,9 @@ export function ManagedAgentsSessionRow({
   ].filter(Boolean);
   const isConnecting = connectStage !== null;
   const canConnect = phase === "ready" || phase === "paused";
+  // Anything not already over can be stopped, including a failed or stuck
+  // provisioning session whose sandbox still needs tearing down.
+  const canStop = phase !== "ended";
 
   return (
     <li
@@ -177,6 +183,20 @@ export function ManagedAgentsSessionRow({
                   : t(I18nKey.DO_AGENTS$CONNECT)}
               </BrandButton>
             </>
+          ) : null}
+
+          {!isConnecting && canStop ? (
+            <button
+              type="button"
+              onClick={onStop}
+              disabled={isBusy}
+              aria-label={t(I18nKey.DO_AGENTS$STOP)}
+              title={t(I18nKey.DO_AGENTS$STOP)}
+              data-testid={`managed-agents-stop-${session.session_id}`}
+              className={ICON_BUTTON_CLASS}
+            >
+              <Square className="size-4" aria-hidden />
+            </button>
           ) : null}
         </div>
       </div>

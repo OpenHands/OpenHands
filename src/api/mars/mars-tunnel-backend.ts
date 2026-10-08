@@ -171,6 +171,10 @@ export interface MarsBridge {
   createSession: (configId: string, name: string) => Promise<MarsSession>;
   pauseSession: (sessionId: string) => Promise<void>;
   resumeSession: (sessionId: string) => Promise<void>;
+  /** Ends the session and its sandbox for good; any live connection is dropped first. */
+  destroySession: (sessionId: string) => Promise<void>;
+  /** Soft-deletes the agent definition; only offered when none of its sessions is live. */
+  deleteAgentConfig: (configId: string) => Promise<void>;
   openTunnel: (params: OpenMarsTunnelParams) => Promise<MarsTunnelStatus>;
   closeTunnel: (sessionId: string) => Promise<void>;
   getTunnel: (sessionId: string) => Promise<MarsTunnelStatus | undefined>;

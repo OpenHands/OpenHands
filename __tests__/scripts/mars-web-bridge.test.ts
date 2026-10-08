@@ -108,6 +108,8 @@ function fakeBridge(upstreamOrigin: string) {
       upstreamFailure: null,
     })),
     closeTunnel: vi.fn(async () => {}),
+    destroySession: vi.fn(async () => {}),
+    deleteAgentConfig: vi.fn(async () => {}),
     getTunnel: vi.fn(() => undefined),
     ingressAuthorizationHeader: vi.fn((url: string) =>
       url.startsWith(upstreamOrigin) ? TOKEN : null,
@@ -220,6 +222,16 @@ describe("createMarsWebBridge", () => {
 
     expect((await rpc(web.origin, "signInWithOAuth")).status).toBe(404);
     expect((await rpc(web.origin, "nope")).status).toBe(404);
+
+    // Destructive session management rides the same allowlisted surface.
+    expect((await rpc(web.origin, "destroySession", ["sess_1"])).status).toBe(
+      200,
+    );
+    expect(bridge.destroySession).toHaveBeenCalledWith("sess_1");
+    expect((await rpc(web.origin, "deleteAgentConfig", ["cfg_1"])).status).toBe(
+      200,
+    );
+    expect(bridge.deleteAgentConfig).toHaveBeenCalledWith("cfg_1");
     expect((await fetch(`${web.origin}/mars/rpc/getAuthState`)).status).toBe(
       405,
     );
