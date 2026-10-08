@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import CanvasExtensionsService from "#/api/canvas-extensions-service";
+import { isSdkHttpStatusError } from "#/api/agent-server-compatibility";
 import type {
   InstallCanvasExtensionRequest,
   InstalledCanvasExtensionInfo,
@@ -8,10 +9,10 @@ import type {
 import { CANVAS_EXTENSIONS_QUERY_KEYS } from "#/hooks/query/query-keys";
 import { I18nKey } from "#/i18n/declaration";
 import {
+  displayApiErrorToast,
   displayErrorToast,
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
-import { getApiOrConnectionErrorMessage } from "#/utils/api-error-message";
 
 function useInvalidateCanvasExtensions() {
   const queryClient = useQueryClient();
@@ -19,12 +20,6 @@ function useInvalidateCanvasExtensions() {
     queryClient.invalidateQueries({
       queryKey: CANVAS_EXTENSIONS_QUERY_KEYS.all,
     });
-}
-
-// A transport failure carries no response body, so keep the shared
-// "Disconnected" wording for it and use the server's detail otherwise.
-function displayInstallError(error: unknown, fallback: string) {
-  displayErrorToast(getApiOrConnectionErrorMessage(error, fallback));
 }
 
 export function useInstallCanvasExtension() {
@@ -40,7 +35,15 @@ export function useInstallCanvasExtension() {
       void invalidate();
       displaySuccessToast(t(I18nKey.SETTINGS$APPS_INSTALL_SUCCESS));
     },
-    onError: (error) => displayInstallError(error, t(I18nKey.ERROR$GENERIC)),
+    onError: (error) => {
+      // The server's 409 says to retry with `force=true`, which the form
+      // cannot do; Update or Uninstall on the existing card can.
+      if (isSdkHttpStatusError(error, 409)) {
+        displayErrorToast(t(I18nKey.SETTINGS$APPS_ALREADY_INSTALLED));
+        return;
+      }
+      displayApiErrorToast(error, t(I18nKey.ERROR$GENERIC));
+    },
   });
 }
 
@@ -64,7 +67,7 @@ export function useRefreshCanvasExtension() {
       void invalidate();
       displaySuccessToast(t(I18nKey.SETTINGS$APPS_REFRESH_SUCCESS));
     },
-    onError: (error) => displayInstallError(error, t(I18nKey.ERROR$GENERIC)),
+    onError: (error) => displayApiErrorToast(error, t(I18nKey.ERROR$GENERIC)),
   });
 }
 
