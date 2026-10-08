@@ -13,17 +13,36 @@ import type { CloudSetupGuideSteps } from "#/api/cloud/types";
 import SuperAdminSetupGuide from "#/components/features/setup-guide/super-admin-setup-guide";
 import type { SuperAdminSetupStepId } from "#/components/features/setup-guide/super-admin-setup-guide.constants";
 import { notifySuperAdminSetupStep } from "#/components/features/setup-guide/super-admin-setup-step-event";
+import { startSetupGuideTour } from "#/components/features/setup-guide/tour/setup-guide-tour";
 import { NavigationProvider } from "#/context/navigation-context";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { I18nKey } from "#/i18n/declaration";
 import { server } from "#/mocks/node";
 
 const locked = vi.hoisted(() => ({ cloudHost: null as string | null }));
+const tour = vi.hoisted(() => ({ active: false }));
 
 // Canvas served from the cloud host opens enterprise pages in its own tab.
 vi.mock("#/api/agent-server-config", async (importOriginal) => ({
   ...(await importOriginal<typeof import("#/api/agent-server-config")>()),
   getLockedCloudHost: () => locked.cloudHost,
+}));
+
+// The spotlight needs a real layout; these tests check which tour starts.
+vi.mock(
+  "#/components/features/setup-guide/tour/setup-guide-tour",
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import("#/components/features/setup-guide/tour/setup-guide-tour")
+    >()),
+    startSetupGuideTour: vi.fn(),
+  }),
+);
+
+vi.mock("#/components/features/setup-guide/tour/tour-engine", () => ({
+  startGuidedTour: vi.fn(),
+  isGuidedTourActive: () => tour.active,
+  subscribeGuidedTourActive: () => () => {},
 }));
 
 const CLOUD_HOST = "https://ohe.example.com";
@@ -135,11 +154,14 @@ describe("SuperAdminSetupGuide", () => {
     localStorage.clear();
     __resetActiveStoreForTests();
     locked.cloudHost = null;
+    tour.active = false;
+    vi.mocked(startSetupGuideTour).mockReset();
   });
 
   afterEach(() => {
     __resetActiveStoreForTests();
     vi.unstubAllGlobals();
+    window.history.replaceState(null, "", "/");
   });
 
   it("shows the first Super Admin the progress the server reports", async () => {
@@ -238,7 +260,7 @@ describe("SuperAdminSetupGuide", () => {
   });
 
   describe("when the guide's next step is done", () => {
-    it("opens the Canvas MCP page after an automation is created", async () => {
+    it("opens the Canvas MCP page with its tour after an automation is created", async () => {
       activateBackend(cloudBackend);
       let state = guideState({ org_llm: true });
       serveSetupGuide({ setupState: () => HttpResponse.json(state) });
@@ -248,7 +270,15 @@ describe("SuperAdminSetupGuide", () => {
       state = guideState({ org_llm: true, automation: true });
       act(() => notifySuperAdminSetupStep("first-automation"));
 
-      await waitFor(() => expect(navigate).toHaveBeenCalledWith("/mcp"));
+      // The tour opens the page itself.
+      await waitFor(() =>
+        expect(startSetupGuideTour).toHaveBeenCalledWith(
+          "add-integration",
+          expect.objectContaining({ navigate }),
+          expect.any(Function),
+        ),
+      );
+      expect(navigate).not.toHaveBeenCalled();
     });
 
     it("opens the enterprise invite page with its tour when Canvas is served from the cloud host", async () => {
@@ -332,6 +362,77 @@ describe("SuperAdminSetupGuide", () => {
     expect(
       screen.getByTestId("super-admin-setup-guide-toggle"),
     ).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("starts a Canvas step's tour from Start, which opens the page itself", async () => {
+    activateBackend(cloudBackend);
+    serveSetupGuide({
+      setupState: () => HttpResponse.json(guideState({ org_llm: true })),
+    });
+    const user = userEvent.setup();
+    const { navigate } = renderGuide();
+
+    await user.click(
+      await screen.findByTestId("super-admin-setup-guide-start"),
+    );
+
+    expect(startSetupGuideTour).toHaveBeenCalledWith(
+      "first-automation",
+      expect.objectContaining({ navigate }),
+      expect.any(Function),
+    );
+    expect(navigate).not.toHaveBeenCalled();
+    expect(
+      screen.getByTestId("super-admin-setup-guide-toggle"),
+    ).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("starts the tour a page opened from the enterprise guide asks for, once", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/mcp?org=org-1&setup_tour=add-integration",
+    );
+    activateBackend(cloudBackend);
+    serveSetupGuide({
+      setupState: () =>
+        HttpResponse.json(guideState({ org_llm: true, automation: true })),
+    });
+
+    renderGuide("/mcp");
+
+    await waitFor(() =>
+      expect(startSetupGuideTour).toHaveBeenCalledWith(
+        "add-integration",
+        expect.anything(),
+        expect.any(Function),
+      ),
+    );
+    expect(startSetupGuideTour).toHaveBeenCalledTimes(1);
+    expect(window.location.search).toBe("?org=org-1");
+  });
+
+  it("ignores a tour request for a step done in the enterprise app", async () => {
+    window.history.replaceState(null, "", "/mcp?setup_tour=invite-users");
+    activateBackend(cloudBackend);
+    serveSetupGuide();
+
+    renderGuide("/mcp");
+
+    await screen.findByTestId("super-admin-setup-guide-panel");
+    await waitFor(() => expect(window.location.search).toBe(""));
+    expect(startSetupGuideTour).not.toHaveBeenCalled();
+  });
+
+  it("stays out of the way while a tour is open", async () => {
+    tour.active = true;
+    activateBackend(cloudBackend);
+    const requests = serveSetupGuide();
+
+    renderGuide();
+
+    await waitFor(() => expect(requests.setupState).toBeGreaterThan(0));
+    await expectNoGuide();
   });
 
   it("re-reads progress when the admin moves to another page", async () => {

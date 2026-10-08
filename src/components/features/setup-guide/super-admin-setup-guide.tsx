@@ -1,4 +1,12 @@
-import { type ReactNode, useEffect, useState } from "react";
+import {
+  type MouseEvent,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowUpRight, Check, ClipboardList, X } from "lucide-react";
 import { getLockedCloudHost } from "#/api/agent-server-config";
@@ -11,10 +19,19 @@ import { cn } from "#/utils/utils";
 import {
   SETUP_TOUR_PARAM,
   SUPER_ADMIN_SETUP_GUIDE_PAGE_PATH,
+  SUPER_ADMIN_SETUP_STEPS,
   type SuperAdminSetupStep,
   type SuperAdminSetupStepId,
 } from "./super-admin-setup-guide.constants";
 import { SUPER_ADMIN_SETUP_STEP_EVENT } from "./super-admin-setup-step-event";
+import {
+  hasSetupGuideTour,
+  startSetupGuideTour,
+} from "./tour/setup-guide-tour";
+import {
+  isGuidedTourActive,
+  subscribeGuidedTourActive,
+} from "./tour/tour-engine";
 import {
   getNextSetupStep,
   useSuperAdminSetupGuide,
@@ -73,6 +90,26 @@ export default function SuperAdminSetupGuide() {
     refetch,
   } = useSuperAdminSetupGuide();
   const [open, setOpen] = useState(true);
+  const tourActive = useSyncExternalStore(
+    subscribeGuidedTourActive,
+    isGuidedTourActive,
+    isGuidedTourActive,
+  );
+
+  // The tour checks the current route after it navigates, between renders.
+  const pathRef = useRef(currentPath);
+  useEffect(() => {
+    pathRef.current = currentPath;
+  }, [currentPath]);
+  const startTour = useCallback(
+    (stepId: SuperAdminSetupStepId) =>
+      startSetupGuideTour(
+        stepId,
+        { navigate, getPath: () => pathRef.current },
+        t,
+      ),
+    [navigate, t],
+  );
 
   // Progress is read from the server, so re-read it as the admin moves around.
   useEffect(() => {
@@ -107,7 +144,11 @@ export default function SuperAdminSetupGuide() {
       }
       const { destination } = after;
       if (destination.kind === "canvas") {
-        navigate(destination.path);
+        if (hasSetupGuideTour(after.id)) {
+          await startTour(after.id);
+        } else {
+          navigate(destination.path);
+        }
       } else if (isLockedToCloud) {
         window.location.assign(
           cloudPageUrl(
@@ -130,12 +171,39 @@ export default function SuperAdminSetupGuide() {
     refetch,
     nextStepId,
     navigate,
+    startTour,
     cloudHost,
     guideOrgId,
     isLockedToCloud,
   ]);
 
-  if (!visible) {
+  // A page opened from the enterprise guide names the step whose tour to
+  // start. Enterprise steps have no tour here, so only Canvas steps start.
+  useEffect(() => {
+    if (!visible) {
+      return;
+    }
+    const params = new URLSearchParams(window.location.search);
+    const requested = params.get(SETUP_TOUR_PARAM);
+    if (!requested) {
+      return;
+    }
+    // Drop it first, so the tour starts once.
+    params.delete(SETUP_TOUR_PARAM);
+    const query = params.toString();
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`,
+    );
+    const step = SUPER_ADMIN_SETUP_STEPS.find(({ id }) => id === requested);
+    if (step && hasSetupGuideTour(step.id)) {
+      setOpen(false);
+      startTour(step.id);
+    }
+  }, [visible, startTour]);
+
+  if (!visible || tourActive) {
     return null;
   }
 
@@ -155,7 +223,7 @@ export default function SuperAdminSetupGuide() {
     testId: string,
     className: string,
     children: ReactNode,
-    onClick?: () => void,
+    onClick?: (event: MouseEvent<HTMLAnchorElement>) => void,
     startsTour = false,
   ) =>
     step.destination.kind === "canvas" ? (
@@ -296,13 +364,30 @@ export default function SuperAdminSetupGuide() {
               </p>
               {/* Like the enterprise Start, close the panel before opening
                   the step, so Start does something even when the admin is
-                  already on that step's page. */}
+                  already on that step's page. A Canvas step's tour opens
+                  the page itself; a modified click still follows the link. */}
               {renderStepLink(
                 nextStep,
                 START_TEST_ID,
                 START_BUTTON_CLASS,
                 t(I18nKey.ONBOARDING$SETUP_GUIDE_START),
-                () => setOpen(false),
+                (event) => {
+                  setOpen(false);
+                  const plainClick =
+                    event.button === 0 &&
+                    !event.metaKey &&
+                    !event.ctrlKey &&
+                    !event.shiftKey &&
+                    !event.altKey;
+                  if (
+                    plainClick &&
+                    nextStep.destination.kind === "canvas" &&
+                    hasSetupGuideTour(nextStep.id)
+                  ) {
+                    event.preventDefault();
+                    startTour(nextStep.id);
+                  }
+                },
                 true,
               )}
             </div>
