@@ -1,5 +1,5 @@
-import { useEffect } from "react";
-import { useQueries, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo } from "react";
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import EventService from "#/api/event-service/event-service.api";
 import type {
@@ -74,44 +74,111 @@ async function sessionIdentity(
 }
 
 /**
- * Resolve the runtime URL and session key a tail request needs.
+ * Resolve the runtime URL and session key for cloud conversations whose list
+ * entry omitted them, in ONE batched request.
  *
  * Cloud events are searched through the App API (`EventService.searchEvents`
  * branches on the active backend kind), so the runtime URL is not needed to
- * authorize the request — only local, WebSocket-based runtimes require it.
- * A cloud list can report a null `conversation_url` (the runtime URL may be
- * omitted from `/api/v1/app-conversations/search`), but the tail would then
- * never fan out and the row would silently lose its current step and subagent
- * count. Resolving it from the App API keeps Cloud a supported backend rather
- * than a silently degraded one.
+ * authorize the request — only local, WebSocket-based runtimes require it. But
+ * a cloud list can report a null `conversation_url` (the runtime URL may be
+ * omitted from `/api/v1/app-conversations/search`); without resolving it the
+ * tail never fans out and the row silently loses its current step and subagent
+ * count. Resolving the ids together keeps Cloud a supported backend while
+ * issuing a single lookup per refresh instead of one per row.
  *
- * Returns the conversation unchanged for local backends (the list entry
- * already carries the runtime URL) and for a cloud entry that already has one,
- * so the common poll path makes no extra request.
+ * A conversation still provisioning is absent from the result; its row simply
+ * renders an empty tail rather than failing.
  */
-async function resolveRuntimeConversation(
-  conversation: AppConversation,
-  isCloud: boolean,
-): Promise<AppConversation> {
-  if (!isCloud || conversation.conversation_url) {
-    return conversation;
-  }
-
+async function resolveRuntimeConversations(
+  ids: string[],
+): Promise<Map<string, AppConversation>> {
+  if (ids.length === 0) return new Map();
   try {
-    const [resolved] = await batchGetCloudConversations([conversation.id]);
-    const conversationUrl = resolved?.conversation_url?.trim() ?? null;
-    const sessionApiKey = resolved?.session_api_key?.trim() ?? null;
-    if (!conversationUrl) return conversation;
-    return {
-      ...conversation,
-      conversation_url: conversationUrl,
-      session_api_key: sessionApiKey,
-    };
+    const resolved = await batchGetCloudConversations(ids);
+    const byId = new Map<string, AppConversation>();
+    for (const conversation of resolved) {
+      if (conversation?.id && conversation.conversation_url?.trim()) {
+        byId.set(conversation.id, conversation);
+      }
+    }
+    return byId;
   } catch {
-    // The runtime may still be provisioning. Fall back to an empty tail rather
-    // than failing the whole view.
-    return conversation;
+    return new Map();
   }
+}
+
+/** Stable empty resolution so a pending query does not re-render consumers. */
+const EMPTY_RUNTIME_CONVERSATIONS: ReadonlyMap<string, AppConversation> =
+  new Map();
+
+/** Cache identity of the shared runtime-URL resolution for the active backend. */
+export function activityRuntimeQueryKey(
+  ids: string[],
+  backendId: string,
+  orgId: string | null,
+  backendKind: string,
+): readonly unknown[] {
+  return [
+    ...CONVERSATION_QUERY_KEYS.activityRuntime,
+    backendId,
+    orgId,
+    backendKind,
+    ...ids,
+  ];
+}
+
+/**
+ * Backend-scoped, batched resolution of the runtime URLs the cloud list
+ * omitted. One query serves every consumer (identity checking and tail
+ * fetching), so N missing rows cost ONE `batchGetCloudConversations` call per
+ * refresh rather than one per row per consumer. The key carries the sorted set
+ * of missing ids, so it refreshes when that set changes; the interval keeps a
+ * conversation that is still provisioning up to date.
+ */
+function useActivityRuntimeConversations(
+  conversations: AppConversation[],
+): ReadonlyMap<string, AppConversation> {
+  const active = useActiveBackend();
+  const isCloud = active.backend.kind === "cloud";
+
+  const missingIds = useMemo(() => {
+    if (!isCloud) return [];
+    const ids = conversations
+      .filter((conversation) => !conversation.conversation_url)
+      .map((conversation) => conversation.id);
+    return [...new Set(ids)].sort();
+  }, [conversations, isCloud]);
+
+  const query = useQuery({
+    queryKey: activityRuntimeQueryKey(
+      missingIds,
+      active.backend.id,
+      active.orgId,
+      active.backend.kind,
+    ),
+    queryFn: () => resolveRuntimeConversations(missingIds),
+    enabled: missingIds.length > 0,
+    refetchInterval: ACTIVITY_TAIL_REFETCH_MS,
+    refetchIntervalInBackground: false,
+    staleTime: ACTIVITY_TAIL_STALE_MS,
+    gcTime: ACTIVITY_TAIL_GC_MS,
+    retry: false,
+  });
+
+  return query.data ?? EMPTY_RUNTIME_CONVERSATIONS;
+}
+
+/**
+ * Overlay a resolved runtime URL onto a conversation that lacks one. Local
+ * entries and already-resolved cloud entries pass through untouched, so the
+ * common poll path adds nothing.
+ */
+function withResolvedRuntime(
+  conversation: AppConversation,
+  resolved: ReadonlyMap<string, AppConversation>,
+): AppConversation {
+  if (conversation.conversation_url) return conversation;
+  return resolved.get(conversation.id) ?? conversation;
 }
 
 /**
@@ -122,9 +189,10 @@ async function resolveRuntimeConversation(
  * conversation's own event stream. This fans out one bounded REST read per
  * active conversation through `useQueries`; it deliberately does NOT open the
  * per-conversation WebSocket, which is only wired for the conversation the
- * user has open. Missing `conversation_url`/`session_api_key` yields an empty
- * tail rather than a failing request, so a conversation that has not finished
- * provisioning still renders its row.
+ * user has open. A missing cloud `conversation_url` is resolved once for all
+ * affected rows by a shared backend-scoped query (see
+ * `useActivityRuntimeConversations`); a conversation that is still provisioning
+ * has no resolved URL and yields an empty tail rather than a failing request.
  *
  * The session API key is a credential the caller already holds. It is used to
  * authorize each request but is never written into the cached value or the
@@ -140,6 +208,16 @@ export function useActivityEventTails(
   const active = useActiveBackend();
   const queryClient = useQueryClient();
   const enabled = conversations.length > 0;
+  // One batched lookup resolves every missing cloud runtime URL; both the
+  // identity check below and the tail queries read from it.
+  const runtimeConversations = useActivityRuntimeConversations(conversations);
+  const resolvedConversations = useMemo(
+    () =>
+      conversations.map((conversation) =>
+        withResolvedRuntime(conversation, runtimeConversations),
+      ),
+    [conversations, runtimeConversations],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -149,7 +227,7 @@ export function useActivityEventTails(
       // pending; comparing only after all of them resolve means a cancelled run
       // never records a stale identity.
       const identities = await Promise.all(
-        conversations.map(async (conversation) => ({
+        resolvedConversations.map(async (conversation) => ({
           queryKey: activityTailQueryKey(
             conversation,
             active.backend.id,
@@ -157,12 +235,7 @@ export function useActivityEventTails(
             active.backend.kind,
           ),
           conversationUrl: conversation.conversation_url,
-          identity: await sessionIdentity(
-            await resolveRuntimeConversation(
-              conversation,
-              active.backend.kind === "cloud",
-            ),
-          ),
+          identity: await sessionIdentity(conversation),
         })),
       );
       if (cancelled) return;
@@ -183,10 +256,10 @@ export function useActivityEventTails(
     return () => {
       cancelled = true;
     };
-  }, [conversations, active.backend.id, active.orgId, queryClient]);
+  }, [resolvedConversations, active.backend.id, active.orgId, queryClient]);
 
   const results = useQueries({
-    queries: conversations.map((conversation) => {
+    queries: resolvedConversations.map((conversation) => {
       const queryKey = activityTailQueryKey(
         conversation,
         active.backend.id,
@@ -200,21 +273,16 @@ export function useActivityEventTails(
           client,
           queryKey: resolvedKey,
         }): Promise<ActivityTailBuffer> => {
-          // Cloud list entries may omit the runtime URL; resolve it before
-          // gating, since cloud event search goes through the App API and only
-          // needs the URL for the identity/rotation check. Local backends
-          // already carry it and are returned unchanged.
-          const runtimeConversation = await resolveRuntimeConversation(
-            conversation,
-            active.backend.kind === "cloud",
-          );
-          const conversationUrl = runtimeConversation.conversation_url;
+          // `conversation` is already the resolved entry (the shared runtime
+          // query overlaid any missing cloud URL), so the gate below only
+          // skips a conversation that is still provisioning.
+          const conversationUrl = conversation.conversation_url;
           if (!conversationUrl) {
             return { events: [] };
           }
-          const sessionApiKey = runtimeConversation.session_api_key ?? null;
+          const sessionApiKey = conversation.session_api_key ?? null;
 
-          const identity = await sessionIdentity(runtimeConversation);
+          const identity = await sessionIdentity(conversation);
           const cached = client.getQueryData<ActivityTailBuffer>(resolvedKey);
           // A cached tail fetched under a different (or unknown) session
           // identity belongs to another credential: start fresh rather than
