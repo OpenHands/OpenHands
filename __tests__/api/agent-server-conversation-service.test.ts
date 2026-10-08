@@ -1443,25 +1443,32 @@ describe("AgentServerConversationService", () => {
       });
     });
 
-    it("fails the repository update when the cloud server rejects it", async () => {
+    // Older servers reject some repository names (e.g. Azure DevOps
+    // org/project/repo). Connect Repo must still work for the user.
+    it("keeps the connected repository when the cloud server rejects it", async () => {
       // Arrange
       captureRequests(
         ["patch"],
-        HttpResponse.json({ detail: "invalid" }, { status: 400 }),
+        HttpResponse.json({ detail: "invalid" }, { status: 500 }),
       );
+      captureRequests(["get"], [{ id: "conv-cloud-1" }]);
+      vi.spyOn(console, "warn").mockImplementation(() => {});
 
       // Act
-      const update =
-        AgentServerConversationService.updateConversationRepository(
+      const conversation =
+        await AgentServerConversationService.updateConversationRepository(
           "conv-cloud-1",
-          "OpenHands/agent-canvas",
+          "contoso/project/repo",
           "main",
-          "github",
+          "azure_devops",
         );
 
       // Assert
-      await expect(update).rejects.toThrow();
-      expect(getStoredConversationMetadata("conv-cloud-1")).toBeNull();
+      expect(conversation).toMatchObject({
+        selected_repository: "contoso/project/repo",
+        selected_branch: "main",
+        git_provider: "azure_devops",
+      });
     });
 
     it("routes readConversationFile to the cloud file endpoint with the file_path query param", async () => {

@@ -17,8 +17,9 @@ import { callCloudProxy } from "./proxy";
  * Connect Repo saves the selection on the server
  * (`updateCloudConversationRepository`) and also caches it in local storage
  * (see `AgentServerConversationService.updateConversationRepository`). The
- * cache is overlaid here so the chat-page git control bar keeps showing the
- * connection if a refetch returns before the server value.
+ * cache is overlaid here for conversations whose server value is empty:
+ * older conversations connected before the server save existed, and
+ * repositories that the server rejected.
  *
  * Server values take precedence whenever they're populated; the
  * local-storage fallback only fills in fields the server returned as
