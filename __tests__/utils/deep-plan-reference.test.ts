@@ -91,6 +91,19 @@ describe("extractDefinedSections", () => {
     expect([...extractDefinedSections("## Version 1.2")]).toEqual([]);
   });
 
+  it("does not treat a number that is part of a word as a section", () => {
+    // `3D` and `3.1beta` are words, not section numbers; registering them would
+    // let a downstream `[Req 3]` resolve against a section that never exists.
+    expect([...extractDefinedSections("## 3D Rendering")]).toEqual([]);
+    expect([...extractDefinedSections("## 3.1beta Authentication")]).toEqual(
+      [],
+    );
+    expect([...extractDefinedSections("## 3.1.2Detail")]).toEqual([]);
+    // A delimiter after the number still defines it.
+    expect([...extractDefinedSections("## 3. Response")]).toEqual(["3"]);
+    expect([...extractDefinedSections("## 3.1")]).toEqual(["3.1"]);
+  });
+
   it("sees a leading number wrapped in supported inline Markdown", () => {
     // Markdown renders these wrappers without changing the displayed section
     // number, so a citation of the visible `3.1` must still resolve.
@@ -338,6 +351,20 @@ describe("validateDocumentChain", () => {
     expect(report.ok).toBe(false);
     expect(report.issues).toEqual([
       { from: "database", ref: "Req 3.1", reason: "dangling" },
+    ]);
+  });
+
+  it("reports a citation to a word-starting number as dangling", () => {
+    // `## 3D Rendering` has no section 3, so `[Req 3]` must not resolve.
+    const report = validateDocumentChain({
+      requirements: "## 3D Rendering",
+      database: "## 2.1 Model [Req 3]",
+      tasks: "# Tasks",
+    });
+
+    expect(report.ok).toBe(false);
+    expect(report.issues).toEqual([
+      { from: "database", ref: "Req 3", reason: "dangling" },
     ]);
   });
 
