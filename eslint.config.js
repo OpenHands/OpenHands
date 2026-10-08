@@ -443,6 +443,10 @@ export default [
           allow: [
             // src/index.css owns the overlay animation outside the theme graph.
             "environment-switch-overlay",
+            // src/index.css owns the macOS title-bar band; its padding must
+            // beat the p-0 utility on the same element.
+            "oh-titlebar-inset",
+            "oh-titlebar-drag-region",
             // Selector target for has-[.conversation-overview-diffs-git-action:hover].
             "conversation-overview-diffs-git-action",
           ],
