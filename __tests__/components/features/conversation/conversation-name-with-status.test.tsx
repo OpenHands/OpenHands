@@ -2,6 +2,8 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import type { MouseEventHandler } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ConversationNameWithStatus } from "#/components/features/conversation/conversation-name-with-status";
+import { ConversationTagChips } from "#/components/features/conversation-panel/conversation-card/conversation-tag-chips";
+import { I18nKey } from "#/i18n/declaration";
 import {
   OH_STATUS_ERROR_COLOR,
   OH_STATUS_SUCCESS_COLOR,
@@ -14,7 +16,12 @@ const mocks = vi.hoisted(() => ({
   conversationId: "conversation-1" as string | undefined,
   conversation: {
     execution_status: "running",
-  } as { execution_status?: ExecutionStatus | null } | undefined,
+  } as
+    | {
+        execution_status?: ExecutionStatus | null;
+        tags?: Record<string, string> | null;
+      }
+    | undefined,
   curAgentState: "running" as AgentState,
   isTask: false,
   taskStatus: null as string | null,
@@ -437,4 +444,56 @@ describe("conversation name status controls", () => {
       );
     },
   );
+
+  it("shows origin and source tags with the same chip as the conversation list", () => {
+    mocks.conversation = {
+      execution_status: ExecutionStatus.RUNNING,
+      tags: {
+        owner: "alice",
+        source: "api",
+        clientsource: "agent-canvas",
+        origin: "slack",
+      },
+    };
+    renderSubject();
+    render(<ConversationTagChips tags={[["origin", "slack"]]} />);
+
+    const headerChips = screen.getAllByTestId(
+      "conversation-channel-origin-chip",
+    );
+    expect(headerChips.map((chip) => chip.textContent)).toEqual([
+      "Origin: slack",
+      "Source: api",
+    ]);
+    expect(headerChips[0]).toHaveAttribute(
+      "title",
+      I18nKey.CONVERSATION$CHANNEL_ORIGIN_TOOLTIP,
+    );
+
+    const listChip = screen.getByTestId("conversation-card-tag-chip");
+    const listIcon = screen.getByTestId("conversation-card-tag-chip-icon");
+    const headerIcon = screen.getAllByTestId(
+      "conversation-channel-origin-icon",
+    )[0];
+    expect(headerChips[0]).toHaveTextContent(listChip.textContent ?? "");
+    expect(headerIcon.innerHTML).not.toBe("");
+    expect(headerIcon.innerHTML).toBe(listIcon.innerHTML);
+  });
+
+  it.each([
+    ["no tags", null],
+    [
+      "only reserved and other tags",
+      { clientsource: "agent-canvas", repo: "org/repo", owner: "alice" },
+    ],
+    ["a bare origin tag", { origin: "" }],
+  ])("shows no origin chip for a conversation with %s", (_name, tags) => {
+    mocks.conversation = { execution_status: ExecutionStatus.RUNNING, tags };
+    renderSubject();
+
+    expect(screen.getByTestId("conversation-name")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("conversation-channel-origin"),
+    ).not.toBeInTheDocument();
+  });
 });

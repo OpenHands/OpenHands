@@ -67,6 +67,7 @@ function TagChipContent({
   keyName,
   chipLabel,
   iconTestId,
+  labelClassName,
 }: {
   icon: ConversationTagIcon;
   keyName: string;
@@ -77,12 +78,56 @@ function TagChipContent({
    * ``getByTestId`` (singular) for any card with tags.
    */
   iconTestId?: string;
+  labelClassName?: string;
 }) {
   return (
     <>
       <TagIconSlot icon={icon} keyName={keyName} testId={iconTestId} />
-      <span className="truncate leading-4">{chipLabel}</span>
+      <span className={cn("truncate leading-4", labelClassName)}>
+        {chipLabel}
+      </span>
     </>
+  );
+}
+
+interface ConversationTagChipProps {
+  tagKey: string;
+  value: string;
+  /** Defaults to the full ``Label: value`` pair. */
+  title?: string;
+  testId?: string;
+  iconTestId?: string;
+  /** Lets a narrow surface hide the label visually and keep the icon. */
+  labelClassName?: string;
+}
+
+/**
+ * One visible tag chip. The card row and the open conversation header both
+ * render tags through this, so a tag gets the same label and icon on both.
+ */
+export function ConversationTagChip({
+  tagKey,
+  value,
+  title,
+  testId,
+  iconTestId,
+  labelClassName,
+}: ConversationTagChipProps) {
+  const { t } = useTranslation("openhands");
+  return (
+    <span
+      data-testid={testId}
+      title={title ?? formatConversationTagTooltip(tagKey, value, t)}
+      className={CONVERSATION_CARD_META_CHIP_CLASSNAME}
+    >
+      <TagChipContent
+        icon={getConversationTagIcon(tagKey, value)}
+        keyName={tagKey}
+        chipLabel={formatTagChipLabel(tagKey, value, t)}
+        iconTestId={iconTestId}
+        labelClassName={labelClassName}
+      />
+    </span>
   );
 }
 
@@ -260,19 +305,13 @@ export function ConversationTagChips({ tags }: ConversationTagChipsProps) {
         className="flex w-full min-w-0 max-w-full flex-nowrap items-center gap-1 overflow-hidden"
       >
         {visibleTags.map(([key, value]) => (
-          <span
+          <ConversationTagChip
             key={key}
-            data-testid="conversation-card-tag-chip"
-            title={formatConversationTagTooltip(key, value, t)}
-            className={CONVERSATION_CARD_META_CHIP_CLASSNAME}
-          >
-            <TagChipContent
-              icon={getConversationTagIcon(key, value)}
-              keyName={key}
-              chipLabel={formatTagChipLabel(key, value, t)}
-              iconTestId="conversation-card-tag-chip-icon"
-            />
-          </span>
+            tagKey={key}
+            value={value}
+            testId="conversation-card-tag-chip"
+            iconTestId="conversation-card-tag-chip-icon"
+          />
         ))}
         {hiddenCount > 0 ? (
           <button

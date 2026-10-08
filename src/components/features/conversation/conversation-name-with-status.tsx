@@ -13,6 +13,7 @@ import { AgentState } from "#/types/agent-state";
 import DebugStackframeDot from "#/icons/debug-stackframe-dot.svg?react";
 import { ServerStatusContextMenu } from "../controls/server-status-context-menu";
 import { ConversationName } from "./conversation-name";
+import { ConversationChannelOrigin } from "./conversation-channel-origin";
 import { ConversationGitActionsToggle } from "./conversation-git-actions-toggle";
 import { ConversationOverviewToggle } from "./conversation-overview-toggle";
 import { RightPanelToggle } from "./right-panel-toggle";
@@ -92,7 +93,7 @@ export function ConversationNameWithStatus() {
   };
 
   return (
-    <div className="flex items-center justify-between w-full">
+    <div className="@container flex items-center justify-between w-full">
       <div className="flex items-center min-w-0">
         <div
           className="relative shrink-0"
@@ -150,6 +151,7 @@ export function ConversationNameWithStatus() {
           ) : null}
         </div>
         <ConversationName />
+        <ConversationChannelOrigin />
       </div>
       <div className="mr-2 flex shrink-0 items-center gap-1">
         <ConversationGitActionsToggle />

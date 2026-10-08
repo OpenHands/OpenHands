@@ -41938,6 +41938,23 @@
     "tr": "{{count}} etiket daha göster",
     "uk": "Показати ще {{count}} тегів"
   },
+  "CONVERSATION$CHANNEL_ORIGIN_TOOLTIP": {
+    "en": "This conversation came from {{origin}}. Messages you send here continue the same conversation.",
+    "ja": "この会話は{{origin}}から来ました。ここで送信したメッセージは同じ会話の続きになります。",
+    "zh-CN": "此对话来自 {{origin}}。您在此处发送的消息会继续同一对话。",
+    "zh-TW": "此對話來自 {{origin}}。您在此處傳送的訊息會繼續同一對話。",
+    "ko-KR": "이 대화는 {{origin}}에서 왔습니다. 여기에서 보내는 메시지는 같은 대화를 이어갑니다.",
+    "no": "Denne samtalen kom fra {{origin}}. Meldinger du sender her, fortsetter den samme samtalen.",
+    "ar": "جاءت هذه المحادثة من {{origin}}. الرسائل التي ترسلها هنا تتابع المحادثة نفسها.",
+    "de": "Dieses Gespräch stammt aus {{origin}}. Nachrichten, die Sie hier senden, setzen dasselbe Gespräch fort.",
+    "fr": "Cette conversation provient de {{origin}}. Les messages que vous envoyez ici poursuivent la même conversation.",
+    "it": "Questa conversazione proviene da {{origin}}. I messaggi che invii qui continuano la stessa conversazione.",
+    "pt": "Esta conversa veio de {{origin}}. As mensagens que você envia aqui continuam a mesma conversa.",
+    "es": "Esta conversación proviene de {{origin}}. Los mensajes que envíes aquí continúan la misma conversación.",
+    "ca": "Aquesta conversa prové de {{origin}}. Els missatges que enviïs aquí continuen la mateixa conversa.",
+    "tr": "Bu konuşma {{origin}} kaynağından geldi. Buradan gönderdiğiniz mesajlar aynı konuşmayı sürdürür.",
+    "uk": "Ця розмова надійшла з {{origin}}. Повідомлення, які ви надсилаєте тут, продовжують ту саму розмову."
+  },
   "CONVERSATION$EDIT_TAGS": {
     "en": "Edit tags",
     "ja": "タグを編集",
