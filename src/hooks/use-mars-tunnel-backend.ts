@@ -9,6 +9,7 @@ import {
   openMarsTunnel,
   waitForMarsAgentServer,
 } from "#/api/mars/mars-tunnel-backend";
+import { prepareMarsSandbox } from "#/api/mars/mars-sandbox-setup";
 import { resetBackendHealth } from "#/api/backend-registry/health-store";
 import { useActiveBackendContext } from "#/contexts/active-backend-context";
 import type { Backend } from "#/api/backend-registry/types";
@@ -70,6 +71,7 @@ export function useMarsTunnelBackend() {
         await closeMarsTunnel(sessionId).catch(() => {});
         throw error;
       }
+      await prepareMarsSandbox(host, sessionId);
       // Read before the registry switch below, while nothing else is
       // pointed at this host yet.
       const latestConversationId = await fetchLatestMarsConversationId(host);
