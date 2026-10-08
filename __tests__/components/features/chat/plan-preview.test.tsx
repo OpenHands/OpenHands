@@ -4,7 +4,7 @@ import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "test-utils";
 import { PlanPreview } from "#/components/features/chat/plan-preview";
-import { ScrollProvider } from "#/context/scroll-context";
+import { ScrollProvider } from "#/contexts/scroll-context";
 import { useConversationStore } from "#/stores/conversation-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { createChatMessage } from "#/services/chat-service";

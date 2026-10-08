@@ -11,7 +11,7 @@ import {
 import type { Backend } from "#/api/backend-registry/types";
 import type { CloudSetupGuideSteps } from "#/api/cloud/types";
 import SuperAdminSetupGuide from "#/components/features/setup-guide/super-admin-setup-guide";
-import { NavigationProvider } from "#/context/navigation-context";
+import { NavigationProvider } from "#/contexts/navigation-context";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { I18nKey } from "#/i18n/declaration";
 import { server } from "#/mocks/node";

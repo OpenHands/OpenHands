@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { ArrowUpRight, Check, ClipboardList, X } from "lucide-react";
 import { getLockedCloudHost } from "#/api/agent-server-config";
 import { NavigationLink } from "#/components/shared/navigation-link";
-import { useNavigation } from "#/context/navigation-context";
+import { useNavigation } from "#/contexts/navigation-context";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { I18nKey } from "#/i18n/declaration";
 import { formControlButtonClassName } from "#/utils/form-control-classes";

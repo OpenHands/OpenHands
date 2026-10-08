@@ -73,7 +73,7 @@ vi.mock("#/hooks/use-automation-permissions", () => ({
   useAutomationCreatorFilterUserId: () => null,
 }));
 
-vi.mock("#/context/navigation-context", () => ({
+vi.mock("#/contexts/navigation-context", () => ({
   useNavigation: () => ({ navigate: mocks.navigate }),
 }));
 
