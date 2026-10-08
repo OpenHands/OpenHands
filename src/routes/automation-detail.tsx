@@ -259,11 +259,16 @@ export default function AutomationDetail() {
           />
           <DisabledReasonBanner automation={automation} />
           {automation.prompt ? (
-            <PromptSection prompt={automation.prompt} />
+            <>
+              <PromptSection prompt={automation.prompt} />
+              <ConfigurationSection automation={automation} runsAs={runsAs} />
+            </>
           ) : (
-            <ScriptSection automation={automation} />
+            <>
+              <ConfigurationSection automation={automation} runsAs={runsAs} />
+              <ScriptSection automation={automation} />
+            </>
           )}
-          <ConfigurationSection automation={automation} runsAs={runsAs} />
           {automation.plugins && automation.plugins.length > 0 && (
             <PluginsSection plugins={automation.plugins} />
           )}
