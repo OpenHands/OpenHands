@@ -93,6 +93,9 @@ export type WebSocketConnectionState =
   | "CLOSED"
   | "CLOSING";
 
+/** Which of the two session sockets a connection error came from. */
+type ConnectionErrorSource = "main" | "planning";
+
 interface SendMessageResult {
   queued: boolean; // true if message was queued for later delivery, false if sent immediately
 }
@@ -212,12 +215,12 @@ export function ConversationWebSocketProvider({
   // Don't show errors until after first successful connection
   const hasConnectedRefMain = React.useRef(false);
   const hasConnectedRefPlanning = React.useRef(false);
-  // Which socket last raised the connection error. `reconnect` retries that one
-  // rather than guessing from the active mode: in Deep Planning's Implementation
-  // phase the composer routes to the main socket, yet a planner-socket failure
-  // is what puts the banner up, and retrying the main socket would leave the
-  // planner disconnected.
-  const connectionErrorSourceRef = useRef<"main" | "planning" | null>(null);
+  // Sockets that are currently down. Both sockets raise the same banner, so a
+  // single "last error source" cannot represent a failure of both — retrying it
+  // would leave the other one closed. `reconnect` retries every entry here, and
+  // each socket's own `onOpen` removes itself so a healthy socket is not
+  // reconnected on the next Retry.
+  const failedSocketsRef = useRef<Set<ConnectionErrorSource>>(new Set());
 
   const queryClient = useQueryClient();
   const addEvent = useEventStore((state) => state.addEvent);
@@ -633,6 +636,9 @@ export function ConversationWebSocketProvider({
   useEffect(() => {
     hasConnectedRefMain.current = false;
     hasConnectedRefPlanning.current = false;
+    // Failure state belongs to the previous conversation's sockets; a Retry in
+    // the next conversation must not reconnect a socket that is already gone.
+    failedSocketsRef.current.clear();
     // A cursor is a position in one conversation's log; carrying it into the
     // next would skip that conversation's events below it.
     mainCursorRef.current.clear();
@@ -1175,6 +1181,7 @@ export function ConversationWebSocketProvider({
       onOpen: () => {
         setMainConnectionState("OPEN");
         hasConnectedRefMain.current = true; // Mark that we've successfully connected
+        failedSocketsRef.current.delete("main"); // This socket recovered.
         clearConnectionError(); // Clear a previous connection error; keep sticky conversation errors
         // Progress frames are never replayed, so any slot left open across the
         // gap can never be retired. Discard and wait: the durable message is
@@ -1191,7 +1198,7 @@ export function ConversationWebSocketProvider({
         setMainConnectionState("CLOSED");
         // Only show error message if we've previously connected successfully
         if (hasConnectedRefMain.current) {
-          connectionErrorSourceRef.current = "main";
+          failedSocketsRef.current.add("main");
           setErrorMessage(SERVER_CONNECTION_ERROR_MESSAGE, "connection");
         }
       },
@@ -1220,6 +1227,7 @@ export function ConversationWebSocketProvider({
       onOpen: async () => {
         setPlanningConnectionState("OPEN");
         hasConnectedRefPlanning.current = true; // Mark that we've successfully connected
+        failedSocketsRef.current.delete("planning"); // This socket recovered.
         clearConnectionError(); // Clear a previous connection error; keep sticky conversation errors
         // See the main socket: an open slot cannot survive the gap.
         planningDeltaBatcherRef.current?.reset();
@@ -1257,7 +1265,7 @@ export function ConversationWebSocketProvider({
         setPlanningConnectionState("CLOSED");
         // Only show error message if we've previously connected successfully
         if (hasConnectedRefPlanning.current) {
-          connectionErrorSourceRef.current = "planning";
+          failedSocketsRef.current.add("planning");
           setErrorMessage(SERVER_CONNECTION_ERROR_MESSAGE, "connection");
         }
       },
@@ -1284,23 +1292,31 @@ export function ConversationWebSocketProvider({
 
   const reconnect = useCallback(() => {
     removeErrorMessage();
-    // Retry whichever socket is actually down. The error source is preferred
-    // because the mode alone misidentifies it in Implementation; the mode is
-    // the fallback for an error raised before either socket reported one.
-    const failed = connectionErrorSourceRef.current;
-    const source =
-      failed ??
-      (isPlanningMode(
+    // Retry every socket that is currently down. Retrying only the one that
+    // raised the banner last would leave the other closed when both failed,
+    // which is exactly the state a single `last error source` cannot express.
+    // The mode is the fallback for a banner raised before either socket
+    // reported an error, so a Retry always acts on something.
+    const failed = new Set(failedSocketsRef.current);
+    if (failed.size === 0) {
+      const source: ConnectionErrorSource = isPlanningMode(
         useConversationStore.getState().conversationMode,
         useConversationStore.getState().deepPlan.activePhase,
       )
         ? "planning"
-        : "main");
-    if (source === "planning" && planningAgentWsUrl) {
-      reconnectPlanning();
-      return;
+        : "main";
+      failed.add(source);
     }
-    reconnectMain();
+
+    const retryPlanning = failed.has("planning") && planningAgentWsUrl;
+    if (retryPlanning) {
+      reconnectPlanning();
+    }
+    // Without a planner URL the fallback source cannot be retried, so fall back
+    // to the main socket rather than making Retry a no-op.
+    if (failed.has("main") || (failed.has("planning") && !retryPlanning)) {
+      reconnectMain();
+    }
   }, [
     planningAgentWsUrl,
     reconnectMain,

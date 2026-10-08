@@ -889,6 +889,62 @@ describe("Conversation websocket behavior", () => {
     expect(socketCapture.reconnectMain).toHaveBeenCalledOnce();
   });
 
+  // Either socket can raise the same connection banner, so when both fail a
+  // single "last error source" cannot represent the state: retrying only the
+  // one that failed last leaves the other closed. Both failure orders must
+  // retry both sockets.
+  for (const [label, first, second] of [
+    ["the planner then the main socket", "planning", "main"],
+    ["the main socket then the planner", "main", "planning"],
+  ] as const) {
+    it(`retries both sockets when ${label} fails`, async () => {
+      vi.spyOn(EventService, "getEventCount").mockResolvedValue(0);
+      renderProvider({ subConversations: [makeSubConversation()] });
+      await act(async () => {
+        mainOptions().onOpen?.(new Event("open"));
+        await planningOptions().onOpen?.(new Event("open"));
+      });
+
+      act(() => {
+        const options =
+          first === "planning" ? planningOptions() : mainOptions();
+        options.onError?.(new Event("error"));
+        const secondOptions =
+          second === "planning" ? planningOptions() : mainOptions();
+        secondOptions.onError?.(new Event("error"));
+      });
+      expect(useErrorMessageStore.getState().errorMessage).toBe(
+        SERVER_CONNECTION_ERROR_MESSAGE,
+      );
+
+      act(() => contextCapture.current?.reconnect());
+
+      expect(useErrorMessageStore.getState().errorMessage).toBeNull();
+      expect(socketCapture.reconnectMain).toHaveBeenCalledOnce();
+      expect(socketCapture.reconnectPlanning).toHaveBeenCalledOnce();
+    });
+  }
+
+  it("does not retry a failed socket that has since recovered", async () => {
+    vi.spyOn(EventService, "getEventCount").mockResolvedValue(0);
+    renderProvider({ subConversations: [makeSubConversation()] });
+    await act(async () => {
+      mainOptions().onOpen?.(new Event("open"));
+      await planningOptions().onOpen?.(new Event("open"));
+    });
+    act(() => {
+      planningOptions().onError?.(new Event("error"));
+      mainOptions().onError?.(new Event("error"));
+    });
+    // The main socket recovers on its own before the user hits Retry.
+    act(() => mainOptions().onOpen?.(new Event("open")));
+
+    act(() => contextCapture.current?.reconnect());
+
+    expect(socketCapture.reconnectPlanning).toHaveBeenCalledOnce();
+    expect(socketCapture.reconnectMain).not.toHaveBeenCalled();
+  });
+
   it("uses sockets and reconnect routing introduced after the first render", async () => {
     const view = renderProvider();
     const mainSocket = makeSocket(WebSocket.OPEN);
