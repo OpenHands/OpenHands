@@ -7,6 +7,12 @@ import SettingsService from "#/api/settings-service/settings-service.api";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import { Settings } from "#/types/settings";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
+
+vi.mock("#/utils/custom-toast-handlers", () => ({
+  displayErrorToast: vi.fn(),
+  displaySuccessToast: vi.fn(),
+}));
 
 const activeBackendState = vi.hoisted(() => ({
   kind: "local" as "local" | "cloud",
@@ -129,6 +135,30 @@ describe("AppSettingsScreen", () => {
         }),
       );
     });
+  });
+
+  it("preserves unsaved edits when saving fails", async () => {
+    // Arrange
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({ enable_sound_notifications: false }),
+    );
+    vi.spyOn(SettingsService, "saveSettings").mockRejectedValue(
+      new Error("network unavailable"),
+    );
+    renderAppSettingsScreen();
+    const user = userEvent.setup();
+    const soundSwitch = await screen.findByTestId(
+      "enable-sound-notifications-switch",
+    );
+
+    // Act
+    await user.click(soundSwitch);
+    await user.click(screen.getByTestId("submit-button"));
+
+    // Assert
+    await waitFor(() => expect(displayErrorToast).toHaveBeenCalled());
+    expect(soundSwitch).toBeChecked();
+    expect(screen.getByTestId("submit-button")).toBeEnabled();
   });
 
   it("saves updated git author details in OSS mode", async () => {
