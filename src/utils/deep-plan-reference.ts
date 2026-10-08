@@ -67,11 +67,14 @@ export type DeepPlanDocuments = Partial<Record<DeepPlanPhaseId, string>>;
 
 /**
  * Strips leading inline Markdown delimiters so the leading-token check sees the
- * rendered heading. A delimiter is only a wrapper when the same marker also
- * closes the span somewhere later in the heading — Markdown then hides it, so
- * `## **3.1 Authentication**` displays section `3.1`. An unmatched marker
- * (`## *3.1 Authentication`) is shown literally, so the visible heading starts
- * with the marker and nothing is stripped.
+ * rendered heading. A delimiter is only a wrapper when it actually forms a span
+ * under Markdown's closing rules: a code span closes at the next backtick, and
+ * an emphasis marker closes only at a right-flanking run — one preceded by a
+ * non-whitespace character — and at the *first* later run, since an inner span
+ * binds first. This rejects a literal marker followed by separate emphasis,
+ * e.g. `## *3.1 Authentication *notes*`, where the leading `*` cannot pair with
+ * the `*` before `notes` and so stays visible. An unmatched marker
+ * (`## *3.1 Authentication`) is likewise shown literally and not stripped.
  */
 function stripClosedWrapper(title: string): string {
   let visible = title;
@@ -79,7 +82,11 @@ function stripClosedWrapper(title: string): string {
     const marker = LEADING_MARKDOWN_WRAPPER.exec(visible)?.[1];
     if (!marker) return visible;
     const rest = visible.slice(marker.length);
-    if (!rest.includes(marker)) return visible;
+    const closesAt = rest.indexOf(marker);
+    if (closesAt <= 0) return visible;
+    // A code span ignores flanking; an emphasis closer must not be preceded by
+    // whitespace.
+    if (marker !== "`" && /\s/.test(rest[closesAt - 1])) return visible;
     visible = rest;
   }
 }

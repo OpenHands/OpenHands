@@ -115,6 +115,12 @@ describe("extractDefinedSections", () => {
     expect([...extractDefinedSections("## `3.1 Authentication`")]).toEqual([
       "3.1",
     ]);
+    expect([...extractDefinedSections("## __3.1 Authentication__")]).toEqual([
+      "3.1",
+    ]);
+    expect([...extractDefinedSections("## _3.1 Authentication_")]).toEqual([
+      "3.1",
+    ]);
   });
 
   it("does not treat a wrapped prose number as a definition", () => {
@@ -135,6 +141,17 @@ describe("extractDefinedSections", () => {
     expect([...extractDefinedSections("## *3.1* Authentication")]).toEqual([
       "3.1",
     ]);
+  });
+
+  it("ignores a leading marker closed only by a separate emphasis span", () => {
+    // The leading `*` cannot pair with the `*` before `notes` (they are not a
+    // single span), so it stays literal and the heading starts with `*`, not
+    // the number.
+    expect([
+      ...extractDefinedSections("## *3.1 Authentication *notes*"),
+    ]).toEqual([]);
+    // Same shape with the leading `*` separated from the number by whitespace.
+    expect([...extractDefinedSections("## * 3.1 *notes*")]).toEqual([]);
   });
 
   it("does not define a section from an unnumbered heading's citation", () => {
@@ -289,6 +306,23 @@ describe("validateDocumentChain", () => {
     // section; the database's `[Req 3.1]` must be dangling, not accepted.
     const documents: DeepPlanDocuments = {
       requirements: "## *3.1 Authentication",
+      database: "## 2.1 Users [Req 3.1]",
+      tasks: "# Tasks",
+    };
+
+    const report = validateDocumentChain(documents);
+
+    expect(report.ok).toBe(false);
+    expect(report.issues).toEqual([
+      { from: "database", ref: "Req 3.1", reason: "dangling" },
+    ]);
+  });
+
+  it("reports a citation as dangling when the marker only closes a later span", () => {
+    // `## *3.1 Authentication *notes*` renders as `*3.1 Authentication notes`;
+    // the leading `*` is literal, so `[Req 3.1]` must be dangling.
+    const documents: DeepPlanDocuments = {
+      requirements: "## *3.1 Authentication *notes*",
       database: "## 2.1 Users [Req 3.1]",
       tasks: "# Tasks",
     };
