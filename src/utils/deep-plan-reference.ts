@@ -46,17 +46,24 @@ export interface RefReport {
 const REFERENCE_PATTERN = /\[(Req|DB|BE|FE)\s+([0-9]+(?:\.[0-9]+)*)\]/g;
 const HEADING_PATTERN = /^#{1,6}\s+(.*)$/;
 /**
+ * A supported inline Markdown wrapper that may open a heading: bold (`**`/`__`),
+ * italic (`*`/`_`) or a code span (`` ` ``). Markdown renders these around the
+ * heading's first token without changing the visible section number, so
+ * `## **3.1** Authentication` still shows section `3.1`.
+ */
+const LEADING_MARKDOWN_WRAPPER = /^(\*\*|__|\*|_|`)/;
+/**
  * A heading that leads with its section number, e.g. `## 3.1 Authentication`
  * defines `3.1`. Only a *leading* number counts: a title like
  * `## 3.1 Response under 200 ms` defines `3.1`, not `200`, and
  * `## Version 1.2` defines nothing.
  */
-const LEADING_NUMBER_HEADING = /^\s*([0-9]+(?:\.[0-9]+)*)\b/;
+const LEADING_NUMBER_HEADING = /^([0-9]+(?:\.[0-9]+)*)\b/;
 /**
  * A heading that spells its own label out at the start, e.g.
  * `## [Req 3.1] Users` — the citation *is* the section number here.
  */
-const OWN_LABEL_HEADING = /^\s*\[(?:Req|DB|BE|FE)\s+([0-9]+(?:\.[0-9]+)*)\]/;
+const OWN_LABEL_HEADING = /^\[(?:Req|DB|BE|FE)\s+([0-9]+(?:\.[0-9]+)*)\]/;
 
 export type DeepPlanDocuments = Partial<Record<DeepPlanPhaseId, string>>;
 
@@ -65,7 +72,9 @@ export type DeepPlanDocuments = Partial<Record<DeepPlanPhaseId, string>>;
  * (`## 3.1 Authentication` defines `3.1`; `### 3.1.1 Login` defines `3.1.1`).
  * Only a number that *leads* the heading is a definition, so prose numbers in
  * a title (`## 3.1 Response under 200 ms` → `3.1`, not `200`) and version-like
- * titles (`## Version 1.2` → nothing) are ignored.
+ * titles (`## Version 1.2` → nothing) are ignored. A supported inline Markdown
+ * wrapper around that leading token (`## **3.1** Authentication`) does not hide
+ * it — the displayed section number is still `3.1`.
  *
  * A heading may instead spell its own label out (`## [Req 3.1] Authentication`),
  * in which case the leading citation is the definition. An unnumbered heading
@@ -78,7 +87,9 @@ export function extractDefinedSections(content: string): Set<string> {
   for (const line of content.split("\n")) {
     const heading = HEADING_PATTERN.exec(line);
     if (!heading) continue;
-    const title = heading[1];
+    // Unwrap one leading emphasis/code wrapper so the leading-token check sees
+    // the displayed number rather than the markup.
+    const title = heading[1].trimStart().replace(LEADING_MARKDOWN_WRAPPER, "");
     const leadingNumber = LEADING_NUMBER_HEADING.exec(title);
     if (leadingNumber) {
       sections.add(leadingNumber[1]);

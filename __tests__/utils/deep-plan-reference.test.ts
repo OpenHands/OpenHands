@@ -91,6 +91,26 @@ describe("extractDefinedSections", () => {
     expect([...extractDefinedSections("## Version 1.2")]).toEqual([]);
   });
 
+  it("sees a leading number wrapped in supported inline Markdown", () => {
+    // Markdown renders these wrappers without changing the displayed section
+    // number, so a citation of the visible `3.1` must still resolve.
+    expect([...extractDefinedSections("## **3.1** Authentication")]).toEqual([
+      "3.1",
+    ]);
+    expect([...extractDefinedSections("## `3.1` Authentication")]).toEqual([
+      "3.1",
+    ]);
+    expect([...extractDefinedSections("### *3.1.1* Login")]).toEqual(["3.1.1"]);
+  });
+
+  it("does not treat a wrapped prose number as a definition", () => {
+    // Wrapping does not lift the leading-token constraint: `**200**` is still
+    // prose, not a section.
+    expect([
+      ...extractDefinedSections("## 3.1 Response under **200** ms"),
+    ]).toEqual(["3.1"]);
+  });
+
   it("does not define a section from an unnumbered heading's citation", () => {
     // `## Users [Req 3.1]` has no number of its own, so it defines nothing.
     // Treating the citation as a definition would let a downstream
@@ -203,6 +223,21 @@ describe("validateDocumentChain", () => {
     expect(report.issues).toEqual([
       { from: "database", ref: "Req 200", reason: "dangling" },
     ]);
+  });
+
+  it("resolves a citation to a requirement heading wrapped in Markdown", () => {
+    // Reviewer scenario: `## **3.1** Authentication` displays section 3.1, so
+    // the database's `[Req 3.1]` must resolve rather than block the checkpoint.
+    const documents: DeepPlanDocuments = {
+      requirements: "## **3.1** Authentication",
+      database: "## 2.1 Users [Req 3.1]",
+      tasks: "# Tasks",
+    };
+
+    const report = validateDocumentChain(documents);
+
+    expect(report.issues).toEqual([]);
+    expect(report.ok).toBe(true);
   });
 
   it("reports requirements no task cites", () => {

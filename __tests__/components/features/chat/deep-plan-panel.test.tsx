@@ -128,6 +128,32 @@ describe("DeepPlanPanel", () => {
     );
   });
 
+  it("clears a stale checkpoint error when the active phase changes", async () => {
+    const store = useConversationStore.getState();
+    act(() => {
+      store.startDeepPlan();
+      store.setDeepPlanDocument("requirements", "## 3.1 Authentication\n");
+      store.confirmDeepPlanPhase("analysis");
+      store.confirmDeepPlanPhase("requirements");
+      store.setDeepPlanDocument("database", "## 2.1 Users [Req 9.9]\n");
+    });
+
+    renderWithProviders(<DeepPlanPanel />);
+
+    await userEvent.click(screen.getByTestId("deep-plan-confirm"));
+    expect(screen.getByTestId("deep-plan-error")).toBeInTheDocument();
+
+    // The error described the database checkpoint; leaving that phase must
+    // stop showing it.
+    act(() => {
+      useConversationStore.getState().setDeepPlanPhase("analysis");
+    });
+
+    await waitFor(() =>
+      expect(screen.queryByTestId("deep-plan-error")).not.toBeInTheDocument(),
+    );
+  });
+
   it("renders the phase instruction through the translation function", () => {
     const store = useConversationStore.getState();
     act(() => {
