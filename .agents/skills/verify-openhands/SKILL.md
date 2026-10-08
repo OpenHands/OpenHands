@@ -152,7 +152,20 @@ conversations when their recipe is done.
 
 Use `deepseek-flash` for everything that needs a model; switch to `deepseek-pro`
 only for checks that need a second profile or a stronger model. Keep prompts
-small and confined to the run workspace. Without a key, run every credential-free
+small and confined to the run workspace.
+
+The local stack is not a sandbox. The agent's terminal runs as your user, and
+its environment includes the run's own keys. A prompt that leaves the model
+without a clear task can send it exploring outside the workspace, and what it
+reads goes to the model provider. That covers an image with no text, a bare
+trigger word whose skill is not loaded, and an open-ended setup command. On
+2026-10-08, deepseek-flash read the run directory, the checkout, other
+sessions' files under `/tmp` and `env` in such cases. So add `Do not run any
+tools` (or name the exact command) to every prompt whose check does not need
+more. Watch `conversation events <id> --kinds ActionEvent` while a run that
+needs tools is open, and run `conversation pause <id>` as soon as it leaves the
+workspace. Do not launch the stack as a user whose files hold credentials you
+cannot let a model read. Without a key, run every credential-free
 recipe and record model-dependent ones as `blocked` with the missing
 prerequisite; never substitute a mock and call it a pass.
 
