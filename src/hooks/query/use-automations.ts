@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-query";
 import AutomationService from "#/api/automation-service/automation-service.api";
 import { useActiveBackend } from "#/contexts/active-backend-context";
+import { getErrorStatus } from "#/utils/get-error-status";
 import { useTracking } from "#/hooks/use-tracking";
 import { uniqueById } from "#/utils/unique-by-id";
 import type {
@@ -177,6 +178,14 @@ export function useDispatchAutomation() {
       // explicitly (same prefix all conversation mutations invalidate).
       queryClient.invalidateQueries({ queryKey: ["user", "conversations"] });
       trackAutomationExecuted({ backendKind: active.backend.kind });
+    },
+    onError: (error) => {
+      if (getErrorStatus(error) === 404) {
+        queryClient.invalidateQueries({ queryKey: AUTOMATIONS_QUERY_KEY });
+        queryClient.invalidateQueries({
+          queryKey: AUTOMATION_DETAIL_QUERY_KEY,
+        });
+      }
     },
   });
 }
