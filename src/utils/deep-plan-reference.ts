@@ -45,9 +45,13 @@ export interface RefReport {
 
 const REFERENCE_PATTERN = /\[(Req|DB|BE|FE)\s+([0-9]+(?:\.[0-9]+)*)\]/g;
 const HEADING_PATTERN = /^#{1,6}\s+(.*)$/;
-const NUMBER_TOKEN = /\b[0-9]+(?:\.[0-9]+)*\b/g;
-/** A bracketed citation, e.g. `[Req 3.1]`, removed before scanning a heading. */
-const CITATION_IN_TEXT = /\[(?:Req|DB|BE|FE)\s+[0-9]+(?:\.[0-9]+)*\]/g;
+/**
+ * A heading that leads with its section number, e.g. `## 3.1 Authentication`
+ * defines `3.1`. Only a *leading* number counts: a title like
+ * `## 3.1 Response under 200 ms` defines `3.1`, not `200`, and
+ * `## Version 1.2` defines nothing.
+ */
+const LEADING_NUMBER_HEADING = /^\s*([0-9]+(?:\.[0-9]+)*)\b/;
 /**
  * A heading that spells its own label out at the start, e.g.
  * `## [Req 3.1] Users` — the citation *is* the section number here.
@@ -59,15 +63,15 @@ export type DeepPlanDocuments = Partial<Record<DeepPlanPhaseId, string>>;
 /**
  * Section numbers a document defines, taken from its numbered headings
  * (`## 3.1 Authentication` defines `3.1`; `### 3.1.1 Login` defines `3.1.1`).
- * A heading may also spell its own label out (`## [Req 3.1] Authentication`).
+ * Only a number that *leads* the heading is a definition, so prose numbers in
+ * a title (`## 3.1 Response under 200 ms` → `3.1`, not `200`) and version-like
+ * titles (`## Version 1.2` → nothing) are ignored.
  *
- * Upstream citations are not definitions. In `## 2.1 Users [Req 3.1]` the
- * document defines `2.1`, and `3.1` is the requirement it satisfies — counting
- * it as defined here would let a downstream `[DB 3.1]` resolve against a
- * section this document never defines. The citation's number is only a
- * definition when the heading *leads* with it (`## [Req 3.1] Users`); an
- * unnumbered heading that merely cites upstream (`## Users [Req 3.1]`) defines
- * nothing.
+ * A heading may instead spell its own label out (`## [Req 3.1] Authentication`),
+ * in which case the leading citation is the definition. An unnumbered heading
+ * that merely cites upstream (`## Users [Req 3.1]`) defines nothing — counting
+ * it would let a downstream `[DB 3.1]` resolve against a section this document
+ * never defines.
  */
 export function extractDefinedSections(content: string): Set<string> {
   const sections = new Set<string>();
@@ -75,12 +79,9 @@ export function extractDefinedSections(content: string): Set<string> {
     const heading = HEADING_PATTERN.exec(line);
     if (!heading) continue;
     const title = heading[1];
-    const withoutCitations = title.replace(CITATION_IN_TEXT, " ");
-    const tokens = withoutCitations.match(NUMBER_TOKEN);
-    if (tokens) {
-      for (const token of tokens) {
-        sections.add(token);
-      }
+    const leadingNumber = LEADING_NUMBER_HEADING.exec(title);
+    if (leadingNumber) {
+      sections.add(leadingNumber[1]);
       continue;
     }
     const ownLabel = OWN_LABEL_HEADING.exec(title);

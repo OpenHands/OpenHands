@@ -1,4 +1,4 @@
-import { act, screen } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DeepPlanPanel } from "#/components/features/chat/deep-plan-panel";
@@ -97,6 +97,34 @@ describe("DeepPlanPanel", () => {
     );
     expect(useConversationStore.getState().deepPlan.activePhase).toBe(
       "database",
+    );
+  });
+
+  it("clears a stale checkpoint error when the document is re-edited", async () => {
+    const store = useConversationStore.getState();
+    act(() => {
+      store.startDeepPlan();
+      store.setDeepPlanDocument("requirements", "## 3.1 Authentication\n");
+      store.confirmDeepPlanPhase("analysis");
+      store.confirmDeepPlanPhase("requirements");
+      store.setDeepPlanDocument("database", "## 2.1 Users [Req 9.9]\n");
+    });
+
+    renderWithProviders(<DeepPlanPanel />);
+
+    await userEvent.click(screen.getByTestId("deep-plan-confirm"));
+    expect(screen.getByTestId("deep-plan-error")).toBeInTheDocument();
+
+    // Rewriting the database document with a valid citation must drop the
+    // error that described the previous (broken) document.
+    act(() => {
+      useConversationStore
+        .getState()
+        .setDeepPlanDocument("database", "## 2.1 Users [Req 3.1]\n");
+    });
+
+    await waitFor(() =>
+      expect(screen.queryByTestId("deep-plan-error")).not.toBeInTheDocument(),
     );
   });
 

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Check, Lock } from "lucide-react";
 import { I18nKey } from "#/i18n/declaration";
@@ -30,6 +30,13 @@ export function DeepPlanPanel() {
   const [failure, setFailure] = useState<ConfirmFailure | null>(null);
 
   const activePhase = deepPlan.activePhase;
+
+  // A checkpoint error describes the document as it was when Confirm was
+  // pressed. Moving to another phase or editing the documents makes it stale,
+  // so clear it rather than leaving the old error on screen.
+  useEffect(() => {
+    setFailure(null);
+  }, [activePhase, deepPlan.documents]);
 
   // Validate only up to the active phase, matching the checkpoint. A citation
   // in a document the user has not reached yet is not actionable from here, and

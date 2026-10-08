@@ -79,6 +79,18 @@ describe("extractDefinedSections", () => {
     expect([...extractDefinedSections("## [Req 3.1] Users")]).toEqual(["3.1"]);
   });
 
+  it("only counts a heading's leading number, not prose numbers in the title", () => {
+    // `200` is an SLA figure, not a section the document defines; counting it
+    // would let `[Req 200]` resolve against a section that never exists.
+    expect([...extractDefinedSections("## 3.1 Response under 200 ms")]).toEqual(
+      ["3.1"],
+    );
+  });
+
+  it("defines nothing for a heading that does not lead with a number", () => {
+    expect([...extractDefinedSections("## Version 1.2")]).toEqual([]);
+  });
+
   it("does not define a section from an unnumbered heading's citation", () => {
     // `## Users [Req 3.1]` has no number of its own, so it defines nothing.
     // Treating the citation as a definition would let a downstream
@@ -173,6 +185,23 @@ describe("validateDocumentChain", () => {
     expect(report.ok).toBe(false);
     expect(report.issues).toEqual([
       { from: "backend", ref: "DB 3.1", reason: "dangling" },
+    ]);
+  });
+
+  it("rejects a citation to a number that only appears inside a heading title", () => {
+    // `200` is prose in the requirements heading (`under 200 ms`), not a
+    // definition. Counting every number in a title would make `[Req 200]`
+    // resolve, so the database must instead see it as dangling.
+    const documents: DeepPlanDocuments = {
+      requirements: "## 3.1 Latency under 200 ms",
+      database: "## 2.1 X [Req 200]",
+      tasks: "# Tasks",
+    };
+
+    const report = validateDocumentChain(documents);
+
+    expect(report.issues).toEqual([
+      { from: "database", ref: "Req 200", reason: "dangling" },
     ]);
   });
 
