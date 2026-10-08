@@ -36,6 +36,7 @@ import type {
   SetupRequestBody,
   ValidateDraftResponse,
 } from "#/manifests/types";
+import { withPresetSources } from "#/utils/automation-preset-sources";
 import { downloadBlob } from "#/utils/utils";
 import type { Backend, ResolvedActiveBackend } from "../backend-registry/types";
 import {
@@ -294,20 +295,26 @@ class AutomationService {
     const { limit = 50, offset = 0, createdBy } = params;
     const active = getActiveBackend().backend;
 
+    let response: AutomationsResponse;
     if (active.kind === "cloud") {
-      return callCloudProxy<AutomationsResponse>({
+      response = await callCloudProxy<AutomationsResponse>({
         backend: active,
         method: "GET",
         path: `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}?${buildListQuery(limit, offset, { created_by: createdBy })}`,
         headers: await buildAutomationRequestHeaders(),
       });
+    } else {
+      const { data } = await localAutomationAxios.get<AutomationsResponse>(
+        `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}`,
+        { params: { limit, offset, created_by: createdBy } },
+      );
+      response = data;
     }
 
-    const { data } = await localAutomationAxios.get<AutomationsResponse>(
-      `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}`,
-      { params: { limit, offset, created_by: createdBy } },
-    );
-    return data;
+    return {
+      ...response,
+      automations: response.automations.map(withPresetSources),
+    };
   }
 
   /**
@@ -326,17 +333,20 @@ class AutomationService {
     const active = getActiveBackend().backend;
     const path = `${AUTOMATION_BASE_PATH}${getAutomationIdEndpoint("detail", id)}`;
 
+    let automation: Automation;
     if (active.kind === "cloud") {
-      return callCloudProxy<Automation>({
+      automation = await callCloudProxy<Automation>({
         backend: active,
         method: "GET",
         path,
         headers: await buildAutomationRequestHeaders(),
       });
+    } else {
+      const { data } = await localAutomationAxios.get<Automation>(path);
+      automation = data;
     }
 
-    const { data } = await localAutomationAxios.get<Automation>(path);
-    return data;
+    return withPresetSources(automation);
   }
 
   static async createAutomation(spec: AutomationSpec): Promise<Automation> {

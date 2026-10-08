@@ -1,7 +1,14 @@
+import React from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import XMarkIcon from "#/icons/x-mark.svg?react";
+import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
+import {
+  MODAL_MAX_WIDTH_VIEWPORT,
+  modalWidthClassName,
+} from "#/components/shared/modals/modal-body";
 import { modalTitleLgMediumClassName } from "#/utils/modal-classes";
+import { cn } from "#/utils/utils";
 
 interface DeleteConfirmationModalProps {
   automationName: string;
@@ -17,20 +24,29 @@ export function DeleteConfirmationModal({
   onCancel,
 }: DeleteConfirmationModalProps) {
   const { t } = useTranslation("openhands");
+  const cancelButtonRef = React.useRef<HTMLButtonElement>(null);
+
+  // Move keyboard focus into the dialog when it opens, onto the
+  // non-destructive choice, so Enter or Space cannot delete by accident.
+  React.useEffect(() => {
+    if (isOpen) cancelButtonRef.current?.focus();
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
+  const title = t(I18nKey.AUTOMATIONS$DELETE_CONFIRM_TITLE);
+
+  // ModalBackdrop exposes the named `role="dialog"` with `aria-modal` and
+  // closes on Escape or a backdrop click.
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <ModalBackdrop onClose={onCancel} aria-label={title}>
       <div
-        className="absolute inset-0 bg-black/60"
-        onClick={onCancel}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") onCancel();
-        }}
-        role="presentation"
-      />
-      <div className="relative w-full max-w-sm rounded-xl border border-border bg-surface p-6">
+        className={cn(
+          "relative rounded-xl border border-border bg-surface p-6",
+          modalWidthClassName("sm"),
+          MODAL_MAX_WIDTH_VIEWPORT,
+        )}
+      >
         <button
           type="button"
           onClick={onCancel}
@@ -40,9 +56,7 @@ export function DeleteConfirmationModal({
           <XMarkIcon className="size-5" />
         </button>
 
-        <h2 className={modalTitleLgMediumClassName}>
-          {t(I18nKey.AUTOMATIONS$DELETE_CONFIRM_TITLE)}
-        </h2>
+        <h2 className={modalTitleLgMediumClassName}>{title}</h2>
         <p className="mt-2 text-sm text-muted">
           {t(I18nKey.AUTOMATIONS$DELETE_CONFIRM_MESSAGE, {
             name: automationName,
@@ -51,6 +65,7 @@ export function DeleteConfirmationModal({
 
         <div className="mt-6 flex justify-end gap-3">
           <button
+            ref={cancelButtonRef}
             type="button"
             onClick={onCancel}
             className="rounded-lg border border-border px-4 py-2 text-sm text-contrast hover:bg-surface-raised"
@@ -66,6 +81,6 @@ export function DeleteConfirmationModal({
           </button>
         </div>
       </div>
-    </div>
+    </ModalBackdrop>
   );
 }

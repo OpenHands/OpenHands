@@ -8,6 +8,7 @@ import { Divider } from "#/ui/divider";
 import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
+import { getLockedCloudHost } from "#/api/agent-server-config";
 
 interface ChatInputProfileMenuContentProps {
   onClose: () => void;
@@ -38,6 +39,9 @@ export function ChatInputProfileMenuContent({
     isSwitching,
     selectProfile,
   } = useChatInputProfileState();
+  // Locked-to-Cloud blocks the Canvas agent profiles page this links to
+  // (OHE-3457).
+  const showSettingsLink = getLockedCloudHost() === null;
 
   const handleSelect = (profile: (typeof profiles)[number]) => {
     selectProfile(profile);
@@ -103,25 +107,29 @@ export function ChatInputProfileMenuContent({
           )}
         </>
       )}
-      {profiles.length > 0 && <Divider inset={dividerInset} />}
-      <li className="text-sm">
-        <NavigationLink
-          to="/settings/agents"
-          onClick={onClose}
-          className={cn(
-            "flex h-7.5 items-center gap-2 rounded p-2 leading-5 text-foreground hover:bg-interactive-hover transition-colors",
-            settingsLinkClassName,
-          )}
-        >
-          <SettingsGearIcon
-            width={16}
-            height={16}
-            className={cn("shrink-0", settingsIconClassName)}
-            aria-hidden
-          />
-          <span>{t(I18nKey.CHAT$MANAGE_AGENT_PROFILES)}</span>
-        </NavigationLink>
-      </li>
+      {showSettingsLink && profiles.length > 0 && (
+        <Divider inset={dividerInset} />
+      )}
+      {showSettingsLink && (
+        <li className="text-sm">
+          <NavigationLink
+            to="/settings/agents"
+            onClick={onClose}
+            className={cn(
+              "flex h-7.5 items-center gap-2 rounded p-2 leading-5 text-foreground hover:bg-interactive-hover transition-colors",
+              settingsLinkClassName,
+            )}
+          >
+            <SettingsGearIcon
+              width={16}
+              height={16}
+              className={cn("shrink-0", settingsIconClassName)}
+              aria-hidden
+            />
+            <span>{t(I18nKey.CHAT$MANAGE_AGENT_PROFILES)}</span>
+          </NavigationLink>
+        </li>
+      )}
     </>
   );
 }

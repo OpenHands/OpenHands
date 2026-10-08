@@ -69,6 +69,13 @@ export function useAllCloudOrganizations() {
         failureCount < 2 && !isAuthorizationError(error),
       // Mounting workspace consumers must not restart a failed startup query.
       retryOnMount: false,
+      // Org membership rarely changes mid-session and is already fetched
+      // once per backend with a 5-minute staleTime. Refetching on every
+      // window focus means this query re-fires for every registered cloud
+      // backend each time the tab regains focus, which compounds with
+      // every other focus-triggered query into the kind of burst that
+      // trips a server-side rate limiter.
+      refetchOnWindowFocus: false,
       meta: { disableToast: true },
     })),
   });

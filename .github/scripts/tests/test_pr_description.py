@@ -16,7 +16,6 @@ from check_pr_description import (
     extract_linked_issue_numbers,
     extract_pr_type,
     validate_linked_issue_ready,
-    validate_bug_fix_evidence,
     BUG_LABEL,
     ENHANCEMENT_LABEL,
 )
@@ -210,71 +209,83 @@ def test_type_check_no_type_checked_no_type_error():
 
 
 # ---------------------------------------------------------------------------
-# validate_bug_fix_evidence
+# Behavioral evidence through the complete validator
 # ---------------------------------------------------------------------------
 
-BUG_FIX_BODY_NO_EVIDENCE = """## Type
+NONVISUAL_BUG_BODY = """HUMAN:
 
+I reproduced the shutdown failure and verified the corrected exit status.
+
+AGENT:
+
+## Why
+The launcher left a child process alive after shutdown.
+
+## Summary
+Stop the child process before exiting the launcher.
+
+## How to Test
+Run `node scripts/launcher.cjs`, interrupt it, then inspect the child PID.
+Before: child PID still running, exit status 1.
+After: no remaining child process, exit status 0.
+
+## Type
 - [x] Bug fix
-- [ ] Feature
 """
 
-BUG_FIX_BODY_WITH_SCREENSHOT = """## Type
 
-- [x] Bug fix
-- [ ] Feature
-
-## Video/Screenshots
-
-![before](https://example.com/before.png) → ![after](https://example.com/after.png)
-"""
-
-FEATURE_BODY = """## Type
-
-- [ ] Bug fix
-- [x] Feature
-"""
-
-def test_bug_fix_no_screenshot_errors():
-    errors = validate_bug_fix_evidence(BUG_FIX_BODY_NO_EVIDENCE)
+def test_functional_launcher_bug_requires_running_canvas_media():
+    errors = validate_pr_body(NONVISUAL_BUG_BODY, ["scripts/launcher.cjs"])
     assert len(errors) == 1
-    assert "reproduction evidence" in errors[0].lower()
+    assert "functional change" in errors[0]
 
-def test_bug_fix_with_screenshot_no_errors():
-    errors = validate_bug_fix_evidence(BUG_FIX_BODY_WITH_SCREENSHOT)
-    assert errors == []
 
-def test_feature_no_bug_evidence_check():
-    errors = validate_bug_fix_evidence(FEATURE_BODY)
-    assert errors == []
+def test_nonfrontend_feature_requires_running_canvas_media():
+    body = NONVISUAL_BUG_BODY.replace("[x] Bug fix", "[x] Feature")
+    assert len(validate_pr_body(body, ["scripts/launcher.cjs"])) == 1
 
-def test_no_type_no_bug_evidence_check():
-    errors = validate_bug_fix_evidence("## Summary\n\nNo type\n")
-    assert errors == []
 
-def test_bug_fix_with_github_attachment_no_errors():
-    body = """## Type
+def test_functional_launcher_bug_accepts_canvas_recording():
+    body = NONVISUAL_BUG_BODY + "\n## Video/Screenshots\nhttps://github.com/user-attachments/assets/abc123"
+    assert validate_pr_body(body, ["scripts/launcher.cjs"]) == []
 
-- [x] Bug fix
 
-## Video/Screenshots
+def test_nonfunctional_change_accepts_text_evidence():
+    body = NONVISUAL_BUG_BODY.replace("[x] Bug fix", "[x] Docs / chore")
+    assert validate_pr_body(body, ["docs/README.md"]) == []
 
-https://github.com/user-attachments/assets/abc123
-"""
-    errors = validate_bug_fix_evidence(body)
-    assert errors == []
 
-def test_bug_fix_with_video_link_no_errors():
-    body = """## Type
+def test_nonvisual_bug_still_requires_summary_and_test_details():
+    for section in ("Summary", "How to Test"):
+        content = extract_sections(NONVISUAL_BUG_BODY)[section]
+        body = NONVISUAL_BUG_BODY.replace(content, "\n<!-- Fill this in -->\n")
+        assert f"Fill in the `## {section}` section of the PR template." in validate_pr_body(
+            body, ["scripts/launcher.cjs"]
+        )
 
-- [x] Bug fix
 
-## Video/Screenshots
+def test_frontend_bug_reproduction_logs_do_not_replace_media():
+    errors = validate_pr_body(NONVISUAL_BUG_BODY, ["src/app.tsx"])
+    assert len(errors) == 1
+    assert "touches frontend code" in errors[0]
 
-https://youtube.com/watch?v=abc123
-"""
-    errors = validate_bug_fix_evidence(body)
-    assert errors == []
+
+def test_mixed_bug_change_still_requires_frontend_media():
+    errors = validate_pr_body(
+        NONVISUAL_BUG_BODY, ["scripts/launcher.cjs", "src/styles/main.css"]
+    )
+    assert len(errors) == 1
+    assert "touches frontend code" in errors[0]
+
+
+def test_frontend_bug_accepts_screenshot_or_video():
+    for media in (
+        "![before](https://example.com/before.png) → ![after](https://example.com/after.png)",
+        "https://github.com/user-attachments/assets/abc123",
+        "https://youtube.com/watch?v=abc123",
+    ):
+        body = NONVISUAL_BUG_BODY + "\n## Video/Screenshots\n" + media
+        assert validate_pr_body(body, ["src/app.tsx"]) == []
 
 
 def test_markdown_under_frontend_prefix_is_not_frontend():

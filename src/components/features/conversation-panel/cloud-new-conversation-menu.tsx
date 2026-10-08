@@ -116,6 +116,7 @@ export function CloudNewConversationMenu({
     setSelectedProvider(fallback);
   }, [providers, selectedProvider, lastSelectedProvider]);
 
+  const repositoryQueriesEnabled = open && !!selectedProvider;
   const {
     data: repoPages,
     isLoading,
@@ -123,10 +124,17 @@ export function CloudNewConversationMenu({
     hasNextPage,
     isFetchingNextPage,
     fetchNextPage,
-  } = useGitRepositories({ provider: selectedProvider });
+  } = useGitRepositories({
+    provider: selectedProvider,
+    enabled: repositoryQueriesEnabled,
+  });
 
   const { data: searchResults, isLoading: isSearchLoading } =
-    useSearchRepositories(debouncedQuery, selectedProvider);
+    useSearchRepositories(
+      debouncedQuery,
+      selectedProvider,
+      !repositoryQueriesEnabled,
+    );
 
   const allRepositories = React.useMemo(
     () => repoPages?.pages.flatMap((page) => page.items) ?? [],
