@@ -29,9 +29,11 @@ export function redactBodyValue(value) {
 // parameters (the MCP editor sends a server's `url` as typed, so a key the
 // user put in the URL would otherwise come back in clear). Both are redacted
 // in place, the rest of the URL kept as written (no normalization), so the
-// row still proves which endpoint was sent.
+// row still proves which endpoint was sent. The userinfo ends at the last
+// `@` before the path, as the URL parser reads it, so an unencoded `@` in
+// a password is part of the password, not the start of the host.
 const URL_IN_TEXT = /\b[a-z][a-z0-9+.-]*:\/\/[^\s"'<>`]+/gi;
-const USERINFO = /^([a-z][a-z0-9+.-]*:\/\/)([^/?#@]*)@/i;
+const USERINFO = /^([a-z][a-z0-9+.-]*:\/\/)([^/?#]*)@/i;
 
 export function redactUrl(url) {
   let out = url.replace(USERINFO, (m, scheme, userinfo) => {
@@ -54,9 +56,8 @@ export function redactUrl(url) {
     } catch {
       // keep the raw key
     }
-    return SECRET_KEY.test(name)
-      ? `${key}=${redactBodyValue(pair.slice(eq + 1))}`
-      : pair;
+    const value = pair.slice(eq + 1);
+    return `${key}=${SECRET_KEY.test(name) ? redactBodyValue(value) : redactUrlsIn(value)}`;
   });
   return `${out.slice(0, q + 1)}${pairs.join("&")}${hash < 0 ? "" : out.slice(hash)}`;
 }

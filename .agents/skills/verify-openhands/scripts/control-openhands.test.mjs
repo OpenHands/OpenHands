@@ -1219,6 +1219,16 @@ test("credentials carried by a URL are redacted whatever key holds the URL", () 
     redactUrl("https://sk-abc@example.invalid/mcp?secret%5Fid=s&q=kept"),
     "https://<redacted 6 chars>@example.invalid/mcp?secret%5Fid=<redacted 1 chars>&q=kept",
   );
+  // An unencoded `@` in a password belongs to the password: the userinfo
+  // ends at the last `@` before the path, as `new URL()` reads it.
+  assert.equal(
+    redactUrl("https://user:p@ssw0rd@example.invalid/mcp"),
+    "https://<redacted 4 chars>:<redacted 8 chars>@example.invalid/mcp",
+  );
+  assert.equal(
+    redactUrl("https://host/path?email=a@b&token=t&next=https://u:pw@other/"),
+    "https://host/path?email=a@b&token=<redacted 1 chars>&next=https://<redacted 1 chars>:<redacted 2 chars>@other/",
+  );
   assert.equal(
     redactUrl("http://example.invalid/mcp"),
     "http://example.invalid/mcp",
