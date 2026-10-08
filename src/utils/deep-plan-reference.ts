@@ -56,14 +56,18 @@ const LEADING_MARKDOWN_WRAPPER = /^(\*\*|__|\*|_|`)/;
  * number: a title like `## 3.1 Response under 200 ms` defines `3.1`, not
  * `200`, and `## Version 1.2` defines nothing.
  *
- * The number must be followed by a delimiter — whitespace, the end of the
- * heading, a supported closing Markdown marker (`*`/`_`/`` ` ``, as left after
- * unwrapping a wrapped number), or a non-digit dot (`## 3. Response`). This
- * rejects a number that is really part of a word: `## 3D Rendering` and
- * `## 3.1beta Authentication` define nothing, so they cannot become a false
- * citation target.
+ * The number must not be glued to a following letter or digit — the packed
+ * number already consumes every `.digit` group, so this rejects `## 3D Rendering`
+ * and `## 3.1beta Authentication`, which are words rather than sections. The
+ * `(?!\.\d)` arm also blocks the regex engine from backtracking to a shorter
+ * number and treating the dot of a larger one (`3.1beta` → `3`) as a delimiter.
+ * Any other delimiter is fine: whitespace, the end of the heading, a supported
+ * closing Markdown marker (`*`/`_`/`` ` ``, left by unwrapping a wrapped
+ * number), a dot (`## 3. Response`) or separating punctuation such as
+ * `## 3.1: Authentication` and `## 3.1) Authentication`. The check is
+ * Unicode-aware so a non-ASCII letter also blocks the number.
  */
-const LEADING_NUMBER_HEADING = /^([0-9]+(?:\.[0-9]+)*)(?=\s|$|[*_`]|\.(?!\d))/;
+const LEADING_NUMBER_HEADING = /^([0-9]+(?:\.[0-9]+)*)(?![\p{L}\p{N}]|\.\d)/u;
 /**
  * A heading that spells its own label out at the start, e.g.
  * `## [Req 3.1] Users` — the citation *is* the section number here.

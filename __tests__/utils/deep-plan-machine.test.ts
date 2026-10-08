@@ -140,6 +140,28 @@ describe("confirmPhase", () => {
     if (!result.ok) return;
     expect(result.state.activePhase).toBe("backend");
   });
+
+  it("resolves a citation to a punctuation-separated heading", () => {
+    // `## 3.1: Authentication` still defines section 3.1; the checkpoint must
+    // resolve `[Req 3.1]` rather than block with a dangling reference.
+    const state: DeepPlanState = {
+      ...startDeepPlan(),
+      activePhase: "database",
+      confirmed: ["analysis", "requirements"],
+      documents: {
+        requirements: ["# Requirements", "", "## 3.1: Authentication"].join(
+          "\n",
+        ),
+        database,
+      },
+    };
+
+    const result = confirmPhase(state, "database");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.state.activePhase).toBe("backend");
+  });
 });
 
 describe("invalidateFrom", () => {

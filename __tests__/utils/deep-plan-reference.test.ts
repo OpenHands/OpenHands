@@ -104,6 +104,25 @@ describe("extractDefinedSections", () => {
     expect([...extractDefinedSections("## 3.1")]).toEqual(["3.1"]);
   });
 
+  it("sees a number separated from its title by punctuation", () => {
+    // `3.1: Authentication` is still a section 3.1 heading; rejecting it would
+    // make a downstream `[Req 3.1]` dangling.
+    expect([...extractDefinedSections("## 3.1: Authentication")]).toEqual([
+      "3.1",
+    ]);
+    expect([...extractDefinedSections("## 3.1) Authentication")]).toEqual([
+      "3.1",
+    ]);
+    expect([...extractDefinedSections("## 3.1. Authentication")]).toEqual([
+      "3.1",
+    ]);
+    expect([...extractDefinedSections("## 3) Authentication")]).toEqual(["3"]);
+    // A separator may abut the title (`3.1:Auth` still defines `3.1`), but a
+    // number glued directly to a letter does not.
+    expect([...extractDefinedSections("## 3.1:Auth")]).toEqual(["3.1"]);
+    expect([...extractDefinedSections("## 3.1Auth")]).toEqual([]);
+  });
+
   it("sees a leading number wrapped in supported inline Markdown", () => {
     // Markdown renders these wrappers without changing the displayed section
     // number, so a citation of the visible `3.1` must still resolve.
