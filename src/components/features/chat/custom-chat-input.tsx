@@ -83,6 +83,7 @@ export function CustomChatInput({
   // Custom hooks
   const {
     chatInputRef,
+    conversationId,
     messageToSend,
     checkIsContentEmpty,
     clearEmptyContentHandler,
@@ -164,8 +165,10 @@ export function CustomChatInput({
     [setShouldHideSuggestions, clearAllFiles],
   );
   useEffect(() => {
+    // Draft restoration changes the contentEditable on a conversation switch
+    // without firing onInput, so recalculate the Send state for the new route.
     syncCanSubmit();
-  }, [syncCanSubmit, images.length, files.length]);
+  }, [syncCanSubmit, conversationId, images.length, files.length]);
   return (
     <div className={cn("w-full", className)}>
       {/* Hidden file input */}
