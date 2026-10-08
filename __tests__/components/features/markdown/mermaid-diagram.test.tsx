@@ -118,4 +118,40 @@ describe("MermaidDiagram", () => {
     appendSpy.mockRestore();
     clickSpy.mockRestore();
   });
+
+  it("exposes a View action only when a file deep link is provided", async () => {
+    const { rerender } = render(<MermaidDiagram source={SOURCE} />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId("mermaid-diagram-svg")).toBeInTheDocument(),
+    );
+    // A fenced block has no backing file, so the affordance is hidden.
+    expect(
+      screen.queryByTestId("mermaid-diagram-view"),
+    ).not.toBeInTheDocument();
+
+    const onView = vi.fn();
+    rerender(<MermaidDiagram source={SOURCE} onView={onView} />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId("mermaid-diagram-view")).toBeInTheDocument(),
+    );
+    screen.getByTestId("mermaid-diagram-view").click();
+    expect(onView).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the source instead of Loading when toggled during a slow render", async () => {
+    const user = userEvent.setup();
+    // Never resolves: keeps the card in the loading state for the assertion.
+    mermaidMock.render.mockReturnValue(new Promise(() => {}));
+
+    render(<MermaidDiagram source={SOURCE} />);
+
+    await user.click(screen.getByTestId("mermaid-diagram-toggle-source"));
+
+    expect(screen.getByTestId("mermaid-diagram-source")).toHaveTextContent(
+      "graph TD;",
+    );
+    expect(screen.queryByText("Loading")).not.toBeInTheDocument();
+  });
 });

@@ -20,6 +20,12 @@ interface MermaidDiagramProps {
   /** Clip the body to a compact height (chat) vs. fill the pane (files tab). */
   clipped?: boolean;
   testId?: string;
+  /**
+   * Deep-links the backing workspace file into the Files drawer. Omitted for a
+   * fenced block (no file behind it) and outside a conversation route; the
+   * card then hides its View affordance.
+   */
+  onView?: () => void;
 }
 
 type RenderState =
@@ -44,6 +50,7 @@ export function MermaidDiagram({
   fileName,
   clipped = true,
   testId = "mermaid-diagram",
+  onView,
 }: MermaidDiagramProps) {
   const { t } = useTranslation("openhands");
   const reactId = React.useId();
@@ -113,9 +120,10 @@ export function MermaidDiagram({
       errorMessage={
         state.status === "error" ? t(I18nKey.MERMAID$RENDER_ERROR) : undefined
       }
-      isLoading={state.status === "loading"}
+      isLoading={state.status === "loading" && !displaySource}
       clipped={clipped}
       testId={testId}
+      onView={onView}
     >
       {displaySource ? (
         <pre

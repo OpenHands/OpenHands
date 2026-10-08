@@ -90,7 +90,13 @@ function FileEditorCardBody({
     if (path && command === "create" && isMermaidFilePath(path)) {
       return {
         chip: null as React.ReactNode,
-        body: <MermaidFilePreview content={content} path={path} />,
+        body: (
+          <MermaidFilePreview
+            content={content}
+            path={path}
+            onView={onOpenFile}
+          />
+        ),
       };
     }
     return {

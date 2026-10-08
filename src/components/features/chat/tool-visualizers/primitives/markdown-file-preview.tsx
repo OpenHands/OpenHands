@@ -127,9 +127,12 @@ export function MarkdownFilePreview({
 export function MermaidFilePreview({
   content,
   path,
+  onView,
 }: {
   content: string;
   path: string;
+  /** Deep-links the created artifact into the Files drawer. */
+  onView?: () => void;
 }) {
   const fileName = path.split("/").pop() || path;
   return (
@@ -137,6 +140,7 @@ export function MermaidFilePreview({
       source={content}
       fileName={fileName}
       testId="mermaid-file-preview"
+      onView={onView}
     />
   );
 }

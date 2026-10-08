@@ -351,6 +351,37 @@ describe("fileEditorVisualizer", () => {
     );
   });
 
+  it("stores a workspace-relative path when View opens a completed .mmd create", async () => {
+    const user = userEvent.setup();
+
+    renderVisualizer(
+      <Body
+        observation={fileEditorObservation({
+          command: "create",
+          path: "/workspace/docs/flow.mmd",
+          new_content: "graph TD;\n  A-->B;",
+        })}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("mermaid-file-preview")).toBeInTheDocument(),
+    );
+    // A completed create owns a real file, so the card must offer View.
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("mermaid-file-preview-view"),
+      ).toBeInTheDocument(),
+    );
+
+    await user.click(screen.getByTestId("mermaid-file-preview-view"));
+
+    expect(useFilesTabStore.getState()).toMatchObject({
+      selectedPath: "docs/flow.mmd",
+      selectedConversationId: "test-conversation-id",
+    });
+  });
+
   it("keeps a .mmd view observation as a CodeBlock, not a diagram", () => {
     const { container } = renderVisualizer(
       <Body
