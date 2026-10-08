@@ -6,7 +6,8 @@
  * /v2/agents/sessions/{id}/ingress`) that fronts guest port 8000 through the
  * microVM's public ingress. The renderer talks to it directly — REST and
  * WebSocket — so no local listener is needed, unlike the port-forward tunnel
- * in tunnel-client.mjs. The URL is PAT-authenticated on every request; the
+ * in tunnel-client.mjs. Today the bridge uses it only as the fallback when
+ * the tunnel cannot be opened (see mars-tunnel-bridge.mjs connectSession). The URL is PAT-authenticated on every request; the
  * main process injects that header (see mars-tunnel-bridge.mjs
  * `registerRequestAuth`), so the renderer never holds the token.
  *

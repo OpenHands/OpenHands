@@ -23,11 +23,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createTunnelRegistry } from "./tunnel-registry.mjs";
 import { ensureSessionAwake } from "./mars-session.mjs";
-import {
-  MarsIngressTimeoutError,
-  MarsIngressUnsupportedError,
-  resolveIngressURL,
-} from "./mars-ingress.mjs";
+import { resolveIngressURL } from "./mars-ingress.mjs";
 import {
   AGENT_SERVER_GUEST_PORT,
   DEFAULT_MARS_API_BASE_URL,
@@ -181,12 +177,42 @@ export function createMarsTunnelBridge({
   }
 
   /**
-   * Connect over public ingress, or over the port-forward tunnel when the
-   * session cannot have a URL. Both resolve to the same status shape; `host`
-   * is what the renderer registers as the backend's base URL.
+   * Connect over the port-forward tunnel first, and over the session's
+   * public ingress URL only when the tunnel cannot be opened. Both resolve
+   * to the same status shape; `host` is what the renderer registers as the
+   * backend's base URL.
+   *
+   * The tunnel is the default on purpose: it is the path that works end to
+   * end today, WebSocket included, on desktop (this process holds it) and
+   * on the web build (the Canvas server holds it and proxies the browser).
+   * The public URL is the intended path once its WebSocket hop is proven;
+   * flipping this order is the whole change needed to promote it.
    */
   async function connectSession({ sessionId, localPort, connectionId }) {
     const getAccessToken = () => store.getToken(connectionId);
+    let tunnelError;
+    try {
+      // The guest port is fixed here rather than accepted over IPC so the
+      // renderer cannot dial arbitrary ports inside the sandbox.
+      const tunnel = await registry.attach({
+        sessionId,
+        remotePort: AGENT_SERVER_GUEST_PORT,
+        getAccessToken,
+        apiUrl: config.apiBaseUrl,
+        localPort,
+        owner: connectionId,
+      });
+      return {
+        ...tunnel,
+        transport: "tunnel",
+        host:
+          tunnel.localPort === undefined
+            ? undefined
+            : buildTunnelHost(tunnel.localPort),
+      };
+    } catch (error) {
+      tunnelError = error;
+    }
     try {
       const ingress = await resolveIngress({
         api: clientFor(getAccessToken),
@@ -211,34 +237,13 @@ export function createMarsTunnelBridge({
       });
       return status;
     } catch (error) {
-      // Unsupported (501, or a harness-api without /ingress at all) and a
-      // URL that never became READY both leave the tunnel as the way in;
-      // anything else is a real failure the user should see.
-      if (
-        !(error instanceof MarsIngressUnsupportedError) &&
-        !(error instanceof MarsIngressTimeoutError)
-      ) {
-        throw error;
+      // The tunnel is the primary path, so its failure is the one the user
+      // should see; the ingress attempt rides along as the cause.
+      if (tunnelError instanceof Error && !tunnelError.cause) {
+        tunnelError.cause = error;
       }
+      throw tunnelError;
     }
-    // The guest port is fixed here rather than accepted over IPC so the
-    // renderer cannot dial arbitrary ports inside the sandbox.
-    const tunnel = await registry.attach({
-      sessionId,
-      remotePort: AGENT_SERVER_GUEST_PORT,
-      getAccessToken,
-      apiUrl: config.apiBaseUrl,
-      localPort,
-      owner: connectionId,
-    });
-    return {
-      ...tunnel,
-      transport: "tunnel",
-      host:
-        tunnel.localPort === undefined
-          ? undefined
-          : buildTunnelHost(tunnel.localPort),
-    };
   }
 
   /**

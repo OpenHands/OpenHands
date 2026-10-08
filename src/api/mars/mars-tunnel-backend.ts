@@ -3,10 +3,10 @@
  * `electron/preload-main.cjs`, plus the helpers that turn a connected MARS
  * session into an ordinary local backend.
  *
- * A session is reached over its public ingress URL when it has one (the main
- * process stamps the DigitalOcean token onto this renderer's requests to that
- * host, WebSocket handshake included), or over a port-forward tunnel on
- * loopback for sessions that cannot. Either way the far end is a plain
+ * A session is reached over a port-forward tunnel on loopback by default, or
+ * over its public ingress URL when the tunnel cannot be opened (the main
+ * process then stamps the DigitalOcean token onto this renderer's requests to
+ * that host, WebSocket handshake included). Either way the far end is a plain
  * agent-server, so the backend is `kind: "local"`.
  *
  * `window.marsBridge` comes from Electron's preload in the desktop build, or

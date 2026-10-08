@@ -78,9 +78,9 @@ contextBridge.exposeInMainWorld("marsBridge", {
     ipcRenderer.invoke("mars:deleteAgentConfig", configId),
 
   /**
-   * Connects to a session's agent-server — over its public ingress URL when
-   * it has one, otherwise over a port-forward tunnel — and resolves once it
-   * is reachable: `{sessionId, status, transport, host, remotePort,
+   * Connects to a session's agent-server — over a port-forward tunnel, or
+   * over its public ingress URL when the tunnel cannot be opened — and
+   * resolves once it is reachable: `{sessionId, status, transport, host, remotePort,
    * localPort, error}`. `host` is the base URL to register as the backend.
    */
   openTunnel: (params) => ipcRenderer.invoke("mars:openTunnel", params),

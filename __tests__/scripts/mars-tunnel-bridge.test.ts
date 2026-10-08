@@ -15,10 +15,7 @@ import {
   createCredentialStore,
 } from "../../scripts/mars-credentials.mjs";
 import { revokeToken } from "../../scripts/mars-oauth.mjs";
-import {
-  MarsIngressTimeoutError,
-  MarsIngressUnsupportedError,
-} from "../../scripts/mars-ingress.mjs";
+import { MarsIngressUnsupportedError } from "../../scripts/mars-ingress.mjs";
 
 vi.mock("../../scripts/mars-oauth.mjs", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../scripts/mars-oauth.mjs")>()),
@@ -191,8 +188,35 @@ describe("createMarsTunnelBridge", () => {
     );
   });
 
-  it("openTunnel connects over public ingress first and leaves the tunnel registry alone", async () => {
+  it("openTunnel opens the port-forward tunnel first, bound to the active connection on the pinned guest port, and leaves ingress alone", async () => {
+    const { registry, resolveIngress, credentials, ipcMain } = setup();
+    await ipcMain.invoke(MARS_TUNNEL_IPC.savePat, { token: VALID_PAT });
+
+    const result = await ipcMain.invoke(MARS_TUNNEL_IPC.openTunnel, {
+      sessionId: "sess_a",
+      localPort: 51000,
+    });
+
+    expect(registry.attach).toHaveBeenCalledWith({
+      sessionId: "sess_a",
+      remotePort: 8000,
+      getAccessToken: expect.any(Function),
+      apiUrl: API_URL,
+      localPort: 51000,
+      owner: credentials.getActive()?.id,
+    });
+    expect(resolveIngress).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      sessionId: "sess_a",
+      transport: "tunnel",
+      host: "http://127.0.0.1:51000",
+      localPort: 51000,
+    });
+  });
+
+  it("openTunnel falls back to the public ingress URL when the tunnel cannot be opened", async () => {
     const { registry, resolveIngress, ensureAwake, ipcMain } = setup();
+    registry.attach.mockRejectedValueOnce(new Error("port-forward refused"));
     await ipcMain.invoke(MARS_TUNNEL_IPC.savePat, { token: VALID_PAT });
 
     const result = await ipcMain.invoke(MARS_TUNNEL_IPC.openTunnel, {
@@ -202,7 +226,6 @@ describe("createMarsTunnelBridge", () => {
     expect(resolveIngress).toHaveBeenCalledWith(
       expect.objectContaining({ sessionId: "sess_a", ensureAwake }),
     );
-    expect(registry.attach).not.toHaveBeenCalled();
     expect(result).toEqual({
       sessionId: "sess_a",
       status: "connected",
@@ -219,45 +242,20 @@ describe("createMarsTunnelBridge", () => {
     );
   });
 
-  it("openTunnel falls back to the tunnel, bound to the active connection on the pinned guest port, when the session has no public URL", async () => {
-    const { registry, resolveIngress, credentials, ipcMain } = setup();
-    resolveIngress.mockRejectedValueOnce(noIngress());
-    await ipcMain.invoke(MARS_TUNNEL_IPC.savePat, { token: VALID_PAT });
-
-    const result = await ipcMain.invoke(MARS_TUNNEL_IPC.openTunnel, {
-      sessionId: "sess_a",
-      localPort: 51000,
-    });
-
-    expect(registry.attach).toHaveBeenCalledWith({
-      sessionId: "sess_a",
-      remotePort: 8000,
-      getAccessToken: expect.any(Function),
-      apiUrl: API_URL,
-      localPort: 51000,
-      owner: credentials.getActive()?.id,
-    });
-    expect(result).toMatchObject({
-      sessionId: "sess_a",
-      transport: "tunnel",
-      host: "http://127.0.0.1:51000",
-      localPort: 51000,
-    });
-  });
-
-  it("openTunnel does not fall back on any other ingress failure", async () => {
+  it("openTunnel surfaces the tunnel failure when ingress cannot help either", async () => {
     const { registry, resolveIngress, ipcMain } = setup();
-    resolveIngress.mockRejectedValueOnce(new Error("gateway unavailable"));
+    registry.attach.mockRejectedValueOnce(new Error("port-forward refused"));
+    resolveIngress.mockRejectedValueOnce(noIngress());
     await ipcMain.invoke(MARS_TUNNEL_IPC.savePat, { token: VALID_PAT });
 
     await expect(
       ipcMain.invoke(MARS_TUNNEL_IPC.openTunnel, { sessionId: "sess_a" }),
-    ).rejects.toThrow(/gateway unavailable/);
-    expect(registry.attach).not.toHaveBeenCalled();
+    ).rejects.toThrow(/port-forward refused/);
   });
 
   it("ingressAuthorizationHeader stamps the connected credential's token on that host only", async () => {
-    const { bridge, ipcMain } = setup();
+    const { bridge, registry, ipcMain } = setup();
+    registry.attach.mockRejectedValueOnce(new Error("no tunnel"));
     await ipcMain.invoke(MARS_TUNNEL_IPC.savePat, { token: VALID_PAT });
     await ipcMain.invoke(MARS_TUNNEL_IPC.openTunnel, { sessionId: "sess_a" });
 
@@ -279,7 +277,8 @@ describe("createMarsTunnelBridge", () => {
   });
 
   it("an ingress connection keeps its own connection's token after switching, and loses it on sign-out", async () => {
-    const { bridge, ipcMain } = setup();
+    const { bridge, registry, ipcMain } = setup();
+    registry.attach.mockRejectedValueOnce(new Error("no tunnel"));
     const first = (await ipcMain.invoke(MARS_TUNNEL_IPC.savePat, {
       token: VALID_PAT,
     })) as AuthState;
@@ -295,7 +294,8 @@ describe("createMarsTunnelBridge", () => {
   });
 
   it("registerRequestAuth injects Authorization only on requests to connected ingress hosts", async () => {
-    const { bridge, ipcMain } = setup();
+    const { bridge, registry, ipcMain } = setup();
+    registry.attach.mockRejectedValueOnce(new Error("no tunnel"));
     await ipcMain.invoke(MARS_TUNNEL_IPC.savePat, { token: VALID_PAT });
     await ipcMain.invoke(MARS_TUNNEL_IPC.openTunnel, { sessionId: "sess_a" });
     let listener:
@@ -521,6 +521,7 @@ describe("createMarsTunnelBridge", () => {
 
   it("dispose() forgets ingress connections and tears down every tunnel", async () => {
     const { registry, bridge, ipcMain } = setup();
+    registry.attach.mockRejectedValueOnce(new Error("no tunnel"));
     await ipcMain.invoke(MARS_TUNNEL_IPC.savePat, { token: VALID_PAT });
     await ipcMain.invoke(MARS_TUNNEL_IPC.openTunnel, { sessionId: "sess_a" });
 
@@ -532,6 +533,8 @@ describe("createMarsTunnelBridge", () => {
 
   it("destroySession asks harness-api first and drops the live connection only once it agreed", async () => {
     const { registry, api, ipcMain } = setup();
+    // Over ingress, so the connection is visible through getTunnel.
+    registry.attach.mockRejectedValueOnce(new Error("no tunnel"));
     await ipcMain.invoke(MARS_TUNNEL_IPC.savePat, { token: VALID_PAT });
     await ipcMain.invoke(MARS_TUNNEL_IPC.openTunnel, { sessionId: "sess_1" });
     expect(
@@ -561,6 +564,7 @@ describe("createMarsTunnelBridge", () => {
 
   it("destroySession keeps the connection when harness-api refuses (409/423)", async () => {
     const { registry, api, ipcMain } = setup();
+    registry.attach.mockRejectedValueOnce(new Error("no tunnel"));
     api.destroySession.mockRejectedValueOnce(
       Object.assign(new Error("a checkpoint is in progress"), { status: 409 }),
     );
@@ -575,35 +579,5 @@ describe("createMarsTunnelBridge", () => {
     expect(
       await ipcMain.invoke(MARS_TUNNEL_IPC.getTunnel, "sess_1"),
     ).toBeDefined();
-  });
-
-  it("openTunnel falls back to the tunnel when harness-api has no /ingress yet (404)", async () => {
-    const { registry, resolveIngress, ipcMain } = setup();
-    resolveIngress.mockRejectedValueOnce(
-      new MarsIngressUnsupportedError("not found", { status: 404 }),
-    );
-    await ipcMain.invoke(MARS_TUNNEL_IPC.savePat, { token: VALID_PAT });
-
-    const status = (await ipcMain.invoke(MARS_TUNNEL_IPC.openTunnel, {
-      sessionId: "sess_1",
-    })) as { transport: string };
-
-    expect(registry.attach).toHaveBeenCalled();
-    expect(status.transport).toBe("tunnel");
-  });
-
-  it("openTunnel falls back to the tunnel when the URL never becomes READY", async () => {
-    const { registry, resolveIngress, ipcMain } = setup();
-    resolveIngress.mockRejectedValueOnce(
-      new MarsIngressTimeoutError("Timed out waiting for the public URL"),
-    );
-    await ipcMain.invoke(MARS_TUNNEL_IPC.savePat, { token: VALID_PAT });
-
-    const status = (await ipcMain.invoke(MARS_TUNNEL_IPC.openTunnel, {
-      sessionId: "sess_1",
-    })) as { transport: string };
-
-    expect(registry.attach).toHaveBeenCalled();
-    expect(status.transport).toBe("tunnel");
   });
 });
