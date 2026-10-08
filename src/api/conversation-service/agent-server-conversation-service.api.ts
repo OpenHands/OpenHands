@@ -34,6 +34,7 @@ import {
   readCloudConversationFile,
   searchCloudConversations,
   updateCloudConversationPublicFlag,
+  updateCloudConversationRepository,
   updateCloudConversationTitle,
 } from "../cloud/conversation-service.api";
 import {
@@ -840,6 +841,23 @@ class AgentServerConversationService {
     } else {
       removeStoredConversationMetadata(conversationId);
     }
+
+    if (getActiveBackend().backend.kind === "cloud") {
+      try {
+        await updateCloudConversationRepository(
+          conversationId,
+          repository,
+          branch,
+          gitProvider,
+        );
+      } catch {
+        // If the server rejects the repository (for example an older server
+        // that rejects org/project/repo names), Connect Repo still connects
+        // the repository in the current browser and the agent still clones
+        // it, as today.
+      }
+    }
+
     const [conversation] = await this.batchGetAppConversations([
       conversationId,
     ]);
