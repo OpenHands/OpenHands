@@ -15,7 +15,10 @@ import {
   createCredentialStore,
 } from "../../scripts/mars-credentials.mjs";
 import { revokeToken } from "../../scripts/mars-oauth.mjs";
-import { MarsIngressUnsupportedError } from "../../scripts/mars-ingress.mjs";
+import {
+  MarsIngressTimeoutError,
+  MarsIngressUnsupportedError,
+} from "../../scripts/mars-ingress.mjs";
 
 vi.mock("../../scripts/mars-oauth.mjs", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../scripts/mars-oauth.mjs")>()),
@@ -527,7 +530,7 @@ describe("createMarsTunnelBridge", () => {
     expect(bridge.ingressAuthorizationHeader(`${INGRESS_URL}/api`)).toBeNull();
   });
 
-  it("destroySession drops the live connection before asking harness-api to destroy", async () => {
+  it("destroySession asks harness-api first and drops the live connection only once it agreed", async () => {
     const { registry, api, ipcMain } = setup();
     await ipcMain.invoke(MARS_TUNNEL_IPC.savePat, { token: VALID_PAT });
     await ipcMain.invoke(MARS_TUNNEL_IPC.openTunnel, { sessionId: "sess_1" });
@@ -539,8 +542,8 @@ describe("createMarsTunnelBridge", () => {
 
     expect(registry.detach).toHaveBeenCalledWith("sess_1");
     expect(api.destroySession).toHaveBeenCalledWith("sess_1");
-    expect(registry.detach.mock.invocationCallOrder[0]).toBeLessThan(
-      api.destroySession.mock.invocationCallOrder[0],
+    expect(api.destroySession.mock.invocationCallOrder[0]).toBeLessThan(
+      registry.detach.mock.invocationCallOrder[0],
     );
     expect(
       await ipcMain.invoke(MARS_TUNNEL_IPC.getTunnel, "sess_1"),
@@ -554,5 +557,53 @@ describe("createMarsTunnelBridge", () => {
     await ipcMain.invoke(MARS_TUNNEL_IPC.deleteAgentConfig, "cfg_1");
 
     expect(api.deleteAgentConfig).toHaveBeenCalledWith("cfg_1");
+  });
+
+  it("destroySession keeps the connection when harness-api refuses (409/423)", async () => {
+    const { registry, api, ipcMain } = setup();
+    api.destroySession.mockRejectedValueOnce(
+      Object.assign(new Error("a checkpoint is in progress"), { status: 409 }),
+    );
+    await ipcMain.invoke(MARS_TUNNEL_IPC.savePat, { token: VALID_PAT });
+    await ipcMain.invoke(MARS_TUNNEL_IPC.openTunnel, { sessionId: "sess_1" });
+
+    await expect(
+      ipcMain.invoke(MARS_TUNNEL_IPC.destroySession, "sess_1"),
+    ).rejects.toMatchObject({ status: 409 });
+
+    expect(registry.detach).not.toHaveBeenCalled();
+    expect(
+      await ipcMain.invoke(MARS_TUNNEL_IPC.getTunnel, "sess_1"),
+    ).toBeDefined();
+  });
+
+  it("openTunnel falls back to the tunnel when harness-api has no /ingress yet (404)", async () => {
+    const { registry, resolveIngress, ipcMain } = setup();
+    resolveIngress.mockRejectedValueOnce(
+      new MarsIngressUnsupportedError("not found", { status: 404 }),
+    );
+    await ipcMain.invoke(MARS_TUNNEL_IPC.savePat, { token: VALID_PAT });
+
+    const status = (await ipcMain.invoke(MARS_TUNNEL_IPC.openTunnel, {
+      sessionId: "sess_1",
+    })) as { transport: string };
+
+    expect(registry.attach).toHaveBeenCalled();
+    expect(status.transport).toBe("tunnel");
+  });
+
+  it("openTunnel falls back to the tunnel when the URL never becomes READY", async () => {
+    const { registry, resolveIngress, ipcMain } = setup();
+    resolveIngress.mockRejectedValueOnce(
+      new MarsIngressTimeoutError("Timed out waiting for the public URL"),
+    );
+    await ipcMain.invoke(MARS_TUNNEL_IPC.savePat, { token: VALID_PAT });
+
+    const status = (await ipcMain.invoke(MARS_TUNNEL_IPC.openTunnel, {
+      sessionId: "sess_1",
+    })) as { transport: string };
+
+    expect(registry.attach).toHaveBeenCalled();
+    expect(status.transport).toBe("tunnel");
   });
 });

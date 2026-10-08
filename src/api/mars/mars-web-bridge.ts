@@ -12,8 +12,14 @@
  * (`/mars/sessions/<id>`), which the server proxies to the session's public
  * ingress URL with the DigitalOcean token added server-side. The token never
  * reaches the page.
+ *
+ * The server wants its session key on these routes. Each RPC carries it as
+ * `X-Session-API-Key` (the key this page already holds for the agent-server);
+ * the server answers with an HttpOnly cookie that the browser then sends by
+ * itself on the proxied REST calls and the WebSocket upgrade.
  */
 
+import { getAgentServerSessionApiKey } from "#/api/agent-server-config";
 import type { MarsBridge } from "./mars-tunnel-backend";
 
 export const MARS_WEB_HEALTH_PATH = "/mars/health";
@@ -42,9 +48,13 @@ async function rpc<T>(
   args: unknown[],
   fetchImpl: typeof fetch,
 ): Promise<T> {
+  const sessionApiKey = getAgentServerSessionApiKey();
   const response = await fetchImpl(`${baseUrl}${RPC_PREFIX}${method}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(sessionApiKey ? { "X-Session-API-Key": sessionApiKey } : {}),
+    },
     body: JSON.stringify({ args }),
   });
   let envelope: RpcEnvelope<T> = {};
@@ -114,7 +124,15 @@ export async function probeMarsWebBridge(
     const response = await fetchImpl(`${baseUrl}${MARS_WEB_HEALTH_PATH}`, {
       signal: controller.signal,
     });
-    return response.ok;
+    if (!response.ok) return false;
+    // A server that answers every path with index.html is also a 200; only
+    // the bridge says `{ ok: true }`.
+    try {
+      const body = (await response.json()) as { ok?: unknown };
+      return body?.ok === true;
+    } catch {
+      return false;
+    }
   } catch {
     return false;
   } finally {

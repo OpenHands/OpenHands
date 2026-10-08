@@ -24,6 +24,7 @@ import { fileURLToPath } from "node:url";
 import { createTunnelRegistry } from "./tunnel-registry.mjs";
 import { ensureSessionAwake } from "./mars-session.mjs";
 import {
+  MarsIngressTimeoutError,
   MarsIngressUnsupportedError,
   resolveIngressURL,
 } from "./mars-ingress.mjs";
@@ -210,7 +211,15 @@ export function createMarsTunnelBridge({
       });
       return status;
     } catch (error) {
-      if (!(error instanceof MarsIngressUnsupportedError)) throw error;
+      // Unsupported (501, or a harness-api without /ingress at all) and a
+      // URL that never became READY both leave the tunnel as the way in;
+      // anything else is a real failure the user should see.
+      if (
+        !(error instanceof MarsIngressUnsupportedError) &&
+        !(error instanceof MarsIngressTimeoutError)
+      ) {
+        throw error;
+      }
     }
     // The guest port is fixed here rather than accepted over IPC so the
     // renderer cannot dial arbitrary ports inside the sandbox.
@@ -353,13 +362,15 @@ export function createMarsTunnelBridge({
     resumeSession: (sessionId) => client.resumeSession(sessionId),
 
     /**
-     * Drop any live connection first so a backend does not keep probing a
-     * sandbox that is being torn down, then destroy the session.
+     * Destroy first, then drop the live connection: harness-api can refuse
+     * (409 while a checkpoint/fork/rollback holds the session, 423 locked),
+     * and then the session is still running and the user must keep their
+     * connection to it. Only a session that is really gone is detached.
      */
     async destroySession(sessionId) {
+      await client.destroySession(sessionId);
       ingressSessions.delete(sessionId);
       await registry.detach(sessionId);
-      await client.destroySession(sessionId);
     },
     deleteAgentConfig: (configId) => client.deleteAgentConfig(configId),
 

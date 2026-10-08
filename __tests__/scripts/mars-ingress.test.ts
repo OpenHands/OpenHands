@@ -187,6 +187,17 @@ describe("resolveIngressURL", () => {
     ).rejects.toBeInstanceOf(MarsIngressUnsupportedError);
   });
 
+  it("surfaces a 404 (harness-api without /ingress yet) the same way, keeping its status", async () => {
+    harness = await startFakeHarness({ ingressStatus: 404 });
+
+    await expect(
+      resolveIngressURL({ api: harness.api, sessionId, pollIntervalMs: 10 }),
+    ).rejects.toMatchObject({
+      name: "MarsIngressUnsupportedError",
+      status: 404,
+    });
+  });
+
   it("propagates other harness-api errors unchanged", async () => {
     harness = await startFakeHarness({ ingressStatus: 403 });
 
@@ -207,6 +218,9 @@ describe("resolveIngressURL", () => {
         pollIntervalMs: 10,
         timeoutMs: 60,
       }),
-    ).rejects.toThrow(/Timed out waiting for the public URL/);
+    ).rejects.toMatchObject({
+      name: "MarsIngressTimeoutError",
+      message: expect.stringMatching(/Timed out waiting for the public URL/),
+    });
   });
 });

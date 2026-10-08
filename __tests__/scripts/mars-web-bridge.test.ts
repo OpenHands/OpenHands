@@ -1,11 +1,18 @@
 // @vitest-environment node
-import { createServer, type IncomingMessage, type Server } from "node:http";
+import {
+  createServer,
+  request as httpRequest,
+  type IncomingMessage,
+  type Server,
+} from "node:http";
 import net from "node:net";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import WebSocket, { WebSocketServer } from "ws";
 
 import {
   createMarsWebBridge,
+  isMarsWebEnabled,
+  mountMarsWebBridge,
   rewriteAgentServerUrls,
 } from "../../scripts/mars-web-bridge.mjs";
 
@@ -48,6 +55,8 @@ async function startFakeAgentServer() {
   };
   const pings: number[] = [];
   let origin = "";
+  let largeBody = "{}";
+  const state = { delayUpgradeMs: 0 };
   const server = createServer((req, res) => {
     seen.http.push(req);
     if (req.url === UPSTREAM_CONVERSATION_PATH) {
@@ -60,6 +69,11 @@ async function startFakeAgentServer() {
           unrelated: `${origin}/api/other`,
         }),
       );
+      return;
+    }
+    if (req.url === "/mars-upstream/large") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(largeBody);
       return;
     }
     if (req.url === UPSTREAM_ECHO_PATH && req.method === "POST") {
@@ -76,15 +90,31 @@ async function startFakeAgentServer() {
   const wss = new WebSocketServer({ noServer: true });
   server.on("upgrade", (req, socket, head) => {
     seen.ws.push(req);
-    wss.handleUpgrade(req, socket, head, (ws) => {
-      ws.on("ping", () => pings.push(Date.now()));
-      ws.on("message", (data, isBinary) =>
-        ws.send(`echo:${data.toString()}`, { binary: isBinary }),
-      );
-    });
+    const accept = () =>
+      wss.handleUpgrade(req, socket, head, (ws) => {
+        ws.on("ping", () => pings.push(Date.now()));
+        ws.on("message", (data, isBinary) =>
+          ws.send(`echo:${data.toString()}`, { binary: isBinary }),
+        );
+      });
+    if (state.delayUpgradeMs > 0) setTimeout(accept, state.delayUpgradeMs);
+    else accept();
   });
   origin = await listen(server);
-  return { origin, seen, pings, close: () => closeServer(server) };
+  return {
+    origin,
+    seen,
+    pings,
+    setLargeBody: (body: string) => {
+      largeBody = body;
+    },
+    set delayUpgradeMs(ms: number) {
+      state.delayUpgradeMs = ms;
+    },
+    openSockets: () =>
+      [...wss.clients].filter((c) => c.readyState === WebSocket.OPEN).length,
+    close: () => closeServer(server),
+  };
 }
 
 function fakeBridge(upstreamOrigin: string) {
@@ -147,15 +177,21 @@ async function rpc(
 }
 
 describe("rewriteAgentServerUrls", () => {
-  it("re-points every agent-server URL at the proxy prefix, whatever host the upstream used", () => {
+  it("re-points conversation_url at the proxy prefix, whatever host or prefix the upstream used, and leaves other strings alone", () => {
     const base = "http://localhost:8000/mars/sessions/sess_a";
     expect(
       rewriteAgentServerUrls(
         {
           conversation_url:
             "https://ing-1.nyc3.sandbox.ondigitalocean.com/api/conversations/c1",
-          guest: "http://10.0.0.5:8000/api/conversations/c1/events?x=1",
-          prefixed: "http://host/runtime/55313/api/conversations/c1",
+          items: [
+            {
+              conversation_url:
+                "http://host/runtime/55313/api/conversations/c1",
+            },
+          ],
+          // A URL that merely appears in content must not be touched.
+          message: "see http://10.0.0.5:8000/api/conversations/c1/events",
           list: ["http://h/api/conversations", "http://h/api/other"],
           n: 3,
         },
@@ -163,9 +199,9 @@ describe("rewriteAgentServerUrls", () => {
       ),
     ).toEqual({
       conversation_url: `${base}/api/conversations/c1`,
-      guest: `${base}/api/conversations/c1/events?x=1`,
-      prefixed: `${base}/api/conversations/c1`,
-      list: [`${base}/api/conversations`, "http://h/api/other"],
+      items: [{ conversation_url: `${base}/api/conversations/c1` }],
+      message: "see http://10.0.0.5:8000/api/conversations/c1/events",
+      list: ["http://h/api/conversations", "http://h/api/other"],
       n: 3,
     });
   });
@@ -198,6 +234,7 @@ describe("createMarsWebBridge", () => {
   it("answers the health probe and ignores non-MARS paths", async () => {
     expect(await (await fetch(`${web.origin}/mars/health`)).json()).toEqual({
       ok: true,
+      authRequired: false,
     });
     expect((await fetch(`${web.origin}/api/other`)).status).toBe(404);
     expect(await (await fetch(`${web.origin}/api/other`)).text()).toBe(
@@ -277,7 +314,9 @@ describe("createMarsWebBridge", () => {
     expect(body).toEqual({
       id: "c1",
       conversation_url: `${proxyBase}/api/conversations/c1`,
-      nested: { url: `${proxyBase}/api/conversations/c1/events` },
+      // Only the URL fields the renderer follows are rewritten; a URL under
+      // any other key is content and passes through.
+      nested: { url: `${upstream.origin}/api/conversations/c1/events` },
       unrelated: `${upstream.origin}/api/other`,
     });
   });
@@ -353,6 +392,63 @@ describe("createMarsWebBridge", () => {
     expect(outcome).toMatch(/409|Unexpected server response: 409/);
   });
 
+  it("answers 400 to a session path that cannot be decoded instead of crashing", async () => {
+    expect((await fetch(`${web.origin}/mars/sessions/%E0/`)).status).toBe(400);
+    // The server is still alive afterwards.
+    expect((await fetch(`${web.origin}/mars/health`)).status).toBe(200);
+  });
+
+  it("refuses a request from a foreign Host on a loopback bind (DNS rebinding)", async () => {
+    // fetch() will not send a custom Host, so go through node:http.
+    const { port } = new URL(web.origin);
+    const status = await new Promise<number>((resolve, reject) => {
+      httpRequest(
+        {
+          host: "127.0.0.1",
+          port,
+          path: "/mars/health",
+          headers: { Host: "evil.example:80" },
+        },
+        (res) => {
+          res.resume();
+          resolve(res.statusCode ?? 0);
+        },
+      )
+        .on("error", reject)
+        .end();
+    });
+    expect(status).toBe(403);
+  });
+
+  it("streams a JSON body past the rewrite limit through untouched instead of truncating it", async () => {
+    const big = "x".repeat(9 * 1024 * 1024);
+    upstream.setLargeBody(JSON.stringify({ blob: big }));
+    await rpc(web.origin, "openTunnel", [{ sessionId: SESSION_ID }]);
+
+    const response = await fetch(
+      `${web.origin}/mars/sessions/${SESSION_ID}/mars-upstream/large`,
+    );
+    const text = await response.text();
+    expect(response.status).toBe(200);
+    expect(text.length).toBe(big.length + '{"blob":""}'.length);
+    expect(JSON.parse(text).blob.length).toBe(big.length);
+  });
+
+  it("terminates an upstream WebSocket the browser abandoned before the handshake finished", async () => {
+    upstream.delayUpgradeMs = 150;
+    await rpc(web.origin, "openTunnel", [{ sessionId: SESSION_ID }]);
+
+    const ws = new WebSocket(
+      `${web.origin.replace("http", "ws")}/mars/sessions/${SESSION_ID}/mars-upstream/socket`,
+    );
+    ws.on("error", () => {});
+    await new Promise((r) => setTimeout(r, 30));
+    ws.terminate();
+    await new Promise((r) => setTimeout(r, 300));
+
+    expect(upstream.openSockets()).toBe(0);
+  });
+
   it("dispose() forgets connections and disposes the bridge", async () => {
     await rpc(web.origin, "openTunnel", [{ sessionId: SESSION_ID }]);
 
@@ -366,5 +462,140 @@ describe("createMarsWebBridge", () => {
         )
       ).status,
     ).toBe(409);
+  });
+});
+
+describe("createMarsWebBridge with a session key", () => {
+  const KEY = "sk-test-key";
+  let upstream: Awaited<ReturnType<typeof startFakeAgentServer>>;
+  let bridge: ReturnType<typeof fakeBridge>;
+  let marsWeb: ReturnType<typeof createMarsWebBridge>;
+  let web: Awaited<ReturnType<typeof startWebServer>>;
+
+  beforeEach(async () => {
+    upstream = await startFakeAgentServer();
+    bridge = fakeBridge(upstream.origin);
+    marsWeb = createMarsWebBridge({
+      bridge: bridge as never,
+      env: {},
+      key: KEY,
+      pingIntervalMs: 20,
+      log: () => {},
+    });
+    web = await startWebServer(marsWeb);
+  });
+
+  afterEach(async () => {
+    await marsWeb.dispose();
+    web.close();
+    upstream.close();
+  });
+
+  it("requires the key on RPC and proxy routes, hands out a cookie for it, and keeps health open", async () => {
+    expect(await (await fetch(`${web.origin}/mars/health`)).json()).toEqual({
+      ok: true,
+      authRequired: true,
+    });
+    expect((await rpc(web.origin, "getAuthState")).status).toBe(401);
+    expect(
+      (
+        await rpc(web.origin, "getAuthState", [], {
+          headers: { "X-Session-API-Key": "wrong" },
+        })
+      ).status,
+    ).toBe(401);
+
+    const response = await fetch(`${web.origin}/mars/rpc/getAuthState`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Session-API-Key": KEY },
+      body: JSON.stringify({ args: [] }),
+    });
+    expect(response.status).toBe(200);
+    const cookie = response.headers.get("set-cookie") ?? "";
+    expect(cookie).toMatch(
+      /^mars_web_auth=[0-9a-f]{64}; HttpOnly; SameSite=Strict; Path=\/mars$/,
+    );
+
+    // The cookie alone is enough afterwards (what a browser does on its own).
+    const cookiePair = cookie.split(";")[0];
+    expect(
+      (
+        await rpc(web.origin, "getAuthState", [], {
+          headers: { Cookie: cookiePair },
+        })
+      ).status,
+    ).toBe(200);
+  });
+
+  it("neither the key header nor the cookie reaches the session host", async () => {
+    await rpc(web.origin, "openTunnel", [{ sessionId: SESSION_ID }], {
+      headers: { "X-Session-API-Key": KEY },
+    });
+    const response = await fetch(
+      `${web.origin}/mars/sessions/${SESSION_ID}/mars-upstream/conversation`,
+      { headers: { "X-Session-API-Key": KEY, Cookie: "canvas=1" } },
+    );
+    expect(response.status).toBe(200);
+    const forwarded = upstream.seen.http.at(-1)!.headers;
+    expect(forwarded.authorization).toBe(TOKEN);
+    expect(forwarded["x-session-api-key"]).toBeUndefined();
+    expect(forwarded.cookie).toBeUndefined();
+  });
+
+  it("authenticates the WebSocket upgrade by cookie", async () => {
+    const first = await fetch(`${web.origin}/mars/rpc/openTunnel`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Session-API-Key": KEY },
+      body: JSON.stringify({ args: [{ sessionId: SESSION_ID }] }),
+    });
+    const cookiePair = (first.headers.get("set-cookie") ?? "").split(";")[0];
+    const wsUrl = `${web.origin.replace("http", "ws")}/mars/sessions/${SESSION_ID}/mars-upstream/socket`;
+
+    const refused = new WebSocket(wsUrl);
+    const refusedStatus = await new Promise<number>((resolve) => {
+      refused.on("unexpected-response", (_r, res) =>
+        resolve(res.statusCode ?? 0),
+      );
+      refused.on("error", () => {});
+    });
+    expect(refusedStatus).toBe(401);
+
+    const ws = new WebSocket(wsUrl, { headers: { Cookie: cookiePair } });
+    await new Promise<void>((resolve, reject) => {
+      ws.on("open", () => resolve());
+      ws.on("error", reject);
+    });
+    ws.close();
+  });
+});
+
+describe("mountMarsWebBridge", () => {
+  it("is off unless MARS_WEB=1", () => {
+    expect(isMarsWebEnabled({})).toBe(false);
+    expect(isMarsWebEnabled({ MARS_WEB: "0" })).toBe(false);
+    expect(isMarsWebEnabled({ MARS_WEB: "1" })).toBe(true);
+    expect(
+      mountMarsWebBridge({ env: {}, host: "127.0.0.1", log: () => {} }),
+    ).toBeNull();
+  });
+
+  it("refuses a non-loopback bind without a key, and mounts with one", async () => {
+    const logs: string[] = [];
+    expect(
+      mountMarsWebBridge({
+        env: { MARS_WEB: "1" },
+        host: "0.0.0.0",
+        log: (m) => logs.push(m),
+      }),
+    ).toBeNull();
+    expect(logs[0]).toMatch(/not loopback/);
+
+    const mounted = mountMarsWebBridge({
+      env: { MARS_WEB: "1", MARS_WEB_KEY: "k" },
+      host: "0.0.0.0",
+      log: () => {},
+    });
+    expect(mounted).not.toBeNull();
+    await mounted!.dispose();
   });
 });

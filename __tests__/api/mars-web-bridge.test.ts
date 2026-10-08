@@ -7,6 +7,11 @@ import {
   probeMarsWebBridge,
 } from "#/api/mars/mars-web-bridge";
 
+const sessionApiKey = vi.hoisted(() => ({ value: null as string | null }));
+vi.mock("#/api/agent-server-config", () => ({
+  getAgentServerSessionApiKey: () => sessionApiKey.value,
+}));
+
 function jsonResponse(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -17,6 +22,7 @@ function jsonResponse(status: number, body: unknown): Response {
 afterEach(() => {
   vi.unstubAllGlobals();
   delete window.marsBridge;
+  sessionApiKey.value = null;
 });
 
 describe("createMarsWebBridge", () => {
@@ -57,6 +63,26 @@ describe("createMarsWebBridge", () => {
     });
   });
 
+  it("sends the page's session key on every call so the server can admit it", async () => {
+    sessionApiKey.value = "sk-page";
+    const fetchImpl = vi.fn(async () => jsonResponse(200, { result: null }));
+    const bridge = createMarsWebBridge(
+      "",
+      fetchImpl as unknown as typeof fetch,
+    );
+
+    await bridge.pauseSession("s1");
+
+    expect(fetchImpl).toHaveBeenCalledWith("/mars/rpc/pauseSession", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Session-API-Key": "sk-page",
+      },
+      body: JSON.stringify({ args: ["s1"] }),
+    });
+  });
+
   it("never offers OAuth", async () => {
     const bridge = createMarsWebBridge("", vi.fn() as unknown as typeof fetch);
     await expect(bridge.signInWithOAuth()).rejects.toBeInstanceOf(
@@ -69,6 +95,14 @@ describe("probeMarsWebBridge / installMarsWebBridge", () => {
   it("reports whether the server hosts the bridge", async () => {
     const ok = vi.fn(async () => jsonResponse(200, { ok: true }));
     const missing = vi.fn(async () => new Response("", { status: 404 }));
+    // A server that answers every path with index.html is a 200 too.
+    const spa = vi.fn(
+      async () =>
+        new Response("<!doctype html><title>Canvas</title>", {
+          status: 200,
+          headers: { "Content-Type": "text/html" },
+        }),
+    );
     const down = vi.fn(async () => {
       throw new TypeError("Failed to fetch");
     });
@@ -79,6 +113,9 @@ describe("probeMarsWebBridge / installMarsWebBridge", () => {
     expect(
       await probeMarsWebBridge("", missing as unknown as typeof fetch),
     ).toBe(false);
+    expect(await probeMarsWebBridge("", spa as unknown as typeof fetch)).toBe(
+      false,
+    );
     expect(await probeMarsWebBridge("", down as unknown as typeof fetch)).toBe(
       false,
     );

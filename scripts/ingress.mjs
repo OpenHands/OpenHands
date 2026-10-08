@@ -26,7 +26,7 @@ import process from "node:process";
 import { pathToFileURL } from "node:url";
 
 import { DEFAULT_BIND_HOST, resolveBindHost } from "./bind-host.mjs";
-import { createMarsWebBridge, isMarsWebEnabled } from "./mars-web-bridge.mjs";
+import { mountMarsWebBridge } from "./mars-web-bridge.mjs";
 import {
   createProxyHandlers,
   createRouter,
@@ -175,9 +175,10 @@ export function startIngress(config) {
   const route = createRouter(config.routes, config.defaultBackend);
   const proxy = createProxyHandlers({ label: `ingress:${config.port}` });
   const uninstallDiagnostics = proxy.installDiagnostics();
-  // DigitalOcean Managed Agents for the browser: this server hosts the MARS
-  // bridge and proxies to sessions' ingress URLs (see mars-web-bridge.mjs).
-  const marsWeb = isMarsWebEnabled() ? createMarsWebBridge() : null;
+  // DigitalOcean Managed Agents for the browser: with MARS_WEB=1 this server
+  // hosts the MARS bridge and proxies to sessions' ingress URLs, behind the
+  // session key (MARS_WEB_KEY; dev-with-automation passes the stack's key).
+  const marsWeb = mountMarsWebBridge({ host: config.host });
 
   const noReferrerPrefixes = config.noReferrerPrefixes ?? [];
 

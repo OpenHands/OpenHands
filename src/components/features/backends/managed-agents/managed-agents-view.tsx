@@ -226,13 +226,16 @@ export function ManagedAgentsView({ onBack, onDone }: ManagedAgentsViewProps) {
   };
 
   // Stop = destroy: harness-api tears the sandbox down and the session is
-  // gone for good, so it sits behind a confirmation. A connected session is
-  // detached first so no backend keeps probing a sandbox being torn down.
+  // gone for good, so it sits behind a confirmation. The destroy goes first:
+  // it can be refused (409 while a checkpoint/fork/rollback holds the
+  // session, 423 locked), and then the session is still running and the
+  // user must keep their connection to it. Only once it succeeded is a
+  // connected backend detached, so nothing keeps probing a torn-down sandbox.
   const stopSession = async (session: MarsSession) => {
     const backend = connectedBySession.get(session.session_id);
     await runSessionAction(session.session_id, async () => {
-      if (backend) await detach(backend);
       await bridge!.destroySession(session.session_id);
+      if (backend) await detach(backend);
     });
   };
 

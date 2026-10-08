@@ -35,7 +35,7 @@ import { pathToFileURL } from "node:url";
 import sirv from "sirv";
 
 import { applySessionKeyPolicy, DEFAULT_BIND_HOST } from "./bind-host.mjs";
-import { createMarsWebBridge, isMarsWebEnabled } from "./mars-web-bridge.mjs";
+import { mountMarsWebBridge } from "./mars-web-bridge.mjs";
 import {
   createProxyHandlers,
   createRouter,
@@ -680,9 +680,14 @@ export function startStaticServer(config) {
   const staticMiddleware = createStaticMiddleware(dirAbs);
 
   const uninstallDiagnostics = proxy.installDiagnostics();
-  // DigitalOcean Managed Agents for the browser: this server hosts the MARS
-  // bridge and proxies to sessions' ingress URLs (see mars-web-bridge.mjs).
-  const marsWeb = isMarsWebEnabled() ? createMarsWebBridge() : null;
+  // DigitalOcean Managed Agents for the browser: with MARS_WEB=1 this server
+  // hosts the MARS bridge and proxies to sessions' ingress URLs, behind the
+  // session key (see mars-web-bridge.mjs). The key is the one this server
+  // already injects; a LAN bind with no key refuses to mount.
+  const marsWeb = mountMarsWebBridge({
+    host: config.host,
+    sessionApiKey: policy.sessionApiKey,
+  });
 
   const server = createServer((req, res) => {
     const url = req.url ?? "/";

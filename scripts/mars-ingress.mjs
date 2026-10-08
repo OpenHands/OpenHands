@@ -16,9 +16,12 @@
  *   - A freshly published URL starts PENDING and becomes READY once the
  *     gateway route is up; there is no failed state, so this polls.
  *   - 501 means this session can never have a URL (pre-ingress sandbox, a
- *     microVM launched before the port was published, non-OpenHands agent).
- *     That is the one error callers fall back to the tunnel on, so it is
- *     surfaced as its own type.
+ *     microVM launched before the port was published, non-OpenHands agent),
+ *     and a 404 means this harness-api does not serve /ingress yet (the
+ *     backend side is not out everywhere). Both leave the tunnel as the way
+ *     in, so both surface as MarsIngressUnsupportedError; a URL that never
+ *     becomes READY surfaces as MarsIngressTimeoutError, which callers may
+ *     also treat as "use the tunnel".
  *   - The hostname is revoked on pause and lock, and changes after rollback,
  *     so a URL must be re-resolved on every connect rather than cached.
  */
@@ -29,14 +32,24 @@ import { ensureSessionAwake } from "./mars-session.mjs";
 
 const DEFAULT_POLL_INTERVAL_MS = 2_000;
 const DEFAULT_TIMEOUT_MS = 120_000;
+const HTTP_NOT_FOUND = 404;
 const HTTP_NOT_IMPLEMENTED = 501;
 
-/** The session cannot have a public URL; the caller should use the tunnel. */
+/** The session cannot have a public URL (501), or this harness-api has no /ingress (404); use the tunnel. */
 export class MarsIngressUnsupportedError extends Error {
-  constructor(message, { cause = null } = {}) {
+  constructor(message, { cause = null, status = HTTP_NOT_IMPLEMENTED } = {}) {
     super(message);
     this.name = "MarsIngressUnsupportedError";
-    this.status = HTTP_NOT_IMPLEMENTED;
+    this.status = status;
+    if (cause) this.cause = cause;
+  }
+}
+
+/** The URL exists but did not become READY in time. */
+export class MarsIngressTimeoutError extends Error {
+  constructor(message, { cause = null } = {}) {
+    super(message);
+    this.name = "MarsIngressTimeoutError";
     if (cause) this.cause = cause;
   }
 }
@@ -58,9 +71,13 @@ async function waitUntilPublished(api, sessionId, pollIntervalMs, signal) {
     } catch (error) {
       if (
         error instanceof MarsApiError &&
-        error.status === HTTP_NOT_IMPLEMENTED
+        (error.status === HTTP_NOT_IMPLEMENTED ||
+          error.status === HTTP_NOT_FOUND)
       ) {
-        throw new MarsIngressUnsupportedError(error.message, { cause: error });
+        throw new MarsIngressUnsupportedError(error.message, {
+          cause: error,
+          status: error.status,
+        });
       }
       throw error;
     }
@@ -106,7 +123,7 @@ export async function resolveIngressURL({
     return await waitUntilPublished(api, sessionId, pollIntervalMs, deadline);
   } catch (error) {
     if (deadline.aborted && !(error instanceof MarsIngressUnsupportedError)) {
-      throw new Error(
+      throw new MarsIngressTimeoutError(
         `Timed out waiting for the public URL of session ${sessionId}.`,
         { cause: error },
       );

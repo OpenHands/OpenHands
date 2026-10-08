@@ -1153,6 +1153,9 @@ function startIngress(config) {
     {
       cwd: projectRoot,
       color: c.yellow,
+      // The MARS web bridge (opt-in, MARS_WEB=1) guards /mars/* with the
+      // stack's session key, the same one the page already holds.
+      env: config.sessionApiKey ? { MARS_WEB_KEY: config.sessionApiKey } : {},
     },
   );
 }
