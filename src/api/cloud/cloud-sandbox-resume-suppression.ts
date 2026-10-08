@@ -10,6 +10,10 @@ export function consumeCloudAutoResumeSuppression(
   return suppressedConversationIds.delete(conversationId);
 }
 
+export function clearCloudAutoResumeSuppression(conversationId: string): void {
+  suppressedConversationIds.delete(conversationId);
+}
+
 export function __clearCloudAutoResumeSuppressionsForTests(): void {
   suppressedConversationIds.clear();
 }

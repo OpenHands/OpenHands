@@ -285,6 +285,43 @@ describe("conversation route — cloud sandbox resume", () => {
     expect(resumeCloudSandbox).not.toHaveBeenCalled();
   });
 
+  it("clears stale suppression when the route unmounts before PAUSED is observed", async () => {
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    suppressNextCloudAutoResume(CLOUD_CONVERSATION_ID);
+    vi.mocked(
+      AgentServerConversationService.batchGetAppConversations,
+    ).mockResolvedValue([
+      makeConversation(CLOUD_CONVERSATION_ID, {
+        sandbox_status: "RUNNING",
+        sandbox_id: "sandbox-running-before-unmount",
+      }),
+    ]);
+
+    const { unmount } = renderConversation();
+
+    expect(await screen.findByTestId("conversation-main")).toBeInTheDocument();
+    expect(resumeCloudSandbox).not.toHaveBeenCalled();
+
+    unmount();
+    vi.mocked(resumeCloudSandbox).mockClear();
+    vi.mocked(
+      AgentServerConversationService.batchGetAppConversations,
+    ).mockResolvedValue([
+      makeConversation(CLOUD_CONVERSATION_ID, {
+        sandbox_status: "PAUSED",
+        sandbox_id: "sandbox-paused-after-reopen",
+      }),
+    ]);
+
+    renderConversation();
+
+    await waitFor(() => {
+      expect(resumeCloudSandbox).toHaveBeenCalledWith(
+        "sandbox-paused-after-reopen",
+      );
+    });
+  });
+
   it("retries a failed cloud sandbox resume while the conversation remains paused", async () => {
     setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
     vi.mocked(

@@ -31,7 +31,10 @@ import { WebSocketProviderWrapper } from "#/contexts/websocket-provider-wrapper"
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import { I18nKey } from "#/i18n/declaration";
 import { resumeCloudSandbox } from "#/api/cloud/conversation-service.api";
-import { consumeCloudAutoResumeSuppression } from "#/api/cloud/cloud-sandbox-resume-suppression";
+import {
+  clearCloudAutoResumeSuppression,
+  consumeCloudAutoResumeSuppression,
+} from "#/api/cloud/cloud-sandbox-resume-suppression";
 
 const CLOUD_RESUME_RETRY_DELAY_MS =
   import.meta.env.MODE === "test" ? 10 : 10_000;
@@ -193,6 +196,13 @@ function AppContent() {
       }
     },
     [],
+  );
+
+  React.useEffect(
+    () => () => {
+      clearCloudAutoResumeSuppression(conversationId);
+    },
+    [conversationId],
   );
 
   React.useEffect(() => {
