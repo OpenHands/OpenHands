@@ -28,7 +28,6 @@ describe("isFramePreviewablePath", () => {
   it("rejects non-frame types", () => {
     expect(isFramePreviewablePath("notes.md")).toBe(false);
     expect(isFramePreviewablePath("app.ts")).toBe(false);
-    expect(isFramePreviewablePath("logo.png")).toBe(false);
     expect(isFramePreviewablePath("index.html.bak")).toBe(false);
     expect(isFramePreviewablePath("")).toBe(false);
   });
@@ -39,13 +38,16 @@ describe("getArtifactPreviewKind", () => {
     expect(getArtifactPreviewKind("report.md")).toBe("markdown");
     expect(getArtifactPreviewKind("index.html")).toBe("frame");
     expect(getArtifactPreviewKind("chart.svg")).toBe("frame");
-    expect(getArtifactPreviewKind("logo.PNG")).toBe("image");
-    expect(getArtifactPreviewKind("photo.jpg")).toBe("image");
-    expect(getArtifactPreviewKind("photo.jpeg")).toBe("image");
-    expect(getArtifactPreviewKind("spec.pdf")).toBe("pdf");
   });
 
-  it("returns null for paths with no rich preview", () => {
+  it("returns null for binary and plain-source paths", () => {
+    // Binary formats (raster images, PDFs) and Office documents are
+    // deliberately not previewed inline (#18113); they keep their existing
+    // CodeBlock / fallback rendering.
+    expect(getArtifactPreviewKind("logo.png")).toBe(null);
+    expect(getArtifactPreviewKind("photo.jpg")).toBe(null);
+    expect(getArtifactPreviewKind("spec.pdf")).toBe(null);
+    expect(getArtifactPreviewKind("report.docx")).toBe(null);
     expect(getArtifactPreviewKind("app.tsx")).toBe(null);
     expect(getArtifactPreviewKind("Makefile")).toBe(null);
     expect(getArtifactPreviewKind("archive.zip")).toBe(null);
@@ -57,11 +59,11 @@ describe("isPreviewableArtifactPath", () => {
     expect(isPreviewableArtifactPath("report.md")).toBe(true);
     expect(isPreviewableArtifactPath("index.html")).toBe(true);
     expect(isPreviewableArtifactPath("icon.svg")).toBe(true);
-    expect(isPreviewableArtifactPath("logo.png")).toBe(true);
-    expect(isPreviewableArtifactPath("spec.pdf")).toBe(true);
   });
 
-  it("rejects plain source files", () => {
+  it("rejects binary formats and plain source files", () => {
+    expect(isPreviewableArtifactPath("logo.png")).toBe(false);
+    expect(isPreviewableArtifactPath("spec.pdf")).toBe(false);
     expect(isPreviewableArtifactPath("app.tsx")).toBe(false);
     expect(isPreviewableArtifactPath("Makefile")).toBe(false);
   });

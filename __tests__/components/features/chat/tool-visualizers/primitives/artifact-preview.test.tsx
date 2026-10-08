@@ -39,7 +39,10 @@ vi.mock("#/api/cloud/conversation-service.api", () => ({
     readCloudConversationFileMock(...args),
 }));
 
-import { ArtifactPreview } from "#/components/features/chat/tool-visualizers/primitives/artifact-preview";
+import {
+  ArtifactPreview,
+  ARTIFACT_PREVIEW_INLINE_MAX_BYTES,
+} from "#/components/features/chat/tool-visualizers/primitives/artifact-preview";
 
 const fetchMock = vi.fn();
 const BASE_URL =
@@ -307,41 +310,64 @@ describe("ArtifactPreview", () => {
     }
   });
 
-  it("renders a raster image as an <img>, not a sandboxed frame", async () => {
-    renderPreview(<ArtifactPreview path="logo.png" content="binary" />);
-
-    const image = await screen.findByTestId("artifact-preview-image");
-    expect(image.tagName).toBe("IMG");
-    expect(image.getAttribute("src")).toContain(`${BASE_URL}logo.png`);
-    expect(
-      screen.queryByTestId("artifact-preview-frame"),
-    ).not.toBeInTheDocument();
-  });
-
-  it("renders a PDF in an unsandboxed frame so the viewer can instantiate", async () => {
-    renderPreview(<ArtifactPreview path="spec.pdf" content="binary" />);
-
-    const frame = await screen.findByTestId("artifact-preview-pdf-frame");
-    // Chromium will not instantiate the PDF plugin inside a sandboxed frame.
-    expect(frame).not.toHaveAttribute("sandbox");
-  });
-
   it("labels its content so the preview is machine-readable, not just pixels", async () => {
-    // A multimodal model (e.g. DeepSeek V4.1 Flash) reads the rendered pixels;
-    // a text-only consumer reads the DOM. Both need the element to be real
-    // content with an accessible name, not a decorative box.
-    const { unmount } = renderPreview(
-      <ArtifactPreview path="logo.png" content="binary" />,
+    // The frame carries the artifact path as its accessible name, so a text
+    // consumer can identify what the card shows rather than a decorative box.
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      arrayBuffer: () => Promise.resolve(textBytes("<h1>Hello</h1>")),
+    });
+    renderPreview(
+      <ArtifactPreview path="report.html" content="<h1>Hello</h1>" />,
     );
     expect(
-      await screen.findByTestId("artifact-preview-image"),
-    ).toHaveAttribute("alt", "logo.png");
-    unmount();
+      await screen.findByTestId("artifact-preview-frame"),
+    ).toHaveAttribute("title", "report.html");
+  });
 
-    renderPreview(<ArtifactPreview path="spec.pdf" content="binary" />);
-    expect(
-      await screen.findByTestId("artifact-preview-pdf-frame"),
-    ).toHaveAttribute("title", "spec.pdf");
+  it("holds an oversized artifact until the card is expanded", async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      arrayBuffer: () => Promise.resolve(textBytes("<h1>Hello</h1>")),
+    });
+    const observed: Array<(entries: { isIntersecting: boolean }[]) => void> =
+      [];
+    class MockIntersectionObserver {
+      constructor(callback: (entries: { isIntersecting: boolean }[]) => void) {
+        observed.push(callback);
+      }
+      observe() {}
+      disconnect() {}
+      unobserve() {}
+    }
+    vi.stubGlobal("IntersectionObserver", MockIntersectionObserver);
+    const huge = `<h1>${"x".repeat(ARTIFACT_PREVIEW_INLINE_MAX_BYTES)}</h1>`;
+
+    try {
+      renderPreview(<ArtifactPreview path="big.html" content={huge} />);
+      act(() => {
+        observed.forEach((callback) => callback([{ isIntersecting: true }]));
+      });
+
+      // In view, but over the threshold: no frame yet, just the placeholder.
+      // (The test i18n mock returns the key as the translation.)
+      expect(
+        screen.queryByTestId("artifact-preview-frame"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByText("ARTIFACT$LARGE_FILE_EXPAND_TO_PREVIEW"),
+      ).toBeInTheDocument();
+
+      // Expand mounts it.
+      await userEvent.click(screen.getByTestId("artifact-preview-expand"));
+      expect(
+        await screen.findByTestId("artifact-preview-frame"),
+      ).toBeInTheDocument();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("calls onView when provided", async () => {

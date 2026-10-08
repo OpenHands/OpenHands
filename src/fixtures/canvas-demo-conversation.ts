@@ -11,7 +11,6 @@ import type {
 import { SecurityRisk } from "#/types/agent-server/core";
 import type { FileEditorAction } from "#/types/agent-server/core/base/action";
 import type { FileEditorObservation } from "#/types/agent-server/core/base/observation";
-import { createArtifactFormatEvents } from "#/fixtures/artifact-formats-demo";
 
 export const CANVAS_DEMO_CONVERSATION_ID = "canvas-demo";
 export const CANVAS_DEMO_FILE_PATH = "canvas.md";
@@ -276,11 +275,10 @@ export const CANVAS_DEMO_EVENTS: OpenHandsEvent[] = [
   createHtmlObservation,
   createSvgAction,
   createSvgObservation,
-  ...createArtifactFormatEvents(8, timestamp),
   createMessage(
     "canvas-demo-agent",
     "assistant",
-    "I generated the project canvas, an HTML report, an SVG chart, a PNG and a PDF. All of them preview inline above.",
-    20,
+    "I generated the project canvas, an HTML report and an SVG chart. All of them preview inline above.",
+    8,
   ),
 ];

@@ -4,22 +4,15 @@ import { isMarkdownFilePath } from "./is-markdown-file-path";
  * Extensions we render live inside a sandboxed iframe in the conversation:
  * markup formats a browser renders from a workspace URL, where relative asset
  * references must resolve.
+ *
+ * This allowlist is deliberately narrow. Binary formats — raster images and
+ * PDFs — and Office documents (`.docx` / `.xlsx` / `.pptx`) are intentionally
+ * **not** previewed inline and keep their existing CodeBlock / fallback
+ * rendering. Binary previews are an explicit non-goal of #18113, and a PDF
+ * needs an unsandboxed frame, so it would auto-mount an untrusted document load
+ * for every create event.
  */
 const FRAME_PREVIEW_EXTS = new Set(["html", "htm", "svg"]);
-
-/** Raster images the browser can paint directly from a workspace URL. */
-const IMAGE_PREVIEW_EXTS = new Set([
-  "png",
-  "jpg",
-  "jpeg",
-  "gif",
-  "webp",
-  "bmp",
-  "ico",
-  "avif",
-]);
-
-const PDF_PREVIEW_EXTS = new Set(["pdf"]);
 
 /**
  * How an artifact should be previewed inline, or `null` when it gets no rich
@@ -27,10 +20,8 @@ const PDF_PREVIEW_EXTS = new Set(["pdf"]);
  *
  * - `markdown` — rich markdown card (`MarkdownFilePreview`)
  * - `frame`    — sandboxed iframe pointed at the workspace fileserver
- * - `image`    — `<img>` pointed at the workspace fileserver
- * - `pdf`      — unsandboxed iframe so Chromium's PDF viewer can instantiate
  */
-export type ArtifactPreviewKind = "markdown" | "frame" | "image" | "pdf";
+export type ArtifactPreviewKind = "markdown" | "frame";
 
 export function getFileExtension(path: string): string {
   const idx = path.lastIndexOf(".");
@@ -44,8 +35,6 @@ export function getArtifactPreviewKind(
   if (isMarkdownFilePath(path)) return "markdown";
   const ext = getFileExtension(path);
   if (FRAME_PREVIEW_EXTS.has(ext)) return "frame";
-  if (IMAGE_PREVIEW_EXTS.has(ext)) return "image";
-  if (PDF_PREVIEW_EXTS.has(ext)) return "pdf";
   return null;
 }
 
@@ -62,7 +51,7 @@ export function isFramePreviewablePath(path: string): boolean {
 
 /**
  * True for any artifact path that gets a rich inline preview in the chat —
- * the markdown card, the sandboxed frame, a raster image, or a PDF.
+ * the markdown card or the sandboxed frame.
  */
 export function isPreviewableArtifactPath(path: string): boolean {
   return getArtifactPreviewKind(path) !== null;

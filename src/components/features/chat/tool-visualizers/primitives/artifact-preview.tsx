@@ -3,12 +3,11 @@
  *
  * HTML/SVG artifacts render inside a sandboxed iframe pointed at the workspace
  * fileserver URL, so relative assets resolve and the agent-written markup stays
- * inert (no `allow-scripts`). Raster images render as an `<img>` from the same
- * URL. PDFs render in an unsandboxed iframe: a sandboxed frame is not allowed
- * to instantiate a plugin, so Chromium's built-in viewer would never appear.
- * The frame/image is mounted only while the card is near the viewport and
- * unmounted again once it leaves, so a long conversation does not keep every
- * visited frame alive.
+ * inert (no `allow-scripts`). The frame is mounted only while the card is near
+ * the viewport and unmounted again once it leaves, so a long conversation does
+ * not keep every visited frame alive. An artifact above the inline size
+ * threshold stays unmounted until the user expands the card, so a large
+ * document is never loaded merely because its row scrolled past.
  */
 import React from "react";
 import { useTranslation } from "react-i18next";
@@ -28,8 +27,14 @@ import {
   withWorkspaceCacheBuster,
 } from "#/stores/use-workspace-mutation-counter";
 import { Typography } from "#/ui/typography";
-import { getArtifactPreviewKind } from "#/utils/is-previewable-file-path";
 import { cn } from "#/utils/utils";
+
+/**
+ * Largest artifact body mounted inline without an explicit Expand. Above this
+ * the card shows a placeholder until the user expands it, so a multi-megabyte
+ * HTML/SVG document is not loaded just because its row scrolled into view.
+ */
+export const ARTIFACT_PREVIEW_INLINE_MAX_BYTES = 512 * 1024;
 
 interface ArtifactPreviewProps {
   path: string;
@@ -46,8 +51,8 @@ interface ArtifactPreviewProps {
 }
 
 /**
- * Height-clipped live preview of an HTML/SVG, image, or PDF artifact, with
- * Expand / View / Copy / Download actions.
+ * Height-clipped live preview of an HTML/SVG artifact, with Expand / View /
+ * Copy / Download actions.
  */
 export function ArtifactPreview({
   path,
@@ -57,8 +62,11 @@ export function ArtifactPreview({
 }: ArtifactPreviewProps) {
   const { t } = useTranslation("openhands");
   const fileName = path.split("/").pop() || path;
-  const kind = getArtifactPreviewKind(path);
   const fetchPath = sourcePath ?? path;
+  // The event's own source text (create `file_text` / edit `new_content`)
+  // bounds the artifact before we mount a live frame for it.
+  const sourceBytes = new TextEncoder().encode(content).length;
+  const exceedsInlineLimit = sourceBytes > ARTIFACT_PREVIEW_INLINE_MAX_BYTES;
 
   const [expanded, setExpanded] = React.useState(false);
   const [inView, setInView] = React.useState(false);
@@ -97,6 +105,11 @@ export function ArtifactPreview({
     observer.observe(node);
     return () => observer.disconnect();
   }, []);
+
+  // An artifact above the threshold is held back until Expand; everything else
+  // mounts as soon as it has a URL and is near the viewport.
+  const heldForSize = exceedsInlineLimit && !expanded;
+  const frameUrl = staticUrl && inView && !heldForSize ? staticUrl : null;
 
   const copySource = React.useCallback(async () => {
     try {
@@ -153,44 +166,28 @@ export function ArtifactPreview({
           expanded ? "h-[32rem]" : "h-40",
         )}
       >
-        {staticUrl && inView ? (
-          kind === "image" ? (
-            <img
-              src={staticUrl}
-              alt={fileName}
-              data-testid="artifact-preview-image"
-              className="h-full w-full object-contain"
-            />
-          ) : (
-            <iframe
-              title={path}
-              src={staticUrl}
-              // HTML/SVG: `allow-same-origin` keeps the frame on the workspace
-              // fileserver origin so relative `<link>` / `<img>` resolve; the
-              // absence of `allow-scripts` keeps agent-written `<script>` and
-              // inline handlers inert. Mirrors FileContentViewer's posture.
-              //
-              // PDF: Chromium refuses to instantiate the PDF plugin inside a
-              // sandboxed frame, so the PDF viewer needs no sandbox. The file
-              // is still the agent's own artifact on the workspace origin, and
-              // no script runs from a PDF.
-              sandbox={kind === "pdf" ? undefined : "allow-same-origin"}
-              data-testid={
-                kind === "pdf"
-                  ? "artifact-preview-pdf-frame"
-                  : "artifact-preview-frame"
-              }
-              className="h-full w-full"
-            />
-          )
+        {frameUrl ? (
+          <iframe
+            title={path}
+            src={frameUrl}
+            // `allow-same-origin` keeps the frame on the workspace fileserver
+            // origin so relative `<link>` / `<img>` resolve; the absence of
+            // `allow-scripts` keeps agent-written `<script>` and inline
+            // handlers inert. Mirrors FileContentViewer's posture.
+            sandbox="allow-same-origin"
+            data-testid="artifact-preview-frame"
+            className="h-full w-full"
+          />
         ) : (
           <div
             data-testid="artifact-preview-pending"
             className="flex h-full w-full items-center justify-center text-xs text-muted"
           >
-            {query.isError
-              ? t(I18nKey.FILES$LOAD_ERROR)
-              : t(I18nKey.FILES$LOADING_FILES)}
+            {heldForSize
+              ? t(I18nKey.ARTIFACT$LARGE_FILE_EXPAND_TO_PREVIEW)
+              : query.isError
+                ? t(I18nKey.FILES$LOAD_ERROR)
+                : t(I18nKey.FILES$LOADING_FILES)}
           </div>
         )}
       </div>

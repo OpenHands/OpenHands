@@ -8,7 +8,8 @@
  *
  * Created Markdown artifacts get a height-clipped rich preview with a View bar
  * that opens the Files drawer, instead of dumping the full source into a code
- * block. Reads/edits of `.md` files keep the normal CodeBlock / DiffView path.
+ * block. Created HTML/SVG artifacts get the same card with a live sandboxed
+ * frame. Reads/edits of those files keep the normal CodeBlock / DiffView path.
  */
 import React from "react";
 import { getLanguageFromPath } from "#/utils/get-language-from-path";
@@ -102,13 +103,7 @@ function FileEditorCardBody({
     }
     // HTML/SVG render live in a sandboxed frame pointed at the workspace
     // fileserver, so relative assets resolve and agent script stays inert.
-    // Images and PDFs render from the same URL (the PDF frame is deliberately
-    // unsandboxed so Chromium's viewer can instantiate).
-    if (
-      previewKind === "frame" ||
-      previewKind === "image" ||
-      previewKind === "pdf"
-    ) {
+    if (previewKind === "frame") {
       return {
         chip: null as React.ReactNode,
         body: (
