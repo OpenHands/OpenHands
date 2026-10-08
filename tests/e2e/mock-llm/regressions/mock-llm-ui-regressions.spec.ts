@@ -61,8 +61,11 @@ function createPaginationEvent(index: number, prefix: string): PaginationEvent {
   };
 }
 
-function createAllPaginationEvents(prefix: string): PaginationEvent[] {
-  return Array.from({ length: PAGINATION_EVENT_COUNT }, (_, i) =>
+function createAllPaginationEvents(
+  prefix: string,
+  count = PAGINATION_EVENT_COUNT,
+): PaginationEvent[] {
+  return Array.from({ length: count }, (_, i) =>
     createPaginationEvent(i + 1, prefix),
   );
 }
@@ -91,15 +94,19 @@ function searchPaginationEvents(
 /** Build the mock conversation with the same fields the real agent-server
  *  returns so `requireDirectConversationInfo` can parse it and the
  *  conversation route doesn't redirect to `/conversations`. */
-function buildMockConversation() {
+function buildMockConversation(
+  id = PAGINATION_CONVERSATION_ID,
+  eventCount = PAGINATION_EVENT_COUNT,
+  title = "Pagination test",
+) {
   return {
-    id: PAGINATION_CONVERSATION_ID,
-    conversation_id: PAGINATION_CONVERSATION_ID,
+    id,
+    conversation_id: id,
     status: "STOPPED",
     execution_status: "stopped",
     created_at: timestampForEvent(1),
-    updated_at: timestampForEvent(PAGINATION_EVENT_COUNT),
-    title: "Pagination test",
+    updated_at: timestampForEvent(eventCount),
+    title,
   };
 }
 
@@ -224,9 +231,22 @@ function searchCriticEvents(
   };
 }
 
-/** Intercept conversation lookup + event search for pagination tests. */
-async function routePaginationConversation(page: Page) {
-  const allEvents = createAllPaginationEvents("Pagination message");
+/**
+ * Intercept conversation lookup + event search for pagination tests.
+ *
+ * `count` controls how many synthetic events back the conversation: the
+ * default 100 spans two 50-event pages, while a count above the virtualization
+ * threshold (150 rendered rows) drives the virtualized list.
+ */
+async function routePaginationConversation(
+  page: Page,
+  {
+    id = PAGINATION_CONVERSATION_ID,
+    count = PAGINATION_EVENT_COUNT,
+    title = "Pagination test",
+  }: { id?: string; count?: number; title?: string } = {},
+) {
+  const allEvents = createAllPaginationEvents("Pagination message", count);
 
   // The app fetches conversations via the batch endpoint:
   //   GET /api/conversations?ids=<id>
@@ -244,11 +264,11 @@ async function routePaginationConversation(page: Page) {
       ...url.searchParams.getAll("ids"),
       ...url.searchParams.getAll("ids[]"),
     ];
-    if (ids.includes(PAGINATION_CONVERSATION_ID)) {
+    if (ids.includes(id)) {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify([buildMockConversation()]),
+        body: JSON.stringify([buildMockConversation(id, count, title)]),
       });
     } else {
       await route.fallback();
@@ -262,7 +282,7 @@ async function routePaginationConversation(page: Page) {
   // single commit and the DOM element never materialises — making the
   // "loading-older-events" assertion flaky.
   await page.route(
-    `**/api/conversations/${PAGINATION_CONVERSATION_ID}/events/search**`,
+    `**/api/conversations/${id}/events/search**`,
     async (route, req) => {
       if (req.method() !== "GET") {
         await route.fallback();
@@ -505,6 +525,98 @@ test.describe("UI regressions", () => {
       page.getByText("Pagination message 50", { exact: true }),
     ).toBeAttached({ timeout: 15_000 });
     await expect(page.getByTestId("loading-older-events")).toHaveCount(0);
+  });
+
+  // ── virtualized rows render real message components ──────────────
+
+  test("virtualizes long conversations into real message rows", async ({
+    page,
+  }) => {
+    test.setTimeout(90_000);
+    const VIRTUALIZED_CONVERSATION_ID = "virtualized-e2e";
+    const EVENT_COUNT = 400;
+    await routeSessionApiKey(page);
+    await routePaginationConversation(page, {
+      id: VIRTUALIZED_CONVERSATION_ID,
+      count: EVENT_COUNT,
+      title: "Virtualized test",
+    });
+
+    const shell = page.getByTestId("virtualized-message-list");
+    const mountedRows = page.getByTestId("virtualized-message-row");
+    const agentBubble = (index: number) =>
+      page
+        .getByTestId("agent-message")
+        .filter({ hasText: `Pagination message ${index}` });
+    const olderPageRequest = () =>
+      page.waitForRequest(
+        (req) =>
+          req.method() === "GET" &&
+          req
+            .url()
+            .includes(
+              `/api/conversations/${VIRTUALIZED_CONVERSATION_ID}/events/search`,
+            ) &&
+          new URL(req.url()).searchParams.has("timestamp__lt"),
+      );
+
+    await page.goto(`/conversations/${VIRTUALIZED_CONVERSATION_ID}`, {
+      waitUntil: "domcontentloaded",
+    });
+
+    // The tail fetch returns the newest 50 events, rendered through the real
+    // `EventMessage` tree as an actual agent chat bubble — not the mocked stub
+    // the unit test substitutes, so row-layout regressions surface here.
+    await expect(agentBubble(EVENT_COUNT)).toBeVisible({ timeout: 15_000 });
+
+    // Below the virtualization threshold the list is the plain one, so the
+    // shell is absent until enough pages accumulate.
+    await expect(shell).toHaveCount(0);
+
+    // Scroll up to backfill older pages through the real load-older path until
+    // the rendered-row count crosses the threshold and the list virtualizes.
+    for (let page_ = 0; page_ < 3; page_ += 1) {
+      const request = olderPageRequest();
+      await triggerOlderEventLoad(page);
+      await request;
+      await expect(page.getByTestId("loading-older-events")).toHaveCount(0);
+    }
+
+    // 200 events are loaded now — past the 150-row threshold — so the list is
+    // virtualized and only a bounded window of the history is mounted.
+    await expect(shell).toBeVisible({ timeout: 15_000 });
+    expect(await mountedRows.count()).toBeLessThan(100);
+    await expect(
+      page.getByText("Pagination message 1", { exact: true }),
+    ).toHaveCount(0);
+
+    // A backfilled page merged into the virtualized list: the shell represents
+    // the extra rows (offsets, not mounted nodes), so its scroll height grows
+    // while the mounted window stays bounded.
+    const scroller = await getChatScroller(page);
+    const heightBefore = await scroller.evaluate((el) => el.scrollHeight);
+    const backfillRequest = olderPageRequest();
+    await triggerOlderEventLoad(page);
+    await expect(page.getByTestId("loading-older-events")).toContainText(
+      "Fetching older messages",
+    );
+    await backfillRequest;
+    await expect(page.getByTestId("loading-older-events")).toHaveCount(0);
+    await expect
+      .poll(() => scroller.evaluate((el) => el.scrollHeight), {
+        timeout: 15_000,
+      })
+      .toBeGreaterThan(heightBefore);
+    expect(await mountedRows.count()).toBeLessThan(100);
+
+    // Scrolling near the top mounts the oldest backfilled row (event 151, from
+    // the fourth page) as a real agent bubble. scrollTop stays above the
+    // load-older threshold so this does not trigger yet another fetch.
+    await scroller.evaluate((el) => {
+      el.scrollTop = 100;
+      el.dispatchEvent(new Event("scroll", { bubbles: true }));
+    });
+    await expect(agentBubble(151)).toBeAttached({ timeout: 15_000 });
   });
 
   // ── #1076: workspace selection persistence ───────────────────────
