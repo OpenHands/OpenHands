@@ -111,6 +111,18 @@ describe("extractDefinedSections", () => {
     ]).toEqual(["3.1"]);
   });
 
+  it("ignores an unmatched Markdown marker before the number", () => {
+    // An unclosed delimiter renders literally, so the displayed heading does
+    // not start with the number and defines no section.
+    expect([...extractDefinedSections("## *3.1 Authentication")]).toEqual([]);
+    expect([...extractDefinedSections("## `3.1 Authentication")]).toEqual([]);
+    expect([...extractDefinedSections("## **3.1 Authentication")]).toEqual([]);
+    // `*3.1*` closes, so it is a real definition even with a trailing marker.
+    expect([...extractDefinedSections("## *3.1* Authentication")]).toEqual([
+      "3.1",
+    ]);
+  });
+
   it("does not define a section from an unnumbered heading's citation", () => {
     // `## Users [Req 3.1]` has no number of its own, so it defines nothing.
     // Treating the citation as a definition would let a downstream
@@ -238,6 +250,23 @@ describe("validateDocumentChain", () => {
 
     expect(report.issues).toEqual([]);
     expect(report.ok).toBe(true);
+  });
+
+  it("reports a citation to a heading with an unmatched marker as dangling", () => {
+    // `## *3.1 Authentication` shows the marker literally, so it defines no
+    // section; the database's `[Req 3.1]` must be dangling, not accepted.
+    const documents: DeepPlanDocuments = {
+      requirements: "## *3.1 Authentication",
+      database: "## 2.1 Users [Req 3.1]",
+      tasks: "# Tasks",
+    };
+
+    const report = validateDocumentChain(documents);
+
+    expect(report.ok).toBe(false);
+    expect(report.issues).toEqual([
+      { from: "database", ref: "Req 3.1", reason: "dangling" },
+    ]);
   });
 
   it("reports requirements no task cites", () => {

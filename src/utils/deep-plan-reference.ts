@@ -46,12 +46,14 @@ export interface RefReport {
 const REFERENCE_PATTERN = /\[(Req|DB|BE|FE)\s+([0-9]+(?:\.[0-9]+)*)\]/g;
 const HEADING_PATTERN = /^#{1,6}\s+(.*)$/;
 /**
- * A supported inline Markdown wrapper that may open a heading: bold (`**`/`__`),
- * italic (`*`/`_`) or a code span (`` ` ``). Markdown renders these around the
- * heading's first token without changing the visible section number, so
- * `## **3.1** Authentication` still shows section `3.1`.
+ * A heading whose leading section number is wrapped in a supported inline
+ * Markdown delimiter — bold (`**`/`__`), italic (`*`/`_`) or a code span
+ * (`` ` ``) — e.g. `## **3.1** Authentication`. The backreference requires the
+ * *same* opening delimiter to close right after the number: an unmatched
+ * marker (`## *3.1 Authentication`) renders literally in Markdown, so the
+ * displayed heading does not start with the number and defines nothing.
  */
-const LEADING_MARKDOWN_WRAPPER = /^(\*\*|__|\*|_|`)/;
+const WRAPPED_NUMBER_HEADING = /^(\*\*|__|\*|_|`)([0-9]+(?:\.[0-9]+)*)\1/;
 /**
  * A heading that leads with its section number, e.g. `## 3.1 Authentication`
  * defines `3.1`. Only a *leading* number counts: a title like
@@ -74,7 +76,8 @@ export type DeepPlanDocuments = Partial<Record<DeepPlanPhaseId, string>>;
  * a title (`## 3.1 Response under 200 ms` → `3.1`, not `200`) and version-like
  * titles (`## Version 1.2` → nothing) are ignored. A supported inline Markdown
  * wrapper around that leading token (`## **3.1** Authentication`) does not hide
- * it — the displayed section number is still `3.1`.
+ * it — the displayed section number is still `3.1` — but only when the wrapper
+ * is closed, since an unmatched marker stays literal text.
  *
  * A heading may instead spell its own label out (`## [Req 3.1] Authentication`),
  * in which case the leading citation is the definition. An unnumbered heading
@@ -87,9 +90,13 @@ export function extractDefinedSections(content: string): Set<string> {
   for (const line of content.split("\n")) {
     const heading = HEADING_PATTERN.exec(line);
     if (!heading) continue;
-    // Unwrap one leading emphasis/code wrapper so the leading-token check sees
-    // the displayed number rather than the markup.
-    const title = heading[1].trimStart().replace(LEADING_MARKDOWN_WRAPPER, "");
+    const title = heading[1].trimStart();
+    // A wrapped number only counts when its delimiter closes after the number.
+    const wrapped = WRAPPED_NUMBER_HEADING.exec(title);
+    if (wrapped) {
+      sections.add(wrapped[2]);
+      continue;
+    }
     const leadingNumber = LEADING_NUMBER_HEADING.exec(title);
     if (leadingNumber) {
       sections.add(leadingNumber[1]);
