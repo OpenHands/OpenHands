@@ -267,4 +267,34 @@ describe("DeepPlanPanel", () => {
 
     expect(useConversationStore.getState().deepPlan.restoreFailed).toEqual([]);
   });
+
+  it("drops the failed-restore error once the retry starts re-reading", async () => {
+    // The retry clears the recorded failure and re-issues the read, so the
+    // checkpoint must stop reporting the failure immediately. The revision only
+    // tracks phase + documents, so the stale error would otherwise survive the
+    // whole new read.
+    act(() =>
+      useConversationStore.setState({
+        deepPlan: {
+          activePhase: "database",
+          confirmed: ["analysis", "requirements"],
+          documents: { database: "## 2.1 Users [Req 3.1]\n" },
+          documentHashes: { requirements: "req-hash", database: "db-hash" },
+          restoreFailed: ["requirements"],
+        },
+      }),
+    );
+
+    renderWithProviders(<DeepPlanPanel />);
+
+    await userEvent.click(screen.getByTestId("deep-plan-confirm"));
+    expect(screen.getByTestId("deep-plan-error")).toHaveTextContent(
+      "Could not reload requirements.md from disk.",
+    );
+
+    await userEvent.click(screen.getByTestId("deep-plan-restore-retry"));
+
+    expect(screen.queryByTestId("deep-plan-error")).not.toBeInTheDocument();
+    expect(screen.getByTestId("deep-plan-restoring")).toBeInTheDocument();
+  });
 });

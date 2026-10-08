@@ -242,7 +242,14 @@ export function DeepPlanPanel() {
           <BrandButton
             type="button"
             variant="secondary"
-            onClick={() => retryDeepPlanDocumentRestore()}
+            onClick={() => {
+              // Retrying re-reads the document, so the recorded failure stops
+              // being true. The revision only tracks phase + documents, not
+              // restore status, so the stale error would otherwise keep
+              // rendering throughout the new read.
+              setFailure(null);
+              retryDeepPlanDocumentRestore();
+            }}
             testId="deep-plan-restore-retry"
             className="min-w-40 justify-center px-6"
           >
