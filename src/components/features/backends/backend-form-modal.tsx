@@ -17,7 +17,6 @@ import { BrandButton } from "#/components/features/settings/brand-button";
 import { SettingsInput } from "#/components/features/settings/settings-input";
 import { SegmentedToggle } from "#/components/features/files-tab/segmented-toggle";
 import { useActiveBackendContext } from "#/contexts/active-backend-context";
-import { useNavigation } from "#/context/navigation-context";
 import { useBackendsHealth } from "#/hooks/query/use-backends-health";
 import { useTracking } from "#/hooks/use-tracking";
 import type { CloudConnectionSource } from "#/services/cloud-funnel-analytics";
@@ -42,6 +41,7 @@ import ServerIcon from "#/icons/server.svg?react";
 import { getBackendStatusLabel } from "./backend-status-label";
 import { BackendStatusDot } from "./backend-status-dot";
 import { DeviceFlowAuth } from "./device-flow-auth";
+import { useBackendSwitchRedirect } from "./use-backend-switch-redirect";
 
 export type BackendFormMode = "add" | "edit";
 
@@ -692,21 +692,6 @@ export function BackendForm({
 }
 
 // ── Add-mode two-column layout ──────────────────────────────────────
-
-/**
- * @spec BM-002 — Adding a backend auto-switches the active selection to it
- * (BM-001), so a backend-scoped detail page the user is viewing now belongs
- * to the previous backend. Redirect to that section's list so they never see
- * stale data, mirroring the switch-backend redirect in BackendSelector.
- */
-function useRedirectAfterAddBackend() {
-  const { currentPath, navigate } = useNavigation();
-  return React.useCallback(() => {
-    if (/^\/automations\/[^/]+/.test(currentPath)) navigate("/automations");
-    else if (/^\/conversations\/[^/]+/.test(currentPath))
-      navigate("/conversations");
-  }, [currentPath, navigate]);
-}
 
 interface BackendConnectionOptionsProps {
   onConnected: (
@@ -1516,7 +1501,9 @@ function AddBackendConnectionOptions({
   source: BackendAddedSource;
 }) {
   const { addBackend } = useActiveBackendContext();
-  const redirectAfterAdd = useRedirectAfterAddBackend();
+  // @spec BM-002 — Adding a backend auto-switches the active selection to it
+  // (BM-001), so leave any detail page that belongs to the previous backend.
+  const redirectAfterAdd = useBackendSwitchRedirect();
   const { trackBackendAdded } = useTracking();
   const lockedCloudHost = getLockedCloudHost();
 

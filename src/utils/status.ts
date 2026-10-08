@@ -66,6 +66,10 @@ export function getStatusCode(
   executionStatus: ExecutionStatus | null,
   taskStatus?: AppConversationStartTaskStatus | null,
   subConversationTaskStatus?: AppConversationStartTaskStatus | null,
+  // Distinguishes a connection drop-and-recover from the very first
+  // connect, so a background-tab reconnect reads "Reconnecting" instead of
+  // the more alarming-sounding (and less accurate) "Connecting".
+  hasConnectedOnce?: boolean,
 ) {
   if (
     taskStatus === "ERROR" ||
@@ -90,7 +94,9 @@ export function getStatusCode(
       case "CLOSING":
         return I18nKey.CHAT_INTERFACE$DISCONNECTED;
       case "CONNECTING":
-        return I18nKey.CHAT_INTERFACE$CONNECTING;
+        return hasConnectedOnce
+          ? I18nKey.CHAT_INTERFACE$RECONNECTING
+          : I18nKey.CHAT_INTERFACE$CONNECTING;
       default:
         throw new Error(
           `Unknown WebsocketConnectionState: ${webSocketConnectionState}`,

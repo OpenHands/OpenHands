@@ -122,7 +122,6 @@ const mockAutomation: Automation = {
   prompt: "A test automation",
   trigger: { type: "schedule", schedule_human: "Daily at 09:00" },
   enabled: true,
-  repository: "acme/repo",
   model: "daily-profile",
   created_at: "2026-01-01T00:00:00Z",
   updated_at: "2026-01-02T00:00:00Z",
@@ -176,6 +175,30 @@ describe("AutomationService", () => {
         params: { limit: 10, offset: 5 },
       });
       expect(result).toEqual(response);
+    });
+
+    it("exposes the preset_metadata repositories and plugins of each listed automation", async () => {
+      mockGet.mockResolvedValue({
+        data: {
+          automations: [
+            {
+              ...mockAutomation,
+              preset_metadata: {
+                repos: [{ url: "acme/repo", ref: "main" }],
+                plugins: [{ source: "github:acme/plugin" }],
+              },
+            },
+          ],
+          total: 1,
+        },
+      });
+
+      const { automations } = await AutomationService.listAutomations();
+
+      expect(automations[0].repositories).toEqual([
+        { url: "acme/repo", ref: "main" },
+      ]);
+      expect(automations[0].plugins).toEqual(["github:acme/plugin"]);
     });
 
     it("uses default params when none provided", async () => {
@@ -233,6 +256,86 @@ describe("AutomationService", () => {
 
       expect(mockGet).toHaveBeenCalledWith("/api/automation/v1/1");
       expect(result).toEqual(mockAutomation);
+    });
+
+    it("exposes the repository with its ref and the plugin stored in preset_metadata", async () => {
+      mockGet.mockResolvedValue({
+        data: {
+          ...mockAutomation,
+          preset_metadata: {
+            preset_type: "plugin",
+            repos: [
+              { url: "https://github.com/qa-example/qa-repo", ref: "main" },
+            ],
+            plugins: [{ source: "github:qa-example/qa-plugin" }],
+          },
+        },
+      });
+
+      const result = await AutomationService.getAutomation("1");
+
+      expect(result.repositories).toEqual([
+        { url: "https://github.com/qa-example/qa-repo", ref: "main" },
+      ]);
+      expect(result.plugins).toEqual(["github:qa-example/qa-plugin"]);
+    });
+
+    it("keeps every repository and plugin entry stored in preset_metadata", async () => {
+      mockGet.mockResolvedValue({
+        data: {
+          ...mockAutomation,
+          preset_metadata: {
+            repos: [
+              { url: "https://github.com/qa-example/qa-repo", ref: "main" },
+              { url: "qa-example/docs", provider: "github" },
+            ],
+            plugins: [
+              { source: "github:qa-example/qa-plugin" },
+              { source: "github:qa-example/other-plugin", ref: "v1" },
+            ],
+          },
+        },
+      });
+
+      const result = await AutomationService.getAutomation("1");
+
+      expect(result.repositories).toEqual([
+        { url: "https://github.com/qa-example/qa-repo", ref: "main" },
+        { url: "qa-example/docs" },
+      ]);
+      expect(result.plugins).toEqual([
+        "github:qa-example/qa-plugin",
+        "github:qa-example/other-plugin",
+      ]);
+    });
+
+    it("adds no repositories or plugins when preset_metadata has none", async () => {
+      mockGet.mockResolvedValue({
+        data: { ...mockAutomation, preset_metadata: { preset_type: "prompt" } },
+      });
+
+      const result = await AutomationService.getAutomation("1");
+
+      expect(result).not.toHaveProperty("repositories");
+      expect(result).not.toHaveProperty("plugins");
+    });
+
+    it("falls back to a top-level repository, branch and plugins", async () => {
+      mockGet.mockResolvedValue({
+        data: {
+          ...mockAutomation,
+          repository: "acme/repo",
+          branch: "develop",
+          plugins: ["GitHub"],
+        },
+      });
+
+      const result = await AutomationService.getAutomation("1");
+
+      expect(result.repositories).toEqual([
+        { url: "acme/repo", ref: "develop" },
+      ]);
+      expect(result.plugins).toEqual(["GitHub"]);
     });
   });
 
@@ -423,6 +526,17 @@ describe("AutomationService", () => {
         headers: expectedAutomationTelemetryHeaders,
       });
       expect(result).toEqual(mockAutomation);
+    });
+
+    it("getAutomation exposes preset_metadata repositories from the cloud proxy response", async () => {
+      mockCallCloudProxy.mockResolvedValue({
+        ...mockAutomation,
+        preset_metadata: { repos: [{ url: "acme/repo", ref: "main" }] },
+      });
+
+      const result = await AutomationService.getAutomation("abc");
+
+      expect(result.repositories).toEqual([{ url: "acme/repo", ref: "main" }]);
     });
 
     it("dispatchAutomation forwards method POST via callCloudProxy", async () => {

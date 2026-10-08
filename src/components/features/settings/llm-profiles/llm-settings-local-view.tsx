@@ -132,6 +132,9 @@ export function LlmSettingsLocalView() {
 
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [profileName, setProfileName] = useState("");
+  // Whether the user typed the current create-mode name. Until they do (or
+  // after they clear it), the name is auto-derived from the selected model.
+  const [isProfileNameUserEdited, setIsProfileNameUserEdited] = useState(false);
   const [editingProfile, setEditingProfile] = useState<EditingProfile | null>(
     null,
   );
@@ -169,8 +172,14 @@ export function LlmSettingsLocalView() {
     return true;
   }, [profileName, viewMode, existingNames, editingProfile?.profile.name]);
 
+  const handleProfileNameChange = useCallback((value: string) => {
+    setProfileName(value);
+    setIsProfileNameUserEdited(value !== "");
+  }, []);
+
   const handleAddProfile = useCallback(() => {
     setProfileName("");
+    setIsProfileNameUserEdited(false);
     setEditingProfile(null);
     setViewMode("create");
   }, []);
@@ -252,24 +261,25 @@ export function LlmSettingsLocalView() {
     (control: SdkSectionSaveControl) => {
       setSaveControl(control);
 
-      // Auto-derive profile name from model in create mode.
+      // Auto-derive profile name from model in create mode, and keep it
+      // following later model changes until the user types their own name.
       // Note: The uniqueness check uses existingNames from state, which is derived
       // from profilesData at component render time. If another client creates a
       // profile with the same derived name while this form is open, the client-side
       // check would pass but the server save would fail with a conflict error.
       // This is acceptable for the current use case; the server error is handled
       // gracefully in handleSave.
-      if (viewMode === "create" && !profileName) {
+      if (viewMode === "create" && !isProfileNameUserEdited) {
         const modelValue = control.values["llm.model"];
         if (typeof modelValue === "string" && modelValue) {
           const derived = deriveProfileNameFromModel(modelValue);
-          if (!existingNames.has(derived)) {
-            setProfileName(derived);
-          }
+          // Never auto-fill an existing profile's name; clear the previous
+          // model's name instead so it cannot be saved under the new model.
+          setProfileName(existingNames.has(derived) ? "" : derived);
         }
       }
     },
-    [viewMode, profileName, existingNames],
+    [viewMode, isProfileNameUserEdited, existingNames],
   );
 
   const handleSave = useCallback(async () => {
@@ -497,7 +507,7 @@ export function LlmSettingsLocalView() {
       <ProfileNameInput
         testId="profile-name-input"
         value={profileName}
-        onChange={setProfileName}
+        onChange={handleProfileNameChange}
         isRequired
       />
 

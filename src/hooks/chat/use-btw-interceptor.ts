@@ -1,6 +1,9 @@
 import { useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { askAgent } from "#/hooks/mutation/conversation-mutation-utils";
 import { useBtwStore } from "#/stores/btw-store";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import { I18nKey } from "#/i18n/declaration";
 import { BTW_COMMAND } from "#/utils/constants";
 
 const BTW_PREFIX = `${BTW_COMMAND} `;
@@ -14,6 +17,7 @@ export const useBtwInterceptor = (
   conversationId: string | null | undefined,
   onSubmit: (message: string) => void,
 ) => {
+  const { t } = useTranslation();
   const addPending = useBtwStore((s) => s.addPending);
   const resolve = useBtwStore((s) => s.resolve);
   const fail = useBtwStore((s) => s.fail);
@@ -27,7 +31,10 @@ export const useBtwInterceptor = (
         return;
       }
       const question = trimmed.slice(BTW_COMMAND.length).trim();
-      if (!question) return;
+      if (!question) {
+        displayErrorToast(t(I18nKey.CHAT_INTERFACE$BTW_QUESTION_REQUIRED)); // bare /btw — nothing to ask
+        return;
+      }
 
       const entryId = addPending(conversationId, question);
       askAgent(conversationId, question)
@@ -36,6 +43,6 @@ export const useBtwInterceptor = (
           fail(conversationId, entryId, err?.message ?? "Failed to ask agent"),
         );
     },
-    [conversationId, onSubmit, addPending, resolve, fail],
+    [conversationId, onSubmit, addPending, resolve, fail, t],
   );
 };
