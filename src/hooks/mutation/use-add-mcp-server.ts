@@ -18,6 +18,8 @@ export function useAddMcpServer() {
   const { data: settings } = useSettings();
 
   return useMutation({
+    // Every caller reports a failure itself; skip the global error toast.
+    meta: { disableToast: true },
     mutationFn: async (server: MCPServerConfig): Promise<void> => {
       if (!settings) {
         throw new Error("MCP settings are still loading. Please try again.");
