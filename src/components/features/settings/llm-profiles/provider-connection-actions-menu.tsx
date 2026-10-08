@@ -42,6 +42,7 @@ export function ProviderConnectionActionsMenu({
 
   const anchorElement = anchorRef?.current ?? null;
   const [portalStyle, setPortalStyle] = useState<React.CSSProperties>();
+  const menuReady = !anchorElement || Boolean(portalStyle);
 
   useLayoutEffect(() => {
     if (!anchorElement) return undefined;
@@ -69,8 +70,10 @@ export function ProviderConnectionActionsMenu({
   }, [anchorElement]);
 
   useEffect(() => {
-    menuItemsRef.current[0]?.focus();
-  }, []);
+    // The anchored menu first renders null while its portal position is
+    // measured; focus only after the menu items actually mount.
+    if (menuReady) menuItemsRef.current[0]?.focus();
+  }, [menuReady]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

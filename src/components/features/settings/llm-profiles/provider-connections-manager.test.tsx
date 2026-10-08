@@ -165,7 +165,7 @@ describe("ProviderConnectionsManager", () => {
     expect(screen.getByText("openai")).toBeInTheDocument();
   });
 
-  it("renders a bulk-add-models action in each connection's menu", async () => {
+  it("focuses the first provider-connection action when its menu opens", async () => {
     const user = userEvent.setup();
     renderWith(
       <ProviderConnectionsManager
@@ -178,9 +178,13 @@ describe("ProviderConnectionsManager", () => {
     );
 
     await user.click(screen.getByTestId("provider-connection-menu-trigger"));
-    expect(
-      await screen.findByTestId("provider-connection-add-models"),
-    ).toBeInTheDocument();
+    const firstAction = await screen.findByTestId(
+      "provider-connection-add-models",
+    );
+    await waitFor(() => expect(firstAction).toHaveFocus());
+
+    await user.keyboard("{ArrowDown}");
+    expect(screen.getByTestId("provider-connection-edit")).toHaveFocus();
   });
 
   it("calls onAddModels with the clicked connection (parent opens the modal)", async () => {
