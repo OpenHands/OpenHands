@@ -54,9 +54,12 @@ const LEADING_MARKDOWN_WRAPPER = /^(\*\*|__|\*|_|`)/;
  * A heading that leads with its section number, e.g. `## 3.1 Authentication`
  * defines `3.1`. Only a *leading* number counts: a title like
  * `## 3.1 Response under 200 ms` defines `3.1`, not `200`, and
- * `## Version 1.2` defines nothing.
+ * `## Version 1.2` defines nothing. The trailing guard rejects a further
+ * `.digit` but allows a trailing dot or word character (`## _3.1_ Auth` and
+ * `## 3. Response` both define their leading number) — a plain `\b` would fail
+ * on `3.1_`, where `_` counts as a word character.
  */
-const LEADING_NUMBER_HEADING = /^([0-9]+(?:\.[0-9]+)*)\b/;
+const LEADING_NUMBER_HEADING = /^([0-9]+(?:\.[0-9]+)*)(?!\.?[0-9])/;
 /**
  * A heading that spells its own label out at the start, e.g.
  * `## [Req 3.1] Users` — the citation *is* the section number here.

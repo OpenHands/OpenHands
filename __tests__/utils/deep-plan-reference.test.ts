@@ -100,6 +100,12 @@ describe("extractDefinedSections", () => {
     expect([...extractDefinedSections("## `3.1` Authentication")]).toEqual([
       "3.1",
     ]);
+    expect([...extractDefinedSections("## *3.1* Authentication")]).toEqual([
+      "3.1",
+    ]);
+    expect([...extractDefinedSections("## _3.1_ Authentication")]).toEqual([
+      "3.1",
+    ]);
     expect([...extractDefinedSections("### *3.1.1* Login")]).toEqual(["3.1.1"]);
   });
 
