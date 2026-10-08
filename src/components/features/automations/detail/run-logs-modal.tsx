@@ -272,7 +272,7 @@ export function RunLogsModal({
         }}
         role="presentation"
       />
-      <div className="relative flex max-h-[80vh] w-full max-w-3xl flex-col rounded-xl border border-border bg-surface p-6">
+      <div className="relative flex max-h-[80vh] w-full max-w-3xl flex-col overflow-y-auto rounded-xl border border-border bg-surface p-6">
         <button
           type="button"
           onClick={onClose}
