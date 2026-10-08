@@ -514,6 +514,60 @@ describe("LlmSettingsLocalView", () => {
     });
   });
 
+  describe("duplicate profile name", () => {
+    it("tells the user a new profile's name is taken until it is unique", async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<LlmSettingsLocalView />);
+      await user.click(screen.getByTestId("add-llm-profile"));
+      const nameInput = screen.getByTestId("profile-name-input");
+
+      await user.clear(nameInput);
+      await user.type(nameInput, "claude-profile");
+
+      expect(nameInput).toHaveAttribute("aria-invalid", "true");
+      expect(nameInput).toHaveAccessibleDescription(
+        "SETTINGS$META_PROFILE_NAME_TAKEN",
+      );
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "SETTINGS$META_PROFILE_NAME_TAKEN",
+      );
+      expect(screen.getByTestId("save-profile-btn")).toBeDisabled();
+
+      await user.type(nameInput, "-2");
+
+      expect(nameInput).toHaveAttribute("aria-invalid", "false");
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(screen.getByTestId("save-profile-btn")).toBeEnabled();
+    });
+
+    it("flags a rename to another profile's name but not the profile's own name", async () => {
+      const user = userEvent.setup();
+      vi.mocked(ProfilesService.getProfile).mockResolvedValue({
+        name: "gpt-4-profile",
+        api_key_set: true,
+        config: { model: "openai/gpt-4" },
+      });
+
+      renderWithProviders(<LlmSettingsLocalView />);
+      await user.click(screen.getAllByTestId("profile-menu-trigger")[0]);
+      await user.click(screen.getByTestId("profile-edit"));
+      const nameInput = await screen.findByTestId("profile-name-input");
+      await waitFor(() => expect(nameInput).toHaveValue("gpt-4-profile"));
+
+      expect(nameInput).toHaveAttribute("aria-invalid", "false");
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+      await user.clear(nameInput);
+      await user.type(nameInput, "claude-profile");
+
+      expect(nameInput).toHaveAttribute("aria-invalid", "true");
+      expect(nameInput).toHaveAccessibleDescription(
+        "SETTINGS$META_PROFILE_NAME_TAKEN",
+      );
+      expect(screen.getByTestId("save-profile-btn")).toBeDisabled();
+    });
+  });
+
   describe("edit mode form initialization", () => {
     it("populates profile name when editing an existing profile", async () => {
       const user = userEvent.setup();
