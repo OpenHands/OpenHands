@@ -454,12 +454,44 @@ describe("conversation store", () => {
 
       // A late successful read must clear the failure so the checkpoint stops
       // reporting the document as unavailable.
-      freshStore.getState().setDeepPlanDocument("requirements", requirementsDoc);
+      freshStore
+        .getState()
+        .setDeepPlanDocument("requirements", requirementsDoc);
       expect(freshStore.getState().deepPlan.restoreFailed).toEqual([]);
       expect(freshStore.getState().deepPlan.confirmed).toEqual([
         "analysis",
         "requirements",
       ]);
+    });
+
+    it("clears every recorded restore failure when the user retries", async () => {
+      // A transient read failure records `restoreFailed` so the checkpoint can
+      // explain it. Retrying must clear that record so the provider re-reads
+      // the documents instead of the phase staying locked forever.
+      const requirementsDoc = "## 3.1 Authentication\n";
+      mockGetConversationState.mockReturnValue({
+        selectedTab: "files",
+        unpinnedTabs: [],
+        conversationMode: "deep-plan",
+        deepPlan: {
+          activePhase: "database",
+          confirmed: ["analysis", "requirements"],
+          documentHashes: {
+            requirements: hashDeepPlanDocument(requirementsDoc),
+          },
+        },
+      });
+      vi.resetModules();
+      const { useConversationStore: freshStore } =
+        await import("#/stores/conversation-store");
+
+      freshStore.getState().failDeepPlanDocumentRestore("requirements");
+      expect(freshStore.getState().deepPlan.restoreFailed).toEqual([
+        "requirements",
+      ]);
+
+      freshStore.getState().retryDeepPlanDocumentRestore();
+      expect(freshStore.getState().deepPlan.restoreFailed).toEqual([]);
     });
 
     it("restores the phase machine from persisted state on load", async () => {

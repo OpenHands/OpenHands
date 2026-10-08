@@ -2069,6 +2069,122 @@ describe("Conversation websocket behavior", () => {
     ).toBe(requirementsBody);
   });
 
+  it("drops a restore that lands after the conversation switched", async () => {
+    // A read can settle after the user navigated to another conversation. The
+    // late result must not be written into the new conversation's `deepPlan`:
+    // doing so would store the old body under the new id and, because the hash
+    // does not match, drop the confirmations the new chain already earned.
+    const requirementsBody = "## 3.1 Authentication\n";
+    useConversationStore.setState({
+      conversationMode: "deep-plan",
+      deepPlan: {
+        activePhase: "database",
+        confirmed: ["analysis", "requirements"],
+        documents: {},
+        documentHashes: {
+          requirements: hashDeepPlanDocument(requirementsBody),
+        },
+      },
+    });
+
+    const successCallbacks: Array<(content: string) => void> = [];
+    socketCapture.readConversationFile.mockImplementation((_variables, cbs) => {
+      successCallbacks.push(cbs.onSuccess);
+    });
+
+    const view = renderProvider({
+      subConversations: [],
+      subConversationIds: [],
+      deepPlanWorkingDir: "/workspace/project",
+    });
+
+    await waitFor(() => expect(successCallbacks.length).toBeGreaterThan(0));
+
+    // The user switches conversations before the read settles. The new
+    // conversation has its own confirmed chain and no upstream document yet.
+    view.rerender(
+      <QueryClientProvider client={view.queryClient}>
+        <ConversationWebSocketProvider
+          conversationId="conv-next"
+          conversationUrl="http://localhost:8000/api/conversations/conv-next"
+          subConversations={[]}
+          subConversationIds={[]}
+          deepPlanWorkingDir="/workspace/project"
+        >
+          <ContextProbe />
+        </ConversationWebSocketProvider>
+      </QueryClientProvider>,
+    );
+    act(() => {
+      useConversationStore.setState({
+        deepPlan: {
+          activePhase: "database",
+          confirmed: ["analysis", "requirements"],
+          documents: { database: "## 2.1 Users [Req 3.1]\n" },
+          documentHashes: { database: "db-hash" },
+        },
+      });
+    });
+
+    // The first read was issued for `conv-main`; it resolves now.
+    act(() => {
+      successCallbacks[0](requirementsBody);
+    });
+
+    const deepPlan = useConversationStore.getState().deepPlan;
+    expect(deepPlan.documents.requirements).toBeUndefined();
+    expect(deepPlan.confirmed).toEqual(["analysis", "requirements"]);
+  });
+
+  it("re-reads a phase document after a failed restore is retried", async () => {
+    // A transient read failure must not lock the checkpoint permanently: the
+    // retry action clears `restoreFailed` and the provider re-issues the read
+    // for the same phase, which then succeeds.
+    const requirementsBody = "## 3.1 Authentication\n";
+    useConversationStore.setState({
+      conversationMode: "deep-plan",
+      deepPlan: {
+        activePhase: "database",
+        confirmed: ["analysis", "requirements"],
+        documents: {},
+        documentHashes: {
+          requirements: hashDeepPlanDocument(requirementsBody),
+        },
+      },
+    });
+
+    let attempt = 0;
+    socketCapture.readConversationFile.mockImplementation((_variables, cbs) => {
+      attempt += 1;
+      if (attempt === 1) cbs.onError(new Error("offline"));
+      else cbs.onSuccess(requirementsBody);
+    });
+
+    renderProvider({
+      subConversations: [],
+      subConversationIds: [],
+      deepPlanWorkingDir: "/workspace/project",
+    });
+
+    await waitFor(() =>
+      expect(useConversationStore.getState().deepPlan.restoreFailed).toEqual([
+        "requirements",
+      ]),
+    );
+
+    act(() => {
+      useConversationStore.getState().retryDeepPlanDocumentRestore();
+    });
+
+    await waitFor(() =>
+      expect(
+        useConversationStore.getState().deepPlan.documents.requirements,
+      ).toBe(requirementsBody),
+    );
+    expect(socketCapture.readConversationFile).toHaveBeenCalledTimes(2);
+    expect(useConversationStore.getState().deepPlan.restoreFailed).toEqual([]);
+  });
+
   it("falls through planning history when event counting fails", async () => {
     vi.spyOn(EventService, "getEventCount").mockRejectedValue(
       new Error("count unavailable"),

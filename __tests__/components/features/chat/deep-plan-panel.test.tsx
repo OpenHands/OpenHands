@@ -39,6 +39,7 @@ const TRANSLATIONS: Record<string, string> = {
     "Restoring {{document}}… confirm once the document is loaded.",
   [I18nKey.DEEP_PLAN$CONFIRM_RESTORE_FAILED]:
     "Could not reload {{document}} from disk. Reopen its phase to rewrite it before confirming.",
+  [I18nKey.DEEP_PLAN$RESTORE_RETRY]: "Retry restoring documents",
 };
 
 vi.mock("react-i18next", async (importOriginal) => {
@@ -245,5 +246,25 @@ describe("DeepPlanPanel", () => {
     expect(screen.getByTestId("deep-plan-error")).toHaveTextContent(
       "Could not reload requirements.md from disk. Reopen its phase to rewrite it before confirming.",
     );
+  });
+
+  it("offers a retry that clears the failed restore and re-reads the document", async () => {
+    act(() =>
+      useConversationStore.setState({
+        deepPlan: {
+          activePhase: "database",
+          confirmed: ["analysis", "requirements"],
+          documents: { database: "## 2.1 Users [Req 3.1]\n" },
+          documentHashes: { requirements: "req-hash", database: "db-hash" },
+          restoreFailed: ["requirements"],
+        },
+      }),
+    );
+
+    renderWithProviders(<DeepPlanPanel />);
+
+    await userEvent.click(screen.getByTestId("deep-plan-restore-retry"));
+
+    expect(useConversationStore.getState().deepPlan.restoreFailed).toEqual([]);
   });
 });

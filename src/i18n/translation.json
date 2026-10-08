@@ -43943,5 +43943,22 @@
     "de": "{{document}} konnte nicht von der Festplatte neu geladen werden. Öffne die Phase erneut und schreibe sie neu, bevor du bestätigst.",
     "uk": "Не вдалося повторно завантажити {{document}} з диска. Відкрийте його фазу знову, щоб переписати, перш ніж підтвердити.",
     "ca": "No s'ha pogut tornar a carregar {{document}} del disc. Torna a obrir la seva fase per reescriure'l abans de confirmar."
+  },
+  "DEEP_PLAN$RESTORE_RETRY": {
+    "en": "Retry restoring documents",
+    "ja": "ドキュメントの復元を再試行",
+    "zh-CN": "重试恢复文档",
+    "zh-TW": "重試還原文件",
+    "ko-KR": "문서 복원 다시 시도",
+    "no": "Prøv å gjenopprette dokumenter på nytt",
+    "it": "Riprova a ripristinare i documenti",
+    "pt": "Tentar restaurar os documentos novamente",
+    "es": "Reintentar restaurar los documentos",
+    "ar": "إعادة محاولة استعادة المستندات",
+    "fr": "Réessayer de restaurer les documents",
+    "tr": "Belgeleri geri yüklemeyi yeniden dene",
+    "de": "Wiederherstellen der Dokumente erneut versuchen",
+    "uk": "Повторити відновлення документів",
+    "ca": "Torna a provar de restaurar els documents"
   }
 }

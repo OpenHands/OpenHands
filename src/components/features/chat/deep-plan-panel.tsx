@@ -46,8 +46,13 @@ const sameDeepPlanRevision = (
  */
 export function DeepPlanPanel() {
   const { t } = useTranslation("openhands");
-  const { deepPlan, setDeepPlanPhase, confirmDeepPlanPhase, startDeepPlan } =
-    useConversationStore();
+  const {
+    deepPlan,
+    setDeepPlanPhase,
+    confirmDeepPlanPhase,
+    startDeepPlan,
+    retryDeepPlanDocumentRestore,
+  } = useConversationStore();
   // Tie the checkpoint failure to the exact revision it described: the phase
   // and the documents snapshot at confirm time. Moving to another phase or
   // editing the documents changes the revision, so the stale error simply stops
@@ -116,6 +121,11 @@ export function DeepPlanPanel() {
   // validating a half-restored chain.
   const unavailable = deepPlanUnavailableDocuments(deepPlan, activePhase);
   const restoreBlocked = unavailable.pending.length > 0;
+  // A phase whose disk re-read was rejected leaves the checkpoint unable to
+  // validate it. Offer a Retry rather than an automatic re-read, which would
+  // loop forever when the file is genuinely gone.
+  const showRestoreRetry =
+    unavailable.failed.length > 0 || visibleFailure?.kind === "restore-failed";
   const formatPhases = (phases: DeepPlanPhaseId[]) =>
     phases
       .map(
@@ -226,6 +236,18 @@ export function DeepPlanPanel() {
                           : ""
                       }`}
           </Typography.Text>
+        )}
+
+        {showRestoreRetry && (
+          <BrandButton
+            type="button"
+            variant="secondary"
+            onClick={() => retryDeepPlanDocumentRestore()}
+            testId="deep-plan-restore-retry"
+            className="min-w-40 justify-center px-6"
+          >
+            {t(I18nKey.DEEP_PLAN$RESTORE_RETRY)}
+          </BrandButton>
         )}
 
         <BrandButton

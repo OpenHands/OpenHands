@@ -115,6 +115,13 @@ interface ConversationActions {
   setDeepPlanDocument: (phase: DeepPlanPhaseId, content: string) => void;
   /** Record that a phase document's reload re-read was rejected (file gone). */
   failDeepPlanDocumentRestore: (phase: DeepPlanPhaseId) => void;
+  /**
+   * Clear every recorded restore failure so the provider re-attempts the disk
+   * re-read on the next render. The user triggers this from the panel's Retry
+   * button; there is no automatic retry, since a genuinely missing file would
+   * then loop forever.
+   */
+  retryDeepPlanDocumentRestore: () => void;
   /** Runs the reference validator; returns the structured reason on failure. */
   confirmDeepPlanPhase: (phase: DeepPlanPhaseId) => {
     ok: boolean;
@@ -571,6 +578,21 @@ export const useConversationStore = create<ConversationStore>()(
           },
           false,
           "failDeepPlanDocumentRestore",
+        ),
+
+      retryDeepPlanDocumentRestore: () =>
+        set(
+          (state) => {
+            if ((state.deepPlan.restoreFailed ?? []).length === 0) return {};
+            // `restoreFailed` is deliberately not persisted: it describes an
+            // in-flight read failure, so clearing it in memory is enough to let
+            // the restore effect re-issue the read.
+            return {
+              deepPlan: { ...state.deepPlan, restoreFailed: [] },
+            };
+          },
+          false,
+          "retryDeepPlanDocumentRestore",
         ),
 
       confirmDeepPlanPhase: (phase) => {

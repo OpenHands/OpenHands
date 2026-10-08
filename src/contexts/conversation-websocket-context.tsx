@@ -324,6 +324,15 @@ export function ConversationWebSocketProvider({
   const restoreAttemptedRef = useRef<Set<DeepPlanPhaseId>>(new Set());
   const restoreAttemptedConversationRef = useRef<string | undefined>(undefined);
 
+  // The conversation the in-flight document reads were issued for. A read
+  // callback can land after the user switched conversations; writing its result
+  // then would mutate the new conversation's `deepPlan` (dropping its
+  // confirmations and storing the old body under the new conversation's id).
+  // Every read captures the id it was requested for and drops its result once
+  // the active conversation has moved on.
+  const currentConversationIdRef = useRef(conversationId);
+  currentConversationIdRef.current = conversationId;
+
   // Resolve the planner conversation the phase document should be read from.
   // Deep Planning runs one planner per phase, each pinned to that phase's
   // document; every planner shares the parent's workspace, so the file can be
@@ -654,14 +663,19 @@ export function ConversationWebSocketProvider({
     if (pending.size === 0) return;
     latestDeepPlanFileEventsRef.current = new Map();
     for (const [phase, { path, conversationId: fallbackId }] of pending) {
+      const requestedFor = conversationId;
       readConversationFile(
         {
           conversationId: resolvePhaseConversationId(phase, fallbackId),
           filePath: path,
         },
         {
-          onSuccess: (fileContent) => setDeepPlanDocument(phase, fileContent),
+          onSuccess: (fileContent) => {
+            if (currentConversationIdRef.current !== requestedFor) return;
+            setDeepPlanDocument(phase, fileContent);
+          },
           onError: (error) => {
+            if (currentConversationIdRef.current !== requestedFor) return;
             console.warn("Failed to read deep-plan document:", error);
           },
         },
@@ -723,6 +737,7 @@ export function ConversationWebSocketProvider({
       // restore never runs for Implementation and its checkpoint stays
       // disabled.
       const fallbackId = targetIds[0] ?? conversationId;
+      const requestedFor = conversationId;
       restoreAttemptedRef.current.add(phase);
       readConversationFile(
         {
@@ -730,9 +745,19 @@ export function ConversationWebSocketProvider({
           filePath: path,
         },
         {
-          onSuccess: (fileContent) => setDeepPlanDocument(phase, fileContent),
+          onSuccess: (fileContent) => {
+            if (currentConversationIdRef.current !== requestedFor) return;
+            setDeepPlanDocument(phase, fileContent);
+          },
           onError: (error) => {
+            if (currentConversationIdRef.current !== requestedFor) return;
             console.warn("Failed to restore deep-plan document:", error);
+            // A transient failure (e.g. the socket was briefly down) must not
+            // permanently lock the checkpoint: drop the phase from the
+            // attempted set so the effect re-issues the read once the
+            // conversation is retried, and record the failure so the panel can
+            // surface a Retry. Only a *successful* re-read clears it.
+            restoreAttemptedRef.current.delete(phase);
             failDeepPlanDocumentRestore(phase);
           },
         },
@@ -1232,12 +1257,18 @@ export function ConversationWebSocketProvider({
                   conversationId: readConversationId,
                 });
               } else {
+                const requestedFor = conversationId;
                 readConversationFile(
                   { conversationId: readConversationId, filePath: path },
                   {
-                    onSuccess: (fileContent) =>
-                      setDeepPlanDocument(deepPlanPhase, fileContent),
+                    onSuccess: (fileContent) => {
+                      if (currentConversationIdRef.current !== requestedFor)
+                        return;
+                      setDeepPlanDocument(deepPlanPhase, fileContent);
+                    },
                     onError: (error) => {
+                      if (currentConversationIdRef.current !== requestedFor)
+                        return;
                       console.warn("Failed to read deep-plan document:", error);
                     },
                   },
