@@ -935,6 +935,56 @@ describe("recommended automations", () => {
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledTimes(1));
   });
 
+  it("does not list automations in the rail when no automation service answers", async () => {
+    // Earlier cases unstub globals, including the ResizeObserver the rail needs.
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+
+        unobserve() {}
+
+        disconnect() {}
+      },
+    );
+    // Arrange
+    const checkHealth = vi
+      .spyOn(AutomationService, "checkHealth")
+      .mockResolvedValue({ status: "error" });
+    const getAutomations = vi.spyOn(AutomationService, "getAutomations");
+
+    // Act
+    renderLauncher({ variant: "rail" });
+
+    // Assert
+    await waitFor(() => expect(checkHealth).toHaveBeenCalled());
+    expect(getAutomations).not.toHaveBeenCalled();
+  });
+
+  it("lists automations in the rail once the automation service is healthy", async () => {
+    // Earlier cases unstub globals, including the ResizeObserver the rail needs.
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+
+        unobserve() {}
+
+        disconnect() {}
+      },
+    );
+    vi.spyOn(AutomationService, "checkHealth").mockResolvedValue({
+      status: "ok",
+    });
+    const getAutomations = vi
+      .spyOn(AutomationService, "getAutomations")
+      .mockResolvedValue({ automations: [], total: 0 });
+
+    renderLauncher({ variant: "rail" });
+
+    await waitFor(() => expect(getAutomations).toHaveBeenCalled());
+  });
+
   it("shows the recommended automations section on cloud backends", async () => {
     setRegisteredBackends([cloudBackend]);
     setActiveSelection({ backendId: cloudBackend.id });
@@ -1222,6 +1272,9 @@ describe("recommended automations", () => {
         disconnect() {}
       },
     );
+    vi.spyOn(AutomationService, "checkHealth").mockResolvedValue({
+      status: "ok",
+    });
     vi.spyOn(AutomationService, "getAutomations").mockResolvedValue({
       automations: [
         {
@@ -1245,16 +1298,19 @@ describe("recommended automations", () => {
     expect(
       screen.queryByTestId("recommended-automations-section"),
     ).not.toBeInTheDocument();
-    expect(
-      screen.queryByTestId(
-        "recommended-automation-rail-card-github-pr-reviewer",
-      ),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.getByTestId(
-        "recommended-automation-rail-card-slack-standup-digest",
-      ),
-    ).toBeInTheDocument();
+    // Installed automations load only after the health check succeeds.
+    await waitFor(() => {
+      expect(
+        screen.getByTestId(
+          "recommended-automation-rail-card-slack-standup-digest",
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByTestId(
+          "recommended-automation-rail-card-github-pr-reviewer",
+        ),
+      ).not.toBeInTheDocument();
+    });
   });
 
   it("launches the recommendation after the missing MCP is installed", async () => {

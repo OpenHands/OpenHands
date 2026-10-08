@@ -34,6 +34,7 @@ import {
   getRequiredIntegrationIds,
 } from "#/utils/automation-catalog";
 import { isResponderAutomation } from "#/utils/responder-deployment";
+import { useAutomationHealth } from "#/hooks/query/use-automation-health";
 import { useAutomations } from "#/hooks/query/use-automations";
 import { useNativeGitIntegrations } from "#/hooks/query/use-native-git-integrations";
 import { cloudIntegrationsUrl } from "#/utils/cloud-integrations-url";
@@ -114,8 +115,11 @@ export function RecommendedAutomationsLauncher({
   const [isPreparingLocalResponder, setIsPreparingLocalResponder] =
     useState(false);
   const isRail = variant === "rail";
+  // Backends without an automation service (remote agent-servers such as a
+  // DigitalOcean sandbox) 404 the list, which would surface as an error toast.
+  const { data: automationHealth } = useAutomationHealth();
   const { data: automationsData, isLoading: isAutomationsLoading } =
-    useAutomations({ enabled: isRail });
+    useAutomations({ enabled: isRail && automationHealth?.status === "ok" });
   const {
     getNativeIntegration,
     isJiraEnabled,
