@@ -162,6 +162,32 @@ describe("confirmPhase", () => {
     if (!result.ok) return;
     expect(result.state.activePhase).toBe("backend");
   });
+
+  it("blocks a citation that resolves only to a numeric quantity", () => {
+    // `## 3,000 concurrent users` is a quantity, not section 3; the database
+    // checkpoint must refuse rather than advance.
+    const state: DeepPlanState = {
+      ...startDeepPlan(),
+      activePhase: "database",
+      confirmed: ["analysis", "requirements"],
+      documents: {
+        requirements: ["# Requirements", "", "## 3,000 concurrent users"].join(
+          "\n",
+        ),
+        database,
+      },
+    };
+
+    const result = confirmPhase(state, "database");
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.failure).toEqual({
+      kind: "invalid-chain",
+      issue: { from: "database", ref: "Req 3.1", reason: "dangling" },
+      extraCount: 0,
+    });
+  });
 });
 
 describe("invalidateFrom", () => {

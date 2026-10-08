@@ -123,6 +123,22 @@ describe("extractDefinedSections", () => {
     expect([...extractDefinedSections("## 3.1Auth")]).toEqual([]);
   });
 
+  it("does not read a numeric quantity or range as a section", () => {
+    // `3,000` and `3-4` are numbers in a title, not section numbers with a
+    // delimiter; registering them would let `[Req 3]` resolve against a section
+    // the document never defines.
+    expect([...extractDefinedSections("## 3,000 concurrent users")]).toEqual(
+      [],
+    );
+    expect([...extractDefinedSections("## 3-4 servers")]).toEqual([]);
+    expect([...extractDefinedSections("## 3/4 of capacity")]).toEqual([]);
+    // A separator that ends the number still defines it.
+    expect([...extractDefinedSections("## 3.1, Authentication")]).toEqual([
+      "3.1",
+    ]);
+    expect([...extractDefinedSections("## 3 - Authentication")]).toEqual(["3"]);
+  });
+
   it("sees a leading number wrapped in supported inline Markdown", () => {
     // Markdown renders these wrappers without changing the displayed section
     // number, so a citation of the visible `3.1` must still resolve.
@@ -378,6 +394,20 @@ describe("validateDocumentChain", () => {
     const report = validateDocumentChain({
       requirements: "## 3D Rendering",
       database: "## 2.1 Model [Req 3]",
+      tasks: "# Tasks",
+    });
+
+    expect(report.ok).toBe(false);
+    expect(report.issues).toEqual([
+      { from: "database", ref: "Req 3", reason: "dangling" },
+    ]);
+  });
+
+  it("reports a citation to a quantity-starting heading as dangling", () => {
+    // `## 3,000 concurrent users` is a quantity, not section 3.
+    const report = validateDocumentChain({
+      requirements: "## 3,000 concurrent users",
+      database: "## 2 Storage [Req 3]",
       tasks: "# Tasks",
     });
 

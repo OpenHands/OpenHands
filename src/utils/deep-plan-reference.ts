@@ -58,16 +58,20 @@ const LEADING_MARKDOWN_WRAPPER = /^(\*\*|__|\*|_|`)/;
  *
  * The number must not be glued to a following letter or digit — the packed
  * number already consumes every `.digit` group, so this rejects `## 3D Rendering`
- * and `## 3.1beta Authentication`, which are words rather than sections. The
- * `(?!\.\d)` arm also blocks the regex engine from backtracking to a shorter
- * number and treating the dot of a larger one (`3.1beta` → `3`) as a delimiter.
- * Any other delimiter is fine: whitespace, the end of the heading, a supported
- * closing Markdown marker (`*`/`_`/`` ` ``, left by unwrapping a wrapped
- * number), a dot (`## 3. Response`) or separating punctuation such as
- * `## 3.1: Authentication` and `## 3.1) Authentication`. The check is
- * Unicode-aware so a non-ASCII letter also blocks the number.
+ * and `## 3.1beta Authentication`, which are words rather than sections. It must
+ * also not be continued by punctuation that keeps building a numeric
+ * expression: `## 3,000 concurrent users` (a quantity) and `## 3-4 servers`
+ * (a range) define nothing. The lookahead `(?:[,./-]?\d)` rejects a digit that
+ * follows a numeric separator, and also blocks the engine from backtracking to
+ * a shorter number and treating the dot of a larger one (`3.1beta` → `3`) as a
+ * delimiter. Any real delimiter is fine: whitespace, the end of the heading, a
+ * supported closing Markdown marker (`*`/`_`/`` ` ``, left by unwrapping a
+ * wrapped number) or section separators such as `## 3.1: Authentication`,
+ * `## 3.1) Authentication` and `## 3. Response`. Unicode-aware, so a non-ASCII
+ * letter also blocks the number.
  */
-const LEADING_NUMBER_HEADING = /^([0-9]+(?:\.[0-9]+)*)(?![\p{L}\p{N}]|\.\d)/u;
+const LEADING_NUMBER_HEADING =
+  /^([0-9]+(?:\.[0-9]+)*)(?![\p{L}\p{N}]|[,./-]?\d)/u;
 /**
  * A heading that spells its own label out at the start, e.g.
  * `## [Req 3.1] Users` — the citation *is* the section number here.
