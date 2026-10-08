@@ -68,6 +68,7 @@ export function CompactConversationRow({
         <ConversationStatusDot
           executionStatus={executionStatus}
           sandboxStatus={sandboxStatus}
+          isArchived={isArchived}
           showTooltip={false}
         />
         <span
@@ -120,6 +121,7 @@ export function CompactConversationRow({
         <ConversationStatusDot
           executionStatus={executionStatus}
           sandboxStatus={sandboxStatus}
+          isArchived={isArchived}
           showTooltip={false}
         />
       </NavigationLink>

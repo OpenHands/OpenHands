@@ -40,6 +40,11 @@ interface ConversationCardPreviewProps {
    * Sidebar card chips stay gated by the panel's Tags preference.
    */
   tags?: Record<string, string> | null;
+  /**
+   * The row's effective archived state. Keeps the preview's status dot in
+   * agreement with the "Archived" chip shown on the card being hovered.
+   */
+  isArchived?: boolean;
 }
 
 const providerIcon: Partial<Record<Provider, IconType>> = {
@@ -114,6 +119,7 @@ export function ConversationCardPreview({
   acpServer = null,
   createdAt,
   tags = null,
+  isArchived = false,
 }: ConversationCardPreviewProps) {
   const { t } = useTranslation("openhands");
 
@@ -142,6 +148,7 @@ export function ConversationCardPreview({
             <ConversationStatusDot
               executionStatus={executionStatus}
               sandboxStatus={sandboxStatus}
+              isArchived={isArchived}
               showTooltip={false}
             />
           </span>

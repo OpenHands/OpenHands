@@ -61,7 +61,10 @@ import {
 import { useArchivedConversationsStore } from "#/stores/archived-conversations-store";
 import { usePinnedConversationsStore } from "#/stores/pinned-conversations-store";
 import { uniqueById } from "#/utils/unique-by-id";
-import { isEffectivelyArchivedConversation } from "#/utils/conversation-archive-status";
+import {
+  isEffectivelyArchivedConversation,
+  isMissingSandboxStatus,
+} from "#/utils/conversation-archive-status";
 import type { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
 
 interface ConversationPanelProps {
@@ -872,6 +875,16 @@ export function ConversationPanel({
       options?: { inPinnedSection?: boolean },
     ) => {
       const isPinned = pinnedIds.includes(conversation.id);
+      // The row presents as archived when the user archived it or its runtime
+      // is missing; both drive list visibility, the chip, the dot, and the
+      // title. "Unarchive" is only offered when it can actually restore the
+      // row (an explicit archive with a present runtime) — a missing-runtime
+      // row is archived by its runtime, which the client cannot resume, so it
+      // gets no no-op action.
+      const runtimeArchived = isMissingSandboxStatus(
+        conversation.sandbox_status,
+      );
+      const explicitlyArchived = archivedIdSet.has(conversation.id);
       const isArchived = isRowArchived(conversation);
       if (compact) {
         return (
@@ -935,6 +948,7 @@ export function ConversationPanel({
               acpServer={conversation.acp_server}
               createdAt={conversation.created_at}
               tags={conversation.tags}
+              isArchived={isArchived}
             />
           }
         >
@@ -953,8 +967,12 @@ export function ConversationPanel({
               onDelete={() =>
                 handleDeleteProject(conversation.id, conversation.title ?? "")
               }
-              // Exactly one direction is offered per row, so the menu always
-              // reflects the conversation's current archived state.
+              // Exactly one direction is offered per row, and only when it can
+              // take effect: "Archive" until the row is effectively archived,
+              // "Unarchive" only for an explicit archive whose runtime is still
+              // present and therefore restorable. A missing-runtime row is
+              // archived by its runtime, which the client cannot resume, so it
+              // offers neither (never a no-op "Unarchive").
               onArchive={
                 isArchived
                   ? undefined
@@ -965,7 +983,7 @@ export function ConversationPanel({
                       )
               }
               onUnarchive={
-                isArchived
+                isArchived && explicitlyArchived && !runtimeArchived
                   ? () => handleUnarchiveProject(conversation.id)
                   : undefined
               }
@@ -1017,6 +1035,7 @@ export function ConversationPanel({
     [
       activeBackend.id,
       activeBackend.kind,
+      archivedIdSet,
       compact,
       currentConversationId,
       handleArchiveProject,

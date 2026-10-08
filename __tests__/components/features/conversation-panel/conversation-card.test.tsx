@@ -1264,4 +1264,30 @@ describe("ConversationCard", () => {
     ).toBeVisible();
     expect(screen.getByRole("time")).toBeInTheDocument();
   });
+
+  it("dims the title and grays the dot for an explicitly archived row with a present runtime", () => {
+    // A RUNNING conversation archived through the menu: the chip, the dimmed
+    // title, and the archive dot must agree even though the runtime is fine.
+    renderWithProviders(
+      <ConversationCard
+        title="Conversation 1"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        executionStatus={ExecutionStatus.RUNNING}
+        sandboxStatus="RUNNING"
+        isArchived
+      />,
+    );
+
+    const card = screen.getByTestId("conversation-card");
+    expect(
+      within(card).getByTestId("conversation-card-archived-chip"),
+    ).toBeInTheDocument();
+    expect(
+      within(card).getByTestId("conversation-status-archived"),
+    ).toBeInTheDocument();
+    expect(within(card).getByTestId("conversation-card-title")).toHaveClass(
+      "opacity-60",
+    );
+  });
 });

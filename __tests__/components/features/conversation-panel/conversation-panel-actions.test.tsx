@@ -200,8 +200,9 @@ describe("ConversationPanel conversation actions", () => {
     expect(cards).toHaveLength(1);
     expect(screen.queryByText("Gone Conversation")).not.toBeInTheDocument();
 
-    // "Show archived": the row reappears with the Archived chip and an
-    // Unarchive menu entry (never Archive).
+    // "Show archived": the row reappears with the Archived chip. It offers
+    // neither direction: it is archived by its missing (non-resumable)
+    // runtime, so "Unarchive" could not restore it and must not be a no-op.
     act(() => {
       useConversationPanelPreferencesStore.setState({
         showArchivedConversations: true,
@@ -220,6 +221,30 @@ describe("ConversationPanel conversation actions", () => {
     await userEvent
       .setup()
       .click(within(goneCard).getByTestId("ellipsis-button"));
+    expect(screen.queryByTestId("unarchive-button")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("archive-button")).not.toBeInTheDocument();
+  });
+
+  it("offers Unarchive on an explicitly archived row with a present runtime", async () => {
+    // An explicit archive whose sandbox is not missing is restorable, so its
+    // ⋮ menu offers Unarchive and removing it returns the row to the default
+    // list.
+    useArchivedConversationsStore
+      .getState()
+      .archiveConversation("default-local", "1");
+    useConversationPanelPreferencesStore.setState({
+      showArchivedConversations: true,
+    });
+
+    renderConversationPanel();
+
+    const cards = await screen.findAllByTestId("conversation-card");
+    const archivedCard = cards.find((card) =>
+      within(card).queryByText("Conversation 1"),
+    )!;
+    await userEvent
+      .setup()
+      .click(within(archivedCard).getByTestId("ellipsis-button"));
     expect(screen.getByTestId("unarchive-button")).toBeInTheDocument();
     expect(screen.queryByTestId("archive-button")).not.toBeInTheDocument();
   });

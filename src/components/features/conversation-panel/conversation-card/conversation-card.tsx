@@ -270,8 +270,11 @@ export function ConversationCard({
             onTitleSave={onTitleSave}
             executionStatus={executionStatus}
             sandboxStatus={sandboxStatus}
+            isArchived={isArchived}
           />
-          {sandboxStatus === "ERROR" && <ConversationStatusBadges />}
+          {sandboxStatus === "ERROR" && !isArchived && (
+            <ConversationStatusBadges />
+          )}
         </div>
 
         <div

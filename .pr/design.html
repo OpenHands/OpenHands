@@ -209,11 +209,19 @@ archivedIdSet.has(conversation.id)</code></pre>
       <p>Adds one <code>isRowArchived(conversation)</code> callback. The display filter, the <code>isArchived</code>
       handed to cards, and the ⋮ menu direction all call it instead of <code>archivedIdSet.has(id)</code>.
       Delete/prune logic still reads the unfiltered loaded set, so hiding a row never shrinks what can be deleted.</p>
+      <p>The ⋮ menu offers <b>exactly one</b> direction per row, and only when it can take effect: <em>Archive</em>
+      until the row is effectively archived, and <em>Unarchive</em> only for an explicit archive whose runtime is
+      still present and therefore restorable. A missing-runtime row is archived by its runtime, which the client
+      cannot resume, so it offers neither — never a no-op "Unarchive" that silently does nothing.</p>
 
       <h3>✏️ Status dot &amp; dimmed title</h3>
-      <p><a class="src" href="https://github.com/OpenHands/OpenHands/blob/261a7ef99091348fd39a49dbc9238bcca7cc311b/src/components/features/conversation-panel/conversation-status-dot.tsx#L128">conversation-status-dot.tsx:128</a>
-      and <a class="src" href="https://github.com/OpenHands/OpenHands/blob/261a7ef99091348fd39a49dbc9238bcca7cc311b/src/components/features/conversation-panel/conversation-card/conversation-card-header.tsx#L25">conversation-card-header.tsx:25</a>
-      now read <code>isMissingSandboxStatus</code>, so <code>ERROR</code> no longer inherits the dimmed archived title — it keeps the red Error indicator. Dot and title agree.</p>
+      <p><a class="src" href="https://github.com/OpenHands/OpenHands/blob/261a7ef99091348fd39a49dbc9238bcca7cc311b/src/components/features/conversation-panel/conversation-status-dot.tsx#L128">conversation-status-dot.tsx</a>,
+      <a class="src" href="https://github.com/OpenHands/OpenHands/blob/261a7ef99091348fd39a49dbc9238bcca7cc311b/src/components/features/conversation-panel/conversation-card/conversation-card-header.tsx#L25">conversation-card-header.tsx</a>,
+      the hover preview, and the compact row all take the row's <b>effective archived</b> state
+      (<code>isArchived</code>), not the raw sandbox status, so an explicitly archived row streams the gray
+      archive dot and dimmed title even though its runtime is fine, and the dot can never disagree with the
+      "Archived" chip. A missing sandbox is still inferred from <code>sandboxStatus</code> for callers that only
+      have that, and an unarchived <code>ERROR</code> row keeps its red "Error" dot and badge.</p>
 
       <h3>✏️ Read-only gate</h3>
       <p><a class="src" href="https://github.com/OpenHands/OpenHands/blob/261a7ef99091348fd39a49dbc9238bcca7cc311b/src/hooks/use-is-archived-conversation.ts#L15">use-is-archived-conversation.ts:15</a>
@@ -239,7 +247,7 @@ archivedIdSet.has(conversation.id)</code></pre>
             <td>MISSING row <b>hidden</b> (archived); ERROR row shown with red "Error"</td></tr>
         <tr><td>⋮ menu on the archived row</td>
             <td><code>["Rename","Edit tags","Stop Conversation","Download conversation data","<b>Archive Conversation</b>","Delete Conversation"]</code></td>
-            <td><code>[…,"<b>Unarchive Conversation</b>","Delete Conversation"]</code> — no "Archive"</td></tr>
+            <td><code>[…]</code> — no "Archive" and no no-op "Unarchive" (the row is archived by its missing runtime)</td></tr>
         <tr><td>ERROR row presentation</td>
             <td>red "Error" dot, but dimmed title (wrongly archived)</td>
             <td>red "Error" dot, title not dimmed, never chipped/archived</td></tr>
@@ -248,6 +256,15 @@ archivedIdSet.has(conversation.id)</code></pre>
       archived-row ⋮ menu) are attached to the PR under <b>Video/Screenshots</b>. Unit/integration tests cover the
       predicate's MISSING/ERROR/local-non-resumable cases, the dot's MISSING→archive render, and the panel's
       default-hide / show-archived behavior.</p>
+      <div class="callout note"><b>ⓘ Where MISSING actually comes from.</b> The local (non-Docker) agent server
+      reports every catalog conversation as <code>runtime_status: "available"</code>, so it never yields a
+      <code>MISSING</code> row; the adapter maps <code>MISSING</code> from a Cloud
+      <code>sandbox_status</code> or a Docker-runtime <code>runtime_info.runtime_status: "missing"</code> with
+      <code>can_resume: false</code> (the <code>conversation_runtime: "docker"</code> mode). That mapping is pinned
+      by <a class="src" href="https://github.com/OpenHands/OpenHands/blob/3f98684763a4e17e6e2faf8dd8f1cfc3969b020c/__tests__/api/agent-server-adapter.test.ts#L1008">agent-server-adapter.test.ts</a>
+      (missing+non-resumable → <code>MISSING</code>; missing+resumable → <code>null</code>), and the fixtures here
+      use that contract. The presentation side is therefore exercised end-to-end against the real Canvas with the
+      backend-shaped payload.</div>
     </section>
 
     <p style="margin-top:40px;font-size:12.5px;color:var(--subtle)">Temporary review artifact under <code>.pr/</code>; removed after merge.</p>
