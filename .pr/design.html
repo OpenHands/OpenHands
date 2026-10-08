@@ -209,10 +209,10 @@ archivedIdSet.has(conversation.id)</code></pre>
       <p>Adds one <code>isRowArchived(conversation)</code> callback. The display filter, the <code>isArchived</code>
       handed to cards, and the ⋮ menu direction all call it instead of <code>archivedIdSet.has(id)</code>.
       Delete/prune logic still reads the unfiltered loaded set, so hiding a row never shrinks what can be deleted.</p>
-      <p>The ⋮ menu offers <b>exactly one</b> direction per row, and only when it can take effect: <em>Archive</em>
-      until the row is effectively archived, and <em>Unarchive</em> only for an explicit archive whose runtime is
-      still present and therefore restorable. A missing-runtime row is archived by its runtime, which the client
-      cannot resume, so it offers neither — never a no-op "Unarchive" that silently does nothing.</p>
+      <p>The ⋮ menu offers <b>exactly one</b> direction per row: <em>Archive</em> until the row is effectively
+      archived, then <em>Unarchive</em>. This holds for a runtime-derived archive too: "Unarchive" clears the user's
+      explicit archive intent (if any) and does not resume the runtime, so a missing-runtime row stays archived while
+      its runtime is missing and non-resumable — never a dead <em>Archive</em> direction nor a broken promise.</p>
 
       <h3>✏️ Status dot &amp; dimmed title</h3>
       <p><a class="src" href="https://github.com/OpenHands/OpenHands/blob/261a7ef99091348fd39a49dbc9238bcca7cc311b/src/components/features/conversation-panel/conversation-status-dot.tsx#L128">conversation-status-dot.tsx</a>,
@@ -247,7 +247,7 @@ archivedIdSet.has(conversation.id)</code></pre>
             <td>MISSING row <b>hidden</b> (archived); ERROR row shown with red "Error"</td></tr>
         <tr><td>⋮ menu on the archived row</td>
             <td><code>["Rename","Edit tags","Stop Conversation","Download conversation data","<b>Archive Conversation</b>","Delete Conversation"]</code></td>
-            <td><code>[…]</code> — no "Archive" and no no-op "Unarchive" (the row is archived by its missing runtime)</td></tr>
+            <td><code>[…]</code> — exactly one direction, <b>Unarchive</b> (never "Archive"); it clears explicit intent without resuming the runtime</td></tr>
         <tr><td>ERROR row presentation</td>
             <td>red "Error" dot, but dimmed title (wrongly archived)</td>
             <td>red "Error" dot, title not dimmed, never chipped/archived</td></tr>
