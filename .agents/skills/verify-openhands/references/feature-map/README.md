@@ -258,7 +258,7 @@ How to write and prove new entries: [../mapping.md](../mapping.md).
 | F27 | [Workspace tools](F27-workspace-tools.md) | terminal, browser, planner, task list, usage, `canvas_ui_control` | drawer tabs | LLM | 30 |
 | F28 | [Live activity view](F28-live-activity-view.md) | running/waiting agents list, status chips, latest action, subagent fan-out, cost and tokens, empty/error/unavailable states, home pin | sidebar **Activity** link, `/activity` | LLM; a running conversation | 10 |
 
-28 families, 726 sub-features. `control-openhands map ids` lists every ID with its file.
+28 families, 746 sub-features. `control-openhands map ids` lists every ID with its file.
 
 ### Neighbouring families
 
