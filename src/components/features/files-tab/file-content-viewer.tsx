@@ -109,21 +109,8 @@ export function FileContentViewer({ path, viewMode }: FileContentViewerProps) {
 
   const { kind, text, staticUrl, mimeType, bytesTooLarge } = query.data;
   const bustedStaticUrl = withWorkspaceCacheBuster(staticUrl, mutationCounter);
-
-  // A file that exceeded the download bound was never buffered, so its bytes
-  // are not available in either view mode. Say so explicitly — falling through
-  // to the binary fallback would present a huge, readable log as an
-  // unopenable blob.
-  if (bytesTooLarge) {
-    return (
-      <div
-        className="flex h-full w-full items-center justify-center text-sm text-muted"
-        data-testid="file-content-viewer-too-large"
-      >
-        {t(I18nKey.FILES$FILE_TOO_LARGE)}
-      </div>
-    );
-  }
+  const isHtmlLike =
+    mimeType === "text/html" || HTML_LIKE_EXTS.has(getExtension(path));
 
   // ----- Plain mode: raw source bytes, syntax-highlighted when we can
   // recognize the grammar (falls through to a `<pre>` otherwise). This
@@ -137,6 +124,18 @@ export function FileContentViewer({ path, viewMode }: FileContentViewerProps) {
           text={text}
           mimeType={mimeType ?? undefined}
         />
+      );
+    }
+    // An oversized file's body was never buffered, so there is no source to
+    // show. Say "too large" rather than the binary fallback.
+    if (bytesTooLarge) {
+      return (
+        <div
+          className="flex h-full w-full items-center justify-center text-sm text-muted"
+          data-testid="file-content-viewer-too-large"
+        >
+          {t(I18nKey.FILES$FILE_TOO_LARGE)}
+        </div>
       );
     }
     return <UnpreviewableFallback path={path} />;
@@ -178,12 +177,13 @@ export function FileContentViewer({ path, viewMode }: FileContentViewerProps) {
     );
   }
 
-  if (kind === "binary") {
-    return <UnpreviewableFallback path={path} />;
-  }
-
-  // Text-like content.
-  if (mimeType === "text/html" || HTML_LIKE_EXTS.has(getExtension(path))) {
+  // HTML / SVG render from `staticUrl` in a sandboxed frame, so this branch
+  // is checked before the binary / too-large fallbacks: a frame fetches its
+  // own bytes, so an oversized markup file (whose body the hook refused to
+  // buffer and so reports as `binary` + `bytesTooLarge`) still renders richly
+  // instead of dropping to a "too large" message. A genuinely binary `.html`
+  // (NUL bytes, not merely oversized) keeps the binary fallback as before.
+  if (isHtmlLike && (kind === "text" || bytesTooLarge)) {
     // Sandbox the preview iframe: `allow-same-origin` keeps the frame on
     // the workspace fileserver's origin so relative `<link href="…">`,
     // `<img src="…">`, etc. continue to resolve, while the absence of
@@ -200,6 +200,23 @@ export function FileContentViewer({ path, viewMode }: FileContentViewerProps) {
         className="h-full w-full bg-white"
       />
     );
+  }
+
+  if (kind === "binary") {
+    // A binary file's bytes are not previewable, and an oversized one was
+    // never buffered — say "too large" so a huge file is not mistaken for an
+    // empty one.
+    if (bytesTooLarge) {
+      return (
+        <div
+          className="flex h-full w-full items-center justify-center text-sm text-muted"
+          data-testid="file-content-viewer-too-large"
+        >
+          {t(I18nKey.FILES$FILE_TOO_LARGE)}
+        </div>
+      );
+    }
+    return <UnpreviewableFallback path={path} />;
   }
 
   if (kind === "text" && isMarkdownFilePath(path)) {

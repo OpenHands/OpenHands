@@ -148,4 +148,54 @@ describe("FileContentViewer", () => {
       ).toBeInTheDocument();
     },
   );
+
+  it("keeps the rich iframe preview for an oversized HTML file in rich mode", async () => {
+    // Arrange: an HTML file past the download bound. The hook refuses to
+    // buffer its body (bytesTooLarge), but the rich preview renders the file
+    // from `staticUrl` in a frame that fetches its own bytes — so it must NOT
+    // drop to the "too large" message just because the body was not buffered.
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({
+        "content-length": String(MAX_TEXT_DOWNLOAD_BYTES + 1),
+      }),
+      body: { cancel: vi.fn().mockResolvedValue(undefined) },
+      arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+    });
+
+    // Act
+    renderViewer("report.html", "rich");
+
+    // Assert
+    expect(
+      await screen.findByTestId("file-content-viewer-iframe"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("file-content-viewer-too-large"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps the binary fallback for a genuinely binary .html file", async () => {
+    // Arrange: an .html path whose body carries a NUL byte. The rich HTML
+    // frame is only for readable markup or an oversized body the hook refused
+    // to buffer; a genuinely binary file must still fall through, as before.
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      arrayBuffer: () =>
+        Promise.resolve(new Uint8Array([0x3c, 0x00, 0x3e]).buffer),
+    });
+
+    // Act
+    renderViewer("report.html", "rich");
+
+    // Assert
+    expect(
+      await screen.findByTestId("file-content-viewer-binary-fallback"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("file-content-viewer-iframe"),
+    ).not.toBeInTheDocument();
+  });
 });

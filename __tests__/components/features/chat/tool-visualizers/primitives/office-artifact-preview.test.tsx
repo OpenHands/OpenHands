@@ -119,9 +119,11 @@ describe("OfficeArtifactPreview", () => {
       await screen.findByText("Body text", undefined, { timeout: 3000 }),
     ).toBeInTheDocument();
     expect(screen.getByText("Title")).toBeInTheDocument();
+    // The hook owns the transport: it fetches the bare static URL and
+    // revalidates with `cache: "no-cache"` rather than a `?v=` cache-buster.
     expect(fetchMock).toHaveBeenCalledWith(
-      `${BASE_URL}notes.docx?v=0`,
-      expect.objectContaining({ credentials: "include" }),
+      `${BASE_URL}notes.docx`,
+      expect.objectContaining({ credentials: "include", cache: "no-cache" }),
     );
   });
 
@@ -138,8 +140,8 @@ describe("OfficeArtifactPreview", () => {
 
     await screen.findByText("Body text", undefined, { timeout: 3000 });
     expect(fetchMock).toHaveBeenCalledWith(
-      `${BASE_URL}report.docx?v=0`,
-      expect.objectContaining({ credentials: "include" }),
+      `${BASE_URL}report.docx`,
+      expect.objectContaining({ credentials: "include", cache: "no-cache" }),
     );
     expect(fetchMock).not.toHaveBeenCalledWith(
       expect.stringContaining("/workspace/project/"),
