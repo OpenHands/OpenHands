@@ -311,4 +311,6 @@ export interface RuntimeConversationInfo {
   updated_at: string;
   status: ExecutionStatus;
   stats: RuntimeConversationStats;
+  /** Models an ACP session reported; empty otherwise. */
+  available_models: ACPModelOption[];
 }

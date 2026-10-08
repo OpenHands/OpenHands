@@ -66,6 +66,7 @@ import {
   type WorkspaceMode,
 } from "../conversation-metadata-store";
 import { resolveTitleLlmProfile } from "#/utils/title-llm-profile";
+import { toAcpModelOptions } from "#/constants/acp-providers";
 import { isPlannerConversationOf } from "#/utils/plan-file";
 import type {
   GetHooksResponse,
@@ -937,6 +938,7 @@ class AgentServerConversationService {
       updated_at: data.updated_at,
       status: toRuntimeStatus(data.execution_status),
       stats: data.stats ?? { usage_to_metrics: {} },
+      available_models: toAcpModelOptions(data.available_models),
     };
   }
 

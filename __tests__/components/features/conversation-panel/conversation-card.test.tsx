@@ -53,6 +53,13 @@ vi.mock("react-i18next", async () => {
   };
 });
 
+const readRememberedAcpModels = vi.hoisted(() =>
+  vi.fn((): { id: string; label: string }[] => []),
+);
+vi.mock("#/utils/remembered-acp-models", () => ({
+  readRememberedAcpModels,
+}));
+
 vi.mock("#/hooks/use-tracking", () => ({
   useTracking: () => ({
     trackDownloadVsCodeButtonClicked: vi.fn(),
@@ -1061,10 +1068,11 @@ describe("ConversationCard", () => {
       ).toBeInTheDocument();
     });
 
-    it("shows the provider's picker label for a known model ID", () => {
-      // When ``llm_model`` is a registry-known ID, the chip renders the
-      // human label ("Claude Opus (1M)") instead of the raw ID — matching
-      // what the Settings → Agent picker shows for the same value.
+    it("labels a model with the name the agent last reported for it", () => {
+      readRememberedAcpModels.mockReturnValue([
+        { id: "opus[1m]", label: "Claude Opus (1M)" },
+      ]);
+
       renderWithProviders(
         <ConversationCard
           title="Conversation 1"
@@ -1080,6 +1088,11 @@ describe("ConversationCard", () => {
       const chip = screen.getByTestId("conversation-card-agent-chip");
       expect(chip).toHaveTextContent("Claude Opus (1M)");
       expect(chip).toHaveAttribute("title", "Claude Code · Claude Opus (1M)");
+      expect(readRememberedAcpModels).toHaveBeenCalledWith(
+        expect.any(String),
+        "claude-code",
+      );
+      readRememberedAcpModels.mockReturnValue([]);
     });
 
     it("falls back to the provider display name for an ACP conversation with no model", () => {

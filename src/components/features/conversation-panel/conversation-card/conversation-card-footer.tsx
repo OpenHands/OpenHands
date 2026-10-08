@@ -11,6 +11,8 @@ import {
   resolveAcpProviderIcon,
 } from "#/constants/acp-providers";
 import { useFreeModels } from "#/hooks/query/use-free-models";
+import { useActiveBackend } from "#/contexts/active-backend-context";
+import { readRememberedAcpModels } from "#/utils/remembered-acp-models";
 import { formatNativeModelName } from "#/utils/format-model-name";
 import {
   AgentBrandIcon,
@@ -89,6 +91,7 @@ export function ConversationCardFooter({
 }: ConversationCardFooterProps) {
   const { t } = useTranslation("openhands");
   const freeModels = useFreeModels();
+  const { backend } = useActiveBackend();
 
   const isPaused = isExecutionPaused(executionStatus);
 
@@ -108,10 +111,12 @@ export function ConversationCardFooter({
       const providerName =
         getAcpProviderDisplayName(acpServer) ??
         t(I18nKey.CONVERSATION$ACP_AGENT_GENERIC);
-      // Prefer the provider's picker label (e.g. "Claude Opus 4.7") over the
-      // raw ``acp_model`` ID; falls back to the raw ID for custom overrides
-      // and to the provider name when there's no model at all.
-      const modelLabel = labelForAcpModel(acpServer, llmModel);
+      // Prefer the label the agent gave the model over its raw ID, and the
+      // provider name when there's no model at all.
+      const modelLabel = labelForAcpModel(
+        llmModel,
+        readRememberedAcpModels(backend.id, acpServer),
+      );
       const text = modelLabel ?? providerName;
       chip = {
         kind: resolveAcpProviderIcon(acpServer),
