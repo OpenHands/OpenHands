@@ -1184,6 +1184,46 @@ describe("AutomationSetupPanel", () => {
       expect(AutomationService.createServerDraft).toHaveBeenCalledTimes(1);
     });
 
+    it("keeps a saved custom server draft clean after uploading its bundle", async () => {
+      vi.mocked(AutomationService.uploadAutomationTarball).mockResolvedValue(
+        "oh-internal://uploads/custom-archive",
+      );
+      vi.mocked(AutomationService.createServerDraft).mockImplementation(
+        async (request) => ({
+          ...dispatchableDraft,
+          id: "draft-custom",
+          endpoint: request.endpoint,
+          name: request.name ?? "",
+          draft: request.draft as never,
+          validationErrors: null,
+        }),
+      );
+
+      const user = userEvent.setup();
+      renderPanel({ prompt: "Run a custom security check", kind: "custom" });
+
+      await user.click(screen.getByTestId("automation-setup-save-draft"));
+
+      await waitFor(() =>
+        expect(AutomationService.createServerDraft).toHaveBeenCalledWith(
+          expect.objectContaining({
+            endpoint: "/v1",
+            draft: expect.objectContaining({
+              tarball_path: "oh-internal://uploads/custom-archive",
+            }),
+          }),
+        ),
+      );
+      await waitFor(() =>
+        expect(screen.getByTestId("automation-setup-save-state")).toHaveTextContent(
+          "AUTOMATION_SETUP$SAVED_JUST_NOW",
+        ),
+      );
+      expect(screen.getByTestId("automation-setup-save-state")).not.toHaveTextContent(
+        "AUTOMATION_SETUP$UNSAVED_CHANGES",
+      );
+    });
+
     it("tags the conversation with the server draft id after saving", async () => {
       vi.mocked(AutomationService.createServerDraft).mockResolvedValue(
         dispatchableDraft,

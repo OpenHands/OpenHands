@@ -819,24 +819,29 @@ export default function AutomationsList() {
                 onEdit={handleEditRequest}
                 insights={groupInsights}
               />
-
-              {hasMore && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (hasNextPage) void fetchNextPage();
-                    if (hasMoreDrafts) {
-                      setDraftLimit((prev) => prev + PAGE_SIZE);
-                    }
-                  }}
-                  disabled={isFetching || isDraftsLoading}
-                  className="self-center rounded-lg border border-border px-6 py-2 text-sm text-contrast hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {t(I18nKey.AUTOMATIONS$LOAD_MORE)}
-                </button>
-              )}
             </>
           ))}
+
+        {!isListLoading &&
+          !isListError &&
+          data &&
+          draftsData &&
+          !hasNoAutomations &&
+          hasMore && (
+            <button
+              type="button"
+              onClick={() => {
+                if (hasNextPage) void fetchNextPage();
+                if (hasMoreDrafts) {
+                  setDraftLimit((prev) => prev + PAGE_SIZE);
+                }
+              }}
+              disabled={isFetching || isDraftsLoading}
+              className="self-center rounded-lg border border-border px-6 py-2 text-sm text-contrast hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {t(I18nKey.AUTOMATIONS$LOAD_MORE)}
+            </button>
+          )}
       </div>
 
       {/* The launcher lives on the templates sub-page in dashboard mode */}

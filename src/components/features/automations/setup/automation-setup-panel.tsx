@@ -548,6 +548,9 @@ export function AutomationSetupPanel({
   const [saveState, setSaveState] = useState<
     "idle" | "saving" | "saved" | "error"
   >("idle");
+  const [savedDraftRequestKey, setSavedDraftRequestKey] = useState<
+    string | null
+  >(null);
   const [isTaggedDraftMissing, setIsTaggedDraftMissing] = useState(false);
   const queryClient = useQueryClient();
   const latestConversationTagsRef = useRef(conversationTags);
@@ -675,6 +678,7 @@ export function AutomationSetupPanel({
 
     let cancelled = false;
     setIsHydratingServerDraft(true);
+    setSavedDraftRequestKey(null);
     setIsTaggedDraftMissing(false);
 
     AutomationService.getServerDraft(taggedServerDraftId)
@@ -1060,41 +1064,82 @@ export function AutomationSetupPanel({
   }, [serverDraft?.validationErrors]);
   const fieldError = (field: string): string | undefined =>
     draftValidationByField.get(field);
-  const isDraftDirty = useMemo(() => {
-    if (!serverDraft) return true;
-    return (
-      serverDraft.endpoint !== draftEndpoint(kind, pluginEndpointSource) ||
-      (serverDraft.name ?? "") !== normalizedName() ||
-      JSON.stringify(serverDraft.draft) !== JSON.stringify(draftRequestBody())
-    );
-  }, [
-    serverDraft,
-    kind,
-    name,
-    prompt,
-    repository,
-    pluginSource,
-    pluginRef,
-    pluginList,
-    customCode,
-    entrypoint,
-    setupScriptPath,
-    setupScript,
-    triggerKind,
-    frequency,
-    time,
-    weekday,
-    scheduleDateTime,
-    timezone,
-    customSchedule,
-    eventSource,
-    eventKey,
-    eventFilter,
-    model,
-    agentProfileId,
-    showTimeout,
-    timeoutSeconds,
-  ]);
+  const normalizeDraftForDirtyCheck = (body: SetupRequestBody) => {
+    if (kind !== "custom" || typeof body !== "object" || body === null) {
+      return body;
+    }
+    return { ...body, tarball_path: PREFLIGHT_TARBALL_PATH };
+  };
+  const draftRequestKey = (
+    endpoint: string,
+    draftName: string,
+    body: SetupRequestBody,
+  ) =>
+    JSON.stringify({
+      endpoint,
+      name: draftName,
+      draft: normalizeDraftForDirtyCheck(body),
+      customSource:
+        kind === "custom"
+          ? {
+              customCode,
+              setupScript,
+            }
+          : undefined,
+    });
+  const currentDraftRequestKey = useMemo(
+    () =>
+      draftRequestKey(
+        draftEndpoint(kind, pluginEndpointSource),
+        normalizedName(),
+        draftRequestBody(),
+      ),
+    [
+      kind,
+      name,
+      prompt,
+      repository,
+      pluginSource,
+      pluginRef,
+      pluginList,
+      customCode,
+      entrypoint,
+      setupScriptPath,
+      setupScript,
+      triggerKind,
+      frequency,
+      time,
+      weekday,
+      scheduleDateTime,
+      timezone,
+      customSchedule,
+      eventSource,
+      eventKey,
+      eventFilter,
+      model,
+      agentProfileId,
+      showTimeout,
+      timeoutSeconds,
+    ],
+  );
+  const isDraftDirty = savedDraftRequestKey
+    ? savedDraftRequestKey !== currentDraftRequestKey
+    : !serverDraft ||
+      draftRequestKey(
+        serverDraft.endpoint,
+        serverDraft.name ?? "",
+        serverDraft.draft,
+      ) !== currentDraftRequestKey;
+  const wasHydratingServerDraftRef = useRef(false);
+  useEffect(() => {
+    if (isHydratingServerDraft) {
+      wasHydratingServerDraftRef.current = true;
+      return;
+    }
+    if (!wasHydratingServerDraftRef.current || !serverDraft) return;
+    wasHydratingServerDraftRef.current = false;
+    setSavedDraftRequestKey(currentDraftRequestKey);
+  }, [currentDraftRequestKey, isHydratingServerDraft, serverDraft]);
 
   const ensureCustomWebhookSource = async (): Promise<boolean> => {
     if (triggerKind !== "event" || !customWebhook.enabled) return true;
@@ -1169,6 +1214,9 @@ export function AutomationSetupPanel({
       : await AutomationService.createServerDraft(request);
     setServerDraft(saved);
     saveDraftInFormSession(saved, form);
+    setSavedDraftRequestKey(
+      draftRequestKey(request.endpoint, request.name ?? "", request.draft),
+    );
     setIsTaggedDraftMissing(false);
     await updateConversationDraftTags(saved.id);
     return saved;
