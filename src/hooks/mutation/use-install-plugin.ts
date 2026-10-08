@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { isSdkHttpStatusError } from "#/api/agent-server-compatibility";
 import PluginsManagementService, {
   type InstallPluginRequest,
 } from "#/api/plugins-management-service";
@@ -7,6 +8,7 @@ import { PLUGINS_QUERY_KEYS } from "#/hooks/query/query-keys";
 import { I18nKey } from "#/i18n/declaration";
 import {
   displayApiErrorToast,
+  displayErrorToast,
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
 
@@ -31,6 +33,12 @@ export function useInstallPlugin() {
       });
       displaySuccessToast(t(I18nKey.SETTINGS$PLUGINS_INSTALL_SUCCESS));
     },
-    onError: (error) => displayApiErrorToast(error, t(I18nKey.ERROR$GENERIC)),
+    onError: (error) => {
+      if (isSdkHttpStatusError(error, 409)) {
+        displayErrorToast(t(I18nKey.SETTINGS$PLUGINS_ALREADY_INSTALLED));
+        return;
+      }
+      displayApiErrorToast(error, t(I18nKey.ERROR$GENERIC));
+    },
   });
 }
