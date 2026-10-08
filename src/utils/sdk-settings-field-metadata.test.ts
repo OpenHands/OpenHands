@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { TFunction } from "i18next";
+import translations from "#/i18n/translation.json";
 import {
   toSchemaTranslationKey,
   resolveSchemaFieldLabel,
@@ -318,4 +319,82 @@ describe("warning logging", () => {
 
     expect(warnSpy).not.toHaveBeenCalled();
   });
+});
+
+describe("translations for fields the pinned Agent Server exposes", () => {
+  // Field keys, schema text and choices as served by the pinned Agent Server's
+  // /api/settings/agent-schema; without translations these render verbatim,
+  // including the SDK's reStructuredText ``literals``.
+  const SCHEMA_FIELDS: {
+    key: string;
+    label: string;
+    description: string;
+    choices?: string[];
+  }[] = [
+    {
+      key: "tool_concurrency_limit",
+      label: "Parallel tool calls",
+      description:
+        "Maximum number of tool calls to execute concurrently per agent step.",
+    },
+    {
+      key: "condenser.condenser_kind",
+      label: "Condenser Kind",
+      description:
+        "Discriminator for the condenser settings union. ``'llm_summarizing'`` selects the default LLM summarizing condenser.",
+      choices: ["llm_summarizing", "no_op"],
+    },
+    {
+      key: "condenser.max_tokens",
+      label: "Max tokens",
+      description:
+        "Maximum number of tokens allowed before the condenser runs.",
+    },
+    {
+      key: "condenser.keep_first",
+      label: "Keep first",
+      description:
+        "Minimum number of initial events to preserve before condensation.",
+    },
+    {
+      key: "condenser.minimum_progress",
+      label: "Minimum progress",
+      description: "Minimum fraction of events that must be condensed.",
+    },
+    {
+      key: "condenser.hard_context_reset_max_retries",
+      label: "Hard reset retries",
+      description:
+        "Number of hard context reset attempts before raising an error.",
+    },
+    {
+      key: "condenser.hard_context_reset_context_scaling",
+      label: "Hard reset scaling",
+      description:
+        "Factor used to reduce event string size after a hard context reset summarization failure.",
+    },
+  ];
+  const catalog = translations as Record<string, Record<string, string>>;
+  const languages = Object.keys(catalog.SCHEMA$CONDENSER$MAX_SIZE$LABEL);
+
+  it.each(languages)(
+    "resolves every field from translation.json in %s",
+    (lang) => {
+      const t = ((key: string, options?: { defaultValue: string }) =>
+        catalog[key]?.[lang] ?? options?.defaultValue ?? key) as TFunction;
+
+      const resolved = SCHEMA_FIELDS.flatMap((field) => [
+        resolveSchemaFieldLabel(t, field.key, field.label),
+        resolveSchemaFieldDescription(t, field.key, field.description) ?? "",
+        ...(field.choices ?? []).map((choice) =>
+          resolveSchemaChoiceLabel(t, field.key, choice, choice),
+        ),
+      ]);
+
+      expect(warnSpy).not.toHaveBeenCalled();
+      resolved.forEach((text) => {
+        expect(text).not.toMatch(/``|llm_summarizing|no_op/);
+      });
+    },
+  );
 });

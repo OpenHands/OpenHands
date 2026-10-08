@@ -18,7 +18,7 @@ import { EXTENSIONS_NAV_ITEMS } from "./extensions-navigation";
 /** Only the Skills item points to a cloud-hosted page today. */
 const CLOUD_LINKED_EXTENSION_PATH = "/skills";
 /** Backend-installed artifacts are not available on Cloud backends yet. */
-const CLOUD_HIDDEN_EXTENSION_PATHS = new Set(["/plugins", "/extensions"]);
+const CLOUD_HIDDEN_EXTENSION_PATHS = new Set(["/plugins", "/apps"]);
 
 export function ExtensionsMobileHub() {
   const { t } = useTranslation("openhands");
@@ -29,7 +29,7 @@ export function ExtensionsMobileHub() {
   return (
     <div
       data-testid="extensions-mobile-hub"
-      className="flex flex-col gap-4 px-4 py-2 md:hidden"
+      className="flex flex-col gap-4 px-4 py-2 lg:hidden"
     >
       <Typography.H2>{t(I18nKey.NAV$CUSTOMIZE)}</Typography.H2>
       <nav className="flex flex-col gap-0.5">
@@ -56,7 +56,7 @@ export function ExtensionsMobileHub() {
                   {t(I18nKey.SIDEBAR$SKILLS_AND_PLUGINS_CLOUD_LINK)}
                 </span>
                 <ExternalLink
-                  className="size-4 shrink-0 text-[var(--oh-muted)]"
+                  className="size-4 shrink-0 text-muted"
                   aria-hidden
                 />
               </a>

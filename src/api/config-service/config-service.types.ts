@@ -4,6 +4,19 @@ export interface LLMModel {
   provider: string | null;
   name: string;
   verified: boolean;
+  /**
+   * Whether the model is free to use on the OpenHands provider. Mirrors
+   * `verified`: it is populated by the backend model list (DB-driven on
+   * cloud) and defaults to `false` where no free metadata exists (e.g. the
+   * local agent-server reconstruction path, which has no model database).
+   */
+  free: boolean;
+  /**
+   * Whether this is the provider's default model. Mirrors `free`: DB-driven on
+   * cloud, `false` where no default metadata exists. Used to preselect the
+   * model on onboarding and when creating a new model for the provider.
+   */
+  default: boolean;
 }
 
 export interface LLMModelPage {

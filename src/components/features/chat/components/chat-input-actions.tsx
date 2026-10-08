@@ -12,6 +12,7 @@ import {
 import { resolvePickerKind } from "./resolve-picker-kind";
 import { ChatAddFileButton } from "../chat-add-file-button";
 import { ChatSendButton } from "../chat-send-button";
+import { ChatDictationButton } from "../chat-dictation-button";
 import { ContextWindowMeter } from "./context-window-meter";
 import CarretRightFillIcon from "#/icons/carret-right-fill.svg?react";
 import LessonPlanIcon from "#/icons/lesson-plan.svg?react";
@@ -24,6 +25,8 @@ import { useResumeConversation } from "#/hooks/mutation/use-resume-conversation"
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useAgentProfiles } from "#/hooks/query/use-agent-profiles";
 import { useChatInputModelState } from "#/hooks/use-chat-input-model-state";
+import { useChatInputLlmProfileState } from "#/hooks/use-chat-input-llm-profile-state";
+import { getLockedCloudHost } from "#/api/agent-server-config";
 import { useConversationStore } from "#/stores/conversation-store";
 import { useAgentState } from "#/hooks/use-agent-state";
 import { AgentState } from "#/types/agent-state";
@@ -48,6 +51,9 @@ interface ChatInputActionsProps {
   showButton?: boolean;
   buttonClassName?: string;
   handleSubmit?: () => void;
+  onDictationTranscript?: (text: string) => void;
+  /** Tracks the text field's editability, not submit availability. */
+  isDictationDisabled?: boolean;
 }
 
 export function ChatInputActions({
@@ -58,6 +64,8 @@ export function ChatInputActions({
   showButton = true,
   buttonClassName = "",
   handleSubmit = () => {},
+  onDictationTranscript,
+  isDictationDisabled = false,
 }: ChatInputActionsProps) {
   const { t } = useTranslation("openhands");
   const unifiedPauseMutation = useUnifiedPauseConversation();
@@ -67,6 +75,7 @@ export function ChatInputActions({
   const { backend } = useActiveBackend();
   const isCloud = backend.kind === "cloud";
   const modelState = useChatInputModelState();
+  const llmProfileState = useChatInputLlmProfileState();
   // Agent-profile switching lives in the "+" tools menu while the conversation
   // hasn't started (OSS-5735) — the pill itself is always an LLM selector. The
   // gate is computed here (not in the menu) so ToolsContextMenu only mounts the
@@ -217,10 +226,27 @@ export function ChatInputActions({
   const showAddFileInline = true;
   const showAgentStatusInline = actionsRowWidth >= 360;
 
+  // Which chat-input LLM picker to show — the constrained ACP model picker or
+  // the LLM-profile picker (unit-tested in `resolve-picker-kind.test.ts`).
+  const pickerKind = resolvePickerKind({ isAcp: modelState.isAcpContext });
+
+  // Locked-to-Cloud drops the settings link from the Model menu (OHE-3457),
+  // so the overflow entry stays only while the menu still has rows — the same
+  // conditions ChatInputModelMenuContent / ChatInputLlmProfileMenuContent use.
+  const hasModelMenuRows =
+    pickerKind === "model"
+      ? modelState.showAcpPicker || Boolean(modelState.displayModel)
+      : (llmProfileState.canSwitchProfile &&
+          llmProfileState.profiles.length > 0) ||
+        (!llmProfileState.canSwitchProfile &&
+          Boolean(llmProfileState.currentProfileName));
+  const showOverflowModel =
+    !showModelInline && (getLockedCloudHost() === null || hasModelMenuRows);
+
   const hasOverflowItems =
     !showAddFileInline ||
     (showChangeAgentButton && !showCodeInline) ||
-    !showModelInline;
+    showOverflowModel;
 
   React.useEffect(() => {
     if (!hasOverflowItems) {
@@ -229,10 +255,13 @@ export function ChatInputActions({
     }
   }, [hasOverflowItems]);
 
+  // The trigger toggles the menu itself. The app hydrates on `document`, so
+  // its stopPropagation() can't keep the click from this document listener;
+  // without the ignore ref, the opening click immediately closes the menu.
   const overflowMenuRef = useClickOutsideElement<HTMLUListElement>(() => {
     setIsOverflowOpen(false);
     setActiveSubmenu(null);
-  });
+  }, overflowTriggerRef);
 
   const isAgentSwitcherDisabled =
     curAgentState === AgentState.RUNNING ||
@@ -244,17 +273,13 @@ export function ChatInputActions({
     setIsOverflowOpen(false);
   };
 
-  // Which chat-input LLM picker to show — the constrained ACP model picker or
-  // the LLM-profile picker (unit-tested in `resolve-picker-kind.test.ts`).
-  const pickerKind = resolvePickerKind({ isAcp: modelState.isAcpContext });
-
   // Shared styling for the settings link inside the overflow submenu content.
   const overflowSettingsLinkClassName = cn(
     "group",
     formControlTransitionClassName,
   );
   const overflowSettingsIconClassName = cn(
-    "text-[var(--oh-muted)] group-hover:text-[var(--oh-foreground)]",
+    "text-muted group-hover:text-foreground",
     formControlTransitionClassName,
   );
 
@@ -293,7 +318,7 @@ export function ChatInputActions({
       testId="chat-input-overflow-menu"
       position="top"
       alignment="left"
-      className="!static !top-auto !bottom-auto !left-auto !right-auto !mt-0 overflow-visible min-w-[200px]"
+      className="!static !top-auto !bottom-auto !left-auto !right-auto !mt-0 overflow-visible min-w-50"
     >
       {showChangeAgentButton && !showCodeInline && (
         <div className="relative group/overflow-agent">
@@ -307,7 +332,7 @@ export function ChatInputActions({
             isDisabled={isAgentSwitcherDisabled}
           >
             <ToolsContextMenuIconText
-              icon={<CodePillIcon className="h-[11px] w-[11px]" />}
+              icon={<CodePillIcon className="h-2.75 w-2.75" />}
               text={
                 conversationMode === "code"
                   ? t(I18nKey.COMMON$CODE)
@@ -319,7 +344,7 @@ export function ChatInputActions({
           {!isAgentSwitcherDisabled && (
             <div
               className={cn(
-                "absolute left-full top-[-4px] z-60 opacity-0 invisible pointer-events-none transition-all duration-200 ml-[1px]",
+                "absolute left-full top-[-4px] z-60 opacity-0 invisible pointer-events-none transition-all duration-200 ml-px",
                 "group-hover/overflow-agent:opacity-100 group-hover/overflow-agent:visible group-hover/overflow-agent:pointer-events-auto",
                 "hover:opacity-100 hover:visible hover:pointer-events-auto",
                 activeSubmenu === "agent" &&
@@ -328,7 +353,7 @@ export function ChatInputActions({
             >
               <ContextMenu
                 testId="overflow-agent-submenu"
-                className="overflow-visible min-w-[195px]"
+                className="overflow-visible min-w-48.75"
               >
                 <ContextMenuListItem
                   testId="overflow-agent-code"
@@ -340,7 +365,7 @@ export function ChatInputActions({
                   }}
                 >
                   <ToolsContextMenuIconText
-                    icon={<CodePillIcon className="h-[11px] w-[11px]" />}
+                    icon={<CodePillIcon className="h-2.75 w-2.75" />}
                     text={t(I18nKey.COMMON$CODE)}
                   />
                 </ContextMenuListItem>
@@ -367,7 +392,7 @@ export function ChatInputActions({
           )}
         </div>
       )}
-      {!showModelInline && (
+      {showOverflowModel && (
         <div className="relative group/overflow-model">
           <ContextMenuListItem
             testId="overflow-model-button"
@@ -385,7 +410,7 @@ export function ChatInputActions({
           </ContextMenuListItem>
           <div
             className={cn(
-              "absolute left-full top-[-4px] z-60 opacity-0 invisible pointer-events-none transition-all duration-200 ml-[1px]",
+              "absolute left-full top-[-4px] z-60 opacity-0 invisible pointer-events-none transition-all duration-200 ml-px",
               "group-hover/overflow-model:opacity-100 group-hover/overflow-model:visible group-hover/overflow-model:pointer-events-auto",
               "hover:opacity-100 hover:visible hover:pointer-events-auto",
               activeSubmenu === "model" &&
@@ -399,7 +424,7 @@ export function ChatInputActions({
                 + Settings link. Revisit if floating children are added here. */}
             <ContextMenu
               testId="overflow-model-submenu"
-              className="min-w-[220px] max-w-[320px] max-h-[60vh] overflow-y-auto gap-0"
+              className="min-w-55 max-w-80 max-h-[60vh] overflow-y-auto gap-0"
             >
               {pickerKind === "model" ? (
                 <ChatInputModelMenuContent
@@ -499,6 +524,12 @@ export function ChatInputActions({
           />
         )}
         <ContextWindowMeter />
+        {onDictationTranscript && (
+          <ChatDictationButton
+            onTranscript={onDictationTranscript}
+            disabled={isDictationDisabled}
+          />
+        )}
         {showButton && (
           <ChatSendButton
             buttonClassName={buttonClassName}

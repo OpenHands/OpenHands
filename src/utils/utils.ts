@@ -73,6 +73,15 @@ export const isMobileUserAgent = (): boolean =>
   );
 
 /**
+ * Detect an Apple platform (macOS, iOS, iPadOS), whose keyboard shortcuts use
+ * ⌘ where other platforms use Ctrl. iPadOS Safari reports a Mac user agent,
+ * which this matches too.
+ */
+export const isApplePlatform = (): boolean =>
+  typeof navigator !== "undefined" &&
+  /Macintosh|Mac OS X|iPhone|iPad|iPod/.test(navigator.userAgent);
+
+/**
  * Detect if the user is on a mobile device.
  * Touch support alone is not sufficient — touchscreen laptops have touch
  * but use a mouse/trackpad as primary input. We check that the primary
@@ -333,6 +342,14 @@ export const constructRepositoryUrl = (
 };
 
 /**
+ * Percent-encode a branch name for use as a URL path component. Each
+ * `/`-separated segment is encoded on its own so nested branch names such as
+ * `release/1.0` keep their slashes while `#`, `%` and `&` are escaped.
+ */
+const encodeBranchPath = (branchName: string): string =>
+  branchName.split("/").map(encodeURIComponent).join("/");
+
+/**
  * Construct the branch URL for different providers
  * @param provider The git provider
  * @param repositoryName The repository name in format "owner/repo"
@@ -356,19 +373,21 @@ export const constructBranchUrl = (
 
   switch (provider) {
     case "github":
-      return `${baseUrl}/${repositoryName}/tree/${branchName}`;
+      return `${baseUrl}/${repositoryName}/tree/${encodeBranchPath(branchName)}`;
     case "forgejo":
-      return `${baseUrl}/${repositoryName}/src/branch/${branchName}`;
+      return `${baseUrl}/${repositoryName}/src/branch/${encodeBranchPath(branchName)}`;
     case "gitlab":
-      return `${baseUrl}/${repositoryName}/-/tree/${branchName}`;
+      return `${baseUrl}/${repositoryName}/-/tree/${encodeBranchPath(branchName)}`;
     case "bitbucket":
-      return `${baseUrl}/${repositoryName}/src/${branchName}`;
+      return `${baseUrl}/${repositoryName}/src/${encodeBranchPath(branchName)}`;
     case "bitbucket_data_center": {
       // Bitbucket Server format: /projects/{PROJECT}/repos/{repo}/browse?at=refs/heads/{branch}
       const parts = repositoryName.split("/");
       if (parts.length >= 2) {
         const [project, repo] = parts;
-        return `${baseUrl}/projects/${project}/repos/${repo}/browse?at=refs/heads/${branchName}`;
+        // The branch is one query value here, so encode it whole: an
+        // unencoded `&` would start a new query parameter.
+        return `${baseUrl}/projects/${project}/repos/${repo}/browse?at=refs/heads/${encodeURIComponent(branchName)}`;
       }
       return "";
     }
@@ -377,7 +396,9 @@ export const constructBranchUrl = (
       const parts = repositoryName.split("/");
       if (parts.length === 3) {
         const [org, project, repo] = parts;
-        return `${baseUrl}/${org}/${project}/_git/${repo}?version=GB${branchName}`;
+        // The branch is one query value here, so encode it whole: an
+        // unencoded `&` would start a new query parameter.
+        return `${baseUrl}/${org}/${project}/_git/${repo}?version=GB${encodeURIComponent(branchName)}`;
       }
       return "";
     }
@@ -547,7 +568,7 @@ export const getStatusClassName = (status: string) => {
   if (status === "in_progress") {
     return "bg-yellow-800 text-yellow-200";
   }
-  return "bg-tertiary text-[var(--oh-text-tertiary)]";
+  return "bg-tertiary text-text-tertiary";
 };
 
 /**

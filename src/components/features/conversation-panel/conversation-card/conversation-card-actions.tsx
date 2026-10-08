@@ -5,6 +5,7 @@ import { cn } from "#/utils/utils";
 import { I18nKey } from "#/i18n/declaration";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import { isExecutionActive, isExecutionPaused } from "#/utils/status";
+import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { ConversationCardContextMenu } from "./conversation-card-context-menu";
 import { EllipsisButton } from "../ellipsis-button";
 
@@ -16,6 +17,7 @@ interface ConversationCardActionsProps {
   onUnarchive?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onStop?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onEdit?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onEditTags?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDownloadViaVSCode?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDownloadConversation?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   executionStatus?: ExecutionStatus | null;
@@ -31,6 +33,7 @@ export function ConversationCardActions({
   onUnarchive,
   onStop,
   onEdit,
+  onEditTags,
   onDownloadViaVSCode,
   onDownloadConversation,
   executionStatus,
@@ -42,6 +45,11 @@ export function ConversationCardActions({
   const isActive = isExecutionActive(executionStatus);
   const anchorRef = useRef<HTMLButtonElement>(null);
   const [, bumpPosition] = useReducer((i: number) => i + 1, 0);
+  useCloseOnEscape(
+    contextMenuOpen,
+    () => onContextMenuToggle(false),
+    anchorRef,
+  );
 
   useLayoutEffect(() => {
     if (!contextMenuOpen) return undefined;
@@ -118,6 +126,7 @@ export function ConversationCardActions({
               onUnarchive={onUnarchive}
               onStop={isActive ? onStop : undefined}
               onEdit={onEdit}
+              onEditTags={onEditTags}
               onDownloadViaVSCode={
                 conversationId && showOptions ? onDownloadViaVSCode : undefined
               }

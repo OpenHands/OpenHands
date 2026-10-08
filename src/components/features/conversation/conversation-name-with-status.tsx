@@ -6,6 +6,7 @@ import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useUnifiedPauseConversation } from "#/hooks/mutation/use-unified-stop-conversation";
 import { useUnifiedResumeConversation } from "#/hooks/mutation/use-unified-start-conversation";
 import { useConversationId } from "#/hooks/use-conversation-id";
+import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { useUserProviders } from "#/hooks/use-user-providers";
 import { getStatusColor, cn } from "#/utils/utils";
 import { AgentState } from "#/types/agent-state";
@@ -55,6 +56,10 @@ export function ConversationNameWithStatus() {
     setMenuOpen(false);
     setHoveredOpen(false);
   };
+
+  // A menu opened by click or Enter returns focus to the dot; one opened by
+  // hover closes without moving focus.
+  useCloseOnEscape(isMenuVisible, closeMenu, menuOpen ? triggerRef : undefined);
 
   const handleStopServer = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
@@ -114,7 +119,7 @@ export function ConversationNameWithStatus() {
             onClick={handleStatusClick}
             className={cn(
               "flex items-center justify-center rounded-md",
-              "text-[var(--oh-muted)] hover:bg-white/10",
+              "text-muted hover:bg-contrast/10",
             )}
           >
             <DebugStackframeDot

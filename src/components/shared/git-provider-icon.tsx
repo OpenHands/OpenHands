@@ -23,7 +23,7 @@ export function GitProviderIcon({
         <FaBitbucket size={14} className={className} />
       )}
       {gitProvider === "azure_devops" && (
-        <AzureDevOpsLogo className={cn(className, "w-[14px] h-[14px]")} />
+        <AzureDevOpsLogo className={cn(className, "w-3.5 h-3.5")} />
       )}
     </>
   );

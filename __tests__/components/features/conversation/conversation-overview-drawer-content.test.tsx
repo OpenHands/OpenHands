@@ -1,3 +1,4 @@
+import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -13,6 +14,7 @@ import SettingsService from "#/api/settings-service/settings-service.api";
 import SkillsService from "#/api/skills-service";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import type { SkillInfo } from "#/types/settings";
+import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 
 vi.mock("#/hooks/use-conversation-overview-stats", () => ({
   useConversationOverviewStats: () => ({
@@ -121,12 +123,31 @@ function OpenSection({
   );
 }
 
+// Stands in for a menu that closes on Escape, such as the Overview ⋯ menu.
+function MenuOverDrawer() {
+  const [isOpen, setIsOpen] = React.useState(false);
+  useCloseOnEscape(isOpen, () => setIsOpen(false));
+  return (
+    <>
+      <button
+        type="button"
+        data-testid="open-menu-over-drawer"
+        onClick={() => setIsOpen(true)}
+      >
+        Menu
+      </button>
+      {isOpen ? <div data-testid="menu-over-drawer" /> : null}
+    </>
+  );
+}
+
 function renderDrawer(
   section: (typeof CONVERSATION_OVERVIEW_DRAWER_SECTION)[keyof typeof CONVERSATION_OVERVIEW_DRAWER_SECTION],
 ) {
   return render(
     <ConversationOverviewDrawerProvider>
       <OpenSection section={section} />
+      <MenuOverDrawer />
       <ConversationOverviewDrawerContent />
     </ConversationOverviewDrawerProvider>,
     {
@@ -182,6 +203,25 @@ describe("ConversationOverviewDrawerContent", () => {
       "data-testid",
       "conversation-overview-skills-add-skill-button",
     );
+  });
+
+  it("lets a menu opened over the drawer take the first Escape", async () => {
+    const user = userEvent.setup();
+    renderDrawer(CONVERSATION_OVERVIEW_DRAWER_SECTION.pull_requests);
+
+    await user.click(screen.getByTestId("open-drawer-section"));
+    await user.click(screen.getByTestId("open-menu-over-drawer"));
+
+    await user.keyboard("{Escape}");
+    expect(screen.queryByTestId("menu-over-drawer")).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("conversation-overview-drawer-content"),
+    ).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    expect(
+      screen.queryByTestId("conversation-overview-drawer-content"),
+    ).not.toBeInTheDocument();
   });
 
   it("opens the add skill modal from the header add button", async () => {
