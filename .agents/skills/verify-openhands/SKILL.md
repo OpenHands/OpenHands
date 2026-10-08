@@ -122,9 +122,12 @@ control-openhands stop                         # stops only this run; evidence s
   (stale session key). `restart` keeps the browser on its page. While a service
   is stopped, a reload replaces the page with the backend-unavailable screen, so
   drive backend-down states on the page that was already loaded. `browser
-  network`, `browser toasts` and `browser media` observe requests by origin,
-  toasts and sound without changing anything. Check `--help` before calling a
-  state unreachable: most "can't be driven" claims predate a verb.
+  network` (with `--bodies`, what the page sent, credentials redacted),
+  `browser toasts` and `browser media` observe requests by origin, toasts and
+  sound without changing anything; `click --observe SEL` and `scroll
+  --observe SEL` record the transient states SEL shows while the action's
+  effects play out (a "Saving..." label, a loading row). Check `--help` before
+  calling a state unreachable: most "can't be driven" claims predate a verb.
 - **Evidence** goes under `<run>/evidence/<feature-id>/` and the append-only
   ledger `<run>/evidence/ledger.jsonl`. Nothing is overwritten: a repeated
   screenshot name is saved as `<name>-2.png`, so cite the path the command

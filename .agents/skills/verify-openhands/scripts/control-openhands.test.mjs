@@ -36,6 +36,8 @@ import { routePattern } from "./lib/route-pattern.mjs";
 import { resolveTestids } from "./lib/testids.mjs";
 import { tmuxPathFor } from "./lib/tmux-path.mjs";
 import { browserCallLimit } from "./lib/call-limit.mjs";
+import { collectEvents, countImages } from "./lib/events-paging.mjs";
+import { redactBody } from "./lib/network-bodies.mjs";
 import { buildLocator, parseRole, toCss } from "./lib/selectors.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -1080,4 +1082,197 @@ test("map baseline reads the index line, and map affected starts from it by defa
     encoding: "utf8",
   });
   assert.match(help.stdout, /map baseline \[--set TARGET \[--force\]\]/);
+});
+
+test("request bodies are shown with credentials and env maps redacted", () => {
+  // A stored secret sent behind its placeholder must stay recognizable as
+  // the placeholder; a real value shows only its length.
+  const body = redactBody(
+    JSON.stringify({
+      name: "qa_vault",
+      command: "/bin/sh",
+      env: { QA_VAULT_TOKEN: "qa-vault-secret-000", QA_NODE: "**********" },
+      api_key: "sk-abcdef",
+      headers: { Authorization: "Bearer x" },
+      nested: { session_api_key: "k", plain: "kept" },
+      list: [{ token: "t" }],
+    }),
+  );
+  const parsed = JSON.parse(body);
+  assert.equal(parsed.name, "qa_vault");
+  assert.equal(parsed.command, "/bin/sh");
+  assert.equal(parsed.env.QA_VAULT_TOKEN, "<redacted 19 chars>");
+  assert.equal(parsed.env.QA_NODE, "**********");
+  assert.equal(parsed.api_key, "<redacted 9 chars>");
+  assert.equal(parsed.headers.Authorization, "<redacted 8 chars>");
+  assert.equal(parsed.nested.session_api_key, "<redacted 1 chars>");
+  assert.equal(parsed.nested.plain, "kept");
+  assert.equal(parsed.list[0].token, "<redacted 1 chars>");
+  // Form bodies redact by key; anything else is described, never shown.
+  assert.equal(redactBody("a=1&api_key=zzz"), "a=1&api_key=%3Credacted%3E");
+  assert.equal(redactBody("--boundary\r\nraw"), "<non-JSON body, 15 chars>");
+  // A credential endpoint redacts every string, whatever the field is called.
+  assert.deepEqual(
+    JSON.parse(
+      redactBody(JSON.stringify({ name: "X", value: "v" }), { all: true }),
+    ),
+    { name: "<redacted 1 chars>", value: "<redacted 1 chars>" },
+  );
+  assert.equal(redactBody(""), undefined);
+  assert.equal(redactBody(null), undefined);
+  assert.match(
+    redactBody(JSON.stringify({ t: "x".repeat(5000) }), { limit: 50 }),
+    /…$/,
+  );
+});
+
+test("conversation events reads pages until the rows asked for are in hand", async () => {
+  const pages = {
+    undefined: { items: [1, 2, 3], next_page_id: "p2" },
+    p2: { items: [4, 5], next_page_id: "p3" },
+    p3: { items: [6], next_page_id: null },
+  };
+  const calls = [];
+  const fetchPage = async (id) => {
+    calls.push(id);
+    return pages[id];
+  };
+  // Enough rows after one page: no second request.
+  assert.deepEqual(await collectEvents(fetchPage, 3), {
+    items: [1, 2, 3],
+    more: true,
+    pages: 1,
+  });
+  calls.length = 0;
+  // More rows than one page holds: follow next_page_id, stop at the end.
+  assert.deepEqual(await collectEvents(fetchPage, 500), {
+    items: [1, 2, 3, 4, 5, 6],
+    more: false,
+    pages: 3,
+  });
+  assert.deepEqual(calls, [undefined, "p2", "p3"]);
+  // A page without items or a missing body ends the walk cleanly.
+  assert.deepEqual(await collectEvents(async () => undefined, 10), {
+    items: [],
+    more: false,
+    pages: 1,
+  });
+});
+
+test("image attachments are counted from a message's content blocks", () => {
+  assert.equal(countImages("plain text"), 0);
+  assert.equal(countImages(undefined), 0);
+  assert.equal(
+    countImages([
+      { type: "text", text: " " },
+      { type: "image", image_urls: ["data:image/png;base64,AAAA", "data:x"] },
+      { type: "image" },
+    ]),
+    3,
+  );
+});
+
+test("help documents the observe, bodies, tab, mode and commit additions", () => {
+  const browser = spawnSync(process.execPath, [cli, "help", "browser"], {
+    encoding: "utf8",
+  }).stdout;
+  assert.match(
+    browser,
+    /scroll \[<sel>\] \[--by PX\] \[--x PX\]\n\s+\[--observe SEL/,
+  );
+  assert.match(browser, /network .*\[--bodies\]/);
+  assert.match(browser, /tab new \[\/path\]/);
+  assert.match(browser, /wait-tab <url-regex> \[--timeout MS\] \[--new\]/);
+  const conversation = spawnSync(
+    process.execPath,
+    [cli, "help", "conversation"],
+    { encoding: "utf8" },
+  ).stdout;
+  assert.match(conversation, /images: N/);
+  assert.match(conversation, /more:true/);
+  assert.match(conversation, /prints the prompt it typed/);
+  const fixture = spawnSync(process.execPath, [cli, "help", "fixture"], {
+    encoding: "utf8",
+  }).stdout;
+  assert.match(fixture, /fixture skill .*\[--commit\]/);
+  const workspace = spawnSync(process.execPath, [cli, "help", "workspace"], {
+    encoding: "utf8",
+  }).stdout;
+  assert.match(
+    workspace,
+    /workspace open PATH\|NAME \[--stay\] \[--mode local_repo\|new_worktree\]/,
+  );
+});
+
+test("fixture skill --commit records the project skill once and reports a re-run", () => {
+  // A stopped run directory is enough for fixtures: they only need run.json.
+  const dir = mkdtempSync(join(tmpdir(), "cov-run-"));
+  mkdirSync(join(dir, "private"));
+  writeFileSync(join(dir, "private", "session-key"), "x".repeat(64));
+  writeFileSync(
+    join(dir, "run.json"),
+    JSON.stringify({
+      baseUrl: "http://127.0.0.1:9",
+      ports: { ingress: 9 },
+      launcherPgid: 0,
+    }),
+  );
+  const env = { OH_VERIFY_RUN: dir };
+  assert.equal(run(["fixture", "git-repo", "--name", "qa-t"], env).status, 0);
+  const first = run(
+    [
+      "fixture",
+      "skill",
+      "--repo",
+      "qa-t",
+      "--name",
+      "qa-t-skill",
+      "--trigger",
+      "qa-t-ping",
+      "--commit",
+    ],
+    env,
+  );
+  assert.equal(first.status, 0, first.stdout);
+  assert.equal(first.json.scope, "project");
+  assert.match(first.json.committed.sha, /^[0-9a-f]{40}$/);
+  assert.equal(first.json.committed.message, "Add qa-t-skill skill");
+  const log = spawnSync(
+    "git",
+    ["-C", join(dir, "workspace", "qa-t"), "log", "--format=%s"],
+    {
+      encoding: "utf8",
+    },
+  )
+    .stdout.trim()
+    .split("\n");
+  assert.deepEqual(log, ["Add qa-t-skill skill", "Initial fixture commit"]);
+  // The same command again changes nothing and says so.
+  const again = run(
+    [
+      "fixture",
+      "skill",
+      "--repo",
+      "qa-t",
+      "--name",
+      "qa-t-skill",
+      "--trigger",
+      "qa-t-ping",
+      "--commit",
+    ],
+    env,
+  );
+  assert.equal(again.status, 0, again.stdout);
+  assert.equal(again.json.committed.sha, first.json.committed.sha);
+  assert.equal(again.json.committed.unchanged, true);
+  // Without --commit nothing is recorded; a personal skill cannot be committed.
+  const plain = run(
+    ["fixture", "skill", "--repo", "qa-t", "--name", "qa-u"],
+    env,
+  );
+  assert.equal(plain.status, 0);
+  assert.equal(plain.json.committed, undefined);
+  const personal = run(["fixture", "skill", "--name", "qa-p", "--commit"], env);
+  assert.equal(personal.status, 2);
+  assert.match(personal.json.error, /needs --repo/);
 });
