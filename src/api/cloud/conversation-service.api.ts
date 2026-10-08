@@ -11,6 +11,7 @@ import type {
   AppConversationStartTask,
 } from "../conversation-service/agent-server-conversation-service.types";
 import { AGENT_CANVAS_CLIENT_HEADERS } from "../client-source";
+import type { Provider } from "#/types/settings";
 import { callCloudProxy } from "./proxy";
 
 /**
@@ -245,7 +246,7 @@ export async function updateCloudConversationRepository(
   conversationId: string,
   repository: string | null,
   branch: string | null,
-  gitProvider: string | null,
+  gitProvider: Provider | null,
 ): Promise<AppConversation> {
   const backend = getActiveCloudBackend();
   return callCloudProxy<AppConversation>({

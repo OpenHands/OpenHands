@@ -828,7 +828,7 @@ class AgentServerConversationService {
     conversationId: string,
     repository: string | null,
     branch?: string | null,
-    gitProvider?: string | null,
+    gitProvider?: Provider | null,
   ): Promise<AppConversation> {
     // Cloud conversations keep the repository on the server, so other
     // browsers and server features see it. Best effort: an older server can
@@ -855,7 +855,7 @@ class AgentServerConversationService {
         ...(existing ?? {}),
         selected_repository: repository,
         selected_branch: branch ?? null,
-        git_provider: (gitProvider as Provider | null | undefined) ?? null,
+        git_provider: gitProvider ?? null,
       });
     } else {
       removeStoredConversationMetadata(conversationId);
