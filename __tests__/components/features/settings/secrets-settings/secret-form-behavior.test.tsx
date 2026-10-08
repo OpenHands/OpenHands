@@ -225,10 +225,9 @@ describe("Secret form behavior", () => {
     await user.type(screen.getByTestId("value-input"), "secret-value");
     await user.click(screen.getByTestId("submit-button"));
 
-    expect(screen.getByText(I18nKey.SECRETS$SECRET_ALREADY_EXISTS)).toHaveClass(
-      "text-red-500",
-      "text-sm",
-    );
+    expect(
+      screen.getByText(I18nKey.SECRETS$SECRET_ALREADY_EXISTS),
+    ).toBeVisible();
     expect(mocks.create).not.toHaveBeenCalled();
   });
 
