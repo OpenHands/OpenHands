@@ -232,10 +232,9 @@ export function createMarsTunnelBridge({
       const target = id ?? store.getActive()?.id;
       if (!target) return authState();
       await registry.detachOwnedBy(target);
-      const isActive = store.getActive()?.id === target;
       const kind = store.list().find((c) => c.id === target)?.kind;
-      if (isActive && kind === CREDENTIAL_KIND_OAUTH) {
-        const token = store.getActiveToken();
+      if (kind === CREDENTIAL_KIND_OAUTH) {
+        const token = store.getToken(target);
         if (token) await revokeToken(token);
       }
       store.remove(target);

@@ -10,7 +10,16 @@ import {
   readMarsConfig,
   readMarsDefaults,
 } from "../../scripts/mars-tunnel-bridge.mjs";
-import { createCredentialStore } from "../../scripts/mars-credentials.mjs";
+import {
+  CREDENTIAL_KIND_OAUTH,
+  createCredentialStore,
+} from "../../scripts/mars-credentials.mjs";
+import { revokeToken } from "../../scripts/mars-oauth.mjs";
+
+vi.mock("../../scripts/mars-oauth.mjs", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../scripts/mars-oauth.mjs")>()),
+  revokeToken: vi.fn(async () => {}),
+}));
 
 const VALID_PAT = `dop_v1_${"a".repeat(64)}`;
 const OTHER_PAT = `dop_v1_${"b".repeat(64)}`;
@@ -196,6 +205,23 @@ describe("createMarsTunnelBridge", () => {
     expect(tokenAfterSwitch).toBe(VALID_PAT);
     expect(registry.detachOwnedBy).toHaveBeenCalledWith(firstId);
     expect(getAccessToken()).toBeNull();
+  });
+
+  it("signOut revokes an OAuth connection's token even when it is not the active one", async () => {
+    // Arrange
+    const { credentials, ipcMain } = setup();
+    const oauth = credentials.save({
+      kind: CREDENTIAL_KIND_OAUTH,
+      token: "oauth-token",
+      label: "OAuth team",
+    });
+    await ipcMain.invoke(MARS_TUNNEL_IPC.savePat, { token: VALID_PAT });
+
+    // Act
+    await ipcMain.invoke(MARS_TUNNEL_IPC.signOut, oauth!.id);
+
+    // Assert
+    expect(revokeToken).toHaveBeenCalledWith("oauth-token");
   });
 
   it("openTunnel refuses to dial while signed out", async () => {
