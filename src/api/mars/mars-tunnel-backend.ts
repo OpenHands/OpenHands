@@ -1,6 +1,6 @@
 /**
  * Renderer-side view of the DigitalOcean MARS bridge exposed by
- * `electron/mars-preload.cjs`, plus the helpers that turn a MARS session's
+ * `electron/preload-main.cjs`, plus the helpers that turn a MARS session's
  * port-forward tunnel into an ordinary local backend.
  *
  * `window.marsBridge` only exists in the Electron desktop build: harness-api
