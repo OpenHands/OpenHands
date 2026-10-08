@@ -19,6 +19,8 @@ interface RuntimeServicesInfoShape {
   agent_host_alias: string;
   services: {
     agent_server?: { url_from_agent: string };
+    ingress?: { description: string; url_from_agent: string };
+    frontend?: { kind?: string; description: string; url_from_agent: string };
     automation?: {
       url_from_agent: string;
       api_prefix: string;
@@ -75,6 +77,29 @@ describe("runtime-services-info.mjs", () => {
       expect(() => buildRuntimeServicesInfo({ mode: "x" })).toThrow(
         /agentServerPort or agentServerUrl is required/,
       );
+    });
+
+    it("omits frontend routing from ingress description when no frontend port is configured", () => {
+      const info = buildRuntimeServicesInfo({
+        agentServerUrl: "http://127.0.0.1:18000",
+        ingressPort: 8000,
+      }) as RuntimeServicesInfoShape;
+      expect(info.services.ingress?.description).toBe(
+        "Unified entry point. Routes /api/automation/* to the automation backend, and /api/* and /sockets to the agent-server.",
+      );
+      expect(info.services.frontend).toBeUndefined();
+    });
+
+    it("includes frontend routing in ingress description when frontend port is configured", () => {
+      const info = buildRuntimeServicesInfo({
+        agentServerUrl: "http://127.0.0.1:18000",
+        ingressPort: 8000,
+        frontendPort: 3000,
+      }) as RuntimeServicesInfoShape;
+      expect(info.services.ingress?.description).toBe(
+        "Unified entry point. Routes /api/automation/* to the automation backend, /api/* and /sockets to the agent-server, and /* to the frontend.",
+      );
+      expect(info.services.frontend).toBeDefined();
     });
   });
 

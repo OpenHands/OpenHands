@@ -54,6 +54,7 @@ Override versions via environment variables:
 const isPublic = args.includes("--public");
 const isFrontendOnly = args.includes("--frontend-only");
 const isBackendOnly = args.includes("--backend-only");
+const allowLanSessionKey = args.includes("--allow-lan-session-key");
 
 if (args.includes("-h") || args.includes("--help")) {
   console.log(`
@@ -78,6 +79,8 @@ OPTIONS:
   -H, --host <host>     Bind address (default: 127.0.0.1). Use 0.0.0.0
                         or :: to listen on all interfaces; the session
                         key is then not injected into HTML.
+  --allow-lan-session-key
+                        Permit session API key injection when binding to LAN
   --public              Enable public mode (see above)
   --frontend-only       Start only the static frontend behind ingress
   --backend-only        Start only agent-server + automation behind ingress
@@ -138,6 +141,11 @@ if (isFrontendOnly && isPublic) {
   process.exit(1);
 }
 
+if (isPublic && allowLanSessionKey) {
+  console.error("Error: --allow-lan-session-key cannot be used with --public");
+  process.exit(1);
+}
+
 // Check build exists before doing anything else unless no frontend will run.
 if (!isBackendOnly && !existsSync(BUILD_DIR)) {
   console.error(`
@@ -168,7 +176,16 @@ main({
   staticDir: BUILD_DIR,
   mode: "agent-canvas",
   isPublic,
+  allowLanSessionKey,
 }).catch((err) => {
+  if (
+    err.message?.startsWith(
+      "Cannot start: the following ports are already in use",
+    )
+  ) {
+    console.error(err.message);
+    process.exit(1);
+  }
   console.error(`Fatal error: ${err.message}`);
   if (err.stack) {
     console.error(err.stack);
