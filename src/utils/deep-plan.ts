@@ -31,9 +31,14 @@ export interface DeepPlanPhase {
   /** Label this phase's sections carry, so downstream phases can cite them. */
   defines: DeepPlanLabel | null;
   /**
-   * I18n key for the phase-specific prompt. Rendered through `t()` by the
-   * panel and the planner send path, so the workflow guidance follows the
-   * active locale instead of staying English.
+   * I18n key for the phase-specific workflow guidance, rendered through `t()`
+   * by the Planner panel so it follows the active locale.
+   *
+   * This is panel copy only: no planner send path reads it yet. The planner is
+   * created once per conversation and pinned to a single `plan_path`
+   * (`.agents_tmp/PLAN.md`), so handing it per-phase guidance — and letting it
+   * write per-phase documents — needs the per-phase planner wiring described in
+   * #18104 (Route A).
    */
   instructionKey: I18nKey;
 }
