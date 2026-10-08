@@ -1452,23 +1452,28 @@ describe("AgentServerConversationService", () => {
         HttpResponse.json({ detail: "invalid" }, { status: 500 }),
       );
       captureRequests(["get"], [{ id: "conv-cloud-1" }]);
-      vi.spyOn(console, "warn").mockImplementation(() => {});
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-      // Act
-      const conversation =
-        await AgentServerConversationService.updateConversationRepository(
-          "conv-cloud-1",
-          "contoso/project/repo",
-          "main",
-          "azure_devops",
-        );
+      try {
+        // Act
+        const conversation =
+          await AgentServerConversationService.updateConversationRepository(
+            "conv-cloud-1",
+            "contoso/project/repo",
+            "main",
+            "azure_devops",
+          );
 
-      // Assert
-      expect(conversation).toMatchObject({
-        selected_repository: "contoso/project/repo",
-        selected_branch: "main",
-        git_provider: "azure_devops",
-      });
+        // Assert
+        expect(warn).toHaveBeenCalled();
+        expect(conversation).toMatchObject({
+          selected_repository: "contoso/project/repo",
+          selected_branch: "main",
+          git_provider: "azure_devops",
+        });
+      } finally {
+        warn.mockRestore();
+      }
     });
 
     it("routes readConversationFile to the cloud file endpoint with the file_path query param", async () => {
