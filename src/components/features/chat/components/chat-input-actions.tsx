@@ -37,6 +37,7 @@ import { ToolsContextMenuIconText } from "../../controls/tools-context-menu-icon
 import { ContextMenuListItem } from "../../context-menu/context-menu-list-item";
 import { ContextMenu } from "#/ui/context-menu";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
+import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { cn } from "#/utils/utils";
 import {
   chatInputIconButtonClassName,
@@ -272,6 +273,8 @@ export function ChatInputActions({
     setActiveSubmenu(null);
     setIsOverflowOpen(false);
   };
+
+  useCloseOnEscape(isOverflowOpen, closeOverflowMenus, overflowTriggerRef);
 
   // Shared styling for the settings link inside the overflow submenu content.
   const overflowSettingsLinkClassName = cn(
