@@ -141,6 +141,11 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
  * inline preview defers the load of a large artifact until the user expands it,
  * so scrolling past the card does not download the whole file. The additional
  * runtime/session guards below still apply when enabled.
+ *
+ * The returned observer also carries a `prerequisitesReady` boolean: the
+ * runtime/session/conversation guards are satisfied, so an explicit `refetch()`
+ * can succeed. It is distinct from `isEnabled`, which is additionally false
+ * whenever the caller holds the read with `{ enabled: false }`.
  */
 export function useWorkspaceFileContent(
   relativePath: string | null,
@@ -181,7 +186,19 @@ export function useWorkspaceFileContent(
     ? `${workspaceRoot}/${relativePath}`
     : null;
 
-  return useQuery<WorkspaceFileContent>({
+  // The prerequisites the read needs before it can succeed: an active
+  // conversation, a ready runtime, and (off Cloud) a minted workspace session
+  // with a base URL. Distinct from the consumer's `{ enabled }` gate, which
+  // additionally holds the read for size/visibility. Consumers use this to tell
+  // "the read is held on purpose" apart from "the read is not ready yet" and
+  // defer an explicit read until it can actually run.
+  const prerequisitesReady =
+    runtimeIsReady &&
+    !!conversationId &&
+    !!relativePath &&
+    (isCloud || !!baseUrl);
+
+  const query = useQuery<WorkspaceFileContent>({
     queryKey: [
       "workspace-file-content",
       conversationId,
@@ -306,15 +323,12 @@ export function useWorkspaceFileContent(
         mimeType,
       };
     },
-    enabled:
-      enabledOption &&
-      runtimeIsReady &&
-      !!conversationId &&
-      !!relativePath &&
-      (isCloud || !!baseUrl),
+    enabled: enabledOption && prerequisitesReady,
     retry: false,
     staleTime: 1000 * 5,
     gcTime: 1000 * 60,
     meta: { disableToast: true },
   });
+
+  return Object.assign(query, { prerequisitesReady });
 }

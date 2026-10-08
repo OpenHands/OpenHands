@@ -78,9 +78,8 @@ export function ArtifactPreview({
   // its frame) until Expand; nothing else reads until it is near the viewport.
   // Gating `enabled` here — not just the frame mount — is what stops ten 4 MiB
   // cards from downloading all ten files before any is expanded. Download is
-  // kept independent: it calls `refetch()` directly to read the bytes on
-  // demand, so an oversized collapsed card can still be saved without
-  // expanding it first.
+  // kept independent: it reads the bytes on demand (once the session is ready),
+  // so an oversized collapsed card can still be saved without expanding it.
   const shouldLoad = inView && (!exceedsInlineLimit || expanded);
   const query = useWorkspaceFileContent(fetchPath, { enabled: shouldLoad });
   // Refetch the frame after every agent-side edit so a rewrite of this file
@@ -162,20 +161,44 @@ export function ArtifactPreview({
     [fileName],
   );
 
-  const download = React.useCallback(async () => {
-    // Download works the moment the card renders, even while the read is still
-    // deferred behind the size/visibility gate: read the bytes on demand rather
-    // than requiring an Expand first. `refetch()` resolves with the fresh
-    // result, so this also serves as the retry path after a failed read — the
-    // query sets `retry: false`, so a transient failure would otherwise never
-    // be re-attempted and the button would stay dead for the life of the card.
-    let url = staticUrl;
-    if (!url) {
-      const result = await query.refetch();
-      url = result.data?.staticUrl ?? null;
-    }
+  // Read on demand and save. `refetch()` resolves with the fresh result, which
+  // makes this also the retry path after a failed read — the query sets
+  // `retry: false`, so a transient failure would otherwise never be
+  // re-attempted and the button would stay dead for the life of the card.
+  const readAndDownload = React.useCallback(async () => {
+    const result = await query.refetch();
+    const url = result.data?.staticUrl ?? null;
     if (url) void runDownload(url);
-  }, [staticUrl, query.refetch, runDownload]);
+  }, [query.refetch, runDownload]);
+
+  // A click can land before the workspace session has minted its cookie. The
+  // hook disables its query until then, and `refetch()` would bypass that gate
+  // and fail with "No workspace session", leaving nothing to resume. Instead,
+  // arm the download and let the effect below fire it once the read can run.
+  const pendingDownloadRef = React.useRef(false);
+  const queryIsReady = query.prerequisitesReady;
+
+  React.useEffect(() => {
+    if (!pendingDownloadRef.current || !queryIsReady) return;
+    pendingDownloadRef.current = false;
+    void readAndDownload();
+  }, [queryIsReady, readAndDownload]);
+
+  const download = React.useCallback(() => {
+    // Download works the moment the card renders, even while the read is still
+    // deferred behind the size/visibility gate, rather than requiring an Expand
+    // first. If the bytes are already read, save straight away; otherwise drive
+    // the read now if possible, or arm it until the session is ready.
+    if (staticUrl) {
+      void runDownload(staticUrl);
+      return;
+    }
+    if (!queryIsReady) {
+      pendingDownloadRef.current = true;
+      return;
+    }
+    void readAndDownload();
+  }, [staticUrl, queryIsReady, runDownload, readAndDownload]);
 
   return (
     <div

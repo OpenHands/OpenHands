@@ -486,6 +486,68 @@ describe("ArtifactPreview", () => {
     }
   });
 
+  it("defers a download clicked before the workspace session is ready", async () => {
+    // The card can render before `useWorkspaceSession` mints its cookie. The
+    // hook disables its query until then, so a Download click must wait for
+    // readiness and resume on its own rather than failing on "No workspace
+    // session" and silently doing nothing.
+    useWorkspaceSessionMock.mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      isError: false,
+      error: null,
+    });
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      arrayBuffer: () => Promise.resolve(textBytes("<h1>hi</h1>")),
+      blob: () => Promise.resolve(new Blob(["<h1>hi</h1>"])),
+    });
+    const createObjectURL = vi.fn().mockReturnValue("blob:mock");
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal("URL", {
+      ...URL,
+      createObjectURL,
+      revokeObjectURL,
+    });
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => {});
+
+    try {
+      const { rerender } = renderPreview(
+        <ArtifactPreview path="report.html" content="<h1>hi</h1>" />,
+      );
+
+      const downloadButton = screen.getByTestId("artifact-preview-download");
+      await userEvent.click(downloadButton);
+
+      // Session not ready: the click is armed, not attempted.
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(createObjectURL).not.toHaveBeenCalled();
+
+      // The cookie arrives: the armed download resumes without another click.
+      useWorkspaceSessionMock.mockReturnValue({
+        data: { baseUrl: BASE_URL },
+        isLoading: false,
+        isError: false,
+        error: null,
+      });
+      rerender(
+        <ArtifactPreview path="report.html" content="<h1>hi</h1>" />,
+      );
+
+      await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(1));
+      expect(fetchMock).toHaveBeenCalled();
+      expect(revokeObjectURL).toHaveBeenCalledWith("blob:mock");
+      expect(click).toHaveBeenCalled();
+    } finally {
+      click.mockRestore();
+      vi.unstubAllGlobals();
+      vi.stubGlobal("fetch", fetchMock);
+    }
+  });
+
   it("calls onView when provided", async () => {
     fetchMock.mockResolvedValue({
       ok: true,
