@@ -1413,6 +1413,57 @@ describe("AgentServerConversationService", () => {
       });
     });
 
+    // Connect Repo on an existing cloud conversation must reach the server, so
+    // other clients and server features see the repository.
+    it("saves a connected repository on the cloud conversation", async () => {
+      // Arrange
+      const requests = captureRequests(
+        ["patch", "get"],
+        [{ id: "conv-cloud-1", selected_repository: "OpenHands/agent-canvas" }],
+      );
+
+      // Act
+      await AgentServerConversationService.updateConversationRepository(
+        "conv-cloud-1",
+        "OpenHands/agent-canvas",
+        "main",
+        "github",
+      );
+
+      // Assert
+      const patch = requests.find((request) => request.method === "PATCH");
+      expect(patch?.url).toBe(
+        `${cloudBackend.host}/api/v1/app-conversations/conv-cloud-1`,
+      );
+      expect(patch?.headers.authorization).toBe("Bearer bearer-token");
+      expect(patch?.body).toEqual({
+        selected_repository: "OpenHands/agent-canvas",
+        selected_branch: "main",
+        git_provider: "github",
+      });
+    });
+
+    it("fails the repository update when the cloud server rejects it", async () => {
+      // Arrange
+      captureRequests(
+        ["patch"],
+        HttpResponse.json({ detail: "invalid" }, { status: 400 }),
+      );
+
+      // Act
+      const update =
+        AgentServerConversationService.updateConversationRepository(
+          "conv-cloud-1",
+          "OpenHands/agent-canvas",
+          "main",
+          "github",
+        );
+
+      // Assert
+      await expect(update).rejects.toThrow();
+      expect(getStoredConversationMetadata("conv-cloud-1")).toBeNull();
+    });
+
     it("routes readConversationFile to the cloud file endpoint with the file_path query param", async () => {
       // Arrange
       const requests = captureRequests(["get"], "# PLAN content");

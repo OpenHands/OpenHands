@@ -34,6 +34,7 @@ import {
   readCloudConversationFile,
   searchCloudConversations,
   updateCloudConversationPublicFlag,
+  updateCloudConversationRepository,
   updateCloudConversationTitle,
 } from "../cloud/conversation-service.api";
 import {
@@ -829,6 +830,16 @@ class AgentServerConversationService {
     branch?: string | null,
     gitProvider?: string | null,
   ): Promise<AppConversation> {
+    // Cloud conversations keep the repository on the server. Save it there
+    // first, so a failed save does not leave only a local copy.
+    if (getActiveBackend().backend.kind === "cloud") {
+      await updateCloudConversationRepository(
+        conversationId,
+        repository,
+        branch ?? null,
+        gitProvider ?? null,
+      );
+    }
     if (repository) {
       const existing = getStoredConversationMetadata(conversationId);
       setStoredConversationMetadata(conversationId, {

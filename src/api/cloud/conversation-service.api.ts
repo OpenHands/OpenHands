@@ -14,14 +14,11 @@ import { AGENT_CANVAS_CLIENT_HEADERS } from "../client-source";
 import { callCloudProxy } from "./proxy";
 
 /**
- * The cloud backend does not always echo `selected_repository` /
- * `selected_branch` / `git_provider` back from
- * `GET /api/v1/app-conversations` until its own background hydration
- * completes. We persist the selection to local storage at connect time
- * (see `AgentServerConversationService.updateConversationRepository`)
- * and overlay it here so the chat-page git control bar reflects the
- * connection immediately, instead of snapping back to the empty
- * "Connect Repo" state on every refetch.
+ * Connect Repo saves the selection on the server
+ * (`updateCloudConversationRepository`) and also caches it in local storage
+ * (see `AgentServerConversationService.updateConversationRepository`). The
+ * cache is overlaid here so the chat-page git control bar keeps showing the
+ * connection if a refetch returns before the server value.
  *
  * Server values take precedence whenever they're populated; the
  * local-storage fallback only fills in fields the server returned as
@@ -235,6 +232,30 @@ export async function updateCloudConversationTitle(
     method: "PATCH",
     path: `/api/v1/app-conversations/${conversationId}`,
     body: { title },
+  });
+}
+
+/**
+ * Attach, change, or clear the repository of a cloud v1 app-conversation.
+ * `PATCH /api/v1/app-conversations/{id}`. The server stores the fields but
+ * does not clone; the caller asks the agent to clone the repository.
+ */
+export async function updateCloudConversationRepository(
+  conversationId: string,
+  repository: string | null,
+  branch: string | null,
+  gitProvider: string | null,
+): Promise<AppConversation> {
+  const backend = getActiveCloudBackend();
+  return callCloudProxy<AppConversation>({
+    backend,
+    method: "PATCH",
+    path: `/api/v1/app-conversations/${conversationId}`,
+    body: {
+      selected_repository: repository,
+      selected_branch: branch,
+      git_provider: gitProvider,
+    },
   });
 }
 
