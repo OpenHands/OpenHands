@@ -86,7 +86,17 @@ export function ConversationOverviewMcpPanel({
   );
 
   const handleToggleEnabled = (server: MCPServerConfig, enabled: boolean) => {
-    updateMcpServer({ serverId: server.id, server: { ...server, enabled } });
+    updateMcpServer(
+      { serverId: server.id, server: { ...server, enabled } },
+      {
+        onError: (error) => {
+          displayErrorToast(
+            retrieveAxiosErrorMessage(error as AxiosError) ||
+              t(I18nKey.ERROR$GENERIC),
+          );
+        },
+      },
+    );
   };
 
   const handleConfirmDelete = () => {
