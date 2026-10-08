@@ -234,14 +234,27 @@ archivedIdSet.has(conversation.id)</code></pre>
     </section>
 
     <section id="sec5">
-      <h2><span class="num">5</span>Evidence — before vs after, same mock fixtures</h2>
-      <p>Both builds run the real Canvas in mock mode (<code>npm run dev:mock</code>) against the same fixtures that
-      already live on <code>main</code>: id 4 <code>MISSING</code> ("Archived Project") and id 5 <code>ERROR</code>
-      ("Errored Project") in <a class="src" href="https://github.com/OpenHands/OpenHands/blob/3f98684763a4e17e6e2faf8dd8f1cfc3969b020c/src/mocks/conversation-handlers.ts#L77">conversation-handlers.ts:77</a>.
-      "Before" is <code>main</code> @ <code>3f98684</code> served on :3002; "after" is this PR's head on :3001.
-      Driven with the verify-openhands Playwright browser.</p>
+      <h2><span class="num">5</span>Evidence — before vs after, real backend and mock fixtures</h2>
+      <p>Two independent setups, both driving the real Canvas build:</p>
+      <p><b>Real backend (primary).</b> A real agent server ran the shipped Canvas build against a conversation
+      created locally, then restarted in <code>conversation_runtime: "docker"</code> mode. The server then reports
+      <code>runtime_info.runtime_status: "missing"</code> with <code>can_resume: false</code> for that conversation —
+      a genuine non-resumable runtime, not a fixture. The adapter maps it to <code>sandbox_status: "MISSING"</code>.
+      "Before" is <code>main</code> @ <code>3f98684</code>; "after" is this PR's head; both served from the same
+      origin so only the build differs. Captures are the <code>real-before-*</code> / <code>real-after-*</code> files.</p>
+      <p><b>Mock fixtures (secondary).</b> Both builds also run in mock mode (<code>npm run dev:mock</code>) against
+      the fixtures already on <code>main</code>: id 4 <code>MISSING</code> ("Archived Project") and id 5
+      <code>ERROR</code> ("Errored Project") in <a class="src" href="https://github.com/OpenHands/OpenHands/blob/3f98684763a4e17e6e2faf8dd8f1cfc3969b020c/src/mocks/conversation-handlers.ts#L77">conversation-handlers.ts:77</a>,
+      which additionally exercise the <code>ERROR</code> row. Captures are the <code>before-*</code> /
+      <code>after-*</code> files. Driven with the verify-openhands Playwright browser.</p>
       <table>
-        <tr><th>Observation (same fixture)</th><th>Before — main</th><th>After — this PR</th></tr>
+        <tr><th>Observation</th><th>Before — main</th><th>After — this PR</th></tr>
+        <tr><td>Real backend, default list (Show archived off)</td>
+            <td>the genuine MISSING row is <b>shown</b> (bug) with no chip</td>
+            <td>the MISSING row is <b>hidden</b></td></tr>
+        <tr><td>Real backend, ⋮ menu on that row</td>
+            <td><code>[…,"<b>Archive Conversation</b>","Delete Conversation"]</code></td>
+            <td><code>[…,"<b>Unarchive Conversation</b>","Delete Conversation"]</code> — one direction only</td></tr>
         <tr><td>Default list (Show archived off)</td>
             <td>MISSING row <b>shown</b> with a gray archive dot + dimmed title, no chip</td>
             <td>MISSING row <b>hidden</b> (archived); ERROR row shown with red "Error"</td></tr>
@@ -252,19 +265,26 @@ archivedIdSet.has(conversation.id)</code></pre>
             <td>red "Error" dot, but dimmed title (wrongly archived)</td>
             <td>red "Error" dot, title not dimmed, never chipped/archived</td></tr>
       </table>
-      <p style="font-size:13.5px;color:var(--muted)">Six captures (3 before · 3 after: default list, "Show archived",
-      archived-row ⋮ menu) are attached to the PR under <b>Video/Screenshots</b>. Unit/integration tests cover the
-      predicate's MISSING/ERROR/local-non-resumable cases, the dot's MISSING→archive render, and the panel's
-      default-hide / show-archived behavior.</p>
+      <p style="font-size:13.5px;color:var(--muted)">Twelve captures (real-backend and mock, 3 before · 3 after
+      each: default list, "Show archived", archived-row ⋮ menu) are attached to the PR under
+      <b>Video/Screenshots</b>. Unit/integration tests cover the predicate's MISSING/ERROR/local-non-resumable cases,
+      the dot's MISSING→archive render, and the panel's default-hide / show-archived behavior.</p>
       <div class="callout note"><b>ⓘ Where MISSING actually comes from.</b> The local (non-Docker) agent server
       reports every catalog conversation as <code>runtime_status: "available"</code>, so it never yields a
       <code>MISSING</code> row; the adapter maps <code>MISSING</code> from a Cloud
       <code>sandbox_status</code> or a Docker-runtime <code>runtime_info.runtime_status: "missing"</code> with
       <code>can_resume: false</code> (the <code>conversation_runtime: "docker"</code> mode). That mapping is pinned
       by <a class="src" href="https://github.com/OpenHands/OpenHands/blob/3f98684763a4e17e6e2faf8dd8f1cfc3969b020c/__tests__/api/agent-server-adapter.test.ts#L1008">agent-server-adapter.test.ts</a>
-      (missing+non-resumable → <code>MISSING</code>; missing+resumable → <code>null</code>), and the fixtures here
-      use that contract. The presentation side is therefore exercised end-to-end against the real Canvas with the
-      backend-shaped payload.</div>
+      (missing+non-resumable → <code>MISSING</code>; missing+resumable → <code>null</code>). The real-backend
+      captures above reproduce exactly that: a conversation created in local mode, then read back after the server
+      restarted in Docker mode, yields <code>runtime_status: "missing"</code> + <code>can_resume: false</code>.</div>
+      <div class="callout note"><b>ⓘ Why the ⋮ menu still offers "Unarchive" on a runtime-derived row.</b>
+      The issue's acceptance criteria commit to treating a missing runtime as archived "everywhere" and require
+      "exactly one direction — Unarchive, never Archive" for any archived row. On a purely runtime-derived archive,
+      "Unarchive" clears the user's explicit archive intent (if any) and never attempts to resume the runtime; the
+      row stays archived while the runtime is missing and non-resumable, which the criteria state explicitly. The
+      alternative — hiding the action entirely — would leave an archived row with no archive-related direction and
+      would violate that criterion.</div>
     </section>
 
     <p style="margin-top:40px;font-size:12.5px;color:var(--subtle)">Temporary review artifact under <code>.pr/</code>; removed after merge.</p>
