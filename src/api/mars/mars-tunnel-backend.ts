@@ -3,11 +3,8 @@
  * `electron/preload-main.cjs`, plus the helpers that turn a connected MARS
  * session into an ordinary local backend.
  *
- * A session is reached over a port-forward tunnel on loopback by default, or
- * over its public ingress URL when the tunnel cannot be opened (the main
- * process then stamps the DigitalOcean token onto this renderer's requests to
- * that host, WebSocket handshake included). Either way the far end is a plain
- * agent-server, so the backend is `kind: "local"`.
+ * A session is reached over a port-forward tunnel on loopback. The far end
+ * is a plain agent-server, so the backend is `kind: "local"`.
  *
  * `window.marsBridge` comes from Electron's preload in the desktop build, or
  * from the Agent Canvas server in the web build (src/api/mars/mars-web-bridge.ts,
@@ -115,11 +112,8 @@ export interface MarsUpstreamFailure {
   message: string;
 }
 
-/**
- * How a connected session is reached: directly at its public ingress URL, or
- * through a loopback port-forward tunnel for sessions that cannot have one.
- */
-export type MarsTransport = "ingress" | "tunnel";
+/** How a connected session is reached. Only the loopback tunnel today. */
+export type MarsTransport = "tunnel";
 
 export interface MarsTunnelStatus {
   sessionId: string;
@@ -127,8 +121,6 @@ export interface MarsTunnelStatus {
   transport?: MarsTransport;
   /** Base URL the renderer registers as the backend host. */
   host?: string;
-  /** harness-api's id for the ingress URL; absent over the tunnel. */
-  ingressUrlId?: string;
   remotePort: number;
   /** Loopback listener port; only set over the tunnel. */
   localPort: number | undefined;
@@ -202,10 +194,9 @@ function requireMarsBridge(): MarsBridge {
 }
 
 /**
- * Connects to one MARS session — public ingress first, tunnel otherwise —
- * waking it if paused. The ingress hostname is revoked on pause and lock and
- * changes after rollback, so this always re-resolves rather than reusing a
- * host the renderer remembered.
+ * Connects to one MARS session over a port-forward tunnel, waking it if
+ * paused. The listener port can change between connects, so callers read
+ * the host from the returned status rather than reusing a remembered one.
  */
 export function openMarsTunnel(
   params: OpenMarsTunnelParams,
@@ -287,9 +278,8 @@ export function buildNewSessionName(configName: string | null | undefined) {
 
 /**
  * The in-guest agent-server's session key is set by the sandbox template, not
- * by us. The DigitalOcean token is the authorization boundary instead: the
- * ingress gateway requires it on every request (the main process injects it),
- * and dialing the tunnel requires it too.
+ * by us. The DigitalOcean token is the authorization boundary instead:
+ * dialing the tunnel requires it.
  */
 export const MARS_GUEST_API_KEY = "";
 
@@ -426,9 +416,9 @@ export function buildMarsBackendHost(localPort: number): string {
 }
 
 /**
- * The base URL a connection status says to register. Over ingress it is the
- * public URL; over the tunnel the loopback listener. A status from a bridge
- * that predates `host` is still honoured through its `localPort`.
+ * The base URL a connection status says to register: the tunnel's loopback
+ * listener. A status from a bridge that predates `host` is still honoured
+ * through its `localPort`.
  */
 export function getMarsConnectionHost(
   status: MarsTunnelStatus,
@@ -441,9 +431,8 @@ export function getMarsConnectionHost(
 
 /**
  * Local port a persisted MARS backend's tunnel was listening on, so a
- * restore can ask for it again. Undefined for an ingress-connected backend
- * (its host carries no explicit port), which is right: the public URL is
- * re-resolved rather than reused.
+ * restore can ask for it again. Undefined for a host that is not a loopback
+ * listener.
  */
 export function getMarsBackendLocalPort(backend: Backend): number | undefined {
   try {
@@ -459,8 +448,7 @@ export function getMarsBackendLocalPort(backend: Backend): number | undefined {
 /**
  * Build the Backend record for a session that now answers at `host`. The far
  * end really is an ordinary agent-server, so this is a `kind: "local"`
- * backend like any other, whether `host` is a public ingress URL or a
- * loopback tunnel.
+ * backend like any other.
  */
 export function buildMarsBackendInput({
   name,

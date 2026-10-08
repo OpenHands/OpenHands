@@ -47,7 +47,6 @@ import {
   nativeImage,
   nativeTheme,
   safeStorage,
-  session,
   shell,
 } from "electron";
 import { chmodSync, existsSync } from "node:fs";
@@ -315,7 +314,7 @@ async function waitForAgentServer(
 
 let loadingWin = null;
 let mainWin = null;
-/** MARS session bridge (ingress + port-forward tunnels, MARSOHS-1429) — created in app.whenReady(). */
+/** MARS session bridge (port-forward tunnels, MARSOHS-1429) — created in app.whenReady(). */
 let marsTunnelBridge = null;
 
 // Collapsed splash size — loading.html's .container height must match. The
@@ -732,11 +731,6 @@ app.whenReady().then(async () => {
     openExternal: (url) => shell.openExternal(url),
   });
   marsTunnelBridge.registerIpc(ipcMain);
-  // A session's public ingress URL is PAT-authenticated on every request,
-  // WebSocket handshake included, and the renderer must never hold that
-  // token — so the main process stamps it onto the renderer's requests to
-  // connected ingress hosts here.
-  marsTunnelBridge.registerRequestAuth(session.defaultSession);
 
   if (!uvxAvailable()) {
     dialog.showErrorBox(
@@ -825,8 +819,8 @@ app.on("before-quit", (event) => {
   cleanupStarted = true;
   event.preventDefault();
 
-  // MARS connections are in-process state (ingress hosts to forget, tunnel
-  // listeners to close; no OS subprocess to signal and wait on), so this
+  // MARS connections are in-process state (tunnel listeners to close; no OS
+  // subprocess to signal and wait on), so this
   // doesn't need the SIGTERM-based cleanup path below — just tear them down
   // directly. Best-effort: quitting must not hang on it.
   void marsTunnelBridge?.dispose().catch((err) => {

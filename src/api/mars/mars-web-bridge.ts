@@ -9,9 +9,9 @@
  * only ever talks to the `MarsBridge` interface.
  *
  * Connections resolve to a path-prefixed backend on this origin
- * (`/mars/sessions/<id>`), which the server proxies to the session's public
- * ingress URL with the DigitalOcean token added server-side. The token never
- * reaches the page.
+ * (`/mars/sessions/<id>`), which the server proxies to the port-forward
+ * tunnel it holds for the session. The DigitalOcean token is used only on the
+ * server to dial that tunnel and never reaches the page.
  *
  * The server wants its session key on these routes. Each RPC carries it as
  * `X-Session-API-Key` (the key this page already holds for the agent-server);

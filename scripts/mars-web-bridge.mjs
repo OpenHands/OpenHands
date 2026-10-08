@@ -3,25 +3,23 @@
  * main process.
  *
  * In the desktop app the renderer reaches a DigitalOcean session through
- * `window.marsBridge` (electron/mars-preload.cjs → scripts/mars-tunnel-bridge.mjs),
- * and Electron stamps the DO token onto the renderer's own requests to the
- * session's public ingress URL. A browser can do neither: harness-api sends
- * no CORS headers, a browser WebSocket cannot carry an Authorization header,
- * and the token must never reach the page. So the server that already fronts
- * the web build (scripts/ingress.mjs, scripts/static-server.mjs) hosts the
- * same bridge and exposes it same-origin:
+ * `window.marsBridge` (electron/preload-main.cjs → scripts/mars-tunnel-bridge.mjs),
+ * which holds a port-forward tunnel to the session in the Electron main
+ * process. A browser can do neither: harness-api sends no CORS headers, the
+ * tunnel needs a Node process, and the token must never reach the page. So
+ * the server that already fronts the web build (scripts/ingress.mjs,
+ * scripts/static-server.mjs) hosts the same bridge — holding the tunnel
+ * itself — and exposes it same-origin:
  *
  *   POST /mars/rpc/<method>        — the MarsBridge surface over JSON; the
  *                                    renderer's fetch-backed bridge
  *                                    (src/api/mars/mars-web-bridge.ts) calls
  *                                    this exactly as the preload calls IPC.
  *   ANY  /mars/sessions/<id>/...   — reverse proxy (HTTP + WebSocket) to that
- *                                    session's connected host (its ingress
- *                                    URL, or the tunnel's loopback listener),
- *                                    with `Authorization: Bearer` added
- *                                    server-side and the upstream WebSocket
- *                                    pinged every 30 s: the ingress route has
- *                                    a 20 min idle timeout and drops silently.
+ *                                    session's tunnel listener on loopback,
+ *                                    with the upstream WebSocket pinged
+ *                                    every 30 s so an idle stream is not
+ *                                    reaped along the way.
  *   GET  /mars/health              — lets the renderer detect this server.
  *
  * `openTunnel` therefore answers with `host` = `<origin>/mars/sessions/<id>`,
@@ -63,7 +61,7 @@ const HEALTH_PATH = `${MARS_WEB_PREFIX}/health`;
 const RPC_PREFIX = `${MARS_WEB_PREFIX}/rpc/`;
 const SESSIONS_PREFIX = `${MARS_WEB_PREFIX}/sessions/`;
 
-/** Ingress routes idle out at 20 min; keep the upstream socket warm. */
+/** Keep an idle upstream socket warm so intermediaries do not reap it. */
 export const UPSTREAM_PING_INTERVAL_MS = 30_000;
 const RPC_BODY_LIMIT_BYTES = 64 * 1024;
 /** Past this a JSON body streams through untouched rather than being rewritten. */
@@ -268,8 +266,7 @@ const CONVERSATION_URL_RE =
  * Point the agent-server URL fields of a response at the proxy prefix. The
  * agent-server builds `conversation_url` from its own view of the request,
  * whatever host that is, and the renderer opens the event WebSocket at that
- * host — so without this the page would try to reach the ingress hostname
- * (or the guest) directly. Only the fields in URL_FIELDS are touched, so a
+ * host — so without this the page would try to reach the guest directly. Only the fields in URL_FIELDS are touched, so a
  * URL that merely appears inside a message or event is left alone. Matches
  * any origin + prefix in front of `/api/conversations`, so it does not
  * depend on what the upstream thinks its hostname is.
@@ -316,7 +313,7 @@ function parseSessionPath(url) {
   return { sessionId, path: tail.startsWith("/") ? tail : `/${tail}` };
 }
 
-function forwardHeaders(req, upstream, authorization) {
+function forwardHeaders(req, upstream) {
   const headers = {};
   for (const [name, value] of Object.entries(req.headers)) {
     if (!HOP_BY_HOP_HEADERS.has(name) && value !== undefined) {
@@ -327,7 +324,6 @@ function forwardHeaders(req, upstream, authorization) {
   // Responses are read as UTF-8 for the URL rewrite; a compressed body
   // would have to be inflated first.
   headers["accept-encoding"] = "identity";
-  if (authorization) headers.authorization = authorization;
   return headers;
 }
 
@@ -357,7 +353,7 @@ export function createMarsWebBridge({
       env,
     });
 
-  /** Connected sessions: id → the real upstream base (ingress URL or tunnel). */
+  /** Connected sessions: id → the real upstream base (the tunnel listener). */
   const upstreams = new Map();
   /** Live WebSocket pairs, so dispose() can close them. */
   const sockets = new Set();
@@ -473,11 +469,7 @@ export function createMarsWebBridge({
   function resolveUpstream(sessionId) {
     const base = upstreams.get(sessionId);
     if (!base) return null;
-    const upstream = new URL(base);
-    return {
-      upstream,
-      authorization: bridge.ingressAuthorizationHeader(base),
-    };
+    return { upstream: new URL(base) };
   }
 
   function proxyHttp(req, res, { sessionId, path }) {
@@ -488,7 +480,7 @@ export function createMarsWebBridge({
       });
       return;
     }
-    const { upstream, authorization } = target;
+    const { upstream } = target;
     const proxyBase = sessionProxyBase(req, sessionId);
     const isTls = upstream.protocol === "https:";
     const upstreamReq = (isTls ? httpsRequest : httpRequest)(
@@ -498,7 +490,7 @@ export function createMarsWebBridge({
         port: upstream.port || (isTls ? 443 : 80),
         method: req.method,
         path: `${upstream.pathname.replace(/\/$/, "")}${path}`,
-        headers: forwardHeaders(req, upstream, authorization),
+        headers: forwardHeaders(req, upstream),
       },
       (upstreamRes) => {
         const headers = { ...upstreamRes.headers };
@@ -571,7 +563,7 @@ export function createMarsWebBridge({
       socket.end("HTTP/1.1 409 Conflict\r\n\r\n");
       return;
     }
-    const { upstream, authorization } = target;
+    const { upstream } = target;
     const wsUrl = new URL(
       `${upstream.pathname.replace(/\/$/, "")}${path}`,
       upstream,
@@ -581,10 +573,7 @@ export function createMarsWebBridge({
       ?.split(",")
       .map((p) => p.trim())
       .filter(Boolean);
-    const headers = {};
-    if (authorization) headers.authorization = authorization;
     const upstreamSocket = new WebSocket(wsUrl, protocols, {
-      headers,
       perMessageDeflate: false,
     });
 

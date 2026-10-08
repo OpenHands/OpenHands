@@ -1,29 +1,27 @@
 /**
  * Main-process service behind the DigitalOcean Managed Agents screen.
  *
- * Wires the MARS REST client, public ingress (scripts/mars-ingress.mjs), the
- * port-forward tunnel registry (scripts/tunnel-registry.mjs, MARSOHS-1428/
- * 1429) and the DigitalOcean credential store into Electron's IPC layer.
- * Channel names mirror the teammate fork's `window.marsBridge` surface so the
- * two integrations stay easy to reconcile.
+ * Wires the MARS REST client, the port-forward tunnel registry
+ * (scripts/tunnel-registry.mjs, MARSOHS-1428/1429) and the DigitalOcean
+ * credential store into Electron's IPC layer. Channel names mirror the
+ * teammate fork's `window.marsBridge` surface so the two integrations stay
+ * easy to reconcile.
  *
- * Connecting to a session prefers its public ingress URL: the renderer then
- * talks to the Agent Server directly (REST and WebSocket) with no local
- * listener in between. Sessions that cannot have one (harness-api 501) fall
- * back to the tunnel, so older sandboxes keep working.
+ * Connecting to a session opens a port-forward tunnel: a loopback listener
+ * this process holds, relayed over harness-api's port-forward WebSocket to
+ * the agent server inside the sandbox. The renderer registers the listener
+ * as an ordinary local backend.
  *
  * Tokens never cross the context bridge: the renderer asks to connect by
- * session id alone, this process sources the bearer token from the stored
- * connection, and for ingress it injects that token on the renderer's own
- * requests to the public host (`registerRequestAuth`). harness-api sends no
- * CORS headers, so every MARS control-plane call has to happen here anyway.
+ * session id alone, and this process sources the bearer token from the
+ * stored connection for every dial. harness-api sends no CORS headers, so
+ * every MARS control-plane call has to happen here anyway.
  */
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createTunnelRegistry } from "./tunnel-registry.mjs";
 import { ensureSessionAwake } from "./mars-session.mjs";
-import { resolveIngressURL } from "./mars-ingress.mjs";
 import {
   AGENT_SERVER_GUEST_PORT,
   DEFAULT_MARS_API_BASE_URL,
@@ -66,13 +64,6 @@ export const MARS_TUNNEL_IPC = {
  * create path gets a longer budget than ensureSessionAwake's wake default.
  */
 const CREATE_SESSION_READY_TIMEOUT_MS = 300_000;
-
-/**
- * Only the renderer's requests to a connected session's public host get the
- * bearer injected. Scoped to TLS schemes: an ingress URL is always https, and
- * its WebSocket upgrade wss.
- */
-const INGRESS_REQUEST_FILTER = { urls: ["https://*/*", "wss://*/*"] };
 
 export function buildTunnelHost(localPort) {
   return `http://127.0.0.1:${localPort}`;
@@ -123,7 +114,6 @@ export function readMarsConfig(
  * @param {import("electron").SafeStorage | null} [options.safeStorage]
  * @param {(url: string) => Promise<void>} [options.openExternal] Opens the OAuth page
  * @param {typeof ensureSessionAwake} [options.ensureAwake] Override for tests
- * @param {typeof resolveIngressURL} [options.resolveIngress] Override for tests
  * @param {Record<string, string | undefined>} [options.env]
  */
 export function createMarsTunnelBridge({
@@ -134,7 +124,6 @@ export function createMarsTunnelBridge({
   safeStorage = null,
   openExternal = async () => {},
   ensureAwake = ensureSessionAwake,
-  resolveIngress = resolveIngressURL,
   env = process.env,
 } = {}) {
   const config = readMarsConfig(env);
@@ -159,91 +148,30 @@ export function createMarsTunnelBridge({
   const agentByConfigId = new Map();
 
   /**
-   * Sessions connected over public ingress, by session id. `host` is the
-   * URL's authority (`hostname[:port]`), matched against the renderer's
-   * outgoing requests to decide which get the bearer. `connectionId` names
-   * the credential the session was connected with, read live on every
-   * request so sign-out cuts it off exactly as it does for a tunnel.
-   *
-   * @type {Map<string, { host: string, connectionId: string, status: object }>}
-   */
-  const ingressSessions = new Map();
-
-  function dropIngressOwnedBy(connectionId) {
-    for (const [sessionId, entry] of ingressSessions) {
-      if (entry.connectionId === connectionId)
-        ingressSessions.delete(sessionId);
-    }
-  }
-
-  /**
-   * Connect over the port-forward tunnel first, and over the session's
-   * public ingress URL only when the tunnel cannot be opened. Both resolve
-   * to the same status shape; `host` is what the renderer registers as the
-   * backend's base URL.
-   *
-   * The tunnel is the default on purpose: it is the path that works end to
-   * end today, WebSocket included, on desktop (this process holds it) and
-   * on the web build (the Canvas server holds it and proxies the browser).
-   * The public URL is the intended path once its WebSocket hop is proven;
-   * flipping this order is the whole change needed to promote it.
+   * Connect over the port-forward tunnel. `host` is what the renderer
+   * registers as the backend's base URL: the loopback listener this process
+   * holds for the session.
    */
   async function connectSession({ sessionId, localPort, connectionId }) {
     const getAccessToken = () => store.getToken(connectionId);
-    let tunnelError;
-    try {
-      // The guest port is fixed here rather than accepted over IPC so the
-      // renderer cannot dial arbitrary ports inside the sandbox.
-      const tunnel = await registry.attach({
-        sessionId,
-        remotePort: AGENT_SERVER_GUEST_PORT,
-        getAccessToken,
-        apiUrl: config.apiBaseUrl,
-        localPort,
-        owner: connectionId,
-      });
-      return {
-        ...tunnel,
-        transport: "tunnel",
-        host:
-          tunnel.localPort === undefined
-            ? undefined
-            : buildTunnelHost(tunnel.localPort),
-      };
-    } catch (error) {
-      tunnelError = error;
-    }
-    try {
-      const ingress = await resolveIngress({
-        api: clientFor(getAccessToken),
-        sessionId,
-        ensureAwake,
-      });
-      const status = {
-        sessionId,
-        status: "connected",
-        transport: "ingress",
-        host: ingress.url,
-        ingressUrlId: ingress.ingressUrlId,
-        remotePort: ingress.port,
-        localPort: undefined,
-        error: undefined,
-        upstreamFailure: null,
-      };
-      ingressSessions.set(sessionId, {
-        host: new URL(ingress.url).host,
-        connectionId,
-        status,
-      });
-      return status;
-    } catch (error) {
-      // The tunnel is the primary path, so its failure is the one the user
-      // should see; the ingress attempt rides along as the cause.
-      if (tunnelError instanceof Error && !tunnelError.cause) {
-        tunnelError.cause = error;
-      }
-      throw tunnelError;
-    }
+    // The guest port is fixed here rather than accepted over IPC so the
+    // renderer cannot dial arbitrary ports inside the sandbox.
+    const tunnel = await registry.attach({
+      sessionId,
+      remotePort: AGENT_SERVER_GUEST_PORT,
+      getAccessToken,
+      apiUrl: config.apiBaseUrl,
+      localPort,
+      owner: connectionId,
+    });
+    return {
+      ...tunnel,
+      transport: "tunnel",
+      host:
+        tunnel.localPort === undefined
+          ? undefined
+          : buildTunnelHost(tunnel.localPort),
+    };
   }
 
   /**
@@ -342,7 +270,6 @@ export function createMarsTunnelBridge({
     async signOut(id) {
       const target = id ?? store.getActive()?.id;
       if (!target) return authState();
-      dropIngressOwnedBy(target);
       await registry.detachOwnedBy(target);
       const kind = store.list().find((c) => c.id === target)?.kind;
       if (kind === CREDENTIAL_KIND_OAUTH) {
@@ -374,7 +301,6 @@ export function createMarsTunnelBridge({
      */
     async destroySession(sessionId) {
       await client.destroySession(sessionId);
-      ingressSessions.delete(sessionId);
       await registry.detach(sessionId);
     },
     deleteAgentConfig: (configId) => client.deleteAgentConfig(configId),
@@ -425,13 +351,9 @@ export function createMarsTunnelBridge({
     },
 
     /**
-     * Connect to a session's agent-server: over its public ingress URL when
-     * the session has one (re-resolved every time, since the hostname is
-     * revoked on pause and lock), otherwise over a port-forward tunnel. The
-     * connection is bound to the active credential: ingress requests and
-     * tunnel dials read that credential's current token, and both are cut
-     * off when it signs out. Kept under the historical `openTunnel` name so
-     * persisted backends and the renderer's restore path need no migration.
+     * Connect to a session's agent-server over a port-forward tunnel. The
+     * connection is bound to the active credential: tunnel dials read that
+     * credential's current token and are cut off when it signs out.
      */
     openTunnel({ sessionId, localPort } = {}) {
       const connectionId = requireActiveConnectionId();
@@ -439,55 +361,10 @@ export function createMarsTunnelBridge({
     },
 
     closeTunnel(sessionId) {
-      ingressSessions.delete(sessionId);
       return registry.detach(sessionId);
     },
     getTunnel(sessionId) {
-      return ingressSessions.get(sessionId)?.status ?? registry.get(sessionId);
-    },
-
-    /**
-     * `Authorization` value for a renderer request to a connected session's
-     * public host, or null when the URL is not one of ours or that
-     * credential is gone. Matched on the URL authority so the WebSocket
-     * upgrade (`wss://`) and REST (`https://`) to the same host both qualify.
-     */
-    ingressAuthorizationHeader(url) {
-      let host;
-      try {
-        ({ host } = new URL(url));
-      } catch {
-        return null;
-      }
-      for (const entry of ingressSessions.values()) {
-        if (entry.host !== host) continue;
-        const token = store.getToken(entry.connectionId);
-        return token ? `Bearer ${token}` : null;
-      }
-      return null;
-    },
-
-    /**
-     * Inject the bearer on the renderer's own requests to connected ingress
-     * hosts. Runs in the main process for every matching request, including
-     * WebSocket handshakes, which is what lets the renderer open
-     * `new WebSocket(url)` against a PAT-authenticated host without ever
-     * seeing the token. Requests to any other host pass through untouched.
-     *
-     * @param {import("electron").Session} electronSession
-     */
-    registerRequestAuth(electronSession) {
-      electronSession.webRequest.onBeforeSendHeaders(
-        INGRESS_REQUEST_FILTER,
-        (details, callback) => {
-          const authorization = this.ingressAuthorizationHeader(details.url);
-          callback({
-            requestHeaders: authorization
-              ? { ...details.requestHeaders, Authorization: authorization }
-              : details.requestHeaders,
-          });
-        },
-      );
+      return registry.get(sessionId);
     },
 
     /** @param {import("electron").IpcMain} ipcMain */
@@ -537,9 +414,8 @@ export function createMarsTunnelBridge({
       );
     },
 
-    /** Forget every ingress connection and tear down every tunnel — on quit. */
+    /** Tear down every tunnel — on quit. */
     dispose() {
-      ingressSessions.clear();
       return registry.detachAll();
     },
   };

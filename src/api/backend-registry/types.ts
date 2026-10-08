@@ -11,8 +11,8 @@ export interface Backend {
   /** Changes whenever connection credentials change, invalidating keyed data. */
   connectionRevision?: number;
   /**
-   * Set when `host` reaches a DigitalOcean MARS session — its public ingress
-   * URL, or the loopback end of a port-forward tunnel. The far end is an
+   * Set when `host` reaches a DigitalOcean MARS session — the loopback end
+   * of a port-forward tunnel (or the web server's proxy for it). The far end is an
    * ordinary agent-server, so the backend stays `kind: "local"`; this only
    * lets the Managed Agents screen and connection lifecycle recognise it.
    */

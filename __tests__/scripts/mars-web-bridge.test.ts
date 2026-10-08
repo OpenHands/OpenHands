@@ -17,7 +17,6 @@ import {
 } from "../../scripts/mars-web-bridge.mjs";
 
 const SESSION_ID = "sess_a";
-const TOKEN = "Bearer dop_v1_test";
 
 function listen(server: Server): Promise<string> {
   return new Promise((resolve) => {
@@ -34,7 +33,7 @@ function closeServer(server: Server): void {
 }
 
 /**
- * Stands in for the Agent Server behind an ingress URL: records what it was
+ * Stands in for the Agent Server behind a tunnel listener: records what it was
  * sent, answers JSON with its own origin in `conversation_url`, and echoes on
  * its WebSocket (recording pings).
  *
@@ -129,11 +128,12 @@ function fakeBridge(upstreamOrigin: string) {
     openTunnel: vi.fn(async ({ sessionId }: { sessionId: string }) => ({
       sessionId,
       status: "connected",
-      transport: "ingress",
+      transport: "tunnel",
       host: upstreamOrigin,
-      ingressUrlId: "ing-1",
       remotePort: 8000,
-      localPort: undefined,
+      localPort: new URL(upstreamOrigin).port
+        ? Number(new URL(upstreamOrigin).port)
+        : undefined,
       error: undefined,
       upstreamFailure: null,
     })),
@@ -141,9 +141,6 @@ function fakeBridge(upstreamOrigin: string) {
     destroySession: vi.fn(async () => {}),
     deleteAgentConfig: vi.fn(async () => {}),
     getTunnel: vi.fn(() => undefined),
-    ingressAuthorizationHeader: vi.fn((url: string) =>
-      url.startsWith(upstreamOrigin) ? TOKEN : null,
-    ),
     dispose: vi.fn(async () => {}),
   };
 }
@@ -291,12 +288,12 @@ describe("createMarsWebBridge", () => {
     ]);
     expect(bridge.openTunnel).toHaveBeenCalledWith({ sessionId: SESSION_ID });
     expect(body.result).toMatchObject({
-      transport: "ingress",
+      transport: "tunnel",
       host: `${web.origin}/mars/sessions/${SESSION_ID}`,
     });
   });
 
-  it("proxies HTTP to the connected upstream with the bearer added and agent-server URLs rewritten", async () => {
+  it("proxies HTTP to the connected upstream with agent-server URLs rewritten and no credentials of its own", async () => {
     await rpc(web.origin, "openTunnel", [{ sessionId: SESSION_ID }]);
 
     const response = await fetch(
@@ -307,7 +304,7 @@ describe("createMarsWebBridge", () => {
     expect(response.status).toBe(200);
     const seen = upstream.seen.http[0];
     expect(seen.url).toBe(UPSTREAM_CONVERSATION_PATH);
-    expect(seen.headers.authorization).toBe(TOKEN);
+    expect(seen.headers.authorization).toBeUndefined();
     expect(seen.headers.host).toBe(new URL(upstream.origin).host);
     expect(seen.headers["accept-encoding"]).toBe("identity");
     const proxyBase = `${web.origin}/mars/sessions/${SESSION_ID}`;
@@ -356,7 +353,7 @@ describe("createMarsWebBridge", () => {
     expect(bridge.closeTunnel).toHaveBeenCalledWith(SESSION_ID);
   });
 
-  it("proxies the WebSocket with the bearer on the upstream handshake, relays both ways, and pings upstream", async () => {
+  it("proxies the WebSocket, relays both ways, and pings upstream", async () => {
     await rpc(web.origin, "openTunnel", [{ sessionId: SESSION_ID }]);
     const wsUrl = `${web.origin.replace("http:", "ws:")}/mars/sessions/${SESSION_ID}/sockets/session/c1?after_seq=0`;
     const client = new WebSocket(wsUrl);
@@ -375,7 +372,7 @@ describe("createMarsWebBridge", () => {
 
     const seen = upstream.seen.ws[0];
     expect(seen.url).toBe("/sockets/session/c1?after_seq=0");
-    expect(seen.headers.authorization).toBe(TOKEN);
+    expect(seen.headers.authorization).toBeUndefined();
     client.close();
   });
 
@@ -537,7 +534,7 @@ describe("createMarsWebBridge with a session key", () => {
     );
     expect(response.status).toBe(200);
     const forwarded = upstream.seen.http.at(-1)!.headers;
-    expect(forwarded.authorization).toBe(TOKEN);
+    expect(forwarded.authorization).toBeUndefined();
     expect(forwarded["x-session-api-key"]).toBeUndefined();
     expect(forwarded.cookie).toBeUndefined();
   });

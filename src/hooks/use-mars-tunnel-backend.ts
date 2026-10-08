@@ -30,8 +30,8 @@ export interface AttachMarsSessionResult {
 }
 
 /**
- * Connect to the session and return the base URL to register: its public
- * ingress URL, or the loopback tunnel for a session that cannot have one.
+ * Connect to the session and return the base URL to register: the loopback
+ * tunnel listener (or, in the web build, the server's proxy path for it).
  */
 async function openHealthyConnection(
   sessionId: string,
@@ -119,11 +119,9 @@ export function useMarsTunnelBackend() {
  * Connections live in the Electron main process and die with it, while the
  * Backend records pointing at them persist. Re-connect the *active* MARS
  * backend — at startup and whenever the user switches to one — and update
- * its host when the address changed. Over ingress that is expected: the
- * hostname is revoked on pause and lock and changes after rollback, so the
- * URL is always re-resolved. Over the tunnel the previous local port is
- * asked for again so queries keyed to that host survive the restart, and a
- * port another process has since taken yields a new one.
+ * its host when the address changed. The previous local port is asked for
+ * again so queries keyed to that host survive the restart, and a port
+ * another process has since taken yields a new one.
  *
  * Only the active one: connecting resumes a paused session, so restoring
  * every registered session would wake (and bill) sandboxes the user is not
