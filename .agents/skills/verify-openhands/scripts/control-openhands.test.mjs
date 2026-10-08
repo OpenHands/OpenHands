@@ -37,7 +37,7 @@ import { resolveTestids } from "./lib/testids.mjs";
 import { tmuxPathFor } from "./lib/tmux-path.mjs";
 import { browserCallLimit } from "./lib/call-limit.mjs";
 import { MAX_PAGES, collectEvents, countImages } from "./lib/events-paging.mjs";
-import { redactBody } from "./lib/network-bodies.mjs";
+import { redactBody, redactUrl } from "./lib/network-bodies.mjs";
 import { buildLocator, parseRole, toCss } from "./lib/selectors.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -1158,6 +1158,78 @@ test("request bodies are shown with credentials and env maps redacted", () => {
   assert.match(
     redactBody(JSON.stringify({ t: "x".repeat(5000) }), { limit: 50 }),
     /…$/,
+  );
+});
+
+test("credentials carried by a URL are redacted whatever key holds the URL", () => {
+  // The MCP editor sends a remote server's URL as typed, under `server.url`
+  // (POST /api/v1/mcp/test) or `url` (a settings save): a key or a basic-auth
+  // pair the user put in the URL must not come back in clear. The rest of
+  // the URL is kept as written, so the row still proves the endpoint sent.
+  const probe = JSON.parse(
+    redactBody(
+      JSON.stringify({
+        server: {
+          type: "http",
+          url: "https://example.invalid/mcp?api_key=DUMMY_URL_API_KEY",
+          headers: { "X-Api-Key": "dummy-header-key" },
+        },
+        name: "qa-remote",
+        timeout: 30,
+      }),
+    ),
+  );
+  assert.equal(
+    probe.server.url,
+    "https://example.invalid/mcp?api_key=<redacted 17 chars>",
+  );
+  assert.equal(probe.server.headers["X-Api-Key"], "<redacted 16 chars>");
+  assert.equal(probe.name, "qa-remote");
+  const save = JSON.parse(
+    redactBody(
+      JSON.stringify({
+        name: "qa-sse",
+        type: "sse",
+        url: "https://qa:hunter2pw@example.invalid/sse?v=2&Token=t0k#frag",
+        description: "docs at https://docs.example.invalid/sse?page=1",
+      }),
+    ),
+  );
+  assert.equal(
+    save.url,
+    "https://<redacted 2 chars>:<redacted 9 chars>@example.invalid/sse?v=2&Token=<redacted 3 chars>#frag",
+  );
+  assert.equal(
+    save.description,
+    "docs at https://docs.example.invalid/sse?page=1",
+  );
+  // A URL inside prose (a prompt naming a server) is treated the same; the
+  // settings API's placeholder stays recognizable inside a URL too.
+  assert.equal(
+    JSON.parse(
+      redactBody(JSON.stringify({ content: "use https://u:p@h/x now" })),
+    ).content,
+    "use https://<redacted 1 chars>:<redacted 1 chars>@h/x now",
+  );
+  assert.equal(
+    redactUrl("https://user:**********@example.invalid/mcp"),
+    "https://<redacted 4 chars>:**********@example.invalid/mcp",
+  );
+  assert.equal(
+    redactUrl("https://sk-abc@example.invalid/mcp?secret%5Fid=s&q=kept"),
+    "https://<redacted 6 chars>@example.invalid/mcp?secret%5Fid=<redacted 1 chars>&q=kept",
+  );
+  assert.equal(
+    redactUrl("http://example.invalid/mcp"),
+    "http://example.invalid/mcp",
+  );
+  assert.equal(redactUrl("a:b@c mailto:x@y"), "a:b@c mailto:x@y");
+  // A form body's URL values go through the same redaction.
+  assert.equal(
+    new URLSearchParams(
+      redactBody("name=x&url=https%3A%2F%2Fu%3Ap%40h%2Fmcp%3Fkey%3Dk"),
+    ).get("url"),
+    "https://<redacted 1 chars>:<redacted 1 chars>@h/mcp?key=<redacted 1 chars>",
   );
 });
 

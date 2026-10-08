@@ -42,7 +42,11 @@ import {
 } from "./lib/testids.mjs";
 import { tmuxPathFor } from "./lib/tmux-path.mjs";
 import { browserCallLimit } from "./lib/call-limit.mjs";
-import { collectEvents, countImages } from "./lib/events-paging.mjs";
+import {
+  PAGE_LIMIT,
+  collectEvents,
+  countImages,
+} from "./lib/events-paging.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const skillDir = resolve(here, "..");
@@ -2019,7 +2023,7 @@ async function cmdConversation({ positional, flags }) {
         const res = await http(
           run,
           "GET",
-          `/api/conversations/${encodeURIComponent(id)}/events/search?limit=100&sort_order=${order}${pageId ? `&page_id=${encodeURIComponent(pageId)}` : ""}`,
+          `/api/conversations/${encodeURIComponent(id)}/events/search?limit=${PAGE_LIMIT}&sort_order=${order}${pageId ? `&page_id=${encodeURIComponent(pageId)}` : ""}`,
         );
         if (!res.ok)
           throw new CliError(
@@ -4152,7 +4156,8 @@ Verbs
   media [--clear]                        media playback recorded since load (sound features)
   network [--external] [--filter REGEX] [--clear] [--last N] [--bodies]   requests with status and redacted query (rows under "recent")
         (--bodies adds each app-origin write's body, JSON with credential values and env/header maps
-         replaced by their length; the settings API's ********** placeholder is kept as is)
+         replaced by their length, URL userinfo and secret-named query values redacted in any string;
+         the settings API's ********** placeholder is kept as is)
                                          (privacy/telemetry checks; --clear as for errors)
   toasts [--history [--clear]]          toasts on screen now (with links); --history adds every
                                          status/alert text seen since this page loaded

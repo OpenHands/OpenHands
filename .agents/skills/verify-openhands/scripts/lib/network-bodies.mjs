@@ -6,9 +6,14 @@
 // redaction: everything under a key that names a credential or an `env` or
 // `headers` map (strings, nested objects, arrays) is replaced by its length;
 // the settings API's own `**********` placeholder is kept, so a recipe can
-// tell "the placeholder was sent" from "a real value was sent".
+// tell "the placeholder was sent" from "a real value was sent". A URL in any
+// other string (an MCP server's `url`, a prompt) keeps its host and path but
+// loses its userinfo and the values of its secret-named query parameters.
 
-const SECRET_KEY = /key|token|secret|auth|pass|session|sig|credential/i;
+// Matched as a substring, so a non-secret key such as `design` (sig),
+// `keyboard` (key) or `bypass` (pass) reads `<redacted N chars>` too; over-
+// redaction is the safe side. Shared with the daemon's query redaction.
+export const SECRET_KEY = /key|token|secret|auth|pass|session|sig|credential/i;
 const SECRET_MAP = /^(env|headers|environment)$/i;
 export const PLACEHOLDER = "**********";
 export const BODY_LIMIT = 2000;
@@ -19,10 +24,52 @@ export function redactBodyValue(value) {
   return `<redacted ${value.length} chars>`;
 }
 
+// A URL carries credentials of its own, under no key at all: the userinfo
+// of `https://user:pw@host/` and the values of `?api_key=…`-style query
+// parameters (the MCP editor sends a server's `url` as typed, so a key the
+// user put in the URL would otherwise come back in clear). Both are redacted
+// in place, the rest of the URL kept as written (no normalization), so the
+// row still proves which endpoint was sent.
+const URL_IN_TEXT = /\b[a-z][a-z0-9+.-]*:\/\/[^\s"'<>`]+/gi;
+const USERINFO = /^([a-z][a-z0-9+.-]*:\/\/)([^/?#@]*)@/i;
+
+export function redactUrl(url) {
+  let out = url.replace(USERINFO, (m, scheme, userinfo) => {
+    const at = userinfo.indexOf(":");
+    const parts =
+      at < 0 ? [userinfo] : [userinfo.slice(0, at), userinfo.slice(at + 1)];
+    return `${scheme}${parts.map(redactBodyValue).join(":")}@`;
+  });
+  const q = out.indexOf("?");
+  if (q < 0) return out;
+  const hash = out.indexOf("#", q);
+  const query = hash < 0 ? out.slice(q + 1) : out.slice(q + 1, hash);
+  const pairs = query.split("&").map((pair) => {
+    const eq = pair.indexOf("=");
+    if (eq < 0) return pair;
+    const key = pair.slice(0, eq);
+    let name = key;
+    try {
+      name = decodeURIComponent(key);
+    } catch {
+      // keep the raw key
+    }
+    return SECRET_KEY.test(name)
+      ? `${key}=${redactBodyValue(pair.slice(eq + 1))}`
+      : pair;
+  });
+  return `${out.slice(0, q + 1)}${pairs.join("&")}${hash < 0 ? "" : out.slice(hash)}`;
+}
+
+export function redactUrlsIn(text) {
+  return text.replace(URL_IN_TEXT, redactUrl);
+}
+
 // `secret` is inherited by the whole subtree: a string in an array under
 // `api_keys`, an object under `credentials`, every value of an `env` map.
 function redactNode(node, secret = false) {
-  if (typeof node === "string") return secret ? redactBodyValue(node) : node;
+  if (typeof node === "string")
+    return secret ? redactBodyValue(node) : redactUrlsIn(node);
   if (Array.isArray(node)) return node.map((v) => redactNode(v, secret));
   if (node && typeof node === "object") {
     const out = {};
@@ -50,9 +97,12 @@ export function redactBody(text, { limit = BODY_LIMIT, all = false } = {}) {
     shown = JSON.stringify(redactNode(JSON.parse(raw), all));
   } catch {
     if (/^[^=&\s]+=[^&]*(&[^=&\s]+=[^&]*)*$/.test(raw)) {
-      const params = new URLSearchParams(raw);
-      for (const key of [...params.keys()])
-        if (all || SECRET_KEY.test(key)) params.set(key, "<redacted>");
+      const params = new URLSearchParams();
+      for (const [key, value] of new URLSearchParams(raw))
+        params.append(
+          key,
+          all || SECRET_KEY.test(key) ? "<redacted>" : redactUrlsIn(value),
+        );
       shown = params.toString();
     } else {
       return `<non-JSON body, ${raw.length} chars>`;

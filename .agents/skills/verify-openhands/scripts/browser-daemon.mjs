@@ -21,7 +21,7 @@ import { createRequire } from "node:module";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { redactStorage } from "./lib/redact-storage.mjs";
-import { SECRET_PATH, redactBody } from "./lib/network-bodies.mjs";
+import { SECRET_KEY, SECRET_PATH, redactBody } from "./lib/network-bodies.mjs";
 import { buildLocator, toCss } from "./lib/selectors.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -173,8 +173,7 @@ function redactQuery(search) {
   if (!search) return "";
   const params = new URLSearchParams(search);
   for (const key of [...params.keys()]) {
-    if (/key|token|secret|auth|pass|session|sig/i.test(key))
-      params.set(key, "<redacted>");
+    if (SECRET_KEY.test(key)) params.set(key, "<redacted>");
   }
   const text = params.toString();
   return text ? `?${text.slice(0, 200)}` : "";
@@ -984,10 +983,19 @@ const handlers = {
     // Resolve the target first: a refused URL must not leave a blank tab
     // open and active.
     const url = target ? assertAppUrl(target, allowExternal) : undefined;
+    const previous = activePage;
     const page = await context.newPage();
     activePage = page;
     if (url) {
-      await page.goto(url, { waitUntil: "domcontentloaded" });
+      try {
+        await page.goto(url, { waitUntil: "domcontentloaded" });
+      } catch (error) {
+        // A navigation that fails (the stack is down) closes the tab it
+        // opened and leaves the daemon on the tab it was on.
+        activePage = previous;
+        await page.close().catch(() => {});
+        throw error;
+      }
       await page
         .waitForLoadState("networkidle", { timeout: 10_000 })
         .catch(() => {});
