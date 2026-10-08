@@ -10,14 +10,20 @@
  */
 const { contextBridge, ipcRenderer } = require("electron");
 
+// Read once here, before any page script runs, and kept current from the
+// pushed transitions: the renderer subscribes long after load, and a reload of
+// a fullscreen window reports no transition at all.
+let isFullScreen = Boolean(ipcRenderer.sendSync("window:full-screen:get"));
+const listeners = new Set();
+ipcRenderer.on("window:full-screen", (_event, value) => {
+  isFullScreen = Boolean(value);
+  for (const cb of listeners) cb(isFullScreen);
+});
+
 contextBridge.exposeInMainWorld("desktopShell", {
   platform: process.platform,
-  /**
-   * The window's current fullscreen state. A subscriber starts listening long
-   * after the window opened, so it can miss the transition it is already past:
-   * a reload of a window that is fullscreen reports no event at all.
-   */
-  getFullScreen: () => ipcRenderer.invoke("window:full-screen:get"),
+  /** The window's current fullscreen state. */
+  isFullScreen: () => isFullScreen,
   /**
    * Subscribe to native fullscreen transitions: cb(isFullScreen). Returns an
    * unsubscribe fn.
@@ -27,8 +33,7 @@ contextBridge.exposeInMainWorld("desktopShell", {
    */
   onFullScreenChange(cb) {
     if (typeof cb !== "function") return () => {};
-    const listener = (_event, isFullScreen) => cb(Boolean(isFullScreen));
-    ipcRenderer.on("window:full-screen", listener);
-    return () => ipcRenderer.removeListener("window:full-screen", listener);
+    listeners.add(cb);
+    return () => listeners.delete(cb);
   },
 });

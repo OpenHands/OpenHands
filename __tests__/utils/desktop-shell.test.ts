@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  isDesktopFullScreen,
   isMacDesktopShell,
   subscribeDesktopFullScreen,
 } from "#/utils/desktop-shell";
@@ -7,7 +8,7 @@ import {
 type ShellWindow = Window & {
   desktopShell?: {
     platform?: string;
-    getFullScreen?: () => Promise<boolean>;
+    isFullScreen?: () => boolean;
     onFullScreenChange?: (cb: (v: boolean) => void) => () => void;
   };
 };
@@ -75,81 +76,23 @@ describe("subscribeDesktopFullScreen", () => {
     stop();
     expect(unsubscribe).toHaveBeenCalled();
   });
+});
 
-  it("reads the state the window is already in, which no transition announces", async () => {
-    (window as ShellWindow).desktopShell = {
-      platform: "darwin",
-      getFullScreen: () => Promise.resolve(true),
-      onFullScreenChange: () => () => {},
-    };
-    const cb = vi.fn();
-
-    subscribeDesktopFullScreen(cb);
-    await vi.waitFor(() => expect(cb).toHaveBeenCalledWith(true));
+describe("isDesktopFullScreen", () => {
+  it("is false in a browser tab", () => {
+    expect(isDesktopFullScreen()).toBe(false);
   });
 
-  it("lets a transition win over an initial read that resolves after it", async () => {
-    let resolveRead: ((value: boolean) => void) | undefined;
-    let emit: ((value: boolean) => void) | undefined;
-    (window as ShellWindow).desktopShell = {
-      platform: "darwin",
-      getFullScreen: () =>
-        new Promise((resolve) => {
-          resolveRead = resolve;
-        }),
-      onFullScreenChange: (cb) => {
-        emit = cb;
-        return () => {};
-      },
-    };
-    const cb = vi.fn();
-
-    subscribeDesktopFullScreen(cb);
-    emit?.(false);
-    resolveRead?.(true);
-    await Promise.resolve();
-
-    expect(cb).toHaveBeenCalledExactlyOnceWith(false);
+  it("is false when the bridge exposes no fullscreen state", () => {
+    setShell("darwin");
+    expect(isDesktopFullScreen()).toBe(false);
   });
 
-  it("drops an initial read that resolves after unsubscribing", async () => {
-    let resolveRead: ((value: boolean) => void) | undefined;
+  it("reads the state the preload holds, which no transition announces after a reload", () => {
     (window as ShellWindow).desktopShell = {
       platform: "darwin",
-      getFullScreen: () =>
-        new Promise((resolve) => {
-          resolveRead = resolve;
-        }),
-      onFullScreenChange: () => () => {},
+      isFullScreen: () => true,
     };
-    const cb = vi.fn();
-
-    subscribeDesktopFullScreen(cb)();
-    resolveRead?.(true);
-    await Promise.resolve();
-
-    expect(cb).not.toHaveBeenCalled();
-  });
-
-  it("survives a failed initial read, keeping the transition subscription", async () => {
-    const unsubscribe = vi.fn();
-    let emit: ((value: boolean) => void) | undefined;
-    (window as ShellWindow).desktopShell = {
-      platform: "darwin",
-      getFullScreen: () => Promise.reject(new Error("no window")),
-      onFullScreenChange: (cb) => {
-        emit = cb;
-        return unsubscribe;
-      },
-    };
-    const cb = vi.fn();
-
-    const stop = subscribeDesktopFullScreen(cb);
-    await Promise.resolve();
-    emit?.(true);
-
-    expect(cb).toHaveBeenCalledExactlyOnceWith(true);
-    stop();
-    expect(unsubscribe).toHaveBeenCalled();
+    expect(isDesktopFullScreen()).toBe(true);
   });
 });

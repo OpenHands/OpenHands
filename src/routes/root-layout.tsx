@@ -43,13 +43,39 @@ const CommandMenu = React.lazy(() =>
   })),
 );
 
+function useShowTitleBarBand(): boolean {
+  const isFullScreen = useDesktopFullScreen();
+  // Fullscreen hides the traffic lights, so the band has nothing to clear.
+  return isMacDesktopShell() && !isFullScreen;
+}
+
+function TitleBarDragRegion() {
+  return (
+    <div
+      data-testid="titlebar-drag-region"
+      aria-hidden="true"
+      className="oh-titlebar-drag-region fixed inset-x-0 top-0 z-50"
+    />
+  );
+}
+
+function ErrorShell({ children }: { children: React.ReactNode }) {
+  const showTitleBarBand = useShowTitleBarBand();
+  return (
+    <div className={cn(showTitleBarBand && "oh-titlebar-inset")}>
+      {showTitleBarBand ? <TitleBarDragRegion /> : null}
+      {children}
+    </div>
+  );
+}
+
 export function ErrorBoundary() {
   const error = useRouteError();
   const { t } = useTranslation("openhands");
 
   if (isRouteErrorResponse(error)) {
     return (
-      <div>
+      <ErrorShell>
         <h1>{error.status}</h1>
         <p>{error.statusText}</p>
         <pre>
@@ -57,22 +83,22 @@ export function ErrorBoundary() {
             ? JSON.stringify(error.data)
             : error.data}
         </pre>
-      </div>
+      </ErrorShell>
     );
   }
   if (error instanceof Error) {
     return (
-      <div>
+      <ErrorShell>
         <h1>{t(I18nKey.ERROR$GENERIC)}</h1>
         <pre>{error.message}</pre>
-      </div>
+      </ErrorShell>
     );
   }
 
   return (
-    <div>
+    <ErrorShell>
       <h1>{t(I18nKey.ERROR$UNKNOWN)}</h1>
-    </div>
+    </ErrorShell>
   );
 }
 
@@ -81,7 +107,7 @@ export default function MainApp() {
   const appTitle = useAppTitle();
   const { data: settings } = useSettings();
   const config = useConfig();
-  const isFullScreen = useDesktopFullScreen();
+  const showTitleBarBand = useShowTitleBarBand();
 
   useSyncAutomationTelemetryConsent();
 
@@ -101,6 +127,7 @@ export default function MainApp() {
   if (config.isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-base">
+        {showTitleBarBand ? <TitleBarDragRegion /> : null}
         <LoadingSpinner size="large" />
       </div>
     );
@@ -112,8 +139,6 @@ export default function MainApp() {
     location.pathname,
   );
   const showOnboardingPreview = isOnboardingPreviewActive(location.search);
-  // Fullscreen hides the traffic lights, so the band has nothing to clear.
-  const showTitleBarBand = isMacDesktopShell() && !isFullScreen;
 
   return (
     <ReactRouterNavigationProvider>
@@ -127,13 +152,7 @@ export default function MainApp() {
             )}
           >
             <title>{appTitle}</title>
-            {showTitleBarBand ? (
-              <div
-                data-testid="titlebar-drag-region"
-                aria-hidden="true"
-                className="oh-titlebar-drag-region fixed inset-x-0 top-0 z-50"
-              />
-            ) : null}
+            {showTitleBarBand ? <TitleBarDragRegion /> : null}
             <Sidebar />
 
             <div className="flex min-h-0 flex-col w-full min-w-0 h-full gap-3">

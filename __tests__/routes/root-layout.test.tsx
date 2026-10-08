@@ -1,11 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRoutesStub, data, Link } from "react-router";
@@ -491,6 +485,27 @@ describe("macOS desktop title bar", () => {
     );
   });
 
+  it("keeps a drag band on the loading screen, before config resolves", () => {
+    (window as ShellWindow).desktopShell = { platform: "darwin" };
+    useConfigMock.mockReturnValue({ isLoading: true, data: null });
+
+    renderMainApp();
+
+    expect(screen.getByTestId("titlebar-drag-region")).toBeInTheDocument();
+  });
+
+  it("keeps the band and the inset on the route error screen", async () => {
+    (window as ShellWindow).desktopShell = { platform: "darwin" };
+
+    renderRouteError(new Error("Kaboom"));
+
+    expect(await screen.findByText("Kaboom")).toBeInTheDocument();
+    expect(screen.getByTestId("titlebar-drag-region")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("titlebar-drag-region").parentElement,
+    ).toHaveClass("oh-titlebar-inset");
+  });
+
   it.each(["win32", "linux"])(
     "adds no band on %s, which keeps the native title bar",
     (platform) => {
@@ -512,7 +527,7 @@ describe("fullscreen", () => {
   type FsWindow = Window & {
     desktopShell?: {
       platform?: string;
-      getFullScreen?: () => Promise<boolean>;
+      isFullScreen?: () => boolean;
       onFullScreenChange?: (cb: (v: boolean) => void) => () => void;
     };
   };
@@ -538,11 +553,16 @@ describe("fullscreen", () => {
   });
 
   it("drops the band once the window goes fullscreen, where macOS hides the traffic lights", async () => {
+    let isFullScreen = false;
     let emit: ((value: boolean) => void) | undefined;
     (window as FsWindow).desktopShell = {
       platform: "darwin",
+      isFullScreen: () => isFullScreen,
       onFullScreenChange: (cb) => {
-        emit = cb;
+        emit = (value) => {
+          isFullScreen = value;
+          cb(value);
+        };
         return () => {};
       },
     };
@@ -564,20 +584,19 @@ describe("fullscreen", () => {
     expect(screen.getByTestId("titlebar-drag-region")).toBeInTheDocument();
   });
 
-  it("adds no band when the window is already fullscreen on load, as after a reload", async () => {
+  it("never renders the band when the window is already fullscreen on load, as after a reload", () => {
     (window as FsWindow).desktopShell = {
       platform: "darwin",
-      getFullScreen: () => Promise.resolve(true),
+      isFullScreen: () => true,
       onFullScreenChange: () => () => {},
     };
 
     renderMainApp();
 
-    await waitFor(() =>
-      expect(
-        screen.queryByTestId("titlebar-drag-region"),
-      ).not.toBeInTheDocument(),
-    );
+    // Checked on the first commit: a band that is dropped later still flashes.
+    expect(
+      screen.queryByTestId("titlebar-drag-region"),
+    ).not.toBeInTheDocument();
     expect(screen.getByTestId("root-layout")).not.toHaveClass(
       "oh-titlebar-inset",
     );

@@ -375,8 +375,8 @@ function createMainWindow() {
   });
 
   // The renderer drops its reserved traffic-light band in fullscreen, where
-  // macOS hides the buttons. Only transitions are pushed; the current state is
-  // pulled over "window:full-screen:get" when the renderer subscribes.
+  // macOS hides the buttons. Only transitions are pushed; the preload reads the
+  // current state over "window:full-screen:get" on every page load.
   const sendFullScreenState = () => {
     if (!mainWin || mainWin.isDestroyed()) return;
     mainWin.webContents.send("window:full-screen", mainWin.isFullScreen());
@@ -553,12 +553,11 @@ ipcMain.handle("boot-log:quit", (event) => {
   app.quit();
 });
 
-// The app window reads its own fullscreen state here. IPC is not buffered and
-// the renderer subscribes only after hydration, so pushing the state when the
-// page finishes loading would arrive before any listener exists.
-ipcMain.handle("window:full-screen:get", (event) => {
+// Synchronous so the preload has the state before the first render; a
+// renderer that starts with "not fullscreen" paints the band and then drops it.
+ipcMain.on("window:full-screen:get", (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);
-  return win !== null && !win.isDestroyed() && win.isFullScreen();
+  event.returnValue = win !== null && !win.isDestroyed() && win.isFullScreen();
 });
 
 // ── Backend stack ─────────────────────────────────────────────────────────────
