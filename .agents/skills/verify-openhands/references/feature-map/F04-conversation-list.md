@@ -38,7 +38,7 @@ Source: `src/components/features/sidebar/sidebar-conversation-list.tsx`, `src/co
 - `F04.filter-chips`: active filters show as chips above the list; a chip click removes one, Clear all removes every chip.
 - `F04.metadata-toggles`: Repo and branch, Agent / model and Show tags add or remove row chips.
 - `F04.hover-preview`: hovering a row for a second shows title, directory, model and creation time, unless Details on hover is off.
-- `F04.pin`: the pin moves a row into a Pinned section above the list, survives a reload and unpins from there.
+- `F04.pin`: the pin moves a row into a Pinned section above the list, survives a reload (including pagination and cloud org scoping) and unpins from there.
 - `F04.pinned-preview-more`: the Pinned section previews five rows; its More shows every pinned row and Less returns to five.
 - `F04.card-rename`: ⋮ → Rename edits the title inline; Enter saves, a toast confirms, and the title persists.
 - `F04.edit-tags`: ⋮ → Edit tags adds and removes `key: value` tags with validation; Save shows `Tags updated` and the chips persist.
