@@ -1795,6 +1795,9 @@ export function toHooksResponse(
           hooks: hooks.map((hook) => ({
             type: hook.type ?? HookType.COMMAND,
             command: hook.command,
+            prompt: (hook as { prompt?: string | null }).prompt ?? null,
+            system_prompt:
+              (hook as { system_prompt?: string | null }).system_prompt ?? null,
             timeout: hook.timeout,
             async: hook.async,
           })),

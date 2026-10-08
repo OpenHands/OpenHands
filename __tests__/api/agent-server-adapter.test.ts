@@ -15,6 +15,7 @@ import {
   getDefaultConversationTitle,
   parseRuntimeServicesInfo,
   toAppConversation,
+  toHooksResponse,
   type DirectConversationInfo,
 } from "#/api/agent-server-adapter";
 import SettingsService from "#/api/settings-service/settings-service.api";
@@ -2214,5 +2215,59 @@ describe("buildStartConversationRequestWithEncryptedSettings", () => {
     expect(
       payload.agent_settings?.agent_context?.system_message_suffix ?? "",
     ).not.toContain("ROUTE_AT_CONVERSATION_START");
+  });
+
+  describe("toHooksResponse", () => {
+    it("preserves prompt and system_prompt on mapped hooks", () => {
+      const hookConfig = {
+        stop: [
+          {
+            matcher: "*",
+            hooks: [
+              {
+                type: "prompt",
+                command: "",
+                prompt: "QA_F07 prompt hook",
+                timeout: 60,
+                async: false,
+              },
+            ],
+          },
+        ],
+        session_start: [
+          {
+            matcher: "*",
+            hooks: [
+              {
+                type: "agent",
+                command: "",
+                system_prompt: "QA_F07 agent hook",
+                timeout: 60,
+                async: false,
+              },
+            ],
+          },
+        ],
+      } as unknown as HookConfig;
+
+      const response = toHooksResponse(hookConfig);
+
+      const stopHooks = response.hooks.find((h) => h.event_type === "stop")
+        ?.matchers[0].hooks;
+      expect(stopHooks?.[0]).toMatchObject({
+        type: "prompt",
+        command: "",
+        prompt: "QA_F07 prompt hook",
+      });
+
+      const sessionStartHooks = response.hooks.find(
+        (h) => h.event_type === "session_start",
+      )?.matchers[0].hooks;
+      expect(sessionStartHooks?.[0]).toMatchObject({
+        type: "agent",
+        command: "",
+        system_prompt: "QA_F07 agent hook",
+      });
+    });
   });
 });

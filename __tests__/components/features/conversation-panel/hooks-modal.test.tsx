@@ -300,4 +300,91 @@ describe("HookEventItem", () => {
 
     expect(screen.getByText("1 hook")).toBeInTheDocument();
   });
+
+  it("should render prompt text for prompt hooks", () => {
+    const promptHookEvent: HookEvent = {
+      event_type: "stop",
+      matchers: [
+        {
+          matcher: "*",
+          hooks: [
+            {
+              type: "prompt",
+              command: "",
+              prompt: "QA_F07 prompt hook",
+              timeout: 60,
+            },
+          ],
+        },
+      ],
+    };
+
+    render(
+      <HookEventItem
+        {...defaultProps}
+        hookEvent={promptHookEvent}
+        isExpanded={true}
+      />,
+    );
+
+    expect(screen.getByText("QA_F07 prompt hook")).toBeInTheDocument();
+  });
+
+  it("should render system_prompt text for agent hooks", () => {
+    const agentHookEvent: HookEvent = {
+      event_type: "session_start",
+      matchers: [
+        {
+          matcher: "*",
+          hooks: [
+            {
+              type: "agent",
+              command: "",
+              system_prompt: "QA_F07 agent hook",
+              timeout: 60,
+            },
+          ],
+        },
+      ],
+    };
+
+    render(
+      <HookEventItem
+        {...defaultProps}
+        hookEvent={agentHookEvent}
+        isExpanded={true}
+      />,
+    );
+
+    expect(screen.getByText("QA_F07 agent hook")).toBeInTheDocument();
+  });
+
+  it("should not render an empty pre box when prompt or agent hook has no text", () => {
+    const emptyHookEvent: HookEvent = {
+      event_type: "session_start",
+      matchers: [
+        {
+          matcher: "*",
+          hooks: [
+            {
+              type: "agent",
+              command: "",
+              timeout: 60,
+            },
+          ],
+        },
+      ],
+    };
+
+    const { container } = render(
+      <HookEventItem
+        {...defaultProps}
+        hookEvent={emptyHookEvent}
+        isExpanded={true}
+      />,
+    );
+
+    const preElements = container.querySelectorAll("pre");
+    expect(preElements).toHaveLength(0);
+  });
 });
