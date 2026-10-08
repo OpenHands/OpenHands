@@ -5,7 +5,7 @@ import { useSubConversations } from "#/hooks/query/use-sub-conversations";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { useConversationStore } from "#/stores/conversation-store";
 import { useActiveBackend } from "#/contexts/active-backend-context";
-import { findPlannerConversationId } from "#/utils/plan-file";
+import { findPhasePlannerConversationId } from "#/utils/plan-file";
 import { isArchivedSandboxStatus } from "#/utils/conversation-archive-status";
 
 interface WebSocketProviderWrapperProps {
@@ -22,6 +22,15 @@ export function WebSocketProviderWrapper({
   const isLocalBackend = backend.kind !== "cloud";
   const localPlanningConversationId = useConversationStore(
     (state) => state.localPlanningConversationId,
+  );
+  const conversationMode = useConversationStore(
+    (state) => state.conversationMode,
+  );
+  const activeDeepPlanPhase = useConversationStore(
+    (state) => state.deepPlan.activePhase,
+  );
+  const deepPlanPlannerPhase = useConversationStore(
+    (state) => state.deepPlanPlannerPhase,
   );
 
   // `localPlanningConversationId` is a single unscoped Zustand field. Right
@@ -61,6 +70,13 @@ export function WebSocketProviderWrapper({
     candidateConversationIds,
   );
 
+  // Deep Planning creates one planner per phase, each pinned to that phase's
+  // document; `plan` mode keeps the single untagged planner. Resolve the one
+  // that matches the phase the user is in, so the socket and the PLAN.md read
+  // follow the phase instead of always hitting the first planner.
+  const deepPlanPhaseToResolve =
+    conversationMode === "deep-plan" ? activeDeepPlanPhase : null;
+
   // Identify the planner via the `plannerparent` tag rather than list
   // position — an unrelated child must never be adopted as the planner.
   // Kept as its own memo (a primitive) rather than inlined below: `subConversations`
@@ -69,8 +85,34 @@ export function WebSocketProviderWrapper({
   // array in that case — see candidateConversationIds above.
   const plannerConversationId = React.useMemo(() => {
     if (!isLocalBackend) return null;
-    return findPlannerConversationId(subConversations, conversation?.id);
-  }, [isLocalBackend, subConversations, conversation?.id]);
+    const phasePlanner = findPhasePlannerConversationId(
+      subConversations,
+      conversation?.id,
+      deepPlanPhaseToResolve,
+    );
+    if (phasePlanner) return phasePlanner;
+    // In deep-plan mode before a phase planner exists (or while the tag data
+    // has not resolved), fall back to the store id so the planner is still
+    // reachable; `plan` mode uses the plain untagged planner.
+    if (deepPlanPhaseToResolve) {
+      return deepPlanPlannerPhase === deepPlanPhaseToResolve
+        ? trustedLocalPlanningConversationId
+        : null;
+    }
+    // Plain plan mode: the untagged planner, never one of the per-phase ones.
+    return findPhasePlannerConversationId(
+      subConversations,
+      conversation?.id,
+      null,
+    );
+  }, [
+    isLocalBackend,
+    subConversations,
+    conversation?.id,
+    deepPlanPhaseToResolve,
+    deepPlanPlannerPhase,
+    trustedLocalPlanningConversationId,
+  ]);
 
   const planningConversationIds = React.useMemo(() => {
     if (!isLocalBackend) return candidateConversationIds;

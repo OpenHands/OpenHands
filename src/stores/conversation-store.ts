@@ -60,6 +60,13 @@ interface ConversationState {
   deepPlan: DeepPlanState;
   subConversationTaskId: string | null; // Task ID for cloud sub-conversation creation
   localPlanningConversationId: string | null;
+  /**
+   * Deep Planning phase the current local planner was created for. The planner
+   * is pinned to one document at creation (its `plan_path`), so switching phase
+   * requires a new planner; this records which phase the live one owns so the
+   * switch can be detected. `null` for a plain `plan`-mode planner.
+   */
+  deepPlanPlannerPhase: DeepPlanPhaseId | null;
 }
 
 interface ConversationActions {
@@ -95,7 +102,12 @@ interface ConversationActions {
   setHasRightPanelToggled: (hasRightPanelToggled: boolean) => void;
   setConversationMode: (conversationMode: ConversationMode) => void;
   setSubConversationTaskId: (taskId: string | null) => void;
-  setLocalPlanningConversationId: (conversationId: string | null) => void;
+  setLocalPlanningConversationId: (
+    conversationId: string | null,
+    deepPlanPlannerPhase?: DeepPlanPhaseId | null,
+  ) => void;
+  /** Records which Deep Planning phase a planner is (being) created for. */
+  setDeepPlanPlannerPhase: (phase: DeepPlanPhaseId | null) => void;
   setPlanContent: (planContent: string | null) => void;
   startDeepPlan: () => void;
   setDeepPlanPhase: (phase: DeepPlanPhaseId) => void;
@@ -208,6 +220,7 @@ export const useConversationStore = create<ConversationStore>()(
       deepPlan: getInitialDeepPlanState(),
       subConversationTaskId: null,
       localPlanningConversationId: null,
+      deepPlanPlannerPhase: null,
 
       // Actions
       setIsRightPanelShown: (isRightPanelShown) =>
@@ -445,12 +458,18 @@ export const useConversationStore = create<ConversationStore>()(
       setSubConversationTaskId: (subConversationTaskId) =>
         set({ subConversationTaskId }, false, "setSubConversationTaskId"),
 
-      setLocalPlanningConversationId: (localPlanningConversationId) =>
+      setLocalPlanningConversationId: (
+        localPlanningConversationId,
+        deepPlanPlannerPhase = null,
+      ) =>
         set(
-          { localPlanningConversationId },
+          { localPlanningConversationId, deepPlanPlannerPhase },
           false,
           "setLocalPlanningConversationId",
         ),
+
+      setDeepPlanPlannerPhase: (deepPlanPlannerPhase) =>
+        set({ deepPlanPlannerPhase }, false, "setDeepPlanPlannerPhase"),
 
       setPlanContent: (planContent) =>
         set({ planContent }, false, "setPlanContent"),

@@ -61,6 +61,7 @@ import {
 } from "../conversation-metadata-store";
 import { resolveTitleLlmProfile } from "#/utils/title-llm-profile";
 import { isPlannerConversationOf } from "#/utils/plan-file";
+import type { DeepPlanPhaseId } from "#/utils/deep-plan";
 import type {
   GetHooksResponse,
   PluginSpec,
@@ -602,6 +603,8 @@ class AgentServerConversationService {
   static async createLocalPlanningConversation(
     parentConversationId: string,
     initialMessage?: string,
+    deepPlanPhase?: DeepPlanPhaseId | null,
+    deepPlanGuidance?: string | null,
   ): Promise<AppConversation> {
     if (getActiveBackend().backend.kind === "cloud") {
       throw new Error("Local planning conversations require a local backend.");
@@ -637,6 +640,8 @@ class AgentServerConversationService {
         parentAgentProfileId:
           parent?.launched_agent_profile?.agent_profile_id ?? null,
         initialMessage,
+        deepPlanPhase,
+        deepPlanGuidance,
       });
 
     const data = await new ConversationClient(

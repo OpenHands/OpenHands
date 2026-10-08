@@ -22,11 +22,38 @@ import {
   LOCAL_PLANNER_MUTATION_KEYS,
 } from "#/hooks/query/query-keys";
 import { useSubConversations } from "#/hooks/query/use-sub-conversations";
-import { findPlannerConversationId } from "#/utils/plan-file";
+import {
+  findPhasePlannerConversationId,
+  findPlannerConversationId,
+} from "#/utils/plan-file";
+import { type DeepPlanPhaseId } from "#/utils/deep-plan";
+import { deepPlanGuidance } from "#/utils/deep-plan-messages";
+import { isPlanningMode } from "#/utils/conversation-mode";
 import { invalidateConversationQueries } from "#/hooks/mutation/conversation-mutation-utils";
 
+/**
+ * Phases whose planner creation is currently in flight, keyed by parent then
+ * phase. `useHandlePlanClick` mounts in several places (chat input, agent
+ * button, planner tab), so their provisioning effects can fire in the same tick
+ * — before any of their React Query mutations reports `isPending`. React Query
+ * only de-dupes mutations sharing a `mutationKey`; ours is static, so this
+ * module-level set is what stops two concurrent effects from creating two
+ * planners for the same phase.
+ */
+const inFlightPhasePlannerCreations = new Set<string>();
+
+function phasePlannerCreationKey(
+  parentConversationId: string,
+  phase: DeepPlanPhaseId | null,
+): string {
+  return `${parentConversationId}::${phase ?? "plan"}`;
+}
+
 function useCreateLocalPlanningConversationMutation(options: {
-  onCreated: (planningConversationId: string) => void;
+  onCreated: (
+    planningConversationId: string,
+    deepPlanPhase: DeepPlanPhaseId | null,
+  ) => void;
   onInitialized: () => void;
   onFailed: () => void;
 }) {
@@ -37,13 +64,26 @@ function useCreateLocalPlanningConversationMutation(options: {
     mutationFn: (variables: {
       parentConversationId: string;
       initialMessage?: string;
+      deepPlanPhase?: DeepPlanPhaseId | null;
+      deepPlanGuidance?: string | null;
     }) =>
       AgentServerConversationService.createLocalPlanningConversation(
         variables.parentConversationId,
         variables.initialMessage,
+        variables.deepPlanPhase,
+        variables.deepPlanGuidance,
       ),
     onSuccess: (planningConversation, variables) => {
-      options.onCreated(planningConversation.id);
+      inFlightPhasePlannerCreations.delete(
+        phasePlannerCreationKey(
+          variables.parentConversationId,
+          variables.deepPlanPhase ?? null,
+        ),
+      );
+      options.onCreated(
+        planningConversation.id,
+        variables.deepPlanPhase ?? null,
+      );
       invalidateConversationQueries(
         queryClient,
         variables.parentConversationId,
@@ -53,7 +93,15 @@ function useCreateLocalPlanningConversationMutation(options: {
       });
       options.onInitialized();
     },
-    onError: options.onFailed,
+    onError: (error, variables) => {
+      inFlightPhasePlannerCreations.delete(
+        phasePlannerCreationKey(
+          variables.parentConversationId,
+          variables.deepPlanPhase ?? null,
+        ),
+      );
+      options.onFailed();
+    },
   });
 }
 
@@ -97,10 +145,12 @@ export const useHandlePlanClick = () => {
   const { backend } = useActiveBackend();
   const {
     setConversationMode,
+    conversationMode,
     setSubConversationTaskId,
     subConversationTaskId,
     setLocalPlanningConversationId,
     localPlanningConversationId,
+    deepPlanPlannerPhase,
   } = useConversationStore();
   const { data: conversation } = useActiveConversation();
   const { mutate: createConversation, isPending: isCreatingCloudConversation } =
@@ -129,6 +179,9 @@ export const useHandlePlanClick = () => {
   // `parent_conversation_id`), so that is the authoritative handle. Cloud
   // sub-conversations are driven by their own task/socket plumbing.
   const isLocalBackend = backend.kind !== "cloud";
+  const activeDeepPlanPhase = useConversationStore(
+    (state) => state.deepPlan.activePhase,
+  );
   const { data: rawSubConversations } = useSubConversations(
     isLocalBackend ? conversation?.sub_conversation_ids : undefined,
   );
@@ -137,11 +190,29 @@ export const useHandlePlanClick = () => {
     ? findPlannerConversationId(rawSubConversations, conversation?.id)
     : null;
 
+  // Whether the current Deep Planning phase already has its own planner. Each
+  // phase's planner is pinned to that phase's document, so "has a planner" is
+  // per-phase, not per-conversation. The Implementation phase runs in the code
+  // agent (`isPlanningMode` excludes it), so it needs no planner.
+  const hasPhasePlanner =
+    isLocalBackend &&
+    activeDeepPlanPhase !== null &&
+    isPlanningMode("deep-plan", activeDeepPlanPhase)
+      ? !!findPhasePlannerConversationId(
+          rawSubConversations,
+          conversation?.id,
+          activeDeepPlanPhase,
+        ) || deepPlanPlannerPhase === activeDeepPlanPhase
+      : false;
+
   // Restore planning conversation ids on conversation load. This handles page
   // refreshes while cloud or local planning conversation creation is in
   // progress, and recovers the local planner after browser storage is lost.
   useEffect(() => {
     if (!conversation?.id) return;
+    // Deep Planning keeps one planner per phase, resolved from each planner's
+    // phase tag, so the single-planner restore would clobber the phase id.
+    if (conversationMode === "deep-plan") return;
 
     restorePlanningConversationIds({
       conversationId: conversation.id,
@@ -153,6 +224,7 @@ export const useHandlePlanClick = () => {
     });
   }, [
     conversation?.id,
+    conversationMode,
     serverPlanningConversationId,
     localPlanningConversationId,
     setLocalPlanningConversationId,
@@ -165,12 +237,37 @@ export const useHandlePlanClick = () => {
       conversation.sub_conversation_ids.length > 0) ||
     subConversationTaskId
   );
-  // Whether a planner helper already exists for this conversation — callers
-  // (e.g. the `/plan <task>` interceptor) use this to decide whether they can
-  // send a message to the planner immediately, or must wait for creation.
+  // Whether a plain `plan`-mode planner helper already exists for this
+  // conversation — callers (e.g. the `/plan <task>` interceptor) use this to
+  // decide whether they can send a message to the planner immediately, or must
+  // wait for creation. Deep Planning resolves its own per-phase planner via
+  // `hasPhasePlanner`; a phase planner carries a phase tag, so it must never
+  // satisfy the plain-planner check.
   const hasPlanner = isLocalBackend
     ? !!(localPlanningConversationId || serverPlanningConversationId)
     : hasCloudPlanner;
+
+  // Create the local planner for `phase` (or the plain planner when `phase` is
+  // null). Records the phase on success so the socket resolves the right one
+  // before the tag data refetches.
+  const createLocalPlanner = useCallback(
+    (
+      parentConversationId: string,
+      phase: DeepPlanPhaseId | null,
+      initialMessage?: string,
+    ) => {
+      const key = phasePlannerCreationKey(parentConversationId, phase);
+      if (inFlightPhasePlannerCreations.has(key)) return;
+      inFlightPhasePlannerCreations.add(key);
+      createLocalPlanningConversation({
+        parentConversationId,
+        initialMessage,
+        deepPlanPhase: phase,
+        deepPlanGuidance: phase ? deepPlanGuidance(t, phase) : null,
+      });
+    },
+    [createLocalPlanningConversation, t],
+  );
 
   const handlePlanClick = useCallback(
     (
@@ -184,22 +281,31 @@ export const useHandlePlanClick = () => {
       setConversationMode(mode);
 
       if (backend.kind !== "cloud") {
-        // Guard on the server-reported helper, the store, and the mutation's
-        // own in-flight state — the last one stops two rapid invocations
-        // (e.g. a double-click) from both passing before either updates and
-        // creating two planners for the same parent.
+        if (!conversation?.id) return;
+
+        // Deep Planning: one planner per phase, each pinned to that phase's
+        // document. Create the phase's planner when it does not exist yet; a
+        // different phase's planner must not be reused (it edits the wrong
+        // file). The in-flight guard stops a double invocation from creating
+        // two planners for the same phase.
+        if (mode === "deep-plan") {
+          const phase = useConversationStore.getState().deepPlan.activePhase;
+          // Implementation runs in the code agent, not a planner.
+          if (!phase || !isPlanningMode("deep-plan", phase)) return;
+          if (hasPhasePlanner || isCreatingLocalPlanningConversation) return;
+          createLocalPlanner(conversation.id, phase, initialMessage);
+          return;
+        }
+
+        // Plain plan mode: one shared, untagged planner.
         if (
-          !conversation?.id ||
           localPlanningConversationId ||
           serverPlanningConversationId ||
           isCreatingLocalPlanningConversation
         ) {
           return;
         }
-        createLocalPlanningConversation({
-          parentConversationId: conversation.id,
-          initialMessage,
-        });
+        createLocalPlanner(conversation.id, null, initialMessage);
         return;
       }
 
@@ -233,8 +339,10 @@ export const useHandlePlanClick = () => {
       backend.kind,
       conversation,
       createConversation,
+      createLocalPlanner,
       createLocalPlanningConversation,
       hasCloudPlanner,
+      hasPhasePlanner,
       isCreatingLocalPlanningConversation,
       localPlanningConversationId,
       serverPlanningConversationId,
@@ -244,9 +352,40 @@ export const useHandlePlanClick = () => {
     ],
   );
 
+  // Entering or advancing to a Deep Planning phase must provision that phase's
+  // planner: without its own planner pinned to the phase document, messages
+  // would run in the previous phase's planner (wrong `plan_path`) or the code
+  // agent. Cloud backends keep their existing sub-conversation plumbing.
+  const ensureDeepPlanPlanner = useCallback(() => {
+    if (backend.kind === "cloud") return;
+    if (!conversation?.id) return;
+    const phase = useConversationStore.getState().deepPlan.activePhase;
+    if (!phase || !isPlanningMode("deep-plan", phase)) return;
+    if (hasPhasePlanner || isCreatingLocalPlanningConversation) return;
+    createLocalPlanner(conversation.id, phase);
+  }, [
+    backend.kind,
+    conversation?.id,
+    createLocalPlanner,
+    hasPhasePlanner,
+    isCreatingLocalPlanningConversation,
+  ]);
+
+  // Provision the active phase's planner as soon as the mode is deep-plan or
+  // the phase advances. This hook is mounted by the mode controls, so the
+  // planner exists before the user can send into the phase; the guards inside
+  // `ensureDeepPlanPlanner` keep concurrent mount points from double-creating.
+  useEffect(() => {
+    if (conversationMode !== "deep-plan") return;
+    ensureDeepPlanPlanner();
+  }, [conversationMode, activeDeepPlanPhase, ensureDeepPlanPlanner]);
+
   return {
     handlePlanClick,
     hasPlanner,
+    /** Whether the active Deep Planning phase already has its own planner. */
+    hasDeepPlanPlanner: hasPhasePlanner,
+    ensureDeepPlanPlanner,
     isCreatingConversation:
       isCreatingCloudConversation || isCreatingLocalPlanningConversation,
   };

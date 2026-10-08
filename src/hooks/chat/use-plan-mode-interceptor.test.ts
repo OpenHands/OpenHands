@@ -9,6 +9,7 @@ const startDeepPlan = vi.fn();
 const handlePlanClick = vi.fn();
 let isCreatingConversation = false;
 let hasPlanner = false;
+let hasDeepPlanPlanner = false;
 let mainWebSocketStatus: WebSocketConnectionState = "OPEN";
 let unifiedWebSocketStatus: WebSocketConnectionState = "OPEN";
 let isPlanningAgentRunning = false;
@@ -21,6 +22,7 @@ vi.mock("#/hooks/use-handle-plan-click", () => ({
   useHandlePlanClick: () => ({
     handlePlanClick,
     hasPlanner,
+    hasDeepPlanPlanner,
     isCreatingConversation,
   }),
 }));
@@ -50,6 +52,7 @@ describe("usePlanModeInterceptor", () => {
     vi.clearAllMocks();
     isCreatingConversation = false;
     hasPlanner = false;
+    hasDeepPlanPlanner = false;
     mainWebSocketStatus = "OPEN";
     unifiedWebSocketStatus = "OPEN";
     isPlanningAgentRunning = false;
@@ -219,5 +222,16 @@ describe("usePlanModeInterceptor", () => {
     expect(startDeepPlan).not.toHaveBeenCalled();
     expect(handlePlanClick).not.toHaveBeenCalled();
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("sends /deep-plan <task> straight to the phase planner when one exists", () => {
+    hasDeepPlanPlanner = true;
+    const { intercept, onSubmit } = setup(CONV);
+    intercept("/deep-plan   refine the schema  ");
+    expect(startDeepPlan).toHaveBeenCalledOnce();
+    // A phase planner already owns the right document, so no new planner is
+    // created; the task goes through the normal send path (which routes to it).
+    expect(handlePlanClick).not.toHaveBeenCalled();
+    expect(onSubmit).toHaveBeenCalledExactlyOnceWith("refine the schema");
   });
 });

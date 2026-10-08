@@ -57,13 +57,16 @@ import {
   LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
 } from "./launch-child-conversation-client-tool";
 import {
+  buildPhasePlanPath,
   buildPlanPath,
+  DEEP_PLAN_PHASE_TAG_KEY,
   LOCAL_PLANNER_PARENT_TAG_KEY,
   PLAN_STRUCTURE_TEXT,
   PLANNING_AGENT_INSTRUCTION,
   PLANNING_FILE_EDITOR_TOOL_NAME,
   PLANNING_SYSTEM_PROMPT_FILENAME,
 } from "#/utils/plan-file";
+import type { DeepPlanPhaseId } from "#/utils/deep-plan";
 
 export interface DirectConversationInfo {
   id: string;
@@ -1468,6 +1471,20 @@ export function buildStartPlanningConversationRequest(options: {
   skillEnablement?: SkillEnablement;
   /** Mirrors the main conversation's workspace selection — see buildConfiguredConversationSettings. */
   executionRuntime?: AgentServerInfo["execution_runtime"];
+  /**
+   * Deep Planning phase this planner is created for. Pins `plan_path` to that
+   * phase's document and tags the conversation with the phase, so the planner
+   * can actually produce the phase's file. `null`/omitted keeps the plain
+   * single-`PLAN.md` planner that `plan` mode uses.
+   */
+  deepPlanPhase?: DeepPlanPhaseId | null;
+  /**
+   * English phase guidance appended to the planner's system prompt. Passed in
+   * (rather than imported) so this module stays free of i18n; the caller
+   * resolves the phase's `instructionKey` at `lng: "en"` so the planner prompt
+   * is stable and locale-independent while the panel shows the localized copy.
+   */
+  deepPlanGuidance?: string | null;
 }): RawAgentStartConversationPayload {
   const agentSettings = toRecord(options.encryptedAgentSettings);
   const llm = buildNormalizedLlmSettings(agentSettings.llm);
@@ -1477,7 +1494,12 @@ export function buildStartPlanningConversationRequest(options: {
   // all at once instead of token-by-token.
   llm.stream = true;
 
-  const planPath = buildPlanPath(options.workingDir);
+  // A Deep Planning planner is pinned to the phase's own document so the
+  // planning tool will accept writes to it (it only edits `plan_path`);
+  // `plan` mode keeps the single shared `PLAN.md`.
+  const planPath = options.deepPlanPhase
+    ? buildPhasePlanPath(options.workingDir, options.deepPlanPhase)
+    : buildPlanPath(options.workingDir);
 
   // Put the planner's directive + boundaries in the system prompt (matching the
   // OpenHands app-server's PLANNING_AGENT_INSTRUCTION), preserving any suffix
@@ -1487,11 +1509,19 @@ export function buildStartPlanningConversationRequest(options: {
     undefined,
     options.skillEnablement,
   );
+  // The phase guidance is the prompt that makes the phase's document reachable
+  // and correctly referenced. It goes into the system prompt (stable, English)
+  // rather than the user's chat, so the planner always has it while the user's
+  // own messages stay untouched.
+  const plannerDirective =
+    options.deepPlanPhase && options.deepPlanGuidance
+      ? `${PLANNING_AGENT_INSTRUCTION}\n\n${options.deepPlanGuidance}`
+      : PLANNING_AGENT_INSTRUCTION;
   const existingSuffix = agentContext.system_message_suffix;
   agentContext.system_message_suffix =
     typeof existingSuffix === "string"
-      ? `${PLANNING_AGENT_INSTRUCTION}\n\n${existingSuffix}`
-      : PLANNING_AGENT_INSTRUCTION;
+      ? `${plannerDirective}\n\n${existingSuffix}`
+      : plannerDirective;
 
   // Idle planner: "Create a Plan" only switches to plan mode and provisions
   // this conversation; the user sends the first message themselves, so nothing
@@ -1563,7 +1593,14 @@ export function buildStartPlanningConversationRequest(options: {
     // - The tag is what hides the helper from the conversation list; it is
     //   also the only marker on agent-servers too old for the parent link.
     parent_conversation_id: options.parentConversationId,
-    tags: { [LOCAL_PLANNER_PARENT_TAG_KEY]: options.parentConversationId },
+    tags: {
+      [LOCAL_PLANNER_PARENT_TAG_KEY]: options.parentConversationId,
+      // Identifies which phase's document this planner owns, so the socket
+      // layer can route a phase's messages to the planner pinned to it.
+      ...(options.deepPlanPhase
+        ? { [DEEP_PLAN_PHASE_TAG_KEY]: options.deepPlanPhase }
+        : {}),
+    },
     ...(initialMessage ? { initial_message: initialMessage } : {}),
   };
 
@@ -1656,6 +1693,10 @@ export async function buildStartPlanningConversationRequestWithEncryptedSettings
   initialMessage?: string;
   /** The server's `execution_runtime` — threads through to workspace selection. */
   executionRuntime?: AgentServerInfo["execution_runtime"];
+  /** Deep Planning phase this planner is created for; see buildStartPlanningConversationRequest. */
+  deepPlanPhase?: DeepPlanPhaseId | null;
+  /** English phase guidance for the planner's system prompt; see buildStartPlanningConversationRequest. */
+  deepPlanGuidance?: string | null;
 }): Promise<RawAgentStartConversationPayload> {
   const { SecretsService } = await import("./secrets-service");
 

@@ -1,9 +1,18 @@
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
+import {
+  DEEP_PLAN_PHASE_IDS,
+  getDeepPlanPhase,
+  type DeepPlanPhaseId,
+} from "#/utils/deep-plan";
 
 export const PLAN_RELATIVE_PATH = ".agents_tmp/PLAN.md";
 export const PLANNING_SYSTEM_PROMPT_FILENAME = "system_prompt_planning.j2";
 export const PLANNING_FILE_EDITOR_TOOL_NAME = "planning_file_editor";
 export const LOCAL_PLANNER_PARENT_TAG_KEY = "plannerparent";
+/** Tags a Deep Planning planner with the phase whose document it writes. */
+export const DEEP_PLAN_PHASE_TAG_KEY = "plannerphase";
+/** Directory the planner and the phase documents live under. */
+export const AGENTS_TMP_DIR = ".agents_tmp";
 
 const PLAN_FILENAME_UPPER = "PLAN.MD";
 
@@ -63,6 +72,21 @@ export function buildPlanPath(workingDir: string): string {
   return `${normalized}/${PLAN_RELATIVE_PATH}`;
 }
 
+/**
+ * The `plan_path` a Deep Planning planner is pinned to. The planning tool only
+ * edits its `plan_path`, so each phase's planner is pointed at that phase's own
+ * document — that is what lets the chain actually be produced. Pure-conversation
+ * phases (`analysis`, `implementation`) have no output file and keep `PLAN.md`.
+ */
+export function buildPhasePlanPath(
+  workingDir: string,
+  phase: DeepPlanPhaseId,
+): string {
+  const normalized = workingDir.replace(/\/+$/, "");
+  const outputFile = getDeepPlanPhase(phase).outputFile;
+  return `${normalized}/${AGENTS_TMP_DIR}/${outputFile ?? "PLAN.md"}`;
+}
+
 export function isPlanFilePath(path: string | null | undefined): boolean {
   if (!path) return false;
   const normalized = path.replace(/\\/g, "/").toUpperCase();
@@ -98,4 +122,40 @@ export function findPlannerConversationId(
       isPlannerConversationOf(sub, parentConversationId),
     )?.id ?? null
   );
+}
+
+/**
+ * The Deep Planning phase a planner was created for, or `null` for a plain
+ * `plan`-mode planner (which carries no phase tag). Lets the socket layer tell
+ * a deep-plan planner pinned to `requirements.md` from one pinned to
+ * `database-design.md` — they share the parent and the `plannerparent` tag.
+ */
+export function plannerPhaseOf(
+  conversation: Pick<AppConversation, "tags"> | null | undefined,
+): DeepPlanPhaseId | null {
+  const phase = conversation?.tags?.[DEEP_PLAN_PHASE_TAG_KEY];
+  return phase && (DEEP_PLAN_PHASE_IDS as readonly string[]).includes(phase)
+    ? (phase as DeepPlanPhaseId)
+    : null;
+}
+
+/**
+ * Finds the planner helper for a specific Deep Planning phase. Falls back to
+ * the plain planner when no phase is given, so `plan` mode is unchanged.
+ */
+export function findPhasePlannerConversationId(
+  subConversations: (AppConversation | null)[] | null | undefined,
+  parentConversationId: string | null | undefined,
+  phase: DeepPlanPhaseId | null,
+): string | null {
+  if (!parentConversationId) return null;
+  const planners = (subConversations ?? []).filter(
+    (sub): sub is AppConversation =>
+      sub !== null && isPlannerConversationOf(sub, parentConversationId),
+  );
+  if (phase) {
+    return planners.find((sub) => plannerPhaseOf(sub) === phase)?.id ?? null;
+  }
+  // Plain planner: one without a phase tag.
+  return planners.find((sub) => plannerPhaseOf(sub) === null)?.id ?? null;
 }

@@ -40,8 +40,12 @@ export const usePlanModeInterceptor = (
     (s) => s.setConversationMode,
   );
   const startDeepPlan = useConversationStore((s) => s.startDeepPlan);
-  const { handlePlanClick, hasPlanner, isCreatingConversation } =
-    useHandlePlanClick();
+  const {
+    handlePlanClick,
+    hasPlanner,
+    hasDeepPlanPlanner,
+    isCreatingConversation,
+  } = useHandlePlanClick();
   const isMainWebSocketConnected = useMainWebSocketStatus() === "OPEN";
   const isWebSocketConnected = useUnifiedWebSocketStatus() === "OPEN";
   const { isPlanningAgentRunning } = usePlanningAgentState();
@@ -74,7 +78,9 @@ export const usePlanModeInterceptor = (
         // (`resetDeepPlan`).
         startDeepPlan();
         const task = trimmed.slice(DEEP_PLAN_COMMAND.length).trim();
-        if (task && hasPlanner) {
+        // Deep Planning resolves its own per-phase planner; a plain planner is
+        // not a valid target (wrong plan_path).
+        if (task && hasDeepPlanPlanner) {
           onSubmit(task);
         } else {
           handlePlanClick(undefined, task || undefined, "deep-plan");
@@ -111,6 +117,7 @@ export const usePlanModeInterceptor = (
       conversationId,
       curAgentState,
       hasPlanner,
+      hasDeepPlanPlanner,
       isCreatingConversation,
       isMainWebSocketConnected,
       isPlanningAgentRunning,

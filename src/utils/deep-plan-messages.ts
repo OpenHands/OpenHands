@@ -15,6 +15,20 @@ export const DEEP_PLAN_PHASE_LABEL_KEY: Record<DeepPlanPhaseId, I18nKey> = {
 };
 
 /**
+ * English phase guidance for the planner's system prompt. Resolved at
+ * `lng: "en"` on purpose: the planner's directive must be stable regardless of
+ * the UI locale (an agent prompt is not user copy), while the panel keeps
+ * showing `t(instructionKey)` in the active locale. `t` is passed in so this
+ * module does not import a particular i18n instance.
+ */
+export function deepPlanGuidance(
+  t: TFunction<"openhands">,
+  phase: DeepPlanPhaseId,
+): string {
+  return t(getDeepPlanPhase(phase).instructionKey, { lng: "en" });
+}
+
+/**
  * The document an issue is reported against: its output filename when the
  * phase produces one, otherwise the phase's display name. Localized so the
  * checkpoint error follows the active locale.

@@ -308,11 +308,12 @@ describe("useHandlePlanClick", () => {
       await waitFor(() => {
         expect(
           AgentServerConversationService.createLocalPlanningConversation,
-        ).toHaveBeenCalledWith("conv-123", undefined);
+        ).toHaveBeenCalledWith("conv-123", undefined, null, null);
       });
       await waitFor(() => {
         expect(mockSetLocalPlanningConversationId).toHaveBeenCalledWith(
           "plan-conv-1",
+          null,
         );
       });
       expect(mockSetConversationMode).toHaveBeenCalledWith("plan");
@@ -343,6 +344,7 @@ describe("useHandlePlanClick", () => {
       await waitFor(() => {
         expect(mockSetLocalPlanningConversationId).toHaveBeenCalledWith(
           "plan-conv-1",
+          null,
         );
       });
 
@@ -374,6 +376,8 @@ describe("useHandlePlanClick", () => {
         ).toHaveBeenCalledWith(
           "conv-123",
           "Build a website about open source.",
+          null,
+          null,
         );
       });
     });
@@ -483,7 +487,7 @@ describe("useHandlePlanClick", () => {
       await waitFor(() => {
         expect(
           AgentServerConversationService.createLocalPlanningConversation,
-        ).toHaveBeenCalledWith("conv-123", undefined);
+        ).toHaveBeenCalledWith("conv-123", undefined, null, null);
       });
     });
 
