@@ -32,7 +32,6 @@ contextBridge.exposeInMainWorld("desktopShell", {
    * fullscreened BrowserWindow, so a CSS media query cannot see this.
    */
   onFullScreenChange(cb) {
-    if (typeof cb !== "function") return () => {};
     listeners.add(cb);
     return () => listeners.delete(cb);
   },

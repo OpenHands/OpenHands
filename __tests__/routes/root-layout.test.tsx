@@ -396,6 +396,113 @@ describe("root layout", () => {
     expect(await screen.findByTestId("command-menu")).toBeInTheDocument();
     expect(screen.queryByTestId("alert-banner")).not.toBeInTheDocument();
   });
+
+  describe("macOS desktop title bar", () => {
+    afterEach(() => {
+      delete window.desktopShell;
+    });
+
+    it("reserves a draggable band for the traffic lights on the macOS desktop app", () => {
+      window.desktopShell = { platform: "darwin" };
+
+      renderMainApp();
+
+      expect(screen.getByTestId("titlebar-drag-region")).toHaveAttribute(
+        "aria-hidden",
+        "true",
+      );
+      expect(screen.getByTestId("root-layout")).toHaveClass("pt-7");
+    });
+
+    it("adds no band in a browser tab, where the shell owns no window chrome", () => {
+      renderMainApp();
+
+      expect(
+        screen.queryByTestId("titlebar-drag-region"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("root-layout")).not.toHaveClass("pt-7");
+    });
+
+    it.each(["win32", "linux"])(
+      "adds no band on %s, which keeps the native title bar",
+      (platform) => {
+        window.desktopShell = { platform };
+
+        renderMainApp();
+
+        expect(
+          screen.queryByTestId("titlebar-drag-region"),
+        ).not.toBeInTheDocument();
+        expect(screen.getByTestId("root-layout")).not.toHaveClass("pt-7");
+      },
+    );
+
+    it("keeps a drag band on the loading screen, before config resolves", () => {
+      window.desktopShell = { platform: "darwin" };
+      useConfigMock.mockReturnValue({ isLoading: true, data: null });
+
+      renderMainApp();
+
+      expect(screen.getByTestId("titlebar-drag-region")).toBeInTheDocument();
+    });
+
+    it("keeps the band and the inset on the route error screen", async () => {
+      window.desktopShell = { platform: "darwin" };
+
+      renderRouteError(new Error("Kaboom"));
+
+      expect(await screen.findByText("Kaboom")).toBeInTheDocument();
+      expect(
+        screen.getByTestId("titlebar-drag-region").parentElement,
+      ).toHaveClass("pt-7");
+    });
+
+    it("drops the band once the window goes fullscreen, where macOS hides the traffic lights", async () => {
+      let isFullScreen = false;
+      let emit: ((value: boolean) => void) | undefined;
+      window.desktopShell = {
+        platform: "darwin",
+        isFullScreen: () => isFullScreen,
+        onFullScreenChange: (cb) => {
+          emit = (value) => {
+            isFullScreen = value;
+            cb(value);
+          };
+          return () => {};
+        },
+      };
+
+      renderMainApp();
+      expect(screen.getByTestId("titlebar-drag-region")).toBeInTheDocument();
+
+      await act(async () => emit?.(true));
+
+      expect(
+        screen.queryByTestId("titlebar-drag-region"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("root-layout")).not.toHaveClass("pt-7");
+
+      await act(async () => emit?.(false));
+
+      expect(screen.getByTestId("titlebar-drag-region")).toBeInTheDocument();
+    });
+
+    it("never renders the band when the window is already fullscreen on load, as after a reload", () => {
+      window.desktopShell = {
+        platform: "darwin",
+        isFullScreen: () => true,
+        onFullScreenChange: () => () => {},
+      };
+
+      renderMainApp();
+
+      // Checked on the first commit: a band that is dropped later still flashes.
+      expect(
+        screen.queryByTestId("titlebar-drag-region"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("root-layout")).not.toHaveClass("pt-7");
+    });
+  });
 });
 
 describe("root layout error boundary", () => {
@@ -441,177 +548,5 @@ describe("root layout error boundary", () => {
     expect(
       await screen.findByRole("heading", { name: I18nKey.ERROR$UNKNOWN }),
     ).toBeInTheDocument();
-  });
-});
-
-describe("macOS desktop title bar", () => {
-  type ShellWindow = Window & { desktopShell?: { platform?: string } };
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    useConfigMock.mockReturnValue({
-      isLoading: false,
-      data: {
-        maintenance_start_time: null,
-        faulty_models: [],
-        error_message: null,
-        updated_at: new Date().toISOString(),
-      },
-    });
-    useSettingsMock.mockReturnValue({
-      data: { language: "en", user_consents_to_analytics: true },
-    });
-  });
-
-  afterEach(() => {
-    delete (window as ShellWindow).desktopShell;
-  });
-
-  it("reserves a draggable band for the traffic lights on the macOS desktop app", () => {
-    (window as ShellWindow).desktopShell = { platform: "darwin" };
-
-    renderMainApp();
-
-    expect(screen.getByTestId("titlebar-drag-region")).toBeInTheDocument();
-    expect(screen.getByTestId("root-layout")).toHaveClass("oh-titlebar-inset");
-  });
-
-  it("keeps the band out of the accessibility tree", () => {
-    (window as ShellWindow).desktopShell = { platform: "darwin" };
-
-    renderMainApp();
-
-    expect(screen.getByTestId("titlebar-drag-region")).toHaveAttribute(
-      "aria-hidden",
-      "true",
-    );
-  });
-
-  it("adds no band in a browser tab, where the shell owns no window chrome", () => {
-    renderMainApp();
-
-    expect(
-      screen.queryByTestId("titlebar-drag-region"),
-    ).not.toBeInTheDocument();
-    expect(screen.getByTestId("root-layout")).not.toHaveClass(
-      "oh-titlebar-inset",
-    );
-  });
-
-  it("keeps a drag band on the loading screen, before config resolves", () => {
-    (window as ShellWindow).desktopShell = { platform: "darwin" };
-    useConfigMock.mockReturnValue({ isLoading: true, data: null });
-
-    renderMainApp();
-
-    expect(screen.getByTestId("titlebar-drag-region")).toBeInTheDocument();
-  });
-
-  it("keeps the band and the inset on the route error screen", async () => {
-    (window as ShellWindow).desktopShell = { platform: "darwin" };
-
-    renderRouteError(new Error("Kaboom"));
-
-    expect(await screen.findByText("Kaboom")).toBeInTheDocument();
-    expect(screen.getByTestId("titlebar-drag-region")).toBeInTheDocument();
-    expect(
-      screen.getByTestId("titlebar-drag-region").parentElement,
-    ).toHaveClass("oh-titlebar-inset");
-  });
-
-  it.each(["win32", "linux"])(
-    "adds no band on %s, which keeps the native title bar",
-    (platform) => {
-      (window as ShellWindow).desktopShell = { platform };
-
-      renderMainApp();
-
-      expect(
-        screen.queryByTestId("titlebar-drag-region"),
-      ).not.toBeInTheDocument();
-      expect(screen.getByTestId("root-layout")).not.toHaveClass(
-        "oh-titlebar-inset",
-      );
-    },
-  );
-});
-
-describe("fullscreen", () => {
-  type FsWindow = Window & {
-    desktopShell?: {
-      platform?: string;
-      isFullScreen?: () => boolean;
-      onFullScreenChange?: (cb: (v: boolean) => void) => () => void;
-    };
-  };
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    useConfigMock.mockReturnValue({
-      isLoading: false,
-      data: {
-        maintenance_start_time: null,
-        faulty_models: [],
-        error_message: null,
-        updated_at: new Date().toISOString(),
-      },
-    });
-    useSettingsMock.mockReturnValue({
-      data: { language: "en", user_consents_to_analytics: true },
-    });
-  });
-
-  afterEach(() => {
-    delete (window as FsWindow).desktopShell;
-  });
-
-  it("drops the band once the window goes fullscreen, where macOS hides the traffic lights", async () => {
-    let isFullScreen = false;
-    let emit: ((value: boolean) => void) | undefined;
-    (window as FsWindow).desktopShell = {
-      platform: "darwin",
-      isFullScreen: () => isFullScreen,
-      onFullScreenChange: (cb) => {
-        emit = (value) => {
-          isFullScreen = value;
-          cb(value);
-        };
-        return () => {};
-      },
-    };
-
-    renderMainApp();
-    expect(screen.getByTestId("titlebar-drag-region")).toBeInTheDocument();
-
-    await act(async () => emit?.(true));
-
-    expect(
-      screen.queryByTestId("titlebar-drag-region"),
-    ).not.toBeInTheDocument();
-    expect(screen.getByTestId("root-layout")).not.toHaveClass(
-      "oh-titlebar-inset",
-    );
-
-    await act(async () => emit?.(false));
-
-    expect(screen.getByTestId("titlebar-drag-region")).toBeInTheDocument();
-  });
-
-  it("never renders the band when the window is already fullscreen on load, as after a reload", () => {
-    (window as FsWindow).desktopShell = {
-      platform: "darwin",
-      isFullScreen: () => true,
-      onFullScreenChange: () => () => {},
-    };
-
-    renderMainApp();
-
-    // Checked on the first commit: a band that is dropped later still flashes.
-    expect(
-      screen.queryByTestId("titlebar-drag-region"),
-    ).not.toBeInTheDocument();
-    expect(screen.getByTestId("root-layout")).not.toHaveClass(
-      "oh-titlebar-inset",
-    );
   });
 });

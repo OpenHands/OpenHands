@@ -12,10 +12,14 @@ interface DesktopShellBridge {
   onFullScreenChange?: (cb: (isFullScreen: boolean) => void) => () => void;
 }
 
+declare global {
+  interface Window {
+    desktopShell?: DesktopShellBridge;
+  }
+}
+
 function getDesktopShell(): DesktopShellBridge | undefined {
-  if (typeof window === "undefined") return undefined;
-  return (window as Window & { desktopShell?: DesktopShellBridge })
-    .desktopShell;
+  return typeof window === "undefined" ? undefined : window.desktopShell;
 }
 
 /**

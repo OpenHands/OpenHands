@@ -48,6 +48,11 @@ const SuperAdminSetupGuide = React.lazy(
   () => import("#/components/features/setup-guide/super-admin-setup-guide"),
 );
 
+/**
+ * The macOS desktop app hides its title bar ("hiddenInset"), leaving the
+ * traffic lights over the shell. Screens reserve a 28px band for them (pt-7)
+ * and make it the window's drag handle; the padding keeps it free of controls.
+ */
 function useShowTitleBarBand(): boolean {
   const isFullScreen = useDesktopFullScreen();
   // Fullscreen hides the traffic lights, so the band has nothing to clear.
@@ -55,11 +60,12 @@ function useShowTitleBarBand(): boolean {
 }
 
 function TitleBarDragRegion() {
+  if (!useShowTitleBarBand()) return null;
   return (
     <div
       data-testid="titlebar-drag-region"
       aria-hidden="true"
-      className="oh-titlebar-drag-region fixed inset-x-0 top-0 z-50"
+      className="app-region-drag fixed inset-x-0 top-0 z-50 h-7"
     />
   );
 }
@@ -67,8 +73,8 @@ function TitleBarDragRegion() {
 function ErrorShell({ children }: { children: React.ReactNode }) {
   const showTitleBarBand = useShowTitleBarBand();
   return (
-    <div className={cn(showTitleBarBand && "oh-titlebar-inset")}>
-      {showTitleBarBand ? <TitleBarDragRegion /> : null}
+    <div className={cn(showTitleBarBand && "pt-7")}>
+      <TitleBarDragRegion />
       {children}
     </div>
   );
@@ -141,7 +147,7 @@ function MainAppContent() {
   if (config.isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-base">
-        {showTitleBarBand ? <TitleBarDragRegion /> : null}
+        <TitleBarDragRegion />
         <LoadingSpinner size="large" />
       </div>
     );
@@ -162,11 +168,11 @@ function MainAppContent() {
             data-testid="root-layout"
             className={cn(
               "h-screen lg:min-w-5xl flex flex-col md:flex-row bg-base overflow-hidden p-0",
-              showTitleBarBand && "oh-titlebar-inset",
+              showTitleBarBand && "pt-7",
             )}
           >
             <title>{appTitle}</title>
-            {showTitleBarBand ? <TitleBarDragRegion /> : null}
+            <TitleBarDragRegion />
             <Sidebar />
 
             <div className="flex min-h-0 flex-col w-full min-w-0 h-full gap-3">

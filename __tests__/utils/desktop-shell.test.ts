@@ -5,20 +5,12 @@ import {
   subscribeDesktopFullScreen,
 } from "#/utils/desktop-shell";
 
-type ShellWindow = Window & {
-  desktopShell?: {
-    platform?: string;
-    isFullScreen?: () => boolean;
-    onFullScreenChange?: (cb: (v: boolean) => void) => () => void;
-  };
-};
-
 function setShell(platform: string | undefined) {
   if (platform === undefined) {
-    delete (window as ShellWindow).desktopShell;
+    delete window.desktopShell;
     return;
   }
-  (window as ShellWindow).desktopShell = { platform };
+  window.desktopShell = { platform };
 }
 
 afterEach(() => {
@@ -44,7 +36,7 @@ describe("isMacDesktopShell", () => {
   );
 
   it("is false when the bridge exposes no platform", () => {
-    (window as ShellWindow).desktopShell = {};
+    window.desktopShell = {};
     expect(isMacDesktopShell()).toBe(false);
   });
 });
@@ -60,7 +52,7 @@ describe("subscribeDesktopFullScreen", () => {
   it("forwards fullscreen transitions from the bridge", () => {
     const unsubscribe = vi.fn();
     let emit: ((value: boolean) => void) | undefined;
-    (window as ShellWindow).desktopShell = {
+    window.desktopShell = {
       platform: "darwin",
       onFullScreenChange: (cb) => {
         emit = cb;
@@ -89,7 +81,7 @@ describe("isDesktopFullScreen", () => {
   });
 
   it("reads the state the preload holds, which no transition announces after a reload", () => {
-    (window as ShellWindow).desktopShell = {
+    window.desktopShell = {
       platform: "darwin",
       isFullScreen: () => true,
     };
