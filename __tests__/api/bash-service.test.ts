@@ -6,6 +6,7 @@ import {
   setRegisteredBackends,
 } from "#/api/backend-registry/active-store";
 import BashService from "#/api/bash-service/bash-service.api";
+import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
 import { callCloudProxy } from "#/api/cloud/proxy";
 import type { Backend } from "#/api/backend-registry/types";
 
@@ -77,6 +78,7 @@ beforeEach(() => {
   window.localStorage.clear();
   __resetActiveStoreForTests();
   vi.mocked(BashClient).mockClear();
+  vi.mocked(getAgentServerClientOptions).mockClear();
   searchEventsMock.mockReset();
   vi.mocked(callCloudProxy).mockReset();
 });
@@ -84,6 +86,7 @@ beforeEach(() => {
 afterEach(() => {
   window.localStorage.clear();
   __resetActiveStoreForTests();
+  vi.restoreAllMocks();
 });
 
 describe("BashService.listOutputs — local backend", () => {
@@ -120,6 +123,54 @@ describe("BashService.listOutputs — local backend", () => {
     expect(outputs).toEqual([OUTPUT_1, OUTPUT_2]);
   });
 
+  it("searches the server-level bash events for a run that has a conversation", async () => {
+    // Arrange: the real option builder and client, so the assertion is on the
+    // request the browser actually sends. The automation's command runs at
+    // server level, so a conversation-scoped search would come back empty.
+    const actualClients = await vi.importActual<
+      typeof import("@openhands/typescript-client/clients")
+    >("@openhands/typescript-client/clients");
+    const actualOptions = await vi.importActual<
+      typeof import("#/api/agent-server-client-options")
+    >("#/api/agent-server-client-options");
+    vi.mocked(getAgentServerClientOptions).mockImplementationOnce(
+      actualOptions.getAgentServerClientOptions,
+    );
+    vi.mocked(BashClient).mockImplementationOnce(
+      function RealBashClient(options) {
+        return new actualClients.BashClient(options);
+      },
+    );
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input) => {
+        const body = String(input).includes("/server_info")
+          ? { capabilities: ["conversation_runtime_routes_v1"] }
+          : { items: [OUTPUT_1], next_page_id: null };
+        return new Response(JSON.stringify(body), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      });
+
+    // Act
+    const outputs = await BashService.listOutputs(
+      `${localBackend.host}/api/conversations/conv-1`,
+      "local-key",
+      BASH_CMD_ID,
+    );
+
+    // Assert
+    const urls = fetchMock.mock.calls.map(([input]) => new URL(String(input)));
+    expect(urls.map((url) => url.pathname)).toEqual([
+      "/api/bash/bash_events/search",
+    ]);
+    expect(urls[0].origin).toBe(localBackend.host);
+    expect(urls[0].searchParams.get("command_id__eq")).toBe(BASH_CMD_ID);
+    expect(urls[0].searchParams.has("cid")).toBe(false);
+    expect(outputs).toEqual([OUTPUT_1]);
+  });
+
   it("works without a conversation URL (falls back to backend host)", async () => {
     searchEventsMock.mockResolvedValueOnce({ items: [OUTPUT_1] });
 
@@ -137,10 +188,8 @@ describe("BashService.listOutputs — cloud backend", () => {
     setActiveSelection({ backendId: cloudBackend.id, orgId: null });
   });
 
-  it("routes through callCloudProxy with hostOverride and session-api-key", async () => {
-    vi.mocked(callCloudProxy).mockResolvedValueOnce({
-      items: [OUTPUT_1, OUTPUT_2],
-    });
+  it("calls the runtime directly via BashClient with the session key", async () => {
+    searchEventsMock.mockResolvedValueOnce({ items: [OUTPUT_1, OUTPUT_2] });
 
     const outputs = await BashService.listOutputs(
       CONVERSATION_URL,
@@ -148,21 +197,19 @@ describe("BashService.listOutputs — cloud backend", () => {
       BASH_CMD_ID,
     );
 
-    expect(BashClient).not.toHaveBeenCalled();
-    const proxyCall = vi.mocked(callCloudProxy).mock.calls[0][0];
-    expect(proxyCall.method).toBe("GET");
-    expect(proxyCall.path).toMatch(/^\/api\/bash\/bash_events\/search\?/);
-    expect(proxyCall.hostOverride).toBe("https://runtime.example.com");
-    expect(proxyCall.authMode).toBe("session-api-key");
-    expect(proxyCall.sessionApiKey).toBe(SESSION_KEY);
-
-    const searchUrl = new URL(
-      `http://x.example.com${proxyCall.path as string}`,
-    );
-    expect(searchUrl.searchParams.get("kind__eq")).toBe("BashOutput");
-    expect(searchUrl.searchParams.get("command_id__eq")).toBe(BASH_CMD_ID);
-    expect(searchUrl.searchParams.get("sort_order")).toBe("TIMESTAMP");
-
+    // Cloud now hits the runtime host directly (CORS allowlisted), not
+    // the /api/cloud-proxy envelope.
+    expect(callCloudProxy).not.toHaveBeenCalled();
+    expect(getAgentServerClientOptions).toHaveBeenCalledWith({
+      conversationUrl: CONVERSATION_URL,
+      sessionApiKey: SESSION_KEY,
+    });
+    expect(BashClient).toHaveBeenCalledTimes(1);
+    expect(searchEventsMock).toHaveBeenCalledWith({
+      kind__eq: "BashOutput",
+      command_id__eq: BASH_CMD_ID,
+      sort_order: "TIMESTAMP",
+    });
     expect(outputs).toEqual([OUTPUT_1, OUTPUT_2]);
   });
 
@@ -171,5 +218,6 @@ describe("BashService.listOutputs — cloud backend", () => {
       BashService.listOutputs(null, SESSION_KEY, BASH_CMD_ID),
     ).rejects.toThrow(/requires a conversation URL/);
     expect(callCloudProxy).not.toHaveBeenCalled();
+    expect(BashClient).not.toHaveBeenCalled();
   });
 });

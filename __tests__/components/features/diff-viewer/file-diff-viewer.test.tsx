@@ -5,6 +5,7 @@ import {
   FileDiffViewer,
   MAX_DIFF_EDITOR_HEIGHT_PX,
 } from "#/components/features/diff-viewer/file-diff-viewer";
+import { I18nKey } from "#/i18n/declaration";
 
 const MOCK_DIFF = { original: "old content", modified: "new content" };
 const MOCK_MD_DIFF = {
@@ -223,5 +224,38 @@ describe("FileDiffViewer", () => {
       "aria-pressed",
       "false",
     );
+  });
+
+  it("gives the icon-only view mode and collapse buttons accessible names", async () => {
+    const user = userEvent.setup();
+    render(<FileDiffViewer path="src/index.ts" type="M" />);
+
+    expect(screen.getByTestId("collapse")).toHaveAccessibleName(
+      I18nKey.BUTTON$EXPAND,
+    );
+
+    await expand(user);
+
+    expect(screen.getByTestId("collapse")).toHaveAccessibleName(
+      I18nKey.BUTTON$COLLAPSE,
+    );
+    expect(
+      screen.getByRole("button", {
+        name: I18nKey.DIFF_VIEWER$VIEW_MODE_OLD,
+        pressed: false,
+      }),
+    ).toHaveAttribute("data-testid", "view-mode-old");
+    expect(
+      screen.getByRole("button", {
+        name: I18nKey.FILES$DIFF_VIEW,
+        pressed: true,
+      }),
+    ).toHaveAttribute("data-testid", "view-mode-diff");
+    expect(
+      screen.getByRole("button", {
+        name: I18nKey.DIFF_VIEWER$VIEW_MODE_NEW,
+        pressed: false,
+      }),
+    ).toHaveAttribute("data-testid", "view-mode-new");
   });
 });

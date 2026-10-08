@@ -19,7 +19,9 @@ import { useSyncTelemetryConsent } from "#/hooks/use-sync-telemetry-consent";
 import { useSyncAutomationTelemetryConsent } from "#/hooks/use-sync-automation-telemetry-consent";
 
 import { useTelemetryIdentity } from "#/hooks/use-telemetry-identity";
+import { useSyncDocumentLanguage } from "#/hooks/use-sync-document-language";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
+import { CloudOrganizationBoundary } from "#/components/features/backends/cloud-organization-boundary";
 import { useAppTitle } from "#/hooks/use-app-title";
 import { ReactRouterNavigationProvider } from "./react-router-navigation-provider";
 import { OnboardingHost } from "#/components/features/onboarding";
@@ -41,6 +43,9 @@ const CommandMenu = React.lazy(() =>
   import("#/components/features/command-menu/command-menu").then((m) => ({
     default: m.CommandMenu,
   })),
+);
+const SuperAdminSetupGuide = React.lazy(
+  () => import("#/components/features/setup-guide/super-admin-setup-guide"),
 );
 
 function useShowTitleBarBand(): boolean {
@@ -103,6 +108,14 @@ export function ErrorBoundary() {
 }
 
 export default function MainApp() {
+  return (
+    <CloudOrganizationBoundary>
+      <MainAppContent />
+    </CloudOrganizationBoundary>
+  );
+}
+
+function MainAppContent() {
   const location = useLocation();
   const appTitle = useAppTitle();
   const { data: settings } = useSettings();
@@ -123,6 +136,7 @@ export default function MainApp() {
       i18n.changeLanguage(settings.language);
     }
   }, [settings?.language]);
+  useSyncDocumentLanguage();
 
   if (config.isLoading) {
     return (
@@ -182,6 +196,9 @@ export default function MainApp() {
           <React.Suspense fallback={null}>
             <EnvironmentSwitchOverlay />
             <CommandMenu />
+          </React.Suspense>
+          <React.Suspense fallback={null}>
+            <SuperAdminSetupGuide />
           </React.Suspense>
           {showOnboardingPreview ? <OnboardingHost /> : null}
         </SidebarMobileNavProvider>

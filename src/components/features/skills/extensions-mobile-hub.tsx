@@ -29,7 +29,7 @@ export function ExtensionsMobileHub() {
   return (
     <div
       data-testid="extensions-mobile-hub"
-      className="flex flex-col gap-4 px-4 py-2 md:hidden"
+      className="flex flex-col gap-4 px-4 py-2 lg:hidden"
     >
       <Typography.H2>{t(I18nKey.NAV$CUSTOMIZE)}</Typography.H2>
       <nav className="flex flex-col gap-0.5">
@@ -56,7 +56,7 @@ export function ExtensionsMobileHub() {
                   {t(I18nKey.SIDEBAR$SKILLS_AND_PLUGINS_CLOUD_LINK)}
                 </span>
                 <ExternalLink
-                  className="size-4 shrink-0 text-[var(--oh-muted)]"
+                  className="size-4 shrink-0 text-muted"
                   aria-hidden
                 />
               </a>

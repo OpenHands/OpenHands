@@ -63,7 +63,7 @@ describe("Browser", () => {
 
     render(<BrowserPanel />);
 
-    expect(screen.getByTestId("browser-chrome-bar")).toHaveClass("min-h-[34px]");
+    expect(screen.getByTestId("browser-chrome-bar")).toHaveClass("min-h-8.5");
     expect(screen.getByTestId("browser-chrome-url")).toHaveTextContent(
       "BROWSER$URL_PLACEHOLDER",
     );

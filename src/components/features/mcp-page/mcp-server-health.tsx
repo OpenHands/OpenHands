@@ -22,14 +22,14 @@ interface McpServerHealthSectionProps {
 }
 
 const DOT_CLASS_BY_STATUS: Record<McpServerHealth["status"], string> = {
-  unchecked: "bg-[var(--oh-text-tertiary)]",
-  checking: "bg-[var(--oh-interactive-selected)] animate-pulse",
-  healthy: "bg-[var(--oh-status-success)]",
+  unchecked: "bg-text-tertiary",
+  checking: "bg-interactive-selected animate-pulse",
+  healthy: "bg-status-success",
   failed: "bg-red-500",
 };
 
 const actionClassName =
-  "text-xs text-[var(--oh-muted)] underline transition-colors hover:text-white disabled:cursor-not-allowed disabled:opacity-60";
+  "text-xs text-muted underline transition-colors hover:text-contrast disabled:cursor-not-allowed disabled:opacity-60";
 
 function getDotStatus(health: McpServerHealth): string {
   if (health.status === "healthy") {
@@ -43,6 +43,7 @@ function getDotStatus(health: McpServerHealth): string {
 function getStatusLabel(
   t: TFunction<"openhands">,
   health: McpServerHealth,
+  serverType: MCPServerConfig["type"],
 ): string {
   switch (health.status) {
     case "checking":
@@ -52,7 +53,7 @@ function getStatusLabel(
         ? t(I18nKey.MCP$HEALTH_STATUS_VERIFIED, { count: health.toolCount })
         : t(I18nKey.MCP$HEALTH_STATUS_CONNECTIVITY_ONLY);
     case "failed":
-      return makeMcpTestErrorMessage(t, health.kind, health.error);
+      return makeMcpTestErrorMessage(t, health.kind, health.error, serverType);
     default:
       return t(I18nKey.MCP$HEALTH_STATUS_UNCHECKED);
   }
@@ -63,9 +64,10 @@ function getStatusLabel(
  * a Test connection / Retry action, and — on failure — the relevant
  * recovery actions (fix credentials, re-run OAuth, open the docs).
  *
- * Renders nothing for cloud backends: the test endpoint only exists on the
- * local agent-server (`McpService.testServer` short-circuits cloud with a
- * synthetic success that must not be presented as a health verdict).
+ * Renders nothing for stdio servers on cloud backends: those spawn inside
+ * the cloud sandbox, so `McpService.testServer` short-circuits them with a
+ * synthetic success that must not be presented as a health verdict. Remote
+ * servers on cloud backends are probed through the app server.
  */
 export function McpServerHealthSection({
   server,
@@ -77,11 +79,11 @@ export function McpServerHealthSection({
   const { health, probe, reauthorize } = useMcpServerHealth(server);
   const { mutate: updateMcpServer } = useUpdateMcpServer();
 
-  if (backend.kind === "cloud") return null;
+  if (backend.kind === "cloud" && server.type === "stdio") return null;
 
   const isChecking = health.status === "checking";
   const isFailed = health.status === "failed";
-  const label = getStatusLabel(t, health);
+  const label = getStatusLabel(t, health, server.type);
 
   const handleReauthorize = async () => {
     const result = await reauthorize();

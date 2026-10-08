@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { AUTOMATION_CATALOG } from "@openhands/extensions/automations";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -54,6 +55,13 @@ vi.mock("#/hooks/query/use-manifest-prerequisites", () => ({
   useSetupPrerequisites: () => mocks.prerequisites(),
 }));
 
+vi.mock("#/hooks/query/use-agent-profiles", () => ({
+  useAgentProfiles: () => ({
+    data: { profiles: [{ id: "review-profile", name: "Reviewer" }] },
+    isLoading: false,
+  }),
+}));
+
 vi.mock("#/hooks/query/use-llm-profiles", () => ({
   useLlmProfiles: (options: { enabled?: boolean } = {}) =>
     mocks.llmProfiles(options),
@@ -88,6 +96,9 @@ const NOTHING_TO_CONNECT: SetupPrerequisitesResult = {
 };
 
 const ENTRY: SetupEntry = createSetupEntry();
+const CUSTOM_AUTOMATION_ENTRY = AUTOMATION_CATALOG.find(
+  (entry) => entry.id === "custom-automation",
+) as SetupEntry;
 
 function renderDialog(entry: SetupEntry = ENTRY) {
   const user = userEvent.setup();
@@ -184,6 +195,12 @@ const CRON_ONLY_CAPABILITIES: DeploymentCapabilities = {
   features: [],
 };
 
+const ACTION_CAPABILITIES: DeploymentCapabilities = {
+  ...CRON_ONLY_CAPABILITIES,
+  triggerKinds: ["cron", "event"],
+  features: ["agentProfiles", "presetPrompt", "presetPlugin", "customTarball"],
+};
+
 const EVENT_FIRST_MIXED_TRIGGER_ENTRY: SetupEntry = (() => {
   const { form } = createSetup();
   return createSetupEntry({
@@ -243,6 +260,43 @@ const LLM_PROFILE_ENTRY: SetupEntry = (() => {
 })();
 
 describe("SetupDialog", () => {
+  it("offers agent profiles only for actions that accept them", async () => {
+    mocks.capabilities.mockReturnValue({
+      capabilities: ACTION_CAPABILITIES,
+      supported: true,
+      unmet: [],
+      isLoading: false,
+    });
+    const { user } = renderDialog(CUSTOM_AUTOMATION_ENTRY);
+
+    await waitFor(() =>
+      expect(screen.getByTestId("setup-action-kind")).toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByTestId("automation-agent-profile"),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("setup-action-kind"));
+    await user.click(await screen.findByText("Upload tarball"));
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("automation-agent-profile"),
+      ).toBeInTheDocument(),
+    );
+
+    await user.click(screen.getByTestId("automation-agent-profile"));
+    await user.click(await screen.findByText("Reviewer"));
+    await user.click(screen.getByTestId("setup-action-kind"));
+    await user.click(await screen.findByText("Prompt"));
+
+    await waitFor(() => {
+      expect(
+        screen.queryByTestId("automation-agent-profile"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("setup-field-model")).toBeInTheDocument();
+    });
+  });
+
   it("asks about an unconnected integration before it asks anything else", async () => {
     // Arrange — an advisory integration, which is shown but does not block.
     mocks.prerequisites.mockReturnValue({
@@ -508,5 +562,36 @@ describe("SetupDialog", () => {
     );
     expect(screen.queryByTestId("setup-review")).toBeNull();
     expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+});
+
+it("creates a bundle with an optional selected agent profile", async () => {
+  mocks.capabilities.mockReturnValue({
+    capabilities: {
+      ...CRON_ONLY_CAPABILITIES,
+      features: ["agentProfiles", "customTarball"],
+    },
+    supported: true,
+    unmet: [],
+    isLoading: false,
+  });
+  const entry = {
+    ...BUNDLE_ENTRY,
+    requires: {
+      ...BUNDLE_ENTRY.requires,
+      features: ["agentProfiles", "customTarball"],
+    },
+  };
+  const { user } = renderDialog(entry);
+  await fillForm(user);
+  await user.click(screen.getByTestId("automation-agent-profile"));
+  await user.click(await screen.findByRole("option", { name: "Reviewer" }));
+  await user.click(screen.getByTestId("setup-continue-button"));
+  await waitFor(() =>
+    expect(screen.getByTestId("setup-review")).toBeInTheDocument(),
+  );
+  await user.click(screen.getByTestId("setup-continue-button"));
+  expect(mocks.runAction.mock.calls[0][1]).toMatchObject({
+    agent_profile_id: "review-profile",
   });
 });

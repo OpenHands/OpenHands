@@ -27,7 +27,11 @@ vi.mock("#/hooks/query/use-active-conversation", () => ({
 
 const useRuntimeIsReadyMock = vi.fn();
 vi.mock("#/hooks/use-runtime-is-ready", () => ({
-  useRuntimeIsReady: () => useRuntimeIsReadyMock(),
+  useRuntimeIsReady: (...args: unknown[]) => useRuntimeIsReadyMock(...args),
+}));
+
+vi.mock("#/hooks/use-agent-state", () => ({
+  useAgentState: () => ({ curAgentState: "error" }),
 }));
 
 const getActiveBackendMock = vi.fn();
@@ -108,6 +112,26 @@ describe("useWorkspaceFileContent", () => {
     return new TextEncoder().encode(value).buffer as ArrayBuffer;
   }
 
+  it("reads a diagnostic file while the conversation is in Error", async () => {
+    const { useRuntimeIsReady } = await vi.importActual<
+      typeof import("#/hooks/use-runtime-is-ready")
+    >("#/hooks/use-runtime-is-ready");
+    useRuntimeIsReadyMock.mockImplementation(useRuntimeIsReady);
+    useActiveConversationMock.mockReturnValue({
+      data: { id: "conv-1", execution_status: "error" },
+    });
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      arrayBuffer: () => Promise.resolve(arrayBufferFromString("diagnostic")),
+    });
+    const { result } = renderHook(
+      () => useWorkspaceFileContent("evidence/checkpoint.txt"),
+      { wrapper: makeWrapper() },
+    );
+    await waitFor(() => expect(result.current.data?.text).toBe("diagnostic"));
+  });
+
   it("returns a static URL on the workspace fileserver for text content", async () => {
     fetchMock.mockResolvedValue({
       ok: true,
@@ -122,9 +146,12 @@ describe("useWorkspaceFileContent", () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
+    // Revalidate instead of trusting the browser HTTP cache: the fileserver
+    // sends no Cache-Control, so an old file's body stays heuristically
+    // fresh and a Refresh would otherwise keep showing it (#17921).
     expect(fetchMock).toHaveBeenCalledWith(
       `${BASE_URL}docs/readme.md`,
-      expect.objectContaining({ credentials: "include" }),
+      expect.objectContaining({ credentials: "include", cache: "no-cache" }),
     );
     expect(result.current.data).toEqual({
       path: "docs/readme.md",

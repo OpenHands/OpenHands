@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useContextWindowUsage } from "#/hooks/use-context-window-usage";
 import { useSelectConversationTab } from "#/hooks/use-select-conversation-tab";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
+import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { useCompactContextAction } from "#/hooks/use-compact-context-action";
 import { ContextMenuListItem } from "#/components/features/context-menu/context-menu-list-item";
 import { ConversationNameContextMenuIconText } from "#/components/features/conversation/conversation-name-context-menu-icon-text";
@@ -29,7 +30,7 @@ const TONE_BAR_CLASS = {
 } as const;
 
 const TONE_LABEL_CLASS = {
-  neutral: "text-[var(--oh-muted)]",
+  neutral: "text-muted",
   warning: "text-amber-500",
   danger: "text-red-500",
 } as const;
@@ -44,6 +45,7 @@ export function ContextWindowMeter() {
     () => setIsPopoverOpen(false),
     triggerRef,
   );
+  useCloseOnEscape(isPopoverOpen, () => setIsPopoverOpen(false), triggerRef);
   const { handleCompact, isCompacting, isDisabled } = useCompactContextAction(
     usage?.perTurnToken ?? 0,
   );
@@ -72,6 +74,9 @@ export function ContextWindowMeter() {
       <StyledTooltip
         content={t(I18nKey.CHAT_INTERFACE$SHOW_CONTEXT)}
         placement="top"
+        // While the popover is open the hint is redundant, and an open
+        // tooltip would swallow the Escape meant for the popover.
+        isDisabled={isPopoverOpen}
       >
         <button
           ref={triggerRef}
@@ -96,13 +101,13 @@ export function ContextWindowMeter() {
           ref={popoverRef}
           data-testid="context-window-meter-popover"
           className={cn(
-            "absolute bottom-full right-0 z-[60] mb-2 w-[280px]",
-            "flex flex-col gap-0.5 rounded-md border border-[var(--oh-border-subtle)] bg-tertiary px-1 py-1 shadow-lg",
+            "absolute bottom-full right-0 z-[60] mb-2 w-70",
+            "flex flex-col gap-0.5 rounded-md border border-border-subtle bg-tertiary px-1 py-1 shadow-lg",
           )}
         >
           <div className="flex flex-col gap-2 px-2 py-1.5">
             <div className="flex items-center justify-between gap-2 text-sm">
-              <span className="font-semibold text-[var(--oh-foreground)]">
+              <span className="font-semibold text-foreground">
                 {t(I18nKey.CONVERSATION$CONTEXT_WINDOW)}
               </span>
               <span className={cn("shrink-0 text-xs", TONE_LABEL_CLASS[tone])}>
@@ -140,7 +145,7 @@ export function ContextWindowMeter() {
                 aria-label={t(I18nKey.CONVERSATION$COMPACT_CONTEXT)}
                 className={cn(
                   "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs",
-                  "text-[var(--oh-muted)] hover:bg-[var(--oh-interactive-hover)] hover:text-[var(--oh-foreground)]",
+                  "text-muted hover:bg-interactive-hover hover:text-foreground",
                   "transition-colors disabled:cursor-not-allowed disabled:opacity-50",
                 )}
                 onClick={(event) => {
@@ -156,9 +161,7 @@ export function ContextWindowMeter() {
                 )}
                 <span>{t(I18nKey.CONVERSATION$COMPACT_CONTEXT)}</span>
               </button>
-              <span className="text-xs text-[var(--oh-muted)]">
-                {usageTokenSummary}
-              </span>
+              <span className="text-xs text-muted">{usageTokenSummary}</span>
             </div>
           </div>
 

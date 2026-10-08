@@ -11,6 +11,7 @@ import {
   sidebarNavLabelClassName,
   sidebarNavRowClassName,
 } from "#/components/features/sidebar/sidebar-layout";
+import { getCommandMenuShortcutKey } from "./command-menu-items";
 
 interface CommandMenuTriggerProps {
   collapsed: boolean;
@@ -34,7 +35,7 @@ export function CommandMenuTrigger({ collapsed }: CommandMenuTriggerProps) {
         sidebarNavRowClassName({ collapsed }),
         collapsed
           ? "cursor-pointer"
-          : "group justify-between border border-[var(--oh-border-subtle)] bg-[var(--oh-surface)]/50 hover:border-[var(--oh-border)] hover:bg-[var(--oh-surface-raised)]",
+          : "group justify-between border border-border-subtle bg-surface/50 hover:border-border hover:bg-surface-raised",
       )}
     >
       <span className="flex min-w-0 items-center gap-2">
@@ -49,7 +50,7 @@ export function CommandMenuTrigger({ collapsed }: CommandMenuTriggerProps) {
           <span
             className={cn(
               SIDEBAR_ICON_SLOT_CLASS,
-              "text-[var(--oh-muted)] group-hover:text-white",
+              "text-muted group-hover:text-contrast",
             )}
             aria-hidden="true"
           >
@@ -62,8 +63,8 @@ export function CommandMenuTrigger({ collapsed }: CommandMenuTriggerProps) {
         <span className={sidebarNavLabelClassName(collapsed)}>{label}</span>
       </span>
       {!collapsed ? (
-        <kbd className="rounded-md border border-[var(--oh-border)] bg-black/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--oh-text-dim)]">
-          {t(I18nKey.COMMAND_MENU$SHORTCUT)}
+        <kbd className="rounded-md border border-border bg-black/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-text-dim">
+          {t(getCommandMenuShortcutKey())}
         </kbd>
       ) : null}
     </button>

@@ -8,6 +8,7 @@ import { Divider } from "#/ui/divider";
 import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
+import { getLockedCloudHost } from "#/api/agent-server-config";
 
 interface ChatInputProfileMenuContentProps {
   onClose: () => void;
@@ -38,6 +39,9 @@ export function ChatInputProfileMenuContent({
     isSwitching,
     selectProfile,
   } = useChatInputProfileState();
+  // Locked-to-Cloud blocks the Canvas agent profiles page this links to
+  // (OHE-3457).
+  const showSettingsLink = getLockedCloudHost() === null;
 
   const handleSelect = (profile: (typeof profiles)[number]) => {
     selectProfile(profile);
@@ -51,7 +55,7 @@ export function ChatInputProfileMenuContent({
           {/* role="presentation" keeps this a valid <li> child of the
               ContextMenu <ul> without exposing the label as a menu item. */}
           <li role="presentation" className="px-2 pt-1 pb-0.5">
-            <Typography.Text className="text-[11px] font-medium text-[var(--oh-text-dim)] uppercase tracking-wide leading-4">
+            <Typography.Text className="text-[11px] font-medium text-text-dim uppercase tracking-wide leading-4">
               {t(I18nKey.SETTINGS$AVAILABLE_PROFILES)}
             </Typography.Text>
           </li>
@@ -74,7 +78,7 @@ export function ChatInputProfileMenuContent({
                 }}
                 className={cn(
                   "flex items-center gap-2",
-                  isCurrent && "bg-[var(--oh-interactive-hover)]",
+                  isCurrent && "bg-interactive-hover",
                 )}
               >
                 <span
@@ -96,32 +100,36 @@ export function ChatInputProfileMenuContent({
           })}
           {isInConversation && (
             <li role="presentation" className="px-2 pt-0.5 pb-1">
-              <Typography.Text className="text-[11px] text-[var(--oh-text-dim)] leading-4">
+              <Typography.Text className="text-[11px] text-text-dim leading-4">
                 {t(I18nKey.CHAT$START_NEW_WITH_PROFILE_HINT)}
               </Typography.Text>
             </li>
           )}
         </>
       )}
-      {profiles.length > 0 && <Divider inset={dividerInset} />}
-      <li className="text-sm">
-        <NavigationLink
-          to="/settings/agents"
-          onClick={onClose}
-          className={cn(
-            "flex h-[30px] items-center gap-2 rounded p-2 leading-5 text-[var(--oh-foreground)] hover:bg-[var(--oh-interactive-hover)] transition-colors",
-            settingsLinkClassName,
-          )}
-        >
-          <SettingsGearIcon
-            width={16}
-            height={16}
-            className={cn("shrink-0", settingsIconClassName)}
-            aria-hidden
-          />
-          <span>{t(I18nKey.CHAT$MANAGE_AGENT_PROFILES)}</span>
-        </NavigationLink>
-      </li>
+      {showSettingsLink && profiles.length > 0 && (
+        <Divider inset={dividerInset} />
+      )}
+      {showSettingsLink && (
+        <li className="text-sm">
+          <NavigationLink
+            to="/settings/agents"
+            onClick={onClose}
+            className={cn(
+              "flex h-7.5 items-center gap-2 rounded p-2 leading-5 text-foreground hover:bg-interactive-hover transition-colors",
+              settingsLinkClassName,
+            )}
+          >
+            <SettingsGearIcon
+              width={16}
+              height={16}
+              className={cn("shrink-0", settingsIconClassName)}
+              aria-hidden
+            />
+            <span>{t(I18nKey.CHAT$MANAGE_AGENT_PROFILES)}</span>
+          </NavigationLink>
+        </li>
+      )}
     </>
   );
 }
