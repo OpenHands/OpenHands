@@ -17,6 +17,7 @@ const mockNavigate = vi.fn();
 const mockUseActiveBackend = vi.fn();
 const sendMessageWithAttachments = vi.fn();
 const mockClearAllFiles = vi.fn();
+const mockRestoreMessageToInputIfEmpty = vi.fn();
 const enqueueHomeTaskPendingMessage = vi.fn();
 const mockDisplayErrorToast = vi.fn();
 const mockUseLlmConfigured = vi.fn();
@@ -42,6 +43,7 @@ vi.mock("#/stores/conversation-store", () => ({
     files: mockFiles,
     imagesMarkedUploadAsFile: [],
     clearAllFiles: mockClearAllFiles,
+    restoreMessageToInputIfEmpty: mockRestoreMessageToInputIfEmpty,
   }),
 }));
 
@@ -658,6 +660,32 @@ describe("HomeChatLauncher", () => {
         "/conversations/task-start-task-1",
       ),
     );
+  });
+
+  it("does not hand the prompt back to a composer when a step after a successful create fails", async () => {
+    // Arrange — the conversation exists; only the follow-up enqueue fails.
+    mockUseActiveBackend.mockReturnValue(cloudBackend);
+    vi.spyOn(
+      AgentServerConversationService,
+      "createConversation",
+    ).mockResolvedValue(
+      makeConversationResponse({
+        id: "start-task-1",
+        app_conversation_id: null,
+      }),
+    );
+    enqueueHomeTaskPendingMessage.mockRejectedValue(new Error("Queue down"));
+
+    // Act
+    renderLauncher();
+    await userEvent.setup().click(screen.getByTestId("stub-chat-submit"));
+
+    // Assert — the prompt already belongs to the new conversation, so
+    // restoring it would replay it into that conversation's composer.
+    await waitFor(() =>
+      expect(mockDisplayErrorToast).toHaveBeenCalledWith("Queue down"),
+    );
+    expect(mockRestoreMessageToInputIfEmpty).not.toHaveBeenCalled();
   });
 
   it("defers attachments and enqueues an optimistic pending message for cloud start tasks", async () => {

@@ -388,13 +388,26 @@ function createMainWindow() {
     // App-shell background (--oh-background in src/index.css) — avoids white
     // flashes during the show → maximize repaint after the splash closes.
     backgroundColor: "#0b0e14",
+    // hiddenInset hides the native title bar but keeps the traffic lights
+    // floating over the app shell; the renderer reserves a drag band for them.
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
     icon: appIconPath,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      preload: join(__dirname, "preload-main.cjs"),
     },
   });
+
+  // The renderer drops its reserved traffic-light band in fullscreen, where
+  // macOS hides the buttons. Only transitions are pushed; the preload reads the
+  // current state over "window:full-screen:get" on every page load.
+  const sendFullScreenState = () => {
+    if (!mainWin || mainWin.isDestroyed()) return;
+    mainWin.webContents.send("window:full-screen", mainWin.isFullScreen());
+  };
+  mainWin.on("enter-full-screen", sendFullScreenState);
+  mainWin.on("leave-full-screen", sendFullScreenState);
 
   mainWin.loadURL("http://localhost:8000");
 
@@ -563,6 +576,13 @@ ipcMain.handle("boot-log:copy", (event) => {
 ipcMain.handle("boot-log:quit", (event) => {
   if (!isLoadingWinEvent(event)) return;
   app.quit();
+});
+
+// Synchronous so the preload has the state before the first render; a
+// renderer that starts with "not fullscreen" paints the band and then drops it.
+ipcMain.on("window:full-screen:get", (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  event.returnValue = win !== null && !win.isDestroyed() && win.isFullScreen();
 });
 
 // ── Backend stack ─────────────────────────────────────────────────────────────
