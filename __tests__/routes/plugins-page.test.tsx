@@ -123,6 +123,7 @@ describe("SkillsPluginsScreen", () => {
 
     const toggle = await screen.findByTestId("plugin-toggle-demo-plugin");
     expect(toggle).toHaveAttribute("aria-checked", "true");
+    expect(toggle).toHaveAccessibleName("SETTINGS$PLUGINS_DISABLE_PLUGIN");
   });
 
   it("installs a catalog plugin with its coordinates when Install is clicked", async () => {

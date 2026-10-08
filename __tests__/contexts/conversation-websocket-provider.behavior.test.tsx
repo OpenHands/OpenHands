@@ -44,6 +44,8 @@ const socketCapture = vi.hoisted(() => ({
   planningSocket: null as TestSocket | null,
   reconnectMain: vi.fn(),
   reconnectPlanning: vi.fn(),
+  disconnectMain: vi.fn(),
+  disconnectPlanning: vi.fn(),
   queueMessage: vi.fn(),
   readConversationFile: vi.fn(),
   trackError: vi.fn(),
@@ -53,7 +55,7 @@ const socketCapture = vi.hoisted(() => ({
 const historyCapture = vi.hoisted(() => ({
   result: {
     data: { events: [] as OpenHandsEvent[] } as
-      | { events: OpenHandsEvent[] }
+      | { events: OpenHandsEvent[]; afterSeq?: number | null }
       | undefined,
     isPending: false,
     isFetching: false,
@@ -72,6 +74,7 @@ vi.mock("#/hooks/use-websocket", () => ({
       return {
         socket: socketCapture.mainSocket,
         reconnect: socketCapture.reconnectMain,
+        disconnect: socketCapture.disconnectMain,
       };
     }
 
@@ -80,6 +83,7 @@ vi.mock("#/hooks/use-websocket", () => ({
     return {
       socket: socketCapture.planningSocket,
       reconnect: socketCapture.reconnectPlanning,
+      disconnect: socketCapture.disconnectPlanning,
     };
   }),
 }));
@@ -292,18 +296,36 @@ function planningOptions(): WebSocketHookOptions {
   return socketCapture.planningOptions!;
 }
 
-function dispatchMain(event: unknown) {
+/** Resolve a socket's query params the way `useWebSocket` does at connect. */
+function queryParamsOf(options: WebSocketHookOptions) {
+  const params = options.queryParams;
+  return typeof params === "function" ? params() : params;
+}
+
+let nextSeq = 0;
+
+/** Send a raw session-socket frame (progress frames, malformed payloads). */
+function dispatchMainFrame(frame: unknown) {
   act(() => {
-    mainOptions().onMessage?.({ data: JSON.stringify(event) } as MessageEvent);
+    mainOptions().onMessage?.({ data: JSON.stringify(frame) } as MessageEvent);
   });
 }
 
-function dispatchPlanning(event: unknown) {
+function dispatchPlanningFrame(frame: unknown) {
   act(() => {
     planningOptions().onMessage?.({
-      data: JSON.stringify(event),
+      data: JSON.stringify(frame),
     } as MessageEvent);
   });
+}
+
+/** Deliver an event the way `/sockets/session/{id}` does: as a durable frame. */
+function dispatchMain(event: unknown) {
+  dispatchMainFrame({ type: "durable", seq: nextSeq++, event });
+}
+
+function dispatchPlanning(event: unknown) {
+  dispatchPlanningFrame({ type: "durable", seq: nextSeq++, event });
 }
 
 describe("Conversation websocket behavior", () => {
@@ -317,10 +339,13 @@ describe("Conversation websocket behavior", () => {
     socketCapture.planningSocket = null;
     socketCapture.reconnectMain.mockReset();
     socketCapture.reconnectPlanning.mockReset();
+    socketCapture.disconnectMain.mockReset();
+    socketCapture.disconnectPlanning.mockReset();
     socketCapture.queueMessage.mockReset().mockResolvedValue(undefined);
     socketCapture.readConversationFile.mockReset();
     socketCapture.trackError.mockReset();
     socketCapture.launchChild.mockReset().mockResolvedValue(undefined);
+    nextSeq = 0;
     historyCapture.result = {
       data: { events: [] },
       isPending: false,
@@ -392,7 +417,7 @@ describe("Conversation websocket behavior", () => {
   it("hydrates history, consumes matching optimistic messages, and subscribes after the latest event", async () => {
     const first = makeMessageEvent("01", "assistant", ["first"]);
     const latest = makeMessageEvent("02", "user", ["hello", " world"]);
-    historyCapture.result.data = { events: [first, latest] };
+    historyCapture.result.data = { events: [first, latest], afterSeq: 41 };
     const consumeMatchingPendingMessage = vi.spyOn(
       useOptimisticUserMessageStore.getState(),
       "consumeMatchingPendingMessage",
@@ -439,17 +464,14 @@ describe("Conversation websocket behavior", () => {
         timestamp: expect.any(String),
       }),
     );
-    expect(socketCapture.mainUrl).toContain("/sockets/events/conv-main");
+    expect(socketCapture.mainUrl).toContain("/sockets/session/conv-main");
     // The session key is now passed via the dedicated `sessionApiKey` option
     // rather than folded into the query string.
-    expect(mainOptions().queryParams).toEqual({
-      resend_mode: "since",
-      after_timestamp: latest.timestamp,
-    });
+    // Resumes after the last seq the history page covered, not a timestamp.
+    expect(queryParamsOf(mainOptions())).toEqual({ after_seq: "41" });
     expect(mainOptions().sessionApiKey).toBe("session-key");
-    expect(planningOptions().queryParams).toEqual({
-      resend_all: true,
-    });
+    // The planner has no REST preload, so it replays its whole log.
+    expect(queryParamsOf(planningOptions())).toEqual({ after_seq: "-1" });
     expect(planningOptions().sessionApiKey).toBe("session-key");
     expect(mainOptions().reconnect).toEqual({ enabled: true });
     expect(planningOptions().reconnect).toEqual({ enabled: true });
@@ -465,7 +487,7 @@ describe("Conversation websocket behavior", () => {
     renderProvider();
 
     expect(socketCapture.mainUrl).toBe("");
-    expect(mainOptions().queryParams).toEqual({ resend_mode: "all" });
+    expect(queryParamsOf(mainOptions())).toEqual({ after_seq: "-1" });
     expect(screen.getByTestId("connection-state")).toHaveTextContent(
       "CONNECTING",
     );
@@ -489,8 +511,8 @@ describe("Conversation websocket behavior", () => {
 
     renderProvider();
 
-    expect(socketCapture.mainUrl).toContain("/sockets/events/conv-main");
-    expect(mainOptions().queryParams).toEqual({ resend_mode: "all" });
+    expect(socketCapture.mainUrl).toContain("/sockets/session/conv-main");
+    expect(queryParamsOf(mainOptions())).toEqual({ after_seq: "-1" });
   });
 
   it("does not build socket URLs without complete conversation coordinates", () => {
@@ -526,7 +548,7 @@ describe("Conversation websocket behavior", () => {
     socketCapture.callIndex = 0;
     historyCapture.result.data = undefined;
     const first = renderProvider();
-    expect(mainOptions().queryParams).toEqual({ resend_mode: "all" });
+    expect(queryParamsOf(mainOptions())).toEqual({ after_seq: "-1" });
     expect(addEvents).not.toHaveBeenCalled();
     first.unmount();
 
@@ -595,7 +617,7 @@ describe("Conversation websocket behavior", () => {
 
     const latest = makeMessageEvent("07", "assistant", ["fresh tail"]);
     historyCapture.result = {
-      data: { events: [latest] },
+      data: { events: [latest], afterSeq: 6 },
       isPending: false,
       isFetching: false,
       isError: false,
@@ -614,16 +636,13 @@ describe("Conversation websocket behavior", () => {
     await waitFor(() =>
       expect(useEventStore.getState().events).toHaveLength(1),
     );
-    expect(socketCapture.mainUrl).toContain("/sockets/events/conv-main");
-    expect(mainOptions().queryParams).toEqual({
-      resend_mode: "since",
-      after_timestamp: latest.timestamp,
-    });
+    expect(socketCapture.mainUrl).toContain("/sockets/session/conv-main");
+    expect(queryParamsOf(mainOptions())).toEqual({ after_seq: "6" });
     expect(
-      Object.hasOwn(mainOptions().queryParams ?? {}, "session_api_key"),
+      Object.hasOwn(queryParamsOf(mainOptions()) ?? {}, "session_api_key"),
     ).toBe(false);
     expect(
-      Object.hasOwn(planningOptions().queryParams ?? {}, "session_api_key"),
+      Object.hasOwn(queryParamsOf(planningOptions()) ?? {}, "session_api_key"),
     ).toBe(false);
   });
 
@@ -646,7 +665,7 @@ describe("Conversation websocket behavior", () => {
     );
 
     expect(socketCapture.planningUrl).toContain(
-      "/sockets/events/conv-planning",
+      "/sockets/session/conv-planning",
     );
   });
 
@@ -1784,12 +1803,16 @@ describe("Conversation websocket behavior", () => {
       useErrorMessageStore
         .getState()
         .setErrorMessage("disconnected", "connection");
-      const dispatch = source === "main" ? dispatchMain : dispatchPlanning;
+      const dispatch =
+        source === "main" ? dispatchMainFrame : dispatchPlanningFrame;
+      dispatch({ type: "item_started", item_id: "delta", attempt: 1 });
       dispatch({
-        ...baseEvent("delta", "agent"),
-        kind: "StreamingDeltaEvent",
+        type: "delta",
+        item_id: "delta",
+        attempt: 1,
+        order: 0,
+        kind: "text",
         content: "Streaming",
-        reasoning_content: null,
       });
       expect(useEventStore.getState().eventIds.has("delta")).toBe(false);
       act(() => {
@@ -1810,11 +1833,18 @@ describe("Conversation websocket behavior", () => {
   it("flushes planning deltas before later events and ignores replayed error side effects", () => {
     vi.spyOn(window, "requestAnimationFrame").mockReturnValue(1);
     const view = renderProvider({ subConversations: [makeSubConversation()] });
-    dispatchPlanning({
-      ...baseEvent("delta-plan", "agent"),
-      kind: "StreamingDeltaEvent",
+    dispatchPlanningFrame({
+      type: "item_started",
+      item_id: "delta-plan",
+      attempt: 1,
+    });
+    dispatchPlanningFrame({
+      type: "delta",
+      item_id: "delta-plan",
+      attempt: 1,
+      order: 0,
+      kind: "text",
       content: "Planning",
-      reasoning_content: null,
     });
     view.rerender(
       <QueryClientProvider client={view.queryClient}>
@@ -1840,8 +1870,15 @@ describe("Conversation websocket behavior", () => {
       classification,
     };
     dispatchPlanning(error);
-    expect(useEventStore.getState().uiEvents[0]).toMatchObject({
-      kind: "StreamingDeltaEvent",
+    // requestAnimationFrame never fires here, so the slot only holds the
+    // streamed text if the durable frame flushed the buffer before it.
+    expect(
+      useEventStore
+        .getState()
+        .uiEvents.find(
+          (event) => "kind" in event && event.kind === "StreamingDeltaEvent",
+        ),
+    ).toMatchObject({
       content: "Planning",
       isFromPlanningAgent: true,
     });
@@ -2212,5 +2249,275 @@ describe("Conversation websocket behavior", () => {
       expect.any(SyntaxError),
     );
     expect(warn).toHaveBeenCalledTimes(1);
+  });
+});
+
+const MOBILE_USER_AGENT =
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15";
+const DESKTOP_USER_AGENT =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36";
+
+function setUserAgent(userAgent: string) {
+  vi.spyOn(window.navigator, "userAgent", "get").mockReturnValue(userAgent);
+}
+
+function setVisibility(state: "visible" | "hidden") {
+  Object.defineProperty(document, "visibilityState", {
+    value: state,
+    configurable: true,
+  });
+  document.dispatchEvent(new Event("visibilitychange"));
+}
+
+describe("Conversation websocket — page visibility reconnect (#17894)", () => {
+  const originalVisibilityDescriptor = Object.getOwnPropertyDescriptor(
+    Document.prototype,
+    "visibilityState",
+  );
+
+  beforeEach(() => {
+    socketCapture.callIndex = 0;
+    socketCapture.mainUrl = "";
+    socketCapture.planningUrl = "";
+    socketCapture.mainOptions = null;
+    socketCapture.planningOptions = null;
+    socketCapture.mainSocket = null;
+    socketCapture.planningSocket = null;
+    socketCapture.reconnectMain.mockReset();
+    socketCapture.reconnectPlanning.mockReset();
+    socketCapture.disconnectMain.mockReset();
+    socketCapture.disconnectPlanning.mockReset();
+    contextCapture.current = null;
+    historyCapture.result = {
+      data: { events: [] },
+      isPending: false,
+      isFetching: false,
+      isError: false,
+    };
+    useConversationStore.setState({
+      conversationMode: "code",
+      planContent: null,
+    });
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    if (originalVisibilityDescriptor) {
+      Object.defineProperty(
+        document,
+        "visibilityState",
+        originalVisibilityDescriptor,
+      );
+    }
+  });
+
+  it("disconnects both sockets once the hide debounce elapses on a mobile user agent", () => {
+    setUserAgent(MOBILE_USER_AGENT);
+    renderProvider({ subConversations: [makeSubConversation()] });
+
+    act(() => setVisibility("hidden"));
+    // Still within the grace period: nothing torn down yet.
+    expect(socketCapture.disconnectMain).not.toHaveBeenCalled();
+    expect(socketCapture.disconnectPlanning).not.toHaveBeenCalled();
+
+    act(() => {
+      vi.advanceTimersByTime(3_000);
+    });
+
+    expect(socketCapture.disconnectMain).toHaveBeenCalledOnce();
+    expect(socketCapture.disconnectPlanning).toHaveBeenCalledOnce();
+  });
+
+  it("never tears a socket down for a quick glance away (flap guard)", () => {
+    setUserAgent(MOBILE_USER_AGENT);
+    renderProvider();
+
+    act(() => {
+      setVisibility("hidden");
+      vi.advanceTimersByTime(1_000);
+      setVisibility("visible");
+      vi.advanceTimersByTime(10_000);
+    });
+
+    expect(socketCapture.disconnectMain).not.toHaveBeenCalled();
+  });
+
+  it("does not disconnect on hide for a desktop user agent", () => {
+    setUserAgent(DESKTOP_USER_AGENT);
+    renderProvider();
+
+    act(() => {
+      setVisibility("hidden");
+      vi.advanceTimersByTime(10_000);
+    });
+
+    expect(socketCapture.disconnectMain).not.toHaveBeenCalled();
+    expect(socketCapture.disconnectPlanning).not.toHaveBeenCalled();
+  });
+
+  it("immediately reconnects a stale socket on return to the foreground, regardless of platform", () => {
+    setUserAgent(DESKTOP_USER_AGENT);
+    renderProvider();
+    act(() => mainOptions().onClose?.(new CloseEvent("close")));
+    expect(screen.getByTestId("connection-state")).toHaveTextContent("CLOSED");
+
+    act(() => {
+      setVisibility("hidden");
+      setVisibility("visible");
+    });
+
+    // Nothing waits on a backoff timer: the foreground check fires the
+    // reconnect synchronously off the visibility event itself.
+    expect(socketCapture.reconnectMain).toHaveBeenCalledOnce();
+  });
+
+  it("does not reconnect an already-open socket on a foreground health check", () => {
+    setUserAgent(DESKTOP_USER_AGENT);
+    const mainSocket = makeSocket(WebSocket.OPEN);
+    socketCapture.mainSocket = mainSocket;
+    renderProvider();
+    act(() => mainOptions().onOpen?.(new Event("open")));
+    expect(screen.getByTestId("connection-state")).toHaveTextContent("OPEN");
+
+    act(() => {
+      setVisibility("hidden");
+      setVisibility("visible");
+    });
+
+    expect(socketCapture.reconnectMain).not.toHaveBeenCalled();
+  });
+
+  it("reconnects whichever sockets are stale independent of the active conversation mode", () => {
+    setUserAgent(DESKTOP_USER_AGENT);
+    renderProvider({ subConversations: [makeSubConversation()] });
+    useConversationStore.setState({ conversationMode: "plan" });
+    act(() => mainOptions().onClose?.(new CloseEvent("close")));
+    act(() => planningOptions().onClose?.(new CloseEvent("close")));
+
+    act(() => {
+      setVisibility("hidden");
+      setVisibility("visible");
+    });
+
+    // Unlike the manual `reconnect()` action (mode-gated), the foreground
+    // health check always covers both — a mode switch while backgrounded
+    // must not leave the other socket stale.
+    expect(socketCapture.reconnectMain).toHaveBeenCalledOnce();
+    expect(socketCapture.reconnectPlanning).toHaveBeenCalledOnce();
+  });
+
+  it("stops reacting to visibility changes after the provider unmounts", () => {
+    setUserAgent(MOBILE_USER_AGENT);
+    const { unmount } = renderProvider();
+    unmount();
+
+    act(() => {
+      setVisibility("hidden");
+      vi.advanceTimersByTime(10_000);
+    });
+
+    expect(socketCapture.disconnectMain).not.toHaveBeenCalled();
+  });
+
+  it("does not surface the connection-error banner for a drop that happens while the tab is hidden", () => {
+    setUserAgent(MOBILE_USER_AGENT);
+    renderProvider();
+    act(() => mainOptions().onOpen?.(new Event("open")));
+
+    act(() => {
+      setVisibility("hidden");
+      // The OS kills the socket mid-background, ahead of our own debounced
+      // disconnect — exactly the race this guards against.
+      mainOptions().onError?.(new Event("error"));
+    });
+
+    expect(useErrorMessageStore.getState().errorMessage).toBeNull();
+    expect(screen.getByTestId("connection-state")).toHaveTextContent("CLOSED");
+
+    act(() => setVisibility("visible"));
+  });
+
+  it("still surfaces the connection-error banner for a drop that happens while visible", () => {
+    setUserAgent(MOBILE_USER_AGENT);
+    renderProvider();
+    act(() => mainOptions().onOpen?.(new Event("open")));
+
+    act(() => mainOptions().onError?.(new Event("error")));
+
+    expect(useErrorMessageStore.getState()).toMatchObject({
+      errorMessage: SERVER_CONNECTION_ERROR_MESSAGE,
+      errorType: "connection",
+    });
+  });
+
+  it("does not surface the planning socket's connection-error banner while hidden", async () => {
+    vi.spyOn(EventService, "getEventCount").mockResolvedValue(0);
+    setUserAgent(MOBILE_USER_AGENT);
+    renderProvider({ subConversations: [makeSubConversation()] });
+    await act(async () => planningOptions().onOpen?.(new Event("open")));
+
+    act(() => {
+      setVisibility("hidden");
+      planningOptions().onError?.(new Event("error"));
+    });
+
+    expect(useErrorMessageStore.getState().errorMessage).toBeNull();
+
+    // Settle the pending (fake-timer) hide-debounce before the test ends: an
+    // un-settled `setTimeout` surviving into `vi.useRealTimers()` in this
+    // suite's `afterEach` otherwise leaks past this test.
+    act(() => setVisibility("visible"));
+  });
+
+  it("clears a stale connection-error banner the instant the tab is foregrounded, ahead of the reconnect actually completing", () => {
+    setUserAgent(DESKTOP_USER_AGENT);
+    renderProvider();
+    act(() => mainOptions().onOpen?.(new Event("open")));
+    act(() => mainOptions().onClose?.(new CloseEvent("close")));
+    useErrorMessageStore
+      .getState()
+      .setErrorMessage(SERVER_CONNECTION_ERROR_MESSAGE, "connection");
+
+    act(() => {
+      setVisibility("hidden");
+      setVisibility("visible");
+    });
+
+    expect(useErrorMessageStore.getState().errorMessage).toBeNull();
+    expect(socketCapture.reconnectMain).toHaveBeenCalledOnce();
+  });
+
+  it("leaves an unrelated sticky error alone on a foreground reconnect", () => {
+    setUserAgent(DESKTOP_USER_AGENT);
+    renderProvider();
+    act(() => mainOptions().onOpen?.(new Event("open")));
+    act(() => mainOptions().onClose?.(new CloseEvent("close")));
+    useErrorMessageStore
+      .getState()
+      .setErrorMessage("Bad API key", "conversation");
+
+    act(() => {
+      setVisibility("hidden");
+      setVisibility("visible");
+    });
+
+    expect(useErrorMessageStore.getState().errorMessage).toBe("Bad API key");
+  });
+
+  it("exposes hasConnectedOnce so the UI can tell a reconnect from the first-ever connect", () => {
+    setUserAgent(DESKTOP_USER_AGENT);
+    renderProvider();
+    expect(contextCapture.current?.hasConnectedOnce).toBe(false);
+
+    act(() => mainOptions().onOpen?.(new Event("open")));
+    expect(contextCapture.current?.hasConnectedOnce).toBe(true);
+
+    // Staying true through a subsequent drop is the whole point: it's what
+    // lets the status badge read "Reconnecting" instead of "Connecting"
+    // while the foreground health check is retrying.
+    act(() => mainOptions().onClose?.(new CloseEvent("close")));
+    expect(contextCapture.current?.hasConnectedOnce).toBe(true);
   });
 });

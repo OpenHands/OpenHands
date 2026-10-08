@@ -22,6 +22,7 @@ import { modalTitleLgClassName } from "#/utils/modal-classes";
 import { BackendFormModal } from "./backend-form-modal";
 import { BackendRow } from "./backend-row";
 import { DeviceFlowAuth } from "./device-flow-auth";
+import { useBackendSwitchRedirect } from "./use-backend-switch-redirect";
 
 interface ManageBackendsModalProps {
   onClose: () => void;
@@ -101,14 +102,18 @@ export function ManageBackendsModal({
     setPendingRemoval(null);
   };
 
+  const redirectAfterSwitch = useBackendSwitchRedirect();
+
   const handleSelectBackend = React.useCallback(
     (backend: Backend) => {
       if (active.backend.id !== backend.id || active.orgId !== null) {
+        // @spec BM-002 — Switching backends keeps the user on the same page
+        redirectAfterSwitch();
         setActive(backend.id);
       }
       onClose();
     },
-    [active.backend.id, active.orgId, onClose, setActive],
+    [active.backend.id, active.orgId, onClose, redirectAfterSwitch, setActive],
   );
 
   const handleCloudLogin = React.useCallback(

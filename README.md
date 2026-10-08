@@ -97,14 +97,31 @@ docker run -it --rm \
   -e AGENT_CANVAS_ALLOW_LAN_SESSION_KEY=true \
   -v "$HOME/.openhands:/home/openhands/.openhands" \
   -v "${PROJECTS_PATH}:/projects" \
-  ghcr.io/openhands/agent-canvas:1.24.0 # x-release-please-version
+  ghcr.io/openhands/agent-canvas:1.25.0 # x-release-please-version
 ```
 
 **Windows (PowerShell / Windows Terminal):** See [README.windows.md](./README.windows.md) for the equivalent commands.
 
 The agent will be able to access any project under `PROJECTS_PATH`.
 
-### Option 3: From Source
+### Option 3: With Multiple Docker Sandboxes
+
+Run each new conversation in its own Docker container, with its own Agent Server and tools. This is useful for running several agents concurrently. Canvas and the outer Agent Server run on your host and route conversation requests to the containers.
+
+**Prerequisites**: Node.js 24 or later, `uv`, and a running Docker Desktop (macOS) or Docker Engine/Desktop (Linux). The user starting Canvas must be able to run `docker` commands.
+
+**macOS / Linux:**
+
+```sh
+npm install -g @openhands/agent-canvas
+OH_CONVERSATION_RUNTIME=docker agent-canvas
+```
+
+Open [http://localhost:8000](http://localhost:8000) and start a new conversation. Existing local conversations are not converted. Each container mounts its conversation's workspace and persisted state, so workspace files and conversation history survive container replacement. Conversations using the same host workspace still share those files; choose separate directories or worktrees to avoid conflicting edits.
+
+This setting isolates conversation execution; it does not move the entire Canvas or automation service into a sandbox. For Windows, see [README.windows.md](./README.windows.md#option-3-with-multiple-docker-sandboxes-wsl-2).
+
+### Option 4: From Source
 
 > [!WARNING]
 > This runs the agent-server directly on the machine you're installing on — the agent will have full access to your filesystem!

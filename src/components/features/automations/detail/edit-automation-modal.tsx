@@ -296,21 +296,28 @@ export function EditAutomationModal({
     );
   };
 
+  // Stay open while a save is in flight: the save's error toast is the
+  // dialog's own, and it is dropped if the dialog unmounts first.
+  const dismiss = () => {
+    if (!updateMutation.isPending) onClose();
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div
         className="absolute inset-0 bg-black/60"
-        onClick={onClose}
+        onClick={dismiss}
         onKeyDown={(e) => {
-          if (e.key === "Escape") onClose();
+          if (e.key === "Escape") dismiss();
         }}
         role="presentation"
       />
       <div className="relative w-full max-w-md rounded-xl border border-border bg-surface p-6">
         <button
           type="button"
-          onClick={onClose}
-          className="absolute right-4 top-4 text-muted hover:text-foreground"
+          onClick={dismiss}
+          disabled={updateMutation.isPending}
+          className="absolute right-4 top-4 text-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
           aria-label={t(I18nKey.AUTOMATIONS$CANCEL)}
         >
           <XMarkIcon className="size-5" />
