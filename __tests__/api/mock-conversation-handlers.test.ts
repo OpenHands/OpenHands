@@ -7,7 +7,13 @@ import EventService from "#/api/event-service/event-service.api";
 import {
   CANVAS_DEMO_CONVERSATION_ID,
   CANVAS_DEMO_FILE_PATH,
+  CANVAS_DEMO_HTML,
+  CANVAS_DEMO_HTML_FILE_PATH,
+  CANVAS_DEMO_HTML_STYLES,
+  CANVAS_DEMO_HTML_STYLES_PATH,
   CANVAS_DEMO_MARKDOWN,
+  CANVAS_DEMO_SVG,
+  CANVAS_DEMO_SVG_FILE_PATH,
 } from "#/fixtures/canvas-demo-conversation";
 import { TABLE_DEMO_CONVERSATION_ID } from "#/fixtures/table-demo-conversation";
 import { server } from "#/mocks/node";
@@ -669,13 +675,27 @@ describe("mock conversation handlers", () => {
 
     expect(conversation?.title).toBe("Generated canvas demo");
     expect(conversation?.workspace?.working_dir?.trim()).toBeTruthy();
-    expect(page.items).toHaveLength(4);
+    // User + agent messages, plus an action/observation pair for each of the
+    // three inline-previewable artifacts (Markdown, HTML, SVG).
+    expect(page.items).toHaveLength(8);
     expect(page.items).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           observation: expect.objectContaining({
             kind: "FileEditorObservation",
             path: CANVAS_DEMO_FILE_PATH,
+          }),
+        }),
+        expect.objectContaining({
+          observation: expect.objectContaining({
+            kind: "FileEditorObservation",
+            path: CANVAS_DEMO_HTML_FILE_PATH,
+          }),
+        }),
+        expect.objectContaining({
+          observation: expect.objectContaining({
+            kind: "FileEditorObservation",
+            path: CANVAS_DEMO_SVG_FILE_PATH,
           }),
         }),
       ]),
@@ -689,5 +709,31 @@ describe("mock conversation handlers", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("text/markdown");
     await expect(response.text()).resolves.toBe(CANVAS_DEMO_MARKDOWN);
+  });
+  it("serves the generated canvas HTML and its sibling stylesheet", async () => {
+    // eslint-disable-next-line local/no-direct-agent-server-fetch -- Verify the bytes the sandboxed preview frame fetches, including the relative asset.
+    const html = await fetch(
+      `${API_BASE}/api/conversations/${CANVAS_DEMO_CONVERSATION_ID}/workspace/${CANVAS_DEMO_HTML_FILE_PATH}`,
+    );
+    expect(html.status).toBe(200);
+    expect(html.headers.get("content-type")).toContain("text/html");
+    await expect(html.text()).resolves.toBe(CANVAS_DEMO_HTML);
+
+    // eslint-disable-next-line local/no-direct-agent-server-fetch -- The relative `./report.css` in the HTML must resolve against the same workspace base.
+    const css = await fetch(
+      `${API_BASE}/api/conversations/${CANVAS_DEMO_CONVERSATION_ID}/workspace/${CANVAS_DEMO_HTML_STYLES_PATH}`,
+    );
+    expect(css.status).toBe(200);
+    expect(css.headers.get("content-type")).toContain("text/css");
+    await expect(css.text()).resolves.toBe(CANVAS_DEMO_HTML_STYLES);
+  });
+  it("serves the generated canvas SVG artifact", async () => {
+    // eslint-disable-next-line local/no-direct-agent-server-fetch -- Verify the bytes the sandboxed preview frame fetches.
+    const svg = await fetch(
+      `${API_BASE}/api/conversations/${CANVAS_DEMO_CONVERSATION_ID}/workspace/${CANVAS_DEMO_SVG_FILE_PATH}`,
+    );
+    expect(svg.status).toBe(200);
+    expect(svg.headers.get("content-type")).toContain("image/svg+xml");
+    await expect(svg.text()).resolves.toBe(CANVAS_DEMO_SVG);
   });
 });

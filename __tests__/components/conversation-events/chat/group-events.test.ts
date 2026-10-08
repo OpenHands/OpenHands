@@ -144,6 +144,30 @@ const makeMarkdownFileEditorObservation = (
   },
 });
 
+const makeHtmlFileEditorAction = (
+  id: string,
+): ActionEvent<FileEditorAction> => ({
+  ...makeMarkdownFileEditorAction(id),
+  action: {
+    ...makeMarkdownFileEditorAction(id).action,
+    path: "index.html",
+    file_text: "<h1>Demo</h1>",
+  },
+});
+
+const makeHtmlFileEditorObservation = (
+  id: string,
+  actionId: string,
+): ObservationEvent<FileEditorObservation> => ({
+  ...makeMarkdownFileEditorObservation(id, actionId),
+  observation: {
+    ...makeMarkdownFileEditorObservation(id, actionId).observation,
+    output: "Created index.html",
+    path: "index.html",
+    new_content: "<h1>Demo</h1>",
+  },
+});
+
 const makeTaskTrackerObservation = (
   id: string,
   actionId: string,
@@ -241,6 +265,25 @@ describe("isGroupableEvent", () => {
     };
     expect(isGroupableEvent(observation)).toBe(true);
     expect(isGroupableEvent(observation, action)).toBe(false);
+  });
+
+  it("does not group HTML/SVG file-editor create actions or observations", () => {
+    expect(isGroupableEvent(makeHtmlFileEditorAction("a1"))).toBe(false);
+    expect(isGroupableEvent(makeHtmlFileEditorObservation("o1", "a1"))).toBe(
+      false,
+    );
+  });
+
+  it("still groups HTML file-editor view observations", () => {
+    const viewObservation = makeHtmlFileEditorObservation("o1", "a1");
+    viewObservation.observation = {
+      ...viewObservation.observation,
+      command: "view",
+      output: "",
+      new_content: null,
+      content: [{ type: "text", text: "     1\t<h1>Demo</h1>" }],
+    };
+    expect(isGroupableEvent(viewObservation)).toBe(true);
   });
 
   it("does not group TaskTrackerObservation", () => {
