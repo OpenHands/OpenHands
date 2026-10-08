@@ -6,6 +6,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import AutomationService from "#/api/automation-service/automation-service.api";
+import { useDeploymentCapabilities } from "#/hooks/query/use-manifest-capabilities";
 import { isSdkHttpStatusError } from "#/api/agent-server-compatibility";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useTracking } from "#/hooks/use-tracking";
@@ -74,14 +75,21 @@ interface UseAutomationDraftsOptions {
 export function useAutomationDrafts(options: UseAutomationDraftsOptions = {}) {
   const { limit = AUTOMATIONS_PAGE_SIZE, offset = 0, enabled = true } = options;
   const active = useActiveBackend();
+  const deploymentCapabilities = useDeploymentCapabilities();
+  const supportsAutomationDrafts = AutomationService.supportsAutomationDrafts(
+    deploymentCapabilities.data,
+  );
+
   return useQuery<AutomationDraftListResponse>({
     queryKey: [
       ...AUTOMATION_DRAFTS_QUERY_KEY,
       { limit, offset },
       active.backend.id,
       active.orgId,
+      supportsAutomationDrafts,
     ],
     queryFn: async () => {
+      if (!supportsAutomationDrafts) return { drafts: [], total: 0 };
       try {
         return await AutomationService.listServerDrafts({ limit, offset });
       } catch (error) {
@@ -92,7 +100,7 @@ export function useAutomationDrafts(options: UseAutomationDraftsOptions = {}) {
       }
     },
     staleTime: 0,
-    enabled,
+    enabled: enabled && !deploymentCapabilities.isLoading,
   });
 }
 

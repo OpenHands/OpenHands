@@ -81,6 +81,8 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
     deleteAutomation: vi.fn(),
     dispatchAutomation: vi.fn(),
     checkHealth: vi.fn(),
+    getCapabilities: vi.fn(),
+    supportsAutomationDrafts: vi.fn(),
   },
 }));
 
@@ -224,6 +226,20 @@ beforeEach(() => {
     drafts: [],
     total: 0,
   });
+  vi.mocked(AutomationService.getCapabilities).mockReset();
+  vi.mocked(AutomationService.getCapabilities).mockResolvedValue({
+    ready: true,
+    features: ["automationDrafts"],
+    triggerKinds: ["cron", "event"],
+    eventSources: [],
+    eventTypes: [],
+    triggers: {},
+  });
+  vi.mocked(AutomationService.supportsAutomationDrafts).mockReset();
+  vi.mocked(AutomationService.supportsAutomationDrafts).mockImplementation(
+    (capabilities) =>
+      Boolean(capabilities?.features?.includes("automationDrafts")),
+  );
   vi.mocked(AutomationService.updateAutomation).mockReset();
   vi.mocked(AutomationService.dispatchAutomation).mockReset();
   vi.mocked(AutomationService.deleteAutomation).mockReset();
@@ -257,6 +273,27 @@ afterEach(() => {
 });
 
 describe("AutomationsList — draft sections", () => {
+
+  it("does not request saved drafts when capabilities do not advertise drafts", async () => {
+    vi.mocked(AutomationService.getCapabilities).mockResolvedValue({
+      ready: true,
+      features: [],
+      triggerKinds: ["cron", "event"],
+      eventSources: [],
+      eventTypes: [],
+      triggers: {},
+    });
+
+    renderList();
+
+    await screen.findByText(automation.name);
+    await waitFor(() =>
+      expect(AutomationService.listServerDrafts).not.toHaveBeenCalled(),
+    );
+    expect(
+      screen.queryByText(I18nKey.AUTOMATIONS$SAVED_DRAFTS),
+    ).not.toBeInTheDocument();
+  });
   it("renders saved setup drafts as actionable cards and hides materialized test artifacts", async () => {
     vi.mocked(AutomationService.getAutomations).mockResolvedValue({
       automations: [automation, materializedDraftAutomation],

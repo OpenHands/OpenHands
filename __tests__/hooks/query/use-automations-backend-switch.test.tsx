@@ -50,6 +50,8 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
     updateAutomation: vi.fn(),
     toggleAutomation: vi.fn(),
     listServerDrafts: vi.fn(),
+    getCapabilities: vi.fn(),
+    supportsAutomationDrafts: vi.fn(),
   },
 }));
 
@@ -131,6 +133,20 @@ beforeEach(() => {
     drafts: [],
     total: 0,
   });
+  vi.mocked(AutomationService.getCapabilities).mockReset();
+  vi.mocked(AutomationService.getCapabilities).mockResolvedValue({
+    ready: true,
+    features: ["automationDrafts"],
+    triggerKinds: ["cron", "event"],
+    eventSources: [],
+    eventTypes: [],
+    triggers: {},
+  });
+  vi.mocked(AutomationService.supportsAutomationDrafts).mockReset();
+  vi.mocked(AutomationService.supportsAutomationDrafts).mockImplementation(
+    (capabilities) =>
+      Boolean(capabilities?.features?.includes("automationDrafts")),
+  );
   vi.mocked(AutomationService.dispatchAutomation).mockReset();
   vi.mocked(AutomationService.dispatchAutomation).mockResolvedValue(
     automationRun,
@@ -159,6 +175,25 @@ afterEach(() => {
 });
 
 describe("useAutomationDrafts — draft endpoint unavailability", () => {
+
+  it("does not call the drafts endpoint when capabilities do not advertise drafts", async () => {
+    vi.mocked(AutomationService.getCapabilities).mockResolvedValue({
+      ready: true,
+      features: [],
+      triggerKinds: ["cron", "event"],
+      eventSources: [],
+      eventTypes: [],
+      triggers: {},
+    });
+
+    const { result } = renderHook(() => useAutomationDrafts(), {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toEqual({ drafts: [], total: 0 });
+    expect(AutomationService.listServerDrafts).not.toHaveBeenCalled();
+  });
   it("returns an empty draft list when the drafts fetch rejects with an axios-style error", async () => {
     const error = Object.assign(new Error("Not Found"), {
       response: { status: 404 },

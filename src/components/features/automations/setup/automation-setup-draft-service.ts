@@ -11,6 +11,7 @@ import type {
   AutomationDraftEndpoint,
 } from "#/manifests/types";
 import { I18nKey } from "#/i18n/declaration";
+import { getApiErrorBody } from "#/utils/api-error-message";
 import type { AutomationRun } from "#/types/automation";
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -172,24 +173,23 @@ export function isDraftEndpointUnavailable(error: unknown): boolean {
   return status === 404 || status === 405;
 }
 
+function getDraftErrorPayload(error: unknown): Record<string, unknown> | null {
+  const body = getApiErrorBody(error);
+  const record = asRecord(body);
+  if (!record) return null;
+  return asRecord(record.detail) ?? record;
+}
+
 export function extractDraftDispatchErrors(error: unknown): string | null {
-  if (error && typeof error === "object") {
-    const record = error as Record<string, unknown>;
-    const response = record.response;
-    if (response && typeof response === "object") {
-      const data = (response as Record<string, unknown>).data;
-      if (data && typeof data === "object") {
-        const errors = (data as Record<string, unknown>).errors;
-        if (Array.isArray(errors) && errors.length > 0) {
-          const first = errors[0] as Record<string, unknown> | undefined;
-          if (first && typeof first.message === "string") return first.message;
-        }
-        const message = (data as Record<string, unknown>).message;
-        if (typeof message === "string") return message;
-      }
-    }
+  const data = getDraftErrorPayload(error);
+  if (!data) return null;
+  const errors = data.errors;
+  if (Array.isArray(errors) && errors.length > 0) {
+    const first = errors[0] as Record<string, unknown> | undefined;
+    if (first && typeof first.message === "string") return first.message;
   }
-  return null;
+  const message = data.message;
+  return typeof message === "string" ? message : null;
 }
 
 function draftRunFinishedSuccessfully(run: AutomationRun): boolean {

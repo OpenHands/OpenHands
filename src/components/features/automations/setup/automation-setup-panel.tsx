@@ -1241,7 +1241,17 @@ export function AutomationSetupPanel({
     setSaveState("saving");
     try {
       if (!(await ensureCustomWebhookSource())) return;
-      const saved = await persistServerDraft();
+      if (!draftsSupported) {
+        setSaveState("saved");
+        setStatusMessage({
+          kind: "success",
+          text: t(I18nKey.AUTOMATION_SETUP$DRAFT_SAVED),
+        });
+        return;
+      }
+      const tarballPath =
+        kind === "custom" ? await uploadCustomArchive() : undefined;
+      const saved = await persistServerDraft(tarballPath);
       setSaveState("saved");
       setStatusMessage({
         kind: "success",
@@ -1279,6 +1289,12 @@ export function AutomationSetupPanel({
     setSaveState("saving");
     try {
       if (!(await ensureCustomWebhookSource())) return;
+      if (!draftsSupported) {
+        setSaveState("saved");
+        await runPreflightValidation();
+        return;
+      }
+
       // Persist the current form state as a draft first, then dispatch it.
       // The service materializes the validated draft body into a disabled
       // automation and starts a manual run; the draft row stays as source
@@ -1424,6 +1440,9 @@ export function AutomationSetupPanel({
       { source: "", ref: DEFAULT_AUTOMATION_PLUGIN_REF },
     ]);
   const saveStateText = saveStateLabel();
+  const draftsSupported = AutomationService.supportsAutomationDrafts(
+    deploymentCapabilities.data,
+  );
 
   const renderToolbarActions = () => (
     <div className="flex shrink-0 items-center gap-1.5">

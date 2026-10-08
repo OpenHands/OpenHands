@@ -389,7 +389,7 @@ export const AUTOMATION_HANDLERS = [
       draft.validation_errors = errors;
       draft.dispatchable = false;
       return HttpResponse.json(
-        { message: "Draft is not dispatchable", errors },
+        { detail: { message: "Draft is not dispatchable", errors } },
         { status: 422 },
       );
     }
