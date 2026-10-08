@@ -160,10 +160,13 @@ function searchPaginationEvents(
 ) {
   const limit = Number(searchParams.get("limit") ?? "100");
   const timestampLt = searchParams.get("timestamp__lt");
+  const timestampGte = searchParams.get("timestamp__gte");
   const sortOrder = searchParams.get("sort_order");
-  const filtered = timestampLt
-    ? events.filter((event) => (event.timestamp ?? "") < timestampLt)
-    : events;
+  const filtered = events.filter(
+    (event) =>
+      (!timestampLt || (event.timestamp ?? "") < timestampLt) &&
+      (!timestampGte || (event.timestamp ?? "") >= timestampGte),
+  );
   const sorted = [...filtered].sort((a, b) =>
     sortOrder === "TIMESTAMP_DESC"
       ? (b.timestamp ?? "").localeCompare(a.timestamp ?? "")
