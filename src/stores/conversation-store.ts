@@ -106,8 +106,6 @@ interface ConversationActions {
     conversationId: string | null,
     deepPlanPlannerPhase?: DeepPlanPhaseId | null,
   ) => void;
-  /** Records which Deep Planning phase a planner is (being) created for. */
-  setDeepPlanPlannerPhase: (phase: DeepPlanPhaseId | null) => void;
   setPlanContent: (planContent: string | null) => void;
   startDeepPlan: () => void;
   setDeepPlanPhase: (phase: DeepPlanPhaseId) => void;
@@ -438,6 +436,11 @@ export const useConversationStore = create<ConversationStore>()(
             deepPlan: getInitialDeepPlanState(),
             subConversationTaskId: null,
             localPlanningConversationId: null,
+            // Clear the phase with the id. They describe the same planner, so a
+            // stale phase alongside a nulled id would make the next
+            // conversation inherit this one's planner decision and skip
+            // provisioning its own.
+            deepPlanPlannerPhase: null,
             planContent: null,
           },
           false,
@@ -467,9 +470,6 @@ export const useConversationStore = create<ConversationStore>()(
           false,
           "setLocalPlanningConversationId",
         ),
-
-      setDeepPlanPlannerPhase: (deepPlanPlannerPhase) =>
-        set({ deepPlanPlannerPhase }, false, "setDeepPlanPlannerPhase"),
 
       setPlanContent: (planContent) =>
         set({ planContent }, false, "setPlanContent"),

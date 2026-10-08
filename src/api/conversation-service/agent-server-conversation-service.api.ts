@@ -651,9 +651,12 @@ class AgentServerConversationService {
     // Client-side fallback only: agent-servers >= 1.37.1 persist the link via
     // `parent_conversation_id` and hand it back on the parent's
     // `sub_conversation_ids`, which is the source of truth. This hint covers
-    // older backends that ignore the field.
+    // older backends that ignore the field. The phase is stored alongside the
+    // id so a refresh restores the planner for the *matching* phase, never one
+    // pinned to a different phase's document.
     mergeStoredConversationMetadata(parentConversationId, {
       local_planning_conversation_id: data.id,
+      local_planning_planner_phase: deepPlanPhase ?? null,
     });
 
     return toAppConversation(data);

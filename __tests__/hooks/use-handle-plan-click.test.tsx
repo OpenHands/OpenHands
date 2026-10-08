@@ -19,7 +19,10 @@ import AgentServerConversationService from "#/api/conversation-service/agent-ser
 import { getStoredConversationMetadata } from "#/api/conversation-metadata-store";
 import { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { useSubConversations } from "#/hooks/query/use-sub-conversations";
-import { LOCAL_PLANNER_PARENT_TAG_KEY } from "#/utils/plan-file";
+import {
+  DEEP_PLAN_PHASE_TAG_KEY,
+  LOCAL_PLANNER_PARENT_TAG_KEY,
+} from "#/utils/plan-file";
 
 // Mock dependencies
 vi.mock("#/stores/conversation-store");
@@ -138,6 +141,9 @@ describe("useHandlePlanClick", () => {
       subConversationTaskId: null,
       setLocalPlanningConversationId: mockSetLocalPlanningConversationId,
       localPlanningConversationId: null,
+      deepPlanPlannerPhase: null,
+      conversationMode: "code",
+      deepPlan: { activePhase: null, confirmed: [], documents: {} },
     });
 
     vi.mocked(useActiveConversation).mockReturnValue(
@@ -288,6 +294,7 @@ describe("useHandlePlanClick", () => {
 
       expect(mockSetLocalPlanningConversationId).toHaveBeenCalledWith(
         "plan-conv-1",
+        null,
       );
     });
 
@@ -408,6 +415,7 @@ describe("useHandlePlanClick", () => {
 
       expect(mockSetLocalPlanningConversationId).toHaveBeenCalledWith(
         "plan-conv-1",
+        null,
       );
     });
 
@@ -766,6 +774,147 @@ describe("useHandlePlanClick", () => {
 
       expect(mockSetSubConversationTaskId).not.toHaveBeenCalled();
       expect(setConversationState).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("deep plan planner provisioning", () => {
+    function mockDeepPlanStore(state: {
+      activePhase: "analysis" | "requirements" | "database";
+      conversationMode?: string;
+      deepPlanPlannerPhase?: "analysis" | "requirements" | "database" | null;
+      localPlanningConversationId?: string | null;
+    }) {
+      const storeValue = {
+        setConversationMode: mockSetConversationMode,
+        setSubConversationTaskId: mockSetSubConversationTaskId,
+        subConversationTaskId: null,
+        setLocalPlanningConversationId: mockSetLocalPlanningConversationId,
+        localPlanningConversationId: state.localPlanningConversationId ?? null,
+        deepPlanPlannerPhase: state.deepPlanPlannerPhase ?? null,
+        conversationMode: state.conversationMode ?? "deep-plan",
+        deepPlan: {
+          activePhase: state.activePhase,
+          confirmed: [],
+          documents: {},
+        },
+      };
+      vi.mocked(useConversationStore).mockReturnValue(
+        asMockReturnValue<ReturnType<typeof useConversationStore>>(storeValue),
+      );
+      vi.mocked(useConversationStore).getState = vi.fn(
+        () => storeValue,
+      ) as never;
+    }
+
+    it("provisions the active phase's planner instead of reusing a prior conversation's phase", async () => {
+      // Regression: the store id/phase survive a navigation until the route
+      // resets them. A new conversation that lands on `requirements` must not
+      // inherit the previous conversation's `database` planner — no planner is
+      // tagged for this parent, so one must be created.
+      vi.mocked(useActiveBackend).mockReturnValue({
+        backend: { kind: "local" },
+      } as ReturnType<typeof useActiveBackend>);
+      mockDeepPlanStore({
+        activePhase: "requirements",
+        deepPlanPlannerPhase: "database",
+        localPlanningConversationId: "prev-db-planner",
+      });
+      vi.mocked(
+        AgentServerConversationService.createLocalPlanningConversation,
+      ).mockResolvedValue(makeConversation({ id: "plan-conv-req" }));
+
+      const { result } = renderPlanHook();
+
+      act(() => {
+        result.current.handlePlanClick();
+      });
+
+      await waitFor(() => {
+        expect(
+          AgentServerConversationService.createLocalPlanningConversation,
+        ).toHaveBeenCalledWith(
+          "conv-123",
+          undefined,
+          "requirements",
+          expect.any(String),
+        );
+      });
+      await waitFor(() => {
+        expect(mockSetLocalPlanningConversationId).toHaveBeenCalledWith(
+          "plan-conv-req",
+          "requirements",
+        );
+      });
+    });
+
+    it("adopts the active phase's own tagged planner without creating a second one", () => {
+      vi.mocked(useActiveBackend).mockReturnValue({
+        backend: { kind: "local" },
+      } as ReturnType<typeof useActiveBackend>);
+      mockDeepPlanStore({ activePhase: "requirements" });
+      vi.mocked(useActiveConversation).mockReturnValue(
+        asMockReturnValue<ReturnType<typeof useActiveConversation>>({
+          data: makeConversation({ sub_conversation_ids: ["plan-req"] }),
+          isLoading: false,
+          isPending: false,
+          isError: false,
+          error: null,
+          refetch: vi.fn(),
+        }),
+      );
+      vi.mocked(useSubConversations).mockReturnValue(
+        asMockReturnValue<ReturnType<typeof useSubConversations>>({
+          data: [
+            makeConversation({
+              id: "plan-req",
+              tags: {
+                [LOCAL_PLANNER_PARENT_TAG_KEY]: "conv-123",
+                [DEEP_PLAN_PHASE_TAG_KEY]: "requirements",
+              },
+            }),
+          ],
+        }),
+      );
+
+      const { result } = renderPlanHook();
+
+      act(() => {
+        result.current.handlePlanClick();
+      });
+
+      expect(
+        AgentServerConversationService.createLocalPlanningConversation,
+      ).not.toHaveBeenCalled();
+    });
+
+    it("does not let a phase planner satisfy the plain plan-mode reuse check", async () => {
+      // A phase planner edits a phase document, not PLAN.md. Plain `/plan`
+      // must create its own untagged planner even when a phase planner exists.
+      vi.mocked(useActiveBackend).mockReturnValue({
+        backend: { kind: "local" },
+      } as ReturnType<typeof useActiveBackend>);
+      mockDeepPlanStore({
+        activePhase: "requirements",
+        deepPlanPlannerPhase: "requirements",
+        localPlanningConversationId: "plan-req",
+        conversationMode: "plan",
+      });
+      // The store id is a phase planner, so it cannot satisfy `hasPlanner`.
+      vi.mocked(
+        AgentServerConversationService.createLocalPlanningConversation,
+      ).mockResolvedValue(makeConversation({ id: "plan-plain" }));
+
+      const { result } = renderPlanHook();
+
+      act(() => {
+        result.current.handlePlanClick();
+      });
+
+      await waitFor(() => {
+        expect(
+          AgentServerConversationService.createLocalPlanningConversation,
+        ).toHaveBeenCalledWith("conv-123", undefined, null, null);
+      });
     });
   });
 });

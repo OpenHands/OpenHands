@@ -159,3 +159,41 @@ export function findPhasePlannerConversationId(
   // Plain planner: one without a phase tag.
   return planners.find((sub) => plannerPhaseOf(sub) === null)?.id ?? null;
 }
+
+/**
+ * Whether a stored planner id may stand in for `parentConversationId`'s
+ * planner for `phase` — the check every store-id fallback must pass.
+ *
+ * The store id is a single unscoped value that can still hold another
+ * conversation's planner right after a navigation; unless we verify its owner
+ * and phase, a fallback would route messages into a planner pinned to a
+ * different document (or another conversation entirely).
+ *
+ * `recordedPhase` is the phase the store stamped when it wrote the id (the
+ * store's `deepPlanPlannerPhase`; `null` for a plain planner). The fetched
+ * `plannerparent` tag is authoritative when present; otherwise the id is trusted
+ * only when its recorded phase matches and the list holds no planner for that
+ * phase that would contradict it.
+ */
+export function isFallbackPlannerId(
+  subConversations: (AppConversation | null)[] | null | undefined,
+  parentConversationId: string | null | undefined,
+  localPlanningConversationId: string | null | undefined,
+  phase: DeepPlanPhaseId | null,
+  recordedPhase: DeepPlanPhaseId | null,
+): boolean {
+  if (!parentConversationId || !localPlanningConversationId) return false;
+  const planners = (subConversations ?? []).filter(
+    (sub): sub is AppConversation =>
+      sub !== null && isPlannerConversationOf(sub, parentConversationId),
+  );
+  const match = planners.find((sub) => sub.id === localPlanningConversationId);
+  if (match) return plannerPhaseOf(match) === phase;
+  // The tagged child is not in the fetched list. Trust the store id only when
+  // it was recorded for this exact phase and no listed planner claims that
+  // phase — a deep-plan phase must be proven, never assumed.
+  return (
+    recordedPhase === phase &&
+    !planners.some((sub) => plannerPhaseOf(sub) === phase)
+  );
+}

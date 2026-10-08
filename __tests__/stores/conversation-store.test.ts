@@ -143,6 +143,29 @@ describe("conversation store", () => {
       expect(useConversationStore.getState().conversationMode).toBe("code");
       expect(mockGetConversationState).toHaveBeenCalledWith(CONV_ID);
     });
+
+    it("clears the planner id and its phase together", () => {
+      // The id and phase describe the same planner. Leaving the phase behind
+      // while nulling the id lets the next conversation inherit this one's
+      // planner decision — e.g. a fresh conversation whose stored phase happens
+      // to match would skip provisioning its own planner.
+      useConversationStore
+        .getState()
+        .setLocalPlanningConversationId("planner-1", "requirements");
+      expect(useConversationStore.getState().localPlanningConversationId).toBe(
+        "planner-1",
+      );
+      expect(useConversationStore.getState().deepPlanPlannerPhase).toBe(
+        "requirements",
+      );
+
+      useConversationStore.getState().resetConversationState();
+
+      expect(
+        useConversationStore.getState().localPlanningConversationId,
+      ).toBeNull();
+      expect(useConversationStore.getState().deepPlanPlannerPhase).toBeNull();
+    });
   });
 
   describe("deep plan", () => {

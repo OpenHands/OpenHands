@@ -54,6 +54,14 @@ export interface ConversationMetadata {
    * backends do not, so Canvas stores the relationship here.
    */
   local_planning_conversation_id?: string | null;
+  /**
+   * Deep Planning phase `local_planning_conversation_id` was created for
+   * (`null`/absent for a plain `plan`-mode planner). The planner is pinned to
+   * one document, so the fallback hint must record which phase it owns —
+   * otherwise a refresh (or another conversation's phase) would adopt a planner
+   * pinned to the wrong document.
+   */
+  local_planning_planner_phase?: string | null;
 }
 
 export const toPluginCoordinates = (plugin: PluginSpec): PluginSpec => ({

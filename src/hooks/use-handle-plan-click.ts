@@ -24,7 +24,7 @@ import {
 import { useSubConversations } from "#/hooks/query/use-sub-conversations";
 import {
   findPhasePlannerConversationId,
-  findPlannerConversationId,
+  isFallbackPlannerId,
 } from "#/utils/plan-file";
 import { type DeepPlanPhaseId } from "#/utils/deep-plan";
 import { deepPlanGuidance } from "#/utils/deep-plan-messages";
@@ -110,26 +110,55 @@ function restorePlanningConversationIds(options: {
   serverPlanningConversationId: string | null;
   subConversationTaskId: string | null;
   localPlanningConversationId: string | null;
+  localPlannerPhase: DeepPlanPhaseId | null;
+  activeDeepPlanPhase: DeepPlanPhaseId | null;
   setSubConversationTaskId: (taskId: string | null) => void;
-  setLocalPlanningConversationId: (conversationId: string | null) => void;
+  setLocalPlanningConversationId: (
+    conversationId: string | null,
+    deepPlanPlannerPhase?: DeepPlanPhaseId | null,
+  ) => void;
 }) {
   const storedState = getConversationState(options.conversationId);
   if (storedState.subConversationTaskId && !options.subConversationTaskId) {
     options.setSubConversationTaskId(storedState.subConversationTaskId);
   }
 
-  // Server first: `sub_conversation_ids` is derived by the agent-server from
-  // the planner's `parent_conversation_id`, so it survives cleared site data
-  // and follows the user to another browser. The localStorage hint is only the
-  // fallback for agent-servers older than 1.37.1, which drop the parent link.
-  const restoredId =
-    options.serverPlanningConversationId ??
-    getStoredConversationMetadata(options.conversationId)
-      ?.local_planning_conversation_id ??
-    null;
+  // `sub_conversation_ids` is derived by the agent-server from the planner's
+  // `parent_conversation_id`, so it survives cleared site data and follows the
+  // user to another browser. The localStorage metadata hint is only the
+  // fallback for agent-servers older than 1.37.1, which drop the parent link
+  // (and return no children at all) — there the hint is the sole handle.
+  const metadata = getStoredConversationMetadata(options.conversationId);
 
+  if (options.activeDeepPlanPhase) {
+    // Deep Planning: restore only a hint recorded for the *active* phase. A
+    // plain (`plan`) hint, or another phase's, would point the planner at the
+    // wrong document, so it is ignored — the provisioning effect then creates
+    // the correct phase planner rather than adopting a mismatched one.
+    const phase = options.activeDeepPlanPhase;
+    const storedId =
+      metadata?.local_planning_planner_phase === phase
+        ? (metadata.local_planning_conversation_id ?? null)
+        : null;
+    if (
+      storedId &&
+      storedId !== options.localPlanningConversationId &&
+      options.localPlannerPhase !== phase
+    ) {
+      options.setLocalPlanningConversationId(storedId, phase);
+    }
+    return;
+  }
+
+  // Plain `plan` mode: an untagged hint (`local_planning_planner_phase` null or
+  // absent — planners created before this field existed default to untagged).
+  const storedPlainId =
+    metadata?.local_planning_planner_phase == null
+      ? (metadata?.local_planning_conversation_id ?? null)
+      : null;
+  const restoredId = options.serverPlanningConversationId ?? storedPlainId;
   if (restoredId && restoredId !== options.localPlanningConversationId) {
-    options.setLocalPlanningConversationId(restoredId);
+    options.setLocalPlanningConversationId(restoredId, null);
   }
 }
 
@@ -186,8 +215,43 @@ export const useHandlePlanClick = () => {
     isLocalBackend ? conversation?.sub_conversation_ids : undefined,
   );
 
-  const serverPlanningConversationId = isLocalBackend
-    ? findPlannerConversationId(rawSubConversations, conversation?.id)
+  // The planner id the *fetched children* report, resolved per phase. These are
+  // the authoritative handles; the store id below is only a fallback for
+  // backends that do not report children yet (or before the fetch resolves).
+  // The store id is global, so trusting it alone would let a conversation
+  // inherit the previous conversation's phase (whose planner belongs to a
+  // different parent).
+  const serverPlainPlannerId = isLocalBackend
+    ? findPhasePlannerConversationId(
+        rawSubConversations,
+        conversation?.id,
+        null,
+      )
+    : null;
+  const serverPhasePlannerId =
+    isLocalBackend &&
+    activeDeepPlanPhase &&
+    isPlanningMode("deep-plan", activeDeepPlanPhase)
+      ? findPhasePlannerConversationId(
+          rawSubConversations,
+          conversation?.id,
+          activeDeepPlanPhase,
+        )
+      : null;
+
+  // The store id is only usable when it was persisted for a phase that matches
+  // the one being resolved *and* its owner can be proven. For a plain planner
+  // `plan` mode must not adopt a phase-tagged planner (which edits the wrong
+  // file); for a phase the recorded phase must match and no fetched child may
+  // contradict it.
+  const storedPlannerId = isFallbackPlannerId(
+    rawSubConversations,
+    conversation?.id,
+    localPlanningConversationId,
+    activeDeepPlanPhase,
+    deepPlanPlannerPhase,
+  )
+    ? localPlanningConversationId
     : null;
 
   // Whether the current Deep Planning phase already has its own planner. Each
@@ -198,34 +262,36 @@ export const useHandlePlanClick = () => {
     isLocalBackend &&
     activeDeepPlanPhase !== null &&
     isPlanningMode("deep-plan", activeDeepPlanPhase)
-      ? !!findPhasePlannerConversationId(
-          rawSubConversations,
-          conversation?.id,
-          activeDeepPlanPhase,
-        ) || deepPlanPlannerPhase === activeDeepPlanPhase
+      ? !!(serverPhasePlannerId || storedPlannerId)
       : false;
 
   // Restore planning conversation ids on conversation load. This handles page
   // refreshes while cloud or local planning conversation creation is in
   // progress, and recovers the local planner after browser storage is lost.
+  // Deep Planning restores the active phase's own hint (each phase pins a
+  // different document); `plan` mode restores the untagged one. Both are
+  // phase-scoped so neither adopts a planner pinned to the wrong document.
+  const deepPlanRestorePhase =
+    conversationMode === "deep-plan" ? activeDeepPlanPhase : null;
   useEffect(() => {
     if (!conversation?.id) return;
-    // Deep Planning keeps one planner per phase, resolved from each planner's
-    // phase tag, so the single-planner restore would clobber the phase id.
-    if (conversationMode === "deep-plan") return;
 
     restorePlanningConversationIds({
       conversationId: conversation.id,
-      serverPlanningConversationId,
+      serverPlanningConversationId: serverPlainPlannerId,
       subConversationTaskId,
       localPlanningConversationId,
+      localPlannerPhase: deepPlanPlannerPhase,
+      activeDeepPlanPhase: deepPlanRestorePhase,
       setSubConversationTaskId,
       setLocalPlanningConversationId,
     });
   }, [
     conversation?.id,
     conversationMode,
-    serverPlanningConversationId,
+    deepPlanRestorePhase,
+    deepPlanPlannerPhase,
+    serverPlainPlannerId,
     localPlanningConversationId,
     setLocalPlanningConversationId,
     subConversationTaskId,
@@ -240,12 +306,21 @@ export const useHandlePlanClick = () => {
   // Whether a plain `plan`-mode planner helper already exists for this
   // conversation — callers (e.g. the `/plan <task>` interceptor) use this to
   // decide whether they can send a message to the planner immediately, or must
-  // wait for creation. Deep Planning resolves its own per-phase planner via
-  // `hasPhasePlanner`; a phase planner carries a phase tag, so it must never
-  // satisfy the plain-planner check.
-  const hasPlanner = isLocalBackend
-    ? !!(localPlanningConversationId || serverPlanningConversationId)
-    : hasCloudPlanner;
+  // wait for creation. It must resolve an *untagged* planner: a Deep Planning
+  // phase planner is pinned to that phase's document, so adopting it here would
+  // send `/plan` tasks to the wrong file and block creating the real planner.
+  const plainPlannerUsableId =
+    serverPlainPlannerId ||
+    (isFallbackPlannerId(
+      rawSubConversations,
+      conversation?.id,
+      localPlanningConversationId,
+      null,
+      deepPlanPlannerPhase,
+    )
+      ? localPlanningConversationId
+      : null);
+  const hasPlanner = isLocalBackend ? !!plainPlannerUsableId : hasCloudPlanner;
 
   // Create the local planner for `phase` (or the plain planner when `phase` is
   // null). Records the phase on success so the socket resolves the right one
@@ -297,12 +372,10 @@ export const useHandlePlanClick = () => {
           return;
         }
 
-        // Plain plan mode: one shared, untagged planner.
-        if (
-          localPlanningConversationId ||
-          serverPlanningConversationId ||
-          isCreatingLocalPlanningConversation
-        ) {
+        // Plain plan mode: one shared, untagged planner. Only an *untagged*
+        // planner satisfies this — a phase-tagged one edits a phase document,
+        // so it must not block creating the real PLAN.md planner.
+        if (plainPlannerUsableId || isCreatingLocalPlanningConversation) {
           return;
         }
         createLocalPlanner(conversation.id, null, initialMessage);
@@ -344,8 +417,7 @@ export const useHandlePlanClick = () => {
       hasCloudPlanner,
       hasPhasePlanner,
       isCreatingLocalPlanningConversation,
-      localPlanningConversationId,
-      serverPlanningConversationId,
+      plainPlannerUsableId,
       setConversationMode,
       setSubConversationTaskId,
       t,

@@ -5,7 +5,10 @@ import { useSubConversations } from "#/hooks/query/use-sub-conversations";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { useConversationStore } from "#/stores/conversation-store";
 import { useActiveBackend } from "#/contexts/active-backend-context";
-import { findPhasePlannerConversationId } from "#/utils/plan-file";
+import {
+  findPhasePlannerConversationId,
+  isFallbackPlannerId,
+} from "#/utils/plan-file";
 import { isArchivedSandboxStatus } from "#/utils/conversation-archive-status";
 
 interface WebSocketProviderWrapperProps {
@@ -92,10 +95,19 @@ export function WebSocketProviderWrapper({
     );
     if (phasePlanner) return phasePlanner;
     // In deep-plan mode before a phase planner exists (or while the tag data
-    // has not resolved), fall back to the store id so the planner is still
-    // reachable; `plan` mode uses the plain untagged planner.
+    // has not resolved), fall back to the store id only when it was recorded
+    // for *this* phase and its owner can be proven. A nil result here means the
+    // active phase has no planner yet — sends must not fall back to another
+    // phase's planner (which edits the wrong document), so the caller leaves
+    // the target empty until the new planner appears.
     if (deepPlanPhaseToResolve) {
-      return deepPlanPlannerPhase === deepPlanPhaseToResolve
+      return isFallbackPlannerId(
+        subConversations,
+        conversation?.id,
+        trustedLocalPlanningConversationId,
+        deepPlanPhaseToResolve,
+        deepPlanPlannerPhase,
+      )
         ? trustedLocalPlanningConversationId
         : null;
     }
@@ -114,20 +126,34 @@ export function WebSocketProviderWrapper({
     trustedLocalPlanningConversationId,
   ]);
 
+  // Bridge candidate (a primitive, so `planningConversationIds` below keeps a
+  // stable array reference across refetches that resolve to the same planner).
+  // The store id is bridged only when it belongs to this resolve context (same
+  // phase, proven owner); blindly bridging would send messages while the new
+  // phase's planner is still provisioning into the *previous* phase's planner,
+  // whose tool edits the wrong document. Otherwise there is no bridge: an
+  // unresolved phase must not fall back to an unrelated planner.
+  const bridgePlannerId =
+    trustedLocalPlanningConversationId &&
+    isFallbackPlannerId(
+      subConversations,
+      conversation?.id,
+      trustedLocalPlanningConversationId,
+      deepPlanPhaseToResolve,
+      deepPlanPlannerPhase,
+    )
+      ? trustedLocalPlanningConversationId
+      : null;
+
   const planningConversationIds = React.useMemo(() => {
     if (!isLocalBackend) return candidateConversationIds;
     if (plannerConversationId) return [plannerConversationId];
-    // Tag data hasn't resolved yet — bridge with the verified store id (see
-    // `trustedLocalPlanningConversationId` above), otherwise stay empty
-    // rather than guessing an untagged child is the planner.
-    return trustedLocalPlanningConversationId
-      ? [trustedLocalPlanningConversationId]
-      : [];
+    return bridgePlannerId ? [bridgePlannerId] : [];
   }, [
     isLocalBackend,
     candidateConversationIds,
     plannerConversationId,
-    trustedLocalPlanningConversationId,
+    bridgePlannerId,
   ]);
 
   const filteredSubConversations = subConversations?.filter(
