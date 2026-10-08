@@ -24,7 +24,7 @@
 - **Production-fidelity launch**: The Playwright config (`playwright.mock-llm.config.ts`) starts the full `agent-canvas` stack via `bin/agent-canvas.mjs` — the same binary that `npx @openhands/agent-canvas` executes when users install the npm package. This means mock-LLM tests exercise the actual production path: pre-built static frontend + static-server.mjs + agent-server via uvx + automation backend via uvx + ingress proxy, all behind a single port.
 - A pre-built `build/` directory is required. The Playwright webServer command runs `npm run build:app` when `build/index.html` is absent, but CI should run the build step explicitly for caching (`npm run build:app` in `.github/workflows/mock-llm-e2e.yml`).
 - **Single ingress URL**: Tests use one URL for both the browser (`baseURL`) and backend API assertions (`BACKEND_URL`). The ingress proxy routes `/api/*` to the agent-server, `/api/automation/*` to the automation backend, and `/*` to the static frontend. Default ingress port for tests is `18300` (override via `MOCK_LLM_INGRESS_PORT` env var).
-- **State isolation**: `OH_CANVAS_SAFE_STATE_DIR=.tmp/mock-llm-state` isolates test state from the user's real `~/.openhands/agent-canvas/` directory. Both `STATE_DIR` (`.tmp/mock-llm-state`) and the automation DB dir (`.tmp/automation/`) are cleaned before each test run — the automation DB now lives outside STATE_DIR at `dirname(STATE_DIR)/automation/automations.db`, mirroring Docker's `~/.openhands/automation/automations.db`.
+- **State isolation**: Each run gets a `RUN_ROOT` (`.tmp/mock-llm-<runId>`, or `.tmp/mock-llm-docker-<runId>` for Docker) holding `STATE_DIR`, the automation DB dir, skill fixtures, and `TEST_HOME`. The npm stack sets `HOME` to `TEST_HOME` so user skills load from the isolated `TEST_HOME/.openhands/skills` and never the developer's real home. `UV_CACHE_DIR` and `UV_PYTHON_INSTALL_DIR` stay on the runner's real home (explicit `UV_*` overrides win) so the workflow's uv pre-warm is reused under the 180s webServer timeout. The webServer command pre-cleans `RUN_ROOT`, and `globalTeardown` removes it unless `MOCK_LLM_PRESERVE_STATE` is set. The automation DB lives at `dirname(STATE_DIR)/automation/automations.db`, mirroring Docker's `~/.openhands/automation/automations.db`.
 - **Session API key**: A random key is generated per test run and passed to the stack via `SESSION_API_KEY` / `OH_SESSION_API_KEYS_0` / `VITE_SESSION_API_KEY`. The static server injects it into `index.html` at serve time so the frontend authenticates automatically.
 - **Mock LLM server** (`tests/e2e/mock-llm/scripts/mock-llm-server.py`): Python HTTP server using openhands-sdk's `TestLLM` to return scripted tool-call + text trajectories. Supports admin API endpoints for dynamic trajectory management:
   - `POST /admin/reset` — reset to the default trajectory (terminal printf + text reply); also clears the stored completion-request history
@@ -72,23 +72,30 @@
 When an E2E test fails in CI, use this workflow to diagnose the root cause efficiently:
 
 ### 1. Read the workflow summary first
+
 The mock-LLM E2E workflows write a structured report to the GitHub Actions workflow summary with a test results table, pass/fail status, and collapsible failure details including the Playwright error message. **Start here** — the error message usually reveals whether the failure is a locator mismatch, a timeout, or a missing element.
 
 ### 2. Download CI artifacts
+
 Every failing test run uploads artifacts (`mock-llm-e2e-results` for npm, `mock-llm-docker-e2e-results` for Docker). Download them with:
+
 ```bash
 gh run download <run_id> --repo OpenHands/OpenHands --name mock-llm-e2e-results --dir /tmp/artifacts
 ```
+
 Artifacts contain:
+
 - `test-results-mock-llm/` — per-test directories with `test-failed-N.png` (screenshot at failure) and `error-context.md` (Playwright page snapshot as YAML accessibility tree + test source with the failing line marked)
 - `playwright-report-mock-llm/` — full HTML report (`npx playwright show-report /tmp/artifacts/playwright-report-mock-llm`)
 
 ### 3. Inspect the error-context.md page snapshot
+
 The `error-context.md` file contains a YAML accessibility tree of the entire page at the moment of failure. This is the single most useful artifact — it shows exactly what DOM elements exist, which tabs are selected, what text is in inputs, and whether a component rendered at all. Search for the element your test expects (e.g. `llm-provider-input`) to see if it's present or absent, and check surrounding context (tab selection state, form view mode, etc.) to understand why.
 
 ### 4. Common failure patterns
 
 **"element(s) not found"** — The locator matched zero elements. The component either:
+
 - Didn't render (conditional rendering path not taken — check the page snapshot for what DID render)
 - Has a different `name`/`data-testid` than expected
 - Is behind a lazy-load boundary that hasn't resolved
@@ -100,6 +107,7 @@ The `error-context.md` file contains a YAML accessibility tree of the entire pag
 **Playwright route interception vs real server** — In mock-LLM tests, routes registered with `page.route()` intercept at the browser level before requests reach the real agent-server. However, `page.route()` must be set up BEFORE `page.goto()`. The `showOnboarding` helper handles this correctly (routes are registered before navigation). Non-GET methods should use `route.fallback()` to pass through to the real server.
 
 ### 5. Running locally
+
 ```bash
 npm run test:e2e:mock-llm                    # full suite
 npm run test:e2e:mock-llm -- --headed        # watch in browser

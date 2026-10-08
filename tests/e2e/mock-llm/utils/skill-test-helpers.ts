@@ -12,15 +12,16 @@
  * with the agent-server while creating files on the host (volume-mounted).
  */
 
-import { resolve, join } from "path";
+import { resolve, join, dirname } from "path";
 import { mkdirSync, writeFileSync, rmSync, existsSync } from "fs";
 import { execSync } from "child_process";
-import { homedir } from "os";
 
 // ── Paths ────────────────────────────────────────────────────────────
 
 /** STATE_DIR matches playwright.mock-llm.config.ts */
-export const STATE_DIR = resolve(".tmp/mock-llm-state");
+export const STATE_DIR = process.env.OH_CANVAS_SAFE_STATE_DIR
+  ? resolve(process.env.OH_CANVAS_SAFE_STATE_DIR)
+  : resolve(".tmp/mock-llm-state");
 
 /**
  * Root directory for skill-test workspace git repos (HOST-side).
@@ -28,7 +29,9 @@ export const STATE_DIR = resolve(".tmp/mock-llm-state");
  * here with the skill file already committed, so the agent-server's
  * worktree machinery picks it up (worktrees only contain committed content).
  */
-export const SKILL_REPOS_DIR = resolve(".tmp/mock-llm-skill-repos");
+export const SKILL_REPOS_DIR = process.env.MOCK_LLM_SKILL_REPOS_HOST_DIR
+  ? resolve(process.env.MOCK_LLM_SKILL_REPOS_HOST_DIR)
+  : resolve(".tmp/mock-llm-skill-repos");
 
 /**
  * The path the agent-server sees for skill repos.
@@ -42,10 +45,14 @@ export const SKILL_REPOS_AGENT_DIR =
  * User-level skills directory — HOST-side (for file creation/removal).
  * In Docker mode, we use a local temp dir that is volume-mounted into the
  * container at the agent-server's expected `~/.openhands/skills/` path.
+ * In npm mode, this resolves to the test-isolated user skills directory
+ * instead of the developer's real ~/.openhands/skills.
  */
 export const USER_SKILLS_DIR = process.env.MOCK_LLM_USER_SKILLS_HOST_DIR
   ? resolve(process.env.MOCK_LLM_USER_SKILLS_HOST_DIR)
-  : join(homedir(), ".openhands", "skills");
+  : process.env.MOCK_LLM_TEST_HOME
+    ? join(resolve(process.env.MOCK_LLM_TEST_HOME), ".openhands", "skills")
+    : join(dirname(STATE_DIR), "home", ".openhands", "skills");
 
 // ── Skill content builders ───────────────────────────────────────────
 
