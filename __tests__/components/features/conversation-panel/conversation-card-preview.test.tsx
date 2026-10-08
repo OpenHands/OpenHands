@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { screen } from "@testing-library/react";
 import { renderWithProviders } from "test-utils";
 import { ConversationCardPreview } from "#/components/features/conversation-panel/conversation-card/conversation-card-preview";
+import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 
 const PREVIEW_TITLE = "Conversation 1";
 
@@ -123,6 +124,26 @@ describe("ConversationCardPreview", () => {
     ).toBeInTheDocument();
     expect(
       screen.queryByTestId("agent-brand-icon-openhands"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("infers the archive dot from a missing runtime when isArchived is omitted", () => {
+    // A hovercard that only knows the sandbox status must match the card's
+    // missing-runtime archive presentation.
+    renderWithProviders(
+      <ConversationCardPreview
+        title={PREVIEW_TITLE}
+        selectedRepository={null}
+        executionStatus={ExecutionStatus.FINISHED}
+        sandboxStatus="MISSING"
+      />,
+    );
+
+    expect(
+      screen.getByTestId("conversation-status-archived"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("conversation-status-check"),
     ).not.toBeInTheDocument();
   });
 
