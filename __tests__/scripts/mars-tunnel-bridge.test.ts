@@ -322,6 +322,7 @@ describe("createMarsTunnelBridge", () => {
       [
         "agent: openhands",
         "template: openhands",
+        "keep_warm: false",
         "secrets:",
         "  OPENHANDS_LLM_API_KEY:",
         '    value: "sk-test"',

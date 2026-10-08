@@ -61,6 +61,9 @@ export function buildOpenHandsManifest({ llmApiKey } = {}) {
   const lines = [
     `agent: ${OPENHANDS_AGENT}`,
     `template: ${OPENHANDS_TEMPLATE}`,
+    // The openhands adapter defaults to keep_warm, which bills until the
+    // session is destroyed and makes harness-api refuse every pause.
+    "keep_warm: false",
   ];
   if (llmApiKey) {
     lines.push(
