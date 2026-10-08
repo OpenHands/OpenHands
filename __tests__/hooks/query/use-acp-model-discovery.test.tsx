@@ -4,6 +4,10 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useAcpModelDiscovery } from "#/hooks/query/use-acp-model-discovery";
+import {
+  readRememberedAcpModels,
+  rememberAcpModels,
+} from "#/utils/remembered-acp-models";
 
 const backendMock = vi.hoisted(() => ({
   current: {
@@ -50,6 +54,7 @@ const PI_DISCOVERY = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  window.localStorage.clear();
   backendMock.current = {
     backend: { id: "local-1", kind: "local" },
     orgId: null,
@@ -71,13 +76,16 @@ describe("useAcpModelDiscovery", () => {
       "ANTHROPIC_API_KEY",
       "PI_AUTH_JSON",
     ]);
-    expect(result.current.models).toEqual([
+    const models = [
       { id: "anthropic/claude-opus-4-8", label: "Claude Opus 4.8" },
       { id: "anthropic/claude-sonnet-5", label: "anthropic/claude-sonnet-5" },
-    ]);
+    ];
+    expect(result.current.models).toEqual(models);
+    expect(result.current.source).toBe("live");
+    expect(readRememberedAcpModels("local-1", "pi")).toEqual(models);
   });
 
-  it("keeps the curated list when the server cannot answer", async () => {
+  it("has no models when the server cannot answer and none were seen", async () => {
     discoverModels.mockRejectedValue(new Error("404"));
 
     const { result } = renderHook(() => useAcpModelDiscovery("pi"), {
@@ -88,6 +96,7 @@ describe("useAcpModelDiscovery", () => {
     await waitFor(() => expect(result.current.isDiscovering).toBe(false));
     expect(result.current.discovery).toBeNull();
     expect(result.current.models).toEqual([]);
+    expect(result.current.source).toBe("none");
   });
 
   it("does not ask on a cloud backend", () => {
@@ -102,6 +111,25 @@ describe("useAcpModelDiscovery", () => {
 
     expect(discoverModels).not.toHaveBeenCalled();
     expect(result.current.models).toEqual([]);
+    expect(result.current.source).toBe("none");
+  });
+
+  it("offers the list the agent last reported on this backend", () => {
+    backendMock.current = {
+      backend: { id: "cloud-1", kind: "cloud" },
+      orgId: null,
+    };
+    const models = [{ id: "sonnet", label: "Sonnet" }];
+    rememberAcpModels("cloud-1", "claude-code", models);
+    rememberAcpModels("cloud-2", "codex", [{ id: "gpt-5.5", label: "GPT" }]);
+
+    const { result } = renderHook(() => useAcpModelDiscovery("claude-code"), {
+      wrapper,
+    });
+
+    expect(result.current.models).toEqual(models);
+    expect(result.current.source).toBe("remembered");
+    expect(result.current.defaultModelId).toBeNull();
   });
 
   it("does not ask without a provider", () => {

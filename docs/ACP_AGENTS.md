@@ -252,22 +252,27 @@ Open **Settings → Agent** at any time:
 - **Command** — the command line used to spawn the subprocess. Selecting a preset
   fills this in; editing it to match another preset re-detects that provider.
   API keys are _not_ entered here — they live in the Secrets panel.
-- **Model** — choose a suggested model for the provider or enter a custom model
-  override. Built-in providers save a concrete model rather than leaving it
-  blank — except Pi, which picks its own from the configured credential
-  (shown as **Agent default**).
+- **Credentials** — sign in or add the provider's keys. They come before the
+  model because the models a provider offers depend on them.
+- **Model** — **Agent default** (the provider picks, saving no model), one of
+  the provider's models, or a custom model ID. Gemini has no **Agent default**:
+  Canvas preselects `gemini-2.5-pro` (see the note above).
 
-On a local backend the model list comes from the agent itself: Canvas asks the
-agent-server (`POST /api/acp/models`) to start the provider with your saved
-credentials and report the models it offers and the one it uses by default,
-marked _agent default_. Account-dependent catalogues (a ChatGPT plan's Codex
-models, a Claude subscription's aliases, OpenCode's free tier versus a Zen key)
-therefore show what you can actually run. The first lookup can take a few
-seconds while the provider starts; results are cached. If the agent rejects its
-login, Settings says so instead of showing a stale "signed in" banner. Cloud,
-older agent-servers and failed lookups fall back to the curated list. Inside a
-conversation the model picker lists the models that conversation's session
-reported.
+Canvas keeps no list of models; the agent reports its own. On a local backend
+Canvas asks the agent-server (`POST /api/acp/models`) to start the provider with
+your saved credentials and report the models it offers and the one it uses by
+default, so account-dependent catalogues (a ChatGPT plan's Codex models, a Claude
+subscription's aliases, OpenCode's free tier versus a Zen key) show what you can
+actually run. The first lookup can take a few seconds while the provider starts;
+results are cached. If the agent rejects its login, Settings says so instead of
+showing a stale "signed in" banner.
+
+Cloud can't ask before a conversation starts, so until then the model field
+offers **Agent default** and a custom model ID. Each conversation's session
+reports its models, which the in-chat picker offers for switching mid-conversation;
+Canvas remembers the last list per backend and provider in the browser and
+offers it in Settings and on the home page from then on (also the fallback for
+older agent-servers and failed lookups).
 
 Saving writes an `agent_settings_diff` (`agent_kind`, `acp_server`,
 `acp_command`, `acp_model`) to `PATCH /api/settings`. A running conversation
@@ -277,6 +282,7 @@ start afterward.
 ## Custom ACP servers
 
 Any stdio ACP server works: choose **Custom** in Settings → Agent and enter its
-launch command. Custom servers have no curated model list, so enter the model ID
-the server expects (if any) as a custom model. Pass credentials by adding the
+launch command. Canvas can't ask a custom server for its models before a
+conversation, so enter the model ID the server expects (if any) as a custom
+model; inside a conversation the picker lists what the session reports. Pass credentials by adding the
 env vars the server reads as global secrets under **Settings → Secrets**.

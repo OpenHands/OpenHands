@@ -12,7 +12,10 @@ import SettingsService from "#/api/settings-service/settings-service.api";
 import { SecretsService } from "#/api/secrets-service";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import { Settings } from "#/types/settings";
-import { ACP_PROVIDERS } from "#/constants/acp-providers";
+import {
+  ACP_PROVIDERS,
+  ACP_VERTEX_SAFE_MODEL,
+} from "#/constants/acp-providers";
 import {
   __resetActiveStoreForTests,
   setActiveSelection,
@@ -39,9 +42,14 @@ vi.mock("#/hooks/query/use-acp-model-discovery", () => ({
 const NO_DISCOVERY = {
   discovery: null,
   models: [],
+  source: "none",
   defaultModelId: null,
   isDiscovering: false,
 };
+const CLAUDE_MODELS = [
+  { id: "default", label: "Default (recommended)" },
+  { id: "haiku", label: "Haiku" },
+];
 
 const profileSupportsSecretRefsMock = vi.hoisted(() => vi.fn(() => true));
 const profileSupportsInstructionsMock = vi.hoisted(() => vi.fn(() => false));
@@ -162,9 +170,7 @@ describe("AgentSettingsScreen", () => {
     });
   });
 
-  it("opens a stored ACP profile on its command and custom model", async () => {
-    // A model ID outside the provider's suggestions falls through to the
-    // custom input; known IDs go through the dropdown instead.
+  it("opens a stored ACP profile on its command and saved model", async () => {
     renderAgentSettingsScreen({
       agentSettingsOverride: {
         ...CLAUDE_PROFILE,
@@ -179,22 +185,80 @@ describe("AgentSettingsScreen", () => {
     expect(commandInput.value).toBe(
       "npx -y @agentclientprotocol/claude-agent-acp",
     );
-    const modelInput = screen.getByTestId(
-      "agent-model-input",
-    ) as HTMLInputElement;
-    expect(modelInput.value).toBe("my-pinned-fork-model");
+    expect(screen.getByLabelText("SETTINGS$AGENT_MODEL")).toHaveValue(
+      "my-pinned-fork-model",
+    );
+    expect(screen.queryByTestId("agent-model-input")).toBeNull();
   });
 
-  it("defaults built-in ACP providers to a suggested model when none is saved", async () => {
-    renderAgentSettingsScreen({ agentSettingsOverride: CLAUDE_PROFILE });
+  it("starts a built-in provider on the agent's own default before any model list", async () => {
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: CLAUDE_PROFILE,
+    });
 
     await screen.findByTestId("agent-command-input");
     expect(screen.getByLabelText("SETTINGS$AGENT_MODEL")).toHaveValue(
-      "Claude Opus (1M)",
+      "SETTINGS$AGENT_MODEL_AGENT_DEFAULT",
     );
+    expect(
+      screen.getByTestId("agent-model-list-after-first-conversation"),
+    ).toBeInTheDocument();
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      acp_model: null,
+    });
+  });
+
+  it("says when the models come from the last conversation", async () => {
+    acpModelDiscoveryMock.mockReturnValue({
+      ...NO_DISCOVERY,
+      models: CLAUDE_MODELS,
+      source: "remembered",
+    });
+    renderAgentSettingsScreen({ agentSettingsOverride: CLAUDE_PROFILE });
+
+    expect(
+      await screen.findByTestId("agent-model-list-remembered"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("agent-model-list-after-first-conversation"),
+    ).toBeNull();
+  });
+
+  it("keeps Gemini on its Vertex-safe model instead of offering its own default", async () => {
+    const user = userEvent.setup();
+    renderAgentSettingsScreen({
+      agentSettingsOverride: { ...CLAUDE_PROFILE, acp_server: "gemini-cli" },
+    });
+
+    await screen.findByTestId("agent-command-input");
+    expect(screen.getByLabelText("SETTINGS$AGENT_MODEL")).toHaveValue(
+      ACP_VERTEX_SAFE_MODEL,
+    );
+    await user.click(screen.getByLabelText("SETTINGS$AGENT_MODEL"));
+    expect(
+      screen.queryByRole("option", {
+        name: "SETTINGS$AGENT_MODEL_AGENT_DEFAULT",
+      }),
+    ).toBeNull();
+  });
+
+  it("puts the credentials before the model, since the models depend on them", async () => {
+    renderAgentSettingsScreen({ agentSettingsOverride: CLAUDE_PROFILE });
+
+    const model = await screen.findByTestId("agent-model-selector");
+    const credentials = screen.getByText("SETTINGS$ACP_CREDENTIALS_TITLE");
+    expect(
+      credentials.compareDocumentPosition(model) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("builds the selected built-in ACP model", async () => {
+    acpModelDiscoveryMock.mockReturnValue({
+      ...NO_DISCOVERY,
+      models: CLAUDE_MODELS,
+      source: "live",
+    });
     const user = userEvent.setup();
     const { control } = renderAgentSettingsScreen({
       agentSettingsOverride: CLAUDE_PROFILE,
@@ -202,7 +266,7 @@ describe("AgentSettingsScreen", () => {
 
     await screen.findByTestId("agent-command-input");
     await user.click(screen.getByLabelText("SETTINGS$AGENT_MODEL"));
-    await user.click(await screen.findByText("Claude Haiku"));
+    await user.click(await screen.findByText("Haiku"));
 
     expect(control().buildAgentProfileFields()).toMatchObject({
       acp_model: "haiku",
@@ -316,7 +380,7 @@ describe("AgentSettingsScreen", () => {
     });
     await screen.findByTestId("agent-command-input");
     expect(screen.getByLabelText("SETTINGS$AGENT_MODEL")).toHaveValue(
-      "Claude Opus (1M)",
+      "SETTINGS$AGENT_MODEL_AGENT_DEFAULT",
     );
 
     await user.click(screen.getByTestId("agent-preset-selector"));
@@ -357,9 +421,10 @@ describe("AgentSettingsScreen", () => {
     });
   });
 
-  it("lists the models the agent reports and marks its own default", async () => {
+  it("lists the models the agent reports and names its own default", async () => {
     acpModelDiscoveryMock.mockReturnValue({
       ...NO_DISCOVERY,
+      source: "live",
       models: [
         { id: "default", label: "Default (recommended)" },
         { id: "claude-fable-5[1m]", label: "Fable 5 (1M)" },
@@ -385,23 +450,21 @@ describe("AgentSettingsScreen", () => {
     await user.click(screen.getByLabelText("SETTINGS$AGENT_MODEL"));
     await user.click(
       await screen.findByRole("option", {
-        name: "SETTINGS$AGENT_MODEL_IS_AGENT_DEFAULT",
+        name: "SETTINGS$AGENT_MODEL_AGENT_DEFAULT_IS",
       }),
     );
     expect(control().buildAgentProfileFields()).toMatchObject({
-      acp_model: "default",
+      acp_model: null,
     });
   });
 
-  it("keeps a saved curated model selectable when the agent no longer lists it", async () => {
+  it("keeps a saved model selectable when the agent no longer lists it", async () => {
     acpModelDiscoveryMock.mockReturnValue({
       ...NO_DISCOVERY,
+      source: "live",
       models: [{ id: "gpt-6-astra", label: "GPT-6 Astra" }],
       defaultModelId: "gpt-6-astra",
     });
-    const gpt55 = getClientAcpProvider("codex")!.available_models.find(
-      ({ id }) => id === "gpt-5.5",
-    )!;
     renderAgentSettingsScreen({
       agentSettingsOverride: {
         ...CLAUDE_PROFILE,
@@ -412,7 +475,7 @@ describe("AgentSettingsScreen", () => {
 
     await screen.findByTestId("agent-command-input");
     expect(screen.getByLabelText("SETTINGS$AGENT_MODEL")).toHaveValue(
-      gpt55.label,
+      "gpt-5.5",
     );
     expect(screen.queryByTestId("agent-model-input")).toBeNull();
   });
@@ -545,7 +608,7 @@ describe("AgentSettingsScreen", () => {
     // previous provider's model just like the preset dropdown does.
     const user = userEvent.setup();
     const { control } = renderAgentSettingsScreen({
-      agentSettingsOverride: CLAUDE_PROFILE,
+      agentSettingsOverride: { ...CLAUDE_PROFILE, acp_model: "haiku" },
     });
     await screen.findByTestId("agent-command-input");
 
@@ -553,13 +616,10 @@ describe("AgentSettingsScreen", () => {
     await user.clear(commandInput);
     await user.type(commandInput, CODEX_COMMAND.join(" "));
 
-    expect(screen.getByLabelText("SETTINGS$AGENT_MODEL")).toHaveValue(
-      "GPT-5.5",
-    );
     expect(control().buildAgentProfileFields()).toMatchObject({
       acp_server: "codex",
       acp_command: null,
-      acp_model: "gpt-5.5",
+      acp_model: null,
     });
   });
 
@@ -587,7 +647,7 @@ describe("AgentSettingsScreen", () => {
       // The default command is left to the registry rather than pinned.
       acp_command: null,
       acp_args: null,
-      acp_model: "opus[1m]",
+      acp_model: null,
     });
   });
 

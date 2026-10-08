@@ -1016,12 +1016,8 @@ function buildConfiguredAcpAgentSettings(
     payload.mcp_config = mcpConfig;
   }
 
-  // Saved settings may carry ``acp_model: null`` (existing users predating
-  // the default-model registry, or saved fields the agent-server stripped).
-  // Fall back to the *preferred* default (Vertex-safe for Gemini) so the
-  // conversation starts with whatever the Settings → Agent UI shows — without
-  // that, the form's displayed default would silently not take effect at
-  // runtime until the user re-saved the page.
+  // A saved ``acp_model: null`` leaves the agent on its own default, unless
+  // Canvas prefers another (see getAcpPreferredDefaultModel).
   const serverKey =
     typeof agentSettings.acp_server === "string"
       ? agentSettings.acp_server
