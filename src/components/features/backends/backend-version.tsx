@@ -24,6 +24,9 @@ export function BackendVersion({ backend }: { backend: Backend }) {
     retry: false,
     staleTime: 60_000,
     enabled: backend.kind === "local",
+    meta: {
+      disableToast: true,
+    },
   });
 
   if (!version) return null;

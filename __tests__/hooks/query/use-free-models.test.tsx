@@ -134,7 +134,7 @@ describe("useHydrateFreeModels", () => {
     expect(useFreeModelsStore.getState().defaultModel).toBeNull();
   });
 
-  it("still toasts a real backend failure once a backend is configured", async () => {
+  it("settles without toasting when model search fails for an unreachable or failing backend", async () => {
     const toastSpy = vi.spyOn(ToastHandlers, "displayErrorToast");
     vi.mocked(callCloudProxy).mockRejectedValue(
       new Error("Model search is unavailable"),
@@ -145,8 +145,8 @@ describe("useHydrateFreeModels", () => {
     });
 
     await waitFor(() =>
-      expect(toastSpy).toHaveBeenCalledWith("Model search is unavailable"),
+      expect(useFreeModelsStore.getState().defaultModelReady).toBe(true),
     );
-    expect(useFreeModelsStore.getState().defaultModelReady).toBe(true);
+    expect(toastSpy).not.toHaveBeenCalled();
   });
 });

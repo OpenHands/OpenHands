@@ -90,12 +90,18 @@ const useOpenHandsModels = (hasBackend: boolean) => {
         queryKey: [...VERIFIED_MODELS_QUERY_KEY, ...backendScope],
         queryFn: fetchVerifiedModelsByProvider,
         staleTime: VERIFIED_MODELS_STALE_TIME,
+        meta: {
+          disableToast: true,
+        },
       });
       return fetchAllOpenHandsModels(verifiedByProvider, null, new Set(), 0);
     },
     enabled: hasBackend,
     staleTime: VERIFIED_MODELS_STALE_TIME,
     gcTime: VERIFIED_MODELS_GC_TIME,
+    meta: {
+      disableToast: true,
+    },
   });
 };
 
