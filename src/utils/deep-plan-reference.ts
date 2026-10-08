@@ -17,7 +17,6 @@ import {
   DEEP_PLAN_PHASES,
   type DeepPlanLabel,
   type DeepPlanPhaseId,
-  getDeepPlanPhase,
   upstreamPhasesOf,
 } from "#/utils/deep-plan";
 
@@ -176,16 +175,3 @@ export function validateDocumentChain(
 
   return { ok: issues.length === 0, issues, uncovered };
 }
-
-/** Human-readable reason, for the checkpoint error message. */
-export const describeRefIssue = (issue: RefIssue): string => {
-  const phase = getDeepPlanPhase(issue.from);
-  switch (issue.reason) {
-    case "dangling":
-      return `${phase.outputFile ?? issue.from} cites [${issue.ref}], which no upstream document defines.`;
-    case "not-upstream":
-      return `${phase.outputFile ?? issue.from} cites [${issue.ref}], which is not an upstream document for this phase.`;
-    case "missing-document":
-      return `${phase.outputFile ?? issue.from} cites [${issue.ref}], but that document has not been produced yet.`;
-  }
-};

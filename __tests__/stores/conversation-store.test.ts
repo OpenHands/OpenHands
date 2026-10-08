@@ -291,7 +291,11 @@ describe("conversation store", () => {
         .confirmDeepPlanPhase("database");
 
       expect(result.ok).toBe(false);
-      expect(result.error).toContain("[Req 9.9]");
+      expect(result.failure).toEqual({
+        kind: "invalid-chain",
+        issue: { from: "database", ref: "Req 9.9", reason: "dangling" },
+        extraCount: 0,
+      });
       expect(useConversationStore.getState().deepPlan.activePhase).toBe(
         "database",
       );

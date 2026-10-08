@@ -1,11 +1,13 @@
+import type { TFunction } from "i18next";
 import { describe, expect, it } from "vitest";
+import { I18nKey } from "#/i18n/declaration";
 import {
-  describeRefIssue,
   extractDefinedSections,
   extractReferences,
   validateDocumentChain,
   type DeepPlanDocuments,
 } from "#/utils/deep-plan-reference";
+import { makeRefIssueMessage } from "#/utils/deep-plan-messages";
 
 const requirements = [
   "# Requirements",
@@ -30,9 +32,11 @@ const database = [
 const validChain = (): DeepPlanDocuments => ({
   requirements,
   database,
-  backend: ["# Backend design", "", "## 4.2 Login endpoint [Req 3.1] [DB 2.5.1]"].join(
-    "\n",
-  ),
+  backend: [
+    "# Backend design",
+    "",
+    "## 4.2 Login endpoint [Req 3.1] [DB 2.5.1]",
+  ].join("\n"),
   frontend: [
     "# Frontend design",
     "",
@@ -211,13 +215,28 @@ describe("validateDocumentChain", () => {
   });
 });
 
-describe("describeRefIssue", () => {
-  it("names the document and the offending citation", () => {
-    expect(
-      describeRefIssue({ from: "backend", ref: "DB 9.9.9", reason: "dangling" }),
-    ).toContain("[DB 9.9.9]");
-    expect(
-      describeRefIssue({ from: "backend", ref: "DB 9.9.9", reason: "dangling" }),
-    ).toContain("backend-design.md");
+describe("makeRefIssueMessage", () => {
+  const t = ((key: string, options?: Record<string, unknown>) =>
+    `${key}|${JSON.stringify(options ?? {})}`) as unknown as TFunction<"openhands">;
+
+  it("names the producing document and the offending citation", () => {
+    const message = makeRefIssueMessage(t, {
+      from: "backend",
+      ref: "DB 9.9.9",
+      reason: "dangling",
+    });
+    expect(message).toContain(I18nKey.DEEP_PLAN$ISSUE_DANGLING);
+    expect(message).toContain("backend-design.md");
+    expect(message).toContain("DB 9.9.9");
+  });
+
+  it("falls back to the phase label for a phase without an output file", () => {
+    const message = makeRefIssueMessage(t, {
+      from: "analysis",
+      ref: "DB 1.1",
+      reason: "not-upstream",
+    });
+    expect(message).toContain(I18nKey.DEEP_PLAN$ISSUE_NOT_UPSTREAM);
+    expect(message).toContain(I18nKey.DEEP_PLAN$PHASE_ANALYSIS);
   });
 });

@@ -5,27 +5,18 @@ import { I18nKey } from "#/i18n/declaration";
 import { Typography } from "#/ui/typography";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { useConversationStore } from "#/stores/conversation-store";
+import { DEEP_PLAN_PHASES, getDeepPlanPhase } from "#/utils/deep-plan";
+import { validateDocumentChain } from "#/utils/deep-plan-reference";
 import {
-  DEEP_PLAN_PHASES,
-  getDeepPlanPhase,
-  type DeepPlanPhaseId,
-} from "#/utils/deep-plan";
+  DEEP_PLAN_PHASE_LABEL_KEY,
+  makeRefIssueMessage,
+} from "#/utils/deep-plan-messages";
 import {
-  describeRefIssue,
-  validateDocumentChain,
-} from "#/utils/deep-plan-reference";
-import { canEnterPhase, isPhaseConfirmed } from "#/utils/deep-plan-machine";
+  canEnterPhase,
+  isPhaseConfirmed,
+  type ConfirmFailure,
+} from "#/utils/deep-plan-machine";
 import { cn } from "#/utils/utils";
-
-const PHASE_LABEL_KEY: Record<DeepPlanPhaseId, I18nKey> = {
-  analysis: I18nKey.DEEP_PLAN$PHASE_ANALYSIS,
-  requirements: I18nKey.DEEP_PLAN$PHASE_REQUIREMENTS,
-  database: I18nKey.DEEP_PLAN$PHASE_DATABASE,
-  backend: I18nKey.DEEP_PLAN$PHASE_BACKEND,
-  frontend: I18nKey.DEEP_PLAN$PHASE_FRONTEND,
-  tasks: I18nKey.DEEP_PLAN$PHASE_TASKS,
-  implementation: I18nKey.DEEP_PLAN$PHASE_IMPLEMENTATION,
-};
 
 /**
  * The phase rail plus the checkpoint for the active phase. The rail is the
@@ -36,7 +27,7 @@ export function DeepPlanPanel() {
   const { t } = useTranslation("openhands");
   const { deepPlan, setDeepPlanPhase, confirmDeepPlanPhase, startDeepPlan } =
     useConversationStore();
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<ConfirmFailure | null>(null);
 
   const activePhase = deepPlan.activePhase;
 
@@ -51,7 +42,7 @@ export function DeepPlanPanel() {
   const handleConfirm = () => {
     if (!activePhase) return;
     const result = confirmDeepPlanPhase(activePhase);
-    setError(result.ok ? null : (result.error ?? null));
+    setFailure(result.ok ? null : (result.failure ?? null));
   };
 
   if (!activePhase) {
@@ -106,7 +97,7 @@ export function DeepPlanPanel() {
                 ) : enterable ? null : (
                   <Lock aria-hidden width={14} height={14} />
                 )}
-                {t(PHASE_LABEL_KEY[candidate.id])}
+                {t(DEEP_PLAN_PHASE_LABEL_KEY[candidate.id])}
               </button>
             </li>
           );
@@ -118,14 +109,14 @@ export function DeepPlanPanel() {
           {phase.outputFile ?? t(I18nKey.DEEP_PLAN$PHASE_ANALYSIS)}
         </Typography.Text>
         <Typography.Text className="text-xs whitespace-pre-line">
-          {phase.instruction}
+          {t(phase.instructionKey)}
         </Typography.Text>
 
         {report.issues.length > 0 && (
           <ul className="flex flex-col gap-1" data-testid="deep-plan-issues">
             {report.issues.map((issue) => (
               <li key={`${issue.from}-${issue.ref}`} className="text-xs">
-                {describeRefIssue(issue)}
+                {makeRefIssueMessage(t, issue)}
               </li>
             ))}
           </ul>
@@ -139,9 +130,19 @@ export function DeepPlanPanel() {
           </Typography.Text>
         )}
 
-        {error && (
+        {failure && (
           <Typography.Text className="text-xs" testId="deep-plan-error">
-            {error}
+            {failure.kind === "blocked"
+              ? t(I18nKey.DEEP_PLAN$CONFIRM_BLOCKED, {
+                  phase: t(DEEP_PLAN_PHASE_LABEL_KEY[failure.phase]),
+                })
+              : `${makeRefIssueMessage(t, failure.issue)}${
+                  failure.extraCount > 0
+                    ? t(I18nKey.DEEP_PLAN$CONFIRM_MORE_ISSUES, {
+                        count: failure.extraCount,
+                      })
+                    : ""
+                }`}
           </Typography.Text>
         )}
 

@@ -8,6 +8,8 @@
  * `deep-plan-reference.ts` so it stays pure and unit-testable.
  */
 
+import { I18nKey } from "#/i18n/declaration";
+
 export type DeepPlanPhaseId =
   | "analysis"
   | "requirements"
@@ -28,8 +30,12 @@ export interface DeepPlanPhase {
   cites: readonly DeepPlanLabel[];
   /** Label this phase's sections carry, so downstream phases can cite them. */
   defines: DeepPlanLabel | null;
-  /** Phase-specific suffix appended to the planner's system prompt. */
-  instruction: string;
+  /**
+   * I18n key for the phase-specific prompt. Rendered through `t()` by the
+   * panel and the planner send path, so the workflow guidance follows the
+   * active locale instead of staying English.
+   */
+  instructionKey: I18nKey;
 }
 
 /**
@@ -42,86 +48,49 @@ export const DEEP_PLAN_PHASES: readonly DeepPlanPhase[] = [
     outputFile: null,
     cites: [],
     defines: null,
-    instruction: [
-      "PHASE: Requirements analysis.",
-      "Interview the user to establish scope, actors, constraints and success",
-      "criteria. Ask focused questions; do not write files yet. When the picture is",
-      "complete, summarize it and tell the user to confirm the phase to continue.",
-    ].join("\n"),
+    instructionKey: I18nKey.DEEP_PLAN$INSTRUCTION_ANALYSIS,
   },
   {
     id: "requirements",
     outputFile: "requirements.md",
     cites: [],
     defines: "Req",
-    instruction: [
-      "PHASE: Requirements.",
-      "Write `requirements.md` with numbered, SMART requirements. Every requirement",
-      "section heading carries its number so it can be cited as `[Req X.X]`",
-      "downstream. Include measurable non-functional requirements, roles and a",
-      "version history. Chunk long documents (max 3 pages per write).",
-    ].join("\n"),
+    instructionKey: I18nKey.DEEP_PLAN$INSTRUCTION_REQUIREMENTS,
   },
   {
     id: "database",
     outputFile: "database-design.md",
     cites: ["Req"],
     defines: "DB",
-    instruction: [
-      "PHASE: Database design.",
-      "Write `database-design.md`. Every section cites the requirements it satisfies",
-      "as `[Req X.X]`, and the section number itself is citable as `[DB X.X]`.",
-      "Chunk if there are more than 15 tables.",
-    ].join("\n"),
+    instructionKey: I18nKey.DEEP_PLAN$INSTRUCTION_DATABASE,
   },
   {
     id: "backend",
     outputFile: "backend-design.md",
     cites: ["Req", "DB"],
     defines: "BE",
-    instruction: [
-      "PHASE: Backend design.",
-      "Write `backend-design.md`. Every section cites `[Req X.X] [DB X.X]`, and the",
-      "section number itself is citable as `[BE X.X]`. Chunk if there are more than",
-      "8 API modules.",
-    ].join("\n"),
+    instructionKey: I18nKey.DEEP_PLAN$INSTRUCTION_BACKEND,
   },
   {
     id: "frontend",
     outputFile: "frontend-design.md",
     cites: ["Req", "DB", "BE"],
     defines: "FE",
-    instruction: [
-      "PHASE: Frontend design.",
-      "Write `frontend-design.md`. Every section cites `[Req X.X] [DB X.X] [BE X.X]`,",
-      "and the section number itself is citable as `[FE X.X]`. Always chunk: max 3",
-      "pages per write.",
-    ].join("\n"),
+    instructionKey: I18nKey.DEEP_PLAN$INSTRUCTION_FRONTEND,
   },
   {
     id: "tasks",
     outputFile: "tasks.md",
     cites: ["Req", "DB", "BE", "FE"],
     defines: null,
-    instruction: [
-      "PHASE: Tasks.",
-      "Write `tasks.md` as an ordered checklist. Every task cites `[Req X.X] [DB X.X]",
-      "[BE X.X] [FE X.X]` and carries a priority, an estimate, and mandatory testing",
-      "sub-tasks: Implement, Write unit tests, Write integration tests, Run tests &",
-      "verify. Never mark a task complete while its tests fail.",
-    ].join("\n"),
+    instructionKey: I18nKey.DEEP_PLAN$INSTRUCTION_TASKS,
   },
   {
     id: "implementation",
     outputFile: null,
     cites: ["Req", "DB", "BE", "FE"],
     defines: null,
-    instruction: [
-      "PHASE: Implementation.",
-      "Before implementing a task, read every section the task cites across all",
-      "upstream documents — not just the task line. Work one task at a time and only",
-      "tick it off once its tests pass.",
-    ].join("\n"),
+    instructionKey: I18nKey.DEEP_PLAN$INSTRUCTION_IMPLEMENTATION,
   },
 ] as const;
 

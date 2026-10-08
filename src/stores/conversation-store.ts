@@ -10,6 +10,7 @@ import {
   confirmPhase,
   invalidateFrom,
   startDeepPlan as createDeepPlanState,
+  type ConfirmFailure,
   type DeepPlanState,
 } from "#/utils/deep-plan-machine";
 import type { DeepPlanPhaseId } from "#/utils/deep-plan";
@@ -99,10 +100,10 @@ interface ConversationActions {
   startDeepPlan: () => void;
   setDeepPlanPhase: (phase: DeepPlanPhaseId) => void;
   setDeepPlanDocument: (phase: DeepPlanPhaseId, content: string) => void;
-  /** Runs the reference validator; returns the error when the checkpoint fails. */
+  /** Runs the reference validator; returns the structured reason on failure. */
   confirmDeepPlanPhase: (phase: DeepPlanPhaseId) => {
     ok: boolean;
-    error?: string;
+    failure?: ConfirmFailure;
   };
   resetDeepPlan: () => void;
 }
@@ -514,7 +515,7 @@ export const useConversationStore = create<ConversationStore>()(
           phase,
         );
         if (!result.ok) {
-          return { ok: false, error: result.error };
+          return { ok: false, failure: result.failure };
         }
         persistDeepPlan(result.state);
         set({ deepPlan: result.state }, false, "confirmDeepPlanPhase");

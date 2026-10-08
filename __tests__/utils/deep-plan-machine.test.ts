@@ -72,7 +72,11 @@ describe("confirmPhase", () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.error).toContain("[Req 9.9]");
+    expect(result.failure).toEqual({
+      kind: "invalid-chain",
+      issue: { from: "database", ref: "Req 9.9", reason: "dangling" },
+      extraCount: 0,
+    });
   });
 
   it("does not let a stale downstream citation block an upstream phase", () => {
@@ -108,7 +112,7 @@ describe("confirmPhase", () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.error).toContain("requirements");
+    expect(result.failure).toEqual({ kind: "blocked", phase: "requirements" });
   });
 
   it("does not duplicate an already-confirmed phase", () => {
@@ -162,11 +166,7 @@ describe("invalidateFrom", () => {
   it("keeps earlier confirmations and the active phase when a later doc is edited", () => {
     const state = invalidateFrom(confirmedChain, "backend");
 
-    expect(state.confirmed).toEqual([
-      "analysis",
-      "requirements",
-      "database",
-    ]);
+    expect(state.confirmed).toEqual(["analysis", "requirements", "database"]);
     expect(state.activePhase).toBe("backend");
   });
 

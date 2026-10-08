@@ -13,9 +13,9 @@ import {
   nextDeepPlanPhase,
 } from "#/utils/deep-plan";
 import {
-  describeRefIssue,
   validateDocumentChain,
   type DeepPlanDocuments,
+  type RefIssue,
 } from "#/utils/deep-plan-reference";
 
 export interface DeepPlanState {
@@ -83,9 +83,20 @@ export function invalidateFrom(
   return { ...state, confirmed, activePhase };
 }
 
+/**
+ * Why a checkpoint was refused. Returned as structured data rather than a
+ * pre-rendered string so the caller localizes it; this module stays free of
+ * `t()` and of any particular locale.
+ */
+export type ConfirmFailure =
+  /** An earlier phase is still unconfirmed and must be confirmed first. */
+  | { kind: "blocked"; phase: DeepPlanPhaseId }
+  /** The reference chain is invalid; `issue` names the offending citation. */
+  | { kind: "invalid-chain"; issue: RefIssue; extraCount: number };
+
 export type ConfirmResult =
   | { ok: true; state: DeepPlanState }
-  | { ok: false; error: string };
+  | { ok: false; failure: ConfirmFailure };
 
 /**
  * Pass the checkpoint for `phase`: validate the reference chain, then mark the
@@ -101,10 +112,7 @@ export function confirmPhase(
       0,
       DEEP_PLAN_PHASE_IDS.indexOf(phase),
     ).find((earlier) => !isPhaseConfirmed(state, earlier));
-    return {
-      ok: false,
-      error: `Confirm ${blocking} before continuing.`,
-    };
+    return { ok: false, failure: { kind: "blocked", phase: blocking! } };
   }
 
   // Validate the chain only through the phase being confirmed. Later documents
@@ -113,9 +121,14 @@ export function confirmPhase(
   const report = validateDocumentChain(state.documents, phase);
   if (!report.ok) {
     const [first] = report.issues;
-    const extra =
-      report.issues.length > 1 ? ` (+${report.issues.length - 1} more)` : "";
-    return { ok: false, error: `${describeRefIssue(first)}${extra}` };
+    return {
+      ok: false,
+      failure: {
+        kind: "invalid-chain",
+        issue: first,
+        extraCount: report.issues.length - 1,
+      },
+    };
   }
 
   const confirmed = isPhaseConfirmed(state, phase)
