@@ -76,6 +76,9 @@ export function ManagedAgentsView({ onBack, onDone }: ManagedAgentsViewProps) {
     null,
   );
   const [errors, setErrors] = React.useState<Record<string, string>>({});
+  // One launch at a time: overlapping connects reset each other's progress
+  // and navigate twice, and a create can take up to a minute.
+  const isLaunching = connecting !== null || creatingConfigId !== null;
 
   const setError = (key: string, message: string | null) =>
     setErrors((previous) => {
@@ -242,7 +245,7 @@ export function ManagedAgentsView({ onBack, onDone }: ManagedAgentsViewProps) {
         connectStage={
           connecting?.sessionId === session.session_id ? connecting.stage : null
         }
-        isBusy={connecting !== null || busySessionId === session.session_id}
+        isBusy={isLaunching || busySessionId === session.session_id}
         error={errors[session.session_id] ?? null}
         onConnect={() => void connect(session, config)}
         // The registry reuses a live tunnel, so this is a fast re-probe that
@@ -417,7 +420,7 @@ export function ManagedAgentsView({ onBack, onDone }: ManagedAgentsViewProps) {
                     <button
                       type="button"
                       onClick={() => void launchSession(config)}
-                      disabled={isCreating || connecting !== null}
+                      disabled={isLaunching}
                       data-testid={`managed-agents-new-session-${config.id}`}
                       className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2 py-1 text-xs text-primary transition-colors hover:bg-[var(--oh-interactive-hover)] disabled:cursor-not-allowed disabled:opacity-50"
                     >

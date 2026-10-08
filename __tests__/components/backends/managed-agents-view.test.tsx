@@ -159,6 +159,27 @@ describe("ManagedAgentsView", () => {
     );
   });
 
+  it("blocks other connects and launches while a new session is being created", async () => {
+    // Arrange
+    const bridge = fakeBridge(SIGNED_IN);
+    bridge.createSession = vi.fn(() => new Promise<MarsSession>(() => {}));
+    window.marsBridge = bridge;
+    renderView();
+    const newSession = await screen.findByTestId(
+      "managed-agents-new-session-cfg_1",
+    );
+
+    // Act
+    await userEvent.click(newSession);
+
+    // Assert
+    expect(bridge.createSession).toHaveBeenCalledOnce();
+    expect(newSession).toBeDisabled();
+    expect(
+      screen.getByTestId("managed-agents-connect-sess_ready"),
+    ).toBeDisabled();
+  });
+
   it("explains a refused tunnel on the session row instead of timing out", async () => {
     const bridge = fakeBridge(SIGNED_IN);
     vi.mocked(bridge.getTunnel).mockResolvedValue({
