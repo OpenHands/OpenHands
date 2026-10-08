@@ -7,6 +7,7 @@ import {
   hydrateDeepPlanState,
   invalidateFrom,
   isPhaseConfirmed,
+  deepPlanUnavailableDocuments,
   startDeepPlan,
   toPersistedDeepPlan,
   type DeepPlanState,
@@ -315,5 +316,89 @@ describe("persisted deep-plan shape", () => {
 
   it("returns the empty machine for a missing persisted blob", () => {
     expect(hydrateDeepPlanState(undefined)).toEqual(EMPTY_DEEP_PLAN_STATE);
+  });
+});
+
+describe("deep-plan document restore", () => {
+  const hydrated = hydrateDeepPlanState({
+    activePhase: "database",
+    confirmed: ["analysis", "requirements"],
+    documentHashes: {
+      requirements: hashDeepPlanDocument(requirements),
+      database: hashDeepPlanDocument(database),
+    },
+  });
+
+  it("reports every vouched-for body that is not in memory yet", () => {
+    const unavailable = deepPlanUnavailableDocuments(hydrated);
+
+    expect(unavailable.pending).toEqual(["requirements", "database"]);
+    expect(unavailable.failed).toEqual([]);
+  });
+
+  it("stops reporting a phase once its body has been re-read", () => {
+    const restored = { ...hydrated, documents: { requirements } };
+
+    expect(deepPlanUnavailableDocuments(restored).pending).toEqual([
+      "database",
+    ]);
+  });
+
+  it("scopes pending documents to the checkpoint being confirmed", () => {
+    // Confirming `requirements` must not be gated by the not-yet-restored
+    // `database` document, which is beyond its checkpoint.
+    expect(
+      deepPlanUnavailableDocuments(hydrated, "requirements").pending,
+    ).toEqual(["requirements"]);
+  });
+
+  it("separates a failed re-read from one still in flight", () => {
+    const failed = { ...hydrated, restoreFailed: ["requirements" as const] };
+    const unavailable = deepPlanUnavailableDocuments(failed, "database");
+
+    expect(unavailable.failed).toEqual(["requirements"]);
+    expect(unavailable.pending).toEqual(["database"]);
+  });
+
+  it("refuses to confirm with 'restoring' until upstream bodies are back", () => {
+    // The regression: before the fix the recorded hash existed but its body did
+    // not, so the validator treated `[Req 3.1]` as a missing-document citation
+    // and blocked a chain that is actually valid.
+    const result = confirmPhase(hydrated, "database");
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.failure).toEqual({
+      kind: "restoring",
+      phases: ["requirements", "database"],
+    });
+  });
+
+  it("confirms once every upstream body has been restored", () => {
+    const restored = {
+      ...hydrated,
+      documents: { requirements, database },
+    };
+
+    const result = confirmPhase(restored, "database");
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("reports a failed upstream re-read as restore-failed", () => {
+    const failed = {
+      ...hydrated,
+      documents: { database },
+      restoreFailed: ["requirements" as const],
+    };
+
+    const result = confirmPhase(failed, "database");
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.failure).toEqual({
+      kind: "restore-failed",
+      phases: ["requirements"],
+    });
   });
 });

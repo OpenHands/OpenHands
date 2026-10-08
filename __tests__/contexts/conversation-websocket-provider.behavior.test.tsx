@@ -24,6 +24,7 @@ import { useFilesTabStore } from "#/stores/files-tab-store";
 import EventService from "#/api/event-service/event-service.api";
 import { SERVER_CONNECTION_ERROR_MESSAGE } from "#/constants/server-connection-error";
 import { getStoredConversationMetadata } from "#/api/conversation-metadata-store";
+import { hashDeepPlanDocument } from "#/utils/deep-plan-machine";
 import {
   getConversationState,
   setConversationState,
@@ -1963,6 +1964,57 @@ describe("Conversation websocket behavior", () => {
     expect(useConversationStore.getState().deepPlan.documents.database).toBe(
       "# Loaded database",
     );
+  });
+
+  it("restores every persisted phase document that history replay did not", async () => {
+    // Reload regression: after a reload the store holds only hashes, and the
+    // planner wrapper replays only the *active* planner. An upstream phase's
+    // body is never re-read, so the checkpoint reported its valid citation as a
+    // missing document. The provider must read every vouched-for document back
+    // from disk.
+    vi.spyOn(EventService, "getEventCount").mockResolvedValue(0);
+    const requirementsBody = "## 3.1 Authentication\n";
+    useConversationStore.setState({
+      conversationMode: "deep-plan",
+      deepPlan: {
+        activePhase: "database",
+        confirmed: ["analysis", "requirements"],
+        documents: {},
+        documentHashes: {
+          requirements: hashDeepPlanDocument(requirementsBody),
+        },
+      },
+    });
+    socketCapture.readConversationFile.mockImplementation(
+      (variables, callbacks) => {
+        if (variables.filePath.endsWith("requirements.md")) {
+          callbacks.onSuccess(requirementsBody);
+        } else {
+          callbacks.onError(new Error("not found"));
+        }
+      },
+    );
+
+    renderProvider({
+      subConversations: [makeSubConversation()],
+      subConversationIds: ["conv-planning"],
+      deepPlanWorkingDir: "/workspace/project",
+    });
+
+    await act(async () => {
+      await planningOptions().onOpen?.(new Event("open"));
+    });
+
+    expect(socketCapture.readConversationFile).toHaveBeenCalledWith(
+      {
+        conversationId: "conv-planning",
+        filePath: "/workspace/project/.agents_tmp/requirements.md",
+      },
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    );
+    expect(
+      useConversationStore.getState().deepPlan.documents.requirements,
+    ).toBe(requirementsBody);
   });
 
   it("falls through planning history when event counting fails", async () => {

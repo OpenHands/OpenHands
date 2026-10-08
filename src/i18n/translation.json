@@ -43909,5 +43909,39 @@
     "de": "Führe den Planer aus, um {{document}} zu erstellen, bevor du diese Phase bestätigst.",
     "uk": "Запустіть планувальник, щоб створити {{document}}, перш ніж підтвердити цю фазу.",
     "ca": "Executa el planificador per produir {{document}} abans de confirmar aquesta fase."
+  },
+  "DEEP_PLAN$CONFIRM_RESTORING": {
+    "en": "Restoring {{document}}… confirm once the document is loaded.",
+    "ja": "{{document}} を復元しています… 読み込み完了後に確定してください。",
+    "zh-CN": "正在恢复 {{document}}……加载完成后请确认。",
+    "zh-TW": "正在還原 {{document}}……載入完成後請確認。",
+    "ko-KR": "{{document}}을(를) 복원하는 중입니다… 문서가 로드되면 확인하세요.",
+    "no": "Gjenoppretter {{document}}… bekreft når dokumentet er lastet inn.",
+    "it": "Ripristino di {{document}}… conferma quando il documento è caricato.",
+    "pt": "Restaurando {{document}}… confirme quando o documento for carregado.",
+    "es": "Restaurando {{document}}… confirma cuando el documento se haya cargado.",
+    "ar": "جارٍ استعادة {{document}}… أكّد بعد تحميل المستند.",
+    "fr": "Restauration de {{document}}… confirmez une fois le document chargé.",
+    "tr": "{{document}} geri yükleniyor… belge yüklendiğinde onaylayın.",
+    "de": "{{document}} wird wiederhergestellt… bestätige, sobald das Dokument geladen ist.",
+    "uk": "Відновлення {{document}}… підтвердьте, коли документ завантажиться.",
+    "ca": "Restaurant {{document}}… confirma quan el document s'hagi carregat."
+  },
+  "DEEP_PLAN$CONFIRM_RESTORE_FAILED": {
+    "en": "Could not reload {{document}} from disk. Reopen its phase to rewrite it before confirming.",
+    "ja": "{{document}} をディスクから再読み込みできませんでした。確定する前に、そのフェーズを開き直して書き直してください。",
+    "zh-CN": "无法从磁盘重新加载 {{document}}。请重新打开该阶段并重写后再确认。",
+    "zh-TW": "無法從磁碟重新載入 {{document}}。請重新開啟該階段並重寫後再確認。",
+    "ko-KR": "디스크에서 {{document}}을(를) 다시 불러올 수 없습니다. 확인하기 전에 해당 단계를 다시 열어 다시 작성하세요.",
+    "no": "Kunne ikke laste inn {{document}} på nytt fra disken. Åpne fasen på nytt og skriv den på nytt før du bekrefter.",
+    "it": "Impossibile ricaricare {{document}} dal disco. Riapri la sua fase per riscriverlo prima di confermare.",
+    "pt": "Não foi possível recarregar {{document}} do disco. Reabra a fase para reescrevê-lo antes de confirmar.",
+    "es": "No se pudo recargar {{document}} desde el disco. Vuelve a abrir su fase para reescribirlo antes de confirmar.",
+    "ar": "تعذّر إعادة تحميل {{document}} من القرص. أعد فتح مرحلته لإعادة كتابته قبل التأكيد.",
+    "fr": "Impossible de recharger {{document}} depuis le disque. Rouvrez sa phase pour le réécrire avant de confirmer.",
+    "tr": "{{document}} diskten yeniden yüklenemedi. Onaylamadan önce aşamasını yeniden açıp tekrar yazın.",
+    "de": "{{document}} konnte nicht von der Festplatte neu geladen werden. Öffne die Phase erneut und schreibe sie neu, bevor du bestätigst.",
+    "uk": "Не вдалося повторно завантажити {{document}} з диска. Відкрийте його фазу знову, щоб переписати, перш ніж підтвердити.",
+    "ca": "No s'ha pogut tornar a carregar {{document}} del disc. Torna a obrir la seva fase per reescriure'l abans de confirmar."
   }
 }

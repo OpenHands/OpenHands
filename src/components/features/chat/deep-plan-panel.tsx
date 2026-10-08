@@ -18,6 +18,7 @@ import {
 } from "#/utils/deep-plan-messages";
 import {
   canEnterPhase,
+  deepPlanUnavailableDocuments,
   isPhaseConfirmed,
   type ConfirmFailure,
 } from "#/utils/deep-plan-machine";
@@ -108,6 +109,22 @@ export function DeepPlanPanel() {
 
   const phase = getDeepPlanPhase(activePhase);
 
+  // Documents the persisted chain vouches for but that are not in memory yet. A
+  // reload or an in-app conversation switch hydrates the slim state (bodies
+  // empty), so until the disk re-read lands every upstream citation would look
+  // like a missing document. Surface it and hold the checkpoint rather than
+  // validating a half-restored chain.
+  const unavailable = deepPlanUnavailableDocuments(deepPlan, activePhase);
+  const restoreBlocked = unavailable.pending.length > 0;
+  const formatPhases = (phases: DeepPlanPhaseId[]) =>
+    phases
+      .map(
+        (candidate) =>
+          getDeepPlanPhase(candidate).outputFile ??
+          t(DEEP_PLAN_PHASE_LABEL_KEY[candidate]),
+      )
+      .join(", ");
+
   return (
     <div className="flex flex-col gap-4 p-4">
       <Typography.Text className="text-sm font-medium">
@@ -155,6 +172,14 @@ export function DeepPlanPanel() {
           {t(phase.instructionKey)}
         </Typography.Text>
 
+        {restoreBlocked && (
+          <Typography.Text className="text-xs" testId="deep-plan-restoring">
+            {t(I18nKey.DEEP_PLAN$CONFIRM_RESTORING, {
+              document: formatPhases(unavailable.pending),
+            })}
+          </Typography.Text>
+        )}
+
         {report.issues.length > 0 && (
           <ul className="flex flex-col gap-1" data-testid="deep-plan-issues">
             {report.issues.map((issue) => (
@@ -185,13 +210,21 @@ export function DeepPlanPanel() {
                       getDeepPlanPhase(visibleFailure.phase).outputFile ??
                       t(DEEP_PLAN_PHASE_LABEL_KEY[visibleFailure.phase]),
                   })
-                : `${makeRefIssueMessage(t, visibleFailure.issue)}${
-                    visibleFailure.extraCount > 0
-                      ? t(I18nKey.DEEP_PLAN$CONFIRM_MORE_ISSUES, {
-                          count: visibleFailure.extraCount,
-                        })
-                      : ""
-                  }`}
+                : visibleFailure.kind === "restoring"
+                  ? t(I18nKey.DEEP_PLAN$CONFIRM_RESTORING, {
+                      document: formatPhases(visibleFailure.phases),
+                    })
+                  : visibleFailure.kind === "restore-failed"
+                    ? t(I18nKey.DEEP_PLAN$CONFIRM_RESTORE_FAILED, {
+                        document: formatPhases(visibleFailure.phases),
+                      })
+                    : `${makeRefIssueMessage(t, visibleFailure.issue)}${
+                        visibleFailure.extraCount > 0
+                          ? t(I18nKey.DEEP_PLAN$CONFIRM_MORE_ISSUES, {
+                              count: visibleFailure.extraCount,
+                            })
+                          : ""
+                      }`}
           </Typography.Text>
         )}
 
@@ -200,6 +233,7 @@ export function DeepPlanPanel() {
           variant="secondary"
           onClick={handleConfirm}
           testId="deep-plan-confirm"
+          isDisabled={restoreBlocked}
           className="min-w-40 justify-center px-6"
         >
           {t(I18nKey.COMMON$DEEP_PLAN_CONFIRM)}

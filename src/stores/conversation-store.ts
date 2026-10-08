@@ -113,6 +113,8 @@ interface ConversationActions {
   startDeepPlan: () => void;
   setDeepPlanPhase: (phase: DeepPlanPhaseId) => void;
   setDeepPlanDocument: (phase: DeepPlanPhaseId, content: string) => void;
+  /** Record that a phase document's reload re-read was rejected (file gone). */
+  failDeepPlanDocumentRestore: (phase: DeepPlanPhaseId) => void;
   /** Runs the reference validator; returns the structured reason on failure. */
   confirmDeepPlanPhase: (phase: DeepPlanPhaseId) => {
     ok: boolean;
@@ -537,6 +539,11 @@ export const useConversationStore = create<ConversationStore>()(
               ...state.deepPlan,
               documents: { ...state.deepPlan.documents, [phase]: content },
               documentHashes,
+              // A successful re-read clears any earlier restore failure for the
+              // phase, so the checkpoint stops reporting it as unavailable.
+              restoreFailed: (state.deepPlan.restoreFailed ?? []).filter(
+                (failed) => failed !== phase,
+              ),
             };
             const deepPlan = isRehydrate
               ? withDocument
@@ -548,6 +555,23 @@ export const useConversationStore = create<ConversationStore>()(
           "setDeepPlanDocument",
         );
       },
+
+      failDeepPlanDocumentRestore: (phase) =>
+        set(
+          (state) => {
+            if (state.deepPlan.documents[phase] !== undefined) return {};
+            const restoreFailed = state.deepPlan.restoreFailed ?? [];
+            if (restoreFailed.includes(phase)) return {};
+            return {
+              deepPlan: {
+                ...state.deepPlan,
+                restoreFailed: [...restoreFailed, phase],
+              },
+            };
+          },
+          false,
+          "failDeepPlanDocumentRestore",
+        ),
 
       confirmDeepPlanPhase: (phase) => {
         const result = confirmPhase(

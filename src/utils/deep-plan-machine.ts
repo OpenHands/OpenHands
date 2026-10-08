@@ -34,6 +34,13 @@ export interface DeepPlanState {
    * hashes were recorded still has to typecheck.
    */
   documentHashes?: DeepPlanDocuments;
+  /**
+   * Phases whose document could not be re-read from disk during a restore
+   * (planner gone, file deleted under it). Tracked explicitly rather than
+   * silently left empty so the checkpoint can name the missing document instead
+   * of reporting it as an ordinary dangling/missing citation.
+   */
+  restoreFailed?: DeepPlanPhaseId[];
 }
 
 /**
@@ -72,7 +79,47 @@ export function hydrateDeepPlanState(
     confirmed: persisted.confirmed,
     documents: {},
     documentHashes: persisted.documentHashes ?? {},
+    restoreFailed: [],
   };
+}
+
+/**
+ * Documents the persisted chain vouches for (a recorded hash) but whose bytes
+ * are not in memory. After a reload every document is here until the disk
+ * re-read lands; a checkpoint run in that window would otherwise see each
+ * upstream citation as a missing document. Derived rather than stored so it
+ * cannot be left stale by a lifecycle race.
+ *
+ * `pending` are still being re-read (or have not been attempted yet); `failed`
+ * had their re-read rejected (planner/file gone), so the chain genuinely cannot
+ * be validated for them. Scoped to `throughPhase` so an unavailable document
+ * beyond the checkpoint does not gate it.
+ */
+export interface UnavailableDeepPlanDocuments {
+  pending: DeepPlanPhaseId[];
+  failed: DeepPlanPhaseId[];
+}
+
+export function deepPlanUnavailableDocuments(
+  state: DeepPlanState,
+  throughPhase?: DeepPlanPhaseId,
+): UnavailableDeepPlanDocuments {
+  const hashes = state.documentHashes ?? {};
+  const failedSet = new Set(state.restoreFailed ?? []);
+  const lastIndex = throughPhase
+    ? DEEP_PLAN_PHASE_IDS.indexOf(throughPhase)
+    : DEEP_PLAN_PHASE_IDS.length - 1;
+  const pending: DeepPlanPhaseId[] = [];
+  const failed: DeepPlanPhaseId[] = [];
+  for (const phase of DEEP_PLAN_PHASE_IDS) {
+    if (DEEP_PLAN_PHASE_IDS.indexOf(phase) > lastIndex) continue;
+    if (hashes[phase] === undefined || state.documents[phase] !== undefined) {
+      continue;
+    }
+    if (failedSet.has(phase)) failed.push(phase);
+    else pending.push(phase);
+  }
+  return { pending, failed };
 }
 
 /** Drop the document bodies for storage; keep phase, confirmations and hashes. */
@@ -158,6 +205,20 @@ export type ConfirmFailure =
    * (`outputFile === null`) are unaffected.
    */
   | { kind: "missing-output"; phase: DeepPlanPhaseId }
+  /**
+   * A document this checkpoint needs is vouched for by the persisted chain but
+   * its bytes are not in memory yet — the reload re-read is still in flight, or
+   * it failed (see `restoreFailed`). Validating now would treat the recorded
+   * hash as if it were a body and report every upstream citation as a missing
+   * document; name the unavailable phases instead.
+   */
+  | { kind: "restoring"; phases: DeepPlanPhaseId[] }
+  /**
+   * A document this checkpoint needs had its reload re-read rejected — the
+   * planner or file is gone. Distinct from `restoring` so the panel can tell
+   * the user the chain cannot be validated rather than that it is arriving.
+   */
+  | { kind: "restore-failed"; phases: DeepPlanPhaseId[] }
   /** The reference chain is invalid; `issue` names the offending citation. */
   | { kind: "invalid-chain"; issue: RefIssue; extraCount: number };
 
@@ -180,6 +241,24 @@ export function confirmPhase(
       DEEP_PLAN_PHASE_IDS.indexOf(phase),
     ).find((earlier) => !isPhaseConfirmed(state, earlier));
     return { ok: false, failure: { kind: "blocked", phase: blocking! } };
+  }
+
+  // A reload re-reads the persisted documents from disk. Until it lands, the
+  // bodies are absent but the chain still vouches for them, so validating now
+  // would report every upstream citation as a missing document. Refuse and name
+  // the phases rather than treating a recorded hash as a body.
+  const pendingRestore = deepPlanUnavailableDocuments(state, phase);
+  if (pendingRestore.pending.length > 0) {
+    return {
+      ok: false,
+      failure: { kind: "restoring", phases: pendingRestore.pending },
+    };
+  }
+  if (pendingRestore.failed.length > 0) {
+    return {
+      ok: false,
+      failure: { kind: "restore-failed", phases: pendingRestore.failed },
+    };
   }
 
   // A phase that must produce a document cannot be confirmed before that

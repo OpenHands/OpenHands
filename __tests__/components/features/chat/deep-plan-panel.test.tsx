@@ -35,6 +35,10 @@ const TRANSLATIONS: Record<string, string> = {
   [I18nKey.DEEP_PLAN$CONFIRM_MORE_ISSUES]: " (+{{count}} more)",
   [I18nKey.DEEP_PLAN$CONFIRM_MISSING_OUTPUT]:
     "Run the planner to produce {{document}} before confirming this phase.",
+  [I18nKey.DEEP_PLAN$CONFIRM_RESTORING]:
+    "Restoring {{document}}… confirm once the document is loaded.",
+  [I18nKey.DEEP_PLAN$CONFIRM_RESTORE_FAILED]:
+    "Could not reload {{document}} from disk. Reopen its phase to rewrite it before confirming.",
 };
 
 vi.mock("react-i18next", async (importOriginal) => {
@@ -188,5 +192,58 @@ describe("DeepPlanPanel", () => {
     renderWithProviders(<DeepPlanPanel />);
 
     expect(screen.getByText(/PHASE: Database design\./)).toBeInTheDocument();
+  });
+
+  it("holds the checkpoint while a persisted upstream body is still restoring", () => {
+    // After a reload only the hashes survive; the bodies are re-read from disk.
+    // Until that read lands the checkpoint must not run — validating now would
+    // report the valid `[Req 3.1]` citation as a missing upstream document.
+    act(() =>
+      useConversationStore.setState({
+        deepPlan: {
+          activePhase: "database",
+          confirmed: ["analysis", "requirements"],
+          documents: {},
+          documentHashes: {
+            requirements: "req-hash",
+            database: "db-hash",
+          },
+        },
+      }),
+    );
+
+    renderWithProviders(<DeepPlanPanel />);
+
+    expect(screen.getByTestId("deep-plan-restoring")).toHaveTextContent(
+      "Restoring requirements.md, database-design.md… confirm once the document is loaded.",
+    );
+    expect(screen.getByTestId("deep-plan-confirm")).toBeDisabled();
+  });
+
+  it("reports an upstream document that could not be reloaded", async () => {
+    act(() =>
+      useConversationStore.setState({
+        deepPlan: {
+          activePhase: "database",
+          confirmed: ["analysis", "requirements"],
+          documents: { database: "## 2.1 Users [Req 3.1]\n" },
+          documentHashes: { requirements: "req-hash", database: "db-hash" },
+          restoreFailed: ["requirements"],
+        },
+      }),
+    );
+
+    renderWithProviders(<DeepPlanPanel />);
+
+    // The restore has settled (nothing pending), so the checkpoint runs and
+    // names the unavailable phase rather than a bogus dangling citation.
+    expect(screen.queryByTestId("deep-plan-restoring")).not.toBeInTheDocument();
+    expect(screen.getByTestId("deep-plan-confirm")).not.toBeDisabled();
+
+    await userEvent.click(screen.getByTestId("deep-plan-confirm"));
+
+    expect(screen.getByTestId("deep-plan-error")).toHaveTextContent(
+      "Could not reload requirements.md from disk. Reopen its phase to rewrite it before confirming.",
+    );
   });
 });

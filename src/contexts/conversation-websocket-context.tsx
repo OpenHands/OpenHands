@@ -84,11 +84,13 @@ import {
 import {
   findPhasePlannerConversationId,
   isPlanFilePath,
+  buildPhasePlanPath,
 } from "#/utils/plan-file";
 import {
   matchDeepPlanDocumentFile,
   type DeepPlanPhaseId,
 } from "#/utils/deep-plan";
+import { deepPlanUnavailableDocuments } from "#/utils/deep-plan-machine";
 
 export type WebSocketConnectionState =
   | "CONNECTING"
@@ -200,6 +202,7 @@ export function ConversationWebSocketProvider({
   sessionApiKey,
   subConversations,
   subConversationIds,
+  deepPlanWorkingDir,
 }: {
   children: React.ReactNode;
   conversationId?: string;
@@ -207,6 +210,13 @@ export function ConversationWebSocketProvider({
   sessionApiKey?: string | null;
   subConversations?: AppConversation[];
   subConversationIds?: string[];
+  /**
+   * The parent conversation's resolved workspace dir. Used to rebuild a phase
+   * document's absolute path when the file must be re-read during a restore and
+   * no live file observation named it. Mirrors the local read path's default
+   * (`<workingDir>/.agents_tmp/<outputFile>`).
+   */
+  deepPlanWorkingDir?: string | null;
 }) {
   // Separate connection state tracking for each WebSocket
   const [mainConnectionState, setMainConnectionState] =
@@ -276,7 +286,13 @@ export function ConversationWebSocketProvider({
     number | null
   >(null);
 
-  const { setPlanContent, setDeepPlanDocument } = useConversationStore();
+  const {
+    setPlanContent,
+    setDeepPlanDocument,
+    failDeepPlanDocumentRestore,
+    conversationMode,
+  } = useConversationStore();
+  const deepPlan = useConversationStore((state) => state.deepPlan);
 
   useEffect(() => {
     setPlanContent(null);
@@ -299,6 +315,14 @@ export function ConversationWebSocketProvider({
   const latestDeepPlanFileEventsRef = useRef<
     Map<DeepPlanPhaseId, { path: string; conversationId: string }>
   >(new Map());
+
+  // Phases whose disk re-read has already been kicked off for the current
+  // conversation. Guards the restore effect against re-issuing a read while the
+  // first one is still in flight (the store update that clears `pending`
+  // arrives only on success). Keyed to the conversation it was populated for so
+  // a switch starts fresh.
+  const restoreAttemptedRef = useRef<Set<DeepPlanPhaseId>>(new Set());
+  const restoreAttemptedConversationRef = useRef<string | undefined>(undefined);
 
   // Resolve the planner conversation the phase document should be read from.
   // Deep Planning runs one planner per phase, each pinned to that phase's
@@ -650,6 +674,78 @@ export function ConversationWebSocketProvider({
     resolvePhaseConversationId,
   ]);
 
+  // Restore the persisted phase documents after a reload or an in-app
+  // conversation switch. The slim persisted state keeps only hashes, so the
+  // bodies start empty; history replay only fills the *active* planner, and a
+  // completed phase's planner never re-emits its file. Every vouched-for phase
+  // that is still missing is therefore read from disk here, so the checkpoint
+  // can validate upstream citations instead of seeing each as a missing
+  // document. Reads are tracked per phase so a phase already filled by live
+  // history is not re-read, and a read that lands late cannot overwrite a live
+  // write (setDeepPlanDocument rejects identical bytes and invalidates on a
+  // genuine change).
+  useEffect(() => {
+    if (!conversationId) return;
+    if (!conversationUrl || isLoadingHistoryPlanning) return;
+    if (conversationMode !== "deep-plan") return;
+
+    const targetIds = subConversationIds ?? [];
+    if (targetIds.length === 0) return;
+
+    // A conversation switch swaps the store contents; drop the previous
+    // conversation's in-flight tracking so its documents are restored anew.
+    if (restoreAttemptedConversationRef.current !== conversationId) {
+      restoreAttemptedRef.current = new Set();
+      restoreAttemptedConversationRef.current = conversationId;
+    }
+
+    const { pending } = deepPlanUnavailableDocuments(deepPlan);
+    if (pending.length === 0) return;
+
+    const toRead = pending.filter(
+      (phase) => !restoreAttemptedRef.current.has(phase),
+    );
+
+    for (const phase of toRead) {
+      const path =
+        latestDeepPlanFileEventsRef.current.get(phase)?.path ??
+        (deepPlanWorkingDir
+          ? buildPhasePlanPath(deepPlanWorkingDir, phase)
+          : null);
+      // The workspace dir is resolved with the conversation query; if it is not
+      // in yet, leave the phase unattempted so the effect retries on the render
+      // that carries it — a premature fail would strand the checkpoint.
+      if (!path) continue;
+      restoreAttemptedRef.current.add(phase);
+      const fallbackId = targetIds[0];
+      readConversationFile(
+        {
+          conversationId: resolvePhaseConversationId(phase, fallbackId),
+          filePath: path,
+        },
+        {
+          onSuccess: (fileContent) => setDeepPlanDocument(phase, fileContent),
+          onError: (error) => {
+            console.warn("Failed to restore deep-plan document:", error);
+            failDeepPlanDocumentRestore(phase);
+          },
+        },
+      );
+    }
+  }, [
+    conversationId,
+    conversationUrl,
+    isLoadingHistoryPlanning,
+    conversationMode,
+    subConversationIds,
+    deepPlan,
+    deepPlanWorkingDir,
+    readConversationFile,
+    resolvePhaseConversationId,
+    setDeepPlanDocument,
+    failDeepPlanDocumentRestore,
+  ]);
+
   useEffect(() => {
     hasConnectedRefMain.current = false;
     setIsLoadingHistoryPlanning(!!subConversationIds?.length);
@@ -671,6 +767,9 @@ export function ConversationWebSocketProvider({
     mainCursorRef.current.clear();
     // Reset the tracked event ref when conversation changes
     latestPlanningFileEventRef.current = null;
+    // Paths recorded for the previous conversation must not steer the next
+    // conversation's document restore.
+    latestDeepPlanFileEventsRef.current = new Map();
   }, [conversationId]);
 
   // Drop buffered deltas on conversation switch/unmount: the store is cleared on

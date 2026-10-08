@@ -425,6 +425,43 @@ describe("conversation store", () => {
       );
     });
 
+    it("tracks a failed document restore and clears it when the read succeeds", async () => {
+      // A reloaded chain holds only hashes. If a phase document cannot be read
+      // back from disk, the checkpoint must say so rather than report the
+      // recorded but absent upstream as a bogus missing citation.
+      const requirementsDoc = "## 3.1 Authentication\n";
+      mockGetConversationState.mockReturnValue({
+        selectedTab: "files",
+        unpinnedTabs: [],
+        conversationMode: "deep-plan",
+        deepPlan: {
+          activePhase: "database",
+          confirmed: ["analysis", "requirements"],
+          documentHashes: {
+            requirements: hashDeepPlanDocument(requirementsDoc),
+            database: hashDeepPlanDocument("## 2.1 Users [Req 3.1]\n"),
+          },
+        },
+      });
+      vi.resetModules();
+      const { useConversationStore: freshStore } =
+        await import("#/stores/conversation-store");
+
+      freshStore.getState().failDeepPlanDocumentRestore("requirements");
+      expect(freshStore.getState().deepPlan.restoreFailed).toEqual([
+        "requirements",
+      ]);
+
+      // A late successful read must clear the failure so the checkpoint stops
+      // reporting the document as unavailable.
+      freshStore.getState().setDeepPlanDocument("requirements", requirementsDoc);
+      expect(freshStore.getState().deepPlan.restoreFailed).toEqual([]);
+      expect(freshStore.getState().deepPlan.confirmed).toEqual([
+        "analysis",
+        "requirements",
+      ]);
+    });
+
     it("restores the phase machine from persisted state on load", async () => {
       mockGetConversationState.mockReturnValue({
         selectedTab: "files",

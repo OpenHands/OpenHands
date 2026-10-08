@@ -177,6 +177,7 @@ export function WebSocketProviderWrapper({
       sessionApiKey={conversation?.session_api_key}
       subConversationIds={planningConversationIds}
       subConversations={filteredSubConversations}
+      deepPlanWorkingDir={conversation?.workspace?.working_dir ?? null}
     >
       {children}
     </ConversationWebSocketProvider>
