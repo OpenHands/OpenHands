@@ -11,6 +11,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ONBOARDING_COMPLETED_STORAGE_KEY } from "#/components/features/onboarding/use-onboarding-completion";
+import { GettingStartedChecklistSwitch } from "#/components/features/settings/app-settings/getting-started-checklist-switch";
 import { SidebarOnboardingChecklist } from "#/components/features/sidebar/sidebar-onboarding-checklist";
 import {
   OPENHANDS_SLACK_COMMUNITY_URL,
@@ -19,6 +20,7 @@ import {
   SIDEBAR_ONBOARDING_CHECKLIST_SLACK_JOINED_STORAGE_KEY,
 } from "#/components/features/sidebar/sidebar-onboarding-checklist.constants";
 import {
+  readSidebarOnboardingChecklistDismissed,
   readSidebarOnboardingChecklistMinimized,
   readSidebarOnboardingChecklistSlackJoined,
 } from "#/components/features/sidebar/sidebar-onboarding-checklist-storage";
@@ -60,7 +62,7 @@ vi.mock("#/hooks/query/use-llm-profiles", () => ({
   useLlmProfiles: () => mockUseLlmProfiles(),
 }));
 
-function renderChecklist() {
+function renderChecklist({ withSettingsSwitch = false } = {}) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -77,6 +79,7 @@ function renderChecklist() {
       <QueryClientProvider client={queryClient}>
         <NavigationProvider value={navigation}>
           <SidebarOnboardingChecklist collapsed={false} />
+          {withSettingsSwitch ? <GettingStartedChecklistSwitch /> : null}
         </NavigationProvider>
       </QueryClientProvider>,
     ),
@@ -88,7 +91,9 @@ describe("SidebarOnboardingChecklist", () => {
   beforeEach(() => {
     window.localStorage.clear();
     window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
-    window.localStorage.removeItem(SIDEBAR_ONBOARDING_CHECKLIST_MINIMIZED_STORAGE_KEY);
+    window.localStorage.removeItem(
+      SIDEBAR_ONBOARDING_CHECKLIST_MINIMIZED_STORAGE_KEY,
+    );
     window.localStorage.removeItem(
       SIDEBAR_ONBOARDING_CHECKLIST_CUSTOMIZE_EXPLORED_STORAGE_KEY,
     );
@@ -275,9 +280,51 @@ describe("SidebarOnboardingChecklist", () => {
     expect(readSidebarOnboardingChecklistMinimized()).toBe(false);
   });
 
+  it.each([false, true])(
+    "dismisses from the %s minimized state and updates the Application switch",
+    async (minimized) => {
+      if (minimized) {
+        window.localStorage.setItem(
+          SIDEBAR_ONBOARDING_CHECKLIST_MINIMIZED_STORAGE_KEY,
+          "true",
+        );
+      }
+      const user = userEvent.setup();
+      renderChecklist({ withSettingsSwitch: true });
+
+      const checklist = screen.getByTestId("sidebar-onboarding-checklist");
+      const switchControl = screen.getByTestId(
+        "show-getting-started-checklist-switch",
+      );
+      await user.hover(checklist);
+      await user.click(
+        screen.getByRole("button", {
+          name: I18nKey.SIDEBAR$ONBOARDING_CHECKLIST_DISMISS,
+        }),
+      );
+
+      expect(readSidebarOnboardingChecklistDismissed()).toBe(true);
+      expect(readSidebarOnboardingChecklistMinimized()).toBe(minimized);
+      expect(
+        screen.queryByTestId("sidebar-onboarding-checklist"),
+      ).not.toBeInTheDocument();
+      expect(switchControl).not.toBeChecked();
+
+      await user.click(switchControl);
+
+      expect(readSidebarOnboardingChecklistDismissed()).toBe(false);
+      expect(
+        screen.getByTestId("sidebar-onboarding-checklist"),
+      ).toHaveAttribute("data-minimized", String(minimized));
+    },
+  );
+
   it("hides when collapsed", () => {
     const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
     });
     const navigation: NavigationContextValue = {
       currentPath: "/",
