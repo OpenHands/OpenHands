@@ -298,12 +298,25 @@ export const Messages: React.FC<MessagesProps> = React.memo(
         Math.round(element.getBoundingClientRect().height) + ROW_GAP_PX,
     });
 
+    // With a scroll container, rows can cross the virtualization threshold
+    // and remount into the shell. Persist their expansion by row key in the
+    // plain list too, so a control the user opened before the switch restores
+    // once the shared shell mounts. Without a container (shared/read-only
+    // views) component state is stable, so the Provider is omitted.
+    const persistExpansion = scrollParent !== undefined;
+
     if (!shouldVirtualize) {
       return (
         <>
           {renderedItems.map((item, itemIndex) => (
             <React.Fragment key={renderedItemKey(item)}>
-              {renderItem(item, itemIndex)}
+              {persistExpansion ? (
+                <RowExpansionContext.Provider value={renderedItemKey(item)}>
+                  {renderItem(item, itemIndex)}
+                </RowExpansionContext.Provider>
+              ) : (
+                renderItem(item, itemIndex)
+              )}
             </React.Fragment>
           ))}
           <ConversationConfirmationButtons />

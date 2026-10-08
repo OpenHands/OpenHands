@@ -173,6 +173,41 @@ describe("Messages virtualization", () => {
     );
   });
 
+  it("persists a row's expansion across the virtualization threshold", () => {
+    // 100 events stay in the plain list; the same row must keep its expansion
+    // once appends push the list past the threshold and it remounts into the
+    // virtualized shell.
+    const events = buildEvents(100);
+    const { rerender } = renderMessages(events);
+
+    expect(screen.queryByTestId("virtualized-message-list")).toBeNull();
+    fireEvent.click(screen.getByTestId("toggle-message-99"));
+    expect(screen.getByTestId("toggle-message-99")).toHaveTextContent(
+      "expanded",
+    );
+
+    // Append 300 events: 400 total, message-99 still present, now virtualized.
+    rerender(<Harness events={buildEvents(400)} withScrollParent />);
+    expect(screen.getByTestId("virtualized-message-list")).toBeInTheDocument();
+
+    // Row 99 is outside the initial window; scroll until it mounts.
+    const scrollParent = screen.getByTestId("scroll-parent");
+    for (
+      let top = 0;
+      top <= 400 * 608 && !screen.queryByTestId("event-message-message-99");
+      top += 2000
+    ) {
+      act(() => {
+        scrollParent.scrollTop = top;
+        fireEvent.scroll(scrollParent);
+      });
+    }
+
+    expect(screen.getByTestId("toggle-message-99")).toHaveTextContent(
+      "expanded",
+    );
+  });
+
   it("keeps the plain list's expansion local so the store stays empty", () => {
     const events = buildEvents(100);
     renderMessages(events, false);
