@@ -54,6 +54,18 @@ describe("setup guide tours", () => {
     },
   );
 
+  it("hides the footer only on the stop that waits for a template card", async () => {
+    await startSetupGuideTour("first-automation", NAV, t);
+    await startSetupGuideTour("add-integration", NAV, t);
+
+    const stops = vi
+      .mocked(startGuidedTour)
+      .mock.calls.flatMap(([tour]) => tour.stops);
+    expect(
+      stops.filter((stop) => stop.hideFooter).map((stop) => stop.id),
+    ).toEqual(["choose-template"]);
+  });
+
   it("starts nothing for a step done in the enterprise app", async () => {
     await startSetupGuideTour("invite-users", NAV, t);
 

@@ -13,9 +13,16 @@ import { SecretsService } from "#/api/secrets-service";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import { Settings } from "#/types/settings";
 import { ACP_PROVIDERS } from "#/constants/acp-providers";
+import {
+  __resetActiveStoreForTests,
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
+import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { parseCommand } from "#/utils/acp-command";
 const CLAUDE_COMMAND = getClientAcpProvider("claude-code")!.default_command;
 const CODEX_COMMAND = getClientAcpProvider("codex")!.default_command;
+const OPENCODE_PROVIDER = getClientAcpProvider("opencode")!;
 
 // Stub the login-detection probe so the ACP credentials section doesn't spin a
 // subprocess; default to no detected session so existing tests are unaffected.
@@ -189,6 +196,104 @@ describe("AgentSettingsScreen", () => {
     });
   });
 
+  it("offers OpenCode and leaves its default command to the profile resolver", async () => {
+    const user = userEvent.setup();
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: CLAUDE_PROFILE,
+    });
+    await screen.findByTestId("agent-command-input");
+    await user.click(screen.getByTestId("agent-preset-selector"));
+    await user.click(await screen.findByRole("option", { name: "OpenCode" }));
+
+    expect(screen.getByTestId("agent-command-input")).toHaveValue(
+      OPENCODE_PROVIDER.default_command.join(" "),
+    );
+    expect(screen.getByLabelText("SETTINGS$AGENT_MODEL")).toHaveValue(
+      OPENCODE_PROVIDER.available_models.find(
+        ({ id }) => id === OPENCODE_PROVIDER.default_model,
+      )?.label,
+    );
+
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      agent_kind: "acp",
+      acp_server: "opencode",
+      acp_command: null,
+      acp_args: null,
+      acp_model: OPENCODE_PROVIDER.default_model,
+    });
+  });
+
+  it.each([null, [...OPENCODE_PROVIDER.default_command]])(
+    "reloads OpenCode with command %j without losing its preset or model",
+    async (command) => {
+      const { control } = renderAgentSettingsScreen({
+        agentSettingsOverride: {
+          agent_kind: "acp",
+          acp_server: "opencode",
+          acp_command: command,
+          acp_model: OPENCODE_PROVIDER.default_model,
+        },
+      });
+
+      expect(await screen.findByTestId("agent-preset-selector")).toHaveValue(
+        "OpenCode",
+      );
+      expect(screen.getByTestId("agent-command-input")).toHaveValue(
+        OPENCODE_PROVIDER.default_command.join(" "),
+      );
+      expect(screen.getByLabelText("SETTINGS$AGENT_MODEL")).toHaveValue(
+        OPENCODE_PROVIDER.available_models.find(
+          ({ id }) => id === OPENCODE_PROVIDER.default_model,
+        )?.label,
+      );
+      // Old explicit defaults are cleared on the next save; new profiles
+      // resolve the current registry command rather than pinning a CLI version.
+      expect(control().buildAgentProfileFields()).toMatchObject({
+        acp_server: "opencode",
+        acp_command: null,
+        acp_model: OPENCODE_PROVIDER.default_model,
+      });
+    },
+  );
+
+  it.each(["opencode-go/kimi-k3"])(
+    "preserves the OpenCode preset when reopening and changing Go model %s",
+    async (model) => {
+      const user = userEvent.setup();
+      const { control } = renderAgentSettingsScreen({
+        agentSettingsOverride: {
+          agent_kind: "acp",
+          acp_server: "opencode",
+          acp_command: null,
+          acp_model: model,
+        },
+      });
+
+      expect(await screen.findByTestId("agent-preset-selector")).toHaveValue(
+        "OpenCode",
+      );
+      expect(screen.getByTestId("agent-model-input")).toHaveValue(model);
+      expect(control().buildAgentProfileFields()).toMatchObject({
+        acp_server: "opencode",
+        acp_command: null,
+        acp_model: model,
+      });
+
+      // Go IDs need not be in the SDK's static model suggestions. Changing
+      // the model must not turn the provider into a Custom ACP command.
+      await user.clear(screen.getByTestId("agent-model-input"));
+      await user.type(
+        screen.getByTestId("agent-model-input"),
+        "opencode-go/deepseek-v4-flash",
+      );
+      expect(control().buildAgentProfileFields()).toMatchObject({
+        acp_server: "opencode",
+        acp_command: null,
+        acp_model: "opencode-go/deepseek-v4-flash",
+      });
+    },
+  );
+
   it("clears the model when switching from a built-in provider to Custom", async () => {
     // Picking Custom must not leak the built-in default model onto an
     // unrelated wrapper.
@@ -216,6 +321,77 @@ describe("AgentSettingsScreen", () => {
       acp_command: "my-custom-acp --flag",
       acp_model: null,
     });
+  });
+
+  it("offers the Pi preset and leaves its model to Pi", async () => {
+    const pi = getClientAcpProvider("pi")!;
+    const user = userEvent.setup();
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: CLAUDE_PROFILE,
+    });
+    await screen.findByTestId("agent-command-input");
+
+    await user.click(screen.getByTestId("agent-preset-selector"));
+    await user.click(await screen.findByRole("option", { name: "Pi" }));
+
+    expect(screen.getByTestId("agent-command-input")).toHaveValue(
+      pi.default_command.join(" "),
+    );
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      acp_server: "pi",
+      acp_command: null,
+      acp_model: null,
+    });
+  });
+
+  it("hides the local-only presets on a cloud backend", async () => {
+    __resetActiveStoreForTests();
+    setRegisteredBackends([
+      {
+        id: "cloud-1",
+        name: "Cloud",
+        host: "https://app.example.com",
+        apiKey: "key",
+        kind: "cloud",
+      },
+    ]);
+    setActiveSelection({ backendId: "cloud-1", orgId: null });
+    try {
+      render(
+        <AgentSettingsScreen
+          agentSettingsOverride={CLAUDE_PROFILE}
+          onSaveControlChange={() => {}}
+        />,
+        {
+          wrapper: ({ children }) => (
+            <MemoryRouter>
+              <QueryClientProvider
+                client={
+                  new QueryClient({
+                    defaultOptions: { queries: { retry: false } },
+                  })
+                }
+              >
+                <ActiveBackendProvider>{children}</ActiveBackendProvider>
+              </QueryClientProvider>
+            </MemoryRouter>
+          ),
+        },
+      );
+      await screen.findByTestId("agent-command-input");
+      await userEvent
+        .setup()
+        .click(screen.getByTestId("agent-preset-selector"));
+
+      expect(
+        await screen.findByRole("option", { name: "Codex" }),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("option", { name: "Pi" })).toBeNull();
+      expect(screen.queryByRole("option", { name: "OpenCode" })).toBeNull();
+    } finally {
+      window.localStorage.clear();
+      __resetActiveStoreForTests();
+    }
   });
 
   it("reconciles the model when the command is retyped to a different provider", async () => {

@@ -43,6 +43,10 @@ import {
 import { tmuxPathFor } from "./lib/tmux-path.mjs";
 import { browserCallLimit } from "./lib/call-limit.mjs";
 import {
+  DEFAULT_AGENT_PROFILE,
+  agentProfileRepoint,
+} from "./lib/agent-profile-repoint.mjs";
+import {
   PAGE_LIMIT,
   collectEvents,
   countImages,
@@ -394,7 +398,7 @@ async function browserCall(run, cmd, args = {}, { timeout = 120_000 } = {}) {
   const result = await response.json();
   if (!result.ok) {
     throw new CliError(result.error, {
-      code: 1,
+      code: Number.isInteger(result.code) ? result.code : 1,
       hint: result.hint,
       extra: { url: result.url, failureScreenshot: result.failureScreenshot },
     });
@@ -1492,6 +1496,30 @@ async function activateProfile(run, name) {
     );
 }
 
+// Onboarding pins the `default` agent profile to the LLM profile it created;
+// `llm preset` moves it to the one it activates (see
+// lib/agent-profile-repoint.mjs). `llm set` leaves it: its throwaway profiles
+// would otherwise become `default`'s and refuse deletion.
+async function repointDefaultAgentProfile(run, target) {
+  const path = `/api/agent-profiles/${DEFAULT_AGENT_PROFILE}`;
+  const detail = await http(run, "GET", path);
+  if (detail.status === 404) return undefined;
+  if (!detail.ok)
+    throw new CliError(
+      `Reading agent profile ${DEFAULT_AGENT_PROFILE} failed: ${detail.status} ${detail.text.slice(0, 300)}`,
+    );
+  const llm = await http(run, "GET", "/api/profiles");
+  const names = (llm.json?.profiles ?? []).map((p) => p.name);
+  const plan = agentProfileRepoint(detail.json?.profile, names, target);
+  if (!plan) return undefined;
+  const saved = await http(run, "POST", path, { body: plan.body });
+  if (!saved.ok)
+    throw new CliError(
+      `Pointing agent profile ${DEFAULT_AGENT_PROFILE} at ${target} failed: ${saved.status} ${saved.text.slice(0, 300)}`,
+    );
+  return { agentProfile: DEFAULT_AGENT_PROFILE, from: plan.from, to: target };
+}
+
 const PRESETS = {
   deepseek: {
     envVar: "DEEPSEEK_API_KEY",
@@ -1571,7 +1599,11 @@ async function cmdLlm({ positional, flags }) {
       created.push(profile.name);
     }
     const active = preset.profiles.find((p) => p.activate);
-    if (active) await activateProfile(run, active.name);
+    let repointed;
+    if (active) {
+      await activateProfile(run, active.name);
+      repointed = await repointDefaultAgentProfile(run, active.name);
+    }
     const settings = await http(run, "GET", "/api/settings");
     out({
       ok: true,
@@ -1579,6 +1611,7 @@ async function cmdLlm({ positional, flags }) {
       profiles: created,
       active: active?.name,
       activeModel: settings.json?.agent_settings?.llm?.model,
+      ...(repointed ? { repointed } : {}),
     });
     return;
   }
@@ -2908,6 +2941,44 @@ async function cmdBrowser({ positional, flags }) {
         fullPage: Boolean(flags["full-page"]),
       });
       break;
+    case "record": {
+      const action = rest[0];
+      if (action === "start") {
+        if (!flags.feature || !flags.name)
+          usage(
+            "browser record start needs --feature <ID> and --name <label>",
+            "control-openhands browser record start --feature F05.overflow-menu --name escape",
+          );
+        result = await browserCall(run, "record-start", {
+          feature: flags.feature,
+          name: flags.name,
+          fps: flags.fps === undefined ? undefined : intFlag(flags.fps),
+          maxSeconds:
+            flags["max-seconds"] === undefined
+              ? undefined
+              : intFlag(flags["max-seconds"]),
+        });
+      } else if (action === "stop") {
+        result = await browserCall(
+          run,
+          "record-stop",
+          {
+            gif: Boolean(flags.gif),
+            keepFrames: Boolean(flags["keep-frames"]),
+            discard: Boolean(flags.discard),
+          },
+          { timeout: 600_000 },
+        );
+      } else if (["pause", "resume", "status"].includes(action)) {
+        result = await browserCall(run, `record-${action}`);
+      } else {
+        usage(
+          "browser record start|pause|resume|stop|status",
+          "control-openhands browser record start --feature F05.overflow-menu --name escape",
+        );
+      }
+      break;
+    }
     case "clock":
       if (
         !flags["offset-ms"] &&
@@ -3306,6 +3377,7 @@ const BROWSER_VERBS = new Set([
   "snapshot",
   "testids",
   "screenshot",
+  "record",
   "viewport",
   "clock",
   "errors",
@@ -4033,6 +4105,10 @@ set/preset validate with a 1-token completion first (skip with --no-validate).
 Keys are read from an environment variable or file, never from argv.
 'preset deepseek' saves deepseek-flash (deepseek/deepseek-flash, activated) and
 deepseek-pro (deepseek/deepseek-v4-pro). Prefer flash; it is cheaper.
+'preset' also points the 'default' agent profile at deepseek-flash when it
+references another LLM profile that exists, as onboarding leaves it; the output
+then has 'repointed'. A reference to a missing profile (a fresh run's seed),
+named agent profiles and 'set' leave agent profiles as they are.
 
 Examples:
   DEEPSEEK_API_KEY=... control-openhands llm preset deepseek
@@ -4139,6 +4215,12 @@ Verbs
   snapshot [<sel>] [--max-lines N] [--feature ID --name N]   ARIA tree (saved as evidence)
   testids [<sel>] [--hidden] [--filter part]                 discover on-screen data-testid handles (--hidden adds hidden/off-screen)
   screenshot [<sel>] --feature ID --name N [--full-page]     PNG under evidence/<ID>/
+  record start --feature ID --name N [--fps 10] [--max-seconds 600]   video of the active tab
+  record pause | record resume            cut a wait (the agent working) out of the video
+  record stop [--gif] [--keep-frames] [--discard] | record status
+        (MP4 under evidence/<ID>/ when ffmpeg has libx264, else WebM with Playwright's ffmpeg;
+         --gif adds a GIF at most 960 px wide; the still lead-in is cut to 1 s, the end held 1 s;
+         --max-seconds is wall time; browser stop or reset ends the daemon and the recording)
   viewport desktop|phone|narrow|tablet|WxH                    1440x1000, 390x844, 320x700, 820x1180
   clock --offset-ms N | --system ISO|+MS | --fixed ISO|+MS    skew the page's clock (install before the goto
                                          whose page should see it; the server's clock is untouched)

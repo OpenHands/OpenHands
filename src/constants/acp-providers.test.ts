@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   ACP_MANAGED_SENTINEL,
   ACP_PROVIDERS,
+  getAcpProvidersForBackend,
   getAcpProviderSecrets,
   SURFACED_ACP_PROVIDERS,
   resolveEffectiveAcpModel,
@@ -90,12 +91,22 @@ describe("surfaced ACP providers", () => {
     (key) => !SURFACED_ACP_PROVIDERS.includes(key),
   );
 
-  it("surfaces only Claude Code, Codex and Gemini CLI", () => {
+  it("surfaces Claude Code, Codex, Gemini CLI, Pi and OpenCode", () => {
     expect([...SURFACED_ACP_PROVIDERS]).toEqual([
       "claude-code",
       "codex",
       "gemini-cli",
+      "pi",
+      "opencode",
     ]);
+  });
+
+  it("offers Pi and OpenCode on local backends only", () => {
+    const keys = (kind: "local" | "cloud") =>
+      getAcpProvidersForBackend(kind).map(({ key }) => key);
+
+    expect(keys("local")).toEqual([...SURFACED_ACP_PROVIDERS]);
+    expect(keys("cloud")).toEqual(["claude-code", "codex", "gemini-cli"]);
   });
 
   it("surfaces nothing the pinned client registry has dropped", () => {

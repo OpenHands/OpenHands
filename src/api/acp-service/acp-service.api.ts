@@ -52,10 +52,11 @@ function classifyCodex(out: BashOutput): AcpAuthStatus {
   return "unknown";
 }
 
-// Gemini CLI signs in via Google OAuth and has no status command, so we check
-// its credentials file. The command echoes present/absent and exits 0 either
-// way; anything else (a shell failure) ⇒ unknown.
-function classifyGemini(out: BashOutput): AcpAuthStatus {
+// Gemini CLI signs in via Google OAuth and Pi stores its logins in auth.json;
+// neither has a status command, so we check for the credential directly. The
+// command echoes present/absent and exits 0 either way; anything else (a shell
+// failure) ⇒ unknown.
+function classifyPresence(out: BashOutput): AcpAuthStatus {
   // The command echoes exactly `present` / `absent` to stdout, so match trimmed
   // stdout exactly. Reading only stdout (not stderr) means a stray shell
   // warning can't turn a real result into `unknown`.
@@ -79,14 +80,20 @@ const ACP_AUTH_PROBES: Record<string, AcpAuthProbe> = {
   "gemini-cli": {
     command:
       'test -f "$HOME/.gemini/oauth_creds.json" && echo present || echo absent',
-    classify: classifyGemini,
+    classify: classifyPresence,
+  },
+  // Pi seeds an empty ``{}`` auth.json on first run, so require an entry.
+  pi: {
+    command:
+      '{ [ -n "$ANTHROPIC_API_KEY" ] || grep -qs \'"type"\' "${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/auth.json"; } && echo present || echo absent',
+    classify: classifyPresence,
   },
 };
 
 /**
  * Detects whether the selected ACP provider is already logged in — entirely
  * client-side, with **no dedicated agent-server endpoint**. It runs the
- * provider's own status command (or, for Gemini, a credentials-file check)
+ * provider's own status command (or, for Gemini and Pi, a credentials check)
  * through the existing agent-server bash endpoint and classifies the output.
  *
  * Gated by the caller to **local backends**: the command runs wherever the

@@ -36,6 +36,18 @@ import { routePattern } from "./lib/route-pattern.mjs";
 import { resolveTestids } from "./lib/testids.mjs";
 import { tmuxPathFor } from "./lib/tmux-path.mjs";
 import { browserCallLimit } from "./lib/call-limit.mjs";
+import { agentProfileRepoint } from "./lib/agent-profile-repoint.mjs";
+import {
+  canvasSize,
+  encodeRecording,
+  encoderSupport,
+  ffmpegArgs,
+  findFfmpeg,
+  frameDurations,
+  frameRepeats,
+  playwrightFfmpegPaths,
+  withoutPauses,
+} from "./lib/recording.mjs";
 import { MAX_PAGES, collectEvents, countImages } from "./lib/events-paging.mjs";
 import { redactBody, redactUrl } from "./lib/network-bodies.mjs";
 import { buildLocator, parseRole, toCss } from "./lib/selectors.mjs";
@@ -1431,4 +1443,198 @@ test("fixture skill --commit records the project skill once and reports a re-run
   const personal = run(["fixture", "skill", "--name", "qa-p", "--commit"], env);
   assert.equal(personal.status, 2);
   assert.match(personal.json.error, /needs --repo/);
+});
+
+test("llm preset repoints default only off another live LLM profile", () => {
+  const seeded = {
+    id: "a1",
+    name: "default",
+    revision: 3,
+    schema_version: 1,
+    agent_kind: "openhands",
+    llm_profile_ref: "deepseek-chat",
+    enable_sub_agents: true,
+    mcp_server_refs: ["qa_mcp_a"],
+  };
+  const names = ["deepseek-chat", "deepseek-flash", "deepseek-pro"];
+  // Onboarding left default on its own profile: move it, keep every other field.
+  assert.deepEqual(agentProfileRepoint(seeded, names, "deepseek-flash"), {
+    from: "deepseek-chat",
+    body: {
+      schema_version: 1,
+      agent_kind: "openhands",
+      llm_profile_ref: "deepseek-flash",
+      enable_sub_agents: true,
+      mcp_server_refs: ["qa_mcp_a"],
+    },
+  });
+  // Already there, a fresh run's missing `default` ref, or no ref: unchanged.
+  assert.equal(agentProfileRepoint(seeded, names, "deepseek-chat"), null);
+  assert.equal(
+    agentProfileRepoint(
+      { ...seeded, llm_profile_ref: "default" },
+      names,
+      "deepseek-flash",
+    ),
+    null,
+  );
+  assert.equal(
+    agentProfileRepoint(
+      { ...seeded, llm_profile_ref: null },
+      names,
+      "deepseek-flash",
+    ),
+    null,
+  );
+  // An ACP default owns its own model; an older backend has no profile.
+  assert.equal(
+    agentProfileRepoint(
+      { ...seeded, agent_kind: "acp" },
+      names,
+      "deepseek-flash",
+    ),
+    null,
+  );
+  assert.equal(agentProfileRepoint(undefined, names, "deepseek-flash"), null);
+});
+
+test("llm help says when preset repoints the default agent profile", () => {
+  const help = spawnSync(process.execPath, [cli, "help", "llm"], {
+    encoding: "utf8",
+  });
+  assert.equal(help.status, 0);
+  assert.match(
+    help.stdout,
+    /'preset' also points the 'default' agent profile at deepseek-flash/,
+  );
+  assert.match(help.stdout, /and 'set' leave agent profiles as they are/);
+  assert.match(help.stdout, /'repointed'/);
+});
+
+test("a recording's timeline cuts the lead-in and pauses, and holds the end", () => {
+  // Changes at 0, 3, 3.2 and 10 s; stopped at 10.5 s.
+  const frames = [{ t: 0 }, { t: 3000 }, { t: 3200 }, { t: 10000 }];
+  assert.deepEqual(frameDurations(frames, 10500), [1, 0.2, 6.8, 1]);
+  // Paused from 4 s to 9 s: the frame shown at 3.2 s lasts 1.8 s.
+  const cut = withoutPauses(frames, 10500, [{ at: 4000, ms: 5000 }]);
+  assert.deepEqual(
+    cut.frames.map((f) => f.t),
+    [0, 3000, 3200, 5000],
+  );
+  assert.equal(cut.endT, 5500);
+  assert.deepEqual(frameDurations(cut.frames, cut.endT), [1, 0.2, 1.8, 1]);
+  // One unchanging frame keeps its real length, and is shown for at least 1 s.
+  assert.deepEqual(frameDurations([{ t: 0 }], 5000), [5]);
+  assert.deepEqual(frameDurations([{ t: 0 }], 200), [1]);
+  // Constant frame rate: ends rounded on the running total, at least one each.
+  assert.deepEqual(frameRepeats([1, 0.2, 6.8, 1], 10), [10, 2, 68, 10]);
+  assert.deepEqual(frameRepeats([0.15, 0.15, 0.15], 10), [2, 1, 2]);
+  assert.deepEqual(frameRepeats([0.01, 0.01], 10), [1, 1]);
+  // The canvas is the largest frame with even sides; smaller frames are padded.
+  assert.deepEqual(
+    canvasSize([
+      { width: 1440, height: 1000 },
+      { width: 391, height: 845 },
+    ]),
+    { width: 1440, height: 1000 },
+  );
+  assert.deepEqual(canvasSize([{ width: 391, height: 845 }]), {
+    width: 392,
+    height: 846,
+  });
+});
+
+test("the recorder picks MP4 with libx264, else WebM, and finds Playwright's ffmpeg", () => {
+  const system = [
+    " V....D libx264              libx264 H.264 / AVC (codec h264)",
+    " V....D libx264rgb           libx264 H.264 RGB (codec h264)",
+    " V....D gif                  GIF (Graphics Interchange Format)",
+  ].join("\n");
+  assert.deepEqual(encoderSupport(system), { format: "mp4", gif: true });
+  const bundled =
+    " V....D libvpx               libvpx VP8 (codec vp8)\n A....D aac x";
+  assert.deepEqual(encoderSupport(bundled), { format: "webm", gif: false });
+  assert.equal(encoderSupport(" V....D libx264rgb  rgb only"), null);
+  const root = mkdtempSync(join(tmpdir(), "pw-browsers-"));
+  for (const dir of ["chromium-1194", "ffmpeg-1009", "ffmpeg-1011"])
+    mkdirSync(join(root, dir));
+  assert.deepEqual(
+    playwrightFfmpegPaths({ PLAYWRIGHT_BROWSERS_PATH: root }, "darwin"),
+    [
+      join(root, "ffmpeg-1011", "ffmpeg-mac"),
+      join(root, "ffmpeg-1009", "ffmpeg-mac"),
+    ],
+  );
+  assert.deepEqual(
+    playwrightFfmpegPaths({ XDG_CACHE_HOME: root }, "linux"),
+    [],
+  );
+  const mp4 = ffmpegArgs("mp4", {
+    fps: 10,
+    width: 320,
+    height: 700,
+    out: "o.mp4",
+  });
+  assert.equal(mp4[mp4.indexOf("-i") + 1], "pipe:0");
+  assert.ok(mp4.includes("libx264") && mp4.at(-1) === "o.mp4");
+  assert.match(mp4[mp4.indexOf("-vf") + 1], /pad=320:700:.*format=yuv420p$/);
+  assert.ok(
+    ffmpegArgs("webm", {
+      fps: 10,
+      width: 2,
+      height: 2,
+      out: "o.webm",
+    }).includes("vp8"),
+  );
+});
+
+const RED_16X16_JPEG =
+  "/9j/4AAQSkZJRgABAgAAAQABAAD//gAQTGF2YzYwLjMxLjEwMgD/2wBDAAgUFBcUFxsbGxsbGyAeICEhISAgICAhISEkJCQqKiokJCQhISQkKCgqKi4vLisrKisvLzIyMjw8OTlGRkhWVmf/xABMAAEBAAAAAAAAAAAAAAAAAAAABgEBAQAAAAAAAAAAAAAAAAAABgcQAQAAAAAAAAAAAAAAAAAAAAARAQAAAAAAAAAAAAAAAAAAAAD/wAARCAAQABADASIAAhEAAxEA/9oADAMBAAIRAxEAPwCLAFF/f//Z";
+const BLUE_16X12_JPEG =
+  "/9j/4AAQSkZJRgABAgAAAQABAAD//gAQTGF2YzYwLjMxLjEwMgD/2wBDAAgUFBcUFxsbGxsbGyAeICEhISAgICAhISEkJCQqKiokJCQhISQkKCgqKi4vLisrKisvLzIyMjw8OTlGRkhWVmf/xABMAAEBAAAAAAAAAAAAAAAAAAAABwEBAQAAAAAAAAAAAAAAAAAABQcQAQAAAAAAAAAAAAAAAAAAAAARAQAAAAAAAAAAAAAAAAAAAAD/wAARCAAMABADASIAAhEAAxEA/9oADAMBAAIRAxEAPwCOAL+Lf//Z";
+
+test.skipIf(!findFfmpeg())(
+  "recorded frames of two sizes encode at the real timing",
+  async () => {
+    const dir = mkdtempSync(join(tmpdir(), "record-"));
+    const frames = [
+      [RED_16X16_JPEG, 0, 16, 16],
+      [BLUE_16X12_JPEG, 1500, 16, 12],
+    ].map(([data, t, width, height], i) => {
+      const file = join(dir, `frame-${i}.jpg`);
+      writeFileSync(file, Buffer.from(data, "base64"));
+      return { file, t, width, height };
+    });
+    const ffmpeg = findFfmpeg();
+    const out = join(dir, `out.${ffmpeg.format}`);
+    const written = await encodeRecording({
+      ffmpeg,
+      frames,
+      durations: frameDurations(frames, 2000),
+      fps: 10,
+      ...canvasSize(frames),
+      out,
+    });
+    // 1 s lead-in (cut from 1.5 s) + 1 s hold on the last frame.
+    assert.equal(written, 20);
+    assert.ok(readFileSync(out).length > 0);
+  },
+);
+
+test("browser help documents record", () => {
+  const help = spawnSync(process.execPath, [cli, "help", "browser"], {
+    encoding: "utf8",
+  });
+  assert.equal(help.status, 0);
+  assert.match(help.stdout, /record start --feature ID --name N/);
+  assert.match(help.stdout, /record pause \| record resume/);
+  assert.match(help.stdout, /record stop \[--gif\]/);
+  const bad = spawnSync(
+    process.execPath,
+    [cli, "browser", "record", "start", "--name", "x", "--run", tmpdir()],
+    {
+      encoding: "utf8",
+    },
+  );
+  assert.notEqual(bad.status, 0);
 });

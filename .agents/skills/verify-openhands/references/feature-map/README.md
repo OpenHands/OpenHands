@@ -5,7 +5,7 @@ of Agent Canvas. Read this index before driving the app, then open the matching
 feature file and run its recipe with `control-openhands`. The map is not a claim
 that every row passes today; the run's evidence ledger is.
 
-Maintenance baseline: main@ed815e141409c7b52991ab8d13c553b595da9165 (2026-10-06). The next maintenance pass starts from this commit; a pass proposes the next baseline in its PR, and merging that PR accepts it.
+Maintenance baseline: main@553d4519113192a80fb18376fdb6c1e39fa06387 (2026-10-09). The next maintenance pass starts from this commit; a pass proposes the next baseline in its PR, and merging that PR accepts it.
 
 ## Baseline preconditions
 
@@ -45,7 +45,7 @@ Maintenance baseline: main@ed815e141409c7b52991ab8d13c553b595da9165 (2026-10-06)
 - Verbs that are easy to miss: `browser mouse-click X Y` (backdrops and
   overlays), `click --modifiers Control,Meta` (open in new tab, multi-select),
   `click --hover-first` (hover-driven toggles), `click --expect-new-url`,
-  `browser tooltip <sel>`, `browser wait <sel> --state hidden|visible|detached`
+  `browser tooltip <sel>` (it returns a tooltip that is still open: before reading another one, hover elsewhere and `browser wait 'role=tooltip' --state detached`), `browser wait <sel> --state hidden|visible|detached`
   (use it after toggles: animations make an immediate `count` or `visible`
   lie), `browser media --clear` (forget earlier sounds before a negative sound
   check). `browser eval` takes one expression; wrap statements in an IIFE.
@@ -229,9 +229,9 @@ How to write and prove new entries: [../mapping.md](../mapping.md).
 
 | ID | Family | What it covers | Entry points | Needs | Sub-features |
 |---|---|---|---|---|---|
-| F01 | [First run, onboarding and sign-in](F01-first-run-and-sign-in.md) | telemetry consent, onboarding modal, public-mode backend step and API-key screen, route error page | any URL on a fresh browser profile; `launch --public` | fresh run or `browser reset`; LLM for say-hello | 21 |
-| F02 | [App shell, sidebar and command menu](F02-app-shell.md) | rail and phone drawer, collapse, home pinning, getting-started checklist, command menu, toasts | every page; `Control+k` / `Meta+k` | baseline; LLM for checklist progress | 25 |
-| F03 | [Home and starting work](F03-home.md) | home composer, workspace picker, plugin picker, recommended automations rail, no-LLM banner | `/`, **New Chat**, command menu | runs before and after `llm preset`; fixture repo | 39 |
+| F01 | [First run, onboarding and sign-in](F01-first-run-and-sign-in.md) | telemetry consent, onboarding modal, public-mode backend step and API-key screen, route error page | any URL on a fresh browser profile; `launch --public` | fresh run or `browser reset`; LLM for say-hello | 22 |
+| F02 | [App shell, sidebar and command menu](F02-app-shell.md) | rail and phone drawer, collapse, home pinning, getting-started checklist, command menu, toasts | every page; `Control+k` / `Meta+k` | baseline; LLM for checklist progress | 27 |
+| F03 | [Home and starting work](F03-home.md) | home composer, workspace picker, plugin picker, recommended automations rail, no-LLM banner | `/`, **New Chat**, command menu | runs before and after `llm preset`; fixture repo | 40 |
 | F04 | [Conversation list and folders](F04-conversation-list.md) | sidebar list, View presets, workspace folders, tags, rename/pin/archive/delete, load more | sidebar on every page | several conversations; fixture repos | 40 |
 | F05 | [Composer, slash commands and plan mode](F05-composer.md) | send, drafts, attachments, model pill, slash commands, `/goal`, plan mode, dictation | home and conversation composer | LLM | 25 |
 | F06 | [Agent activity](F06-agent-activity.md) | messages, tool events, thinking, empty state, confirmation mode, stop/resume, errors, branching | `/conversations/<id>` | LLM | 35 |
@@ -246,18 +246,18 @@ How to write and prove new entries: [../mapping.md](../mapping.md).
 | F15 | [Condenser, agent context and verification](F15-agent-behavior-settings.md) | condenser fields, agent context, confirmation mode and critic, their effect on runs | `/settings/condenser`, `/agent-context`, `/verification` | LLM for the effects | 23 |
 | F16 | [Application settings](F16-application-settings.md) | language, theme, analytics, sound, checklist, title model, voice input, git identity | `/settings/app` | LLM for title and git checks | 19 |
 | F17 | [Customize hub and MCP servers](F17-mcp-servers.md) | catalog, install, test, edit, delete, custom servers, agent use | **Customize**, `/mcp` | `uvx`/`npx`; LLM | 30 |
-| F18 | [Skills catalog](F18-skills.md) | facets, search, enable/disable, add skill, Use skill, personal and project skills | `/skills` | `fixture skill`; LLM | 21 |
+| F18 | [Skills catalog](F18-skills.md) | facets, search, enable/disable, add skill, Use skill, personal and project skills | `/skills` | `fixture skill`; LLM | 22 |
 | F19 | [Plugins and plugin launch](F19-plugins.md) | catalog, install, update, uninstall, enable, launch deep links | `/plugins`, `/launch` | LLM | 25 |
 | F20 | [Canvas apps](F20-canvas-apps.md) | install from path or git, enable, update, uninstall, extension pages | `/apps` | none | 24 |
 | F21 | [Automations dashboard and actions](F21-automations-dashboard.md) | cards and list, filters, sort, Run now, enable, export, import, delete, pin | `/automations` | LLM; automation service | 34 |
-| F22 | [Creating automations](F22-automation-creation.md) | templates, setup dialog, custom automations, import | `/automations/templates`, `/automations/new/<id>` | LLM | 28 |
+| F22 | [Creating automations](F22-automation-creation.md) | templates, setup dialog, custom automations, import | `/automations/templates`, `/automations/new/<id>` | LLM | 29 |
 | F23 | [Automation detail, runs and editing](F23-automation-detail.md) | detail page, runs, logs, edit dialog, triggers, debug | `/automations/<id>` | LLM; runs | 39 |
 | F24 | [Automation Git Sync](F24-git-sync.md) | configure, sync cycles, encryption, status | `/automations/git-sync` | `fixture git-repo` | 26 |
-| F25 | [Backends, Cloud and sharing](F25-backends-and-cloud.md) | add, edit, remove and switch backends, per-backend consent, Cloud login, shared pages | backend selector | a second stack; Cloud account (blocked) | 28 |
-| F26 | [Launcher modes, Docker, desktop and library](F26-runtime-variants.md) | launcher flags, partial stacks, LAN bind, Docker, Electron, embeddable library | a terminal | Docker/Electron where available | 30 |
+| F25 | [Backends, Cloud and sharing](F25-backends-and-cloud.md) | add, edit, remove and switch backends, per-backend consent, Cloud login, shared pages | backend selector | a second stack; Cloud account (blocked) | 29 |
+| F26 | [Launcher modes, Docker, desktop and library](F26-runtime-variants.md) | launcher flags, partial stacks, LAN bind, Docker, Electron, embeddable library | a terminal | Docker/Electron where available | 32 |
 | F27 | [Workspace tools](F27-workspace-tools.md) | terminal, browser, planner, task list, usage, `canvas_ui_control` | drawer tabs | LLM | 30 |
 
-27 families, 736 sub-features. `control-openhands map ids` lists every ID with its file.
+27 families, 745 sub-features. `control-openhands map ids` lists every ID with its file.
 
 ### Neighbouring families
 
@@ -276,8 +276,9 @@ Everything else a user can reach is mapped. These are left out on purpose:
 
 - `src/components/features/context-menu`: a shared menu primitive, not a feature of its own. Its behavior is checked through the menus that use it (F04, F07, F21, F27).
 - OpenHands Cloud behavior (Cloud login and device flow, organizations, sharing, task URLs, sandbox pause): needs a Cloud account. The recipes are written up to that point and recorded as `blocked` (for example `F07.cloud-only` and the Cloud rows of F25).
-- Suspended Cloud workspaces (`src/components/features/backends/cloud-organization-boundary.tsx`, added by [#17988](https://github.com/OpenHands/OpenHands/pull/17988)) are not yet live-mapped. The alert needs a real selected Cloud organization whose scoped request receives HTTP 403 with `detail: "Organization is suspended"` or `detail: "User membership is suspended"`; checking recovery also needs another accessible workspace. Desktop/phone alerts, workspace switching and request/backend/organization isolation remain blocked until those genuine states are available. An unrelated 403 is not that prerequisite.
-- `src/components/features/setup-guide`: the enterprise Super Admin setup guide added by [#17969](https://github.com/OpenHands/OpenHands/pull/17969) is not yet live-mapped. It needs an authenticated enterprise Cloud backend with a selected organization whose `/me` permissions include `manage_super_admins`, plus a genuine `/api/admin/setup-state` response with a non-null `guide_org_id`, `guide_dismissed: false`, and at least one unfinished required guide step. A local backend cannot establish those prerequisites. Progress, step destinations, collapse/reopen, server-driven guide removal, progress persistence and desktop/phone layouts remain blocked until an entitled account can drive them; source inspection is not runtime proof.
+- Suspended Cloud workspaces (`src/components/features/backends/cloud-organization-boundary.tsx`, [#17988](https://github.com/OpenHands/OpenHands/pull/17988)): **Mapped prerequisites/local absence:** [`F25.cloud-org-suspended`](F25-backends-and-cloud.md) records the expected alert and the prerequisite; a local backend can check only that the Cloud suspension surface is absent. **Positive paths not live-mapped:** the selected Cloud organization must receive a genuine scoped HTTP 403 with `detail: "Organization is suspended"` or `detail: "User membership is suspended"`; recovery also needs another accessible workspace. Desktop/phone alerts, workspace switching and request/backend/organization isolation remain blocked until those genuine states are available. An unrelated 403 is not that prerequisite.
+- Enterprise Super Admin setup guide (`src/components/features/setup-guide`, [#17969](https://github.com/OpenHands/OpenHands/pull/17969)): **Mapped prerequisites/local absence:** [`F02.super-admin-setup-guide`](F02-app-shell.md) records its prerequisites and the local check for no guide or `/api/admin/setup-state` request. **Positive paths not live-mapped:** an authenticated enterprise Cloud backend must have a selected organization whose `/me` permissions include `manage_super_admins`, plus a genuine `/api/admin/setup-state` response with a non-null `guide_org_id`, `guide_dismissed: false`, and at least one unfinished required guide step. A local backend cannot establish those prerequisites. Progress, step destinations, collapse/reopen, server-driven guide removal, progress persistence and desktop/phone layouts remain blocked until an entitled account can drive them; source inspection is not runtime proof.
+- Setup-guide continuation and Canvas tours ([#18138](https://github.com/OpenHands/OpenHands/pull/18138), `src/components/features/setup-guide/`, `src/components/features/manifest/manifest-setup-dialog.tsx`, `src/hooks/mutation/use-add-mcp-server.ts`) are **not live-mapped**. They share `F02.super-admin-setup-guide`'s genuine Cloud account and setup-state prerequisites above, with the next required step set to `first-automation` or `add-integration`. Verification additionally needs a successful direct automation creation or MCP-server addition and a subsequent server response confirming that step complete; assisted setup and out-of-order or unconfirmed completion have different control flow. The next Canvas step/tour, Cloud-host same-tab invitation handoff with `org` and `setup_tour`, standalone/Electron Start fallback, and tour entry via `setup_tour` remain blocked across desktop/phone and those deployment boundaries. The invitation handoff also needs an accessible enterprise invitation page for the guide organization. No positive recipe is accepted from source or mocked enterprise responses.
 - Locked-to-Cloud deployments: `scripts/static-server.mjs --lock-to-cloud` exists, but `bin/agent-canvas.mjs` does not forward it, so `control-openhands launch` cannot start that mode.
 - Page-local load errors (for example the LLM profiles or apps list failing while the rest of the backend works) need fault injection; stopping a service with `service stop` replaces the whole app with the backend-unavailable screen instead. The pages' empty and error copy is mapped where reachable.
 - Real microphone dictation, native file dialogs outside the browser, and Electron window chrome beyond what F26 drives.
