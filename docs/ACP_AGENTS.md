@@ -105,7 +105,8 @@ Two providers behave differently:
   `Authentication required`. Pi picks its model from whichever provider that
   credential unlocks, so Canvas doesn't preselect one. To route Pi through a
   proxy, declare the provider in Pi's own `models.json`; `ANTHROPIC_BASE_URL`
-  is ignored.
+  is ignored. Pi's key is the same `ANTHROPIC_API_KEY` secret Claude Code
+  reads, and Claude Code then uses it instead of your Claude login.
 - **OpenCode** runs without any credential on OpenCode Zen's free models
   (including its default, `opencode/big-pickle`), so its credential step never
   blocks onboarding. A key or login unlocks the paid models.
