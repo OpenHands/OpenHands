@@ -43,12 +43,23 @@ const {
   mockCreateSecret,
   mockDisplayErrorToast,
   mockUseSettings,
+  mockHasAutomationInterface,
 } = vi.hoisted(() => ({
   mockCreateConversationMutate: vi.fn(),
   mockCreateSecret: vi.fn(),
   mockDisplayErrorToast: vi.fn(),
   mockUseSettings: vi.fn(),
+  mockHasAutomationInterface: vi.fn(() => true),
 }));
+
+vi.mock("#/manifests/automation-interface", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("#/manifests/automation-interface")>();
+  return {
+    ...actual,
+    hasAutomationInterface: () => mockHasAutomationInterface(),
+  };
+});
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -208,6 +219,7 @@ function continueGithubResponderLocally() {
 describe("recommended automations", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockHasAutomationInterface.mockReturnValue(true);
     localStorage.clear();
     __resetActiveStoreForTests();
     setRegisteredBackends([localBackend]);
@@ -1317,5 +1329,22 @@ describe("recommended automations", () => {
       screen.queryByTestId("responder-deployment-modal"),
     ).not.toBeInTheDocument();
     expect(mockCreateSecret).not.toHaveBeenCalled();
+  });
+
+  it("renders nothing when automation interface is absent and does not throw", () => {
+    mockHasAutomationInterface.mockReturnValue(false);
+
+    const { container } = render(
+      <RecommendedAutomationsSection
+        backendKind="cloud"
+        installedServers={[]}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("recommended-automations-section"),
+    ).not.toBeInTheDocument();
+    expect(container).toBeEmptyDOMElement();
   });
 });

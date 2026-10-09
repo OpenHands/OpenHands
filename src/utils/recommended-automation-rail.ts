@@ -2,7 +2,10 @@ import {
   AUTOMATION_CATALOG,
   type RecommendedAutomation,
 } from "@openhands/extensions/automations";
-import { getFeaturedAutomationIds } from "#/manifests/automation-interface";
+import {
+  getFeaturedAutomationIds,
+  hasAutomationInterface,
+} from "#/manifests/automation-interface";
 import { SETUP_REGISTRY } from "#/manifests/manifest-sources";
 import type { Automation } from "#/types/automation";
 
@@ -54,6 +57,7 @@ export function isCatalogAutomationAdded(
 }
 
 function isProvenAutomation(entry: RecommendedAutomation): boolean {
+  if (!hasAutomationInterface()) return false;
   return getFeaturedAutomationIds().includes(entry.id);
 }
 

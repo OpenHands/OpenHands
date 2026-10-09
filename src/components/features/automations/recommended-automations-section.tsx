@@ -24,7 +24,10 @@ import {
   getMarketplaceEntryById,
   isMcpInstallableEntry,
 } from "#/utils/mcp-marketplace-utils";
-import { getFeaturedAutomationIds } from "#/manifests/automation-interface";
+import {
+  getFeaturedAutomationIds,
+  hasAutomationInterface,
+} from "#/manifests/automation-interface";
 import {
   getAutomationIcon,
   getAutomationLaunchPrompt,
@@ -63,6 +66,7 @@ const RECOMMENDED_AUTOMATIONS = getAutomationsByPopularity(AUTOMATION_CATALOG);
 // popularityRank: slack-standup-digest@94 outranks slack-channel-monitor@92
 // yet is Beta.
 function isProvenAutomation(automation: RecommendedAutomation): boolean {
+  if (!hasAutomationInterface()) return false;
   return getFeaturedAutomationIds().includes(automation.id);
 }
 
@@ -313,6 +317,8 @@ export function RecommendedAutomationsSection({
   scrollableGrid = false,
 }: RecommendedAutomationsSectionProps) {
   const { t } = useTranslation("openhands");
+
+  if (!hasAutomationInterface()) return null;
 
   // Only the query narrows the grid. An automation that declares no
   // integration needs nothing connected, and one naming an integration this
