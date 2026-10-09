@@ -269,6 +269,46 @@ describe("validateDocumentChain", () => {
     ]);
   });
 
+  it("accepts a document that spells out its own label to define a section", () => {
+    // Live planners write `### 3.1 Create Endpoint [Req 3.1]`, annotating each
+    // section with the label downstream phases cite. Requirements has no
+    // upstream phase, so treating that self-label as a dependency would mark
+    // every section `not-upstream` and block the checkpoint that confirms the
+    // very document the planner just produced.
+    const documents: DeepPlanDocuments = {
+      requirements: [
+        "# Requirements",
+        "",
+        "### 3.1 Create Endpoint [Req 3.1]",
+        "",
+        "### 3.2 Redirect Endpoint [Req 3.2]",
+      ].join("\n"),
+    };
+
+    const report = validateDocumentChain(documents, "requirements");
+
+    expect(report.ok).toBe(true);
+    expect(report.issues).toEqual([]);
+  });
+
+  it("still reports a downstream citation to a document that cites only itself", () => {
+    // A self-label is not an upstream definition: the database design cannot
+    // resolve `[Req 3.1]` against the requirements' own annotation unless the
+    // heading actually defines section 3.1.
+    const documents: DeepPlanDocuments = {
+      requirements: "## Users [Req 3.1]",
+      database: "## 2.1 Users [Req 3.1]",
+      tasks: "# Tasks",
+    };
+
+    const report = validateDocumentChain(documents, "database");
+
+    expect(report.ok).toBe(false);
+    expect(report.issues).toEqual([
+      { from: "database", ref: "Req 3.1", reason: "dangling" },
+    ]);
+  });
+
   it("reports a citation to an upstream document that has not been produced", () => {
     const documents = validChain();
     // Drop the database document and the downstream chain with it, so only the

@@ -187,6 +187,15 @@ export function validateDocumentChain(
       const ref = `${label} ${section}`;
       const target = DEEP_PLAN_LABEL_TO_PHASE[label];
 
+      // A document citing its own label is spelling out a section it defines
+      // (`### 3.1 Create Endpoint [Req 3.1]`, `## [Req 3.1] Users`), not
+      // depending on an upstream phase. `extractDefinedSections` already takes
+      // the definition from that same heading, so validating the label again
+      // would only re-derive it — and, because requirements has no upstream at
+      // all, every self-label would otherwise read as `not-upstream` and block
+      // the checkpoint meant to confirm the very sections it names.
+      if (target === phase.id) continue;
+
       if (!upstream.has(target)) {
         issues.push({ from: phase.id, ref, reason: "not-upstream" });
         continue;
