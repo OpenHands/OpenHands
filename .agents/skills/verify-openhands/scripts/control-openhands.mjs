@@ -43,6 +43,10 @@ import {
 import { tmuxPathFor } from "./lib/tmux-path.mjs";
 import { browserCallLimit } from "./lib/call-limit.mjs";
 import {
+  DEFAULT_AGENT_PROFILE,
+  agentProfileRepoint,
+} from "./lib/agent-profile-repoint.mjs";
+import {
   PAGE_LIMIT,
   collectEvents,
   countImages,
@@ -1492,6 +1496,30 @@ async function activateProfile(run, name) {
     );
 }
 
+// Onboarding pins the `default` agent profile to the LLM profile it created;
+// `llm preset` moves it to the one it activates (see
+// lib/agent-profile-repoint.mjs). `llm set` leaves it: its throwaway profiles
+// would otherwise become `default`'s and refuse deletion.
+async function repointDefaultAgentProfile(run, target) {
+  const path = `/api/agent-profiles/${DEFAULT_AGENT_PROFILE}`;
+  const detail = await http(run, "GET", path);
+  if (detail.status === 404) return undefined;
+  if (!detail.ok)
+    throw new CliError(
+      `Reading agent profile ${DEFAULT_AGENT_PROFILE} failed: ${detail.status} ${detail.text.slice(0, 300)}`,
+    );
+  const llm = await http(run, "GET", "/api/profiles");
+  const names = (llm.json?.profiles ?? []).map((p) => p.name);
+  const plan = agentProfileRepoint(detail.json?.profile, names, target);
+  if (!plan) return undefined;
+  const saved = await http(run, "POST", path, { body: plan.body });
+  if (!saved.ok)
+    throw new CliError(
+      `Pointing agent profile ${DEFAULT_AGENT_PROFILE} at ${target} failed: ${saved.status} ${saved.text.slice(0, 300)}`,
+    );
+  return { agentProfile: DEFAULT_AGENT_PROFILE, from: plan.from, to: target };
+}
+
 const PRESETS = {
   deepseek: {
     envVar: "DEEPSEEK_API_KEY",
@@ -1571,7 +1599,11 @@ async function cmdLlm({ positional, flags }) {
       created.push(profile.name);
     }
     const active = preset.profiles.find((p) => p.activate);
-    if (active) await activateProfile(run, active.name);
+    let repointed;
+    if (active) {
+      await activateProfile(run, active.name);
+      repointed = await repointDefaultAgentProfile(run, active.name);
+    }
     const settings = await http(run, "GET", "/api/settings");
     out({
       ok: true,
@@ -1579,6 +1611,7 @@ async function cmdLlm({ positional, flags }) {
       profiles: created,
       active: active?.name,
       activeModel: settings.json?.agent_settings?.llm?.model,
+      ...(repointed ? { repointed } : {}),
     });
     return;
   }
@@ -4033,6 +4066,10 @@ set/preset validate with a 1-token completion first (skip with --no-validate).
 Keys are read from an environment variable or file, never from argv.
 'preset deepseek' saves deepseek-flash (deepseek/deepseek-flash, activated) and
 deepseek-pro (deepseek/deepseek-v4-pro). Prefer flash; it is cheaper.
+'preset' also points the 'default' agent profile at deepseek-flash when it
+references another LLM profile that exists, as onboarding leaves it; the output
+then has 'repointed'. A reference to a missing profile (a fresh run's seed),
+named agent profiles and 'set' leave agent profiles as they are.
 
 Examples:
   DEEPSEEK_API_KEY=... control-openhands llm preset deepseek

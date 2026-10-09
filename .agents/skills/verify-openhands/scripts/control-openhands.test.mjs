@@ -36,6 +36,7 @@ import { routePattern } from "./lib/route-pattern.mjs";
 import { resolveTestids } from "./lib/testids.mjs";
 import { tmuxPathFor } from "./lib/tmux-path.mjs";
 import { browserCallLimit } from "./lib/call-limit.mjs";
+import { agentProfileRepoint } from "./lib/agent-profile-repoint.mjs";
 import { MAX_PAGES, collectEvents, countImages } from "./lib/events-paging.mjs";
 import { redactBody, redactUrl } from "./lib/network-bodies.mjs";
 import { buildLocator, parseRole, toCss } from "./lib/selectors.mjs";
@@ -1431,4 +1432,70 @@ test("fixture skill --commit records the project skill once and reports a re-run
   const personal = run(["fixture", "skill", "--name", "qa-p", "--commit"], env);
   assert.equal(personal.status, 2);
   assert.match(personal.json.error, /needs --repo/);
+});
+
+test("llm preset repoints default only off another live LLM profile", () => {
+  const seeded = {
+    id: "a1",
+    name: "default",
+    revision: 3,
+    schema_version: 1,
+    agent_kind: "openhands",
+    llm_profile_ref: "deepseek-chat",
+    enable_sub_agents: true,
+    mcp_server_refs: ["qa_mcp_a"],
+  };
+  const names = ["deepseek-chat", "deepseek-flash", "deepseek-pro"];
+  // Onboarding left default on its own profile: move it, keep every other field.
+  assert.deepEqual(agentProfileRepoint(seeded, names, "deepseek-flash"), {
+    from: "deepseek-chat",
+    body: {
+      schema_version: 1,
+      agent_kind: "openhands",
+      llm_profile_ref: "deepseek-flash",
+      enable_sub_agents: true,
+      mcp_server_refs: ["qa_mcp_a"],
+    },
+  });
+  // Already there, a fresh run's missing `default` ref, or no ref: unchanged.
+  assert.equal(agentProfileRepoint(seeded, names, "deepseek-chat"), null);
+  assert.equal(
+    agentProfileRepoint(
+      { ...seeded, llm_profile_ref: "default" },
+      names,
+      "deepseek-flash",
+    ),
+    null,
+  );
+  assert.equal(
+    agentProfileRepoint(
+      { ...seeded, llm_profile_ref: null },
+      names,
+      "deepseek-flash",
+    ),
+    null,
+  );
+  // An ACP default owns its own model; an older backend has no profile.
+  assert.equal(
+    agentProfileRepoint(
+      { ...seeded, agent_kind: "acp" },
+      names,
+      "deepseek-flash",
+    ),
+    null,
+  );
+  assert.equal(agentProfileRepoint(undefined, names, "deepseek-flash"), null);
+});
+
+test("llm help says when preset repoints the default agent profile", () => {
+  const help = spawnSync(process.execPath, [cli, "help", "llm"], {
+    encoding: "utf8",
+  });
+  assert.equal(help.status, 0);
+  assert.match(
+    help.stdout,
+    /'preset' also points the 'default' agent profile at deepseek-flash/,
+  );
+  assert.match(help.stdout, /and 'set' leave agent profiles as they are/);
+  assert.match(help.stdout, /'repointed'/);
 });
