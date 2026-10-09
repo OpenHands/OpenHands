@@ -7,7 +7,7 @@ composer. From the header a user renames, stops or resumes the runtime, opens
 the skills, hooks and agent-tools dialogs, exports or downloads the
 conversation, jumps to usage and deletes it.
 
-Source: `src/routes/conversation.tsx`, `src/components/features/conversation/`, `src/components/features/conversation-panel/`, `src/components/features/controls/server-status-context-menu.tsx`, `src/hooks/use-conversation-name-context-menu.ts`.
+Source: `src/routes/conversation.tsx`, `src/components/features/conversation/`, `src/components/features/conversation-panel/`, `src/components/features/controls/server-status-context-menu.tsx`, `src/hooks/use-conversation-name-context-menu.ts`, `src/api/agent-server-adapter.ts` (the Hooks dialog's `toHooksResponse`).
 
 ## Sub-features
 

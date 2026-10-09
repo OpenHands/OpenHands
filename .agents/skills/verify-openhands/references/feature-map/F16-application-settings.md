@@ -8,7 +8,7 @@ page mixes two save models: language, analytics, sound, title model and git
 identity wait for **Save Changes** and are stored on the backend; theme,
 checklist and voice input apply instantly and live in this browser only.
 
-Source: `src/routes/app-settings.tsx`, `src/components/features/settings/app-settings/`, `src/components/features/settings/settings-switch.tsx`, `src/themes/color-theme/`, `src/utils/transcription-endpoint-storage.ts`, `src/api/settings-service/settings-service.api.ts`.
+Source: `src/routes/app-settings.tsx`, `src/components/features/settings/app-settings/`, `src/components/features/settings/settings-switch.tsx`, `src/themes/color-theme/`, `src/utils/transcription-endpoint-storage.ts`, `src/api/settings-service/settings-service.api.ts`, `src/services/telemetry.ts`.
 
 ## Sub-features
 

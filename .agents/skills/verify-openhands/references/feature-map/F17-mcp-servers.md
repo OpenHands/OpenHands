@@ -9,7 +9,7 @@ test connections, check each installed server's health, enable or disable,
 edit and delete servers. Enabled servers are offered to every new
 conversation's agent.
 
-Source: `src/routes/extensions-hub.tsx`, `src/routes/mcp.tsx`, `src/components/features/skills/extensions-navigation.tsx`, `src/components/features/skills/extensions-mobile-hub.tsx`, `src/components/features/mcp-page/`, `src/components/features/settings/mcp-settings/mcp-server-form.tsx`, `src/utils/mcp-marketplace-utils.ts`, `src/api/mcp-health/`, `src/utils/mobile-section-nav.ts`.
+Source: `src/routes/extensions-hub.tsx`, `src/routes/mcp.tsx`, `src/components/features/skills/extensions-navigation.tsx`, `src/components/features/skills/extensions-mobile-hub.tsx`, `src/components/features/mcp-page/`, `src/components/features/settings/mcp-settings/mcp-server-form.tsx`, `src/utils/mcp-marketplace-utils.ts`, `src/api/mcp-health/`, `src/hooks/mutation/use-add-mcp-server.ts`, `src/utils/mobile-section-nav.ts`.
 
 ## Sub-features
 
