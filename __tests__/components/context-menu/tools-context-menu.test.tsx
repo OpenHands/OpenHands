@@ -124,3 +124,43 @@ describe("ToolsContextMenu - Show Plugins", () => {
     expect(screen.queryByTestId("show-plugins-button")).not.toBeInTheDocument();
   });
 });
+
+describe("ToolsContextMenu - Submenu viewport placement (#18063)", () => {
+  it("positions the macros submenu inside the viewport near screen edges", async () => {
+    window.innerWidth = 390;
+    window.innerHeight = 844;
+
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: HTMLElement) {
+        if (
+          this.dataset?.testid === "macros-submenu" ||
+          this.firstElementChild?.getAttribute("data-testid") ===
+            "macros-submenu"
+        ) {
+          return DOMRect.fromRect({ x: 0, y: 0, width: 220, height: 200 });
+        }
+        return DOMRect.fromRect({ x: 16, y: 550, width: 194, height: 36 });
+      },
+    );
+
+    render(
+      <ToolsContextMenu
+        onClose={() => {}}
+        onShowSkills={() => {}}
+        onShowPlugins={() => {}}
+        onShowHooks={() => {}}
+        onShowAgentTools={() => {}}
+      />,
+    );
+
+    await userEvent.click(screen.getByTestId("macros-button"));
+
+    const submenu = screen.getByTestId("macros-submenu");
+    const submenuWrapper = submenu.parentElement;
+    expect(submenuWrapper).toHaveClass("visible");
+    expect(submenuWrapper).toHaveStyle({
+      left: "146px",
+      top: "-4px",
+    });
+  });
+});
