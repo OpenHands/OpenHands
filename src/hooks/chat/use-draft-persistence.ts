@@ -100,6 +100,7 @@ export const useDraftPersistence = (
           // Keep draft visible in DOM and mark as restored to prevent overwrite
           hasRestoredRef.current = true;
           setIsRestored(true);
+          element.dispatchEvent(new InputEvent("input", { bubbles: true }));
           return; // Skip normal cleanup - draft is already in correct state
         }
       }
@@ -146,6 +147,7 @@ export const useDraftPersistence = (
           // Seed lastHomeTextRef so an unmount flush without any typing still
           // preserves the restored text rather than clearing sessionStorage.
           lastHomeTextRef.current = draft;
+          element.dispatchEvent(new InputEvent("input", { bubbles: true }));
         }
       } catch {
         // sessionStorage not available
@@ -163,6 +165,7 @@ export const useDraftPersistence = (
     if (draftMessage && getTextContent(element).trim() === "") {
       element.textContent = draftMessage;
       focusContentEditableAtEnd(element);
+      element.dispatchEvent(new InputEvent("input", { bubbles: true }));
     }
 
     hasRestoredRef.current = true;
