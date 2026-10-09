@@ -36,7 +36,9 @@ describe("useAutomationHealth", () => {
   });
 
   it("should return healthy status when backend is available", async () => {
-    vi.mocked(AutomationService.checkHealth).mockResolvedValue({ status: "ok" });
+    vi.mocked(AutomationService.checkHealth).mockResolvedValue({
+      status: "ok",
+    });
 
     const { result } = renderHook(() => useAutomationHealth(), {
       wrapper: createWrapper(),
@@ -63,5 +65,16 @@ describe("useAutomationHealth", () => {
     expect(result.current.data?.message).toBe(
       "Automation backend is not available",
     );
+  });
+
+  // @spec AIA-001 — An absent interface manifest cannot provide a health endpoint.
+  it("does not call the backend when health probing is disabled", () => {
+    const { result } = renderHook(
+      () => useAutomationHealth({ enabled: false }),
+      { wrapper: createWrapper() },
+    );
+
+    expect(result.current.fetchStatus).toBe("idle");
+    expect(AutomationService.checkHealth).not.toHaveBeenCalled();
   });
 });

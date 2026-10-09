@@ -1,0 +1,17 @@
+{
+  "ok": true,
+  "toasts": [
+    {
+      "role": "alert",
+      "text": "Your LLM isn't set up yet, so conversations won't run. Finish setup to get started.\nSet up LLM",
+      "links": []
+    }
+  ],
+  "history": [
+    {
+      "ts": "2026-10-09T01:37:07.914Z",
+      "role": "alert",
+      "text": "Your LLM isn't set up yet, so conversations won't run. Finish setup to get started.\nSet up LLM"
+    }
+  ]
+}

@@ -44,17 +44,25 @@ const mockUseAutomations = vi.fn();
 const mockUseSettings = vi.fn();
 const mockUseLlmConfigured = vi.fn();
 const mockUseLlmProfiles = vi.fn();
+const mockHasAutomationInterface = vi.fn();
+
+vi.mock("#/manifests/automation-interface", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("#/manifests/automation-interface")
+  >()),
+  hasAutomationInterface: () => mockHasAutomationInterface(),
+}));
 
 vi.mock("#/hooks/query/use-paginated-conversations", () => ({
   usePaginatedConversations: () => mockUsePaginatedConversations(),
 }));
 
 vi.mock("#/hooks/query/use-automation-health", () => ({
-  useAutomationHealth: () => mockUseAutomationHealth(),
+  useAutomationHealth: (...args: unknown[]) => mockUseAutomationHealth(...args),
 }));
 
 vi.mock("#/hooks/query/use-automations", () => ({
-  useAutomations: () => mockUseAutomations(),
+  useAutomations: (...args: unknown[]) => mockUseAutomations(...args),
 }));
 
 vi.mock("#/hooks/query/use-settings", () => ({
@@ -95,9 +103,12 @@ function renderChecklist() {
 
 describe("SidebarOnboardingChecklist", () => {
   beforeEach(() => {
+    mockHasAutomationInterface.mockReturnValue(true);
     window.localStorage.clear();
     window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
-    window.localStorage.removeItem(SIDEBAR_ONBOARDING_CHECKLIST_MINIMIZED_STORAGE_KEY);
+    window.localStorage.removeItem(
+      SIDEBAR_ONBOARDING_CHECKLIST_MINIMIZED_STORAGE_KEY,
+    );
     window.localStorage.removeItem(
       SIDEBAR_ONBOARDING_CHECKLIST_CUSTOMIZE_EXPLORED_STORAGE_KEY,
     );
@@ -161,6 +172,27 @@ describe("SidebarOnboardingChecklist", () => {
     expect(
       screen.getByText(I18nKey.SIDEBAR$ONBOARDING_CHECKLIST_JOIN_SLACK),
     ).toBeInTheDocument();
+  });
+
+  // @spec AIA-001 — The checklist must not link to the 404 Automation route.
+  it("omits the schedule task link when the automation interface manifest is absent", () => {
+    mockHasAutomationInterface.mockReturnValue(false);
+
+    renderChecklist();
+
+    expect(
+      screen.queryByTestId("sidebar-onboarding-checklist-item-schedule-task"),
+    ).toBeNull();
+    expect(
+      screen.getByTestId(
+        "sidebar-onboarding-checklist-item-start-conversation",
+      ),
+    ).toBeInTheDocument();
+    expect(mockUseAutomations).toHaveBeenCalledWith({
+      pageSize: 1,
+      enabled: false,
+    });
+    expect(mockUseAutomationHealth).toHaveBeenCalledWith({ enabled: false });
   });
 
   it("marks Join Slack complete after the invite link is clicked", async () => {
@@ -286,7 +318,10 @@ describe("SidebarOnboardingChecklist", () => {
 
   it("hides when collapsed", () => {
     const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
     });
     const navigation: NavigationContextValue = {
       currentPath: "/",

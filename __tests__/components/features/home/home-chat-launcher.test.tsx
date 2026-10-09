@@ -22,6 +22,7 @@ const enqueueHomeTaskPendingMessage = vi.fn();
 const mockDisplayErrorToast = vi.fn();
 const mockUseLlmConfigured = vi.fn();
 const mockUseConversationWorkspace = vi.fn();
+const mockHasAutomationInterface = vi.fn();
 
 let mockImages: File[] = [];
 let mockFiles: File[] = [];
@@ -79,6 +80,13 @@ vi.mock("#/hooks/use-llm-configured", () => ({
 
 vi.mock("#/hooks/query/use-conversation-workspace", () => ({
   useConversationWorkspace: () => mockUseConversationWorkspace(),
+}));
+
+vi.mock("#/manifests/automation-interface", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("#/manifests/automation-interface")
+  >()),
+  hasAutomationInterface: () => mockHasAutomationInterface(),
 }));
 
 vi.mock("#/hooks/use-is-creating-conversation", () => ({
@@ -326,6 +334,7 @@ describe("HomeChatLauncher", () => {
     mockFiles = [];
     mockIsolated = false;
     mockUseActiveBackend.mockReturnValue(localBackend);
+    mockHasAutomationInterface.mockReturnValue(true);
     mockUseLlmConfigured.mockReturnValue({
       isConfigured: true,
       isLoading: false,
@@ -744,11 +753,22 @@ describe("HomeChatLauncher", () => {
     });
   });
 
-  it("always renders the recommended automations rail above pinned activity", () => {
+  it("renders the recommended automations rail when the interface manifest is admitted", () => {
     renderLauncher();
 
     expect(
       screen.getByTestId("recommended-automations-rail"),
     ).toBeInTheDocument();
+  });
+
+  // @spec AIA-001 — Home omits automation surfaces without an admitted interface manifest.
+  it("hides home automation sections when the interface manifest is absent", () => {
+    mockHasAutomationInterface.mockReturnValue(false);
+
+    renderLauncher();
+
+    expect(screen.queryByTestId("recommended-automations-rail")).toBeNull();
+    expect(AutomationService.checkHealth).not.toHaveBeenCalled();
+    expect(mockDisplayErrorToast).not.toHaveBeenCalled();
   });
 });

@@ -35,6 +35,7 @@ import type { PluginSpec } from "#/api/conversation-service/agent-server-convers
 import { PluginPickerModal } from "#/components/features/plugins/plugin-picker-modal";
 import { PluginPickerTrigger } from "#/components/features/plugins/plugin-picker-trigger";
 import { RecommendedAutomationsLauncher } from "#/components/features/automations/recommended-automations-launcher";
+import { hasAutomationInterface } from "#/manifests/automation-interface";
 import { PinnedAutomationsDashboard } from "./featured-automations/pinned-automations-dashboard";
 import { RunningAutomationsList } from "./featured-automations/running-automations-list";
 import { HomeHeaderTitle } from "./home-header/home-header-title";
@@ -327,11 +328,14 @@ export function HomeChatLauncher() {
           />
         </div>
 
-        <div className="mt-8 flex w-full flex-col gap-8">
-          <RecommendedAutomationsLauncher variant="rail" />
-          <PinnedAutomationsDashboard />
-          <RunningAutomationsList />
-        </div>
+        {/* @spec AIA-001 — Home omits automation surfaces without an admitted interface manifest. */}
+        {hasAutomationInterface() && (
+          <div className="mt-8 flex w-full flex-col gap-8">
+            <RecommendedAutomationsLauncher variant="rail" />
+            <PinnedAutomationsDashboard />
+            <RunningAutomationsList />
+          </div>
+        )}
       </div>
 
       {isLocal ? (
