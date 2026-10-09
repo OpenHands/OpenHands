@@ -25,13 +25,14 @@ import {
   normalizeFieldValue,
 } from "#/utils/sdk-settings-schema";
 import {
-  ACP_PROVIDERS,
   ACP_CUSTOM_PRESET_KEY,
   getAcpPreferredDefaultModel,
   getAcpProvider,
+  getAcpProvidersForBackend,
   getAcpProviderSecrets,
   type ACPProviderConfig,
 } from "#/constants/acp-providers";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 import { parseCommand, formatCommand } from "#/utils/acp-command";
 import {
   readProfileScope,
@@ -313,6 +314,9 @@ export function AgentSettingsScreen({
   const { data: schema } = useAgentSettingsSchema(
     settings?.agent_settings_schema,
   );
+  const acpProviders = getAcpProvidersForBackend(
+    useActiveBackend().backend.kind,
+  );
 
   const fields = React.useMemo(
     () => schema?.sections.flatMap((section) => section.fields),
@@ -503,7 +507,7 @@ export function AgentSettingsScreen({
   // stable across the ``isLoading`` early-return below; ``detectPreset`` is a
   // cheap pure lookup.
   const acpPresetForCreds =
-    agentType === "acp" ? detectPreset(commandText, ACP_PROVIDERS) : null;
+    agentType === "acp" ? detectPreset(commandText, acpProviders) : null;
   const acpCredentialForm = useAcpCredentialForm(
     acpPresetForCreds && acpPresetForCreds !== ACP_CUSTOM_PRESET_KEY
       ? acpPresetForCreds
@@ -723,7 +727,7 @@ export function AgentSettingsScreen({
 
   const isAcp = agentType === "acp";
   const commandTokens = parseCommand(commandText);
-  const selectedPreset = detectPreset(commandText, ACP_PROVIDERS);
+  const selectedPreset = detectPreset(commandText, acpProviders);
   const selectedProvider = getAcpProvider(selectedPreset);
   const modelSuggestions = selectedProvider?.available_models ?? [];
   const hasModelSuggestions = modelSuggestions.length > 0;
@@ -736,7 +740,7 @@ export function AgentSettingsScreen({
     !!selectedProvider &&
     commandTokens.join(" ") === selectedProvider.default_command.join(" ");
   const commandPlaceholder =
-    formatCommand(ACP_PROVIDERS[0]?.default_command ?? []) ||
+    formatCommand(acpProviders[0]?.default_command ?? []) ||
     COMMAND_PLACEHOLDER_FALLBACK;
 
   // Assign the control's field builder from the live render state.
@@ -790,7 +794,7 @@ export function AgentSettingsScreen({
           const newType = key as AgentType;
           setAgentType(newType);
           if (newType === "acp" && !commandText) {
-            const preferred = ACP_PROVIDERS[0];
+            const preferred = acpProviders[0];
             if (preferred) {
               setCommandText(formatCommand(preferred.default_command));
               setAcpModel(getAcpPreferredDefaultModel(preferred.key) ?? "");
@@ -1145,7 +1149,7 @@ export function AgentSettingsScreen({
             name="agent-preset"
             label={t(I18nKey.SETTINGS$AGENT_PRESET)}
             items={[
-              ...ACP_PROVIDERS.map((provider) => ({
+              ...acpProviders.map((provider) => ({
                 key: provider.key,
                 label: provider.display_name,
               })),
@@ -1201,8 +1205,8 @@ export function AgentSettingsScreen({
                 // reconciliation. Gated on the *detected preset* actually
                 // changing, so it never clobbers a model the user is editing
                 // within the same provider.
-                const prevPreset = detectPreset(commandText, ACP_PROVIDERS);
-                const nextPreset = detectPreset(nextCommandText, ACP_PROVIDERS);
+                const prevPreset = detectPreset(commandText, acpProviders);
+                const nextPreset = detectPreset(nextCommandText, acpProviders);
                 if (nextPreset !== prevPreset) {
                   setAcpModel(getAcpPreferredDefaultModel(nextPreset) ?? "");
                   setIsCustomAcpModel(false);

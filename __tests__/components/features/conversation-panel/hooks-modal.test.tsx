@@ -34,7 +34,9 @@ vi.mock("react-i18next", async () => {
           HOOKS_MODAL$TYPE: `Type: ${params?.type ?? ""}`,
           HOOKS_MODAL$TIMEOUT: `Timeout: ${params?.timeout ?? 0}s`,
           HOOKS_MODAL$ASYNC: "Async",
-          COMMON$FETCH_ERROR: "Failed to fetch data",
+          HOOKS_MODAL$FETCH_ERROR:
+            "Failed to fetch hooks. Please try again later.",
+          COMMON$FETCH_ERROR: "Failed to fetch skills. Please try again later.",
           CONVERSATION$NO_HOOKS: "No hooks configured",
           BUTTON$REFRESH: "Refresh",
           BUTTON$CLOSE: "Close",
@@ -64,7 +66,10 @@ describe("HooksEmptyState", () => {
 
   it("should render error message when isError is true", () => {
     render(<HooksEmptyState isError={true} />);
-    expect(screen.getByText("Failed to fetch data")).toBeInTheDocument();
+    expect(
+      screen.getByText("Failed to fetch hooks. Please try again later."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/skills/i)).not.toBeInTheDocument();
   });
 });
 
@@ -188,6 +193,113 @@ describe("HookEventItem", () => {
   it("should render async badge for async hooks", () => {
     render(<HookEventItem {...defaultProps} isExpanded={true} />);
     expect(screen.getByText("Async")).toBeInTheDocument();
+  });
+
+  it("should render a prompt hook's prompt instead of an empty box", () => {
+    const promptHookEvent: HookEvent = {
+      event_type: "stop",
+      matchers: [
+        {
+          matcher: "*",
+          hooks: [
+            { type: "prompt", command: "", prompt: "QA_F07 prompt hook" },
+          ],
+        },
+      ],
+    };
+
+    const { container } = render(
+      <HookEventItem
+        {...defaultProps}
+        hookEvent={promptHookEvent}
+        isExpanded={true}
+      />,
+    );
+
+    const preBlocks = container.querySelectorAll("pre");
+    expect(preBlocks).toHaveLength(1);
+    expect(preBlocks[0]).toHaveTextContent("QA_F07 prompt hook");
+    expect(screen.getByText("Type: prompt")).toBeInTheDocument();
+  });
+
+  it("should render an agent hook's system_prompt instead of an empty box", () => {
+    const agentHookEvent: HookEvent = {
+      event_type: "session_start",
+      matchers: [
+        {
+          matcher: "*",
+          hooks: [
+            { type: "agent", command: "", system_prompt: "QA_F07 agent hook" },
+          ],
+        },
+      ],
+    };
+
+    const { container } = render(
+      <HookEventItem
+        {...defaultProps}
+        hookEvent={agentHookEvent}
+        isExpanded={true}
+      />,
+    );
+
+    const preBlocks = container.querySelectorAll("pre");
+    expect(preBlocks).toHaveLength(1);
+    expect(preBlocks[0]).toHaveTextContent("QA_F07 agent hook");
+    expect(screen.getByText("Type: agent")).toBeInTheDocument();
+  });
+
+  it("should not render an empty box when a hook omits its text", () => {
+    const textlessHookEvent: HookEvent = {
+      event_type: "session_start",
+      matchers: [
+        {
+          matcher: "*",
+          hooks: [{ type: "agent", command: "" }],
+        },
+      ],
+    };
+
+    const { container } = render(
+      <HookEventItem
+        {...defaultProps}
+        hookEvent={textlessHookEvent}
+        isExpanded={true}
+      />,
+    );
+
+    expect(container.querySelectorAll("pre")).toHaveLength(0);
+    expect(screen.getByText("Type: agent")).toBeInTheDocument();
+  });
+
+  it("should show each hook's own text in order for a matcher mixing hook types", () => {
+    const mixedHookEvent: HookEvent = {
+      event_type: "stop",
+      matchers: [
+        {
+          matcher: "*",
+          hooks: [
+            { type: "command", command: "echo mixed", timeout: 10 },
+            { type: "prompt", command: "", prompt: "mixed prompt hook" },
+          ],
+        },
+      ],
+    };
+
+    const { container } = render(
+      <HookEventItem
+        {...defaultProps}
+        hookEvent={mixedHookEvent}
+        isExpanded={true}
+      />,
+    );
+
+    const preBlocks = container.querySelectorAll("pre");
+    expect(preBlocks).toHaveLength(2);
+    expect(preBlocks[0]).toHaveTextContent("echo mixed");
+    expect(preBlocks[1]).toHaveTextContent("mixed prompt hook");
+    expect(screen.getByText("Type: command")).toBeInTheDocument();
+    expect(screen.getByText("Type: prompt")).toBeInTheDocument();
   });
 
   it("should render different event types with correct i18n labels", () => {

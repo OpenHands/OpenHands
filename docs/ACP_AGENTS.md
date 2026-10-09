@@ -1,7 +1,7 @@
 # Using ACP agents
 
 Agent Canvas can drive your conversations with the built-in **OpenHands** agent or
-with an external **ACP agent** — Claude Code, Codex, or Gemini CLI. This guide
+with an external **ACP agent** — Claude Code, Codex, Gemini CLI, Pi, or OpenCode. This guide
 explains what ACP agents are, how to onboard one, and how to switch agents or
 models later.
 
@@ -38,11 +38,19 @@ The provider list is sourced from the SDK registry
 [`src/constants/acp-providers.ts`](../src/constants/acp-providers.ts). Adding or
 changing a provider happens upstream in the SDK, not here.
 
-| Provider        | Default command                                |
-| --------------- | ---------------------------------------------- |
-| **Claude Code** | `npx -y @agentclientprotocol/claude-agent-acp` |
-| **Codex**       | `npx -y @agentclientprotocol/codex-acp`        |
-| **Gemini CLI**  | `npx -y @google/gemini-cli --acp`              |
+| Provider        | Default command                                                            |
+| --------------- | -------------------------------------------------------------------------- |
+| **Claude Code** | `npx -y @agentclientprotocol/claude-agent-acp`                             |
+| **Codex**       | `npx -y @agentclientprotocol/codex-acp`                                    |
+| **Gemini CLI**  | `npx -y @google/gemini-cli --acp`                                          |
+| **Pi**          | `npx -y --package=pi-acp --package=@earendil-works/pi-coding-agent pi-acp` |
+| **OpenCode**    | `npx -y opencode-ai acp`                                                   |
+
+Pi and OpenCode are offered on **local** backends only (your machine or a
+self-hosted Agent Server, including Docker); OpenHands Cloud runs only Claude
+Code, Codex, and Gemini CLI, so Canvas hides the other two there. Neither is
+pre-installed in the Agent Server image, so the first conversation downloads the
+CLI through `npx`.
 
 See [Authentication](#authentication) for how each one authenticates.
 
@@ -69,8 +77,11 @@ needed instead.
 | **Claude Code** | A Claude Code login (Pro/Max), from Claude Code's own credential store: the **macOS Keychain**, or `~/.claude/.credentials.json` on Linux | `ANTHROPIC_API_KEY` _(onboarding)_ |
 | **Codex**       | A ChatGPT login (`codex login`) cached at `~/.codex/auth.json`                                                                            | `OPENAI_API_KEY` _(onboarding)_    |
 | **Gemini CLI**  | Your Google login (`gemini`/`gemini --acp`) cached at `~/.gemini/oauth_creds.json`                                                        | `GEMINI_API_KEY` _(onboarding)_    |
+| **Pi**          | Any login or key saved by `pi` (`/login`) in `~/.pi/agent/auth.json` (or `$PI_CODING_AGENT_DIR`)                                          | `ANTHROPIC_API_KEY` _(onboarding)_ |
+| **OpenCode**    | Provider logins saved by `opencode auth login` in `~/.local/share/opencode/auth.json`                                                     | `OPENCODE_API_KEY` _(onboarding)_  |
 
-All three collect an _optional_ API key (+ base URL) in onboarding. As noted
+Each collects an _optional_ API key in onboarding (plus a base URL where the
+provider honours one — Pi and OpenCode do not). As noted
 above, **a subscription / OAuth login takes priority over an API key** — when the
 provider's CLI is signed in, a key set in the environment is not used. Verified
 per provider:
@@ -88,6 +99,18 @@ per provider:
   containers or multiple accounts) and signals the SDK to strip a conflicting
   `ANTHROPIC_API_KEY` / `ANTHROPIC_BASE_URL`.
 
+Two providers behave differently:
+
+- **Pi** needs _some_ credential: with none, the session fails with
+  `Authentication required`. Pi picks its model from whichever provider that
+  credential unlocks, so Canvas doesn't preselect one. To route Pi through a
+  proxy, declare the provider in Pi's own `models.json`; `ANTHROPIC_BASE_URL`
+  is ignored. Pi's key is the same `ANTHROPIC_API_KEY` secret Claude Code
+  reads, and Claude Code then uses it instead of your Claude login.
+- **OpenCode** runs without any credential on OpenCode Zen's free models
+  (including its default, `opencode/big-pickle`), so its credential step never
+  blocks onboarding. A key or login unlocks the paid models.
+
 The one exception is the **base URL** (`*_BASE_URL`): a custom value points the
 CLI at a different endpoint (a proxy or gateway) and _does_ take effect even
 under a login — for Gemini it rides the ACP `gateway` param. It's an advanced
@@ -97,8 +120,8 @@ override, not needed for normal use.
 
 First-time users get a four-step onboarding modal. To onboard an ACP agent:
 
-1. **Choose agent** — pick Claude Code, Codex, or Gemini CLI instead of
-   OpenHands. The choice is saved immediately to your backend's settings.
+1. **Choose agent** — pick Claude Code, Codex, Gemini CLI, Pi, or OpenCode
+   instead of OpenHands. The choice is saved immediately to your backend's settings.
 2. **Check backend** — confirms Agent Canvas can reach the Agent Server.
 3. **Set up credentials** — enter the provider's credentials. Beyond the API
    key (+ optional base URL), this step also collects the credentials a
@@ -108,12 +131,16 @@ First-time users get a four-step onboarding modal. To onboard an ACP agent:
    - **Gemini CLI** — `GOOGLE_APPLICATION_CREDENTIALS_JSON` (Vertex SA / ADC JSON)
      plus `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, and
      `GOOGLE_GENAI_USE_VERTEXAI`.
+   - **Pi** — `PI_AUTH_JSON` (the contents of `~/.pi/agent/auth.json`).
+   - **OpenCode** — `OPENCODE_AUTH_CONTENT` (the contents of
+     `~/.local/share/opencode/auth.json`).
 
    On a **local** backend the step is optional (a host login is reused
    automatically); on a **Docker / cloud** backend it's **required**, because
    there's no host login to fall back on. When the login probe detects an
    existing session, the step shows a "you're already signed in" banner and
-   stays skippable.
+   stays skippable. OpenCode's step is always skippable, since it can run on
+   free models without a credential.
 
 4. **Say hello** — creates your first conversation and closes the modal.
 
@@ -173,8 +200,9 @@ SDK's `acp_file_secrets` defaults then:
   Codex at it;
 - materialise `GOOGLE_APPLICATION_CREDENTIALS_JSON` to a file referenced by
   `GOOGLE_APPLICATION_CREDENTIALS` and route Gemini through Vertex AI;
-- export the rest (`CLAUDE_CODE_OAUTH_TOKEN`, project/location, API keys) as env
-  vars for the CLI.
+- materialise `PI_AUTH_JSON` to `auth.json` under `PI_CODING_AGENT_DIR`;
+- export the rest (`CLAUDE_CODE_OAUTH_TOKEN`, `OPENCODE_AUTH_CONTENT`,
+  project/location, API keys) as env vars for the CLI.
 
 Canvas just sends the secrets — it does **not** hand-roll the file
 materialisation. The `npx -y <pkg>` command is rewritten to the pinned
@@ -218,14 +246,15 @@ grouping isolation is separate (agent-canvas#1016).
 Open **Settings → Agent** at any time:
 
 - **Agent** — switch between **OpenHands** and **ACP**.
-- **Preset** — pick a built-in provider (Claude Code, Codex, Gemini CLI) or
-  **Custom** to point at any other ACP server.
+- **Preset** — pick a built-in provider (Claude Code, Codex, Gemini CLI, and,
+  on a local backend, Pi or OpenCode) or **Custom** to point at any other ACP
+  server.
 - **Command** — the command line used to spawn the subprocess. Selecting a preset
   fills this in; editing it to match another preset re-detects that provider.
   API keys are _not_ entered here — they live in the Secrets panel.
 - **Model** — choose a suggested model for the provider or enter a custom model
   override. Built-in providers save a concrete model rather than leaving it
-  blank.
+  blank — except Pi, which picks its own from the configured credential.
 
 Saving writes an `agent_settings_diff` (`agent_kind`, `acp_server`,
 `acp_command`, `acp_model`) to `PATCH /api/settings`. A running conversation

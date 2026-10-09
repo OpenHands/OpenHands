@@ -31,6 +31,13 @@ function isStepDone(
   return guideSteps[step.completion];
 }
 
+/** The first required step the server does not report as done, if any. */
+export function getNextSetupStep(
+  guideSteps: CloudSetupGuideSteps | null,
+): SuperAdminSetupStep | null {
+  return REQUIRED_STEPS.find((step) => !isStepDone(step, guideSteps)) ?? null;
+}
+
 /**
  * The enterprise Super Admin setup guide for the active cloud backend.
  *
@@ -82,8 +89,7 @@ export function useSuperAdminSetupGuide() {
   const completedCount = REQUIRED_STEPS.filter((step) =>
     isStepDone(step, guideSteps),
   ).length;
-  const nextStep =
-    REQUIRED_STEPS.find((step) => !isStepDone(step, guideSteps)) ?? null;
+  const nextStep = getNextSetupStep(guideSteps);
   const guideOrgId = setupState?.guide_org_id ?? null;
   // Only the first Super Admin's guide has an organization; it stays until dismissed.
   const active = Boolean(guideOrgId) && !setupState?.guide_dismissed;
