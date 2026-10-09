@@ -63,8 +63,9 @@ async function run(plan: ProviderPlan): Promise<boolean> {
   }
 
   // 2) choose-agent step — persist ACP agent settings via the app's diff builder.
-  const diff = buildAcpAgentSettingsDiff(plan.acpServer, { model: plan.model });
+  const diff = buildAcpAgentSettingsDiff(plan.acpServer);
   if (!diff) throw new Error(`no settings diff for ${plan.acpServer}`);
+  diff.acp_model = plan.model;
   if (plan.sessionMode) diff.acp_session_mode = plan.sessionMode;
   await settingsClient.updateSettings({ agent_settings_diff: diff });
   console.log(
@@ -119,7 +120,9 @@ async function main() {
   const args = process.argv.slice(2).filter((a) => a !== "--");
   const plan = args[0] ? getProviderPlan(args[0]) : undefined;
   if (!plan) {
-    console.error(`usage: ... acp-docker-app-e2e.mts -- <codex|claude|gemini>`);
+    console.error(
+      `usage: ... acp-docker-app-e2e.mts -- <codex|claude|gemini|opencode>`,
+    );
     process.exit(2);
   }
   console.log(`App-path e2e against ${BASE} — provider: ${plan.id}`);
