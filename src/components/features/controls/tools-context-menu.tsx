@@ -23,6 +23,7 @@ import { MacrosSubmenu } from "./macros-submenu";
 import { ChatInputProfileMenuContent } from "#/components/features/chat/components/chat-input-profile-picker";
 import { ArchivedDisabledTooltip } from "../context-menu/archived-disabled-tooltip";
 import { useIsArchivedConversation } from "#/hooks/use-is-archived-conversation";
+import { useSubmenuPlacement } from "#/hooks/use-submenu-placement";
 
 interface ToolsContextMenuProps {
   onClose: () => void;
@@ -87,6 +88,30 @@ export function ToolsContextMenu({
 
   const ref = useClickOutsideElement<HTMLUListElement>(handleClose);
 
+  const agentProfileTriggerRef = React.useRef<HTMLDivElement>(null);
+  const agentProfileSubmenuRef = React.useRef<HTMLDivElement>(null);
+  const {
+    style: agentProfileStyle,
+    updatePlacement: updateAgentProfilePlacement,
+  } = useSubmenuPlacement(agentProfileTriggerRef, agentProfileSubmenuRef, {
+    isOpen: activeSubmenu === "agent-profile",
+  });
+
+  const gitTriggerRef = React.useRef<HTMLDivElement>(null);
+  const gitSubmenuRef = React.useRef<HTMLDivElement>(null);
+  const { style: gitStyle, updatePlacement: updateGitPlacement } =
+    useSubmenuPlacement(gitTriggerRef, gitSubmenuRef, {
+      isOpen: activeSubmenu === "git",
+      defaultOffset: { x: 1, y: -6 },
+    });
+
+  const macrosTriggerRef = React.useRef<HTMLDivElement>(null);
+  const macrosSubmenuRef = React.useRef<HTMLDivElement>(null);
+  const { style: macrosStyle, updatePlacement: updateMacrosPlacement } =
+    useSubmenuPlacement(macrosTriggerRef, macrosSubmenuRef, {
+      isOpen: activeSubmenu === "macros",
+    });
+
   return (
     <ContextMenu
       ref={ref}
@@ -101,7 +126,11 @@ export function ToolsContextMenu({
           with it (see ChatInputProfileMenuContent). No archived gating: this
           never renders in a started (archivable) conversation. */}
       {showAgentProfileSwitch && (
-        <div className="relative group/agent-profile">
+        <div
+          ref={agentProfileTriggerRef}
+          onMouseEnter={updateAgentProfilePlacement}
+          className="relative group/agent-profile"
+        >
           <ContextMenuListItem
             testId="switch-agent-profile-button"
             onClick={() => handleSubmenuClick("agent-profile")}
@@ -113,8 +142,10 @@ export function ToolsContextMenu({
             />
           </ContextMenuListItem>
           <div
+            ref={agentProfileSubmenuRef}
+            style={agentProfileStyle}
             className={cn(
-              "absolute left-full top-[-4px] z-60 opacity-0 invisible pointer-events-none transition-all duration-200 ml-px",
+              "absolute left-full top-[-4px] z-60 opacity-0 invisible pointer-events-none transition-opacity duration-200 ml-px",
               "group-hover/agent-profile:opacity-100 group-hover/agent-profile:visible group-hover/agent-profile:pointer-events-auto",
               "hover:opacity-100 hover:visible hover:pointer-events-auto",
               activeSubmenu === "agent-profile" &&
@@ -139,7 +170,11 @@ export function ToolsContextMenu({
 
       {/* Git Tools */}
       {showGitTools && (
-        <div className="relative group/git">
+        <div
+          ref={gitTriggerRef}
+          onMouseEnter={updateGitPlacement}
+          className="relative group/git"
+        >
           <ArchivedDisabledTooltip isDisabled={isArchivedConversation}>
             <ContextMenuListItem
               testId="git-tools-button"
@@ -155,8 +190,10 @@ export function ToolsContextMenu({
           </ArchivedDisabledTooltip>
           {!isArchivedConversation && (
             <div
+              ref={gitSubmenuRef}
+              style={gitStyle}
               className={cn(
-                "absolute left-full top-[-6px] z-60 opacity-0 invisible pointer-events-none transition-all duration-200 ml-px",
+                "absolute left-full top-[-6px] z-60 opacity-0 invisible pointer-events-none transition-opacity duration-200 ml-px",
                 "group-hover/git:opacity-100 group-hover/git:visible group-hover/git:pointer-events-auto",
                 "hover:opacity-100 hover:visible hover:pointer-events-auto",
                 activeSubmenu === "git" &&
@@ -170,7 +207,11 @@ export function ToolsContextMenu({
       )}
 
       {/* Macros */}
-      <div className="relative group/macros">
+      <div
+        ref={macrosTriggerRef}
+        onMouseEnter={updateMacrosPlacement}
+        className="relative group/macros"
+      >
         <ArchivedDisabledTooltip isDisabled={isArchivedConversation}>
           <ContextMenuListItem
             testId="macros-button"
@@ -186,8 +227,10 @@ export function ToolsContextMenu({
         </ArchivedDisabledTooltip>
         {!isArchivedConversation && (
           <div
+            ref={macrosSubmenuRef}
+            style={macrosStyle}
             className={cn(
-              "absolute left-full top-[-4px] z-60 opacity-0 invisible pointer-events-none transition-all duration-200 ml-px",
+              "absolute left-full top-[-4px] z-60 opacity-0 invisible pointer-events-none transition-opacity duration-200 ml-px",
               "group-hover/macros:opacity-100 group-hover/macros:visible group-hover/macros:pointer-events-auto",
               "hover:opacity-100 hover:visible hover:pointer-events-auto",
               activeSubmenu === "macros" &&

@@ -11,8 +11,11 @@ export function clampLeftToViewport(
   left: number,
   width: number,
   gutter = 8,
+  viewportWidth?: number,
 ): number {
-  return Math.max(gutter, Math.min(left, window.innerWidth - gutter - width));
+  const vpWidth =
+    viewportWidth ?? (typeof window !== "undefined" ? window.innerWidth : 1024);
+  return Math.max(gutter, Math.min(left, vpWidth - gutter - width));
 }
 
 /**
