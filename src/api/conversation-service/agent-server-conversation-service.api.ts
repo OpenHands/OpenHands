@@ -34,6 +34,7 @@ import {
   readCloudConversationFile,
   searchCloudConversations,
   updateCloudConversationPublicFlag,
+  updateCloudConversationRepository,
   updateCloudConversationTitle,
 } from "../cloud/conversation-service.api";
 import {
@@ -827,15 +828,34 @@ class AgentServerConversationService {
     conversationId: string,
     repository: string | null,
     branch?: string | null,
-    gitProvider?: string | null,
+    gitProvider?: Provider | null,
   ): Promise<AppConversation> {
+    // Cloud conversations keep the repository on the server, so other
+    // browsers and server features see it. Best effort: an older server can
+    // reject some names (e.g. Azure DevOps org/project/repo), and Connect Repo
+    // must still work, so a failure keeps the local selection only.
+    if (getActiveBackend().backend.kind === "cloud") {
+      try {
+        await updateCloudConversationRepository(
+          conversationId,
+          repository,
+          branch ?? null,
+          gitProvider ?? null,
+        );
+      } catch (error) {
+        console.warn(
+          `Failed to save the repository of conversation ${conversationId}`,
+          error,
+        );
+      }
+    }
     if (repository) {
       const existing = getStoredConversationMetadata(conversationId);
       setStoredConversationMetadata(conversationId, {
         ...(existing ?? {}),
         selected_repository: repository,
         selected_branch: branch ?? null,
-        git_provider: (gitProvider as Provider | null | undefined) ?? null,
+        git_provider: gitProvider ?? null,
       });
     } else {
       removeStoredConversationMetadata(conversationId);

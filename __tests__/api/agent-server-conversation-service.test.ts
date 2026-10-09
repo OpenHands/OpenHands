@@ -1413,6 +1413,69 @@ describe("AgentServerConversationService", () => {
       });
     });
 
+    // Connect Repo on an existing cloud conversation must reach the server, so
+    // other clients and server features see the repository.
+    it("saves a connected repository on the cloud conversation", async () => {
+      // Arrange
+      const requests = captureRequests(
+        ["patch", "get"],
+        [{ id: "conv-cloud-1", selected_repository: "OpenHands/agent-canvas" }],
+      );
+
+      // Act
+      await AgentServerConversationService.updateConversationRepository(
+        "conv-cloud-1",
+        "OpenHands/agent-canvas",
+        "main",
+        "github",
+      );
+
+      // Assert
+      const patch = requests.find((request) => request.method === "PATCH");
+      expect(patch?.url).toBe(
+        `${cloudBackend.host}/api/v1/app-conversations/conv-cloud-1`,
+      );
+      expect(patch?.headers.authorization).toBe("Bearer bearer-token");
+      expect(patch?.body).toEqual({
+        selected_repository: "OpenHands/agent-canvas",
+        selected_branch: "main",
+        git_provider: "github",
+      });
+    });
+
+    // Older servers reject some repository names (e.g. Azure DevOps
+    // org/project/repo). Connect Repo must still work for the user.
+    it("keeps the connected repository when the cloud server rejects it", async () => {
+      // Arrange
+      captureRequests(
+        ["patch"],
+        HttpResponse.json({ detail: "invalid" }, { status: 500 }),
+      );
+      captureRequests(["get"], [{ id: "conv-cloud-1" }]);
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      try {
+        // Act
+        const conversation =
+          await AgentServerConversationService.updateConversationRepository(
+            "conv-cloud-1",
+            "contoso/project/repo",
+            "main",
+            "azure_devops",
+          );
+
+        // Assert
+        expect(warn).toHaveBeenCalled();
+        expect(conversation).toMatchObject({
+          selected_repository: "contoso/project/repo",
+          selected_branch: "main",
+          git_provider: "azure_devops",
+        });
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
     it("routes readConversationFile to the cloud file endpoint with the file_path query param", async () => {
       // Arrange
       const requests = captureRequests(["get"], "# PLAN content");
