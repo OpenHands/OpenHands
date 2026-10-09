@@ -10,6 +10,8 @@ import {
   OPENCODE_MARK_INNER_PATH,
   OPENCODE_MARK_OUTER_PATH,
   OPENCODE_VIEWBOX,
+  PI_MARK_PATH,
+  PI_VIEWBOX,
 } from "#/constants/acp-brand-marks";
 import type { ACPProviderIcon } from "#/constants/acp-providers";
 import { cn } from "#/utils/utils";
@@ -17,7 +19,7 @@ import { cn } from "#/utils/utils";
 /**
  * Icons the conversation chip + onboarding tiles can render. Strictly broader
  * than {@link ACPProviderIcon} — that type covers ACP CLI subprocesses only
- * (Claude Code, Codex, Gemini, generic terminal fallback), whereas this type
+ * (plus the generic terminal fallback), whereas this type
  * additionally includes the native OpenHands harness.
  */
 export type AgentBrandIconKind = "openhands" | ACPProviderIcon;
@@ -106,6 +108,21 @@ export function AgentBrandIcon({
         aria-hidden
       >
         <path fill="currentColor" d={GEMINI_MARK_PATH} />
+      </svg>
+    );
+  }
+  if (kind === "pi") {
+    return (
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox={PI_VIEWBOX}
+        width={size}
+        height={size}
+        className={cn("shrink-0", className)}
+        data-testid={testId ?? "agent-brand-icon-pi"}
+        aria-hidden
+      >
+        <path fill="currentColor" d={PI_MARK_PATH} />
       </svg>
     );
   }

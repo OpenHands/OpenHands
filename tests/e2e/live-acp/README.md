@@ -8,10 +8,9 @@ provider API calls. It's the "it actually works" companion to the unit tests in
 `__tests__/api/agent-server-adapter.test.ts` — those assert the request shape;
 this asserts a real agent reply.
 
-> **Use Canvas's supported Agent Server version** from `config/defaults.json`
-> (currently 1.50.1; minimum 1.47.0). OpenCode first enters the server's
-> `ACPServerKind` in 1.45.0. The historical 1.25.0 result below proves only the
-> off-event-loop LookupSecret fix, not today's Canvas/OpenCode compatibility.
+> **Use the Agent Server version Canvas pins** (`versions.agentServer` in
+> `config/defaults.json`). The 1.25.0 results below predate OpenCode, which
+> needs agent-server 1.45.0 or newer.
 
 It is **not** part of `npm test` (it lives under `tests/`, which Vitest excludes,
 and needs a running container + real host credentials).
@@ -19,12 +18,12 @@ and needs a running container + real host credentials).
 ## Run it
 
 ```bash
-# 1. Agent-server container. Match the current Canvas release's server pin.
+# 1. Agent-server container, at the version Canvas pins.
 #    The Python mount keeps pre-migration conversation state loadable.
 docker run -d --name oh-acp -p 8010:8000 \
   -v oh-acp-data:/workspace \
   -v "$(pwd)/tools:/canvas-tools:ro" -e OH_EXTRA_PYTHON_PATH=/canvas-tools \
-  ghcr.io/openhands/agent-server:1.50.1-python
+  ghcr.io/openhands/agent-server:1.53.0-python
 
 # 2. Run the e2e (all providers, or a subset).
 npx vite-node -c tests/e2e/live-acp/vite-node.config.mts \
@@ -82,11 +81,7 @@ software-agent-sdk#3532; this is why Canvas preselects `gemini-2.5-pro`), and
 - `ACP_E2E_BASE_URL` (default `http://localhost:8010`)
 - `ACP_E2E_SESSION_API_KEY` (optional `X-Session-API-Key` for an authenticated
   Agent Server; never printed)
-- `ACP_E2E_WORKING_DIR_BASE` (default `/workspace/acp-e2e` for the
-  request-builder script and `/workspace/app-e2e` for the app-path script)
 - `ACP_E2E_CODEX_MODEL` / `ACP_E2E_CLAUDE_MODEL` / `ACP_E2E_GEMINI_MODEL` /
   `ACP_E2E_OPENCODE_MODEL`
-- `ACP_E2E_EXPECTED_REPLY` (optional human-readable reply override; defaults to
-  the provider's short smoke-test token)
 - `ACP_E2E_GEMINI_SESSION_MODE` (set `default` to bypass the SDK `yolo` blocker)
 - `GOOGLE_CLOUD_PROJECT` / `GOOGLE_CLOUD_LOCATION` (else read from gcloud / `us-central1`)

@@ -17,6 +17,10 @@ export const GEMINI_MARK_PATH =
   "M12 0C12.904 6.056 17.944 11.096 24 12C17.944 12.904 12.904 17.944 12 24C11.096 17.944 6.056 12.904 0 12C6.056 11.096 11.096 6.056 12 0Z";
 export const GEMINI_VIEWBOX = "0 0 24 24";
 
+export const PI_MARK_PATH =
+  "M420 280H280V140H0V0H420V280ZM560 560H420V280H560V560ZM140 560H0V140H140V280H280V420H140V560Z";
+export const PI_VIEWBOX = "0 0 560 560";
+
 // Adapted from OpenCode's official square logo asset. The outer path is a
 // cut-out ``O``; the inset path is rendered at lower opacity so the mark stays
 // recognisable in both light and dark Canvas themes while inheriting the

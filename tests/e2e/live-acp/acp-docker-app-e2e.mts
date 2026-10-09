@@ -42,12 +42,7 @@ import {
 
 registerDockerBackend();
 
-const WORKING_DIR_BASE =
-  process.env.ACP_E2E_WORKING_DIR_BASE ?? "/workspace/app-e2e";
-const EXPECTED_REPLY = process.env.ACP_E2E_EXPECTED_REPLY;
-
 async function run(plan: ProviderPlan): Promise<boolean> {
-  const expectedReply = EXPECTED_REPLY ?? plan.expectedToken;
   const secrets = plan.collectSecrets();
   if (!secrets) {
     console.log(`⏭️  ${plan.id}: SKIP — credentials not present on host`);
@@ -76,7 +71,6 @@ async function run(plan: ProviderPlan): Promise<boolean> {
   console.log(
     `   PATCHed agent settings: ${JSON.stringify({
       acp_server: diff.acp_server,
-      acp_command: diff.acp_command,
       acp_model: diff.acp_model,
       ...(plan.sessionMode ? { acp_session_mode: plan.sessionMode } : {}),
     })}`,
@@ -84,10 +78,10 @@ async function run(plan: ProviderPlan): Promise<boolean> {
 
   // 3) conversation start — the app's own orchestrator. It re-reads settings +
   //    the saved secret names and emits each as a LookupSecret.
-  const workingDir = `${WORKING_DIR_BASE}/${plan.id}-${Date.now()}`;
+  const workingDir = `/workspace/app-e2e/${plan.id}-${Date.now()}`;
   const payload = (await buildStartConversationRequestWithEncryptedSettings({
     settings: undefined as any, // base settings come from the backend fetch
-    query: `Reply with exactly: ${expectedReply}`,
+    query: `Reply with exactly: ${plan.expectedToken}`,
     workingDir,
   })) as any;
 
@@ -114,11 +108,11 @@ async function run(plan: ProviderPlan): Promise<boolean> {
 
   const status = await pollUntilTerminal(id);
   const reply = await fetchFinalReply(id);
-  const ok = reply.includes(expectedReply);
+  const ok = reply.includes(plan.expectedToken);
   console.log(
     `   status=${status} reply=${JSON.stringify(reply.slice(0, 160))}`,
   );
-  console.log(`   ${ok ? "✅ PASS" : "❌ FAIL"} (expected "${expectedReply}")`);
+  console.log(`   ${ok ? "✅ PASS" : "❌ FAIL"} (expected "${plan.expectedToken}")`);
   return ok;
 }
 

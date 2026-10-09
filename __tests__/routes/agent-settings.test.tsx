@@ -13,6 +13,12 @@ import { SecretsService } from "#/api/secrets-service";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import { Settings } from "#/types/settings";
 import { ACP_PROVIDERS } from "#/constants/acp-providers";
+import {
+  __resetActiveStoreForTests,
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
+import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { parseCommand } from "#/utils/acp-command";
 const CLAUDE_COMMAND = getClientAcpProvider("claude-code")!.default_command;
 const CODEX_COMMAND = getClientAcpProvider("codex")!.default_command;
@@ -315,6 +321,80 @@ describe("AgentSettingsScreen", () => {
       acp_command: "my-custom-acp --flag",
       acp_model: null,
     });
+  });
+
+  it("offers the Pi preset and leaves its model to Pi", async () => {
+    const pi = getClientAcpProvider("pi")!;
+    const user = userEvent.setup();
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: CLAUDE_PROFILE,
+    });
+    await screen.findByTestId("agent-command-input");
+
+    await user.click(screen.getByTestId("agent-preset-selector"));
+    expect(
+      await screen.findByRole("option", { name: "OpenCode" }),
+    ).toBeInTheDocument();
+    await user.click(await screen.findByRole("option", { name: "Pi" }));
+
+    expect(screen.getByTestId("agent-command-input")).toHaveValue(
+      pi.default_command.join(" "),
+    );
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      acp_server: "pi",
+      acp_command: null,
+      acp_model: null,
+    });
+  });
+
+  it("hides the local-only presets on a cloud backend", async () => {
+    __resetActiveStoreForTests();
+    setRegisteredBackends([
+      {
+        id: "cloud-1",
+        name: "Cloud",
+        host: "https://app.example.com",
+        apiKey: "key",
+        kind: "cloud",
+      },
+    ]);
+    setActiveSelection({ backendId: "cloud-1", orgId: null });
+    try {
+      render(
+        <AgentSettingsScreen
+          agentSettingsOverride={CLAUDE_PROFILE}
+          onSaveControlChange={() => {}}
+        />,
+        {
+          wrapper: ({ children }) => (
+            <MemoryRouter>
+              <QueryClientProvider
+                client={
+                  new QueryClient({
+                    defaultOptions: { queries: { retry: false } },
+                  })
+                }
+              >
+                <ActiveBackendProvider>{children}</ActiveBackendProvider>
+              </QueryClientProvider>
+            </MemoryRouter>
+          ),
+        },
+      );
+      await screen.findByTestId("agent-command-input");
+      await userEvent
+        .setup()
+        .click(screen.getByTestId("agent-preset-selector"));
+
+      expect(
+        await screen.findByRole("option", { name: "Codex" }),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("option", { name: "Pi" })).toBeNull();
+      expect(screen.queryByRole("option", { name: "OpenCode" })).toBeNull();
+    } finally {
+      window.localStorage.clear();
+      __resetActiveStoreForTests();
+    }
   });
 
   it("reconciles the model when the command is retyped to a different provider", async () => {

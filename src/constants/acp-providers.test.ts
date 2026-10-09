@@ -4,6 +4,7 @@ import {
   ACP_MANAGED_SENTINEL,
   ACP_PROVIDERS,
   buildAcpAgentSettingsDiff,
+  getAcpProvidersForBackend,
   getAcpProviderSecrets,
   SURFACED_ACP_PROVIDERS,
   resolveEffectiveAcpModel,
@@ -91,13 +92,22 @@ describe("surfaced ACP providers", () => {
     (key) => !SURFACED_ACP_PROVIDERS.includes(key),
   );
 
-  it("surfaces only the four Canvas-approved ACP presets", () => {
+  it("surfaces Claude Code, Codex, Gemini CLI, Pi and OpenCode", () => {
     expect([...SURFACED_ACP_PROVIDERS]).toEqual([
       "claude-code",
       "codex",
       "gemini-cli",
+      "pi",
       "opencode",
     ]);
+  });
+
+  it("offers Pi and OpenCode on local backends only", () => {
+    const keys = (kind: "local" | "cloud") =>
+      getAcpProvidersForBackend(kind).map(({ key }) => key);
+
+    expect(keys("local")).toEqual([...SURFACED_ACP_PROVIDERS]);
+    expect(keys("cloud")).toEqual(["claude-code", "codex", "gemini-cli"]);
   });
 
   it("sources OpenCode's command, default model, and credential from the client registry", () => {
@@ -110,6 +120,7 @@ describe("surfaced ACP providers", () => {
       default_model: client.default_model,
     });
     expect(getAcpProviderSecrets("opencode").map(({ name }) => name)).toEqual([
+      "OPENCODE_AUTH_CONTENT",
       client.api_key_env_var,
     ]);
     expect(buildAcpAgentSettingsDiff("opencode")).toMatchObject({
@@ -134,10 +145,8 @@ describe("surfaced ACP providers", () => {
     });
   });
 
-  it("keeps Kimi and Pi hidden from Canvas", () => {
+  it("keeps Kimi hidden from Canvas", () => {
     expect(SURFACED_ACP_PROVIDERS).not.toContain("kimi-code");
-    expect(SURFACED_ACP_PROVIDERS).not.toContain("pi");
     expect(getAcpProviderSecrets("kimi-code")).toEqual([]);
-    expect(getAcpProviderSecrets("pi")).toEqual([]);
   });
 });
