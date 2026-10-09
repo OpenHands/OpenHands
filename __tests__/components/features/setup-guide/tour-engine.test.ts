@@ -16,6 +16,7 @@ const { drivers } = vi.hoisted(() => ({
   drivers: [] as {
     destroy: ReturnType<typeof vi.fn>;
     moveTo: ReturnType<typeof vi.fn>;
+    config: Config;
   }[],
 }));
 
@@ -29,6 +30,7 @@ vi.mock("driver.js", () => ({
       moveNext: vi.fn(),
       movePrevious: vi.fn(),
       destroy: vi.fn(() => config.onDestroyed?.(undefined, {}, {} as never)),
+      config,
     };
     drivers.push(instance);
     return instance;
@@ -132,6 +134,37 @@ describe("startGuidedTour", () => {
     // Assert
     expect(afterOtherClick).toBe(0);
     await waitFor(() => expect(drivers[0].moveTo).toHaveBeenCalledWith(1));
+  });
+
+  it("hides the popover footer only on a stop that asks for it", async () => {
+    // Arrange
+    const renderPopover = () => {
+      const popover = {
+        nextButton: document.createElement("button"),
+        footer: document.createElement("div"),
+      };
+      drivers[0].config.onPopoverRender?.(popover as never, {} as never);
+      return popover;
+    };
+    await startGuidedTour(
+      tour(
+        stop({ id: "pick", advanceOnClick: "#card", hideFooter: true }),
+        stop({ id: "form", anchor: "#form" }),
+      ),
+      NAV,
+      LABELS,
+    );
+    await wait(60);
+
+    // Act
+    const first = renderPopover();
+    document.getElementById("card")!.click();
+    await waitFor(() => expect(drivers[0].moveTo).toHaveBeenCalledWith(1));
+    const second = renderPopover();
+
+    // Assert
+    expect(first.footer.style.display).toBe("none");
+    expect(second.footer.style.display).toBe("");
   });
 
   it("keeps the page usable while an interactive stop is shown", async () => {

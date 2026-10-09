@@ -14,6 +14,10 @@ import {
   type NavigationContextValue,
 } from "#/context/navigation-context";
 import { BackendFormModal } from "#/components/features/backends/backend-form-modal";
+import {
+  MODAL_MAX_WIDTH_VIEWPORT,
+  MODAL_WIDTH_CLASS,
+} from "#/components/shared/modals/modal-body";
 
 const getServerInfoMock = vi.hoisted(() => vi.fn());
 const getSettingsMock = vi.hoisted(() => vi.fn().mockResolvedValue({}));
@@ -82,6 +86,43 @@ afterEach(() => {
 });
 
 describe("BackendFormModal – edit mode (BackendForm entry point)", () => {
+  it("bounds the edit dialog to the viewport with its close control outside the scrollable form", () => {
+    renderWithProviders(
+      <BackendFormModal
+        mode="edit"
+        backend={{
+          id: "seeded-id",
+          name: "My Server",
+          host: "http://localhost:9000",
+          apiKey: "",
+          kind: "local",
+        }}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const dialog = screen.getByTestId("edit-backend-modal");
+    expect(dialog).toHaveClass(
+      MODAL_WIDTH_CLASS.md,
+      MODAL_MAX_WIDTH_VIEWPORT,
+      "max-h-[92dvh]",
+    );
+
+    const scrollRegion = screen
+      .getByTestId("edit-backend-form")
+      .closest(".overflow-y-auto");
+    expect(scrollRegion).toHaveClass("min-h-0");
+    expect(scrollRegion).toContainElement(
+      screen.getByTestId("edit-backend-cancel"),
+    );
+    expect(scrollRegion).toContainElement(
+      screen.getByTestId("edit-backend-submit"),
+    );
+    expect(scrollRegion).not.toContainElement(
+      screen.getByTestId("edit-backend-close"),
+    );
+  });
+
   it("pre-fills fields with the backend data passed as prop", () => {
     renderWithProviders(
       <BackendFormModal

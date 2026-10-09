@@ -291,6 +291,12 @@ export async function startGuidedTour(
       // Completion and clicks are event-driven on these stops.
       // eslint-disable-next-line no-param-reassign -- driver.js owns this node
       popover.nextButton.style.display = isWaiting(stops[index]) ? "none" : "";
+      // A per-step `showProgress: false` falls back to the tour-wide value in
+      // driver.js, so the footer is hidden here instead.
+      if (stops[index]?.hideFooter) {
+        // eslint-disable-next-line no-param-reassign -- driver.js owns this node
+        popover.footer.style.display = "none";
+      }
     },
     onNextClick: async (_el, _step, { driver: instanceApi }) => {
       const current = stops[index];
