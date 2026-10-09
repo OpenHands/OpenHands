@@ -27,6 +27,7 @@ interface ScreenProps {
 
 const formState = vi.hoisted(() => ({
   backendKind: "local",
+  backendId: "local-backend",
   /** What the user changed in the form, as the coerced `llm` payload. */
   dirtyLlm: {} as Record<string, unknown>,
   view: "all" as "basic" | "advanced" | "all",
@@ -78,7 +79,9 @@ LLM_SCHEMA.current = {
 };
 
 vi.mock("#/contexts/active-backend-context", () => ({
-  useActiveBackend: () => ({ backend: { kind: formState.backendKind } }),
+  useActiveBackend: () => ({
+    backend: { kind: formState.backendKind, id: formState.backendId },
+  }),
 }));
 
 vi.mock("#/api/profiles-service/profiles-service.api", () => ({
@@ -187,6 +190,7 @@ describe("SetupLlmStep", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     formState.backendKind = "local";
+    formState.backendId = "local-backend";
     formState.dirtyLlm = {};
     formState.view = "all";
     formState.screenProps = undefined;
@@ -298,6 +302,31 @@ describe("SetupLlmStep", () => {
     expect(saveProfile).toHaveBeenCalledWith("gpt-4o-mini", {
       llm: { ...API_KEY_PROFILE_DEFAULTS, model: "openai/gpt-4o-mini" },
       include_secrets: true,
+    });
+  });
+
+  it("waits for a backend, then fills the form from that backend's active profile", async () => {
+    // Public-mode onboarding mounts this step before the backend is added.
+    formState.backendId = "no-backend";
+    givenActiveProfile("previous", {
+      model: "openai/previous-model",
+      base_url: "http://localhost:19118/v1",
+    });
+    const { rerender } = renderWithProviders(
+      <SetupLlmStep onBack={vi.fn()} onNext={vi.fn()} />,
+    );
+
+    expect(screen.queryByTestId("llm-settings-screen")).toBeNull();
+    expect(screen.getByTestId("onboarding-llm-next")).toBeDisabled();
+    expect(listProfiles).not.toHaveBeenCalled();
+
+    formState.backendId = "local-backend";
+    rerender(<SetupLlmStep onBack={vi.fn()} onNext={vi.fn()} />);
+
+    await screen.findByTestId("llm-settings-screen");
+    expect(getProfile).toHaveBeenCalledWith("previous", "encrypted");
+    expect(formState.screenProps?.initialValueOverrides).toMatchObject({
+      "llm.base_url": "http://localhost:19118/v1",
     });
   });
 

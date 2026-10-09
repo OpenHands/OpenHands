@@ -9,6 +9,7 @@ import {
   buildProfileLlmConfig,
   profileConfigToFormValues,
 } from "#/components/features/settings/llm-profiles/llm-profile-form";
+import { isNoBackend } from "#/api/backend-registry/active-store";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useSaveLlmProfile } from "#/hooks/mutation/use-save-llm-profile";
 import { useActivateLlmProfile } from "#/hooks/mutation/use-activate-llm-profile";
@@ -53,12 +54,19 @@ interface ProfileSeed {
 /**
  * The profile the local LLM step edits: the active LLM profile, or a fresh one
  * when none is active. Raw LLM settings are never the source. The seed is
- * taken once, when the profile list, the profile and the schema have loaded,
- * because the embedded form reads its initial values only when it mounts.
+ * taken once per backend, when the profile list, the profile and the schema
+ * have loaded, because the embedded form reads its initial values only when
+ * it mounts. Onboarding mounts this step before a public-mode user adds the
+ * backend, so there is no seed until a backend exists.
  */
-function useActiveProfileSeed(enabled: boolean): ProfileSeed | null {
+function useActiveProfileSeed(isLocalBackend: boolean): ProfileSeed | null {
   const { backend, orgId } = useActiveBackend();
-  const [seed, setSeed] = React.useState<ProfileSeed | null>(null);
+  const enabled = isLocalBackend && !isNoBackend(backend);
+  const [seedState, setSeedState] = React.useState<{
+    backendId: string;
+    seed: ProfileSeed;
+  } | null>(null);
+  const seed = seedState?.backendId === backend.id ? seedState.seed : null;
   const profiles = useLlmProfiles({ enabled });
   const activeName = profiles.data?.active_profile;
   const activeProfileName =
@@ -107,13 +115,17 @@ function useActiveProfileSeed(enabled: boolean): ProfileSeed | null {
     // An unreadable active profile also starts a fresh one: the form then shows
     // no key, so the user can see that one is needed.
     const baseConfig = activeConfig.data ?? {};
-    setSeed({
-      baseConfig,
-      initialValues: profileConfigToFormValues(schema, baseConfig),
+    setSeedState({
+      backendId: backend.id,
+      seed: {
+        baseConfig,
+        initialValues: profileConfigToFormValues(schema, baseConfig),
+      },
     });
   }, [
     enabled,
     seed,
+    backend.id,
     isProfileListSettled,
     isActiveConfigSettled,
     isSchemaSettled,
@@ -307,7 +319,7 @@ export function SetupLlmStep({ onBack, onNext }: SetupLlmStepProps) {
           variant="primary"
           isDisabled={
             !isDefaultModelReady ||
-            (isLocalBackend && !saveControl) ||
+            (isLocalBackend && (!profileSeed || !saveControl)) ||
             (saveControl?.isSaving ?? false) ||
             isFinalizing
           }
