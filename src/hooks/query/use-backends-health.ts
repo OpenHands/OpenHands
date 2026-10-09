@@ -23,10 +23,14 @@ import {
 } from "#/api/backend-registry/health-store";
 import { MAX_CONSECUTIVE_FAILURES } from "#/api/backend-registry/health-storage";
 
-// 30s: each tick costs two sequential requests per backend (settings +
+// 30s: each local tick costs two sequential requests per backend (settings +
 // server_info), which on slow links measurably competes with conversation
 // traffic for the browser's per-origin HTTP/1.1 connection pool.
 const REFRESH_INTERVAL_MS = 30000;
+// Cloud health probes hit app-server auth/org endpoints that are shared with the
+// main UI. They do not need local-runtime-level freshness, and a slower cadence
+// avoids competing with conversation, sandbox, and repository requests.
+const CLOUD_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 const PROBE_TIMEOUT_MS = 4000;
 export { INVALID_BACKEND_API_KEY_ERROR } from "#/api/agent-server-compatibility";
 export const MISSING_BACKEND_API_KEY_ERROR = "API key required";
@@ -221,6 +225,8 @@ export function useBackendsHealth(
       const entry = healthMap[b.id];
       const hasMissingCloudApiKey = hasMissingBackendApiKey(b);
       const isDisabled = entry?.disabled === true;
+      const refreshInterval =
+        b.kind === "cloud" ? CLOUD_REFRESH_INTERVAL_MS : REFRESH_INTERVAL_MS;
       const shouldReprobeStaleCloudNetworkError =
         isDisabled &&
         b.kind === "cloud" &&
@@ -252,15 +258,17 @@ export function useBackendsHealth(
         refetchInterval:
           isDisabled || hasMissingCloudApiKey
             ? (false as const)
-            : REFRESH_INTERVAL_MS,
+            : refreshInterval,
         refetchIntervalInBackground: false,
         refetchOnMount: isDisabled && probeDisabledOnce ? "always" : true,
-        refetchOnReconnect: !isDisabled && !hasMissingCloudApiKey,
-        refetchOnWindowFocus: !isDisabled && !hasMissingCloudApiKey,
+        refetchOnReconnect:
+          b.kind !== "cloud" && !isDisabled && !hasMissingCloudApiKey,
+        refetchOnWindowFocus:
+          b.kind !== "cloud" && !isDisabled && !hasMissingCloudApiKey,
         retry: false,
         // Keep the previous verdict visible while the next probe is in
         // flight so the indicator doesn't flicker on routine polling.
-        staleTime: isDisabled ? 0 : REFRESH_INTERVAL_MS,
+        staleTime: isDisabled ? 0 : refreshInterval,
         meta: { disableToast: true },
       };
     }),

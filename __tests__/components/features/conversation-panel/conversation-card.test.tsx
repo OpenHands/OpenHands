@@ -24,6 +24,7 @@ import {
 import type { Backend } from "#/api/backend-registry/types";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { useFreeModelsStore } from "#/stores/free-models-store";
+import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 
 // We'll use the actual i18next implementation but override the translation function
 
@@ -55,6 +56,7 @@ vi.mock("react-i18next", async () => {
 vi.mock("#/hooks/use-tracking", () => ({
   useTracking: () => ({
     trackDownloadVsCodeButtonClicked: vi.fn(),
+    trackDownloadTrajectoryButtonClicked: vi.fn(),
   }),
 }));
 
@@ -153,9 +155,9 @@ describe("ConversationCard", () => {
     const branch = screen.getByTestId("conversation-card-selected-branch");
     const tag = screen.getByTestId("conversation-card-tag-chip");
 
-    expect(repo).toHaveClass("bg-[var(--oh-surface-raised)]");
-    expect(branch).toHaveClass("bg-[var(--oh-surface-raised)]");
-    expect(tag).toHaveClass("bg-[var(--oh-surface-raised)]");
+    expect(repo).toHaveClass("bg-surface-raised");
+    expect(branch).toHaveClass("bg-surface-raised");
+    expect(tag).toHaveClass("bg-surface-raised");
 
     // Identical pill look. The one intentional difference is flex-shrink:
     // repo and branch share a single overflow-hidden row, so they must shrink
@@ -365,6 +367,29 @@ describe("ConversationCard", () => {
     expect(onContextMenuToggle).toHaveBeenCalledWith(false);
   });
 
+  it("closes the context menu with Escape and returns focus to its trigger", async () => {
+    const user = userEvent.setup();
+    const onContextMenuToggle = vi.fn();
+    renderWithProviders(
+      <ConversationCard
+        onDelete={onDelete}
+        onChangeTitle={onChangeTitle}
+        title="Conversation 1"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        contextMenuOpen
+        onContextMenuToggle={onContextMenuToggle}
+      />,
+    );
+    const menu = screen.getByTestId("context-menu");
+    within(menu).getByTestId("delete-button").focus();
+
+    await user.keyboard("{Escape}");
+
+    expect(onContextMenuToggle).toHaveBeenCalledWith(false);
+    expect(screen.getByTestId("ellipsis-button")).toHaveFocus();
+  });
+
   it("should call onDelete when the delete button is clicked", async () => {
     const user = userEvent.setup();
     const onContextMenuToggle = vi.fn();
@@ -411,6 +436,36 @@ describe("ConversationCard", () => {
 
     expect(onArchive).toHaveBeenCalled();
     expect(onContextMenuToggle).toHaveBeenCalledWith(false);
+  });
+
+  it("closes the context menu when downloading the conversation fails", async () => {
+    const user = userEvent.setup();
+    const onContextMenuToggle = vi.fn();
+    vi.spyOn(
+      AgentServerConversationService,
+      "downloadConversation",
+    ).mockRejectedValue(new Error("HTTP request failed (502 Bad Gateway)"));
+    renderWithProviders(
+      <ConversationCard
+        conversationId="conv-1"
+        onDelete={onDelete}
+        title="Conversation 1"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        contextMenuOpen
+        onContextMenuToggle={onContextMenuToggle}
+      />,
+    );
+
+    await user.click(
+      within(screen.getByTestId("context-menu")).getByTestId(
+        "download-trajectory-button",
+      ),
+    );
+
+    await vi.waitFor(() =>
+      expect(onContextMenuToggle).toHaveBeenCalledWith(false),
+    );
   });
 
   test("clicking the selectedRepository should not trigger the onClick handler", async () => {
@@ -754,9 +809,9 @@ describe("ConversationCard", () => {
   describe("Tag chips", () => {
     // Tag chips surface the agent-server's server-side conversation tags
     // (e.g. ``origin=slack`` stamped by an automation) and are gated by the
-    // conversation panel's "Tags" toggle (``showTags``). Chip labels are
-    // value-only; the full ``key: value`` lives in the chip tooltip.
-    it("renders non-reserved tags as value-only chips when showTags is on", () => {
+    // conversation panel's "Tags" toggle (``showTags``). Chips show a friendly
+    // ``key: value`` pair, with the full pair retained in the tooltip.
+    it("renders friendly key/value chips in priority and alphabetical order", () => {
       renderWithProviders(
         <ConversationCard
           title="Conversation 1"
@@ -770,10 +825,9 @@ describe("ConversationCard", () => {
       const chips = screen.getAllByTestId("conversation-card-tag-chip");
       // ``origin`` is a priority key, so it leads; remaining keys sort A–Z.
       expect(chips).toHaveLength(2);
-      expect(chips[0]).toHaveTextContent("slack");
-      expect(chips[0].getAttribute("title")).toMatch(/: slack$/);
-      expect(chips[0].getAttribute("title")).not.toContain("origin");
-      expect(chips[1]).toHaveTextContent("alice");
+      expect(chips[0]).toHaveTextContent("Origin: slack");
+      expect(chips[0]).toHaveAttribute("title", "Origin: slack");
+      expect(chips[1]).toHaveTextContent("Owner: alice");
       expect(chips[1]).toHaveAttribute("title", "Owner: alice");
       expect(
         within(chips[0]).getByTestId("conversation-card-tag-chip-icon"),
@@ -809,9 +863,8 @@ describe("ConversationCard", () => {
 
       const chips = screen.getAllByTestId("conversation-card-tag-chip");
       expect(chips).toHaveLength(1);
-      expect(chips[0]).toHaveTextContent("review");
-      expect(chips[0].getAttribute("title")).toMatch(/: review$/);
-      expect(chips[0].getAttribute("title")).not.toContain("origin");
+      expect(chips[0]).toHaveTextContent("Origin: review");
+      expect(chips[0]).toHaveAttribute("title", "Origin: review");
     });
 
     it("hides every automation provenance chip", () => {
@@ -922,7 +975,7 @@ describe("ConversationCard", () => {
       );
 
       const chip = screen.getByTestId("conversation-card-tag-chip");
-      expect(chip).toHaveTextContent("abcdefghijklm…");
+      expect(chip).toHaveTextContent("Token: abcdefghijklm…");
       expect(chip).toHaveAttribute("title", `Token: ${longValue}`);
     });
 

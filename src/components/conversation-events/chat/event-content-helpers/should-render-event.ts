@@ -42,6 +42,14 @@ const isGoalLoopReprompt = (event: MessageEvent): boolean => {
   return GOAL_REPROMPT_PREFIXES.some((prefix) => text.startsWith(prefix));
 };
 
+// SDK empty-response nudge (`_send_corrective_nudge`); keep in sync with the SDK.
+const CORRECTIVE_NUDGE_PREFIX =
+  "Your last response did not include a function call or a message.";
+
+export const isCorrectiveNudge = (event: MessageEvent): boolean =>
+  event.source === "environment" &&
+  (userMessageText(event)?.startsWith(CORRECTIVE_NUDGE_PREFIX) ?? false);
+
 // The frontend posts the outcome of a `launch_child_conversation` call back as
 // a `user` message because client tools have no result channel (see
 // `services/child-conversation-launch.ts`). It is a JSON payload addressed to
@@ -92,8 +100,12 @@ export const shouldRenderEvent = (event: OpenHandsEvent) => {
     // Successful model switches are rendered through ModelMessages so they
     // look identical to `/model <profile>` confirmations. Failed switches
     // still render as observations so the error remains visible in chat.
+    // Same treatment for the router-driven classifier switch — its success
+    // path produces the same inline "Switched to" message via the
+    // model-store seam, so it must not render as a raw observation card.
     if (
-      event.observation.kind === "SwitchLLMObservation" &&
+      (event.observation.kind === "SwitchLLMObservation" ||
+        event.observation.kind === "ClassifyAndSwitchLLMObservation") &&
       !event.observation.is_error
     ) {
       return false;

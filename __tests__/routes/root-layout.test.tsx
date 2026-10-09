@@ -1,9 +1,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { type ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRoutesStub, data, Link } from "react-router";
 import MainApp, { ErrorBoundary } from "#/routes/root-layout";
+import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { I18nKey } from "#/i18n/declaration";
 
 const useConfigMock = vi.fn();
@@ -14,6 +15,7 @@ const migrateEnabledSkillsMock = vi.fn();
 const syncTelemetryConsentMock = vi.fn();
 const syncAutomationTelemetryConsentMock = vi.fn();
 const telemetryIdentityMock = vi.fn();
+const syncDocumentLanguageMock = vi.fn();
 
 vi.mock("#/hooks/query/use-config", () => ({
   useConfig: () => useConfigMock(),
@@ -37,6 +39,10 @@ vi.mock("#/hooks/use-sync-automation-telemetry-consent", () => ({
 
 vi.mock("#/hooks/use-telemetry-identity", () => ({
   useTelemetryIdentity: () => telemetryIdentityMock(),
+}));
+
+vi.mock("#/hooks/use-sync-document-language", () => ({
+  useSyncDocumentLanguage: () => syncDocumentLanguageMock(),
 }));
 
 vi.mock("#/hooks/use-ensure-active-profile", () => ({
@@ -148,7 +154,9 @@ function renderMainApp(path = "/") {
   const queryClient = new QueryClient();
   return render(
     <QueryClientProvider client={queryClient}>
-      <RouterStub initialEntries={[path]} />
+      <ActiveBackendProvider>
+        <RouterStub initialEntries={[path]} />
+      </ActiveBackendProvider>
     </QueryClientProvider>,
   );
 }
@@ -193,7 +201,9 @@ describe("root layout", () => {
 
     render(
       <QueryClientProvider client={new QueryClient()}>
-        <RouterStub initialEntries={["/"]} />
+        <ActiveBackendProvider>
+          <RouterStub initialEntries={["/"]} />
+        </ActiveBackendProvider>
       </QueryClientProvider>,
     );
 
@@ -231,7 +241,9 @@ describe("root layout", () => {
     const classNames = paths.map((path) => {
       const { unmount } = render(
         <QueryClientProvider client={new QueryClient()}>
-          <RouterStub initialEntries={[path]} />
+          <ActiveBackendProvider>
+            <RouterStub initialEntries={[path]} />
+          </ActiveBackendProvider>
         </QueryClientProvider>,
       );
       const { className } = screen.getByTestId("root-layout");
@@ -251,6 +263,7 @@ describe("root layout", () => {
     expect(syncAutomationTelemetryConsentMock).toHaveBeenCalledOnce();
     expect(telemetryIdentityMock).toHaveBeenCalledOnce();
     expect(ensureActiveProfileMock).toHaveBeenCalledOnce();
+    expect(syncDocumentLanguageMock).toHaveBeenCalledOnce();
     expect(document.title).toBe("OpenHands");
     expect(
       await screen.findByTestId("environment-switch-overlay"),
@@ -382,6 +395,113 @@ describe("root layout", () => {
 
     expect(await screen.findByTestId("command-menu")).toBeInTheDocument();
     expect(screen.queryByTestId("alert-banner")).not.toBeInTheDocument();
+  });
+
+  describe("macOS desktop title bar", () => {
+    afterEach(() => {
+      delete window.desktopShell;
+    });
+
+    it("reserves a draggable band for the traffic lights on the macOS desktop app", () => {
+      window.desktopShell = { platform: "darwin" };
+
+      renderMainApp();
+
+      expect(screen.getByTestId("titlebar-drag-region")).toHaveAttribute(
+        "aria-hidden",
+        "true",
+      );
+      expect(screen.getByTestId("root-layout")).toHaveClass("pt-7");
+    });
+
+    it("adds no band in a browser tab, where the shell owns no window chrome", () => {
+      renderMainApp();
+
+      expect(
+        screen.queryByTestId("titlebar-drag-region"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("root-layout")).not.toHaveClass("pt-7");
+    });
+
+    it.each(["win32", "linux"])(
+      "adds no band on %s, which keeps the native title bar",
+      (platform) => {
+        window.desktopShell = { platform };
+
+        renderMainApp();
+
+        expect(
+          screen.queryByTestId("titlebar-drag-region"),
+        ).not.toBeInTheDocument();
+        expect(screen.getByTestId("root-layout")).not.toHaveClass("pt-7");
+      },
+    );
+
+    it("keeps a drag band on the loading screen, before config resolves", () => {
+      window.desktopShell = { platform: "darwin" };
+      useConfigMock.mockReturnValue({ isLoading: true, data: null });
+
+      renderMainApp();
+
+      expect(screen.getByTestId("titlebar-drag-region")).toBeInTheDocument();
+    });
+
+    it("keeps the band and the inset on the route error screen", async () => {
+      window.desktopShell = { platform: "darwin" };
+
+      renderRouteError(new Error("Kaboom"));
+
+      expect(await screen.findByText("Kaboom")).toBeInTheDocument();
+      expect(
+        screen.getByTestId("titlebar-drag-region").parentElement,
+      ).toHaveClass("pt-7");
+    });
+
+    it("drops the band once the window goes fullscreen, where macOS hides the traffic lights", async () => {
+      let isFullScreen = false;
+      let emit: ((value: boolean) => void) | undefined;
+      window.desktopShell = {
+        platform: "darwin",
+        isFullScreen: () => isFullScreen,
+        onFullScreenChange: (cb) => {
+          emit = (value) => {
+            isFullScreen = value;
+            cb(value);
+          };
+          return () => {};
+        },
+      };
+
+      renderMainApp();
+      expect(screen.getByTestId("titlebar-drag-region")).toBeInTheDocument();
+
+      await act(async () => emit?.(true));
+
+      expect(
+        screen.queryByTestId("titlebar-drag-region"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("root-layout")).not.toHaveClass("pt-7");
+
+      await act(async () => emit?.(false));
+
+      expect(screen.getByTestId("titlebar-drag-region")).toBeInTheDocument();
+    });
+
+    it("never renders the band when the window is already fullscreen on load, as after a reload", () => {
+      window.desktopShell = {
+        platform: "darwin",
+        isFullScreen: () => true,
+        onFullScreenChange: () => () => {},
+      };
+
+      renderMainApp();
+
+      // Checked on the first commit: a band that is dropped later still flashes.
+      expect(
+        screen.queryByTestId("titlebar-drag-region"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("root-layout")).not.toHaveClass("pt-7");
+    });
   });
 });
 

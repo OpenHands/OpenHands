@@ -15,7 +15,7 @@ does not prove the last two. A working new behavior with missing intent evidence
 is still an unresolved finding.
 
 Use [verify-openhands](../verify-openhands/SKILL.md) for runtime operation and its
-[feature map](../verify-openhands/features/README.md) as the coverage inventory.
+[feature map](../verify-openhands/references/feature-map/README.md) as the coverage inventory.
 This skill is a reusable weekly procedure, not a scheduler. Do not create an
 automation, enable a recurring task, merge code, or post externally unless asked.
 
@@ -66,7 +66,7 @@ rebase, direct commits, reverts, and older merges can defeat date-only searches.
 For every change, record:
 
 | Commit / PR | Changed paths | Feature IDs / entry points | Intended result + exact PR evidence | Runtime proof needed |
-|---|---|---|---|---|
+| ----------- | ------------- | -------------------------- | ----------------------------------- | -------------------- |
 
 Include direct commits and unassociated/unavailable PRs explicitly as unknown
 intent. Record retrieval time and exact source links/quotes; do not treat a title,
@@ -82,9 +82,9 @@ section—to retroactively justify it. Ask the maintainer to resolve ambiguous i
 ## 3. Reconcile the feature map with source
 
 Read the index and all feature files. Check missing, duplicate and dead links/IDs.
-Assign read-only source readers by feature if delegation is available; otherwise
-work serially. Return source anchors, likely drift/new surfaces, and a concrete
-live recipe. Children must not edit files or drive the shared browser.
+Work serially unless parallel source review is authorized. If delegated, source
+readers return anchors, likely drift/new surfaces, and a concrete live recipe;
+they do not edit files or drive the shared browser.
 
 Map **every changed path** to a feature or an explicit non-user-facing rationale.
 For shared CSS, primitives, API clients, config, and dependencies, expand to their

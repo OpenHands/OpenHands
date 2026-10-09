@@ -1,4 +1,10 @@
-# OpenHands feature verification map
+# Historical OpenHands feature verification map
+
+This preserves the original 58-check inventory and stable IDs from #17569.
+The maintained map and current driving recipes now live in
+[references/feature-map](../references/feature-map/README.md), which is the
+coverage authority for new daily and weekly runs. Treat the recipes below as
+historical context, not current selector or route guarantees.
 
 Use this index before driving the app. This is a maintained map of user behavior,
 not a claim that every row has passed. Seeded from main `a07364828c8f202e7745c6bce3dcef3915ae7ac1`
@@ -25,20 +31,20 @@ for using the feature. Keep IDs stable when labels/routes move.
 
 ## Feature families
 
-| ID | User-facing family | Routes / non-route entry points | Preconditions beyond the local stack |
-|---|---|---|---|
-| F01 | [Entry, onboarding and backends](entry-and-backends.md) | `/`, `/conversations`; command menu, workspace picker, backend selector | Second owned backend for switching; authorized provider for onboarding completion |
-| F02 | [Conversations](conversations.md) | `/conversations/:conversationId`; sidebar, composer, conversation menus | Real authorized LLM or ACP; disposable workspace |
-| F03 | [Workspace and panels](workspace-and-panels.md) | Conversation Files/Changes/Terminal/Browser/Planner/Tasks/Usage; `/conversations/:conversationId/panel` | Real file/tool events; optional VS Code/browser tool |
-| F04 | [LLM and agent profiles](profiles.md) | `/settings/llm`, `/settings/agent`, `/settings/agents`; composer selectors | Authorized provider/ACP for saved/executing profiles |
-| F05 | [Settings and secrets](settings-and-secrets.md) | `/settings`, `/settings/app`, `/settings/condenser`, `/settings/agent-context`, `/settings/verification`, `/settings/secrets` | Dummy values suffice for safe persistence checks |
-| F06 | [MCP integrations](mcp.md) | `/mcp`; catalog, install/custom editor, connection test | Approved local package for Time; test accounts for external integrations |
-| F07 | [Skills and plugins](skills-and-plugins.md) | `/customize`, `/skills`, `/plugins`, `/launch`; conversation Skills/Hooks/Tools | Reviewed fixture plugin/skill; LLM for execution |
-| F08 | [Canvas apps](canvas-apps.md) | `/apps`, `/extensions/:extensionName/*` | Backend supporting extensions; reviewed bundled fixture |
-| F09 | [Automations](automations.md) | `/automations`, `/automations/templates`, `/automations/new/:automationId`, `/automations/:automationId`; pinned home cards | Real automation service; authorized bounded dispatch for execution |
-| F10 | [Automation Git Sync](git-sync.md) | `/automations/git-sync` | Explicitly approved disposable remote, branch and credentials |
-| F11 | [Cloud and sharing](cloud-and-sharing.md) | Cloud backend/org selector, `/oauth/device/verify`, `/shared/conversations/:conversationId` | Authorized test account, organization, sandbox and sharing entitlement |
-| F12 | [Runtime and embedding variants](runtime-and-embedding.md) | CLI/npm, Docker, Electron; provider/root library embedding | Platform/install-specific runner; separate host app for library checks |
+| ID  | User-facing family                                         | Routes / non-route entry points                                                                                               | Preconditions beyond the local stack                                              |
+| --- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| F01 | [Entry, onboarding and backends](entry-and-backends.md)    | `/`, `/conversations`; command menu, workspace picker, backend selector                                                       | Second owned backend for switching; authorized provider for onboarding completion |
+| F02 | [Conversations](conversations.md)                          | `/conversations/:conversationId`; sidebar, composer, conversation menus                                                       | Real authorized LLM or ACP; disposable workspace                                  |
+| F03 | [Workspace and panels](workspace-and-panels.md)            | Conversation Files/Changes/Terminal/Browser/Planner/Tasks/Usage; `/conversations/:conversationId/panel`                       | Real file/tool events; optional VS Code/browser tool                              |
+| F04 | [LLM and agent profiles](profiles.md)                      | `/settings/llm`, `/settings/agent`, `/settings/agents`; composer selectors                                                    | Authorized provider/ACP for saved/executing profiles                              |
+| F05 | [Settings and secrets](settings-and-secrets.md)            | `/settings`, `/settings/app`, `/settings/condenser`, `/settings/agent-context`, `/settings/verification`, `/settings/secrets` | Dummy values suffice for safe persistence checks                                  |
+| F06 | [MCP integrations](mcp.md)                                 | `/mcp`; catalog, install/custom editor, connection test                                                                       | Approved local package for Time; test accounts for external integrations          |
+| F07 | [Skills and plugins](skills-and-plugins.md)                | `/customize`, `/skills`, `/plugins`, `/launch`; conversation Skills/Hooks/Tools                                               | Reviewed fixture plugin/skill; LLM for execution                                  |
+| F08 | [Canvas apps](canvas-apps.md)                              | `/apps`, `/extensions/:extensionName/*`                                                                                       | Backend supporting extensions; reviewed bundled fixture                           |
+| F09 | [Automations](automations.md)                              | `/automations`, `/automations/templates`, `/automations/new/:automationId`, `/automations/:automationId`; pinned home cards   | Real automation service; authorized bounded dispatch for execution                |
+| F10 | [Automation Git Sync](git-sync.md)                         | `/automations/git-sync`                                                                                                       | Explicitly approved disposable remote, branch and credentials                     |
+| F11 | [Cloud and sharing](cloud-and-sharing.md)                  | Cloud backend/org selector, `/oauth/device/verify`, `/shared/conversations/:conversationId`                                   | Authorized test account, organization, sandbox and sharing entitlement            |
+| F12 | [Runtime and embedding variants](runtime-and-embedding.md) | CLI/npm, Docker, Electron; provider/root library embedding                                                                    | Platform/install-specific runner; separate host app for library checks            |
 
 This covers the registered route families in [src/routes.ts](../../../../src/routes.ts)
 plus non-route interactions. Sweep that registry, menus, exported library surface

@@ -5,6 +5,7 @@ import { useConversationOverviewStats } from "#/hooks/use-conversation-overview-
 import { useConversationId } from "#/hooks/use-conversation-id";
 import { useConversationPrimaryRepository } from "#/hooks/use-conversation-primary-repository";
 import { useConversationLocalStorageState } from "#/utils/conversation-local-storage";
+import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { ConversationOverviewDiffsRow } from "./conversation-overview-diffs-row";
 import { ConversationOverviewContextMenu } from "./conversation-overview-context-menu";
 import { ConversationOverviewGitSection } from "./conversation-overview-git-section";
@@ -22,16 +23,16 @@ import {
 } from "./conversation-overview-sections";
 
 const PANEL_CLASSNAME = cn(
-  "w-full max-w-[240px] rounded-xl border border-[var(--oh-border)]",
-  "bg-[var(--oh-surface)] pb-1",
+  "w-full max-w-60 rounded-xl border border-border",
+  "bg-surface pb-1",
 );
 
 const ROW_CLASSNAME = cn(
   "flex items-center gap-2 rounded-md px-2 py-1.5",
-  "transition-colors hover:bg-white/5",
+  "transition-colors hover:bg-contrast/5",
 );
 
-const ROW_ICON_CLASSNAME = "size-4 shrink-0 text-[var(--oh-muted)]";
+const ROW_ICON_CLASSNAME = "size-4 shrink-0 text-muted";
 
 interface OverviewRowProps {
   icon: React.ReactNode;
@@ -44,10 +45,10 @@ function OverviewRow({ icon, label, value, testId }: OverviewRowProps) {
   return (
     <li data-testid={testId} className={ROW_CLASSNAME}>
       {icon}
-      <span className="min-w-0 flex-1 truncate text-sm text-[var(--oh-foreground)]">
+      <span className="min-w-0 flex-1 truncate text-sm text-foreground">
         {label}
       </span>
-      <span className="max-w-[45%] shrink-0 truncate text-right text-sm text-[var(--oh-muted)]">
+      <span className="max-w-[45%] shrink-0 truncate text-right text-sm text-muted">
         {value}
       </span>
     </li>
@@ -80,6 +81,7 @@ export function ConversationOverviewPanel() {
   const { isConnected: isGitConnected } = useConversationPrimaryRepository();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuAnchorRef = useRef<HTMLButtonElement>(null);
+  useCloseOnEscape(isMenuOpen, () => setIsMenuOpen(false), menuAnchorRef);
 
   const isPinned = (section: ConversationOverviewSection) =>
     isOverviewSectionPinned(section, state.unpinnedOverviewSections ?? []);
@@ -139,7 +141,7 @@ export function ConversationOverviewPanel() {
       className={PANEL_CLASSNAME}
     >
       <div className="flex items-center justify-between px-4 pb-0.5 pt-2.5">
-        <span className="text-xs font-medium text-[var(--oh-muted)]">
+        <span className="text-xs font-medium text-muted">
           {t(I18nKey.CONVERSATION$OVERVIEW)}
         </span>
         <div className="relative shrink-0">

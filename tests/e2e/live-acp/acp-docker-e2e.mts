@@ -22,7 +22,7 @@
  *     -v "$(pwd)/tools:/canvas-tools:ro" -e OH_EXTRA_PYTHON_PATH=/canvas-tools \
  *     ghcr.io/openhands/agent-server:1.28.0-python
  *   npx vite-node -c tests/e2e/live-acp/vite-node.config.mts \
- *     tests/e2e/live-acp/acp-docker-e2e.mts -- codex claude gemini
+ *     tests/e2e/live-acp/acp-docker-e2e.mts -- codex claude gemini opencode
  *
  * The provider plans, host credential collectors, and HTTP/poll helpers are
  * shared with the app-path script — see ./harness.mts. A provider whose

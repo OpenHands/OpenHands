@@ -1,134 +1,223 @@
 ---
 name: verify-openhands
 description: >
-  This skill should be used to "verify OpenHands features", "drive Agent Canvas",
-  "check a Canvas UI change", or collect real desktop/mobile evidence in this
-  repository. Provides the feature map, isolated launch, doctor, browser recipes,
-  and cleanup. For a week-over-week audit, use verify-openhands-weekly as well.
+  This skill should be used to "verify OpenHands features", "test the Canvas UI
+  like a user", "drive Agent Canvas", "check a UI change in the real app",
+  "create or update the feature map", "run the daily pass" or "run the weekly
+  feature audit". Ships control-openhands (launch, doctor, browser, LLM
+  profiles, conversations, evidence, map tooling, cleanup) and the maintained
+  map of every user-facing feature.
+triggers:
+- /verify-openhands
+- feature map
+- verify feature
 ---
 
 # Verify OpenHands through the real app
 
-Prove the user-visible result, not merely that a route loaded or CI passed.
-This is a repository-local companion to the public `qa-changes` skill, not a
-replacement for it. Use `qa-changes` for the verdict on an individual PR and this
-map for the actual Canvas paths and traps. Neither skill authorizes external
-writes, paid model calls, or product fixes beyond the user's request.
+Prove what a user sees, not that a route rendered or CI passed. Three parts work
+together:
 
-## Select the surface and scope
+1. **`control-openhands`** ([scripts/](scripts/)) is the lever. It launches this
+   checkout as an isolated real stack (Agent Server, automation, static frontend,
+   ingress), keeps one browser alive between commands, and turns every user step
+   into a command you can rerun.
+2. **The feature map** ([references/feature-map/](references/feature-map/README.md))
+   lists every user-facing behavior with stable IDs, user entry points, exact
+   `control-openhands` recipes, observable results and gotchas.
+3. **Evidence**: screenshots, ARIA snapshots and a pass/fail/blocked/not-run
+   ledger that survive cleanup.
 
-Read [the feature index](features/README.md), then the relevant feature files.
-Record the exact checkout SHA and selected entry points before starting. Use
-[the weekly skill](../verify-openhands-weekly/SKILL.md) when comparing main with
-last week's evidence or checking merged PR intent.
+Neither this skill nor the map authorizes external writes, paid models beyond
+the budget you were given, or product fixes the user did not ask for.
 
-The primary surface is the standalone web app with a real local Agent Server and
-real automation service. Cloud, ACP agents, browser tools, third-party services,
-Electron, Docker, and embedded-library behavior have separate prerequisites.
-A passing local route is not a pass for another backend or platform.
+## The CLI comes first
 
-## Launch
-
-Follow [the runtime recipe](references/runtime.md) from the checkout being
-verified. It uses the existing production CLI, pinned dependencies from
-`config/defaults.json`, fresh state, and authenticated public mode to avoid
-publishing a launcher-injected session key. Do not install the latest published
-Canvas and call that a test of this checkout.
-
-Use an isolated worktree for each revision, a fresh browser context per backend,
-and distinct ports/state for baseline and target. Drive one instance serially.
-Parallel source readers are useful; concurrent agents clicking the same page are
-not. Do not reuse a user's running session or copy their profiles/state.
-
-## Doctor
-
-Before driving, and after a surprising failure, use the runtime recipe to check:
-
-1. The expected launcher and owned child processes are alive; their actual ports
-   match this run's log, not an unrelated listener.
-2. The build and checkout match the recorded target SHA.
-3. Unauthenticated API requests are rejected, and the private session key reaches
-   the expected Agent Server and automation versions.
-4. The UI reaches that backend without an auth loop or loading overlay.
-
-A successful HTML response alone is not readiness. If an API returns the SPA,
-JSON parsing fails, or a backend is unavailable, stop driving that surface. Record
-an environment blocker. If the process is healthy but the UI is wedged, preserve
-failure evidence, reset to a known state, and retry once. Never silently switch
-to mocked responses or remove a failing assertion to manufacture a pass.
-
-## Drive
-
-Run the credential-free starter recipe after doctor:
+Put it on `PATH` and read its help before anything else:
 
 ```sh
-node .agents/skills/verify-openhands/scripts/smoke.mjs
+export PATH="$PWD/.agents/skills/verify-openhands/scripts:$PATH"
+control-openhands --help                # then: control-openhands <command> --help
 ```
 
-It uses the `QA_RUN` / `QA_BASE_URL` exported by the runtime recipe and optionally
-`QA_BROWSER_EXECUTABLE`. It authenticates through the UI, creates a dummy secret,
-reloads to prove persistence, deletes it through the UI, and captures desktop and
-mobile GitHub MCP credential fields without installing the integration. Its
-passing result covers only the named checks, not all features in the map.
+Requirements: Node >=24 (the launcher's engine), npm dependencies installed
+(`npm ci --ignore-scripts`), `uv`/`uvx`, and a Chromium Playwright can launch
+(set `CONTROL_OPENHANDS_BROWSER=/path/to/chrome` when the pinned browser is not
+installed; `launch` then reports the running stack and `browser start` picks it
+up). `browser record` also needs an ffmpeg: one with libx264 on `PATH` writes
+MP4 (and GIF), and Playwright's bundled one (`npx playwright install ffmpeg`)
+writes WebM. Every command prints one JSON object; exit 0 ok, 1 action failed, 2 usage,
+3 environment.
 
-For further driving, use installed Playwright (`@playwright/test`) or the available
-browser tools. Follow the feature's actual user entry point; prefer scoped ARIA
-roles, labels, and `data-testid` handles over coordinates or text scraped from
-hidden drawers. Reinspect current source when a handle drifts. The existing
-`tests/e2e/mock-llm/` specs are useful selector references, **not permission to copy
-their API interception or mock LLM into a live proof**.
+If a user path cannot be driven with the CLI, that is a **harness gap**: extend
+`scripts/control-openhands.mjs` (keep it executable, document the verb in
+`--help` and below), prove the new verb live, then write the recipe. Never work
+around a gap with an untracked one-off script the next agent cannot rerun.
+Other agents on the machine may be running the same script: edit a copy, run
+`node --check` and the tests on it, then move it into place in one step.
 
-For each selected sub-feature:
+## Launch → doctor → drive → evidence → cleanup
 
-- Capture the initial state and action, then assert the named observable result.
-- For mutations, verify through a second read or reload, not just a toast.
-- Check empty, populated, loading/error, disabled, and confirmation states where
-  relevant to the change. Treat each changed entry point separately.
-- Exercise desktop 1440×1000 and phone 390×844 for UI changes; add 320px width for
-  responsive fixes. Inspect screenshots, dialogs' bounding boxes, overflow,
-  keyboard/focus/close behavior, and browser exceptions. A visible destination
-  panel does not cancel a lifecycle exception during the transition.
-- Scope assertions and request authentication to the intended backend. Never put
-  a backend key in global headers sent to third-party origins.
+```sh
+export OH_VERIFY_RUN=$(control-openhands launch --new --print-run)   # builds if needed; isolated run
+control-openhands doctor                       # read-only; must be ok before driving
+control-openhands llm preset deepseek          # deepseek-flash (active) + deepseek-pro; key from $DEEPSEEK_API_KEY or --api-key-file
+control-openhands onboard --skip               # consent + onboarding (walk it instead when F01 is under test)
+control-openhands browser goto /settings/secrets
+control-openhands browser testids              # discover handles on the current page
+control-openhands browser click 'testid=add-secret-button'
+control-openhands browser screenshot --feature F14.create --name form
+control-openhands evidence add --feature F14.create --result pass --entry "Settings > Secrets > Add" \
+  --expected "add form" --actual "add form" --artifact evidence/F14.create/form.png
+control-openhands stop                         # stops only this run; evidence stays
+```
 
-Use harmless dummy values for appearance-only credential checks. Keep native
-password masking: do not cover the input background/border with a screenshot
-mask. If a real credential is necessary for an authorized integration, keep it
-concealed and inspect the entire frame before publication. Plaintext secret forms,
-exports, system prompts, tool definitions, traces, and storage can still leak data.
+- **Which run.** Commands use `--run DIR` (anywhere on the line), else `$OH_VERIFY_RUN`, else the only live
+  run. With several live runs they refuse to guess, so export `OH_VERIFY_RUN` in
+  every shell command when other agents share the machine: an agent that drives
+  someone else's run corrupts both evidence ledgers. For the same reason never
+  `pkill -f` or `killall` by pattern; `control-openhands stop` ends only your run.
+- **Launch** refuses to start when less than about 2 GB of memory is free: each
+  run holds an Agent Server, automation, a static frontend and Chromium (about
+  1.5 GB together). Stop runs you are done with; several agents on one machine
+  should each `launch --new`, export their own `OH_VERIFY_RUN`, and never touch
+  another agent's run.
+- **Launch** starts `bin/agent-canvas.mjs` from this checkout with a private
+  `HOME`, state, session key and free port block, so it never touches a user's
+  `~/.openhands` or another run. `launch --new` starts a second independent run
+  (for a baseline, or to drive two backends); `--public` exercises the API-key
+  login screen (`control-openhands login`). It still binds to 127.0.0.1; it only
+  stops injecting the session key into the page. `--sdk-version`, `--sdk-ref` or
+  `--sdk-path` (and the `--automation-*` equivalents) choose other backends;
+  record them. Version variables exported in your shell are not forwarded.
+  The block includes the VS Code editor port (`ports.vscode`) only when the
+  checkout's launcher sets VS Code up (the port is reserved even if the
+  agent-server has no editor binary and nothing listens there). Where that is opt-in (#17660), `--vscode`
+  turns it on; where the editor is bundled (before #17660, or since #18048), it
+  is always included and `--vscode` changes nothing.
+- **Doctor** checks the launcher's process group, ports, served build revision,
+  unauthenticated rejection, authenticated settings, Agent Server pin and the
+  UI's minimum Agent Server version, automation health and a throwaway-tab UI
+  probe. Run it first, after every surprising
+  failure, and before blaming the product. A wedged UI on a healthy stack:
+  capture evidence, `browser reload` or `goto /`, retry once.
+- **Drive** through the real UI with `control-openhands browser ...`. Selectors are
+  `testid=`, `role=button[name="Save"]`, `label=`, `text=`, chained with ` >> `.
+  Use `browser testids` and `browser snapshot` to find handles; prefer scoped
+  test IDs and accessible names over CSS. Failures return a hint and a
+  screenshot path; read the screenshot before retrying. A click returns the URL
+  from *before* any client-side navigation: use `click ... --expect-url '<regex>'`
+  (or `browser wait-url`) after every navigating click, because many routes
+  redirect (`/settings` → `/settings/agents`, `/customize` → `/mcp`).
+- **Arrange, don't fake.** `llm`, `fixture` and `api ... --write` exist to set up
+  preconditions (a configured profile, a git repo, a dummy secret). They never
+  count as proof that the UI path works; the map says which steps are UI proof.
+  Never intercept routes or add mock LLM responses to make a live check pass.
+- **Essential pathways** are single commands so recipes can start from a known
+  state: `onboard`, `llm preset|set`, `conversation start --prompt ... --wait`
+  (add `--workspace qa-repo` to run it in a `fixture git-repo`),
+  `conversation events <id>`, `workspace open`.
+- **State control** reaches states a happy path never shows, without mocks:
+  `browser reset` (fresh browser profile: first run again), `service stop
+  automation|agent-server` (backend-down UI), `restart` (same state after a
+  backend restart: persistence and reconnection) and `restart --rotate-key`
+  (stale session key). `restart` keeps the browser on its page. While a service
+  is stopped, a reload replaces the page with the backend-unavailable screen, so
+  drive backend-down states on the page that was already loaded. `browser
+  network` (with `--bodies`, what the page sent, credentials redacted),
+  `browser toasts` and `browser media` observe requests by origin, toasts and
+  sound without changing anything; `click --observe SEL` and `scroll
+  --observe SEL` record the transient states SEL shows while the action's
+  effects play out (a "Saving..." label, a loading row). Check `--help` before
+  calling a state unreachable: most "can't be driven" claims predate a verb.
+- **Evidence** goes under `<run>/evidence/<feature-id>/` and the append-only
+  ledger `<run>/evidence/ledger.jsonl`. Nothing is overwritten: a repeated
+  screenshot name is saved as `<name>-2.png`, so cite the path the command
+  prints; `evidence report` renders the table from
+  [the report contract](references/report.md), fail and blocked rows first with
+  their `--note` (a blocked row names its missing prerequisite there), and
+  `--baseline <yesterday's run>` lists what changed since that ledger. When
+  timing or a transition is the point (a menu closing on Escape, a reply
+  streaming in), record it: `browser record start --feature ID --name N`,
+  drive the steps, then `browser record stop` saves a video of the active tab
+  under the same folder (`--gif` adds one that GitHub shows inline). Around a
+  long wait, such as the agent working, run `browser record pause` and `browser
+  record resume`: the video cuts there. The caret is hidden in recordings, as
+  in screenshots. Keys, logs, browser profile and
+  downloads stay in `<run>/private/`. Evidence is not automatically public:
+  review every image before publishing it. The CLI masks password fields in
+  `snapshot`, `value` and `testids`; a screenshot of a visible key field is
+  still a leak.
+- **Cleanup** with `control-openhands stop` (add `--purge-private` to delete keys
+  and state once you have checked the evidence). It only signals the process
+  group it launched and verifies the ports closed. Delete run-owned fixtures
+  through the UI when deletion is the path under test.
 
-## Evidence
+## LLM budget
 
-Keep raw logs, browser state, API payloads, and traces under `$QA_RUN/private`.
-Keep candidate screenshots and the feature/action/result ledger under
-`$QA_RUN/evidence`, which is **not automatically public**. Review before publishing
-only the selected safe artifacts to an authorized destination. Never serve the
-run root or copy a secret-bearing file into a served or committed directory.
+Features that start a real agent with automation or debugging skills (for
+example "Debug with OpenHands") can act on other fixtures by name: stop those
+conversations when their recipe is done.
 
-Use [the report contract](references/report.md). Every claim names a feature ID,
-entry point, revision, backend/capabilities, viewport, command/action, expected
-result, actual result, and evidence path. Preserve failures and coverage gaps.
-Record console exception class/count separately from successful visual rendering.
-CI results and old screenshots are supporting context, not this run's proof.
+Use `deepseek-flash` for everything that needs a model; switch to `deepseek-pro`
+only for checks that need a second profile or a stronger model. Keep prompts
+small and confined to the run workspace.
 
-## Cleanup
+The local stack is not a sandbox. The agent's terminal runs as your user, and
+its environment includes the run's own keys. A prompt that leaves the model
+without a clear task can send it exploring outside the workspace, and what it
+reads goes to the model provider. That covers an image with no text, a bare
+trigger word whose skill is not loaded, and an open-ended setup command. On
+2026-10-08, deepseek-flash read the run directory, the checkout, other
+sessions' files under `/tmp` and `env` in such cases. So add `Do not run any
+tools` (or name the exact command) to every prompt whose check does not need
+more. Watch `conversation events <id> --kinds ActionEvent` while a run that
+needs tools is open, and run `conversation pause <id>` as soon as it leaves the
+workspace. Do not launch the stack as a user whose files hold credentials you
+cannot let a model read. Without a key, run every credential-free
+recipe and record model-dependent ones as `blocked` with the missing
+prerequisite; never substitute a mock and call it a pass.
 
-Delete only fixtures created by this run, through the UI where that is the path
-under test. Disable schedules and remove test integrations before ending a live
-session. Stop only the launcher/process tree this run owns, using the runtime
-recipe; verify its ports close. Do not kill by a generic process name.
+## Choose the job
 
-Delete temporary private state only after teardown and after checking evidence
-exists. Keep reviewed proof artifacts and the run ledger after cleanup, including
-on failed iterations. A run whose cleanup deletes its proof is not complete.
+For a frozen week-over-week comparison and PR-intent ledger, use
+[verify-openhands-weekly](../verify-openhands-weekly/SKILL.md) with this skill's
+current harness, map, and report contract.
 
-## Improve the map, not the product under test
+- **Verify a change or a PR**: `control-openhands map affected --base <ref>`
+  (or `--paths` with the PR's file list) maps the changed paths to the
+  families whose `Source:` lines own them, and separates shared code to widen,
+  `src/` paths no family owns (a map gap) and non-user-facing paths. Drive every entry point those features list at
+  desktop and phone viewports, and report with
+  [the report contract](references/report.md).
+- **Run the daily pass**: follow [references/daily.md](references/daily.md):
+  static checks (`map check`, `map coverage`, `map testids`), the changed
+  families since the `Maintenance baseline` line of the map index
+  (`control-openhands map baseline`; `map affected` starts there by default),
+  a smoke row per family, and a date-derived rotation that gives every family
+  a full live pass once a week. A pass that finished its changed families
+  proposes `TARGET` as the next baseline with `map baseline --set "$TARGET"`
+  in its PR; compare ledgers with `evidence report --baseline` when
+  yesterday's is at hand.
+- **Create or extend the map**: follow [references/mapping.md](references/mapping.md).
+  It teaches how to discover features, write entries against the CLI and prove
+  each one live. `control-openhands map coverage` measures what is still unmapped.
+- **Maintain the map (periodic or weekly)**: follow
+  [references/maintenance.md](references/maintenance.md): index hygiene, a source
+  wave, one live pass over every feature, PR-intent reconciliation for the week's
+  changes, and at most one PR of proven corrections.
 
-Document a broken selector as a harness gap and a wrong recipe as map drift.
-Re-drive corrected instructions before claiming they work. Report product bugs
-separately; never rewrite the expected result to bless broken behavior. Historical
-issues in the map are repro candidates, not permanent exemptions or claims that
-the issue is still open.
+## Triage what you find
 
-See [adaptation notes](references/adaptation.md) for pstack provenance and the
-OpenHands-specific decisions behind this workflow.
+- **Map drift**: the map describes something the app no longer does by design.
+  Fix the entry with current source and live evidence.
+- **Harness gap**: the app works but the CLI cannot drive it. Fix the CLI, re-drive.
+- **Product bug**: the app is broken. Keep the evidence, search existing issues,
+  report it separately (right repository: Canvas UI here, Agent Server/SDK in
+  `OpenHands/software-agent-sdk`, scheduling/dispatch in `OpenHands/automation`).
+  Never rewrite an expected result to bless broken behavior.
+- **Blocked**: name the missing prerequisite (account, entitlement, OS, binary)
+  and the route you attempted. Unreachable is never a pass.
+
+See [references/adaptation.md](references/adaptation.md) for where these ideas
+come from and what was deliberately left out.

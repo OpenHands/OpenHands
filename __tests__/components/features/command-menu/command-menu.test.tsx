@@ -1,7 +1,13 @@
-import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   CommandMenu,
   CommandMenuTrigger,
@@ -12,6 +18,7 @@ import {
   NavigationProvider,
   type NavigationContextValue,
 } from "#/context/navigation-context";
+import { ConversationCardActions } from "#/components/features/conversation-panel/conversation-card/conversation-card-actions";
 import { useCommandMenuStore } from "#/stores/command-menu-store";
 import { useSidebarStore } from "#/stores/sidebar-store";
 import { renderWithProviders } from "../../../../test-utils";
@@ -41,6 +48,16 @@ const AUTOMATIONS_TITLE_KEY = getInterfaceCopy().commandMenuTitle;
 const NEW_CHAT_TITLE_KEY = "COMMAND_MENU$NEW_CHAT_TITLE";
 const SECRETS_TITLE_KEY = "COMMAND_MENU$SECRETS_SETTINGS_TITLE";
 const TOGGLE_SIDEBAR_TITLE_KEY = "COMMAND_MENU$TOGGLE_SIDEBAR_TITLE";
+const APPLE_SHORTCUT_KEY = "COMMAND_MENU$SHORTCUT";
+const CTRL_SHORTCUT_KEY = "COMMAND_MENU$SHORTCUT_CTRL";
+const MAC_USER_AGENT =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36";
+const IPHONE_USER_AGENT =
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
+const LINUX_USER_AGENT =
+  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36";
+const WINDOWS_USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36";
 const SEARCH_INPUT_ID = "command-menu-search";
 const RESULTS_LISTBOX_ID = "command-menu-results";
 const NEW_CHAT_OPTION_ID = "command-menu-option-new-chat";
@@ -94,6 +111,81 @@ describe("CommandMenu", () => {
     await waitFor(() => {
       expect(screen.queryByTestId("command-menu")).not.toBeInTheDocument();
     });
+  });
+
+  it("closes with escape while a command option has focus", async () => {
+    const user = userEvent.setup();
+    renderCommandMenu();
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    const searchInput = await screen.findByRole("combobox", {
+      name: SEARCH_LABEL_KEY,
+    });
+    await waitFor(() => expect(searchInput).toHaveFocus());
+
+    await user.tab();
+    expect(document.activeElement?.id).toBe(NEW_CHAT_OPTION_ID);
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByTestId("command-menu")).not.toBeInTheDocument();
+  });
+
+  it("returns focus to the element that had it before opening", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <>
+        <textarea data-testid="composer" />
+        <CommandMenu />
+      </>,
+      { navigation: { navigate: navigateMock } },
+    );
+    const composer = screen.getByTestId("composer");
+    composer.focus();
+
+    await user.keyboard("{Control>}k{/Control}");
+    const searchInput = await screen.findByRole("combobox", {
+      name: SEARCH_LABEL_KEY,
+    });
+    await waitFor(() => expect(searchInput).toHaveFocus());
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByTestId("command-menu")).not.toBeInTheDocument();
+    expect(composer).toHaveFocus();
+  });
+
+  it("closes itself, not a card menu left open underneath, on Escape", async () => {
+    const user = userEvent.setup();
+    const onContextMenuToggle = vi.fn();
+    renderWithProviders(
+      <>
+        <textarea data-testid="composer" />
+        <ConversationCardActions
+          contextMenuOpen
+          onContextMenuToggle={onContextMenuToggle}
+          onDelete={vi.fn()}
+        />
+        <CommandMenu />
+      </>,
+      { navigation: { navigate: navigateMock } },
+    );
+    const composer = screen.getByTestId("composer");
+    composer.focus();
+
+    await user.keyboard("{Control>}k{/Control}");
+    const searchInput = await screen.findByRole("combobox", {
+      name: SEARCH_LABEL_KEY,
+    });
+    await waitFor(() => expect(searchInput).toHaveFocus());
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByTestId("command-menu")).not.toBeInTheDocument();
+    expect(onContextMenuToggle).not.toHaveBeenCalled();
+    expect(screen.getByTestId("context-menu")).toBeInTheDocument();
+    expect(screen.getByTestId("ellipsis-button")).not.toHaveFocus();
+    expect(composer).toHaveFocus();
+
+    // The next Escape reaches the card menu.
+    await user.keyboard("{Escape}");
+    expect(onContextMenuToggle).toHaveBeenCalledWith(false);
   });
 
   it("opens from the global ctrl-k shortcut", async () => {
@@ -190,6 +282,28 @@ describe("CommandMenu", () => {
       expect(screen.queryByTestId("command-menu")).not.toBeInTheDocument();
     });
   });
+
+  it.each([
+    ["meta_llm", COMMAND_MENU_ROUTE.metaLlmSettings],
+    ["agent_context", COMMAND_MENU_ROUTE.agentContextSettings],
+  ])(
+    "finds the %s settings page and opens it",
+    async (searchTerm, expectedRoute) => {
+      useCommandMenuStore.getState().open();
+      const { navigate } = renderCommandMenu();
+
+      await userEvent.type(
+        screen.getByRole("combobox", { name: SEARCH_LABEL_KEY }),
+        searchTerm,
+      );
+      await userEvent.keyboard("{Enter}");
+
+      expect(navigate).toHaveBeenCalledWith(expectedRoute);
+      await waitFor(() => {
+        expect(screen.queryByTestId("command-menu")).not.toBeInTheDocument();
+      });
+    },
+  );
 
   it("supports arrow-key navigation and enter selection", async () => {
     useCommandMenuStore.getState().open();
@@ -364,7 +478,7 @@ describe("CommandMenu", () => {
       name: SEARCH_LABEL_KEY,
     });
     expect(reopenedInput).toHaveValue("");
-    expect(screen.getAllByRole("option")).toHaveLength(12);
+    expect(screen.getAllByRole("option")).toHaveLength(14);
     expect(screen.getAllByRole("option")[0]).toHaveAttribute(
       "aria-selected",
       "true",
@@ -409,13 +523,13 @@ describe("CommandMenu", () => {
 
     expect(surface).toHaveClass(
       "max-w-2xl",
-      "border-[var(--oh-border)]",
+      "border-border",
       "shadow-[0_24px_90px_rgba(0,0,0,0.52),0_0_0_1px_rgba(255,255,255,0.03)_inset]",
     );
-    expect(activeOption).toHaveClass("rounded-xl", "bg-white/[0.09]");
-    expect(inactiveOption).toHaveClass("rounded-xl", "text-[var(--oh-muted)]");
-    expect(activeIcon).toHaveClass("size-9", "border-[var(--oh-accent)]");
-    expect(inactiveIcon).toHaveClass("size-9", "border-[var(--oh-border)]");
+    expect(activeOption).toHaveClass("rounded-xl", "bg-contrast/[0.09]");
+    expect(inactiveOption).toHaveClass("rounded-xl", "text-muted");
+    expect(activeIcon).toHaveClass("size-9", "border-accent");
+    expect(inactiveIcon).toHaveClass("size-9", "border-border");
   });
 
   it("leaves modified command links to native browser behavior", () => {
@@ -465,6 +579,46 @@ describe("CommandMenu", () => {
       vi.resetModules();
     }
   });
+});
+
+describe("the command menu shortcut hint", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it.each([
+    ["macOS", MAC_USER_AGENT, APPLE_SHORTCUT_KEY],
+    ["iOS", IPHONE_USER_AGENT, APPLE_SHORTCUT_KEY],
+    ["Linux", LINUX_USER_AGENT, CTRL_SHORTCUT_KEY],
+    ["Windows", WINDOWS_USER_AGENT, CTRL_SHORTCUT_KEY],
+  ])(
+    "on %s reads the same in the sidebar trigger and the menu header",
+    (_platform, userAgent, expectedShortcutKey) => {
+      // Arrange
+      vi.spyOn(window.navigator, "userAgent", "get").mockReturnValue(userAgent);
+      useCommandMenuStore.getState().open();
+
+      // Act
+      renderWithProviders(
+        <>
+          <CommandMenuTrigger collapsed={false} />
+          <CommandMenu />
+        </>,
+      );
+
+      // Assert
+      expect(
+        within(screen.getByRole("button", { name: OPEN_LABEL_KEY })).getByText(
+          expectedShortcutKey,
+        ),
+      ).toBeInTheDocument();
+      expect(
+        within(screen.getByTestId("command-menu")).getByText(
+          expectedShortcutKey,
+        ),
+      ).toBeInTheDocument();
+    },
+  );
 });
 
 describe("CommandMenuTrigger", () => {

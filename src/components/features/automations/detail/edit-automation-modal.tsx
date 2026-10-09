@@ -296,21 +296,28 @@ export function EditAutomationModal({
     );
   };
 
+  // Stay open while a save is in flight: the save's error toast is the
+  // dialog's own, and it is dropped if the dialog unmounts first.
+  const dismiss = () => {
+    if (!updateMutation.isPending) onClose();
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div
         className="absolute inset-0 bg-black/60"
-        onClick={onClose}
+        onClick={dismiss}
         onKeyDown={(e) => {
-          if (e.key === "Escape") onClose();
+          if (e.key === "Escape") dismiss();
         }}
         role="presentation"
       />
-      <div className="relative w-full max-w-md rounded-xl border border-[var(--oh-border)] bg-[var(--oh-surface)] p-6">
+      <div className="relative w-full max-w-md rounded-xl border border-border bg-surface p-6">
         <button
           type="button"
-          onClick={onClose}
-          className="absolute right-4 top-4 text-muted hover:text-foreground"
+          onClick={dismiss}
+          disabled={updateMutation.isPending}
+          className="absolute right-4 top-4 text-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
           aria-label={t(I18nKey.AUTOMATIONS$CANCEL)}
         >
           <XMarkIcon className="size-5" />
@@ -415,7 +422,7 @@ export function EditAutomationModal({
           )}
 
           {automation.trigger.type === "event" ? (
-            <div className="flex flex-col gap-3 rounded-lg bg-[var(--oh-surface-raised)] p-3">
+            <div className="flex flex-col gap-3 rounded-lg bg-surface-raised p-3">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-medium text-muted">
                   {t(I18nKey.AUTOMATIONS$DETAIL$TRIGGER)}
@@ -499,7 +506,7 @@ export function EditAutomationModal({
                   disabled={form.isCustomSchedule}
                   className={cn(
                     formControlSettingsFieldClassName,
-                    "disabled:bg-[var(--oh-surface-raised)]",
+                    "disabled:bg-surface-raised",
                   )}
                 />
                 {automation.timezone && (

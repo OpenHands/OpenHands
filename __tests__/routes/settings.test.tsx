@@ -134,6 +134,38 @@ describe("settings route", () => {
     expect(screen.getByTestId("app-settings-screen")).toBeInTheDocument();
   });
 
+  it("exposes a single main landmark that holds the settings page", () => {
+    // Arrange
+    const RouterStub = createRoutesStub([
+      {
+        path: "/settings",
+        Component: SettingsScreen,
+        children: [
+          {
+            path: "/settings/app",
+            Component: () => <div data-testid="app-settings-screen" />,
+          },
+        ],
+      },
+    ]);
+
+    // Act
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ActiveBackendProvider>
+          <RouterStub initialEntries={["/settings/app"]} />
+        </ActiveBackendProvider>
+      </QueryClientProvider>,
+    );
+
+    // Assert — nested <main> elements give screen readers two landmarks.
+    const landmarks = screen.getAllByRole("main");
+    expect(landmarks).toHaveLength(1);
+    expect(landmarks[0]).toContainElement(
+      screen.getByTestId("app-settings-screen"),
+    );
+  });
+
   it("keeps the section title of a page that is not in the listed navigation", () => {
     // Arrange — the nav mock above lists only LLM + Application, mirroring a
     // locked-to-Cloud deployment where deep-linked pages stay routable but are

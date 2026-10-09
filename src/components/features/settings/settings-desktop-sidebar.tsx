@@ -31,11 +31,11 @@ export function SettingsDesktopSidebar({
     <aside
       data-testid="settings-navbar-desktop"
       className={cn(
-        "hidden md:flex md:w-[260px] md:shrink-0 md:flex-col md:gap-2",
-        "md:sticky md:top-8 md:self-start md:pl-8",
+        "hidden lg:flex lg:w-65 lg:shrink-0 lg:flex-col lg:gap-2",
+        "lg:sticky lg:top-8 lg:self-start lg:pl-8",
       )}
     >
-      <Typography.Text className="px-2 text-sm font-normal text-white">
+      <Typography.Text className="px-2 text-sm font-normal text-contrast">
         {t(I18nKey.SETTINGS$TITLE)}
       </Typography.Text>
       <div className="flex flex-col gap-0.5 pt-0.5">

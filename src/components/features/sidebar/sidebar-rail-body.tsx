@@ -6,7 +6,6 @@ import {
   Plus,
   Server,
   Settings,
-  PanelsTopLeft,
 } from "lucide-react";
 import { OpenHandsLogoButton } from "#/components/shared/buttons/openhands-logo-button";
 import { NavigationLink } from "#/components/shared/navigation-link";
@@ -43,6 +42,7 @@ import {
   sidebarNavRowClassName,
 } from "./sidebar-layout";
 import { useCanvasExtensionsRuntime } from "#/components/features/canvas-extensions/canvas-extensions-runtime";
+import { CanvasExtensionIcon } from "#/components/features/canvas-extensions/canvas-extension-icon";
 import type { Backend } from "#/api/backend-registry/types";
 
 const ICON_SIZE = 18;
@@ -178,7 +178,7 @@ export function SidebarRailBody({
             className={cn(
               "hidden md:inline-flex ml-auto",
               SIDEBAR_ICON_BUTTON_CLASS,
-              "text-[var(--oh-muted)] hover:text-white hover:bg-[var(--oh-surface-raised)]",
+              "text-muted hover:text-contrast hover:bg-surface-raised",
             )}
           >
             <ChevronLeft width={14} height={14} />
@@ -193,7 +193,7 @@ export function SidebarRailBody({
             className={cn(
               "inline-flex ml-auto",
               SIDEBAR_ICON_BUTTON_CLASS,
-              "text-[var(--oh-muted)] hover:text-white hover:bg-[var(--oh-surface-raised)]",
+              "text-muted hover:text-contrast hover:bg-surface-raised",
             )}
           >
             <ChevronLeft width={14} height={14} />
@@ -271,7 +271,12 @@ export function SidebarRailBody({
             label={page.contribution.nav_label || page.contribution.title}
             testId={`sidebar-canvas-extension-${page.extension.name}-${page.contribution.id}`}
             collapsed={collapsed}
-            icon={<PanelsTopLeft width={ICON_SIZE} height={ICON_SIZE} />}
+            icon={
+              <CanvasExtensionIcon
+                extension={page.extension}
+                size={ICON_SIZE}
+              />
+            }
           />
         ))}
       </nav>
@@ -356,7 +361,7 @@ export function SidebarRailBody({
               )}
             >
               <SidebarCollapsedIconSlot active={collapsedBackendPopoverOpen}>
-                <span className="relative inline-flex size-[18px] shrink-0 items-center justify-center">
+                <span className="relative inline-flex size-4.5 shrink-0 items-center justify-center">
                   <BackendStatusDot
                     isConnected={activeBackendHealth?.isConnected ?? null}
                     className="absolute -left-0.5 -top-0.5 z-[1] pointer-events-none"
@@ -370,7 +375,7 @@ export function SidebarRailBody({
             </button>
             {collapsedBackendPopoverOpen ? (
               <div
-                className="absolute bottom-[-4px] left-full pl-2.5 z-40 w-[272px]"
+                className="absolute bottom-[-4px] left-full pl-2.5 z-40 w-68"
                 onClick={(event) => event.stopPropagation()}
               >
                 <BackendSelector
@@ -396,7 +401,7 @@ export function SidebarRailBody({
           <div
             className={cn(
               "flex flex-col items-stretch max-w-none box-border shrink-0 gap-2",
-              "-ml-2.5 w-[calc(100%+0.625rem)] border-t border-[var(--oh-border)] pt-2 px-2.5",
+              "-ml-2.5 w-[calc(100%+0.625rem)] border-t border-border pt-2 px-2.5",
             )}
           >
             <AgentCanvasVersionTile hideWhenUpToDate />

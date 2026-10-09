@@ -95,11 +95,28 @@ ENV VITE_POSTHOG_API_KEY=${VITE_POSTHOG_API_KEY}
 
 USER root
 
-# Install system deps required by automation's transitive dependencies
-# (asyncpg needs libpq, which the agent-server base image may not include).
+# Refresh inherited packages so the final image includes available security
+# fixes. asyncpg publishes wheels for the supported Python and architectures
+# and implements the PostgreSQL protocol directly, so no libpq package is needed.
+ARG DEBIAN_SNAPSHOT=20260930T000000Z
 RUN if command -v apt-get >/dev/null 2>&1; then \
+      printf '%s\n' \
+        'Types: deb' \
+        "URIs: http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT}/" \
+        'Suites: trixie' \
+        'Components: main' \
+        'Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg' \
+        'Check-Valid-Until: no' \
+        '' \
+        'Types: deb' \
+        "URIs: http://snapshot.debian.org/archive/debian-security/${DEBIAN_SNAPSHOT}/" \
+        'Suites: trixie-security' \
+        'Components: main' \
+        'Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg' \
+        'Check-Valid-Until: no' \
+        > /etc/apt/sources.list.d/debian.sources && \
       apt-get update && \
-      apt-get install -y --no-install-recommends libpq-dev && \
+      apt-get upgrade -y --no-install-recommends && \
       rm -rf /var/lib/apt/lists/*; \
     fi
 
@@ -123,6 +140,7 @@ COPY --from=frontend-build /build/build /opt/agent-canvas/frontend
 
 # Copy the static-server scripts and their production runtime deps.
 COPY scripts/static-server.mjs /opt/agent-canvas/static-server.mjs
+COPY scripts/bind-host.mjs /opt/agent-canvas/bind-host.mjs
 COPY scripts/proxy-utils.mjs /opt/agent-canvas/proxy-utils.mjs
 COPY --from=frontend-build /build/node_modules/httpxy /opt/agent-canvas/node_modules/httpxy
 COPY --from=frontend-build /build/node_modules/sirv /opt/agent-canvas/node_modules/sirv

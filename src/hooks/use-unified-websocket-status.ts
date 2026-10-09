@@ -23,3 +23,13 @@ export function useMainWebSocketStatus(): WebSocketConnectionState {
     ? conversationContext.mainConnectionState
     : "CLOSED";
 }
+
+/**
+ * True once the conversation has connected at least once. Pair with a
+ * `CONNECTING` status to tell a first-ever connect from a reconnect — see
+ * `getStatusCode`.
+ */
+export function useHasConnectedOnceWebSocket(): boolean {
+  const conversationContext = useConversationWebSocket();
+  return conversationContext ? conversationContext.hasConnectedOnce : false;
+}
