@@ -1596,8 +1596,9 @@ export function BackendFormModal({
       <div
         data-testid={`${testIdRoot}-modal`}
         className={cn(
-          "relative bg-base-secondary p-6 rounded-xl flex flex-col gap-4 border border-border",
+          "relative bg-base-secondary p-6 rounded-xl flex flex-col gap-4 border border-border max-h-[90vh] overflow-y-auto",
           modalWidthClassName("md"),
+          MODAL_MAX_WIDTH_VIEWPORT,
         )}
       >
         <ModalCloseButton onClose={onClose} testId={`${testIdRoot}-close`} />

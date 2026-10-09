@@ -14,6 +14,10 @@ import {
   type NavigationContextValue,
 } from "#/context/navigation-context";
 import { BackendFormModal } from "#/components/features/backends/backend-form-modal";
+import {
+  MODAL_MAX_WIDTH_VIEWPORT,
+  MODAL_WIDTH_CLASS,
+} from "#/components/shared/modals/modal-body";
 
 const getServerInfoMock = vi.hoisted(() => vi.fn());
 const getSettingsMock = vi.hoisted(() => vi.fn().mockResolvedValue({}));
@@ -307,5 +311,27 @@ describe("BackendFormModal – edit mode (BackendForm entry point)", () => {
     expect(
       screen.queryByTestId("add-backend-cloud-host"),
     ).not.toBeInTheDocument();
+  });
+
+  it("caps edit mode body at 90vw and supports vertical scrolling to prevent phone-width clipping", () => {
+    renderWithProviders(
+      <BackendFormModal
+        mode="edit"
+        backend={{
+          id: "seeded-id",
+          name: "My Server",
+          host: "http://localhost:9000",
+          apiKey: "sk-old",
+          kind: "local",
+        }}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const modal = screen.getByTestId("edit-backend-modal");
+    expect(modal).toHaveClass(MODAL_WIDTH_CLASS.md);
+    expect(modal).toHaveClass(MODAL_MAX_WIDTH_VIEWPORT);
+    expect(modal).toHaveClass("max-h-[90vh]");
+    expect(modal).toHaveClass("overflow-y-auto");
   });
 });
