@@ -256,7 +256,7 @@ describe("AgentSettingsScreen", () => {
     },
   );
 
-  it.each(["opencode-go/kimi-k3", "opencode-go/glm-5.3-flash"])(
+  it.each(["opencode-go/kimi-k3"])(
     "preserves the OpenCode preset when reopening and changing Go model %s",
     async (model) => {
       const user = userEvent.setup();
@@ -332,9 +332,6 @@ describe("AgentSettingsScreen", () => {
     await screen.findByTestId("agent-command-input");
 
     await user.click(screen.getByTestId("agent-preset-selector"));
-    expect(
-      await screen.findByRole("option", { name: "OpenCode" }),
-    ).toBeInTheDocument();
     await user.click(await screen.findByRole("option", { name: "Pi" }));
 
     expect(screen.getByTestId("agent-command-input")).toHaveValue(

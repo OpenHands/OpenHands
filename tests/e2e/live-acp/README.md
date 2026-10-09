@@ -8,9 +8,10 @@ provider API calls. It's the "it actually works" companion to the unit tests in
 `__tests__/api/agent-server-adapter.test.ts` — those assert the request shape;
 this asserts a real agent reply.
 
-> **Use the Agent Server version Canvas pins** (`versions.agentServer` in
-> `config/defaults.json`). The 1.25.0 results below predate OpenCode, which
-> needs agent-server 1.45.0 or newer.
+> **Requires `agent-server:1.25.0-python` or newer** (software-agent-sdk#3510):
+> the ACP credentials ride as loopback LookupSecrets, and only #3510 resolves
+> them off the event loop. An older image deadlocks the first turn. OpenCode
+> needs 1.45.0 or newer.
 
 It is **not** part of `npm test` (it lives under `tests/`, which Vitest excludes,
 and needs a running container + real host credentials).
@@ -55,17 +56,12 @@ deadlock, no "Failed to start ACP server: timed out"**, which is exactly what
 #3510 fixes. Codex and Claude also passed the app-orchestrator script
 (`acp-docker-app-e2e.mts`).
 
-OpenCode was validated separately on 2026-09-28 through the app-orchestrator
-script against Agent Server 1.49.6 and OpenCode 1.18.23. The real turn reached
-`finished` and returned `ACPOK-OPENCODE`; the selected preset, registry command,
-and `opencode/big-pickle` model also survived a browser reload.
-
-| Provider        | Result                                      | Evidence (agent-server logs)                                                                                                                                                                                                 |
-| --------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Codex**       | ✅ real reply `ACPOK-CODEX` (both scripts)  | `Materialised ACP file-secret 'CODEX_AUTH_JSON' -> …/acp/codex/auth.json`; codex-acp 0.15.0; `Authenticating with ACP method: chatgpt`                                                                                       |
-| **Claude Code** | ✅ real reply `ACPOK-CLAUDE` (both scripts) | claude-agent-acp 0.30.0; `CLAUDE_CODE_OAUTH_TOKEN` env path (no `ANTHROPIC_BASE_URL`)                                                                                                                                        |
-| **Gemini CLI**  | ✅ real reply `ACPOK-GEMINI`¹               | `Materialised ACP file-secret 'GOOGLE_APPLICATION_CREDENTIALS_JSON' -> …/acp/gemini-cli/gcloud-credentials.json`; gemini-cli 0.45.1; `Authenticating with ACP method: vertex-ai` → real Vertex inference on `gemini-2.5-pro` |
-| **OpenCode**    | ✅ real reply `ACPOK-OPENCODE`              | OpenCode 1.18.23 starts through the shared registry command; default `opencode/big-pickle`; optional `OPENCODE_API_KEY` is emitted as a `LookupSecret` when present                                                          |
+| Provider | Result | Evidence (agent-server logs) |
+|---|---|---|
+| **Codex** | ✅ real reply `ACPOK-CODEX` (both scripts) | `Materialised ACP file-secret 'CODEX_AUTH_JSON' -> …/acp/codex/auth.json`; codex-acp 0.15.0; `Authenticating with ACP method: chatgpt` |
+| **Claude Code** | ✅ real reply `ACPOK-CLAUDE` (both scripts) | claude-agent-acp 0.30.0; `CLAUDE_CODE_OAUTH_TOKEN` env path (no `ANTHROPIC_BASE_URL`) |
+| **Gemini CLI** | ✅ real reply `ACPOK-GEMINI`¹ | `Materialised ACP file-secret 'GOOGLE_APPLICATION_CREDENTIALS_JSON' -> …/acp/gemini-cli/gcloud-credentials.json`; gemini-cli 0.45.1; `Authenticating with ACP method: vertex-ai` → real Vertex inference on `gemini-2.5-pro` |
+| **OpenCode** | ✅ real reply `ACPOK-OPENCODE` (app-path script, agent-server 1.49.6, 2026-09-28) | opencode-ai 1.18.23; default `opencode/big-pickle`, no API key |
 
 ¹ **Gemini prerequisites.** The full turn passes with: a **fresh** host ADC
 (`gcloud auth application-default login` — a stale one fails as `invalid_rapt`,

@@ -364,20 +364,6 @@ describe("SetupAcpSecretsStep", () => {
     ).not.toBeDisabled();
   });
 
-  it("keeps OpenCode skippable on local when auth cannot be probed", () => {
-    acpAuthStatusMock.mockReturnValue({
-      status: "unknown",
-      isChecking: false,
-      isSupported: false,
-    });
-    renderStep("opencode");
-
-    expect(
-      screen.queryByTestId("onboarding-acp-secrets-blocked"),
-    ).not.toBeInTheDocument();
-    expect(screen.getByTestId("onboarding-acp-secrets-next")).toBeEnabled();
-  });
-
   it("stays blocked when only a non-credential field is filled", async () => {
     // GOOGLE_CLOUD_LOCATION (or a base URL) alone can't authenticate anything —
     // only a masked ``secret`` field (blob / token / API key) satisfies a

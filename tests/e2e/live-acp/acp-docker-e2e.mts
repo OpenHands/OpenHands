@@ -155,11 +155,9 @@ async function main() {
       ? PROVIDER_PLANS.filter((p) => args.includes(p.id))
       : PROVIDER_PLANS;
 
-  console.log(
-    `ACP Docker e2e against ${BASE} — providers: ${selected
-      .map((p) => p.id)
-      .join(", ")}`,
-  );
+  console.log(`ACP Docker e2e against ${BASE} — providers: ${selected
+    .map((p) => p.id)
+    .join(", ")}`);
 
   const results: Array<{ id: ProviderId; ok: boolean }> = [];
   for (const plan of selected) {

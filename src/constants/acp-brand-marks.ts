@@ -21,10 +21,7 @@ export const PI_MARK_PATH =
   "M420 280H280V140H0V0H420V280ZM560 560H420V280H560V560ZM140 560H0V140H140V280H280V420H140V560Z";
 export const PI_VIEWBOX = "0 0 560 560";
 
-// Adapted from OpenCode's official square logo asset. The outer path is a
-// cut-out ``O``; the inset path is rendered at lower opacity so the mark stays
-// recognisable in both light and dark Canvas themes while inheriting the
-// surrounding text colour.
+// OpenCode's square logo; the inner path renders dimmed, as in the original.
 export const OPENCODE_MARK_OUTER_PATH =
   "M210 60H90V240H210V60ZM270 300H30V0H270V300Z";
 export const OPENCODE_MARK_INNER_PATH = "M210 240H90V120H210V240Z";

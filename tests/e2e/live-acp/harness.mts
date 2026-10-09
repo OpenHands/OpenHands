@@ -159,10 +159,7 @@ export const PROVIDER_PLANS: ProviderPlan[] = [
     acpServer: "opencode",
     model: process.env.ACP_E2E_OPENCODE_MODEL ?? "opencode/big-pickle",
     expectedToken: "ACPOK-OPENCODE",
-    // OpenCode's default Big Pickle model can run without an API key. When a
-    // host key is present, still exercise Canvas's LookupSecret path exactly as
-    // onboarding does; otherwise an empty map deliberately keeps the provider
-    // runnable for contributors who only need the first-party preset smoke test.
+    // The default model runs keyless; a host key still goes through LookupSecret.
     collectSecrets: () =>
       process.env.OPENCODE_API_KEY
         ? { OPENCODE_API_KEY: process.env.OPENCODE_API_KEY }
@@ -211,9 +208,7 @@ const TERMINAL = new Set(["finished", "error", "stuck", "stopped"]);
 
 /** Poll the conversation until a terminal state (or timeout); returns the last
  * observed ``execution_status``. */
-export async function pollUntilTerminal(
-  conversationId: string,
-): Promise<string> {
+export async function pollUntilTerminal(conversationId: string): Promise<string> {
   const deadline = Date.now() + POLL_TIMEOUT_MS;
   let status = "";
   while (Date.now() < deadline) {

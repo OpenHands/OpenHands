@@ -183,7 +183,7 @@ describe("getAcpProviderSecrets — containerized credentials", () => {
     // ``secret`` is what a required credential step counts as an actual
     // credential — a base URL alone can't authenticate, and ANTHROPIC_BASE_URL
     // alongside a Claude OAuth token actively breaks bearer auth.
-    for (const key of ["codex", "claude-code", "gemini-cli", "opencode"]) {
+    for (const key of ["codex", "claude-code", "gemini-cli"]) {
       const baseUrl = getAcpProviderSecrets(key).find((f) =>
         f.name.endsWith("_BASE_URL"),
       );

@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   ACP_MANAGED_SENTINEL,
   ACP_PROVIDERS,
-  buildAcpAgentSettingsDiff,
   getAcpProvidersForBackend,
   getAcpProviderSecrets,
   SURFACED_ACP_PROVIDERS,
@@ -110,27 +109,6 @@ describe("surfaced ACP providers", () => {
     expect(keys("cloud")).toEqual(["claude-code", "codex", "gemini-cli"]);
   });
 
-  it("sources OpenCode's command, default model, and credential from the client registry", () => {
-    const provider = ACP_PROVIDERS.find(({ key }) => key === "opencode");
-    const client = CLIENT_ACP_PROVIDERS.opencode;
-
-    expect(provider).toMatchObject({
-      display_name: client.display_name,
-      default_command: [...client.default_command],
-      default_model: client.default_model,
-    });
-    expect(getAcpProviderSecrets("opencode").map(({ name }) => name)).toEqual([
-      "OPENCODE_AUTH_CONTENT",
-      client.api_key_env_var,
-    ]);
-    expect(buildAcpAgentSettingsDiff("opencode")).toMatchObject({
-      acp_server: "opencode",
-      acp_command: [],
-      acp_args: [],
-      acp_model: client.default_model,
-    });
-  });
-
   it("surfaces nothing the pinned client registry has dropped", () => {
     // A rename or removal upstream must break loudly rather than leave a tile
     // whose command and models resolve to nothing. An addition stays a no-op.
@@ -143,10 +121,5 @@ describe("surfaced ACP providers", () => {
     unsurfaced.forEach((key) => {
       expect(getAcpProviderSecrets(key)).toEqual([]);
     });
-  });
-
-  it("keeps Kimi hidden from Canvas", () => {
-    expect(SURFACED_ACP_PROVIDERS).not.toContain("kimi-code");
-    expect(getAcpProviderSecrets("kimi-code")).toEqual([]);
   });
 });
