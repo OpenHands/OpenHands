@@ -5,7 +5,7 @@ of Agent Canvas. Read this index before driving the app, then open the matching
 feature file and run its recipe with `control-openhands`. The map is not a claim
 that every row passes today; the run's evidence ledger is.
 
-Maintenance baseline: main@ed815e141409c7b52991ab8d13c553b595da9165 (2026-10-06). The next maintenance pass starts from this commit; a pass proposes the next baseline in its PR, and merging that PR accepts it.
+Maintenance baseline: main@553d4519113192a80fb18376fdb6c1e39fa06387 (2026-10-09). The next maintenance pass starts from this commit; a pass proposes the next baseline in its PR, and merging that PR accepts it.
 
 ## Baseline preconditions
 
@@ -45,7 +45,7 @@ Maintenance baseline: main@ed815e141409c7b52991ab8d13c553b595da9165 (2026-10-06)
 - Verbs that are easy to miss: `browser mouse-click X Y` (backdrops and
   overlays), `click --modifiers Control,Meta` (open in new tab, multi-select),
   `click --hover-first` (hover-driven toggles), `click --expect-new-url`,
-  `browser tooltip <sel>`, `browser wait <sel> --state hidden|visible|detached`
+  `browser tooltip <sel>` (it returns a tooltip that is still open: before reading another one, hover elsewhere and `browser wait 'role=tooltip' --state detached`), `browser wait <sel> --state hidden|visible|detached`
   (use it after toggles: animations make an immediate `count` or `visible`
   lie), `browser media --clear` (forget earlier sounds before a negative sound
   check). `browser eval` takes one expression; wrap statements in an IIFE.
@@ -230,8 +230,8 @@ How to write and prove new entries: [../mapping.md](../mapping.md).
 | ID | Family | What it covers | Entry points | Needs | Sub-features |
 |---|---|---|---|---|---|
 | F01 | [First run, onboarding and sign-in](F01-first-run-and-sign-in.md) | telemetry consent, onboarding modal, public-mode backend step and API-key screen, route error page | any URL on a fresh browser profile; `launch --public` | fresh run or `browser reset`; LLM for say-hello | 22 |
-| F02 | [App shell, sidebar and command menu](F02-app-shell.md) | rail and phone drawer, collapse, home pinning, getting-started checklist, command menu, toasts | every page; `Control+k` / `Meta+k` | baseline; LLM for checklist progress | 26 |
-| F03 | [Home and starting work](F03-home.md) | home composer, workspace picker, plugin picker, recommended automations rail, no-LLM banner | `/`, **New Chat**, command menu | runs before and after `llm preset`; fixture repo | 39 |
+| F02 | [App shell, sidebar and command menu](F02-app-shell.md) | rail and phone drawer, collapse, home pinning, getting-started checklist, command menu, toasts | every page; `Control+k` / `Meta+k` | baseline; LLM for checklist progress | 27 |
+| F03 | [Home and starting work](F03-home.md) | home composer, workspace picker, plugin picker, recommended automations rail, no-LLM banner | `/`, **New Chat**, command menu | runs before and after `llm preset`; fixture repo | 40 |
 | F04 | [Conversation list and folders](F04-conversation-list.md) | sidebar list, View presets, workspace folders, tags, rename/pin/archive/delete, load more | sidebar on every page | several conversations; fixture repos | 40 |
 | F05 | [Composer, slash commands and plan mode](F05-composer.md) | send, drafts, attachments, model pill, slash commands, `/goal`, plan mode, dictation | home and conversation composer | LLM | 25 |
 | F06 | [Agent activity](F06-agent-activity.md) | messages, tool events, thinking, empty state, confirmation mode, stop/resume, errors, branching | `/conversations/<id>` | LLM | 35 |
@@ -257,7 +257,7 @@ How to write and prove new entries: [../mapping.md](../mapping.md).
 | F26 | [Launcher modes, Docker, desktop and library](F26-runtime-variants.md) | launcher flags, partial stacks, LAN bind, Docker, Electron, embeddable library | a terminal | Docker/Electron where available | 32 |
 | F27 | [Workspace tools](F27-workspace-tools.md) | terminal, browser, planner, task list, usage, `canvas_ui_control` | drawer tabs | LLM | 30 |
 
-27 families, 743 sub-features. `control-openhands map ids` lists every ID with its file.
+27 families, 745 sub-features. `control-openhands map ids` lists every ID with its file.
 
 ### Neighbouring families
 
