@@ -24,7 +24,6 @@ import { fileURLToPath } from "node:url";
 import { redactStorage } from "./lib/redact-storage.mjs";
 import { SECRET_KEY, SECRET_PATH, redactBody } from "./lib/network-bodies.mjs";
 import { buildLocator, toCss } from "./lib/selectors.mjs";
-import { BrowserVideoCapture } from "./lib/browser-video.mjs";
 import {
   RECORD_DEFAULTS,
   canvasSize,
@@ -508,8 +507,6 @@ function evidencePath(feature, name, ext) {
   return path;
 }
 
-const videoCapture = new BrowserVideoCapture({ privateDir, evidencePath });
-
 function assertAppUrl(target, allowExternal) {
   const url = new URL(target, baseUrl);
   if (!allowExternal && url.origin !== baseUrl.origin) {
@@ -922,13 +919,6 @@ const handlers = {
         : undefined,
     };
   },
-  async video({ action, feature, name }) {
-    if (action === "start")
-      return videoCapture.start(activePage, { feature, name });
-    if (action === "stop") return videoCapture.stop();
-    if (action === "status") return videoCapture.status();
-    throw new Error("browser video requires start, stop or status");
-  },
   async screenshot({ feature, name, selector, fullPage }) {
     const path = evidencePath(feature, name, ".png");
     if (selector) await locate(selector).first().screenshot({ path });
@@ -961,9 +951,6 @@ const handlers = {
     };
   },
   async viewport({ size }) {
-    if (videoCapture.isRecordingPage(activePage)) {
-      throw new Error("Stop the current video before changing its viewport.");
-    }
     const preset = VIEWPORTS[size];
     let next = preset;
     if (!next) {
@@ -1092,13 +1079,9 @@ const handlers = {
     const page = pages[Number(index)];
     if (!page) throw new Error(`No tab ${index}`);
     if (pages.length === 1) throw new Error("Refusing to close the last tab");
-    const video = videoCapture.isRecordingPage(page)
-      ? await videoCapture.stop()
-      : undefined;
     await page.close();
     if (page === activePage) activePage = context.pages()[0];
     return {
-      video,
       closed: Number(index),
       active: context.pages().indexOf(activePage),
     };
@@ -1572,19 +1555,11 @@ const handlers = {
     return result;
   },
   async shutdown() {
-    let video;
-    let videoError;
-    try {
-      const result = await videoCapture.stop();
-      if (result.path) video = result;
-    } catch (error) {
-      videoError = { error: error.message, hint: error.hint };
-    }
     setTimeout(async () => {
       await context.close().catch(() => {});
       process.exit(0);
     }, 50);
-    return { stopping: true, video, videoError };
+    return { stopping: true };
   },
 };
 
@@ -1657,11 +1632,6 @@ server.listen(0, "127.0.0.1", () => {
 
 for (const signal of ["SIGTERM", "SIGINT"]) {
   process.on(signal, async () => {
-    await videoCapture.stop().catch((error) => {
-      console.error(
-        `Video finalization failed; output remains private: ${error.message}`,
-      );
-    });
     await context.close().catch(() => {});
     process.exit(0);
   });

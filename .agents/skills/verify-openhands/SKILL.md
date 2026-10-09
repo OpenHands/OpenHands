@@ -25,8 +25,8 @@ together:
 2. **The feature map** ([references/feature-map/](references/feature-map/README.md))
    lists every user-facing behavior with stable IDs, user entry points, exact
    `control-openhands` recipes, observable results and gotchas.
-3. **Evidence**: screenshots, opt-in WebM clips, ARIA snapshots and a
-   pass/fail/blocked/not-run ledger that survive cleanup.
+3. **Evidence**: screenshots, ARIA snapshots and a pass/fail/blocked/not-run
+   ledger that survive cleanup.
 
 Neither this skill nor the map authorizes external writes, paid models beyond
 the budget you were given, or product fixes the user did not ask for.
@@ -148,24 +148,6 @@ control-openhands stop                         # stops only this run; evidence s
   review every image before publishing it. The CLI masks password fields in
   `snapshot`, `value` and `testids`; a screenshot of a visible key field is
   still a leak.
-- **Video** for temporal behavior: set the viewport first, then
-  `browser video start --feature F03.create-error-toast --name failed-launch`,
-  drive the real action, and `browser video stop`. A safe `BUG-<id>` is also
-  supported for defect captures. The public Playwright
-  Screencast API (>=1.59) captures the selected tab without reloading it or
-  changing its profile, URL, storage or drafts. Start waits for a real frame;
-  stop waits up to 10 s for encoding and returns the retained `.webm` path.
-  `browser video status` reports the captured tab, viewport and real-frame
-  count. A tab switch keeps recording the original tab; closing that tab or
-  stopping the browser finalizes its clip. Set the next viewport after stop.
-  Missing FFmpeg is blocked with `npx playwright install ffmpeg` as the
-  prerequisite; the CLI never downloads it automatically. Pending/failed
-  clips stay under `<run>/private/video/`; only successful WebM finalization
-  copies to evidence. No trace or storage dump is captured. Review the whole
-  clip for visible secrets before publishing it, just as for screenshots.
-  Encoded dimensions can include gray padding when Chrome supplies smaller
-  frames. Inspect decoded frames, retain a full-viewport screenshot from the
-  same entry/viewport, and caption any region the clip does not show.
 - **Cleanup** with `control-openhands stop` (add `--purge-private` to delete keys
   and state once you have checked the evidence). It only signals the process
   group it launched and verifies the ports closed. Delete run-owned fixtures

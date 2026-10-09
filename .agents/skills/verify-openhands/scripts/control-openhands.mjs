@@ -42,7 +42,6 @@ import {
 } from "./lib/testids.mjs";
 import { tmuxPathFor } from "./lib/tmux-path.mjs";
 import { browserCallLimit } from "./lib/call-limit.mjs";
-import { videoCaptureArguments } from "./lib/browser-video.mjs";
 import {
   DEFAULT_AGENT_PROFILE,
   agentProfileRepoint,
@@ -450,22 +449,15 @@ async function startBrowser(run) {
 async function stopBrowser(run) {
   const info = daemonInfo(run);
   if (!info) return { running: false };
-  let recording;
   try {
-    // Native video finalization has a 10 s deadline; keep response margin.
-    recording = await browserCall(run, "shutdown", {}, { timeout: 15_000 });
+    await browserCall(run, "shutdown", {}, { timeout: 5_000 });
   } catch {
     // fall through to signal
   }
   for (let i = 0; i < 20 && processAlive(info.pid); i += 1) await delay(250);
   if (processAlive(info.pid)) process.kill(info.pid, "SIGTERM");
   rmSync(join(run.dir, "private", "browser.json"), { force: true });
-  return {
-    stopped: true,
-    pid: info.pid,
-    video: recording?.video,
-    videoError: recording?.videoError,
-  };
+  return { stopped: true, pid: info.pid };
 }
 
 function versionAtLeast(version, minimum) {
@@ -2936,19 +2928,6 @@ async function cmdBrowser({ positional, flags }) {
         );
       result.count = result.testids.length;
       break;
-    case "video": {
-      let args;
-      try {
-        args = videoCaptureArguments(rest[0], flags);
-      } catch (error) {
-        throw new CliError(error.message, {
-          code: error.code,
-          hint: error.hint,
-        });
-      }
-      result = await browserCall(run, "video", args);
-      break;
-    }
     case "screenshot":
       if (!flags.feature || !flags.name)
         usage(
@@ -3398,7 +3377,6 @@ const BROWSER_VERBS = new Set([
   "snapshot",
   "testids",
   "screenshot",
-  "video",
   "record",
   "viewport",
   "clock",
@@ -4237,9 +4215,6 @@ Verbs
   snapshot [<sel>] [--max-lines N] [--feature ID --name N]   ARIA tree (saved as evidence)
   testids [<sel>] [--hidden] [--filter part]                 discover on-screen data-testid handles (--hidden adds hidden/off-screen)
   screenshot [<sel>] --feature ID --name N [--full-page]     PNG under evidence/<ID>/
-  video start --feature ID --name N     opt-in current-tab WebM; keeps the page/profile alive
-  video stop | status                   finalize WebM evidence | inspect capture state
-                                         set viewport first; needs Playwright >=1.59 and its FFmpeg runtime
   record start --feature ID --name N [--fps 10] [--max-seconds 600]   video of the active tab
   record pause | record resume            cut a wait (the agent working) out of the video
   record stop [--gif] [--keep-frames] [--discard] | record status
