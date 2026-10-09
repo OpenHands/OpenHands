@@ -129,7 +129,7 @@ return new ConversationClient(getAgentServerClientOptions()).someMethod(...);
 
 ## Backend and Contract Invariants
 
-- Local onboarding must create its LLM profile from the complete persisted settings after the form save succeeds. Fetch with `X-Expose-Secrets: encrypted` through `SettingsService.fetchSettingsFromApi("encrypted")` so unchanged endpoints, credentials and typed options survive the profile creation. A dirty-field settings diff is insufficient for the profile endpoint's complete LLM configuration. Cloud onboarding continues to use its settings save path.
+- Local onboarding edits an LLM profile, the way the LLM profile editor does. It fills the form from the active profile, read with `X-Expose-Secrets: encrypted`, or from a fresh profile when none is active. On Next it merges the form's changes over that profile with `buildProfileLlmConfig` (`src/components/features/settings/llm-profiles/llm-profile-form.ts`), then saves and activates the result. It never reads or PATCHes raw `agent_settings.llm`; activating the profile syncs it on the server. A form's dirty fields alone are not a complete profile, because the profile endpoint replaces the whole LLM configuration. Cloud onboarding still saves through its settings path.
 
 - Use `@openhands/typescript-client` classes directly for agent-server-backed REST/workspace/event/VS Code calls. Centralize host/session API key/working-directory option assembly through `src/api/agent-server-client-options.ts`; the backend fallback policy itself lives in `src/api/backend-registry/active-store.ts`.
 - Local verification/build gotchas:

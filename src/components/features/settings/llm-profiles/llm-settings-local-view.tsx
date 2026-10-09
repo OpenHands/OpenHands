@@ -9,10 +9,8 @@ import { useTranslation } from "react-i18next";
 import { LlmProfilesManager } from "./llm-profiles-manager";
 import { ProfileNameInput } from "./profile-name-input";
 import { BrandButton } from "#/components/features/settings/brand-button";
-import {
-  LlmSettingsScreen,
-  LLM_PROVIDER_CONNECTION_KEY,
-} from "#/routes/llm-settings";
+import { LlmSettingsScreen } from "#/routes/llm-settings";
+import { LLM_PROVIDER_CONNECTION_KEY } from "#/constants/llm-provider-connection";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useSaveLlmProfile } from "#/hooks/mutation/use-save-llm-profile";
 import { useActivateLlmProfile } from "#/hooks/mutation/use-activate-llm-profile";
@@ -38,20 +36,18 @@ import {
   deriveProfileNameFromModel,
   isProfileNameValid,
 } from "#/utils/derive-profile-name";
-import { isOpenHandsProviderModel } from "#/utils/format-model-name";
 import { SdkSectionSaveControl } from "../sdk-settings/sdk-section-page";
+import {
+  buildProfileLlmConfig,
+  profileConfigToFormValues,
+} from "./llm-profile-form";
 import {
   LLM_AUTH_TYPE_API_KEY,
   LLM_AUTH_TYPE_KEY,
-  LLM_AUTH_TYPE_SUBSCRIPTION,
   LLM_SUBSCRIPTION_VENDOR_KEY,
   OPENAI_SUBSCRIPTION_VENDOR,
-  resolveLlmAuthType,
 } from "#/constants/llm-subscription";
-import {
-  normalizeFieldValue,
-  SettingsFormValues,
-} from "#/utils/sdk-settings-schema";
+import { SettingsFormValues } from "#/utils/sdk-settings-schema";
 import { BackNavButton } from "#/components/shared/buttons/back-nav-button";
 import { Typography } from "#/ui/typography";
 import { useSettingsSectionHeader } from "#/contexts/settings-section-header-context";
@@ -203,41 +199,10 @@ export function LlmSettingsLocalView() {
         // active settings. Fields absent from the schema are still preserved
         // on save via `baseConfig`. Read the schema from the ref so a schema
         // that loaded during the `getProfile` await above is used.
-        const schema = agentSchemaRef.current;
-        const llmFields =
-          schema?.sections.find((section) => section.key === "llm")?.fields ??
-          [];
-        const initialValues: SettingsFormValues = {};
-        for (const field of llmFields) {
-          const flatKey = field.key.startsWith("llm.")
-            ? field.key.slice("llm.".length)
-            : field.key;
-          initialValues[field.key] = normalizeFieldValue(
-            field,
-            config[flatKey],
-          );
-        }
-
-        // Safety net for the specially-rendered keys when the schema is
-        // unavailable, so editing still works without it.
-        if (llmFields.length === 0) {
-          initialValues["llm.model"] = (config.model as string) ?? "";
-          initialValues["llm.api_key"] = (config.api_key as string) ?? "";
-          initialValues["llm.base_url"] = (config.base_url as string) ?? "";
-          initialValues[LLM_AUTH_TYPE_KEY] = resolveLlmAuthType(
-            config.auth_type,
-          );
-          initialValues[LLM_SUBSCRIPTION_VENDOR_KEY] =
-            (config.subscription_vendor as string) ??
-            OPENAI_SUBSCRIPTION_VENDOR;
-        }
-
-        // Seed the provider-connection link explicitly (it is excluded from the
-        // schema-driven inputs), so an unchanged profile keeps its connection.
-        initialValues[LLM_PROVIDER_CONNECTION_KEY] =
-          typeof config.provider_connection_id === "string"
-            ? config.provider_connection_id
-            : "";
+        const initialValues = profileConfigToFormValues(
+          agentSchemaRef.current,
+          config,
+        );
 
         setEditingProfile({ profile, initialValues, baseConfig: config });
         setProfileName(profile.name);
@@ -303,80 +268,17 @@ export function LlmSettingsLocalView() {
       return;
     }
 
-    const baseConfig =
-      viewMode === "edit" && editingProfile?.baseConfig
-        ? { ...editingProfile.baseConfig }
-        : {};
-    const didChangeModelInBasic =
-      saveControl.view === "basic" &&
-      Object.prototype.hasOwnProperty.call(dirtyLlm, "model") &&
-      dirtyLlm.model !== baseConfig.model;
-    const llmConfig: Record<string, unknown> = { ...baseConfig, ...dirtyLlm };
-    const authType = resolveLlmAuthType(llmConfig.auth_type);
-
-    // A profile linked to a provider connection sources its credential from the
-    // connection, so it never carries an inline api_key / base_url. The form
-    // value is the source of truth: empty (or absent) means "not linked".
-    const connectionId = supportsConnections
-      ? String(saveControl.values[LLM_PROVIDER_CONNECTION_KEY] ?? "").trim()
-      : "";
-
-    if (authType === LLM_AUTH_TYPE_SUBSCRIPTION) {
-      llmConfig.auth_type = LLM_AUTH_TYPE_SUBSCRIPTION;
-      llmConfig.subscription_vendor = OPENAI_SUBSCRIPTION_VENDOR;
-      llmConfig.provider_connection_id = null;
-      delete llmConfig.api_key;
-      delete llmConfig.base_url;
-    } else if (connectionId) {
-      llmConfig.auth_type = LLM_AUTH_TYPE_API_KEY;
-      llmConfig.subscription_vendor = null;
-      llmConfig.provider_connection_id = connectionId;
-      delete llmConfig.api_key;
-      delete llmConfig.base_url;
-    } else {
-      llmConfig.auth_type = LLM_AUTH_TYPE_API_KEY;
-      llmConfig.subscription_vendor = null;
-      // Clear any prior link so unlinking sticks. Only relevant where provider
-      // connections exist; otherwise the field stays untouched below.
-      if (supportsConnections) llmConfig.provider_connection_id = null;
-
-      // On cloud the OpenHands provider is backed by a server-minted LLM key,
-      // so the profile must not carry an inline api_key / base_url — let the
-      // backend attach its own credential when the profile is saved.
-      const isCloudOpenHandsProvider =
-        backend.kind === "cloud" &&
-        isOpenHandsProviderModel(
-          typeof llmConfig.model === "string" ? llmConfig.model : "",
-        );
-      if (isCloudOpenHandsProvider) {
-        delete llmConfig.api_key;
-        delete llmConfig.base_url;
-      } else {
-        // The Basic tab has no base_url field. Preserve an existing hidden value
-        // when the model did not actually change; if the user chooses a new model,
-        // drop the old base URL so provider defaults can apply to that model.
-        if (didChangeModelInBasic) {
-          delete llmConfig.base_url;
-        }
-
-        // API key handling: an empty value means "no change" (the UX doesn't
-        // support clearing a key). In edit mode preserve the existing encrypted
-        // key from the profile; in create mode omit api_key entirely. A newly
-        // typed key arrives in `dirtyLlm` and wins.
-        if (
-          typeof llmConfig.api_key !== "string" ||
-          llmConfig.api_key.trim() === ""
-        ) {
-          const existingKey =
-            typeof baseConfig.api_key === "string" ? baseConfig.api_key : "";
-          if (existingKey) {
-            llmConfig.api_key = existingKey;
-          } else {
-            delete llmConfig.api_key;
-          }
-        }
-      }
-    }
+    const { llmConfig, connectionId } = buildProfileLlmConfig({
+      baseConfig:
+        viewMode === "edit" && editingProfile?.baseConfig
+          ? editingProfile.baseConfig
+          : {},
+      dirtyLlm,
+      values: saveControl.values,
+      view: saveControl.view,
+      supportsConnections,
+      isCloud: backend.kind === "cloud",
+    });
 
     const model = typeof llmConfig.model === "string" ? llmConfig.model : "";
     if (!model) {

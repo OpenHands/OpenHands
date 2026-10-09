@@ -6,8 +6,9 @@
  *   Step 0 — Choose Agent: selects OpenHands and advances.
  *   Step 1 — Check Backend: waits for the connected banner, advances.
  *   Step 2 — Setup LLM: fills in the mock LLM model, base URL, and API
- *            key (via "All" mode), and advances. The step persists settings
- *            AND creates/activates a named profile automatically.
+ *            key (via "All" mode), and advances. The step edits the active
+ *            LLM profile: it saves the form as a profile named after the
+ *            model and activates it, without writing raw LLM settings.
  *   Step 3 — Say Hello: verifies the Skip button is hidden (PR #1095),
  *            submits the default greeting, verifies the conversation is
  *            created and the browser navigates to it.
@@ -38,7 +39,6 @@ import {
   BACKEND_URL,
   waitForNonUserMessageText,
   waitForAgentMessageContaining,
-  ensureMockLLMProfileViaAPI,
 } from "../utils/mock-llm-helpers";
 import {
   showOnboarding,
@@ -51,6 +51,10 @@ import {
 
 const PROFILE_NAME = `mock-onboarding-${randomUUID()}`;
 const MOCK_MODEL = `openai/${PROFILE_NAME}`;
+const PREVIOUS_PROFILE_NAME = `mock-before-onboarding-${randomUUID()}`;
+// Raw settings that disagree with the active profile. Onboarding edits the
+// profile, so this endpoint must never reach the form or the new profile.
+const STALE_SETTINGS_BASE_URL = "http://127.0.0.1:9/stale-raw-settings";
 const REPLY_TOKEN = "ONBOARDING_HAPPY_PATH_REPLY_OK";
 
 test.describe.configure({ mode: "serial" });
@@ -80,9 +84,36 @@ test.describe("onboarding happy path", () => {
     expect(settings.ok()).toBe(true);
     previousSettings = await settings.json();
 
-    // Reproduce re-onboarding with an already-configured endpoint and key.
-    // They are unchanged form values, so neither appears in the settings diff.
-    await ensureMockLLMProfileViaAPI(request, "openai/mock-before-onboarding");
+    // Reproduce re-onboarding with an active profile that already has the
+    // endpoint and key. The form shows them, so the endpoint the test types
+    // again is an unchanged value that is absent from the form's changes.
+    const saved = await request.post(
+      `${BACKEND_URL}/api/profiles/${PREVIOUS_PROFILE_NAME}`,
+      {
+        headers,
+        data: {
+          llm: {
+            model: `openai/${PREVIOUS_PROFILE_NAME}`,
+            api_key: "mock-api-key-for-testing",
+            base_url: MOCK_LLM_AGENT_URL,
+          },
+          include_secrets: true,
+        },
+      },
+    );
+    expect(saved.ok(), "save the previous profile").toBe(true);
+    const activated = await request.post(
+      `${BACKEND_URL}/api/profiles/${PREVIOUS_PROFILE_NAME}/activate`,
+      { headers },
+    );
+    expect(activated.ok(), "activate the previous profile").toBe(true);
+    const staleSettings = await request.patch(`${BACKEND_URL}/api/settings`, {
+      headers,
+      data: {
+        agent_settings_diff: { llm: { base_url: STALE_SETTINGS_BASE_URL } },
+      },
+    });
+    expect(staleSettings.ok(), "write stale raw LLM settings").toBe(true);
     await resetMockLLM(request);
   });
 
@@ -118,13 +149,13 @@ test.describe("onboarding happy path", () => {
         });
         expect.soft(restored.ok(), "restore the previous settings").toBe(true);
       }
-      const deleted = await request.delete(
-        `${BACKEND_URL}/api/profiles/${PROFILE_NAME}`,
-        { headers },
-      );
-      expect
-        .soft(deleted.ok(), "delete the onboarding test profile")
-        .toBe(true);
+      for (const name of [PROFILE_NAME, PREVIOUS_PROFILE_NAME]) {
+        const deleted = await request.delete(
+          `${BACKEND_URL}/api/profiles/${name}`,
+          { headers },
+        );
+        expect.soft(deleted.ok(), `delete test profile ${name}`).toBe(true);
+      }
     } finally {
       await resetMockLLM(request);
     }
@@ -197,6 +228,22 @@ test.describe("onboarding happy path", () => {
         timeout: 10_000,
       });
 
+      // The form shows the active profile's endpoint, not the raw settings.
+      await expect(page.getByTestId("base-url-input")).toHaveValue(
+        MOCK_LLM_AGENT_URL,
+      );
+
+      // The LLM step must not write raw LLM settings.
+      const settingsWrites: string[] = [];
+      page.on("request", (req) => {
+        if (
+          req.method() === "PATCH" &&
+          new URL(req.url()).pathname.endsWith("/api/settings")
+        ) {
+          settingsWrites.push(req.postData() ?? "");
+        }
+      });
+
       // Fill in model
       const modelInput = page.getByTestId("llm-custom-model-input");
       await modelInput.click();
@@ -227,6 +274,7 @@ test.describe("onboarding happy path", () => {
         model: MOCK_MODEL,
         base_url: MOCK_LLM_AGENT_URL,
       });
+      expect(settingsWrites, "settings PATCHes from the LLM step").toEqual([]);
     });
 
     // ── Step 3: Say Hello ───────────────────────────────────────────
