@@ -36,7 +36,8 @@ Intent status: documented / undocumented / contradictory. Runtime classification
 intended-change / introduced-in-range / reproduced-on-both /
 observed-origin-unconfirmed / environment-or-harness-gap. Keep these independent.
 A screenshot proves appearance, not provenance or a side effect; include reloads,
-real files, actual run status, or read-only state as appropriate.
+real files, actual run status, or read-only state as appropriate. A recording
+(`browser record`) shows order and timing; say where it was paused.
 
 ## Findings and verdict
 

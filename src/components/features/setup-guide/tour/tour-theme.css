@@ -1,0 +1,181 @@
+/* The enterprise app's tour popover, with Canvas's theme tokens. */
+.oh-setup-tour-popover.driver-popover {
+  background: var(--oh-color-base-secondary);
+  color: var(--oh-foreground);
+  color-scheme: dark;
+  border: 1px solid var(--oh-border);
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgb(0 0 0 / 45%);
+  min-width: 300px;
+  max-width: 400px;
+  padding: 18px 20px 16px;
+}
+
+.oh-setup-tour-popover .driver-popover-arrow {
+  border-width: 6px;
+}
+
+.oh-setup-tour-popover .driver-popover-arrow::after {
+  content: "";
+  position: absolute;
+  border: 6px solid transparent;
+}
+
+.oh-setup-tour-popover .driver-popover-arrow-side-left {
+  border-left-color: var(--oh-border);
+}
+
+.oh-setup-tour-popover .driver-popover-arrow-side-left::after {
+  top: -6px;
+  left: -7px;
+  border-left-color: var(--oh-color-base-secondary);
+}
+
+.oh-setup-tour-popover .driver-popover-arrow-side-right {
+  border-right-color: var(--oh-border);
+}
+
+.oh-setup-tour-popover .driver-popover-arrow-side-right::after {
+  top: -6px;
+  left: -5px;
+  border-right-color: var(--oh-color-base-secondary);
+}
+
+.oh-setup-tour-popover .driver-popover-arrow-side-top {
+  border-top-color: var(--oh-border);
+}
+
+.oh-setup-tour-popover .driver-popover-arrow-side-top::after {
+  top: -7px;
+  left: -6px;
+  border-top-color: var(--oh-color-base-secondary);
+}
+
+.oh-setup-tour-popover .driver-popover-arrow-side-bottom {
+  border-bottom-color: var(--oh-border);
+}
+
+.oh-setup-tour-popover .driver-popover-arrow-side-bottom::after {
+  top: -5px;
+  left: -6px;
+  border-bottom-color: var(--oh-color-base-secondary);
+}
+
+.oh-setup-tour-popover .driver-popover-title {
+  color: var(--oh-foreground);
+  font-size: 17px;
+  line-height: 1.3;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+}
+
+.oh-setup-tour-popover .driver-popover-description {
+  color: var(--oh-muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.oh-setup-tour-popover .driver-popover-progress-text {
+  color: var(--oh-muted);
+  font-size: 12px;
+}
+
+.oh-setup-tour-popover .driver-popover-footer {
+  margin-top: 16px;
+}
+
+.oh-setup-tour-popover .driver-popover-footer button {
+  padding: 8px 14px;
+  font-size: 13px;
+  line-height: 1.3;
+  font-weight: 500;
+  border-radius: 8px;
+  text-shadow: none;
+}
+
+.oh-setup-tour-popover .driver-popover-next-btn {
+  background: var(--oh-foreground);
+  color: var(--oh-color-base);
+  border: 1px solid var(--oh-foreground);
+}
+
+.oh-setup-tour-popover .driver-popover-next-btn:hover {
+  opacity: 0.9;
+}
+
+.oh-setup-tour-popover .driver-popover-prev-btn {
+  background: transparent;
+  color: var(--oh-foreground);
+  border: 1px solid var(--oh-border);
+}
+
+.oh-setup-tour-popover .driver-popover-prev-btn:hover {
+  background: var(--oh-surface-raised);
+}
+
+.oh-setup-tour-popover .driver-popover-prev-btn:disabled {
+  color: var(--oh-muted);
+  opacity: 0.5;
+}
+
+.oh-setup-tour-popover .driver-popover-close-btn {
+  top: 8px;
+  right: 8px;
+  width: 32px;
+  height: 32px;
+  font-size: 20px;
+  background: transparent;
+  color: var(--oh-muted);
+  border: none;
+  box-shadow: none;
+  outline: none;
+  text-shadow: none;
+}
+
+.oh-setup-tour-popover .driver-popover-close-btn:hover,
+.oh-setup-tour-popover .driver-popover-close-btn:focus {
+  background: transparent;
+  color: var(--oh-foreground);
+  border: none;
+  box-shadow: none;
+  outline: none;
+}
+
+/*
+ * driver.js puts its state classes on <body>, but Canvas scopes every rule
+ * under [data-agent-server-ui], which is on <body> itself, so driver.css's
+ * `.driver-active …` rules never match. They are restated here on the body.
+ * Selectors that name the scope attribute are left as written.
+ */
+[data-agent-server-ui].driver-active .driver-overlay,
+[data-agent-server-ui].driver-active * {
+  pointer-events: none;
+}
+
+[data-agent-server-ui].driver-active .driver-active-element,
+[data-agent-server-ui].driver-active .driver-active-element *,
+[data-agent-server-ui].driver-active .driver-popover,
+[data-agent-server-ui].driver-active .driver-popover * {
+  pointer-events: auto;
+}
+
+[data-agent-server-ui].driver-fade .driver-overlay {
+  animation: animate-fade-in 0.2s ease-in-out;
+}
+
+[data-agent-server-ui].driver-fade .driver-popover {
+  animation: animate-fade-in 0.2s;
+}
+
+/*
+ * A stop on a form keeps the whole page usable. driver.js otherwise turns off
+ * pointer events outside the highlighted element, which would also block a
+ * dropdown's option list rendered in a portal.
+ */
+[data-agent-server-ui].oh-setup-tour-interactive .driver-overlay {
+  display: none;
+}
+
+[data-agent-server-ui].oh-setup-tour-interactive.driver-active * {
+  pointer-events: auto;
+}
