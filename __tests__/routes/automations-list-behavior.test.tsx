@@ -883,7 +883,9 @@ describe("automations list interactions", () => {
     );
 
     expect(mocks.createConversation).not.toHaveBeenCalled();
-    expect(mocks.navigate).toHaveBeenCalledWith("/automations/setup");
+    expect(mocks.navigate).toHaveBeenCalledWith(
+      "/automations/setup?automationId=automation-1",
+    );
     expect(screen.queryByTestId("edit-modal")).not.toBeInTheDocument();
   });
 

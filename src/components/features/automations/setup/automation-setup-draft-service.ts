@@ -30,12 +30,40 @@ function getStringField(
   return typeof field === "string" ? field : undefined;
 }
 
-function getFirstObject(
+function getObjectArray(
   value: Record<string, unknown>,
   key: string,
-): Record<string, unknown> | null {
+): Record<string, unknown>[] {
   const field = value[key];
-  return Array.isArray(field) ? asRecord(field[0]) : null;
+  return Array.isArray(field)
+    ? field.flatMap((item) => {
+        const record = asRecord(item);
+        return record ? [record] : [];
+      })
+    : [];
+}
+
+function getRepositoryField(
+  value: Record<string, unknown>,
+): string | undefined {
+  const repositories = getObjectArray(value, "repos")
+    .map((repo) => getStringField(repo, "url")?.trim())
+    .filter((repo): repo is string => !!repo);
+  if (repositories.length > 0) return repositories.join(", ");
+  return typeof value.repository === "string" ? value.repository : undefined;
+}
+
+function getEventKeyField(
+  trigger: Record<string, unknown>,
+): string | undefined {
+  const eventKey = trigger.on;
+  if (typeof eventKey === "string") return eventKey;
+  if (!Array.isArray(eventKey)) return undefined;
+  const eventKeys = eventKey
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return eventKeys.length > 0 ? eventKeys.join(",") : undefined;
 }
 
 function getPluginEntries(
@@ -68,7 +96,6 @@ export function setupDraftFromServerDraft(
 ): AutomationSetupDraft {
   const body = saved.draft as Record<string, unknown>;
   const trigger = asRecord(body.trigger);
-  const repo = getFirstObject(body, "repos");
   const pluginEntries = getPluginEntries(body);
   const kind = kindForDraftEndpoint(saved.endpoint);
   const form: AutomationSetupFormPatch = { kind };
@@ -77,9 +104,7 @@ export function setupDraftFromServerDraft(
   if (savedName !== undefined) form.name = savedName;
   const savedPrompt = getStringField(body, "prompt");
   if (savedPrompt !== undefined) form.prompt = savedPrompt;
-  const savedRepository =
-    getStringField(repo ?? {}, "url") ??
-    (typeof body.repository === "string" ? body.repository : undefined);
+  const savedRepository = getRepositoryField(body);
   if (savedRepository !== undefined) form.repository = savedRepository;
   if (pluginEntries.length > 0) {
     form.pluginSource = pluginEntries[0]?.source ?? "";
@@ -104,11 +129,7 @@ export function setupDraftFromServerDraft(
     if (savedTimezone !== undefined) form.timezone = savedTimezone;
     const savedEventSource = getStringField(trigger, "source");
     if (savedEventSource !== undefined) form.eventSource = savedEventSource;
-    const savedEventKey =
-      getStringField(trigger, "on") ??
-      (Array.isArray(trigger.on) && typeof trigger.on[0] === "string"
-        ? trigger.on[0]
-        : undefined);
+    const savedEventKey = getEventKeyField(trigger);
     if (savedEventKey !== undefined) form.eventKey = savedEventKey;
     const savedEventFilter = getStringField(trigger, "filter");
     if (savedEventFilter !== undefined) form.eventFilter = savedEventFilter;
@@ -153,7 +174,6 @@ export function formFromServerDraft(
             ref: base.pluginRef,
           },
         ].filter((entry) => entry.source || entry.ref);
-  const repo = getFirstObject(body, "repos");
   const endpointKind = kindForDraftEndpoint(saved.endpoint);
 
   return {
@@ -161,9 +181,7 @@ export function formFromServerDraft(
     kind: endpointKind,
     name: saved.name ?? getStringField(body, "name") ?? base.name,
     prompt: getStringField(body, "prompt") ?? base.prompt,
-    repository:
-      getStringField(repo ?? {}, "url") ??
-      (typeof body.repository === "string" ? body.repository : base.repository),
+    repository: getRepositoryField(body) ?? base.repository,
     pluginSource: savedPlugins[0]?.source ?? "",
     pluginRef: savedPlugins[0]?.ref ?? "",
     pluginList:
@@ -182,11 +200,9 @@ export function formFromServerDraft(
       getStringField(trigger ?? {}, "schedule") ?? base.customSchedule,
     timezone: getStringField(trigger ?? {}, "timezone") ?? base.timezone,
     eventSource: getStringField(trigger ?? {}, "source") ?? base.eventSource,
-    eventKey:
-      getStringField(trigger ?? {}, "on") ??
-      (Array.isArray(trigger?.on) && typeof trigger.on[0] === "string"
-        ? trigger.on[0]
-        : base.eventKey),
+    eventKey: trigger
+      ? (getEventKeyField(trigger) ?? base.eventKey)
+      : base.eventKey,
     eventFilter: getStringField(trigger ?? {}, "filter") ?? base.eventFilter,
     model: getStringField(body, "model") ?? base.model,
     agentProfileId:

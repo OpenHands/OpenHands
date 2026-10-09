@@ -1405,6 +1405,11 @@ export function AutomationSetupPanel({
       draftRequestKey(request.endpoint, request.name ?? "", request.draft),
     );
     setIsTaggedDraftMissing(false);
+    if (isPendingAutomationSetupId(conversationId) && !serverDraftId) {
+      navigate(`/automations/setup?draftId=${encodeURIComponent(saved.id)}`, {
+        replace: true,
+      });
+    }
     await updateConversationDraftTags(saved.id);
     return saved;
   };
@@ -1673,12 +1678,11 @@ export function AutomationSetupPanel({
   };
 
   /**
-   * Fields the setup form owns, written back onto the automation being edited.
-   * `enabled` stays off this body so Save does not turn a live automation off
-   * the way creating a draft does.
+   * Only fields accepted by the backend PATCH contract are sent when editing an
+   * existing automation. Repositories, plugins and uploaded code are create-time
+   * configuration today, so the edit form must not include them in PATCH.
    */
-  const buildExistingAutomationBody = async () => {
-    const repositories = parseAutomationSetupRepositories(repository);
+  const buildExistingAutomationBody = () => {
     const body: Record<string, unknown> = {
       name: normalizedName(),
       trigger: buildTrigger(),
@@ -1688,16 +1692,6 @@ export function AutomationSetupPanel({
         showTimeout && timeoutSeconds.trim() ? Number(timeoutSeconds) : null,
     };
     if (kind !== "custom") body.prompt = prompt.trim();
-    body.repository = repositories[0] ?? null;
-    body.repos = repositories.map((url) => ({ url, provider: "github" }));
-    body.plugins = configuredPlugins;
-    if (kind === "custom") {
-      body.entrypoint = entrypoint.trim();
-      if (!hasExistingCustomBundle) {
-        body.setup_script_path = setupScriptPath.trim();
-        body.tarball_path = await uploadCustomArchive();
-      }
-    }
     return body as Partial<Automation>;
   };
 
@@ -1709,7 +1703,7 @@ export function AutomationSetupPanel({
       if (!(await ensureCustomWebhookSource())) return;
       await AutomationService.updateAutomation(
         editingAutomationId,
-        await buildExistingAutomationBody(),
+        buildExistingAutomationBody(),
       );
       setSaveState("saved");
       toast.success(t(I18nKey.AUTOMATIONS$EDIT_SUCCESS));
@@ -1722,18 +1716,10 @@ export function AutomationSetupPanel({
   };
 
   const handleTestExisting = async () => {
-    if (!validateRequiredFields()) return;
     setIsSubmitting(true);
-    setSaveState("saving");
     try {
-      if (!(await ensureCustomWebhookSource())) return;
-      await AutomationService.updateAutomation(
-        editingAutomationId,
-        await buildExistingAutomationBody(),
-      );
       const run =
         await AutomationService.dispatchAutomation(editingAutomationId);
-      setSaveState("saved");
       setDraftRuns((previous) => [
         run,
         ...previous.filter((existing) => existing.id !== run.id),
@@ -1743,7 +1729,6 @@ export function AutomationSetupPanel({
         text: t(I18nKey.AUTOMATION_SETUP$TEST_DISPATCHED),
       });
     } catch (error) {
-      setSaveState("error");
       displayErrorToast(error instanceof Error ? error.message : null);
     } finally {
       setIsSubmitting(false);

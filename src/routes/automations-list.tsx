@@ -476,7 +476,7 @@ export default function AutomationsList() {
       PENDING_AUTOMATION_SETUP_ID,
       setupDraftFromServerDraft(draft),
     );
-    navigate?.("/automations/setup");
+    navigate?.(`/automations/setup?draftId=${encodeURIComponent(draft.id)}`);
   };
 
   const handleTestDraft = (draft: AutomationDraftApiResponse) => {

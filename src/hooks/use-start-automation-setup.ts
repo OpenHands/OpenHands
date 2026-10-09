@@ -31,6 +31,7 @@ export function useStartAutomationSetup() {
 
   const startSetup = useCallback(() => {
     trackAutomationCreatedButton({ backendKind: active.backend.kind });
+    clearAutomationFormSession(PENDING_AUTOMATION_SETUP_ID);
     navigate?.("/automations/setup");
   }, [active.backend.kind, navigate, trackAutomationCreatedButton]);
 

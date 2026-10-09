@@ -208,7 +208,9 @@ describe("AutomationDetail — Edit in the kebab menu", () => {
     // conversation. The permission model (mocked to canManage above) decides
     // whether the action exists, not the backend kind.
     expect(detailMocks.createConversationMutate).not.toHaveBeenCalled();
-    expect(detailMocks.navigate).toHaveBeenCalledWith("/automations/setup");
+    expect(detailMocks.navigate).toHaveBeenCalledWith(
+      "/automations/setup?automationId=auto-1",
+    );
     expect(
       screen.queryByTestId("edit-automation-name"),
     ).not.toBeInTheDocument();

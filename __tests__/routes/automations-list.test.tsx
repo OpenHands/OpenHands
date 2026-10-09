@@ -282,7 +282,6 @@ afterEach(() => {
 });
 
 describe("AutomationsList — draft sections", () => {
-
   it("does not request saved drafts when capabilities do not advertise drafts", async () => {
     vi.mocked(AutomationService.getCapabilities).mockResolvedValue({
       ready: true,
@@ -403,7 +402,9 @@ describe("AutomationsList — draft sections", () => {
         }),
       }),
     );
-    expect(mocks.navigate).toHaveBeenCalledWith("/automations/setup");
+    expect(mocks.navigate).toHaveBeenCalledWith(
+      "/automations/setup?draftId=draft-1",
+    );
     expect(mocks.createConversationMutate).not.toHaveBeenCalled();
     expect(
       AgentServerConversationService.updateConversationTags,
@@ -511,7 +512,9 @@ describe("AutomationsList — Edit from the row kebab", () => {
         }),
       }),
     );
-    expect(mocks.navigate).toHaveBeenCalledWith("/automations/setup");
+    expect(mocks.navigate).toHaveBeenCalledWith(
+      "/automations/setup?automationId=auto-1",
+    );
     expect(
       screen.queryByTestId("edit-automation-name"),
     ).not.toBeInTheDocument();
@@ -547,7 +550,9 @@ describe("AutomationsList — Edit from the row kebab", () => {
         editingAutomationId: automation.id,
       }),
     );
-    expect(mocks.navigate).toHaveBeenCalledWith("/automations/setup");
+    expect(mocks.navigate).toHaveBeenCalledWith(
+      "/automations/setup?automationId=auto-1",
+    );
     expect(
       screen.queryByTestId("edit-automation-name"),
     ).not.toBeInTheDocument();

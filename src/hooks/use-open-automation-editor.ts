@@ -22,7 +22,9 @@ export function useOpenAutomationEditor() {
         PENDING_AUTOMATION_SETUP_ID,
         setupDraftFromAutomation(automation),
       );
-      navigate?.("/automations/setup");
+      navigate?.(
+        `/automations/setup?automationId=${encodeURIComponent(automation.id)}`,
+      );
     },
     [navigate],
   );

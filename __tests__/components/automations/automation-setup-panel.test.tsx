@@ -1968,6 +1968,16 @@ describe("AutomationSetupPanel", () => {
         }),
       ),
     );
+    expect(AutomationService.updateAutomation).toHaveBeenCalledTimes(1);
+    expect(
+      vi.mocked(AutomationService.updateAutomation).mock.calls[0][1],
+    ).not.toEqual(
+      expect.objectContaining({
+        repository: expect.anything(),
+        repos: expect.anything(),
+        plugins: expect.anything(),
+      }),
+    );
     expect(AutomationService.createServerDraft).not.toHaveBeenCalled();
     expect(AutomationService.createAutomationDraft).not.toHaveBeenCalled();
 
@@ -1977,6 +1987,7 @@ describe("AutomationSetupPanel", () => {
         "auto-1",
       ),
     );
+    expect(AutomationService.updateAutomation).toHaveBeenCalledTimes(1);
 
     await user.click(screen.getByTestId("automation-setup-close"));
     expect(mockNavigate).toHaveBeenCalledWith("/automations");
@@ -2063,7 +2074,7 @@ describe("AutomationSetupPanel", () => {
     expect(AutomationService.dispatchServerDraft).not.toHaveBeenCalled();
   });
 
-  it("sends explicit clears when removing repository and plugins while editing", async () => {
+  it("does not send unsupported repository and plugin fields while editing", async () => {
     vi.mocked(AutomationService.updateAutomation).mockResolvedValue({
       id: "auto-1",
     } as never);
@@ -2095,11 +2106,19 @@ describe("AutomationSetupPanel", () => {
       expect(AutomationService.updateAutomation).toHaveBeenCalledWith(
         "auto-1",
         expect.objectContaining({
-          repository: null,
-          repos: [],
-          plugins: [],
+          name: "Reviewer",
+          prompt: "Review PRs",
         }),
       ),
+    );
+    expect(
+      vi.mocked(AutomationService.updateAutomation).mock.calls[0][1],
+    ).not.toEqual(
+      expect.objectContaining({
+        repository: expect.anything(),
+        repos: expect.anything(),
+        plugins: expect.anything(),
+      }),
     );
   });
 
@@ -2148,10 +2167,12 @@ describe("AutomationSetupPanel", () => {
         "auto-1",
         expect.objectContaining({
           name: "Nightly scan",
-          entrypoint: "python3 scan.py",
         }),
       ),
     );
+    expect(
+      vi.mocked(AutomationService.updateAutomation).mock.calls[0][1],
+    ).not.toEqual(expect.objectContaining({ entrypoint: expect.anything() }));
     expect(AutomationService.uploadAutomationTarball).not.toHaveBeenCalled();
     expect(packTarGzip).not.toHaveBeenCalled();
     expect(
