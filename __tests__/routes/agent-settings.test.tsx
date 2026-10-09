@@ -33,11 +33,18 @@ vi.mock("#/hooks/query/use-acp-auth-status", () => ({
   useAcpAuthStatus: (...args: unknown[]) => acpAuthStatusMock(...args),
 }));
 
-// The models the provider last reported; empty unless a test sets it.
-const rememberedModelsMock = vi.hoisted(() => vi.fn());
-vi.mock("#/hooks/use-remembered-acp-models", () => ({
-  useRememberedAcpModels: (...args: unknown[]) => rememberedModelsMock(...args),
+// What the provider's own server reports; empty unless a test sets it.
+const acpModelDiscoveryMock = vi.hoisted(() => vi.fn());
+vi.mock("#/hooks/query/use-acp-model-discovery", () => ({
+  useAcpModelDiscovery: (...args: unknown[]) => acpModelDiscoveryMock(...args),
 }));
+const NO_DISCOVERY = {
+  discovery: null,
+  models: [],
+  source: "none",
+  defaultModelId: null,
+  isDiscovering: false,
+};
 const CLAUDE_MODELS = [
   { id: "default", label: "Default (recommended)" },
   { id: "haiku", label: "Haiku" },
@@ -129,7 +136,7 @@ describe("AgentSettingsScreen", () => {
       isChecking: false,
       isSupported: true,
     });
-    rememberedModelsMock.mockReturnValue([]);
+    acpModelDiscoveryMock.mockReturnValue(NO_DISCOVERY);
     toastMocks.success.mockClear();
     toastMocks.error.mockClear();
     toastMocks.warning.mockClear();
@@ -201,7 +208,11 @@ describe("AgentSettingsScreen", () => {
   });
 
   it("says when the models come from the last conversation", async () => {
-    rememberedModelsMock.mockReturnValue(CLAUDE_MODELS);
+    acpModelDiscoveryMock.mockReturnValue({
+      ...NO_DISCOVERY,
+      models: CLAUDE_MODELS,
+      source: "remembered",
+    });
     renderAgentSettingsScreen({ agentSettingsOverride: CLAUDE_PROFILE });
 
     expect(
@@ -242,7 +253,11 @@ describe("AgentSettingsScreen", () => {
   });
 
   it("builds the selected built-in ACP model", async () => {
-    rememberedModelsMock.mockReturnValue(CLAUDE_MODELS);
+    acpModelDiscoveryMock.mockReturnValue({
+      ...NO_DISCOVERY,
+      models: CLAUDE_MODELS,
+      source: "live",
+    });
     const user = userEvent.setup();
     const { control } = renderAgentSettingsScreen({
       agentSettingsOverride: CLAUDE_PROFILE,
@@ -310,18 +325,23 @@ describe("AgentSettingsScreen", () => {
     });
   });
 
-  it("lists the models the agent last reported", async () => {
-    rememberedModelsMock.mockReturnValue([
-      { id: "default", label: "Default (recommended)" },
-      { id: "claude-fable-5[1m]", label: "Fable 5 (1M)" },
-      { id: "sonnet", label: "Sonnet" },
-    ]);
+  it("lists the models the agent reports and names its own default", async () => {
+    acpModelDiscoveryMock.mockReturnValue({
+      ...NO_DISCOVERY,
+      source: "live",
+      models: [
+        { id: "default", label: "Default (recommended)" },
+        { id: "claude-fable-5[1m]", label: "Fable 5 (1M)" },
+        { id: "sonnet", label: "Sonnet" },
+      ],
+      defaultModelId: "default",
+    });
     const user = userEvent.setup();
     const { control } = renderAgentSettingsScreen({
       agentSettingsOverride: CLAUDE_PROFILE,
     });
     await screen.findByTestId("agent-command-input");
-    expect(rememberedModelsMock).toHaveBeenLastCalledWith("claude-code");
+    expect(acpModelDiscoveryMock).toHaveBeenLastCalledWith("claude-code");
 
     await user.click(screen.getByLabelText("SETTINGS$AGENT_MODEL"));
     await user.click(
@@ -334,7 +354,7 @@ describe("AgentSettingsScreen", () => {
     await user.click(screen.getByLabelText("SETTINGS$AGENT_MODEL"));
     await user.click(
       await screen.findByRole("option", {
-        name: "SETTINGS$AGENT_MODEL_AGENT_DEFAULT",
+        name: "SETTINGS$AGENT_MODEL_AGENT_DEFAULT_IS",
       }),
     );
     expect(control().buildAgentProfileFields()).toMatchObject({
@@ -343,9 +363,12 @@ describe("AgentSettingsScreen", () => {
   });
 
   it("keeps a saved model selectable when the agent no longer lists it", async () => {
-    rememberedModelsMock.mockReturnValue([
-      { id: "gpt-6-astra", label: "GPT-6 Astra" },
-    ]);
+    acpModelDiscoveryMock.mockReturnValue({
+      ...NO_DISCOVERY,
+      source: "live",
+      models: [{ id: "gpt-6-astra", label: "GPT-6 Astra" }],
+      defaultModelId: "gpt-6-astra",
+    });
     renderAgentSettingsScreen({
       agentSettingsOverride: {
         ...CLAUDE_PROFILE,
@@ -362,10 +385,14 @@ describe("AgentSettingsScreen", () => {
   });
 
   it("offers Pi's own default and saves no model for it", async () => {
-    rememberedModelsMock.mockReturnValue([
-      { id: "anthropic/claude-opus-4-8", label: "Claude Opus 4.8" },
-      { id: "anthropic/claude-sonnet-5", label: "Claude Sonnet 5" },
-    ]);
+    acpModelDiscoveryMock.mockReturnValue({
+      ...NO_DISCOVERY,
+      models: [
+        { id: "anthropic/claude-opus-4-8", label: "Claude Opus 4.8" },
+        { id: "anthropic/claude-sonnet-5", label: "Claude Sonnet 5" },
+      ],
+      defaultModelId: "anthropic/claude-opus-4-8",
+    });
     const user = userEvent.setup();
     const { control } = renderAgentSettingsScreen({
       agentSettingsOverride: { ...CLAUDE_PROFILE, acp_server: "pi" },
@@ -373,7 +400,7 @@ describe("AgentSettingsScreen", () => {
 
     await screen.findByTestId("agent-command-input");
     expect(screen.getByLabelText("SETTINGS$AGENT_MODEL")).toHaveValue(
-      "SETTINGS$AGENT_MODEL_AGENT_DEFAULT",
+      "SETTINGS$AGENT_MODEL_AGENT_DEFAULT_IS",
     );
     expect(control().buildAgentProfileFields()).toMatchObject({
       acp_server: "pi",
@@ -389,7 +416,7 @@ describe("AgentSettingsScreen", () => {
     });
   });
 
-  it("does not offer remembered models for a custom command", async () => {
+  it("does not ask a custom command for its models", async () => {
     renderAgentSettingsScreen({
       agentSettingsOverride: {
         ...CLAUDE_PROFILE,
@@ -399,7 +426,35 @@ describe("AgentSettingsScreen", () => {
     });
 
     await screen.findByTestId("agent-command-input");
-    expect(rememberedModelsMock).toHaveBeenLastCalledWith(null);
+    expect(acpModelDiscoveryMock).toHaveBeenLastCalledWith(null);
+  });
+
+  it("asks for credentials when the agent needs a login to list models", async () => {
+    acpModelDiscoveryMock.mockReturnValue({
+      ...NO_DISCOVERY,
+      discovery: {
+        agent_name: null,
+        agent_version: null,
+        current_model_id: null,
+        available_models: [],
+        supports_runtime_model_switch: false,
+        error: { code: "ACPAuthRequired", detail: "log in" },
+      },
+    });
+    acpAuthStatusMock.mockReturnValue({
+      status: "authenticated",
+      isChecking: false,
+      isSupported: true,
+    });
+    renderAgentSettingsScreen({
+      agentSettingsOverride: { ...CLAUDE_PROFILE, acp_server: "gemini-cli" },
+    });
+
+    expect(
+      await screen.findByTestId("agent-model-discovery-needs-auth"),
+    ).toBeInTheDocument();
+    // The agent refused the login a local file check counted as signed in.
+    expect(screen.queryByTestId("settings-acp-auth-detected")).toBeNull();
   });
 
   it("hides the local-only presets on a cloud backend", async () => {
