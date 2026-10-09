@@ -25,6 +25,7 @@ export interface ChatInputModelState {
   displayModel: string | null;
   currentModelId: string | null;
   availableAcpModels: ACPModelOption[];
+  offersAgentDefault: boolean;
   showAcpPicker: boolean;
   switchConversationId: string | null;
   destinationPath: AcpModelContext["destinationPath"];
@@ -120,6 +121,8 @@ export function useChatInputModelState(): ChatInputModelState {
     !isHomeAcp || backend.kind !== "cloud" || canManageOrgProfiles;
   const showAcpPicker =
     isAcpContext && availableAcpModels.length > 0 && canPersistHomeAcpModel;
+  const offersAgentDefault =
+    isHomeAcp && !!acpProvider && !getAcpPreferredDefaultModel(acpServerKey);
   const switchConversationId = isActiveAcpConversation
     ? (conversationId ?? null)
     : null;
@@ -129,6 +132,7 @@ export function useChatInputModelState(): ChatInputModelState {
     displayModel,
     currentModelId,
     availableAcpModels,
+    offersAgentDefault,
     showAcpPicker,
     switchConversationId,
     destinationPath,

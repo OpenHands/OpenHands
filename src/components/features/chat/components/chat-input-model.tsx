@@ -56,7 +56,7 @@ export function ChatInputModelMenuContent({
   // Locked-to-Cloud blocks the Canvas settings pages this links to (OHE-3457).
   const showSettingsLink = getLockedCloudHost() === null;
 
-  const handleSelectAcpModel = (modelId: string) => {
+  const handleSelectAcpModel = (modelId: string | null) => {
     if (modelId !== model.currentModelId) {
       switchAcpModel.mutate({
         conversationId: model.switchConversationId,
@@ -78,12 +78,22 @@ export function ChatInputModelMenuContent({
               {t(I18nKey.MODEL$AVAILABLE_MODELS)}
             </Typography.Text>
           </li>
-          {model.availableAcpModels.map((option) => {
+          {[
+            ...(model.offersAgentDefault
+              ? [
+                  {
+                    id: null,
+                    label: t(I18nKey.SETTINGS$AGENT_MODEL_AGENT_DEFAULT),
+                  },
+                ]
+              : []),
+            ...model.availableAcpModels,
+          ].map((option) => {
             const isSelected = option.id === model.currentModelId;
             return (
               <ContextMenuListItem
-                key={option.id}
-                testId={`chat-input-acp-model-option-${option.id}`}
+                key={option.id ?? ""}
+                testId={`chat-input-acp-model-option-${option.id ?? "agent-default"}`}
                 onClick={(event) => {
                   event.preventDefault();
                   event.stopPropagation();

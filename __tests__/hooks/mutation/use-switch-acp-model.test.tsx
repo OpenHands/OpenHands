@@ -167,6 +167,41 @@ describe("useSwitchAcpModel", () => {
     });
   });
 
+  it("saves no model into the active ACP profile when Agent default is picked", async () => {
+    vi.mocked(AgentProfilesService.listProfiles).mockResolvedValue({
+      profiles: [{ id: "id-codex", name: "codex", agent_kind: "acp" }],
+      active_agent_profile_id: "id-codex",
+    } as never);
+    vi.mocked(AgentProfilesService.getProfile).mockResolvedValue({
+      profile: {
+        id: "id-codex",
+        name: "codex",
+        revision: 2,
+        agent_kind: "acp",
+        acp_server: "codex",
+        acp_model: "gpt-5.6-terra",
+      },
+    } as never);
+    vi.mocked(AgentProfilesService.saveProfile).mockResolvedValue({
+      name: "codex",
+      message: "saved",
+    } as never);
+
+    const { result } = renderSwitchHook();
+
+    result.current.mutate({ conversationId: null, model: null });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    expect(AgentProfilesService.saveProfile).toHaveBeenCalledWith("codex", {
+      agent_kind: "acp",
+      acp_server: "codex",
+      acp_model: null,
+    });
+  });
+
   it("does not persist to agent_settings when the profiles fetch fails", async () => {
     // Discovery failure propagates instead of downgrading (#16523): an
     // active-profile launch ignores agent_settings, so persisting the pick

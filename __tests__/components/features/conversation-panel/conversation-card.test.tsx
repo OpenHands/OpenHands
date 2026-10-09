@@ -1095,6 +1095,30 @@ describe("ConversationCard", () => {
       readRememberedAcpModels.mockReturnValue([]);
     });
 
+    it("prefers the models the conversation's own session reported", () => {
+      readRememberedAcpModels.mockReturnValue([
+        { id: "opus[1m]", label: "Stale label" },
+      ]);
+
+      renderWithProviders(
+        <ConversationCard
+          title="Conversation 1"
+          selectedRepository={null}
+          lastUpdatedAt="2021-10-01T12:00:00Z"
+          showLlmProfiles
+          agentKind="acp"
+          acpServer="claude-code"
+          llmModel="opus[1m]"
+          acpModels={[{ id: "opus[1m]", label: "Claude Opus (1M)" }]}
+        />,
+      );
+
+      expect(
+        screen.getByTestId("conversation-card-agent-chip"),
+      ).toHaveTextContent("Claude Opus (1M)");
+      readRememberedAcpModels.mockReturnValue([]);
+    });
+
     it("falls back to the provider display name for an ACP conversation with no model", () => {
       // No ``llm_model`` (older agent-server, no SDK runtime fields, no
       // configured ``acp_model``) — the chip still renders for identity, with

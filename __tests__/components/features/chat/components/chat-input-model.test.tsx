@@ -325,6 +325,78 @@ describe("ChatInputModel", () => {
     });
   });
 
+  it("offers Agent default on the home page and saves no model when it is picked", () => {
+    rememberedModelsMock.mockReturnValue(CLAUDE_MODELS);
+    useActiveConversationMock.mockReturnValue({ data: undefined });
+    useSettingsMock.mockReturnValue({
+      data: {
+        agent_settings: {
+          agent_kind: "acp",
+          acp_server: "claude-code",
+          acp_model: "sonnet",
+        },
+      },
+    });
+
+    renderWithProviders(<ChatInputModel />);
+
+    fireEvent.click(screen.getByTestId("chat-input-llm-model"));
+    const agentDefault = screen.getByTestId(
+      "chat-input-acp-model-option-agent-default",
+    );
+    expect(agentDefault).toHaveTextContent(
+      "SETTINGS$AGENT_MODEL_AGENT_DEFAULT",
+    );
+    fireEvent.click(agentDefault);
+
+    expect(switchAcpModelMutate).toHaveBeenCalledWith({
+      conversationId: null,
+      model: null,
+    });
+  });
+
+  it("does not offer Agent default inside a conversation", () => {
+    sessionModelsMock.mockReturnValue(CLAUDE_MODELS);
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "test-conversation-id",
+        agent_kind: "acp",
+        acp_server: "claude-code",
+        llm_model: "sonnet",
+      },
+    });
+
+    renderWithProviders(<ChatInputModel />);
+
+    fireEvent.click(screen.getByTestId("chat-input-llm-model"));
+    expect(
+      screen.getByTestId("chat-input-acp-model-option-sonnet"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("chat-input-acp-model-option-agent-default"),
+    ).toBeNull();
+  });
+
+  it("does not offer Agent default for Gemini, which keeps its Vertex-safe model", () => {
+    rememberedModelsMock.mockReturnValue([
+      { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
+    ]);
+    useActiveConversationMock.mockReturnValue({ data: undefined });
+    useSettingsMock.mockReturnValue({
+      data: { agent_settings: { agent_kind: "acp", acp_server: "gemini-cli" } },
+    });
+
+    renderWithProviders(<ChatInputModel />);
+
+    fireEvent.click(screen.getByTestId("chat-input-llm-model"));
+    expect(
+      screen.getByTestId("chat-input-acp-model-option-gemini-2.5-pro"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("chat-input-acp-model-option-agent-default"),
+    ).toBeNull();
+  });
+
   it("offers selectable rows on a cloud backend for ACP conversations (mid-conversation model switching is supported)", () => {
     useActiveBackendMock.mockReturnValue({ backend: { kind: "cloud" } });
     sessionModelsMock.mockReturnValue(CLAUDE_MODELS);

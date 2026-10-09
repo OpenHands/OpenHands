@@ -6,13 +6,13 @@ import { RepositorySelection } from "#/api/open-hands.types";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import { isExecutionPaused } from "#/utils/status";
 import {
+  type ACPModelOption,
   getAcpProviderDisplayName,
   labelForAcpModel,
   resolveAcpProviderIcon,
 } from "#/constants/acp-providers";
 import { useFreeModels } from "#/hooks/query/use-free-models";
-import { useActiveBackend } from "#/contexts/active-backend-context";
-import { readRememberedAcpModels } from "#/utils/remembered-acp-models";
+import { useRememberedAcpModels } from "#/hooks/use-remembered-acp-models";
 import { formatNativeModelName } from "#/utils/format-model-name";
 import {
   AgentBrandIcon,
@@ -54,6 +54,8 @@ interface ConversationCardFooterProps {
    * useful chip.
    */
   acpServer?: string | null;
+  /** The models this conversation's session reported. */
+  acpModels?: readonly ACPModelOption[] | null;
   /**
    * Server-side conversation tags (``AppConversation.tags``). Non-reserved
    * entries render as value-only chips so API-/automation-born
@@ -85,13 +87,14 @@ export function ConversationCardFooter({
   showAgentChip = false,
   agentKind = null,
   acpServer = null,
+  acpModels = null,
   tags = null,
   showTags = false,
   isArchived = false,
 }: ConversationCardFooterProps) {
   const { t } = useTranslation("openhands");
   const freeModels = useFreeModels();
-  const { backend } = useActiveBackend();
+  const rememberedModels = useRememberedAcpModels(acpServer);
 
   const isPaused = isExecutionPaused(executionStatus);
 
@@ -115,7 +118,7 @@ export function ConversationCardFooter({
       // provider name when there's no model at all.
       const modelLabel = labelForAcpModel(
         llmModel,
-        readRememberedAcpModels(backend.id, acpServer),
+        acpModels?.length ? acpModels : rememberedModels,
       );
       const text = modelLabel ?? providerName;
       chip = {
