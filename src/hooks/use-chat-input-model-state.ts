@@ -24,8 +24,11 @@ export interface ChatInputModelState {
   isAcpContext: boolean;
   displayModel: string | null;
   currentModelId: string | null;
+  /** The saved choice the picker marks; null is the agent's own default. */
+  selectedModelId: string | null;
   availableAcpModels: ACPModelOption[];
-  offersAgentDefault: boolean;
+  /** The picker's Agent default row, or null when it isn't offered. */
+  agentDefaultLabel: string | null;
   showAcpPicker: boolean;
   switchConversationId: string | null;
   destinationPath: AcpModelContext["destinationPath"];
@@ -83,6 +86,7 @@ export function useChatInputModelState(): ChatInputModelState {
       : settingsAcpModel;
 
   let currentModelId: string | null = null;
+  let selectedModelId: string | null = null;
   if (isActiveAcpConversation) {
     // ACP conversations store llm_model as the acp_model (persisted at
     // creation time). Use it directly if available; fall back to the
@@ -93,14 +97,15 @@ export function useChatInputModelState(): ChatInputModelState {
         configured: acpConfiguredModel,
         providerDefault: getAcpPreferredDefaultModel(acpServerKey),
       });
+    selectedModelId = currentModelId;
   } else if (isHomeAcp) {
-    currentModelId = resolveEffectiveAcpModel({
+    selectedModelId = resolveEffectiveAcpModel({
       configured: acpConfiguredModel,
       // Preferred default (Vertex-safe for Gemini) — must match what the
       // start request would substitute for an unconfigured model.
-      providerDefault:
-        getAcpPreferredDefaultModel(acpServerKey) ?? discovered.defaultModelId,
+      providerDefault: getAcpPreferredDefaultModel(acpServerKey),
     });
+    currentModelId = selectedModelId ?? discovered.defaultModelId;
   } else {
     currentModelId = conversation?.llm_model ?? settings?.llm_model ?? null;
   }
@@ -120,8 +125,18 @@ export function useChatInputModelState(): ChatInputModelState {
     !isHomeAcp || backend.kind !== "cloud" || canManageOrgProfiles;
   const showAcpPicker =
     isAcpContext && availableAcpModels.length > 0 && canPersistHomeAcpModel;
-  const offersAgentDefault =
-    isHomeAcp && !!acpProvider && !getAcpPreferredDefaultModel(acpServerKey);
+  let agentDefaultLabel: string | null = null;
+  if (isHomeAcp && acpProvider && !getAcpPreferredDefaultModel(acpServerKey)) {
+    const defaultModelLabel = labelForAcpModel(
+      discovered.defaultModelId,
+      liveModels,
+    );
+    agentDefaultLabel = defaultModelLabel
+      ? t(I18nKey.SETTINGS$AGENT_MODEL_AGENT_DEFAULT_IS, {
+          model: defaultModelLabel,
+        })
+      : t(I18nKey.SETTINGS$AGENT_MODEL_AGENT_DEFAULT);
+  }
   const switchConversationId = isActiveAcpConversation
     ? (conversationId ?? null)
     : null;
@@ -130,8 +145,9 @@ export function useChatInputModelState(): ChatInputModelState {
     isAcpContext,
     displayModel,
     currentModelId,
+    selectedModelId,
     availableAcpModels,
-    offersAgentDefault,
+    agentDefaultLabel,
     showAcpPicker,
     switchConversationId,
     destinationPath,

@@ -57,7 +57,7 @@ export function ChatInputModelMenuContent({
   const showSettingsLink = getLockedCloudHost() === null;
 
   const handleSelectAcpModel = (modelId: string | null) => {
-    if (modelId !== model.currentModelId) {
+    if (modelId !== model.selectedModelId) {
       switchAcpModel.mutate({
         conversationId: model.switchConversationId,
         model: modelId,
@@ -79,17 +79,12 @@ export function ChatInputModelMenuContent({
             </Typography.Text>
           </li>
           {[
-            ...(model.offersAgentDefault
-              ? [
-                  {
-                    id: null,
-                    label: t(I18nKey.SETTINGS$AGENT_MODEL_AGENT_DEFAULT),
-                  },
-                ]
+            ...(model.agentDefaultLabel
+              ? [{ id: null, label: model.agentDefaultLabel }]
               : []),
             ...model.availableAcpModels,
           ].map((option) => {
-            const isSelected = option.id === model.currentModelId;
+            const isSelected = option.id === model.selectedModelId;
             return (
               <ContextMenuListItem
                 key={option.id ?? ""}

@@ -330,7 +330,10 @@ describe("ChatInputModel", () => {
   });
 
   it("offers Agent default on the home page and saves no model when it is picked", () => {
-    rememberedModelsMock.mockReturnValue(CLAUDE_MODELS);
+    discoveryMock.mockReturnValue({
+      models: CLAUDE_MODELS,
+      defaultModelId: null,
+    });
     useActiveConversationMock.mockReturnValue({ data: undefined });
     useSettingsMock.mockReturnValue({
       data: {
@@ -359,6 +362,39 @@ describe("ChatInputModel", () => {
     });
   });
 
+  it("marks Agent default, not the model it resolves to, when no model is saved", () => {
+    discoveryMock.mockReturnValue({
+      models: CLAUDE_MODELS,
+      defaultModelId: "opus[1m]",
+    });
+    useActiveConversationMock.mockReturnValue({ data: undefined });
+    useSettingsMock.mockReturnValue({
+      data: {
+        agent_settings: { agent_kind: "acp", acp_server: "claude-code" },
+      },
+    });
+
+    renderWithProviders(<ChatInputModel />);
+
+    fireEvent.click(screen.getByTestId("chat-input-llm-model"));
+    const agentDefault = screen.getByTestId(
+      "chat-input-acp-model-option-agent-default",
+    );
+    expect(agentDefault).toHaveTextContent(
+      "SETTINGS$AGENT_MODEL_AGENT_DEFAULT_IS",
+    );
+    expect(agentDefault).toHaveClass("bg-interactive-hover");
+    const opus = screen.getByTestId("chat-input-acp-model-option-opus[1m]");
+    expect(opus).not.toHaveClass("bg-interactive-hover");
+
+    // Picking the default's model by name pins it.
+    fireEvent.click(opus);
+    expect(switchAcpModelMutate).toHaveBeenCalledWith({
+      conversationId: null,
+      model: "opus[1m]",
+    });
+  });
+
   it("does not offer Agent default inside a conversation", () => {
     sessionModelsMock.mockReturnValue(CLAUDE_MODELS);
     useActiveConversationMock.mockReturnValue({
@@ -382,9 +418,10 @@ describe("ChatInputModel", () => {
   });
 
   it("does not offer Agent default for Gemini, which keeps its Vertex-safe model", () => {
-    rememberedModelsMock.mockReturnValue([
-      { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
-    ]);
+    discoveryMock.mockReturnValue({
+      models: [{ id: "gemini-2.5-pro", label: "Gemini 2.5 Pro" }],
+      defaultModelId: "auto",
+    });
     useActiveConversationMock.mockReturnValue({ data: undefined });
     useSettingsMock.mockReturnValue({
       data: { agent_settings: { agent_kind: "acp", acp_server: "gemini-cli" } },
