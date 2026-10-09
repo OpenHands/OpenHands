@@ -2908,6 +2908,44 @@ async function cmdBrowser({ positional, flags }) {
         fullPage: Boolean(flags["full-page"]),
       });
       break;
+    case "record": {
+      const action = rest[0];
+      if (action === "start") {
+        if (!flags.feature || !flags.name)
+          usage(
+            "browser record start needs --feature <ID> and --name <label>",
+            "control-openhands browser record start --feature F05.overflow-menu --name escape",
+          );
+        result = await browserCall(run, "record-start", {
+          feature: flags.feature,
+          name: flags.name,
+          fps: flags.fps === undefined ? undefined : intFlag(flags.fps),
+          maxSeconds:
+            flags["max-seconds"] === undefined
+              ? undefined
+              : intFlag(flags["max-seconds"]),
+        });
+      } else if (action === "stop") {
+        result = await browserCall(
+          run,
+          "record-stop",
+          {
+            gif: Boolean(flags.gif),
+            keepFrames: Boolean(flags["keep-frames"]),
+            discard: Boolean(flags.discard),
+          },
+          { timeout: 600_000 },
+        );
+      } else if (["pause", "resume", "status"].includes(action)) {
+        result = await browserCall(run, `record-${action}`);
+      } else {
+        usage(
+          "browser record start|pause|resume|stop|status",
+          "control-openhands browser record start --feature F05.overflow-menu --name escape",
+        );
+      }
+      break;
+    }
     case "clock":
       if (
         !flags["offset-ms"] &&
@@ -3306,6 +3344,7 @@ const BROWSER_VERBS = new Set([
   "snapshot",
   "testids",
   "screenshot",
+  "record",
   "viewport",
   "clock",
   "errors",
@@ -4139,6 +4178,12 @@ Verbs
   snapshot [<sel>] [--max-lines N] [--feature ID --name N]   ARIA tree (saved as evidence)
   testids [<sel>] [--hidden] [--filter part]                 discover on-screen data-testid handles (--hidden adds hidden/off-screen)
   screenshot [<sel>] --feature ID --name N [--full-page]     PNG under evidence/<ID>/
+  record start --feature ID --name N [--fps 10] [--max-seconds 600]   video of the active tab
+  record pause | record resume            cut a wait (the agent working) out of the video
+  record stop [--gif] [--keep-frames] [--discard] | record status
+        (MP4 under evidence/<ID>/ when ffmpeg has libx264, else WebM with Playwright's ffmpeg;
+         --gif adds a GIF at most 960 px wide; the still lead-in is cut to 1 s, the end held 1 s;
+         --max-seconds is wall time; browser stop or reset ends the daemon and the recording)
   viewport desktop|phone|narrow|tablet|WxH                    1440x1000, 390x844, 320x700, 820x1180
   clock --offset-ms N | --system ISO|+MS | --fixed ISO|+MS    skew the page's clock (install before the goto
                                          whose page should see it; the server's clock is untouched)
