@@ -53,11 +53,11 @@ vi.mock("react-i18next", async () => {
   };
 });
 
-const readRememberedAcpModels = vi.hoisted(() =>
+const useRememberedAcpModels = vi.hoisted(() =>
   vi.fn((): { id: string; label: string }[] => []),
 );
-vi.mock("#/utils/remembered-acp-models", () => ({
-  readRememberedAcpModels,
+vi.mock("#/hooks/use-remembered-acp-models", () => ({
+  useRememberedAcpModels,
 }));
 
 vi.mock("#/hooks/use-tracking", () => ({
@@ -1069,7 +1069,7 @@ describe("ConversationCard", () => {
     });
 
     it("labels a model with the name the agent last reported for it", () => {
-      readRememberedAcpModels.mockReturnValue([
+      useRememberedAcpModels.mockReturnValue([
         { id: "opus[1m]", label: "Claude Opus (1M)" },
       ]);
 
@@ -1088,15 +1088,12 @@ describe("ConversationCard", () => {
       const chip = screen.getByTestId("conversation-card-agent-chip");
       expect(chip).toHaveTextContent("Claude Opus (1M)");
       expect(chip).toHaveAttribute("title", "Claude Code · Claude Opus (1M)");
-      expect(readRememberedAcpModels).toHaveBeenCalledWith(
-        expect.any(String),
-        "claude-code",
-      );
-      readRememberedAcpModels.mockReturnValue([]);
+      expect(useRememberedAcpModels).toHaveBeenCalledWith("claude-code");
+      useRememberedAcpModels.mockReturnValue([]);
     });
 
     it("prefers the models the conversation's own session reported", () => {
-      readRememberedAcpModels.mockReturnValue([
+      useRememberedAcpModels.mockReturnValue([
         { id: "opus[1m]", label: "Stale label" },
       ]);
 
@@ -1116,7 +1113,7 @@ describe("ConversationCard", () => {
       expect(
         screen.getByTestId("conversation-card-agent-chip"),
       ).toHaveTextContent("Claude Opus (1M)");
-      readRememberedAcpModels.mockReturnValue([]);
+      useRememberedAcpModels.mockReturnValue([]);
     });
 
     it("falls back to the provider display name for an ACP conversation with no model", () => {

@@ -1,12 +1,18 @@
-import { useMemo } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import { useActiveBackend } from "#/contexts/active-backend-context";
-import { readRememberedAcpModels } from "#/utils/remembered-acp-models";
+import {
+  parseRememberedAcpModels,
+  readRememberedAcpModelsRaw,
+  subscribeRememberedAcpModels,
+} from "#/utils/remembered-acp-models";
 
 /** The models ``providerKey`` last reported in a conversation on this backend. */
 export function useRememberedAcpModels(providerKey: string | null | undefined) {
   const { backend } = useActiveBackend();
-  return useMemo(
-    () => readRememberedAcpModels(backend.id, providerKey),
-    [backend.id, providerKey],
+  const raw = useSyncExternalStore(
+    subscribeRememberedAcpModels,
+    () => readRememberedAcpModelsRaw(backend.id, providerKey),
+    () => null,
   );
+  return useMemo(() => parseRememberedAcpModels(raw), [raw]);
 }

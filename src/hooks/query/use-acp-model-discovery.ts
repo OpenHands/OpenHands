@@ -9,10 +9,8 @@ import {
   toAcpModelOptions,
   type ACPModelOption,
 } from "#/constants/acp-providers";
-import {
-  readRememberedAcpModels,
-  rememberAcpModels,
-} from "#/utils/remembered-acp-models";
+import { useRememberedAcpModels } from "#/hooks/use-remembered-acp-models";
+import { rememberAcpModels } from "#/utils/remembered-acp-models";
 
 async function discover(
   providerKey: string,
@@ -34,15 +32,23 @@ export type AcpModelSource = "live" | "remembered" | "none";
  * it uses by default, as its own server reports them for the saved
  * credentials. Only local backends can ask before a conversation starts;
  * otherwise ``models`` is the list the agent last reported in a conversation.
+ * ``secretRefs`` limits the lookup to the secrets a launch would receive; null
+ * means every saved secret.
  */
 export function useAcpModelDiscovery(
   providerKey: string | null | undefined,
-  { enabled = true }: { enabled?: boolean } = {},
+  {
+    enabled = true,
+    secretRefs = null,
+  }: { enabled?: boolean; secretRefs?: readonly string[] | null } = {},
 ) {
   const { backend } = useActiveBackend();
   const isLocal = backend.kind === "local";
   const secrets = useSearchSecrets({ enabled: enabled && isLocal });
-  const secretNames = secrets.data.map(({ name }) => name).sort();
+  const secretNames = secrets.data
+    .map(({ name }) => name)
+    .filter((name) => !secretRefs || secretRefs.includes(name))
+    .sort();
   const queryEnabled =
     enabled && isLocal && !!providerKey && !secrets.isLoading;
 
@@ -70,10 +76,7 @@ export function useAcpModelDiscovery(
     if (providerKey) rememberAcpModels(backend.id, providerKey, liveModels);
   }, [backend.id, providerKey, liveModels]);
 
-  const remembered = useMemo(
-    () => (enabled ? readRememberedAcpModels(backend.id, providerKey) : []),
-    [enabled, backend.id, providerKey],
-  );
+  const remembered = useRememberedAcpModels(enabled ? providerKey : null);
   let models: ACPModelOption[] = [];
   let source: AcpModelSource = "none";
   if (liveModels.length) {

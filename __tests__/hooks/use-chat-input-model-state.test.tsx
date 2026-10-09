@@ -152,7 +152,9 @@ describe("useChatInputModelState", () => {
     expect(result.current.availableAcpModels).toEqual(live);
     expect(result.current.displayModel).toBe("SWE-2 High");
     expect(result.current.showAcpPicker).toBe(true);
-    expect(useAcpModelDiscoveryMock).toHaveBeenCalledWith(null);
+    expect(useAcpModelDiscoveryMock).toHaveBeenCalledWith(null, {
+      secretRefs: null,
+    });
   });
 
   it("active ACP: uses the agent's reported list until the session reports its own", () => {
@@ -179,7 +181,9 @@ describe("useChatInputModelState", () => {
 
     const { result } = renderHook(() => useChatInputModelState());
 
-    expect(useAcpModelDiscoveryMock).toHaveBeenCalledWith("codex");
+    expect(useAcpModelDiscoveryMock).toHaveBeenCalledWith("codex", {
+      secretRefs: null,
+    });
     expect(result.current.availableAcpModels).toEqual(live);
     expect(result.current.currentModelId).toBe("gpt-5.6-terra");
   });
@@ -202,7 +206,9 @@ describe("useChatInputModelState", () => {
 
     const { result } = renderHook(() => useChatInputModelState());
 
-    expect(useAcpModelDiscoveryMock).toHaveBeenCalledWith("pi");
+    expect(useAcpModelDiscoveryMock).toHaveBeenCalledWith("pi", {
+      secretRefs: null,
+    });
     expect(result.current.availableAcpModels).toEqual(live);
     expect(result.current.currentModelId).toBe("anthropic/claude-opus-4-8");
     expect(result.current.displayModel).toBe("Claude Opus 4.8");
@@ -398,8 +404,30 @@ describe("useChatInputModelState", () => {
     const { result } = renderHook(() => useChatInputModelState());
 
     expect(result.current.currentModelId).toBe("gpt-5.5");
-    expect(useAcpModelDiscoveryMock).toHaveBeenCalledWith("codex");
+    expect(useAcpModelDiscoveryMock).toHaveBeenCalledWith("codex", {
+      secretRefs: null,
+    });
     expect(result.current.availableAcpModels).toEqual(codexModels);
+  });
+
+  it("home ACP: asks for models with the active profile's secret scope", () => {
+    useActiveAcpProfileDetailMock.mockReturnValue({
+      id: "id-codex",
+      name: "codex-test",
+      agent_kind: "acp",
+      acp_server: "codex",
+      acp_model: null,
+      secret_refs: ["OPENAI_API_KEY"],
+    });
+    useAcpModelContextMock.mockReturnValue(
+      acpContext({ isHomeAcp: true, isAcpContext: true }),
+    );
+
+    renderHook(() => useChatInputModelState());
+
+    expect(useAcpModelDiscoveryMock).toHaveBeenCalledWith("codex", {
+      secretRefs: ["OPENAI_API_KEY"],
+    });
   });
 
   it("home ACP on cloud: hides the selectable rows from members who cannot manage org profiles", () => {

@@ -437,7 +437,9 @@ describe("AgentSettingsScreen", () => {
       agentSettingsOverride: CLAUDE_PROFILE,
     });
     await screen.findByTestId("agent-command-input");
-    expect(acpModelDiscoveryMock).toHaveBeenLastCalledWith("claude-code");
+    expect(acpModelDiscoveryMock).toHaveBeenLastCalledWith("claude-code", {
+      secretRefs: null,
+    });
 
     await user.click(screen.getByLabelText("SETTINGS$AGENT_MODEL"));
     await user.click(
@@ -512,6 +514,20 @@ describe("AgentSettingsScreen", () => {
     });
   });
 
+  it("asks for models with only the secrets the profile allows", async () => {
+    renderAgentSettingsScreen({
+      agentSettingsOverride: {
+        ...CLAUDE_PROFILE,
+        secret_refs: ["ANTHROPIC_API_KEY"],
+      },
+    });
+
+    await screen.findByTestId("agent-command-input");
+    expect(acpModelDiscoveryMock).toHaveBeenLastCalledWith("claude-code", {
+      secretRefs: ["ANTHROPIC_API_KEY"],
+    });
+  });
+
   it("does not ask a custom command for its models", async () => {
     renderAgentSettingsScreen({
       agentSettingsOverride: {
@@ -522,7 +538,9 @@ describe("AgentSettingsScreen", () => {
     });
 
     await screen.findByTestId("agent-command-input");
-    expect(acpModelDiscoveryMock).toHaveBeenLastCalledWith(null);
+    expect(acpModelDiscoveryMock).toHaveBeenLastCalledWith(null, {
+      secretRefs: null,
+    });
   });
 
   it("asks for credentials when the agent needs a login to list models", async () => {

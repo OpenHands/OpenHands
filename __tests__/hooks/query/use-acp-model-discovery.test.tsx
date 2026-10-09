@@ -1,6 +1,6 @@
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useAcpModelDiscovery } from "#/hooks/query/use-acp-model-discovery";
@@ -85,6 +85,30 @@ describe("useAcpModelDiscovery", () => {
     expect(readRememberedAcpModels("local-1", "pi")).toEqual(models);
   });
 
+  it("asks with only the secrets the launch would receive", async () => {
+    discoverModels.mockResolvedValue(PI_DISCOVERY);
+
+    renderHook(
+      () =>
+        useAcpModelDiscovery("pi", { secretRefs: ["PI_AUTH_JSON", "GONE"] }),
+      { wrapper },
+    );
+
+    await waitFor(() =>
+      expect(discoverModels).toHaveBeenCalledWith("pi", ["PI_AUTH_JSON"]),
+    );
+  });
+
+  it("sends no secrets when the profile allows none", async () => {
+    discoverModels.mockResolvedValue(PI_DISCOVERY);
+
+    renderHook(() => useAcpModelDiscovery("pi", { secretRefs: [] }), {
+      wrapper,
+    });
+
+    await waitFor(() => expect(discoverModels).toHaveBeenCalledWith("pi", []));
+  });
+
   it("has no models when the server cannot answer and none were seen", async () => {
     discoverModels.mockRejectedValue(new Error("404"));
 
@@ -130,6 +154,23 @@ describe("useAcpModelDiscovery", () => {
     expect(result.current.models).toEqual(models);
     expect(result.current.source).toBe("remembered");
     expect(result.current.defaultModelId).toBeNull();
+  });
+
+  it("picks up a list remembered after it mounted", () => {
+    backendMock.current = {
+      backend: { id: "cloud-1", kind: "cloud" },
+      orgId: null,
+    };
+    const { result } = renderHook(() => useAcpModelDiscovery("claude-code"), {
+      wrapper,
+    });
+    expect(result.current.models).toEqual([]);
+
+    const models = [{ id: "sonnet", label: "Sonnet" }];
+    act(() => rememberAcpModels("cloud-1", "claude-code", models));
+
+    expect(result.current.models).toEqual(models);
+    expect(result.current.source).toBe("remembered");
   });
 
   it("does not ask without a provider", () => {

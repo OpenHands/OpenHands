@@ -735,6 +735,12 @@ export function AgentSettingsScreen({
     commandTokens.join(" ") === selectedProvider.default_command.join(" ");
   const liveModels = useAcpModelDiscovery(
     isAcp && isDefaultProviderCommand ? selectedPreset : null,
+    {
+      secretRefs:
+        secretRefsSupportedOnProfile && secretsMode === "custom"
+          ? selectedSecrets
+          : null,
+    },
   );
 
   if (isLoading) return null;

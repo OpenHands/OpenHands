@@ -66,7 +66,9 @@ export function useChatInputModelState(): ChatInputModelState {
       ? (activeAcpProfile?.acp_server ?? settingsAcpServerKey)
       : null;
   const acpProvider = isAcpContext ? getAcpProvider(acpServerKey) : undefined;
-  const discovered = useAcpModelDiscovery(acpProvider ? acpServerKey : null);
+  const discovered = useAcpModelDiscovery(acpProvider ? acpServerKey : null, {
+    secretRefs: activeAcpProfile?.secret_refs ?? null,
+  });
   // The session's own list arrives only after it starts.
   const sessionModels = useAcpSessionModels(
     isActiveAcpConversation ? conversation : null,

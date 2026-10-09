@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   readRememberedAcpModels,
   rememberAcpModels,
+  subscribeRememberedAcpModels,
 } from "#/utils/remembered-acp-models";
 
 const MODELS = [{ id: "sonnet", label: "Sonnet" }];
@@ -15,6 +16,21 @@ afterEach(() => {
 });
 
 describe("remembered ACP models", () => {
+  it("notifies subscribers when a list changes, not when it is rewritten unchanged", () => {
+    const listener = vi.fn();
+    const unsubscribe = subscribeRememberedAcpModels(listener);
+
+    rememberAcpModels("cloud-1", "claude-code", MODELS);
+    rememberAcpModels("cloud-1", "claude-code", MODELS);
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    unsubscribe();
+    rememberAcpModels("cloud-1", "claude-code", [
+      { id: "haiku", label: "Haiku" },
+    ]);
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps each backend's list per agent", () => {
     rememberAcpModels("cloud-1", "claude-code", MODELS);
 
