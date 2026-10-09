@@ -4,7 +4,7 @@ import { AutomationCard } from "./automation-card";
 import { AutomationListRow } from "./automation-list-row";
 import { StatusBadge } from "./status-badge";
 import {
-  automationListTableClassName,
+  automationActivityListClassName,
   type AutomationViewMode,
 } from "./automation-view-mode";
 import {
@@ -79,41 +79,26 @@ export function AutomationGroup({
           </div>
         </div>
       ) : (
-        <div
-          className={cn(
-            automationListTableClassName,
-            "mt-3",
-            insights && "@container",
-          )}
-        >
-          <table
-            className={cn(
-              "w-full min-w-full [&>tbody>tr:first-child]:border-t-0",
-              insights && "table-fixed",
-            )}
-          >
-            <tbody>
-              {automations.map((automation) => (
-                <AutomationListRow
-                  key={automation.id}
-                  automation={automation}
-                  onToggle={onToggle}
-                  onRunNow={onRunNow}
-                  isRunPending={runPendingId === automation.id}
-                  onDelete={onDelete}
-                  onExport={onExport}
-                  onEdit={onEdit}
-                  insights={
-                    insights && {
-                      spec: insights.spec,
-                      state: insights.byId.get(automation.id),
-                    }
-                  }
-                />
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ul className={cn(automationActivityListClassName, "mt-3")}>
+          {automations.map((automation) => (
+            <AutomationListRow
+              key={automation.id}
+              automation={automation}
+              onToggle={onToggle}
+              onRunNow={onRunNow}
+              isRunPending={runPendingId === automation.id}
+              onDelete={onDelete}
+              onExport={onExport}
+              onEdit={onEdit}
+              insights={
+                insights && {
+                  spec: insights.spec,
+                  state: insights.byId.get(automation.id),
+                }
+              }
+            />
+          ))}
+        </ul>
       )}
     </section>
   );

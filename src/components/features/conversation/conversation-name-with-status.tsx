@@ -6,12 +6,15 @@ import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useUnifiedPauseConversation } from "#/hooks/mutation/use-unified-stop-conversation";
 import { useUnifiedResumeConversation } from "#/hooks/mutation/use-unified-start-conversation";
 import { useConversationId } from "#/hooks/use-conversation-id";
+import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { useUserProviders } from "#/hooks/use-user-providers";
 import { getStatusColor, cn } from "#/utils/utils";
 import { AgentState } from "#/types/agent-state";
 import DebugStackframeDot from "#/icons/debug-stackframe-dot.svg?react";
 import { ServerStatusContextMenu } from "../controls/server-status-context-menu";
 import { ConversationName } from "./conversation-name";
+import { ConversationGitActionsToggle } from "./conversation-git-actions-toggle";
+import { ConversationOverviewToggle } from "./conversation-overview-toggle";
 import { RightPanelToggle } from "./right-panel-toggle";
 import {
   isExecutionActive,
@@ -53,6 +56,10 @@ export function ConversationNameWithStatus() {
     setMenuOpen(false);
     setHoveredOpen(false);
   };
+
+  // A menu opened by click or Enter returns focus to the dot; one opened by
+  // hover closes without moving focus.
+  useCloseOnEscape(isMenuVisible, closeMenu, menuOpen ? triggerRef : undefined);
 
   const handleStopServer = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
@@ -112,7 +119,7 @@ export function ConversationNameWithStatus() {
             onClick={handleStatusClick}
             className={cn(
               "flex items-center justify-center rounded-md",
-              "text-[var(--oh-muted)] hover:bg-white/10",
+              "text-muted hover:bg-contrast/10",
             )}
           >
             <DebugStackframeDot
@@ -144,7 +151,11 @@ export function ConversationNameWithStatus() {
         </div>
         <ConversationName />
       </div>
-      <RightPanelToggle className="mr-2" />
+      <div className="mr-2 flex shrink-0 items-center gap-1">
+        <ConversationGitActionsToggle />
+        <ConversationOverviewToggle />
+        <RightPanelToggle />
+      </div>
     </div>
   );
 }

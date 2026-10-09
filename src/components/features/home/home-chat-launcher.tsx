@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useConversationWorkspace } from "#/hooks/query/use-conversation-workspace";
+import { useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { CustomChatInput } from "#/components/features/chat/custom-chat-input";
@@ -24,10 +25,16 @@ import {
   displayErrorToast,
   TOAST_OPTIONS,
 } from "#/utils/custom-toast-handlers";
+import { getApiErrorMessage } from "#/utils/api-error-message";
 import { getWorkspacesUnsupportedMessage } from "#/utils/workspaces-compatibility";
+import {
+  readStoredLocalWorkspaceMode,
+  writeStoredLocalWorkspaceMode,
+} from "#/utils/workspace-mode";
 import type { PluginSpec } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { PluginPickerModal } from "#/components/features/plugins/plugin-picker-modal";
 import { PluginPickerTrigger } from "#/components/features/plugins/plugin-picker-trigger";
+import { RecommendedAutomationsLauncher } from "#/components/features/automations/recommended-automations-launcher";
 import { PinnedAutomationsDashboard } from "./featured-automations/pinned-automations-dashboard";
 import { RunningAutomationsList } from "./featured-automations/running-automations-list";
 import { HomeHeaderTitle } from "./home-header/home-header-title";
@@ -49,13 +56,25 @@ export function HomeChatLauncher() {
     useState<GitRepository | null>(null);
   const [pendingBranch, setPendingBranch] = useState<Branch | null>(null);
   const [pendingProvider, setPendingProvider] = useState<Provider | null>(null);
-  const [workspaceMode, setWorkspaceMode] =
-    useState<WorkspaceMode>("local_repo");
+  const [workspaceMode, setWorkspaceModeState] = useState<WorkspaceMode>(() =>
+    readStoredLocalWorkspaceMode(),
+  );
   const [selectedPlugins, setSelectedPlugins] = useState<PluginSpec[]>([]);
   const [isPluginPickerOpen, setIsPluginPickerOpen] = useState(false);
+  const isMountedRef = useRef(true);
 
-  const { mutateAsync: createConversation, isPending } =
-    useCreateConversation();
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  // The launcher reports a failed create itself (see handleSubmit), so the
+  // global mutation error toast is turned off to keep it to one toast.
+  const { mutateAsync: createConversation, isPending } = useCreateConversation({
+    disableToast: true,
+  });
   const isCreatingElsewhere = useIsCreatingConversation();
   const isCreating = isPending || isCreatingElsewhere;
   const { isConfigured: isLlmConfigured, isLoading: isLlmConfigLoading } =
@@ -63,13 +82,25 @@ export function HomeChatLauncher() {
   // Block sending entirely when there's no usable LLM; the banner above the
   // launcher (rendered by the home route) explains it and offers setup.
   const llmBlocked = !isLlmConfigLoading && !isLlmConfigured;
-  const { images, files, imagesMarkedUploadAsFile, clearAllFiles } =
-    useConversationStore();
+  const {
+    images,
+    files,
+    imagesMarkedUploadAsFile,
+    clearAllFiles,
+    restoreMessageToInputIfEmpty,
+  } = useConversationStore();
   const { handleUpload } = useChatAttachmentUpload();
   const { error: workspacesError } = useLocalWorkspaces({ enabled: isLocal });
-  const workspacesUnsupportedMessage = isLocal
-    ? getWorkspacesUnsupportedMessage(workspacesError, t)
-    : null;
+  const { isolated, unsupportedMessage: runtimeWorkspaceMessage } =
+    useConversationWorkspace();
+  const workspacesUnsupportedMessage =
+    runtimeWorkspaceMessage ??
+    (isLocal ? getWorkspacesUnsupportedMessage(workspacesError, t) : null);
+
+  const setWorkspaceMode = (mode: WorkspaceMode) => {
+    setWorkspaceModeState(mode);
+    if (isLocal) writeStoredLocalWorkspaceMode(mode);
+  };
 
   const hasSelection = isLocal
     ? !!pendingWorkspace
@@ -100,7 +131,12 @@ export function HomeChatLauncher() {
       query: hasAttachments ? undefined : trimmed || undefined,
       entryPoint: "home_chat_launcher",
     };
-    if (isLocal && pendingWorkspace) {
+    // An isolated backend owns its workspace, so a host selection left over
+    // from a non-isolated session must not be forwarded: the server rejects it
+    // (`HOME$ISOLATED_WORKSPACE_NOTICE`) and the user sees an error toast for a
+    // selection they may not have noticed. Creation proceeds isolated instead;
+    // the launcher still offers an explicit "clear" affordance for the UI.
+    if (isLocal && pendingWorkspace && !isolated) {
       variables = {
         ...variables,
         workingDir: pendingWorkspace.path,
@@ -132,8 +168,10 @@ export function HomeChatLauncher() {
     );
 
     void (async () => {
+      let isCreated = false;
       try {
         const data = await createConversation(variables);
+        isCreated = true;
         toast.dismiss(toastId);
         try {
           sessionStorage.removeItem(HOME_PROMPT_DRAFT_KEY);
@@ -205,7 +243,18 @@ export function HomeChatLauncher() {
         navigate(`/conversations/${targetConversationId}`);
       } catch (error) {
         toast.dismiss(toastId);
-        displayErrorToast(error instanceof Error ? error.message : null);
+        // Prefer the server's own message; without one, keep the launcher's
+        // existing wording (the error's message).
+        const fallback = error instanceof Error ? error.message : "";
+        displayErrorToast(getApiErrorMessage(error, fallback) || null);
+        // The composer cleared itself on submit; hand the prompt back so the
+        // user can retry without retyping it. Only when the create itself
+        // failed and this composer is still on screen: the request is consumed
+        // by whichever composer is mounted, so otherwise the prompt would
+        // replay into a conversation.
+        if (!isCreated && isMountedRef.current) {
+          restoreMessageToInputIfEmpty(message);
+        }
       }
     })();
   };
@@ -221,7 +270,7 @@ export function HomeChatLauncher() {
       data-testid="home-chat-launcher"
       className="flex w-full flex-col items-center pt-[max(4rem,28vh)] pb-10"
     >
-      <div className="flex w-full max-w-[800px] flex-col gap-4 md:px-4">
+      <div className="flex w-full max-w-200 flex-col gap-4 md:px-4">
         <div className="flex w-full justify-center">
           <HomeHeaderTitle />
         </div>
@@ -230,10 +279,27 @@ export function HomeChatLauncher() {
           <CustomChatInput
             onSubmit={handleSubmitWithModelGuard}
             onFilesPaste={handleUpload}
+            placeholder={t(I18nKey.HOME$DESCRIBE_ENGINEERING_TASK)}
             disabled={isCreating || llmBlocked}
           />
         </div>
 
+        {isolated && (
+          <p role="status" className="text-xs text-[var(--oh-text-secondary)]">
+            {pendingWorkspace
+              ? runtimeWorkspaceMessage
+              : t(I18nKey.HOME$ISOLATED_WORKSPACE_NEW)}
+            {pendingWorkspace && (
+              <button
+                type="button"
+                className="ml-2 underline"
+                onClick={() => setPendingWorkspace(null)}
+              >
+                {t(I18nKey.HOME$CLEAR_HOST_WORKSPACE)}
+              </button>
+            )}
+          </p>
+        )}
         <div className="flex items-center justify-start gap-2">
           {hasSelection ? (
             <HomeGitControlBarPreview
@@ -262,6 +328,7 @@ export function HomeChatLauncher() {
         </div>
 
         <div className="mt-8 flex w-full flex-col gap-8">
+          <RecommendedAutomationsLauncher variant="rail" />
           <PinnedAutomationsDashboard />
           <RunningAutomationsList />
         </div>
@@ -276,7 +343,6 @@ export function HomeChatLauncher() {
             setPendingRepository(null);
             setPendingBranch(null);
             setPendingProvider(null);
-            setWorkspaceMode("local_repo");
           }}
         />
       ) : (
@@ -288,7 +354,7 @@ export function HomeChatLauncher() {
             setPendingBranch(branch);
             setPendingProvider(provider ?? repository.git_provider);
             setPendingWorkspace(null);
-            setWorkspaceMode("local_repo");
+            setWorkspaceModeState("local_repo");
           }}
         />
       )}

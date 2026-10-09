@@ -11,14 +11,16 @@ describe("conversation-panel-preferences store", () => {
   it("defaults to showing older conversations, chronological list, and expected toggles", () => {
     const state = useConversationPanelPreferencesStore.getState();
     expect(state.showOlderConversations).toBe(true);
+    expect(state.olderConversationCutoff).toBe("7d");
     expect(state.showRepoBranchMetadata).toBe(false);
     expect(state.showLlmProfiles).toBe(false);
-    expect(state.showTagsMetadata).toBe(false);
+    expect(state.showTagsMetadata).toBe(true);
     expect(state.organizeMode).toBe("chronological");
     expect(state.conversationSort).toBe("updated");
     expect(state.threadScope).toBe("all");
     expect(state.automationFilterMode).toBe("all");
     expect(state.selectedAutomationNames).toEqual([]);
+    expect(state.selectedTagFacets).toEqual([]);
   });
 
   it("toggles showOlderConversations and persists the new value to localStorage", () => {
@@ -51,6 +53,21 @@ describe("conversation-panel-preferences store", () => {
     expect(persisted.state.showRepoBranchMetadata).toBe(true);
   });
 
+  it("sets the older-conversation cutoff and persists it", () => {
+    useConversationPanelPreferencesStore
+      .getState()
+      .setOlderConversationCutoff("1d");
+
+    expect(
+      useConversationPanelPreferencesStore.getState().olderConversationCutoff,
+    ).toBe("1d");
+
+    const persisted = JSON.parse(
+      window.localStorage.getItem(STORAGE_KEY) ?? "{}",
+    );
+    expect(persisted.state.olderConversationCutoff).toBe("1d");
+  });
+
   it("supports explicit setters for both preferences", () => {
     useConversationPanelPreferencesStore
       .getState()
@@ -76,8 +93,10 @@ describe("conversation-panel-preferences store", () => {
       "automationFilterMode",
       "conversationSort",
       "groupFolderOrder",
+      "olderConversationCutoff",
       "organizeMode",
       "selectedAutomationNames",
+      "selectedTagFacets",
       "showArchivedConversations",
       "showHoverMetadata",
       "showLlmProfiles",
@@ -86,6 +105,20 @@ describe("conversation-panel-preferences store", () => {
       "showTagsMetadata",
       "threadScope",
     ]);
+  });
+
+  it("applies a layout preset's partial bundle in one action", () => {
+    useConversationPanelPreferencesStore.getState().applyLayoutSettings({
+      organizeMode: "grouped",
+      showOlderConversations: false,
+    });
+
+    const state = useConversationPanelPreferencesStore.getState();
+    expect(state.organizeMode).toBe("grouped");
+    expect(state.showOlderConversations).toBe(false);
+    // Fields the preset does not name stay untouched.
+    expect(state.conversationSort).toBe("updated");
+    expect(state.threadScope).toBe("all");
   });
 
   it("exposes setters and a toggler for the LLM-profiles preference", () => {
@@ -139,6 +172,77 @@ describe("conversation-panel-preferences store", () => {
     useConversationPanelPreferencesStore.setState({
       automationFilterMode: "all",
       selectedAutomationNames: [],
+    });
+  });
+
+  it("clears both facet selections without touching the automation scope", () => {
+    // The active-filter strip renders a chip per facet selection but none for
+    // the automation mode, so Clear all must not silently switch a surface it
+    // does not show.
+    useConversationPanelPreferencesStore.setState({
+      automationFilterMode: "only-automations",
+      selectedAutomationNames: ["Nightly Audit"],
+      selectedTagFacets: ["project=vault"],
+    });
+
+    useConversationPanelPreferencesStore.getState().clearFilterSelections();
+
+    const next = useConversationPanelPreferencesStore.getState();
+    expect({
+      selectedTagFacets: next.selectedTagFacets,
+      selectedAutomationNames: next.selectedAutomationNames,
+      automationFilterMode: next.automationFilterMode,
+    }).toEqual({
+      selectedTagFacets: [],
+      selectedAutomationNames: [],
+      automationFilterMode: "only-automations",
+    });
+
+    // Restore defaults so later tests in this file see a pristine store.
+    useConversationPanelPreferencesStore.setState({
+      automationFilterMode: "all",
+    });
+  });
+
+  it("clears a selected automation name when the mode leaves only-automations", () => {
+    // Self-healing: a hidden name row must never keep narrowing the list.
+    const store = useConversationPanelPreferencesStore.getState();
+    store.setAutomationFilterMode("only-automations");
+    store.toggleAutomationName("Nightly Audit");
+    expect(
+      useConversationPanelPreferencesStore.getState().selectedAutomationNames,
+    ).toEqual(["Nightly Audit"]);
+
+    store.setAutomationFilterMode("hide-automations");
+    expect(
+      useConversationPanelPreferencesStore.getState().selectedAutomationNames,
+    ).toEqual([]);
+
+    // Restore defaults so later tests in this file see a pristine store.
+    useConversationPanelPreferencesStore.setState({
+      automationFilterMode: "all",
+      selectedAutomationNames: [],
+    });
+  });
+
+  it("toggles selected tag facets and persists them to localStorage", () => {
+    const store = useConversationPanelPreferencesStore.getState();
+    store.toggleTagFacet("origin=slack");
+    store.toggleTagFacet("owner=alice");
+    store.toggleTagFacet("origin=slack");
+
+    const next = useConversationPanelPreferencesStore.getState();
+    // Toggling twice removes the facet again; the other selection stays.
+    expect(next.selectedTagFacets).toEqual(["owner=alice"]);
+
+    const persisted = JSON.parse(
+      window.localStorage.getItem(STORAGE_KEY) ?? "{}",
+    );
+    expect(persisted.state.selectedTagFacets).toEqual(["owner=alice"]);
+
+    // Restore defaults so later tests in this file see a pristine store.
+    useConversationPanelPreferencesStore.setState({
+      selectedTagFacets: [],
     });
   });
 

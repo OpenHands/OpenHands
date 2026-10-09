@@ -1,7 +1,11 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { FileDiffViewer } from "#/components/features/diff-viewer/file-diff-viewer";
+import {
+  FileDiffViewer,
+  MAX_DIFF_EDITOR_HEIGHT_PX,
+} from "#/components/features/diff-viewer/file-diff-viewer";
+import { I18nKey } from "#/i18n/declaration";
 
 const MOCK_DIFF = { original: "old content", modified: "new content" };
 const MOCK_MD_DIFF = {
@@ -48,20 +52,29 @@ describe("FileDiffViewer", () => {
     mockIsLoading = false;
   });
 
-  it("starts collapsed with no view mode buttons", () => {
-    render(<FileDiffViewer path="src/index.ts" type="M" />);
-
-    expect(screen.queryByTestId("view-mode-old")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("view-mode-diff")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("view-mode-new")).not.toBeInTheDocument();
+  it("caps opened editor panes at 600px", () => {
+    expect(MAX_DIFF_EDITOR_HEIGHT_PX).toBe(600);
   });
 
-  it("shows view mode buttons when expanded", async () => {
+  it("keeps view mode controls reserved but inert while collapsed", () => {
+    render(<FileDiffViewer path="src/index.ts" type="M" />);
+
+    const viewModeGroup = screen.getByTestId("view-mode-diff").parentElement;
+    expect(viewModeGroup).toHaveClass("invisible");
+    expect(screen.getByTestId("view-mode-old")).toHaveAttribute(
+      "tabIndex",
+      "-1",
+    );
+  });
+
+  it("reveals view mode buttons when expanded", async () => {
     const user = userEvent.setup();
     render(<FileDiffViewer path="src/index.ts" type="M" />);
 
     await expand(user);
 
+    const viewModeGroup = screen.getByTestId("view-mode-diff").parentElement;
+    expect(viewModeGroup).not.toHaveClass("invisible");
     expect(screen.getByTestId("view-mode-old")).toBeInTheDocument();
     expect(screen.getByTestId("view-mode-diff")).toBeInTheDocument();
     expect(screen.getByTestId("view-mode-new")).toBeInTheDocument();
@@ -211,5 +224,38 @@ describe("FileDiffViewer", () => {
       "aria-pressed",
       "false",
     );
+  });
+
+  it("gives the icon-only view mode and collapse buttons accessible names", async () => {
+    const user = userEvent.setup();
+    render(<FileDiffViewer path="src/index.ts" type="M" />);
+
+    expect(screen.getByTestId("collapse")).toHaveAccessibleName(
+      I18nKey.BUTTON$EXPAND,
+    );
+
+    await expand(user);
+
+    expect(screen.getByTestId("collapse")).toHaveAccessibleName(
+      I18nKey.BUTTON$COLLAPSE,
+    );
+    expect(
+      screen.getByRole("button", {
+        name: I18nKey.DIFF_VIEWER$VIEW_MODE_OLD,
+        pressed: false,
+      }),
+    ).toHaveAttribute("data-testid", "view-mode-old");
+    expect(
+      screen.getByRole("button", {
+        name: I18nKey.FILES$DIFF_VIEW,
+        pressed: true,
+      }),
+    ).toHaveAttribute("data-testid", "view-mode-diff");
+    expect(
+      screen.getByRole("button", {
+        name: I18nKey.DIFF_VIEWER$VIEW_MODE_NEW,
+        pressed: false,
+      }),
+    ).toHaveAttribute("data-testid", "view-mode-new");
   });
 });

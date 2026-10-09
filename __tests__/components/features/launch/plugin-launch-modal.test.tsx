@@ -85,9 +85,10 @@ describe("PluginLaunchModal", () => {
         { source: "github:owner/plugin2" },
       ]);
 
-      // The h2 title contains both LAUNCH$MODAL_TITLE and LAUNCH$MODAL_TITLE_GENERIC
+      // The generic title already contains the verb, so "Launch" is not
+      // prepended again ("Launch Launch Plugin").
       const title = screen.getByRole("heading", { level: 2 });
-      expect(title.textContent).toContain("LAUNCH$MODAL_TITLE_GENERIC");
+      expect(title.textContent).toBe("LAUNCH$MODAL_TITLE_GENERIC");
     });
   });
 

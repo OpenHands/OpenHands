@@ -287,6 +287,185 @@ describe("RunLogsModal", () => {
   });
 });
 
+describe("RunLogsModal — run inspection summary", () => {
+  const makeRun = (overrides: Partial<AutomationRun> = {}): AutomationRun => ({
+    id: "run-1",
+    status: AutomationRunStatus.COMPLETED,
+    conversation_id: "conv-1",
+    bash_command_id: "cmd-1",
+    error_detail: null,
+    started_at: "2026-01-01T10:00:00Z",
+    completed_at: "2026-01-01T10:02:00Z",
+    ...overrides,
+  });
+
+  it("labels run, task, and system details for a completed blocked task", () => {
+    useBashCommandLogsMock.mockReturnValue(makeHookResult());
+
+    render(
+      <RunLogsModal
+        isOpen
+        conversationId="conv-1"
+        bashCommandId="cmd-1"
+        onClose={() => {}}
+        run={makeRun({
+          error_detail: "Environment variable HUBSPOT_API_KEY is missing.",
+          status_detail: {
+            phase: "callback",
+            kind: "execution_error",
+            detail: "Environment variable HUBSPOT_API_KEY is missing.",
+            source: "environment",
+          },
+          run_metadata: {
+            finish_tool_response: {
+              status: "blocked",
+              outcome_summary:
+                "Attempted HubSpot CRM contact search but HUBSPOT_API_KEY was unavailable.",
+            },
+          },
+        })}
+      />,
+    );
+
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$RUN_LABEL),
+    ).toBeInTheDocument();
+    expect(screen.getByText("COMPLETED")).toBeInTheDocument();
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$TASK_LABEL),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$BLOCKED),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Attempted HubSpot CRM contact search but HUBSPOT_API_KEY was unavailable.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$SYSTEM_LABEL),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByText(/Environment variable HUBSPOT_API_KEY is missing/),
+    ).toHaveLength(2);
+    expect(screen.getByText(/callback · execution_error/)).toBeInTheDocument();
+  });
+
+  it("keeps infrastructure failures in the system section when no task outcome exists", () => {
+    useBashCommandLogsMock.mockReturnValue(makeHookResult());
+
+    render(
+      <RunLogsModal
+        isOpen
+        conversationId="conv-1"
+        bashCommandId="cmd-1"
+        onClose={() => {}}
+        run={makeRun({
+          status: AutomationRunStatus.FAILED,
+          error_detail: "Sandbox timed out.",
+        })}
+      />,
+    );
+
+    expect(screen.getByText("FAILED")).toBeInTheDocument();
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$NO_TASK_OUTCOME),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Sandbox timed out/)).toBeInTheDocument();
+  });
+
+  it("shows a failed run's agent summary separately from its system error", () => {
+    useBashCommandLogsMock.mockReturnValue(makeHookResult());
+
+    render(
+      <RunLogsModal
+        isOpen
+        conversationId="conv-1"
+        bashCommandId="cmd-1"
+        onClose={() => {}}
+        run={makeRun({
+          status: AutomationRunStatus.FAILED,
+          error_detail: "Sandbox timed out.",
+          run_metadata: {
+            finish_tool_response: {
+              outcome_summary: "The report was generated before the timeout.",
+            },
+          },
+        })}
+      />,
+    );
+
+    expect(
+      screen.getByText("The report was generated before the timeout."),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Sandbox timed out/)).toBeInTheDocument();
+  });
+
+  it("shows a successful task with readable custom metadata when no status was reported", () => {
+    useBashCommandLogsMock.mockReturnValue(makeHookResult());
+
+    render(
+      <RunLogsModal
+        isOpen
+        conversationId="conv-1"
+        bashCommandId="cmd-1"
+        onClose={() => {}}
+        run={makeRun({
+          run_metadata: {
+            finish_tool_response: {
+              crm_contacts_checked: 12,
+              matches: ["Acme", "Globex"],
+              next_action: "Ask user to pick a contact.",
+            },
+          },
+        })}
+      />,
+    );
+
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$SUCCESSFUL),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$CUSTOM_TASK_METADATA),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$TASK_METADATA),
+    ).toBeInTheDocument();
+    const metadata = screen.getByTestId("automation-task-metadata");
+    expect(metadata).toHaveTextContent('"crm_contacts_checked": 12');
+    expect(metadata).toHaveTextContent(
+      '"next_action": "Ask user to pick a contact."',
+    );
+  });
+
+  it("shows an outcome summary for a successful task with no reported status", () => {
+    useBashCommandLogsMock.mockReturnValue(makeHookResult());
+
+    render(
+      <RunLogsModal
+        isOpen
+        conversationId="conv-1"
+        bashCommandId="cmd-1"
+        onClose={() => {}}
+        run={makeRun({
+          run_metadata: {
+            finish_tool_response: {
+              outcome_summary: "Created and published the weekly report.",
+            },
+          },
+        })}
+      />,
+    );
+
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$SUCCESSFUL),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Created and published the weekly report."),
+    ).toBeInTheDocument();
+  });
+});
+
 describe("RunLogsModal — Debug with OpenHands button", () => {
   const makeRun = (status: AutomationRunStatus): AutomationRun => ({
     id: "run-1",

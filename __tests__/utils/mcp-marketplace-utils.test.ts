@@ -1,12 +1,19 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   findCatalogEntryForServer,
+  findInstalledEntryMatch,
   findInstalledMatch,
+  getDefaultMcpConnectionOption,
   getDefaultMcpTransport,
   getInstallableMcpConnectionOption,
+  getMarketplaceEntriesByPopularity,
+  getMarketplaceEntryById,
+  getMcpConnectionOptions,
   getMcpMarketplaceCatalog,
+  getMcpOAuthAuthenticationConfig,
   installedServerMatchesQuery,
   marketplaceEntryMatchesQuery,
+  urlsMatch,
 } from "#/utils/mcp-marketplace-utils";
 import { INTEGRATION_CATALOG as MCP_MARKETPLACE } from "@openhands/extensions/integrations";
 
@@ -14,7 +21,6 @@ const mcpMarketplace = getMcpMarketplaceCatalog(MCP_MARKETPLACE);
 const slackEntry = mcpMarketplace.find((e) => e.id === "slack")!;
 const tavilyEntry = mcpMarketplace.find((e) => e.id === "tavily")!;
 const linearEntry = mcpMarketplace.find((e) => e.id === "linear")!;
-const filesystemEntry = mcpMarketplace.find((e) => e.id === "filesystem")!;
 
 function optionTransport(entry: typeof slackEntry, optionId = "api") {
   const transport = entry.connectionOptions.find(
@@ -25,7 +31,7 @@ function optionTransport(entry: typeof slackEntry, optionId = "api") {
 }
 
 describe("findInstalledMatch", () => {
-  it("matches stdio servers by name", () => {
+  it("matches stdio servers by command and args", () => {
     const result = findInstalledMatch(optionTransport(slackEntry), [
       {
         id: "stdio-0",
@@ -38,7 +44,7 @@ describe("findInstalledMatch", () => {
     expect(result).toEqual(expect.objectContaining({ id: "stdio-0" }));
   });
 
-  it("does not match a different stdio name", () => {
+  it("does not match a stdio server running a different package", () => {
     const result = findInstalledMatch(optionTransport(slackEntry), [
       {
         id: "stdio-0",
@@ -51,7 +57,7 @@ describe("findInstalledMatch", () => {
     expect(result).toBeNull();
   });
 
-  it("matches Tavily as a stdio server by name", () => {
+  it("matches Tavily as a stdio server", () => {
     // Tavily lives in the catalog as a stdio MCP entry (the previous
     // tavily-builtin / search_api_key flow never persisted anywhere
     // and silently dropped the key); confirm the now-uniform match.
@@ -181,6 +187,18 @@ describe("marketplaceEntryMatchesQuery", () => {
       false,
     );
   });
+
+  it("keeps searchable fields separated", () => {
+    const entry = {
+      ...slackEntry,
+      name: "alpha",
+      description: "beta",
+      id: "gamma",
+      keywords: [],
+    };
+
+    expect(marketplaceEntryMatchesQuery(entry, "alpha beta")).toBe(true);
+  });
 });
 
 describe("installedServerMatchesQuery", () => {
@@ -219,6 +237,50 @@ describe("installedServerMatchesQuery", () => {
   it("empty query always matches", () => {
     expect(installedServerMatchesQuery(slackServer, undefined, "")).toBe(true);
   });
+
+  it("returns false when no installed-server field matches", () => {
+    expect(
+      installedServerMatchesQuery(slackServer, undefined, "zzzz-no-match"),
+    ).toBe(false);
+    expect(
+      installedServerMatchesQuery(slackServer, undefined, "Stryker was here"),
+    ).toBe(false);
+  });
+
+  it("searches HTTP server fields without gaps from missing fields", () => {
+    const server = {
+      id: "shttp-0",
+      type: "shttp" as const,
+      url: "https://example.com/mcp",
+    };
+
+    expect(
+      installedServerMatchesQuery(
+        server,
+        undefined,
+        "shttp https://example.com/mcp",
+      ),
+    ).toBe(true);
+  });
+
+  it.each([
+    ["name", "slack"],
+    ["command", "npx"],
+    ["args", "-y @zencoderai/slack-mcp-server"],
+    ["name and command", "slack npx"],
+  ])("searches isolated %s values", (_field, query) => {
+    expect(installedServerMatchesQuery(slackServer, undefined, query)).toBe(
+      true,
+    );
+  });
+
+  it("handles a runtime stdio server whose args are missing", () => {
+    const server = { ...slackServer, args: undefined };
+
+    expect(
+      installedServerMatchesQuery(server as never, undefined, "no-match"),
+    ).toBe(false);
+  });
 });
 
 describe("findCatalogEntryForServer", () => {
@@ -229,12 +291,64 @@ describe("findCatalogEntryForServer", () => {
         type: "stdio",
         name: "slack",
         command: "npx",
-        args: [],
+        args: ["-y", "@zencoderai/slack-mcp-server"],
       },
       mcpMarketplace,
     );
     expect(match?.id).toBe("slack");
   });
+
+  it.each(["time_1", "work_time"])(
+    "keeps the catalog identity of a stdio copy named %s",
+    (name) => {
+      // A second library install is stored under a suffixed key (time_1)
+      // and users may rename a copy; both still run the catalog command.
+      const match = findCatalogEntryForServer(
+        {
+          id: name,
+          type: "stdio",
+          name,
+          command: "uvx",
+          args: ["mcp-server-time"],
+        },
+        mcpMarketplace,
+      );
+      expect(match?.id).toBe("time");
+    },
+  );
+
+  it.each([
+    [
+      "filesystem",
+      "npx",
+      ["-y", "@modelcontextprotocol/server-filesystem", "/a", "/b"],
+    ],
+    ["git", "uvx", ["mcp-server-git", "--repository", "/repo"]],
+  ])(
+    "matches %s with its argument-field tokens appended",
+    (id, command, args) => {
+      const match = findCatalogEntryForServer(
+        { id, type: "stdio", name: id, command, args },
+        mcpMarketplace,
+      );
+      expect(match?.id).toBe(id);
+    },
+  );
+
+  it.each([
+    ["a different command", "npx", ["mcp-server-time"]],
+    ["different args", "uvx", ["my-own-time-server"]],
+    ["missing args", "uvx", undefined],
+  ])(
+    "does not match a stdio server named after a catalog entry with %s",
+    (_case, command, args) => {
+      const match = findCatalogEntryForServer(
+        { id: "time", type: "stdio", name: "time", command, args },
+        mcpMarketplace,
+      );
+      expect(match).toBeUndefined();
+    },
+  );
 
   it("returns undefined for unknown servers", () => {
     expect(
@@ -302,5 +416,306 @@ describe("GitHub hosted MCP entry", () => {
       [github],
     );
     expect(match?.id).toBe("github");
+  });
+});
+
+describe("marketplace option normalization", () => {
+  it("filters non-MCP and transport-less connection options", () => {
+    const entry = {
+      ...slackEntry,
+      connectionOptions: [
+        ...slackEntry.connectionOptions,
+        { id: "other", provider: "github", auth: { strategy: "none" } },
+        {
+          id: "missing-transport",
+          provider: "mcp",
+          auth: { strategy: "none" },
+        },
+      ],
+    } as typeof slackEntry;
+    const options = getMcpConnectionOptions(entry);
+    expect(options.length).toBe(slackEntry.connectionOptions.length);
+    expect(getDefaultMcpConnectionOption(entry)).toBe(options[0]);
+  });
+
+  it("applies option filtering when the module is initialized", async () => {
+    vi.resetModules();
+    const fresh = await import("#/utils/mcp-marketplace-utils");
+    const invalidEntry = {
+      ...slackEntry,
+      id: "invalid",
+      connectionOptions: [
+        {
+          id: "other",
+          provider: "github",
+          auth: { strategy: "none" },
+          transport: { kind: "shttp", url: "https://example.com/mcp" },
+        },
+        {
+          id: "missing-transport",
+          provider: "mcp",
+          auth: { strategy: "none" },
+        },
+      ],
+    } as typeof slackEntry;
+
+    expect(fresh.getMcpConnectionOptions(invalidEntry)).toEqual([]);
+    expect(fresh.getMcpMarketplaceCatalog([invalidEntry, slackEntry])).toEqual([
+      slackEntry,
+    ]);
+  });
+
+  it("returns no default transport when an entry has no MCP option", () => {
+    const entry = { ...slackEntry, connectionOptions: [] };
+
+    expect(getDefaultMcpTransport(entry)).toBeUndefined();
+  });
+
+  it.each([
+    ["none", "none"],
+    ["body", "client_secret_post"],
+    ["basic", "client_secret_basic"],
+  ] as const)("maps %s OAuth client authentication", (input, expected) => {
+    const option = {
+      id: "oauth",
+      provider: "mcp",
+      auth: {
+        strategy: "oauth2",
+        oauth: { clientAuthentication: input, scopes: ["read", "write"] },
+      },
+      transport: { kind: "shttp", url: "https://example.com/mcp" },
+    } as Parameters<typeof getMcpOAuthAuthenticationConfig>[0];
+    expect(getMcpOAuthAuthenticationConfig(option)).toEqual({
+      type: "oauth",
+      client_auth_method: expected,
+      scopes: ["read", "write"],
+    });
+  });
+
+  it("omits empty or unsupported OAuth metadata and ignores non-OAuth options", () => {
+    const base = {
+      id: "oauth",
+      provider: "mcp",
+      transport: { kind: "shttp", url: "https://example.com/mcp" },
+    } as const;
+    expect(
+      getMcpOAuthAuthenticationConfig({
+        ...base,
+        auth: {
+          strategy: "none",
+          oauth: { clientAuthentication: "none" },
+        },
+      } as never),
+    ).toBeUndefined();
+    expect(
+      getMcpOAuthAuthenticationConfig({
+        ...base,
+        auth: { strategy: "oauth2" },
+      } as never),
+    ).toBeUndefined();
+    expect(
+      getMcpOAuthAuthenticationConfig({
+        ...base,
+        auth: {
+          strategy: "oauth2",
+          oauth: { clientAuthentication: "unsupported", scopes: [] },
+        },
+      } as never),
+    ).toBeUndefined();
+  });
+
+  it("supports client authentication when OAuth scopes are omitted", () => {
+    const option = {
+      id: "oauth",
+      provider: "mcp",
+      auth: {
+        strategy: "oauth2",
+        oauth: { clientAuthentication: "body" },
+      },
+      transport: { kind: "shttp", url: "https://example.com/mcp" },
+    } as Parameters<typeof getMcpOAuthAuthenticationConfig>[0];
+
+    expect(getMcpOAuthAuthenticationConfig(option)).toEqual({
+      type: "oauth",
+      client_auth_method: "client_secret_post",
+    });
+  });
+
+  it.each([
+    "authorizationUrl",
+    "tokenUrl",
+    "registrationUrl",
+    "additionalAuthorizationParams",
+    "additionalTokenParams",
+  ] as const)("rejects hosted OAuth metadata: %s", (field) => {
+    const option = {
+      id: field,
+      provider: "mcp",
+      auth: {
+        strategy: "oauth2",
+        oauth: { clientAuthentication: "none", [field]: "configured" },
+      },
+      transport: { kind: "shttp", url: "https://example.com/mcp" },
+    } as never;
+    const entry = {
+      ...slackEntry,
+      connectionOptions: [option],
+    } as typeof slackEntry;
+    expect(getInstallableMcpConnectionOption(entry)).toBeUndefined();
+  });
+});
+
+describe("URL and entry matching", () => {
+  it("normalizes default ports, queries, and trailing slashes", () => {
+    expect(
+      urlsMatch(
+        "https://example.com:443/mcp/?token=one",
+        "https://example.com/mcp?token=two",
+      ),
+    ).toBe(true);
+  });
+
+  it.each([
+    [undefined, "https://example.com"],
+    ["https://example.com", undefined],
+    ["http://example.com/mcp", "https://example.com/mcp"],
+    ["https://one.example/mcp", "https://two.example/mcp"],
+    ["https://example.com/one", "https://example.com/two"],
+    ["not a url/", "not a url"],
+    ["not a url", "different"],
+  ])("compares defensive URL inputs", (left, right) => {
+    const expected = left === "not a url/" && right === "not a url";
+    expect(urlsMatch(left, right)).toBe(expected);
+  });
+
+  it.each([
+    [1, "not-a-url"],
+    ["not-a-url", 1],
+    [null, "Stryker was here!"],
+    ["Stryker was here!", null],
+    [undefined, undefined],
+    [undefined, "/"],
+    ["/", undefined],
+    ["not-a-url", "https://example.com"],
+    ["https://example.com", "not-a-url"],
+  ])("rejects mixed defensive URL values", (left, right) => {
+    expect(urlsMatch(left, right)).toBe(false);
+  });
+
+  it.each([
+    ["alpha/beta", "alphabeta", false],
+    ["alphabeta", "alpha/beta", false],
+    ["not-a-url///", "not-a-url", true],
+    ["not-a-url", "not-a-url///", true],
+    ["https://example.com/path///", "https://example.com/path", true],
+    ["https://example.com/path", "https://example.com/path///", true],
+  ])("normalizes only trailing URL separators", (left, right, expected) => {
+    expect(urlsMatch(left, right)).toBe(expected);
+  });
+
+  it("matches SSE transports and rejects wrong or missing server URLs", () => {
+    const entry = {
+      ...linearEntry,
+      connectionOptions: [
+        {
+          id: "sse",
+          provider: "mcp",
+          auth: { strategy: "none" },
+          transport: { kind: "sse", url: "https://example.com/events" },
+        },
+      ],
+    } as typeof linearEntry;
+    expect(
+      findInstalledEntryMatch(entry, [
+        { id: "shttp", type: "shttp", url: "https://example.com/events" },
+        { id: "empty", type: "sse", url: "" },
+        { id: "sse", type: "sse", url: "https://example.com/events/" },
+      ]),
+    ).toMatchObject({ id: "sse" });
+    expect(findInstalledEntryMatch(entry, [])).toBeNull();
+  });
+
+  it("checks later connection options after an earlier option misses", () => {
+    const entry = {
+      ...linearEntry,
+      connectionOptions: [
+        {
+          id: "missing",
+          provider: "mcp",
+          auth: { strategy: "none" },
+          transport: { kind: "shttp", url: "https://missing.example/mcp" },
+        },
+        {
+          id: "matching",
+          provider: "mcp",
+          auth: { strategy: "none" },
+          transport: { kind: "shttp", url: "https://example.com/mcp" },
+        },
+      ],
+    } as typeof linearEntry;
+
+    expect(
+      findInstalledEntryMatch(entry, [
+        { id: "match", type: "shttp", url: "https://example.com/mcp" },
+      ]),
+    ).toMatchObject({ id: "match" });
+  });
+
+  it("requires the installed server transport type to match", () => {
+    const shttp = {
+      kind: "shttp" as const,
+      url: "https://example.com/mcp",
+    };
+    expect(
+      findInstalledMatch(shttp, [
+        { id: "sse", type: "sse", url: "https://example.com/mcp" },
+      ]),
+    ).toBeNull();
+
+    const stdio = {
+      kind: "stdio" as const,
+      serverName: "matching-name",
+      command: "npx",
+      args: [],
+    };
+    expect(
+      findInstalledMatch(stdio, [
+        {
+          id: "wrong-type",
+          type: "shttp",
+          url: "https://example.com/mcp",
+          name: "matching-name",
+        } as never,
+      ]),
+    ).toBeNull();
+  });
+});
+
+describe("marketplace catalog ordering and lookup", () => {
+  const entries = [
+    { ...slackEntry, id: "first", popularityRank: undefined },
+    { ...slackEntry, id: "popular", popularityRank: 10 },
+    { ...slackEntry, id: "stable-a", popularityRank: 5 },
+    { ...slackEntry, id: "stable-b", popularityRank: 5 },
+  ];
+
+  it("orders by popularity while keeping equal ranks stable", () => {
+    expect(
+      getMarketplaceEntriesByPopularity(entries).map((entry) => entry.id),
+    ).toEqual(["popular", "stable-a", "stable-b", "first"]);
+    expect(getMarketplaceEntriesByPopularity([entries[1], entries[0]])).toEqual(
+      [entries[1], entries[0]],
+    );
+  });
+
+  it("finds entries by id and returns undefined for misses", () => {
+    expect(getMarketplaceEntryById("popular", entries)?.id).toBe("popular");
+    expect(getMarketplaceEntryById("missing", entries)).toBeUndefined();
+  });
+
+  it("matches queries when keywords are absent", () => {
+    const entry = { ...slackEntry, keywords: undefined };
+    expect(marketplaceEntryMatchesQuery(entry, entry.id)).toBe(true);
+    expect(marketplaceEntryMatchesQuery(entry, "Stryker was here")).toBe(false);
   });
 });

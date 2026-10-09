@@ -54,7 +54,7 @@ const createUserMessageEvent = (id: string) => ({
     role: "user" as const,
     content: [{ type: "text" as const, text: "User message" }],
   },
-  activated_microagents: [],
+  activated_skills: [],
   extended_content: [],
 });
 

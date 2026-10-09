@@ -44,12 +44,19 @@ export const MODEL_COMMAND = "/model";
 /** The /goal slash command — drives the agent toward an objective, judging completion each round. */
 export const GOAL_COMMAND = "/goal";
 
+/** The /plan slash command — switches the conversation into Plan mode. */
+export const PLAN_COMMAND = "/plan";
+
+/** The /code slash command — switches the conversation back to Code mode. */
+export const CODE_COMMAND = "/code";
+
 /** Built-in slash commands surfaced in the menu for V1 conversations. */
 export const BUILT_IN_COMMANDS: SlashCommandItem[] = [
   {
     skill: {
       name: "new",
       type: "agentskills",
+      source: null,
       content: "Creates a new conversation using the same runtime",
       triggers: ["/new"],
     },
@@ -59,6 +66,7 @@ export const BUILT_IN_COMMANDS: SlashCommandItem[] = [
     skill: {
       name: "btw",
       type: "agentskills",
+      source: null,
       content: "Ask the agent a side question without derailing the main task",
       triggers: [BTW_COMMAND],
     },
@@ -68,6 +76,7 @@ export const BUILT_IN_COMMANDS: SlashCommandItem[] = [
     skill: {
       name: "model",
       type: "agentskills",
+      source: null,
       content:
         "List saved LLM profiles, or switch the conversation LLM profile with /model <name>",
       triggers: [MODEL_COMMAND],
@@ -78,11 +87,34 @@ export const BUILT_IN_COMMANDS: SlashCommandItem[] = [
     skill: {
       name: "goal",
       type: "agentskills",
+      source: null,
       content:
         "Drive the agent toward an objective until a judge says it's done — /goal <objective> or /goal --max <n> <objective>",
       triggers: [GOAL_COMMAND],
     },
     command: GOAL_COMMAND,
+  },
+  {
+    skill: {
+      name: "plan",
+      type: "agentskills",
+      source: null,
+      content:
+        "Switch the conversation into Plan mode, or start planning immediately with /plan <task>",
+      triggers: [PLAN_COMMAND],
+    },
+    command: PLAN_COMMAND,
+  },
+  {
+    skill: {
+      name: "code",
+      type: "agentskills",
+      source: null,
+      content:
+        "Switch the conversation back to Code mode, or resume immediately with /code <task>",
+      triggers: [CODE_COMMAND],
+    },
+    command: CODE_COMMAND,
   },
 ];
 

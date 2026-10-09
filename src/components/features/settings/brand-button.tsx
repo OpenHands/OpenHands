@@ -15,6 +15,8 @@ interface BrandButtonProps {
   ariaLabel?: string;
   /** Indicates busy/loading state for screen readers */
   "aria-busy"?: boolean;
+  "aria-haspopup"?: React.AriaAttributes["aria-haspopup"];
+  "aria-expanded"?: boolean;
 }
 
 export const BrandButton = forwardRef<
@@ -33,6 +35,8 @@ export const BrandButton = forwardRef<
     startContent,
     ariaLabel,
     "aria-busy": ariaBusy,
+    "aria-haspopup": ariaHasPopup,
+    "aria-expanded": ariaExpanded,
   },
   ref,
 ) {
@@ -48,14 +52,16 @@ export const BrandButton = forwardRef<
       onClick={onClick}
       aria-label={ariaLabel}
       aria-busy={ariaBusy}
+      aria-haspopup={ariaHasPopup}
+      aria-expanded={ariaExpanded}
       className={cn(
         formControlButtonClassName,
         variant === "primary" &&
-          "bg-primary text-[var(--oh-color-base)] hover:opacity-80 disabled:bg-[var(--oh-interactive-hover)] disabled:text-[var(--oh-muted)] disabled:opacity-100",
+          "bg-primary text-[var(--oh-accent-foreground)] hover:opacity-80 disabled:bg-interactive-hover disabled:text-muted disabled:opacity-100",
         variant === "secondary" &&
-          "border border-[var(--oh-border)] bg-base-secondary text-white hover:bg-surface-raised",
+          "border border-border bg-base-secondary text-contrast hover:bg-surface-raised",
         variant === "tertiary" &&
-          "bg-[var(--oh-interactive-hover)] text-white hover:opacity-80",
+          "bg-interactive-hover text-contrast hover:opacity-80",
         variant === "danger" && "bg-red-600 text-white hover:bg-red-700",
         variant === "ghost-danger" &&
           "h-auto min-h-0 bg-transparent px-0 text-red-600 underline hover:text-red-700 hover:no-underline font-normal",

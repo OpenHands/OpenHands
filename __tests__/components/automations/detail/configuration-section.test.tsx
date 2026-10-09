@@ -17,8 +17,7 @@ const cronAutomation: Automation = {
   created_at: "2026-01-01T00:00:00Z",
   updated_at: "2026-01-01T00:00:00Z",
   model: "fast-model",
-  repository: "acme/app",
-  branch: "main",
+  repositories: [{ url: "acme/app", ref: "main" }],
   timezone: "UTC",
 };
 
@@ -36,8 +35,7 @@ const eventAutomation: Automation = {
   created_at: "2026-01-01T00:00:00Z",
   updated_at: "2026-01-01T00:00:00Z",
   model: "review-model",
-  repository: "acme/frontend-app",
-  branch: "main",
+  repositories: [{ url: "acme/frontend-app", ref: "main" }],
 };
 
 const eventMultiPatternAutomation: Automation = {
@@ -62,6 +60,41 @@ describe("ConfigurationSection", () => {
     expect(screen.getByText("Daily at 09:00 (UTC)")).toBeInTheDocument();
     expect(screen.getByText("fast-model")).toBeInTheDocument();
     expect(screen.getByText("acme/app")).toBeInTheDocument();
+  });
+
+  it("renders every repository as owner/repo with its branch badge", () => {
+    const automation: Automation = {
+      ...eventAutomation,
+      repositories: [
+        { url: "https://github.com/qa-example/qa-repo", ref: "main" },
+        { url: "git@gitlab.com:qa-example/docs.git", ref: "v2" },
+        { url: "qa-example/tools" },
+      ],
+    };
+
+    render(<ConfigurationSection automation={automation} />);
+
+    expect(
+      screen.getByText("AUTOMATIONS$DETAIL$REPOSITORIES"),
+    ).toBeInTheDocument();
+    const rows = screen.getAllByTestId("automation-repository");
+    expect(rows.map((row) => row.textContent)).toEqual([
+      "qa-example/qa-repomain",
+      "qa-example/docsv2",
+      "qa-example/tools",
+    ]);
+  });
+
+  it("omits the repositories field when the automation has none", () => {
+    render(
+      <ConfigurationSection
+        automation={{ ...eventAutomation, repositories: undefined }}
+      />,
+    );
+
+    expect(
+      screen.queryByText("AUTOMATIONS$DETAIL$REPOSITORIES"),
+    ).not.toBeInTheDocument();
   });
 
   it("renders event trigger with source, event type, and filter", () => {
@@ -129,6 +162,30 @@ describe("ConfigurationSection", () => {
 
     expect(
       screen.queryByText("AUTOMATIONS$DETAIL$EVENT_FILTER"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders the Automation Runs As field with the resolved identity", () => {
+    // Arrange / Act — the route resolves the creator and passes it down.
+    render(
+      <ConfigurationSection
+        automation={cronAutomation}
+        runsAs="jdoe@acme.com"
+      />,
+    );
+
+    // Assert
+    expect(screen.getByText("AUTOMATIONS$DETAIL$RUNS_AS")).toBeInTheDocument();
+    expect(screen.getByText("jdoe@acme.com")).toBeInTheDocument();
+  });
+
+  it("does not render the Automation Runs As field when no identity is provided", () => {
+    // Arrange / Act — local backends and in-flight lookups pass nothing.
+    render(<ConfigurationSection automation={cronAutomation} />);
+
+    // Assert
+    expect(
+      screen.queryByText("AUTOMATIONS$DETAIL$RUNS_AS"),
     ).not.toBeInTheDocument();
   });
 });

@@ -1,6 +1,7 @@
 import { useQueries } from "@tanstack/react-query";
 import AutomationService from "#/api/automation-service/automation-service.api";
 import { useActiveBackend } from "#/contexts/active-backend-context";
+import { automationRunRequestsLimiter } from "#/hooks/query/concurrency-limiter";
 import {
   AutomationRunStatus,
   type Automation,
@@ -26,6 +27,8 @@ export interface LatestAutomationRunState {
   latestRun: AutomationRun | null;
   /** Newest-first recent runs for the activity sparkline (may be empty). */
   recentRuns: AutomationRun[];
+  /** Lifetime run count from the runs response, when known. */
+  total?: number;
   isLoading: boolean;
   isError: boolean;
 }
@@ -51,11 +54,15 @@ export function useLatestAutomationRuns(
         active.backend.id,
         active.orgId,
       ],
-      queryFn: () =>
-        AutomationService.getAutomationRuns(
-          automation.id,
-          AUTOMATION_RUN_ACTIVITY_LIMIT,
-          0,
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        automationRunRequestsLimiter.run(
+          () =>
+            AutomationService.getAutomationRuns(
+              automation.id,
+              AUTOMATION_RUN_ACTIVITY_LIMIT,
+              0,
+            ),
+          signal,
         ),
       staleTime: 60 * 1000,
       // No retries: the home section settles into its degraded "unknown"
@@ -85,6 +92,7 @@ export function useLatestAutomationRuns(
     runStates.set(automation.id, {
       latestRun: recentRuns[0] ?? null,
       recentRuns,
+      total: result?.data?.total,
       isLoading: result?.isPending ?? true,
       isError: result?.isError ?? false,
     });

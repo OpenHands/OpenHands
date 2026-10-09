@@ -7,6 +7,7 @@ import {
 
 export type ConversationTab =
   | "files"
+  | "commits"
   | "browser"
   | "terminal"
   | "planner"
@@ -15,14 +16,27 @@ export type ConversationTab =
 
 export type ConversationMode = "code" | "plan";
 
+export type CommitsPaneSection = "uncommitted";
+
+/**
+ * The composer a queued message is meant for: the open conversation's, or the
+ * Home composer at `/conversations`, which has no conversation id.
+ */
+export type MessageToSendTarget = "conversation" | "home";
+
 export interface IMessageToSend {
   text: string;
   timestamp: number;
+  /** Absent means "conversation". */
+  target?: MessageToSendTarget;
 }
 
 interface ConversationState {
   isRightPanelShown: boolean;
+  isOverviewPanelShown: boolean;
+  isOverviewPanelPeeked: boolean;
   selectedTab: ConversationTab | null;
+  commitsAutoExpandSection: CommitsPaneSection | null;
   images: File[];
   files: File[];
   /** Image file names (e.g. pasted screenshots) to send via file upload instead of vision embed. */
@@ -40,12 +54,18 @@ interface ConversationState {
   hasRightPanelToggled: boolean;
   planContent: string | null;
   conversationMode: ConversationMode;
-  subConversationTaskId: string | null; // Task ID for sub-conversation creation
+  subConversationTaskId: string | null; // Task ID for cloud sub-conversation creation
+  localPlanningConversationId: string | null;
 }
 
 interface ConversationActions {
   setIsRightPanelShown: (isRightPanelShown: boolean) => void;
+  setIsOverviewPanelShown: (isOverviewPanelShown: boolean) => void;
+  setIsOverviewPanelPeeked: (isOverviewPanelPeeked: boolean) => void;
   setSelectedTab: (selectedTab: ConversationTab | null) => void;
+  setCommitsAutoExpandSection: (
+    commitsAutoExpandSection: CommitsPaneSection | null,
+  ) => void;
   setShouldShownAgentLoading: (shouldShownAgentLoading: boolean) => void;
   setShouldHideSuggestions: (shouldHideSuggestions: boolean) => void;
   addImages: (images: File[]) => void;
@@ -62,7 +82,7 @@ interface ConversationActions {
   addImageLoading: (imageName: string) => void;
   removeImageLoading: (imageName: string) => void;
   clearAllLoading: () => void;
-  setMessageToSend: (text: string) => void;
+  setMessageToSend: (text: string, target?: MessageToSendTarget) => void;
   clearMessageToSend: () => void;
   restoreMessageToInputIfEmpty: (text: string) => void;
   clearMessageRestoreIfEmpty: () => void;
@@ -71,6 +91,7 @@ interface ConversationActions {
   setHasRightPanelToggled: (hasRightPanelToggled: boolean) => void;
   setConversationMode: (conversationMode: ConversationMode) => void;
   setSubConversationTaskId: (taskId: string | null) => void;
+  setLocalPlanningConversationId: (conversationId: string | null) => void;
   setPlanContent: (planContent: string | null) => void;
 }
 
@@ -114,7 +135,10 @@ export const useConversationStore = create<ConversationStore>()(
       // when they come back to the app and only want the panel back when
       // they themselves opened it during the current session.
       isRightPanelShown: false,
+      isOverviewPanelShown: false,
+      isOverviewPanelPeeked: false,
       selectedTab: "files" as ConversationTab,
+      commitsAutoExpandSection: null,
       images: [],
       files: [],
       imagesMarkedUploadAsFile: [],
@@ -130,13 +154,27 @@ export const useConversationStore = create<ConversationStore>()(
       planContent: null,
       conversationMode: getInitialConversationMode(),
       subConversationTaskId: null,
+      localPlanningConversationId: null,
 
       // Actions
       setIsRightPanelShown: (isRightPanelShown) =>
         set({ isRightPanelShown }, false, "setIsRightPanelShown"),
 
+      setIsOverviewPanelShown: (isOverviewPanelShown) =>
+        set(
+          { isOverviewPanelShown, isOverviewPanelPeeked: false },
+          false,
+          "setIsOverviewPanelShown",
+        ),
+
+      setIsOverviewPanelPeeked: (isOverviewPanelPeeked) =>
+        set({ isOverviewPanelPeeked }, false, "setIsOverviewPanelPeeked"),
+
       setSelectedTab: (selectedTab) =>
         set({ selectedTab }, false, "setSelectedTab"),
+
+      setCommitsAutoExpandSection: (commitsAutoExpandSection) =>
+        set({ commitsAutoExpandSection }, false, "setCommitsAutoExpandSection"),
 
       setShouldShownAgentLoading: (shouldShownAgentLoading) =>
         set({ shouldShownAgentLoading }, false, "setShouldShownAgentLoading"),
@@ -283,12 +321,13 @@ export const useConversationStore = create<ConversationStore>()(
       clearAllLoading: () =>
         set({ loadingFiles: [], loadingImages: [] }, false, "clearAllLoading"),
 
-      setMessageToSend: (text) =>
+      setMessageToSend: (text, target = "conversation") =>
         set(
           {
             messageToSend: {
               text,
               timestamp: Date.now(),
+              target,
             },
           },
           false,
@@ -328,6 +367,7 @@ export const useConversationStore = create<ConversationStore>()(
             shouldHideSuggestions: false,
             conversationMode: getInitialConversationMode(),
             subConversationTaskId: null,
+            localPlanningConversationId: null,
             planContent: null,
           },
           false,
@@ -347,6 +387,13 @@ export const useConversationStore = create<ConversationStore>()(
 
       setSubConversationTaskId: (subConversationTaskId) =>
         set({ subConversationTaskId }, false, "setSubConversationTaskId"),
+
+      setLocalPlanningConversationId: (localPlanningConversationId) =>
+        set(
+          { localPlanningConversationId },
+          false,
+          "setLocalPlanningConversationId",
+        ),
 
       setPlanContent: (planContent) =>
         set({ planContent }, false, "setPlanContent"),

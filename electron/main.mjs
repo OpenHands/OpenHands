@@ -14,8 +14,14 @@
  *       scripts/                  ← copied from repo scripts/
  *       config/                   ← copied from repo config/
  *       build/                    ← static frontend
- *     Contents/Resources/bin/     ← process.resourcesPath/bin
- *       uv  uvx                   ← bundled via extraResources
+ *     Contents/Resources/bin-<arch>/  ← process.resourcesPath/bin-<arch>
+ *       uv  uvx                        ← bundled via extraResources
+ *     Contents/Resources/bin/          ← legacy flat dir (single-arch builds)
+ *
+ *   Bundled runtimes (uv `bin`, Node `node`) prefer the arch-tagged dir
+ *   matching process.arch — under a universal binary that's the executing
+ *   slice (arm64 on Apple Silicon, x64 on Intel/Rosetta) — and fall back
+ *   to the legacy flat dir (see lib/bundled-runtime-dir.mjs).
  *
  *   Dev (npm run desktop  →  electron electron):
  *     electron/main.mjs           ← __dirname = <repo>/electron/
@@ -46,6 +52,9 @@ import { chmodSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
+
+import { isExternalBrowsableUrl, isLoopbackAppUrl } from "./lib/window-url-policy.mjs";
+import { resolveBundledRuntimeDir } from "./lib/bundled-runtime-dir.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -97,7 +106,16 @@ function injectBundledUv() {
   const isWin = process.platform === "win32";
   const uvName = isWin ? "uv.exe" : "uv";
   const uvxName = isWin ? "uvx.exe" : "uvx";
-  const binDir = join(process.resourcesPath, "bin");
+  const binDir = resolveBundledRuntimeDir(process.resourcesPath, "bin");
+  if (!binDir) {
+    console.warn(
+      "[desktop] Bundled uv not found — looked in",
+      join(process.resourcesPath, `bin-${process.arch}`),
+      "and",
+      join(process.resourcesPath, "bin"),
+    );
+    return;
+  }
   const uvPath = join(binDir, uvName);
 
   // We only probe for `uv` here — `uv` and `uvx` ship together in the
@@ -171,7 +189,16 @@ function injectBundledNode() {
   if (!app.isPackaged) return;
 
   const isWin = process.platform === "win32";
-  const nodeRoot = join(process.resourcesPath, "node");
+  const nodeRoot = resolveBundledRuntimeDir(process.resourcesPath, "node");
+  if (!nodeRoot) {
+    console.warn(
+      "[desktop] Bundled Node.js not found — looked in " +
+        `${join(process.resourcesPath, `node-${process.arch}`)} and ` +
+        `${join(process.resourcesPath, "node")} — backend scripts and stdio ` +
+        "MCP servers will fail. Run `npm run download-node` and rebuild.",
+    );
+    return;
+  }
   // POSIX Node distributions put binaries in bin/; Windows zips put node.exe
   // and the npm.cmd / npx.cmd wrappers at the distribution root.
   const binDir = isWin ? nodeRoot : join(nodeRoot, "bin");
@@ -184,6 +211,26 @@ function injectBundledNode() {
         "and rebuild.",
     );
     return;
+  }
+
+  // node.exe alone is not enough. npm / npx are wrapper scripts that exec
+  // npm's JS entry points out of the distribution's own node_modules, and
+  // that directory is the one piece electron-builder drops on Windows (see
+  // restoreBundledNodeNpm in electron-builder.config.mjs). Since we PREPEND
+  // this dir to PATH, a half-copied bundle doesn't just fail to help — it
+  // shadows the user's working npm with shims that die on MODULE_NOT_FOUND.
+  // Warn loudly, but still inject: `node` itself works and the backend
+  // launcher scripts need it.
+  const npmCli = isWin
+    ? join(nodeRoot, "node_modules", "npm", "bin", "npm-cli.js")
+    : join(nodeRoot, "lib", "node_modules", "npm", "bin", "npm-cli.js");
+  if (!existsSync(npmCli)) {
+    console.warn(
+      `[desktop] Bundled npm is incomplete — ${npmCli} is missing. ` +
+        "`npx`-launched subprocesses (stdio MCP servers, ACP servers) will " +
+        "fail with MODULE_NOT_FOUND, and this bundle shadows any npm already " +
+        "on PATH. Rebuild with `npm run download-node`.",
+    );
   }
 
   // electron-builder doesn't always preserve the +x bit on POSIX. node, npm,
@@ -341,13 +388,26 @@ function createMainWindow() {
     // App-shell background (--oh-background in src/index.css) — avoids white
     // flashes during the show → maximize repaint after the splash closes.
     backgroundColor: "#0b0e14",
+    // hiddenInset hides the native title bar but keeps the traffic lights
+    // floating over the app shell; the renderer reserves a drag band for them.
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
     icon: appIconPath,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      preload: join(__dirname, "preload-main.cjs"),
     },
   });
+
+  // The renderer drops its reserved traffic-light band in fullscreen, where
+  // macOS hides the buttons. Only transitions are pushed; the preload reads the
+  // current state over "window:full-screen:get" on every page load.
+  const sendFullScreenState = () => {
+    if (!mainWin || mainWin.isDestroyed()) return;
+    mainWin.webContents.send("window:full-screen", mainWin.isFullScreen());
+  };
+  mainWin.on("enter-full-screen", sendFullScreenState);
+  mainWin.on("leave-full-screen", sendFullScreenState);
 
   mainWin.loadURL("http://localhost:8000");
 
@@ -371,15 +431,20 @@ function createMainWindow() {
         overrideBrowserWindowOptions: { width: 800, height: 700 },
       };
     }
-    // All other external URLs open directly in the system browser.
-    if (
-      !url.startsWith("http://localhost") &&
-      !url.startsWith("http://127.0.0.1")
-    ) {
-      shell.openExternal(url);
-      return { action: "deny" };
+    // All other URLs open directly in the system browser. The loopback test
+    // goes through URL parsing: prefix matching would also accept
+    // attacker-controlled hosts like http://localhost.evil.com (or
+    // http://localhost@evil.com) and render them in a chromeless native
+    // window. Schemes outside the openExternal allowlist are denied
+    // outright — shell.openExternal would forward them to OS protocol
+    // handlers.
+    if (isLoopbackAppUrl(url)) {
+      return { action: "allow" };
     }
-    return { action: "allow" };
+    if (isExternalBrowsableUrl(url)) {
+      shell.openExternal(url);
+    }
+    return { action: "deny" };
   });
 
   // When the renderer opens a popup (the about:blank above), watch for its
@@ -388,13 +453,11 @@ function createMainWindow() {
   // now-unneeded Electron popup.
   mainWin.webContents.on("did-create-window", (popupWin) => {
     popupWin.webContents.on("will-navigate", (_event, url) => {
-      if (
-        url !== "about:blank" &&
-        !url.startsWith("http://localhost") &&
-        !url.startsWith("http://127.0.0.1")
-      ) {
+      if (url !== "about:blank" && !isLoopbackAppUrl(url)) {
         _event.preventDefault();
-        shell.openExternal(url);
+        if (isExternalBrowsableUrl(url)) {
+          shell.openExternal(url);
+        }
         popupWin.close();
       }
     });
@@ -414,7 +477,7 @@ function createMainWindow() {
 // otherwise be lost) and it backs the "Copy logs" action. In a packaged app
 // this console is the only log surface — stdout/stderr go to /dev/null when
 // launched from Finder, and the winston file logger is a no-op there (see
-// AGENTS.md on the node_modules strip).
+// `.agents/skills/desktop-electron/references/guide.md` on dependency stripping).
 
 const BOOT_LOG_MAX_LINES = 2000;
 const BOOT_LOG_FLUSH_MS = 200;
@@ -513,6 +576,13 @@ ipcMain.handle("boot-log:copy", (event) => {
 ipcMain.handle("boot-log:quit", (event) => {
   if (!isLoadingWinEvent(event)) return;
   app.quit();
+});
+
+// Synchronous so the preload has the state before the first render; a
+// renderer that starts with "not fullscreen" paints the band and then drops it.
+ipcMain.on("window:full-screen:get", (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  event.returnValue = win !== null && !win.isDestroyed() && win.isFullScreen();
 });
 
 // ── Backend stack ─────────────────────────────────────────────────────────────

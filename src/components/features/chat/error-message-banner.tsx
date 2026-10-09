@@ -1,11 +1,12 @@
 import React from "react";
 import { Trans, useTranslation } from "react-i18next";
-import { Check, CircleX, Copy, X } from "lucide-react";
+import { Check, CircleAlert, CircleX, Copy, X } from "lucide-react";
 import { OH_STATUS_ERROR_COLOR } from "#/constants/status-colors";
 import { I18nKey } from "#/i18n/declaration";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { getAcpErrorHeaderKey } from "#/utils/acp-error-codes";
 import { cn } from "#/utils/utils";
+import type { ErrorClassification } from "@openhands/typescript-client";
 
 interface ErrorMessageBannerProps {
   message: string;
@@ -15,6 +16,7 @@ interface ErrorMessageBannerProps {
   onRetry?: () => void;
   /** Recovery action (e.g. re-authenticate) shown for credential failures. */
   onReauth?: () => void;
+  classification?: ErrorClassification | null;
 }
 
 const DEFAULT_MAX_COLLAPSED_CHARS = 220;
@@ -25,6 +27,7 @@ export function ErrorMessageBanner({
   onDismiss,
   onRetry,
   onReauth,
+  classification,
 }: ErrorMessageBannerProps) {
   const { t, i18n } = useTranslation("openhands");
   const headerKey = getAcpErrorHeaderKey(code);
@@ -92,22 +95,33 @@ export function ErrorMessageBanner({
   return (
     <div
       className={cn(
-        "flex w-full gap-2 rounded-lg border border-[var(--oh-border)] bg-[var(--oh-surface-raised)] p-2 text-[var(--oh-foreground)]",
+        "flex w-full gap-2 rounded-lg border border-border bg-surface-raised p-2 text-foreground",
         isMultiLine ? "items-start" : "items-center",
       )}
       data-testid="error-message-banner"
     >
-      <CircleX
-        aria-hidden
-        className="h-4 w-4 shrink-0"
-        strokeWidth={2}
-        style={{ color: OH_STATUS_ERROR_COLOR }}
-        data-testid="error-message-banner-icon"
-      />
+      {classification != null &&
+      classification.kind !== "internal" &&
+      classification.kind !== "unknown" ? (
+        <CircleAlert
+          aria-hidden
+          className="h-4 w-4 shrink-0 text-warning"
+          strokeWidth={2}
+          data-testid="warning-message-banner-icon"
+        />
+      ) : (
+        <CircleX
+          aria-hidden
+          className="h-4 w-4 shrink-0"
+          strokeWidth={2}
+          style={{ color: OH_STATUS_ERROR_COLOR }}
+          data-testid="error-message-banner-icon"
+        />
+      )}
       <div className="min-w-0 flex-1">
         {headerKey && (
           <div
-            className="text-sm font-medium text-[var(--oh-foreground)]"
+            className="text-sm font-medium text-foreground"
             data-testid="error-message-banner-header"
           >
             {t(headerKey)}
@@ -116,7 +130,7 @@ export function ErrorMessageBanner({
         <div
           ref={contentRef}
           className={cn(
-            "whitespace-pre-wrap break-words text-sm text-[var(--oh-muted)]",
+            "whitespace-pre-wrap break-words text-sm text-muted",
             isCollapsed && "line-clamp-3",
           )}
           data-testid="error-message-banner-content"
@@ -128,7 +142,7 @@ export function ErrorMessageBanner({
           <button
             type="button"
             onClick={onReauth}
-            className="mt-2 cursor-pointer rounded-md border border-[var(--oh-border)] px-2 py-1 text-xs font-normal text-[var(--oh-foreground)] hover:bg-[var(--oh-interactive-hover)]"
+            className="mt-2 cursor-pointer rounded-md border border-border px-2 py-1 text-xs font-normal text-foreground hover:bg-interactive-hover"
             data-testid="error-message-banner-reauth"
           >
             {t(I18nKey.ERROR$ACP_UPDATE_CREDENTIALS)}
@@ -138,7 +152,7 @@ export function ErrorMessageBanner({
         {shouldShowToggle && (
           <button
             type="button"
-            className="mt-1 cursor-pointer text-xs font-normal text-[var(--oh-foreground)] underline"
+            className="mt-1 cursor-pointer text-xs font-normal text-foreground underline"
             onClick={() => setIsExpanded((prev) => !prev)}
             data-testid="error-message-banner-toggle"
           >
@@ -159,7 +173,7 @@ export function ErrorMessageBanner({
           <button
             type="button"
             onClick={onRetry}
-            className="cursor-pointer rounded-md border border-[var(--oh-border)] px-2 py-1 text-xs font-normal text-[var(--oh-foreground)] hover:bg-[var(--oh-interactive-hover)]"
+            className="cursor-pointer rounded-md border border-border px-2 py-1 text-xs font-normal text-foreground hover:bg-interactive-hover"
             data-testid="error-message-banner-retry"
           >
             {t(I18nKey.CHAT_INTERFACE$MESSAGE_RETRY)}
@@ -169,7 +183,7 @@ export function ErrorMessageBanner({
         <button
           type="button"
           onClick={handleCopy}
-          className="shrink-0 cursor-pointer rounded-md p-1 text-[var(--oh-muted)] hover:bg-[var(--oh-interactive-hover)] hover:text-[var(--oh-foreground)]"
+          className="shrink-0 cursor-pointer rounded-md p-1 text-muted hover:bg-interactive-hover hover:text-foreground"
           aria-label={t(isCopied ? I18nKey.BUTTON$COPIED : I18nKey.BUTTON$COPY)}
           data-testid="error-message-banner-copy"
         >
@@ -184,7 +198,7 @@ export function ErrorMessageBanner({
           <button
             type="button"
             onClick={onDismiss}
-            className="shrink-0 cursor-pointer rounded-md p-1 text-[var(--oh-muted)] hover:bg-[var(--oh-interactive-hover)] hover:text-[var(--oh-foreground)]"
+            className="shrink-0 cursor-pointer rounded-md p-1 text-muted hover:bg-interactive-hover hover:text-foreground"
             aria-label={t(I18nKey.BUTTON$CLOSE)}
             data-testid="error-message-banner-dismiss"
           >

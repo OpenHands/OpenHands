@@ -18,25 +18,75 @@ import {
   buildAgentServerAutomationEnv,
   buildAutomationCommand,
   buildAutomationTelemetryEnv,
+  buildAutomationRuntimeServicesInfo,
   buildConfig,
   buildRouteArgs,
   buildViteBackendEnv,
+  buildViteFrontendEnv,
+  getAgentServerBaseUrl,
   getFrontendBackend,
   getLocalServiceRoutes,
+  getRejectPrefixes,
   setServiceLogListener,
   spawnService,
+  validateLocalAutomationPath,
   DEFAULT_AUTOMATION_REPO,
   DEFAULT_AUTOMATION_PACKAGE,
   DEFAULT_AUTOMATION_VERSION,
-  DEFAULT_BACKEND_PORT,
-  DEFAULT_AUTOMATION_PORT,
 } from "../../scripts/dev-with-automation.mjs";
-import { resetPersistedSessionApiKeyCache } from "../../scripts/dev-safe.mjs";
+import {
+  buildAgentServerEnv,
+  buildSafeDevConfig,
+  resetPersistedSessionApiKeyCache,
+} from "../../scripts/dev-safe.mjs";
+import { createRouter } from "../../scripts/proxy-utils.mjs";
 
 const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../..",
 );
+
+type RuntimeServicesInfo = {
+  services: Record<string, { url_from_agent: string }>;
+};
+
+describe("buildAutomationRuntimeServicesInfo", () => {
+  const config = {
+    mode: "agent-canvas",
+    agentServerPort: 18000,
+    ingressPort: 8000,
+    vitePort: 3001,
+    autoBackendPort: 18001,
+    launchFrontend: true,
+    launchAutomation: true,
+  };
+
+  it("advertises host services through the Docker host gateway", () => {
+    const info = buildAutomationRuntimeServicesInfo(config, {
+      OH_CONVERSATION_RUNTIME: "docker",
+    }) as RuntimeServicesInfo;
+    expect(info.services.agent_server.url_from_agent).toBe(
+      "http://localhost:18000",
+    );
+    expect(info.services.ingress.url_from_agent).toBe(
+      "http://host.docker.internal:8000",
+    );
+    expect(info.services.automation.url_from_agent).toBe(
+      "http://host.docker.internal:8000",
+    );
+  });
+
+  it("keeps host services on localhost for local conversations", () => {
+    const info = buildAutomationRuntimeServicesInfo(
+      config,
+      {},
+    ) as RuntimeServicesInfo;
+    expect(info.services.ingress.url_from_agent).toBe("http://localhost:8000");
+    expect(info.services.automation.url_from_agent).toBe(
+      "http://localhost:18001",
+    );
+  });
+});
 
 describe("buildAutomationCommand", () => {
   it("uses released PyPI version by default", () => {
@@ -120,6 +170,69 @@ describe("buildAutomationCommand", () => {
     expect(cmd.args).toContain(`git+${DEFAULT_AUTOMATION_REPO}@main`);
     expect(cmd.args).not.toContain(`${DEFAULT_AUTOMATION_PACKAGE}==1.0.0`);
     expect(cmd.source).toBe("git (main)");
+  });
+
+  it("runs a local checkout in place, ahead of the other env vars", () => {
+    const cmd = buildAutomationCommand({
+      OH_AUTOMATION_LOCAL_PATH: "/checkouts/automation",
+      OH_AUTOMATION_GIT_REF: "main",
+      OH_AUTOMATION_VERSION: "1.0.0",
+    });
+
+    expect(cmd.command).toBe("uv");
+    expect(cmd.args).toEqual([
+      "run",
+      "--project",
+      "/checkouts/automation",
+      "uvicorn",
+      "openhands.automation.app:app",
+    ]);
+    expect(cmd.source).toBe("local (/checkouts/automation)");
+  });
+});
+
+describe("validateLocalAutomationPath", () => {
+  const dirs: string[] = [];
+
+  afterEach(() => {
+    while (dirs.length > 0) {
+      const dir = dirs.pop();
+      if (dir) rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  function makeCheckout({ withProjectFile = true } = {}) {
+    const dir = mkdtempSync(path.join(tmpdir(), "automation-checkout-"));
+    dirs.push(dir);
+    if (withProjectFile) {
+      writeFileSync(path.join(dir, "pyproject.toml"), "[project]\n");
+    }
+    return dir;
+  }
+
+  it("accepts an absolute path to a Python project", () => {
+    expect(() => validateLocalAutomationPath(makeCheckout())).not.toThrow();
+  });
+
+  // Without these, `uv run --project <bad path>` just exits and the rest of
+  // the stack stays up, leaving the automations UI blaming the backend.
+  it("rejects a relative path", () => {
+    expect(() => validateLocalAutomationPath("../automation")).toThrow(
+      /absolute path/i,
+    );
+  });
+
+  it("rejects a path that does not exist", () => {
+    const dir = makeCheckout();
+    rmSync(dir, { recursive: true, force: true });
+
+    expect(() => validateLocalAutomationPath(dir)).toThrow(/does not exist/i);
+  });
+
+  it("rejects a directory that is not a Python project", () => {
+    expect(() =>
+      validateLocalAutomationPath(makeCheckout({ withProjectFile: false })),
+    ).toThrow(/pyproject\.toml/);
   });
 });
 
@@ -237,6 +350,31 @@ describe("buildConfig", () => {
     expect(ports.size).toBe(4);
   });
 
+  it("lets --automation-git-ref win over an exported OH_AUTOMATION_LOCAL_PATH", async () => {
+    // Otherwise someone with the checkout exported in their shell profile
+    // reproduces a bug against their own working tree while believing they
+    // are testing the ref they just passed.
+    const env = envWithIsolatedKeyPath({
+      OH_AUTOMATION_LOCAL_PATH: "/checkouts/automation",
+    });
+
+    await buildConfig({ automationGitRef: "abc123" }, env);
+
+    expect(env.OH_AUTOMATION_GIT_REF).toBe("abc123");
+    expect(env.OH_AUTOMATION_LOCAL_PATH).toBeUndefined();
+    expect(buildAutomationCommand(env).source).toBe("git (abc123)");
+  });
+
+  it("keeps a local checkout when no ref is passed", async () => {
+    const env = envWithIsolatedKeyPath({
+      OH_AUTOMATION_LOCAL_PATH: "/checkouts/automation",
+    });
+
+    await buildConfig({}, env);
+
+    expect(env.OH_AUTOMATION_LOCAL_PATH).toBe("/checkouts/automation");
+  });
+
   it("respects preferred port from args when available", async () => {
     // Use a high port unlikely to be busy
     const preferredPort = 19500;
@@ -249,22 +387,23 @@ describe("buildConfig", () => {
   });
 
   it("throws when ingress port is busy", async () => {
-    const busyPort = 8100;
-
-    // Block port 8100
     const server = net.createServer();
-    await new Promise<void>((resolve, reject) => {
-      server.listen(busyPort, "127.0.0.1", () => {
+    const busyPort = await new Promise<number>((resolve, reject) => {
+      server.listen(0, "127.0.0.1", () => {
+        const address = server.address();
+        if (!address || typeof address === "string") {
+          reject(new Error("Expected a TCP server address"));
+          return;
+        }
         servers.push(server);
-        resolve();
+        resolve(address.port);
       });
       server.on("error", reject);
     });
 
-    // Should throw instead of falling back to a different port
     await expect(
       buildConfig({ port: busyPort }, envWithIsolatedKeyPath()),
-    ).rejects.toThrow(/ingress.*port 8100/i);
+    ).rejects.toThrow(new RegExp(`ingress.*port ${busyPort}`, "i"));
   });
 
   it("allocates valid ports for all services", async () => {
@@ -462,6 +601,66 @@ describe("stack mode routing", () => {
     });
   });
 
+  it("binds Vite to loopback and injects the key by default", async () => {
+    const config = await buildConfig({}, envWithIsolatedKeyPath());
+
+    expect(buildViteFrontendEnv(config)).toMatchObject({
+      VITE_BIND_HOST: "127.0.0.1",
+      VITE_SESSION_API_KEY: config.sessionApiKey,
+    });
+    expect(buildViteFrontendEnv(config)).not.toHaveProperty(
+      "VITE_AUTH_REQUIRED",
+    );
+  });
+
+  it("keeps the session key out of an off-loopback Vite origin", async () => {
+    const config = await buildConfig(
+      { host: "0.0.0.0" },
+      envWithIsolatedKeyPath(),
+    );
+
+    const viteEnv = buildViteFrontendEnv(config);
+    expect(viteEnv.VITE_BIND_HOST).toBe("0.0.0.0");
+    expect(viteEnv).not.toHaveProperty("VITE_SESSION_API_KEY");
+    expect(viteEnv.VITE_AUTH_REQUIRED).toBe("true");
+  });
+
+  it("makes the key-free ingress reachable to Docker conversations", async () => {
+    const config = await buildConfig(
+      {},
+      envWithIsolatedKeyPath({ OH_CONVERSATION_RUNTIME: "docker" }),
+    );
+
+    expect(config.bindHost).toBe("0.0.0.0");
+    expect(buildViteFrontendEnv(config)).not.toHaveProperty(
+      "VITE_SESSION_API_KEY",
+    );
+  });
+
+  it("honors an explicit loopback override in Docker conversation mode", async () => {
+    const config = await buildConfig(
+      {},
+      envWithIsolatedKeyPath({
+        OH_CONVERSATION_RUNTIME: "docker",
+        OH_BIND_HOST: "127.0.0.1",
+      }),
+    );
+
+    expect(config.bindHost).toBe("127.0.0.1");
+  });
+
+  it("keeps the session key out of public-mode Vite on loopback", async () => {
+    const config = await buildConfig(
+      { public: true },
+      envWithIsolatedKeyPath({ LOCAL_BACKEND_API_KEY: "public-key" }),
+    );
+
+    const viteEnv = buildViteFrontendEnv(config);
+    expect(viteEnv.VITE_BIND_HOST).toBe("127.0.0.1");
+    expect(viteEnv).not.toHaveProperty("VITE_SESSION_API_KEY");
+    expect(viteEnv.VITE_AUTH_REQUIRED).toBe("true");
+  });
+
   it("allows frontend-only Vite to target an explicit backend URL", async () => {
     const config = await buildConfig(
       { frontendOnly: true },
@@ -540,6 +739,103 @@ describe("stack mode routing", () => {
     expect(routeArgs).not.toContain("--default");
   });
 
+  it("routes the editor base path to the vscode port in the stock config", async () => {
+    // The whole point of the base path is that a stock launcher — no
+    // INGRESS_ROUTES, no OH_VSCODE_BASE_PATH — already reaches the editor
+    // through the single ingress origin. Both the outer ingress and the
+    // static-server route list are built from getLocalServiceRoutes, so
+    // asserting it here covers both.
+    const config = await buildConfig({}, envWithIsolatedKeyPath());
+
+    expect(config.vscodeBasePath).toBe("/vscode");
+
+    const routes = getLocalServiceRoutes(config);
+    expect(routes).toContainEqual([
+      config.vscodeBasePath,
+      `http://127.0.0.1:${config.vscodePort}`,
+    ]);
+    expect(buildRouteArgs(routes)).toContain(
+      `/vscode=http://127.0.0.1:${config.vscodePort}`,
+    );
+    // The editor must not collide with the agent-server or automation ports;
+    // it is a separate process reached through the same origin.
+    expect(config.vscodePort).not.toBe(config.agentServerPort);
+    expect(config.vscodePort).not.toBe(config.autoBackendPort);
+  });
+
+  it("passes the agent-server a base path matching the ingress route", async () => {
+    // The advertised URL and the route that serves it come from two different
+    // places (agent-server's /api/vscode/url vs. the proxy route table). They
+    // only agree because both read the same config value — assert that rather
+    // than each side in isolation.
+    const config = await buildConfig({}, envWithIsolatedKeyPath());
+    const env = buildAgentServerEnv(
+      buildSafeDevConfig(process.cwd(), {
+        ...envWithIsolatedKeyPath(),
+        OH_CANVAS_SAFE_BACKEND_PORT: String(config.agentServerPort),
+        OH_CANVAS_SAFE_VSCODE_PORT: String(config.vscodePort),
+      }),
+      { vscodeBasePath: config.vscodeBasePath },
+    );
+
+    expect(env.OH_VSCODE_BASE_PATH).toBe(config.vscodeBasePath);
+    expect(env.OH_VSCODE_PORT).toBe(String(config.vscodePort));
+
+    const [, vscodeBackend] =
+      getLocalServiceRoutes(config).find(
+        ([prefix]) => prefix === env.OH_VSCODE_BASE_PATH,
+      ) ?? [];
+    expect(vscodeBackend).toBe(`http://127.0.0.1:${env.OH_VSCODE_PORT}`);
+  });
+
+  it("preserves the editor prefix rather than stripping it", async () => {
+    // openvscode-server is launched with --server-base-path, so it generates
+    // its HTTP and WebSocket URLs beneath the prefix and only answers there.
+    // A router that stripped the prefix would 404 every asset.
+    const config = await buildConfig({}, envWithIsolatedKeyPath());
+    const routes = Object.fromEntries(getLocalServiceRoutes(config));
+    const route = createRouter(routes);
+    const vscodeBackend = `http://127.0.0.1:${config.vscodePort}`;
+
+    expect(route("/vscode")).toBe(vscodeBackend);
+    expect(route("/vscode/")).toBe(vscodeBackend);
+    // Workbench assets and the WebSocket upgrade path both sit under the
+    // prefix; the proxy forwards req.url unchanged, so matching is all that
+    // is needed for the prefix to survive.
+    expect(route("/vscode/static/out/vs/workbench/workbench.web.main.js")).toBe(
+      vscodeBackend,
+    );
+    expect(route("/vscode/stable-abc/?tkn=k")).toBe(vscodeBackend);
+    // Longest-prefix matching must not let /vscode swallow /api or vice versa.
+    expect(route("/api/vscode/url")).toBe(
+      `http://127.0.0.1:${config.agentServerPort}`,
+    );
+  });
+
+  it("addresses the agent-server over IPv4 for readiness and secret seeding", async () => {
+    const config = await buildConfig({}, envWithIsolatedKeyPath());
+
+    // The launcher starts the agent-server with `--host 127.0.0.1`, so the
+    // readiness probe (`/server_info`), the secret-seeding request, and the
+    // automation backend's AUTOMATION_AGENT_SERVER_URL must all skip the
+    // `localhost` lookup that resolves to ::1 first on Windows.
+    expect(getAgentServerBaseUrl(config)).toBe(
+      `http://127.0.0.1:${config.agentServerPort}`,
+    );
+  });
+
+  it("rejects the editor prefix when no agent-server is launched", async () => {
+    // Without an agent-server there is no editor behind the prefix. Falling
+    // back to index.html would answer an editor request with the canvas shell.
+    const config = await buildConfig(
+      { frontendOnly: true },
+      envWithIsolatedKeyPath(),
+    );
+
+    expect(getLocalServiceRoutes(config)).toEqual([]);
+    expect(getRejectPrefixes(config)).toContain("/vscode");
+  });
+
   it("rejects mutually exclusive partial-stack modes", async () => {
     await expect(
       buildConfig(
@@ -547,26 +843,6 @@ describe("stack mode routing", () => {
         envWithIsolatedKeyPath(),
       ),
     ).rejects.toThrow(/cannot be used together/);
-  });
-});
-
-describe("default constants", () => {
-  it("has expected default automation repo", () => {
-    expect(DEFAULT_AUTOMATION_REPO).toBe(
-      "https://github.com/OpenHands/automation",
-    );
-  });
-
-  it("has expected default automation package", () => {
-    expect(DEFAULT_AUTOMATION_PACKAGE).toBe("openhands-automation");
-  });
-
-  it("has expected default backend port", () => {
-    expect(DEFAULT_BACKEND_PORT).toBe(18000);
-  });
-
-  it("has expected default automation port", () => {
-    expect(DEFAULT_AUTOMATION_PORT).toBe(18001);
   });
 });
 

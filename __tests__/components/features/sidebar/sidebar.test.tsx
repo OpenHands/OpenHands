@@ -1,4 +1,5 @@
 import {
+  act,
   render,
   screen,
   fireEvent,
@@ -15,6 +16,7 @@ import {
   NavigationProvider,
   type NavigationContextValue,
 } from "#/context/navigation-context";
+import { getPinnedHomeRouteKey } from "#/hooks/use-pinned-home-route";
 import translations from "#/i18n/translation.json";
 
 // The global `useTranslation` mock in `vitest.setup.ts` returns the key
@@ -51,16 +53,21 @@ vi.mock("#/hooks/query/use-settings", () => ({
   getErrorStatus: () => undefined,
 }));
 
-vi.mock("#/contexts/active-backend-context", () => ({
-  useActiveBackendContext: () => ({
-    backends: [{ id: "local", name: "Local", kind: "local" }],
-    active: {
-      backend: { id: "local", name: "Local", kind: "local" },
-      orgId: null,
-    },
-    setActive: vi.fn(),
-  }),
-}));
+vi.mock("#/contexts/active-backend-context", () => {
+  const active = {
+    backend: { id: "local", name: "Local", kind: "local" },
+    orgId: null,
+  };
+
+  return {
+    useActiveBackendContext: () => ({
+      backends: [active.backend],
+      active,
+      setActive: vi.fn(),
+    }),
+    useActiveBackend: () => active,
+  };
+});
 
 vi.mock("#/hooks/query/use-backends-health", () => ({
   useBackendsHealth: () => ({
@@ -82,6 +89,12 @@ vi.mock("#/components/features/sidebar/user-actions", () => ({
 
 vi.mock("#/components/features/conversation-panel/conversation-panel", () => ({
   ConversationPanel: () => null,
+}));
+
+vi.mock("#/components/features/sidebar/sidebar-onboarding-checklist", () => ({
+  SidebarOnboardingChecklist: () => (
+    <div data-testid="sidebar-onboarding-checklist" />
+  ),
 }));
 
 vi.mock(
@@ -180,13 +193,6 @@ vi.mock("#/components/features/backends/manage-backends-modal", () => ({
   ),
 }));
 
-vi.mock(
-  "#/components/features/conversation-panel/new-conversation-button",
-  () => ({
-    NewConversationButton: () => <div data-testid="new-conversation-button" />,
-  }),
-);
-
 vi.mock("#/components/features/sidebar/sidebar-conversation-list", () => ({
   SidebarConversationList: () => (
     <div data-testid="sidebar-conversation-list" />
@@ -265,6 +271,27 @@ describe("Sidebar", () => {
         screen.queryByTestId("sidebar-mobile-drawer"),
       ).not.toBeInTheDocument();
     });
+  });
+
+  it("leaves the mobile drawer open when a menu inside it already handled Escape", () => {
+    renderSidebar("/conversations");
+    const toggle = screen.getByTestId("sidebar-mobile-menu-toggle");
+    fireEvent.click(toggle);
+
+    const handledEscape = new KeyboardEvent("keydown", {
+      key: "Escape",
+      bubbles: true,
+      cancelable: true,
+    });
+    handledEscape.preventDefault();
+    act(() => {
+      document.body.dispatchEvent(handledEscape);
+    });
+
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
   });
 
   it("toggles between expanded and collapsed states and persists the choice", () => {
@@ -458,6 +485,23 @@ describe("Sidebar", () => {
     }
   });
 
+  it("renders the Getting Started checklist above the bottom backend bar", () => {
+    renderSidebar("/conversations");
+
+    const automations = screen.getByTestId("sidebar-automations-link");
+    const checklist = screen.getByTestId("sidebar-onboarding-checklist");
+    const backendBar = screen.getByTestId("backend-selector");
+
+    expect(
+      automations.compareDocumentPosition(checklist) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      checklist.compareDocumentPosition(backendBar) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it("renders icons for every top-level nav item so they remain meaningful in the collapsed rail", () => {
     renderSidebar("/conversations");
 
@@ -484,6 +528,58 @@ describe("Sidebar", () => {
     );
     expect(screen.getByTestId("sidebar-automations-link")).toHaveTextContent(
       "Automate",
+    );
+  });
+
+  it.each(["/customize", "/mcp", "/skills", "/plugins", "/apps"])(
+    "marks the Customize row as the current page on %s",
+    (path) => {
+      renderSidebar(path);
+
+      expect(screen.getByTestId("sidebar-skills-link")).toHaveAttribute(
+        "aria-current",
+        "page",
+      );
+    },
+  );
+
+  it.each(["/conversations", "/automations"])(
+    "does not mark the Customize row as current on %s",
+    (path) => {
+      renderSidebar(path);
+
+      expect(screen.getByTestId("sidebar-skills-link")).not.toHaveAttribute(
+        "aria-current",
+      );
+    },
+  );
+
+  it("pins and unpins a sidebar page as the home route without navigating", () => {
+    // Arrange: the mocked active backend is `local` with no org.
+    const pinKey = getPinnedHomeRouteKey("local", null);
+    const { navigate } = renderSidebar("/conversations");
+    const pinToggle = screen.getByTestId("sidebar-pin-home-toggle-customize");
+    expect(pinToggle).toHaveAttribute("aria-pressed", "false");
+    expect(pinToggle).toHaveAttribute("aria-label", "Pin as home page");
+
+    // Act: pin Customize as the home page.
+    fireEvent.click(pinToggle);
+
+    // Assert: the toggle flips and the pin persists for the active backend.
+    expect(pinToggle).toHaveAttribute("aria-pressed", "true");
+    expect(pinToggle).toHaveAttribute("aria-label", "Unpin as home page");
+    expect(window.localStorage.getItem(pinKey)).toBe(
+      JSON.stringify("/customize"),
+    );
+    expect(navigate).not.toHaveBeenCalled();
+
+    // Act: unpin from the same control.
+    fireEvent.click(pinToggle);
+
+    // Assert: the pin is gone.
+    expect(pinToggle).toHaveAttribute("aria-pressed", "false");
+    expect(window.localStorage.getItem(pinKey)).not.toBe(
+      JSON.stringify("/customize"),
     );
   });
 });

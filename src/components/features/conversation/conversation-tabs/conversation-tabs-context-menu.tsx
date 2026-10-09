@@ -3,6 +3,8 @@ import ReactDOM from "react-dom";
 import { useTranslation } from "react-i18next";
 import { ContextMenu } from "#/ui/context-menu";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
+import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
+import { clampLeftToViewport } from "#/hooks/use-popover-fixed-placement";
 import { useConversationId } from "#/hooks/use-conversation-id";
 import { useConversationLocalStorageState } from "#/utils/conversation-local-storage";
 import {
@@ -11,12 +13,12 @@ import {
 } from "#/stores/conversation-store";
 import { I18nKey } from "#/i18n/declaration";
 import { Gauge, Globe, ListTodo, SquareChevronRight } from "lucide-react";
+import { LuFileDiff } from "react-icons/lu";
 import DocumentIcon from "#/icons/document.svg?react";
 import PillIcon from "#/icons/pill.svg?react";
 import PillFillIcon from "#/icons/pill-fill.svg?react";
 import DoubleCheckIcon from "#/icons/double-check.svg?react";
 import { useTaskList } from "#/hooks/use-task-list";
-import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useSelectConversationTab } from "#/hooks/use-select-conversation-tab";
 import { useIsArchivedConversation } from "#/hooks/use-is-archived-conversation";
 import { ArchivedDisabledTooltip } from "../../context-menu/archived-disabled-tooltip";
@@ -25,6 +27,9 @@ import {
   dropdownInstantColorClassName,
   dropdownMenuRowIconWrapperClassName,
 } from "#/utils/dropdown-classes";
+
+/** Space between the trigger and the portaled menu. */
+const MENU_GAP_PX = 8;
 
 interface ConversationTabsContextMenuProps {
   isOpen: boolean;
@@ -44,6 +49,7 @@ export function ConversationTabsContextMenu({
     onClose,
     ignoreOutsideClickRef,
   );
+  useCloseOnEscape(isOpen, onClose, anchorRef);
   const [portalStyle, setPortalStyle] = useState<React.CSSProperties>();
 
   useLayoutEffect(() => {
@@ -56,23 +62,38 @@ export function ConversationTabsContextMenu({
       const rect = anchorRef.current?.getBoundingClientRect();
       if (!rect) return;
 
-      const gap = 8;
+      // The menu's own box is only measurable once it has painted; the first
+      // pass falls back to anchoring on the trigger, and the frame below
+      // re-runs with real dimensions.
+      const menuRect = ref.current?.getBoundingClientRect();
+
+      const overflowsBelow =
+        rect.bottom + MENU_GAP_PX + (menuRect?.height ?? 0) >
+        window.innerHeight;
+
       setPortalStyle({
         position: "fixed",
         zIndex: 9999,
-        top: rect.bottom + gap,
-        left: rect.left,
+        // Flip above the trigger rather than clipping at the viewport bottom.
+        ...(overflowsBelow
+          ? { bottom: window.innerHeight - rect.top + MENU_GAP_PX }
+          : { top: rect.bottom + MENU_GAP_PX }),
+        // An embedded canvas can sit hard against the viewport's right edge,
+        // where left-aligning on the trigger clips the labels and pin controls.
+        left: clampLeftToViewport(rect.left, menuRect?.width ?? 0),
       });
     };
 
     updatePosition();
+    const frame = window.requestAnimationFrame(updatePosition);
     window.addEventListener("resize", updatePosition);
     window.addEventListener("scroll", updatePosition, true);
     return () => {
+      window.cancelAnimationFrame(frame);
       window.removeEventListener("resize", updatePosition);
       window.removeEventListener("scroll", updatePosition, true);
     };
-  }, [isOpen, anchorRef]);
+  }, [isOpen, anchorRef, ref]);
   const { t } = useTranslation("openhands");
   const { conversationId } = useConversationId();
   const {
@@ -86,7 +107,6 @@ export function ConversationTabsContextMenu({
   const { navigateToTab } = useSelectConversationTab();
 
   const { hasTaskList } = useTaskList();
-  const { backend } = useActiveBackend();
   const isArchivedConversation = useIsArchivedConversation();
 
   const tabConfig = [
@@ -96,6 +116,11 @@ export function ConversationTabsContextMenu({
       i18nKey: I18nKey.COMMON$PLANNER,
     },
     { tab: "files", icon: DocumentIcon, i18nKey: I18nKey.COMMON$FILES },
+    {
+      tab: "commits",
+      icon: LuFileDiff,
+      i18nKey: I18nKey.DIFF_VIEWER$COMMITS,
+    },
     {
       tab: "terminal",
       icon: SquareChevronRight,
@@ -112,10 +137,6 @@ export function ConversationTabsContextMenu({
       i18nKey: I18nKey.COMMON$TASK_LIST,
     });
   }
-
-  const visibleTabConfig = tabConfig.filter(
-    ({ tab }) => tab !== "planner" || backend.kind === "cloud",
-  );
 
   const handleOpenTab = (tab: string) => {
     if (isArchivedConversation) {
@@ -140,7 +161,7 @@ export function ConversationTabsContextMenu({
       setUnpinnedTabs(newUnpinnedTabs);
 
       if (selectedTab === tab && isRightPanelShown) {
-        const nextPinnedTab = visibleTabConfig.find(
+        const nextPinnedTab = tabConfig.find(
           ({ tab: tabKey }) =>
             tabKey !== tab && !newUnpinnedTabs.includes(tabKey),
         );
@@ -166,16 +187,15 @@ export function ConversationTabsContextMenu({
       spacing={isPortaled ? "none" : "default"}
       className={cn("z-[9999] w-fit", isPortaled ? "mt-0" : "mt-2")}
     >
-      {visibleTabConfig.map(({ tab, icon: Icon, i18nKey }) => {
+      {tabConfig.map(({ tab, icon: Icon, i18nKey }) => {
         const pinned = !state.unpinnedTabs.includes(tab);
         return (
           <li key={tab} className="list-none">
             <ArchivedDisabledTooltip isDisabled={isArchivedConversation}>
               <div
                 className={cn(
-                  "group flex h-[30px] w-full min-w-0 items-stretch rounded",
-                  !isArchivedConversation &&
-                    "hover:bg-[var(--oh-interactive-hover)]",
+                  "group flex h-7.5 w-full min-w-0 items-stretch rounded",
+                  !isArchivedConversation && "hover:bg-interactive-hover",
                   isArchivedConversation && "opacity-50",
                 )}
               >
@@ -184,7 +204,7 @@ export function ConversationTabsContextMenu({
                   data-testid={`conversation-tabs-menu-open-${tab}`}
                   disabled={isArchivedConversation}
                   className={cn(
-                    "flex min-w-0 flex-1 items-center gap-2 rounded-l p-2 text-start text-white",
+                    "flex min-w-0 flex-1 items-center gap-2 rounded-l p-2 text-start text-contrast",
                     dropdownInstantColorClassName,
                     isArchivedConversation
                       ? "cursor-not-allowed"
@@ -205,11 +225,11 @@ export function ConversationTabsContextMenu({
                   data-testid={`conversation-tabs-menu-pin-${tab}`}
                   disabled={isArchivedConversation}
                   className={cn(
-                    "flex shrink-0 items-center justify-center rounded-r px-2 text-white",
+                    "flex shrink-0 items-center justify-center rounded-r px-2 text-contrast",
                     dropdownInstantColorClassName,
                     isArchivedConversation
                       ? "cursor-not-allowed"
-                      : "cursor-pointer hover:bg-white/10",
+                      : "cursor-pointer hover:bg-contrast/10",
                   )}
                   aria-pressed={pinned}
                   aria-label={
@@ -222,7 +242,7 @@ export function ConversationTabsContextMenu({
                   {pinned ? (
                     <span
                       className={cn(
-                        "-mr-[5px] ml-auto",
+                        "-mr-1.25 ml-auto",
                         dropdownMenuRowIconWrapperClassName,
                       )}
                       aria-hidden

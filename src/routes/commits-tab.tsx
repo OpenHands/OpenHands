@@ -1,13 +1,16 @@
+import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { CommitList } from "#/components/features/diff-viewer/commit-list";
 import { DiffDrawerIcon } from "#/components/features/diff-viewer/diff-drawer-icon";
 import { useUnifiedGitCommits } from "#/hooks/query/use-unified-git-commits";
+import { useUnifiedGetGitChanges } from "#/hooks/query/use-unified-get-git-changes";
 import { useConversationId } from "#/hooks/use-conversation-id";
 import { I18nKey } from "#/i18n/declaration";
 import { RUNTIME_INACTIVE_STATES } from "#/types/agent-state";
 import { useAgentState } from "#/hooks/use-agent-state";
 import { RuntimeWaitingState } from "#/components/features/conversation-panel/runtime-waiting-state";
 import { ConversationTabEmptyState } from "#/components/features/conversation/conversation-tab-empty-state";
+import { useConversationStore } from "#/stores/conversation-store";
 
 /**
  * The Files tab's "Commits" view: the workspace's recent commit history
@@ -20,11 +23,30 @@ function GitCommits() {
   const { conversationId } = useConversationId();
   const { commits, hasMore, isUnsupported, isLoading, isSuccess } =
     useUnifiedGitCommits();
+  const {
+    data: uncommittedChanges,
+    isSuccess: uncommittedSuccess,
+    isLoading: uncommittedLoading,
+  } = useUnifiedGetGitChanges();
+  const commitsAutoExpandSection = useConversationStore(
+    (state) => state.commitsAutoExpandSection,
+  );
+  const setCommitsAutoExpandSection = useConversationStore(
+    (state) => state.setCommitsAutoExpandSection,
+  );
+  const handleAutoExpandHandled = useCallback(
+    () => setCommitsAutoExpandSection(null),
+    [setCommitsAutoExpandSection],
+  );
 
   const { curAgentState } = useAgentState();
   const runtimeIsActive = !RUNTIME_INACTIVE_STATES.includes(curAgentState);
 
-  const showList = isSuccess && !isUnsupported && commits.length > 0;
+  const hasCommits = isSuccess && !isUnsupported && commits.length > 0;
+  const hasUncommitted =
+    uncommittedSuccess && (uncommittedChanges?.length ?? 0) > 0;
+  const showList = hasCommits || hasUncommitted;
+  const isListLoading = isLoading || (runtimeIsActive && uncommittedLoading);
 
   return (
     <main className="h-full w-full flex flex-col items-stretch">
@@ -34,8 +56,13 @@ function GitCommits() {
               expanded commit. */}
           <CommitList
             key={conversationId}
-            commits={commits}
-            hasMore={hasMore}
+            commits={hasCommits ? commits : []}
+            hasMore={hasCommits ? hasMore : false}
+            uncommittedChanges={
+              uncommittedSuccess ? (uncommittedChanges ?? []).slice(0, 100) : []
+            }
+            autoExpandUncommitted={commitsAutoExpandSection === "uncommitted"}
+            onAutoExpandHandled={handleAutoExpandHandled}
           />
         </div>
       ) : (
@@ -46,13 +73,13 @@ function GitCommits() {
               messageKey={I18nKey.DIFF_VIEWER$WAITING_FOR_RUNTIME}
             />
           )}
-          {runtimeIsActive && isLoading && (
+          {runtimeIsActive && isListLoading && (
             <RuntimeWaitingState
               testId="commits-tab-status"
               messageKey={I18nKey.DIFF_VIEWER$LOADING}
             />
           )}
-          {runtimeIsActive && !isLoading && (
+          {runtimeIsActive && !isListLoading && (
             <ConversationTabEmptyState icon={<DiffDrawerIcon />}>
               {t(I18nKey.DIFF_VIEWER$NO_COMMITS)}
             </ConversationTabEmptyState>

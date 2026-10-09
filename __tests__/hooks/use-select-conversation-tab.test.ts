@@ -37,17 +37,16 @@ describe("useSelectConversationTab", () => {
         result.current.selectTab("files");
       });
 
-      // Assert: Panel should be open and tab selected (in-memory only).
+      // Assert: Panel should be open and tab selected.
       expect(useConversationStore.getState().selectedTab).toBe("files");
       expect(useConversationStore.getState().hasRightPanelToggled).toBe(true);
+      expect(useConversationStore.getState().isRightPanelShown).toBe(true);
 
-      // Tab selection is persisted; the right-drawer open state is
-      // intentionally session-only and must NOT touch localStorage.
       const storedState = JSON.parse(
         localStorage.getItem(`conversation-state-${TEST_CONVERSATION_ID}`)!,
       );
       expect(storedState.selectedTab).toBe("files");
-      expect(storedState).not.toHaveProperty("rightPanelShown");
+      expect(storedState.rightPanelShown).toBe(true);
     });
 
     it("should close panel when clicking the same active tab", () => {
@@ -65,19 +64,14 @@ describe("useSelectConversationTab", () => {
         result.current.selectTab("files");
       });
 
-      // Assert: Panel should be closed (in-memory only).
+      // Assert: Panel should be closed and persisted.
       expect(useConversationStore.getState().hasRightPanelToggled).toBe(false);
+      expect(useConversationStore.getState().isRightPanelShown).toBe(false);
 
-      // The drawer-close shouldn't have written to localStorage at all
-      // (session-only behavior). If anything is persisted, it's just the
-      // pre-existing tab selection from earlier writes — never a
-      // `rightPanelShown` field.
-      const raw = localStorage.getItem(
-        `conversation-state-${TEST_CONVERSATION_ID}`,
+      const storedState = JSON.parse(
+        localStorage.getItem(`conversation-state-${TEST_CONVERSATION_ID}`)!,
       );
-      if (raw !== null) {
-        expect(JSON.parse(raw)).not.toHaveProperty("rightPanelShown");
-      }
+      expect(storedState.rightPanelShown).toBe(false);
     });
 
     it("should switch to different tab when panel is already open", () => {
@@ -150,6 +144,77 @@ describe("useSelectConversationTab", () => {
 
       // Assert: Terminal tab should not be active
       expect(result.current.isTabActive("terminal")).toBe(false);
+    });
+  });
+
+  describe("navigateToTab", () => {
+    it("always opens the panel even when isRightPanelShown is stale true", () => {
+      useConversationStore.setState({
+        selectedTab: "terminal",
+        isRightPanelShown: true,
+        hasRightPanelToggled: false,
+        isOverviewPanelShown: true,
+      });
+
+      const { result } = renderHook(() => useSelectConversationTab());
+
+      act(() => {
+        result.current.navigateToTab("files");
+      });
+
+      expect(useConversationStore.getState().selectedTab).toBe("files");
+      expect(useConversationStore.getState().hasRightPanelToggled).toBe(true);
+      expect(useConversationStore.getState().isOverviewPanelShown).toBe(false);
+    });
+  });
+
+  describe("navigateToChanges", () => {
+    it("opens the commits tab with Uncommitted requested", () => {
+      useConversationStore.setState({
+        selectedTab: "terminal",
+        isRightPanelShown: false,
+        hasRightPanelToggled: false,
+        isOverviewPanelShown: true,
+        commitsAutoExpandSection: null,
+      });
+
+      const { result } = renderHook(() => useSelectConversationTab());
+
+      act(() => {
+        result.current.navigateToChanges();
+      });
+
+      expect(useConversationStore.getState().selectedTab).toBe("commits");
+      expect(useConversationStore.getState().commitsAutoExpandSection).toBe(
+        "uncommitted",
+      );
+      expect(useConversationStore.getState().hasRightPanelToggled).toBe(true);
+      expect(useConversationStore.getState().isOverviewPanelShown).toBe(false);
+    });
+  });
+
+  describe("navigateToCommits", () => {
+    it("opens the commits tab without requesting Uncommitted", () => {
+      useConversationStore.setState({
+        selectedTab: "terminal",
+        isRightPanelShown: false,
+        hasRightPanelToggled: false,
+        isOverviewPanelShown: true,
+        commitsAutoExpandSection: "uncommitted",
+      });
+
+      const { result } = renderHook(() => useSelectConversationTab());
+
+      act(() => {
+        result.current.navigateToCommits();
+      });
+
+      expect(useConversationStore.getState().selectedTab).toBe("commits");
+      expect(
+        useConversationStore.getState().commitsAutoExpandSection,
+      ).toBeNull();
+      expect(useConversationStore.getState().hasRightPanelToggled).toBe(true);
+      expect(useConversationStore.getState().isOverviewPanelShown).toBe(false);
     });
   });
 
