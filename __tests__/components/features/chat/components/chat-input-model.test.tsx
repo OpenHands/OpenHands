@@ -142,6 +142,32 @@ describe("ChatInputModel", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("does not show another provider's saved model before an ACP conversation reports its own", () => {
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "test-conversation-id",
+        agent_kind: "acp",
+        acp_server: "codex",
+        llm_model: null,
+      },
+    });
+    useSettingsMock.mockReturnValue({
+      data: {
+        agent_settings: {
+          agent_kind: "acp",
+          acp_server: "claude-code",
+          acp_model: "opus[1m]",
+        },
+      },
+    });
+
+    renderWithProviders(<ChatInputModel />);
+
+    expect(
+      screen.queryByTestId("chat-input-llm-model"),
+    ).not.toBeInTheDocument();
+  });
+
   it("falls back to the user's default model from settings when there is no active conversation", () => {
     // Arrange — home page render: no conversation yet, but the user has
     // a default model configured. The switcher should still show.
