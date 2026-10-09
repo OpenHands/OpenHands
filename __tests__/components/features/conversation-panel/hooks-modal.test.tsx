@@ -34,7 +34,9 @@ vi.mock("react-i18next", async () => {
           HOOKS_MODAL$TYPE: `Type: ${params?.type ?? ""}`,
           HOOKS_MODAL$TIMEOUT: `Timeout: ${params?.timeout ?? 0}s`,
           HOOKS_MODAL$ASYNC: "Async",
-          COMMON$FETCH_ERROR: "Failed to fetch data",
+          HOOKS_MODAL$FETCH_ERROR:
+            "Failed to fetch hooks. Please try again later.",
+          COMMON$FETCH_ERROR: "Failed to fetch skills. Please try again later.",
           CONVERSATION$NO_HOOKS: "No hooks configured",
           BUTTON$REFRESH: "Refresh",
           BUTTON$CLOSE: "Close",
@@ -64,7 +66,10 @@ describe("HooksEmptyState", () => {
 
   it("should render error message when isError is true", () => {
     render(<HooksEmptyState isError={true} />);
-    expect(screen.getByText("Failed to fetch data")).toBeInTheDocument();
+    expect(
+      screen.getByText("Failed to fetch hooks. Please try again later."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/skills/i)).not.toBeInTheDocument();
   });
 });
 

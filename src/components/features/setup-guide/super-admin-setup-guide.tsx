@@ -216,8 +216,30 @@ export default function SuperAdminSetupGuide() {
     withOrg: boolean,
     tourStepId?: SuperAdminSetupStepId,
   ) => cloudPageUrl(cloudHost, path, withOrg ? guideOrgId : null, tourStepId);
-  // A step row and Start open the same page for a step; Start also asks the
-  // enterprise guide for the step's tour.
+  // A plain click on a Canvas step that has a tour runs the tour, which opens
+  // the step's page itself; a modified click still follows the link.
+  const startStepTour = (
+    step: SuperAdminSetupStep,
+    event: MouseEvent<HTMLAnchorElement>,
+  ) => {
+    const plainClick =
+      event.button === 0 &&
+      !event.metaKey &&
+      !event.ctrlKey &&
+      !event.shiftKey &&
+      !event.altKey;
+    if (
+      plainClick &&
+      step.destination.kind === "canvas" &&
+      hasSetupGuideTour(step.id)
+    ) {
+      event.preventDefault();
+      setOpen(false);
+      startTour(step.id);
+    }
+  };
+  // A step row and Start open the same page for a step, with the step's tour
+  // for a Canvas step. Start also asks the enterprise guide for its tour.
   const renderStepLink = (
     step: SuperAdminSetupStep,
     testId: string,
@@ -346,7 +368,9 @@ export default function SuperAdminSetupGuide() {
               );
               return (
                 <li key={step.id}>
-                  {renderStepLink(step, testId, rowClassName, label)}
+                  {renderStepLink(step, testId, rowClassName, label, (event) =>
+                    startStepTour(step, event),
+                  )}
                 </li>
               );
             })}
@@ -364,8 +388,7 @@ export default function SuperAdminSetupGuide() {
               </p>
               {/* Like the enterprise Start, close the panel before opening
                   the step, so Start does something even when the admin is
-                  already on that step's page. A Canvas step's tour opens
-                  the page itself; a modified click still follows the link. */}
+                  already on that step's page. */}
               {renderStepLink(
                 nextStep,
                 START_TEST_ID,
@@ -373,20 +396,7 @@ export default function SuperAdminSetupGuide() {
                 t(I18nKey.ONBOARDING$SETUP_GUIDE_START),
                 (event) => {
                   setOpen(false);
-                  const plainClick =
-                    event.button === 0 &&
-                    !event.metaKey &&
-                    !event.ctrlKey &&
-                    !event.shiftKey &&
-                    !event.altKey;
-                  if (
-                    plainClick &&
-                    nextStep.destination.kind === "canvas" &&
-                    hasSetupGuideTour(nextStep.id)
-                  ) {
-                    event.preventDefault();
-                    startTour(nextStep.id);
-                  }
+                  startStepTour(nextStep, event);
                 },
                 true,
               )}

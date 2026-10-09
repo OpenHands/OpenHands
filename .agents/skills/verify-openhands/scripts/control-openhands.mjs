@@ -398,7 +398,7 @@ async function browserCall(run, cmd, args = {}, { timeout = 120_000 } = {}) {
   const result = await response.json();
   if (!result.ok) {
     throw new CliError(result.error, {
-      code: 1,
+      code: Number.isInteger(result.code) ? result.code : 1,
       hint: result.hint,
       extra: { url: result.url, failureScreenshot: result.failureScreenshot },
     });

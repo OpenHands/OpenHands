@@ -23,6 +23,8 @@ const SETUP_GUIDE_TOUR_STOPS: Partial<
       id: "choose-template",
       anchor: '[data-testid="recommended-automations-section"]',
       advanceOnClick: '[data-testid^="recommended-automation-card-"]',
+      // Next is hidden while it waits for a card, and Back has nowhere to go.
+      hideFooter: true,
       title: I18nKey.ONBOARDING$SETUP_GUIDE_TOUR_TEMPLATE_TITLE,
       body: I18nKey.ONBOARDING$SETUP_GUIDE_TOUR_TEMPLATE_BODY,
       side: "top",

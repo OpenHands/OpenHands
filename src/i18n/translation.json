@@ -30123,6 +30123,23 @@
     "uk": "Зупинка",
     "ca": "Atura"
   },
+  "HOOKS_MODAL$FETCH_ERROR": {
+    "en": "Failed to fetch hooks. Please try again later.",
+    "ja": "フックの取得に失敗しました。後でもう一度お試しください。",
+    "zh-CN": "获取钩子失败。请稍后再试。",
+    "zh-TW": "取得鉤子失敗。請稍後再試。",
+    "ko-KR": "훅을 가져오지 못했습니다. 나중에 다시 시도해주세요.",
+    "no": "Kunne ikke hente kroker. Prøv igjen senere.",
+    "ar": "فشل في جلب الخطافات. يرجى المحاولة لاحقًا.",
+    "de": "Die Hooks konnten nicht abgerufen werden. Bitte versuchen Sie es später erneut.",
+    "fr": "Échec de la récupération des hooks. Veuillez réessayer plus tard.",
+    "it": "Impossibile recuperare gli hook. Riprova più tardi.",
+    "pt": "Falha ao buscar os hooks. Por favor, tente novamente mais tarde.",
+    "es": "No se pudieron obtener los hooks. Por favor, inténtalo de nuevo más tarde.",
+    "tr": "Kancalar alınamadı. Lütfen daha sonra tekrar deneyin.",
+    "uk": "Не вдалося отримати хуки. Будь ласка, спробуйте пізніше.",
+    "ca": "No s'han pogut obtenir els hooks. Torneu-ho a intentar més tard."
+  },
   "HOOK$HOOK_LABEL": {
     "en": "Hook",
     "ja": "フック",
@@ -32911,6 +32928,40 @@
     "tr": "Google'ın Gemini CLI aracısı.",
     "uk": "Агент Gemini CLI від Google."
   },
+  "ONBOARDING$AGENT_PI_DESCRIPTION": {
+    "en": "The open source Pi coding agent.",
+    "ja": "オープンソースのコーディングエージェント Pi。",
+    "zh-CN": "开源的 Pi 编程智能体。",
+    "zh-TW": "開源的 Pi 程式設計代理。",
+    "ko-KR": "오픈 소스 Pi 코딩 에이전트입니다.",
+    "no": "Pi, en åpen kildekode-agent for programmering.",
+    "ar": "وكيل البرمجة مفتوح المصدر Pi.",
+    "de": "Der quelloffene Coding-Agent Pi.",
+    "fr": "L'agent de programmation open source Pi.",
+    "it": "L'agente di programmazione open source Pi.",
+    "pt": "O agente de programação de código aberto Pi.",
+    "es": "El agente de programación de código abierto Pi.",
+    "ca": "L'agent de programació de codi obert Pi.",
+    "tr": "Açık kaynaklı Pi kodlama aracı.",
+    "uk": "Агент програмування з відкритим кодом Pi."
+  },
+  "ONBOARDING$AGENT_OPENCODE_DESCRIPTION": {
+    "en": "The open source OpenCode coding agent.",
+    "ja": "オープンソースのコーディングエージェント OpenCode。",
+    "zh-CN": "开源的 OpenCode 编程智能体。",
+    "zh-TW": "開源的 OpenCode 程式設計代理。",
+    "ko-KR": "오픈 소스 OpenCode 코딩 에이전트입니다.",
+    "no": "OpenCode, en åpen kildekode-agent for programmering.",
+    "ar": "وكيل البرمجة مفتوح المصدر OpenCode.",
+    "de": "Der quelloffene Coding-Agent OpenCode.",
+    "fr": "L'agent de programmation open source OpenCode.",
+    "it": "L'agente di programmazione open source OpenCode.",
+    "pt": "O agente de programação de código aberto OpenCode.",
+    "es": "El agente de programación de código abierto OpenCode.",
+    "ca": "L'agent de programació de codi obert OpenCode.",
+    "tr": "Açık kaynaklı OpenCode kodlama aracısı.",
+    "uk": "Агент програмування з відкритим кодом OpenCode."
+  },
   "ONBOARDING$BACKEND_TITLE": {
     "en": "Check your backend",
     "ja": "バックエンドを確認",
@@ -35257,6 +35308,23 @@
     "tr": "Eklenti kuruldu.",
     "uk": "Плагін встановлено."
   },
+  "SETTINGS$PLUGINS_ALREADY_INSTALLED": {
+    "en": "This plugin is already installed. Open its card to Update or Uninstall it.",
+    "ja": "このプラグインはすでにインストールされています。カードを開いて「更新」または「アンインストール」してください。",
+    "zh-CN": "此插件已安装。请打开其卡片进行“更新”或“卸载”。",
+    "zh-TW": "此外掛程式已安裝。請開啟其卡片以「更新」或「解除安裝」。",
+    "ko-KR": "이 플러그인은 이미 설치되어 있습니다. 카드를 열어 업데이트 또는 제거하세요.",
+    "no": "Denne plugin-en er allerede installert. Åpne kortet for å oppdatere eller avinstallere.",
+    "ar": "هذه الإضافة مثبتة بالفعل. افتح بطاقتها للتحديث أو إلغاء التثبيت.",
+    "de": "Dieses Plugin ist bereits installiert. Öffne seine Karte, um es zu aktualisieren oder zu deinstallieren.",
+    "fr": "Ce plugin est déjà installé. Ouvrez sa carte pour le mettre à jour ou le désinstaller.",
+    "it": "Questo plugin è già installato. Apri la sua scheda per Aggiornare o Disinstallare.",
+    "pt": "Este plugin já está instalado. Abra o cartão dele para Atualizar ou Desinstalar.",
+    "es": "Este complemento ya está instalado. Abre su tarjeta para Actualizarlo o Desinstalarlo.",
+    "ca": "Aquest connector ja està instal·lat. Obre'n la targeta per actualitzar-lo o desinstal·lar-lo.",
+    "tr": "Bu eklenti zaten yüklü. Güncellemek veya kaldırmak için kartını açın.",
+    "uk": "Цей плагін уже встановлено. Відкрийте його картку, щоб оновити або видалити."
+  },
   "SETTINGS$PLUGINS_UNINSTALL_SUCCESS": {
     "en": "Plugin uninstalled.",
     "ja": "プラグインをアンインストールしました。",
@@ -36786,6 +36854,23 @@
     "ca": "Enganxa el contingut complet de {{file}}. Executa `cat {{file}}` per obtenir-lo. Es desa com a secret i s'escriu al disc per a l'agent en temps d'execució.",
     "tr": "{{file}} dosyasının tüm içeriğini yapıştırın. Almak için `cat {{file}}` çalıştırın. Bir secret olarak kaydedilir ve çalışma zamanında aracı için diske yazılır.",
     "uk": "Вставте повний вміст {{file}}. Виконайте `cat {{file}}`, щоб отримати його. Зберігається як секрет і записується на диск для агента під час виконання."
+  },
+  "ONBOARDING$ACP_SECRET_AUTH_CONTENT_HINT": {
+    "en": "Paste the full contents of {{file}}. Run `cat {{file}}` to get it. Saved as a secret and passed to the agent at runtime.",
+    "ja": "{{file}} の内容全体を貼り付けてください。`cat {{file}}` を実行して取得できます。シークレットとして保存され、実行時にエージェントへ渡されます。",
+    "zh-CN": "粘贴 {{file}} 的完整内容。运行 `cat {{file}}` 获取。它会作为密钥保存，并在运行时传递给智能体。",
+    "zh-TW": "貼上 {{file}} 的完整內容。執行 `cat {{file}}` 取得。將以密鑰形式儲存，並在執行時傳遞給代理。",
+    "ko-KR": "{{file}}의 전체 내용을 붙여넣으세요. `cat {{file}}`을 실행해 가져올 수 있습니다. 비밀로 저장되며 실행 시 에이전트에 전달됩니다.",
+    "no": "Lim inn hele innholdet i {{file}}. Kjør `cat {{file}}` for å hente det. Lagres som en hemmelighet og sendes til agenten ved kjøretid.",
+    "ar": "الصق المحتوى الكامل لـ {{file}}. شغّل `cat {{file}}` للحصول عليه. يُحفظ كسرّ ويُمرَّر إلى الوكيل عند التشغيل.",
+    "de": "Füge den vollständigen Inhalt von {{file}} ein. Führe `cat {{file}}` aus, um ihn zu erhalten. Wird als Secret gespeichert und zur Laufzeit an den Agenten übergeben.",
+    "fr": "Collez le contenu complet de {{file}}. Exécutez `cat {{file}}` pour l'obtenir. Enregistré comme secret et transmis à l'agent à l'exécution.",
+    "it": "Incolla l'intero contenuto di {{file}}. Esegui `cat {{file}}` per ottenerlo. Salvato come secret e passato all'agente in fase di esecuzione.",
+    "pt": "Cole o conteúdo completo de {{file}}. Execute `cat {{file}}` para obtê-lo. Salvo como secret e repassado ao agente em tempo de execução.",
+    "es": "Pega el contenido completo de {{file}}. Ejecuta `cat {{file}}` para obtenerlo. Se guarda como secreto y se pasa al agente en tiempo de ejecución.",
+    "ca": "Enganxa el contingut complet de {{file}}. Executa `cat {{file}}` per obtenir-lo. Es desa com a secret i es passa a l'agent en temps d'execució.",
+    "tr": "{{file}} dosyasının tüm içeriğini yapıştırın. Almak için `cat {{file}}` çalıştırın. Bir secret olarak kaydedilir ve çalışma zamanında araca iletilir.",
+    "uk": "Вставте повний вміст {{file}}. Виконайте `cat {{file}}`, щоб отримати його. Зберігається як секрет і передається агенту під час виконання."
   },
   "ONBOARDING$ACP_SECRET_OAUTH_TOKEN_HINT": {
     "en": "Subscription OAuth token for Claude Pro/Max. Run `claude setup-token` in your terminal to get it.",

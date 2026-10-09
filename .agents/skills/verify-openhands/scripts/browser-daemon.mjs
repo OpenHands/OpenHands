@@ -1594,7 +1594,7 @@ const server = createServer(async (req, res) => {
       .split("\n")
       .slice(0, 14)
       .join("\n");
-    let hint;
+    let hint = error?.hint;
     if (/strict mode violation/.test(message)) {
       hint =
         'Several elements match. Scope it (`testid=dialog >> role=button[name="Save"]`) or add `>> nth=0` after checking `browser testids`.';
@@ -1606,6 +1606,7 @@ const server = createServer(async (req, res) => {
       JSON.stringify({
         ok: false,
         error: message,
+        code: Number.isInteger(error?.code) ? error.code : undefined,
         hint,
         url: activePage.url(),
         failureScreenshot: await failureShot(),
