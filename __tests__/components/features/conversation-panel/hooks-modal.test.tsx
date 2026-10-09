@@ -249,6 +249,70 @@ describe("HookEventItem", () => {
     expect(screen.getByText("Type: agent")).toBeInTheDocument();
   });
 
+  it("should render an agent hook's system_prompt and ignore a stray prompt", () => {
+    const agentHookEvent: HookEvent = {
+      event_type: "session_start",
+      matchers: [
+        {
+          matcher: "*",
+          hooks: [
+            {
+              type: "agent",
+              command: "",
+              prompt: "QA_F07 stray prompt",
+              system_prompt: "QA_F07 agent system prompt",
+            },
+          ],
+        },
+      ],
+    };
+
+    const { container } = render(
+      <HookEventItem
+        {...defaultProps}
+        hookEvent={agentHookEvent}
+        isExpanded={true}
+      />,
+    );
+
+    const preBlocks = container.querySelectorAll("pre");
+    expect(preBlocks).toHaveLength(1);
+    expect(preBlocks[0]).toHaveTextContent("QA_F07 agent system prompt");
+    expect(preBlocks[0]).not.toHaveTextContent("QA_F07 stray prompt");
+    expect(screen.getByText("Type: agent")).toBeInTheDocument();
+  });
+
+  it("should not render a text box for an agent hook with only prompt and no system_prompt", () => {
+    const promptOnlyAgentHookEvent: HookEvent = {
+      event_type: "stop",
+      matchers: [
+        {
+          matcher: "*",
+          hooks: [
+            {
+              type: "agent",
+              command: "",
+              prompt: "QA_F07 prompt-only agent hook",
+              timeout: 60,
+            },
+          ],
+        },
+      ],
+    };
+
+    const { container } = render(
+      <HookEventItem
+        {...defaultProps}
+        hookEvent={promptOnlyAgentHookEvent}
+        isExpanded={true}
+      />,
+    );
+
+    expect(container.querySelectorAll("pre")).toHaveLength(0);
+    expect(screen.getByText("Type: agent")).toBeInTheDocument();
+    expect(screen.getByText("Timeout: 60s")).toBeInTheDocument();
+  });
+
   it("should not render an empty box when a hook omits its text", () => {
     const textlessHookEvent: HookEvent = {
       event_type: "session_start",
