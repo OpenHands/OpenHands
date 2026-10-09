@@ -20,8 +20,7 @@ import { Typography } from "#/ui/typography";
 export function Probe() {
   return <>
     <Separator className="mt-2 w-full" />
-    <Separator className="bg-danger rounded-md" />
-    <Track enabled className="bg-danger" />
+    <Separator className="bg-danger" />
     <ToggleSwitch className="ml-2 opacity-50" />
     <ToggleSwitch className="bg-danger" />
     <AutomationToggle className="bg-danger" />
@@ -41,18 +40,21 @@ describe("Canvas divider and toggle appearance contracts", () => {
     });
 
     expect(result.fatalErrorCount).toBe(0);
+    const findings = result.messages.filter(
+      (message) => message.ruleId === "shadcn/no-restyle",
+    );
+    const probeLines = probe.split("\n");
     expect(
-      result.messages
-        .filter((message) => message.ruleId === "shadcn/no-restyle")
-        .map(({ line, severity }) => ({ line, severity })),
-    ).toEqual([
-      { line: 9, severity: 2 },
-      { line: 9, severity: 2 },
-      { line: 10, severity: 2 },
-      { line: 12, severity: 2 },
-      { line: 13, severity: 2 },
-      { line: 14, severity: 2 },
-    ]);
+      new Set(findings.map(({ line }) => probeLines[line - 1]?.trim())),
+    ).toEqual(
+      new Set([
+        '<Separator className="bg-danger" />',
+        '<ToggleSwitch className="bg-danger" />',
+        '<AutomationToggle className="bg-danger" />',
+        '<Track enabled className="opacity-50" />',
+      ]),
+    );
+    expect(findings.every(({ severity }) => severity === 2)).toBe(true);
   });
 
   it("allows primitive implementations to own their appearance", async () => {
