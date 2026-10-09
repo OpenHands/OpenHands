@@ -1,4 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it, test, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+  test,
+  vi,
+} from "vitest";
 import {
   fireEvent,
   render,
@@ -285,6 +294,59 @@ describe("ChatInterface - Chat Suggestions", () => {
 
 describe("ChatInterface - Empty state", () => {
   it.todo("should render suggestions if empty");
+
+  it("enables Send when a suggestion fills the same conversation's composer", async () => {
+    // Arrange: jsdom does not implement the contentEditable innerText getter.
+    const previousInnerText = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      "innerText",
+    );
+    Object.defineProperty(HTMLElement.prototype, "innerText", {
+      configurable: true,
+      get(this: HTMLElement) {
+        return this.textContent ?? "";
+      },
+    });
+    onTestFinished(() => {
+      if (previousInnerText) {
+        Object.defineProperty(
+          HTMLElement.prototype,
+          "innerText",
+          previousInnerText,
+        );
+      } else {
+        Reflect.deleteProperty(HTMLElement.prototype, "innerText");
+      }
+    });
+    useConversationStore.getState().clearMessageToSend();
+    (useConfig as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      data: {},
+    });
+    (
+      useUnifiedUploadFiles as unknown as ReturnType<typeof vi.fn>
+    ).mockReturnValue({
+      mutateAsync: vi.fn().mockResolvedValue({
+        skipped_files: [],
+        uploaded_files: [],
+      }),
+      isLoading: false,
+    });
+    renderChatInterfaceWithRouter();
+
+    // Act: the chip queues text without changing the conversation route.
+    const suggestion = within(
+      screen.getByTestId("chat-suggestions"),
+    ).getAllByRole("button")[0];
+    fireEvent.click(suggestion);
+
+    // Assert: the queued text is ready to send without another keystroke.
+    await waitFor(() =>
+      expect(screen.getByTestId("chat-input").textContent).toBe(
+        Object.values(SUGGESTIONS.repo)[0],
+      ),
+    );
+    expect(screen.getByTestId("submit-button")).toBeEnabled();
+  });
 
   it("should render the default suggestions", () => {
     renderChatInterfaceWithRouter();

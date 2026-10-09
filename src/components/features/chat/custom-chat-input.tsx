@@ -165,10 +165,17 @@ export function CustomChatInput({
     [setShouldHideSuggestions, clearAllFiles],
   );
   useEffect(() => {
-    // Draft restoration changes the contentEditable on a conversation switch
-    // without firing onInput, so recalculate the Send state for the new route.
+    // Draft restoration and queued messages (including suggestion chips) write
+    // the contentEditable without firing onInput. Recalculate after either one
+    // changes, including when the conversation route stays the same.
     syncCanSubmit();
-  }, [syncCanSubmit, conversationId, images.length, files.length]);
+  }, [
+    syncCanSubmit,
+    conversationId,
+    messageToSend,
+    images.length,
+    files.length,
+  ]);
   return (
     <div className={cn("w-full", className)}>
       {/* Hidden file input */}
