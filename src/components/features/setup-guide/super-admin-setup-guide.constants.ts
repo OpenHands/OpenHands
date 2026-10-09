@@ -8,6 +8,13 @@ export const MANAGE_SUPER_ADMINS_PERMISSION = "manage_super_admins";
 /** The enterprise setup guide page, on the cloud host. */
 export const SUPER_ADMIN_SETUP_GUIDE_PAGE_PATH = "/super-admin/setup";
 
+/**
+ * Names the setup step whose tour to start when a page loads. The enterprise
+ * guide reads it on the links this guide opens, and Canvas on the links the
+ * enterprise guide opens.
+ */
+export const SETUP_TOUR_PARAM = "setup_tour";
+
 export type SuperAdminSetupStepId =
   | "add-llm"
   | "add-integration"

@@ -23,29 +23,37 @@ describe("getApiErrorMessage", () => {
     );
   });
 
+  it("returns the nested `detail.message` when the body `detail` is structured", () => {
+    const error = new HttpError(422, "Unprocessable Entity", {
+      detail: {
+        message: "MCP server ref(s) not present: 'qa_mcp_a'",
+        dangling_mcp_server_refs: ["qa_mcp_a"],
+      },
+    });
+
+    expect(getApiErrorMessage(error, "fallback")).toBe(
+      "MCP server ref(s) not present: 'qa_mcp_a'",
+    );
+  });
+
   it("returns the reason from an Agent Server unhandled-error body, not its generic `detail`", () => {
-    // Arrange — the Agent Server answers unhandled errors with a fixed
-    // `detail` and the actual reason under `exception`.
     const error = new HttpError(500, "Internal Server Error", {
       detail: "Internal Server Error",
       exception: "Local extension path does not exist: /plugins/magic-test",
       error_id: "0dd795f8",
     });
 
-    // Act + Assert
     expect(getApiErrorMessage(error, "fallback")).toBe(
       "Local extension path does not exist: /plugins/magic-test",
     );
   });
 
   it("prefers a specific `detail` over a technical `exception`", () => {
-    // Arrange — a friendly `detail` is the server's wording for users.
     const error = new HttpError(500, "Internal Server Error", {
       detail: "Plugin source could not be reached. Check the URL.",
       exception: "ConnectError: [Errno 111] Connection refused",
     });
 
-    // Act + Assert
     expect(getApiErrorMessage(error, "fallback")).toBe(
       "Plugin source could not be reached. Check the URL.",
     );

@@ -250,8 +250,10 @@ export interface GetSkillsResponse {
 }
 
 export interface HookDefinition {
-  type: string; // 'command' or 'prompt'
-  command: string;
+  type: string; // 'command', 'prompt' or 'agent'
+  command: string; // Empty for prompt and agent hooks
+  prompt?: string; // Text of a prompt hook; the server sends null when absent
+  system_prompt?: string; // Text of an agent hook; the server sends null when absent
   timeout?: number; // Omitted when a server leaves the SDK default implicit
   async?: boolean;
 }

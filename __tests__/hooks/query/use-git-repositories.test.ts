@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
   installations: undefined as string[] | undefined,
   backend: { id: "local", kind: "local" as "local" | "cloud" },
   orgId: null as string | null,
+  appInstallationsCalls: [] as unknown[][],
   queryConfig: null as CapturedQueryConfig | null,
   repos: {
     data: undefined as unknown,
@@ -47,12 +48,15 @@ vi.mock("#/hooks/use-user-providers", () => ({
 }));
 
 vi.mock("#/hooks/query/use-app-installations", () => ({
-  useAppInstallations: () => ({
-    data:
-      mocks.installations === undefined
-        ? undefined
-        : { items: mocks.installations, next_page_id: null },
-  }),
+  useAppInstallations: (...args: unknown[]) => {
+    mocks.appInstallationsCalls.push(args);
+    return {
+      data:
+        mocks.installations === undefined
+          ? undefined
+          : { items: mocks.installations, next_page_id: null },
+    };
+  },
 }));
 
 vi.mock("#/contexts/active-backend-context", () => ({
@@ -85,6 +89,7 @@ describe("useGitRepositories", () => {
     mocks.installations = undefined;
     mocks.backend = { id: "local", kind: "local" };
     mocks.orgId = null;
+    mocks.appInstallationsCalls = [];
     mocks.queryConfig = null;
     mocks.repos.data = undefined;
     mocks.repos.isLoading = false;
@@ -251,6 +256,22 @@ describe("useGitRepositories", () => {
       expect(config().enabled).toBe(expected);
     },
   );
+
+  it("passes the enabled flag through to app installation fetching", () => {
+    setupMocks();
+    mocks.backend = { id: "cloud", kind: "cloud" };
+    mocks.providers = ["github"];
+
+    renderHook(() =>
+      useGitRepositories({ provider: "github", enabled: false }),
+    );
+
+    expect(mocks.appInstallationsCalls.at(-1)).toEqual([
+      "github",
+      { enabled: false },
+    ]);
+    expect(config().enabled).toBe(false);
+  });
 
   it("stays disabled while connected providers are unresolved", () => {
     setupMocks();
