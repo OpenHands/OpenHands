@@ -29,7 +29,7 @@ requires a real authorized conversation; never ask an agent to print a real key.
   help and save state. Change one safe setting, save, reload and verify the stored
   choice, then restore it. Check long values and phone-width scrolling. Record
   which fields were mutated rather than claiming all configuration permutations.
-- **Create/delete:** run [the smoke helper](../scripts/smoke.mjs). It uses
+- **Create/delete:** follow the maintained [secrets recipes](../references/feature-map/F14-secrets.md). The original flow used
   `add-secret-button`, scoped `add-secret-form` → `name-input` / `value-input` /
   `description-input` → `submit-button`; checks the named `secret-item` after reload;
   then `delete-secret-button` → `confirmation-modal` → `confirm-button` and reload.

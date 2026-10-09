@@ -6,7 +6,7 @@ The maintained map and current driving recipes now live in
 coverage authority for new daily and weekly runs. Treat the recipes below as
 historical context, not current selector or route guarantees.
 
-Use this index before driving the app. This is a maintained map of user behavior,
+This historical index records user behavior,
 not a claim that every row has passed. Seeded from main `a07364828c8f202e7745c6bce3dcef3915ae7ac1`
 and the September 2026 live audit; recheck source and runtime at each target SHA.
 

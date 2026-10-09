@@ -26,8 +26,8 @@ Review executable package/source before installation; enabling MCP executes code
 
 - **Catalog/layout:** inspect `mcp-marketplace-grid`; click
   `mcp-marketplace-card-github`, fill `mcp-install-field-api_key` with a dummy and
-  assert native `type="password"`. Use the [smoke helper](../scripts/smoke.mjs)
-  for both viewport captures; do not click Install with the dummy credential.
+  assert native `type="password"`. Use the maintained [MCP recipes](../references/feature-map/F17-mcp-servers.md)
+  for current controls and both viewport captures; do not click Install with the dummy credential.
 - **Install:** choose the reviewed Time entry, inspect the command/configuration,
   use `mcp-install-submit`; expect the named `mcp-server-item` in
   `mcp-installed-list`, then reload to prove persistence.

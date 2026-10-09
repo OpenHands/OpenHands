@@ -25,7 +25,7 @@ do not infer direct-link behavior from client-side navigation alone.
 Preconditions: fresh run/browser for first-run checks; two owned servers with distinct
 names/state for switching; an authorized provider for completing the hello step.
 
-- **Auth:** the [smoke helper](../scripts/smoke.mjs) skips onboarding, fills
+- **Auth:** the maintained [first-run recipes](../references/feature-map/F01-first-run-and-sign-in.md) cover onboarding and login. The original flow filled
   `api-key-entry-name` / `api-key-entry-api-key`, and submits `api-key-entry-submit`.
   Separately try a dummy wrong key: remain on the entry screen with an inline error.
   Use a private returning context to prove reload preserves authorized access.

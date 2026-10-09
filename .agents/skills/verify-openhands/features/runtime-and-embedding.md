@@ -27,7 +27,7 @@ permissions. The weekly browser default is F12.source-web; record every other
 variant as covered, blocked or outside the agreed scope, never implicitly passed.
 
 - **Source web:** execute [the runtime recipe](../references/runtime.md), doctor and
-  smoke; verify build revision, backend versions, auth rejection, actual UI mutation
+  the relevant maintained-map recipes; verify build revision, backend versions, auth rejection, actual UI mutation
   persistence, then the owned process/port state after shutdown.
 - **Partial stack:** follow the production CLI's `--frontend-only` / `--backend-only`
   modes in separate owned instances. Check documented available routes and explicit
