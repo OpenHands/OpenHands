@@ -97,6 +97,14 @@ export function parseWorkspaceFileList(stdout: string, maxFiles: number) {
 // pipeline exits non-zero and the Files tab shows its empty state. `dir /s`
 // prints absolute backslash paths; findstr drops excluded directories and the
 // caller makes the rest relative with `parseWindowsWorkspaceFileList`.
+// The agent-server reports its own working directory, so its shape tells us
+// which shell runs the command. The browser's OS says nothing about that: a
+// Windows browser can talk to a Linux agent-server in Docker Desktop, and a
+// macOS or Linux browser can talk to a remote Windows agent-server.
+export function isWindowsWorkingDir(workingDir: string | undefined): boolean {
+  return !!workingDir && /^(?:[A-Za-z]:[\\/]|[A-Za-z]:$|\\\\)/.test(workingDir);
+}
+
 const isCmdSafePattern = (pattern: string) => !/["%^&|<>!*?]/.test(pattern);
 
 export function buildWindowsWorkspaceFileListCommand(

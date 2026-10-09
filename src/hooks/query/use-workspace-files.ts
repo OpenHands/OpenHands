@@ -15,6 +15,7 @@ import { useWorkspaceFileDiscovery } from "./use-workspace-file-discovery";
 import {
   buildWindowsWorkspaceFileListCommand,
   buildWorkspaceFileListCommand,
+  isWindowsWorkingDir,
   parseWindowsWorkspaceFileList,
   parseWorkspaceFileList,
 } from "#/utils/workspace-file-discovery";
@@ -65,16 +66,14 @@ function useLocalWorkspaceFiles(enabled: boolean): WorkspaceFilesResult {
       options,
     ],
     queryFn: async () => {
-      // The local backend serves the UI from the host the agent-server runs
-      // on, so the browser's user agent reflects the host OS.
-      const onWindowsHost =
-        !!workingDir &&
-        typeof navigator !== "undefined" &&
-        /windows/i.test(navigator.userAgent);
+      // Pick the command from the agent-server's own working directory, not
+      // the browser's user agent: the two can run on different operating
+      // systems (Docker Desktop on Windows runs a Linux agent-server).
+      const onWindowsHost = isWindowsWorkingDir(workingDir);
       const result = await AgentServerRuntimeService.executeCommand(
         conversationUrl,
         sessionApiKey,
-        onWindowsHost
+        onWindowsHost && workingDir
           ? buildWindowsWorkspaceFileListCommand(options, workingDir)
           : buildWorkspaceFileListCommand(options),
         workingDir,
@@ -88,7 +87,7 @@ function useLocalWorkspaceFiles(enabled: boolean): WorkspaceFilesResult {
         );
       }
 
-      return onWindowsHost
+      return onWindowsHost && workingDir
         ? parseWindowsWorkspaceFileList(result.stdout, workingDir, options)
         : parseWorkspaceFileList(result.stdout, options.maxFiles);
     },
