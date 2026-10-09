@@ -317,4 +317,43 @@ describe("settings route", () => {
       },
     );
   });
+
+  it("establishes a full-height flex column context so <main> fills the content column", () => {
+    const RouterStub = createRoutesStub([
+      {
+        path: "/settings",
+        Component: SettingsScreen,
+        children: [
+          {
+            path: "/settings/app",
+            Component: () => <div data-testid="app-settings-screen" />,
+          },
+        ],
+      },
+    ]);
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ActiveBackendProvider>
+          <RouterStub initialEntries={["/settings/app"]} />
+        </ActiveBackendProvider>
+      </QueryClientProvider>,
+    );
+
+    const screenRoot = screen.getByTestId("settings-screen");
+    const mainLandmark = screen.getByRole("main");
+
+    // The route wrapper must establish a full-height flex column context
+    // so nested scroll containers (like <main>) have a resolved height context
+    // and do not collapse to short content heights below 1024px (#18255).
+    expect(screenRoot.classList.contains("h-full")).toBe(true);
+    expect(screenRoot.classList.contains("flex")).toBe(true);
+    expect(screenRoot.classList.contains("flex-col")).toBe(true);
+    expect(screenRoot).toContainElement(mainLandmark);
+
+    // Verify the layout propagation chain to the main scroll container
+    expect(mainLandmark.classList.contains("overflow-y-auto")).toBe(true);
+    expect(mainLandmark.classList.contains("flex-1")).toBe(true);
+  });
 });
+

@@ -104,7 +104,7 @@ function SettingsScreen() {
 
   // SettingsLayout renders the page's only <main> landmark (#17909).
   return (
-    <div data-testid="settings-screen" className="min-h-0">
+    <div data-testid="settings-screen" className="flex h-full min-h-0 flex-col">
       <SettingsSectionHeaderProvider
         setHideSectionHeader={setHideSectionHeader}
       >
