@@ -30,14 +30,14 @@ vi.mock("#/hooks/mutation/use-switch-acp-model", () => ({
   useSwitchAcpModel: () => ({ mutate: switchAcpModelMutate }),
 }));
 
-// What the session and the agent report; empty unless a test sets them.
+// What the session reports and the agent last reported; empty unless a test sets them.
 const sessionModelsMock = vi.fn();
 vi.mock("#/hooks/query/use-acp-session-models", () => ({
   useAcpSessionModels: () => sessionModelsMock(),
 }));
-const discoveryMock = vi.fn();
-vi.mock("#/hooks/query/use-acp-model-discovery", () => ({
-  useAcpModelDiscovery: () => discoveryMock(),
+const rememberedModelsMock = vi.fn();
+vi.mock("#/hooks/use-remembered-acp-models", () => ({
+  useRememberedAcpModels: () => rememberedModelsMock(),
 }));
 
 const CLAUDE_MODELS = [
@@ -58,7 +58,7 @@ describe("ChatInputModel", () => {
     useActiveBackendMock.mockReturnValue({ backend: { kind: "local" } });
     switchAcpModelMutate.mockReset();
     sessionModelsMock.mockReturnValue([]);
-    discoveryMock.mockReturnValue({ models: [], defaultModelId: null });
+    rememberedModelsMock.mockReturnValue([]);
   });
 
   it("renders the active conversation's llm_model when present", () => {
@@ -219,14 +219,10 @@ describe("ChatInputModel", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows the agent's own default on the home page when no model is saved", () => {
-    // The next conversation starts on the agent's default, so the picker
-    // shows it. It links to Agent settings since ``settings.llm_model``
-    // doesn't apply to ACP.
-    discoveryMock.mockReturnValue({
-      models: CLAUDE_MODELS,
-      defaultModelId: "opus[1m]",
-    });
+  it("shows the agent's default on the home page when no model is saved", () => {
+    // The next conversation starts on the agent's default. The picker links
+    // to Agent settings since ``settings.llm_model`` doesn't apply to ACP.
+    rememberedModelsMock.mockReturnValue(CLAUDE_MODELS);
     useActiveConversationMock.mockReturnValue({ data: undefined });
     useSettingsMock.mockReturnValue({
       data: {
@@ -240,7 +236,10 @@ describe("ChatInputModel", () => {
     renderWithProviders(<ChatInputModel />);
 
     const model = screen.getByTestId("chat-input-llm-model");
-    expect(model).toHaveAttribute("title", "Claude Opus (1M)");
+    expect(model).toHaveAttribute(
+      "title",
+      "SETTINGS$AGENT_MODEL_AGENT_DEFAULT",
+    );
     fireEvent.click(model);
     expect(screen.getByRole("link")).toHaveAttribute(
       "href",
@@ -304,10 +303,7 @@ describe("ChatInputModel", () => {
   });
 
   it("persists the choice as the default (conversationId null) in the home ACP case", () => {
-    discoveryMock.mockReturnValue({
-      models: CLAUDE_MODELS,
-      defaultModelId: null,
-    });
+    rememberedModelsMock.mockReturnValue(CLAUDE_MODELS);
     useActiveConversationMock.mockReturnValue({ data: undefined });
     useSettingsMock.mockReturnValue({
       data: {

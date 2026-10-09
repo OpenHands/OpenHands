@@ -258,21 +258,12 @@ Open **Settings → Agent** at any time:
   the provider's models, or a custom model ID. Gemini has no **Agent default**:
   Canvas preselects `gemini-2.5-pro` (see the note above).
 
-Canvas keeps no list of models; the agent reports its own. On a local backend
-Canvas asks the agent-server (`POST /api/acp/models`) to start the provider with
-your saved credentials and report the models it offers and the one it uses by
-default, so account-dependent catalogues (a ChatGPT plan's Codex models, a Claude
-subscription's aliases, OpenCode's free tier versus a Zen key) show what you can
-actually run. The first lookup can take a few seconds while the provider starts;
-results are cached. If the agent rejects its login, Settings says so instead of
-showing a stale "signed in" banner.
-
-Cloud can't ask before a conversation starts, so until then the model field
-offers **Agent default** and a custom model ID. Each conversation's session
-reports its models, which the in-chat picker offers for switching mid-conversation;
-Canvas remembers the last list per backend and provider in the browser and
-offers it in Settings and on the home page from then on (also the fallback for
-older agent-servers and failed lookups).
+Canvas keeps no list of models; the agent reports its own. Until a provider
+has run once, the model field offers **Agent default** and a custom model ID.
+Each conversation's session reports its models, which the in-chat picker offers
+for switching mid-conversation; Canvas remembers the last list per backend and
+provider in the browser and offers it in Settings and on the home page from then
+on.
 
 Saving writes an `agent_settings_diff` (`agent_kind`, `acp_server`,
 `acp_command`, `acp_model`) to `PATCH /api/settings`. A running conversation
