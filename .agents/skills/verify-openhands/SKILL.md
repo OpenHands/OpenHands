@@ -44,7 +44,9 @@ Requirements: Node >=24 (the launcher's engine), npm dependencies installed
 (`npm ci --ignore-scripts`), `uv`/`uvx`, and a Chromium Playwright can launch
 (set `CONTROL_OPENHANDS_BROWSER=/path/to/chrome` when the pinned browser is not
 installed; `launch` then reports the running stack and `browser start` picks it
-up). Every command prints one JSON object; exit 0 ok, 1 action failed, 2 usage,
+up). `browser record` also needs an ffmpeg: one with libx264 on `PATH` writes
+MP4 (and GIF), and Playwright's bundled one (`npx playwright install ffmpeg`)
+writes WebM. Every command prints one JSON object; exit 0 ok, 1 action failed, 2 usage,
 3 environment.
 
 If a user path cannot be driven with the CLI, that is a **harness gap**: extend
@@ -122,16 +124,26 @@ control-openhands stop                         # stops only this run; evidence s
   (stale session key). `restart` keeps the browser on its page. While a service
   is stopped, a reload replaces the page with the backend-unavailable screen, so
   drive backend-down states on the page that was already loaded. `browser
-  network`, `browser toasts` and `browser media` observe requests by origin,
-  toasts and sound without changing anything. Check `--help` before calling a
-  state unreachable: most "can't be driven" claims predate a verb.
+  network` (with `--bodies`, what the page sent, credentials redacted),
+  `browser toasts` and `browser media` observe requests by origin, toasts and
+  sound without changing anything; `click --observe SEL` and `scroll
+  --observe SEL` record the transient states SEL shows while the action's
+  effects play out (a "Saving..." label, a loading row). Check `--help` before
+  calling a state unreachable: most "can't be driven" claims predate a verb.
 - **Evidence** goes under `<run>/evidence/<feature-id>/` and the append-only
   ledger `<run>/evidence/ledger.jsonl`. Nothing is overwritten: a repeated
   screenshot name is saved as `<name>-2.png`, so cite the path the command
   prints; `evidence report` renders the table from
   [the report contract](references/report.md), fail and blocked rows first with
   their `--note` (a blocked row names its missing prerequisite there), and
-  `--baseline <yesterday's run>` lists what changed since that ledger. Keys, logs, browser profile and
+  `--baseline <yesterday's run>` lists what changed since that ledger. When
+  timing or a transition is the point (a menu closing on Escape, a reply
+  streaming in), record it: `browser record start --feature ID --name N`,
+  drive the steps, then `browser record stop` saves a video of the active tab
+  under the same folder (`--gif` adds one that GitHub shows inline). Around a
+  long wait, such as the agent working, run `browser record pause` and `browser
+  record resume`: the video cuts there. The caret is hidden in recordings, as
+  in screenshots. Keys, logs, browser profile and
   downloads stay in `<run>/private/`. Evidence is not automatically public:
   review every image before publishing it. The CLI masks password fields in
   `snapshot`, `value` and `testids`; a screenshot of a visible key field is
@@ -167,7 +179,20 @@ conversations when their recipe is done.
 
 Use `deepseek-flash` for everything that needs a model; switch to `deepseek-pro`
 only for checks that need a second profile or a stronger model. Keep prompts
-small and confined to the run workspace. Without a key, run every credential-free
+small and confined to the run workspace.
+
+The local stack is not a sandbox. The agent's terminal runs as your user, and
+its environment includes the run's own keys. A prompt that leaves the model
+without a clear task can send it exploring outside the workspace, and what it
+reads goes to the model provider. That covers an image with no text, a bare
+trigger word whose skill is not loaded, and an open-ended setup command. On
+2026-10-08, deepseek-flash read the run directory, the checkout, other
+sessions' files under `/tmp` and `env` in such cases. So add `Do not run any
+tools` (or name the exact command) to every prompt whose check does not need
+more. Watch `conversation events <id> --kinds ActionEvent` while a run that
+needs tools is open, and run `conversation pause <id>` as soon as it leaves the
+workspace. Do not launch the stack as a user whose files hold credentials you
+cannot let a model read. Without a key, run every credential-free
 recipe and record model-dependent ones as `blocked` with the missing
 prerequisite; never substitute a mock and call it a pass.
 

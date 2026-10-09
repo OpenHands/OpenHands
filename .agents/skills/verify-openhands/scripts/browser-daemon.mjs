@@ -15,14 +15,25 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  rmSync,
   writeFileSync,
 } from "node:fs";
 import { createRequire } from "node:module";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { redactStorage } from "./lib/redact-storage.mjs";
+import { SECRET_KEY, SECRET_PATH, redactBody } from "./lib/network-bodies.mjs";
 import { buildLocator, toCss } from "./lib/selectors.mjs";
 import { BrowserVideoCapture } from "./lib/browser-video.mjs";
+import {
+  RECORD_DEFAULTS,
+  canvasSize,
+  encodeRecording,
+  findFfmpeg,
+  frameDurations,
+  videoToGif,
+  withoutPauses,
+} from "./lib/recording.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, "../../../..");
@@ -173,8 +184,7 @@ function redactQuery(search) {
   if (!search) return "";
   const params = new URLSearchParams(search);
   for (const key of [...params.keys()]) {
-    if (/key|token|secret|auth|pass|session|sig/i.test(key))
-      params.set(key, "<redacted>");
+    if (SECRET_KEY.test(key)) params.set(key, "<redacted>");
   }
   const text = params.toString();
   return text ? `?${text.slice(0, 200)}` : "";
@@ -235,6 +245,19 @@ function watch(page) {
       return;
     }
     if (!origin.startsWith("http") && !origin.startsWith("ws")) return;
+    // The body of an app-origin write, redacted (see lib/network-bodies.mjs);
+    // `network --bodies` shows it, so a recipe can prove what the page sent.
+    let body;
+    if (
+      origin === baseUrl.origin &&
+      /^(POST|PUT|PATCH|DELETE)$/.test(request.method())
+    ) {
+      try {
+        body = redactBody(request.postData(), { all: SECRET_PATH.test(path) });
+      } catch {
+        body = undefined;
+      }
+    }
     const entry = {
       ts: new Date().toISOString(),
       origin,
@@ -243,6 +266,7 @@ function watch(page) {
       method: request.method(),
       type: request.resourceType(),
       app: origin === baseUrl.origin,
+      body,
     };
     requestEntries.set(request, entry);
     requests.push(entry);
@@ -298,6 +322,172 @@ context.on("page", (page) => {
   record("page-opened", page, { url: page.url() });
 });
 
+// Transient states (labels such as "Saving...", a loading row) of the
+// elements an `--observe` selector names, while an action's effects play
+// out: an in-page MutationObserver when the selector is plain CSS/testid,
+// else polling every 20 ms. `startObserver` before the action,
+// `finishObserver` after it.
+async function startObserver(observe) {
+  if (!observe) return undefined;
+  let observer;
+  let poller;
+  const css = toCss(observe);
+  if (css) {
+    observer = await activePage
+      .evaluateHandle((sel) => {
+        document.querySelectorAll(sel);
+        const log = [];
+        const snap = () => {
+          const els = [...document.querySelectorAll(sel)];
+          // Text plus disabled/busy markers, so pending states show up.
+          const entry = els.length
+            ? els.map(
+                (e) =>
+                  (e.innerText || e.value || "").trim().slice(0, 80) +
+                  (e.disabled || e.getAttribute("aria-disabled") === "true"
+                    ? " [disabled]"
+                    : "") +
+                  (e.getAttribute("aria-busy") === "true" ? " [busy]" : ""),
+              )
+            : ["<absent>"];
+          const key = JSON.stringify(entry);
+          if (log[log.length - 1]?.key !== key) {
+            log.push({ key, t: Math.round(performance.now()) });
+          }
+        };
+        snap();
+        const mo = new MutationObserver(snap);
+        mo.observe(document.body, {
+          subtree: true,
+          childList: true,
+          characterData: true,
+          attributes: true,
+        });
+        return { log, mo };
+      }, css)
+      .catch(() => undefined);
+  }
+  if (!observer) {
+    const log = [];
+    const t0 = Date.now();
+    poller = { log, running: true };
+    poller.done = (async () => {
+      while (poller.running) {
+        let entry;
+        try {
+          const loc = locate(observe);
+          entry = (await loc.count())
+            ? (await loc.allInnerTexts()).map((s) => s.trim().slice(0, 80))
+            : ["<absent>"];
+        } catch {
+          entry = ["<unreadable>"];
+        }
+        const key = JSON.stringify(entry);
+        if (log[log.length - 1]?.key !== key)
+          log.push({ key, t: Date.now() - t0 });
+        await new Promise((r) => setTimeout(r, 20));
+      }
+    })();
+  }
+  return { observer, poller };
+}
+
+// The action failed: stop watching without a report, so the poller does not
+// outlive the request and the page's MutationObserver is disconnected.
+async function abandonObserver(watching) {
+  if (!watching) return;
+  const { observer, poller } = watching;
+  if (observer)
+    await observer.evaluate(({ mo }) => mo.disconnect()).catch(() => {});
+  if (poller) {
+    poller.running = false;
+    await poller.done.catch(() => {});
+  }
+}
+
+async function finishObserver(watching, observeMs) {
+  if (!watching) return {};
+  const { observer, poller } = watching;
+  await activePage.waitForTimeout(Number(observeMs ?? 3000));
+  let observed;
+  if (observer) {
+    observed = await observer.evaluate(({ log, mo }) => {
+      mo.disconnect();
+      const start = log[0]?.t ?? 0;
+      return log.map((l) => ({ ms: l.t - start, state: JSON.parse(l.key) }));
+    });
+  } else {
+    poller.running = false;
+    await poller.done;
+    observed = poller.log.map((l) => ({
+      ms: l.t,
+      state: JSON.parse(l.key),
+    }));
+  }
+  return { observed, observedBy: observer ? "mutation" : "poll-20ms" };
+}
+
+// One scroll, as `browser scroll` asked for it: a horizontal rail, the
+// nearest scrollable container of an element, an element into view, or the
+// wheel at the pointer.
+async function scrollOnce({ selector, by, x, timeout }) {
+  if (selector && x !== undefined) {
+    // Horizontal rails: scroll the nearest horizontally scrollable box.
+    return locate(selector)
+      .first()
+      .evaluate((el, dx) => {
+        let node = el;
+        while (
+          node &&
+          !(
+            node.scrollWidth > node.clientWidth &&
+            /auto|scroll/.test(getComputedStyle(node).overflowX)
+          )
+        ) {
+          node = node.parentElement;
+        }
+        const target = node || document.scrollingElement;
+        target.scrollBy(dx, 0);
+        return {
+          scrolled: target === document.scrollingElement ? "page" : "container",
+          scrollLeft: Math.round(target.scrollLeft),
+          scrollWidth: target.scrollWidth,
+        };
+      }, Number(x));
+  }
+  if (selector && by !== undefined) {
+    // Scroll the element's nearest scrollable container (settings and
+    // panels scroll inside a container, not the window).
+    return locate(selector)
+      .first()
+      .evaluate((el, dy) => {
+        let node = el;
+        while (
+          node &&
+          !(
+            node.scrollHeight > node.clientHeight &&
+            /auto|scroll/.test(getComputedStyle(node).overflowY)
+          )
+        ) {
+          node = node.parentElement;
+        }
+        const target = node || document.scrollingElement;
+        target.scrollBy(0, dy);
+        return {
+          scrolled: target === document.scrollingElement ? "page" : "container",
+          scrollTop: Math.round(target.scrollTop),
+          scrollHeight: target.scrollHeight,
+        };
+      }, Number(by));
+  }
+  if (selector) {
+    await locate(selector).scrollIntoViewIfNeeded({ timeout });
+    return { scrolled: "into-view" };
+  }
+  await activePage.mouse.wheel(0, Number(by ?? 600));
+  return { scrolled: "wheel at mouse position" };
+}
+
 function locate(selector) {
   return buildLocator(activePage, selector);
 }
@@ -338,6 +528,49 @@ async function failureShot() {
   } catch {
     return undefined;
   }
+}
+
+// One recording at a time (`browser record`). The loop captures whichever tab
+// is active, so it follows `browser tab`; see lib/recording.mjs for why it
+// polls instead of using a screencast. The text caret is hidden in each
+// capture, as in screenshots: its blink would make an idle page look busy.
+let recording = null;
+
+async function captureLoop(rec) {
+  while (!rec.stopping && Date.now() - rec.startedAt < rec.maxMs) {
+    const t = Date.now();
+    const page = activePage;
+    if (rec.pausedAt) {
+      await new Promise((r) => setTimeout(r, rec.intervalMs));
+      continue;
+    }
+    try {
+      const data = await page.screenshot({
+        type: "jpeg",
+        quality: 85,
+        caret: "hide",
+        timeout: 5_000,
+      });
+      rec.captures += 1;
+      const hash = createHash("sha1").update(data).digest("hex");
+      if (hash !== rec.lastHash) {
+        rec.lastHash = hash;
+        const file = join(
+          rec.dir,
+          `frame-${String(rec.frames.length).padStart(5, "0")}.jpg`,
+        );
+        writeFileSync(file, data);
+        const size = page.viewportSize() ?? {};
+        rec.frames.push({ file, t, width: size.width, height: size.height });
+      }
+    } catch {
+      // A navigation or a closed tab; the next tick captures the active page.
+      rec.misses += 1;
+    }
+    const wait = rec.intervalMs - (Date.now() - t);
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+  }
+  rec.endedAt = Date.now();
 }
 
 async function collectTestids(scopeSelector, includeHidden) {
@@ -448,114 +681,38 @@ const handlers = {
     observeMs,
   }) {
     const before = activePage.url();
-    // Record transient states (labels such as "Saving...", skeletons) of the
-    // observed elements while the click's effects play out: an in-page
-    // MutationObserver when the selector is plain CSS/testid, else polling.
-    let observer;
-    let poller;
-    const css = observe ? toCss(observe) : null;
-    if (css) {
-      observer = await activePage
-        .evaluateHandle((sel) => {
-          document.querySelectorAll(sel);
-          const log = [];
-          const snap = () => {
-            const els = [...document.querySelectorAll(sel)];
-            // Text plus disabled/busy markers, so pending states show up.
-            const entry = els.length
-              ? els.map(
-                  (e) =>
-                    (e.innerText || e.value || "").trim().slice(0, 80) +
-                    (e.disabled || e.getAttribute("aria-disabled") === "true"
-                      ? " [disabled]"
-                      : "") +
-                    (e.getAttribute("aria-busy") === "true" ? " [busy]" : ""),
-                )
-              : ["<absent>"];
-            const key = JSON.stringify(entry);
-            if (log[log.length - 1]?.key !== key) {
-              log.push({ key, t: Math.round(performance.now()) });
-            }
-          };
-          snap();
-          const mo = new MutationObserver(snap);
-          mo.observe(document.body, {
-            subtree: true,
-            childList: true,
-            characterData: true,
-            attributes: true,
-          });
-          return { log, mo };
-        }, css)
-        .catch(() => undefined);
-    }
-    if (observe && !observer) {
-      const log = [];
-      const t0 = Date.now();
-      poller = { log, running: true };
-      poller.done = (async () => {
-        while (poller.running) {
-          let entry;
-          try {
-            const loc = locate(observe);
-            entry = (await loc.count())
-              ? (await loc.allInnerTexts()).map((s) => s.trim().slice(0, 80))
-              : ["<absent>"];
-          } catch {
-            entry = ["<unreadable>"];
-          }
-          const key = JSON.stringify(entry);
-          if (log[log.length - 1]?.key !== key)
-            log.push({ key, t: Date.now() - t0 });
-          await new Promise((r) => setTimeout(r, 20));
-        }
-      })();
-    }
-    if (hoverFirst) {
-      // Hover-driven controls re-render on pointerenter and swallow a click
-      // that moves and presses at once.
-      await locate(selector).hover({ timeout });
-      await activePage.waitForTimeout(Number(hoverFirst) || 150);
-    }
-    await locate(selector).click({
-      timeout,
-      force,
-      button,
-      modifiers,
-      position,
-    });
-    if (expectUrl) {
-      await activePage.waitForURL(new RegExp(expectUrl), { timeout });
-    }
-    if (expectNewUrl) {
-      const re = new RegExp(expectNewUrl);
-      await activePage.waitForURL(
-        (u) => u.toString() !== before && re.test(u.toString()),
-        { timeout },
-      );
-    }
-    let observed;
-    if (observer || poller) {
-      await activePage.waitForTimeout(Number(observeMs ?? 3000));
-    }
-    if (observer) {
-      observed = await observer.evaluate(({ log, mo }) => {
-        mo.disconnect();
-        const start = log[0]?.t ?? 0;
-        return log.map((l) => ({ ms: l.t - start, state: JSON.parse(l.key) }));
+    const watching = await startObserver(observe);
+    try {
+      if (hoverFirst) {
+        // Hover-driven controls re-render on pointerenter and swallow a click
+        // that moves and presses at once.
+        await locate(selector).hover({ timeout });
+        await activePage.waitForTimeout(Number(hoverFirst) || 150);
+      }
+      await locate(selector).click({
+        timeout,
+        force,
+        button,
+        modifiers,
+        position,
       });
-    } else if (poller) {
-      poller.running = false;
-      await poller.done;
-      observed = poller.log.map((l) => ({
-        ms: l.t,
-        state: JSON.parse(l.key),
-      }));
+      if (expectUrl) {
+        await activePage.waitForURL(new RegExp(expectUrl), { timeout });
+      }
+      if (expectNewUrl) {
+        const re = new RegExp(expectNewUrl);
+        await activePage.waitForURL(
+          (u) => u.toString() !== before && re.test(u.toString()),
+          { timeout },
+        );
+      }
+    } catch (error) {
+      await abandonObserver(watching);
+      throw error;
     }
     return {
       url: activePage.url(),
-      observed,
-      observedBy: observe ? (observer ? "mutation" : "poll-20ms") : undefined,
+      ...(await finishObserver(watching, observeMs)),
     };
   },
   async dblclick({ selector, timeout, modifiers }) {
@@ -628,64 +785,18 @@ const handlers = {
     await locate(selector).setInputFiles(files, { timeout });
     return { files };
   },
-  async scroll({ selector, by, x, timeout }) {
-    if (selector && x !== undefined) {
-      // Horizontal rails: scroll the nearest horizontally scrollable box.
-      return locate(selector)
-        .first()
-        .evaluate((el, dx) => {
-          let node = el;
-          while (
-            node &&
-            !(
-              node.scrollWidth > node.clientWidth &&
-              /auto|scroll/.test(getComputedStyle(node).overflowX)
-            )
-          ) {
-            node = node.parentElement;
-          }
-          const target = node || document.scrollingElement;
-          target.scrollBy(dx, 0);
-          return {
-            scrolled:
-              target === document.scrollingElement ? "page" : "container",
-            scrollLeft: Math.round(target.scrollLeft),
-            scrollWidth: target.scrollWidth,
-          };
-        }, Number(x));
+  async scroll({ selector, by, x, timeout, observe, observeMs }) {
+    // `--observe SEL` records what SEL shows while the scroll's effects
+    // play out (a loading row, a fetched page), as `click --observe` does.
+    const watching = await startObserver(observe);
+    let result;
+    try {
+      result = await scrollOnce({ selector, by, x, timeout });
+    } catch (error) {
+      await abandonObserver(watching);
+      throw error;
     }
-    if (selector && by !== undefined) {
-      // Scroll the element's nearest scrollable container (settings and
-      // panels scroll inside a container, not the window).
-      return locate(selector)
-        .first()
-        .evaluate((el, dy) => {
-          let node = el;
-          while (
-            node &&
-            !(
-              node.scrollHeight > node.clientHeight &&
-              /auto|scroll/.test(getComputedStyle(node).overflowY)
-            )
-          ) {
-            node = node.parentElement;
-          }
-          const target = node || document.scrollingElement;
-          target.scrollBy(0, dy);
-          return {
-            scrolled:
-              target === document.scrollingElement ? "page" : "container",
-            scrollTop: Math.round(target.scrollTop),
-            scrollHeight: target.scrollHeight,
-          };
-        }, Number(by));
-    }
-    if (selector) {
-      await locate(selector).scrollIntoViewIfNeeded({ timeout });
-      return { scrolled: "into-view" };
-    }
-    await activePage.mouse.wheel(0, Number(by ?? 600));
-    return { scrolled: "wheel at mouse position" };
+    return { ...result, ...(await finishObserver(watching, observeMs)) };
   },
   async wait({ selector, state, timeout }) {
     await locate(selector)
@@ -914,13 +1025,16 @@ const handlers = {
     }, expression);
     return { value };
   },
-  async "wait-tab"({ pattern, timeout }) {
-    // window.open pages appear a moment after the click.
+  async "wait-tab"({ pattern, timeout, excludeActive }) {
+    // window.open pages appear a moment after the click. With
+    // `--new` the page the daemon is on does not count, so a second tab at
+    // the current URL can be waited for.
     const re = new RegExp(pattern);
+    const skip = excludeActive ? activePage : null;
     const deadline = Date.now() + (timeout ?? 10_000);
     while (Date.now() < deadline) {
       const pages = context.pages();
-      const index = pages.findIndex((p) => re.test(p.url()));
+      const index = pages.findIndex((p) => p !== skip && re.test(p.url()));
       if (index >= 0) return { index, url: pages[index].url() };
       await new Promise((r) => setTimeout(r, 100));
     }
@@ -928,6 +1042,31 @@ const handlers = {
     throw new Error(
       `No tab matching ${pattern} within the timeout. Open tabs: ${open.join(" | ")} (a pop-up that stays about:blank could not load its URL)`,
     );
+  },
+  async "new-tab"({ target, allowExternal }) {
+    // A plain new tab, as a user opening the app in a second tab: no
+    // opener, no sessionStorage, the localStorage of the same profile.
+    // Resolve the target first: a refused URL must not leave a blank tab
+    // open and active.
+    const url = target ? assertAppUrl(target, allowExternal) : undefined;
+    const previous = activePage;
+    const page = await context.newPage();
+    activePage = page;
+    if (url) {
+      try {
+        await page.goto(url, { waitUntil: "domcontentloaded" });
+      } catch (error) {
+        // A navigation that fails (the stack is down) closes the tab it
+        // opened and leaves the daemon on the tab it was on.
+        activePage = previous;
+        await page.close().catch(() => {});
+        throw error;
+      }
+      await page
+        .waitForLoadState("networkidle", { timeout: 10_000 })
+        .catch(() => {});
+    }
+    return { index: context.pages().indexOf(page), url: page.url() };
   },
   async tabs() {
     return {
@@ -1034,7 +1173,7 @@ const handlers = {
     if (keysOnly !== false) return { area, keys: Object.keys(data).sort() };
     return { area, storage: redactStorage(data) };
   },
-  async network({ clear, external, last, filter }) {
+  async network({ clear, external, last, filter, bodies }) {
     const re = filter ? new RegExp(filter) : null;
     const list = requests.filter(
       (r) =>
@@ -1046,7 +1185,9 @@ const handlers = {
     const result = {
       total: list.length,
       byOrigin,
-      recent: list.slice(-Number(last ?? 15)),
+      recent: list
+        .slice(-Number(last ?? 15))
+        .map(({ body, ...rest }) => (bodies ? { ...rest, body } : rest)),
     };
     if (clear) requests.length = 0;
     return result;
@@ -1282,6 +1423,153 @@ const handlers = {
     } finally {
       await probe.close();
     }
+  },
+  async "record-start"({ feature, name, fps, maxSeconds }) {
+    if (recording)
+      throw new Error(
+        "A recording is already running: end it with `browser record stop`.",
+      );
+    const rate = Number(fps ?? RECORD_DEFAULTS.fps);
+    if (!(rate >= 1 && rate <= 25))
+      throw new Error("--fps must be between 1 and 25");
+    const limit = Number(maxSeconds ?? RECORD_DEFAULTS.maxSeconds);
+    if (!(limit > 0 && limit <= 3600))
+      throw new Error("--max-seconds must be between 1 and 3600");
+    const ffmpeg = findFfmpeg();
+    if (!ffmpeg)
+      throw new Error(
+        "browser record needs ffmpeg: install it (MP4, --gif), or run `npx playwright install ffmpeg` (WebM). CONTROL_OPENHANDS_FFMPEG=/path picks one.",
+      );
+    const dir = join(privateDir, "recordings", String(Date.now()));
+    mkdirSync(dir, { recursive: true });
+    recording = {
+      feature,
+      name,
+      dir,
+      ffmpeg,
+      fps: rate,
+      intervalMs: 1000 / rate,
+      maxMs: limit * 1000,
+      startedAt: Date.now(),
+      frames: [],
+      cuts: [],
+      captures: 0,
+      misses: 0,
+    };
+    recording.loop = captureLoop(recording);
+    return {
+      recording: true,
+      fps: rate,
+      maxSeconds: limit,
+      format: ffmpeg.format,
+      ffmpeg: ffmpeg.path,
+      url: activePage.url(),
+    };
+  },
+  async "record-pause"() {
+    if (!recording || recording.endedAt)
+      throw new Error("No recording is running.");
+    if (recording.pausedAt) throw new Error("The recording is already paused.");
+    recording.pausedAt = Date.now();
+    return { paused: true };
+  },
+  async "record-resume"() {
+    if (!recording?.pausedAt) throw new Error("No recording is paused.");
+    if (recording.endedAt)
+      throw new Error(
+        "The recording reached --max-seconds while paused; stop it.",
+      );
+    const ms = Date.now() - recording.pausedAt;
+    recording.cuts.push({ at: recording.pausedAt, ms });
+    recording.pausedAt = undefined;
+    // The first capture after the cut is kept even if nothing changed.
+    recording.lastHash = undefined;
+    return { resumed: true, cutSeconds: Number((ms / 1000).toFixed(1)) };
+  },
+  async "record-status"() {
+    if (!recording) return { recording: false };
+    return {
+      recording: !recording.endedAt,
+      paused: Boolean(recording.pausedAt),
+      capped: Boolean(recording.endedAt),
+      seconds: ((recording.endedAt ?? Date.now()) - recording.startedAt) / 1000,
+      captures: recording.captures,
+      changes: recording.frames.length,
+      misses: recording.misses,
+    };
+  },
+  async "record-stop"({ gif, keepFrames, discard }) {
+    const rec = recording;
+    if (!rec)
+      throw new Error(
+        "No recording is running: start one with `browser record start`.",
+      );
+    rec.stopping = true;
+    await rec.loop;
+    recording = null;
+    if (discard) {
+      rmSync(rec.dir, { recursive: true, force: true });
+      return { discarded: true, captures: rec.captures };
+    }
+    if (!rec.frames.length)
+      throw new Error(
+        `No frame was captured (${rec.misses} failed captures); frames dir ${rec.dir}`,
+      );
+    // Stopped while paused: the video ends where the pause began.
+    const timeline = withoutPauses(
+      rec.frames,
+      rec.pausedAt ?? rec.endedAt,
+      rec.cuts,
+    );
+    const durations = frameDurations(timeline.frames, timeline.endT);
+    const { width, height } = canvasSize(rec.frames);
+    const path = evidencePath(rec.feature, rec.name, `.${rec.ffmpeg.format}`);
+    const written = await encodeRecording({
+      ffmpeg: rec.ffmpeg,
+      frames: rec.frames,
+      durations,
+      fps: rec.fps,
+      width,
+      height,
+      out: path,
+    }).catch((error) => {
+      throw new Error(`${error.message} (frames kept in ${rec.dir})`);
+    });
+    const result = {
+      path,
+      seconds: Number((written / rec.fps).toFixed(1)),
+      recordedSeconds: Number(
+        ((rec.endedAt - rec.startedAt) / 1000).toFixed(1),
+      ),
+      size: `${width}x${height}`,
+      fps: rec.fps,
+      captures: rec.captures,
+      changes: rec.frames.length,
+      misses: rec.misses,
+      capped: rec.endedAt - rec.startedAt >= rec.maxMs,
+      cutSeconds: Number(
+        (rec.cuts.reduce((sum, c) => sum + c.ms, 0) / 1000).toFixed(1),
+      ),
+      url: activePage.url(),
+    };
+    if (gif && !rec.ffmpeg.gif) {
+      result.gifError = `${rec.ffmpeg.path} cannot write GIF; install ffmpeg for --gif`;
+    } else if (gif) {
+      const out = evidencePath(rec.feature, rec.name, ".gif");
+      await videoToGif({
+        ffmpeg: rec.ffmpeg,
+        video: path,
+        out,
+        fps: Math.min(rec.fps, 12),
+        width: RECORD_DEFAULTS.gifWidth,
+      }).then(
+        () => (result.gif = out),
+        (error) => (result.gifError = error.message),
+      );
+    }
+    if (keepFrames) result.framesDir = rec.dir;
+    else rmSync(rec.dir, { recursive: true, force: true });
+    return result;
   },
   async shutdown() {
     let video;

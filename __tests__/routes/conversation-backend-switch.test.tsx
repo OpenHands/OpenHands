@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import React from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import type { SharedConversation } from "@openhands/typescript-client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -14,6 +14,11 @@ import {
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { NavigationProvider } from "#/context/navigation-context";
 import ConversationView from "#/routes/conversation";
+import { resumeCloudSandbox } from "#/api/cloud/conversation-service.api";
+import {
+  __clearCloudAutoResumeSuppressionsForTests,
+  suppressNextCloudAutoResume,
+} from "#/api/cloud/cloud-sandbox-resume-suppression";
 import type { Backend } from "#/api/backend-registry/types";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { getCloudSharedConversation } from "#/api/cloud/shared-conversation-service.api";
@@ -92,7 +97,10 @@ const cloudBackend: Backend = {
 
 const CLOUD_CONVERSATION_ID = "conv-cloud";
 
-function makeConversation(id: string): AppConversation {
+function makeConversation(
+  id: string,
+  overrides: Partial<AppConversation> = {},
+): AppConversation {
   return {
     id,
     created_by_user_id: null,
@@ -112,6 +120,7 @@ function makeConversation(id: string): AppConversation {
     session_api_key: null,
     sandbox_id: null,
     sub_conversation_ids: [],
+    ...overrides,
   };
 }
 
@@ -204,6 +213,8 @@ beforeEach(() => {
   vi.mocked(
     AgentServerConversationService.batchGetAppConversations,
   ).mockReset();
+  vi.mocked(resumeCloudSandbox).mockReset();
+  vi.mocked(resumeCloudSandbox).mockResolvedValue(undefined);
   vi.mocked(
     AgentServerConversationService.batchGetAppConversations,
   ).mockResolvedValue([makeConversation(CLOUD_CONVERSATION_ID)]);
@@ -211,6 +222,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
+  __clearCloudAutoResumeSuppressionsForTests();
   window.localStorage.clear();
   __resetActiveStoreForTests();
 });
@@ -231,6 +244,145 @@ describe("conversation route — backend switch", () => {
     await waitFor(() => {
       expect(screen.queryByTestId("conversation-main")).not.toBeInTheDocument();
     });
+  });
+});
+
+describe("conversation route — cloud sandbox resume", () => {
+  it("resumes an already-paused cloud sandbox when the conversation is opened", async () => {
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    vi.mocked(
+      AgentServerConversationService.batchGetAppConversations,
+    ).mockResolvedValue([
+      makeConversation(CLOUD_CONVERSATION_ID, {
+        sandbox_status: "PAUSED",
+        sandbox_id: "sandbox-paused-1",
+      }),
+    ]);
+
+    renderConversation();
+
+    await waitFor(() => {
+      expect(resumeCloudSandbox).toHaveBeenCalledWith("sandbox-paused-1");
+    });
+    expect(resumeCloudSandbox).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not auto-resume a cloud sandbox intentionally paused in this tab", async () => {
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    suppressNextCloudAutoResume(CLOUD_CONVERSATION_ID);
+    vi.mocked(
+      AgentServerConversationService.batchGetAppConversations,
+    ).mockResolvedValue([
+      makeConversation(CLOUD_CONVERSATION_ID, {
+        sandbox_status: "PAUSED",
+        sandbox_id: "sandbox-paused-suppressed",
+      }),
+    ]);
+
+    renderConversation();
+
+    expect(await screen.findByTestId("conversation-main")).toBeInTheDocument();
+    expect(resumeCloudSandbox).not.toHaveBeenCalled();
+  });
+
+  it("clears stale suppression when the route unmounts before PAUSED is observed", async () => {
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    suppressNextCloudAutoResume(CLOUD_CONVERSATION_ID);
+    vi.mocked(
+      AgentServerConversationService.batchGetAppConversations,
+    ).mockResolvedValue([
+      makeConversation(CLOUD_CONVERSATION_ID, {
+        sandbox_status: "RUNNING",
+        sandbox_id: "sandbox-running-before-unmount",
+      }),
+    ]);
+
+    const { unmount } = renderConversation();
+
+    expect(await screen.findByTestId("conversation-main")).toBeInTheDocument();
+    expect(resumeCloudSandbox).not.toHaveBeenCalled();
+
+    unmount();
+    vi.mocked(resumeCloudSandbox).mockClear();
+    vi.mocked(
+      AgentServerConversationService.batchGetAppConversations,
+    ).mockResolvedValue([
+      makeConversation(CLOUD_CONVERSATION_ID, {
+        sandbox_status: "PAUSED",
+        sandbox_id: "sandbox-paused-after-reopen",
+      }),
+    ]);
+
+    renderConversation();
+
+    await waitFor(() => {
+      expect(resumeCloudSandbox).toHaveBeenCalledWith(
+        "sandbox-paused-after-reopen",
+      );
+    });
+  });
+
+  it("retries a failed cloud sandbox resume while the conversation remains paused", async () => {
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    vi.mocked(
+      AgentServerConversationService.batchGetAppConversations,
+    ).mockResolvedValue([
+      makeConversation(CLOUD_CONVERSATION_ID, {
+        sandbox_status: "PAUSED",
+        sandbox_id: "sandbox-paused-2",
+      }),
+    ]);
+    vi.mocked(resumeCloudSandbox)
+      .mockRejectedValueOnce(new Error("resume failed"))
+      .mockResolvedValueOnce(undefined);
+
+    renderConversation();
+
+    await waitFor(() => {
+      expect(resumeCloudSandbox).toHaveBeenCalled();
+    });
+
+    await waitFor(() => {
+      expect(resumeCloudSandbox).toHaveBeenCalledTimes(2);
+    });
+    expect(resumeCloudSandbox).toHaveBeenNthCalledWith(2, "sandbox-paused-2");
+  });
+
+  it("does not retry or toast when a pending cloud resume fails after unmount", async () => {
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    vi.mocked(
+      AgentServerConversationService.batchGetAppConversations,
+    ).mockResolvedValue([
+      makeConversation(CLOUD_CONVERSATION_ID, {
+        sandbox_status: "PAUSED",
+        sandbox_id: "sandbox-paused-unmounted",
+      }),
+    ]);
+    let rejectResume!: (reason?: unknown) => void;
+    vi.mocked(resumeCloudSandbox).mockReturnValueOnce(
+      new Promise<void>((_, reject) => {
+        rejectResume = reject;
+      }),
+    );
+
+    const { unmount } = renderConversation();
+
+    await waitFor(() => {
+      expect(resumeCloudSandbox).toHaveBeenCalledTimes(1);
+    });
+
+    unmount();
+    await act(async () => {
+      rejectResume(new Error("resume failed after unmount"));
+      await Promise.resolve();
+    });
+
+    expect(displayErrorToast).not.toHaveBeenCalled();
+
+    await new Promise((resolve) => {
+      window.setTimeout(resolve, 20);
+    });
+    expect(resumeCloudSandbox).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -1792,12 +1792,22 @@ export function toHooksResponse(
         matchers: hookConfig[eventType].map(({ matcher, hooks }) => ({
           // The SDK's own defaults for fields a hooks.json may omit.
           matcher: matcher ?? "*",
-          hooks: hooks.map((hook) => ({
-            type: hook.type ?? HookType.COMMAND,
-            command: hook.command,
-            timeout: hook.timeout,
-            async: hook.async,
-          })),
+          hooks: hooks.map((hook) => {
+            // `prompt` and `system_prompt` reach Canvas over the wire but lag in
+            // the client's HookDefinition; the server sends them as null when absent.
+            const wireHook = hook as typeof hook & {
+              prompt?: string | null;
+              system_prompt?: string | null;
+            };
+            return {
+              type: hook.type ?? HookType.COMMAND,
+              command: hook.command,
+              prompt: wireHook.prompt ?? undefined,
+              system_prompt: wireHook.system_prompt ?? undefined,
+              timeout: hook.timeout,
+              async: hook.async,
+            };
+          }),
         })),
       })),
   };
