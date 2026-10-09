@@ -600,38 +600,25 @@ test.describe("cross-connect: frontend-only → multiple backends", () => {
     // The dropdown should now list both backends. Click Backend B.
     await page.getByTestId("backend-selector").click();
 
-    // Find "Backend B" in the dropdown options and click it
-    const backendBOption = page.locator(
-      '[data-testid="backend-selector"] + [role="listbox"] [role="option"]',
-    );
-    // If the dropdown renders options differently, fall back to text match
+    // Backend B must be listed by name and selectable. Requiring it — rather
+    // than falling through to a best-effort scan that can click nothing — is
+    // what makes this test fail if the added backend stops appearing.
     const optionB = page.getByRole("option", { name: /Backend B/i });
-    if (await optionB.isVisible({ timeout: 2_000 }).catch(() => false)) {
-      await optionB.click();
-    } else {
-      // The dropdown may use a different structure — try the last option
-      const options = backendBOption;
-      const count = await options.count();
-      if (count > 0) {
-        // Click the option containing "Backend B"
-        for (let i = 0; i < count; i++) {
-          const text = await options.nth(i).textContent();
-          if (text?.includes("Backend B")) {
-            await options.nth(i).click();
-            break;
-          }
-        }
-      }
-    }
+    await expect(optionB).toBeVisible({ timeout: 10_000 });
+    await optionB.click();
 
-    // ── 8. Verify the app works after switching ───────────────────────
-    // The page should reload or re-settle. Wait for the home UI to be
-    // visible, confirming Backend B is reachable.
+    // ── 8. Verify Backend B is the active backend ─────────────────────
+    // The home UI renders for either backend, so it cannot distinguish a
+    // successful switch from a failed one. Assert the selector's active
+    // identity as well, which only holds if Backend B was really selected.
     await page.waitForLoadState("domcontentloaded", { timeout: 15_000 });
     await dismissAnalyticsModal(page);
     await expect(page.getByTestId("home-chat-launcher")).toBeVisible({
       timeout: 20_000,
     });
+    await expect(
+      page.getByTestId("backend-selector").locator("input"),
+    ).toHaveValue(/Backend B/i, { timeout: 20_000 });
 
     // ── 9. Verify both backends appear in the manage modal ────────────
     await page.getByTestId("backend-selector").click();
