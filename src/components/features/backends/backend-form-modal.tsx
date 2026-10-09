@@ -1585,7 +1585,8 @@ export function BackendFormModal({
     );
   }
 
-  // Edit mode — single-column form (unchanged)
+  // Edit mode — single-column form, capped to the viewport on phones;
+  // the close control stays outside the scrolling region.
   const testIdRoot = "edit-backend";
   return (
     <ModalBackdrop
@@ -1596,20 +1597,23 @@ export function BackendFormModal({
       <div
         data-testid={`${testIdRoot}-modal`}
         className={cn(
-          "relative bg-base-secondary p-6 rounded-xl flex flex-col gap-4 border border-border",
+          "relative max-h-[92vh] flex flex-col gap-4 bg-base-secondary p-6 rounded-xl border border-border",
           modalWidthClassName("md"),
+          MODAL_MAX_WIDTH_VIEWPORT,
         )}
       >
         <ModalCloseButton onClose={onClose} testId={`${testIdRoot}-close`} />
         <h2 className={cn("pr-6", modalTitleLgClassName)}>
           {t(I18nKey.BACKEND$EDIT_TITLE)}
         </h2>
-        <BackendForm
-          mode="edit"
-          backend={backend}
-          onSubmitted={onClose}
-          testIdRoot={testIdRoot}
-        />
+        <div className="min-h-0 overflow-y-auto">
+          <BackendForm
+            mode="edit"
+            backend={backend}
+            onSubmitted={onClose}
+            testIdRoot={testIdRoot}
+          />
+        </div>
       </div>
     </ModalBackdrop>
   );

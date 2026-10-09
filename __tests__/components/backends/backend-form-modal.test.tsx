@@ -14,6 +14,10 @@ import {
   type NavigationContextValue,
 } from "#/context/navigation-context";
 import { BackendFormModal } from "#/components/features/backends/backend-form-modal";
+import {
+  MODAL_MAX_WIDTH_VIEWPORT,
+  MODAL_WIDTH_CLASS,
+} from "#/components/shared/modals/modal-body";
 
 const getServerInfoMock = vi.hoisted(() => vi.fn());
 const getSettingsMock = vi.hoisted(() => vi.fn().mockResolvedValue({}));
@@ -307,5 +311,52 @@ describe("BackendFormModal – edit mode (BackendForm entry point)", () => {
     expect(
       screen.queryByTestId("add-backend-cloud-host"),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("BackendFormModal – edit mode viewport fit", () => {
+  const editBackend = {
+    id: "seeded-id",
+    name: "My Server",
+    host: "http://localhost:9000",
+    apiKey: "sk-old",
+    kind: "local" as const,
+  };
+
+  it("keeps the shared md token at 520px so the desktop editor is unchanged", () => {
+    // w-130 is 32.5rem/520px; 90vw at 1024px is ~922px, so min(520px, 90vw) remains 520px.
+    expect(MODAL_WIDTH_CLASS.md).toBe("w-130");
+    expect(MODAL_MAX_WIDTH_VIEWPORT).toBe("max-w-[90vw]");
+  });
+
+  it("caps the 520px edit body at 90vw and scrolls its form region", () => {
+    renderWithProviders(
+      <BackendFormModal mode="edit" backend={editBackend} onClose={vi.fn()} />,
+    );
+
+    const body = screen.getByTestId("edit-backend-modal");
+    expect(body).toHaveClass(MODAL_WIDTH_CLASS.md);
+    expect(body).toHaveClass(MODAL_MAX_WIDTH_VIEWPORT);
+    expect(body).toHaveClass("max-h-[92vh]");
+
+    const scrollRegion = body.querySelector(".overflow-y-auto");
+    expect(scrollRegion).not.toBeNull();
+    expect(scrollRegion).toContainElement(
+      screen.getByTestId("edit-backend-form"),
+    );
+  });
+
+  it("keeps the close control outside the scrolling region so it stays visible", () => {
+    renderWithProviders(
+      <BackendFormModal mode="edit" backend={editBackend} onClose={vi.fn()} />,
+    );
+
+    const body = screen.getByTestId("edit-backend-modal");
+    const scrollRegion = body.querySelector(".overflow-y-auto");
+    const close = screen.getByTestId("edit-backend-close");
+
+    expect(scrollRegion).not.toBeNull();
+    expect(scrollRegion!.contains(close)).toBe(false);
+    expect(close).toBeVisible();
   });
 });
