@@ -1,5 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { HttpError } from "@openhands/typescript-client";
 import { useBtwInterceptor } from "#/hooks/chat/use-btw-interceptor";
 import { useBtwStore } from "#/stores/btw-store";
 
@@ -79,6 +80,28 @@ describe("useBtwInterceptor", () => {
     act(() => result.current("/btw why?"));
     await waitFor(() => expect(entries()[0].status).toBe("error"));
     expect(entries()[0].response).toBe("boom");
+  });
+
+  it("stores a readable server error instead of the raw HttpError JSON", async () => {
+    const body = {
+      detail: "Internal Server Error",
+      exception: "Authentication failed. See https://example.invalid/help",
+      error_id: "qa-error",
+    };
+    mockAskAgent.mockRejectedValueOnce(
+      new HttpError(
+        500,
+        "Internal Server Error",
+        body,
+        `HTTP request failed (500 Internal Server Error): ${JSON.stringify(body)}`,
+      ),
+    );
+    const { result } = renderHook(() => useBtwInterceptor(CONV, vi.fn()));
+
+    act(() => result.current("/btw why?"));
+
+    await waitFor(() => expect(entries()[0].status).toBe("error"));
+    expect(entries()[0].response).toBe(body.exception);
   });
 
   it("falls through when conversationId is null", () => {
