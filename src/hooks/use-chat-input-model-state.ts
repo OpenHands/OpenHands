@@ -9,7 +9,7 @@ import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useCanManageOrgProfiles } from "#/hooks/use-can-manage-org-profiles";
 import { useActiveAcpProfileDetail } from "#/hooks/query/use-active-acp-profile-detail";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
-import { useAcpModelDiscovery } from "#/hooks/query/use-acp-model-discovery";
+import { useRememberedAcpModels } from "#/hooks/use-remembered-acp-models";
 import { useAcpSessionModels } from "#/hooks/query/use-acp-session-models";
 import {
   getAcpPreferredDefaultModel,
@@ -62,12 +62,14 @@ export function useChatInputModelState(): ChatInputModelState {
       ? (activeAcpProfile?.acp_server ?? settingsAcpServerKey)
       : null;
   const acpProvider = isAcpContext ? getAcpProvider(acpServerKey) : undefined;
-  const discovered = useAcpModelDiscovery(acpProvider ? acpServerKey : null);
+  const rememberedModels = useRememberedAcpModels(
+    acpProvider ? acpServerKey : null,
+  );
   // The session's own list arrives only after it starts.
   const sessionModels = useAcpSessionModels(
     isActiveAcpConversation ? conversation : null,
   );
-  const liveModels = sessionModels.length ? sessionModels : discovered.models;
+  const agentModels = sessionModels.length ? sessionModels : rememberedModels;
 
   const settingsAcpModel =
     typeof settings?.agent_settings?.acp_model === "string"
@@ -97,8 +99,7 @@ export function useChatInputModelState(): ChatInputModelState {
       configured: acpConfiguredModel,
       // Preferred default (Vertex-safe for Gemini) — must match what the
       // start request would substitute for an unconfigured model.
-      providerDefault:
-        getAcpPreferredDefaultModel(acpServerKey) ?? discovered.defaultModelId,
+      providerDefault: getAcpPreferredDefaultModel(acpServerKey),
     });
   } else {
     currentModelId = conversation?.llm_model ?? settings?.llm_model ?? null;
@@ -107,11 +108,11 @@ export function useChatInputModelState(): ChatInputModelState {
   let displayModel = currentModelId;
   if (isAcpContext) {
     displayModel =
-      labelForAcpModel(currentModelId, liveModels) ??
+      labelForAcpModel(currentModelId, agentModels) ??
       // The next conversation starts on a default no one has reported yet.
       (isHomeAcp ? t(I18nKey.SETTINGS$AGENT_MODEL_AGENT_DEFAULT) : null);
   }
-  const availableAcpModels = isAcpContext ? liveModels : [];
+  const availableAcpModels = isAcpContext ? agentModels : [];
   // A home-page pick persists into the active ACP profile, which on cloud is
   // org-owned — hide the selectable rows from members who'd only get a 403.
   // Conversation-scoped switches (blank or started) stay member-allowed.

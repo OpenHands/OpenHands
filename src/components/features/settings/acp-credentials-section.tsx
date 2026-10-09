@@ -19,12 +19,9 @@ import type { AcpCredentialForm } from "#/hooks/use-acp-credential-form";
 export function AcpCredentialsSection({
   form,
   providerKey,
-  loginRejected = false,
 }: {
   form: AcpCredentialForm;
   providerKey: string;
-  /** The agent itself refused its login, whatever the local check found. */
-  loginRejected?: boolean;
 }) {
   const { t } = useTranslation("openhands");
   const {
@@ -52,7 +49,7 @@ export function AcpCredentialsSection({
       </div>
 
       <AcpAuthStatusBanner
-        status={loginRejected ? "unauthenticated" : authStatus}
+        status={authStatus}
         isChecking={isChecking}
         credentialsConfigured={credentialsConfigured}
         providerName={providerName}
