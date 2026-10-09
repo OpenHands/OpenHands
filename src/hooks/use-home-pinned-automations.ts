@@ -123,7 +123,6 @@ export function useHomePinnedAutomations() {
 
   const queryClient = useQueryClient();
   const settings = useSettings();
-  // Same key `useSettings` reads, so optimistic writes show up everywhere.
   const settingsQueryKey = useMemo(
     () => [...SETTINGS_QUERY_KEYS.byScope("personal"), backendId, orgId],
     [backendId, orgId],
@@ -202,7 +201,6 @@ export function useHomePinnedAutomations() {
     const current = readServerPinnedIds();
     if (!current) return;
     migratingLegacyKeys.add(storageKey);
-    // Server pins keep their order; legacy pins the server lacks go last.
     const next = sanitizePinnedIds([
       ...current,
       ...sanitizePinnedIds(JSON.parse(legacyPinsJson)),

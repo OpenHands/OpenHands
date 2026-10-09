@@ -157,8 +157,6 @@ function renderHomeAutomations(ui: React.ReactElement) {
 beforeEach(() => {
   vi.clearAllMocks();
   window.localStorage.clear();
-  // Local backends keep home pins in agent-server settings; saves replace
-  // the stored list like the server does.
   let serverPins: string[] | undefined;
   vi.mocked(SettingsService.getSettings).mockImplementation(async () => ({
     ...DEFAULT_SETTINGS,

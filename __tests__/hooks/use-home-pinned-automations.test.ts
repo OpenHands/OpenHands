@@ -87,7 +87,7 @@ describe("useHomePinnedAutomations on a local backend", () => {
     const { result } = renderPinnedHook(() => useHomePinnedAutomations());
     await waitFor(() => expect(result.current.pinnedIds).toEqual(["a", "b"]));
 
-    // Act + Assert: each change shows in the list and is saved in full.
+    // Act + Assert
     act(() => result.current.pin("c"));
     await waitFor(() =>
       expect(result.current.pinnedIds).toEqual(["a", "b", "c"]),
