@@ -34,6 +34,11 @@
     "tools": "openhands-tools",
     "workspace": "openhands-workspace"
   },
+  "mars": {
+    "_comment": "DigitalOcean Managed Agents (Electron desktop only). oauthClientId is the public client ID of the DigitalOcean OAuth app registered with redirect URI http://127.0.0.1:53682/callback; implicit grant needs no secret. Leave empty to offer personal access tokens only. Overridden at runtime by DO_OAUTH_CLIENT_ID / MARS_API_BASE_URL. Read by scripts/mars-tunnel-bridge.mjs.",
+    "apiBaseUrl": "https://api.digitalocean.com",
+    "oauthClientId": ""
+  },
   "telemetry": {
     "posthogApiKey": "phc_kBtz5nKmxVRRQ7HtPwr2QX9eMC5j65zE86QKocVNwb4U",
     "posthogHost": "https://us.i.posthog.com"

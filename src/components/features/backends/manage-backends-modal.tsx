@@ -4,6 +4,7 @@ import { Plus } from "lucide-react";
 
 import { getLockedCloudHost } from "#/api/agent-server-config";
 import { type Backend } from "#/api/backend-registry/types";
+import { getMarsBridge } from "#/api/mars/mars-tunnel-backend";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { ConfirmationModal } from "#/components/shared/modals/confirmation-modal";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
@@ -22,6 +23,7 @@ import { modalTitleLgClassName } from "#/utils/modal-classes";
 import { BackendFormModal } from "./backend-form-modal";
 import { BackendRow } from "./backend-row";
 import { DeviceFlowAuth } from "./device-flow-auth";
+import { ManagedAgentsView } from "./managed-agents/managed-agents-view";
 import { useBackendSwitchRedirect } from "./use-backend-switch-redirect";
 
 interface ManageBackendsModalProps {
@@ -31,7 +33,11 @@ interface ManageBackendsModalProps {
    * app shell behind the modal, so dismiss controls would be misleading.
    */
   recoveryMode?: boolean;
+  /** Open straight onto the DigitalOcean Managed Agents screen. */
+  initialView?: ManageBackendsView;
 }
+
+export type ManageBackendsView = "backends" | "managed-agents";
 
 interface PendingRemoval {
   id: string;
@@ -64,6 +70,7 @@ function resolveBackendOrgLabel(
 export function ManageBackendsModal({
   onClose,
   recoveryMode = false,
+  initialView = "backends",
 }: ManageBackendsModalProps) {
   const { t } = useTranslation("openhands");
   const { backends, active, removeBackend, setActive, updateBackend } =
@@ -95,7 +102,12 @@ export function ManageBackendsModal({
     null,
   );
   const [showAddForm, setShowAddForm] = React.useState(false);
-
+  // The tunnel lives in the Electron main process, so the browser and library
+  // builds have nothing to offer here.
+  const showManagedAgents = getMarsBridge() !== null && !isLockedToCloud;
+  const [view, setView] = React.useState<ManageBackendsView>(
+    showManagedAgents ? initialView : "backends",
+  );
   const handleConfirmRemoval = () => {
     if (!pendingRemoval) return;
     removeBackend(pendingRemoval.id);
@@ -143,9 +155,9 @@ export function ManageBackendsModal({
           data-testid="manage-backends-modal"
           className={cn(
             "relative flex flex-col bg-surface border border-border rounded-xl",
-            modalWidthClassName("lg"),
+            modalWidthClassName(view === "managed-agents" ? "xl" : "lg"),
             MODAL_MAX_WIDTH_VIEWPORT,
-            "max-h-[70vh]",
+            view === "managed-agents" ? "h-[80vh]" : "max-h-[70vh]",
           )}
         >
           {recoveryMode ? null : (
@@ -154,87 +166,96 @@ export function ManageBackendsModal({
               testId="close-manage-backends-modal"
             />
           )}
-          <div className={cn("p-5", !recoveryMode && "pr-12")}>
-            <h2 className={modalTitleLgClassName}>{modalTitle}</h2>
-          </div>
+          {view === "managed-agents" ? (
+            <ManagedAgentsView
+              onBack={() => setView("backends")}
+              onDone={onClose}
+            />
+          ) : (
+            <>
+              <div className={cn("p-5", !recoveryMode && "pr-12")}>
+                <h2 className={modalTitleLgClassName}>{modalTitle}</h2>
+              </div>
 
-          <div className="flex min-h-0 flex-1 flex-col px-5">
-            <div
-              className="flex-1 overflow-auto rounded-md border border-border bg-surface-raised custom-scrollbar-always"
-              data-testid="manage-backends-list"
-            >
-              {backends.length === 0 ? (
-                <p className="px-3 py-6 text-center text-sm text-text-secondary">
-                  {t(I18nKey.BACKEND$MANAGE_EMPTY)}
-                </p>
-              ) : (
-                <ul className="divide-y divide-border">
-                  {backends.map((backend) => (
-                    <BackendRow
-                      key={backend.id}
-                      backend={backend}
-                      health={healthByBackendId[backend.id]}
-                      orgLabel={resolveBackendOrgLabel(
-                        backend,
-                        cloudOrgs,
-                        currentUserIds,
-                        personalWorkspaceLabel,
-                      )}
-                      onSelect={() => handleSelectBackend(backend)}
-                      onEdit={() => setEditingBackend(backend)}
-                      onRemove={() =>
-                        setPendingRemoval({
-                          id: backend.id,
-                          name: backend.name,
-                        })
-                      }
-                      onLogin={
-                        backend.authMode === "cookie"
-                          ? undefined
-                          : (apiKey) => handleCloudLogin(backend, apiKey)
-                      }
+              <div className="flex min-h-0 flex-1 flex-col px-5">
+                <div
+                  className="flex-1 overflow-auto rounded-md border border-border bg-surface-raised custom-scrollbar-always"
+                  data-testid="manage-backends-list"
+                >
+                  {backends.length === 0 ? (
+                    <p className="px-3 py-6 text-center text-sm text-text-secondary">
+                      {t(I18nKey.BACKEND$MANAGE_EMPTY)}
+                    </p>
+                  ) : (
+                    <ul className="divide-y divide-border">
+                      {backends.map((backend) => (
+                        <BackendRow
+                          key={backend.id}
+                          backend={backend}
+                          health={healthByBackendId[backend.id]}
+                          orgLabel={resolveBackendOrgLabel(
+                            backend,
+                            cloudOrgs,
+                            currentUserIds,
+                            personalWorkspaceLabel,
+                          )}
+                          onSelect={() => handleSelectBackend(backend)}
+                          onEdit={() => setEditingBackend(backend)}
+                          onRemove={() =>
+                            setPendingRemoval({
+                              id: backend.id,
+                              name: backend.name,
+                            })
+                          }
+                          onLogin={
+                            backend.authMode === "cookie"
+                              ? undefined
+                              : (apiKey) => handleCloudLogin(backend, apiKey)
+                          }
+                        />
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 p-5">
+                {isLockedToCloud ? (
+                  lockedCloudBackend ? (
+                    <DeviceFlowAuth
+                      host={lockedCloudReconnectHost}
+                      onSuccess={handleLockedCloudReconnect}
+                      testIdRoot="manage-backends-reconnect-cloud"
+                      idleButtonLabel={t(I18nKey.BACKEND$RECONNECT_CLOUD)}
+                      className="w-full sm:w-auto"
+                      buttonClassName="w-full sm:w-auto"
+                      statusDisplay="modal"
                     />
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-2 p-5">
-            {isLockedToCloud ? (
-              lockedCloudBackend ? (
-                <DeviceFlowAuth
-                  host={lockedCloudReconnectHost}
-                  onSuccess={handleLockedCloudReconnect}
-                  testIdRoot="manage-backends-reconnect-cloud"
-                  idleButtonLabel={t(I18nKey.BACKEND$RECONNECT_CLOUD)}
-                  className="w-full sm:w-auto"
-                  buttonClassName="w-full sm:w-auto"
-                  statusDisplay="modal"
-                />
-              ) : null
-            ) : (
-              <BrandButton
-                type="button"
-                variant={recoveryMode ? "primary" : "secondary"}
-                onClick={() => setShowAddForm(true)}
-                testId="manage-backends-add"
-                startContent={<Plus width={14} height={14} />}
-              >
-                {t(I18nKey.BACKEND$ADD)}
-              </BrandButton>
-            )}
-            {recoveryMode ? null : (
-              <BrandButton
-                type="button"
-                variant="primary"
-                onClick={onClose}
-                testId="manage-backends-done"
-              >
-                {t(I18nKey.HOME$DONE)}
-              </BrandButton>
-            )}
-          </div>
+                  ) : null
+                ) : (
+                  <BrandButton
+                    type="button"
+                    variant={recoveryMode ? "primary" : "secondary"}
+                    onClick={() => setShowAddForm(true)}
+                    testId="manage-backends-add"
+                    startContent={<Plus width={14} height={14} />}
+                  >
+                    {t(I18nKey.BACKEND$ADD)}
+                  </BrandButton>
+                )}
+                {recoveryMode ? null : (
+                  <BrandButton
+                    type="button"
+                    variant="primary"
+                    onClick={onClose}
+                    testId="manage-backends-done"
+                  >
+                    {t(I18nKey.HOME$DONE)}
+                  </BrandButton>
+                )}
+              </div>
+            </>
+          )}
         </div>
       </ModalBackdrop>
 

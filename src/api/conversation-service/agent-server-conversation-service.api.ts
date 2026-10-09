@@ -804,7 +804,7 @@ class AgentServerConversationService {
       return batchGetCloudConversations(ids);
     }
 
-    const data = await new ConversationClient(
+    const data: unknown = await new ConversationClient(
       getAgentServerClientOptions(),
     ).getConversations<DirectConversationInfo>(ids);
 

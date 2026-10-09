@@ -61,6 +61,8 @@ export function BackendRow({
   const dotStatus = isInvalidApiKey ? false : (health?.isConnected ?? null);
   const canSelect = health?.isConnected === true && !isInvalidApiKey;
   const lockedCloudHost = getLockedCloudHost();
+  // The host is a tunnel's loopback port, owned by the Managed Agents screen.
+  const isMarsSession = Boolean(backend.marsSessionId);
 
   return (
     <li
@@ -94,7 +96,9 @@ export function BackendRow({
               {orgLabel}
             </span>
           ) : null}
-          <span className="truncate text-xs text-muted">{backend.host}</span>
+          <span className="truncate text-xs text-muted">
+            {isMarsSession ? t(I18nKey.DO_AGENTS$HOSTED_SESSION) : backend.host}
+          </span>
           <span
             data-testid={`manage-backends-status-${backend.name}`}
             className={cn("truncate text-xs", statusClassName)}
@@ -112,9 +116,11 @@ export function BackendRow({
           ) : null}
         </div>
         <span className="px-2 py-1 rounded-full text-[11px] uppercase tracking-wide text-text-tertiary bg-surface border border-border">
-          {backend.kind === "cloud"
-            ? t(I18nKey.BACKEND$KIND_CLOUD)
-            : t(I18nKey.BACKEND$KIND_LOCAL)}
+          {isMarsSession
+            ? t(I18nKey.DO_AGENTS$BADGE)
+            : backend.kind === "cloud"
+              ? t(I18nKey.BACKEND$KIND_CLOUD)
+              : t(I18nKey.BACKEND$KIND_LOCAL)}
         </span>
       </button>
       <div className="flex shrink-0 items-center gap-2 px-3 py-3">
@@ -134,7 +140,7 @@ export function BackendRow({
             analyticsSource="manage_backends_modal"
           />
         ) : null}
-        {!lockedCloudHost && (
+        {!lockedCloudHost && !isMarsSession && (
           <button
             type="button"
             onClick={onEdit}

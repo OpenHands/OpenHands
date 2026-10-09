@@ -11,6 +11,7 @@ import {
   INVALID_BACKEND_API_KEY_ERROR,
 } from "#/api/agent-server-compatibility";
 import type { Backend } from "#/api/backend-registry/types";
+import { getActiveBackend } from "#/api/backend-registry/active-store";
 import {
   isCorsOrNetworkError,
   isCorsOrNetworkErrorMessage,
@@ -220,10 +221,17 @@ export function useBackendsHealth(
     getHealthSnapshot,
   );
 
+  const activeBackendId = getActiveBackend().backend.id;
+
   const results = useQueries({
     queries: backends.map((b) => {
       const entry = healthMap[b.id];
       const hasMissingCloudApiKey = hasMissingBackendApiKey(b);
+      // Every probe of a MARS session travels its tunnel into the sandbox;
+      // polling sessions the user is not on would keep them from ever
+      // idle-pausing (and billing), so only the active one is watched.
+      const isIdleMarsSession =
+        Boolean(b.marsSessionId) && b.id !== activeBackendId;
       const isDisabled = entry?.disabled === true;
       const refreshInterval =
         b.kind === "cloud" ? CLOUD_REFRESH_INTERVAL_MS : REFRESH_INTERVAL_MS;
@@ -256,15 +264,21 @@ export function useBackendsHealth(
         },
         enabled: shouldProbe,
         refetchInterval:
-          isDisabled || hasMissingCloudApiKey
+          isDisabled || hasMissingCloudApiKey || isIdleMarsSession
             ? (false as const)
             : refreshInterval,
         refetchIntervalInBackground: false,
         refetchOnMount: isDisabled && probeDisabledOnce ? "always" : true,
         refetchOnReconnect:
-          b.kind !== "cloud" && !isDisabled && !hasMissingCloudApiKey,
+          b.kind !== "cloud" &&
+          !isDisabled &&
+          !hasMissingCloudApiKey &&
+          !isIdleMarsSession,
         refetchOnWindowFocus:
-          b.kind !== "cloud" && !isDisabled && !hasMissingCloudApiKey,
+          b.kind !== "cloud" &&
+          !isDisabled &&
+          !hasMissingCloudApiKey &&
+          !isIdleMarsSession,
         retry: false,
         // Keep the previous verdict visible while the next probe is in
         // flight so the indicator doesn't flicker on routine polling.

@@ -331,6 +331,41 @@ describe("useBackendsHealth", () => {
     });
   });
 
+  it("keeps polling ordinary backends but stops re-probing MARS sessions the user is not on", async () => {
+    // Arrange — every probe of a MARS session tunnels into its sandbox, so
+    // polling an idle one would keep it from auto-pausing.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    getSettingsMock.mockResolvedValue({});
+    const idleMarsBackend: Backend = {
+      id: "mars-idle",
+      name: "Web agent · fix-login",
+      host: "http://127.0.0.1:51000",
+      apiKey: "",
+      kind: "local",
+      marsSessionId: "sess_idle",
+    };
+    const probesOf = (host: string) =>
+      vi
+        .mocked(SettingsClient)
+        .mock.calls.filter(([options]) => options?.host === host).length;
+    renderHook(() => useBackendsHealth([localBackend, idleMarsBackend]), {
+      wrapper,
+    });
+    await waitFor(() => {
+      expect(probesOf(localBackend.host)).toBe(1);
+      expect(probesOf(idleMarsBackend.host)).toBe(1);
+    });
+
+    // Act
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(65_000);
+    });
+
+    // Assert
+    expect(probesOf(localBackend.host)).toBeGreaterThan(1);
+    expect(probesOf(idleMarsBackend.host)).toBe(1);
+  });
+
   it("does not probe a backend whose disabled state was persisted before the GUI mounted (refresh case)", async () => {
     // Arrange — simulate a prior session that already exhausted retries
     // by seeding localStorage before the hook subscribes.
