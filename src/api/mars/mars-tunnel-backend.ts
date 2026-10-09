@@ -1,12 +1,17 @@
 /**
  * Renderer-side view of the DigitalOcean MARS bridge exposed by
- * `electron/preload-main.cjs`, plus the helpers that turn a MARS session's
- * port-forward tunnel into an ordinary local backend.
+ * `electron/preload-main.cjs`, plus the helpers that turn a connected MARS
+ * session into an ordinary local backend.
  *
- * `window.marsBridge` only exists in the Electron desktop build: harness-api
- * sends no CORS headers and the tunnel needs a local main process to hold
- * it, so the browser and library builds cannot offer MARS at all. Callers
- * gate on `getMarsBridge()` rather than catching per-call failures.
+ * A session is reached over a port-forward tunnel on loopback. The far end
+ * is a plain agent-server, so the backend is `kind: "local"`.
+ *
+ * `window.marsBridge` comes from Electron's preload in the desktop build, or
+ * from the Agent Canvas server in the web build (src/api/mars/mars-web-bridge.ts,
+ * installed before first render when the server hosts it). harness-api sends
+ * no CORS headers and the token must live in a trusted process, so a page
+ * with neither cannot offer MARS at all. Callers gate on `getMarsBridge()`
+ * rather than catching per-call failures.
  */
 
 import { ConversationSortOrder } from "@openhands/typescript-client";
@@ -107,10 +112,17 @@ export interface MarsUpstreamFailure {
   message: string;
 }
 
+/** How a connected session is reached. Only the loopback tunnel today. */
+export type MarsTransport = "tunnel";
+
 export interface MarsTunnelStatus {
   sessionId: string;
   status: "connecting" | "connected" | "error";
+  transport?: MarsTransport;
+  /** Base URL the renderer registers as the backend host. */
+  host?: string;
   remotePort: number;
+  /** Loopback listener port; only set over the tunnel. */
   localPort: number | undefined;
   error: string | undefined;
   upstreamFailure?: MarsUpstreamFailure | null;
@@ -151,6 +163,10 @@ export interface MarsBridge {
   createSession: (configId: string, name: string) => Promise<MarsSession>;
   pauseSession: (sessionId: string) => Promise<void>;
   resumeSession: (sessionId: string) => Promise<void>;
+  /** Ends the session and its sandbox for good; any live connection is dropped first. */
+  destroySession: (sessionId: string) => Promise<void>;
+  /** Soft-deletes the agent definition; only offered when none of its sessions is live. */
+  deleteAgentConfig: (configId: string) => Promise<void>;
   openTunnel: (params: OpenMarsTunnelParams) => Promise<MarsTunnelStatus>;
   closeTunnel: (sessionId: string) => Promise<void>;
   getTunnel: (sessionId: string) => Promise<MarsTunnelStatus | undefined>;
@@ -171,20 +187,24 @@ function requireMarsBridge(): MarsBridge {
   const bridge = getMarsBridge();
   if (!bridge) {
     throw new Error(
-      "window.marsBridge is unavailable — MARS tunnels only work in the Electron desktop build.",
+      "window.marsBridge is unavailable — Managed Agents need the Electron desktop build or an Agent Canvas server that hosts the MARS bridge.",
     );
   }
   return bridge;
 }
 
-/** Opens (or reuses) the port-forward tunnel for one MARS session. */
+/**
+ * Connects to one MARS session over a port-forward tunnel, waking it if
+ * paused. The listener port can change between connects, so callers read
+ * the host from the returned status rather than reusing a remembered one.
+ */
 export function openMarsTunnel(
   params: OpenMarsTunnelParams,
 ): Promise<MarsTunnelStatus> {
   return requireMarsBridge().openTunnel(params);
 }
 
-/** Closes the tunnel for one MARS session, if any. */
+/** Forgets the connection for one MARS session (closing its tunnel, if any). */
 export function closeMarsTunnel(sessionId: string): Promise<void> {
   return requireMarsBridge().closeTunnel(sessionId);
 }
@@ -233,7 +253,7 @@ export function getSessionPhase(
   return "starting";
 }
 
-/** READY or PAUSED — the tunnel resumes a paused session on dial. */
+/** READY or PAUSED — connecting resumes a paused session first. */
 export function isConnectableSession(session: MarsSession): boolean {
   const phase = getSessionPhase(session.status);
   return phase === "ready" || phase === "paused";
@@ -258,8 +278,8 @@ export function buildNewSessionName(configName: string | null | undefined) {
 
 /**
  * The in-guest agent-server's session key is set by the sandbox template, not
- * by us. The tunnel itself is the authorization boundary: dialing it requires
- * a team-scoped DigitalOcean token.
+ * by us. The DigitalOcean token is the authorization boundary instead:
+ * dialing the tunnel requires it.
  */
 export const MARS_GUEST_API_KEY = "";
 
@@ -395,10 +415,30 @@ export function buildMarsBackendHost(localPort: number): string {
   return `http://127.0.0.1:${localPort}`;
 }
 
-/** Local port a persisted MARS backend's tunnel was listening on. */
+/**
+ * The base URL a connection status says to register: the tunnel's loopback
+ * listener. A status from a bridge that predates `host` is still honoured
+ * through its `localPort`.
+ */
+export function getMarsConnectionHost(
+  status: MarsTunnelStatus,
+): string | undefined {
+  if (status.host) return status.host;
+  return status.localPort === undefined
+    ? undefined
+    : buildMarsBackendHost(status.localPort);
+}
+
+/**
+ * Local port a persisted MARS backend's tunnel was listening on, so a
+ * restore can ask for it again. Undefined for a host that is not a loopback
+ * listener.
+ */
 export function getMarsBackendLocalPort(backend: Backend): number | undefined {
   try {
-    const port = Number.parseInt(new URL(backend.host).port, 10);
+    const url = new URL(backend.host);
+    if (url.hostname !== "127.0.0.1") return undefined;
+    const port = Number.parseInt(url.port, 10);
     return Number.isInteger(port) && port > 0 ? port : undefined;
   } catch {
     return undefined;
@@ -406,26 +446,26 @@ export function getMarsBackendLocalPort(backend: Backend): number | undefined {
 }
 
 /**
- * Build the Backend record for a session's now-healthy tunnel. The far end
- * really is an ordinary agent-server, so this is a `kind: "local"` backend
- * like any other.
+ * Build the Backend record for a session that now answers at `host`. The far
+ * end really is an ordinary agent-server, so this is a `kind: "local"`
+ * backend like any other.
  */
 export function buildMarsBackendInput({
   name,
-  localPort,
+  host,
   sessionId,
   configId,
   apiKey = MARS_GUEST_API_KEY,
 }: {
   name: string;
-  localPort: number;
+  host: string;
   sessionId: string;
   configId?: string;
   apiKey?: string;
 }): Omit<Backend, "id" | "connectionRevision"> {
   return {
     name,
-    host: buildMarsBackendHost(localPort),
+    host,
     apiKey,
     kind: "local",
     authMode: "api-key",

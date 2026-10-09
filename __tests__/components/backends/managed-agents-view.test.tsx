@@ -94,6 +94,8 @@ function fakeBridge(authState: MarsAuthState) {
     })),
     closeTunnel: vi.fn(async () => {}),
     getTunnel: vi.fn(async () => undefined),
+    destroySession: vi.fn(async () => {}),
+    deleteAgentConfig: vi.fn(async () => {}),
   } as unknown as MarsBridge;
 }
 
@@ -202,5 +204,84 @@ describe("ManagedAgentsView", () => {
       await screen.findByTestId("managed-agents-session-error-sess_ready"),
     ).toHaveTextContent("DO_AGENTS$ERROR_REFUSED");
     expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it("stops a session only after the user confirms, then refreshes the list", async () => {
+    const bridge = fakeBridge(SIGNED_IN);
+    window.marsBridge = bridge;
+    renderView();
+
+    await userEvent.click(
+      await screen.findByTestId("managed-agents-stop-sess_ready"),
+    );
+    // Nothing destructive happens before the confirmation.
+    expect(bridge.destroySession).not.toHaveBeenCalled();
+    expect(screen.getByTestId("confirmation-modal")).toHaveTextContent(
+      "DO_AGENTS$STOP_CONFIRM",
+    );
+
+    await userEvent.click(screen.getByTestId("cancel-button"));
+    expect(bridge.destroySession).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("confirmation-modal")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByTestId("managed-agents-stop-sess_ready"));
+    await userEvent.click(screen.getByTestId("confirm-button"));
+
+    await waitFor(() =>
+      expect(bridge.destroySession).toHaveBeenCalledWith("sess_ready"),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId("confirmation-modal"),
+      ).not.toBeInTheDocument(),
+    );
+    // The list is re-read so the stopped session disappears.
+    expect(
+      vi.mocked(bridge.listConfigSessions).mock.calls.length,
+    ).toBeGreaterThan(1);
+  });
+
+  it("offers Delete agent only once the agent has no live session", async () => {
+    const bridge = fakeBridge(SIGNED_IN);
+    window.marsBridge = bridge;
+    renderView();
+
+    const deleteButton = await screen.findByTestId(
+      "managed-agents-delete-agent-cfg_1",
+    );
+    expect(deleteButton).toBeDisabled();
+    expect(deleteButton).toHaveAttribute(
+      "title",
+      "DO_AGENTS$DELETE_AGENT_BLOCKED",
+    );
+    expect(bridge.deleteAgentConfig).not.toHaveBeenCalled();
+  });
+
+  it("deletes an agent with no live sessions after confirmation", async () => {
+    const bridge = fakeBridge(SIGNED_IN);
+    vi.mocked(bridge.listConfigSessions).mockResolvedValue({
+      sessions: [{ ...READY_SESSION, status: "SESSION_STATUS_DESTROYED" }],
+      nextPageToken: null,
+    });
+    vi.mocked(bridge.listSessions).mockResolvedValue({
+      sessions: [],
+      nextPageToken: null,
+    });
+    window.marsBridge = bridge;
+    renderView();
+
+    const deleteButton = await screen.findByTestId(
+      "managed-agents-delete-agent-cfg_1",
+    );
+    await waitFor(() => expect(deleteButton).toBeEnabled());
+    await userEvent.click(deleteButton);
+    expect(screen.getByTestId("confirmation-modal")).toHaveTextContent(
+      "DO_AGENTS$DELETE_AGENT_CONFIRM",
+    );
+    await userEvent.click(screen.getByTestId("confirm-button"));
+
+    await waitFor(() =>
+      expect(bridge.deleteAgentConfig).toHaveBeenCalledWith("cfg_1"),
+    );
   });
 });

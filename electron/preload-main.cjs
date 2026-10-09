@@ -70,15 +70,21 @@ contextBridge.exposeInMainWorld("marsBridge", {
     ipcRenderer.invoke("mars:pauseSession", sessionId),
   resumeSession: (sessionId) =>
     ipcRenderer.invoke("mars:resumeSession", sessionId),
+  /** Ends the session and its sandbox for good; drops any live connection first. */
+  destroySession: (sessionId) =>
+    ipcRenderer.invoke("mars:destroySession", sessionId),
+  /** Soft-deletes the agent; the renderer only offers it when no session is live. */
+  deleteAgentConfig: (configId) =>
+    ipcRenderer.invoke("mars:deleteAgentConfig", configId),
 
   /**
-   * Opens (or reuses) the tunnel to a session's agent-server and resolves once
-   * its local listener is up: `{sessionId, status, remotePort, localPort,
-   * error}`.
+   * Connects to a session's agent-server over a port-forward tunnel and
+   * resolves once it is reachable: `{sessionId, status, transport, host, remotePort,
+   * localPort, error}`. `host` is the base URL to register as the backend.
    */
   openTunnel: (params) => ipcRenderer.invoke("mars:openTunnel", params),
-  /** Closes the tunnel for one session, if any. */
+  /** Forgets the connection for one session (and closes its tunnel, if any). */
   closeTunnel: (sessionId) => ipcRenderer.invoke("mars:closeTunnel", sessionId),
-  /** Reads a session's current tunnel status without opening or closing it. */
+  /** Reads a session's current connection status without changing it. */
   getTunnel: (sessionId) => ipcRenderer.invoke("mars:getTunnel", sessionId),
 });

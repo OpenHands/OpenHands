@@ -1,15 +1,21 @@
 /**
  * Main-process service behind the DigitalOcean Managed Agents screen.
  *
- * Wires scripts/tunnel-registry.mjs (MARSOHS-1428/1429), the MARS REST client,
- * and the DigitalOcean credential store into Electron's IPC layer. Channel
- * names mirror the teammate fork's `window.marsBridge` surface so the two
- * integrations stay easy to reconcile.
+ * Wires the MARS REST client, the port-forward tunnel registry
+ * (scripts/tunnel-registry.mjs, MARSOHS-1428/1429) and the DigitalOcean
+ * credential store into Electron's IPC layer. Channel names mirror the
+ * teammate fork's `window.marsBridge` surface so the two integrations stay
+ * easy to reconcile.
  *
- * Tokens never cross the context bridge: the renderer asks for a tunnel by
+ * Connecting to a session opens a port-forward tunnel: a loopback listener
+ * this process holds, relayed over harness-api's port-forward WebSocket to
+ * the agent server inside the sandbox. The renderer registers the listener
+ * as an ordinary local backend.
+ *
+ * Tokens never cross the context bridge: the renderer asks to connect by
  * session id alone, and this process sources the bearer token from the
- * active stored connection. harness-api sends no CORS headers, so every MARS
- * call has to happen here rather than in the renderer anyway.
+ * stored connection for every dial. harness-api sends no CORS headers, so
+ * every MARS control-plane call has to happen here anyway.
  */
 
 import { readFileSync } from "node:fs";
@@ -49,6 +55,8 @@ export const MARS_TUNNEL_IPC = {
   createSession: "mars:createSession",
   pauseSession: "mars:pauseSession",
   resumeSession: "mars:resumeSession",
+  destroySession: "mars:destroySession",
+  deleteAgentConfig: "mars:deleteAgentConfig",
 };
 
 /**
@@ -56,6 +64,10 @@ export const MARS_TUNNEL_IPC = {
  * create path gets a longer budget than ensureSessionAwake's wake default.
  */
 const CREATE_SESSION_READY_TIMEOUT_MS = 300_000;
+
+export function buildTunnelHost(localPort) {
+  return `http://127.0.0.1:${localPort}`;
+}
 
 /**
  * Shipped MARS defaults from `config/defaults.json`. The packaged app copies
@@ -134,6 +146,33 @@ export function createMarsTunnelBridge({
 
   /** Configs are immutable, so a config's agent never needs re-reading. */
   const agentByConfigId = new Map();
+
+  /**
+   * Connect over the port-forward tunnel. `host` is what the renderer
+   * registers as the backend's base URL: the loopback listener this process
+   * holds for the session.
+   */
+  async function connectSession({ sessionId, localPort, connectionId }) {
+    const getAccessToken = () => store.getToken(connectionId);
+    // The guest port is fixed here rather than accepted over IPC so the
+    // renderer cannot dial arbitrary ports inside the sandbox.
+    const tunnel = await registry.attach({
+      sessionId,
+      remotePort: AGENT_SERVER_GUEST_PORT,
+      getAccessToken,
+      apiUrl: config.apiBaseUrl,
+      localPort,
+      owner: connectionId,
+    });
+    return {
+      ...tunnel,
+      transport: "tunnel",
+      host:
+        tunnel.localPort === undefined
+          ? undefined
+          : buildTunnelHost(tunnel.localPort),
+    };
+  }
 
   /**
    * The list projection has no manifest, so each config's agent is read from
@@ -255,6 +294,18 @@ export function createMarsTunnelBridge({
     resumeSession: (sessionId) => client.resumeSession(sessionId),
 
     /**
+     * Destroy first, then drop the live connection: harness-api can refuse
+     * (409 while a checkpoint/fork/rollback holds the session, 423 locked),
+     * and then the session is still running and the user must keep their
+     * connection to it. Only a session that is really gone is detached.
+     */
+    async destroySession(sessionId) {
+      await client.destroySession(sessionId);
+      await registry.detach(sessionId);
+    },
+    deleteAgentConfig: (configId) => client.deleteAgentConfig(configId),
+
+    /**
      * Create an OpenHands Agent Config. The manifest is built here rather
      * than accepted over IPC so the renderer can only ever create OpenHands
      * agents; it contributes just the name and an optional LLM key.
@@ -300,26 +351,21 @@ export function createMarsTunnelBridge({
     },
 
     /**
-     * Open (or reuse) the tunnel to a session's agent-server. The guest port
-     * is fixed here rather than accepted over IPC so the renderer cannot dial
-     * arbitrary ports inside the sandbox. The tunnel is bound to the active
-     * connection: it reads that connection's current token on every dial and
-     * is torn down when that connection signs out.
+     * Connect to a session's agent-server over a port-forward tunnel. The
+     * connection is bound to the active credential: tunnel dials read that
+     * credential's current token and are cut off when it signs out.
      */
     openTunnel({ sessionId, localPort } = {}) {
       const connectionId = requireActiveConnectionId();
-      return registry.attach({
-        sessionId,
-        remotePort: AGENT_SERVER_GUEST_PORT,
-        getAccessToken: () => store.getToken(connectionId),
-        apiUrl: config.apiBaseUrl,
-        localPort,
-        owner: connectionId,
-      });
+      return connectSession({ sessionId, localPort, connectionId });
     },
 
-    closeTunnel: (sessionId) => registry.detach(sessionId),
-    getTunnel: (sessionId) => registry.get(sessionId),
+    closeTunnel(sessionId) {
+      return registry.detach(sessionId);
+    },
+    getTunnel(sessionId) {
+      return registry.get(sessionId);
+    },
 
     /** @param {import("electron").IpcMain} ipcMain */
     registerIpc(ipcMain) {
@@ -360,9 +406,15 @@ export function createMarsTunnelBridge({
       handle(MARS_TUNNEL_IPC.resumeSession, (sessionId) =>
         this.resumeSession(sessionId),
       );
+      handle(MARS_TUNNEL_IPC.destroySession, (sessionId) =>
+        this.destroySession(sessionId),
+      );
+      handle(MARS_TUNNEL_IPC.deleteAgentConfig, (configId) =>
+        this.deleteAgentConfig(configId),
+      );
     },
 
-    /** Tear down every open tunnel — called on app quit. */
+    /** Tear down every tunnel — on quit. */
     dispose() {
       return registry.detachAll();
     },

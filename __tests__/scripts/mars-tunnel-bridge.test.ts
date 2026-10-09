@@ -31,6 +31,7 @@ type AuthState = {
 };
 const API_URL = "https://api.example.test";
 
+/** What harness-api answers for a session with no public URL. */
 /** A fake ipcMain that just records handlers so tests can invoke them directly. */
 function fakeIpcMain() {
   const handlers = new Map<
@@ -104,6 +105,8 @@ function fakeApi() {
     })),
     pauseSession: vi.fn(async () => {}),
     resumeSession: vi.fn(async () => {}),
+    destroySession: vi.fn(async () => {}),
+    deleteAgentConfig: vi.fn(async () => {}),
     getSession: vi.fn(async () => null),
   };
 }
@@ -127,7 +130,14 @@ function setup() {
   });
   const ipcMain = fakeIpcMain();
   bridge.registerIpc(ipcMain);
-  return { registry, api, credentials, ensureAwake, bridge, ipcMain };
+  return {
+    registry,
+    api,
+    credentials,
+    ensureAwake,
+    bridge,
+    ipcMain,
+  };
 }
 
 describe("readMarsConfig", () => {
@@ -164,7 +174,7 @@ describe("createMarsTunnelBridge", () => {
     );
   });
 
-  it("openTunnel binds the tunnel to the active connection and pins the guest port", async () => {
+  it("openTunnel opens the port-forward tunnel bound to the active connection on the pinned guest port", async () => {
     const { registry, credentials, ipcMain } = setup();
     await ipcMain.invoke(MARS_TUNNEL_IPC.savePat, { token: VALID_PAT });
 
@@ -181,7 +191,12 @@ describe("createMarsTunnelBridge", () => {
       localPort: 51000,
       owner: credentials.getActive()?.id,
     });
-    expect(result).toMatchObject({ sessionId: "sess_a", localPort: 51000 });
+    expect(result).toMatchObject({
+      sessionId: "sess_a",
+      transport: "tunnel",
+      host: "http://127.0.0.1:51000",
+      localPort: 51000,
+    });
   });
 
   it("a tunnel keeps its own connection's token after switching, and loses it on sign-out", async () => {
@@ -224,7 +239,7 @@ describe("createMarsTunnelBridge", () => {
     expect(revokeToken).toHaveBeenCalledWith("oauth-token");
   });
 
-  it("openTunnel refuses to dial while signed out", async () => {
+  it("openTunnel refuses to connect while signed out", async () => {
     const { registry, ipcMain } = setup();
 
     expect(() =>
@@ -362,11 +377,51 @@ describe("createMarsTunnelBridge", () => {
     expect(api.getAgentConfig).toHaveBeenCalledTimes(2);
   });
 
-  it("dispose() tears down every tunnel via registry.detachAll", async () => {
-    const { registry, bridge } = setup();
+  it("dispose() tears down every tunnel", async () => {
+    const { registry, bridge, ipcMain } = setup();
+    await ipcMain.invoke(MARS_TUNNEL_IPC.savePat, { token: VALID_PAT });
+    await ipcMain.invoke(MARS_TUNNEL_IPC.openTunnel, { sessionId: "sess_a" });
 
     await bridge.dispose();
 
     expect(registry.detachAll).toHaveBeenCalledTimes(1);
+  });
+
+  it("destroySession asks harness-api first and drops the live connection only once it agreed", async () => {
+    const { registry, api, ipcMain } = setup();
+    await ipcMain.invoke(MARS_TUNNEL_IPC.savePat, { token: VALID_PAT });
+    await ipcMain.invoke(MARS_TUNNEL_IPC.openTunnel, { sessionId: "sess_1" });
+
+    await ipcMain.invoke(MARS_TUNNEL_IPC.destroySession, "sess_1");
+
+    expect(registry.detach).toHaveBeenCalledWith("sess_1");
+    expect(api.destroySession).toHaveBeenCalledWith("sess_1");
+    expect(api.destroySession.mock.invocationCallOrder[0]).toBeLessThan(
+      registry.detach.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("deleteAgentConfig is a plain pass-through", async () => {
+    const { api, ipcMain } = setup();
+    await ipcMain.invoke(MARS_TUNNEL_IPC.savePat, { token: VALID_PAT });
+
+    await ipcMain.invoke(MARS_TUNNEL_IPC.deleteAgentConfig, "cfg_1");
+
+    expect(api.deleteAgentConfig).toHaveBeenCalledWith("cfg_1");
+  });
+
+  it("destroySession keeps the connection when harness-api refuses (409/423)", async () => {
+    const { registry, api, ipcMain } = setup();
+    api.destroySession.mockRejectedValueOnce(
+      Object.assign(new Error("a checkpoint is in progress"), { status: 409 }),
+    );
+    await ipcMain.invoke(MARS_TUNNEL_IPC.savePat, { token: VALID_PAT });
+    await ipcMain.invoke(MARS_TUNNEL_IPC.openTunnel, { sessionId: "sess_1" });
+
+    await expect(
+      ipcMain.invoke(MARS_TUNNEL_IPC.destroySession, "sess_1"),
+    ).rejects.toMatchObject({ status: 409 });
+
+    expect(registry.detach).not.toHaveBeenCalled();
   });
 });

@@ -1,7 +1,14 @@
 import React from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { ChevronLeft, Loader2, Plus, RefreshCw, Search } from "lucide-react";
+import {
+  ChevronLeft,
+  Loader2,
+  Plus,
+  RefreshCw,
+  Search,
+  Trash2,
+} from "lucide-react";
 
 import DigitalOceanLogo from "#/assets/branding/digitalocean-logo.svg?react";
 import {
@@ -24,9 +31,24 @@ import { useConnectMarsSession } from "#/hooks/use-connect-mars-session";
 import { useMarsTunnelBackend } from "#/hooks/use-mars-tunnel-backend";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
+import { ConfirmationModal } from "#/components/shared/modals/confirmation-modal";
 import { ManagedAgentsSignIn } from "./managed-agents-sign-in";
 import { ManagedAgentsSessionRow } from "./managed-agents-session-row";
-import { agentLabel, buildMarsBackendName } from "./managed-agents-labels";
+import {
+  agentLabel,
+  buildMarsBackendName,
+  getSessionDisplayName,
+} from "./managed-agents-labels";
+
+/** A destructive action awaiting the user's confirmation. */
+type PendingAction =
+  | { kind: "stop"; session: MarsSession }
+  | { kind: "delete-agent"; config: MarsAgentConfig };
+
+/** A session that is still around to be stopped (or must be, before its agent goes). */
+function isLiveSession(session: MarsSession): boolean {
+  return getSessionPhase(session.status) !== "ended";
+}
 
 type StatusFilter = "all" | "ready" | "paused";
 
@@ -76,6 +98,9 @@ export function ManagedAgentsView({ onBack, onDone }: ManagedAgentsViewProps) {
     null,
   );
   const [errors, setErrors] = React.useState<Record<string, string>>({});
+  const [pendingAction, setPendingAction] =
+    React.useState<PendingAction | null>(null);
+  const [isConfirming, setIsConfirming] = React.useState(false);
   // One launch at a time: overlapping connects reset each other's progress
   // and navigate twice, and a create can take up to a minute.
   const isLaunching = connecting !== null || creatingConfigId !== null;
@@ -200,6 +225,50 @@ export function ManagedAgentsView({ onBack, onDone }: ManagedAgentsViewProps) {
     }
   };
 
+  // Stop = destroy: harness-api tears the sandbox down and the session is
+  // gone for good, so it sits behind a confirmation. The destroy goes first:
+  // it can be refused (409 while a checkpoint/fork/rollback holds the
+  // session, 423 locked), and then the session is still running and the
+  // user must keep their connection to it. Only once it succeeded is a
+  // connected backend detached, so nothing keeps probing a torn-down sandbox.
+  const stopSession = async (session: MarsSession) => {
+    const backend = connectedBySession.get(session.session_id);
+    await runSessionAction(session.session_id, async () => {
+      await bridge!.destroySession(session.session_id);
+      if (backend) await detach(backend);
+    });
+  };
+
+  // harness-api soft-deletes a config without looking at its sessions, so
+  // the UI only offers it once none is live; otherwise the sessions would
+  // silently drop out of their group while still running (and billing).
+  const deleteAgent = async (config: MarsAgentConfig) => {
+    setError(config.id, null);
+    try {
+      await bridge!.deleteAgentConfig(config.id);
+      await refreshAgents();
+    } catch (error) {
+      setError(
+        config.id,
+        getMarsErrorMessage(error) ??
+          t(I18nKey.DO_AGENTS$SESSION_ACTION_FAILED),
+      );
+    }
+  };
+
+  const confirmPendingAction = async () => {
+    if (!pendingAction) return;
+    setIsConfirming(true);
+    try {
+      if (pendingAction.kind === "stop")
+        await stopSession(pendingAction.session);
+      else await deleteAgent(pendingAction.config);
+    } finally {
+      setIsConfirming(false);
+      setPendingAction(null);
+    }
+  };
+
   const normalizedQuery = query.trim().toLowerCase();
   const filterSessions = (sessions: MarsSession[], agentMatches: boolean) =>
     sessions.filter((session) => {
@@ -261,6 +330,7 @@ export function ManagedAgentsView({ onBack, onDone }: ManagedAgentsViewProps) {
             bridge!.pauseSession(session.session_id),
           )
         }
+        onStop={() => setPendingAction({ kind: "stop", session })}
       />
     );
   };
@@ -400,6 +470,14 @@ export function ManagedAgentsView({ onBack, onDone }: ManagedAgentsViewProps) {
                 data?.groups.find((g) => g.config.id === config.id)?.sessions
                   .length ?? 0;
               const isCreating = creatingConfigId === config.id;
+              const liveSessions =
+                data?.groups
+                  .find((g) => g.config.id === config.id)
+                  ?.sessions.filter(isLiveSession).length ?? 0;
+              const deleteTitle =
+                liveSessions > 0
+                  ? t(I18nKey.DO_AGENTS$DELETE_AGENT_BLOCKED)
+                  : t(I18nKey.DO_AGENTS$DELETE_AGENT);
               return (
                 <section
                   key={config.id}
@@ -435,6 +513,19 @@ export function ManagedAgentsView({ onBack, onDone }: ManagedAgentsViewProps) {
                       {isCreating
                         ? t(I18nKey.BACKEND$DIGITALOCEAN_CREATING_SESSION)
                         : t(I18nKey.DO_AGENTS$NEW_SESSION)}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPendingAction({ kind: "delete-agent", config })
+                      }
+                      disabled={isLaunching || liveSessions > 0}
+                      aria-label={t(I18nKey.DO_AGENTS$DELETE_AGENT)}
+                      title={deleteTitle}
+                      data-testid={`managed-agents-delete-agent-${config.id}`}
+                      className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-[var(--oh-muted)] transition-colors hover:bg-[var(--oh-interactive-hover)] hover:text-[var(--oh-status-error)] disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <Trash2 className="size-3.5" aria-hidden />
                     </button>
                   </header>
                   {errors[config.id] ? (
@@ -575,6 +666,28 @@ export function ManagedAgentsView({ onBack, onDone }: ManagedAgentsViewProps) {
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col px-5 pb-5">{body}</div>
+
+      {pendingAction ? (
+        <ConfirmationModal
+          text={
+            pendingAction.kind === "stop"
+              ? t(I18nKey.DO_AGENTS$STOP_CONFIRM, {
+                  name: getSessionDisplayName(pendingAction.session, t),
+                })
+              : t(I18nKey.DO_AGENTS$DELETE_AGENT_CONFIRM, {
+                  name: agentLabel(pendingAction.config),
+                })
+          }
+          confirmText={
+            pendingAction.kind === "stop"
+              ? t(I18nKey.DO_AGENTS$STOP)
+              : t(I18nKey.DO_AGENTS$DELETE_AGENT)
+          }
+          isConfirming={isConfirming}
+          onConfirm={() => void confirmPendingAction()}
+          onCancel={() => setPendingAction(null)}
+        />
+      ) : null}
     </div>
   );
 }

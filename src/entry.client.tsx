@@ -11,11 +11,17 @@ import {
   AgentServerUIProviders,
   DEFAULT_AGENT_SERVER_ANALYTICS,
 } from "./components/providers";
+import { installMarsWebBridge } from "./api/mars/mars-web-bridge";
 import { waitForI18n } from "./i18n";
 import { shouldStartMockWorker } from "./mocks/should-start-mock-worker";
 
 async function prepareApp() {
   await waitForI18n();
+
+  // DigitalOcean Managed Agents in the browser: present only when the server
+  // this page came from hosts the MARS bridge (scripts/mars-web-bridge.mjs).
+  // Must settle before render — the UI reads `window.marsBridge` synchronously.
+  await installMarsWebBridge();
 
   if (shouldStartMockWorker()) {
     const { worker } = await import("./mocks/browser");
