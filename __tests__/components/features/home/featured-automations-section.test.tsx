@@ -601,7 +601,7 @@ describe("home automations on a cloud backend", () => {
 
     // Assert — Edit opens the setup form for this row rather than the modal.
     expect(homeMocks.createConversationMutate).not.toHaveBeenCalled();
-    expect(homeMocks.navigate).toHaveBeenCalledWith("/automations/setup");
+    expect(homeMocks.navigate).toHaveBeenCalledWith("/automations/setup?automationId=auto-1");
     expect(
       screen.queryByTestId("edit-automation-name"),
     ).not.toBeInTheDocument();
