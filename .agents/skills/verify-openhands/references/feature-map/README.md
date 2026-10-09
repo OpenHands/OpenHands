@@ -7,6 +7,8 @@ that every row passes today; the run's evidence ledger is.
 
 Maintenance baseline: main@ed815e141409c7b52991ab8d13c553b595da9165 (2026-10-06). The next maintenance pass starts from this commit; a pass proposes the next baseline in its PR, and merging that PR accepts it.
 
+Latest full sweep run: **2026-10-09 (Europe/Stockholm)**, partial because required accounts, model credentials, runtimes, and some approvals were unavailable. See the [agentic run history](../run-history.md) and [per-ID outcomes](../run-results-2026-10-09.md) for its target, coverage, findings, and blocked prerequisites. This run does not advance the accepted maintenance baseline above.
+
 ## Baseline preconditions
 
 - `control-openhands` is on `PATH` (see [the skill](../../SKILL.md)).

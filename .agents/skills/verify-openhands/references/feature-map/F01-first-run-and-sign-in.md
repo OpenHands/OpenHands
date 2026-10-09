@@ -90,7 +90,7 @@ Not reachable locally:
 
 - **Locked Cloud first run (`F01.locked-cloud-first-run`).** Blocked: needs a build locked to a Cloud host (`VITE_LOCK_TO_CLOUD` or `static-server --lock-to-cloud`) and an OpenHands Cloud account. `launch` has no such flag.
 - **Cookie-auth redirect (`F01.cookie-auth-redirect`).** Blocked: needs an OHE cookie-auth deployment.
-- **Bootstrap spinner (`F01.bootstrap-loading`).** Not-run: it lasts under a second on a healthy stack, and slowing `/server_info` would mean intercepting requests.
+- **Bootstrap spinner (`F01.bootstrap-loading`).** Blocked on the 2026-10-09 run: the agent attempted a fresh first paint, but the spinner lasted under a second on the healthy stack; slowing `/server_info` would require request interception rather than the real service response.
 
 ## Gotchas
 
