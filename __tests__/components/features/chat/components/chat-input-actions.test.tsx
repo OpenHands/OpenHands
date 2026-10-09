@@ -506,6 +506,25 @@ describe("ChatInputActions — More input actions overflow menu (#17925)", () =>
     ).not.toBeInTheDocument();
   });
 
+  it("closes on Escape and returns focus to the trigger", () => {
+    renderWithProviders(<ChatInputActions disabled={false} />);
+
+    clickTrigger();
+    fireEvent.click(screen.getByTestId("overflow-model-button"));
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(getTrigger()).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.queryByTestId("chat-input-overflow-menu"),
+    ).not.toBeInTheDocument();
+    expect(getTrigger()).toHaveFocus();
+
+    clickTrigger();
+    expect(
+      screen.getByTestId("overflow-model-submenu").parentElement,
+    ).not.toHaveClass("visible");
+  });
+
   it("opens the Model submenu with the profile list", () => {
     renderWithProviders(<ChatInputActions disabled={false} />);
 

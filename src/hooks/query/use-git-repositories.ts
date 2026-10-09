@@ -20,7 +20,7 @@ type Cursor = InstallationCursor | UserCursor;
 export function useGitRepositories(options: UseGitRepositoriesOptions) {
   const { provider, pageSize = 30, enabled = true } = options;
   const { providers } = useUserProviders();
-  const { data: page } = useAppInstallations(provider);
+  const { data: page } = useAppInstallations(provider, { enabled });
   const installations = page?.items;
   const active = useActiveBackend();
 

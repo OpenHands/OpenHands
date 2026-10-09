@@ -95,6 +95,14 @@ export const CANVAS_EXTENSIONS_QUERY_KEYS = {
     ] as const,
 } as const;
 
+export const SUPER_ADMIN_SETUP_QUERY_KEYS = {
+  /** Every backend's setup-guide state, for invalidation. */
+  all: ["super-admin-setup-state"] as const,
+  /** Enterprise Super Admin setup-guide state for a cloud backend. */
+  state: (backendId: string, connectionRevision: number) =>
+    ["super-admin-setup-state", backendId, connectionRevision] as const,
+} as const;
+
 export const SETUP_QUERY_KEYS = {
   /** What the deployment supports. The same answer for every setup entry. */
   capabilities: () => ["setup-capabilities"] as const,

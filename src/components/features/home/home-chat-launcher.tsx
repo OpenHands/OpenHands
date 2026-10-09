@@ -1,5 +1,5 @@
 import { useConversationWorkspace } from "#/hooks/query/use-conversation-workspace";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { CustomChatInput } from "#/components/features/chat/custom-chat-input";
@@ -25,6 +25,7 @@ import {
   displayErrorToast,
   TOAST_OPTIONS,
 } from "#/utils/custom-toast-handlers";
+import { getApiErrorMessage } from "#/utils/api-error-message";
 import { getWorkspacesUnsupportedMessage } from "#/utils/workspaces-compatibility";
 import {
   readStoredLocalWorkspaceMode,
@@ -60,9 +61,20 @@ export function HomeChatLauncher() {
   );
   const [selectedPlugins, setSelectedPlugins] = useState<PluginSpec[]>([]);
   const [isPluginPickerOpen, setIsPluginPickerOpen] = useState(false);
+  const isMountedRef = useRef(true);
 
-  const { mutateAsync: createConversation, isPending } =
-    useCreateConversation();
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  // The launcher reports a failed create itself (see handleSubmit), so the
+  // global mutation error toast is turned off to keep it to one toast.
+  const { mutateAsync: createConversation, isPending } = useCreateConversation({
+    disableToast: true,
+  });
   const isCreatingElsewhere = useIsCreatingConversation();
   const isCreating = isPending || isCreatingElsewhere;
   const { isConfigured: isLlmConfigured, isLoading: isLlmConfigLoading } =
@@ -70,8 +82,13 @@ export function HomeChatLauncher() {
   // Block sending entirely when there's no usable LLM; the banner above the
   // launcher (rendered by the home route) explains it and offers setup.
   const llmBlocked = !isLlmConfigLoading && !isLlmConfigured;
-  const { images, files, imagesMarkedUploadAsFile, clearAllFiles } =
-    useConversationStore();
+  const {
+    images,
+    files,
+    imagesMarkedUploadAsFile,
+    clearAllFiles,
+    restoreMessageToInputIfEmpty,
+  } = useConversationStore();
   const { handleUpload } = useChatAttachmentUpload();
   const { error: workspacesError } = useLocalWorkspaces({ enabled: isLocal });
   const { isolated, unsupportedMessage: runtimeWorkspaceMessage } =
@@ -151,8 +168,10 @@ export function HomeChatLauncher() {
     );
 
     void (async () => {
+      let isCreated = false;
       try {
         const data = await createConversation(variables);
+        isCreated = true;
         toast.dismiss(toastId);
         try {
           sessionStorage.removeItem(HOME_PROMPT_DRAFT_KEY);
@@ -224,7 +243,18 @@ export function HomeChatLauncher() {
         navigate(`/conversations/${targetConversationId}`);
       } catch (error) {
         toast.dismiss(toastId);
-        displayErrorToast(error instanceof Error ? error.message : null);
+        // Prefer the server's own message; without one, keep the launcher's
+        // existing wording (the error's message).
+        const fallback = error instanceof Error ? error.message : "";
+        displayErrorToast(getApiErrorMessage(error, fallback) || null);
+        // The composer cleared itself on submit; hand the prompt back so the
+        // user can retry without retyping it. Only when the create itself
+        // failed and this composer is still on screen: the request is consumed
+        // by whichever composer is mounted, so otherwise the prompt would
+        // replay into a conversation.
+        if (!isCreated && isMountedRef.current) {
+          restoreMessageToInputIfEmpty(message);
+        }
       }
     })();
   };

@@ -27,8 +27,9 @@
  * - Injecting window.__AGENT_CANVAS_DO_NOT_TRACK__ = true at runtime, which the
  *   static server does from AGENT_CANVAS_DISABLE_TELEMETRY=1 (or the equivalent
  *   --disable-telemetry flag) so a precompiled bundle can opt out without
- *   VITE_DO_NOT_TRACK baked into the image. Under this flag the PostHog client
- *   is never initialized, so consent mirrored from a backend cannot opt it in.
+ *   VITE_DO_NOT_TRACK baked into the image.
+ * Under any of these the PostHog client is never initialized, so it makes no
+ * network requests and consent mirrored from a backend cannot opt it in.
  */
 
 import type { BootstrapConfig, CaptureResult, PostHog } from "posthog-js";
@@ -308,7 +309,9 @@ export function configureTelemetry(config: TelemetryConfiguration): void {
 }
 
 function getResolvedTelemetryConfig(): Required<TelemetryConfig> | null {
-  if (isTelemetryHardDisabled()) return null;
+  // Do Not Track pins consent to "denied", so a client could never capture;
+  // initializing one anyway would still fetch remote config and flags.
+  if (isDoNotTrackEnabled()) return null;
 
   return {
     apiKey: telemetryConfig.apiKey || DEFAULT_POSTHOG_API_KEY,

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useOnboardingCompletion } from "#/components/features/onboarding/use-onboarding-completion";
+import { useSuperAdminSetupGuide } from "#/components/features/setup-guide/use-super-admin-setup-guide";
 import { useNavigation } from "#/context/navigation-context";
 import { useAutomations } from "#/hooks/query/use-automations";
 import { useAutomationHealth } from "#/hooks/query/use-automation-health";
@@ -38,6 +39,7 @@ function hasConfiguredMcpServers(mcpConfig: unknown): boolean {
 
 export function useSidebarOnboardingChecklist() {
   const { isCompleted: onboardingCompleted } = useOnboardingCompletion();
+  const setupGuide = useSuperAdminSetupGuide();
   const { currentPath } = useNavigation();
   const isDismissed = useSyncExternalStore(
     subscribeSidebarOnboardingChecklistDismissed,
@@ -133,7 +135,13 @@ export function useSidebarOnboardingChecklist() {
   const completedCount = items.filter((item) => item.isComplete).length;
   const isAllComplete = completedCount === items.length;
 
-  const isVisible = onboardingCompleted && !isDismissed && !isAllComplete;
+  // The Super Admin setup guide replaces this checklist while it is shown.
+  const isVisible =
+    onboardingCompleted &&
+    !isDismissed &&
+    !isAllComplete &&
+    !setupGuide.isLoading &&
+    !setupGuide.visible;
 
   const dismiss = () => {
     writeSidebarOnboardingChecklistDismissed(true);

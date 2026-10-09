@@ -61,7 +61,17 @@ interface CreateConversationResponse {
   task_id?: string;
 }
 
-export const useCreateConversation = () => {
+interface UseCreateConversationOptions {
+  /**
+   * Set by callers that report a failed create themselves, so the global
+   * mutation error toast doesn't repeat it.
+   */
+  disableToast?: boolean;
+}
+
+export const useCreateConversation = ({
+  disableToast = false,
+}: UseCreateConversationOptions = {}) => {
   const queryClient = useQueryClient();
   const { trackConversationCreated } = useTracking();
   // Cache-warm on the home page (the profile picker reads the same query).
@@ -88,6 +98,7 @@ export const useCreateConversation = () => {
 
   return useMutation({
     mutationKey: CREATE_CONVERSATION_MUTATION_KEY,
+    meta: { disableToast },
     mutationFn: async (
       variables: CreateConversationVariables,
     ): Promise<CreateConversationResponse> => {
@@ -115,6 +126,9 @@ export const useCreateConversation = () => {
           queryKey: [...AGENT_PROFILES_QUERY_KEYS.all, backend.id, orgId],
           queryFn: AgentProfilesService.listProfiles,
           ...AGENT_PROFILES_RETRY_OPTIONS,
+          // A failure here rejects the mutation, which reports it; a query
+          // toast on top would show the same error twice.
+          meta: { disableToast: true },
         });
 
       const requestedAgentProfileId =
@@ -184,6 +198,8 @@ export const useCreateConversation = () => {
             // errors, fall back to agent_settings immediately rather than
             // stalling the send through the default exponential backoff.
             retry: false,
+            // Handled by the fallback below, so there is nothing to report.
+            meta: { disableToast: true },
           });
           llmProfileExists = llm.profiles.some(
             (profile) => profile.name === resolvedAgentProfile.llm_profile_ref,
@@ -244,6 +260,8 @@ export const useCreateConversation = () => {
             queryFn: () =>
               AgentProfilesService.getProfile(resolvedAgentProfile.name),
             ...AGENT_PROFILES_RETRY_OPTIONS,
+            // Handled by failing closed below, so there is nothing to report.
+            meta: { disableToast: true },
           });
           const secretRefs = (detail.profile as { secret_refs?: unknown })
             .secret_refs;
