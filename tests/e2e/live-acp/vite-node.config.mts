@@ -1,3 +1,5 @@
+import { createRequire } from "node:module";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 
@@ -8,7 +10,21 @@ import { defineConfig } from "vite";
 // configures it.
 const srcDir = fileURLToPath(new URL("../../../src", import.meta.url));
 
+const _require = createRequire(import.meta.url);
+let extensionsSkillsDir = "";
+try {
+  extensionsSkillsDir = resolve(
+    dirname(_require.resolve("@openhands/extensions/package.json")),
+    "skills",
+  );
+} catch {
+  extensionsSkillsDir = "";
+}
+
 export default defineConfig({
+  define: {
+    __EXTENSIONS_SKILLS_DIR__: JSON.stringify(extensionsSkillsDir),
+  },
   resolve: {
     alias: [{ find: /^#\//, replacement: `${srcDir}/` }],
   },
