@@ -275,5 +275,6 @@ start afterward.
 Any stdio ACP server works: choose **Custom** in Settings → Agent and enter its
 launch command. Canvas can't ask a custom server for its models before a
 conversation, so enter the model ID the server expects (if any) as a custom
-model; inside a conversation the picker lists what the session reports. Pass credentials by adding the
-env vars the server reads as global secrets under **Settings → Secrets**.
+model; inside a conversation the picker lists what the session reports. Pass
+credentials by adding the env vars the server reads as global secrets under
+**Settings → Secrets**.

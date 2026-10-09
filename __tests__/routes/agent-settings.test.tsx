@@ -271,9 +271,7 @@ describe("AgentSettingsScreen", () => {
       OPENCODE_PROVIDER.default_command.join(" "),
     );
     expect(screen.getByLabelText("SETTINGS$AGENT_MODEL")).toHaveValue(
-      OPENCODE_PROVIDER.available_models.find(
-        ({ id }) => id === OPENCODE_PROVIDER.default_model,
-      )?.label,
+      "SETTINGS$AGENT_MODEL_AGENT_DEFAULT",
     );
 
     expect(control().buildAgentProfileFields()).toMatchObject({
@@ -281,7 +279,7 @@ describe("AgentSettingsScreen", () => {
       acp_server: "opencode",
       acp_command: null,
       acp_args: null,
-      acp_model: OPENCODE_PROVIDER.default_model,
+      acp_model: null,
     });
   });
 
@@ -293,7 +291,7 @@ describe("AgentSettingsScreen", () => {
           agent_kind: "acp",
           acp_server: "opencode",
           acp_command: command,
-          acp_model: OPENCODE_PROVIDER.default_model,
+          acp_model: "opencode/big-pickle",
         },
       });
 
@@ -304,16 +302,14 @@ describe("AgentSettingsScreen", () => {
         OPENCODE_PROVIDER.default_command.join(" "),
       );
       expect(screen.getByLabelText("SETTINGS$AGENT_MODEL")).toHaveValue(
-        OPENCODE_PROVIDER.available_models.find(
-          ({ id }) => id === OPENCODE_PROVIDER.default_model,
-        )?.label,
+        "opencode/big-pickle",
       );
       // Old explicit defaults are cleared on the next save; new profiles
       // resolve the current registry command rather than pinning a CLI version.
       expect(control().buildAgentProfileFields()).toMatchObject({
         acp_server: "opencode",
         acp_command: null,
-        acp_model: OPENCODE_PROVIDER.default_model,
+        acp_model: "opencode/big-pickle",
       });
     },
   );
@@ -334,16 +330,20 @@ describe("AgentSettingsScreen", () => {
       expect(await screen.findByTestId("agent-preset-selector")).toHaveValue(
         "OpenCode",
       );
-      expect(screen.getByTestId("agent-model-input")).toHaveValue(model);
+      expect(screen.getByLabelText("SETTINGS$AGENT_MODEL")).toHaveValue(model);
       expect(control().buildAgentProfileFields()).toMatchObject({
         acp_server: "opencode",
         acp_command: null,
         acp_model: model,
       });
 
-      // Go IDs need not be in the SDK's static model suggestions. Changing
-      // the model must not turn the provider into a Custom ACP command.
-      await user.clear(screen.getByTestId("agent-model-input"));
+      // Changing the model must not turn the provider into a Custom ACP command.
+      await user.click(screen.getByLabelText("SETTINGS$AGENT_MODEL"));
+      await user.click(
+        await screen.findByRole("option", {
+          name: "SETTINGS$AGENT_PRESET_CUSTOM",
+        }),
+      );
       await user.type(
         screen.getByTestId("agent-model-input"),
         "opencode-go/deepseek-v4-flash",
