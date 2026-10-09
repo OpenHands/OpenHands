@@ -15,7 +15,11 @@ import {
   BaseModalDescription,
 } from "#/components/shared/modals/confirmation-modals/base-modal";
 import { BrandButton } from "#/components/features/settings/brand-button";
-import { setTelemetryConsent } from "#/services/telemetry";
+import {
+  getTelemetryConsent,
+  setTelemetryConsent,
+  subscribeTelemetryConsent,
+} from "#/services/telemetry";
 
 interface TelemetryConsentBannerProps {
   onChoice?: (granted: boolean) => void;
@@ -33,6 +37,11 @@ function LocalTelemetryConsentBanner({
   const { data: settings, isSuccess: hasLoadedSettings } = useSettings();
   const { mutateAsync: saveSettings, isPending: isSavingSettings } =
     useSaveSettings();
+  const telemetryConsent = React.useSyncExternalStore(
+    subscribeTelemetryConsent,
+    getTelemetryConsent,
+    () => "pending",
+  );
   const [isReady, setIsReady] = React.useState(false);
   const [hasSubmittedChoice, setHasSubmittedChoice] = React.useState(false);
 
@@ -44,6 +53,7 @@ function LocalTelemetryConsentBanner({
     isBackendConnected &&
     hasLoadedSettings &&
     settings?.user_consents_to_analytics === null &&
+    telemetryConsent === "pending" &&
     !hasSubmittedChoice;
 
   React.useEffect(() => {
