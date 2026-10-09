@@ -28,9 +28,14 @@ export function HookMatcherContent({ matcher }: HookMatcherContentProps) {
           {t(I18nKey.HOOKS_MODAL$COMMANDS)}
         </Typography.Text>
         {(matcher.hooks ?? []).map((hook, index) => {
-          // Prompt and agent hooks carry their text in `prompt`/`system_prompt`
-          // with an empty `command`; only command hooks are guaranteed a command.
-          const text = hook.command || hook.prompt || hook.system_prompt;
+          // Pick the field each hook type runs with; an agent hook may also
+          // carry a `prompt`, which it never reads.
+          const text =
+            hook.type === "agent"
+              ? hook.system_prompt
+              : hook.type === "prompt"
+                ? hook.prompt
+                : hook.command;
           return (
             <div key={`${text}-${index}`} className="mt-2">
               {text ? (
