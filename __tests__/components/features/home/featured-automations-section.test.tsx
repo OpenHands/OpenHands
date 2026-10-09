@@ -557,6 +557,116 @@ describe("home automations composer layout", () => {
       expect(displayErrorToast).toHaveBeenCalled();
     });
   });
+
+  it("shares status strip space between summary and conversation link when both are present", async () => {
+    vi.mocked(AutomationService.getAutomations).mockResolvedValue({
+      automations: [
+        makeAutomation({ id: "auto-1", name: "QA blocked automation" }),
+      ],
+      total: 1,
+    });
+    vi.mocked(AutomationService.getAutomationRuns).mockResolvedValue({
+      runs: [
+        makeRun({
+          id: "run-1",
+          status: AutomationRunStatus.COMPLETED,
+          conversation_id: "conv-1",
+          run_metadata: {
+            finish_tool_response: {
+              status: "blocked",
+              outcome_summary: "QA blocked on purpose",
+            },
+          },
+        }),
+      ],
+      total: 1,
+    });
+    vi.mocked(
+      AgentServerConversationService.batchGetAppConversations,
+    ).mockResolvedValue([
+      makeConversation("conv-1", "QA_F03 Blocked — 2026-10-09 08:45:00"),
+    ]);
+    const user = userEvent.setup();
+
+    renderHomeAutomations(
+      <>
+        <PinnedAutomationsDashboard />
+        <RunningAutomationsList />
+      </>,
+    );
+
+    await screen.findByTestId("running-automations-list");
+    await user.click(screen.getByTestId("running-automation-menu-auto-1"));
+    await user.click(screen.getByTestId("running-automation-pin-auto-1"));
+
+    const dashboard = await screen.findByTestId("pinned-automations-dashboard");
+    const pinnedCard = within(dashboard).getByTestId(
+      "pinned-automation-card-auto-1",
+    );
+
+    // Summary is visible in the card status strip
+    const summaryEl = await within(pinnedCard).findByText(
+      "QA blocked on purpose",
+    );
+    expect(summaryEl).toBeInTheDocument();
+    expect(summaryEl.className).toContain("flex-1");
+
+    // Conversation link is visible, points to the conversation, and shares space via flex-1
+    const conversationLink = await within(pinnedCard).findByRole("link", {
+      name: "QA_F03 Blocked — 2026-10-09 08:45:00",
+    });
+    expect(conversationLink).toHaveAttribute("href", "/conversations/conv-1");
+    expect(conversationLink.className).toContain("flex-1");
+  });
+
+  it("renders conversation link without flex-1 when summary is absent", async () => {
+    vi.mocked(AutomationService.getAutomations).mockResolvedValue({
+      automations: [
+        makeAutomation({ id: "auto-1", name: "Conversation only" }),
+      ],
+      total: 1,
+    });
+    vi.mocked(AutomationService.getAutomationRuns).mockResolvedValue({
+      runs: [
+        makeRun({
+          id: "run-1",
+          status: AutomationRunStatus.COMPLETED,
+          conversation_id: "conv-1",
+          error_detail: null,
+        }),
+      ],
+      total: 1,
+    });
+    vi.mocked(
+      AgentServerConversationService.batchGetAppConversations,
+    ).mockResolvedValue([
+      makeConversation("conv-1", "Conversation with no summary"),
+    ]);
+    const user = userEvent.setup();
+
+    renderHomeAutomations(
+      <>
+        <PinnedAutomationsDashboard />
+        <RunningAutomationsList />
+      </>,
+    );
+
+    await screen.findByTestId("running-automations-list");
+    await user.click(screen.getByTestId("running-automation-menu-auto-1"));
+    await user.click(screen.getByTestId("running-automation-pin-auto-1"));
+
+    const dashboard = await screen.findByTestId("pinned-automations-dashboard");
+    const pinnedCard = within(dashboard).getByTestId(
+      "pinned-automation-card-auto-1",
+    );
+
+    const conversationLink = await within(pinnedCard).findByRole("link", {
+      name: "Conversation with no summary",
+    });
+    expect(conversationLink).toHaveAttribute("href", "/conversations/conv-1");
+    // Without summary, link retains original basis-auto styling without flex-1
+    expect(conversationLink.className).not.toContain("flex-1");
+  });
 });
 
 describe("home automations on a cloud backend", () => {
