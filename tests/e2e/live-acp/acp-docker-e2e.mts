@@ -10,7 +10,8 @@
  * LookupSecrets Canvas emits resolve back from the store and authenticate the
  * CLI end-to-end (including the SDK's acp_file_secrets materialisation).
  *
- * Requires agent-server v1.28.0: it includes both software-agent-sdk#3510 for
+ * Requires agent-server >= v1.28.0 (defaults.json minimumAgentServer); example pin is versions.agentServer:
+ * it includes both software-agent-sdk#3510 for
  * off-loop LookupSecret resolution and the client_tools API used by
  * canvas_ui_control. Older images either deadlock resolving ACP credentials or
  * omit the Canvas UI tool.
@@ -20,7 +21,7 @@
  *
  *   docker run -d --name oh-acp -p 8010:8000 -v oh-acp-data:/workspace \
  *     -v "$(pwd)/tools:/canvas-tools:ro" -e OH_EXTRA_PYTHON_PATH=/canvas-tools \
- *     ghcr.io/openhands/agent-server:1.28.0-python
+ *     ghcr.io/openhands/agent-server:1.44.1-python
  *   npx vite-node -c tests/e2e/live-acp/vite-node.config.mts \
  *     tests/e2e/live-acp/acp-docker-e2e.mts -- codex claude gemini
  *
