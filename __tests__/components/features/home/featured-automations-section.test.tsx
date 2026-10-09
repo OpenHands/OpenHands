@@ -494,6 +494,58 @@ describe("home automations composer layout", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("gives a pinned card's task summary room next to its conversation title", async () => {
+    vi.mocked(AutomationService.getAutomations).mockResolvedValue({
+      automations: [makeAutomation({ id: "auto-1", name: "Daily digest" })],
+      total: 1,
+    });
+    vi.mocked(AutomationService.getAutomationRuns).mockResolvedValue({
+      runs: [
+        makeRun({
+          run_metadata: {
+            finish_tool_response: {
+              status: "blocked",
+              outcome_summary: "Waiting on a reviewer",
+            },
+          },
+        }),
+      ],
+      total: 1,
+    });
+    vi.mocked(
+      AgentServerConversationService.batchGetAppConversations,
+    ).mockResolvedValue([
+      makeConversation("conv-1", "Reviewed the release PR"),
+    ]);
+    window.localStorage.clear();
+    const user = userEvent.setup();
+
+    renderHomeAutomations(
+      <>
+        <PinnedAutomationsDashboard />
+        <RunningAutomationsList />
+      </>,
+    );
+
+    await user.click(
+      await screen.findByTestId("running-automation-menu-auto-1"),
+    );
+    await user.click(screen.getByTestId("running-automation-pin-auto-1"));
+
+    const pinnedCard = await screen.findByTestId(
+      "pinned-automation-card-auto-1",
+    );
+    await within(pinnedCard).findByRole("link", {
+      name: "Reviewed the release PR",
+    });
+    // jsdom has no layout, so check the flex basis: with `flex-1` (basis 0)
+    // the summary shrank to 0 px beside the title link, which sizes to its
+    // content. `flex-auto` lets both shrink in proportion to their text.
+    const summary = within(pinnedCard).getByText("Waiting on a reviewer");
+    expect(summary).toHaveClass("flex-auto", "min-w-0", "truncate");
+    expect(summary).not.toHaveClass("flex-1");
+  });
+
   it("shows the pinned card's active-run phase using only the shared latest-run fetch, no extra request (home surface)", async () => {
     // Arrange: a single automation with a RUNNING run that has a phase.
     // `getAutomationRuns` is the one query both the row and the pinned

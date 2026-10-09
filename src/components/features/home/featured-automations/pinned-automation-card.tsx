@@ -307,12 +307,12 @@ export function PinnedAutomationCard({
                     disableAnimation={disableAnimation}
                     className="rounded-xl border border-border bg-base-secondary p-0 text-contrast shadow-xl"
                   >
-                    <span className="min-w-0 flex-1 cursor-default truncate text-text-secondary">
+                    <span className="min-w-0 flex-auto cursor-default truncate text-text-secondary">
                       {shortSummary}
                     </span>
                   </Tooltip>
                 ) : (
-                  <p className="min-w-0 flex-1 truncate text-text-secondary">
+                  <p className="min-w-0 flex-auto truncate text-text-secondary">
                     {shortSummary}
                   </p>
                 )
