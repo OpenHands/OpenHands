@@ -14,6 +14,8 @@ function TestTerminalComponent() {
   return <div ref={ref} />;
 }
 
+// Canvas currently mounts one terminal tab at a time; this pair exercises the
+// hook's defensive instance-isolation invariant for independent consumers.
 function TestTerminalPair({ showFirst = true }: { showFirst?: boolean } = {}) {
   return (
     <>
@@ -102,7 +104,7 @@ describe("useTerminal", () => {
     expect(mockTerminal.writeln).toHaveBeenNthCalledWith(2, "hello");
   });
 
-  it("should render new commands in every terminal instance", () => {
+  it("should render new commands independently in multiple hook instances", () => {
     renderWithProviders(<TestTerminalPair />);
 
     act(() => {
