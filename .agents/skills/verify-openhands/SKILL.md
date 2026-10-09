@@ -44,7 +44,9 @@ Requirements: Node >=24 (the launcher's engine), npm dependencies installed
 (`npm ci --ignore-scripts`), `uv`/`uvx`, and a Chromium Playwright can launch
 (set `CONTROL_OPENHANDS_BROWSER=/path/to/chrome` when the pinned browser is not
 installed; `launch` then reports the running stack and `browser start` picks it
-up). Every command prints one JSON object; exit 0 ok, 1 action failed, 2 usage,
+up). `browser record` also needs an ffmpeg: one with libx264 on `PATH` writes
+MP4 (and GIF), and Playwright's bundled one (`npx playwright install ffmpeg`)
+writes WebM. Every command prints one JSON object; exit 0 ok, 1 action failed, 2 usage,
 3 environment.
 
 If a user path cannot be driven with the CLI, that is a **harness gap**: extend
@@ -134,7 +136,14 @@ control-openhands stop                         # stops only this run; evidence s
   prints; `evidence report` renders the table from
   [the report contract](references/report.md), fail and blocked rows first with
   their `--note` (a blocked row names its missing prerequisite there), and
-  `--baseline <yesterday's run>` lists what changed since that ledger. Keys, logs, browser profile and
+  `--baseline <yesterday's run>` lists what changed since that ledger. When
+  timing or a transition is the point (a menu closing on Escape, a reply
+  streaming in), record it: `browser record start --feature ID --name N`,
+  drive the steps, then `browser record stop` saves a video of the active tab
+  under the same folder (`--gif` adds one that GitHub shows inline). Around a
+  long wait, such as the agent working, run `browser record pause` and `browser
+  record resume`: the video cuts there. The caret is hidden in recordings, as
+  in screenshots. Keys, logs, browser profile and
   downloads stay in `<run>/private/`. Evidence is not automatically public:
   review every image before publishing it. The CLI masks password fields in
   `snapshot`, `value` and `testids`; a screenshot of a visible key field is

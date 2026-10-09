@@ -15,6 +15,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  rmSync,
   writeFileSync,
 } from "node:fs";
 import { createRequire } from "node:module";
@@ -23,6 +24,15 @@ import { fileURLToPath } from "node:url";
 import { redactStorage } from "./lib/redact-storage.mjs";
 import { SECRET_KEY, SECRET_PATH, redactBody } from "./lib/network-bodies.mjs";
 import { buildLocator, toCss } from "./lib/selectors.mjs";
+import {
+  RECORD_DEFAULTS,
+  canvasSize,
+  encodeRecording,
+  findFfmpeg,
+  frameDurations,
+  videoToGif,
+  withoutPauses,
+} from "./lib/recording.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, "../../../..");
@@ -515,6 +525,49 @@ async function failureShot() {
   } catch {
     return undefined;
   }
+}
+
+// One recording at a time (`browser record`). The loop captures whichever tab
+// is active, so it follows `browser tab`; see lib/recording.mjs for why it
+// polls instead of using a screencast. The text caret is hidden in each
+// capture, as in screenshots: its blink would make an idle page look busy.
+let recording = null;
+
+async function captureLoop(rec) {
+  while (!rec.stopping && Date.now() - rec.startedAt < rec.maxMs) {
+    const t = Date.now();
+    const page = activePage;
+    if (rec.pausedAt) {
+      await new Promise((r) => setTimeout(r, rec.intervalMs));
+      continue;
+    }
+    try {
+      const data = await page.screenshot({
+        type: "jpeg",
+        quality: 85,
+        caret: "hide",
+        timeout: 5_000,
+      });
+      rec.captures += 1;
+      const hash = createHash("sha1").update(data).digest("hex");
+      if (hash !== rec.lastHash) {
+        rec.lastHash = hash;
+        const file = join(
+          rec.dir,
+          `frame-${String(rec.frames.length).padStart(5, "0")}.jpg`,
+        );
+        writeFileSync(file, data);
+        const size = page.viewportSize() ?? {};
+        rec.frames.push({ file, t, width: size.width, height: size.height });
+      }
+    } catch {
+      // A navigation or a closed tab; the next tick captures the active page.
+      rec.misses += 1;
+    }
+    const wait = rec.intervalMs - (Date.now() - t);
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+  }
+  rec.endedAt = Date.now();
 }
 
 async function collectTestids(scopeSelector, includeHidden) {
@@ -1353,6 +1406,153 @@ const handlers = {
     } finally {
       await probe.close();
     }
+  },
+  async "record-start"({ feature, name, fps, maxSeconds }) {
+    if (recording)
+      throw new Error(
+        "A recording is already running: end it with `browser record stop`.",
+      );
+    const rate = Number(fps ?? RECORD_DEFAULTS.fps);
+    if (!(rate >= 1 && rate <= 25))
+      throw new Error("--fps must be between 1 and 25");
+    const limit = Number(maxSeconds ?? RECORD_DEFAULTS.maxSeconds);
+    if (!(limit > 0 && limit <= 3600))
+      throw new Error("--max-seconds must be between 1 and 3600");
+    const ffmpeg = findFfmpeg();
+    if (!ffmpeg)
+      throw new Error(
+        "browser record needs ffmpeg: install it (MP4, --gif), or run `npx playwright install ffmpeg` (WebM). CONTROL_OPENHANDS_FFMPEG=/path picks one.",
+      );
+    const dir = join(privateDir, "recordings", String(Date.now()));
+    mkdirSync(dir, { recursive: true });
+    recording = {
+      feature,
+      name,
+      dir,
+      ffmpeg,
+      fps: rate,
+      intervalMs: 1000 / rate,
+      maxMs: limit * 1000,
+      startedAt: Date.now(),
+      frames: [],
+      cuts: [],
+      captures: 0,
+      misses: 0,
+    };
+    recording.loop = captureLoop(recording);
+    return {
+      recording: true,
+      fps: rate,
+      maxSeconds: limit,
+      format: ffmpeg.format,
+      ffmpeg: ffmpeg.path,
+      url: activePage.url(),
+    };
+  },
+  async "record-pause"() {
+    if (!recording || recording.endedAt)
+      throw new Error("No recording is running.");
+    if (recording.pausedAt) throw new Error("The recording is already paused.");
+    recording.pausedAt = Date.now();
+    return { paused: true };
+  },
+  async "record-resume"() {
+    if (!recording?.pausedAt) throw new Error("No recording is paused.");
+    if (recording.endedAt)
+      throw new Error(
+        "The recording reached --max-seconds while paused; stop it.",
+      );
+    const ms = Date.now() - recording.pausedAt;
+    recording.cuts.push({ at: recording.pausedAt, ms });
+    recording.pausedAt = undefined;
+    // The first capture after the cut is kept even if nothing changed.
+    recording.lastHash = undefined;
+    return { resumed: true, cutSeconds: Number((ms / 1000).toFixed(1)) };
+  },
+  async "record-status"() {
+    if (!recording) return { recording: false };
+    return {
+      recording: !recording.endedAt,
+      paused: Boolean(recording.pausedAt),
+      capped: Boolean(recording.endedAt),
+      seconds: ((recording.endedAt ?? Date.now()) - recording.startedAt) / 1000,
+      captures: recording.captures,
+      changes: recording.frames.length,
+      misses: recording.misses,
+    };
+  },
+  async "record-stop"({ gif, keepFrames, discard }) {
+    const rec = recording;
+    if (!rec)
+      throw new Error(
+        "No recording is running: start one with `browser record start`.",
+      );
+    rec.stopping = true;
+    await rec.loop;
+    recording = null;
+    if (discard) {
+      rmSync(rec.dir, { recursive: true, force: true });
+      return { discarded: true, captures: rec.captures };
+    }
+    if (!rec.frames.length)
+      throw new Error(
+        `No frame was captured (${rec.misses} failed captures); frames dir ${rec.dir}`,
+      );
+    // Stopped while paused: the video ends where the pause began.
+    const timeline = withoutPauses(
+      rec.frames,
+      rec.pausedAt ?? rec.endedAt,
+      rec.cuts,
+    );
+    const durations = frameDurations(timeline.frames, timeline.endT);
+    const { width, height } = canvasSize(rec.frames);
+    const path = evidencePath(rec.feature, rec.name, `.${rec.ffmpeg.format}`);
+    const written = await encodeRecording({
+      ffmpeg: rec.ffmpeg,
+      frames: rec.frames,
+      durations,
+      fps: rec.fps,
+      width,
+      height,
+      out: path,
+    }).catch((error) => {
+      throw new Error(`${error.message} (frames kept in ${rec.dir})`);
+    });
+    const result = {
+      path,
+      seconds: Number((written / rec.fps).toFixed(1)),
+      recordedSeconds: Number(
+        ((rec.endedAt - rec.startedAt) / 1000).toFixed(1),
+      ),
+      size: `${width}x${height}`,
+      fps: rec.fps,
+      captures: rec.captures,
+      changes: rec.frames.length,
+      misses: rec.misses,
+      capped: rec.endedAt - rec.startedAt >= rec.maxMs,
+      cutSeconds: Number(
+        (rec.cuts.reduce((sum, c) => sum + c.ms, 0) / 1000).toFixed(1),
+      ),
+      url: activePage.url(),
+    };
+    if (gif && !rec.ffmpeg.gif) {
+      result.gifError = `${rec.ffmpeg.path} cannot write GIF; install ffmpeg for --gif`;
+    } else if (gif) {
+      const out = evidencePath(rec.feature, rec.name, ".gif");
+      await videoToGif({
+        ffmpeg: rec.ffmpeg,
+        video: path,
+        out,
+        fps: Math.min(rec.fps, 12),
+        width: RECORD_DEFAULTS.gifWidth,
+      }).then(
+        () => (result.gif = out),
+        (error) => (result.gifError = error.message),
+      );
+    }
+    if (keepFrames) result.framesDir = rec.dir;
+    else rmSync(rec.dir, { recursive: true, force: true });
+    return result;
   },
   async shutdown() {
     setTimeout(async () => {
