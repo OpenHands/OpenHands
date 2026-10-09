@@ -69,6 +69,12 @@ interface ConversationCardFooterProps {
    * the user why an otherwise ordinary row is visible.
    */
   isArchived?: boolean;
+  /**
+   * Localized "why did this run start" label key (see
+   * {@link getConversationTriggerLabel}). `null` renders no chip, so a row with
+   * no trigger and no automation tags is unchanged.
+   */
+  triggerLabelKey?: I18nKey | null;
 }
 
 export function ConversationCardFooter({
@@ -86,6 +92,7 @@ export function ConversationCardFooter({
   tags = null,
   showTags = false,
   isArchived = false,
+  triggerLabelKey = null,
 }: ConversationCardFooterProps) {
   const { t } = useTranslation("openhands");
   const freeModels = useFreeModels();
@@ -189,6 +196,16 @@ export function ConversationCardFooter({
             className={CONVERSATION_CARD_META_CHIP_CLASSNAME}
           >
             {t(I18nKey.COMMON$ARCHIVED)}
+          </span>
+        </div>
+      ) : null}
+      {triggerLabelKey ? (
+        <div className={metadataIndentClass}>
+          <span
+            data-testid="conversation-card-trigger-reason"
+            className={CONVERSATION_CARD_META_CHIP_CLASSNAME}
+          >
+            {t(triggerLabelKey)}
           </span>
         </div>
       ) : null}

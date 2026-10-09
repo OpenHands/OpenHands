@@ -2,6 +2,8 @@ import type { AppConversation } from "#/api/conversation-service/agent-server-co
 import type { BackendKind } from "#/api/backend-registry/types";
 import type { LocalWorkspace } from "#/types/workspace";
 import type { Provider } from "#/types/settings";
+import type { ConversationTrigger } from "#/api/open-hands.types";
+import { I18nKey } from "#/i18n/declaration";
 import {
   AUTOMATION_NAME_TAG_KEY,
   AUTOMATION_TAG_KEYS,
@@ -214,7 +216,7 @@ export const UNNAMED_AUTOMATION_FACET = "__unnamed__";
  * recognized by the automation tags the SDK workspace attaches at creation.
  */
 export function isAutomationConversation(
-  conversation: AppConversation,
+  conversation: Pick<AppConversation, "trigger" | "tags">,
 ): boolean {
   if (conversation.trigger === "automation") {
     return true;
@@ -224,6 +226,42 @@ export function isAutomationConversation(
     return false;
   }
   return AUTOMATION_TAG_KEYS.some((key) => Boolean(tags[key]));
+}
+
+/**
+ * Localized label for every `ConversationTrigger` value Canvas recognizes.
+ * Adding a future trigger (for example `standing_intent`) means adding the enum
+ * member and its `I18nKey` here — the row derives and renders the label from
+ * this map alone.
+ */
+const CONVERSATION_TRIGGER_LABELS: Record<ConversationTrigger, I18nKey> = {
+  gui: I18nKey.CONVERSATION_PANEL$TRIGGER_USER,
+  automation: I18nKey.CONVERSATION_PANEL$TRIGGER_AUTOMATION,
+  resolver: I18nKey.CONVERSATION_PANEL$TRIGGER_RESOLVER,
+  suggested_task: I18nKey.CONVERSATION_PANEL$TRIGGER_SUGGESTED_TASK,
+  microagent_management:
+    I18nKey.CONVERSATION_PANEL$TRIGGER_MICROAGENT_MANAGEMENT,
+};
+
+/**
+ * Why a conversation started, as an `I18nKey` to render, or `null` when the
+ * row should show no label. `AppConversation.trigger` is the source of truth;
+ * on the local agent-server backend it is always `null`, so the automation tags
+ * the SDK workspace stamps at creation are the fallback. An unrecognized value
+ * (a trigger this Canvas version does not know yet) yields `null` so the row
+ * renders exactly as it did before.
+ */
+export function getConversationTriggerLabel(
+  conversation: Pick<AppConversation, "trigger" | "tags">,
+): I18nKey | null {
+  const trigger = conversation.trigger;
+  if (trigger && Object.hasOwn(CONVERSATION_TRIGGER_LABELS, trigger)) {
+    return CONVERSATION_TRIGGER_LABELS[trigger];
+  }
+  if (isAutomationConversation(conversation)) {
+    return I18nKey.CONVERSATION_PANEL$TRIGGER_AUTOMATION;
+  }
+  return null;
 }
 
 export function getAutomationNameFacet(conversation: AppConversation): string {

@@ -883,6 +883,7 @@ export function ConversationPanel({
             agentKind={conversation.agent_kind}
             acpServer={conversation.acp_server}
             tags={conversation.tags}
+            trigger={conversation.trigger}
             showTags={showTagsMetadata}
           />
         );
@@ -917,6 +918,7 @@ export function ConversationPanel({
               acpServer={conversation.acp_server}
               createdAt={conversation.created_at}
               tags={conversation.tags}
+              trigger={conversation.trigger}
             />
           }
         >
@@ -986,6 +988,7 @@ export function ConversationPanel({
               agentKind={conversation.agent_kind}
               acpServer={conversation.acp_server}
               tags={conversation.tags}
+              trigger={conversation.trigger}
               showTags={showTagsMetadata}
               isArchived={isArchived}
               isPinned={isPinned}

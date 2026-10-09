@@ -8,6 +8,7 @@ import {
   formatTagFacetLabel,
   getGroupConversationPreview,
   getGroupDiscoveryConversationIds,
+  getConversationTriggerLabel,
   groupConversations,
   GROUP_CONVERSATIONS_PREVIEW_LIMIT,
   isAutomationConversation,
@@ -22,6 +23,7 @@ import {
 } from "#/components/features/conversation-panel/conversation-panel-list-helpers";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { ExecutionStatus } from "#/types/agent-server/core";
+import { I18nKey } from "#/i18n/declaration";
 
 const base: Omit<AppConversation, "id" | "title" | "workspace"> = {
   selected_repository: null,
@@ -537,6 +539,53 @@ describe("conversation-panel-list-helpers", () => {
         isAutomationConversation,
       ),
     ).toEqual([true, true, true, false]);
+  });
+
+  it("maps recognized triggers to a label and falls back to automation tags, else null", () => {
+    const conversation = (
+      fields: Partial<AppConversation>,
+    ): AppConversation => ({
+      ...base,
+      id: "c",
+      title: "c",
+      ...fields,
+    });
+
+    expect(
+      [
+        conversation({ trigger: "gui" }),
+        conversation({ trigger: "automation" }),
+        conversation({ trigger: "resolver" }),
+        conversation({ trigger: "suggested_task" }),
+        conversation({ trigger: "microagent_management" }),
+        // Local backend: trigger is always null, automation tags are the fallback.
+        conversation({ tags: { automationname: "Nightly Audit" } }),
+        // Unknown / absent: no label, so the row renders as before.
+        conversation({ trigger: null }),
+        conversation({ tags: { origin: "slack" } }),
+      ].map(getConversationTriggerLabel),
+    ).toEqual([
+      I18nKey.CONVERSATION_PANEL$TRIGGER_USER,
+      I18nKey.CONVERSATION_PANEL$TRIGGER_AUTOMATION,
+      I18nKey.CONVERSATION_PANEL$TRIGGER_RESOLVER,
+      I18nKey.CONVERSATION_PANEL$TRIGGER_SUGGESTED_TASK,
+      I18nKey.CONVERSATION_PANEL$TRIGGER_MICROAGENT_MANAGEMENT,
+      I18nKey.CONVERSATION_PANEL$TRIGGER_AUTOMATION,
+      null,
+      null,
+    ]);
+  });
+
+  it("renders no label for a trigger value this Canvas version does not know", () => {
+    // A runtime ahead of this build reports a trigger outside the union; the
+    // row must render exactly as today rather than showing a raw enum value.
+    const futureTrigger = {
+      ...base,
+      id: "future",
+      title: "future",
+      trigger: "standing_intent",
+    } as unknown as AppConversation;
+    expect(getConversationTriggerLabel(futureTrigger)).toBeNull();
   });
 
   it("collects unique sorted automation-name facets with the unnamed bucket last", () => {
