@@ -1,7 +1,11 @@
 import { ObservationEvent } from "#/types/agent-server/core";
 import { ACPToolCallEvent } from "#/types/agent-server/core/events/acp-tool-call-event";
 
-export type ObservationResultStatus = "success" | "error" | "timeout";
+export type ObservationResultStatus =
+  | "success"
+  | "error"
+  | "timeout"
+  | "rejected";
 
 /**
  * Map an ACPToolCallEvent's lifecycle + error flags to the same

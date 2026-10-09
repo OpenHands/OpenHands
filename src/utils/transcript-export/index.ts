@@ -14,6 +14,7 @@ import {
   isHookExecutionEvent,
   isMessageEvent,
   isObservationEvent,
+  isUserRejectObservation,
   isStreamingDeltaEvent,
   isSwitchLLMObservationEvent,
   isClassifyAndSwitchLLMObservationEvent,
@@ -323,7 +324,7 @@ const buildTranscriptEntries = (
     try {
       const narrationAction = isActionEvent(event)
         ? event
-        : isObservationEvent(event)
+        : isObservationEvent(event) || isUserRejectObservation(event)
           ? actionsById.get(event.action_id)
           : undefined;
       if (narrationAction) addActionNarration(narrationAction);
@@ -468,6 +469,20 @@ const buildTranscriptEntries = (
           details: includeToolDetails
             ? getSafeObservationDetails(event, correspondingAction)
             : "",
+          timestamp: event.timestamp ?? "",
+        });
+        continue;
+      }
+
+      if (isUserRejectObservation(event)) {
+        const correspondingAction = actionsById.get(event.action_id);
+        const actionSummary = correspondingAction
+          ? getActionSummary(correspondingAction)
+          : event.tool_name;
+        entries.push({
+          kind: "tool",
+          summary: `${actionSummary} (${i18n.t(I18nKey.ACTION$REJECT)})`,
+          details: event.rejection_reason,
           timestamp: event.timestamp ?? "",
         });
         continue;

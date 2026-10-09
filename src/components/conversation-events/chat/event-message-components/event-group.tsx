@@ -7,6 +7,8 @@ import { OpenHandsEvent, ActionEvent } from "#/types/agent-server/core";
 import {
   isActionEvent,
   isObservationEvent,
+  isAgentErrorEvent,
+  isUserRejectObservation,
 } from "#/types/agent-server/type-guards";
 import { I18nKey } from "#/i18n/declaration";
 import { getEventContent } from "../event-content-helpers/get-event-content";
@@ -71,11 +73,27 @@ export function EventGroup({
     return null;
   }
 
-  // Each ObservationEvent in the group is a completed action. An ActionEvent
-  // that's still here (i.e. not yet replaced by its observation in the UI
-  // events array) is an action currently in flight.
-  const pendingAction = events.find((e): e is ActionEvent => isActionEvent(e));
-  const completedCount = events.filter(isObservationEvent).length;
+  const isActionResolved = (action: ActionEvent): boolean => {
+    if (!allEvents) return false;
+    return allEvents.some(
+      (e) =>
+        (isAgentErrorEvent(e) && e.tool_call_id === action.tool_call_id) ||
+        (isUserRejectObservation(e) && e.action_id === action.id) ||
+        (isObservationEvent(e) && e.action_id === action.id),
+    );
+  };
+
+  const pendingAction = isFinalized
+    ? undefined
+    : events.find(
+        (e): e is ActionEvent => isActionEvent(e) && !isActionResolved(e),
+      );
+  const completedCount = events.filter(
+    (e) =>
+      isObservationEvent(e) ||
+      isUserRejectObservation(e) ||
+      (isActionEvent(e) && isActionResolved(e)),
+  ).length;
   const totalCount = events.length;
   const isRunning = !!pendingAction;
 
@@ -88,7 +106,10 @@ export function EventGroup({
   if (latestEvent) {
     if (isActionEvent(latestEvent)) {
       latestTitle = getEventContent(latestEvent).title;
-    } else if (isObservationEvent(latestEvent)) {
+    } else if (
+      isObservationEvent(latestEvent) ||
+      isUserRejectObservation(latestEvent)
+    ) {
       const lookupSource = allEvents ?? events;
       const correspondingAction = lookupSource.find(
         (e): e is ActionEvent =>

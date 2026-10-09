@@ -5,6 +5,7 @@ import {
   MessageEvent,
   SecurityRisk,
   OpenHandsEvent,
+  UserRejectObservation,
 } from "#/types/agent-server/core";
 import { ACPToolCallEvent } from "#/types/agent-server/core/events/acp-tool-call-event";
 import { StreamingDeltaEvent } from "#/types/agent-server/core/events/streaming-delta-event";
@@ -152,6 +153,24 @@ describe("handleEventForUI", () => {
 
     expect(result).toEqual([mockMessageEvent, mockObservationEvent]);
     expect(result).not.toBe(initialUiEvents); // Should return a new array
+  });
+
+  it("should replace corresponding action with UserRejectObservation when action exists", () => {
+    const mockUserRejectObservation: UserRejectObservation = {
+      id: "test-reject-1",
+      timestamp: Date.now().toString(),
+      source: "environment",
+      tool_name: "execute_bash",
+      tool_call_id: "call_123",
+      action_id: "test-action-1",
+      rejection_reason: "User rejected the action",
+    };
+
+    const initialUiEvents = [mockMessageEvent, mockActionEvent];
+    const result = handleEventForUI(mockUserRejectObservation, initialUiEvents);
+
+    expect(result).toEqual([mockMessageEvent, mockUserRejectObservation]);
+    expect(result).not.toBe(initialUiEvents);
   });
 
   it("should add observation to end when corresponding action is not found", () => {

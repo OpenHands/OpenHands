@@ -15,6 +15,7 @@ import {
 import {
   isACPToolCallEvent,
   isObservationEvent,
+  isUserRejectObservation,
 } from "#/types/agent-server/type-guards";
 import {
   SkillReadyEvent,
@@ -87,6 +88,8 @@ export function GenericEventMessageWrapper({
     success = getObservationResult(event);
   } else if (isACPToolCallEvent(event)) {
     success = getACPToolCallResult(event);
+  } else if (isUserRejectObservation(event)) {
+    success = "rejected";
   }
 
   // Skill Ready events and invoke-skill tool observations both render the

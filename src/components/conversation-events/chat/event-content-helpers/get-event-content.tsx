@@ -12,6 +12,7 @@ import {
   isObservationEvent,
   isACPToolCallEvent,
   isCanvasUIActionEvent,
+  isUserRejectObservation,
 } from "#/types/agent-server/type-guards";
 import { MonoComponent } from "../../../features/chat/mono-component";
 import { PathComponent } from "../../../features/chat/path-component";
@@ -343,6 +344,13 @@ export const getEventContent = (
         resolveVisualizerBody(event, correspondingAction) ??
         getObservationContent(event);
     }
+  } else if (isUserRejectObservation(event)) {
+    title = correspondingAction
+      ? getActionEventTitle(correspondingAction)
+      : event.tool_name || i18n.t(I18nKey.ACTION$REJECT);
+    details =
+      event.rejection_reason ||
+      i18n.t(I18nKey.CHAT_INTERFACE$AGENT_ACTION_USER_REJECTED_MESSAGE);
   } else if (isACPToolCallEvent(event)) {
     // ACP sub-agent tool calls reuse the same card shape as observations:
     // title is "Running/Editing/Reading …" via a translation key that
