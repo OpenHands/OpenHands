@@ -1,7 +1,15 @@
 import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, Globe, Info, Monitor } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronDown,
+  ChevronRight,
+  CloudCog,
+  Globe,
+  Info,
+  Monitor,
+} from "lucide-react";
 import { ServerClient } from "@openhands/typescript-client/clients";
 import OpenHandsLogoWhite from "#/assets/branding/openhands-logo-white.svg?react";
 import DigitalOceanLogo from "#/assets/branding/digitalocean-logo.svg?react";
@@ -158,7 +166,7 @@ const DEPLOYMENT_OPTIONS_URL =
 export type BackendConnectionMethod = "manual" | "cloud_login";
 
 export type BackendAddedSource = CloudConnectionSource;
-type AddBackendOption = "cloud" | "agent-server" | "digitalocean";
+type AddBackendOption = "cloud" | "agent-server" | "providers";
 type AgentServerLocation = "local" | "remote";
 
 function getConnectionTestFailedTitle(
@@ -1127,10 +1135,11 @@ function BackendOptionTab({
       role="tab"
       aria-selected={isSelected}
       aria-controls={panelId}
+      aria-describedby={`${tabId}-description`}
       data-testid={testId}
       onClick={() => onSelect(value)}
       className={cn(
-        "relative flex min-h-16 w-full cursor-pointer items-center gap-3 px-3 py-3 text-left transition-colors",
+        "relative flex min-h-14 w-full cursor-pointer items-center gap-2.5 px-2.5 py-2.5 text-left transition-colors",
         "not-last:border-r not-last:border-r-border",
         "focus-visible:z-10 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue-300",
         isSelected
@@ -1139,14 +1148,14 @@ function BackendOptionTab({
       )}
     >
       <span
-        className="flex size-8 shrink-0 items-center justify-center"
+        className="flex size-7 shrink-0 items-center justify-center"
         aria-hidden
       >
         {icon}
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-medium">{title}</span>
-        <span className="mt-0.5 block text-xs leading-tight text-muted">
+        <span id={`${tabId}-description`} className="sr-only">
           {description}
         </span>
       </span>
@@ -1329,7 +1338,7 @@ function AgentServerGuidance({ location }: { location: AgentServerLocation }) {
 
 function AddBackendChooser({
   onConnected,
-  onClose,
+  onSelectProvider,
   source,
 }: {
   onConnected: (
@@ -1337,7 +1346,7 @@ function AddBackendChooser({
     connectionMethod: BackendConnectionMethod,
     metadata?: BackendConnectionTestMetadata,
   ) => void;
-  onClose: () => void;
+  onSelectProvider: () => void;
   source: BackendAddedSource;
 }) {
   const { t } = useTranslation("openhands");
@@ -1351,8 +1360,39 @@ function AddBackendChooser({
   const canUseDigitalOcean = getMarsBridge() !== null;
 
   let panel: React.ReactNode;
-  if (selectedOption === "digitalocean") {
-    panel = <DigitalOceanConnectPanel onConnected={onClose} />;
+  if (selectedOption === "providers") {
+    panel = (
+      <div
+        data-testid="add-backend-providers-panel"
+        className="flex flex-col gap-4"
+      >
+        <button
+          type="button"
+          data-testid="add-backend-provider-digitalocean"
+          onClick={onSelectProvider}
+          className="flex w-full cursor-pointer items-center gap-3 rounded-xl border border-border bg-base-secondary px-4 py-3 text-left transition-colors hover:bg-surface-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300"
+        >
+          <span
+            className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-surface-raised"
+            aria-hidden
+          >
+            <DigitalOceanLogo width={32} height={32} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-medium text-contrast">
+              {t(I18nKey.DO_AGENTS$BADGE)}
+            </span>
+            <span className="mt-0.5 block text-xs leading-tight text-muted">
+              {t(I18nKey.DO_AGENTS$TAB_DESCRIPTION)}
+            </span>
+          </span>
+          <ChevronRight className="size-4 shrink-0 text-muted" aria-hidden />
+        </button>
+        <p className="text-xs text-muted">
+          {t(I18nKey.BACKEND$PROVIDERS_COMING_SOON)}
+        </p>
+      </div>
+    );
   } else if (isCloudSelected) {
     /* Padding keeps the CTA and Advanced host field from hugging the
        border; when Advanced expands the panel grows with the content
@@ -1465,14 +1505,14 @@ function AddBackendChooser({
         />
         {canUseDigitalOcean ? (
           <BackendOptionTab
-            value="digitalocean"
+            value="providers"
             selectedValue={selectedOption}
-            title={t(I18nKey.DO_AGENTS$BADGE)}
-            description={t(I18nKey.DO_AGENTS$TAB_DESCRIPTION)}
-            icon={<DigitalOceanLogo width={28} height={28} />}
+            title={t(I18nKey.BACKEND$PROVIDERS_TITLE)}
+            description={t(I18nKey.BACKEND$PROVIDERS_OPTION_DESCRIPTION)}
+            icon={<CloudCog className="size-6" aria-hidden />}
             onSelect={setSelectedOption}
             panelId={panelId}
-            testId="add-backend-option-digitalocean"
+            testId="add-backend-option-providers"
           />
         ) : null}
       </div>
@@ -1496,9 +1536,11 @@ function AddBackendChooser({
 function AddBackendConnectionOptions({
   onClose,
   source,
+  onSelectProvider,
 }: {
   onClose: () => void;
   source: BackendAddedSource;
+  onSelectProvider: () => void;
 }) {
   const { addBackend } = useActiveBackendContext();
   // @spec BM-002 — Adding a backend auto-switches the active selection to it
@@ -1541,9 +1583,128 @@ function AddBackendConnectionOptions({
   return (
     <AddBackendChooser
       onConnected={handleConnected}
-      onClose={onClose}
+      onSelectProvider={onSelectProvider}
       source={source}
     />
+  );
+}
+
+function AddBackendAddModeBody({
+  hideCloseButton,
+  onClose,
+  source,
+}: {
+  hideCloseButton: boolean;
+  onClose: () => void;
+  source: BackendAddedSource;
+}) {
+  const { t } = useTranslation("openhands");
+  const [providerOpen, setProviderOpen] = React.useState(false);
+  const backRef = React.useRef<HTMLButtonElement>(null);
+  const railRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (providerOpen) backRef.current?.focus();
+    else
+      railRef.current
+        ?.querySelector<HTMLButtonElement>(
+          '[data-testid="add-backend-provider-digitalocean"]',
+        )
+        ?.focus();
+  }, [providerOpen]);
+
+  const goBack = () => setProviderOpen(false);
+
+  return (
+    <AnimatedPanelHeight>
+      <div
+        ref={railRef}
+        data-testid="add-backend-slide-rail"
+        className="relative overflow-hidden"
+      >
+        <div
+          aria-hidden={providerOpen}
+          inert={providerOpen ? true : undefined}
+          style={{ transform: `translateX(${providerOpen ? -100 : 0}%)` }}
+          className={cn(
+            "w-full transition-transform duration-300 ease-out motion-reduce:transition-none",
+            providerOpen && "pointer-events-none absolute inset-0",
+          )}
+        >
+          {hideCloseButton ? null : (
+            <div className="pr-8">
+              <h2 className={modalTitleLgClassName}>
+                {t(I18nKey.BACKEND$CHOOSER_TITLE)}
+              </h2>
+              <p
+                className="mt-2 text-sm leading-6 text-muted"
+                data-testid="add-backend-description"
+              >
+                {t(I18nKey.BACKEND$CHOOSER_DESCRIPTION)}{" "}
+                <a
+                  href={DEPLOYMENT_OPTIONS_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={t(I18nKey.BACKEND$DEPLOYMENT_OPTIONS)}
+                  data-testid="add-backend-deployment-options-link"
+                  className="text-primary hover:underline"
+                >
+                  {t(I18nKey.CTA$LEARN_MORE)}
+                  <ExternalLinkIcon
+                    className="ml-1 inline size-3.5 align-[-0.125em]"
+                    aria-hidden
+                  />
+                </a>
+              </p>
+            </div>
+          )}
+
+          <div className={hideCloseButton ? undefined : "mt-5"}>
+            <AddBackendConnectionOptions
+              onClose={onClose}
+              source={source}
+              onSelectProvider={() => setProviderOpen(true)}
+            />
+          </div>
+        </div>
+        <div
+          aria-hidden={!providerOpen}
+          inert={!providerOpen ? true : undefined}
+          style={{ transform: `translateX(${providerOpen ? 0 : 100}%)` }}
+          className={cn(
+            "w-full transition-transform duration-300 ease-out motion-reduce:transition-none",
+            !providerOpen && "pointer-events-none absolute inset-0",
+          )}
+        >
+          {providerOpen ? (
+            <div className="flex flex-col gap-4">
+              <button
+                ref={backRef}
+                type="button"
+                onClick={goBack}
+                data-testid="add-backend-providers-back"
+                className="inline-flex w-fit cursor-pointer items-center gap-1.5 rounded-md py-1 text-sm text-muted hover:text-contrast focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300"
+              >
+                <ArrowLeft className="size-4" aria-hidden />
+                {t(I18nKey.BUTTON$BACK)}
+              </button>
+              <div className="flex min-w-0 items-center gap-3 pr-8">
+                <span
+                  className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-surface-raised"
+                  aria-hidden
+                >
+                  <DigitalOceanLogo width={32} height={32} />
+                </span>
+                <h2 className={modalTitleLgMediumClassName}>
+                  {t(I18nKey.DO_AGENTS$BADGE)}
+                </h2>
+              </div>
+              <DigitalOceanConnectPanel onConnected={onClose} />
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </AnimatedPanelHeight>
   );
 }
 
@@ -1576,44 +1737,18 @@ export function BackendFormModal({
             hideCloseButton ? "onboarding-modal" : "add-backend-modal"
           }
           className={cn(
-            "relative max-h-[92vh] w-180 overflow-y-auto rounded-xl border border-border bg-base-secondary p-6",
+            "relative max-h-[92vh] w-180 overflow-x-hidden overflow-y-auto rounded-xl border border-border bg-base-secondary p-6",
             MODAL_MAX_WIDTH_VIEWPORT,
           )}
         >
           {hideCloseButton ? null : (
             <ModalCloseButton onClose={onClose} testId="add-backend-close" />
           )}
-          {hideCloseButton ? null : (
-            <div className="pr-8">
-              <h2 className={modalTitleLgClassName}>
-                {t(I18nKey.BACKEND$CHOOSER_TITLE)}
-              </h2>
-              <p
-                className="mt-2 text-sm leading-6 text-muted"
-                data-testid="add-backend-description"
-              >
-                {t(I18nKey.BACKEND$CHOOSER_DESCRIPTION)}{" "}
-                <a
-                  href={DEPLOYMENT_OPTIONS_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label={t(I18nKey.BACKEND$DEPLOYMENT_OPTIONS)}
-                  data-testid="add-backend-deployment-options-link"
-                  className="text-primary hover:underline"
-                >
-                  {t(I18nKey.CTA$LEARN_MORE)}
-                  <ExternalLinkIcon
-                    className="ml-1 inline size-3.5 align-[-0.125em]"
-                    aria-hidden
-                  />
-                </a>
-              </p>
-            </div>
-          )}
-
-          <div className={hideCloseButton ? undefined : "mt-5"}>
-            <AddBackendConnectionOptions onClose={onClose} source={source} />
-          </div>
+          <AddBackendAddModeBody
+            hideCloseButton={hideCloseButton}
+            onClose={onClose}
+            source={source}
+          />
         </div>
       </ModalBackdrop>
     );

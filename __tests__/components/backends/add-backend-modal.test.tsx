@@ -121,8 +121,10 @@ describe("AddBackendModal – connection chooser", () => {
     expect(
       within(tabs[0]).getByTestId("add-backend-option-cloud-logo"),
     ).toBeInTheDocument();
-    expect(tabs[0]).toHaveTextContent("BACKEND$CLOUD_OPTION_DESCRIPTION");
-    expect(tabs[1]).toHaveTextContent(
+    expect(tabs[0]).toHaveAccessibleDescription(
+      "BACKEND$CLOUD_OPTION_DESCRIPTION",
+    );
+    expect(tabs[1]).toHaveAccessibleDescription(
       "BACKEND$AGENT_SERVER_OPTION_DESCRIPTION",
     );
 
@@ -658,6 +660,30 @@ describe("AddBackendModal – DigitalOcean", () => {
     delete window.marsBridge;
   });
 
+  it("opens the provider flow and returns to the catalog without connecting", async () => {
+    // Arrange
+    const bridge = fakeMarsBridge({ signedIn: false });
+    const user = userEvent.setup();
+    renderWithProviders(<AddBackendModal onClose={vi.fn()} />);
+
+    // Act
+    await user.click(screen.getByTestId("add-backend-option-providers"));
+    await user.click(screen.getByTestId("add-backend-provider-digitalocean"));
+    await screen.findByTestId("managed-agents-token");
+    await user.click(screen.getByTestId("add-backend-providers-back"));
+
+    // Assert
+    expect(
+      screen.getByTestId("add-backend-provider-digitalocean"),
+    ).toBeVisible();
+    expect(screen.getByTestId("add-backend-option-providers")).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.queryByTestId("managed-agents-token")).toBeNull();
+    expect(bridge.openTunnel).not.toHaveBeenCalled();
+  });
+
   it("signs in with a token and lists only the team's OpenHands agents", async () => {
     // Arrange
     fakeMarsBridge({ signedIn: false });
@@ -665,7 +691,8 @@ describe("AddBackendModal – DigitalOcean", () => {
     renderWithProviders(<AddBackendModal onClose={vi.fn()} />);
 
     // Act
-    await user.click(screen.getByTestId("add-backend-option-digitalocean"));
+    await user.click(screen.getByTestId("add-backend-option-providers"));
+    await user.click(screen.getByTestId("add-backend-provider-digitalocean"));
     await user.type(
       await screen.findByTestId("managed-agents-token"),
       `dop_v1_${"a".repeat(64)}`,
@@ -695,8 +722,9 @@ describe("AddBackendModal – DigitalOcean", () => {
     });
 
     // Act
+    await userEvent.click(screen.getByTestId("add-backend-option-providers"));
     await userEvent.click(
-      screen.getByTestId("add-backend-option-digitalocean"),
+      screen.getByTestId("add-backend-provider-digitalocean"),
     );
     await userEvent.click(
       await screen.findByTestId("digitalocean-agent-open-cfg_oh"),
@@ -718,7 +746,8 @@ describe("AddBackendModal – DigitalOcean", () => {
     const onClose = vi.fn();
     const user = userEvent.setup();
     renderWithProviders(<AddBackendModal onClose={onClose} />);
-    await user.click(screen.getByTestId("add-backend-option-digitalocean"));
+    await user.click(screen.getByTestId("add-backend-option-providers"));
+    await user.click(screen.getByTestId("add-backend-provider-digitalocean"));
 
     // Act
     await user.click(await screen.findByTestId("digitalocean-new-agent"));
@@ -769,7 +798,8 @@ describe("AddBackendModal – DigitalOcean", () => {
     const onClose = vi.fn();
     const user = userEvent.setup();
     renderWithProviders(<AddBackendModal onClose={onClose} />);
-    await user.click(screen.getByTestId("add-backend-option-digitalocean"));
+    await user.click(screen.getByTestId("add-backend-option-providers"));
+    await user.click(screen.getByTestId("add-backend-provider-digitalocean"));
 
     // Act
     await user.click(
