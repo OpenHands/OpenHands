@@ -10,6 +10,7 @@ import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useLlmConfigured } from "#/hooks/use-llm-configured";
 import { parseMcpConfig } from "#/utils/mcp-config";
 import { getLockedCloudHost } from "#/api/agent-server-config";
+import { hasAutomationInterface } from "#/manifests/automation-interface";
 import {
   isCustomizeChecklistPath,
   SIDEBAR_ONBOARDING_CHECKLIST_ITEM_IDS,
@@ -61,11 +62,15 @@ export function useSidebarOnboardingChecklist() {
     useLlmConfigured();
   const { data: profilesData, isLoading: isProfilesLoading } = useLlmProfiles();
   const { data: conversationPage } = usePaginatedConversations(1);
-  const { data: healthData } = useAutomationHealth();
+  const automationInterfaceAvailable = hasAutomationInterface();
+  const { data: healthData } = useAutomationHealth({
+    enabled: automationInterfaceAvailable,
+  });
   const isAutomationBackendHealthy = healthData?.status === "ok";
   const { data: automationsData } = useAutomations({
     pageSize: 1,
-    enabled: isAutomationBackendHealthy,
+    // @spec AIA-001 — Do not query Automation endpoints that require a missing interface manifest.
+    enabled: automationInterfaceAvailable && isAutomationBackendHealthy,
   });
 
   useEffect(() => {
@@ -123,13 +128,15 @@ export function useSidebarOnboardingChecklist() {
     (): SidebarOnboardingChecklistItemState[] =>
       SIDEBAR_ONBOARDING_CHECKLIST_ITEM_IDS.filter(
         (id) =>
-          !isLockedToCloud ||
-          (id !== "configure-llm" && id !== "customize-agent"),
+          // @spec AIA-001 — Do not link to the 404 Automation route without its interface manifest.
+          (automationInterfaceAvailable || id !== "schedule-task") &&
+          (!isLockedToCloud ||
+            (id !== "configure-llm" && id !== "customize-agent")),
       ).map((id) => ({
         id,
         isComplete: completionById[id],
       })),
-    [completionById, isLockedToCloud],
+    [automationInterfaceAvailable, completionById, isLockedToCloud],
   );
 
   const completedCount = items.filter((item) => item.isComplete).length;
