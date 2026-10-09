@@ -369,10 +369,17 @@ export function ConversationWebSocketProvider({
   // First-connect cursor from the REST page (see `afterSeq`). Read lazily by
   // the socket's `queryParams`; after the first connect the socket's own
   // cursor takes over.
+  // Updated synchronously during render so queryParams can read it immediately
+  // on first connect without waiting for passive useEffect execution.
   const historyAfterSeqRef = useRef<number | null>(null);
-  useEffect(() => {
-    historyAfterSeqRef.current = preloadedHistory?.afterSeq ?? null;
-  }, [preloadedHistory]);
+  historyAfterSeqRef.current = preloadedHistory?.afterSeq ?? null;
+
+  // Track the timestamp of the oldest event preloaded via REST. Used to prevent
+  // the session socket from replaying older history event-by-event into the view
+  // when the backlog is replayed (older events are loaded on demand via REST on scroll-up).
+  const oldestPreloadedTimestampRef = useRef<string | null>(null);
+  oldestPreloadedTimestampRef.current =
+    preloadedHistory?.events[0]?.timestamp ?? null;
 
   // The planner has its own log: reset its cursor when it is a different one.
   const planningSocketConversationId = subConversations?.[0]?.id ?? null;
@@ -643,15 +650,29 @@ export function ConversationWebSocketProvider({
           const isDuplicateEvent = useEventStore
             .getState()
             .eventIds.has(event.id ?? "");
+          if (isDuplicateEvent) {
+            return;
+          }
+
+          // If history was preloaded via REST, the UI already displays the
+          // most recent events and older events are loaded on demand via REST
+          // when scrolling up. Do not stream the past backlog event-by-event
+          // into the view.
+          const oldestPreloadedTimestamp = oldestPreloadedTimestampRef.current;
+          if (
+            oldestPreloadedTimestamp &&
+            event.timestamp &&
+            event.timestamp < oldestPreloadedTimestamp
+          ) {
+            return;
+          }
+
           const switchLLMObservation = isSwitchLLMObservationEvent(event)
             ? event
             : null;
           const classifyAndSwitchLLMObservation =
             isClassifyAndSwitchLLMObservationEvent(event) ? event : null;
           addEvent(event);
-          if (isDuplicateEvent) {
-            return;
-          }
 
           // Handle displayable error events - show error banner
           // AgentErrorEvent errors are displayed inline in the chat, not as banners
