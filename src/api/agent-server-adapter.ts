@@ -4,6 +4,7 @@ import {
   HookType,
 } from "@openhands/typescript-client";
 import type {
+  ACPModelInfo,
   ConversationRuntimeInfo,
   HookConfig,
 } from "@openhands/typescript-client";
@@ -17,7 +18,6 @@ import {
   getAcpProvider,
   resolveEffectiveAcpModel,
   toAcpModelOptions,
-  type ACPModelInfo,
 } from "#/constants/acp-providers";
 import { getAgentServerClientOptions } from "./agent-server-client-options";
 import {
@@ -1155,7 +1155,7 @@ interface LookupSecret {
 }
 
 /** A custom secret's public identity — name + optional description, no value. */
-type CustomSecretInput = { name: string; description?: string };
+export type CustomSecretInput = { name: string; description?: string };
 
 type StartConversationPayloadBase = Record<string, unknown> & {
   workspace: WorkspacePayload;
@@ -1241,7 +1241,7 @@ export interface StartConversationOptions {
  * loopback fetch can't deadlock. Returns `undefined` when there are no custom
  * secrets so callers can omit the field.
  */
-function buildCustomSecrets(
+export function buildCustomSecrets(
   customSecrets: CustomSecretInput[] | undefined,
 ): Record<string, LookupSecret> | undefined {
   if (!customSecrets?.length) return undefined;

@@ -1,4 +1,5 @@
 import {
+  type ACPModelInfo,
   ConversationSortOrder,
   type ForkConversationRequest,
   type LLMConfig,
@@ -65,10 +66,7 @@ import {
   type WorkspaceMode,
 } from "../conversation-metadata-store";
 import { resolveTitleLlmProfile } from "#/utils/title-llm-profile";
-import {
-  toAcpModelOptions,
-  type ACPModelInfo,
-} from "#/constants/acp-providers";
+import { toAcpModelOptions } from "#/constants/acp-providers";
 import { isPlannerConversationOf } from "#/utils/plan-file";
 import type {
   GetHooksResponse,

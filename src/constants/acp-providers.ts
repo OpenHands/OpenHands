@@ -1,4 +1,7 @@
-import { getAcpProvider as getClientAcpProvider } from "@openhands/typescript-client";
+import {
+  getAcpProvider as getClientAcpProvider,
+  type ACPModelInfo,
+} from "@openhands/typescript-client";
 import type { BackendKind } from "#/api/backend-registry/types";
 import { I18nKey } from "#/i18n/declaration";
 
@@ -481,13 +484,6 @@ export function labelForAcpModel(
 ): string | null {
   if (!modelId) return null;
   return models.find(({ id }) => id === modelId)?.label ?? modelId;
-}
-
-/** One model an ACP server reports for a session. */
-export interface ACPModelInfo {
-  model_id: string;
-  name?: string | null;
-  description?: string | null;
 }
 
 /** Picker options for the models an ACP server reported. */
