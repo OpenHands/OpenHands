@@ -99,7 +99,7 @@ Preconditions:
 
 ## Gotchas
 
-- Server errors on MCP mutations (a 404 on a server that is already removed, a 502 while the Agent Server is down) toast the server's message (`MCP server '<id>' was not found`), or `An error occurred` when the body has none (#18051). Expected: one toast per failed action. Known failure (reproduced 2026-10-08): a failed delete from the editor or a failed card toggle shows two identical toasts, one from the caller and one from the global mutation handler (#18181). Count them with `click ... --observe 'role=status'` or `browser toasts --history`.
+- Server errors on MCP mutations (a 404 on a server that is already removed, a 502 while the Agent Server is down) toast the server's message (`MCP server '<id>' was not found`), or `An error occurred` when the body has none (#18051). Expected: one toast per failed action. Known failure (reproduced 2026-10-09): a failed delete from the editor or a failed card toggle shows two identical toasts, one from the caller and one from the global mutation handler (#18181). Count them with `click ... --observe 'role=status'` or `browser toasts --history`.
 - Desktop `/customize` is a client-side redirect: `browser url` may still read `/customize` for a moment; use `wait-url '/mcp(\?|$)'`.
 - From 768 to 1023 px the sidebar rail stays and the top bar is gone, so a Customize detail page shows neither the aside nor a Back chevron; the rail's **Customize** link (`sidebar-skills-link`, unscoped at this width) returns to the hub.
 - On a phone the drawer and the hidden desktop rail both render `sidebar-skills-link`; scope it with `testid=sidebar-mobile-drawer >> ...` or the click fails with a strict-mode error, even though `browser testids` lists it once.
