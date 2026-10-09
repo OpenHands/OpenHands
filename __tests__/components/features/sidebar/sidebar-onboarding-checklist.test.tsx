@@ -24,6 +24,7 @@ import { SidebarOnboardingChecklist } from "#/components/features/sidebar/sideba
 import {
   OPENHANDS_SLACK_COMMUNITY_URL,
   SIDEBAR_ONBOARDING_CHECKLIST_CUSTOMIZE_EXPLORED_STORAGE_KEY,
+  SIDEBAR_ONBOARDING_CHECKLIST_DISMISSED_STORAGE_KEY,
   SIDEBAR_ONBOARDING_CHECKLIST_MINIMIZED_STORAGE_KEY,
   SIDEBAR_ONBOARDING_CHECKLIST_SLACK_JOINED_STORAGE_KEY,
 } from "#/components/features/sidebar/sidebar-onboarding-checklist.constants";
@@ -97,7 +98,9 @@ describe("SidebarOnboardingChecklist", () => {
   beforeEach(() => {
     window.localStorage.clear();
     window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
-    window.localStorage.removeItem(SIDEBAR_ONBOARDING_CHECKLIST_MINIMIZED_STORAGE_KEY);
+    window.localStorage.removeItem(
+      SIDEBAR_ONBOARDING_CHECKLIST_MINIMIZED_STORAGE_KEY,
+    );
     window.localStorage.removeItem(
       SIDEBAR_ONBOARDING_CHECKLIST_CUSTOMIZE_EXPLORED_STORAGE_KEY,
     );
@@ -284,9 +287,69 @@ describe("SidebarOnboardingChecklist", () => {
     expect(readSidebarOnboardingChecklistMinimized()).toBe(false);
   });
 
+  it("renders a dismiss X control in expanded state that hides the checklist and marks it dismissed in storage", async () => {
+    const user = userEvent.setup();
+    renderChecklist();
+
+    const dismissBtn = screen.getByTestId(
+      "sidebar-onboarding-checklist-dismiss",
+    );
+    expect(dismissBtn).toBeInTheDocument();
+    expect(dismissBtn).toHaveAttribute(
+      "aria-label",
+      I18nKey.SIDEBAR$ONBOARDING_CHECKLIST_DISMISS,
+    );
+
+    await user.click(dismissBtn);
+
+    expect(
+      screen.queryByTestId("sidebar-onboarding-checklist"),
+    ).not.toBeInTheDocument();
+    expect(
+      window.localStorage.getItem(
+        SIDEBAR_ONBOARDING_CHECKLIST_DISMISSED_STORAGE_KEY,
+      ),
+    ).toBe("true");
+  });
+
+  it("renders a dismiss X control in minimized state that hides the checklist without expanding it", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem(
+      SIDEBAR_ONBOARDING_CHECKLIST_MINIMIZED_STORAGE_KEY,
+      "true",
+    );
+    renderChecklist();
+
+    expect(screen.getByTestId("sidebar-onboarding-checklist")).toHaveAttribute(
+      "data-minimized",
+      "true",
+    );
+
+    const dismissBtn = screen.getByTestId(
+      "sidebar-onboarding-checklist-dismiss",
+    );
+    expect(dismissBtn).toBeInTheDocument();
+
+    await user.click(dismissBtn);
+
+    expect(
+      screen.queryByTestId("sidebar-onboarding-checklist"),
+    ).not.toBeInTheDocument();
+    expect(
+      window.localStorage.getItem(
+        SIDEBAR_ONBOARDING_CHECKLIST_DISMISSED_STORAGE_KEY,
+      ),
+    ).toBe("true");
+    // Minimized state preserved
+    expect(readSidebarOnboardingChecklistMinimized()).toBe(true);
+  });
+
   it("hides when collapsed", () => {
     const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
     });
     const navigation: NavigationContextValue = {
       currentPath: "/",

@@ -1,9 +1,10 @@
 import { Tooltip } from "@heroui/react";
-import { Check, ChevronDown } from "lucide-react";
+import { Check, ChevronDown, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { useTracking } from "#/hooks/use-tracking";
 import { I18nKey } from "#/i18n/declaration";
+import { hoverRevealActionClassName } from "#/utils/hover-reveal-classes";
 import { cn } from "#/utils/utils";
 import {
   getSidebarOnboardingChecklistHref,
@@ -147,6 +148,7 @@ export function SidebarOnboardingChecklist({
     completedCount,
     isVisible,
     isMinimized,
+    dismiss,
     toggleMinimized,
     markJoinSlackComplete,
   } = useSidebarOnboardingChecklist();
@@ -160,7 +162,7 @@ export function SidebarOnboardingChecklist({
       data-testid="sidebar-onboarding-checklist"
       data-minimized={isMinimized ? "true" : "false"}
       className={cn(
-        "w-full shrink-0 overflow-hidden rounded-xl border border-border",
+        "group w-full shrink-0 overflow-hidden rounded-xl border border-border",
         "bg-surface-raised shadow-sm",
       )}
     >
@@ -213,6 +215,23 @@ export function SidebarOnboardingChecklist({
               )}
             />
           </span>
+
+          <button
+            type="button"
+            data-testid="sidebar-onboarding-checklist-dismiss"
+            aria-label={t(I18nKey.SIDEBAR$ONBOARDING_CHECKLIST_DISMISS)}
+            onClick={(e) => {
+              e.stopPropagation();
+              dismiss();
+            }}
+            className={cn(
+              "relative z-20 inline-flex size-7 shrink-0 items-center justify-center rounded-md",
+              "text-muted hover:text-contrast hover:bg-surface-raised cursor-pointer",
+              hoverRevealActionClassName(),
+            )}
+          >
+            <X className="size-4" />
+          </button>
         </div>
       </div>
 
