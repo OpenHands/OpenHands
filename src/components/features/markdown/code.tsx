@@ -5,6 +5,10 @@ import { useColorTheme } from "#/hooks/use-color-theme";
 import { getSyntaxHighlighterTheme } from "#/themes/syntax-highlighter-themes";
 import { cn } from "#/utils/utils";
 import { SyntaxHighlighter } from "./syntax-highlighter";
+import { MermaidDiagram } from "./mermaid-diagram";
+
+/** Fenced-block languages rendered as an inline diagram instead of code. */
+export const MERMAID_FENCE_LANGUAGES = new Set(["mermaid", "mmd"]);
 
 // See https://github.com/remarkjs/react-markdown?tab=readme-ov-file#use-custom-components-syntax-highlight
 
@@ -25,6 +29,11 @@ function Code({
   const colorTheme = useColorTheme();
   const match = /language-(\w+)/.exec(className || ""); // get the language
   const codeString = String(children).replace(/\n$/, "");
+
+  // Mermaid fenced blocks render as an inline diagram, not highlighted code.
+  if (match && MERMAID_FENCE_LANGUAGES.has(match[1].toLowerCase())) {
+    return <MermaidDiagram source={codeString} />;
+  }
 
   if (!match) {
     const isMultiline = String(children).includes("\n");

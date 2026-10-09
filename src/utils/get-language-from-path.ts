@@ -21,6 +21,9 @@ export const getLanguageFromPath = (path: string): string => {
       return "json";
     case "md":
       return "markdown";
+    case "mmd":
+    case "mermaid":
+      return "mermaid";
     case "yml":
     case "yaml":
       return "yaml";

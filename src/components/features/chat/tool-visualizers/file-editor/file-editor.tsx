@@ -29,7 +29,9 @@ import { DiffView } from "../primitives/diff-view";
 import { FilePathChip } from "../primitives/file-path-chip";
 import {
   isMarkdownFilePath,
+  isMermaidFilePath,
   MarkdownFilePreview,
+  MermaidFilePreview,
 } from "../primitives/markdown-file-preview";
 
 type FileEditorCardProps = VisualizerProps<
@@ -69,15 +71,27 @@ function FileEditorCardBody({
   ) : null;
 
   const renderFileContent = (content: string) => {
-    // Only created Markdown artifacts get the rich preview — `view` returns
-    // `cat -n` numbered snippets that must stay in a CodeBlock.
+    // Only created artifacts get the rich preview — `view` returns `cat -n`
+    // numbered snippets that must stay in a CodeBlock.
     if (path && command === "create" && isMarkdownFilePath(path)) {
-      // Markdown artifacts own their card (clipped preview + optional View),
+      // Artifact previews own their card (clipped preview + optional View),
       // so skip the separate path chip to avoid a duplicate filename affordance.
       return {
         chip: null as React.ReactNode,
         body: (
           <MarkdownFilePreview
+            content={content}
+            path={path}
+            onView={onOpenFile}
+          />
+        ),
+      };
+    }
+    if (path && command === "create" && isMermaidFilePath(path)) {
+      return {
+        chip: null as React.ReactNode,
+        body: (
+          <MermaidFilePreview
             content={content}
             path={path}
             onView={onOpenFile}
