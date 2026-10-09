@@ -398,8 +398,22 @@ RUNTIME_SERVICES_INFO="$(node /opt/agent-canvas/runtime-services-info.mjs \
   --automation-url "$AUTOMATION_BASE_URL")"
 
 # EFFECTIVE_SESSION_KEY is set above from LOCAL_BACKEND_API_KEY or the persisted api-key.txt.
-# --host :: is required so Docker published ports can reach the process. Because
-# the container cannot tell whether the host published that port on loopback or
+# Binding :: allows published Docker ports to reach the process across dual-stack
+# interfaces. When IPv6 is absent (/proc/net/if_inet6 does not exist), fall back
+# to 0.0.0.0 so listen() does not fail with EAFNOSUPPORT.
+# >>> docker-bind-host: extracted by the regression test below.
+STATIC_SERVER_HOST="${OH_BIND_HOST:-}"
+if [ -z "$STATIC_SERVER_HOST" ]; then
+  IPV6_PROBE_FILE="${OH_IPV6_PROBE_FILE:-/proc/net/if_inet6}"
+  if [ -e "$IPV6_PROBE_FILE" ]; then
+    STATIC_SERVER_HOST="::"
+  else
+    STATIC_SERVER_HOST="0.0.0.0"
+  fi
+fi
+# <<< docker-bind-host
+
+# Because the container cannot tell whether the host published that port on loopback or
 # every interface, session-key injection stays disabled unless the operator
 # explicitly opts in.
 # >>> docker-session-key-policy: extracted by the regression test below.
@@ -411,7 +425,7 @@ fi
 # <<< docker-session-key-policy
 node /opt/agent-canvas/static-server.mjs \
   --port "$PORT" \
-  --host :: \
+  --host "$STATIC_SERVER_HOST" \
   "${STATIC_SERVER_SESSION_KEY_ARGS[@]}" \
   --dir /opt/agent-canvas/frontend \
   --base-path "$AGENT_CANVAS_BASE_PATH" \
@@ -464,7 +478,7 @@ if [ -n "${PUBLIC_MODE_PORT:-}" ]; then
   log "Starting public-mode frontend on port $PUBLIC_MODE_PORT (--auth-required)..."
   node /opt/agent-canvas/static-server.mjs \
     --port "$PUBLIC_MODE_PORT" \
-    --host :: \
+    --host "$STATIC_SERVER_HOST" \
     --dir /opt/agent-canvas/frontend \
     --base-path "$AGENT_CANVAS_BASE_PATH" \
     --auth-required \
