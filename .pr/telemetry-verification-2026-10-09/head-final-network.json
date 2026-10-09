@@ -1,0 +1,67 @@
+{
+  "ok": true,
+  "total": 6,
+  "byOrigin": {
+    "http://127.0.0.1:18900": 6
+  },
+  "recent": [
+    {
+      "ts": "2026-10-09T19:53:33.406Z",
+      "origin": "http://127.0.0.1:18900",
+      "path": "/api/automation/v1/telemetry/consent",
+      "method": "POST",
+      "type": "xhr",
+      "app": true,
+      "status": 502,
+      "body": "{\"consent_granted\":false,\"frontend_distinct_id\":null}"
+    },
+    {
+      "ts": "2026-10-09T19:53:34.425Z",
+      "origin": "http://127.0.0.1:18900",
+      "path": "/api/automation/v1/telemetry/consent",
+      "method": "POST",
+      "type": "xhr",
+      "app": true,
+      "status": 502,
+      "body": "{\"consent_granted\":false,\"frontend_distinct_id\":null}"
+    },
+    {
+      "ts": "2026-10-09T19:53:36.429Z",
+      "origin": "http://127.0.0.1:18900",
+      "path": "/api/automation/v1/telemetry/consent",
+      "method": "POST",
+      "type": "xhr",
+      "app": true,
+      "body": "{\"consent_granted\":false,\"frontend_distinct_id\":null}"
+    },
+    {
+      "ts": "2026-10-09T19:53:40.433Z",
+      "origin": "http://127.0.0.1:18900",
+      "path": "/api/automation/v1/telemetry/consent",
+      "method": "POST",
+      "type": "xhr",
+      "app": true,
+      "body": "{\"consent_granted\":false,\"frontend_distinct_id\":null}"
+    },
+    {
+      "ts": "2026-10-09T19:53:48.436Z",
+      "origin": "http://127.0.0.1:18900",
+      "path": "/api/automation/v1/telemetry/consent",
+      "method": "POST",
+      "type": "xhr",
+      "app": true,
+      "status": 502,
+      "body": "{\"consent_granted\":false,\"frontend_distinct_id\":null}"
+    },
+    {
+      "ts": "2026-10-09T19:54:04.445Z",
+      "origin": "http://127.0.0.1:18900",
+      "path": "/api/automation/v1/telemetry/consent",
+      "method": "POST",
+      "type": "xhr",
+      "app": true,
+      "status": 200,
+      "body": "{\"consent_granted\":false,\"frontend_distinct_id\":null}"
+    }
+  ]
+}

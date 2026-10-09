@@ -1,0 +1,19 @@
+{
+  "ok": true,
+  "total": 1,
+  "byOrigin": {
+    "http://127.0.0.1:18920": 1
+  },
+  "recent": [
+    {
+      "ts": "2026-10-09T19:55:17.691Z",
+      "origin": "http://127.0.0.1:18920",
+      "path": "/api/automation/v1/telemetry/consent",
+      "method": "POST",
+      "type": "xhr",
+      "app": true,
+      "status": 502,
+      "body": "{\"consent_granted\":false,\"frontend_distinct_id\":null}"
+    }
+  ]
+}
