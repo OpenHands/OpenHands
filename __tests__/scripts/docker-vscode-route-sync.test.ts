@@ -2,17 +2,12 @@
 //
 // Drift-detection for the Docker install path's editor route.
 //
-// When editor support is enabled (`OH_CANVAS_ENABLE_VSCODE=true`), the VSCode
-// button advertises a URL built by agent-server from OH_VSCODE_BASE_PATH, and
-// that URL only resolves because the static server carries a route for the same
-// prefix to the same port. Those two facts live in separate files
-// (docker/entrypoint.sh, the generated defaults.env), so nothing but a test
-// stops them drifting apart and leaving a button that points at the canvas
-// shell instead of the editor.
-//
-// The editor is opt-in: a default stack reserves neither an editor port nor a
-// proxy route, so the tests below assert both the enabled wiring and the
-// disabled no-op.
+// The VSCode button advertises a URL built by agent-server from
+// OH_VSCODE_BASE_PATH, and that URL only resolves because the static server
+// carries a route for the same prefix to the same port. Those two facts live in
+// separate files (docker/entrypoint.sh, config/defaults.json via the Dockerfile's
+// generated defaults.env), so nothing but a test stops them drifting apart and
+// leaving a button that points at the canvas shell instead of the editor.
 //
 // The npm launcher's equivalent wiring is covered in dev-with-automation.test.ts
 // against the real functions. This file covers the shell/Docker half: the
@@ -35,15 +30,15 @@ function read(rel: string): string {
 }
 
 const defaults = JSON.parse(read("config/defaults.json")) as {
-  ports: Record<string, unknown>;
-  paths: Record<string, unknown>;
+  ports: { vscode: number; proxy: number };
+  paths: { vscodeBasePath: string };
 };
 const entrypoint = read("docker/entrypoint.sh");
 const dockerfile = read("docker/Dockerfile");
 
-// The normal static-server invocation and the --auth-required public-mode one
-// started when PUBLIC_MODE_PORT is set. The editor route is passed through the
-// shared `VSCODE_ROUTE_ARGS` array, so only the normal instance may carry it.
+// Both static-server invocations (the normal one and the --auth-required
+// public-mode one started when PUBLIC_MODE_PORT is set) must carry the route;
+// the public-mode server is what the auth-mode E2E suite drives.
 function staticServerInvocations(): string[] {
   return entrypoint
     .split("node /opt/agent-canvas/static-server.mjs")
@@ -52,39 +47,24 @@ function staticServerInvocations(): string[] {
 }
 
 // ── Executing the entrypoint's editor-config block ──────────────────────────
-// The block resolves the editor port/prefix from the OH_* variables and this
-// image's aliases, then exports the pair to agent-server and builds the route
-// string the static servers register. Those are two consumers of one setting, so
-// the tests below run the real block and compare what each consumer ends up
-// seeing. The enabling `if` lives outside the markers, so the harness reproduces
-// it to keep the enabled/disabled behavior under test.
+// The block resolves the editor port/prefix from the OH_* variables, this
+// image's aliases and the generated defaults.env, then exports the pair to
+// agent-server and builds the route string the static servers register. Those
+// are two consumers of one setting, so the tests below run the real block and
+// compare what each consumer ends up seeing.
 const BLOCK_START = "# >>> vscode-config";
 const BLOCK_END = "# <<< vscode-config";
-// The canvas mount is resolved outside the editor guard (it has non-editor
-// consumers and the script runs under `set -u`), so the harness has to run that
-// block too: the collision guard inside the editor block compares against the
-// value it produces.
-const CANVAS_BLOCK_START = "# >>> canvas-base-path";
-const CANVAS_BLOCK_END = "# <<< canvas-base-path";
 
-function markedBlock(startMarker: string, endMarker: string): string {
-  const start = entrypoint.indexOf(startMarker);
-  const end = entrypoint.indexOf(endMarker);
+function editorConfigBlock(): string {
+  const start = entrypoint.indexOf(BLOCK_START);
+  const end = entrypoint.indexOf(BLOCK_END);
   if (start === -1 || end === -1) {
     throw new Error(
-      `docker/entrypoint.sh is missing the "${startMarker}"/"${endMarker}" markers; ` +
-        "the block can no longer be located, so its behavior is untested.",
+      `docker/entrypoint.sh is missing the "${BLOCK_START}"/"${BLOCK_END}" markers; ` +
+        "the editor-config block can no longer be located, so its behavior is untested.",
     );
   }
   return entrypoint.slice(start, end);
-}
-
-function canvasBasePathBlock(): string {
-  return markedBlock(CANVAS_BLOCK_START, CANVAS_BLOCK_END);
-}
-
-function editorConfigBlock(): string {
-  return markedBlock(BLOCK_START, BLOCK_END);
 }
 
 interface ResolvedEditorConfig {
@@ -95,8 +75,6 @@ interface ResolvedEditorConfig {
   advertisedPort: string;
   /** What every static-server instance registers. */
   route: string;
-  /** How many editor route args the normal static-server invocation receives. */
-  routeArgCount: string;
 }
 
 function resolveEditorConfig(
@@ -104,49 +82,27 @@ function resolveEditorConfig(
 ): ResolvedEditorConfig {
   const script = [
     "set -uo pipefail",
-    // Defined near the top of entrypoint.sh, above the extracted blocks.
+    // Defined near the top of entrypoint.sh, above the extracted block.
     `log_error() { printf 'ERROR: %s\\n' "$*" >&2; }`,
-    // Runs before the guard in entrypoint.sh, and is what the editor block's
-    // collision guard compares against.
-    canvasBasePathBlock(),
-    // Mirrors the guard wrapping the block in entrypoint.sh.
-    `OH_CANVAS_ENABLE_VSCODE="\${OH_CANVAS_ENABLE_VSCODE:-false}"`,
-    "VSCODE_ROUTE_ARGS=()",
-    `if [ "$OH_CANVAS_ENABLE_VSCODE" = "true" ]; then`,
     editorConfigBlock(),
-    `  VSCODE_ROUTE_ARGS=(--route "$VSCODE_ROUTE" --vscode-base-path "$VSCODE_BASE_PATH" --no-referrer-prefix "$VSCODE_BASE_PATH")`,
-    "fi",
-    `printf '%s\\n%s\\n%s\\n%s\\n' "\${OH_VSCODE_BASE_PATH:-}" "\${OH_VSCODE_PORT:-}" "\${VSCODE_ROUTE:-}" "\${#VSCODE_ROUTE_ARGS[@]}"`,
+    `printf '%s\\n%s\\n%s\\n' "$OH_VSCODE_BASE_PATH" "$OH_VSCODE_PORT" "$VSCODE_ROUTE"`,
   ].join("\n");
 
   // Deliberately not inheriting the ambient environment: a developer with
-  // OH_VSCODE_* exported would otherwise change what these tests measure. The
-  // default enables the editor so each case below only states its own override;
-  // the disabled behavior has its own test.
+  // OH_VSCODE_* exported would otherwise change what these tests measure.
   const res = spawnSync("bash", ["-c", script], {
     encoding: "utf-8",
-    env: {
-      PATH: process.env.PATH ?? "",
-      OH_CANVAS_ENABLE_VSCODE: "true",
-      OH_VSCODE_PORT: "8001",
-      ...env,
-    },
+    env: { PATH: process.env.PATH ?? "", ...env },
   });
-  // Split on the trailing newline only: `trim()` would also eat a leading empty
-  // field (an unset advertised prefix), shifting every value up by one.
-  const [
-    advertisedBasePath = "",
-    advertisedPort = "",
-    route = "",
-    routeArgCount = "",
-  ] = res.stdout.replace(/\n$/, "").split("\n");
+  const [advertisedBasePath = "", advertisedPort = "", route = ""] = res.stdout
+    .trim()
+    .split("\n");
   return {
     status: res.status,
     stderr: res.stderr,
     advertisedBasePath,
     advertisedPort,
     route,
-    routeArgCount,
   };
 }
 
@@ -159,37 +115,20 @@ function expectRouteMatchesAdvertised(resolved: ResolvedEditorConfig): void {
 }
 
 describe("docker editor route", () => {
-  it("keeps the editor out of the centralized defaults", () => {
-    // Editor provisioning is opt-in, so neither the port nor the prefix is a
-    // project-wide default any more: a default stack must not reserve either.
-    expect(defaults.ports).not.toHaveProperty("vscode");
-    expect(defaults.paths).not.toHaveProperty("vscodeBasePath");
+  it("centralizes the base path and port in defaults.json", () => {
+    expect(defaults.paths.vscodeBasePath).toBe("/vscode");
+    expect(defaults.paths.vscodeBasePath.startsWith("/")).toBe(true);
+    expect(Number.isInteger(defaults.ports.vscode)).toBe(true);
   });
 
-  it("does not bake editor values into the generated defaults.env", () => {
-    // The container has no jq/python, so the Dockerfile bakes defaults.json into
-    // a shell-sourceable env file. Editor values are gone from defaults.json, so
-    // they must be gone from the generated file too — otherwise a stale entry
-    // would silently re-enable the editor for every stack.
-    expect(dockerfile).not.toContain("CONFIG_VSCODE_PORT");
-    expect(dockerfile).not.toContain("CONFIG_VSCODE_BASE_PATH");
-  });
-
-  it("gates the editor wiring on OH_CANVAS_ENABLE_VSCODE", () => {
-    // The block resolves the pair and, below the markers, builds the route args.
-    // Both have to sit inside the same guard or a disabled stack would still
-    // route an editor nobody started.
-    const guard = 'if [ "${OH_CANVAS_ENABLE_VSCODE:-false}" = "true" ]; then';
-    expect(entrypoint).toContain(guard);
-    const guardIndex = entrypoint.indexOf(guard);
-    const blockEnd = entrypoint.indexOf(BLOCK_END);
-    const argsAssignment = entrypoint.indexOf(
-      'VSCODE_ROUTE_ARGS=(--route "$VSCODE_ROUTE"',
+  it("exports both values from defaults.json into the generated defaults.env", () => {
+    // The container has no jq/python, so the Dockerfile bakes defaults.json
+    // into a shell-sourceable env file. A value missing here silently falls
+    // back to the hardcoded default in entrypoint.sh.
+    expect(dockerfile).toContain(
+      "'CONFIG_VSCODE_BASE_PATH=' + c.paths.vscodeBasePath",
     );
-    expect(blockEnd).toBeGreaterThan(guardIndex);
-    // The route args are assigned after the extracted block and before the guard
-    // closes, i.e. only on the enabled path.
-    expect(argsAssignment).toBeGreaterThan(blockEnd);
+    expect(dockerfile).toContain("'CONFIG_VSCODE_PORT=' + c.ports.vscode");
   });
 
   it("registers the editor route on the normal static-server instance", () => {
@@ -199,13 +138,12 @@ describe("docker editor route", () => {
     expect(invocations).toHaveLength(2);
 
     const [normal] = invocations;
-    // Expanded from the shared array, so the route string cannot be built twice.
-    expect(normal).toContain('"${VSCODE_ROUTE_ARGS[@]}"');
+    expect(normal).toContain('--route "$VSCODE_ROUTE"');
 
     // The route string is assigned once, beside the exports it is derived
     // from. Two independently-built route strings are the drift this whole
     // file exists to prevent.
-    const assignments = entrypoint.match(/^\s+VSCODE_ROUTE=/gm) ?? [];
+    const assignments = entrypoint.match(/^VSCODE_ROUTE=/gm) ?? [];
     expect(assignments).toHaveLength(1);
   });
 
@@ -216,8 +154,7 @@ describe("docker editor route", () => {
     // editor must also advertise it, or the control never renders and the
     // feature is silently off.
     const [normal] = staticServerInvocations();
-    expect(normal).toContain("VSCODE_ROUTE_ARGS");
-    expect(entrypoint).toContain('--vscode-base-path "$VSCODE_BASE_PATH"');
+    expect(normal).toContain('--vscode-base-path "$VSCODE_BASE_PATH"');
   });
 
   it("keeps the editor off the public-mode (--auth-required) instance", () => {
@@ -234,7 +171,7 @@ describe("docker editor route", () => {
       invocation.includes("--auth-required"),
     );
     expect(publicMode).toBeDefined();
-    expect(publicMode).not.toContain("VSCODE_ROUTE_ARGS");
+    expect(publicMode).not.toContain("VSCODE_ROUTE");
     // And it must not advertise one either. Omitting only the route would
     // leave the control rendering — the agent-server this instance shares with
     // the main one still reports the editor as available — and the click would
@@ -246,22 +183,26 @@ describe("docker editor route", () => {
     // The advertised URL carries the connection token as a query parameter and
     // the workbench loads webviews, previews and extension content from that
     // document, so a Referer would carry the token to each of them.
-    expect(entrypoint).toContain('--no-referrer-prefix "$VSCODE_BASE_PATH"');
+    const [normal] = staticServerInvocations();
+    expect(normal).toContain('--no-referrer-prefix "$VSCODE_BASE_PATH"');
   });
 
   it("routes the editor to its own port, not the agent-server", () => {
     // The editor is a separate process. Pointing the prefix at the
     // agent-server port would 404 the workbench.
     expect(entrypoint).toMatch(
-      /^\s+VSCODE_ROUTE="\$\{VSCODE_BASE_PATH\}=http:\/\/127\.0\.0\.1:\$\{VSCODE_PORT\}"$/m,
+      /^VSCODE_ROUTE="\$\{VSCODE_BASE_PATH\}=http:\/\/127\.0\.0\.1:\$\{VSCODE_PORT\}"$/m,
     );
+    expect(defaults.ports.vscode).not.toBe(defaults.ports.proxy);
   });
 
   it("does not publish the editor port", () => {
     // The single-origin shape is the point: the editor is reachable only
     // through the proxy port's path prefix, so it inherits the canvas's
     // auth/ingress posture instead of needing a second exposed port.
-    expect(dockerfile).not.toMatch(/^\s*EXPOSE\s+8001\b/m);
+    expect(dockerfile).not.toMatch(
+      new RegExp(`^\\s*EXPOSE\\s+${defaults.ports.vscode}\\b`, "m"),
+    );
   });
 });
 
@@ -270,62 +211,60 @@ describe("docker editor route", () => {
 describe.skipIf(process.platform === "win32")(
   "docker editor config resolution",
   () => {
-    it("registers no editor route while the editor is disabled", () => {
-      // The default. A disabled stack must not allocate a port, advertise a
-      // prefix, or hand the static server a route — otherwise it proxies to an
-      // editor nobody started.
-      const resolved = resolveEditorConfig({
-        OH_CANVAS_ENABLE_VSCODE: "false",
-        OH_VSCODE_PORT: "",
-        OH_VSCODE_BASE_PATH: "",
-      });
-      expect(resolved.status).toBe(0);
-      expect(resolved.advertisedBasePath).toBe("");
-      expect(resolved.advertisedPort).toBe("");
-      expect(resolved.route).toBe("");
-      expect(resolved.routeArgCount).toBe("0");
-    });
-
     it("advertises and routes the same pair with no overrides", () => {
       const resolved = resolveEditorConfig();
       expectRouteMatchesAdvertised(resolved);
-      // The prefix still has a literal fallback (agent-server's own default),
-      // and the port comes from the caller now that defaults.json no longer
-      // carries one.
-      expect(resolved.advertisedBasePath).toBe("/vscode");
-      expect(resolved.advertisedPort).toBe("8001");
-      expect(resolved.routeArgCount).toBe("6");
+      // Literal fallbacks used when defaults.env is absent — they must not
+      // drift from the central config either.
+      expect(resolved.advertisedBasePath).toBe(defaults.paths.vscodeBasePath);
+      expect(resolved.advertisedPort).toBe(String(defaults.ports.vscode));
     });
 
+    it("takes the defaults baked into defaults.env", () => {
+      const resolved = resolveEditorConfig({
+        CONFIG_VSCODE_BASE_PATH: "/editor",
+        CONFIG_VSCODE_PORT: "9001",
+      });
+      expectRouteMatchesAdvertised(resolved);
+      expect(resolved.advertisedBasePath).toBe("/editor");
+      expect(resolved.advertisedPort).toBe("9001");
+    });
+
+    // The regression this block was restructured for: agent-server's own
+    // documented variables are what a self-hosted deployment is most likely to
+    // already set, and setting one of them used to move the editor without
+    // moving the route.
     it("moves the route when only OH_VSCODE_BASE_PATH is set", () => {
-      const resolved = resolveEditorConfig({ OH_VSCODE_BASE_PATH: "/editor" });
+      const resolved = resolveEditorConfig({
+        OH_VSCODE_BASE_PATH: "/editor",
+        CONFIG_VSCODE_BASE_PATH: "/vscode",
+      });
       expectRouteMatchesAdvertised(resolved);
       expect(resolved.advertisedBasePath).toBe("/editor");
       expect(resolved.route).toContain("/editor=");
     });
 
     it("moves the route when only OH_VSCODE_PORT is set", () => {
-      const resolved = resolveEditorConfig({ OH_VSCODE_PORT: "9001" });
+      const resolved = resolveEditorConfig({
+        OH_VSCODE_PORT: "9001",
+        CONFIG_VSCODE_PORT: "8001",
+      });
       expectRouteMatchesAdvertised(resolved);
       expect(resolved.advertisedPort).toBe("9001");
       expect(resolved.route).toBe("/vscode=http://127.0.0.1:9001");
     });
 
     it("honours this image's aliases too", () => {
-      // VSCODE_PORT / VSCODE_BASE_PATH are this image's aliases for
-      // agent-server's own OH_VSCODE_* variables; they resolve to the same pair.
-      const aliased = resolveEditorConfig({
-        OH_VSCODE_PORT: "",
-        OH_VSCODE_BASE_PATH: "",
+      const resolved = resolveEditorConfig({
         VSCODE_BASE_PATH: "/editor",
         VSCODE_PORT: "9001",
       });
-      expectRouteMatchesAdvertised(aliased);
-      expect(aliased.advertisedBasePath).toBe("/editor");
-      expect(aliased.advertisedPort).toBe("9001");
+      expectRouteMatchesAdvertised(resolved);
+      expect(resolved.advertisedBasePath).toBe("/editor");
+      expect(resolved.advertisedPort).toBe("9001");
     });
 
-    it("prefers agent-server's documented names when both are set", () => {
+    it("keeps one effective pair when both names are set and disagree", () => {
       const resolved = resolveEditorConfig({
         OH_VSCODE_BASE_PATH: "/editor",
         OH_VSCODE_PORT: "9001",

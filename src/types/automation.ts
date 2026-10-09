@@ -21,6 +21,17 @@ export interface AutomationTrigger {
   filter?: string;
 }
 
+/**
+ * A repository an automation clones before it runs, as the preset API stores
+ * it in `preset_metadata.repos[]` (the SDK's `RepoSource`).
+ */
+export interface AutomationRepository {
+  /** Full git URL, or the `owner/repo` shorthand. */
+  url: string;
+  /** Branch, tag or commit to check out; absent uses the default branch. */
+  ref?: string;
+}
+
 export interface Automation {
   id: string;
   name: string;
@@ -55,6 +66,11 @@ export interface Automation {
    * automations even without `manage_automations`.
    */
   user_id?: string;
+  /**
+   * Single repository in the import/export file's shape. The automation
+   * service does not return it; read `repositories` for what an automation
+   * clones.
+   */
   repository?: string;
   /** Saved agent profile controlling model, tools, and selected secrets. */
   agent_profile_id?: string | null;
@@ -76,15 +92,27 @@ export interface Automation {
    */
   entrypoint?: string;
   branch?: string;
+  /**
+   * Every repository the automation clones. The service layer derives it on
+   * read from `preset_metadata.repos` (or the top-level `repository`/`branch`
+   * when there is no metadata); the service has no top-level field for it.
+   */
+  repositories?: AutomationRepository[];
+  /**
+   * Plugin sources (e.g. `github:owner/repo`). The service layer fills it on
+   * read from `preset_metadata.plugins[].source`; a record without that
+   * metadata keeps its own list.
+   */
   plugins?: string[];
   notification?: string;
   timezone?: string;
   last_triggered_at?: string | null;
   /**
-   * Service-owned preset state, returned verbatim. The GUI reads only the
+   * Service-owned preset state, returned verbatim. The GUI reads the
    * `template` provenance block inside it ({id, version, config}, written at
-   * setup time), and only through the guarded helper in
-   * `#/utils/automation-catalog`.
+   * setup time) only through the guarded helper in
+   * `#/utils/automation-catalog`, and `repos`/`plugins` only through
+   * `#/utils/automation-preset-sources`.
    */
   preset_metadata?: Record<string, unknown> | null;
 }
@@ -96,6 +124,7 @@ export type AutomationSpec = Omit<
   | "updated_at"
   | "last_triggered_at"
   | "preset_metadata"
+  | "repositories"
   | "entrypoint"
   | "disabled_reason"
   | "disabled_detail"

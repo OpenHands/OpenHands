@@ -233,6 +233,10 @@ export const useTracking = () => {
     });
   };
 
+  const trackDownloadVsCodeButtonClicked = () => {
+    track("download_via_vscode_button_clicked");
+  };
+
   const trackSettingsSaved = ({
     llmModel,
     llmApiKeySet,
@@ -471,6 +475,7 @@ export const useTracking = () => {
     trackAutomationSetupFailed,
     trackInitialQuerySubmitted,
     trackUserMessageSent,
+    trackDownloadVsCodeButtonClicked,
     trackSettingsSaved,
     trackMcpConfigUpdated,
     trackDownloadTrajectoryButtonClicked,

@@ -57,11 +57,13 @@ RUN node -e " \
     'CONFIG_AGENT_SERVER_PORT=' + c.ports.agentServer, \
     'CONFIG_AUTOMATION_PORT=' + c.ports.automation, \
     'CONFIG_PROXY_PORT=' + c.ports.proxy, \
+    'CONFIG_VSCODE_PORT=' + c.ports.vscode, \
     'CONFIG_STATE_SUBDIR=' + c.paths.stateSubdir, \
     'CONFIG_CONVERSATIONS=' + c.paths.conversations, \
     'CONFIG_BASH_EVENTS=' + c.paths.bashEvents, \
     'CONFIG_AUTOMATION_DB=' + c.paths.automationDb, \
     'CONFIG_CANVAS_BASE_PATH=' + c.paths.canvasBasePath, \
+    'CONFIG_VSCODE_BASE_PATH=' + c.paths.vscodeBasePath, \
     'CONFIG_POSTHOG_API_KEY=' + c.telemetry.posthogApiKey, \
     'CONFIG_POSTHOG_HOST=' + c.telemetry.posthogHost, \
   ]; \
@@ -93,11 +95,10 @@ ENV VITE_POSTHOG_API_KEY=${VITE_POSTHOG_API_KEY}
 
 USER root
 
-# Install system deps required by automation's transitive dependencies
-# (asyncpg needs libpq, which the agent-server base image may not include).
-# Refresh inherited packages after adding dependencies so the final image
-# includes available security fixes.
-ARG DEBIAN_SNAPSHOT=20260913T000000Z
+# Refresh inherited packages so the final image includes available security
+# fixes. asyncpg publishes wheels for the supported Python and architectures
+# and implements the PostgreSQL protocol directly, so no libpq package is needed.
+ARG DEBIAN_SNAPSHOT=20260930T000000Z
 RUN if command -v apt-get >/dev/null 2>&1; then \
       printf '%s\n' \
         'Types: deb' \
@@ -115,7 +116,6 @@ RUN if command -v apt-get >/dev/null 2>&1; then \
         'Check-Valid-Until: no' \
         > /etc/apt/sources.list.d/debian.sources && \
       apt-get update && \
-      apt-get install -y --no-install-recommends libpq-dev && \
       apt-get upgrade -y --no-install-recommends && \
       rm -rf /var/lib/apt/lists/*; \
     fi

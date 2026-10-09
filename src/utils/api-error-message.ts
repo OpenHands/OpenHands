@@ -1,6 +1,6 @@
 import axios from "axios";
-import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
 import { isSdkHttpError } from "#/utils/sdk-http-error";
+import { getUserFacingConnectionErrorMessage } from "#/utils/user-facing-error";
 
 /**
  * Extract the parsed response body from a failed API call.
@@ -50,10 +50,20 @@ function getValidationDetailMessage(detail: unknown): string | null {
 }
 
 /**
+ * The fixed `detail` the Agent Server sends with every 5xx (an unhandled
+ * error, or an `HTTPException` with a 5xx status); the reason is under
+ * `exception` instead.
+ */
+const AGENT_SERVER_GENERIC_DETAIL = "Internal Server Error";
+
+/**
  * Extract a human-readable message from a failed API call. Prefers the
- * server-provided `message`/`detail`/`error` fields (including a FastAPI
- * validation `detail` array), then the `Error` message, then `fallback`.
- * The shared client's `HttpError` message is the raw transport text
+ * server-provided `message`/`detail`/`exception`/`error` fields (including a
+ * FastAPI validation `detail` array and a structured `detail.message`), then
+ * the `Error` message, then `fallback`. `exception` is used only when `detail`
+ * is missing, empty or the Agent Server's generic "Internal Server Error", so
+ * a specific `detail` always wins over the technical `exception` text. The
+ * shared client's `HttpError` message is the raw transport text
  * (`HTTP request failed (status): {json}`), so it is never shown: an
  * `HttpError` without a usable body yields `fallback`.
  */
@@ -63,23 +73,52 @@ export function getApiErrorMessage(error: unknown, fallback: string): string {
   if (body && typeof body === "object") {
     const {
       message,
+      exception,
       detail,
       error: bodyError,
     } = body as {
       message?: unknown;
+      exception?: unknown;
       detail?: unknown;
       error?: unknown;
     };
     if (typeof message === "string" && message) return message;
-    if (typeof detail === "string" && detail) return detail;
     const validationMessage = getValidationDetailMessage(detail);
-    if (validationMessage) return validationMessage;
+    const structuredDetailMessage =
+      detail && typeof detail === "object" && !Array.isArray(detail)
+        ? (detail as { message?: unknown }).message
+        : undefined;
+    const detailMessage =
+      typeof detail === "string" && detail
+        ? detail
+        : validationMessage ||
+          (typeof structuredDetailMessage === "string" &&
+          structuredDetailMessage
+            ? structuredDetailMessage
+            : undefined);
+    if (
+      typeof exception === "string" &&
+      exception &&
+      (!detailMessage || detailMessage === AGENT_SERVER_GENERIC_DETAIL)
+    ) {
+      return exception;
+    }
+    if (detailMessage) return detailMessage;
     if (typeof bodyError === "string" && bodyError) return bodyError;
   }
 
   if (isSdkHttpError(error)) return fallback;
   if (error instanceof Error && error.message) return error.message;
   return fallback;
+}
+
+/**
+ * Whether the server answered a failed call: there is a response body, or the
+ * shared client's `HttpError` (a non-2xx status, possibly with an empty body).
+ * A network failure or timeout has neither.
+ */
+export function hasApiErrorResponse(error: unknown): boolean {
+  return Boolean(getApiErrorBody(error)) || isSdkHttpError(error);
 }
 
 /**
@@ -92,8 +131,8 @@ export function getApiOrConnectionErrorMessage(
   error: unknown,
   fallback: string,
 ): string {
-  if (getApiErrorBody(error) || isSdkHttpError(error)) {
+  if (hasApiErrorResponse(error)) {
     return getApiErrorMessage(error, fallback);
   }
-  return retrieveAxiosErrorMessage(error) || fallback;
+  return getUserFacingConnectionErrorMessage(error) || fallback;
 }

@@ -38,8 +38,11 @@ const SHARED_DEFAULTS = JSON.parse(
 );
 
 const DEFAULT_BACKEND_PORT = SHARED_DEFAULTS.ports.agentServer;
-export const VSCODE_BASE_PATH = "/vscode";
-const VSCODE_ENABLED_ENV = "OH_CANVAS_ENABLE_VSCODE";
+// Path prefix the bundled editor is served under. The same value has to reach
+// agent-server (as OH_VSCODE_BASE_PATH, so openvscode-server is launched with
+// --server-base-path and advertises the prefix) and the ingress route table,
+// or the advertised URL and the route that serves it disagree.
+export const VSCODE_BASE_PATH = SHARED_DEFAULTS.paths.vscodeBasePath;
 const DEFAULT_VITE_PORT = 3001;
 const DEFAULT_WAIT_TIMEOUT_MS = 30_000;
 const DEFAULT_AGENT_SERVER_PACKAGE = SHARED_DEFAULTS.packages.agentServer;
@@ -558,10 +561,7 @@ export function buildSafeDevConfig(cwd = process.cwd(), env = process.env) {
     env.OH_CANVAS_SAFE_BACKEND_PORT,
     DEFAULT_BACKEND_PORT,
   );
-  const vscodePort =
-    env[VSCODE_ENABLED_ENV] === "true"
-      ? parsePort(env.OH_CANVAS_SAFE_VSCODE_PORT, backendPort + 1)
-      : null;
+  const vscodePort = parsePort(env.OH_CANVAS_SAFE_VSCODE_PORT, backendPort + 1);
 
   return buildConfigFromPorts({ backendPort, vscodePort }, cwd, env);
 }
@@ -594,16 +594,16 @@ export async function buildSafeDevConfigAsync(
     env.OH_CANVAS_SAFE_BACKEND_PORT,
     DEFAULT_BACKEND_PORT,
   );
-  const preferredVscodePort =
-    env[VSCODE_ENABLED_ENV] === "true"
-      ? parsePort(env.OH_CANVAS_SAFE_VSCODE_PORT, preferredBackendPort + 1)
-      : null;
+  const preferredVscodePort = parsePort(
+    env.OH_CANVAS_SAFE_VSCODE_PORT,
+    preferredBackendPort + 1,
+  );
 
-  const requiredPorts = [{ name: "agent-server", port: preferredBackendPort }];
-  if (preferredVscodePort) {
-    requiredPorts.push({ name: "vscode", port: preferredVscodePort });
-  }
-  await assertPortsFree(requiredPorts);
+  // Fail fast if any required port is already in use.
+  await assertPortsFree([
+    { name: "agent-server", port: preferredBackendPort },
+    { name: "vscode", port: preferredVscodePort },
+  ]);
 
   return buildConfigFromPorts(
     { backendPort: preferredBackendPort, vscodePort: preferredVscodePort },
@@ -616,8 +616,8 @@ export async function buildSafeDevConfigAsync(
  * @typedef {object} SafeDevConfig
  * @property {string} cwd
  * @property {number} backendPort
- * @property {number | null} vscodePort
- * @property {string | null} vscodeBasePath
+ * @property {number} vscodePort
+ * @property {string} vscodeBasePath
  * @property {string} stateDir
  * @property {string} tmuxTmpDir
  * @property {string} conversationsPath
@@ -676,7 +676,7 @@ function buildConfigFromPorts(ports, cwd, env) {
     cwd,
     backendPort,
     vscodePort,
-    vscodeBasePath: vscodePort ? VSCODE_BASE_PATH : null,
+    vscodeBasePath: VSCODE_BASE_PATH,
     stateDir,
     // tmux socket directory. Defaults to <stateDir>/tmux (under
     // ~/.openhands/agent-canvas), matching where the rest of dev state lives
@@ -823,7 +823,7 @@ export function buildAgentServerEnv(config, options = {}) {
     OH_PERSISTENCE_DIR: path.dirname(config.stateDir),
     OH_CONVERSATIONS_PATH: config.conversationsPath,
     OH_BASH_EVENTS_DIR: config.bashEventsDir,
-    ...(config.vscodePort ? { OH_VSCODE_PORT: String(config.vscodePort) } : {}),
+    OH_VSCODE_PORT: String(config.vscodePort),
     // Serve the editor under a path prefix on the canvas origin rather than on
     // its own published port. agent-server passes this to openvscode-server as
     // --server-base-path and includes it in the URL from /api/vscode/url, which

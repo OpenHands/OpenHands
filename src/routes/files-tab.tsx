@@ -112,6 +112,9 @@ function FilesTab() {
   // nothing extra.
   const selectedFileContent = useWorkspaceFileContent(selectedPath);
   const mutationCounter = useWorkspaceMutationCounter((state) => state.count);
+  const bumpWorkspaceMutationCounter = useWorkspaceMutationCounter(
+    (state) => state.bump,
+  );
   const selectedFileStaticUrl = withWorkspaceCacheBuster(
     selectedFileContent.data?.staticUrl ?? null,
     mutationCounter,
@@ -136,11 +139,12 @@ function FilesTab() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const refreshFiles = async () => {
     setIsRefreshing(true);
+    // Bumping the counter re-keys every `workspace-file-content` query, so
+    // the open file refetches, and gives the rich preview's <iframe>/<img> a
+    // new `?v=` URL: the only way to make them skip a cached response.
+    bumpWorkspaceMutationCounter();
     try {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["workspace-files"] }),
-        queryClient.invalidateQueries({ queryKey: ["workspace-file-content"] }),
-      ]);
+      await queryClient.invalidateQueries({ queryKey: ["workspace-files"] });
     } finally {
       setIsRefreshing(false);
     }

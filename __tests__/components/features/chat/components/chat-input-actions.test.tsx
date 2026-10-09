@@ -15,6 +15,7 @@ import {
   setRegisteredBackends,
 } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
+import { I18nKey } from "#/i18n/declaration";
 
 const useActiveConversationMock = vi.fn<
   () => {
@@ -260,6 +261,16 @@ describe("ChatInputActions", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("gives the icon-only send button an accessible name", () => {
+    renderWithProviders(<ChatInputActions disabled={false} />);
+
+    expect(
+      screen.getByRole("button", {
+        name: I18nKey.CHAT_INTERFACE$TOOLTIP_SEND_MESSAGE,
+      }),
+    ).toHaveAttribute("data-testid", "submit-button");
+  });
+
   it("hides the Change Agent button on a local backend", () => {
     renderWithProviders(<ChatInputActions disabled={false} />);
 
@@ -402,7 +413,8 @@ describe("ChatInputActions — More input actions overflow menu (#17925)", () =>
   // browser drains React's microtask flush between listeners: the outside-click
   // listener sees the opening click only after the menu has mounted. RTL roots
   // React below `document` and dispatches synchronously, so capture the
-  // document click listeners and deliver the trigger click to them afterwards.
+  // document click listeners and deliver the trigger click to them afterwards,
+  // as they would see it mid-dispatch: with its target and its composedPath().
   let documentClickListeners: EventListener[] = [];
 
   beforeEach(() => {
@@ -445,10 +457,21 @@ describe("ChatInputActions — More input actions overflow menu (#17925)", () =>
 
   const clickTrigger = () => {
     const icon = getTrigger().querySelector("svg") ?? getTrigger();
+    // An event has a path only while it is being dispatched, and a click that
+    // is never dispatched has none, so record the path of the real click.
+    let path: EventTarget[] = [];
+    window.addEventListener(
+      "click",
+      (event) => {
+        path = event.composedPath();
+      },
+      { capture: true, once: true },
+    );
     fireEvent.click(icon);
     act(() => {
       const click = new MouseEvent("click", { bubbles: true });
       Object.defineProperty(click, "target", { value: icon });
+      Object.defineProperty(click, "composedPath", { value: () => path });
       documentClickListeners.forEach((listener) => listener(click));
     });
   };
@@ -481,6 +504,25 @@ describe("ChatInputActions — More input actions overflow menu (#17925)", () =>
     expect(
       screen.queryByTestId("chat-input-overflow-menu"),
     ).not.toBeInTheDocument();
+  });
+
+  it("closes on Escape and returns focus to the trigger", () => {
+    renderWithProviders(<ChatInputActions disabled={false} />);
+
+    clickTrigger();
+    fireEvent.click(screen.getByTestId("overflow-model-button"));
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(getTrigger()).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.queryByTestId("chat-input-overflow-menu"),
+    ).not.toBeInTheDocument();
+    expect(getTrigger()).toHaveFocus();
+
+    clickTrigger();
+    expect(
+      screen.getByTestId("overflow-model-submenu").parentElement,
+    ).not.toHaveClass("visible");
   });
 
   it("opens the Model submenu with the profile list", () => {

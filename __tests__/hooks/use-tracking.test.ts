@@ -340,6 +340,17 @@ describe("useTracking", () => {
     });
   });
 
+  describe("trackDownloadVsCodeButtonClicked", () => {
+    it("captures download_via_vscode_button_clicked with commonProperties", () => {
+      getTracking().trackDownloadVsCodeButtonClicked();
+
+      expect(captureMock).toHaveBeenCalledWith(
+        "download_via_vscode_button_clicked",
+        expect.objectContaining(COMMON),
+      );
+    });
+  });
+
   describe("trackSettingsSaved", () => {
     it("captures settings_saved with all properties using SCREAMING_SNAKE_CASE keys", () => {
       getTracking().trackSettingsSaved({
