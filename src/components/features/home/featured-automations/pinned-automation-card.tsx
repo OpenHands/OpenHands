@@ -323,7 +323,12 @@ export function PinnedAutomationCard({
                   to={`/conversations/${conversationId}`}
                   aria-label={conversationTitle}
                   title={conversationTitle}
-                  className="group/conversation inline-flex min-w-0 items-center gap-1 text-foreground hover:text-text-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                  className={cn(
+                    "group/conversation inline-flex min-w-0 items-center gap-1 text-foreground hover:text-text-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-focus",
+                    // Next to a summary, the title takes at most half the
+                    // strip so the summary stays readable.
+                    shortSummary && "max-w-1/2 shrink-0",
+                  )}
                 >
                   <span className="truncate">{conversationTitle}</span>
                   <ExternalLink

@@ -535,15 +535,17 @@ describe("home automations composer layout", () => {
     const pinnedCard = await screen.findByTestId(
       "pinned-automation-card-auto-1",
     );
-    await within(pinnedCard).findByRole("link", {
+    const conversationLink = await within(pinnedCard).findByRole("link", {
       name: "Reviewed the release PR",
     });
     // jsdom has no layout, so check the flex basis: with `flex-1` (basis 0)
     // the summary shrank to 0 px beside the title link, which sizes to its
-    // content. `flex-auto` lets both shrink in proportion to their text.
+    // content. Now the title is capped at half the strip and the summary
+    // takes the rest.
     const summary = within(pinnedCard).getByText("Waiting on a reviewer");
     expect(summary).toHaveClass("flex-auto", "min-w-0", "truncate");
     expect(summary).not.toHaveClass("flex-1");
+    expect(conversationLink).toHaveClass("max-w-1/2", "shrink-0");
   });
 
   it("shows the pinned card's active-run phase using only the shared latest-run fetch, no extra request (home surface)", async () => {
