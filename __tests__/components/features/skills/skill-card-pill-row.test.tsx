@@ -1,3 +1,4 @@
+/* eslint-disable i18next/no-literal-string */
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, screen, waitFor, within } from "@testing-library/react";
@@ -191,5 +192,77 @@ describe("SkillCardPillRow", () => {
       top: "122px",
       left: "200px",
     });
+  });
+
+  it("closes the overflow popover on Escape when the trigger is focused inside a modal", async () => {
+    const user = userEvent.setup();
+    const onModalClose = vi.fn();
+
+    const { ModalBackdrop } =
+      await import("#/components/shared/modals/modal-backdrop");
+
+    renderWithProviders(
+      <ModalBackdrop onClose={onModalClose}>
+        <SkillCardPillRow testId="skill-triggers-test" pills={pills} />
+      </ModalBackdrop>,
+    );
+
+    stubWidths(130, 80);
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("skill-triggers-test-overflow"),
+      ).toBeInTheDocument();
+    });
+
+    const overflow = screen.getByTestId("skill-triggers-test-overflow");
+    await user.click(overflow);
+
+    expect(
+      screen.getByTestId("skill-triggers-test-overflow-popover"),
+    ).toBeInTheDocument();
+
+    // Trigger still has focus or is refocused
+    overflow.focus();
+    await user.keyboard("{Escape}");
+
+    // First Escape closes the popover, leaves modal open
+    expect(
+      screen.queryByTestId("skill-triggers-test-overflow-popover"),
+    ).not.toBeInTheDocument();
+    expect(onModalClose).not.toHaveBeenCalled();
+
+    // Second Escape closes the modal
+    await user.keyboard("{Escape}");
+    expect(onModalClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("closes the overflow popover on Escape on a standalone card row", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <SkillCardPillRow testId="skill-triggers-test" pills={pills} />,
+    );
+
+    stubWidths(130, 80);
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("skill-triggers-test-overflow"),
+      ).toBeInTheDocument();
+    });
+
+    const overflow = screen.getByTestId("skill-triggers-test-overflow");
+    await user.click(overflow);
+
+    expect(
+      screen.getByTestId("skill-triggers-test-overflow-popover"),
+    ).toBeInTheDocument();
+
+    overflow.focus();
+    await user.keyboard("{Escape}");
+
+    expect(
+      screen.queryByTestId("skill-triggers-test-overflow-popover"),
+    ).not.toBeInTheDocument();
   });
 });
