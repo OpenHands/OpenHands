@@ -387,6 +387,29 @@ describe("SuperAdminSetupGuide", () => {
     ).toHaveAttribute("aria-expanded", "false");
   });
 
+  it("starts a Canvas step's tour from its row, even when another step is next", async () => {
+    activateBackend(cloudBackend);
+    serveSetupGuide({
+      setupState: () => HttpResponse.json(guideState({ org_llm: true })),
+    });
+    const user = userEvent.setup();
+    const { navigate } = renderGuide();
+
+    await user.click(
+      await screen.findByTestId("super-admin-setup-guide-step-add-integration"),
+    );
+
+    expect(startSetupGuideTour).toHaveBeenCalledWith(
+      "add-integration",
+      expect.objectContaining({ navigate }),
+      expect.any(Function),
+    );
+    expect(navigate).not.toHaveBeenCalled();
+    expect(
+      screen.getByTestId("super-admin-setup-guide-toggle"),
+    ).toHaveAttribute("aria-expanded", "false");
+  });
+
   it("starts the tour a page opened from the enterprise guide asks for, once", async () => {
     window.history.replaceState(
       null,
