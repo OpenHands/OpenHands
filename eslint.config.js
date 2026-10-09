@@ -73,9 +73,7 @@ function createNoDirectAgentServerFetchRule() {
           return node.value;
         }
         if (node.type === "TemplateLiteral") {
-          return node.quasis
-            .map((q) => q.value.raw)
-            .join("");
+          return node.quasis.map((q) => q.value.raw).join("");
         }
         return null;
       }
@@ -168,8 +166,7 @@ export default [
       // @openhands/typescript-client clients instead of a raw `fetch`.
       local: {
         rules: {
-          "no-direct-agent-server-fetch":
-            createNoDirectAgentServerFetchRule(),
+          "no-direct-agent-server-fetch": createNoDirectAgentServerFetchRule(),
         },
       },
     },
@@ -412,7 +409,29 @@ export default [
     plugins: { shadcn: shadcnPlugin },
     rules: {
       "shadcn/no-arbitrary-values": "warn",
-      "shadcn/no-restyle": "off",
+      "shadcn/no-restyle": [
+        "error",
+        {
+          componentImports: [
+            "^#/ui/(divider|toggle-switch)(/|$)",
+            "^#/components/features/automations/toggle-switch$",
+          ],
+          contracts: [
+            {
+              pattern: "^Divider$",
+              allow: ["layout"],
+            },
+            {
+              pattern: "^ToggleSwitch$",
+              allow: ["layout", "opacity-*"],
+            },
+            {
+              pattern: "^ToggleSwitchVisual$",
+              allow: ["layout"],
+            },
+          ],
+        },
+      ],
       "shadcn/no-raw-colors": [
         "warn",
         {
@@ -454,6 +473,9 @@ export default [
     // Primitive implementations own variant helpers that this rule cannot
     // resolve. Token and unknown-class checks still apply to their definitions.
     files: ["src/ui/**/*.{ts,tsx}"],
-    rules: { "shadcn/require-static-classes": "off" },
+    rules: {
+      "shadcn/require-static-classes": "off",
+      "shadcn/no-restyle": "off",
+    },
   },
 ];
