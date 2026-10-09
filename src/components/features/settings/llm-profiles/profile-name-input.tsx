@@ -17,6 +17,8 @@ interface ProfileNameInputProps {
   isOptional?: boolean;
   /** When true, empty values will show red validation styling (required field behavior). */
   isRequired?: boolean;
+  /** When true, indicates the profile name is already taken by an existing profile. */
+  isNameTaken?: boolean;
 }
 
 export const ProfileNameInput = forwardRef<
@@ -33,11 +35,15 @@ export const ProfileNameInput = forwardRef<
     isDisabled,
     isOptional,
     isRequired = false,
+    isNameTaken = false,
   },
   ref,
 ) {
   const { t } = useTranslation("openhands");
-  const isValid = isProfileNameValid(value, { isRequired });
+  const isNonEmpty = value.trim().length > 0;
+  const isFormatValid = isProfileNameValid(value, { isRequired });
+  const isDuplicate = isNonEmpty && isFormatValid && isNameTaken;
+  const isValid = isFormatValid && !isDuplicate;
   const label = isOptional
     ? `${t(I18nKey.SETTINGS$PROFILE_NAME_LABEL)} (${t(I18nKey.COMMON$OPTIONAL)})`
     : t(I18nKey.SETTINGS$PROFILE_NAME_LABEL);
@@ -45,6 +51,10 @@ export const ProfileNameInput = forwardRef<
   // Generate a stable ID for the rule element to link with aria-describedby
   const ruleId = React.useId();
   const describedById = ruleTestId ?? `${ruleId}-rule`;
+
+  const errorMessage = isDuplicate
+    ? t(I18nKey.SETTINGS$META_PROFILE_NAME_TAKEN)
+    : undefined;
 
   return (
     <div className="flex flex-col gap-2">
@@ -63,11 +73,12 @@ export const ProfileNameInput = forwardRef<
         isDisabled={isDisabled}
         ariaDescribedBy={describedById}
         ariaInvalid={!isValid}
+        error={errorMessage}
       />
       <p
         id={describedById}
         data-testid={ruleTestId}
-        className={cn("text-xs", isValid ? "text-muted" : "text-danger")}
+        className={cn("text-xs", isFormatValid ? "text-muted" : "text-danger")}
       >
         {t(I18nKey.SETTINGS$PROFILE_NAME_RULE)}
       </p>

@@ -1,4 +1,4 @@
-import { forwardRef } from "react";
+import { forwardRef, useId } from "react";
 import { cn } from "#/utils/utils";
 import { formControlSettingsFieldClassName } from "#/utils/form-control-classes";
 import { OptionalTag } from "./optional-tag";
@@ -87,7 +87,12 @@ export const SettingsInput = forwardRef<HTMLInputElement, SettingsInputProps>(
     },
     ref,
   ) {
-    const errorId = error && testId ? `${testId}-error` : undefined;
+    const autoId = useId();
+    const errorId = error
+      ? testId
+        ? `${testId}-error`
+        : `${autoId}-error`
+      : undefined;
     return (
       <label className={cn("flex flex-col gap-2.5 w-full min-w-0", className)}>
         <div className="flex items-center gap-2">

@@ -349,6 +349,36 @@ describe("LlmSettingsLocalView", () => {
     expect(screen.getByTestId("profile-name-input")).toBeInTheDocument();
   });
 
+  it("shows name-taken error and disables Save button when entering duplicate LLM profile name in create mode", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<LlmSettingsLocalView />);
+
+    await user.click(screen.getByTestId("add-llm-profile"));
+    const nameInput = screen.getByTestId("profile-name-input");
+    const saveButton = screen.getByTestId("save-profile-btn");
+
+    // "gpt-4-profile" already exists in the mock profile list
+    await user.clear(nameInput);
+    await user.type(nameInput, "gpt-4-profile");
+
+    expect(nameInput).toHaveAttribute("aria-invalid", "true");
+    expect(nameInput).toHaveAttribute(
+      "aria-describedby",
+      "profile-name-input-error",
+    );
+    expect(screen.getByTestId("profile-name-input-error")).toBeInTheDocument();
+    expect(saveButton).toBeDisabled();
+
+    // Change to a unique name
+    await user.clear(nameInput);
+    await user.type(nameInput, "brand-new-profile");
+
+    expect(nameInput).toHaveAttribute("aria-invalid", "false");
+    expect(
+      screen.queryByTestId("profile-name-input-error"),
+    ).not.toBeInTheDocument();
+  });
+
   describe("create mode form initialization", () => {
     it("prefills the free OpenHands default when creating a new profile", async () => {
       const user = userEvent.setup();
@@ -640,6 +670,50 @@ describe("LlmSettingsLocalView", () => {
       expect(screen.getByTestId("profile-name-input")).toHaveValue(
         "gpt-4-profile",
       );
+    });
+
+    it("does not flag the profile's own name as duplicate in edit mode, but flags another existing profile name", async () => {
+      const user = userEvent.setup();
+      vi.mocked(ProfilesService.getProfile).mockResolvedValue({
+        name: "gpt-4-profile",
+        api_key_set: true,
+        config: {
+          model: "openai/gpt-4",
+          api_key: "encrypted-key-123",
+          base_url: "https://api.openai.com/v1",
+        },
+      });
+
+      renderWithProviders(<LlmSettingsLocalView />);
+
+      await user.click(screen.getAllByTestId("profile-menu-trigger")[0]);
+      await user.click(screen.getByTestId("profile-edit"));
+
+      const nameInput = await screen.findByTestId("profile-name-input");
+      expect(nameInput).toHaveValue("gpt-4-profile");
+      expect(nameInput).toHaveAttribute("aria-invalid", "false");
+      expect(
+        screen.queryByTestId("profile-name-input-error"),
+      ).not.toBeInTheDocument();
+
+      // Change name to another existing profile ("claude-profile")
+      await user.clear(nameInput);
+      await user.type(nameInput, "claude-profile");
+
+      expect(nameInput).toHaveAttribute("aria-invalid", "true");
+      expect(
+        screen.getByTestId("profile-name-input-error"),
+      ).toBeInTheDocument();
+      expect(screen.getByTestId("save-profile-btn")).toBeDisabled();
+
+      // Revert back to own name
+      await user.clear(nameInput);
+      await user.type(nameInput, "gpt-4-profile");
+
+      expect(nameInput).toHaveAttribute("aria-invalid", "false");
+      expect(
+        screen.queryByTestId("profile-name-input-error"),
+      ).not.toBeInTheDocument();
     });
   });
 
