@@ -1,9 +1,16 @@
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
+import { promisify } from "node:util";
+import { brotliDecompress, gunzip, inflate } from "node:zlib";
 import { createProxyServer } from "httpxy";
 
 const DEFAULT_PROXY_TIMEOUT_MS = 120_000;
 const SERVER_INFO_PATH = "/server_info";
+const CONTENT_DECODERS = {
+  gzip: promisify(gunzip),
+  deflate: promisify(inflate),
+  br: promisify(brotliDecompress),
+};
 const BENIGN_SOCKET_ERRORS = new Set([
   "ECONNRESET",
   "EPIPE",
@@ -45,7 +52,8 @@ function parseBackendUrl(backendUrl) {
   }
   return {
     hostname: url.hostname,
-    port: Number.parseInt(url.port, 10) || (url.protocol === "https:" ? 443 : 80),
+    port:
+      Number.parseInt(url.port, 10) || (url.protocol === "https:" ? 443 : 80),
     protocol: url.protocol,
   };
 }
@@ -64,6 +72,99 @@ function writeInvalidBackendUrlResponse(req, res) {
 export function isServerInfoRequest(req) {
   const pathname = new URL(req.url ?? "/", "http://localhost").pathname;
   return pathname === SERVER_INFO_PATH;
+}
+
+// Shared by ingress/static-server and Vite's self-handled proxy response.
+export function proxyServerInfoResponse(
+  proxyRes,
+  req,
+  res,
+  runtimeServicesInfo,
+) {
+  const chunks = [];
+  proxyRes.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+  proxyRes.on("error", (err) => {
+    if (!isBenignSocketError(err)) {
+      console.error(`Upstream response error for ${req.url}:`, err.message);
+    }
+    if (!res.headersSent) {
+      res.writeHead(502);
+      res.end(`Bad Gateway: ${err.message}`);
+    } else {
+      res.destroy();
+    }
+  });
+  proxyRes.on("end", async () => {
+    if (res.destroyed || res.writableEnded) return;
+    const statusCode = proxyRes.statusCode ?? 502;
+    const originalBody = Buffer.concat(chunks);
+    const forwardOriginal = () => {
+      if (res.destroyed || res.writableEnded) return;
+      res.writeHead(statusCode, proxyRes.headers);
+      res.end(req.method === "HEAD" ? "" : originalBody);
+    };
+    if (
+      statusCode < 200 ||
+      statusCode >= 300 ||
+      req.method === "HEAD" ||
+      !isServerInfoRequest(req)
+    ) {
+      forwardOriginal();
+      return;
+    }
+    try {
+      let decoded = originalBody;
+      const encodings = String(proxyRes.headers["content-encoding"] ?? "")
+        .split(",")
+        .map((encoding) => encoding.trim().toLowerCase())
+        .filter((encoding) => encoding && encoding !== "identity")
+        .reverse();
+      for (const encoding of encodings) {
+        const decode = CONTENT_DECODERS[encoding];
+        if (!decode) throw new Error("Unsupported response content encoding");
+        decoded = await decode(decoded);
+      }
+      const serverInfo = JSON.parse(decoded.toString("utf8"));
+      const runtimeServices =
+        typeof runtimeServicesInfo === "string"
+          ? JSON.parse(runtimeServicesInfo)
+          : runtimeServicesInfo;
+      if (
+        !serverInfo ||
+        typeof serverInfo !== "object" ||
+        Array.isArray(serverInfo) ||
+        !runtimeServices ||
+        typeof runtimeServices !== "object" ||
+        Array.isArray(runtimeServices)
+      ) {
+        throw new Error(
+          "Server info and runtime services must be JSON objects",
+        );
+      }
+      const body = Buffer.from(
+        JSON.stringify({
+          ...serverInfo,
+          runtime_services: runtimeServices,
+        }),
+        "utf8",
+      );
+      if (res.destroyed || res.writableEnded) return;
+      const headers = { ...proxyRes.headers };
+      delete headers["content-encoding"];
+      delete headers["content-length"];
+      delete headers["transfer-encoding"];
+      delete headers.etag;
+      headers["content-type"] = "application/json; charset=utf-8";
+      headers["cache-control"] = "no-store";
+      res.writeHead(statusCode, headers);
+      res.end(body);
+    } catch (err) {
+      console.warn(
+        `Could not append runtime_services to ${SERVER_INFO_PATH}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      forwardOriginal();
+    }
+  });
 }
 
 export function proxyServerInfoRequest(
@@ -92,67 +193,8 @@ export function proxyServerInfoRequest(
         host: `${backend.hostname}:${backend.port}`,
       },
     },
-    (proxyRes) => {
-      const chunks = [];
-
-      proxyRes.on("data", (chunk) => {
-        chunks.push(Buffer.from(chunk));
-      });
-
-      proxyRes.on("error", (err) => {
-        if (!isBenignSocketError(err)) {
-          console.error(`Upstream response error for ${req.url}:`, err.message);
-        }
-        if (!res.headersSent) {
-          res.writeHead(502);
-          res.end(`Bad Gateway: ${err.message}`);
-        } else {
-          res.destroy();
-        }
-      });
-
-      proxyRes.on("end", () => {
-        const statusCode = proxyRes.statusCode ?? 502;
-        const headers = { ...proxyRes.headers };
-        const originalBody = Buffer.concat(chunks);
-
-        if (statusCode < 200 || statusCode >= 300 || req.method === "HEAD") {
-          res.writeHead(statusCode, headers);
-          res.end(req.method === "HEAD" ? "" : originalBody);
-          return;
-        }
-
-        try {
-          const serverInfo = JSON.parse(originalBody.toString("utf8"));
-          const runtimeServices =
-            typeof runtimeServicesInfo === "string"
-              ? JSON.parse(runtimeServicesInfo)
-              : runtimeServicesInfo;
-          const body = Buffer.from(
-            JSON.stringify({
-              ...serverInfo,
-              runtime_services: runtimeServices,
-            }),
-            "utf8",
-          );
-
-          delete headers["content-length"];
-          delete headers["transfer-encoding"];
-          headers["content-type"] = "application/json; charset=utf-8";
-          headers["cache-control"] = "no-store";
-          res.writeHead(statusCode, headers);
-          res.end(body);
-        } catch (err) {
-          console.warn(
-            `Could not append runtime_services to ${SERVER_INFO_PATH}: ${
-              err instanceof Error ? err.message : String(err)
-            }`,
-          );
-          res.writeHead(statusCode, headers);
-          res.end(originalBody);
-        }
-      });
-    },
+    (proxyRes) =>
+      proxyServerInfoResponse(proxyRes, req, res, runtimeServicesInfo),
   );
 
   proxyReq.on("error", (err) => {

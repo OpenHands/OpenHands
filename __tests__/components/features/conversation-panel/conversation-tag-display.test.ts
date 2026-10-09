@@ -83,6 +83,25 @@ describe("computeVisibleTagChipCount", () => {
 });
 
 describe("getDisplayConversationTags", () => {
+  it.each([null, "parent-conversation"])(
+    "hides only tags already represented by the Insider badge (parent %s)",
+    (parentConversationId) => {
+      const tags = {
+        smolpaws: "insider",
+        insiderrole: "controller",
+        origin: "api",
+      };
+      expect(getDisplayConversationTags(tags, parentConversationId)).toEqual(
+        parentConversationId
+          ? [
+              ["origin", "api"],
+              ["insiderrole", "controller"],
+              ["smolpaws", "insider"],
+            ]
+          : [["origin", "api"]],
+      );
+    },
+  );
   it("excludes reserved keys and puts priority keys first", () => {
     expect(
       getDisplayConversationTags({

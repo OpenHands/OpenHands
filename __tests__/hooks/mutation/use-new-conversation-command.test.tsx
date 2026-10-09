@@ -54,6 +54,7 @@ const mockConversation = {
   git_provider: null,
   sandbox_id: "sandbox-abc",
   conversation_version: "V1" as const,
+  tags: null as Record<string, string> | null,
 };
 
 vi.mock("#/hooks/query/use-active-conversation", () => ({
@@ -96,6 +97,7 @@ describe("useNewConversationCommand", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockConversation.tags = null;
     captureMock = vi
       .spyOn(telemetry, "trackEvent")
       .mockResolvedValue(undefined);
@@ -111,6 +113,23 @@ describe("useNewConversationCommand", () => {
   const wrapper = ({ children }: { children: React.ReactNode }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );
+
+  it("hands a tagged Insider /new to the App without creating an ordinary conversation", async () => {
+    mockConversation.tags = { smolpaws: "insider" };
+    const createSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue(makeStartTask() as never);
+    const { result } = renderHook(() => useNewConversationCommand(), {
+      wrapper,
+    });
+
+    await result.current.mutateAsync();
+
+    expect(createSpy).not.toHaveBeenCalled();
+    expect(mockNavigate.mock.calls[0][0].split("?")[0]).toBe(
+      "/extensions/insider-cat/projects/new",
+    );
+  });
 
   it("calls createConversation and navigates on success", async () => {
     const readyTask = makeStartTask();
