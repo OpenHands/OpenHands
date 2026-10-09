@@ -1,4 +1,12 @@
-import { type ReactNode, useEffect, useState } from "react";
+import {
+  type MouseEvent,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowUpRight, Check, ClipboardList, X } from "lucide-react";
 import { getLockedCloudHost } from "#/api/agent-server-config";
@@ -9,10 +17,25 @@ import { I18nKey } from "#/i18n/declaration";
 import { formControlButtonClassName } from "#/utils/form-control-classes";
 import { cn } from "#/utils/utils";
 import {
+  SETUP_TOUR_PARAM,
   SUPER_ADMIN_SETUP_GUIDE_PAGE_PATH,
+  SUPER_ADMIN_SETUP_STEPS,
   type SuperAdminSetupStep,
+  type SuperAdminSetupStepId,
 } from "./super-admin-setup-guide.constants";
-import { useSuperAdminSetupGuide } from "./use-super-admin-setup-guide";
+import { SUPER_ADMIN_SETUP_STEP_EVENT } from "./super-admin-setup-step-event";
+import {
+  hasSetupGuideTour,
+  startSetupGuideTour,
+} from "./tour/setup-guide-tour";
+import {
+  isGuidedTourActive,
+  subscribeGuidedTourActive,
+} from "./tour/tour-engine";
+import {
+  getNextSetupStep,
+  useSuperAdminSetupGuide,
+} from "./use-super-admin-setup-guide";
 
 const ICON_BUTTON_CLASS = cn(
   "inline-flex size-7 shrink-0 items-center justify-center rounded-md",
@@ -32,13 +55,30 @@ const START_BUTTON_CLASS = cn(
 const START_TEST_ID = "super-admin-setup-guide-start";
 
 /**
+ * A page on the cloud host, on the guide's organization when given, and
+ * naming the step whose tour the enterprise guide should start.
+ */
+function cloudPageUrl(
+  cloudHost: string,
+  path: string,
+  orgId: string | null,
+  tourStepId?: SuperAdminSetupStepId,
+) {
+  const params = new URLSearchParams();
+  if (orgId) params.set("org", orgId);
+  if (tourStepId) params.set(SETUP_TOUR_PARAM, tourStepId);
+  const query = params.toString();
+  return query ? `${cloudHost}${path}?${query}` : `${cloudHost}${path}`;
+}
+
+/**
  * Floating lower-right setup guide for the enterprise Super Admin, matching
  * the guide in the OpenHands Enterprise app. Steps that live in the
  * enterprise app link back to it; progress is read from the server.
  */
 export default function SuperAdminSetupGuide() {
   const { t } = useTranslation("openhands");
-  const { currentPath } = useNavigation();
+  const { currentPath, navigate } = useNavigation();
   const { backend } = useActiveBackend();
   const {
     steps,
@@ -50,6 +90,26 @@ export default function SuperAdminSetupGuide() {
     refetch,
   } = useSuperAdminSetupGuide();
   const [open, setOpen] = useState(true);
+  const tourActive = useSyncExternalStore(
+    subscribeGuidedTourActive,
+    isGuidedTourActive,
+    isGuidedTourActive,
+  );
+
+  // The tour checks the current route after it navigates, between renders.
+  const pathRef = useRef(currentPath);
+  useEffect(() => {
+    pathRef.current = currentPath;
+  }, [currentPath]);
+  const startTour = useCallback(
+    (stepId: SuperAdminSetupStepId) =>
+      startSetupGuideTour(
+        stepId,
+        { navigate, getPath: () => pathRef.current },
+        t,
+      ),
+    [navigate, t],
+  );
 
   // Progress is read from the server, so re-read it as the admin moves around.
   useEffect(() => {
@@ -58,29 +118,113 @@ export default function SuperAdminSetupGuide() {
     }
   }, [currentPath, visible, refetch]);
 
-  if (!visible) {
-    return null;
-  }
-
   const cloudHost = backend.host.replace(/\/+$/, "");
   // Locked-to-Cloud serves the canvas on the cloud host itself, so enterprise
   // pages open in this tab; standalone / Electron keep a new tab.
   const isLockedToCloud = getLockedCloudHost() !== null;
+
+  // When the guide's next step is done, open the step after it the way Start
+  // does. A step finished out of order, or not confirmed by the server, only
+  // refreshes the progress; nothing opens after the last required step.
+  const nextStepId = nextStep?.id ?? null;
+  useEffect(() => {
+    if (!visible) {
+      return undefined;
+    }
+    const onStep = async (event: Event) => {
+      const completedId = (event as CustomEvent<{ id?: string }>).detail?.id;
+      const { data } = await refetch();
+      const guideSteps = data?.guide_steps;
+      if (!guideSteps || !completedId || completedId !== nextStepId) {
+        return;
+      }
+      const after = getNextSetupStep(guideSteps);
+      if (!after || after.id === completedId) {
+        return;
+      }
+      const { destination } = after;
+      if (destination.kind === "canvas") {
+        if (hasSetupGuideTour(after.id)) {
+          await startTour(after.id);
+        } else {
+          navigate(destination.path);
+        }
+      } else if (isLockedToCloud) {
+        window.location.assign(
+          cloudPageUrl(
+            cloudHost,
+            destination.path,
+            destination.withOrg ? guideOrgId : null,
+            after.id,
+          ),
+        );
+      } else {
+        // A new tab opened after a save is blocked, so point at Start instead.
+        setOpen(true);
+      }
+    };
+    window.addEventListener(SUPER_ADMIN_SETUP_STEP_EVENT, onStep);
+    return () =>
+      window.removeEventListener(SUPER_ADMIN_SETUP_STEP_EVENT, onStep);
+  }, [
+    visible,
+    refetch,
+    nextStepId,
+    navigate,
+    startTour,
+    cloudHost,
+    guideOrgId,
+    isLockedToCloud,
+  ]);
+
+  // A page opened from the enterprise guide names the step whose tour to
+  // start. Enterprise steps have no tour here, so only Canvas steps start.
+  useEffect(() => {
+    if (!visible) {
+      return;
+    }
+    const params = new URLSearchParams(window.location.search);
+    const requested = params.get(SETUP_TOUR_PARAM);
+    if (!requested) {
+      return;
+    }
+    // Drop it first, so the tour starts once.
+    params.delete(SETUP_TOUR_PARAM);
+    const query = params.toString();
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`,
+    );
+    const step = SUPER_ADMIN_SETUP_STEPS.find(({ id }) => id === requested);
+    if (step && hasSetupGuideTour(step.id)) {
+      setOpen(false);
+      startTour(step.id);
+    }
+  }, [visible, startTour]);
+
+  if (!visible || tourActive) {
+    return null;
+  }
+
   const cloudLinkProps = {
     target: isLockedToCloud ? undefined : "_blank",
     rel: isLockedToCloud ? undefined : "noopener noreferrer",
   };
-  const cloudUrl = (path: string, withOrg: boolean) =>
-    withOrg && guideOrgId
-      ? `${cloudHost}${path}?org=${encodeURIComponent(guideOrgId)}`
-      : `${cloudHost}${path}`;
-  // A step row and Start open the same page for a step.
+  const cloudUrl = (
+    path: string,
+    withOrg: boolean,
+    tourStepId?: SuperAdminSetupStepId,
+  ) => cloudPageUrl(cloudHost, path, withOrg ? guideOrgId : null, tourStepId);
+  // A step row and Start open the same page for a step; Start also asks the
+  // enterprise guide for the step's tour.
   const renderStepLink = (
     step: SuperAdminSetupStep,
     testId: string,
     className: string,
     children: ReactNode,
-    onClick?: () => void,
+    onClick?: (event: MouseEvent<HTMLAnchorElement>) => void,
+    startsTour = false,
   ) =>
     step.destination.kind === "canvas" ? (
       <NavigationLink
@@ -93,7 +237,11 @@ export default function SuperAdminSetupGuide() {
       </NavigationLink>
     ) : (
       <a
-        href={cloudUrl(step.destination.path, step.destination.withOrg)}
+        href={cloudUrl(
+          step.destination.path,
+          step.destination.withOrg,
+          startsTour ? step.id : undefined,
+        )}
         {...cloudLinkProps}
         data-testid={testId}
         className={className}
@@ -216,13 +364,31 @@ export default function SuperAdminSetupGuide() {
               </p>
               {/* Like the enterprise Start, close the panel before opening
                   the step, so Start does something even when the admin is
-                  already on that step's page. */}
+                  already on that step's page. A Canvas step's tour opens
+                  the page itself; a modified click still follows the link. */}
               {renderStepLink(
                 nextStep,
                 START_TEST_ID,
                 START_BUTTON_CLASS,
                 t(I18nKey.ONBOARDING$SETUP_GUIDE_START),
-                () => setOpen(false),
+                (event) => {
+                  setOpen(false);
+                  const plainClick =
+                    event.button === 0 &&
+                    !event.metaKey &&
+                    !event.ctrlKey &&
+                    !event.shiftKey &&
+                    !event.altKey;
+                  if (
+                    plainClick &&
+                    nextStep.destination.kind === "canvas" &&
+                    hasSetupGuideTour(nextStep.id)
+                  ) {
+                    event.preventDefault();
+                    startTour(nextStep.id);
+                  }
+                },
+                true,
               )}
             </div>
           ) : null}

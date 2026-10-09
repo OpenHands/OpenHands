@@ -15,6 +15,7 @@ import {
   getDefaultConversationTitle,
   parseRuntimeServicesInfo,
   toAppConversation,
+  toHooksResponse,
   type DirectConversationInfo,
 } from "#/api/agent-server-adapter";
 import SettingsService from "#/api/settings-service/settings-service.api";
@@ -2214,5 +2215,121 @@ describe("buildStartConversationRequestWithEncryptedSettings", () => {
     expect(
       payload.agent_settings?.agent_context?.system_message_suffix ?? "",
     ).not.toContain("ROUTE_AT_CONVERSATION_START");
+  });
+});
+
+describe("toHooksResponse", () => {
+  // Prompt and agent hooks reach Canvas over the wire with `prompt`/`system_prompt`,
+  // which the typed client's `HookDefinition` does not declare yet.
+  const wireHook = (hook: Record<string, unknown>) =>
+    hook as unknown as HookConfig["stop"][number]["hooks"][number];
+
+  it("carries a prompt hook's prompt through", () => {
+    const response = toHooksResponse(
+      makeHookConfig({
+        stop: [
+          {
+            matcher: "*",
+            hooks: [
+              wireHook({
+                type: "prompt",
+                command: "",
+                prompt: "QA_F07 prompt hook",
+                system_prompt: null,
+                timeout: 60,
+                async: false,
+              }),
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(response.hooks).toEqual([
+      {
+        event_type: "stop",
+        matchers: [
+          {
+            matcher: "*",
+            hooks: [
+              {
+                type: "prompt",
+                command: "",
+                prompt: "QA_F07 prompt hook",
+                timeout: 60,
+                async: false,
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("carries an agent hook's system_prompt through", () => {
+    const response = toHooksResponse(
+      makeHookConfig({
+        session_start: [
+          {
+            matcher: "*",
+            hooks: [
+              wireHook({
+                type: "agent",
+                command: "",
+                prompt: null,
+                system_prompt: "QA_F07 agent hook",
+                timeout: 60,
+                async: false,
+              }),
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(response.hooks).toEqual([
+      {
+        event_type: "session_start",
+        matchers: [
+          {
+            matcher: "*",
+            hooks: [
+              {
+                type: "agent",
+                command: "",
+                system_prompt: "QA_F07 agent hook",
+                timeout: 60,
+                async: false,
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("keeps command hooks unchanged", () => {
+    const response = toHooksResponse(
+      makeHookConfig({
+        pre_tool_use: [
+          {
+            matcher: "terminal",
+            hooks: [{ type: HookType.COMMAND, command: "true", timeout: 10 }],
+          },
+        ],
+      }),
+    );
+
+    expect(response.hooks).toEqual([
+      {
+        event_type: "pre_tool_use",
+        matchers: [
+          {
+            matcher: "terminal",
+            hooks: [{ type: HookType.COMMAND, command: "true", timeout: 10 }],
+          },
+        ],
+      },
+    ]);
   });
 });
