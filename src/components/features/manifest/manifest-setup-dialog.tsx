@@ -12,6 +12,7 @@ import { cn } from "#/utils/utils";
 import { modalTitleLgClassName } from "#/utils/modal-classes";
 import { getApiErrorBody } from "#/utils/api-error-message";
 import { useTracking } from "#/hooks/use-tracking";
+import { notifySuperAdminSetupStep } from "#/components/features/setup-guide/super-admin-setup-step-event";
 import { useSetupCapabilities } from "#/hooks/query/use-manifest-capabilities";
 import { useSetupPrerequisites } from "#/hooks/query/use-manifest-prerequisites";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
@@ -381,6 +382,8 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
         automationId: entry.id,
         setupMode,
       });
+      // An assisted setup only starts the conversation that creates it.
+      if (setupMode === "direct") notifySuperAdminSetupStep("first-automation");
       const destination = getDestination(response);
       if (destination) navigate(destination, { replace: true });
       else onClose();

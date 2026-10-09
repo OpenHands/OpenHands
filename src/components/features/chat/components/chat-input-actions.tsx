@@ -37,6 +37,7 @@ import { ToolsContextMenuIconText } from "../../controls/tools-context-menu-icon
 import { ContextMenuListItem } from "../../context-menu/context-menu-list-item";
 import { ContextMenu } from "#/ui/context-menu";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
+import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { cn } from "#/utils/utils";
 import {
   chatInputIconButtonClassName,
@@ -262,6 +263,14 @@ export function ChatInputActions({
     setIsOverflowOpen(false);
     setActiveSubmenu(null);
   }, overflowTriggerRef);
+  useCloseOnEscape(
+    isOverflowOpen,
+    () => {
+      setIsOverflowOpen(false);
+      setActiveSubmenu(null);
+    },
+    overflowTriggerRef,
+  );
 
   const isAgentSwitcherDisabled =
     curAgentState === AgentState.RUNNING ||

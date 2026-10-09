@@ -2,13 +2,19 @@ import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   AgentOptionIcon,
   ChooseAgentStep,
   type OnboardingAgentId,
 } from "#/components/features/onboarding/steps/choose-agent-step";
 import SettingsService from "#/api/settings-service/settings-service.api";
+import {
+  __resetActiveStoreForTests,
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
+import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import {
   ACP_PROVIDERS,
   getAcpPreferredDefaultModel,
@@ -40,23 +46,27 @@ describe("ChooseAgentStep", () => {
     vi.spyOn(SettingsService, "saveSettings").mockResolvedValue(true);
   });
 
-  it("renders all four agent options with OpenHands marked selected by default", () => {
+  it("renders OpenHands and every ACP preset with OpenHands selected by default", () => {
     renderStep();
 
     const openhands = screen.getByTestId("onboarding-agent-option-openhands");
     const claude = screen.getByTestId("onboarding-agent-option-claude-code");
     const codex = screen.getByTestId("onboarding-agent-option-codex");
     const gemini = screen.getByTestId("onboarding-agent-option-gemini-cli");
+    const pi = screen.getByTestId("onboarding-agent-option-pi");
+    const opencode = screen.getByTestId("onboarding-agent-option-opencode");
 
     expect(openhands).toHaveAttribute("aria-checked", "true");
-    // All four options are clickable — ACP is no longer "coming soon".
+    // All ACP options are clickable — ACP is no longer "coming soon".
     expect(openhands).not.toBeDisabled();
     expect(claude).not.toBeDisabled();
     expect(codex).not.toBeDisabled();
     expect(gemini).not.toBeDisabled();
+    expect(pi).not.toBeDisabled();
+    expect(opencode).not.toBeDisabled();
 
     // Neither the legacy "coming soon" banner nor the per-option badges
-    // should render now that all four agent kinds work end-to-end.
+    // should render now that all surfaced agent kinds work end-to-end.
     expect(
       screen.queryByTestId("onboarding-agent-coming-soon"),
     ).not.toBeInTheDocument();
@@ -80,6 +90,26 @@ describe("ChooseAgentStep", () => {
       within(gemini).queryByTestId("onboarding-agent-icon-codex"),
     ).not.toBeInTheDocument();
   });
+
+  it.each([
+    ["pi", "pi"],
+    ["opencode", "opencode"],
+  ])(
+    "offers the %s tile with its brand mark on a local backend",
+    async (id, icon) => {
+      const { onSelect } = renderStep();
+      const tile = screen.getByTestId(`onboarding-agent-option-${id}`);
+
+      expect(
+        within(tile).getByTestId(`onboarding-agent-icon-${icon}`),
+      ).toBeInTheDocument();
+      expect(
+        within(tile).queryByTestId("onboarding-agent-icon-cli-generic"),
+      ).not.toBeInTheDocument();
+      await userEvent.setup().click(tile);
+      expect(onSelect).toHaveBeenLastCalledWith(id);
+    },
+  );
 
   it("falls back to the generic CLI icon for a registry provider without an icon", () => {
     ACP_PROVIDERS.push({
@@ -125,6 +155,9 @@ describe("ChooseAgentStep", () => {
 
     await user.click(screen.getByTestId("onboarding-agent-option-gemini-cli"));
     expect(onSelect).toHaveBeenLastCalledWith("gemini-cli");
+
+    await user.click(screen.getByTestId("onboarding-agent-option-opencode"));
+    expect(onSelect).toHaveBeenLastCalledWith("opencode");
 
     await user.click(screen.getByTestId("onboarding-agent-option-openhands"));
     expect(onSelect).toHaveBeenLastCalledWith("openhands");
@@ -178,6 +211,8 @@ describe("ChooseAgentStep", () => {
   it.each([
     ["codex", "codex"],
     ["gemini-cli", "gemini-cli"],
+    ["pi", "pi"],
+    ["opencode", "opencode"],
   ])("persists acp_server=%s for the matching tile", async (id, expected) => {
     const save = vi.spyOn(SettingsService, "saveSettings");
     renderStep(id as OnboardingAgentId);
@@ -201,6 +236,10 @@ describe("ChooseAgentStep", () => {
     expect(
       (call.agent_settings_diff as Record<string, unknown>).acp_model,
     ).toBe(getAcpPreferredDefaultModel(expected));
+    expect(call.agent_settings_diff).toMatchObject({
+      acp_command: [],
+      acp_args: [],
+    });
   });
 
   it("rebuilds the diff cleanly when the user flips between ACP providers", async () => {
@@ -281,5 +320,56 @@ describe("ChooseAgentStep", () => {
       { timeout: 1000 },
     );
     expect(onNext).not.toHaveBeenCalled();
+  });
+});
+
+describe("ChooseAgentStep on a cloud backend", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    __resetActiveStoreForTests();
+    setRegisteredBackends([
+      {
+        id: "cloud-1",
+        name: "Cloud",
+        host: "https://app.example.com",
+        apiKey: "key",
+        kind: "cloud",
+      },
+    ]);
+    setActiveSelection({ backendId: "cloud-1", orgId: null });
+  });
+  afterEach(() => {
+    window.localStorage.clear();
+    __resetActiveStoreForTests();
+  });
+
+  it("hides local-only agents and drops a selection Cloud can't run", () => {
+    const onSelect = vi.fn();
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <ActiveBackendProvider>
+          <ChooseAgentStep
+            selectedAgentId="pi"
+            onSelect={onSelect}
+            onNext={vi.fn()}
+          />
+        </ActiveBackendProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(
+      screen.getByTestId("onboarding-agent-option-claude-code"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("onboarding-agent-option-pi"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("onboarding-agent-option-opencode"),
+    ).not.toBeInTheDocument();
+    expect(onSelect).toHaveBeenCalledWith("openhands");
   });
 });

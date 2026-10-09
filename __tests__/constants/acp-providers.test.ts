@@ -13,10 +13,12 @@ import {
 } from "#/constants/acp-providers";
 
 describe("getAcpProviderDisplayName", () => {
-  it("resolves the three built-in registry keys to their human names", () => {
+  it("resolves the built-in registry keys to their human names", () => {
     expect(getAcpProviderDisplayName("claude-code")).toBe("Claude Code");
     expect(getAcpProviderDisplayName("codex")).toBe("Codex");
     expect(getAcpProviderDisplayName("gemini-cli")).toBe("Gemini CLI");
+    expect(getAcpProviderDisplayName("pi")).toBe("Pi");
+    expect(getAcpProviderDisplayName("opencode")).toBe("OpenCode");
   });
 
   it("returns null for the Custom-command preset so callers can fall back to the generic 'ACP' label", () => {
@@ -62,7 +64,8 @@ describe("ACP provider registry", () => {
   });
 
   it("keeps every built-in default model in the UX suggestions", () => {
-    for (const provider of ACP_PROVIDERS) {
+    // Pi has no default: it picks a model from whichever credential is set.
+    for (const provider of ACP_PROVIDERS.filter(({ key }) => key !== "pi")) {
       expect(provider.default_model, provider.key).toBeTruthy();
       expect(provider.available_models, provider.key).toBeTruthy();
       expect(
@@ -150,6 +153,16 @@ describe("getAcpProviderSecrets — containerized credentials", () => {
       "GEMINI_API_KEY",
       "GEMINI_BASE_URL",
     ]);
+  });
+
+  it("collects the auth.json blob, then the registry api key, for Pi", () => {
+    const names = getAcpProviderSecrets("pi").map((f) => f.name);
+    expect(names).toEqual(["PI_AUTH_JSON", "ANTHROPIC_API_KEY"]);
+  });
+
+  it("collects the auth store, then the Zen api key, for OpenCode", () => {
+    const names = getAcpProviderSecrets("opencode").map((f) => f.name);
+    expect(names).toEqual(["OPENCODE_AUTH_CONTENT", "OPENCODE_API_KEY"]);
   });
 
   it("renders file-content blobs as multiline secret fields", () => {

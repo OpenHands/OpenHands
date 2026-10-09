@@ -36,6 +36,20 @@ import { routePattern } from "./lib/route-pattern.mjs";
 import { resolveTestids } from "./lib/testids.mjs";
 import { tmuxPathFor } from "./lib/tmux-path.mjs";
 import { browserCallLimit } from "./lib/call-limit.mjs";
+import { agentProfileRepoint } from "./lib/agent-profile-repoint.mjs";
+import {
+  canvasSize,
+  encodeRecording,
+  encoderSupport,
+  ffmpegArgs,
+  findFfmpeg,
+  frameDurations,
+  frameRepeats,
+  playwrightFfmpegPaths,
+  withoutPauses,
+} from "./lib/recording.mjs";
+import { MAX_PAGES, collectEvents, countImages } from "./lib/events-paging.mjs";
+import { redactBody, redactUrl } from "./lib/network-bodies.mjs";
 import { buildLocator, parseRole, toCss } from "./lib/selectors.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -1080,4 +1094,547 @@ test("map baseline reads the index line, and map affected starts from it by defa
     encoding: "utf8",
   });
   assert.match(help.stdout, /map baseline \[--set TARGET \[--force\]\]/);
+});
+
+test("request bodies are shown with credentials and env maps redacted", () => {
+  // A stored secret sent behind its placeholder must stay recognizable as
+  // the placeholder; a real value shows only its length.
+  const body = redactBody(
+    JSON.stringify({
+      name: "qa_vault",
+      command: "/bin/sh",
+      env: { QA_VAULT_TOKEN: "qa-vault-secret-000", QA_NODE: "**********" },
+      api_key: "sk-abcdef",
+      headers: { Authorization: "Bearer x" },
+      nested: { session_api_key: "k", plain: "kept" },
+      list: [{ token: "t" }],
+    }),
+  );
+  const parsed = JSON.parse(body);
+  assert.equal(parsed.name, "qa_vault");
+  assert.equal(parsed.command, "/bin/sh");
+  assert.equal(parsed.env.QA_VAULT_TOKEN, "<redacted 19 chars>");
+  assert.equal(parsed.env.QA_NODE, "**********");
+  assert.equal(parsed.api_key, "<redacted 9 chars>");
+  assert.equal(parsed.headers.Authorization, "<redacted 8 chars>");
+  assert.equal(parsed.nested.session_api_key, "<redacted 1 chars>");
+  assert.equal(parsed.nested.plain, "kept");
+  assert.equal(parsed.list[0].token, "<redacted 1 chars>");
+  // Form bodies redact by key; anything else is described, never shown.
+  assert.equal(redactBody("a=1&api_key=zzz"), "a=1&api_key=%3Credacted%3E");
+  assert.equal(redactBody("--boundary\r\nraw"), "<non-JSON body, 15 chars>");
+  // Secrets inside arrays, under a credential-named key, or at the top level
+  // of a credential endpoint's payload never come back in clear.
+  assert.deepEqual(
+    JSON.parse(
+      redactBody(
+        JSON.stringify({
+          env: ["TOKEN=abc123"],
+          api_keys: ["sk-live-1"],
+          credentials: { value: "p4ss", nested: ["x"] },
+          values: ["kept"],
+        }),
+      ),
+    ),
+    {
+      env: ["<redacted 12 chars>"],
+      api_keys: ["<redacted 9 chars>"],
+      credentials: {
+        value: "<redacted 4 chars>",
+        nested: ["<redacted 1 chars>"],
+      },
+      values: ["kept"],
+    },
+  );
+  assert.equal(
+    redactBody(JSON.stringify("hunter2"), { all: true }),
+    '"<redacted 7 chars>"',
+  );
+  assert.equal(
+    redactBody(JSON.stringify(["hunter2"]), { all: true }),
+    '["<redacted 7 chars>"]',
+  );
+  assert.equal(
+    redactBody("grant_type=x&code=SECRET", { all: true }),
+    "grant_type=%3Credacted%3E&code=%3Credacted%3E",
+  );
+  // A credential endpoint redacts every string, whatever the field is called.
+  assert.deepEqual(
+    JSON.parse(
+      redactBody(JSON.stringify({ name: "X", value: "v" }), { all: true }),
+    ),
+    { name: "<redacted 1 chars>", value: "<redacted 1 chars>" },
+  );
+  assert.equal(redactBody(""), undefined);
+  assert.equal(redactBody(null), undefined);
+  assert.match(
+    redactBody(JSON.stringify({ t: "x".repeat(5000) }), { limit: 50 }),
+    /…$/,
+  );
+});
+
+test("credentials carried by a URL are redacted whatever key holds the URL", () => {
+  // The MCP editor sends a remote server's URL as typed, under `server.url`
+  // (POST /api/v1/mcp/test) or `url` (a settings save): a key or a basic-auth
+  // pair the user put in the URL must not come back in clear. The rest of
+  // the URL is kept as written, so the row still proves the endpoint sent.
+  const probe = JSON.parse(
+    redactBody(
+      JSON.stringify({
+        server: {
+          type: "http",
+          url: "https://example.invalid/mcp?api_key=DUMMY_URL_API_KEY",
+          headers: { "X-Api-Key": "dummy-header-key" },
+        },
+        name: "qa-remote",
+        timeout: 30,
+      }),
+    ),
+  );
+  assert.equal(
+    probe.server.url,
+    "https://example.invalid/mcp?api_key=<redacted 17 chars>",
+  );
+  assert.equal(probe.server.headers["X-Api-Key"], "<redacted 16 chars>");
+  assert.equal(probe.name, "qa-remote");
+  const save = JSON.parse(
+    redactBody(
+      JSON.stringify({
+        name: "qa-sse",
+        type: "sse",
+        url: "https://qa:hunter2pw@example.invalid/sse?v=2&Token=t0k#frag",
+        description: "docs at https://docs.example.invalid/sse?page=1",
+      }),
+    ),
+  );
+  assert.equal(
+    save.url,
+    "https://<redacted 2 chars>:<redacted 9 chars>@example.invalid/sse?v=2&Token=<redacted 3 chars>#frag",
+  );
+  assert.equal(
+    save.description,
+    "docs at https://docs.example.invalid/sse?page=1",
+  );
+  // A URL inside prose (a prompt naming a server) is treated the same; the
+  // settings API's placeholder stays recognizable inside a URL too.
+  assert.equal(
+    JSON.parse(
+      redactBody(JSON.stringify({ content: "use https://u:p@h/x now" })),
+    ).content,
+    "use https://<redacted 1 chars>:<redacted 1 chars>@h/x now",
+  );
+  assert.equal(
+    redactUrl("https://user:**********@example.invalid/mcp"),
+    "https://<redacted 4 chars>:**********@example.invalid/mcp",
+  );
+  assert.equal(
+    redactUrl("https://sk-abc@example.invalid/mcp?secret%5Fid=s&q=kept"),
+    "https://<redacted 6 chars>@example.invalid/mcp?secret%5Fid=<redacted 1 chars>&q=kept",
+  );
+  // An unencoded `@` in a password belongs to the password: the userinfo
+  // ends at the last `@` before the path, as `new URL()` reads it.
+  assert.equal(
+    redactUrl("https://user:p@ssw0rd@example.invalid/mcp"),
+    "https://<redacted 4 chars>:<redacted 8 chars>@example.invalid/mcp",
+  );
+  assert.equal(
+    redactUrl("https://host/path?email=a@b&token=t&next=https://u:pw@other/"),
+    "https://host/path?email=a@b&token=<redacted 1 chars>&next=https://<redacted 1 chars>:<redacted 2 chars>@other/",
+  );
+  assert.equal(
+    redactUrl("http://example.invalid/mcp"),
+    "http://example.invalid/mcp",
+  );
+  assert.equal(redactUrl("a:b@c mailto:x@y"), "a:b@c mailto:x@y");
+  // A form body's URL values go through the same redaction.
+  assert.equal(
+    new URLSearchParams(
+      redactBody("name=x&url=https%3A%2F%2Fu%3Ap%40h%2Fmcp%3Fkey%3Dk"),
+    ).get("url"),
+    "https://<redacted 1 chars>:<redacted 1 chars>@h/mcp?key=<redacted 1 chars>",
+  );
+});
+
+test("conversation events reads pages until the rows asked for are in hand", async () => {
+  const pages = {
+    undefined: { items: [1, 2, 3], next_page_id: "p2" },
+    p2: { items: [4, 5], next_page_id: "p3" },
+    p3: { items: [6], next_page_id: null },
+  };
+  const calls = [];
+  const fetchPage = async (id) => {
+    calls.push(id);
+    return pages[id];
+  };
+  // Enough rows after one page: no second request.
+  assert.deepEqual(await collectEvents(fetchPage, 3), {
+    items: [1, 2, 3],
+    more: true,
+    pages: 1,
+  });
+  calls.length = 0;
+  // More rows than one page holds: follow next_page_id, stop at the end.
+  assert.deepEqual(await collectEvents(fetchPage, 500), {
+    items: [1, 2, 3, 4, 5, 6],
+    more: false,
+    pages: 3,
+  });
+  assert.deepEqual(calls, [undefined, "p2", "p3"]);
+  // A page without items or a missing body ends the walk cleanly.
+  assert.deepEqual(await collectEvents(async () => undefined, 10), {
+    items: [],
+    more: false,
+    pages: 1,
+  });
+  // A filter counts only the rows that pass it, so a kind that is rare keeps
+  // the walk going; a server that never ends paging stops at MAX_PAGES.
+  const mixed = async (id) => ({
+    items: [{ kind: "State" }, { kind: "State" }, { kind: "Message" }],
+    next_page_id:
+      id === "p3" ? null : `p${(Number(String(id).slice(1)) || 1) + 1}`,
+  });
+  const filtered = await collectEvents(mixed, 3, (e) => e.kind === "Message");
+  assert.equal(filtered.pages, 3);
+  assert.equal(filtered.items.filter((e) => e.kind === "Message").length, 3);
+  const endless = await collectEvents(
+    async () => ({ items: [{ kind: "x" }], next_page_id: "again" }),
+    1000,
+  );
+  assert.equal(endless.pages, MAX_PAGES);
+  assert.equal(endless.more, true);
+});
+
+test("image attachments are counted from a message's content blocks", () => {
+  assert.equal(countImages("plain text"), 0);
+  assert.equal(countImages(undefined), 0);
+  assert.equal(
+    countImages([
+      { type: "text", text: " " },
+      { type: "image", image_urls: ["data:image/png;base64,AAAA", "data:x"] },
+      { type: "image" },
+    ]),
+    3,
+  );
+});
+
+test("help documents the observe, bodies, tab, mode and commit additions", () => {
+  const browser = spawnSync(process.execPath, [cli, "help", "browser"], {
+    encoding: "utf8",
+  }).stdout;
+  assert.match(
+    browser,
+    /scroll \[<sel>\] \[--by PX\] \[--x PX\]\n\s+\[--observe SEL/,
+  );
+  assert.match(browser, /network .*\[--bodies\]/);
+  assert.match(browser, /tab new \[\/path\]/);
+  assert.match(browser, /wait-tab <url-regex> \[--timeout MS\] \[--new\]/);
+  const conversation = spawnSync(
+    process.execPath,
+    [cli, "help", "conversation"],
+    { encoding: "utf8" },
+  ).stdout;
+  assert.match(conversation, /images: N/);
+  assert.match(conversation, /more:true/);
+  assert.match(conversation, /prints the prompt it typed/);
+  const fixture = spawnSync(process.execPath, [cli, "help", "fixture"], {
+    encoding: "utf8",
+  }).stdout;
+  assert.match(fixture, /fixture skill .*\[--commit\]/);
+  const workspace = spawnSync(process.execPath, [cli, "help", "workspace"], {
+    encoding: "utf8",
+  }).stdout;
+  assert.match(
+    workspace,
+    /workspace open PATH\|NAME \[--stay\] \[--mode local_repo\|new_worktree\]/,
+  );
+});
+
+test("fixture skill --commit records the project skill once and reports a re-run", () => {
+  // A stopped run directory is enough for fixtures: they only need run.json.
+  const dir = mkdtempSync(join(tmpdir(), "cov-run-"));
+  mkdirSync(join(dir, "private"));
+  writeFileSync(join(dir, "private", "session-key"), "x".repeat(64));
+  writeFileSync(
+    join(dir, "run.json"),
+    JSON.stringify({
+      baseUrl: "http://127.0.0.1:9",
+      ports: { ingress: 9 },
+      launcherPgid: 0,
+    }),
+  );
+  const env = { OH_VERIFY_RUN: dir };
+  assert.equal(run(["fixture", "git-repo", "--name", "qa-t"], env).status, 0);
+  const first = run(
+    [
+      "fixture",
+      "skill",
+      "--repo",
+      "qa-t",
+      "--name",
+      "qa-t-skill",
+      "--trigger",
+      "qa-t-ping",
+      "--commit",
+    ],
+    env,
+  );
+  assert.equal(first.status, 0, first.stdout);
+  assert.equal(first.json.scope, "project");
+  assert.match(first.json.committed.sha, /^[0-9a-f]{40}$/);
+  assert.equal(first.json.committed.message, "Add qa-t-skill skill");
+  const log = spawnSync(
+    "git",
+    ["-C", join(dir, "workspace", "qa-t"), "log", "--format=%s"],
+    {
+      encoding: "utf8",
+    },
+  )
+    .stdout.trim()
+    .split("\n");
+  assert.deepEqual(log, ["Add qa-t-skill skill", "Initial fixture commit"]);
+  // The same command again changes nothing and says so.
+  const again = run(
+    [
+      "fixture",
+      "skill",
+      "--repo",
+      "qa-t",
+      "--name",
+      "qa-t-skill",
+      "--trigger",
+      "qa-t-ping",
+      "--commit",
+    ],
+    env,
+  );
+  assert.equal(again.status, 0, again.stdout);
+  assert.equal(again.json.committed.sha, first.json.committed.sha);
+  assert.equal(again.json.committed.unchanged, true);
+  // Only the skill's path is committed: a file staged beforehand stays staged.
+  const repo = join(dir, "workspace", "qa-t");
+  writeFileSync(join(repo, "other.txt"), "staged elsewhere\n");
+  spawnSync("git", ["-C", repo, "add", "other.txt"]);
+  const third = run(
+    ["fixture", "skill", "--repo", "qa-t", "--name", "qa-v", "--commit"],
+    env,
+  );
+  assert.equal(third.status, 0, third.stdout);
+  const files = spawnSync(
+    "git",
+    ["-C", repo, "show", "--name-only", "--format=", "HEAD"],
+    { encoding: "utf8" },
+  ).stdout.trim();
+  assert.equal(files, ".agents/skills/qa-v/SKILL.md");
+  const staged = spawnSync(
+    "git",
+    ["-C", repo, "diff", "--cached", "--name-only"],
+    {
+      encoding: "utf8",
+    },
+  ).stdout.trim();
+  assert.equal(staged, "other.txt");
+  // Without --commit nothing is recorded; a personal skill cannot be committed.
+  const plain = run(
+    ["fixture", "skill", "--repo", "qa-t", "--name", "qa-u"],
+    env,
+  );
+  assert.equal(plain.status, 0);
+  assert.equal(plain.json.committed, undefined);
+  const personal = run(["fixture", "skill", "--name", "qa-p", "--commit"], env);
+  assert.equal(personal.status, 2);
+  assert.match(personal.json.error, /needs --repo/);
+});
+
+test("llm preset repoints default only off another live LLM profile", () => {
+  const seeded = {
+    id: "a1",
+    name: "default",
+    revision: 3,
+    schema_version: 1,
+    agent_kind: "openhands",
+    llm_profile_ref: "deepseek-chat",
+    enable_sub_agents: true,
+    mcp_server_refs: ["qa_mcp_a"],
+  };
+  const names = ["deepseek-chat", "deepseek-flash", "deepseek-pro"];
+  // Onboarding left default on its own profile: move it, keep every other field.
+  assert.deepEqual(agentProfileRepoint(seeded, names, "deepseek-flash"), {
+    from: "deepseek-chat",
+    body: {
+      schema_version: 1,
+      agent_kind: "openhands",
+      llm_profile_ref: "deepseek-flash",
+      enable_sub_agents: true,
+      mcp_server_refs: ["qa_mcp_a"],
+    },
+  });
+  // Already there, a fresh run's missing `default` ref, or no ref: unchanged.
+  assert.equal(agentProfileRepoint(seeded, names, "deepseek-chat"), null);
+  assert.equal(
+    agentProfileRepoint(
+      { ...seeded, llm_profile_ref: "default" },
+      names,
+      "deepseek-flash",
+    ),
+    null,
+  );
+  assert.equal(
+    agentProfileRepoint(
+      { ...seeded, llm_profile_ref: null },
+      names,
+      "deepseek-flash",
+    ),
+    null,
+  );
+  // An ACP default owns its own model; an older backend has no profile.
+  assert.equal(
+    agentProfileRepoint(
+      { ...seeded, agent_kind: "acp" },
+      names,
+      "deepseek-flash",
+    ),
+    null,
+  );
+  assert.equal(agentProfileRepoint(undefined, names, "deepseek-flash"), null);
+});
+
+test("llm help says when preset repoints the default agent profile", () => {
+  const help = spawnSync(process.execPath, [cli, "help", "llm"], {
+    encoding: "utf8",
+  });
+  assert.equal(help.status, 0);
+  assert.match(
+    help.stdout,
+    /'preset' also points the 'default' agent profile at deepseek-flash/,
+  );
+  assert.match(help.stdout, /and 'set' leave agent profiles as they are/);
+  assert.match(help.stdout, /'repointed'/);
+});
+
+test("a recording's timeline cuts the lead-in and pauses, and holds the end", () => {
+  // Changes at 0, 3, 3.2 and 10 s; stopped at 10.5 s.
+  const frames = [{ t: 0 }, { t: 3000 }, { t: 3200 }, { t: 10000 }];
+  assert.deepEqual(frameDurations(frames, 10500), [1, 0.2, 6.8, 1]);
+  // Paused from 4 s to 9 s: the frame shown at 3.2 s lasts 1.8 s.
+  const cut = withoutPauses(frames, 10500, [{ at: 4000, ms: 5000 }]);
+  assert.deepEqual(
+    cut.frames.map((f) => f.t),
+    [0, 3000, 3200, 5000],
+  );
+  assert.equal(cut.endT, 5500);
+  assert.deepEqual(frameDurations(cut.frames, cut.endT), [1, 0.2, 1.8, 1]);
+  // One unchanging frame keeps its real length, and is shown for at least 1 s.
+  assert.deepEqual(frameDurations([{ t: 0 }], 5000), [5]);
+  assert.deepEqual(frameDurations([{ t: 0 }], 200), [1]);
+  // Constant frame rate: ends rounded on the running total, at least one each.
+  assert.deepEqual(frameRepeats([1, 0.2, 6.8, 1], 10), [10, 2, 68, 10]);
+  assert.deepEqual(frameRepeats([0.15, 0.15, 0.15], 10), [2, 1, 2]);
+  assert.deepEqual(frameRepeats([0.01, 0.01], 10), [1, 1]);
+  // The canvas is the largest frame with even sides; smaller frames are padded.
+  assert.deepEqual(
+    canvasSize([
+      { width: 1440, height: 1000 },
+      { width: 391, height: 845 },
+    ]),
+    { width: 1440, height: 1000 },
+  );
+  assert.deepEqual(canvasSize([{ width: 391, height: 845 }]), {
+    width: 392,
+    height: 846,
+  });
+});
+
+test("the recorder picks MP4 with libx264, else WebM, and finds Playwright's ffmpeg", () => {
+  const system = [
+    " V....D libx264              libx264 H.264 / AVC (codec h264)",
+    " V....D libx264rgb           libx264 H.264 RGB (codec h264)",
+    " V....D gif                  GIF (Graphics Interchange Format)",
+  ].join("\n");
+  assert.deepEqual(encoderSupport(system), { format: "mp4", gif: true });
+  const bundled =
+    " V....D libvpx               libvpx VP8 (codec vp8)\n A....D aac x";
+  assert.deepEqual(encoderSupport(bundled), { format: "webm", gif: false });
+  assert.equal(encoderSupport(" V....D libx264rgb  rgb only"), null);
+  const root = mkdtempSync(join(tmpdir(), "pw-browsers-"));
+  for (const dir of ["chromium-1194", "ffmpeg-1009", "ffmpeg-1011"])
+    mkdirSync(join(root, dir));
+  assert.deepEqual(
+    playwrightFfmpegPaths({ PLAYWRIGHT_BROWSERS_PATH: root }, "darwin"),
+    [
+      join(root, "ffmpeg-1011", "ffmpeg-mac"),
+      join(root, "ffmpeg-1009", "ffmpeg-mac"),
+    ],
+  );
+  assert.deepEqual(
+    playwrightFfmpegPaths({ XDG_CACHE_HOME: root }, "linux"),
+    [],
+  );
+  const mp4 = ffmpegArgs("mp4", {
+    fps: 10,
+    width: 320,
+    height: 700,
+    out: "o.mp4",
+  });
+  assert.equal(mp4[mp4.indexOf("-i") + 1], "pipe:0");
+  assert.ok(mp4.includes("libx264") && mp4.at(-1) === "o.mp4");
+  assert.match(mp4[mp4.indexOf("-vf") + 1], /pad=320:700:.*format=yuv420p$/);
+  assert.ok(
+    ffmpegArgs("webm", {
+      fps: 10,
+      width: 2,
+      height: 2,
+      out: "o.webm",
+    }).includes("vp8"),
+  );
+});
+
+const RED_16X16_JPEG =
+  "/9j/4AAQSkZJRgABAgAAAQABAAD//gAQTGF2YzYwLjMxLjEwMgD/2wBDAAgUFBcUFxsbGxsbGyAeICEhISAgICAhISEkJCQqKiokJCQhISQkKCgqKi4vLisrKisvLzIyMjw8OTlGRkhWVmf/xABMAAEBAAAAAAAAAAAAAAAAAAAABgEBAQAAAAAAAAAAAAAAAAAABgcQAQAAAAAAAAAAAAAAAAAAAAARAQAAAAAAAAAAAAAAAAAAAAD/wAARCAAQABADASIAAhEAAxEA/9oADAMBAAIRAxEAPwCLAFF/f//Z";
+const BLUE_16X12_JPEG =
+  "/9j/4AAQSkZJRgABAgAAAQABAAD//gAQTGF2YzYwLjMxLjEwMgD/2wBDAAgUFBcUFxsbGxsbGyAeICEhISAgICAhISEkJCQqKiokJCQhISQkKCgqKi4vLisrKisvLzIyMjw8OTlGRkhWVmf/xABMAAEBAAAAAAAAAAAAAAAAAAAABwEBAQAAAAAAAAAAAAAAAAAABQcQAQAAAAAAAAAAAAAAAAAAAAARAQAAAAAAAAAAAAAAAAAAAAD/wAARCAAMABADASIAAhEAAxEA/9oADAMBAAIRAxEAPwCOAL+Lf//Z";
+
+test.skipIf(!findFfmpeg())(
+  "recorded frames of two sizes encode at the real timing",
+  async () => {
+    const dir = mkdtempSync(join(tmpdir(), "record-"));
+    const frames = [
+      [RED_16X16_JPEG, 0, 16, 16],
+      [BLUE_16X12_JPEG, 1500, 16, 12],
+    ].map(([data, t, width, height], i) => {
+      const file = join(dir, `frame-${i}.jpg`);
+      writeFileSync(file, Buffer.from(data, "base64"));
+      return { file, t, width, height };
+    });
+    const ffmpeg = findFfmpeg();
+    const out = join(dir, `out.${ffmpeg.format}`);
+    const written = await encodeRecording({
+      ffmpeg,
+      frames,
+      durations: frameDurations(frames, 2000),
+      fps: 10,
+      ...canvasSize(frames),
+      out,
+    });
+    // 1 s lead-in (cut from 1.5 s) + 1 s hold on the last frame.
+    assert.equal(written, 20);
+    assert.ok(readFileSync(out).length > 0);
+  },
+);
+
+test("browser help documents record", () => {
+  const help = spawnSync(process.execPath, [cli, "help", "browser"], {
+    encoding: "utf8",
+  });
+  assert.equal(help.status, 0);
+  assert.match(help.stdout, /record start --feature ID --name N/);
+  assert.match(help.stdout, /record pause \| record resume/);
+  assert.match(help.stdout, /record stop \[--gif\]/);
+  const bad = spawnSync(
+    process.execPath,
+    [cli, "browser", "record", "start", "--name", "x", "--run", tmpdir()],
+    {
+      encoding: "utf8",
+    },
+  );
+  assert.notEqual(bad.status, 0);
 });
