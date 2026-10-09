@@ -1,0 +1,48 @@
+{"run":"main-clean","check":"layout","viewport":"desktop","route":"/settings/secrets","value":{"mainBottom": 282, "viewport": 1000, "mainScrolls": false, "outerScrolls": false}}
+{"run":"main-clean","check":"layout","viewport":"desktop","route":"/settings/app","value":{"mainBottom": 1458, "viewport": 1000, "mainScrolls": false, "outerScrolls": true}}
+{"run":"main-clean","check":"layout","viewport":"tablet","route":"/settings/secrets","value":{"mainBottom": 302, "viewport": 1180, "mainScrolls": false, "outerScrolls": false}}
+{"run":"main-clean","check":"layout","viewport":"tablet","route":"/settings/app","value":{"mainBottom": 1518, "viewport": 1180, "mainScrolls": false, "outerScrolls": true}}
+{"run":"main-clean","check":"layout","viewport":"phone","route":"/settings/secrets","value":{"mainBottom": 362, "viewport": 844, "mainScrolls": false, "outerScrolls": false}}
+{"run":"main-clean","check":"layout","viewport":"phone","route":"/settings/app","value":{"mainBottom": 1618, "viewport": 844, "mainScrolls": false, "outerScrolls": true}}
+{"run":"main-clean","check":"scroll-before-switch","viewport":"tablet","route":"/settings/app","value":{"main": 0, "outer": 338}}
+{"run":"main-clean","check":"scroll-after-switch","viewport":"tablet","route":"/settings/app","value":{"main": 0, "outer": 0}}
+{"run":"main-clean","check":"desktop-nav-pinned","viewport":"desktop","route":"/settings/app","value":{"navYBefore":62,"navYAfterScroll600":62,"scroll":{"main": 0, "outer": 458}}}
+{"run":"main-clean","check":"phone-hub-back","viewport":"phone","route":"/settings","value":true}
+{"run": "main-clean", "check": "app-errors", "count": 0}
+{"run":"main-fix","check":"layout","viewport":"desktop","route":"/settings/secrets","value":{"mainBottom": 282, "viewport": 1000, "mainScrolls": false, "outerScrolls": false}}
+{"run":"main-fix","check":"layout","viewport":"desktop","route":"/settings/app","value":{"mainBottom": 1458, "viewport": 1000, "mainScrolls": false, "outerScrolls": true}}
+{"run":"main-fix","check":"layout","viewport":"tablet","route":"/settings/secrets","value":{"mainBottom": 1180, "viewport": 1180, "mainScrolls": false, "outerScrolls": false}}
+{"run":"main-fix","check":"layout","viewport":"tablet","route":"/settings/app","value":{"mainBottom": 1180, "viewport": 1180, "mainScrolls": true, "outerScrolls": false}}
+{"run":"main-fix","check":"layout","viewport":"phone","route":"/settings/secrets","value":{"mainBottom": 844, "viewport": 844, "mainScrolls": false, "outerScrolls": false}}
+{"run":"main-fix","check":"layout","viewport":"phone","route":"/settings/app","value":{"mainBottom": 844, "viewport": 844, "mainScrolls": true, "outerScrolls": false}}
+{"run":"main-fix","check":"scroll-before-switch","viewport":"tablet","route":"/settings/app","value":{"main": 338, "outer": 0}}
+{"run":"main-fix","check":"scroll-after-switch","viewport":"tablet","route":"/settings/app","value":{"main": 0, "outer": 0}}
+{"run":"main-fix","check":"desktop-nav-pinned","viewport":"desktop","route":"/settings/app","value":{"navYBefore":62,"navYAfterScroll600":62,"scroll":{"main": 0, "outer": 458}}}
+{"run":"main-fix","check":"phone-hub-back","viewport":"phone","route":"/settings","value":true}
+{"run": "main-fix", "check": "app-errors", "count": 0}
+{"run":"pr-repro","check":"layout","viewport":"desktop","route":"/settings/secrets","value":{"mainBottom": 282, "viewport": 1000, "mainScrolls": false, "outerScrolls": false}}
+{"run":"pr-repro","check":"layout","viewport":"desktop","route":"/settings/app","value":{"mainBottom": 1458, "viewport": 1000, "mainScrolls": false, "outerScrolls": true}}
+{"run":"pr-repro","check":"layout","viewport":"tablet","route":"/settings/secrets","value":{"mainBottom": 370, "viewport": 1180, "mainScrolls": false, "outerScrolls": false}}
+{"run":"pr-repro","check":"layout","viewport":"tablet","route":"/settings/app","value":{"mainBottom": 1586, "viewport": 1180, "mainScrolls": false, "outerScrolls": true}}
+{"run":"pr-repro","check":"layout","viewport":"phone","route":"/settings/secrets","value":{"mainBottom": 362, "viewport": 844, "mainScrolls": false, "outerScrolls": false}}
+{"run":"pr-repro","check":"layout","viewport":"phone","route":"/settings/app","value":{"mainBottom": 1618, "viewport": 844, "mainScrolls": false, "outerScrolls": true}}
+{"run":"pr-repro","check":"selector","viewport":"tablet","route":"/settings/secrets","value":{"listBottom": 394, "mainBottom": 370, "clipped": true}}
+{"run":"pr-repro","check":"selector","viewport":"tablet","route":"/settings/agents","value":{"listBottom": 394, "mainBottom": 354, "clipped": true}}
+{"run":"pr-repro","check":"scroll-before-switch","viewport":"tablet","route":"/settings/app","value":{"main": 0, "outer": 400}}
+{"run":"pr-repro","check":"scroll-after-switch","viewport":"tablet","route":"/settings/app","value":{"main": 0, "outer": 0}}
+{"run":"pr-repro","check":"desktop-nav-pinned","viewport":"desktop","route":"/settings/app","value":{"navYBefore":62,"navYAfterScroll600":62,"scroll":{"main": 0, "outer": 458}}}
+{"run":"pr-repro","check":"phone-hub-back","viewport":"phone","route":"/settings","value":true}
+{"run": "pr-repro", "check": "app-errors", "count": 0}
+{"run":"pr-fix","check":"layout","viewport":"desktop","route":"/settings/secrets","value":{"mainBottom": 282, "viewport": 1000, "mainScrolls": false, "outerScrolls": false}}
+{"run":"pr-fix","check":"layout","viewport":"desktop","route":"/settings/app","value":{"mainBottom": 1458, "viewport": 1000, "mainScrolls": false, "outerScrolls": true}}
+{"run":"pr-fix","check":"layout","viewport":"tablet","route":"/settings/secrets","value":{"mainBottom": 1180, "viewport": 1180, "mainScrolls": false, "outerScrolls": false}}
+{"run":"pr-fix","check":"layout","viewport":"tablet","route":"/settings/app","value":{"mainBottom": 1180, "viewport": 1180, "mainScrolls": true, "outerScrolls": false}}
+{"run":"pr-fix","check":"layout","viewport":"phone","route":"/settings/secrets","value":{"mainBottom": 844, "viewport": 844, "mainScrolls": false, "outerScrolls": false}}
+{"run":"pr-fix","check":"layout","viewport":"phone","route":"/settings/app","value":{"mainBottom": 844, "viewport": 844, "mainScrolls": true, "outerScrolls": false}}
+{"run":"pr-fix","check":"selector","viewport":"tablet","route":"/settings/secrets","value":{"listBottom": 394, "mainBottom": 1180, "clipped": false}}
+{"run":"pr-fix","check":"selector","viewport":"tablet","route":"/settings/agents","value":{"listBottom": 394, "mainBottom": 1180, "clipped": false}}
+{"run":"pr-fix","check":"scroll-before-switch","viewport":"tablet","route":"/settings/app","value":{"main": 400, "outer": 0}}
+{"run":"pr-fix","check":"scroll-after-switch","viewport":"tablet","route":"/settings/app","value":{"main": 0, "outer": 0}}
+{"run":"pr-fix","check":"desktop-nav-pinned","viewport":"desktop","route":"/settings/app","value":{"navYBefore":62,"navYAfterScroll600":62,"scroll":{"main": 0, "outer": 458}}}
+{"run":"pr-fix","check":"phone-hub-back","viewport":"phone","route":"/settings","value":true}
+{"run": "pr-fix", "check": "app-errors", "count": 0}
