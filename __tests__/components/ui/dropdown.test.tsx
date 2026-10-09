@@ -331,6 +331,49 @@ describe("Dropdown", () => {
 
       expect(input).toHaveValue("Option 1");
     });
+
+    it("should keep the selection when Escape is pressed on a closed menu", async () => {
+      const user = userEvent.setup();
+      const onChangeMock = vi.fn();
+      render(
+        <Dropdown
+          options={mockOptions}
+          defaultValue={mockOptions[0]}
+          onChange={onChangeMock}
+        />,
+      );
+
+      await user.click(screen.getByTestId("dropdown-trigger"));
+      const input = screen.getByRole("combobox");
+      await user.keyboard("{Escape}");
+      expect(screen.queryByRole("option")).not.toBeInTheDocument();
+
+      await user.keyboard("{Escape}");
+
+      expect(input).toHaveValue("Option 1");
+      expect(onChangeMock).not.toHaveBeenCalled();
+    });
+
+    it("should still clear a clearable dropdown when Escape is pressed on a closed menu", async () => {
+      const user = userEvent.setup();
+      const onChangeMock = vi.fn();
+      render(
+        <Dropdown
+          options={mockOptions}
+          defaultValue={mockOptions[0]}
+          onChange={onChangeMock}
+          clearable
+        />,
+      );
+
+      await user.click(screen.getByTestId("dropdown-trigger"));
+      const input = screen.getByRole("combobox");
+      await user.keyboard("{Escape}");
+      await user.keyboard("{Escape}");
+
+      expect(input).toHaveValue("");
+      expect(onChangeMock).toHaveBeenCalledWith(null);
+    });
   });
 
   describe("onChange", () => {

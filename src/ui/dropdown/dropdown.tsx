@@ -99,11 +99,27 @@ export function Dropdown({
     items: filteredOptions,
     itemToString: (item) => item?.label ?? "",
     inputValue,
-    stateReducer: (state, actionAndChanges) =>
-      actionAndChanges.type === useCombobox.stateChangeTypes.InputClick &&
-      state.isOpen
-        ? { ...actionAndChanges.changes, isOpen: true }
-        : actionAndChanges.changes,
+    stateReducer: (state, actionAndChanges) => {
+      const { type, changes } = actionAndChanges;
+      if (type === useCombobox.stateChangeTypes.InputClick && state.isOpen) {
+        return { ...changes, isOpen: true };
+      }
+      // downshift clears the selection when Escape is pressed on a closed
+      // menu. Only a clearable dropdown should lose its value that way;
+      // the others keep their selection and label.
+      if (
+        type === useCombobox.stateChangeTypes.InputKeyDownEscape &&
+        !state.isOpen &&
+        !clearable
+      ) {
+        return {
+          ...changes,
+          selectedItem: state.selectedItem,
+          inputValue: state.inputValue,
+        };
+      }
+      return changes;
+    },
     initialIsOpen: defaultOpen,
     onInputValueChange: ({ inputValue: newValue }) => {
       setInputValue(newValue ?? "");
