@@ -92,11 +92,39 @@ export function useChatInputModelState(): ChatInputModelState {
     currentModelId = conversation?.llm_model ?? settings?.llm_model ?? null;
   }
 
+  const runtimeModels = isActiveAcpConversation
+    ? conversation?.available_models
+    : null;
+  const runtimeAcpModelOptions: ACPModelOption[] | null =
+    runtimeModels && runtimeModels.length > 0
+      ? runtimeModels.map((m) => ({
+          id: m.model_id,
+          label:
+            typeof m.name === "string" && m.name.trim()
+              ? m.name.trim()
+              : m.model_id,
+        }))
+      : null;
+
+  const availableAcpModels =
+    runtimeAcpModelOptions ?? acpProvider?.available_models ?? [];
+
+  const matchingRuntimeModel =
+    currentModelId && runtimeModels
+      ? runtimeModels.find((m) => m.model_id === currentModelId)
+      : null;
+  const runtimeModelLabel =
+    typeof matchingRuntimeModel?.name === "string" &&
+    matchingRuntimeModel.name.trim()
+      ? matchingRuntimeModel.name.trim()
+      : null;
+
   const displayModel =
     currentModelId && isAcpContext
-      ? (labelForAcpModel(acpServerKey, currentModelId) ?? currentModelId)
+      ? (runtimeModelLabel ??
+        labelForAcpModel(acpServerKey, currentModelId) ??
+        currentModelId)
       : currentModelId;
-  const availableAcpModels = acpProvider?.available_models ?? [];
   // A home-page pick persists into the active ACP profile, which on cloud is
   // org-owned — hide the selectable rows from members who'd only get a 403.
   // Conversation-scoped switches (blank or started) stay member-allowed.

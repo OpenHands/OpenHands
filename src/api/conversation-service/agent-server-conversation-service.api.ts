@@ -69,6 +69,7 @@ import { isPlannerConversationOf } from "#/utils/plan-file";
 import type {
   GetHooksResponse,
   PluginSpec,
+  AcpModelInfo,
   AppConversation,
   AppConversationPage,
   AppConversationStartRequest,
@@ -251,6 +252,31 @@ function normalizeLaunchedAgentProfile(
   return { agent_profile_id: agentProfileId, revision };
 }
 
+function normalizeAvailableModels(
+  value: unknown,
+): DirectConversationInfo["available_models"] {
+  if (!Array.isArray(value)) return null;
+  const models: AcpModelInfo[] = [];
+  for (const item of value) {
+    if (isRecord(item)) {
+      const modelId =
+        typeof item.model_id === "string"
+          ? item.model_id
+          : typeof item.modelId === "string"
+            ? item.modelId
+            : null;
+      if (modelId?.trim()) {
+        models.push({
+          model_id: modelId.trim(),
+          name: stringOrNull(item.name),
+          description: stringOrNull(item.description),
+        });
+      }
+    }
+  }
+  return models;
+}
+
 function normalizeAbsolutePath(path: string): string | null {
   if (!path.startsWith("/")) return null;
 
@@ -310,11 +336,15 @@ function requireDirectConversationInfo(item: unknown): DirectConversationInfo {
       item.sub_conversation_ids,
     ),
     // SDK-runtime ACP model fields (populated when the agent-server supports
-    // ``ConversationInfo.current_model_*``). Consumed by the conversation
-    // adapter to drive the per-card chip's model text. Older agent-servers
-    // omit these — adapter handles ``undefined`` / ``null`` gracefully.
+    // ``ConversationInfo.current_model_*`` and ``available_models``). Consumed
+    // by the conversation adapter to drive the per-card chip's model text and
+    // the chat-input ACP model picker. Older agent-servers omit these —
+    // adapter handles ``undefined`` / ``null`` gracefully.
     current_model_id: stringOrNull(item.current_model_id),
     current_model_name: stringOrNull(item.current_model_name),
+    available_models: normalizeAvailableModels(
+      item.available_models ?? item.availableModels,
+    ),
   };
 }
 

@@ -1322,6 +1322,30 @@ describe("toAppConversation", () => {
     expect(result.agent_kind).toBe("openhands");
     expect(result.acp_server).toBeNull();
   });
+
+  it("surfaces available_models for ACP conversations and suppresses it for non-ACP", () => {
+    const acpResult = toAppConversation({
+      ...baseInfo,
+      agent: { kind: "ACPAgent" },
+      available_models: [
+        { model_id: "swe-2-high", name: "Devin High", description: null },
+      ],
+    });
+    expect(acpResult.agent_kind).toBe("acp");
+    expect(acpResult.available_models).toEqual([
+      { model_id: "swe-2-high", name: "Devin High", description: null },
+    ]);
+
+    const nonAcpResult = toAppConversation({
+      ...baseInfo,
+      agent: { kind: "Agent", llm: { model: "gpt-4" } },
+      available_models: [
+        { model_id: "swe-2-high", name: "Devin High", description: null },
+      ],
+    });
+    expect(nonAcpResult.agent_kind).toBe("openhands");
+    expect(nonAcpResult.available_models).toBeNull();
+  });
 });
 
 describe("buildRuntimeServicesSystemSuffix", () => {
