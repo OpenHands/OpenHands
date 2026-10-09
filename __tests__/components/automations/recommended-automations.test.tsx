@@ -229,7 +229,7 @@ describe("recommended automations", () => {
     __resetActiveStoreForTests();
   });
 
-  it("renders the proven automations before the beta ones, each in popularity order", () => {
+  it("renders every automation in popularity order", () => {
     render(
       <RecommendedAutomationsSection
         backendKind="local"
@@ -246,34 +246,14 @@ describe("recommended automations", () => {
           ?.replace("recommended-automation-card-", ""),
       );
 
-    expect(cardIds).toEqual([
-      "github-pr-reviewer",
-      "custom-automation",
-      "github-issue-to-pr",
-      "slack-channel-monitor",
-      "github-agents-md-maintainer",
-      "news-digest",
-      "github-repo-monitor",
-      "slack-standup-digest",
-      "linear-triage-assistant",
-      "linear-issue-to-github-pr",
-      "gitlab-issue-to-mr",
-      "linear-issue-to-gitlab-mr",
-      "linear-issue-to-bitbucket-pr",
-      "jira-issue-to-pr",
-      "qa-changes",
-      "jira-issue-to-gitlab-mr",
-      "research-brief-writer",
-      "jira-issue-to-bitbucket-pr",
-      "github-delivery-watchdog",
-      "github-issue-triage",
-      "upstream-fork-sync",
-      "incident-retrospective-drafter",
-      "github-stale-ci-pr-closer",
-    ]);
+    expect(cardIds).toEqual(
+      getAutomationsByPopularity(AUTOMATION_CATALOG).map(
+        (automation) => automation.id,
+      ),
+    );
   });
 
-  it("groups the non-proven automations under a labeled Beta section", () => {
+  it("renders one ungrouped grid without a Beta section", () => {
     render(
       <RecommendedAutomationsSection
         backendKind="local"
@@ -282,32 +262,18 @@ describe("recommended automations", () => {
       />,
     );
 
-    const provenHeading = screen.getByText(
-      I18nKey.RECOMMENDED_AUTOMATIONS$SECTION_TITLE,
-    ).parentElement!;
-    expect(within(provenHeading).getByText("6")).toBeInTheDocument();
-
-    const betaHeading = screen.getByTestId(
-      "recommended-automations-beta-heading",
-    );
-    expect(betaHeading).toHaveTextContent(
-      I18nKey.RECOMMENDED_AUTOMATIONS$BETA_LABEL,
-    );
-    expect(within(betaHeading).getByText("17")).toBeInTheDocument();
-
-    const betaSection = screen.getByTestId(
-      "recommended-automations-beta-section",
-    );
     expect(
-      within(betaSection).getByTestId(
-        "recommended-automation-card-slack-standup-digest",
-      ),
+      screen.queryByTestId("recommended-automations-beta-heading"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("recommended-automations-beta-section"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("recommended-automation-card-slack-standup-digest"),
     ).toBeInTheDocument();
     expect(
-      within(betaSection).queryByTestId(
-        "recommended-automation-card-github-pr-reviewer",
-      ),
-    ).not.toBeInTheDocument();
+      screen.getByTestId("recommended-automation-card-github-pr-reviewer"),
+    ).toBeInTheDocument();
   });
 
   it("sorts recommendation popularity deterministically when ranks are missing or tied", () => {
