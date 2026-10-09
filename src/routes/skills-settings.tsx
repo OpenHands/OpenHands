@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { ExtensionsNavigation } from "#/components/features/skills/extensions-navigation";
+import { TabletCustomizeNav } from "#/components/features/skills/tablet-customize-nav";
 import { AddSkillModal } from "#/components/features/skills/add-skill-modal";
 import { SkillCard } from "#/components/features/skills/skill-card";
 import { SkillDetailModal } from "#/components/features/skills/skill-detail-modal";
@@ -135,6 +136,7 @@ function SkillsSettingsScreen() {
           data-testid="skills-page"
           className="mx-auto flex w-full min-w-0 max-w-275 flex-col gap-6"
         >
+          <TabletCustomizeNav />
           <div className="flex min-w-0 items-start justify-between gap-4">
             <div className="min-w-0 space-y-1">
               <h2 className="text-xl font-semibold leading-6 text-foreground">

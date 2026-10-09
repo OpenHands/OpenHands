@@ -29,6 +29,7 @@ import {
 } from "#/utils/settings-utils";
 import { SettingsSectionHeaderProvider } from "#/contexts/settings-section-header-context";
 import { getLockedCloudHost } from "#/api/agent-server-config";
+import { TabletSettingsNav } from "#/components/features/settings/tablet-settings-nav";
 
 export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
   const url = new URL(request.url);
@@ -110,6 +111,7 @@ function SettingsScreen() {
       >
         <SettingsLayout navigationItems={navItems}>
           <div className="flex flex-col gap-6 pb-8">
+            <TabletSettingsNav />
             {!shouldHideTitle && (
               <header className="space-y-1">
                 <Typography.H2>{t(currentSectionTitle)}</Typography.H2>

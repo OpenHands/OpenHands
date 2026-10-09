@@ -68,10 +68,26 @@ for (const width of [390, 767, 768, 820, 1023, 1024, 1440]) {
     await expect(page.getByRole("dialog")).toBeVisible();
     await page.keyboard.press("Escape");
 
+    const isTablet = width >= 768 && width < 1024;
+    const tabletNav = page.getByTestId("tablet-sibling-nav");
+    if (isTablet) {
+      await expect(tabletNav).toBeVisible();
+      await expect(page.getByTestId("tablet-sibling-nav-trigger")).toHaveText(
+        /MCP Servers/,
+      );
+    } else {
+      await expect(tabletNav).toBeHidden();
+    }
+
     for (const route of ["/skills", "/plugins", "/apps", "/settings/app"]) {
       await openMockPage(page, route);
       const main = page.locator("main").last();
       await expect(main).toBeVisible();
+      if (isTablet) {
+        await expect(main.getByTestId("tablet-sibling-nav")).toBeVisible();
+      } else {
+        await expect(main.getByTestId("tablet-sibling-nav")).toBeHidden();
+      }
       expect((await main.boundingBox())!.width).toBeGreaterThan(340);
       expect(
         await main.evaluate((el) => el.scrollWidth <= el.clientWidth + 1),

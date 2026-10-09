@@ -1,6 +1,7 @@
 import React from "react";
 import { AxiosError } from "axios";
 import { ExtensionsNavigation } from "#/components/features/skills/extensions-navigation";
+import { TabletCustomizeNav } from "#/components/features/skills/tablet-customize-nav";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { BrandButton } from "#/components/features/settings/brand-button";
@@ -113,6 +114,7 @@ export default function MCPPage() {
       <ExtensionsNavigation />
       <main className={settingsLikeMainScrollClassName}>
         <div className="mx-auto flex w-full min-w-0 max-w-200 flex-col gap-6">
+          <TabletCustomizeNav />
           <div className="min-w-0">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="min-w-0 flex-1 basis-64 space-y-1">
