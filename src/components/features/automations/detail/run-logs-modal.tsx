@@ -272,7 +272,7 @@ export function RunLogsModal({
         }}
         role="presentation"
       />
-      <div className="relative flex max-h-[80vh] w-full max-w-3xl flex-col rounded-xl border border-border bg-surface p-6">
+      <div className="relative flex max-h-[80vh] w-full max-w-3xl flex-col overflow-y-auto rounded-xl border border-border bg-surface p-6">
         <button
           type="button"
           onClick={onClose}
@@ -282,7 +282,7 @@ export function RunLogsModal({
           <XMarkIcon className="size-5" />
         </button>
 
-        <h2 className={cn("pr-8", modalTitleLgMediumClassName)}>
+        <h2 className={cn("pr-8 shrink-0", modalTitleLgMediumClassName)}>
           {t(I18nKey.AUTOMATIONS$DETAIL$LOGS_TITLE)}
         </h2>
 
@@ -291,7 +291,7 @@ export function RunLogsModal({
         <div
           role="tablist"
           aria-label={t(I18nKey.AUTOMATIONS$DETAIL$LOGS_TITLE)}
-          className="mt-4 flex gap-1 border-b border-border"
+          className="mt-4 flex shrink-0 gap-1 border-b border-border"
         >
           <button
             type="button"
@@ -389,7 +389,7 @@ export function RunLogsModal({
         </div>
 
         {run?.status === AutomationRunStatus.FAILED && (
-          <div className="mt-4 flex justify-end">
+          <div className="mt-4 flex shrink-0 justify-end">
             <DebugAutomationButton
               run={run}
               automation={automation}

@@ -285,6 +285,21 @@ describe("RunLogsModal", () => {
     fireEvent.keyDown(window, { key: "Escape" });
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it("enables vertical scrolling on the dialog panel to prevent content overflow", () => {
+    useBashCommandLogsMock.mockReturnValue(makeHookResult());
+    render(
+      <RunLogsModal
+        isOpen
+        conversationId="conv-1"
+        bashCommandId="cmd-1"
+        onClose={() => {}}
+      />,
+    );
+    const dialog = screen.getByRole("dialog");
+    const panel = dialog.querySelector(".max-w-3xl");
+    expect(panel).toHaveClass("overflow-y-auto");
+  });
 });
 
 describe("RunLogsModal — run inspection summary", () => {
