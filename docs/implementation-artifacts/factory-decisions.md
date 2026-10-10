@@ -87,3 +87,15 @@ leur parent dans le panneau. Les enfants dont le parent n'est pas chargé
   7 nouveaux, 458 verts au total sur conversation-panel + adapter.
 - Orphelins (parent non chargé) : gardés au premier niveau dans les deux
   modes — règle "rien ne disparaît" du ticket.
+
+## D5 — Livraison du draft (2026-10-10)
+
+**Question** : où pousser la branche ? Le remote `origin` = OpenHands/OpenHands
+(blob:none, sans droit de push pour le token Bilail ; aucun fork Ouidou/Bilail
+existant).
+
+**Hypothèse retenue (sans blocage)** : fork sous le compte Bilail, push de
+`agent/688e7f29-nest-subagent-conversations`, ouverture d'une PR **draft**
+vers OpenHands/OpenHands avec mention de génération par agent IA (règle
+factory "draft MR only" + divulgation IA obligatoire). Pas de merge, pas de
+passage en "ready for review".
