@@ -41,6 +41,7 @@ import { LlmNotConfiguredBanner } from "#/components/features/home/llm-not-confi
 import { useLlmConfigured } from "#/hooks/use-llm-configured";
 import { Messages } from "#/components/conversation-events/chat/messages";
 import { PendingUserMessages } from "./pending-user-messages";
+import { TurnIntoAutomationCue } from "./turn-into-automation-cue";
 import { useUnifiedUploadFiles } from "#/hooks/mutation/use-unified-upload-files";
 import { validateFiles } from "#/utils/file-validation";
 import { useConversationStore } from "#/stores/conversation-store";
@@ -321,6 +322,22 @@ export function ChatInterface({
     hasPendingUserMessages ||
     !conversationWebSocket?.isLoadingHistory;
 
+  // Offer "Turn this into an automation" once the agent has handed back a turn
+  // with real work in it. Keyed on agent activity rather than a user event,
+  // because the lazily loaded history window may not reach the first prompt.
+  // The planning agent only writes plans, and a blocked composer could not
+  // send the request, so neither gets the offer.
+  const canTurnIntoAutomation =
+    (curAgentState === AgentState.AWAITING_USER_INPUT ||
+      curAgentState === AgentState.FINISHED) &&
+    hasSubstantiveAgentActions &&
+    conversationMode !== "plan" &&
+    !hasPendingUserMessages &&
+    !isProvisioningTask &&
+    !isArchivedConversation &&
+    !isNewConversationPending &&
+    !llmBlocked;
+
   const isReturningToConversation = !!conversationId;
   // Only show loading skeleton when genuinely loading AND no events in store yet.
   // If events exist (e.g., remount after data was already fetched), skip skeleton.
@@ -457,6 +474,7 @@ export function ChatInterface({
     renderableEvents.length,
     hasPendingUserMessages,
     activeGoalScrollKey,
+    canTurnIntoAutomation,
     scrollDomToBottom,
   ]);
 
@@ -637,6 +655,8 @@ export function ChatInterface({
             double-renders alongside the real event list.
           */}
             <PendingUserMessages />
+
+            <TurnIntoAutomationCue isTurnComplete={canTurnIntoAutomation} />
 
             {/* Goal-loop status sits at the end of the message flow — above the
               composer and its typing indicator — so progress stays in view. */}
