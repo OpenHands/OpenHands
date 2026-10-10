@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HttpError } from "@openhands/typescript-client";
 import { I18nKey } from "#/i18n/declaration";
@@ -64,7 +65,8 @@ afterEach(() => {
 });
 
 describe("ScriptSection", () => {
-  it("lists the bundle's files with the entrypoint first and badged", async () => {
+  it("lists the bundle's files collapsed on load with the entrypoint first, and expands on activation", async () => {
+    const user = userEvent.setup();
     // Arrange
     vi.spyOn(AutomationService, "fetchTarballBytes").mockResolvedValue(
       new Uint8Array(
@@ -80,9 +82,8 @@ describe("ScriptSection", () => {
     renderSection();
 
     // Assert
-    expect(await screen.findAllByTestId("automation-script-file")).toHaveLength(
-      3,
-    );
+    const files = await screen.findAllByTestId("automation-script-file");
+    expect(files).toHaveLength(3);
     expect(filePaths()).toEqual(["main.py", "config.json", "lib/util.py"]);
     expect(
       screen.getByTestId("automation-script-entrypoint"),
@@ -90,9 +91,25 @@ describe("ScriptSection", () => {
     expect(
       screen.getAllByText(I18nKey.AUTOMATIONS$DETAIL$SCRIPT_ENTRYPOINT),
     ).toHaveLength(1);
-    expect(
-      screen.getAllByTestId("automation-script-file")[0],
-    ).toHaveTextContent("print('hi')");
+
+    // Files are collapsed by default on load (source is not rendered)
+    expect(files[0]).not.toHaveTextContent("print('hi')");
+
+    const mainToggle = within(files[0]).getByRole("button", {
+      name: "main.py",
+    });
+    expect(mainToggle).toHaveAttribute("aria-expanded", "false");
+
+    // Click to expand
+    await user.click(mainToggle);
+    expect(mainToggle).toHaveAttribute("aria-expanded", "true");
+    expect(files[0]).toHaveTextContent("print('hi')");
+
+    // Click again to collapse
+    await user.click(mainToggle);
+    expect(mainToggle).toHaveAttribute("aria-expanded", "false");
+    expect(files[0]).not.toHaveTextContent("print('hi')");
+
     expect(AutomationService.fetchTarballBytes).toHaveBeenCalledWith("auto-1");
   });
 
@@ -147,7 +164,8 @@ describe("ScriptSection", () => {
     ).toBeInTheDocument();
   });
 
-  it("labels a binary member instead of rendering it", async () => {
+  it("labels a binary member upon expansion instead of rendering it", async () => {
+    const user = userEvent.setup();
     // Arrange: a member whose bytes are not UTF-8.
     const archive = packTar([{ name: "model.bin", content: "AAAA" }]);
     archive.fill(0xff, 512, 516);
@@ -156,12 +174,20 @@ describe("ScriptSection", () => {
     // Act
     renderSection({ ...automation, entrypoint: undefined });
 
-    // Assert
-    expect(
-      await screen.findByText(I18nKey.AUTOMATIONS$DETAIL$SCRIPT_BINARY_FILE),
-    ).toBeInTheDocument();
+    // Assert: file is collapsed on load
+    const file = await screen.findByTestId("automation-script-file");
+    expect(file).not.toHaveTextContent(
+      I18nKey.AUTOMATIONS$DETAIL$SCRIPT_BINARY_FILE,
+    );
     expect(
       screen.queryByTestId("automation-script-entrypoint"),
     ).not.toBeInTheDocument();
+
+    // Expand reveals binary file message
+    const toggle = within(file).getByRole("button", { name: "model.bin" });
+    await user.click(toggle);
+    expect(file).toHaveTextContent(
+      I18nKey.AUTOMATIONS$DETAIL$SCRIPT_BINARY_FILE,
+    );
   });
 });
