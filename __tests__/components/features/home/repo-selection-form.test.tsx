@@ -128,13 +128,13 @@ const mockOnRepoSelection = vi.fn();
 // Helper function to render with custom store state
 const renderForm = (
   storeOverrides: Partial<{
-    recentRepositories: GitRepository[];
-    lastSelectedProvider: 'gitlab' | null;
+    recentRepositoriesByScope: Record<string, GitRepository[]>;
+    lastSelectedProvider: "gitlab" | null;
   }> = {},
 ) => {
   // Set up the store state before rendering
   useHomeStore.setState({
-    recentRepositories: [],
+    recentRepositoriesByScope: {},
     lastSelectedProvider: null,
     ...storeOverrides,
   });
@@ -166,7 +166,7 @@ describe("RepositorySelectionForm", () => {
     vi.clearAllMocks();
     // Reset the store to initial state
     useHomeStore.setState({
-      recentRepositories: [],
+      recentRepositoriesByScope: {},
       lastSelectedProvider: null,
     });
   });
@@ -229,7 +229,10 @@ describe("RepositorySelectionForm", () => {
 
     // Create a spy on the API call
     const searchGitReposSpy = vi.spyOn(GitService, "searchGitRepositories");
-    searchGitReposSpy.mockResolvedValue({ items: MOCK_SEARCH_REPOS, next_page_id: null });
+    searchGitReposSpy.mockResolvedValue({
+      items: MOCK_SEARCH_REPOS,
+      next_page_id: null,
+    });
 
     mockUseGitRepositories.mockReturnValue({
       data: { pages: [] },
@@ -327,5 +330,4 @@ describe("RepositorySelectionForm", () => {
       screen.queryByTestId("git-provider-dropdown"),
     ).not.toBeInTheDocument();
   });
-
 });

@@ -14,6 +14,8 @@ import { GitProviderDropdown } from "./git-provider-dropdown";
 import { GitBranchDropdown } from "./git-branch-dropdown";
 import { GitRepoDropdown } from "./git-repo-dropdown";
 import { useHomeStore } from "#/stores/home-store";
+import { useActiveBackend } from "#/contexts/active-backend-context";
+import { getHomeLaunchScope } from "#/utils/home-launch-scope";
 
 interface RepositorySelectionFormProps {
   /**
@@ -38,11 +40,17 @@ interface RepositorySelectionFormProps {
   }) => void;
 }
 
-export function RepositorySelectionForm({
+export function RepositorySelectionForm(props: RepositorySelectionFormProps) {
+  const scope = getHomeLaunchScope(useActiveBackend());
+  return <ScopedRepositorySelectionForm key={scope} {...props} scope={scope} />;
+}
+
+function ScopedRepositorySelectionForm({
   onRepoSelection,
   isLoadingSettings = false,
   onConfirm,
-}: RepositorySelectionFormProps) {
+  scope,
+}: RepositorySelectionFormProps & { scope: string }) {
   const { navigate } = useNavigation();
 
   const [selectedRepository, setSelectedRepository] =
@@ -133,6 +141,7 @@ export function RepositorySelectionForm({
   const renderRepositorySelector = () => {
     const handleRepoSelection = (repository?: GitRepository) => {
       if (repository) {
+        setSelectedBranch(null);
         onRepoSelection?.(repository);
         setSelectedRepository(repository);
       } else {
@@ -213,7 +222,7 @@ export function RepositorySelectionForm({
 
           // Persist the repository to recent repositories on every confirm so
           // the home launcher and the inline path stay in sync.
-          addRecentRepository(selectedRepository);
+          addRecentRepository(selectedRepository, scope);
 
           if (onConfirm) {
             onConfirm({

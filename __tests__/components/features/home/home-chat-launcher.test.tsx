@@ -482,6 +482,73 @@ describe("HomeChatLauncher", () => {
     );
   });
 
+  // @spec BM-002 — Home launch targets belong to the active backend and organization
+  it.each([
+    {
+      label: "local backend",
+      from: localBackend,
+      to: {
+        ...localBackend,
+        backend: { ...localBackend.backend, id: "local-b" },
+      },
+    },
+    {
+      label: "cloud backend",
+      from: cloudBackend,
+      to: {
+        ...cloudBackend,
+        backend: { ...cloudBackend.backend, id: "cloud-b" },
+      },
+    },
+    {
+      label: "cloud organization",
+      from: { ...cloudBackend, orgId: "org-a" },
+      to: { ...cloudBackend, orgId: "org-b" },
+    },
+  ])(
+    "does not submit the previous target after switching $label",
+    async ({ from, to }) => {
+      mockUseActiveBackend.mockReturnValue(from);
+      const createSpy = vi
+        .spyOn(AgentServerConversationService, "createConversation")
+        .mockResolvedValue(makeConversationResponse());
+      const { rerender } = renderLauncher();
+      const user = userEvent.setup();
+      const local = from.backend.kind === "local";
+      await user.click(
+        screen.getByTestId(
+          local ? "open-workspace-button" : "open-repository-button",
+        ),
+      );
+      await user.click(
+        await screen.findByTestId(
+          local ? "stub-workspace-dialog-confirm" : "stub-repo-dialog-confirm",
+        ),
+      );
+
+      mockUseActiveBackend.mockReturnValue(to);
+      rerender(<HomeChatLauncher />);
+      await user.click(screen.getByTestId("stub-chat-submit"));
+
+      await waitFor(() =>
+        expect(createSpy).toHaveBeenCalledWith({
+          initialUserMsg: "hello world",
+          metadata: null,
+        }),
+      );
+      expect(
+        screen.queryByTestId("stub-git-control-bar-preview"),
+      ).not.toBeInTheDocument();
+      mockUseActiveBackend.mockReturnValue(from);
+      rerender(<HomeChatLauncher />);
+      expect(
+        screen.getByTestId(
+          local ? "open-workspace-button" : "open-repository-button",
+        ),
+      ).toBeInTheDocument();
+    },
+  );
+
   it("omits a stale host workspace override on an isolated backend", async () => {
     // A host folder selected while the backend looked like a normal local
     // backend must not be forwarded once the backend advertises isolation: the

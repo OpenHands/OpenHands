@@ -2,6 +2,7 @@ import { http, HttpResponse } from "msw";
 import { server } from "#/mocks/node";
 import { clearCachedAgentServerInfo } from "#/api/agent-server-compatibility";
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -19,6 +20,18 @@ import {
 import { WorkspaceDropdown } from "../../../../src/components/features/home/workspace-dropdown/workspace-dropdown";
 import WorkspacesService from "#/api/workspaces-service/workspaces-service.api";
 import { LocalWorkspace, LocalWorkspaceParent } from "#/types/workspace";
+import { makeDefaultLocalBackend } from "#/api/backend-registry/default-backend";
+import {
+  NO_BACKEND,
+  getRegisteredBackends,
+  getActiveSelection,
+  setRegisteredBackends,
+  setActiveSelection,
+} from "#/api/backend-registry/active-store";
+import { ActiveBackendProvider } from "#/contexts/active-backend-context";
+import { getHomeLaunchScope } from "#/utils/home-launch-scope";
+
+const scopedWorkspaceKey = `${HOME_SELECTED_WORKSPACE_PATH_KEY}:${getHomeLaunchScope({ backend: makeDefaultLocalBackend() ?? NO_BACKEND, orgId: null })}`;
 
 const mockNavigate = vi.fn();
 const mockUseIsCreatingConversation = vi.fn();
@@ -191,9 +204,7 @@ describe("WorkspaceSelectionForm (server-backed workspaces)", () => {
 
     expect(dropdown).toHaveValue("");
     expect(screen.getByTestId("workspace-launch-button")).toBeDisabled();
-    expect(
-      window.sessionStorage.getItem(HOME_SELECTED_WORKSPACE_PATH_KEY),
-    ).toBeNull();
+    expect(window.sessionStorage.getItem(scopedWorkspaceKey)).toBeNull();
   });
 
   it("renders workspaces returned by the agent-server in the dropdown", async () => {
@@ -271,9 +282,9 @@ describe("WorkspaceSelectionForm (server-backed workspaces)", () => {
     await user.click(await within(firstMenu).findByText("repo1"));
 
     await waitFor(() =>
-      expect(
-        window.sessionStorage.getItem(HOME_SELECTED_WORKSPACE_PATH_KEY),
-      ).toBe(workspace.path),
+      expect(window.sessionStorage.getItem(scopedWorkspaceKey)).toBe(
+        workspace.path,
+      ),
     );
     expect(screen.getByTestId("workspace-launch-button")).not.toBeDisabled();
 
@@ -286,11 +297,83 @@ describe("WorkspaceSelectionForm (server-backed workspaces)", () => {
     expect(screen.getByTestId("workspace-launch-button")).not.toBeDisabled();
   });
 
-  it("clears a persisted workspace path that is no longer resolved", async () => {
-    window.sessionStorage.setItem(
-      HOME_SELECTED_WORKSPACE_PATH_KEY,
-      "/Users/me/dev/missing",
+  // @spec BM-002 — Restore a workspace only in the backend that selected it
+  it("isolates the current and saved selection across local backend switches", async () => {
+    const previousBackends = getRegisteredBackends();
+    const previousSelection = getActiveSelection();
+    const backendA = {
+      ...NO_BACKEND,
+      id: "local-a",
+      name: "Local A",
+      host: "http://localhost:18000",
+    };
+    const backendB = { ...backendA, id: "local-b", name: "Local B" };
+    const workspace = {
+      id: "/shared/project",
+      path: "/shared/project",
+      name: "project",
+    };
+    vi.spyOn(WorkspacesService, "listWorkspaces").mockResolvedValue({
+      workspaces: [workspace],
+      workspaceParents: [],
+    });
+    setRegisteredBackends([backendA, backendB]);
+    setActiveSelection({ backendId: backendA.id });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const onConfirm = vi.fn();
+    const { unmount } = render(
+      <QueryClientProvider client={queryClient}>
+        <ActiveBackendProvider>
+          <WorkspaceSelectionForm onConfirm={onConfirm} />
+        </ActiveBackendProvider>
+      </QueryClientProvider>,
     );
+    const user = userEvent.setup();
+    try {
+      const menu = await openWorkspaceDropdown(user);
+      await user.click(await within(menu).findByText("project"));
+
+      act(() => setActiveSelection({ backendId: backendB.id }));
+
+      expect(screen.getByTestId("workspace-dropdown")).toHaveValue("");
+      await user.click(screen.getByTestId("workspace-launch-button"));
+      expect(onConfirm).not.toHaveBeenCalled();
+
+      act(() => setActiveSelection({ backendId: backendA.id }));
+      await waitFor(() =>
+        expect(screen.getByTestId("workspace-dropdown")).toHaveValue("project"),
+      );
+      await user.click(screen.getByTestId("workspace-launch-button"));
+      expect(onConfirm).toHaveBeenCalledWith(workspace);
+    } finally {
+      unmount();
+      queryClient.clear();
+      setRegisteredBackends(previousBackends);
+      setActiveSelection(previousSelection);
+    }
+  });
+
+  it("does not restore an unscoped workspace saved by an older version", async () => {
+    const workspace = {
+      id: "/shared/project",
+      path: "/shared/project",
+      name: "project",
+    };
+    sessionStorage.setItem(HOME_SELECTED_WORKSPACE_PATH_KEY, workspace.path);
+
+    renderForm({ workspaces: [workspace] });
+
+    await waitFor(() =>
+      expect(screen.getByTestId("workspace-dropdown")).not.toBeDisabled(),
+    );
+    expect(screen.getByTestId("workspace-dropdown")).toHaveValue("");
+    expect(screen.getByTestId("workspace-launch-button")).toBeDisabled();
+  });
+
+  it("clears a persisted workspace path that is no longer resolved", async () => {
+    window.sessionStorage.setItem(scopedWorkspaceKey, "/Users/me/dev/missing");
 
     renderForm({
       workspaces: [
@@ -303,9 +386,7 @@ describe("WorkspaceSelectionForm (server-backed workspaces)", () => {
     });
 
     await waitFor(() =>
-      expect(
-        window.sessionStorage.getItem(HOME_SELECTED_WORKSPACE_PATH_KEY),
-      ).toBeNull(),
+      expect(window.sessionStorage.getItem(scopedWorkspaceKey)).toBeNull(),
     );
     expect(screen.getByTestId("workspace-dropdown")).toHaveValue("");
     expect(screen.getByTestId("workspace-launch-button")).toBeDisabled();
@@ -546,9 +627,9 @@ describe("WorkspaceSelectionForm (server-backed workspaces)", () => {
     const selectionMenu = await openWorkspaceDropdown(user);
     await user.click(await within(selectionMenu).findByText("repo1"));
     await waitFor(() =>
-      expect(
-        window.sessionStorage.getItem(HOME_SELECTED_WORKSPACE_PATH_KEY),
-      ).toBe(existingWorkspace.path),
+      expect(window.sessionStorage.getItem(scopedWorkspaceKey)).toBe(
+        existingWorkspace.path,
+      ),
     );
 
     // Act
@@ -565,9 +646,9 @@ describe("WorkspaceSelectionForm (server-backed workspaces)", () => {
         addedWorkspace.name,
       ),
     );
-    expect(
-      window.sessionStorage.getItem(HOME_SELECTED_WORKSPACE_PATH_KEY),
-    ).toBe(addedWorkspace.path);
+    expect(window.sessionStorage.getItem(scopedWorkspaceKey)).toBe(
+      addedWorkspace.path,
+    );
     expect(screen.getByTestId("workspace-launch-button")).not.toBeDisabled();
   });
 
@@ -590,9 +671,9 @@ describe("WorkspaceSelectionForm (server-backed workspaces)", () => {
     const selectionMenu = await openWorkspaceDropdown(user);
     await user.click(await within(selectionMenu).findByText("repo1"));
     await waitFor(() =>
-      expect(
-        window.sessionStorage.getItem(HOME_SELECTED_WORKSPACE_PATH_KEY),
-      ).toBe(workspace.path),
+      expect(window.sessionStorage.getItem(scopedWorkspaceKey)).toBe(
+        workspace.path,
+      ),
     );
 
     await openWorkspaceDropdown(user);
@@ -605,9 +686,7 @@ describe("WorkspaceSelectionForm (server-backed workspaces)", () => {
     // Assert
     await waitFor(() => expect(removeSpy).toHaveBeenCalledTimes(1));
     expect(removeSpy).toHaveBeenCalledWith("/Users/me/dev/repo1");
-    expect(
-      window.sessionStorage.getItem(HOME_SELECTED_WORKSPACE_PATH_KEY),
-    ).toBeNull();
+    expect(window.sessionStorage.getItem(scopedWorkspaceKey)).toBeNull();
     expect(screen.getByTestId("workspace-dropdown")).toHaveValue("");
     expect(screen.getByTestId("workspace-launch-button")).toBeDisabled();
   });
@@ -637,9 +716,9 @@ describe("WorkspaceSelectionForm (server-backed workspaces)", () => {
     const selectionMenu = await openWorkspaceDropdown(user);
     await user.click(await within(selectionMenu).findByText("repo1"));
     await waitFor(() =>
-      expect(
-        window.sessionStorage.getItem(HOME_SELECTED_WORKSPACE_PATH_KEY),
-      ).toBe(workspacePath),
+      expect(window.sessionStorage.getItem(scopedWorkspaceKey)).toBe(
+        workspacePath,
+      ),
     );
 
     await openWorkspaceDropdown(user);
@@ -651,9 +730,7 @@ describe("WorkspaceSelectionForm (server-backed workspaces)", () => {
 
     await waitFor(() => expect(removeParentSpy).toHaveBeenCalledTimes(1));
     expect(removeParentSpy).toHaveBeenCalledWith(workspaceParent.path);
-    expect(
-      window.sessionStorage.getItem(HOME_SELECTED_WORKSPACE_PATH_KEY),
-    ).toBeNull();
+    expect(window.sessionStorage.getItem(scopedWorkspaceKey)).toBeNull();
     expect(screen.getByTestId("workspace-dropdown")).toHaveValue("");
     expect(screen.getByTestId("workspace-launch-button")).toBeDisabled();
   });
@@ -693,10 +770,7 @@ describe("WorkspaceSelectionForm (server-backed workspaces)", () => {
 describe("isolated workspace selection", () => {
   it("preserves saved selection but disables confirmation of host folders", async () => {
     clearCachedAgentServerInfo();
-    sessionStorage.setItem(
-      HOME_SELECTED_WORKSPACE_PATH_KEY,
-      "/home/user/project",
-    );
+    sessionStorage.setItem(scopedWorkspaceKey, "/home/user/project");
     server.use(
       http.get("*/server_info", () =>
         HttpResponse.json({
@@ -723,7 +797,7 @@ describe("isolated workspace selection", () => {
     );
     expect(screen.getByTestId("workspace-dropdown")).toBeDisabled();
     expect(screen.getByTestId("workspace-launch-button")).toBeDisabled();
-    expect(sessionStorage.getItem(HOME_SELECTED_WORKSPACE_PATH_KEY)).toBe(
+    expect(sessionStorage.getItem(scopedWorkspaceKey)).toBe(
       "/home/user/project",
     );
   });
