@@ -24,8 +24,22 @@ export function combineUsageMetrics(
   let maxBudgetPerTask: number | null = null;
   let combinedTokenUsage: TokenUsage | null = null;
 
+  // `per_turn_token` is the agent's current context fill: a property of the
+  // primary agent usage's last turn, not a total across services. The server
+  // keys usage entries with arbitrary ids ("default", "profile:<name>:<uuid>",
+  // "condenser", "planning_condenser", ...), and a profile switch starts a
+  // NEW entry while the old one stays frozen (see switchProfile in
+  // agent-server-conversation-service.api.ts), so matching one exact key
+  // would pin the meter to a stale entry. Condenser usages keep their own
+  // (typically larger) last-turn size after the agent compacts, so a max
+  // across entries pins the meter too, and the compaction hook never
+  // observes the drop. Take the last entry whose id is not a condenser
+  // entry: insertion order tracks recency, so that is the live agent usage.
+  // Fall back to the max only when nothing qualifies.
+  let primaryPerTurnToken: number | null = null;
+
   // Iterate through all metrics and combine them
-  for (const metrics of Object.values(stats.usage_to_metrics)) {
+  for (const [usageId, metrics] of Object.entries(stats.usage_to_metrics)) {
     // Add up costs
     totalCost += metrics.accumulated_cost;
 
@@ -36,6 +50,9 @@ export function combineUsageMetrics(
 
     // Combine token usage
     if (metrics.accumulated_token_usage) {
+      if (!usageId.includes("condenser")) {
+        primaryPerTurnToken = metrics.accumulated_token_usage.per_turn_token;
+      }
       if (combinedTokenUsage === null) {
         combinedTokenUsage = { ...metrics.accumulated_token_usage };
       } else {
@@ -63,6 +80,10 @@ export function combineUsageMetrics(
         };
       }
     }
+  }
+
+  if (combinedTokenUsage !== null && primaryPerTurnToken !== null) {
+    combinedTokenUsage.per_turn_token = primaryPerTurnToken;
   }
 
   return {
