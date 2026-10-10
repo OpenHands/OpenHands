@@ -19,12 +19,16 @@ vi.mock("#/components/features/settings/settings-dropdown-input", () => ({
     items,
     selectedKey,
     onSelectionChange,
+    testId,
   }: {
     items: { key: string; label: string }[];
     selectedKey: string;
     onSelectionChange: (key: string) => void;
+    testId: string;
   }) => (
     <select
+      data-testid={testId}
+      data-selected-key={selectedKey}
       value={selectedKey}
       onChange={(event) => onSelectionChange(event.target.value)}
     >
@@ -61,5 +65,17 @@ describe("automation agent profile selection", () => {
     expect(
       screen.getByText("Unavailable profile (deleted-profile)"),
     ).toBeInTheDocument();
+  });
+  it("treats an empty string value as the deployment default", () => {
+    render(
+      <AutomationAgentProfileSelector
+        value={"" as unknown as null}
+        onChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId("automation-agent-profile")).toHaveAttribute(
+      "data-selected-key",
+      "__default__",
+    );
   });
 });

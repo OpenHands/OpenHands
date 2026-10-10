@@ -13,21 +13,24 @@ export function AutomationAgentProfileSelector({ value, onChange }: Props) {
   const { t } = useTranslation("openhands");
   const { data, isLoading, isError } = useAgentProfiles();
   const profiles = data?.profiles ?? [];
-  const selected = value
-    ? profiles.find((profile) => profile.id === value)
+  const normalizedValue = value || null;
+  const selected = normalizedValue
+    ? profiles.find((profile) => profile.id === normalizedValue)
     : undefined;
   const defaultLabel = t(I18nKey.SETTINGS$PROFILE_DEFAULT);
   const label =
     selected?.name ??
-    (value
-      ? t(I18nKey.AUTOMATIONS$UNAVAILABLE_AGENT_PROFILE, { id: value })
+    (normalizedValue
+      ? t(I18nKey.AUTOMATIONS$UNAVAILABLE_AGENT_PROFILE, {
+          id: normalizedValue,
+        })
       : defaultLabel);
   const items = [
     { key: "__default__", label: defaultLabel },
     ...profiles.flatMap((profile) =>
       profile.id ? [{ key: profile.id, label: profile.name }] : [],
     ),
-    ...(value && !selected ? [{ key: value, label }] : []),
+    ...(normalizedValue && !selected ? [{ key: normalizedValue, label }] : []),
   ];
   return (
     <SettingsDropdownInput
@@ -35,7 +38,7 @@ export function AutomationAgentProfileSelector({ value, onChange }: Props) {
       name="agent_profile_id"
       label={t(I18nKey.CHAT$AGENT_PROFILE_PLACEHOLDER)}
       items={items}
-      selectedKey={value ?? "__default__"}
+      selectedKey={normalizedValue ?? "__default__"}
       isClearable
       isLoading={isLoading}
       isDisabled={isError}

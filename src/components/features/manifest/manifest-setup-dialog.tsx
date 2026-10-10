@@ -550,7 +550,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
                 <AutomationAgentProfileSelector
                   value={
                     typeof values.agent_profile_id === "string"
-                      ? values.agent_profile_id
+                      ? values.agent_profile_id || null
                       : null
                   }
                   onChange={(value) =>
