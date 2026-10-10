@@ -810,6 +810,55 @@ describe("AutomationsList — Run now toasts", () => {
       expect(displayErrorToast).toHaveBeenCalledWith("Runner quota exceeded");
     });
   });
+
+  it("refetches and removes the deleted automation when dispatch fails with 404", async () => {
+    let currentAutomations = [automation];
+    vi.mocked(AutomationService.getAutomations).mockImplementation(
+      async () => ({
+        automations: currentAutomations,
+        total: currentAutomations.length,
+      }),
+    );
+    vi.mocked(AutomationService.dispatchAutomation).mockImplementation(
+      async () => {
+        currentAutomations = [];
+        throw new HttpError(404, "Not Found", {
+          message: "Automation not found",
+        });
+      },
+    );
+    const { displayErrorToast } = await import("#/utils/custom-toast-handlers");
+    const user = userEvent.setup();
+    renderList();
+    await screen.findByText(automation.name);
+
+    await user.click(screen.getByTestId(`automation-run-now-${automation.id}`));
+
+    await waitFor(() => {
+      expect(displayErrorToast).toHaveBeenCalledWith("Automation not found");
+    });
+    await waitFor(() => {
+      expect(screen.queryByText(automation.name)).not.toBeInTheDocument();
+    });
+  });
+
+  it("does not refetch or drop automations when dispatch fails with non-404", async () => {
+    const getAutomationsSpy = vi.mocked(AutomationService.getAutomations);
+    vi.mocked(AutomationService.dispatchAutomation).mockRejectedValue(
+      new HttpError(500, "Internal Server Error", {
+        message: "Runner quota exceeded",
+      }),
+    );
+    const user = userEvent.setup();
+    renderList();
+    await screen.findByText(automation.name);
+    const initialCalls = getAutomationsSpy.mock.calls.length;
+
+    await user.click(screen.getByTestId(`automation-run-now-${automation.id}`));
+
+    await screen.findByText(automation.name);
+    expect(getAutomationsSpy.mock.calls.length).toBe(initialCalls);
+  });
 });
 
 describe("AutomationsList — add automation menu", () => {
