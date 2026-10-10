@@ -68,6 +68,9 @@ vi.mock("@openhands/typescript-client/clients", () => ({
   }),
   AgentProfilesClient: vi.fn(function AgentProfilesClientMock() {
     return {
+      listAgentProfiles: vi.fn(() =>
+        Promise.resolve({ profiles: [], active_agent_profile_id: null }),
+      ),
       saveAgentProfile: vi.fn((...args) => saveAgentProfileMock(...args)),
       getAgentProfile: vi.fn((...args) => getAgentProfileMock(...args)),
       activateAgentProfile: vi.fn((...args) =>

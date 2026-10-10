@@ -14,6 +14,7 @@ const activateProfile = vi.hoisted(() => vi.fn());
 const listProfiles = vi.hoisted(() => vi.fn());
 const getProfile = vi.hoisted(() => vi.fn());
 const applyAgentProfile = vi.hoisted(() => vi.fn());
+const listAgentProfiles = vi.hoisted(() => vi.fn());
 const fetchSettings = vi.hoisted(() => vi.fn());
 const settingsSave = vi.hoisted(() => vi.fn());
 const displayErrorToast = vi.hoisted(() => vi.fn());
@@ -32,6 +33,7 @@ const formState = vi.hoisted(() => ({
   dirtyLlm: {} as Record<string, unknown>,
   view: "all" as "basic" | "advanced" | "all",
   screenProps: undefined as ScreenProps | undefined,
+  subscriptionModels: undefined as string[] | undefined,
 }));
 
 const llmField = (
@@ -98,6 +100,7 @@ vi.mock("#/api/settings-service/settings-service.api", () => ({
 vi.mock("#/api/agent-profiles-service/agent-profiles-service.api", () => ({
   WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME: "default",
   default: {
+    listProfiles: listAgentProfiles,
     saveProfile: applyAgentProfile,
     getProfile: vi
       .fn()
@@ -112,6 +115,10 @@ vi.mock("#/hooks/query/use-settings", () => ({
 
 vi.mock("#/hooks/query/use-agent-settings-schema", () => ({
   useAgentSettingsSchema: () => ({ data: LLM_SCHEMA.current, error: null }),
+}));
+
+vi.mock("#/hooks/query/use-llm-subscription-models", () => ({
+  useOpenAISubscriptionModels: () => ({ data: formState.subscriptionModels }),
 }));
 
 vi.mock("#/hooks/query/use-free-models", () => ({
@@ -194,7 +201,12 @@ describe("SetupLlmStep", () => {
     formState.dirtyLlm = {};
     formState.view = "all";
     formState.screenProps = undefined;
+    formState.subscriptionModels = undefined;
     listProfiles.mockResolvedValue({ profiles: [], active_profile: null });
+    listAgentProfiles.mockResolvedValue({
+      profiles: [],
+      active_agent_profile_id: null,
+    });
     getProfile.mockResolvedValue({ name: "", config: {}, api_key_set: false });
     saveProfile.mockResolvedValue(undefined);
     activateProfile.mockResolvedValue(undefined);
@@ -218,10 +230,10 @@ describe("SetupLlmStep", () => {
 
     await waitFor(() => expect(onNext).toHaveBeenCalledTimes(1));
     expect(getProfile).toHaveBeenCalledWith("previous", "encrypted");
-    // The form shows the active profile, with the onboarding model prefilled.
+    // The form shows the active profile, its own model included.
     expect(formState.screenProps?.markInitialOverridesDirty).toBe(false);
     expect(formState.screenProps?.initialValueOverrides).toMatchObject({
-      "llm.model": ONBOARDING_DEFAULT_LLM_MODEL,
+      "llm.model": "openai/previous-model",
       "llm.api_key": "encrypted:test-key",
       "llm.base_url": "http://localhost:19118/v1",
       "llm.temperature": "0.2",
@@ -319,6 +331,7 @@ describe("SetupLlmStep", () => {
     expect(screen.queryByTestId("llm-settings-screen")).toBeNull();
     expect(screen.getByTestId("onboarding-llm-next")).toBeDisabled();
     expect(listProfiles).not.toHaveBeenCalled();
+    expect(listAgentProfiles).not.toHaveBeenCalled();
 
     formState.backendId = "local-backend";
     rerender(<SetupLlmStep onBack={vi.fn()} onNext={vi.fn()} />);
@@ -330,13 +343,29 @@ describe("SetupLlmStep", () => {
     });
   });
 
-  it("saves the prefilled model when it is kept, without the old hidden Base URL", async () => {
-    givenActiveProfile("previous", {
+  it("keeps an unchanged existing profile instead of saving a copy", async () => {
+    givenActiveProfile("my-deepseek", {
       model: "deepseek/deepseek-flash",
       base_url: "https://api.deepseek.com/v1",
       api_key: "encrypted:test-key",
     });
+    const onNext = vi.fn();
+    renderWithProviders(<SetupLlmStep onBack={vi.fn()} onNext={onNext} />);
+
+    await clickNext();
+
+    await waitFor(() => expect(onNext).toHaveBeenCalledTimes(1));
+    expect(saveProfile).not.toHaveBeenCalled();
+    expect(activateProfile).toHaveBeenCalledWith("my-deepseek");
+    expect(applyAgentProfile).toHaveBeenCalledWith("default", {
+      agent_kind: "openhands",
+      llm_profile_ref: "my-deepseek",
+    });
+  });
+
+  it("saves the prefilled default model for a fresh profile", async () => {
     formState.view = "basic";
+    formState.dirtyLlm = { api_key: "sk-test" };
     const onNext = vi.fn();
     renderWithProviders(<SetupLlmStep onBack={vi.fn()} onNext={onNext} />);
 
@@ -347,9 +376,105 @@ describe("SetupLlmStep", () => {
       llm: {
         ...API_KEY_PROFILE_DEFAULTS,
         model: ONBOARDING_DEFAULT_LLM_MODEL,
+        api_key: "sk-test",
+      },
+      include_secrets: true,
+    });
+  });
+
+  it("drops the hidden Base URL when the model changes in the Basic view", async () => {
+    givenActiveProfile("previous", {
+      model: "deepseek/deepseek-flash",
+      base_url: "https://api.deepseek.com/v1",
+      api_key: "encrypted:test-key",
+    });
+    formState.view = "basic";
+    formState.dirtyLlm = { model: "openai/gpt-4o-mini" };
+    const onNext = vi.fn();
+    renderWithProviders(<SetupLlmStep onBack={vi.fn()} onNext={onNext} />);
+
+    await clickNext();
+
+    await waitFor(() => expect(onNext).toHaveBeenCalledTimes(1));
+    expect(saveProfile).toHaveBeenCalledWith("gpt-4o-mini", {
+      llm: {
+        ...API_KEY_PROFILE_DEFAULTS,
+        model: "openai/gpt-4o-mini",
         api_key: "encrypted:test-key",
       },
       include_secrets: true,
+    });
+  });
+
+  it("falls back to the profile the default agent profile points at", async () => {
+    // An older install: the Agent Server's backfill turned its raw LLM
+    // settings into the `default` LLM profile without activating it.
+    listProfiles.mockResolvedValue({
+      profiles: [{ name: "default" }],
+      active_profile: null,
+    });
+    listAgentProfiles.mockResolvedValue({
+      profiles: [{ name: "default", llm_profile_ref: "default" }],
+      active_agent_profile_id: "agent-1",
+    });
+    getProfile.mockResolvedValue({
+      name: "default",
+      config: {
+        model: "openai/legacy-model",
+        base_url: "http://legacy.example/v1",
+        api_key: "encrypted:legacy-key",
+      },
+      api_key_set: true,
+    });
+    renderWithProviders(<SetupLlmStep onBack={vi.fn()} onNext={vi.fn()} />);
+
+    await screen.findByTestId("llm-settings-screen");
+    expect(getProfile).toHaveBeenCalledWith("default", "encrypted");
+    // Listing the agent profiles is what runs the backfill, so it comes first.
+    expect(listAgentProfiles.mock.invocationCallOrder[0]).toBeLessThan(
+      listProfiles.mock.invocationCallOrder[0],
+    );
+    expect(formState.screenProps?.initialValueOverrides).toMatchObject({
+      "llm.model": "openai/legacy-model",
+      "llm.base_url": "http://legacy.example/v1",
+      "llm.api_key": "encrypted:legacy-key",
+    });
+  });
+
+  it("prefers the active LLM profile over the default agent profile's", async () => {
+    listProfiles.mockResolvedValue({
+      profiles: [{ name: "active-one" }, { name: "default" }],
+      active_profile: "active-one",
+    });
+    listAgentProfiles.mockResolvedValue({
+      profiles: [{ name: "default", llm_profile_ref: "default" }],
+      active_agent_profile_id: "agent-1",
+    });
+    renderWithProviders(<SetupLlmStep onBack={vi.fn()} onNext={vi.fn()} />);
+
+    await screen.findByTestId("llm-settings-screen");
+    expect(getProfile).toHaveBeenCalledTimes(1);
+    expect(getProfile).toHaveBeenCalledWith("active-one", "encrypted");
+  });
+
+  it("shows an error with a retry instead of a fresh form when the profiles can't be read", async () => {
+    listProfiles.mockRejectedValue(new Error("backend unavailable"));
+    renderWithProviders(<SetupLlmStep onBack={vi.fn()} onNext={vi.fn()} />);
+
+    await screen.findByTestId(
+      "onboarding-llm-load-error",
+      {},
+      { timeout: 4000 },
+    );
+    expect(screen.queryByTestId("llm-settings-screen")).toBeNull();
+    expect(screen.getByTestId("onboarding-llm-next")).toBeDisabled();
+
+    givenActiveProfile("previous", { model: "openai/previous-model" });
+    await userEvent.click(screen.getByTestId("onboarding-llm-load-retry"));
+
+    await screen.findByTestId("llm-settings-screen");
+    expect(formState.screenProps?.initialValueOverrides).toMatchObject({
+      "llm.model": "openai/previous-model",
     });
   });
 
@@ -361,6 +486,7 @@ describe("SetupLlmStep", () => {
       temperature: 0.2,
     });
     formState.dirtyLlm = { model: "gpt-5.6-luna" };
+    formState.subscriptionModels = ["gpt-5.6-luna", "gpt-5.6-sol"];
     const onNext = vi.fn();
     renderWithProviders(<SetupLlmStep onBack={vi.fn()} onNext={onNext} />);
 
@@ -380,6 +506,44 @@ describe("SetupLlmStep", () => {
     expect(activateProfile).toHaveBeenCalledWith("gpt-5.6-luna");
   });
 
+  it("saves the subscription model the picker shows when the form still holds another", async () => {
+    // Switching to subscription before its models load leaves the form's
+    // value at the default model while the picker shows the first model.
+    formState.dirtyLlm = { auth_type: "subscription" };
+    formState.subscriptionModels = ["gpt-5.6-luna", "gpt-5.6-sol-codex"];
+    const onNext = vi.fn();
+    renderWithProviders(<SetupLlmStep onBack={vi.fn()} onNext={onNext} />);
+
+    await clickNext();
+
+    await waitFor(() => expect(onNext).toHaveBeenCalledTimes(1));
+    expect(saveProfile).toHaveBeenCalledWith("gpt-5.6-luna", {
+      llm: {
+        model: "gpt-5.6-luna",
+        auth_type: "subscription",
+        subscription_vendor: "openai",
+        provider_connection_id: null,
+      },
+      include_secrets: true,
+    });
+  });
+
+  it("waits for the subscription models before saving a subscription profile", async () => {
+    formState.dirtyLlm = { auth_type: "subscription" };
+    const onNext = vi.fn();
+    renderWithProviders(<SetupLlmStep onBack={vi.fn()} onNext={onNext} />);
+
+    await clickNext();
+
+    await waitFor(() =>
+      expect(displayErrorToast).toHaveBeenCalledWith(
+        "Subscription models are not loaded yet.",
+      ),
+    );
+    expect(saveProfile).not.toHaveBeenCalled();
+    expect(onNext).not.toHaveBeenCalled();
+  });
+
   it("keeps Cloud onboarding on its settings save path", async () => {
     formState.backendKind = "cloud";
     const onNext = vi.fn();
@@ -394,6 +558,7 @@ describe("SetupLlmStep", () => {
     });
     expect(formState.screenProps?.markInitialOverridesDirty).toBe(true);
     expect(listProfiles).not.toHaveBeenCalled();
+    expect(listAgentProfiles).not.toHaveBeenCalled();
     expect(getProfile).not.toHaveBeenCalled();
     expect(saveProfile).not.toHaveBeenCalled();
     expect(activateProfile).not.toHaveBeenCalled();

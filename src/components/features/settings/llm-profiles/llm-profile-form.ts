@@ -76,6 +76,12 @@ export interface BuildProfileLlmConfigOptions {
   /** Whether this backend can link a profile to a provider connection. */
   supportsConnections: boolean;
   isCloud: boolean;
+  /**
+   * The loaded subscription models. When given, a subscription profile whose
+   * model is not one of them gets the first, which is the model the form's
+   * subscription picker shows in that case.
+   */
+  subscriptionModels?: readonly string[];
 }
 
 /**
@@ -90,6 +96,7 @@ export function buildProfileLlmConfig({
   view,
   supportsConnections,
   isCloud,
+  subscriptionModels,
 }: BuildProfileLlmConfigOptions): {
   llmConfig: Record<string, unknown>;
   connectionId: string;
@@ -110,6 +117,10 @@ export function buildProfileLlmConfig({
     : "";
 
   if (authType === LLM_AUTH_TYPE_SUBSCRIPTION) {
+    const model = typeof llmConfig.model === "string" ? llmConfig.model : "";
+    if (subscriptionModels?.length && !subscriptionModels.includes(model)) {
+      [llmConfig.model] = subscriptionModels;
+    }
     llmConfig.auth_type = LLM_AUTH_TYPE_SUBSCRIPTION;
     llmConfig.subscription_vendor = OPENAI_SUBSCRIPTION_VENDOR;
     llmConfig.provider_connection_id = null;

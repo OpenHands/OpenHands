@@ -10,6 +10,9 @@ import {
   profileConfigToFormValues,
 } from "#/components/features/settings/llm-profiles/llm-profile-form";
 import { isNoBackend } from "#/api/backend-registry/active-store";
+import AgentProfilesService, {
+  WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME,
+} from "#/api/agent-profiles-service/agent-profiles-service.api";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useSaveLlmProfile } from "#/hooks/mutation/use-save-llm-profile";
 import { useActivateLlmProfile } from "#/hooks/mutation/use-activate-llm-profile";
@@ -18,10 +21,8 @@ import {
   useDefaultModel,
   useDefaultModelReady,
 } from "#/hooks/query/use-free-models";
-import {
-  LLM_PROFILES_QUERY_KEYS,
-  useLlmProfiles,
-} from "#/hooks/query/use-llm-profiles";
+import { LLM_PROFILES_QUERY_KEYS } from "#/hooks/query/use-llm-profiles";
+import { useOpenAISubscriptionModels } from "#/hooks/query/use-llm-subscription-models";
 import { useSettings } from "#/hooks/query/use-settings";
 import { useAgentSettingsSchema } from "#/hooks/query/use-agent-settings-schema";
 import { LlmSettingsInputsSkeleton } from "#/components/features/settings/llm-settings/llm-settings-inputs-skeleton";
@@ -31,6 +32,11 @@ import ProfilesService, {
 } from "#/api/profiles-service/profiles-service.api";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import type { SettingsFormValues } from "#/utils/sdk-settings-schema";
+import {
+  LLM_AUTH_TYPE_KEY,
+  LLM_AUTH_TYPE_SUBSCRIPTION,
+  resolveLlmAuthType,
+} from "#/constants/llm-subscription";
 
 interface SetupLlmStepProps {
   onBack: () => void;
@@ -39,27 +45,63 @@ interface SetupLlmStepProps {
 
 /**
  * Fallback when the backend has not exposed a DB-selected OpenHands default.
- * The onboarding override prefills the model, and Next saves it even when the
- * user leaves it as is.
+ * A fresh profile starts with this model, and Next saves it even when the user
+ * leaves it as is. An existing profile keeps its own model.
  */
 export const ONBOARDING_DEFAULT_LLM_MODEL = "openai/gpt-5.6-sol";
 
 interface ProfileSeed {
-  /** The active LLM profile's config (secrets encrypted), or `{}` without one. */
+  /** The existing LLM profile the form shows, or `null` for a fresh profile. */
+  profileName: string | null;
+  /** That profile's config (secrets encrypted), or `{}` for a fresh profile. */
   baseConfig: Record<string, unknown>;
   /** The form values that show that profile. */
   initialValues: SettingsFormValues;
 }
 
 /**
- * The profile the local LLM step edits: the active LLM profile, or a fresh one
- * when none is active. Raw LLM settings are never the source. The seed is
- * taken once per backend, when the profile list, the profile and the schema
- * have loaded, because the embedded form reads its initial values only when
- * it mounts. Onboarding mounts this step before a public-mode user adds the
- * backend, so there is no seed until a backend exists.
+ * The LLM profile onboarding edits: the active LLM profile, else the one the
+ * `default` agent profile points at, else none (a fresh profile). Listing the
+ * agent profiles first also runs the Agent Server's one-time backfill, which
+ * turns an older install's raw LLM settings into an LLM profile named
+ * `default` and points the `default` agent profile at it, without activating
+ * it. The active profile comes first because a home launch runs it.
  */
-function useActiveProfileSeed(isLocalBackend: boolean): ProfileSeed | null {
+async function loadOnboardingProfile(): Promise<{
+  profileName: string | null;
+  config: Record<string, unknown>;
+}> {
+  const agentProfiles = await AgentProfilesService.listProfiles();
+  const llmProfiles = await ProfilesService.listProfiles();
+  const existing = new Set(llmProfiles.profiles.map((profile) => profile.name));
+  const defaultAgentRef = agentProfiles.profiles.find(
+    (profile) => profile.name === WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME,
+  )?.llm_profile_ref;
+  const profileName =
+    [llmProfiles.active_profile, defaultAgentRef].find(
+      (name): name is string => !!name && existing.has(name),
+    ) ?? null;
+  if (!profileName) return { profileName: null, config: {} };
+  const detail = await ProfilesService.getProfile(profileName, "encrypted");
+  return {
+    profileName,
+    config: (detail.config ?? {}) as Record<string, unknown>,
+  };
+}
+
+/**
+ * The profile the local LLM step edits (see `loadOnboardingProfile`). Raw LLM
+ * settings are never the source. The seed is taken once per backend, because
+ * the embedded form reads its initial values only when it mounts. Onboarding
+ * mounts this step before a public-mode user adds the backend, so there is no
+ * seed until a backend exists. A failed read is an error to retry, not a fresh
+ * profile: a fresh form would drop an endpoint the Basic view hides.
+ */
+function useOnboardingProfileSeed(isLocalBackend: boolean): {
+  seed: ProfileSeed | null;
+  isError: boolean;
+  retry: () => void;
+} {
   const { backend, orgId } = useActiveBackend();
   const enabled = isLocalBackend && !isNoBackend(backend);
   const [seedState, setSeedState] = React.useState<{
@@ -67,31 +109,17 @@ function useActiveProfileSeed(isLocalBackend: boolean): ProfileSeed | null {
     seed: ProfileSeed;
   } | null>(null);
   const seed = seedState?.backendId === backend.id ? seedState.seed : null;
-  const profiles = useLlmProfiles({ enabled });
-  const activeName = profiles.data?.active_profile;
-  const activeProfileName =
-    activeName &&
-    profiles.data?.profiles.some((profile) => profile.name === activeName)
-      ? activeName
-      : null;
-  const activeConfig = useQuery({
+  const profile = useQuery({
     queryKey: [
       ...LLM_PROFILES_QUERY_KEYS.all,
-      "config",
+      "onboarding-seed",
       backend.id,
       orgId,
-      activeProfileName,
     ],
-    queryFn: async () => {
-      const detail = await ProfilesService.getProfile(
-        activeProfileName as string,
-        "encrypted",
-      );
-      return (detail.config ?? {}) as Record<string, unknown>;
-    },
+    queryFn: loadOnboardingProfile,
     // Read once: the seed never changes, and saving or activating the new
     // profile would otherwise refetch the secrets for nothing.
-    enabled: enabled && !!activeProfileName && !seed,
+    enabled: enabled && !seed,
     // Keep the encrypted secrets out of the cache once the step unmounts.
     gcTime: 0,
     retry: 1,
@@ -101,39 +129,30 @@ function useActiveProfileSeed(isLocalBackend: boolean): ProfileSeed | null {
   const { data: schema, error: schemaError } = useAgentSettingsSchema(
     settings?.agent_settings_schema,
   );
-
-  const isProfileListSettled = profiles.isSuccess || profiles.isError;
-  const isActiveConfigSettled =
-    !activeProfileName || activeConfig.isSuccess || activeConfig.isError;
   const isSchemaSettled = !!schema || !!schemaError;
 
   React.useEffect(() => {
-    if (!enabled || seed) return;
-    if (!isProfileListSettled || !isActiveConfigSettled || !isSchemaSettled) {
-      return;
-    }
-    // An unreadable active profile also starts a fresh one: the form then shows
-    // no key, so the user can see that one is needed.
-    const baseConfig = activeConfig.data ?? {};
+    if (!enabled || seed || !profile.data || !isSchemaSettled) return;
     setSeedState({
       backendId: backend.id,
       seed: {
-        baseConfig,
-        initialValues: profileConfigToFormValues(schema, baseConfig),
+        profileName: profile.data.profileName,
+        baseConfig: profile.data.config,
+        initialValues: profileConfigToFormValues(schema, profile.data.config),
       },
     });
-  }, [
-    enabled,
-    seed,
-    backend.id,
-    isProfileListSettled,
-    isActiveConfigSettled,
-    isSchemaSettled,
-    activeConfig.data,
-    schema,
-  ]);
+  }, [enabled, seed, backend.id, profile.data, isSchemaSettled, schema]);
 
-  return seed;
+  const { refetch } = profile;
+  const retry = React.useCallback(() => {
+    void refetch();
+  }, [refetch]);
+
+  return {
+    seed,
+    isError: enabled && !seed && profile.isError && !profile.isFetching,
+    retry,
+  };
 }
 
 /**
@@ -144,11 +163,12 @@ function useActiveProfileSeed(isLocalBackend: boolean): ProfileSeed | null {
  * modal footer level matching the other onboarding steps.
  *
  * On a local backend the step edits an LLM profile, like the profile editor
- * in Settings: the form shows the active profile (or a fresh one), and Next
- * saves the form as a profile named after the model, activates it and points
- * the `default` agent profile at it. Activation applies the profile to
- * `agent_settings.llm` on the server, so the step never reads or writes raw
- * LLM settings.
+ * in Settings: the form shows the profile `loadOnboardingProfile` picks, or a
+ * fresh one with the default model. If the user changes nothing, Next keeps
+ * that profile; otherwise it saves the form as a profile named after the
+ * model. Either way it activates the profile and points the `default` agent
+ * profile at it. Activation applies the profile to `agent_settings.llm` on the
+ * server, so the step never reads or writes raw LLM settings.
  *
  * On Cloud, Next saves the form to the settings and `onSaveSuccess` advances.
  * The agent-profile ↔ LLM wiring is resolved server-side from those settings,
@@ -170,21 +190,65 @@ export function SetupLlmStep({ onBack, onNext }: SetupLlmStepProps) {
   const dbDefaultLlmModel = useDefaultModel();
   const isDefaultModelReady = useDefaultModelReady();
   const defaultLlmModel = dbDefaultLlmModel ?? ONBOARDING_DEFAULT_LLM_MODEL;
-  const profileSeed = useActiveProfileSeed(isLocalBackend);
+  const {
+    seed: profileSeed,
+    isError: isProfileSeedError,
+    retry: retryProfileSeed,
+  } = useOnboardingProfileSeed(isLocalBackend);
   const [saveControl, setSaveControl] =
     React.useState<SdkSectionSaveControl | null>(null);
   const [isFinalizing, setIsFinalizing] = React.useState(false);
+  const isSubscriptionAuth =
+    resolveLlmAuthType(saveControl?.values[LLM_AUTH_TYPE_KEY]) ===
+    LLM_AUTH_TYPE_SUBSCRIPTION;
+  // Shares the form's query, so this reads the list its picker shows.
+  const { data: subscriptionModels } = useOpenAISubscriptionModels({
+    enabled: isLocalBackend && isSubscriptionAuth,
+  });
 
-  const initialValueOverrides = React.useMemo(
-    () => ({
+  // An existing profile keeps its own model; only a fresh one gets the
+  // onboarding default, so the form never pairs the default model with
+  // another profile's key and endpoint.
+  const initialValueOverrides = React.useMemo(() => {
+    if (profileSeed?.profileName) return profileSeed.initialValues;
+    return {
       ...(profileSeed?.initialValues ?? {}),
       "llm.model": defaultLlmModel,
-    }),
-    [profileSeed, defaultLlmModel],
+    };
+  }, [profileSeed, defaultLlmModel]);
+
+  const activateForOnboarding = React.useCallback(
+    async (profileName: string) => {
+      await activateProfile.mutateAsync(profileName);
+      // Conversations launch from the active AGENT profile, so point it at the
+      // LLM the user just set up or kept (this also clears the "LLM not set
+      // up" banner). Otherwise it keeps its seeded llm_profile_ref, which may
+      // have no key.
+      await applyAgentProfile({
+        agent_kind: "openhands",
+        llm_profile_ref: profileName,
+      });
+      onNext();
+    },
+    [activateProfile, applyAgentProfile, onNext],
   );
 
   const persistProfile = React.useCallback(async () => {
     if (!saveControl || !profileSeed) return;
+
+    // Unchanged existing profile: keep it as it is rather than saving a copy
+    // under the name derived from its model.
+    if (profileSeed.profileName && !saveControl.isDirty) {
+      setIsFinalizing(true);
+      try {
+        await activateForOnboarding(profileSeed.profileName);
+      } catch {
+        displayErrorToast(t(I18nKey.ERROR$GENERIC));
+      } finally {
+        setIsFinalizing(false);
+      }
+      return;
+    }
 
     let dirtyLlm: Record<string, unknown>;
     try {
@@ -200,10 +264,15 @@ export function SetupLlmStep({ onBack, onNext }: SetupLlmStepProps) {
       );
       return;
     }
-    // The form shows the onboarding model even when the user keeps it, so the
-    // profile gets that model whether or not the field was edited.
+    // The form shows its model even when the user keeps it (a fresh profile's
+    // is the onboarding default), so the profile gets that model whether or
+    // not the field was edited.
     if (!Object.prototype.hasOwnProperty.call(dirtyLlm, "model")) {
       dirtyLlm.model = String(saveControl.values["llm.model"] ?? "");
+    }
+    if (isSubscriptionAuth && !subscriptionModels?.length) {
+      displayErrorToast("Subscription models are not loaded yet.");
+      return;
     }
     const { llmConfig } = buildProfileLlmConfig({
       baseConfig: profileSeed.baseConfig,
@@ -212,6 +281,7 @@ export function SetupLlmStep({ onBack, onNext }: SetupLlmStepProps) {
       view: saveControl.view,
       supportsConnections: true,
       isCloud: false,
+      subscriptionModels,
     });
     const model = typeof llmConfig.model === "string" ? llmConfig.model : "";
     if (!model) {
@@ -229,16 +299,7 @@ export function SetupLlmStep({ onBack, onNext }: SetupLlmStepProps) {
           include_secrets: true,
         },
       });
-      await activateProfile.mutateAsync(profileName);
-      // Conversations launch from the active AGENT profile, so point it at the
-      // LLM the user just configured (this also clears the "LLM not set up"
-      // banner). Otherwise it keeps its seeded llm_profile_ref, which has no
-      // key.
-      await applyAgentProfile({
-        agent_kind: "openhands",
-        llm_profile_ref: profileName,
-      });
-      onNext();
+      await activateForOnboarding(profileName);
     } catch {
       // Nothing advanced, so Next retries the whole save.
       displayErrorToast(t(I18nKey.ERROR$GENERIC));
@@ -248,10 +309,10 @@ export function SetupLlmStep({ onBack, onNext }: SetupLlmStepProps) {
   }, [
     saveControl,
     profileSeed,
+    isSubscriptionAuth,
+    subscriptionModels,
     saveProfile,
-    activateProfile,
-    applyAgentProfile,
-    onNext,
+    activateForOnboarding,
     t,
   ]);
 
@@ -286,7 +347,24 @@ export function SetupLlmStep({ onBack, onNext }: SetupLlmStepProps) {
         data-testid="onboarding-llm-settings"
         className="flex min-h-0 flex-1 flex-col overflow-y-auto custom-scrollbar-always"
       >
-        {isDefaultModelReady && (!isLocalBackend || profileSeed) ? (
+        {isProfileSeedError ? (
+          <div
+            data-testid="onboarding-llm-load-error"
+            className="flex flex-col items-start gap-3"
+          >
+            <p className="text-sm text-muted">
+              {t(I18nKey.ERROR$FAILED_TO_LOAD_PROFILE_TRY_AGAIN)}
+            </p>
+            <BrandButton
+              testId="onboarding-llm-load-retry"
+              type="button"
+              variant="secondary"
+              onClick={retryProfileSeed}
+            >
+              {t(I18nKey.AUTOMATIONS$ERROR_RETRY)}
+            </BrandButton>
+          </div>
+        ) : isDefaultModelReady && (!isLocalBackend || profileSeed) ? (
           <LlmSettingsScreen
             embedded
             hideSaveButton
