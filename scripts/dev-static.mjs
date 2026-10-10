@@ -68,6 +68,7 @@ import {
   getLocalServiceRoutes,
   getNoReferrerPrefixArgs,
   getVSCodeAdvertiseArgs,
+  resolveAutomationKvSecret,
 } from "./dev-with-automation.mjs";
 import { applySessionKeyPolicy, bindHostArgs } from "./bind-host.mjs";
 
@@ -372,6 +373,9 @@ function buildAutomationBackendEnv(config, env = process.env) {
     AUTOMATION_BASE_URL: `http://localhost:${config.ingressPort}`,
     AUTOMATION_WORKSPACE_BASE: join(config.stateDir, "workspaces"),
     AUTOMATION_LOCAL_API_KEY: config.sessionApiKey,
+    // Same KV secret resolution as the Vite stack, so switching launchers
+    // doesn't strand automation KV state behind a different encryption key.
+    AUTOMATION_KV_SECRET: resolveAutomationKvSecret(config, env),
     ...buildAutomationTelemetryEnv(env),
     AUTOMATION_CORS_ORIGINS: `http://localhost:${config.ingressPort},http://127.0.0.1:${config.ingressPort},http://localhost:3001,http://127.0.0.1:3001`,
     FILE_STORE: "local",
