@@ -20,6 +20,12 @@ const mocks = vi.hoisted(() => ({
     isError: false,
     refetch: vi.fn(),
   },
+  draftsState: {
+    data: { drafts: [], total: 0 },
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  },
   dispatchState: {
     isPending: false,
     variables: undefined as string | undefined,
@@ -28,12 +34,16 @@ const mocks = vi.hoisted(() => ({
   backendKind: "local" as "local" | "cloud",
   canManage: true,
   navigate: vi.fn(),
+  useAutomationDrafts: vi.fn(),
   useAutomations: vi.fn(),
   useAutomationRunSummaries: vi.fn(),
   toggle: vi.fn(),
   remove: vi.fn(),
+  removeDraft: vi.fn(),
   dispatch: vi.fn(),
+  dispatchDraft: vi.fn(),
   importAutomation: vi.fn(),
+  createConversation: vi.fn(),
   trackEnabled: vi.fn(),
   trackExported: vi.fn(),
   useTranslation: vi.fn(),
@@ -88,15 +98,31 @@ vi.mock("#/hooks/query/use-automation-health", () => ({
   useAutomationHealth: () => mocks.healthState,
 }));
 
+vi.mock("#/hooks/mutation/use-create-conversation", () => ({
+  useCreateConversation: () => ({
+    mutate: mocks.createConversation,
+    isPending: false,
+  }),
+}));
+
 vi.mock("#/hooks/query/use-automations", () => ({
+  useAutomationDrafts: (options: unknown) => {
+    mocks.useAutomationDrafts(options);
+    return mocks.draftsState;
+  },
   useAutomations: (options: unknown) => {
     mocks.useAutomations(options);
     return { ...mocks.automationsState, hasNextPage: false };
   },
   useToggleAutomation: () => ({ mutate: mocks.toggle }),
   useDeleteAutomation: () => ({ mutate: mocks.remove }),
+  useDeleteAutomationDraft: () => ({ mutate: mocks.removeDraft }),
   useDispatchAutomation: () => ({
     mutate: mocks.dispatch,
+    ...mocks.dispatchState,
+  }),
+  useDispatchAutomationDraft: () => ({
+    mutate: mocks.dispatchDraft,
     ...mocks.dispatchState,
   }),
   useImportAutomation: () => ({
@@ -115,6 +141,7 @@ vi.mock("#/hooks/use-tracking", () => ({
   useTracking: () => ({
     trackPrebuiltAutomationEnabled: mocks.trackEnabled,
     trackAutomationExported: mocks.trackExported,
+    trackAutomationCreatedButton: vi.fn(),
   }),
 }));
 
@@ -314,23 +341,6 @@ vi.mock(
       ) : null,
   }),
 );
-
-vi.mock("#/components/features/automations/add-automation-modal", () => ({
-  AddAutomationModal: ({
-    isOpen,
-    onClose,
-  }: {
-    isOpen: boolean;
-    onClose: () => void;
-  }) =>
-    isOpen ? (
-      <div data-testid="add-modal">
-        <button type="button" onClick={onClose}>
-          close-add
-        </button>
-      </div>
-    ) : null,
-}));
 
 vi.mock("#/components/features/automations/import-automation-modal", () => ({
   ImportAutomationModal: ({
@@ -862,7 +872,7 @@ describe("automations list interactions", () => {
     expect(screen.queryByTestId("delete-modal")).not.toBeInTheDocument();
   });
 
-  it("opens and closes editing for local automations", async () => {
+  it("opens the setup page when editing an automation", async () => {
     const automation = makeAutomation();
     mocks.automationsState.data = { automations: [automation], total: 1 };
     const user = userEvent.setup();
@@ -871,9 +881,11 @@ describe("automations list interactions", () => {
     await user.click(
       screen.getByRole("button", { name: `edit-${automation.id}` }),
     );
-    expect(screen.getByTestId("edit-modal")).toHaveTextContent(automation.name);
-    await user.click(screen.getByRole("button", { name: "close-edit" }));
 
+    expect(mocks.createConversation).not.toHaveBeenCalled();
+    expect(mocks.navigate).toHaveBeenCalledWith(
+      "/automations/setup?automationId=automation-1",
+    );
     expect(screen.queryByTestId("edit-modal")).not.toBeInTheDocument();
   });
 
@@ -929,15 +941,14 @@ describe("automations list interactions", () => {
     ).toBeInTheDocument();
   });
 
-  it("opens and closes the add-automation form", async () => {
+  it("starts the setup page from the add-automation action", async () => {
     const user = userEvent.setup();
     renderList();
 
-    expect(screen.queryByTestId("add-modal")).not.toBeInTheDocument();
     await user.click(screen.getByTestId("automations-add-automation"));
-    expect(screen.getByTestId("add-modal")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "close-add" }));
 
+    expect(mocks.createConversation).not.toHaveBeenCalled();
+    expect(mocks.navigate).toHaveBeenCalledWith("/automations/setup");
     expect(screen.queryByTestId("add-modal")).not.toBeInTheDocument();
   });
 

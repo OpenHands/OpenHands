@@ -69,6 +69,38 @@ describe("RunLogsModal", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
+  it("scrolls long log content inside the dialog", () => {
+    useBashCommandLogsMock.mockReturnValue(
+      makeHookResult({
+        data: [
+          {
+            id: "o1",
+            kind: "BashOutput",
+            timestamp: "2026-01-01T10:00:00Z",
+            command_id: "cmd-1",
+            order: 0,
+            stdout: "line\n".repeat(80),
+            stderr: null,
+          },
+        ],
+      }),
+    );
+    render(
+      <RunLogsModal
+        isOpen
+        conversationId="conv-1"
+        bashCommandId="cmd-1"
+        onClose={() => {}}
+      />,
+    );
+
+    const body = screen.getByTestId("run-logs-body");
+    expect(body).toHaveClass("max-h-[80vh]", "overflow-y-auto");
+    expect(
+      screen.getByTestId("run-logs-output-stdout").parentElement,
+    ).not.toHaveClass("overflow-auto");
+  });
+
   it("uses the 'Logs' title (not 'Run logs')", () => {
     useBashCommandLogsMock.mockReturnValue(makeHookResult());
     render(

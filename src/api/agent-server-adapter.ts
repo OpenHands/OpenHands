@@ -35,6 +35,13 @@ import {
 } from "./conversation-service/agent-server-conversation-service.types";
 import { combineUsageMetrics } from "#/utils/conversation-metrics";
 import {
+  AUTOMATION_DRAFT_ID_TAG_KEY,
+  AUTOMATION_EDIT_ID_TAG_KEY,
+  AUTOMATION_MATERIALIZED_DRAFT_ID_TAG_KEY,
+  AUTOMATION_SETUP_TAG_KEY,
+  buildAutomationSetupModeTags,
+} from "#/utils/automation-draft-tags";
+import {
   buildSkillEnablementFilter,
   findInvokedCatalogSkill,
   toSkillEnablement,
@@ -59,6 +66,7 @@ import {
   LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL,
   LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
 } from "./launch-child-conversation-client-tool";
+import { AUTOMATION_FORM_UPDATE_CLIENT_TOOL } from "./automation-form-client-tool";
 import {
   buildPlanPath,
   LOCAL_PLANNER_PARENT_TAG_KEY,
@@ -576,6 +584,12 @@ export const AUTOMATION_TAG_KEYS: readonly string[] = [
  *   stay out of it — and users can't edit or spoof automation classification.
  * - ``localplannerparent`` → internal routing for the local planner; already
  *   surfaced by the hidden-from-list planner filter
+ * - ``automationsetup`` → user-visible setup-mode marker so users can find
+ *   setup conversations and filter by them
+ * - ``automationdraftid`` / ``automationmaterializeddraftid`` → internal
+ *   routing for resuming server-backed automation setup drafts (the last one
+ *   links a resumed conversation to the automation materialized from its draft)
+ * - ``automationeditid`` → the saved automation this setup page is editing
  */
 export const RESERVED_CONVERSATION_TAG_KEYS: ReadonlySet<string> = new Set([
   ACP_SERVER_TAG_KEY,
@@ -584,6 +598,9 @@ export const RESERVED_CONVERSATION_TAG_KEYS: ReadonlySet<string> = new Set([
   AUTOMATION_ID_TAG_KEY,
   AUTOMATION_NAME_TAG_KEY,
   AUTOMATION_RUN_ID_TAG_KEY,
+  AUTOMATION_DRAFT_ID_TAG_KEY,
+  AUTOMATION_MATERIALIZED_DRAFT_ID_TAG_KEY,
+  AUTOMATION_EDIT_ID_TAG_KEY,
   "title",
   "git_provider",
   "repo_name",
@@ -598,10 +615,14 @@ export const RESERVED_CONVERSATION_TAG_KEYS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * High-signal tag keys shown first in the chip row (before A–Z). Automations
- * often stamp ``origin``; remaining free-form tags sort alphabetically.
+ * High-signal tag keys shown first in the chip row (before A–Z). Automation
+ * setup mode should be easy to spot and filter; automations often stamp
+ * ``origin``; remaining free-form tags sort alphabetically.
  */
-export const PRIORITY_CONVERSATION_TAG_KEYS: readonly string[] = ["origin"];
+export const PRIORITY_CONVERSATION_TAG_KEYS: readonly string[] = [
+  AUTOMATION_SETUP_TAG_KEY,
+  "origin",
+];
 
 /**
  * User-facing subset of a conversation's server-side tags: everything except
@@ -1196,6 +1217,8 @@ type RawAgentStartConversationPayload = StartConversationPayloadBase & {
 export interface StartConversationOptions {
   settings: Settings;
   query?: string;
+  automationSetup?: boolean;
+  automationSetupTags?: Record<string, string>;
   conversationInstructions?: string;
   plugins?: PluginSpec[];
   conversationId?: string;
@@ -1356,7 +1379,13 @@ export function buildStartConversationRequest(
     // conversations can start.
     client_tools:
       launchAgentKind === "openhands"
-        ? [CANVAS_UI_CLIENT_TOOL, LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL]
+        ? [
+            CANVAS_UI_CLIENT_TOOL,
+            LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL,
+            ...(options.automationSetup
+              ? [AUTOMATION_FORM_UPDATE_CLIENT_TOOL]
+              : []),
+          ]
         : [],
     confirmation_policy:
       getConversationConfirmationPolicy(conversationSettings),
@@ -1376,13 +1405,20 @@ export function buildStartConversationRequest(
   // conversation to Canvas in telemetry (conversation_source = "canvas").
   // A profile launch resolves the ACP server server-side, so don't stamp the
   // tag from current settings (it may not match the launched profile).
+  const baseTags = options.automationSetup
+    ? buildAutomationSetupModeTags(options.automationSetupTags)
+    : {};
   if (!options.agentProfileId && acpServerTag) {
     payload.tags = {
+      ...baseTags,
       [ACP_SERVER_TAG_KEY]: acpServerTag,
       [CLIENT_SOURCE_TAG_KEY]: AGENT_CANVAS_SOURCE,
     };
   } else {
-    payload.tags = { [CLIENT_SOURCE_TAG_KEY]: AGENT_CANVAS_SOURCE };
+    payload.tags = {
+      ...baseTags,
+      [CLIENT_SOURCE_TAG_KEY]: AGENT_CANVAS_SOURCE,
+    };
   }
 
   // ``secrets_encrypted`` makes the agent-server decrypt request secrets at
@@ -1713,6 +1749,8 @@ export async function assertSubscriptionAuthReady(
 export async function buildStartConversationRequestWithEncryptedSettings(options: {
   settings: Settings;
   query?: string;
+  automationSetup?: boolean;
+  automationSetupTags?: Record<string, string>;
   conversationInstructions?: string;
   plugins?: PluginSpec[];
   conversationId?: string;
