@@ -537,4 +537,35 @@ describe("ChatInputActions — More input actions overflow menu (#17925)", () =>
       within(submenu).getByTestId("llm-profile-menu-stub"),
     ).toBeInTheDocument();
   });
+
+  it("positions the Model submenu inside the viewport near the right and bottom edges (#18063)", () => {
+    window.innerWidth = 320;
+    window.innerHeight = 700;
+
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: HTMLElement) {
+        if (
+          this.dataset?.testid === "overflow-model-submenu" ||
+          this.firstElementChild?.getAttribute("data-testid") ===
+            "overflow-model-submenu"
+        ) {
+          return DOMRect.fromRect({ x: 0, y: 0, width: 220, height: 190 });
+        }
+        return DOMRect.fromRect({ x: 68, y: 575, width: 200, height: 36 });
+      },
+    );
+
+    renderWithProviders(<ChatInputActions disabled={false} />);
+
+    clickTrigger();
+    fireEvent.click(screen.getByTestId("overflow-model-button"));
+
+    const submenu = screen.getByTestId("overflow-model-submenu");
+    const submenuWrapper = submenu.parentElement;
+    expect(submenuWrapper).toHaveClass("visible");
+    expect(submenuWrapper).toHaveStyle({
+      left: "24px",
+      top: "-73px",
+    });
+  });
 });
