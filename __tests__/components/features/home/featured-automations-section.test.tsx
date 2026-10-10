@@ -8,6 +8,8 @@ import AutomationService from "#/api/automation-service/automation-service.api";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
+import SettingsService from "#/api/settings-service/settings-service.api";
+import { DEFAULT_SETTINGS } from "#/services/settings";
 import {
   __resetActiveStoreForTests,
   setActiveSelection,
@@ -18,7 +20,6 @@ import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { PinnedAutomationsDashboard } from "#/components/features/home/featured-automations/pinned-automations-dashboard";
 import { RunningAutomationsList } from "#/components/features/home/featured-automations/running-automations-list";
 import { NavigationProvider } from "#/context/navigation-context";
-import { HOME_PINNED_AUTOMATIONS_KEY } from "#/hooks/use-home-pinned-automations";
 import { AUTOMATION_STACK_SECTION_BOTTOM_CLASS } from "#/utils/automation-stack-section";
 import {
   AutomationRunStatus,
@@ -65,6 +66,8 @@ vi.mock("#/api/profiles-service/profiles-service.api", () => ({
     listProfiles: vi.fn(),
   },
 }));
+
+vi.mock("#/api/settings-service/settings-service.api");
 
 vi.mock("#/utils/custom-toast-handlers", () => ({
   displaySuccessToast: vi.fn(),
@@ -142,14 +145,6 @@ function makeConversation(id: string, title: string | null): AppConversation {
   };
 }
 
-/** Pins are stored under a backend/org-scoped key; find it by prefix. */
-function getStoredPinnedIds(): string | null {
-  const key = Object.keys(window.localStorage).find((storageKey) =>
-    storageKey.startsWith(HOME_PINNED_AUTOMATIONS_KEY),
-  );
-  return key ? window.localStorage.getItem(key) : null;
-}
-
 function renderHomeAutomations(ui: React.ReactElement) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -173,6 +168,15 @@ function renderHomeAutomations(ui: React.ReactElement) {
 beforeEach(() => {
   vi.clearAllMocks();
   window.localStorage.clear();
+  let serverPins: string[] | undefined;
+  vi.mocked(SettingsService.getSettings).mockImplementation(async () => ({
+    ...DEFAULT_SETTINGS,
+    home_pinned_automations: serverPins,
+  }));
+  vi.mocked(SettingsService.saveSettings).mockImplementation(async (update) => {
+    serverPins = update.home_pinned_automations;
+    return true;
+  });
   vi.mocked(AutomationService.checkHealth).mockResolvedValue({ status: "ok" });
   vi.mocked(AutomationService.getAutomations).mockResolvedValue({
     automations: [makeAutomation()],
@@ -471,7 +475,9 @@ describe("home automations composer layout", () => {
       within(dashboard).getByText("AUTOMATIONS$DETAIL$NO_CONVERSATION"),
     ).toBeInTheDocument();
 
-    expect(getStoredPinnedIds()).toContain("auto-1");
+    expect(SettingsService.saveSettings).toHaveBeenLastCalledWith({
+      home_pinned_automations: ["auto-1", "auto-2"],
+    });
 
     expect(
       screen.queryByTestId("pinned-automation-run-now-auto-1"),

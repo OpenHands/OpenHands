@@ -112,6 +112,8 @@ export type AgentKind = "openhands" | "acp";
 
 export type Settings = {
   workspace_file_discovery?: Record<string, WorkspaceFileDiscovery | null>;
+  /** Ordered ids of automations pinned to the home dashboard (local only). */
+  home_pinned_automations?: string[];
   llm_model: string;
   llm_base_url: string;
   agent: string;
