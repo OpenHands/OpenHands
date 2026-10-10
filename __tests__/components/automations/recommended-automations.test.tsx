@@ -1318,4 +1318,59 @@ describe("recommended automations", () => {
     ).not.toBeInTheDocument();
     expect(mockCreateSecret).not.toHaveBeenCalled();
   });
+
+  it("does not show a missing-connect pill for an automation whose only declared integration is optional", () => {
+    render(
+      <RecommendedAutomationsSection
+        backendKind="local"
+        installedServers={[]}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    const pills = screen.getByTestId(
+      "recommended-automation-pills-custom-automation-wrap",
+    );
+    expect(pills).toHaveTextContent("GitHub");
+    expect(pills).not.toHaveTextContent(
+      "RECOMMENDED_AUTOMATIONS$MISSING_CONNECT",
+    );
+  });
+
+  it("renders a visible no-results message when search matches no automation and clears on request", () => {
+    const onClear = vi.fn();
+    const { rerender } = render(
+      <RecommendedAutomationsSection
+        backendKind="local"
+        installedServers={[]}
+        query="qa-no-such-template"
+        onClearQuery={onClear}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    const empty = screen.getByTestId("automations-filtered-empty");
+    expect(empty).toBeInTheDocument();
+    expect(empty).toHaveTextContent(I18nKey.AUTOMATIONS$NO_FILTER_MATCHES);
+
+    const clearButton = screen.getByTestId("automations-clear-filters");
+    fireEvent.click(clearButton);
+    expect(onClear).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <RecommendedAutomationsSection
+        backendKind="local"
+        installedServers={[]}
+        query=""
+        onClearQuery={onClear}
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(
+      screen.queryByTestId("automations-filtered-empty"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("recommended-automation-card-github-pr-reviewer"),
+    ).toBeInTheDocument();
+  });
 });

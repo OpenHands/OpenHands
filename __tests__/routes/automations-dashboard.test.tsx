@@ -829,4 +829,34 @@ describe("AutomationTemplates — manifest-declared templates page", () => {
     const nav = await screen.findByTestId("automations-navbar-desktop");
     expect(within(nav).getByText("Widget templates")).toBeInTheDocument();
   });
+
+  it("shows no-results empty state when searching on templates page and clears back to grid", async () => {
+    // Arrange & Act
+    renderAt("/automations/templates", <AutomationTemplates />);
+    await screen.findByTestId("recommended-automations-section");
+
+    const searchInput = screen.getByPlaceholderText(
+      I18nKey.AUTOMATIONS$SEARCH_PLACEHOLDER,
+    );
+    await userEvent.type(searchInput, "qa-no-such-template");
+
+    // Assert empty state is shown
+    const emptyState = await screen.findByTestId("automations-filtered-empty");
+    expect(emptyState).toBeInTheDocument();
+
+    // Act: clear filters
+    const clearButton = screen.getByTestId("automations-clear-filters");
+    await userEvent.click(clearButton);
+
+    // Assert grid is restored and search input is cleared
+    expect(searchInput).toHaveValue("");
+    expect(
+      screen.queryByTestId("automations-filtered-empty"),
+    ).not.toBeInTheDocument();
+    expect(
+      await screen.findByTestId(
+        "recommended-automation-card-custom-automation",
+      ),
+    ).toBeInTheDocument();
+  });
 });
