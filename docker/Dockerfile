@@ -121,11 +121,10 @@ RUN if command -v apt-get >/dev/null 2>&1; then \
     fi
 
 # Install automation server and the tool models its SDK clients deserialize.
-# Match openhands-tools to the SDK already provided by the agent-server image,
-# just as the local Canvas launcher does. Pin openhands-agent-server too: the
-# patched base no longer ships it as a pip package, so automation would pull the latest.
-RUN uv pip install --system "openhands-automation==${AUTOMATION_VERSION}" "openhands-tools==${AGENT_SERVER_VERSION}" "openhands-agent-server==${AGENT_SERVER_VERSION}" 2>/dev/null \
-    || pip install --no-cache-dir "openhands-automation==${AUTOMATION_VERSION}" "openhands-tools==${AGENT_SERVER_VERSION}" "openhands-agent-server==${AGENT_SERVER_VERSION}"
+# Versions are held to the shipped 1.23.0 dependency set; the patched base no longer pre-installs it.
+COPY docker/python-constraints.txt /tmp/python-constraints.txt
+RUN uv pip install --system -c /tmp/python-constraints.txt "openhands-automation==${AUTOMATION_VERSION}" "openhands-tools==${AGENT_SERVER_VERSION}" "openhands-agent-server==${AGENT_SERVER_VERSION}" 2>/dev/null \
+    || pip install --no-cache-dir -c /tmp/python-constraints.txt "openhands-automation==${AUTOMATION_VERSION}" "openhands-tools==${AGENT_SERVER_VERSION}" "openhands-agent-server==${AGENT_SERVER_VERSION}"
 
 RUN if [ -n "${AGENT_SERVER_SDK_GIT_REF}" ]; then \
       BASE_GIT_URL="git+https://github.com/OpenHands/software-agent-sdk@${AGENT_SERVER_SDK_GIT_REF}" && \
