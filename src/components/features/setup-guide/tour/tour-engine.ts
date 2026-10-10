@@ -17,6 +17,16 @@ import "./tour-theme.css";
 /** On `<body>` while the current stop keeps the whole page usable. */
 const INTERACTIVE_STOP_CLASS = "oh-setup-tour-interactive";
 
+/** On `<body>` while the tour is hidden, looking for the next stop's element. */
+const WAITING_CLASS = "oh-setup-tour-waiting";
+
+/**
+ * How long a stop reached by a click may take to appear. The click can open
+ * something else first, such as a choice of setup or an install dialog, and
+ * the admin may take a while there.
+ */
+const NEXT_STOP_TIMEOUT_MS = 60_000;
+
 export interface GuidedTourNavigation {
   navigate: (to: string) => void;
   /** The current route, relative to the app's base path. */
@@ -65,6 +75,24 @@ function setInteractive(stop: GuidedTourStop | undefined): void {
   );
 }
 
+// driver.js keeps Tab inside the stop it last showed, with a listener on
+// `window`. While the tour is hidden, Tab should move through what the click
+// opened instead, so it is stopped on `document` first.
+function keepTabOutOfHiddenTour(event: KeyboardEvent): void {
+  if (event.key === "Tab") {
+    event.stopPropagation();
+  }
+}
+
+function setWaiting(waiting: boolean): void {
+  document.body.classList.toggle(WAITING_CLASS, waiting);
+  if (waiting) {
+    document.addEventListener("keydown", keepTabOutOfHiddenTour);
+  } else {
+    document.removeEventListener("keydown", keepTabOutOfHiddenTour);
+  }
+}
+
 function queryFirst(selector: string): Element | null {
   const parts = selector.split(",").map((part) => part.trim());
   for (const part of parts) {
@@ -76,9 +104,12 @@ function queryFirst(selector: string): Element | null {
   return null;
 }
 
-async function resolveAnchor(selector: string): Promise<Element | null> {
+async function resolveAnchor(
+  selector: string,
+  timeoutMs: number,
+): Promise<Element | null> {
   // A stop reached by a click (a new route, a dialog) can take a moment.
-  for (let attempt = 0; attempt < 50; attempt += 1) {
+  for (let attempt = 0; attempt * 100 < timeoutMs; attempt += 1) {
     const el = queryFirst(selector);
     if (el) {
       el.scrollIntoView({ block: "nearest", inline: "nearest" });
@@ -111,13 +142,14 @@ function sideFor(el: Element, requested?: GuidedTourSide): GuidedTourSide {
 async function prepareStop(
   stop: GuidedTourStop,
   nav: GuidedTourNavigation,
+  timeoutMs = 5_000,
 ): Promise<Element | null> {
   if (stop.route && nav.getPath() !== stop.route) {
     nav.navigate(stop.route);
     // The route's page needs a beat before its anchors exist.
     await wait(400);
   }
-  const el = await resolveAnchor(stop.anchor);
+  const el = await resolveAnchor(stop.anchor, timeoutMs);
   if (el) {
     resolvedAnchors.set(stop.id, el);
   } else {
@@ -137,6 +169,7 @@ export function stopGuidedTour(): void {
   tourGeneration += 1;
   clearSetupStepListener();
   setInteractive(undefined);
+  setWaiting(false);
   activeDriver?.destroy();
   activeDriver = null;
   resolvedAnchors.clear();
@@ -156,8 +189,10 @@ export async function startGuidedTour(
   if (stops.length === 0) {
     return;
   }
-  await prepareStop(stops[0], nav);
-  if (!isCurrent()) {
+  // A stop is only ever shown on its element: without one, driver.js would
+  // float the popover over whatever is on the page.
+  const firstAnchor = await prepareStop(stops[0], nav);
+  if (!isCurrent() || !firstAnchor) {
     return;
   }
 
@@ -192,10 +227,26 @@ export async function startGuidedTour(
       }
       clearSetupStepListener();
       tourCtl.clearAnchorClickHandler();
-      await prepareStop(nextStop, nav);
+      // Hide the tour while the next stop's element is looked for, so it
+      // covers nothing the click opened first and the page stays usable. A
+      // longer wait also lets the setup guide show again meanwhile.
+      setWaiting(true);
+      const markIdle = window.setTimeout(() => {
+        if (isCurrent()) setTourActive(false);
+      }, 1_000);
+      const anchor = await prepareStop(nextStop, nav, NEXT_STOP_TIMEOUT_MS);
+      window.clearTimeout(markIdle);
       if (!isCurrent()) {
         return;
       }
+      setWaiting(false);
+      if (!anchor) {
+        // The flow went elsewhere, e.g. the admin chose the built-in
+        // integration or a template that starts a conversation.
+        instanceApi.destroy();
+        return;
+      }
+      setTourActive(true);
       index = nextIndex;
       setInteractive(nextStop);
       instanceApi.moveTo(nextIndex);
@@ -232,7 +283,7 @@ export async function startGuidedTour(
       tourCtl.bindWaitForComplete(instanceApi);
       const current = stops[index];
       const anchor = current && resolvedAnchors.get(current.id);
-      if (!anchor || (!current.nextClicksAnchor && !current.advanceOnClick)) {
+      if (!anchor || !current.advanceOnClick) {
         return;
       }
       anchorClickHandler = (event: Event) => {
@@ -304,13 +355,6 @@ export async function startGuidedTour(
         return;
       }
       tourCtl.clearAnchorClickHandler();
-      if (current?.nextClicksAnchor) {
-        const anchor = resolvedAnchors.get(current.id);
-        if (anchor instanceof HTMLElement) {
-          anchor.click();
-          await wait(280);
-        }
-      }
       await tourCtl.advanceFrom(instanceApi, index + 1);
     },
     onPrevClick: async (_el, _step, { driver: instanceApi }) => {
@@ -320,8 +364,12 @@ export async function startGuidedTour(
       }
       clearSetupStepListener();
       tourCtl.clearAnchorClickHandler();
-      await prepareStop(prevStop, nav);
+      const anchor = await prepareStop(prevStop, nav);
       if (!isCurrent()) {
+        return;
+      }
+      if (!anchor) {
+        instanceApi.destroy();
         return;
       }
       index -= 1;
@@ -345,6 +393,7 @@ export async function startGuidedTour(
       }
       clearSetupStepListener();
       setInteractive(undefined);
+      setWaiting(false);
       activeDriver = null;
       resolvedAnchors.clear();
       setTourActive(false);
