@@ -61,7 +61,13 @@ const saveSettingsMutationFn = async (settings: SettingsUpdate) => {
 
 export const useSaveSettings = (
   scope: SettingsScope = "personal",
-  { retry }: { retry?: number } = {},
+  {
+    retry,
+    onPersisted,
+  }: {
+    retry?: number;
+    onPersisted?: (settings: SettingsUpdate) => void;
+  } = {},
 ) => {
   const { trackMcpConfigUpdated } = useTracking();
   const queryClient = useQueryClient();
@@ -89,7 +95,9 @@ export const useSaveSettings = (
 
       await saveSettingsMutationFn(settings);
     },
-    onSuccess: async () => {
+    onSuccess: async (_data, settings) => {
+      // The write is committed even while its settings refetch is pending.
+      onPersisted?.(settings);
       await queryClient.invalidateQueries({
         queryKey: SETTINGS_QUERY_KEYS.byScope(scope),
       });

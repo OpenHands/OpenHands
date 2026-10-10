@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -95,6 +95,30 @@ describe("CirclePlusCheckToggle", () => {
     toggle.focus();
 
     expect(toggle).toHaveAttribute("data-showing-remove", "false");
+  });
+
+  it("keeps the pressed icon mounted when the pointer enters", async () => {
+    const user = userEvent.setup();
+    const onToggle = vi.fn();
+    render(
+      <CirclePlusCheckToggle
+        testId="skill-toggle"
+        isSelected
+        onToggle={onToggle}
+      />,
+    );
+    const toggle = screen.getByTestId("skill-toggle");
+    const icon = toggle.querySelector("svg")!;
+
+    fireEvent.mouseDown(icon);
+    await user.hover(toggle);
+    expect(icon.isConnected).toBe(true);
+    await user.pointer([
+      { target: icon, keys: "[MouseLeft>]" },
+      { keys: "[/MouseLeft]" },
+    ]);
+
+    expect(onToggle).toHaveBeenCalledExactlyOnceWith(false);
   });
 
   it("stops click propagation for nested card handlers", async () => {

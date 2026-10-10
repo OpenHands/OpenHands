@@ -84,14 +84,29 @@ export function useSkillEnablement(): SkillEnablementController {
   const { backend } = useActiveBackend();
   const usesCatalogAllowList = backend.kind !== "cloud";
   const { data: settings, isLoading: settingsLoading } = useSettings();
-  const { mutate: saveSettings } = useSaveSettings();
 
   const [enablement, setEnablement] = React.useState<SkillEnablement>({});
   const savedRef = React.useRef<string | null>(null);
+  const persistedRef = React.useRef<SkillEnablement>({});
+  const hydratingRef = React.useRef(false);
+  const hydrationVersionRef = React.useRef(0);
+  const { mutate: saveSettings } = useSaveSettings("personal", {
+    onPersisted: (saved) => {
+      persistedRef.current = {
+        enabledSkills:
+          saved.enabled_skills ?? persistedRef.current.enabledSkills,
+        disabledSkills:
+          saved.disabled_skills ?? persistedRef.current.disabledSkills,
+      };
+    },
+  });
 
   React.useEffect(() => {
     if (settingsLoading || !settings) return;
     const hydrated = readSkillEnablement(settings, usesCatalogAllowList);
+    persistedRef.current = hydrated;
+    hydrationVersionRef.current += 1;
+    hydratingRef.current = true;
     savedRef.current = snapshot(hydrated);
     setEnablement(hydrated);
   }, [
@@ -102,10 +117,16 @@ export function useSkillEnablement(): SkillEnablementController {
   ]);
 
   React.useEffect(() => {
+    // Hydration schedules a render; this effect still sees the preceding state.
+    if (hydratingRef.current) {
+      hydratingRef.current = false;
+      return;
+    }
     // Writing the hydrated value straight back would race the one-shot
     // migration and could narrow a workspace it had just preserved.
     const next = snapshot(enablement);
     if (savedRef.current === null || savedRef.current === next) return;
+    const hydrationVersion = hydrationVersionRef.current;
     savedRef.current = next;
 
     const disabledSkills = enablement.disabledSkills ?? [];
@@ -118,13 +139,32 @@ export function useSkillEnablement(): SkillEnablementController {
         : { disabled_skills: disabledSkills },
       {
         onError: (error) => {
+          // An older failure must not undo a newer edit or refreshed settings.
+          if (
+            hydrationVersionRef.current === hydrationVersion &&
+            savedRef.current === next
+          ) {
+            const previous = persistedRef.current;
+            savedRef.current = snapshot(previous);
+            setEnablement((current) =>
+              snapshot(current) === next ? previous : current,
+            );
+          }
           displayErrorToast(
             retrieveAxiosErrorMessage(error) || t(I18nKey.ERROR$GENERIC),
           );
         },
       },
     );
-  }, [enablement, usesCatalogAllowList, saveSettings, t]);
+  }, [
+    enablement,
+    settingsLoading,
+    settings?.enabled_skills,
+    settings?.disabled_skills,
+    usesCatalogAllowList,
+    saveSettings,
+    t,
+  ]);
 
   const isEnabled = React.useMemo(() => {
     const enabled = buildSkillEnablementFilter(enablement);
