@@ -107,6 +107,43 @@ describe("SkillDetailModal", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("closes the tag popover before closing the detail modal on Escape", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    const skill = buildSkill({
+      name: "overflow-test",
+      triggers: ["one", "two", "three", "four", "five"],
+    });
+
+    render(
+      <SkillDetailModal
+        skill={skill}
+        enabled
+        onToggle={vi.fn()}
+        onClose={onClose}
+      />,
+    );
+
+    const trigger = screen.getByTestId(
+      `skill-modal-pills-${skill.name}-overflow`,
+    );
+    await user.click(trigger);
+    expect(
+      screen.getByTestId(`skill-modal-pills-${skill.name}-overflow-popover`),
+    ).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+
+    expect(
+      screen.queryByTestId(`skill-modal-pills-${skill.name}-overflow-popover`),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("skill-detail-modal")).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+
+    await user.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it("opens a new chat with the add-skill command from the detail modal", async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
