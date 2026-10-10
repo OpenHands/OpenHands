@@ -193,7 +193,6 @@ export function CustomServerEditor({
           });
         }
       },
-      onError: handleError,
     });
   };
 
