@@ -26,6 +26,28 @@ describe("mock-LLM folder workspace paths", () => {
     expect(paths.testDir).toBe(expectedDir);
   });
 
+  it("places each run below the fixed host and container roots", () => {
+    const runDirName = "issue-16714-run-123";
+    const paths = resolveFolderWorkspacePaths({
+      env: {
+        MOCK_LLM_FOLDER_WORKSPACE_HOST_DIR: "/host/folder-workspace",
+        MOCK_LLM_FOLDER_WORKSPACE_CONTAINER_DIR: "/container/folder-workspace",
+      },
+      runDirName,
+    });
+
+    expect(paths.hostRunDir).toBe(`/host/folder-workspace/${runDirName}`);
+    expect(paths.containerRunDir).toBe(
+      `/container/folder-workspace/${runDirName}`,
+    );
+    expect(paths.hostDir).toBe(
+      `/host/folder-workspace/${runDirName}/${TEST_DIR_NAME}`,
+    );
+    expect(paths.testDir).toBe(
+      `/container/folder-workspace/${runDirName}/${TEST_DIR_NAME}`,
+    );
+  });
+
   it("derives Windows folder-browser roots and path segments", () => {
     const target = String.raw`C:\Users\me\AppData\Local\Temp\e2e-folder-workspace-test\my-test-project`;
 

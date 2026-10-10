@@ -7,23 +7,33 @@ export const TEST_DIR_NAME = "my-test-project";
 interface ResolveFolderWorkspacePathsOptions {
   env?: NodeJS.ProcessEnv;
   tmpDir?: string;
+  runDirName?: string;
 }
 
 export function resolveFolderWorkspacePaths({
   env = process.env,
   tmpDir = os.tmpdir(),
+  runDirName,
 }: ResolveFolderWorkspacePathsOptions = {}) {
   const hostDirBase =
     env.MOCK_LLM_FOLDER_WORKSPACE_HOST_DIR ??
     joinRuntimePath(tmpDir, WORKSPACE_DIR_NAME);
   const containerDirBase =
     env.MOCK_LLM_FOLDER_WORKSPACE_CONTAINER_DIR ?? hostDirBase;
+  const hostRunDir = runDirName
+    ? joinRuntimePath(hostDirBase, runDirName)
+    : hostDirBase;
+  const containerRunDir = runDirName
+    ? joinRuntimePath(containerDirBase, runDirName)
+    : containerDirBase;
 
   return {
     hostDirBase,
     containerDirBase,
-    hostDir: joinRuntimePath(hostDirBase, TEST_DIR_NAME),
-    testDir: joinRuntimePath(containerDirBase, TEST_DIR_NAME),
+    hostRunDir,
+    containerRunDir,
+    hostDir: joinRuntimePath(hostRunDir, TEST_DIR_NAME),
+    testDir: joinRuntimePath(containerRunDir, TEST_DIR_NAME),
   };
 }
 

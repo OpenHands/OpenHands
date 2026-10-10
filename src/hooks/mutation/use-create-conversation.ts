@@ -61,6 +61,7 @@ interface CreateConversationResponse {
   session_api_key: string | null;
   url: string | null;
   task_id?: string;
+  workspace_mode?: WorkspaceMode;
 }
 
 interface UseCreateConversationOptions {
@@ -407,6 +408,12 @@ export const useCreateConversation = ({
         session_api_key: null,
         url: conversation.agent_server_url,
         task_id: conversation.id,
+        workspace_mode:
+          workspaceMode ??
+          (localConversationId && workingDir
+            ? (getStoredConversationMetadata(localConversationId)
+                ?.workspace_mode ?? undefined)
+            : undefined),
       };
     },
     onSuccess: async (data, variables) => {
@@ -416,7 +423,7 @@ export const useCreateConversation = ({
         hasRepository: !!variables.repository,
         gitProvider: variables.repository?.gitProvider,
         hasWorkspace: !!variables.workingDir,
-        workspaceMode: variables.workspaceMode,
+        workspaceMode: data.workspace_mode,
         hasInitialQuery: !!variables.query,
         agentType: variables.agentType,
         hasParentConversation: !!variables.parentConversationId,
