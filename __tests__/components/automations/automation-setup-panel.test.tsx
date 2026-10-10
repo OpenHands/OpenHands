@@ -9,7 +9,6 @@ import {
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { HttpError } from "@openhands/typescript-client";
 import {
   NavigationProvider,
   type NavigationContextValue,
@@ -1592,6 +1591,152 @@ describe("AutomationSetupPanel", () => {
       expect(mockNavigate).not.toHaveBeenCalledWith(
         "/conversations/conv-run-1",
       );
+    });
+
+    it("polls in-flight draft test runs until terminal status is reached", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      mockSavedDraftEcho({ materializedAutomationId: "auto-draft-1" });
+      vi.mocked(AutomationService.dispatchServerDraft).mockResolvedValue({
+        id: "run-1",
+        status: "PENDING" as never,
+        conversation_id: "conv-run-1",
+        bash_command_id: null,
+        error_detail: null,
+        started_at: "2026-01-01T00:00:00.000Z",
+        completed_at: null,
+        automation_id: "auto-draft-1",
+      } as never);
+
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderPanel();
+
+      await saveDraftAndWaitForTest(user);
+      await user.click(screen.getByTestId("automation-setup-test"));
+
+      await waitFor(() =>
+        expect(AutomationService.dispatchServerDraft).toHaveBeenCalledWith(
+          "draft-1",
+        ),
+      );
+
+      expect(
+        screen.getByTestId("automation-setup-draft-runs-page"),
+      ).toBeInTheDocument();
+
+      const runRow = screen.getByTestId("automation-setup-draft-run");
+      expect(runRow).toHaveTextContent("AUTOMATIONS$DETAIL$PENDING");
+
+      // Mock backend reporting COMPLETED on next poll
+      vi.mocked(AutomationService.listAutomationRuns).mockResolvedValueOnce({
+        runs: [
+          {
+            id: "run-1",
+            status: "COMPLETED" as never,
+            conversation_id: "conv-run-1",
+            bash_command_id: null,
+            error_detail: null,
+            started_at: "2026-01-01T00:00:00.000Z",
+            completed_at: "2026-01-01T00:01:00.000Z",
+            automation_id: "auto-draft-1",
+          } as never,
+        ],
+        total: 1,
+      });
+
+      // Advance by polling interval (3000ms)
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3000);
+      });
+
+      await waitFor(() => {
+        expect(AutomationService.listAutomationRuns).toHaveBeenCalledWith(
+          "auto-draft-1",
+          { limit: 10, offset: 0 },
+        );
+        expect(runRow).toHaveTextContent("AUTOMATIONS$DETAIL$SUCCESSFUL");
+      });
+
+      const callCount = vi.mocked(AutomationService.listAutomationRuns).mock
+        .calls.length;
+
+      // Advance further: polling must stop because all runs are terminal
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(6000);
+      });
+
+      expect(AutomationService.listAutomationRuns).toHaveBeenCalledTimes(
+        callCount,
+      );
+      vi.useRealTimers();
+    });
+
+    it("polls in-flight draft test runs and surfaces FAILED terminal status", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      mockSavedDraftEcho({ materializedAutomationId: "auto-draft-1" });
+      vi.mocked(AutomationService.dispatchServerDraft).mockResolvedValue({
+        id: "run-failed",
+        status: "PENDING" as never,
+        conversation_id: "conv-run-failed",
+        bash_command_id: null,
+        error_detail: null,
+        started_at: "2026-01-01T00:00:00.000Z",
+        completed_at: null,
+        automation_id: "auto-draft-1",
+      } as never);
+
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderPanel();
+
+      await saveDraftAndWaitForTest(user);
+      await user.click(screen.getByTestId("automation-setup-test"));
+
+      await waitFor(() =>
+        expect(AutomationService.dispatchServerDraft).toHaveBeenCalledWith(
+          "draft-1",
+        ),
+      );
+
+      const runRow = screen.getByTestId("automation-setup-draft-run");
+      expect(runRow).toHaveTextContent("AUTOMATIONS$DETAIL$PENDING");
+
+      // Mock backend reporting FAILED on next poll
+      vi.mocked(AutomationService.listAutomationRuns).mockResolvedValueOnce({
+        runs: [
+          {
+            id: "run-failed",
+            status: "FAILED" as never,
+            conversation_id: "conv-run-failed",
+            bash_command_id: null,
+            error_detail: "Sandbox execution failed",
+            started_at: "2026-01-01T00:00:00.000Z",
+            completed_at: "2026-01-01T00:01:00.000Z",
+            automation_id: "auto-draft-1",
+          } as never,
+        ],
+        total: 1,
+      });
+
+      // Advance by polling interval (3000ms)
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3000);
+      });
+
+      await waitFor(() => {
+        expect(runRow).toHaveTextContent("AUTOMATIONS$DETAIL$FAILED");
+      });
+
+      const callCount = vi.mocked(AutomationService.listAutomationRuns).mock
+        .calls.length;
+
+      // Advance further: polling must stop once FAILED is reached
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(6000);
+      });
+
+      expect(AutomationService.listAutomationRuns).toHaveBeenCalledTimes(
+        callCount,
+      );
+      vi.useRealTimers();
     });
 
     it("surfaces validation errors when the draft is not dispatchable", async () => {

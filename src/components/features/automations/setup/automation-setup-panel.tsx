@@ -87,7 +87,11 @@ import type {
   AutomationDraftApiResponse,
   SetupRequestBody,
 } from "#/manifests/types";
-import type { Automation, AutomationRun } from "#/types/automation";
+import {
+  AutomationRunStatus,
+  type Automation,
+  type AutomationRun,
+} from "#/types/automation";
 import { formatRelativeTime } from "#/utils/format-relative-time";
 import { ActivityLogItem } from "../detail/activity-log-item";
 import { requestAutomationSetupAgent } from "./automation-setup-agent-request";
@@ -1641,15 +1645,19 @@ export function AutomationSetupPanel({
     }
   };
 
+  const draftAutomationId = serverDraft?.materializedAutomationId;
+
   useEffect(() => {
-    const automationId = serverDraft?.materializedAutomationId;
-    if (!automationId) {
+    if (!draftAutomationId) {
       setDraftRuns([]);
       return undefined;
     }
 
     let cancelled = false;
-    AutomationService.listAutomationRuns(automationId, { limit: 10, offset: 0 })
+    AutomationService.listAutomationRuns(draftAutomationId, {
+      limit: 10,
+      offset: 0,
+    })
       .then((response) => {
         if (!cancelled && response.runs.length > 0) setDraftRuns(response.runs);
       })
@@ -1660,7 +1668,49 @@ export function AutomationSetupPanel({
     return () => {
       cancelled = true;
     };
-  }, [serverDraft?.materializedAutomationId]);
+  }, [draftAutomationId]);
+
+  const hasInFlightDraftRun = draftRuns.some(
+    (run) =>
+      run.status === AutomationRunStatus.PENDING ||
+      run.status === AutomationRunStatus.RUNNING,
+  );
+
+  useEffect(() => {
+    if (!draftAutomationId || !hasInFlightDraftRun) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    const intervalId = setInterval(async () => {
+      try {
+        const response = await AutomationService.listAutomationRuns(
+          draftAutomationId,
+          { limit: 10, offset: 0 },
+        );
+        if (cancelled) return;
+        if (response.runs.length > 0) {
+          setDraftRuns((previous) => {
+            const responseIds = new Set(response.runs.map((r) => r.id));
+            const pendingLocals = previous.filter(
+              (p) =>
+                !responseIds.has(p.id) &&
+                (p.status === AutomationRunStatus.PENDING ||
+                  p.status === AutomationRunStatus.RUNNING),
+            );
+            return [...pendingLocals, ...response.runs];
+          });
+        }
+      } catch {
+        // Network or server error during poll: keep polling on subsequent interval
+      }
+    }, 3000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [draftAutomationId, hasInFlightDraftRun]);
 
   const saveStateLabel = () => {
     if (saveState === "saving") return t(I18nKey.AUTOMATION_SETUP$SAVING);
