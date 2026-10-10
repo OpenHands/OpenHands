@@ -286,6 +286,25 @@ function makeStateEvent(
   } as OpenHandsEvent;
 }
 
+function makeACPToolCallEvent(
+  id: string,
+  overrides: Record<string, unknown> = {},
+): OpenHandsEvent {
+  return {
+    ...baseEvent(id, "agent"),
+    kind: "ACPToolCallEvent",
+    tool_call_id: `acp-call-${id}`,
+    title: "Run command",
+    status: "pending",
+    tool_kind: "execute",
+    raw_input: { command: "echo hi" },
+    raw_output: null,
+    content: null,
+    is_error: false,
+    ...overrides,
+  } as OpenHandsEvent;
+}
+
 function mainOptions(): WebSocketHookOptions {
   expect(socketCapture.mainOptions).not.toBeNull();
   return socketCapture.mainOptions!;
@@ -1271,6 +1290,131 @@ describe("Conversation websocket behavior", () => {
       content: "line one\nline two",
     });
 
+    // ACP execute tool calls mirror into the terminal (#18252): the started
+    // event contributes the command, the terminal event its output, each
+    // appended exactly once for the shared tool_call_id.
+    dispatchMain(
+      makeACPToolCallEvent("22-acp", { tool_call_id: "acp-exec-1" }),
+    );
+    expect(useCommandStore.getState().commands).toContainEqual({
+      type: "input",
+      content: "echo hi",
+      toolCallId: "acp-exec-1",
+    });
+
+    dispatchMain(
+      makeACPToolCallEvent("23-acp", {
+        tool_call_id: "acp-exec-1",
+        status: "completed",
+        raw_output: "hi",
+      }),
+    );
+    expect(
+      useCommandStore
+        .getState()
+        .commands.filter(
+          (c) => c.type === "input" && c.toolCallId === "acp-exec-1",
+        ),
+    ).toHaveLength(1);
+    expect(useCommandStore.getState().commands).toContainEqual({
+      type: "output",
+      content: "hi",
+      toolCallId: "acp-exec-1",
+    });
+
+    // A late non-terminal update for a finished id adds nothing either.
+    dispatchMain(
+      makeACPToolCallEvent("24-acp", {
+        tool_call_id: "acp-exec-1",
+        status: "in_progress",
+        raw_output: "hi",
+      }),
+    );
+    expect(
+      useCommandStore
+        .getState()
+        .commands.filter((c) => c.toolCallId === "acp-exec-1"),
+    ).toHaveLength(2);
+
+    // A failed call surfaces the error text carried by its content blocks.
+    dispatchMain(
+      makeACPToolCallEvent("25-acp", {
+        tool_call_id: "acp-exec-2",
+        raw_input: { command: "npm test" },
+      }),
+    );
+    dispatchMain(
+      makeACPToolCallEvent("26-acp", {
+        tool_call_id: "acp-exec-2",
+        status: "failed",
+        is_error: true,
+        raw_input: { command: "npm test" },
+        content: [
+          {
+            type: "content",
+            content: { type: "text", text: "npm is not on the allowlist" },
+          },
+        ],
+      }),
+    );
+    expect(useCommandStore.getState().commands).toContainEqual({
+      type: "output",
+      content: "npm is not on the allowlist",
+      toolCallId: "acp-exec-2",
+    });
+
+    // An execute call with no output still shows its command...
+    dispatchMain(
+      makeACPToolCallEvent("27-acp", {
+        tool_call_id: "acp-exec-3",
+        status: "completed",
+        raw_input: { command: "true" },
+      }),
+    );
+    expect(useCommandStore.getState().commands).toContainEqual({
+      type: "input",
+      content: "true",
+      toolCallId: "acp-exec-3",
+    });
+    expect(
+      useCommandStore
+        .getState()
+        .commands.some(
+          (c) => c.type === "output" && c.toolCallId === "acp-exec-3",
+        ),
+    ).toBe(false);
+
+    // ...and non-execute kinds (read, edit, fetch, …) add nothing.
+    dispatchMain(
+      makeACPToolCallEvent("28-acp", {
+        tool_call_id: "acp-read-1",
+        tool_kind: "read",
+        title: "Read /workspace/foo.py",
+        raw_input: { path: "/workspace/foo.py" },
+        raw_output: "print('hi')",
+      }),
+    );
+    expect(
+      useCommandStore
+        .getState()
+        .commands.some((c) => c.toolCallId === "acp-read-1"),
+    ).toBe(false);
+
+    // An event replayed under the same id (reconnect) adds nothing twice.
+    const acpReplay = makeACPToolCallEvent("29-acp", {
+      tool_call_id: "acp-exec-4",
+      status: "completed",
+      raw_input: { command: "date" },
+      raw_output: "2026-10-10",
+    });
+    dispatchMain(acpReplay);
+    dispatchMain({ ...acpReplay });
+    expect(
+      useCommandStore
+        .getState()
+        .commands.filter((c) => c.toolCallId === "acp-exec-4"),
+    ).toHaveLength(2);
+
     dispatchMain(
       makeObservationEvent(
         "23",
@@ -2146,6 +2290,34 @@ describe("Conversation websocket behavior", () => {
       type: "output",
       content: "plan output\nsecond line",
     });
+
+    // ACP execute mirroring is duplicated on this handler on purpose: the
+    // planning socket feeds the same terminal store.
+    dispatchPlanning(
+      makeACPToolCallEvent("46-acp", { tool_call_id: "acp-plan-1" }),
+    );
+    dispatchPlanning(
+      makeACPToolCallEvent("47-acp", {
+        tool_call_id: "acp-plan-1",
+        status: "completed",
+        raw_output: "plan hi",
+      }),
+    );
+    expect(useCommandStore.getState().commands).toContainEqual({
+      type: "input",
+      content: "echo hi",
+      toolCallId: "acp-plan-1",
+    });
+    expect(useCommandStore.getState().commands).toContainEqual({
+      type: "output",
+      content: "plan hi",
+      toolCallId: "acp-plan-1",
+    });
+    expect(
+      useCommandStore
+        .getState()
+        .commands.filter((c) => c.toolCallId === "acp-plan-1"),
+    ).toHaveLength(2);
 
     dispatchPlanning(
       makeObservationEvent(

@@ -33,6 +33,7 @@ import {
   isGoalConversationStateUpdateEvent,
   isExecuteBashActionEvent,
   isExecuteBashObservationEvent,
+  isACPToolCallEvent,
   isDisplayableErrorEvent,
   isPlanningFileEditorObservationEvent,
   isBrowserObservationEvent,
@@ -59,6 +60,7 @@ import type {
 } from "#/types/agent-server/core/events/conversation-state-event";
 import { handleActionEventCacheInvalidation } from "#/utils/cache-utils";
 import { buildWebSocketUrl } from "#/utils/websocket-url";
+import { handleACPToolCallInTerminal } from "#/utils/acp-terminal-events";
 import { createSeqCursor, type SeqCursor } from "#/utils/session-seq-cursor";
 import type {
   AppConversation,
@@ -758,6 +760,15 @@ export function ConversationWebSocketProvider({
             appendOutput(textContent);
           }
 
+          // Handle ACP execute tool calls - mirror them into the terminal
+          // like ExecuteBash above, so ACP agents (Claude Code, Gemini CLI,
+          // …) surface their commands and output in the Terminal tab
+          // (#18252). Intentionally duplicated across the main and planning
+          // handlers, not a merge artifact.
+          if (isACPToolCallEvent(event)) {
+            handleACPToolCallInTerminal(event);
+          }
+
           // Handle BrowserObservation events - update browser store with screenshot
           if (isBrowserObservationEvent(event)) {
             const { screenshot_data: screenshotData } = event.observation;
@@ -1035,6 +1046,15 @@ export function ConversationWebSocketProvider({
               .map((c) => c.text)
               .join("\n");
             appendOutput(textContent);
+          }
+
+          // Handle ACP execute tool calls - mirror them into the terminal
+          // like ExecuteBash above, so ACP agents (Claude Code, Gemini CLI,
+          // …) surface their commands and output in the Terminal tab
+          // (#18252). Intentionally duplicated across the main and planning
+          // handlers, not a merge artifact.
+          if (isACPToolCallEvent(event)) {
+            handleACPToolCallInTerminal(event);
           }
 
           // Handle PlanningFileEditorObservation - only update plan for Plan.md
