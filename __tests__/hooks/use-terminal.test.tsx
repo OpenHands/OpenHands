@@ -180,11 +180,12 @@ describe("useTerminal", () => {
     renderWithProviders(<TestTerminalComponent />);
     expect(mockTerminal.writeln).toHaveBeenCalledTimes(2);
 
+    mockTerminal.write.mockClear();
     mockTerminal.writeln.mockClear();
     act(() => {
       useCommandStore.getState().clearTerminal();
     });
-    expect(mockTerminal.reset).toHaveBeenCalledOnce();
+    expect(mockTerminal.write).toHaveBeenCalledWith("\x1bc\x1b[?25l");
 
     act(() => {
       useCommandStore.getState().appendInput("echo fresh");
@@ -194,7 +195,7 @@ describe("useTerminal", () => {
     expect(mockTerminal.writeln).toHaveBeenCalledTimes(2);
     expect(mockTerminal.writeln).toHaveBeenNthCalledWith(1, "echo fresh");
     expect(mockTerminal.writeln).toHaveBeenNthCalledWith(2, "fresh");
-    expect(mockTerminal.reset.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(mockTerminal.write.mock.invocationCallOrder[0]).toBeLessThan(
       mockTerminal.writeln.mock.invocationCallOrder[0],
     );
   });
@@ -209,7 +210,7 @@ describe("useTerminal", () => {
     renderWithProviders(<TestTerminalComponent />);
     expect(mockTerminal.writeln).toHaveBeenCalledTimes(2);
 
-    mockTerminal.reset.mockClear();
+    mockTerminal.write.mockClear();
     mockTerminal.writeln.mockClear();
     act(() => {
       useCommandStore.getState().clearTerminal();
@@ -217,13 +218,48 @@ describe("useTerminal", () => {
       useCommandStore.getState().appendOutput("fresh");
     });
 
-    expect(mockTerminal.reset).toHaveBeenCalledOnce();
+    expect(mockTerminal.write).toHaveBeenCalledWith("\x1bc\x1b[?25l");
     expect(mockTerminal.writeln).toHaveBeenCalledTimes(2);
     expect(mockTerminal.writeln).toHaveBeenNthCalledWith(1, "echo fresh");
     expect(mockTerminal.writeln).toHaveBeenNthCalledWith(2, "fresh");
-    expect(mockTerminal.reset.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(mockTerminal.write.mock.invocationCallOrder[0]).toBeLessThan(
       mockTerminal.writeln.mock.invocationCallOrder[0],
     );
+  });
+
+  it("should clear writes still queued when history is replaced", () => {
+    const queuedWrites: (() => void)[] = [];
+    let renderedLines: string[] = [];
+    mockTerminal.write.mockImplementation((data: string) => {
+      queuedWrites.push(() => {
+        if (data.includes("\x1bc")) renderedLines = [];
+      });
+    });
+    mockTerminal.writeln.mockImplementation((data: string) => {
+      queuedWrites.push(() => renderedLines.push(data));
+    });
+    mockTerminal.reset.mockImplementation(() => {
+      renderedLines = [];
+    });
+
+    try {
+      useCommandStore.setState({
+        commands: [{ content: "old conversation", type: "output" }],
+      });
+      renderWithProviders(<TestTerminalComponent />);
+
+      act(() => {
+        useCommandStore.getState().clearTerminal();
+        useCommandStore.getState().appendOutput("current conversation");
+      });
+
+      queuedWrites.forEach((write) => write());
+      expect(renderedLines).toEqual(["current conversation"]);
+    } finally {
+      mockTerminal.write.mockReset();
+      mockTerminal.writeln.mockReset();
+      mockTerminal.reset.mockReset();
+    }
   });
 
   it("should not call fit() when terminal.element is null", () => {

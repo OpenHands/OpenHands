@@ -184,9 +184,8 @@ export const useTerminal = () => {
 
     if (wasCleared) {
       if (terminal.current) {
-        terminal.current.reset();
-        // Reset restores the default cursor visibility.
-        terminal.current.write("\x1b[?25l");
+        // Queue the full reset after pending writes, then hide the cursor again.
+        terminal.current.write("\x1bc\x1b[?25l");
       }
       lastCommandIndex.current = 0;
     }
