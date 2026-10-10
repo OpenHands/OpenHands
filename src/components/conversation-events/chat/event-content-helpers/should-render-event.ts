@@ -10,6 +10,7 @@ import {
   isHookExecutionEvent,
   isACPToolCallEvent,
   isStreamingDeltaEvent,
+  isUserRejectObservation,
 } from "#/types/agent-server/type-guards";
 
 // Prefixes of the SDK goal-loop re-prompts (FOLLOWUP_PROMPT / RESUME_PROMPT in
@@ -111,6 +112,12 @@ export const shouldRenderEvent = (event: OpenHandsEvent) => {
       return false;
     }
 
+    return true;
+  }
+
+  // Render the rejection that replaced a rejected action, so the action stays
+  // in the chat marked as rejected instead of vanishing
+  if (isUserRejectObservation(event)) {
     return true;
   }
 

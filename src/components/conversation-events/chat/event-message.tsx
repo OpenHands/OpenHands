@@ -11,6 +11,7 @@ import {
 import {
   isActionEvent,
   isObservationEvent,
+  isUserRejectObservation,
   isAgentErrorEvent,
   isUserMessageEvent,
   isPlanningFileEditorObservationEvent,
@@ -365,6 +366,31 @@ function EventMessageComponent({
               ? correspondingAction
               : undefined
           }
+        />
+      </>
+    );
+  }
+
+  // Rejected actions - render thought + the rejected action
+  if (isUserRejectObservation(event)) {
+    const correspondingAction = suppliedCorrespondingAction ?? undefined;
+    const reasoningContent = correspondingAction
+      ? getReasoningContent(correspondingAction)
+      : "";
+
+    return (
+      <>
+        {reasoningContent && <CollapsibleThinking content={reasoningContent} />}
+        {!suppressThought && correspondingAction && (
+          <ThoughtEventMessage
+            event={correspondingAction}
+            isFromPlanningAgent={isFromPlanningAgent}
+          />
+        )}
+        <GenericEventMessageWrapper
+          event={event}
+          isLastMessage={isLastMessage}
+          correspondingAction={correspondingAction}
         />
       </>
     );

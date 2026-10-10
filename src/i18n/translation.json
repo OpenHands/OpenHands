@@ -1104,6 +1104,23 @@
     "uk": "Невідома подія",
     "ca": "Esdeveniment desconegut"
   },
+  "EVENT$REJECTED": {
+    "en": "Rejected",
+    "ja": "拒否済み",
+    "zh-CN": "已拒绝",
+    "zh-TW": "已拒絕",
+    "ko-KR": "거부됨",
+    "no": "Avvist",
+    "it": "Rifiutata",
+    "pt": "Rejeitada",
+    "es": "Rechazada",
+    "ar": "مرفوض",
+    "fr": "Rejetée",
+    "tr": "Reddedildi",
+    "de": "Abgelehnt",
+    "uk": "Відхилено",
+    "ca": "Rebutjada"
+  },
   "OBSERVATION$COMMAND_NO_OUTPUT": {
     "en": "[Command finished execution with no output]",
     "ja": "[コマンドは出力なしで実行を終了しました]",
