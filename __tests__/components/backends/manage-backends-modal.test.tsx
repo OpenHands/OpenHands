@@ -30,6 +30,8 @@ import {
   getCurrentCloudApiKey,
 } from "#/api/cloud/organization-service.api";
 import * as telemetry from "#/services/telemetry";
+import { createAgentServerQueryClient } from "#/query-client-config";
+import * as ToastHandlers from "#/utils/custom-toast-handlers";
 
 const deviceFlowMocks = vi.hoisted(() => ({
   startDeviceFlow: vi.fn(),
@@ -896,6 +898,33 @@ describe("BackendVersion", () => {
       screen.queryByTestId(`manage-backends-version-${cloudBackend.name}`),
     ).not.toBeInTheDocument();
     expect(getServerInfoMock).not.toHaveBeenCalled();
+  });
+
+  it("does not trigger an error toast when the local backend version probe fails", async () => {
+    const toastSpy = vi.spyOn(ToastHandlers, "displayErrorToast");
+    getServerInfoMock.mockRejectedValueOnce(
+      Object.assign(new Error("Service Unavailable"), { status: 503 }),
+    );
+    const localBackend: Backend = {
+      id: "backend-local",
+      name: "Local",
+      host: "http://localhost:18960",
+      apiKey: "local-key",
+      kind: "local",
+    };
+    const client = createAgentServerQueryClient();
+    client.setDefaultOptions({ queries: { retry: false } });
+
+    render(
+      <QueryClientProvider client={client}>
+        <BackendVersion backend={localBackend} />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(getServerInfoMock).toHaveBeenCalled();
+    });
+    expect(toastSpy).not.toHaveBeenCalled();
   });
 });
 
