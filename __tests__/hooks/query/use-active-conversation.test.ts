@@ -17,26 +17,34 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook } from "@testing-library/react";
-import { useActiveConversation } from "#/hooks/query/use-active-conversation";
+import {
+  UNTITLED_TERMINAL_FAST_POLL_ATTEMPTS,
+  useActiveConversation,
+} from "#/hooks/query/use-active-conversation";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
-const { mockUseUserConversation, mockSetCurrentConversation } = vi.hoisted(
-  () => ({
-    mockUseUserConversation: vi.fn(),
-    mockSetCurrentConversation: vi.fn(),
-  }),
-);
+const {
+  mockUseUserConversation,
+  mockSetCurrentConversation,
+  mockConversationId,
+} = vi.hoisted(() => ({
+  mockUseUserConversation: vi.fn(),
+  mockSetCurrentConversation: vi.fn(),
+  mockConversationId: { current: "conv-test" },
+}));
 
 vi.mock("#/hooks/query/use-user-conversation", () => ({
   useUserConversation: (...args: unknown[]) => mockUseUserConversation(...args),
 }));
 
 vi.mock("#/hooks/use-conversation-id", () => ({
-  useOptionalConversationId: () => ({ conversationId: "conv-test" }),
-  useConversationId: () => ({ conversationId: "conv-test" }),
+  useOptionalConversationId: () => ({
+    conversationId: mockConversationId.current,
+  }),
+  useConversationId: () => ({ conversationId: mockConversationId.current }),
 }));
 
 vi.mock("#/api/conversation-service/conversation-service.api", () => ({
@@ -109,6 +117,7 @@ function makeQuery(data: Partial<AppConversation> | null | undefined): {
 describe("useActiveConversation — refetchInterval callback", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockConversationId.current = "conv-test";
   });
 
   it("returns 3000 when sandbox_status is PAUSED (even if conversation_url is present)", () => {
@@ -245,5 +254,156 @@ describe("useActiveConversation — refetchInterval callback", () => {
     );
 
     expect(result).toBe(30000);
+  });
+
+  // ── give up fast-polling when autotitle never lands ────────────────────────
+  //
+  // isExecutionActive() includes IDLE and FINISHED, so an untitled conversation
+  // that has already stopped executing would otherwise stay on the 3 s cadence
+  // forever. Bound that branch; leave wake-up/resume (missing URL, PAUSED) and
+  // still-running untitled conversations uncapped.
+
+  function untitledQuery(
+    executionStatus: ExecutionStatus,
+    extra: Partial<AppConversation> = {},
+  ) {
+    return makeQuery({
+      title: null,
+      execution_status: executionStatus,
+      conversation_url: "https://sandbox.example.com/api/conversations/conv-1",
+      sandbox_status: "RUNNING",
+      ...extra,
+    });
+  }
+
+  it("falls back to 30000 after a bounded number of untitled FINISHED polls", () => {
+    const intervalFn = renderAndCaptureIntervalFn();
+    const query = untitledQuery(ExecutionStatus.FINISHED);
+
+    const intervals = Array.from(
+      { length: UNTITLED_TERMINAL_FAST_POLL_ATTEMPTS + 2 },
+      () => intervalFn(query),
+    );
+
+    expect(intervals.slice(0, UNTITLED_TERMINAL_FAST_POLL_ATTEMPTS)).toEqual(
+      Array(UNTITLED_TERMINAL_FAST_POLL_ATTEMPTS).fill(3000),
+    );
+    expect(intervals.slice(UNTITLED_TERMINAL_FAST_POLL_ATTEMPTS)).toEqual([
+      30000, 30000,
+    ]);
+  });
+
+  it("falls back to 30000 after a bounded number of untitled IDLE polls", () => {
+    const intervalFn = renderAndCaptureIntervalFn();
+    const query = untitledQuery(ExecutionStatus.IDLE);
+
+    const intervals = Array.from(
+      { length: UNTITLED_TERMINAL_FAST_POLL_ATTEMPTS + 1 },
+      () => intervalFn(query),
+    );
+
+    expect(intervals.slice(0, UNTITLED_TERMINAL_FAST_POLL_ATTEMPTS)).toEqual(
+      Array(UNTITLED_TERMINAL_FAST_POLL_ATTEMPTS).fill(3000),
+    );
+    expect(intervals[UNTITLED_TERMINAL_FAST_POLL_ATTEMPTS]).toBe(30000);
+  });
+
+  it("keeps fast-polling untitled RUNNING conversations with no attempt cap", () => {
+    const intervalFn = renderAndCaptureIntervalFn();
+    const query = untitledQuery(ExecutionStatus.RUNNING);
+
+    for (let i = 0; i < UNTITLED_TERMINAL_FAST_POLL_ATTEMPTS + 5; i += 1) {
+      expect(intervalFn(query)).toBe(3000);
+    }
+  });
+
+  it("keeps fast-polling untitled WAITING_FOR_CONFIRMATION conversations with no attempt cap", () => {
+    const intervalFn = renderAndCaptureIntervalFn();
+    const query = untitledQuery(ExecutionStatus.WAITING_FOR_CONFIRMATION);
+
+    for (let i = 0; i < UNTITLED_TERMINAL_FAST_POLL_ATTEMPTS + 5; i += 1) {
+      expect(intervalFn(query)).toBe(3000);
+    }
+  });
+
+  it("still fast-polls PAUSED sandboxes after the untitled-terminal give-up bound", () => {
+    const intervalFn = renderAndCaptureIntervalFn();
+    const query = untitledQuery(ExecutionStatus.FINISHED, {
+      sandbox_status: "PAUSED",
+    });
+
+    for (let i = 0; i < UNTITLED_TERMINAL_FAST_POLL_ATTEMPTS + 5; i += 1) {
+      expect(intervalFn(query)).toBe(3000);
+    }
+  });
+
+  it("still fast-polls a missing conversation_url after the untitled-terminal give-up bound", () => {
+    const intervalFn = renderAndCaptureIntervalFn();
+    const query = untitledQuery(ExecutionStatus.FINISHED, {
+      conversation_url: null,
+    });
+
+    for (let i = 0; i < UNTITLED_TERMINAL_FAST_POLL_ATTEMPTS + 5; i += 1) {
+      expect(intervalFn(query)).toBe(3000);
+    }
+  });
+
+  it("resumes fast-poll if execution becomes RUNNING after untitled-terminal give-up", () => {
+    const intervalFn = renderAndCaptureIntervalFn();
+    const finished = untitledQuery(ExecutionStatus.FINISHED);
+
+    for (let i = 0; i < UNTITLED_TERMINAL_FAST_POLL_ATTEMPTS; i += 1) {
+      expect(intervalFn(finished)).toBe(3000);
+    }
+    expect(intervalFn(finished)).toBe(30000);
+
+    expect(intervalFn(untitledQuery(ExecutionStatus.RUNNING))).toBe(3000);
+  });
+
+  it("resets the untitled-terminal budget when the conversation id changes", () => {
+    let captured: IntervalFn | undefined;
+    mockUseUserConversation.mockImplementation(
+      (_cid: string | null, intervalFn: IntervalFn) => {
+        captured = intervalFn;
+        return {
+          data: undefined,
+          isLoading: false,
+          isPending: false,
+          isFetched: false,
+          error: null,
+          isError: false,
+        };
+      },
+    );
+    const { rerender } = renderHook(() => useActiveConversation());
+    if (!captured) throw new Error("useUserConversation was not called");
+
+    const first = untitledQuery(ExecutionStatus.FINISHED);
+    for (let i = 0; i < UNTITLED_TERMINAL_FAST_POLL_ATTEMPTS; i += 1) {
+      expect(captured(first)).toBe(3000);
+    }
+    expect(captured(first)).toBe(30000);
+
+    mockConversationId.current = "conv-other";
+    rerender();
+    expect(captured(untitledQuery(ExecutionStatus.FINISHED))).toBe(3000);
+  });
+
+  it("walks RUNNING untitled → FINISHED untitled through fast-poll then give-up", () => {
+    const intervalFn = renderAndCaptureIntervalFn();
+
+    expect(intervalFn(untitledQuery(ExecutionStatus.RUNNING))).toBe(3000);
+    expect(intervalFn(untitledQuery(ExecutionStatus.RUNNING))).toBe(3000);
+
+    const finished = untitledQuery(ExecutionStatus.FINISHED);
+    const finishedIntervals = Array.from(
+      { length: UNTITLED_TERMINAL_FAST_POLL_ATTEMPTS + 1 },
+      () => intervalFn(finished),
+    );
+
+    expect(
+      finishedIntervals.slice(0, UNTITLED_TERMINAL_FAST_POLL_ATTEMPTS),
+    ).toEqual(Array(UNTITLED_TERMINAL_FAST_POLL_ATTEMPTS).fill(3000));
+    expect(finishedIntervals[UNTITLED_TERMINAL_FAST_POLL_ATTEMPTS]).toBe(30000);
   });
 });
