@@ -4,14 +4,17 @@ import AgentServerConversationService from "#/api/conversation-service/agent-ser
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { getAcpProvider, type ACPModelOption } from "#/constants/acp-providers";
-import { rememberAcpModels } from "#/utils/remembered-acp-models";
+import {
+  acpModelScope,
+  rememberAcpModels,
+} from "#/utils/remembered-acp-models";
 
 const NO_MODELS: ACPModelOption[] = [];
 
 /**
  * The models an ACP conversation's session reported. Cloud conversations
  * carry no list, so it is read from the conversation's sandbox. Lists from
- * built-in agents are remembered for pickers outside the conversation.
+ * built-in agents are remembered under the secrets the conversation may use.
  */
 export function useAcpSessionModels(
   conversation: AppConversation | null | undefined,
@@ -52,11 +55,14 @@ export function useAcpSessionModels(
     [isCloud, runtime.data, conversation?.acp_available_models],
   );
   const server = conversation?.acp_server;
+  const scope = acpModelScope(
+    conversation?.launched_agent_profile?.secret_refs,
+  );
   useEffect(() => {
     if (server && getAcpProvider(server)) {
-      rememberAcpModels(backend.id, server, models);
+      rememberAcpModels(backend.id, server, scope, models);
     }
-  }, [backend.id, server, models]);
+  }, [backend.id, server, scope, models]);
 
   return models;
 }

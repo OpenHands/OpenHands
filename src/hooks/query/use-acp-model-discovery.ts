@@ -10,7 +10,10 @@ import {
   type ACPModelOption,
 } from "#/constants/acp-providers";
 import { useRememberedAcpModels } from "#/hooks/use-remembered-acp-models";
-import { rememberAcpModels } from "#/utils/remembered-acp-models";
+import {
+  acpModelScope,
+  rememberAcpModels,
+} from "#/utils/remembered-acp-models";
 
 async function discover(
   providerKey: string,
@@ -31,9 +34,9 @@ export type AcpModelSource = "live" | "remembered" | "none";
  * The models a built-in ACP provider offers on the active backend, and the one
  * it uses by default, as its own server reports them for the saved
  * credentials. Only local backends can ask before a conversation starts;
- * otherwise ``models`` is the list the agent last reported in a conversation.
- * ``secretRefs`` limits the lookup to the secrets a launch would receive; null
- * means every saved secret.
+ * otherwise ``models`` is the list the agent last reported with the same
+ * secrets. ``secretRefs`` limits the lookup to the secrets a launch would
+ * receive; null means every saved secret.
  */
 export function useAcpModelDiscovery(
   providerKey: string | null | undefined,
@@ -67,16 +70,22 @@ export function useAcpModelDiscovery(
     refetchOnWindowFocus: false,
   });
 
-  const discovery = query.data ?? null;
+  const scope = acpModelScope(secretRefs);
+  const discovery = queryEnabled ? (query.data ?? null) : null;
   const liveModels = useMemo(
     () => toAcpModelOptions(discovery?.available_models),
     [discovery],
   );
   useEffect(() => {
-    if (providerKey) rememberAcpModels(backend.id, providerKey, liveModels);
-  }, [backend.id, providerKey, liveModels]);
+    if (providerKey) {
+      rememberAcpModels(backend.id, providerKey, scope, liveModels);
+    }
+  }, [backend.id, providerKey, scope, liveModels]);
 
-  const remembered = useRememberedAcpModels(enabled ? providerKey : null);
+  const remembered = useRememberedAcpModels(
+    enabled ? providerKey : null,
+    scope,
+  );
   let models: ACPModelOption[] = [];
   let source: AcpModelSource = "none";
   if (liveModels.length) {

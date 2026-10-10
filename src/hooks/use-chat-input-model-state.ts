@@ -66,8 +66,14 @@ export function useChatInputModelState(): ChatInputModelState {
       ? (activeAcpProfile?.acp_server ?? settingsAcpServerKey)
       : null;
   const acpProvider = isAcpContext ? getAcpProvider(acpServerKey) : undefined;
+  // The agent's models depend on the secrets it may use: the ones the
+  // conversation launched with, or the next launch's from the active profile.
   const discovered = useAcpModelDiscovery(acpProvider ? acpServerKey : null, {
-    secretRefs: activeAcpProfile?.secret_refs ?? null,
+    enabled: isActiveAcpConversation || !!activeAcpProfile,
+    secretRefs:
+      (isActiveAcpConversation
+        ? conversation?.launched_agent_profile?.secret_refs
+        : activeAcpProfile?.secret_refs) ?? null,
   });
   // The session's own list arrives only after it starts.
   const sessionModels = useAcpSessionModels(

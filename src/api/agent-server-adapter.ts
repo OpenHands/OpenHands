@@ -138,6 +138,7 @@ export interface DirectConversationInfo {
   launched_agent_profile?: {
     agent_profile_id: string;
     revision: number;
+    secret_refs?: string[] | null;
   } | null;
   /**
    * Server-owned, derived from the catalog's ``parent_conversation_id`` link

@@ -153,6 +153,7 @@ describe("useChatInputModelState", () => {
     expect(result.current.displayModel).toBe("SWE-2 High");
     expect(result.current.showAcpPicker).toBe(true);
     expect(useAcpModelDiscoveryMock).toHaveBeenCalledWith(null, {
+      enabled: true,
       secretRefs: null,
     });
   });
@@ -182,15 +183,56 @@ describe("useChatInputModelState", () => {
     const { result } = renderHook(() => useChatInputModelState());
 
     expect(useAcpModelDiscoveryMock).toHaveBeenCalledWith("codex", {
+      enabled: true,
       secretRefs: null,
     });
     expect(result.current.availableAcpModels).toEqual(live);
     expect(result.current.currentModelId).toBe("gpt-5.6-terra");
   });
 
+  it("active ACP: asks for models with the secrets the conversation launched with", () => {
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "c1",
+        agent_kind: "acp",
+        acp_server: "codex",
+        llm_model: "gpt-5.6-terra",
+        launched_agent_profile: {
+          agent_profile_id: "id-codex",
+          revision: 3,
+          secret_refs: ["OPENAI_API_KEY"],
+        },
+      },
+    });
+    useAcpModelContextMock.mockReturnValue(
+      acpContext({ isActiveAcpConversation: true, isAcpContext: true }),
+    );
+    // The home page's active profile is not the one this conversation launched.
+    useActiveAcpProfileDetailMock.mockReturnValue({
+      id: "id-other",
+      name: "other",
+      agent_kind: "acp",
+      acp_server: "codex",
+      acp_model: null,
+      secret_refs: null,
+    });
+
+    renderHook(() => useChatInputModelState());
+
+    expect(useAcpModelDiscoveryMock).toHaveBeenCalledWith("codex", {
+      enabled: true,
+      secretRefs: ["OPENAI_API_KEY"],
+    });
+  });
+
   it("home ACP: lists the models the agent reported and shows its own default", () => {
-    useSettingsMock.mockReturnValue({
-      data: { agent_settings: { acp_server: "pi", acp_model: null } },
+    useActiveAcpProfileDetailMock.mockReturnValue({
+      id: "id-pi",
+      name: "pi",
+      agent_kind: "acp",
+      acp_server: "pi",
+      acp_model: null,
+      secret_refs: null,
     });
     useAcpModelContextMock.mockReturnValue(
       acpContext({ isHomeAcp: true, isAcpContext: true }),
@@ -207,6 +249,7 @@ describe("useChatInputModelState", () => {
     const { result } = renderHook(() => useChatInputModelState());
 
     expect(useAcpModelDiscoveryMock).toHaveBeenCalledWith("pi", {
+      enabled: true,
       secretRefs: null,
     });
     expect(result.current.availableAcpModels).toEqual(live);
@@ -405,6 +448,7 @@ describe("useChatInputModelState", () => {
 
     expect(result.current.currentModelId).toBe("gpt-5.5");
     expect(useAcpModelDiscoveryMock).toHaveBeenCalledWith("codex", {
+      enabled: true,
       secretRefs: null,
     });
     expect(result.current.availableAcpModels).toEqual(codexModels);
@@ -426,7 +470,24 @@ describe("useChatInputModelState", () => {
     renderHook(() => useChatInputModelState());
 
     expect(useAcpModelDiscoveryMock).toHaveBeenCalledWith("codex", {
+      enabled: true,
       secretRefs: ["OPENAI_API_KEY"],
+    });
+  });
+
+  it("home ACP: does not ask for models until the active profile loads", () => {
+    useSettingsMock.mockReturnValue({
+      data: { agent_settings: { acp_server: "codex", acp_model: null } },
+    });
+    useAcpModelContextMock.mockReturnValue(
+      acpContext({ isHomeAcp: true, isAcpContext: true }),
+    );
+
+    renderHook(() => useChatInputModelState());
+
+    expect(useAcpModelDiscoveryMock).toHaveBeenCalledWith("codex", {
+      enabled: false,
+      secretRefs: null,
     });
   });
 

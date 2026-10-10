@@ -5,7 +5,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useAcpSessionModels } from "#/hooks/query/use-acp-session-models";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
-import { readRememberedAcpModels } from "#/utils/remembered-acp-models";
+import {
+  acpModelScope,
+  readRememberedAcpModels,
+} from "#/utils/remembered-acp-models";
 
 const backendMock = vi.hoisted(() => ({
   current: { backend: { id: "cloud-1", kind: "cloud" as "local" | "cloud" } },
@@ -19,6 +22,8 @@ vi.mock(
   "#/api/conversation-service/agent-server-conversation-service.api",
   () => ({ default: { getRuntimeConversation } }),
 );
+
+const ALL = acpModelScope(null);
 
 const MODELS = [
   { id: "default", label: "Default (recommended)" },
@@ -64,7 +69,9 @@ describe("useAcpSessionModels", () => {
       "https://runtime.example.com/api/conversations/conv-1",
       "session-key",
     );
-    expect(readRememberedAcpModels("cloud-1", "claude-code")).toEqual(MODELS);
+    expect(readRememberedAcpModels("cloud-1", "claude-code", ALL)).toEqual(
+      MODELS,
+    );
   });
 
   it("waits for the sandbox to run", () => {
@@ -87,7 +94,38 @@ describe("useAcpSessionModels", () => {
 
     expect(result.current).toEqual(MODELS);
     expect(getRuntimeConversation).not.toHaveBeenCalled();
-    expect(readRememberedAcpModels("local-1", "claude-code")).toEqual(MODELS);
+    expect(readRememberedAcpModels("local-1", "claude-code", ALL)).toEqual(
+      MODELS,
+    );
+  });
+
+  it("remembers a list under the secrets the conversation launched with", () => {
+    backendMock.current = { backend: { id: "local-1", kind: "local" } };
+    const launched_agent_profile = {
+      agent_profile_id: "id-claude",
+      revision: 2,
+      secret_refs: ["ANTHROPIC_API_KEY"],
+    };
+
+    renderHook(
+      () =>
+        useAcpSessionModels(
+          conversation({
+            acp_available_models: MODELS,
+            launched_agent_profile,
+          }),
+        ),
+      { wrapper },
+    );
+
+    expect(
+      readRememberedAcpModels(
+        "local-1",
+        "claude-code",
+        acpModelScope(["ANTHROPIC_API_KEY"]),
+      ),
+    ).toEqual(MODELS);
+    expect(readRememberedAcpModels("local-1", "claude-code", ALL)).toEqual([]);
   });
 
   it("does not remember a custom server's list", () => {

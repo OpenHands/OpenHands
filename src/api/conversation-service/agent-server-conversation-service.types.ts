@@ -140,6 +140,8 @@ export interface ConversationWorkspace {
 export interface LaunchedAgentProfile {
   agent_profile_id: string;
   revision: number;
+  /** The secrets the conversation may use; null is every saved secret. */
+  secret_refs?: string[] | null;
 }
 
 export interface AppConversation {

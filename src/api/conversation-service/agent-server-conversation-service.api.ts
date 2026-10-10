@@ -260,11 +260,21 @@ function normalizeLaunchedAgentProfile(
   value: unknown,
 ): DirectConversationInfo["launched_agent_profile"] {
   if (!isRecord(value)) return null;
-  const { agent_profile_id: agentProfileId, revision } = value;
+  const {
+    agent_profile_id: agentProfileId,
+    revision,
+    secret_refs: secretRefs,
+  } = value;
   if (typeof agentProfileId !== "string" || typeof revision !== "number") {
     return null;
   }
-  return { agent_profile_id: agentProfileId, revision };
+  return {
+    agent_profile_id: agentProfileId,
+    revision,
+    secret_refs: Array.isArray(secretRefs)
+      ? secretRefs.filter((name): name is string => typeof name === "string")
+      : null,
+  };
 }
 
 function normalizeAbsolutePath(path: string): string | null {

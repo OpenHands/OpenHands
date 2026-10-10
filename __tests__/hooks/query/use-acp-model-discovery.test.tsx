@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useAcpModelDiscovery } from "#/hooks/query/use-acp-model-discovery";
 import {
+  acpModelScope,
   readRememberedAcpModels,
   rememberAcpModels,
 } from "#/utils/remembered-acp-models";
@@ -52,6 +53,15 @@ const PI_DISCOVERY = {
   error: null,
 };
 
+const ALL = acpModelScope(null);
+
+const AUTH_REQUIRED = {
+  ...PI_DISCOVERY,
+  current_model_id: null,
+  available_models: [],
+  error: { code: "ACPAuthRequired", detail: "log in first" },
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   window.localStorage.clear();
@@ -82,7 +92,7 @@ describe("useAcpModelDiscovery", () => {
     ];
     expect(result.current.models).toEqual(models);
     expect(result.current.source).toBe("live");
-    expect(readRememberedAcpModels("local-1", "pi")).toEqual(models);
+    expect(readRememberedAcpModels("local-1", "pi", ALL)).toEqual(models);
   });
 
   it("asks with only the secrets the launch would receive", async () => {
@@ -107,6 +117,74 @@ describe("useAcpModelDiscovery", () => {
     });
 
     await waitFor(() => expect(discoverModels).toHaveBeenCalledWith("pi", []));
+  });
+
+  it("does not offer a list remembered with other secrets", async () => {
+    rememberAcpModels("local-1", "pi", ALL, [
+      { id: "anthropic/claude-opus-4-8", label: "Claude Opus 4.8" },
+    ]);
+    discoverModels.mockResolvedValue(AUTH_REQUIRED);
+
+    const { result } = renderHook(
+      () => useAcpModelDiscovery("pi", { secretRefs: [] }),
+      { wrapper },
+    );
+
+    await waitFor(() =>
+      expect(result.current.discovery?.error?.code).toBe("ACPAuthRequired"),
+    );
+    expect(result.current.models).toEqual([]);
+    expect(result.current.source).toBe("none");
+  });
+
+  it("offers the list remembered with the same secrets", async () => {
+    const models = [{ id: "anthropic/claude-sonnet-5", label: "Sonnet 5" }];
+    rememberAcpModels("local-1", "pi", acpModelScope(["PI_AUTH_JSON"]), models);
+    discoverModels.mockResolvedValue(AUTH_REQUIRED);
+
+    const { result } = renderHook(
+      () => useAcpModelDiscovery("pi", { secretRefs: ["PI_AUTH_JSON"] }),
+      { wrapper },
+    );
+
+    await waitFor(() =>
+      expect(result.current.discovery?.error?.code).toBe("ACPAuthRequired"),
+    );
+    expect(result.current.models).toEqual(models);
+    expect(result.current.source).toBe("remembered");
+  });
+
+  it("remembers a scoped lookup without replacing the unscoped list", async () => {
+    const unscoped = [{ id: "openai/gpt-6-astra", label: "GPT-6 Astra" }];
+    rememberAcpModels("local-1", "pi", ALL, unscoped);
+    discoverModels.mockResolvedValue(PI_DISCOVERY);
+
+    const { result } = renderHook(
+      () => useAcpModelDiscovery("pi", { secretRefs: ["PI_AUTH_JSON"] }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.source).toBe("live"));
+    expect(readRememberedAcpModels("local-1", "pi", ALL)).toEqual(unscoped);
+    expect(
+      readRememberedAcpModels("local-1", "pi", acpModelScope(["PI_AUTH_JSON"])),
+    ).toEqual(result.current.models);
+  });
+
+  it("offers nothing while disabled, even a lookup it already made", async () => {
+    discoverModels.mockResolvedValue(PI_DISCOVERY);
+
+    const { result, rerender } = renderHook(
+      ({ enabled }) => useAcpModelDiscovery("pi", { enabled }),
+      { wrapper, initialProps: { enabled: true } },
+    );
+    await waitFor(() => expect(result.current.source).toBe("live"));
+
+    rerender({ enabled: false });
+
+    expect(result.current.models).toEqual([]);
+    expect(result.current.source).toBe("none");
+    expect(result.current.defaultModelId).toBeNull();
   });
 
   it("has no models when the server cannot answer and none were seen", async () => {
@@ -144,8 +222,10 @@ describe("useAcpModelDiscovery", () => {
       orgId: null,
     };
     const models = [{ id: "sonnet", label: "Sonnet" }];
-    rememberAcpModels("cloud-1", "claude-code", models);
-    rememberAcpModels("cloud-2", "codex", [{ id: "gpt-5.5", label: "GPT" }]);
+    rememberAcpModels("cloud-1", "claude-code", ALL, models);
+    rememberAcpModels("cloud-2", "codex", ALL, [
+      { id: "gpt-5.5", label: "GPT" },
+    ]);
 
     const { result } = renderHook(() => useAcpModelDiscovery("claude-code"), {
       wrapper,
@@ -167,7 +247,7 @@ describe("useAcpModelDiscovery", () => {
     expect(result.current.models).toEqual([]);
 
     const models = [{ id: "sonnet", label: "Sonnet" }];
-    act(() => rememberAcpModels("cloud-1", "claude-code", models));
+    act(() => rememberAcpModels("cloud-1", "claude-code", ALL, models));
 
     expect(result.current.models).toEqual(models);
     expect(result.current.source).toBe("remembered");
