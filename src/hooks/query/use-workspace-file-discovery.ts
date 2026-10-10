@@ -22,11 +22,7 @@ export function useWorkspaceFileDiscovery(workingDir?: string) {
   const isLocal = active.backend.kind === "local";
   const client = useQueryClient();
   const query = useQuery({
-    queryKey: [
-      ...SETTINGS_QUERY_KEYS.personal(),
-      active.backend.id,
-      active.orgId,
-    ],
+    queryKey: SETTINGS_QUERY_KEYS.byBackend("personal", active),
     queryFn: () => getSettingsQueryFn(),
     enabled: isLocal && !!workingDir,
     staleTime: 1000 * 60 * 5,

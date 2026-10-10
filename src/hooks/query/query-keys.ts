@@ -4,6 +4,7 @@
  */
 
 import { SettingsScope } from "#/types/settings";
+import type { ResolvedActiveBackend } from "#/api/backend-registry/types";
 
 export const QUERY_KEYS = {
   /** Web client configuration from the server */
@@ -15,6 +16,15 @@ export const QUERY_KEYS = {
 export const SETTINGS_QUERY_KEYS = {
   all: ["settings"] as const,
   byScope: (scope: SettingsScope) => ["settings", scope] as const,
+  byBackend: (scope: SettingsScope, active: ResolvedActiveBackend) =>
+    [
+      "settings",
+      scope,
+      active.backend.id,
+      active.backend.host,
+      active.backend.connectionRevision ?? 0,
+      active.orgId,
+    ] as const,
   personal: () => ["settings", "personal"] as const,
 } as const;
 

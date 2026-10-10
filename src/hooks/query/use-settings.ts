@@ -136,13 +136,7 @@ export const useSettings = (scope: SettingsScope = "personal") => {
     // Include the active backend identity so switching backends or orgs
     // produces a fresh query — the `staleTime` cache for one backend
     // never serves another's data.
-    queryKey: [
-      ...SETTINGS_QUERY_KEYS.byScope(scope),
-      active.backend.id,
-      active.backend.host,
-      active.backend.connectionRevision ?? 0,
-      active.orgId,
-    ],
+    queryKey: SETTINGS_QUERY_KEYS.byBackend(scope, active),
     queryFn: () => getSettingsQueryFn(scope),
     retry: (_, error) => getErrorStatus(error) !== 404,
     enabled: hasBackend,
