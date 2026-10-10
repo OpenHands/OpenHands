@@ -130,6 +130,8 @@ describe("getObservationResult", () => {
     expect(getObservationResult(terminal(2, 2, { is_error: true }))).toBe(
       "error",
     );
+    expect(getObservationResult(terminal(1, 1))).toBe("error");
+    expect(getObservationResult(terminal(127, 127))).toBe("error");
     expect(getObservationResult(terminal(undefined, null))).toBe("success");
   });
 
