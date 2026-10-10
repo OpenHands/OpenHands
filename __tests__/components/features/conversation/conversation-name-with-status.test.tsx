@@ -14,7 +14,12 @@ const mocks = vi.hoisted(() => ({
   conversationId: "conversation-1" as string | undefined,
   conversation: {
     execution_status: "running",
-  } as { execution_status?: ExecutionStatus | null } | undefined,
+  } as
+    | {
+        execution_status?: ExecutionStatus | null;
+        tags?: Record<string, string> | null;
+      }
+    | undefined,
   curAgentState: "running" as AgentState,
   isTask: false,
   taskStatus: null as string | null,
@@ -437,4 +442,42 @@ describe("conversation name status controls", () => {
       );
     },
   );
+});
+
+describe("conversation channel-origin indicator", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.conversationId = "conversation-1";
+    mocks.conversation = { execution_status: ExecutionStatus.RUNNING };
+    mocks.curAgentState = AgentState.RUNNING;
+    mocks.isTask = false;
+    mocks.taskStatus = null;
+    mocks.providers = [{ name: "provider-1" }];
+  });
+
+  it("renders the channel-origin indicator in the header for an origin tag", () => {
+    mocks.conversation = {
+      execution_status: ExecutionStatus.RUNNING,
+      tags: { origin: "slack" },
+    };
+
+    renderSubject();
+
+    const indicator = screen.getByTestId("conversation-channel-origin");
+    expect(indicator).toHaveTextContent("Origin: slack");
+    expect(indicator).toHaveAttribute("title", "Origin: slack");
+  });
+
+  it("renders no indicator in the header without a channel tag", () => {
+    mocks.conversation = {
+      execution_status: ExecutionStatus.RUNNING,
+      tags: { owner: "alice" },
+    };
+
+    renderSubject();
+
+    expect(
+      screen.queryByTestId("conversation-channel-origin"),
+    ).not.toBeInTheDocument();
+  });
 });
