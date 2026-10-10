@@ -24,6 +24,7 @@ const enqueueHomeTaskPendingMessage = vi.fn();
 const mockDisplayErrorToast = vi.fn();
 const mockUseLlmConfigured = vi.fn();
 const mockUseConversationWorkspace = vi.fn();
+const mockMarkAutomationSetupHandoff = vi.fn();
 
 let mockImages: File[] = [];
 let mockFiles: File[] = [];
@@ -37,6 +38,11 @@ vi.mock("#/utils/send-message-with-attachments", () => ({
 vi.mock("#/utils/enqueue-home-task-pending-message", () => ({
   enqueueHomeTaskPendingMessage: (...args: unknown[]) =>
     enqueueHomeTaskPendingMessage(...args),
+}));
+
+vi.mock("#/api/automation-setup-handoff-store", () => ({
+  markAutomationSetupHandoff: (...args: unknown[]) =>
+    mockMarkAutomationSetupHandoff(...args),
 }));
 
 vi.mock("#/stores/conversation-store", () => ({
@@ -369,13 +375,43 @@ describe("HomeChatLauncher", () => {
     window.localStorage.removeItem(LAST_LOCAL_WORKSPACE_MODE_STORAGE_KEY);
   });
 
-  it("asks for an engineering task in the launcher input placeholder", async () => {
+  it("defaults to Code mode and switches to Automate mode", async () => {
     renderLauncher();
+    const user = userEvent.setup();
 
+    expect(screen.getByTestId("home-launcher-mode-code")).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(screen.getByTestId("home-composer-actions")).toHaveAttribute(
+      "aria-disabled",
+      "false",
+    );
+    expect(screen.getByTestId("open-workspace-button")).toBeEnabled();
+    expect(screen.getByTestId("open-plugin-picker")).toBeEnabled();
     expect(screen.getByTestId("stub-chat-submit")).toHaveAttribute(
       "data-placeholder",
-      "HOME$DESCRIBE_ENGINEERING_TASK",
+      "SUGGESTIONS$WHAT_TO_BUILD",
     );
+    await user.click(screen.getByTestId("home-launcher-mode-automate"));
+
+    expect(screen.getByTestId("home-launcher-mode-automate")).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(screen.getByTestId("home-composer-actions")).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    expect(screen.getByTestId("open-workspace-button")).toBeDisabled();
+    expect(screen.getByTestId("open-plugin-picker")).toBeDisabled();
+    expect(screen.getByTestId("stub-chat-submit")).toHaveAttribute(
+      "data-placeholder",
+      "HOME$AUTOMATE_PROMPT_PLACEHOLDER",
+    );
+    expect(
+      screen.getByTestId("recommended-automations-rail"),
+    ).toBeInTheDocument();
   });
 
   it("creates a conversation with just the typed query and navigates when no workspace is selected", async () => {
@@ -389,10 +425,14 @@ describe("HomeChatLauncher", () => {
     await user.click(screen.getByTestId("stub-chat-submit"));
 
     await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
-    expect(createSpy).toHaveBeenCalledWith({
-      initialUserMsg: "hello world",
-      metadata: null,
-    });
+    expect(mockMarkAutomationSetupHandoff).not.toHaveBeenCalled();
+
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        initialUserMsg: "hello world",
+        metadata: null,
+      }),
+    );
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith("/conversations/conv-abc"),
     );
@@ -431,12 +471,14 @@ describe("HomeChatLauncher", () => {
     await user.click(screen.getByTestId("stub-chat-submit"));
 
     await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
-    expect(createSpy).toHaveBeenCalledWith({
-      initialUserMsg: "hello world",
-      metadata: null,
-      workingDirOverride: "/p/app",
-      workspaceMode: "local_repo",
-    });
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        initialUserMsg: "hello world",
+        metadata: null,
+        workingDirOverride: "/p/app",
+        workspaceMode: "local_repo",
+      }),
+    );
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith("/conversations/conv-ws"),
     );
@@ -472,9 +514,11 @@ describe("HomeChatLauncher", () => {
     await user.click(screen.getByTestId("stub-chat-submit"));
 
     await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
-    expect(createSpy).toHaveBeenCalledWith({
+    expect(createSpy.mock.calls[0]?.[0]).toMatchObject({
       initialUserMsg: "hello world",
       metadata: null,
+      workingDirOverride: undefined,
+      workspaceMode: undefined,
     });
   });
 
@@ -503,12 +547,14 @@ describe("HomeChatLauncher", () => {
     await user.click(screen.getByTestId("stub-chat-submit"));
 
     await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
-    expect(createSpy).toHaveBeenCalledWith({
-      initialUserMsg: "hello world",
-      metadata: null,
-      workingDirOverride: "/p/app",
-      workspaceMode: "new_worktree",
-    });
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        initialUserMsg: "hello world",
+        metadata: null,
+        workingDirOverride: "/p/app",
+        workspaceMode: "new_worktree",
+      }),
+    );
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith("/conversations/conv-wt"),
     );
@@ -576,12 +622,15 @@ describe("HomeChatLauncher", () => {
     await user.click(screen.getByTestId("stub-chat-submit"));
 
     await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
-    expect(createSpy).toHaveBeenCalledWith({
-      initialUserMsg: "hello world",
-      metadata: null,
-      workingDirOverride: "/p/app",
-      workspaceMode: "new_worktree",
-    });
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        initialUserMsg: "hello world",
+        automationSetup: false,
+        metadata: null,
+        workingDirOverride: "/p/app",
+        workspaceMode: "new_worktree",
+      }),
+    );
   });
 
   it("allows a one-conversation override of the saved worktree preference", async () => {
@@ -612,12 +661,15 @@ describe("HomeChatLauncher", () => {
     await user.click(screen.getByTestId("stub-chat-submit"));
 
     await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
-    expect(createSpy).toHaveBeenCalledWith({
-      initialUserMsg: "hello world",
-      metadata: null,
-      workingDirOverride: "/p/app",
-      workspaceMode: "local_repo",
-    });
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        initialUserMsg: "hello world",
+        automationSetup: false,
+        metadata: null,
+        workingDirOverride: "/p/app",
+        workspaceMode: "local_repo",
+      }),
+    );
 
     unmount();
     renderLauncher();
@@ -653,6 +705,37 @@ describe("HomeChatLauncher", () => {
     ).toBeInTheDocument();
   });
 
+  it("allows Automate mode on cloud backends", async () => {
+    mockUseActiveBackend.mockReturnValue(cloudBackend);
+    const createSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue(makeConversationResponse());
+
+    renderLauncher();
+    const user = userEvent.setup();
+
+    expect(
+      screen.queryByText("HOME$AUTOMATE_LOCAL_BACKEND_ONLY"),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByTestId("home-launcher-mode-automate"));
+
+    expect(screen.getByTestId("home-launcher-mode-automate")).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(screen.getByTestId("stub-chat-submit")).toHaveAttribute(
+      "data-placeholder",
+      "HOME$AUTOMATE_PROMPT_PLACEHOLDER",
+    );
+
+    await user.click(screen.getByTestId("stub-chat-submit"));
+
+    await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ automationSetup: true }),
+    );
+  });
+
   it("passes the picked repository + branch payload on a cloud backend", async () => {
     mockUseActiveBackend.mockReturnValue(cloudBackend);
     const createSpy = vi
@@ -669,14 +752,16 @@ describe("HomeChatLauncher", () => {
     await user.click(screen.getByTestId("stub-chat-submit"));
 
     await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
-    expect(createSpy).toHaveBeenCalledWith({
-      initialUserMsg: "hello world",
-      metadata: {
-        selected_repository: "org/repo",
-        selected_branch: "main",
-        git_provider: "github",
-      },
-    });
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        initialUserMsg: "hello world",
+        metadata: {
+          selected_repository: "org/repo",
+          selected_branch: "main",
+          git_provider: "github",
+        },
+      }),
+    );
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith("/conversations/conv-repo"),
     );
@@ -693,9 +778,11 @@ describe("HomeChatLauncher", () => {
     await user.click(screen.getByTestId("stub-chat-submit"));
 
     await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
-    expect(createSpy).toHaveBeenCalledWith({
-      metadata: null,
-    });
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: null,
+      }),
+    );
     await waitFor(() =>
       expect(sendMessageWithAttachments).toHaveBeenCalledTimes(1),
     );
@@ -793,9 +880,11 @@ describe("HomeChatLauncher", () => {
     await user.click(screen.getByTestId("stub-chat-submit"));
 
     await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
-    expect(createSpy).toHaveBeenCalledWith({
-      metadata: null,
-    });
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: null,
+      }),
+    );
     expect(sendMessageWithAttachments).not.toHaveBeenCalled();
     await waitFor(() =>
       expect(enqueueHomeTaskPendingMessage).toHaveBeenCalledWith({
@@ -812,28 +901,67 @@ describe("HomeChatLauncher", () => {
     );
   });
 
-  it("attaches the picked plugins to the created conversation", async () => {
-    const createSpy = vi
-      .spyOn(AgentServerConversationService, "createConversation")
-      .mockResolvedValue(makeConversationResponse());
+  it.each([
+    {
+      name: "code mode with picked plugins",
+      prepare: async () => {
+        await userEvent.click(screen.getByTestId("open-plugin-picker"));
+        await userEvent.click(await screen.findByTestId("stub-plugin-pick"));
+      },
+      expectedPlugins: [{ source: "github:o/a", ref: null, repo_path: null }],
+      expectedAutomationSetup: false,
+      marksAutomationSetup: false,
+    },
+    {
+      name: "automate mode",
+      prepare: async () => {
+        await userEvent.click(
+          screen.getByTestId("home-launcher-mode-automate"),
+        );
+      },
+      expectedPlugins: undefined,
+      expectedAutomationSetup: true,
+      marksAutomationSetup: true,
+    },
+  ])(
+    "creates a conversation in $name",
+    async ({
+      prepare,
+      expectedPlugins,
+      expectedAutomationSetup,
+      marksAutomationSetup,
+    }) => {
+      const createSpy = vi
+        .spyOn(AgentServerConversationService, "createConversation")
+        .mockResolvedValue(makeConversationResponse());
 
+      renderLauncher();
+
+      await prepare();
+      await userEvent.click(screen.getByTestId("stub-chat-submit"));
+
+      await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          initialUserMsg: "hello world",
+          plugins: expectedPlugins,
+          automationSetup: expectedAutomationSetup,
+          metadata: null,
+        }),
+      );
+      if (marksAutomationSetup) {
+        expect(mockMarkAutomationSetupHandoff).toHaveBeenCalledWith("conv-abc");
+      } else {
+        expect(mockMarkAutomationSetupHandoff).not.toHaveBeenCalled();
+      }
+    },
+  );
+
+  it("renders the recommended automations rail above pinned activity in Automate mode", async () => {
     renderLauncher();
     const user = userEvent.setup();
 
-    await user.click(screen.getByTestId("open-plugin-picker"));
-    await user.click(await screen.findByTestId("stub-plugin-pick"));
-    await user.click(screen.getByTestId("stub-chat-submit"));
-
-    await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
-    expect(createSpy).toHaveBeenCalledWith({
-      initialUserMsg: "hello world",
-      plugins: [{ source: "github:o/a", ref: null, repo_path: null }],
-      metadata: null,
-    });
-  });
-
-  it("always renders the recommended automations rail above pinned activity", () => {
-    renderLauncher();
+    await user.click(screen.getByTestId("home-launcher-mode-automate"));
 
     expect(
       screen.getByTestId("recommended-automations-rail"),

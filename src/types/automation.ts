@@ -32,11 +32,15 @@ export interface AutomationRepository {
   ref?: string;
 }
 
+export type AutomationState = "ACTIVE" | "INACTIVE" | "DRAFT";
+
 export interface Automation {
   id: string;
   name: string;
   trigger: AutomationTrigger;
   enabled: boolean;
+  /** Backend automation lifecycle state. Prefer this over deprecated `enabled` when present. */
+  state?: AutomationState | string | null;
   /**
    * Human-readable reason the automation was last disabled (the latest
    * disablement event overwrites this). Mirrors the automation service's
@@ -91,6 +95,10 @@ export interface Automation {
    * detail page uses it to point out which bundle file is the script.
    */
   entrypoint?: string;
+  /** Service-owned upload identifier/path for custom automation bundles. */
+  tarball_path?: string | null;
+  /** Optional setup script path inside the custom automation bundle. */
+  setup_script_path?: string | null;
   branch?: string;
   /**
    * Every repository the automation clones. The service layer derives it on

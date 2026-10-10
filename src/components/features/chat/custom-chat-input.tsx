@@ -194,9 +194,9 @@ export function CustomChatInput({
           hasStartedConversation={hasStartedConversation}
           isNewConversationPending={isNewConversationPending}
           showButton={showButton}
-          placeholder={placeholder}
           buttonClassName={buttonClassName}
           chatInputRef={chatInputRef}
+          placeholder={placeholder}
           handleFileIconClick={handleFileIconClick}
           handleSubmit={handleSubmitAndSync}
           onDragOver={handleDragOver}

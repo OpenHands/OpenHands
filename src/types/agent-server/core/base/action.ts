@@ -1,3 +1,4 @@
+import { AUTOMATION_FORM_UPDATE_ACTION_KIND } from "#/constants/automation-form";
 import { CANVAS_UI_CLIENT_ACTION_KIND } from "#/constants/canvas-ui";
 import { LAUNCH_CHILD_CONVERSATION_ACTION_KIND } from "#/constants/child-conversation";
 import { ActionBase } from "./base";
@@ -323,6 +324,18 @@ export interface CanvasUIAction extends ActionBase<
 }
 
 /**
+ * Request to patch the active automation setup form from an agent tool call.
+ * The concrete fields are normalized by the draft store because the SDK only
+ * validates the JSON schema at the client-tool boundary.
+ */
+export interface AutomationFormUpdateAction extends ActionBase<
+  typeof AUTOMATION_FORM_UPDATE_ACTION_KIND
+> {
+  fields: Record<string, unknown>;
+  overwrite_user_edits?: boolean | null;
+}
+
+/**
  * Request to launch a child conversation, emitted over the existing WebSocket
  * and intercepted by handleLaunchChildConversationAction. The agent-server
  * validates the parameter *names* and types against the tool schema but not
@@ -366,4 +379,5 @@ export type Action =
   | TaskAction
   | SwitchLLMAction
   | CanvasUIAction
+  | AutomationFormUpdateAction
   | LaunchChildConversationAction;
