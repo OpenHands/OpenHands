@@ -14,8 +14,6 @@ export interface GuidedTourStop {
   title: string;
   body: string;
   side?: GuidedTourSide;
-  /** Next clicks the anchor first, e.g. to open a form from its button. */
-  nextClicksAnchor?: boolean;
   /**
    * Hide Next; move on when the admin clicks an element matching this
    * selector inside the anchor, such as one template card in a list.
