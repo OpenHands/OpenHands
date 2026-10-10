@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { screen, waitFor, within, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -168,6 +168,115 @@ describe("ConversationPanel conversation actions", () => {
           .isArchived("default-local", "1"),
       ).toBe(false);
     });
+    expect(
+      screen.queryByTestId("conversation-card-archived-chip"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("hides a missing-runtime conversation from the default list, reveals it with the Archived chip, and offers only Unarchive", async () => {
+    // A conversation whose runtime is gone (adapter maps a local
+    // `runtime_info.runtime_status: "missing"` + `can_resume: false` to
+    // `sandbox_status: "MISSING"`) must be treated as archived everywhere:
+    // hidden by default, chipped when "Show archived" is on, and offering
+    // exactly one menu direction — "Unarchive", never "Archive".
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({
+      items: [
+        createMockConversation({ id: "live", title: "Live Conversation" }),
+        createMockConversation({
+          id: "gone",
+          title: "Gone Conversation",
+          sandbox_status: "MISSING",
+        }),
+      ],
+      next_page_id: null,
+    });
+
+    renderConversationPanel();
+
+    // Default list: the missing-runtime row is hidden like an archived row.
+    let cards = await screen.findAllByTestId("conversation-card");
+    expect(cards).toHaveLength(1);
+    expect(screen.queryByText("Gone Conversation")).not.toBeInTheDocument();
+
+    // "Show archived": the row reappears with the Archived chip.
+    act(() => {
+      useConversationPanelPreferencesStore.setState({
+        showArchivedConversations: true,
+      });
+    });
+    cards = await screen.findAllByTestId("conversation-card");
+    expect(cards).toHaveLength(2);
+    const goneCard = cards.find((card) =>
+      within(card).queryByText("Gone Conversation"),
+    )!;
+    expect(goneCard).toBeInTheDocument();
+    expect(
+      within(goneCard).getByTestId("conversation-card-archived-chip"),
+    ).toBeInTheDocument();
+
+    // Exactly one direction, and it is Unarchive — never Archive.
+    await userEvent
+      .setup()
+      .click(within(goneCard).getByTestId("ellipsis-button"));
+    expect(screen.queryByTestId("archive-button")).not.toBeInTheDocument();
+    const unarchive = screen.getByTestId("unarchive-button");
+
+    // Invoking Unarchive clears the user's explicit archive intent without
+    // resuming the runtime, so the row stays archived while its runtime is
+    // missing and non-resumable.
+    await userEvent.setup().click(unarchive);
+    expect(
+      screen.getByTestId("conversation-card-archived-chip"),
+    ).toBeInTheDocument();
+  });
+
+  it("offers Unarchive on an explicitly archived row with a present runtime", async () => {
+    // An explicit archive whose sandbox is not missing is restorable, so its
+    // ⋮ menu offers Unarchive and removing it returns the row to the default
+    // list.
+    useArchivedConversationsStore
+      .getState()
+      .archiveConversation("default-local", "1");
+    useConversationPanelPreferencesStore.setState({
+      showArchivedConversations: true,
+    });
+
+    renderConversationPanel();
+
+    const cards = await screen.findAllByTestId("conversation-card");
+    const archivedCard = cards.find((card) =>
+      within(card).queryByText("Conversation 1"),
+    )!;
+    await userEvent
+      .setup()
+      .click(within(archivedCard).getByTestId("ellipsis-button"));
+    expect(screen.getByTestId("unarchive-button")).toBeInTheDocument();
+    expect(screen.queryByTestId("archive-button")).not.toBeInTheDocument();
+  });
+
+  it("keeps an ERROR runtime in the default list without the Archived chip", async () => {
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({
+      items: [
+        createMockConversation({
+          id: "errored",
+          title: "Errored Conversation",
+          sandbox_status: "ERROR",
+        }),
+      ],
+      next_page_id: null,
+    });
+
+    renderConversationPanel();
+
+    const cards = await screen.findAllByTestId("conversation-card");
+    expect(cards).toHaveLength(1);
+    expect(screen.getByText("Errored Conversation")).toBeInTheDocument();
     expect(
       screen.queryByTestId("conversation-card-archived-chip"),
     ).not.toBeInTheDocument();

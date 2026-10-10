@@ -10,6 +10,7 @@ import { ConversationStatusDot } from "./conversation-status-dot";
 import { ConversationCardFooter } from "./conversation-card/conversation-card-footer";
 import { I18nKey } from "#/i18n/declaration";
 import { useBackendScopedPath } from "#/hooks/use-backend-scoped-path";
+import { isMissingSandboxStatus } from "#/utils/conversation-archive-status";
 
 interface CompactConversationRowProps {
   conversationId: string;
@@ -29,6 +30,12 @@ interface CompactConversationRowProps {
   acpServer?: string | null;
   tags?: Record<string, string> | null;
   showTags?: boolean;
+  /**
+   * The row's effective archived state. Leave undefined to infer it from
+   * `sandboxStatus` (a missing, non-resumable runtime); the panel passes the
+   * explicit value so the chip and dot agree with the full card.
+   */
+  isArchived?: boolean;
 }
 
 /**
@@ -54,10 +61,12 @@ export function CompactConversationRow({
   acpServer = null,
   tags = null,
   showTags = false,
+  isArchived,
 }: CompactConversationRowProps) {
   const { t } = useTranslation("openhands");
   const backendScopedPath = useBackendScopedPath();
   const disableAnimation = import.meta.env.MODE === "test";
+  const effectiveArchived = isArchived ?? isMissingSandboxStatus(sandboxStatus);
 
   const preview = (
     <div className="w-65 p-3">
@@ -65,6 +74,7 @@ export function CompactConversationRow({
         <ConversationStatusDot
           executionStatus={executionStatus}
           sandboxStatus={sandboxStatus}
+          isArchived={effectiveArchived}
           showTooltip={false}
         />
         <span
@@ -87,6 +97,7 @@ export function CompactConversationRow({
         acpServer={acpServer}
         tags={tags}
         showTags={showTags}
+        isArchived={effectiveArchived}
       />
     </div>
   );
@@ -116,6 +127,7 @@ export function CompactConversationRow({
         <ConversationStatusDot
           executionStatus={executionStatus}
           sandboxStatus={sandboxStatus}
+          isArchived={effectiveArchived}
           showTooltip={false}
         />
       </NavigationLink>

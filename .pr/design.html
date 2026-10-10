@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unify the archived conversation predicate — #18155</title>
+<style>
+  :root{
+    --fg:#1a1a1a; --muted:#5a5a5a; --subtle:#8a8a82;
+    --bg:#fdfdfb; --card:#ffffff; --elevated:#f7f6f1;
+    --accent:#2b4eaa; --accent-soft:#e6ecfa;
+    --rule:#e2e2dc; --rule-strong:#bdbcb4;
+    --code-bg:#f3f1ec; --warn:#b25b0e; --ok:#2f7a3a; --crit:#a02020; --changed:#c2570a;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box} html,body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans)}
+  body{line-height:1.6;font-size:16px}
+  .wrap{display:grid;grid-template-columns:250px minmax(0,1fr);gap:48px;max-width:1180px;margin:0 auto;padding:32px 28px 96px}
+  nav.toc{position:sticky;top:24px;align-self:start;font-size:13px}
+  nav.toc h2{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+  nav.toc ol{list-style:none;padding:0;margin:0;counter-reset:toc}
+  nav.toc li{counter-increment:toc;margin:4px 0}
+  nav.toc li::before{content:counter(toc) ". ";color:var(--muted)}
+  nav.toc a{color:var(--fg);text-decoration:none} nav.toc a:hover{color:var(--accent)}
+  header.title{border-bottom:1px solid var(--rule);padding-bottom:22px;margin-bottom:28px}
+  header.title .eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700}
+  header.title h1{font-size:32px;margin:6px 0 4px;letter-spacing:-.01em}
+  header.title .sub{color:var(--muted);max-width:760px}
+  h2{font-size:22px;margin:44px 0 10px} h2 .num{color:var(--muted);font-weight:500;margin-right:8px}
+  h3{font-size:16px;margin:22px 0 8px}
+  code{font-family:var(--mono);font-size:.88em;background:var(--code-bg);padding:1px 5px;border-radius:3px}
+  pre{font-family:var(--mono);font-size:13px;background:var(--code-bg);padding:14px 16px;border-radius:6px;overflow-x:auto;border:1px solid var(--rule)}
+  pre code{background:transparent;padding:0}
+  .kw{color:#7048a8}.str{color:var(--ok)}.com{color:var(--subtle);font-style:italic}
+  table{border-collapse:collapse;width:100%;font-size:14px;margin:12px 0}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--rule);vertical-align:top}
+  th{font-weight:600;background:var(--code-bg)}
+  .callout{border-left:3px solid var(--accent);background:var(--accent-soft);padding:10px 14px;margin:14px 0;border-radius:0 4px 4px 0;font-size:14.5px}
+  .callout.warn{border-color:var(--warn);background:#fbf1e6} .callout.note{border-color:var(--muted);background:#f3f1ec}
+  .fig{margin:18px 0 22px}
+  .fig svg{display:block;max-width:100%;height:auto;background:#fff;border:1px solid var(--rule);border-radius:6px}
+  .fig figcaption{font-size:13px;color:var(--muted);margin-top:6px;text-align:center}
+  a.src{font-family:var(--mono);font-size:11.5px;color:var(--accent);text-decoration:none;border-bottom:1px dotted var(--accent)}
+  details{border:1px solid var(--rule);border-radius:6px;margin:12px 0}
+  details>summary{cursor:pointer;padding:8px 12px;color:var(--muted);font-size:13px;list-style:none}
+  details>summary::-webkit-details-marker{display:none}
+  details>summary::before{content:"▸ "} details[open]>summary::before{content:"▾ "}
+  .ba{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+  .legend{font-size:12px;color:var(--muted);display:flex;gap:16px;flex-wrap:wrap;margin:6px 0 0}
+  .legend span::before{content:"■ ";color:var(--changed)} .legend span.g::before{color:var(--ok)} .legend span.r::before{color:var(--crit)} .legend span.n::before{color:var(--rule-strong)}
+  @media(max-width:760px){.wrap{grid-template-columns:1fr}.ba{grid-template-columns:1fr}}
+</style></head><body>
+<div class="wrap">
+  <nav class="toc"><h2>Contents</h2><ol>
+    <li><a href="#sec1">The bug: two archived notions</a></li>
+    <li><a href="#sec2">One predicate, two concerns</a></li>
+    <li><a href="#sec3">API before → after</a></li>
+    <li><a href="#sec4">Per-file changes</a></li>
+    <li><a href="#sec5">Evidence</a></li>
+  </ol></nav>
+  <main>
+    <header class="title">
+      <div class="eyebrow">Bug fix · Agent Canvas frontend</div>
+      <h1>Unify the archived conversation predicate</h1>
+      <p class="sub">The conversation list had two independent notions of "archived" that disagreed: the
+      status dot dimmed and labelled a missing-runtime row "Archived", while list visibility, the
+      "Archived" chip, and the ⋮ menu still treated it as active. This PR derives every archived
+      presentation from one predicate, and stops conflating a missing runtime with an errored one.</p>
+    </header>
+
+    <p style="font-size:13.5px;color:var(--muted)">10 files &nbsp;·&nbsp; <b style="color:var(--ok)">+233</b> / <b style="color:var(--crit)">−16</b> &nbsp;·&nbsp; no dependency or wire-contract changes &nbsp;·&nbsp; fixes
+      <a class="src" href="https://github.com/OpenHands/OpenHands/issues/18155">#18155</a></p>
+
+    <div class="callout"><b>★ Key takeaway.</b> A row is now "effectively archived" when the user archived it
+      <i>or</i> its runtime is missing and non-resumable; that one predicate drives list visibility, the
+      "Archived" chip, and the menu direction. <code>ERROR</code> keeps its red "Error" indicator and is never
+      archived. The single new symbol is
+      <a class="src" href="https://github.com/OpenHands/OpenHands/blob/261a7ef99091348fd39a49dbc9238bcca7cc311b/src/utils/conversation-archive-status.ts#L38">isEffectivelyArchivedConversation · src/utils/conversation-archive-status.ts:38</a>.</div>
+
+    <section id="sec1">
+      <h2><span class="num">1</span>The bug: two archived notions disagreed</h2>
+      <p>After an automation run finished, its conversation's runtime was torn down and could not be
+      resumed. The backend reported <code>sandbox_status: "MISSING"</code> (Cloud) or
+      <code>runtime_info.runtime_status: "missing"</code> + <code>can_resume: false</code> (local). The row
+      then rendered the gray archive icon, tooltip "Archived", and a dimmed title — but it stayed in the
+      default list, showed no "Archived" chip, and its ⋮ menu still offered "Archive".</p>
+
+      <figure class="fig">
+        <svg viewBox="0 0 720 250" role="img" aria-label="Before: two archive sources feed different surfaces">
+          <defs><marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="var(--rule-strong)"/></marker></defs>
+          <text x="16" y="22" font-size="12" font-weight="700" fill="var(--crit)">BEFORE — two sources, two answers</text>
+          <rect x="20" y="44" width="200" height="66" rx="6" fill="var(--card)" stroke="var(--rule-strong)"/>
+          <text x="34" y="68" font-size="12" font-weight="700">sandbox_status</text>
+          <text x="34" y="88" font-size="11" fill="var(--muted)">MISSING / ERROR</text>
+          <text x="34" y="103" font-size="10.5" fill="var(--muted)">isArchivedSandboxStatus()</text>
+          <rect x="500" y="44" width="200" height="66" rx="6" fill="var(--card)" stroke="var(--rule-strong)"/>
+          <text x="514" y="68" font-size="12" font-weight="700">localStorage</text>
+          <text x="514" y="88" font-size="11" fill="var(--muted)">archived-conversations</text>
+          <text x="514" y="103" font-size="10.5" fill="var(--muted)">explicit user archive</text>
+          <path d="M220 77 L500 77" stroke="var(--rule-strong)" stroke-width="1.4" marker-end="url(#ar)"/>
+          <text x="360" y="70" font-size="10.5" fill="var(--muted)" text-anchor="middle">do not agree</text>
+          <path d="M120 110 L120 168" stroke="var(--rule-strong)" stroke-width="1.4" marker-end="url(#ar)"/>
+          <path d="M600 110 L600 168" stroke="var(--rule-strong)" stroke-width="1.4" marker-end="url(#ar)"/>
+          <rect x="40" y="172" width="180" height="52" rx="6" fill="#fdf3ef" stroke="var(--crit)"/>
+          <text x="54" y="193" font-size="11">dot · dimmed title</text>
+          <text x="54" y="209" font-size="11">read-only (WS, chat)</text>
+          <rect x="470" y="172" width="230" height="52" rx="6" fill="#fdf3ef" stroke="var(--crit)"/>
+          <text x="484" y="193" font-size="11">list visibility · chip</text>
+          <text x="484" y="209" font-size="11">⋮ menu direction</text>
+          <text x="120" y="240" font-size="10.5" fill="var(--crit)" text-anchor="middle">shown "Archived"</text>
+          <text x="585" y="240" font-size="10.5" fill="var(--crit)" text-anchor="middle">behaved "active"</text>
+        </svg>
+        <figcaption>A missing-runtime row was painted as archived by the sandbox status, but list/chip/menu read the local store — so the row looked archived while behaving as active.</figcaption>
+      </figure>
+
+      <div class="callout warn"><b>⚠ Also wrong.</b> <code>isArchivedSandboxStatus</code> returned true for both
+      <code>MISSING</code> and <code>ERROR</code>, so an errored runtime got the dimmed title and skipped its
+      WebSocket — even though the status dot renders <code>ERROR</code> as a red "Error" dot, not as archived.</div>
+    </section>
+
+    <section id="sec2">
+      <h2><span class="num">2</span>One predicate, two concerns split apart</h2>
+      <p>The old single helper mixed a <b>runtime</b> concern (is the sandbox gone?) with an <b>archive</b>
+      concern (should this row present as archived?). The fix names each:</p>
+      <table>
+        <tr><th>Concern</th><th>Symbol</th><th>Returns true for</th><th>Drives</th></tr>
+        <tr><td>Runtime unavailable (read-only)</td><td><code>isRuntimeUnavailableSandboxStatus</code></td><td>MISSING, ERROR</td><td>WebSocket gating, chat input, git/panel toggles</td></tr>
+        <tr><td>Missing &amp; non-resumable</td><td><code>isMissingSandboxStatus</code></td><td>MISSING</td><td>status dot "Archived", dimmed title</td></tr>
+        <tr><td><b>Effective archived</b></td><td><code>isEffectivelyArchivedConversation</code></td><td>explicit archive <b>or</b> MISSING</td><td>list visibility, "Archived" chip, ⋮ menu direction</td></tr>
+      </table>
+      <div class="callout note"><b>ⓘ Why ERROR stays read-only but not archived.</b> An errored sandbox is
+      also gone and cannot be resumed, so its runtime-backed affordances remain read-only
+      (<a class="src" href="https://github.com/OpenHands/OpenHands/blob/261a7ef99091348fd39a49dbc9238bcca7cc311b/src/contexts/websocket-provider-wrapper.tsx#L101">websocket-provider-wrapper.tsx:101</a>).
+      But it is not "archived": it keeps the red Error dot and never gets the chip, so it is not conflated
+      with MISSING.</div>
+
+      <figure class="fig">
+        <svg viewBox="0 0 720 220" role="img" aria-label="After: one predicate feeds every archived surface">
+          <defs><marker id="ar2" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="var(--accent)"/></marker></defs>
+          <text x="16" y="22" font-size="12" font-weight="700" fill="var(--ok)">AFTER — one predicate, one answer</text>
+          <rect x="250" y="40" width="230" height="58" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+          <text x="264" y="63" font-size="12" font-weight="700">isEffectivelyArchived</text>
+          <text x="264" y="80" font-size="10.5" fill="var(--muted)">explicit || isMissing(status)</text>
+          <text x="264" y="93" font-size="10" fill="var(--muted)">conversation-archive-status.ts:38</text>
+          <path d="M365 98 L365 128" stroke="var(--accent)" stroke-width="1.4" marker-end="url(#ar2)"/>
+          <rect x="70" y="134" width="180" height="46" rx="6" fill="var(--card)" stroke="var(--ok)"/>
+          <text x="84" y="154" font-size="11">list visibility</text>
+          <text x="84" y="170" font-size="11">(default hides it)</text>
+          <rect x="270" y="134" width="180" height="46" rx="6" fill="var(--card)" stroke="var(--ok)"/>
+          <text x="284" y="154" font-size="11">"Archived" chip</text>
+          <text x="284" y="170" font-size="11">under "Show archived"</text>
+          <rect x="470" y="134" width="180" height="46" rx="6" fill="var(--card)" stroke="var(--ok)"/>
+          <text x="484" y="154" font-size="11">⋮ menu direction</text>
+          <text x="484" y="170" font-size="11">Unarchive (never Archive)</text>
+          <path d="M365 180 L365 196" stroke="var(--accent)" stroke-width="1.2"/>
+          <text x="365" y="212" font-size="10.5" fill="var(--muted)" text-anchor="middle">conversation-panel.tsx:208 isRowArchived()</text>
+        </svg>
+        <figcaption>Every archived presentation now reads the same predicate, so the surfaces cannot disagree.</figcaption>
+      </figure>
+    </section>
+
+    <section id="sec3">
+      <h2><span class="num">3</span>API before → after</h2>
+      <div class="ba">
+        <div>
+          <h3>Before</h3>
+          <pre><code><span class="com">// one helper, two meanings</span>
+<span class="kw">export function</span> isArchivedSandboxStatus(
+  s: SandboxStatus | <span class="kw">null</span> | <span class="kw">undefined</span>,
+): <span class="kw">boolean</span> {
+  <span class="kw">return</span> s === <span class="str">"MISSING"</span>
+      || s === <span class="str">"ERROR"</span>;
+}
+
+<span class="com">// list/chip/menu read the store, not this</span>
+archivedIdSet.has(conversation.id)</code></pre>
+        </div>
+        <div>
+          <h3>After</h3>
+          <pre><code><span class="kw">export function</span> isMissingSandboxStatus(
+  s: SandboxStatus | <span class="kw">null</span> | <span class="kw">undefined</span>,
+): <span class="kw">boolean</span> { <span class="kw">return</span> s === <span class="str">"MISSING"</span>; }
+
+<span class="kw">export function</span> isRuntimeUnavailableSandboxStatus(
+  s: SandboxStatus | <span class="kw">null</span> | <span class="kw">undefined</span>,
+): <span class="kw">boolean</span> {
+  <span class="kw">return</span> s === <span class="str">"MISSING"</span> || s === <span class="str">"ERROR"</span>;
+}
+
+<span class="kw">export function</span> isEffectivelyArchivedConversation(
+  s: SandboxStatus | <span class="kw">null</span> | <span class="kw">undefined</span>,
+  explicitlyArchived: <span class="kw">boolean</span>,
+): <span class="kw">boolean</span> {
+  <span class="kw">return</span> explicitlyArchived || isMissingSandboxStatus(s);
+}</code></pre>
+        </div>
+      </div>
+      <p>Verdict: <b>internal refactor</b>. No exported API, wire contract, or TypeScript-client
+      normalization changes; the renamed helpers are module-internal to Canvas.</p>
+    </section>
+
+    <section id="sec4">
+      <h2><span class="num">4</span>Per-file changes</h2>
+      <h3>✏️ The predicate — <a class="src" href="https://github.com/OpenHands/OpenHands/blob/261a7ef99091348fd39a49dbc9238bcca7cc311b/src/utils/conversation-archive-status.ts">src/utils/conversation-archive-status.ts</a></h3>
+      <p>Splits the overloaded <code>isArchivedSandboxStatus</code> (MISSING||ERROR) into
+      <code>isMissingSandboxStatus</code> (MISSING), <code>isRuntimeUnavailableSandboxStatus</code>
+      (MISSING||ERROR), and the new <code>isEffectivelyArchivedConversation</code> (explicit || MISSING).</p>
+
+      <h3>✏️ The panel — <a class="src" href="https://github.com/OpenHands/OpenHands/blob/261a7ef99091348fd39a49dbc9238bcca7cc311b/src/components/features/conversation-panel/conversation-panel.tsx#L208">conversation-panel.tsx:208</a></h3>
+      <p>Adds one <code>isRowArchived(conversation)</code> callback. The display filter, the <code>isArchived</code>
+      handed to cards, and the ⋮ menu direction all call it instead of <code>archivedIdSet.has(id)</code>.
+      Delete/prune logic still reads the unfiltered loaded set, so hiding a row never shrinks what can be deleted.</p>
+      <p>The ⋮ menu offers <b>exactly one</b> direction per row: <em>Archive</em> until the row is effectively
+      archived, then <em>Unarchive</em>. This holds for a runtime-derived archive too: "Unarchive" clears the user's
+      explicit archive intent (if any) and does not resume the runtime, so a missing-runtime row stays archived while
+      its runtime is missing and non-resumable — never a dead <em>Archive</em> direction nor a broken promise.</p>
+
+      <h3>✏️ Status dot &amp; dimmed title</h3>
+      <p><a class="src" href="https://github.com/OpenHands/OpenHands/blob/261a7ef99091348fd39a49dbc9238bcca7cc311b/src/components/features/conversation-panel/conversation-status-dot.tsx#L128">conversation-status-dot.tsx</a>,
+      <a class="src" href="https://github.com/OpenHands/OpenHands/blob/261a7ef99091348fd39a49dbc9238bcca7cc311b/src/components/features/conversation-panel/conversation-card/conversation-card-header.tsx#L25">conversation-card-header.tsx</a>,
+      the hover preview, and the compact row all take the row's <b>effective archived</b> state
+      (<code>isArchived</code>), not the raw sandbox status, so an explicitly archived row streams the gray
+      archive dot and dimmed title even though its runtime is fine, and the dot can never disagree with the
+      "Archived" chip. A missing sandbox is still inferred from <code>sandboxStatus</code> for callers that only
+      have that, and an unarchived <code>ERROR</code> row keeps its red "Error" dot and badge.</p>
+
+      <h3>✏️ Read-only gate</h3>
+      <p><a class="src" href="https://github.com/OpenHands/OpenHands/blob/261a7ef99091348fd39a49dbc9238bcca7cc311b/src/hooks/use-is-archived-conversation.ts#L15">use-is-archived-conversation.ts:15</a>
+      and <a class="src" href="https://github.com/OpenHands/OpenHands/blob/261a7ef99091348fd39a49dbc9238bcca7cc311b/src/contexts/websocket-provider-wrapper.tsx#L101">websocket-provider-wrapper.tsx:101</a>
+      keep using <code>isRuntimeUnavailableSandboxStatus</code> (MISSING still read-only; ERROR stays read-only too, unchanged). The hook's docblock now states it is the read-only gate, not the archive predicate.</p>
+
+      <h3>⚙️ Mechanical</h3>
+      <p><a class="src" href="https://github.com/OpenHands/OpenHands/blob/261a7ef99091348fd39a49dbc9238bcca7cc311b/src/components/features/conversation-panel/compact-conversation-row.tsx">compact-conversation-row.tsx</a>
+      gains an <code>isArchived</code> prop forwarded to the card preview so the compact layout shows the same chip.</p>
+    </section>
+
+    <section id="sec5">
+      <h2><span class="num">5</span>Evidence — before vs after, real backend and mock fixtures</h2>
+      <p>Two independent setups, both driving the real Canvas build:</p>
+      <p><b>Real backend (primary).</b> A real agent server ran the shipped Canvas build against a conversation
+      created locally, then restarted in <code>conversation_runtime: "docker"</code> mode. The server then reports
+      <code>runtime_info.runtime_status: "missing"</code> with <code>can_resume: false</code> for that conversation —
+      a genuine non-resumable runtime, not a fixture. The adapter maps it to <code>sandbox_status: "MISSING"</code>.
+      "Before" is <code>main</code> @ <code>3f98684</code>; "after" is this PR's head; both served from the same
+      origin so only the build differs. Captures are the <code>real-before-*</code> / <code>real-after-*</code> files.</p>
+      <p><b>Mock fixtures (secondary).</b> Both builds also run in mock mode (<code>npm run dev:mock</code>) against
+      the fixtures already on <code>main</code>: id 4 <code>MISSING</code> ("Archived Project") and id 5
+      <code>ERROR</code> ("Errored Project") in <a class="src" href="https://github.com/OpenHands/OpenHands/blob/3f98684763a4e17e6e2faf8dd8f1cfc3969b020c/src/mocks/conversation-handlers.ts#L77">conversation-handlers.ts:77</a>,
+      which additionally exercise the <code>ERROR</code> row. Captures are the <code>before-*</code> /
+      <code>after-*</code> files. Driven with the verify-openhands Playwright browser.</p>
+      <table>
+        <tr><th>Observation</th><th>Before — main</th><th>After — this PR</th></tr>
+        <tr><td>Real backend, default list (Show archived off)</td>
+            <td>the genuine MISSING row is <b>shown</b> (bug) with no chip</td>
+            <td>the MISSING row is <b>hidden</b></td></tr>
+        <tr><td>Real backend, ⋮ menu on that row</td>
+            <td><code>[…,"<b>Archive Conversation</b>","Delete Conversation"]</code></td>
+            <td><code>[…,"<b>Unarchive Conversation</b>","Delete Conversation"]</code> — one direction only</td></tr>
+        <tr><td>Default list (Show archived off)</td>
+            <td>MISSING row <b>shown</b> with a gray archive dot + dimmed title, no chip</td>
+            <td>MISSING row <b>hidden</b> (archived); ERROR row shown with red "Error"</td></tr>
+        <tr><td>⋮ menu on the archived row</td>
+            <td><code>["Rename","Edit tags","Stop Conversation","Download conversation data","<b>Archive Conversation</b>","Delete Conversation"]</code></td>
+            <td><code>[…]</code> — exactly one direction, <b>Unarchive</b> (never "Archive"); it clears explicit intent without resuming the runtime</td></tr>
+        <tr><td>ERROR row presentation</td>
+            <td>red "Error" dot, but dimmed title (wrongly archived)</td>
+            <td>red "Error" dot, title not dimmed, never chipped/archived</td></tr>
+      </table>
+      <p style="font-size:13.5px;color:var(--muted)">Twelve captures (real-backend and mock, 3 before · 3 after
+      each: default list, "Show archived", archived-row ⋮ menu) are attached to the PR under
+      <b>Video/Screenshots</b>. Unit/integration tests cover the predicate's MISSING/ERROR/local-non-resumable cases,
+      the dot's MISSING→archive render, and the panel's default-hide / show-archived behavior.</p>
+      <div class="callout note"><b>ⓘ Where MISSING actually comes from.</b> The local (non-Docker) agent server
+      reports every catalog conversation as <code>runtime_status: "available"</code>, so it never yields a
+      <code>MISSING</code> row; the adapter maps <code>MISSING</code> from a Cloud
+      <code>sandbox_status</code> or a Docker-runtime <code>runtime_info.runtime_status: "missing"</code> with
+      <code>can_resume: false</code> (the <code>conversation_runtime: "docker"</code> mode). That mapping is pinned
+      by <a class="src" href="https://github.com/OpenHands/OpenHands/blob/3f98684763a4e17e6e2faf8dd8f1cfc3969b020c/__tests__/api/agent-server-adapter.test.ts#L1008">agent-server-adapter.test.ts</a>
+      (missing+non-resumable → <code>MISSING</code>; missing+resumable → <code>null</code>). The real-backend
+      captures above reproduce exactly that: a conversation created in local mode, then read back after the server
+      restarted in Docker mode, yields <code>runtime_status: "missing"</code> + <code>can_resume: false</code>.</div>
+      <div class="callout note"><b>ⓘ Why the ⋮ menu still offers "Unarchive" on a runtime-derived row.</b>
+      The issue's acceptance criteria commit to treating a missing runtime as archived "everywhere" and require
+      "exactly one direction — Unarchive, never Archive" for any archived row. On a purely runtime-derived archive,
+      "Unarchive" clears the user's explicit archive intent (if any) and never attempts to resume the runtime; the
+      row stays archived while the runtime is missing and non-resumable, which the criteria state explicitly. The
+      alternative — hiding the action entirely — would leave an archived row with no archive-related direction and
+      would violate that criterion.</div>
+    </section>
+
+    <p style="margin-top:40px;font-size:12.5px;color:var(--subtle)">Temporary review artifact under <code>.pr/</code>; removed after merge.</p>
+  </main>
+</div></body></html>

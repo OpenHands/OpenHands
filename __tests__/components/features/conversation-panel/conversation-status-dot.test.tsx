@@ -46,7 +46,9 @@ describe("ConversationStatusDot", () => {
   it("renders the unknown state for missing execution status", () => {
     renderWithProviders(<ConversationStatusDot executionStatus={undefined} />);
 
-    expect(screen.getByTestId("conversation-status-unknown")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("conversation-status-unknown"),
+    ).toBeInTheDocument();
     expect(screen.getByTestId("styled-tooltip")).toHaveAttribute(
       "data-content",
       "COMMON$STOPPED",
@@ -68,5 +70,61 @@ describe("ConversationStatusDot", () => {
       "data-content",
       "COMMON$ARCHIVED",
     );
+  });
+
+  it("renders the error dot, not the archive icon, when sandbox is ERROR", () => {
+    renderWithProviders(
+      <ConversationStatusDot
+        executionStatus={ExecutionStatus.FINISHED}
+        sandboxStatus="ERROR"
+      />,
+    );
+
+    expect(screen.getByTestId("conversation-status-error")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("conversation-status-archived"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("styled-tooltip")).toHaveAttribute(
+      "data-content",
+      "COMMON$ERROR",
+    );
+  });
+
+  it("renders the archive icon for an explicitly archived row regardless of sandbox status", () => {
+    renderWithProviders(
+      <ConversationStatusDot
+        executionStatus={ExecutionStatus.RUNNING}
+        sandboxStatus="RUNNING"
+        isArchived
+      />,
+    );
+
+    expect(
+      screen.getByTestId("conversation-status-archived"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("conversation-status-working"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("styled-tooltip")).toHaveAttribute(
+      "data-content",
+      "COMMON$ARCHIVED",
+    );
+  });
+
+  it("prefers the archive presentation over the error dot when the row is archived", () => {
+    renderWithProviders(
+      <ConversationStatusDot
+        executionStatus={ExecutionStatus.ERROR}
+        sandboxStatus="ERROR"
+        isArchived
+      />,
+    );
+
+    expect(
+      screen.getByTestId("conversation-status-archived"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("conversation-status-error"),
+    ).not.toBeInTheDocument();
   });
 });
