@@ -1145,4 +1145,50 @@ describe("BackendSelector", () => {
       });
     });
   });
+
+  describe("Escape key handling", () => {
+    it("preserves active backend name and status dot when Escape is pressed while closed", async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<BackendSelector />);
+
+      const wrapper = screen.getByTestId("backend-selector");
+      const input = within(wrapper).getByRole("combobox");
+      expect(input).toHaveValue("Local");
+      expect(
+        within(wrapper).getByTestId("backend-status-dot"),
+      ).toBeInTheDocument();
+
+      input.focus();
+      await user.keyboard("{Escape}");
+
+      expect(input).toHaveValue("Local");
+      expect(
+        within(wrapper).getByTestId("backend-status-dot"),
+      ).toBeInTheDocument();
+    });
+
+    it("preserves active backend name and status dot when Escape is pressed twice (once to close, once while closed)", async () => {
+      renderWithProviders(<BackendSelector />);
+
+      const user = await openDropdown();
+      const wrapper = screen.getByTestId("backend-selector");
+      const input = within(wrapper).getByRole("combobox");
+      expect(screen.queryAllByRole("option").length).toBeGreaterThan(0);
+
+      // First Escape closes the menu and restores the active backend label
+      await user.keyboard("{Escape}");
+      expect(screen.queryAllByRole("option")).toHaveLength(0);
+      expect(input).toHaveValue("Local");
+      expect(
+        within(wrapper).getByTestId("backend-status-dot"),
+      ).toBeInTheDocument();
+
+      // Second Escape on closed menu must not blank the selector
+      await user.keyboard("{Escape}");
+      expect(input).toHaveValue("Local");
+      expect(
+        within(wrapper).getByTestId("backend-status-dot"),
+      ).toBeInTheDocument();
+    });
+  });
 });
