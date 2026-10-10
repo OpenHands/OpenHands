@@ -1,3 +1,7 @@
+import {
+  resolveAutomationSetupPlugins,
+  serializeAutomationSetupPluginList,
+} from "#/api/automation-setup-plugins";
 import type {
   AutomationSetupDraft,
   AutomationSetupField,
@@ -22,6 +26,7 @@ const AUTOMATION_SETUP_TRIGGER_KINDS: AutomationSetupTriggerKind[] = [
   "event",
 ];
 const AUTOMATION_SETUP_FREQUENCIES: AutomationSetupFrequency[] = [
+  "once",
   "hourly",
   "daily",
   "weekdays",
@@ -34,16 +39,21 @@ const STRING_FIELDS = [
   "repository",
   "pluginSource",
   "pluginRef",
+  "pluginList",
   "customCode",
   "entrypoint",
   "setupScriptPath",
   "setupScript",
   "time",
+  "scheduleDateTime",
   "timezone",
+  "weekday",
   "customSchedule",
   "eventSource",
   "eventKey",
   "eventFilter",
+  "model",
+  "agentProfileId",
   "timeoutSeconds",
 ] as const satisfies readonly AutomationSetupField[];
 
@@ -130,15 +140,29 @@ function normalizeDraft(value: AutomationSetupDraft): AutomationSetupDraft {
         (plugin): plugin is string => typeof plugin === "string",
       )
     : [];
-  const pluginSource = form.pluginSource ?? plugins[0];
+  const pluginEntries = resolveAutomationSetupPlugins(form, plugins);
+  const pluginSources = pluginEntries
+    .map((entry) => entry.source.trim())
+    .filter(Boolean);
   const normalizedForm: AutomationSetupFormPatch = {
     ...form,
     prompt,
     kind,
-    ...(pluginSource ? { pluginSource } : {}),
+    pluginList:
+      pluginEntries.length > 0
+        ? serializeAutomationSetupPluginList(pluginEntries)
+        : "",
+    pluginSource: pluginEntries[0]?.source ?? "",
+    pluginRef: pluginEntries[0]?.ref ?? "",
   };
-  const normalizedPlugins = pluginSource ? [pluginSource] : plugins;
+  const normalizedPlugins = pluginSources;
   const fieldMetadata = normalizeFieldMetadata(value.fieldMetadata);
+  const serverDraftId =
+    typeof value.serverDraftId === "string" ? value.serverDraftId.trim() : "";
+  const materializedAutomationId =
+    typeof value.materializedAutomationId === "string"
+      ? value.materializedAutomationId.trim()
+      : null;
   const appliedAgentEventIds = Array.isArray(value.appliedAgentEventIds)
     ? [
         ...new Set(
@@ -152,6 +176,8 @@ function normalizeDraft(value: AutomationSetupDraft): AutomationSetupDraft {
     kind,
     ...(normalizedPlugins.length > 0 ? { plugins: normalizedPlugins } : {}),
     form: normalizedForm,
+    ...(serverDraftId ? { serverDraftId } : {}),
+    ...(materializedAutomationId ? { materializedAutomationId } : {}),
     ...(fieldMetadata ? { fieldMetadata } : {}),
     ...(appliedAgentEventIds && appliedAgentEventIds.length > 0
       ? { appliedAgentEventIds }
@@ -279,10 +305,6 @@ export function patchAutomationFormSession(
     form: nextForm,
     prompt: nextForm.prompt ?? existing.prompt,
     kind: nextForm.kind ?? existing.kind,
-    plugins:
-      typeof nextForm.pluginSource === "string" && nextForm.pluginSource
-        ? [nextForm.pluginSource]
-        : existing.plugins,
     fieldMetadata: nextMetadata,
     appliedAgentEventIds:
       options.source === "agent" && options.eventId

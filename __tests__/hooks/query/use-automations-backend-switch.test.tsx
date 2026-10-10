@@ -13,6 +13,7 @@ import {
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import {
   useAutomations,
+  useAutomationDrafts,
   useCancelAutomationRun,
   useDispatchAutomation,
   useDeleteAutomation,
@@ -48,6 +49,9 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
     deleteAutomation: vi.fn(),
     updateAutomation: vi.fn(),
     toggleAutomation: vi.fn(),
+    listServerDrafts: vi.fn(),
+    getCapabilities: vi.fn(),
+    supportsAutomationDrafts: vi.fn(),
   },
 }));
 
@@ -124,6 +128,25 @@ beforeEach(() => {
   vi.mocked(AutomationService.getAutomations).mockReset();
   vi.mocked(AutomationService.getAutomation).mockReset();
   vi.mocked(AutomationService.getAutomationRuns).mockReset();
+  vi.mocked(AutomationService.listServerDrafts).mockReset();
+  vi.mocked(AutomationService.listServerDrafts).mockResolvedValue({
+    drafts: [],
+    total: 0,
+  });
+  vi.mocked(AutomationService.getCapabilities).mockReset();
+  vi.mocked(AutomationService.getCapabilities).mockResolvedValue({
+    ready: true,
+    features: ["automationDrafts"],
+    triggerKinds: ["cron", "event"],
+    eventSources: [],
+    eventTypes: [],
+    triggers: {},
+  });
+  vi.mocked(AutomationService.supportsAutomationDrafts).mockReset();
+  vi.mocked(AutomationService.supportsAutomationDrafts).mockImplementation(
+    (capabilities) =>
+      Boolean(capabilities?.features?.includes("automationDrafts")),
+  );
   vi.mocked(AutomationService.dispatchAutomation).mockReset();
   vi.mocked(AutomationService.dispatchAutomation).mockResolvedValue(
     automationRun,
@@ -151,6 +174,70 @@ afterEach(() => {
   __resetActiveStoreForTests();
 });
 
+describe("useAutomationDrafts — draft endpoint unavailability", () => {
+
+  it("does not call the drafts endpoint when capabilities do not advertise drafts", async () => {
+    vi.mocked(AutomationService.getCapabilities).mockResolvedValue({
+      ready: true,
+      features: [],
+      triggerKinds: ["cron", "event"],
+      eventSources: [],
+      eventTypes: [],
+      triggers: {},
+    });
+
+    const { result } = renderHook(() => useAutomationDrafts(), {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toEqual({ drafts: [], total: 0 });
+    expect(AutomationService.listServerDrafts).not.toHaveBeenCalled();
+  });
+  it("returns an empty draft list when the drafts fetch rejects with an axios-style error", async () => {
+    const error = Object.assign(new Error("Not Found"), {
+      response: { status: 404 },
+    });
+    vi.mocked(AutomationService.listServerDrafts).mockRejectedValue(error);
+
+    const { result } = renderHook(() => useAutomationDrafts(), {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toEqual({ drafts: [], total: 0 });
+  });
+
+  it("returns an empty draft list when the drafts fetch rejects with an SDK HttpError", async () => {
+    // Cloud requests go through callCloudProxy, whose TypeScript client throws
+    // an HttpError with `status` set directly on the error (not under `response`).
+    const error = Object.assign(new Error("Not Found"), {
+      name: "HttpError",
+      status: 405,
+    });
+    vi.mocked(AutomationService.listServerDrafts).mockRejectedValue(error);
+
+    const { result } = renderHook(() => useAutomationDrafts(), {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toEqual({ drafts: [], total: 0 });
+  });
+
+  it("re-throws errors that are not draft-endpoint 404/405 responses", async () => {
+    vi.mocked(AutomationService.listServerDrafts).mockRejectedValue(
+      new Error("boom"),
+    );
+
+    const { result } = renderHook(() => useAutomationDrafts(), {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error).toBeInstanceOf(Error);
+  });
+});
 describe("automation hooks — backend switch", () => {
   it("useAutomations refetches when the active backend changes", async () => {
     // Arrange — mount under the local backend; capture the initial fetch.

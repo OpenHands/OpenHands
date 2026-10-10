@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
+import { FileText, MessageSquare } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, FileText, MessageSquare } from "lucide-react";
 import { cn } from "#/utils/utils";
 import { ChatActionTooltip } from "#/components/features/chat/chat-action-tooltip";
 import BlockDrawerLeftIcon from "#/icons/block-drawer-left.svg?react";
@@ -24,12 +24,9 @@ import {
 import { SidebarMobileMenuToggle } from "#/components/features/sidebar/sidebar-mobile-menu-toggle";
 import { ConversationOverviewDrawer } from "../conversation-overview-drawer";
 import { useConversationOverviewDrawerOptional } from "../conversation-overview-drawer-context";
-import { useNavigation } from "#/context/navigation-context";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { I18nKey } from "#/i18n/declaration";
-import { formControlTransitionClassName } from "#/utils/form-control-classes";
-
-const SPLASH_ROUTE = "/";
+import { hasAutomationSetupModeTag } from "#/utils/automation-draft-tags";
 
 const BLANK_AUTOMATION_SETUP_DRAFT: AutomationSetupDraft = {
   prompt: "",
@@ -81,16 +78,14 @@ function getDesktopTabPanelClass(isRightPanelShown: boolean) {
 
 export function ConversationMain() {
   const { t } = useTranslation("openhands");
-  const { navigate } = useNavigation();
   const { conversationId } = useConversationId();
   const { data: conversation } = useActiveConversation();
   const isMobile = useBreakpoint();
   const isSidebarRailHidden = useBreakpoint(SIDEBAR_RAIL_COLLAPSE_MAX_WIDTH);
   const { isRightPanelShown, setHasRightPanelToggled, setIsRightPanelShown } =
     useConversationStore();
-  const [isAutomationSetupMode, setIsAutomationSetupMode] = useState(() =>
-    consumeAutomationSetupHandoff(conversationId),
-  );
+  const [isAutomationSetupModeHandoff, setIsAutomationSetupModeHandoff] =
+    useState(() => consumeAutomationSetupHandoff(conversationId));
   const [automationToolbarElement, setAutomationToolbarElement] =
     useState<HTMLDivElement | null>(null);
   const [isAutomationAgentHidden, setIsAutomationAgentHidden] = useState(false);
@@ -100,6 +95,11 @@ export function ConversationMain() {
     useState<HTMLDivElement | null>(null);
   const overviewDrawer = useConversationOverviewDrawerOptional();
   const isSecondaryDrawerOpen = Boolean(overviewDrawer?.section);
+  const hasTaggedAutomationSetupMode = hasAutomationSetupModeTag(
+    conversation?.tags,
+  );
+  const isAutomationSetupMode =
+    isAutomationSetupModeHandoff || hasTaggedAutomationSetupMode;
   const automationSetupDraft = isAutomationSetupMode
     ? BLANK_AUTOMATION_SETUP_DRAFT
     : null;
@@ -115,7 +115,9 @@ export function ConversationMain() {
     });
 
   useEffect(() => {
-    setIsAutomationSetupMode(consumeAutomationSetupHandoff(conversationId));
+    setIsAutomationSetupModeHandoff(
+      consumeAutomationSetupHandoff(conversationId),
+    );
   }, [conversationId]);
 
   useEffect(() => {
@@ -129,10 +131,6 @@ export function ConversationMain() {
       setIsAutomationAgentHidden(false);
     }
   }, [automationSetupDraft]);
-
-  const handleBackToSplash = () => {
-    navigate(SPLASH_ROUTE);
-  };
 
   useEffect(() => {
     const showAgent = () => {
@@ -148,7 +146,10 @@ export function ConversationMain() {
   const agentToggleLabel = isAutomationAgentHidden
     ? t(I18nKey.AUTOMATION_SETUP$SHOW_AGENT)
     : t(I18nKey.AUTOMATION_SETUP$HIDE_AGENT);
-  const setupTitle = conversation?.title || t(I18nKey.AUTOMATION_SETUP$TITLE);
+  const setupTitle =
+    automationSetupDraft?.form?.name?.trim() ||
+    conversation?.title ||
+    t(I18nKey.AUTOMATION_SETUP$TITLE);
 
   return (
     <div
@@ -176,26 +177,12 @@ export function ConversationMain() {
           >
             <div className="flex min-w-0 flex-1 items-center gap-2">
               {isSidebarRailHidden ? <SidebarMobileMenuToggle /> : null}
-              {!isMobile ? (
-                <button
-                  type="button"
-                  data-testid="automation-setup-back"
-                  aria-label={t(I18nKey.AUTOMATION_SETUP$BACK_LABEL)}
-                  onClick={handleBackToSplash}
-                  className={cn(
-                    "flex size-7 items-center justify-center rounded-lg text-[var(--oh-muted)] hover:bg-white/10 hover:text-white",
-                    formControlTransitionClassName,
-                  )}
-                >
-                  <ArrowLeft className="size-4" aria-hidden />
-                </button>
-              ) : null}
-              <h1
+              <h2
                 data-testid="automation-setup-conversation-title"
-                className="min-w-0 truncate text-sm font-semibold text-content"
+                className="min-w-0 truncate text-sm font-medium text-content"
               >
                 {setupTitle}
-              </h1>
+              </h2>
             </div>
             {isMobile ? (
               <div
@@ -369,6 +356,7 @@ export function ConversationMain() {
             <AutomationSetupPanel
               draft={automationSetupDraft}
               conversationId={conversationId}
+              conversationTags={conversation?.tags}
               toolbarPortal={automationToolbarElement}
               showInlineHeader={false}
               reserveComposerSpace
@@ -406,6 +394,7 @@ export function ConversationMain() {
                   <AutomationSetupPanel
                     draft={automationSetupDraft}
                     conversationId={conversationId}
+                    conversationTags={conversation?.tags}
                     toolbarPortal={automationToolbarElement}
                     showInlineHeader={false}
                     reserveComposerSpace={showDockedComposer}
@@ -424,6 +413,10 @@ export function ConversationMain() {
                   </>
                 )}
                 {showDockedComposer ? (
+                  // The setup form scrolls in a padded column with a stable
+                  // scrollbar gutter. This overlay has to be a scroll container
+                  // with the same gutter, or the composer centers in a wider
+                  // box and sits off the fields.
                   <AutomationSetupDockedComposer
                     onTarget={setComposerDockTarget}
                   />

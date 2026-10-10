@@ -1380,7 +1380,6 @@ describe("AgentServerConversationService", () => {
     });
 
     it("forwards parent_conversation_id, agent_type, and sandbox_id to the cloud createConversation payload", async () => {
-      // Arrange
       const requests = captureRequests(["post"], {
         id: "task-1",
         status: "WORKING",
@@ -1391,7 +1390,6 @@ describe("AgentServerConversationService", () => {
         updated_at: "2024-01-01",
       });
 
-      // Act
       await AgentServerConversationService.createConversation({
         metadata: null,
         parentConversationId: "parent-conv-1",
@@ -1399,7 +1397,6 @@ describe("AgentServerConversationService", () => {
         sandboxId: "sandbox-9",
       });
 
-      // Assert
       expect(requests).toHaveLength(1);
       const [request] = requests;
       expect(request.method).toBe("POST");
@@ -1427,6 +1424,10 @@ describe("AgentServerConversationService", () => {
       await AgentServerConversationService.createConversation({
         initialUserMsg: "Create a daily report automation",
         automationSetup: true,
+        automationSetupTags: {
+          automationdraftid: "draft-1",
+          automationmaterializeddraftid: "auto-1",
+        },
         agentProfileKind: "openhands",
       });
 
@@ -1436,7 +1437,11 @@ describe("AgentServerConversationService", () => {
         tags?: Record<string, string>;
         client_tools: Array<{ name: string }>;
       };
-      expect(body.tags).toEqual({ automationsetup: "draft" });
+      expect(body.tags).toEqual({
+        automationsetup: "draft",
+        automationdraftid: "draft-1",
+        automationmaterializeddraftid: "auto-1",
+      });
       expect(body.client_tools.map((tool) => tool.name)).toEqual([
         "canvas_ui_control",
         "launch_child_conversation",
@@ -1471,16 +1476,13 @@ describe("AgentServerConversationService", () => {
     });
 
     it("routes readConversationFile to the cloud file endpoint with the file_path query param", async () => {
-      // Arrange
       const requests = captureRequests(["get"], "# PLAN content");
 
-      // Act
       const content =
         await AgentServerConversationService.readConversationFile(
           "conv-cloud-1",
         );
 
-      // Assert
       expect(content).toBe("# PLAN content");
       expect(requests).toHaveLength(1);
       const [request] = requests;
