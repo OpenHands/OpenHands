@@ -303,10 +303,24 @@ export function LlmSettingsLocalView() {
       return;
     }
 
+    const activeLlm = (settings?.agent_settings?.llm ?? {}) as Record<
+      string,
+      unknown
+    >;
+    const createBaseConfig: Record<string, unknown> = {
+      ...activeLlm,
+      model: createProfileDefaultModel,
+      auth_type: LLM_AUTH_TYPE_API_KEY,
+      subscription_vendor: OPENAI_SUBSCRIPTION_VENDOR,
+    };
+    delete createBaseConfig.api_key;
+    delete createBaseConfig.base_url;
+    delete createBaseConfig.provider_connection_id;
+
     const baseConfig =
       viewMode === "edit" && editingProfile?.baseConfig
         ? { ...editingProfile.baseConfig }
-        : {};
+        : createBaseConfig;
     const didChangeModelInBasic =
       saveControl.view === "basic" &&
       Object.prototype.hasOwnProperty.call(dirtyLlm, "model") &&
