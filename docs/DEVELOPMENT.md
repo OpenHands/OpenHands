@@ -212,7 +212,7 @@ client, then Canvas consumption of the client type. See the
 ### Other useful overrides
 
 - `OH_CANVAS_SAFE_BACKEND_PORT` — backend port for the isolated server (default `18000`)
-- `OH_CANVAS_SAFE_VSCODE_PORT` — VS Code sidecar port (default `backend port + 1`)
+- `OH_CANVAS_SAFE_VSCODE_PORT` — VS Code sidecar port (`dev:minimal` / `scripts/dev-safe.mjs` defaults to backend+1 and honors this override; full `npm run dev` / `scripts/dev-with-automation.mjs` uses backend+1000 so it does not collide with automation on backend+1)
 - `OH_CANVAS_SAFE_STATE_DIR` — base directory for isolated server state
 - `VITE_WORKING_DIR` — repo root used for new conversations (defaults to the current checkout)
 
