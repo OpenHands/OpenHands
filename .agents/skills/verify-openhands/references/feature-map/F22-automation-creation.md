@@ -104,6 +104,7 @@ Preconditions:
 
 ## Gotchas
 
+- Expected: a completed draft test updates the open Test runs row to Successful automatically. Known failure (reproduced 2026-10-10, two fresh desktop Local stacks, Agent Server 1.54.0/automation 1.19.3, no conversation or LLM): the backend reports COMPLETED while the row stays Pending for at least 45 seconds; reload and View test runs recover Successful. Origin unconfirmed without a pre-change live run ([#18263](https://github.com/OpenHands/OpenHands/issues/18263)). The reload readback above does not waive this failure.
 - The Save toast can cover the setup toolbar Test button; use the lower `automation-setup-draft-test` and verify the actual run outcome.
 - Dashboard draft Delete uses an inline confirmation, not a `role=dialog`. Deleting a draft also removes its materialized test automation.
 - A card click and a deep link are different paths: from the grid, GitHub/Slack-only responders (`qa-changes`, `github-agents-md-maintainer`, `slack-channel-monitor`, …) first show the responder choice and then the GitHub/Slack install dialog, so their setup form is reachable locally only by URL (`/automations/new/<id>`).
