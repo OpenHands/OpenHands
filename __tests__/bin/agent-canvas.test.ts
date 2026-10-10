@@ -43,7 +43,30 @@ describe("agent-canvas CLI", () => {
     expect(stdout).toContain("USAGE:");
     expect(stdout).toContain("--frontend-only");
     expect(stdout).toContain("--backend-only");
+    expect(stdout).toContain("--allow-lan-session-key");
     expect(stdout).toContain("--help");
+  });
+
+  it("rejects --public together with --allow-lan-session-key", async () => {
+    const child = spawn(
+      process.execPath,
+      ["bin/agent-canvas.mjs", "--public", "--allow-lan-session-key"],
+      {
+        cwd: repoRoot,
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+
+    let stderr = "";
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    const [code] = await once(child, "exit");
+    expect(code).toBe(1);
+    expect(stderr).toContain(
+      "Error: --allow-lan-session-key cannot be used with --public",
+    );
   });
 
   it("does not require build/ in --backend-only mode", async () => {

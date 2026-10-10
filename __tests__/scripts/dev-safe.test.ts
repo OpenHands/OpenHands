@@ -271,7 +271,7 @@ describe("assertPortsFree", () => {
 
     await expect(
       assertPortsFree([{ name: "agent-server", port: busyPort }]),
-    ).rejects.toThrow(/agent-server.*port/i);
+    ).rejects.toThrow(/--port <other>|PORT=<other>/);
   });
 
   it("names all busy ports in the error message", async () => {

@@ -844,6 +844,28 @@ describe("stack mode routing", () => {
       ),
     ).rejects.toThrow(/cannot be used together/);
   });
+
+  it("parses and forwards allowLanSessionKey to buildConfig and vite env", async () => {
+    const config = await buildConfig(
+      { allowLanSessionKey: true, host: "0.0.0.0" },
+      envWithIsolatedKeyPath(),
+    );
+    expect(config.allowLanSessionKey).toBe(true);
+
+    const viteEnv = buildViteFrontendEnv(config);
+    expect(viteEnv.VITE_SESSION_API_KEY).toBe(config.sessionApiKey);
+  });
+
+  it("does not inject session key into vite env on non-loopback without allowLanSessionKey", async () => {
+    const config = await buildConfig(
+      { host: "0.0.0.0" },
+      envWithIsolatedKeyPath(),
+    );
+    expect(config.allowLanSessionKey).toBe(false);
+
+    const viteEnv = buildViteFrontendEnv(config);
+    expect(viteEnv.VITE_SESSION_API_KEY).toBeUndefined();
+  });
 });
 
 describe("setServiceLogListener", () => {

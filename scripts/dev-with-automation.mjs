@@ -183,6 +183,7 @@ function parseArgs() {
     frontendOnly: false,
     backendOnly: false,
     host: null,
+    allowLanSessionKey: false,
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -190,6 +191,9 @@ function parseArgs() {
       case "-p":
       case "--port":
         config.port = parseInt(args[++i], 10);
+        break;
+      case "--allow-lan-session-key":
+        config.allowLanSessionKey = true;
         break;
       case "--automation-ref":
         config.automationGitRef = args[++i];
@@ -251,6 +255,7 @@ OPTIONS:
   -H, --host <host>           Bind address for ingress/static (default: 127.0.0.1).
                               Use 0.0.0.0 or :: to listen on all interfaces; the
                               session key will not be injected into HTML.
+  --allow-lan-session-key     Permit session API key injection when binding to LAN
   --automation-ref <ref>      Git ref for automation (branch/tag/SHA)
   --automation-repo <url>     Git repo URL (default: ${DEFAULT_AUTOMATION_REPO})
   --static                    Serve an existing production build instead of Vite
@@ -497,7 +502,10 @@ async function buildConfig(args, env = process.env) {
       env.OH_BIND_HOST ||
       (env.OH_CONVERSATION_RUNTIME === "docker" ? "0.0.0.0" : undefined),
   });
-  if (!isLoopbackBind(bindHost) && !isPublic) {
+  const allowLanSessionKey = Boolean(
+    args.allowLanSessionKey ?? env.AGENT_CANVAS_ALLOW_LAN_SESSION_KEY === "1",
+  );
+  if (!isLoopbackBind(bindHost) && !isPublic && !allowLanSessionKey) {
     logService(
       "auth",
       `Bind host ${bindHost} is not loopback — session key will not be injected into HTML`,
@@ -537,6 +545,7 @@ async function buildConfig(args, env = process.env) {
 
     // Public mode — the session key should NOT be baked into the frontend
     isPublic,
+    allowLanSessionKey,
 
     frontendOnly,
     backendOnly,
@@ -1231,6 +1240,7 @@ function buildViteFrontendEnv(config) {
         ? config.sessionApiKey
         : null,
     authRequired: Boolean(config.launchAgentServer && config.isPublic),
+    allowLanSessionKey: config.allowLanSessionKey,
     warn: (msg) => logService("vite", msg, c.yellow),
   });
   if (policy.authRequired) {
@@ -1776,6 +1786,14 @@ const isMainModule =
 
 if (isMainModule) {
   main().catch((err) => {
+    if (
+      err.message?.startsWith(
+        "Cannot start: the following ports are already in use",
+      )
+    ) {
+      console.error(err.message);
+      process.exit(1);
+    }
     logError(`Fatal error: ${err.message}`);
     if (err.stack) {
       console.error(c.dim + err.stack + c.reset);
