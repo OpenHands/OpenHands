@@ -60,6 +60,7 @@ import {
 } from "./conversation-panel-list-helpers";
 import { useArchivedConversationsStore } from "#/stores/archived-conversations-store";
 import { usePinnedConversationsStore } from "#/stores/pinned-conversations-store";
+import { isConversationArchived } from "#/utils/conversation-archive-status";
 import { uniqueById } from "#/utils/unique-by-id";
 
 interface ConversationPanelProps {
@@ -296,7 +297,11 @@ export function ConversationPanel({
       return allLoadedConversations;
     }
     return allLoadedConversations.filter(
-      (conversation) => !archivedIdSet.has(conversation.id),
+      (conversation) =>
+        !isConversationArchived(
+          conversation.sandbox_status,
+          archivedIdSet.has(conversation.id),
+        ),
     );
   }, [allLoadedConversations, archivedIdSet, showArchivedConversations]);
 
@@ -855,7 +860,10 @@ export function ConversationPanel({
       options?: { inPinnedSection?: boolean },
     ) => {
       const isPinned = pinnedIds.includes(conversation.id);
-      const isArchived = archivedIdSet.has(conversation.id);
+      const isArchived = isConversationArchived(
+        conversation.sandbox_status,
+        archivedIdSet.has(conversation.id),
+      );
       if (compact) {
         return (
           <CompactConversationRow
@@ -884,6 +892,7 @@ export function ConversationPanel({
             acpServer={conversation.acp_server}
             tags={conversation.tags}
             showTags={showTagsMetadata}
+            isArchived={isArchived}
           />
         );
       }
