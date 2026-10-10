@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
-import { cn } from "#/utils/utils";
+import { cn, isApplePlatform } from "#/utils/utils";
 import { StyledTooltip } from "./buttons/styled-tooltip";
 
 interface ActionTooltipProps {
@@ -12,6 +12,7 @@ export function ActionTooltip({ type, onClick }: ActionTooltipProps) {
   const { t } = useTranslation("openhands");
 
   const isConfirm = type === "confirm";
+  const isApple = isApplePlatform();
 
   const ariaLabel = isConfirm
     ? t(I18nKey.ACTION$CONFIRM)
@@ -22,8 +23,8 @@ export function ActionTooltip({ type, onClick }: ActionTooltipProps) {
     : t(I18nKey.CHAT_INTERFACE$USER_REJECTED);
 
   const buttonLabel = isConfirm
-    ? `${t(I18nKey.CHAT_INTERFACE$INPUT_CONTINUE_MESSAGE)} ⌘↩`
-    : `${t(I18nKey.BUTTON$CANCEL)} ⇧⌘⌫`;
+    ? `${t(I18nKey.CHAT_INTERFACE$INPUT_CONTINUE_MESSAGE)} ${isApple ? "⌘↩" : "Ctrl+Enter"}`
+    : `${t(I18nKey.BUTTON$CANCEL)} ${isApple ? "⇧⌘⌫" : "Shift+Ctrl+Backspace"}`;
 
   return (
     <StyledTooltip closeDelay={100} content={content}>

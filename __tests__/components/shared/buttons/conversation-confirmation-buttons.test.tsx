@@ -312,4 +312,38 @@ describe("conversation confirmation controls", () => {
     );
     expect(respondToConfirmationMock).toHaveBeenCalledTimes(2);
   });
+
+  it("supports Ctrl+Enter and Shift+Ctrl+Backspace shortcuts on non-Apple platforms", () => {
+    vi.spyOn(navigator, "userAgent", "get").mockReturnValue(
+      "Mozilla/5.0 (X11; Linux x86_64)",
+    );
+    setupState();
+    eventState.events = [actionEvent("action-1")];
+    render(<ConversationConfirmationButtons />);
+
+    const cancel = new KeyboardEvent("keydown", {
+      key: "Backspace",
+      shiftKey: true,
+      ctrlKey: true,
+      cancelable: true,
+    });
+    document.dispatchEvent(cancel);
+    expect(cancel.defaultPrevented).toBe(true);
+    expect(respondToConfirmationMock).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ accept: false }),
+    );
+
+    const continueEvent = new KeyboardEvent("keydown", {
+      key: "Enter",
+      ctrlKey: true,
+      cancelable: true,
+    });
+    document.dispatchEvent(continueEvent);
+    expect(continueEvent.defaultPrevented).toBe(true);
+    expect(respondToConfirmationMock).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ accept: true }),
+    );
+  });
 });
