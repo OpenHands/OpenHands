@@ -95,11 +95,10 @@ ENV VITE_POSTHOG_API_KEY=${VITE_POSTHOG_API_KEY}
 
 USER root
 
-# Install system deps required by automation's transitive dependencies
-# (asyncpg needs libpq, which the agent-server base image may not include).
-# Refresh inherited packages after adding dependencies so the final image
-# includes available security fixes.
-ARG DEBIAN_SNAPSHOT=20260913T000000Z
+# Refresh inherited packages so the final image includes available security
+# fixes. asyncpg publishes wheels for the supported Python and architectures
+# and implements the PostgreSQL protocol directly, so no libpq package is needed.
+ARG DEBIAN_SNAPSHOT=20260930T000000Z
 RUN if command -v apt-get >/dev/null 2>&1; then \
       printf '%s\n' \
         'Types: deb' \
@@ -117,16 +116,17 @@ RUN if command -v apt-get >/dev/null 2>&1; then \
         'Check-Valid-Until: no' \
         > /etc/apt/sources.list.d/debian.sources && \
       apt-get update && \
-      apt-get install -y --no-install-recommends libpq-dev && \
       apt-get upgrade -y --no-install-recommends && \
       rm -rf /var/lib/apt/lists/*; \
     fi
 
 # Install automation server and the tool models its SDK clients deserialize.
-# Match openhands-tools to the SDK already provided by the agent-server image,
-# just as the local Canvas launcher does.
-RUN uv pip install --system "openhands-automation==${AUTOMATION_VERSION}" "openhands-tools==${AGENT_SERVER_VERSION}" 2>/dev/null \
-    || pip install --no-cache-dir "openhands-automation==${AUTOMATION_VERSION}" "openhands-tools==${AGENT_SERVER_VERSION}"
+# Versions are held to the shipped 1.23.0 dependency set; the patched base no longer pre-installs it.
+COPY docker/python-constraints.txt /tmp/python-constraints.txt
+RUN UV_CONSTRAINT=/tmp/python-constraints.txt PIP_CONSTRAINT=/tmp/python-constraints.txt \
+    uv pip install --system "openhands-automation==${AUTOMATION_VERSION}" "openhands-tools==${AGENT_SERVER_VERSION}" "openhands-agent-server==${AGENT_SERVER_VERSION}" 2>/dev/null \
+    || PIP_CONSTRAINT=/tmp/python-constraints.txt pip install --no-cache-dir "openhands-automation==${AUTOMATION_VERSION}" "openhands-tools==${AGENT_SERVER_VERSION}" "openhands-agent-server==${AGENT_SERVER_VERSION}" && \
+    rm -f /tmp/python-constraints.txt
 
 RUN if [ -n "${AGENT_SERVER_SDK_GIT_REF}" ]; then \
       BASE_GIT_URL="git+https://github.com/OpenHands/software-agent-sdk@${AGENT_SERVER_SDK_GIT_REF}" && \
