@@ -1,8 +1,33 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { usePinnedConversationsStore } from "#/stores/pinned-conversations-store";
+import {
+  getPinnedConversationsScopeKey,
+  usePinnedConversationsStore,
+} from "#/stores/pinned-conversations-store";
 
 const STORAGE_KEY = "pinned-conversations";
 const BACKEND_ID = "default-local";
+
+describe("getPinnedConversationsScopeKey", () => {
+  it("keeps the bare backend id for backends without an org", () => {
+    // Local backends never carry an org, and the bare id keeps pins written
+    // before pins became org-aware readable.
+    expect(getPinnedConversationsScopeKey("default-local")).toBe(
+      "default-local",
+    );
+    expect(getPinnedConversationsScopeKey("default-local", null)).toBe(
+      "default-local",
+    );
+  });
+
+  it("separates the orgs of a cloud backend", () => {
+    expect(getPinnedConversationsScopeKey("cloud-prod", "org-1")).toBe(
+      "cloud-prod:org-1",
+    );
+    expect(getPinnedConversationsScopeKey("cloud-prod", "org-2")).not.toBe(
+      getPinnedConversationsScopeKey("cloud-prod", "org-1"),
+    );
+  });
+});
 
 describe("pinned-conversations store", () => {
   beforeEach(() => {
