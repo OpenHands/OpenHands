@@ -117,6 +117,20 @@ export const CONVERSATION_QUERY_KEYS = {
   subConversations: ["v1", "sub-conversations"] as const,
 } as const;
 
+export const PROMPT_ENHANCEMENT_QUERY_KEYS = {
+  availability: (
+    backendId: string,
+    backendHost: string,
+    profileName: string | null,
+  ) =>
+    [
+      "prompt-enhancement-availability",
+      backendId,
+      backendHost,
+      profileName,
+    ] as const,
+} as const;
+
 export const LOCAL_PLANNER_MUTATION_KEYS = {
   create: ["create-local-planning-conversation"] as const,
 } as const;

@@ -8,6 +8,9 @@ import { useConversationStore } from "#/stores/conversation-store";
 import { cn } from "#/utils/utils";
 import { SlashCommandItem } from "#/hooks/chat/use-slash-command";
 import { insertTextAtCaret } from "../utils/chat-input.utils";
+import { PromptEnhancementPanel } from "../prompt-enhancement-panel";
+import type { PromptEnhancementController } from "#/hooks/chat/use-prompt-enhancement";
+import type { PromptEnhancementAvailabilityState } from "#/hooks/query/use-prompt-enhancement-availability";
 
 interface ChatInputContainerProps {
   chatContainerRef: React.RefObject<HTMLDivElement | null>;
@@ -34,6 +37,9 @@ interface ChatInputContainerProps {
   slashItems?: SlashCommandItem[];
   slashSelectedIndex?: number;
   onSlashSelect?: (item: SlashCommandItem) => void;
+  promptEnhancement: PromptEnhancementController;
+  promptEnhancementAvailability: PromptEnhancementAvailabilityState;
+  hasDraftText: boolean;
 }
 
 export function ChatInputContainer({
@@ -61,6 +67,9 @@ export function ChatInputContainer({
   slashItems = [],
   slashSelectedIndex = 0,
   onSlashSelect,
+  promptEnhancement,
+  promptEnhancementAvailability,
+  hasDraftText,
 }: ChatInputContainerProps) {
   const conversationMode = useConversationStore(
     (state) => state.conversationMode,
@@ -81,6 +90,8 @@ export function ChatInputContainer({
       {isDragOver && <DragOver />}
 
       <UploadedFiles />
+
+      <PromptEnhancementPanel enhancement={promptEnhancement} />
 
       {/* Wrapper so the slash menu anchors just above the input row,
           not above the entire (possibly resized) container */}
@@ -117,6 +128,12 @@ export function ChatInputContainer({
           insertTextAtCaret(chatInputRef.current, text)
         }
         isDictationDisabled={isNewConversationPending}
+        promptEnhancement={{
+          availability: promptEnhancementAvailability,
+          hasDraftText,
+          isEnhancing: promptEnhancement.state.status === "loading",
+          onEnhance: promptEnhancement.enhance,
+        }}
       />
     </div>
   );

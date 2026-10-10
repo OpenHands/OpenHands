@@ -1,0 +1,130 @@
+/**
+ * Evidence capture for issue #17496 (not committed).
+ *
+ * MODE=available (default): Agent Server with prompt_enhancement_v1.
+ * MODE=unsupported: released Agent Server 1.53.0 without the capability.
+ */
+import { test, expect, type Page } from "@playwright/test";
+import {
+  activateTrajectory,
+  dismissAnalyticsModal,
+  ensureMockLLMProfile,
+  getMockLLMRequests,
+  registerTrajectory,
+  resetMockLLM,
+  routeSessionApiKey,
+  seedLocalStorage,
+  setChatInput,
+  waitForTestId,
+} from "../utils/mock-llm-helpers";
+
+const OUT_DIR = process.env.EVIDENCE_DIR ?? ".pr-evidence";
+const MODE = process.env.MODE ?? "available";
+const DRAFT =
+  "fix login bug in src/auth.ts when token expired, users get 500. dont break the 3 existing tests in tests/auth.test.ts";
+const ENHANCED = [
+  "Fix the login bug in `src/auth.ts` that occurs when the token has expired.",
+  "",
+  "Current behavior: users get an HTTP 500 error.",
+  "",
+  "Requirements:",
+  "- Do not break the 3 existing tests in `tests/auth.test.ts`.",
+].join("\n");
+const EDIT = "\n- Add a regression test for an expired token.";
+
+const chatInputText = (page: Page) =>
+  page.getByTestId("chat-input").evaluate((el) => (el as HTMLElement).innerText);
+
+const pause = (page: Page, ms = 900) => page.waitForTimeout(ms);
+
+test("prompt enhancement evidence", async ({ page, request }) => {
+  test.setTimeout(240_000);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await seedLocalStorage(page);
+  await ensureMockLLMProfile(page, { profileName: "mock-llm" });
+  await resetMockLLM(request);
+  await registerTrajectory(request, "prompt-enhancement-evidence", [
+    { text: ENHANCED },
+  ]);
+  await activateTrajectory(request, "prompt-enhancement-evidence");
+
+  await routeSessionApiKey(page);
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await dismissAnalyticsModal(page);
+  await waitForTestId(page, "home-chat-launcher");
+  await setChatInput(page, DRAFT);
+  const button = page.getByTestId("chat-enhance-prompt-button");
+
+  if (MODE === "unsupported") {
+    await expect(button).toHaveAttribute(
+      "data-unavailable-reason",
+      "unsupported_backend",
+      { timeout: 30_000 },
+    );
+    // A real pointer move opens the tooltip that explains the reason.
+    const box = (await button.boundingBox())!;
+    await page.mouse.move(box.x - 40, box.y - 40);
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, {
+      steps: 8,
+    });
+    await expect(page.getByRole("tooltip")).toContainText(
+      "does not support prompt enhancement",
+    );
+    await pause(page);
+    await page.screenshot({ path: `${OUT_DIR}/17496-05-unsupported-server.png` });
+    // aria-disabled keeps the button focusable for its tooltip; force the
+    // click to show that it sends nothing.
+    await button.click({ force: true });
+    await pause(page);
+    expect(await getMockLLMRequests(request)).toHaveLength(0);
+    console.log("UNSUPPORTED_NO_REQUEST", true);
+    await expect(page.getByTestId("prompt-enhancement-panel")).toHaveCount(0);
+    return;
+  }
+
+  await expect(button).toHaveAttribute("aria-disabled", "false", {
+    timeout: 30_000,
+  });
+  await button.hover();
+  await pause(page);
+  await page.screenshot({ path: `${OUT_DIR}/17496-01-draft.png` });
+
+  await button.click();
+  const suggestion = page.getByTestId("prompt-enhancement-text");
+  await expect(suggestion).toHaveValue(ENHANCED, { timeout: 30_000 });
+  await pause(page);
+  await page.screenshot({ path: `${OUT_DIR}/17496-02-preview.png` });
+
+  await page.keyboard.type(EDIT, { delay: 25 });
+  await pause(page);
+  await page.screenshot({ path: `${OUT_DIR}/17496-03-preview-edited.png` });
+
+  await page.getByTestId("prompt-enhancement-use").click();
+  await expect(page.getByTestId("prompt-enhancement-panel")).toHaveCount(0);
+  await expect.poll(() => chatInputText(page)).toContain("regression test");
+  expect(new URL(page.url()).pathname).toBe("/");
+  await pause(page);
+  await page.screenshot({ path: `${OUT_DIR}/17496-04-accepted.png` });
+
+  const completions = await getMockLLMRequests(request);
+  console.log("COMPLETIONS", completions.length);
+  console.log(
+    "COMPLETION_SUMMARY",
+    JSON.stringify(
+      completions.map((c) => ({
+        tools: c.tools ?? [],
+        roles: (c.messages as Array<{ role: string }>).map((m) => m.role),
+      })),
+    ),
+  );
+
+  // Error state: the scripted model has no reply left, so the provider fails.
+  await button.click();
+  await expect(page.getByRole("alert")).toBeVisible({ timeout: 60_000 });
+  await pause(page);
+  await page.screenshot({ path: `${OUT_DIR}/17496-06-error.png` });
+  console.log("ERROR_TEXT", await page.getByRole("alert").innerText());
+  console.log("DRAFT_AFTER_ERROR", JSON.stringify(await chatInputText(page)));
+  await page.getByTestId("prompt-enhancement-close").click();
+  await pause(page);
+});
