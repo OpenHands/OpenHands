@@ -121,18 +121,16 @@ export function AppSettingsScreen() {
         onSuccess: () => {
           void setTelemetryConsent(enableAnalytics ? "granted" : "denied");
           displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
-        },
-        onError: (error) => {
-          const errorMessage = retrieveAxiosErrorMessage(error);
-          displayErrorToast(errorMessage || t(I18nKey.ERROR$GENERIC));
-        },
-        onSettled: () => {
           setLanguageInputHasChanged(false);
           setAnalyticsSwitchHasChanged(false);
           setSoundNotificationsSwitchHasChanged(false);
           setGitUserNameHasChanged(false);
           setGitUserEmailHasChanged(false);
           setTitleLlmProfileInput(undefined);
+        },
+        onError: (error) => {
+          const errorMessage = retrieveAxiosErrorMessage(error);
+          displayErrorToast(errorMessage || t(I18nKey.ERROR$GENERIC));
         },
       },
     );
@@ -180,8 +178,7 @@ export function AppSettingsScreen() {
     !gitUserNameHasChanged &&
     !gitUserEmailHasChanged;
 
-  const shouldBeLoading =
-    !settings || isLoading || areLlmProfilesLoading || isPending;
+  const shouldBeLoading = !settings || isLoading || areLlmProfilesLoading;
 
   return (
     <form
