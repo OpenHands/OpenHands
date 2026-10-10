@@ -21,7 +21,7 @@ interface BuiltInIntegrationChoiceModalProps {
   /** The built-in integration that already covers the selected automation. */
   integration: IntegrationCatalogEntry;
   onClose: () => void;
-  /** Fired for the "Connect and use the integration" action. */
+  /** Fired for the "Use the integration" action. */
   onUseBuiltIn: () => void;
   /** Fired for the "Continue with polling setup" action. */
   onContinuePolling: () => void;
