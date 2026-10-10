@@ -641,7 +641,7 @@ const MOCK_VERIFIED_MODELS_BY_PROVIDER = MOCK_MODELS.reduce<
 
 // Matches the pinned `@openhands/typescript-client`, so mock mode models a
 // server that actually ships this schema.
-const MOCK_AGENT_SERVER_VERSION = "1.53.0";
+const MOCK_AGENT_SERVER_VERSION = "1.54.0";
 
 // --- Handlers for options/config/settings ---
 // Uses wildcard "*" prefix to match both relative paths and absolute URLs

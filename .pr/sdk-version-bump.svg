@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="620" height="260" viewBox="0 0 620 260">
+  <rect width="100%" height="100%" fill="#0d1117"/>
+  <text x="24" y="40" font-family="monospace" font-size="18" fill="#3fb950">SDK version bump evidence</text>
+  <text x="24" y="76" font-family="monospace" font-size="15" fill="#e6edf3">versions.agentServer: 1.53.0 -> 1.54.0</text>
+  <text x="24" y="104" font-family="monospace" font-size="15" fill="#e6edf3">@openhands/typescript-client: 1.53.0 -> 1.54.0</text>
+  <text x="24" y="132" font-family="monospace" font-size="15" fill="#e6edf3">package.json/package-lock.json + doc/test literals synced to 1.54.0</text>
+</svg>
