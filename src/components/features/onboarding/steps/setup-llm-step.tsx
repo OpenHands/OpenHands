@@ -15,6 +15,7 @@ import {
 import { LlmSettingsInputsSkeleton } from "#/components/features/settings/llm-settings/llm-settings-inputs-skeleton";
 import { deriveProfileNameFromModel } from "#/utils/derive-profile-name";
 import type { SaveProfileRequest } from "#/api/profiles-service/profiles-service.api";
+import SettingsService from "#/api/settings-service/settings-service.api";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 interface SetupLlmStepProps {
@@ -74,17 +75,23 @@ export function SetupLlmStep({ onBack, onNext }: SetupLlmStepProps) {
   const persistAsProfile = React.useCallback(async (): Promise<
     string | null
   > => {
-    if (!isLocalBackend || !saveControl) return null;
+    if (!isLocalBackend) return null;
 
     let profileDraft = profileDraftRef.current;
     if (!profileDraft) {
-      const payload = saveControl.getSavePayload();
-      const agentSettings = payload.agent_settings_diff;
-      if (!agentSettings || typeof agentSettings !== "object") return null;
-      const llmConfig = (agentSettings as Record<string, unknown>).llm;
-      if (!llmConfig || typeof llmConfig !== "object") return null;
+      // A settings patch only contains changed fields. Read the complete saved
+      // configuration so an unchanged endpoint, credential or option is not
+      // lost when creating the profile. Keep secrets encrypted in the browser;
+      // the profile endpoint decrypts them before persisting the profile.
+      const settings = await SettingsService.fetchSettingsFromApi("encrypted");
+      const llmConfig = settings.agent_settings.llm;
+      if (!llmConfig || typeof llmConfig !== "object") {
+        throw new Error("Saved LLM configuration is unavailable");
+      }
       const model = (llmConfig as Record<string, unknown>).model;
-      if (typeof model !== "string" || !model) return null;
+      if (typeof model !== "string" || !model) {
+        throw new Error("Saved LLM model is unavailable");
+      }
       profileDraft = {
         name: deriveProfileNameFromModel(model),
         llm: llmConfig as SaveProfileRequest["llm"],
@@ -98,7 +105,7 @@ export function SetupLlmStep({ onBack, onNext }: SetupLlmStepProps) {
     });
     await activateProfile.mutateAsync(profileDraft.name);
     return profileDraft.name;
-  }, [isLocalBackend, saveControl, saveProfile, activateProfile]);
+  }, [isLocalBackend, saveProfile, activateProfile]);
 
   const handleSaveSuccess = React.useCallback(async () => {
     setIsFinalizing(true);
