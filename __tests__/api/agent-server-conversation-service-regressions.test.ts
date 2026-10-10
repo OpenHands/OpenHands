@@ -751,6 +751,7 @@ describe("AgentServerConversationService", () => {
             launched_agent_profile: {
               agent_profile_id: "profile-1",
               revision: 3,
+              secret_refs: ["OPENAI_API_KEY"],
             },
           },
         ],
@@ -764,7 +765,31 @@ describe("AgentServerConversationService", () => {
       expect(conversation?.launched_agent_profile).toEqual({
         agent_profile_id: "profile-1",
         revision: 3,
+        secret_refs: ["OPENAI_API_KEY"],
       });
+    });
+
+    it("reads a launched Agent Profile without a secret scope as unscoped", async () => {
+      mockHttpGet.mockResolvedValue({
+        data: [
+          {
+            id: "conv-profile",
+            created_at: "2024-01-01",
+            updated_at: "2024-01-01",
+            launched_agent_profile: {
+              agent_profile_id: "profile-1",
+              revision: 3,
+            },
+          },
+        ],
+      });
+
+      const [conversation] =
+        await AgentServerConversationService.batchGetAppConversations([
+          "conv-profile",
+        ]);
+
+      expect(conversation?.launched_agent_profile?.secret_refs).toBeNull();
     });
 
     it("carries well-formed wire tags through to AppConversation.tags", async () => {

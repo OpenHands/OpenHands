@@ -1,6 +1,7 @@
 import React from "react";
 import { Pin } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import type { ACPModelOption } from "#/constants/acp-providers";
 import { useTracking } from "#/hooks/use-tracking";
 import { cn } from "#/utils/utils";
 import { I18nKey } from "#/i18n/declaration";
@@ -58,6 +59,7 @@ interface ConversationCardProps {
   showLlmProfiles?: boolean;
   agentKind?: "openhands" | "acp" | null;
   acpServer?: string | null;
+  acpModels?: readonly ACPModelOption[] | null;
   tags?: Record<string, string> | null;
   /** Gates the tag-chip row; wired to the panel's "Tags" metadata toggle. */
   showTags?: boolean;
@@ -93,6 +95,7 @@ export function ConversationCard({
   showLlmProfiles = false,
   agentKind = null,
   acpServer = null,
+  acpModels = null,
   tags = null,
   showTags = false,
   isArchived = false,
@@ -378,6 +381,7 @@ export function ConversationCard({
           showAgentChip={showLlmProfiles}
           agentKind={agentKind}
           acpServer={acpServer}
+          acpModels={acpModels}
           tags={tags}
           showTags={showTagChipRow}
           isArchived={isArchived}

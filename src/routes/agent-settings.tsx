@@ -30,8 +30,11 @@ import {
   getAcpProvider,
   getAcpProvidersForBackend,
   getAcpProviderSecrets,
+  labelForAcpModel,
+  type ACPModelOption,
   type ACPProviderConfig,
 } from "#/constants/acp-providers";
+import { useAcpModelDiscovery } from "#/hooks/query/use-acp-model-discovery";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { parseCommand, formatCommand } from "#/utils/acp-command";
 import {
@@ -69,6 +72,7 @@ const SYSTEM_MESSAGE_SUFFIX_KEY = "system_message_suffix";
 const SYSTEM_PROMPT_MAX_LENGTH = 65536;
 const COMMAND_PLACEHOLDER_FALLBACK = "npx -y <package-name>";
 const ACP_CUSTOM_MODEL_KEY = "__custom_model__";
+const ACP_AGENT_DEFAULT_MODEL_KEY = "__agent_default_model__";
 const EMPTY_AGENT_SETTINGS_SNAPSHOT: AgentSettingsSnapshot = {
   agentType: "openhands",
   commandText: "",
@@ -110,13 +114,14 @@ export function readSystemPromptSeed(
   return { mode: "standard", text: "" };
 }
 
-function isKnownAcpModel(
-  provider: ACPProviderConfig | undefined,
-  model: string,
-): boolean {
-  return (
-    provider?.available_models?.some(({ id }) => id === model.trim()) ?? false
-  );
+/** The agent's models, keeping a saved model selectable when it isn't listed. */
+function buildModelSuggestions(
+  models: readonly ACPModelOption[],
+  selectedModel: string,
+): ACPModelOption[] {
+  const model = selectedModel.trim();
+  if (!model || models.some(({ id }) => id === model)) return [...models];
+  return [...models, { id: model, label: model }];
 }
 
 /**
@@ -574,9 +579,7 @@ export function AgentSettingsScreen({
         typeof savedModel === "string" ? savedModel.trim() : "";
       const nextAcpModel =
         normalizedSavedModel || getAcpPreferredDefaultModel(acpServer) || "";
-      const nextIsCustomAcpModel =
-        !!normalizedSavedModel &&
-        (!provider || !isKnownAcpModel(provider, normalizedSavedModel));
+      const nextIsCustomAcpModel = !!normalizedSavedModel && !provider;
       setAcpModel(nextAcpModel);
       setIsCustomAcpModel(nextIsCustomAcpModel);
       setLoadedSnapshot({
@@ -723,22 +726,63 @@ export function AgentSettingsScreen({
     stableCredReset,
   ]);
 
-  if (isLoading) return null;
-
   const isAcp = agentType === "acp";
   const commandTokens = parseCommand(commandText);
   const selectedPreset = detectPreset(commandText, acpProviders);
   const selectedProvider = getAcpProvider(selectedPreset);
-  const modelSuggestions = selectedProvider?.available_models ?? [];
-  const hasModelSuggestions = modelSuggestions.length > 0;
-  const selectedModelIsSuggestion = isKnownAcpModel(selectedProvider, acpModel);
-  const selectedModelKey =
-    isCustomAcpModel || !selectedModelIsSuggestion
-      ? ACP_CUSTOM_MODEL_KEY
-      : acpModel;
   const isDefaultProviderCommand =
     !!selectedProvider &&
     commandTokens.join(" ") === selectedProvider.default_command.join(" ");
+  const liveModels = useAcpModelDiscovery(
+    isAcp && isDefaultProviderCommand ? selectedPreset : null,
+    {
+      secretRefs:
+        secretRefsSupportedOnProfile && secretsMode === "custom"
+          ? selectedSecrets
+          : null,
+    },
+  );
+
+  if (isLoading) return null;
+
+  const modelSuggestions = buildModelSuggestions(
+    liveModels.models,
+    isCustomAcpModel ? "" : acpModel,
+  );
+  const agentDefaultModelLabel = labelForAcpModel(
+    liveModels.defaultModelId,
+    liveModels.models,
+  );
+  // Without a preferred model the agent picks its own, so name that choice.
+  const offersAgentDefault =
+    !!selectedProvider && !getAcpPreferredDefaultModel(selectedPreset);
+  const showModelSelector = offersAgentDefault || modelSuggestions.length > 0;
+  const modelListHint = (() => {
+    if (!selectedProvider || liveModels.isDiscovering) return null;
+    if (liveModels.discovery?.error?.code === "ACPAuthRequired") return null;
+    if (liveModels.source === "remembered") {
+      return {
+        testId: "agent-model-list-remembered",
+        key: I18nKey.SETTINGS$AGENT_MODEL_LIST_REMEMBERED,
+      };
+    }
+    if (liveModels.source === "none") {
+      return {
+        testId: "agent-model-list-after-first-conversation",
+        key: I18nKey.SETTINGS$AGENT_MODEL_LIST_AFTER_FIRST_CONVERSATION,
+      };
+    }
+    return null;
+  })();
+  const selectedModelIsSuggestion = modelSuggestions.some(
+    ({ id }) => id === acpModel.trim(),
+  );
+  let selectedModelKey = acpModel;
+  if (offersAgentDefault && !isCustomAcpModel && !acpModel.trim()) {
+    selectedModelKey = ACP_AGENT_DEFAULT_MODEL_KEY;
+  } else if (isCustomAcpModel || !selectedModelIsSuggestion) {
+    selectedModelKey = ACP_CUSTOM_MODEL_KEY;
+  }
   const commandPlaceholder =
     formatCommand(acpProviders[0]?.default_command ?? []) ||
     COMMAND_PLACEHOLDER_FALLBACK;
@@ -1219,58 +1263,6 @@ export function AgentSettingsScreen({
               {t(I18nKey.SETTINGS$AGENT_COMMAND_HINT)}
             </Typography.Text>
           </div>
-
-          <div className="flex flex-col gap-1.5">
-            {hasModelSuggestions && (
-              <SettingsDropdownInput
-                testId="agent-model-selector"
-                name="agent-model"
-                label={t(I18nKey.SETTINGS$AGENT_MODEL)}
-                items={[
-                  ...modelSuggestions.map((model) => ({
-                    key: model.id,
-                    label: model.label,
-                  })),
-                  {
-                    key: ACP_CUSTOM_MODEL_KEY,
-                    label: t(I18nKey.SETTINGS$AGENT_PRESET_CUSTOM),
-                  },
-                ]}
-                selectedKey={selectedModelKey}
-                onSelectionChange={(key) => {
-                  if (!key) return;
-                  const modelKey = String(key);
-                  if (modelKey === ACP_CUSTOM_MODEL_KEY) {
-                    setIsCustomAcpModel(true);
-                    setAcpModel("");
-                  } else {
-                    setIsCustomAcpModel(false);
-                    setAcpModel(modelKey);
-                  }
-                }}
-              />
-            )}
-            {selectedModelKey === ACP_CUSTOM_MODEL_KEY && (
-              <SettingsInput
-                testId="agent-model-input"
-                label={
-                  hasModelSuggestions
-                    ? t(I18nKey.SETTINGS$AGENT_CUSTOM_MODEL)
-                    : t(I18nKey.SETTINGS$AGENT_MODEL)
-                }
-                type="text"
-                className="w-full"
-                value={acpModel}
-                showOptionalTag
-                onChange={(value) => {
-                  setAcpModel(value);
-                }}
-              />
-            )}
-            <Typography.Text className="text-xs text-[#717888]">
-              {t(I18nKey.SETTINGS$AGENT_MODEL_HINT)}
-            </Typography.Text>
-          </div>
         </>
       )}
 
@@ -1280,8 +1272,116 @@ export function AgentSettingsScreen({
           <AcpCredentialsSection
             form={acpCredentialForm}
             providerKey={selectedPreset}
+            loginRejected={
+              liveModels.discovery?.error?.code === "ACPAuthRequired"
+            }
           />
+          <hr className="border-[#3D4046]" />
         </>
+      )}
+
+      {isAcp && (
+        <div className="flex flex-col gap-1.5">
+          {showModelSelector && (
+            <SettingsDropdownInput
+              testId="agent-model-selector"
+              name="agent-model"
+              label={t(I18nKey.SETTINGS$AGENT_MODEL)}
+              items={[
+                ...(offersAgentDefault
+                  ? [
+                      {
+                        key: ACP_AGENT_DEFAULT_MODEL_KEY,
+                        label: agentDefaultModelLabel
+                          ? t(I18nKey.SETTINGS$AGENT_MODEL_AGENT_DEFAULT_IS, {
+                              model: agentDefaultModelLabel,
+                            })
+                          : t(I18nKey.SETTINGS$AGENT_MODEL_AGENT_DEFAULT),
+                      },
+                    ]
+                  : []),
+                ...modelSuggestions.map((model) => ({
+                  key: model.id,
+                  label:
+                    !offersAgentDefault &&
+                    model.id === liveModels.defaultModelId
+                      ? t(I18nKey.SETTINGS$AGENT_MODEL_IS_AGENT_DEFAULT, {
+                          model: model.label,
+                        })
+                      : model.label,
+                })),
+                {
+                  key: ACP_CUSTOM_MODEL_KEY,
+                  label: t(I18nKey.SETTINGS$AGENT_PRESET_CUSTOM),
+                },
+              ]}
+              selectedKey={selectedModelKey}
+              onSelectionChange={(key) => {
+                if (!key) return;
+                const modelKey = String(key);
+                if (modelKey === ACP_CUSTOM_MODEL_KEY) {
+                  setIsCustomAcpModel(true);
+                  setAcpModel("");
+                } else if (modelKey === ACP_AGENT_DEFAULT_MODEL_KEY) {
+                  setIsCustomAcpModel(false);
+                  setAcpModel("");
+                } else {
+                  setIsCustomAcpModel(false);
+                  setAcpModel(modelKey);
+                }
+              }}
+            />
+          )}
+          {selectedModelKey === ACP_CUSTOM_MODEL_KEY && (
+            <SettingsInput
+              testId="agent-model-input"
+              label={
+                showModelSelector
+                  ? t(I18nKey.SETTINGS$AGENT_CUSTOM_MODEL)
+                  : t(I18nKey.SETTINGS$AGENT_MODEL)
+              }
+              type="text"
+              className="w-full"
+              value={acpModel}
+              showOptionalTag
+              onChange={(value) => {
+                setAcpModel(value);
+              }}
+            />
+          )}
+          {liveModels.isDiscovering && selectedProvider && (
+            <Typography.Text
+              testId="agent-model-discovering"
+              className="text-xs text-[#717888]"
+            >
+              {t(I18nKey.SETTINGS$AGENT_MODEL_DISCOVERING, {
+                agent: selectedProvider.display_name,
+              })}
+            </Typography.Text>
+          )}
+          {liveModels.discovery?.error?.code === "ACPAuthRequired" &&
+            selectedProvider && (
+              <Typography.Text
+                testId="agent-model-discovery-needs-auth"
+                className="text-xs text-[#717888]"
+              >
+                {t(I18nKey.SETTINGS$AGENT_MODEL_DISCOVERY_NEEDS_AUTH, {
+                  agent: selectedProvider.display_name,
+                })}
+              </Typography.Text>
+            )}
+          {modelListHint && selectedProvider && (
+            <Typography.Text
+              testId={modelListHint.testId}
+              className="text-xs text-[#717888]"
+            >
+              {t(modelListHint.key, { agent: selectedProvider.display_name })}
+            </Typography.Text>
+          )}
+          <Typography.Text className="text-xs text-[#717888]">
+            {t(I18nKey.SETTINGS$AGENT_MODEL_HINT)}
+          </Typography.Text>
+        </div>
       )}
     </div>
   );

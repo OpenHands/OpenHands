@@ -1995,37 +1995,32 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
     expect(payload.agent_settings.acp_command).toEqual([]);
   });
 
-  it("seeds the provider default when settings contains an empty acp_model", () => {
-    // The form may carry an empty string after a user clears the model
-    // input. Older behavior left ``acp_model`` absent and relied on the
-    // agent-server's own default; the registry-default path
-    // (resolveEffectiveAcpModel) is now authoritative on Canvas's side,
-    // so an empty string resolves to the provider's ``default_model``
-    // before the request leaves the client. Keeps the displayed Settings
-    // → Agent default in sync with what the runtime actually starts.
-    const payload = buildStartConversationRequest({
-      settings: {
-        ...DEFAULT_SETTINGS,
-        agent_settings: {
-          schema_version: 1,
-          agent_kind: "acp",
-          acp_server: "claude-code",
-          acp_command: [],
-          acp_model: "",
+  it.each([
+    ["claude-code", undefined],
+    ["gemini-cli", ACP_VERTEX_SAFE_MODEL],
+  ])(
+    "leaves an empty %s acp_model to the agent unless Canvas prefers one",
+    (acpServer, expected) => {
+      const payload = buildStartConversationRequest({
+        settings: {
+          ...DEFAULT_SETTINGS,
+          agent_settings: {
+            schema_version: 1,
+            agent_kind: "acp",
+            acp_server: acpServer,
+            acp_command: [],
+            acp_model: "",
+          },
         },
-      },
-    }) as {
-      agent_settings: Record<string, unknown> & { acp_model?: unknown };
-    };
+      }) as {
+        agent_settings: Record<string, unknown> & { acp_model?: unknown };
+      };
 
-    expect(payload.agent_settings.acp_model).toBe("opus[1m]");
-  });
+      expect(payload.agent_settings.acp_model).toBe(expected);
+    },
+  );
 
   it("omits acp_model for the custom preset when none is configured", () => {
-    // The Custom preset has no registered ``default_model``, so an empty
-    // ``acp_model`` falls through to ``undefined`` — the agent-server then
-    // applies its own default. Distinct from the built-in providers
-    // which substitute their registry default.
     const payload = buildStartConversationRequest({
       settings: {
         ...DEFAULT_SETTINGS,

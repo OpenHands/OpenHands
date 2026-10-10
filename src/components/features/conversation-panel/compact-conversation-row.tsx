@@ -1,6 +1,7 @@
 import React from "react";
 import { Tooltip } from "@heroui/react";
 import { useTranslation } from "react-i18next";
+import type { ACPModelOption } from "#/constants/acp-providers";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
@@ -27,6 +28,7 @@ interface CompactConversationRowProps {
   showLlmProfiles?: boolean;
   agentKind?: "openhands" | "acp" | null;
   acpServer?: string | null;
+  acpModels?: readonly ACPModelOption[] | null;
   tags?: Record<string, string> | null;
   showTags?: boolean;
 }
@@ -52,6 +54,7 @@ export function CompactConversationRow({
   showLlmProfiles = false,
   agentKind = null,
   acpServer = null,
+  acpModels = null,
   tags = null,
   showTags = false,
 }: CompactConversationRowProps) {
@@ -85,6 +88,7 @@ export function CompactConversationRow({
         showAgentChip={showLlmProfiles}
         agentKind={agentKind}
         acpServer={acpServer}
+        acpModels={acpModels}
         tags={tags}
         showTags={showTags}
       />

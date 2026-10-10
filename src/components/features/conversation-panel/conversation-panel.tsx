@@ -882,6 +882,7 @@ export function ConversationPanel({
             showLlmProfiles={showLlmProfiles}
             agentKind={conversation.agent_kind}
             acpServer={conversation.acp_server}
+            acpModels={conversation.acp_available_models}
             tags={conversation.tags}
             showTags={showTagsMetadata}
           />
@@ -985,6 +986,7 @@ export function ConversationPanel({
               showLlmProfiles={showLlmProfiles}
               agentKind={conversation.agent_kind}
               acpServer={conversation.acp_server}
+              acpModels={conversation.acp_available_models}
               tags={conversation.tags}
               showTags={showTagsMetadata}
               isArchived={isArchived}

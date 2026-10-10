@@ -21,7 +21,8 @@ interface SwitchAcpModelVars {
    * is persisted as the default the next conversation launches with.
    */
   conversationId: string | null;
-  model: string;
+  /** Null saves no model, so the next conversation starts on the agent's own default. */
+  model: string | null;
 }
 
 /**
@@ -51,10 +52,12 @@ export const useSwitchAcpModel = () => {
   return useMutation({
     mutationFn: async ({ conversationId, model }: SwitchAcpModelVars) => {
       if (conversationId) {
-        await AgentServerConversationService.switchAcpModel(
-          conversationId,
-          model,
-        );
+        if (model) {
+          await AgentServerConversationService.switchAcpModel(
+            conversationId,
+            model,
+          );
+        }
         return;
       }
 

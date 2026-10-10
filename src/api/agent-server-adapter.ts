@@ -4,6 +4,7 @@ import {
   HookType,
 } from "@openhands/typescript-client";
 import type {
+  ACPModelInfo,
   ConversationRuntimeInfo,
   HookConfig,
 } from "@openhands/typescript-client";
@@ -16,6 +17,7 @@ import {
   getAcpPreferredDefaultModel,
   getAcpProvider,
   resolveEffectiveAcpModel,
+  toAcpModelOptions,
 } from "#/constants/acp-providers";
 import { getAgentServerClientOptions } from "./agent-server-client-options";
 import {
@@ -128,6 +130,7 @@ export interface DirectConversationInfo {
   } | null;
   current_model_id?: string | null;
   current_model_name?: string | null;
+  available_models?: ACPModelInfo[] | null;
   workspace?: {
     working_dir?: string | null;
   } | null;
@@ -143,6 +146,7 @@ export interface DirectConversationInfo {
   launched_agent_profile?: {
     agent_profile_id: string;
     revision: number;
+    secret_refs?: string[] | null;
   } | null;
   /**
    * Server-owned, derived from the catalog's ``parent_conversation_id`` link
@@ -439,6 +443,9 @@ export function toAppConversation(
     pr_number: [],
     agent_kind: isAcp ? "acp" : "openhands",
     acp_server: acpServer,
+    acp_available_models: isAcp
+      ? toAcpModelOptions(info.available_models)
+      : null,
     tags: info.tags ?? null,
     launched_agent_profile: info.launched_agent_profile ?? null,
     // Chip path: omit ``providerDefault`` so that when no concrete model
@@ -1031,12 +1038,8 @@ function buildConfiguredAcpAgentSettings(
     payload.mcp_config = mcpConfig;
   }
 
-  // Saved settings may carry ``acp_model: null`` (existing users predating
-  // the default-model registry, or saved fields the agent-server stripped).
-  // Fall back to the *preferred* default (Vertex-safe for Gemini) so the
-  // conversation starts with whatever the Settings → Agent UI shows — without
-  // that, the form's displayed default would silently not take effect at
-  // runtime until the user re-saved the page.
+  // A saved ``acp_model: null`` leaves the agent on its own default, unless
+  // Canvas prefers another (see getAcpPreferredDefaultModel).
   const serverKey =
     typeof agentSettings.acp_server === "string"
       ? agentSettings.acp_server
@@ -1174,7 +1177,7 @@ interface LookupSecret {
 }
 
 /** A custom secret's public identity — name + optional description, no value. */
-type CustomSecretInput = { name: string; description?: string };
+export type CustomSecretInput = { name: string; description?: string };
 
 type StartConversationPayloadBase = Record<string, unknown> & {
   workspace: WorkspacePayload;
@@ -1262,7 +1265,7 @@ export interface StartConversationOptions {
  * loopback fetch can't deadlock. Returns `undefined` when there are no custom
  * secrets so callers can omit the field.
  */
-function buildCustomSecrets(
+export function buildCustomSecrets(
   customSecrets: CustomSecretInput[] | undefined,
 ): Record<string, LookupSecret> | undefined {
   if (!customSecrets?.length) return undefined;

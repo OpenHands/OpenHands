@@ -1136,6 +1136,35 @@ describe("AgentServerConversationService", () => {
       expect(conversation?.llm_model).toBe("Claude Opus 4.7");
     });
 
+    it("carries the models an ACP session reported", async () => {
+      mockHttpGet.mockResolvedValue({
+        data: [
+          {
+            id: "conv-acp-live-models",
+            created_at: "2024-01-01",
+            updated_at: "2024-01-01",
+            agent: { kind: "ACPAgent", acp_server: "codex" },
+            current_model_id: "gpt-6-astra",
+            available_models: [
+              { model_id: "gpt-6-astra", name: "GPT-6 Astra" },
+              { model_id: "gpt-5.6-sol", name: null, description: "fast" },
+              { name: "no id" },
+            ],
+          },
+        ],
+      });
+
+      const [conversation] =
+        await AgentServerConversationService.batchGetAppConversations([
+          "conv-acp-live-models",
+        ]);
+
+      expect(conversation?.acp_available_models).toEqual([
+        { id: "gpt-6-astra", label: "GPT-6 Astra" },
+        { id: "gpt-5.6-sol", label: "gpt-5.6-sol" },
+      ]);
+    });
+
     it("sources acp_server from the agent when the acpserver tag is absent", async () => {
       // Profile launches don't stamp the ``acpserver`` tag client-side, so the
       // provider identity must survive from ``agent.acp_server`` (SDK #3692)
