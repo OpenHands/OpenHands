@@ -34,10 +34,7 @@ import {
   getInterfaceCopy,
 } from "#/manifests/automation-interface";
 import { cn } from "#/utils/utils";
-import {
-  formControlMultilineFieldClassName,
-  formControlSettingsFieldClassName,
-} from "#/utils/form-control-classes";
+import { formControlMultilineFieldClassName } from "#/utils/form-control-classes";
 import XMarkIcon from "#/icons/x-mark.svg?react";
 
 interface EditAutomationModalProps {
@@ -259,19 +256,26 @@ export function EditAutomationModal({
       setScheduleError(null);
     } else if (!form.isCustomSchedule && form.frequency !== "custom") {
       const parsedTime = parseTimeOfDay(form.timeOfDay);
-      if (parsedTime) {
-        const newSchedule = buildCronSchedule({
-          kind: form.frequency,
-          hour: parsedTime.hour,
-          minute: parsedTime.minute,
-          weekday: form.frequency === "weekly" ? form.weekday : undefined,
-        });
-        if (newSchedule !== automation.trigger.schedule) {
-          body.trigger = {
-            ...automation.trigger,
-            schedule: newSchedule,
-          };
-        }
+      if (!parsedTime) {
+        // A preset schedule always has a time of day, so an emptied or
+        // malformed field is input the form cannot apply. Refusing here keeps
+        // the save from reporting success while silently dropping the
+        // schedule change (the other fields would still be PATCHed).
+        setScheduleError(t(I18nKey.ERROR$REQUIRED_FIELD));
+        return;
+      }
+      setScheduleError(null);
+      const newSchedule = buildCronSchedule({
+        kind: form.frequency,
+        hour: parsedTime.hour,
+        minute: parsedTime.minute,
+        weekday: form.frequency === "weekly" ? form.weekday : undefined,
+      });
+      if (newSchedule !== automation.trigger.schedule) {
+        body.trigger = {
+          ...automation.trigger,
+          schedule: newSchedule,
+        };
       }
     }
 
@@ -491,30 +495,32 @@ export function EditAutomationModal({
                 />
               )}
 
-              <label className="flex flex-col gap-2.5 w-full min-w-0">
-                <span className="text-sm">
-                  {t(I18nKey.AUTOMATIONS$TIME_OF_DAY)}
-                </span>
-                <input
-                  data-testid="edit-automation-time"
+              <div className="flex flex-col gap-2.5 w-full min-w-0">
+                <SettingsInput
+                  testId="edit-automation-time"
                   name="timeOfDay"
                   type="time"
+                  label={t(I18nKey.AUTOMATIONS$TIME_OF_DAY)}
                   value={form.timeOfDay}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, timeOfDay: e.target.value }))
+                  onChange={(value) =>
+                    setForm((f) => ({ ...f, timeOfDay: value }))
                   }
-                  disabled={form.isCustomSchedule}
-                  className={cn(
-                    formControlSettingsFieldClassName,
-                    "disabled:bg-surface-raised",
-                  )}
+                  isDisabled={form.isCustomSchedule}
+                  // The cron field carries the schedule error when it owns the
+                  // schedule; this one does otherwise.
+                  error={
+                    form.isCustomSchedule
+                      ? undefined
+                      : (scheduleError ?? undefined)
+                  }
+                  showRequiredTag={!form.isCustomSchedule}
                 />
                 {automation.timezone && (
                   <span className="text-xs text-muted">
                     {t(I18nKey.AUTOMATIONS$TIMEZONE)}: {automation.timezone}
                   </span>
                 )}
-              </label>
+              </div>
 
               {form.isCustomSchedule && (
                 <SettingsInput

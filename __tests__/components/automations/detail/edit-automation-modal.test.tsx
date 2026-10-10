@@ -414,6 +414,64 @@ describe("EditAutomationModal", () => {
     expect(screen.getByTestId("edit-automation-cron")).toBeEnabled();
   });
 
+  it("blocks submit and shows an error when the time of day is cleared", async () => {
+    // Arrange — a preset schedule always carries a time, so an emptied field
+    // is input the form cannot apply.
+    const user = userEvent.setup();
+    const { onClose } = renderModal(dailyAutomation);
+
+    // Act — clear the time and rename, so an unguarded save would still PATCH.
+    const timeInput = screen.getByTestId("edit-automation-time");
+    await user.clear(timeInput);
+    const nameInput = screen.getByTestId("edit-automation-name");
+    await user.clear(nameInput);
+    await user.type(nameInput, "Renamed");
+    await user.click(screen.getByTestId("edit-automation-save"));
+
+    // Assert — the error is bound to the time field, nothing reaches the API,
+    // and the dialog stays open instead of reporting a save that dropped the
+    // schedule change.
+    expect(await screen.findByTestId("edit-automation-time-error")).toHaveTextContent(
+      "ERROR$REQUIRED_FIELD",
+    );
+    expect(timeInput).toHaveAttribute("aria-invalid", "true");
+    expect(AutomationService.updateAutomation).not.toHaveBeenCalled();
+    expect(displaySuccessToast).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("saves the schedule once a valid time is re-entered after the error", async () => {
+    // Arrange — the user hits the required-time error first.
+    vi.mocked(AutomationService.updateAutomation).mockResolvedValue({
+      ...dailyAutomation,
+      trigger: { type: "cron", schedule: "30 10 * * *" },
+    });
+    const user = userEvent.setup();
+    renderModal(dailyAutomation);
+
+    await user.clear(screen.getByTestId("edit-automation-time"));
+    await user.click(screen.getByTestId("edit-automation-save"));
+    expect(
+      await screen.findByTestId("edit-automation-time-error"),
+    ).toBeInTheDocument();
+    expect(AutomationService.updateAutomation).not.toHaveBeenCalled();
+
+    // Act — refill the time and save again.
+    const timeInput = screen.getByTestId("edit-automation-time");
+    await user.type(timeInput, "10:30");
+    await user.click(screen.getByTestId("edit-automation-save"));
+
+    // Assert — the retry PATCHes the new schedule and clears the error.
+    await waitFor(() => {
+      expect(AutomationService.updateAutomation).toHaveBeenCalledTimes(1);
+    });
+    const [, body] = vi.mocked(AutomationService.updateAutomation).mock.calls[0];
+    expect(body).toMatchObject({
+      trigger: { type: "cron", schedule: "30 10 * * *" },
+    });
+    expect(screen.queryByTestId("edit-automation-time-error")).toBeNull();
+  });
+
   it("saves an event-triggered automation without a cron trigger", async () => {
     // Arrange — these have no schedule, so cron validation must not run.
     vi.mocked(AutomationService.updateAutomation).mockResolvedValue(
