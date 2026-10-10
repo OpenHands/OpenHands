@@ -33,6 +33,7 @@ import {
   writeStoredLocalWorkspaceMode,
 } from "#/utils/workspace-mode";
 import type { PluginSpec } from "#/api/conversation-service/agent-server-conversation-service.types";
+import { markAutomationSetupHandoff } from "#/api/automation-setup-handoff-store";
 import { PluginPickerModal } from "#/components/features/plugins/plugin-picker-modal";
 import { PluginPickerTrigger } from "#/components/features/plugins/plugin-picker-trigger";
 import { RecommendedAutomationsLauncher } from "#/components/features/automations/recommended-automations-launcher";
@@ -163,9 +164,14 @@ export function HomeChatLauncher() {
     // Explicitly-attached plugins are additive on top of any ambient set and
     // are resolved from git at run time. Omitted entirely when none selected so
     // nothing attaches unless the user picked it.
-    if (selectedPlugins.length > 0) {
+    if (!isAutomateMode && selectedPlugins.length > 0) {
       variables = { ...variables, plugins: selectedPlugins };
     }
+
+    const openAutomationSetupMode = (conversationId: string) => {
+      if (!isAutomateMode) return;
+      markAutomationSetupHandoff(conversationId);
+    };
 
     // Loading toast gives the user a clear signal that the request is in
     // flight; dismissed precisely once the mutation resolves.
@@ -218,6 +224,7 @@ export function HomeChatLauncher() {
               images: attachmentSnapshot.images,
               imagesMarkedUploadAsFile,
             });
+            openAutomationSetupMode(targetConversationId);
             navigate(`/conversations/${targetConversationId}`);
             return;
           } else {
@@ -247,6 +254,7 @@ export function HomeChatLauncher() {
           });
         }
 
+        openAutomationSetupMode(targetConversationId);
         navigate(`/conversations/${targetConversationId}`);
       } catch (error) {
         toast.dismiss(toastId);
@@ -356,13 +364,11 @@ export function HomeChatLauncher() {
           />
         </div>
 
-        {isAutomateMode && (
-          <div className="mt-8 flex w-full flex-col gap-8">
-            <RecommendedAutomationsLauncher variant="rail" />
-            <PinnedAutomationsDashboard />
-            <RunningAutomationsList />
-          </div>
-        )}
+        <div className="mt-8 flex w-full flex-col gap-8">
+          <RecommendedAutomationsLauncher variant="rail" />
+          <PinnedAutomationsDashboard />
+          <RunningAutomationsList />
+        </div>
       </div>
 
       {isLocal ? (
