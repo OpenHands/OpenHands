@@ -34,6 +34,30 @@ describe("Dropdown", () => {
       expect(screen.getByText("Option 2")).toBeInTheDocument();
       expect(screen.getByText("Option 3")).toBeInTheDocument();
     });
+
+    it("should provide accessible names without dangling labelledby references", async () => {
+      const user = userEvent.setup();
+      render(<Dropdown options={mockOptions} />);
+
+      const input = screen.getByRole("combobox", { name: "Filter options" });
+      expect(input).not.toHaveAttribute("aria-labelledby");
+
+      await user.click(screen.getByTestId("dropdown-trigger"));
+
+      const listbox = screen.getByRole("listbox", { name: "Filter options" });
+      expect(listbox).not.toHaveAttribute("aria-labelledby");
+
+      for (const element of document.querySelectorAll<HTMLElement>(
+        "[aria-labelledby]",
+      )) {
+        for (const id of element
+          .getAttribute("aria-labelledby")
+          ?.split(/\s+/)
+          .filter(Boolean) ?? []) {
+          expect(document.getElementById(id)).not.toBeNull();
+        }
+      }
+    });
   });
 
   describe("Type-ahead / Search", () => {
