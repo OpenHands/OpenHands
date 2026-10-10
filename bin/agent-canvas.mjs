@@ -86,6 +86,11 @@ OPTIONS:
   -h, --help            Show this help message
 
 ENVIRONMENT VARIABLES:
+  OH_CANVAS_ATTACH_EXISTING_AGENT_SERVER=1
+                               Reuse the existing local Agent Server instead
+                               of launching one. Supply its session key through
+                               LOCAL_BACKEND_API_KEY or OH_SESSION_API_KEY_PATH.
+  OH_CANVAS_SAFE_BACKEND_PORT  Existing Agent Server port (default: 18000).
   LOCAL_BACKEND_API_KEY        API key for the server. Required in --public
                                mode; optional otherwise (auto-generated if
                                omitted, persisted across restarts).

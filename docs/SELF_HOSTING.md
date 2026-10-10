@@ -134,6 +134,18 @@ ingress proxy on `127.0.0.1:8000`.
 
 To keep the service running after your SSH session ends, use a process manager.
 
+If an Agent Server is already supervised separately on this machine, set
+`OH_CANVAS_ATTACH_EXISTING_AGENT_SERVER=1` and supply its existing
+`LOCAL_BACKEND_API_KEY` before starting Canvas. Set
+`OH_CANVAS_SAFE_BACKEND_PORT` if it uses a port other than 18000. Canvas checks
+health, authentication and the minimum supported version, then starts its
+frontend, ingress and automation services without starting another Agent Server.
+Stopping Canvas leaves the attached server running. Its secrets, conversation
+leases, workspace paths and editor configuration remain operator-managed.
+See [attachment configuration](./DEVELOPMENT.md#frontend-against-an-existing-backend)
+for key-file fallback and automation setup. This option applies to the npm
+launchers; the all-in-one Docker entrypoint still owns its Agent Server.
+
 **Option A — tmux (quick):**
 
 ```bash

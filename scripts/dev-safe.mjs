@@ -18,6 +18,10 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { applySessionKeyPolicy } from "./bind-host.mjs";
 import {
+  readExistingSessionApiKey,
+  validateAttachedAgentServer,
+} from "./agent-server-attachment.mjs";
+import {
   getProcessTreeSpawnOptions,
   isProcessRunning,
   signalProcessTree,
@@ -549,8 +553,8 @@ function parsePort(value, fallback) {
  * - Ports are already known to be available (e.g., specified via env vars)
  * - You're building config objects for downstream use, not starting services
  *
- * For scripts that actually start services (dev-safe.mjs main, dev-with-automation.mjs),
- * use {@link buildSafeDevConfigAsync} instead to handle port conflicts gracefully.
+ * For the minimal launcher, use {@link buildSafeDevConfigAsync} to check
+ * port availability or validate the explicitly attached server before startup.
  *
  * @param {string} cwd - Current working directory
  * @param {Record<string, string | undefined>} env - Environment variables
@@ -576,14 +580,14 @@ export function getViteSessionApiKey(config, env = process.env) {
 }
 
 /**
- * Build safe dev configuration with dynamic port allocation.
+ * Build safe dev configuration after checking the configured backend.
  *
- * Tries preferred ports first; if busy, finds available alternatives.
- * This is the recommended entry point for scripts that start services.
+ * Managed servers require free backend and editor ports. Explicit attachment
+ * validates the existing server without allocating or remapping its ports.
  *
  * @param {string} cwd - Current working directory
  * @param {Record<string, string | undefined>} env - Environment variables
- * @returns {Promise<SafeDevConfig>} Configuration object with allocated ports
+ * @returns {Promise<SafeDevConfig>} Validated configuration
  */
 export async function buildSafeDevConfigAsync(
   cwd = process.cwd(),
@@ -599,17 +603,26 @@ export async function buildSafeDevConfigAsync(
     preferredBackendPort + 1,
   );
 
-  // Fail fast if any required port is already in use.
-  await assertPortsFree([
-    { name: "agent-server", port: preferredBackendPort },
-    { name: "vscode", port: preferredVscodePort },
-  ]);
+  const attachAgentServer = env.OH_CANVAS_ATTACH_EXISTING_AGENT_SERVER === "1";
+  if (!attachAgentServer) {
+    await assertPortsFree([
+      { name: "agent-server", port: preferredBackendPort },
+      { name: "vscode", port: preferredVscodePort },
+    ]);
+  }
 
-  return buildConfigFromPorts(
+  const config = buildConfigFromPorts(
     { backendPort: preferredBackendPort, vscodePort: preferredVscodePort },
     cwd,
     env,
   );
+  if (attachAgentServer) {
+    await validateAttachedAgentServer(
+      config,
+      SHARED_DEFAULTS.compatibility.minimumAgentServer,
+    );
+  }
+  return config;
 }
 
 /**
@@ -617,7 +630,7 @@ export async function buildSafeDevConfigAsync(
  * @property {string} cwd
  * @property {number} backendPort
  * @property {number} vscodePort
- * @property {string} vscodeBasePath
+ * @property {string | null} vscodeBasePath
  * @property {string} stateDir
  * @property {string} tmuxTmpDir
  * @property {string} conversationsPath
@@ -625,10 +638,11 @@ export async function buildSafeDevConfigAsync(
  * @property {string} bashEventsDir
  * @property {string} backendBaseUrl
  * @property {string} backendHost
- * @property {string} workingDir
- * @property {string} secretKey
+ * @property {string | undefined} workingDir
+ * @property {string | undefined} secretKey
  * @property {string} sessionApiKey
  * @property {string} canvasToolsDir
+ * @property {boolean} [attachAgentServer]
  */
 
 /**
@@ -640,6 +654,7 @@ export async function buildSafeDevConfigAsync(
  */
 function buildConfigFromPorts(ports, cwd, env) {
   const { backendPort, vscodePort } = ports;
+  const attachAgentServer = env.OH_CANVAS_ATTACH_EXISTING_AGENT_SERVER === "1";
   const stateDir = path.resolve(
     cwd,
     env.OH_CANVAS_SAFE_STATE_DIR ||
@@ -652,8 +667,9 @@ function buildConfigFromPorts(ports, cwd, env) {
   // and Docker mode share the same encryption key when they mount the same
   // ~/.openhands directory (docker/entrypoint.sh reads/writes the same file).
   const secretKeyPath = env.OH_SECRET_KEY_PATH || DEFAULT_SECRET_KEY_PATH;
-  const secretKey =
-    env.OH_SECRET_KEY || getOrCreatePersistedApiKey(secretKeyPath, "secret");
+  const secretKey = attachAgentServer
+    ? undefined
+    : env.OH_SECRET_KEY || getOrCreatePersistedApiKey(secretKeyPath, "secret");
   // Use the user-provided LOCAL_BACKEND_API_KEY or fall back to a key
   // persisted to ~/.openhands/agent-canvas/api-key.txt. Persisting on disk
   // keeps the agent-server, the Vite-baked VITE_SESSION_API_KEY, and any
@@ -663,9 +679,10 @@ function buildConfigFromPorts(ports, cwd, env) {
   // LOCAL_BACKEND_API_KEY is the single user-facing env var for the API key.
   // OH_SESSION_API_KEY_PATH overrides the persisted file path (used by tests).
   const persistedKeyPath = env.OH_SESSION_API_KEY_PATH || DEFAULT_API_KEY_PATH;
-  const sessionApiKey =
-    env.LOCAL_BACKEND_API_KEY ||
-    getOrCreatePersistedApiKeyFile(persistedKeyPath);
+  const sessionApiKey = attachAgentServer
+    ? readExistingSessionApiKey(env, persistedKeyPath)
+    : env.LOCAL_BACKEND_API_KEY ||
+      getOrCreatePersistedApiKeyFile(persistedKeyPath);
 
   // Host directory containing the legacy canvas_ui Python module. Persisted
   // conversations created before the client_tools migration still reference
@@ -676,7 +693,7 @@ function buildConfigFromPorts(ports, cwd, env) {
     cwd,
     backendPort,
     vscodePort,
-    vscodeBasePath: VSCODE_BASE_PATH,
+    vscodeBasePath: attachAgentServer ? null : VSCODE_BASE_PATH,
     stateDir,
     // tmux socket directory. Defaults to <stateDir>/tmux (under
     // ~/.openhands/agent-canvas), matching where the rest of dev state lives
@@ -700,10 +717,12 @@ function buildConfigFromPorts(ports, cwd, env) {
     bashEventsDir: path.join(stateDir, "bash_events"),
     backendBaseUrl: `http://127.0.0.1:${backendPort}`,
     backendHost: `127.0.0.1:${backendPort}`,
-    workingDir: env.VITE_WORKING_DIR || workspacesPath,
+    workingDir:
+      env.VITE_WORKING_DIR || (attachAgentServer ? undefined : workspacesPath),
     secretKey,
     sessionApiKey,
     canvasToolsDir,
+    attachAgentServer,
   };
 }
 
@@ -965,24 +984,28 @@ async function main() {
   console.log("Allocating ports...");
   fileLog("info", "Allocating ports...");
 
-  // Use async config builder with dynamic port allocation
+  // Validate the configured ports or the explicitly attached server.
   const config = await buildSafeDevConfigAsync();
 
-  if (process.env.OH_AGENT_SERVER_LOCAL_PATH) {
+  if (!config.attachAgentServer && process.env.OH_AGENT_SERVER_LOCAL_PATH) {
     validateLocalAgentServerPath(process.env.OH_AGENT_SERVER_LOCAL_PATH);
   }
 
-  for (const dir of [
-    config.stateDir,
-    config.tmuxTmpDir,
-    config.conversationsPath,
-    config.workspacesPath,
-    config.bashEventsDir,
-  ]) {
+  for (const dir of config.attachAgentServer
+    ? []
+    : [
+        config.stateDir,
+        config.tmuxTmpDir,
+        config.conversationsPath,
+        config.workspacesPath,
+        config.bashEventsDir,
+      ]) {
     mkdirSync(dir, { recursive: true });
   }
 
-  const agentServerCmd = buildAgentServerCommand();
+  const agentServerCmd = config.attachAgentServer
+    ? { source: "attached (operator-managed)" }
+    : buildAgentServerCommand();
 
   const secretKeySource = process.env.OH_SECRET_KEY
     ? "custom (from OH_SECRET_KEY)"
@@ -996,10 +1019,12 @@ async function main() {
 
   console.log(`- agent-server: ${agentServerCmd.source}`);
   console.log(`- backend: ${config.backendBaseUrl}`);
-  console.log(`- vscode port: ${config.vscodePort}`);
-  console.log(`- working dir: ${config.workingDir}`);
-  console.log(`- isolated state dir: ${config.stateDir}`);
-  console.log(`- secret key: ${secretKeySource}`);
+  console.log(`- working dir: ${config.workingDir ?? "selected by backend"}`);
+  if (!config.attachAgentServer) {
+    console.log(`- vscode port: ${config.vscodePort}`);
+    console.log(`- isolated state dir: ${config.stateDir}`);
+    console.log(`- secret key: ${secretKeySource}`);
+  }
   console.log(`- session API key: ${sessionKeySource}`);
   console.log("");
   fileLog(
@@ -1013,28 +1038,30 @@ async function main() {
     ].join("\n"),
   );
 
-  const backend = spawnProcess(
-    agentServerCmd.command,
-    [
-      ...agentServerCmd.args,
-      "--host",
-      "127.0.0.1",
-      "--port",
-      String(config.backendPort),
-    ],
-    {
-      cwd: config.cwd,
-      env: {
-        ...process.env,
-        // Opt into prefix-mode: the Vite dev server proxies the same prefix to
-        // `config.vscodePort` (see VITE_VSCODE_TARGET below), so the advertised
-        // URL resolves on the frontend origin the browser is actually on.
-        ...buildAgentServerEnv(config, {
-          vscodeBasePath: config.vscodeBasePath,
-        }),
-      },
-    },
-  );
+  const backend = config.attachAgentServer
+    ? null
+    : spawnProcess(
+        agentServerCmd.command,
+        [
+          ...agentServerCmd.args,
+          "--host",
+          "127.0.0.1",
+          "--port",
+          String(config.backendPort),
+        ],
+        {
+          cwd: config.cwd,
+          env: {
+            ...process.env,
+            // Opt into prefix-mode: the Vite dev server proxies the same prefix to
+            // `config.vscodePort` (see VITE_VSCODE_TARGET below), so the advertised
+            // URL resolves on the frontend origin the browser is actually on.
+            ...buildAgentServerEnv(config, {
+              vscodeBasePath: config.vscodeBasePath,
+            }),
+          },
+        },
+      );
 
   let shuttingDown = false;
   let frontend = null;
@@ -1048,13 +1075,13 @@ async function main() {
     if (frontend) {
       signalProcessTree(frontend, signal);
     }
-    signalProcessTree(backend, signal);
+    if (backend) signalProcessTree(backend, signal);
 
     setTimeout(() => {
       if (frontend && isProcessRunning(frontend)) {
         signalProcessTree(frontend, "SIGKILL");
       }
-      if (isProcessRunning(backend)) {
+      if (backend && isProcessRunning(backend)) {
         signalProcessTree(backend, "SIGKILL");
       }
       process.exit(process.exitCode ?? 0);
@@ -1070,30 +1097,32 @@ async function main() {
   // of shutting it down gracefully.
   process.on("SIGHUP", () => shutdown("SIGTERM"));
 
-  const backendErrored = new Promise((_, reject) => {
-    backend.once("error", (error) => reject(error));
-  });
-  const backendExited = new Promise((_, reject) => {
-    backend.once("exit", (code, signal) => {
-      if (!shuttingDown) {
-        reject(
-          new Error(
-            `agent-server exited before startup completed (code=${code ?? "null"}, signal=${signal ?? "null"})`,
-          ),
-        );
-      }
+  if (backend) {
+    const backendErrored = new Promise((_, reject) => {
+      backend.once("error", (error) => reject(error));
     });
-  });
+    const backendExited = new Promise((_, reject) => {
+      backend.once("exit", (code, signal) => {
+        if (!shuttingDown) {
+          reject(
+            new Error(
+              `agent-server exited before startup completed (code=${code ?? "null"}, signal=${signal ?? "null"})`,
+            ),
+          );
+        }
+      });
+    });
 
-  try {
-    await Promise.race([
-      waitForServer(`${config.backendBaseUrl}/server_info`),
-      backendErrored,
-      backendExited,
-    ]);
-  } catch (error) {
-    shutdown();
-    throw error;
+    try {
+      await Promise.race([
+        waitForServer(`${config.backendBaseUrl}/server_info`),
+        backendErrored,
+        backendExited,
+      ]);
+    } catch (error) {
+      shutdown();
+      throw error;
+    }
   }
 
   const frontendCommand = buildNpmScriptCommand("dev:frontend");
@@ -1109,8 +1138,10 @@ async function main() {
       // own proxy is the only thing that can serve the editor prefix on the
       // frontend origin. The editor is a separate process on a port of its
       // own, so it needs its own proxy target rather than VITE_BACKEND_HOST.
-      VITE_VSCODE_BASE_PATH: config.vscodeBasePath,
-      VITE_VSCODE_TARGET: `http://127.0.0.1:${config.vscodePort}`,
+      VITE_VSCODE_BASE_PATH: config.vscodeBasePath || "",
+      VITE_VSCODE_TARGET: config.vscodeBasePath
+        ? `http://127.0.0.1:${config.vscodePort}`
+        : "",
       // dev:minimal deliberately does NOT supply runtime-services info (the
       // frontend here talks straight to the agent-server over
       // VITE_BACKEND_BASE_URL — there is no ingress or static-server in front
@@ -1130,7 +1161,7 @@ async function main() {
     process.exitCode = code ?? 0;
   });
 
-  backend.once("exit", (code) => {
+  backend?.once("exit", (code) => {
     if (!shuttingDown) {
       const msg = `agent-server exited unexpectedly with code ${code ?? 0}`;
       console.error(msg);

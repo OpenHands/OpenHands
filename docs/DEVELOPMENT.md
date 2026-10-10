@@ -227,7 +227,40 @@ reuses the bundled instance's state dir.
 
 ### Frontend against an existing backend
 
-Use this only if you intentionally started `agent-server` yourself or want the frontend to talk to another backend:
+To run the full Canvas stack alongside an Agent Server you already supervise:
+
+```sh
+export OH_CANVAS_ATTACH_EXISTING_AGENT_SERVER=1
+export LOCAL_BACKEND_API_KEY=<existing-server-session-key>
+export OH_CANVAS_SAFE_BACKEND_PORT=18000
+npm run dev
+```
+
+The same environment variables work with `npm run dev:static`,
+`npm run dev:minimal` and the published `agent-canvas` command. The minimal
+stack starts only Vite alongside the attached server. `--frontend-only` cannot
+be combined with attachment.
+
+Canvas checks `/alive`, authenticates through `/api/settings` and verifies
+`/server_info` against `compatibility.minimumAgentServer` before starting its
+services. A failed check exits without launching a replacement server. Without
+the opt-in, busy-port behavior is unchanged.
+
+Instead of setting `LOCAL_BACKEND_API_KEY`, point `OH_SESSION_API_KEY_PATH` at
+the existing server's key file. If neither is set, attachment reads the normal
+`~/.openhands/agent-canvas/api-key.txt` file. It never generates a new key or
+changes the attached server's encryption key. Stopping Canvas leaves the server
+running. Canvas skips conversation lease cleanup and automation secret seeding.
+Configure `OPENHANDS_AUTOMATION_API_KEY` on the external server yourself if its
+agents need to call the automation service.
+
+Set `VITE_WORKING_DIR` explicitly when a default workspace is needed; Canvas
+does not infer a host workspace or an editor proxy port for an attached server.
+The server remains responsible for its tools, workspace access and VS Code
+configuration. The all-in-one Docker entrypoint continues to manage its own
+Agent Server and does not support this launcher option.
+
+To run only the frontend against a separately configured backend:
 
 ```sh
 npm run dev:frontend
