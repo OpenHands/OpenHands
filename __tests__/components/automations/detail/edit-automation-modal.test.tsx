@@ -193,6 +193,18 @@ beforeEach(() => {
 });
 
 describe("EditAutomationModal", () => {
+  it("keeps a tall edit form inside a viewport-constrained dialog", () => {
+    renderModal(dailyAutomation);
+
+    const dialog = screen.getByRole("dialog");
+    const form = screen.getByRole("form");
+
+    expect(dialog.lastElementChild).toHaveClass("max-h-[80vh]", "flex-col");
+    expect(form).toHaveClass("min-h-0", "flex-1");
+    expect(form.firstElementChild).toHaveClass("overflow-y-auto");
+    expect(form.lastElementChild).toHaveClass("shrink-0");
+  });
+
   it("pre-fills current values and PATCHes only the fields that changed", async () => {
     // Arrange — daily automation at 09:00 with a known prompt. The
     // backend will echo back the merged result.
