@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -19,7 +19,7 @@ vi.mock("react-i18next", () => ({
         SETTINGS$PROFILE_DEFAULT: "Default",
         SETTINGS$PROFILE_MENU: "Profile menu",
         SETTINGS$PROFILE_EDIT: "Edit",
-        SETTINGS$PROFILE_SET_ACTIVE: "Set as active",
+        SETTINGS$PROFILE_SET_DEFAULT: "Set as default",
         SETTINGS$PROFILE_DELETE_TITLE: "Delete Profile",
         SETTINGS$AGENT_TYPE_ACP: "ACP",
         SETTINGS$PROFILE_DELETE_CONFIRMATION: params?.name
@@ -201,11 +201,16 @@ describe("AgentProfilesManager", () => {
     expect(onEditProfile).toHaveBeenCalledWith(mockProfiles[0]);
   });
 
-  it("activates a profile by id from the row menu", async () => {
-    vi.mocked(AgentProfilesService.listProfiles).mockResolvedValue({
-      profiles: mockProfiles,
-      active_agent_profile_id: "id-oh",
-    });
+  it("moves the Default badge when a non-default profile is selected", async () => {
+    vi.mocked(AgentProfilesService.listProfiles)
+      .mockResolvedValueOnce({
+        profiles: mockProfiles,
+        active_agent_profile_id: "id-oh",
+      })
+      .mockResolvedValue({
+        profiles: mockProfiles,
+        active_agent_profile_id: "id-acp",
+      });
     vi.mocked(AgentProfilesService.activateProfile).mockResolvedValue({
       id: "id-acp",
       message: "ok",
@@ -216,12 +221,32 @@ describe("AgentProfilesManager", () => {
 
     await screen.findByText("my-claude");
     const user = userEvent.setup();
-    // Second row (my-claude) is not active, so Set active is enabled.
+    const rows = screen.getAllByTestId("agent-profile-row");
+    expect(
+      within(rows[0]).getByTestId("agent-profile-active-badge"),
+    ).toHaveTextContent("Default");
     const triggers = screen.getAllByTestId("agent-profile-menu-trigger");
+    await user.click(triggers[0]);
+    const currentDefaultAction = screen.getByTestId("agent-profile-set-active");
+    expect(currentDefaultAction).toHaveTextContent("Set as default");
+    expect(currentDefaultAction).toBeDisabled();
+    await user.keyboard("{Escape}");
+
     await user.click(triggers[1]);
-    await user.click(screen.getByText("Set as active"));
+    const setDefaultAction = screen.getByTestId("agent-profile-set-active");
+    expect(setDefaultAction).toHaveTextContent("Set as default");
+    expect(setDefaultAction).toBeEnabled();
+    await user.click(setDefaultAction);
 
     expect(AgentProfilesService.activateProfile).toHaveBeenCalledWith("id-acp");
+    await waitFor(() =>
+      expect(
+        within(rows[1]).getByTestId("agent-profile-active-badge"),
+      ).toHaveTextContent("Default"),
+    );
+    expect(
+      within(rows[0]).queryByTestId("agent-profile-active-badge"),
+    ).not.toBeInTheDocument();
   });
 
   it("opens the delete modal from the row menu", async () => {
