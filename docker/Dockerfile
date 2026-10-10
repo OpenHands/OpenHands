@@ -98,7 +98,7 @@ USER root
 # Refresh inherited packages so the final image includes available security
 # fixes. asyncpg publishes wheels for the supported Python and architectures
 # and implements the PostgreSQL protocol directly, so no libpq package is needed.
-ARG DEBIAN_SNAPSHOT=20261008T000000Z
+ARG DEBIAN_SNAPSHOT=20260930T000000Z
 RUN if command -v apt-get >/dev/null 2>&1; then \
       printf '%s\n' \
         'Types: deb' \
