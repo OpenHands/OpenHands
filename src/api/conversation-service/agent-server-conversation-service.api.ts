@@ -256,10 +256,23 @@ function normalizeLaunchedAgentProfile(
 }
 
 function normalizeAbsolutePath(path: string): string | null {
-  if (!path.startsWith("/")) return null;
+  const normalizedPath = path.replace(/\\/g, "/");
+
+  let root: string;
+  let remainder: string;
+
+  if (/^[A-Za-z]:\//.test(normalizedPath)) {
+    root = normalizedPath.slice(0, 3);
+    remainder = normalizedPath.slice(3);
+  } else if (normalizedPath.startsWith("/")) {
+    root = "/";
+    remainder = normalizedPath.slice(1);
+  } else {
+    return null;
+  }
 
   const segments: string[] = [];
-  for (const segment of path.split("/")) {
+  for (const segment of remainder.split("/")) {
     if (segment && segment !== ".") {
       if (segment === "..") {
         if (!segments.length) return null;
@@ -270,7 +283,7 @@ function normalizeAbsolutePath(path: string): string | null {
     }
   }
 
-  return `/${segments.join("/")}`;
+  return `${root}${segments.join("/")}`;
 }
 
 function requirePathInsideDirectory(path: string, directory: string): string {
