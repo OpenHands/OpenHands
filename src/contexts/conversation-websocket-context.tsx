@@ -301,7 +301,7 @@ export function ConversationWebSocketProvider({
 
       // usage_to_metrics is keyed by arbitrary LLM usage ids ("default",
       // "condenser", "profile:<name>:<uuid>", …) — combine across all of
-      // them, mirroring getCombinedMetrics on the REST path.
+      // them, mirroring combineUsageMetrics on the REST path.
       const combined = Object.values(usageToMetrics).reduce<{
         cost: number;
         maxBudgetPerTask: number | null;

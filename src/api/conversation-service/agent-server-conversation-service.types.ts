@@ -280,6 +280,15 @@ export interface RuntimeConversationStats {
   usage_to_metrics: Record<string, RuntimeMetrics>;
 }
 
+/**
+ * One entry of `Metrics.token_usages`: the provider-reported usage of a
+ * single LLM call. `response_id` matches the `llm_response_id` of the events
+ * that the call produced.
+ */
+export interface RuntimeTokenUsage extends TokenUsage {
+  response_id?: string;
+}
+
 export interface RuntimeMetrics {
   model_name: string;
   accumulated_cost: number;
@@ -287,7 +296,7 @@ export interface RuntimeMetrics {
   accumulated_token_usage: TokenUsage | null;
   costs: Cost[];
   response_latencies: ResponseLatency[];
-  token_usages: TokenUsage[];
+  token_usages: RuntimeTokenUsage[];
 }
 
 export interface Cost {
