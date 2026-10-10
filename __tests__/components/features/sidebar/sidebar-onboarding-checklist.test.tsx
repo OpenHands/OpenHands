@@ -44,6 +44,16 @@ const mockUseAutomations = vi.fn();
 const mockUseSettings = vi.fn();
 const mockUseLlmConfigured = vi.fn();
 const mockUseLlmProfiles = vi.fn();
+const mockHasAutomationInterface = vi.fn(() => true);
+
+vi.mock("#/manifests/automation-interface", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("#/manifests/automation-interface")>();
+  return {
+    ...actual,
+    hasAutomationInterface: () => mockHasAutomationInterface(),
+  };
+});
 
 vi.mock("#/hooks/query/use-paginated-conversations", () => ({
   usePaginatedConversations: () => mockUsePaginatedConversations(),
@@ -97,7 +107,9 @@ describe("SidebarOnboardingChecklist", () => {
   beforeEach(() => {
     window.localStorage.clear();
     window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
-    window.localStorage.removeItem(SIDEBAR_ONBOARDING_CHECKLIST_MINIMIZED_STORAGE_KEY);
+    window.localStorage.removeItem(
+      SIDEBAR_ONBOARDING_CHECKLIST_MINIMIZED_STORAGE_KEY,
+    );
     window.localStorage.removeItem(
       SIDEBAR_ONBOARDING_CHECKLIST_CUSTOMIZE_EXPLORED_STORAGE_KEY,
     );
@@ -129,6 +141,7 @@ describe("SidebarOnboardingChecklist", () => {
       data: { active_profile: null, profiles: [] },
       isLoading: false,
     });
+    mockHasAutomationInterface.mockReturnValue(true);
   });
 
   it("renders setup items including LLM keys, agent profiles, schedule a task, and Slack", () => {
@@ -252,6 +265,24 @@ describe("SidebarOnboardingChecklist", () => {
     ).toHaveClass("line-through");
   });
 
+  it("omits Schedule a task when automation interface is absent", () => {
+    mockHasAutomationInterface.mockReturnValue(false);
+    renderChecklist();
+
+    expect(
+      screen.getByTestId("sidebar-onboarding-checklist"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("sidebar-onboarding-checklist-item-schedule-task"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("sidebar-onboarding-checklist-item-configure-llm"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("sidebar-onboarding-checklist-item-connect-mcp"),
+    ).toBeInTheDocument();
+  });
+
   it("hides when the welcome onboarding flow is not complete", () => {
     window.localStorage.removeItem(ONBOARDING_COMPLETED_STORAGE_KEY);
     renderChecklist();
@@ -286,7 +317,10 @@ describe("SidebarOnboardingChecklist", () => {
 
   it("hides when collapsed", () => {
     const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
     });
     const navigation: NavigationContextValue = {
       currentPath: "/",
