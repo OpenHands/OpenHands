@@ -5,6 +5,7 @@ import { useBtwStore } from "#/stores/btw-store";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
 import { BTW_COMMAND } from "#/utils/constants";
+import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
 
 const BTW_PREFIX = `${BTW_COMMAND} `;
 
@@ -40,7 +41,11 @@ export const useBtwInterceptor = (
       askAgent(conversationId, question)
         .then(({ response }) => resolve(conversationId, entryId, response))
         .catch((err) =>
-          fail(conversationId, entryId, err?.message ?? "Failed to ask agent"),
+          fail(
+            conversationId,
+            entryId,
+            retrieveAxiosErrorMessage(err) || t(I18nKey.ERROR$GENERIC),
+          ),
         );
     },
     [conversationId, onSubmit, addPending, resolve, fail, t],
