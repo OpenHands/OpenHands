@@ -38,7 +38,7 @@ export function SettingsSwitch({
 
   const input = (
     <input
-      hidden
+      className="sr-only peer"
       data-testid={testId}
       name={name}
       type="checkbox"
@@ -49,7 +49,10 @@ export function SettingsSwitch({
   );
 
   const toggle = (
-    <ToggleSwitchVisual enabled={controlledIsToggled ?? isToggled} />
+    <ToggleSwitchVisual
+      enabled={controlledIsToggled ?? isToggled}
+      className="peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-contrast"
+    />
   );
 
   const label =
