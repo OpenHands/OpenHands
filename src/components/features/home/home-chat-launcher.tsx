@@ -68,7 +68,9 @@ export function HomeChatLauncher() {
   const [selectedPlugins, setSelectedPlugins] = useState<PluginSpec[]>([]);
   const [isPluginPickerOpen, setIsPluginPickerOpen] = useState(false);
   const [launcherMode, setLauncherMode] = useState<HomeLauncherMode>("code");
+  const displayedLauncherMode = launcherMode;
   const isAutomateMode = launcherMode === "automate";
+  const handleLauncherModeChange = setLauncherMode;
   const isMountedRef = useRef(true);
 
   useEffect(() => {
@@ -137,6 +139,7 @@ export function HomeChatLauncher() {
     // query here would create a duplicate text-only initial_message.
     let variables: Parameters<typeof createConversation>[0] = {
       query: hasAttachments ? undefined : trimmed || undefined,
+      automationSetup: isAutomateMode,
       entryPoint: "home_chat_launcher",
     };
     // An isolated backend owns its workspace, so a host selection left over
@@ -292,8 +295,8 @@ export function HomeChatLauncher() {
 
         <div className="flex w-full justify-center">
           <HomeLauncherModeToggle
-            mode={launcherMode}
-            onChange={setLauncherMode}
+            mode={displayedLauncherMode}
+            onChange={handleLauncherModeChange}
           />
         </div>
 

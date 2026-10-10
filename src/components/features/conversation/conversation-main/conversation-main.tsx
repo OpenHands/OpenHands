@@ -368,6 +368,7 @@ export function ConversationMain() {
           >
             <AutomationSetupPanel
               draft={automationSetupDraft}
+              conversationId={conversationId}
               toolbarPortal={automationToolbarElement}
               showInlineHeader={false}
               reserveComposerSpace
@@ -404,6 +405,7 @@ export function ConversationMain() {
                 {automationSetupDraft ? (
                   <AutomationSetupPanel
                     draft={automationSetupDraft}
+                    conversationId={conversationId}
                     toolbarPortal={automationToolbarElement}
                     showInlineHeader={false}
                     reserveComposerSpace={showDockedComposer}

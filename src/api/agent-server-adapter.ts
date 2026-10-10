@@ -59,6 +59,7 @@ import {
   LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL,
   LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
 } from "./launch-child-conversation-client-tool";
+import { AUTOMATION_FORM_UPDATE_CLIENT_TOOL } from "./automation-form-client-tool";
 import {
   buildPlanPath,
   LOCAL_PLANNER_PARENT_TAG_KEY,
@@ -1196,6 +1197,7 @@ type RawAgentStartConversationPayload = StartConversationPayloadBase & {
 export interface StartConversationOptions {
   settings: Settings;
   query?: string;
+  automationSetup?: boolean;
   conversationInstructions?: string;
   plugins?: PluginSpec[];
   conversationId?: string;
@@ -1356,7 +1358,13 @@ export function buildStartConversationRequest(
     // conversations can start.
     client_tools:
       launchAgentKind === "openhands"
-        ? [CANVAS_UI_CLIENT_TOOL, LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL]
+        ? [
+            CANVAS_UI_CLIENT_TOOL,
+            LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL,
+            ...(options.automationSetup
+              ? [AUTOMATION_FORM_UPDATE_CLIENT_TOOL]
+              : []),
+          ]
         : [],
     confirmation_policy:
       getConversationConfirmationPolicy(conversationSettings),
@@ -1713,6 +1721,7 @@ export async function assertSubscriptionAuthReady(
 export async function buildStartConversationRequestWithEncryptedSettings(options: {
   settings: Settings;
   query?: string;
+  automationSetup?: boolean;
   conversationInstructions?: string;
   plugins?: PluginSpec[];
   conversationId?: string;
