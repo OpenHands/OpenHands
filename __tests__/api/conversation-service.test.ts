@@ -106,7 +106,7 @@ describe("ConversationService", () => {
       );
     });
 
-    it("uses the current conversation session key and reports per-file failures", async () => {
+    it("authenticates with the active local backend key and reports per-file failures", async () => {
       ConversationService.setCurrentConversation({
         id: "conv-1",
         session_api_key: "session-key",
@@ -121,7 +121,7 @@ describe("ConversationService", () => {
       ]);
 
       expect(RemoteWorkspace).toHaveBeenCalledWith(
-        expect.objectContaining({ apiKey: "session-key" }),
+        expect.objectContaining({ apiKey: "test-session-key" }),
       );
       expect(result).toEqual({
         uploaded_files: ["ok.txt"],
