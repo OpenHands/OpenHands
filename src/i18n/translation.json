@@ -34169,23 +34169,6 @@
     "uk": "Активувати",
     "ca": "Activa"
   },
-  "SETTINGS$PROFILE_SET_ACTIVE": {
-    "en": "Set as active",
-    "ja": "アクティブに設定",
-    "zh-CN": "设为活动",
-    "zh-TW": "設為使用中",
-    "ko-KR": "활성으로 설정",
-    "no": "Sett som aktiv",
-    "it": "Imposta come attivo",
-    "pt": "Definir como ativo",
-    "es": "Establecer como activo",
-    "ar": "تعيين كنشط",
-    "fr": "Définir comme actif",
-    "tr": "Aktif olarak ayarla",
-    "de": "Als aktiv festlegen",
-    "uk": "Встановити як активний",
-    "ca": "Establir com a actiu"
-  },
   "SETTINGS$PROFILE_DEFAULT": {
     "en": "Default",
     "ja": "デフォルト",
