@@ -1,0 +1,73 @@
+{
+  "ok": true,
+  "total": 7,
+  "byOrigin": {
+    "http://127.0.0.1:18900": 6,
+    "http://127.0.0.1:18910": 1
+  },
+  "recent": [
+    {
+      "ts": "2026-10-09T19:36:28.453Z",
+      "origin": "http://127.0.0.1:18900",
+      "path": "/api/settings",
+      "method": "GET",
+      "type": "fetch",
+      "app": true,
+      "status": 200
+    },
+    {
+      "ts": "2026-10-09T19:36:28.761Z",
+      "origin": "http://127.0.0.1:18900",
+      "path": "/api/settings",
+      "method": "GET",
+      "type": "fetch",
+      "app": true,
+      "status": 502
+    },
+    {
+      "ts": "2026-10-09T19:36:29.062Z",
+      "origin": "http://127.0.0.1:18900",
+      "path": "/api/settings",
+      "method": "GET",
+      "type": "fetch",
+      "app": true,
+      "status": 502
+    },
+    {
+      "ts": "2026-10-09T19:36:31.241Z",
+      "origin": "http://127.0.0.1:18900",
+      "path": "/api/settings",
+      "method": "GET",
+      "type": "fetch",
+      "app": true,
+      "status": 502
+    },
+    {
+      "ts": "2026-10-09T19:36:31.452Z",
+      "origin": "http://127.0.0.1:18910",
+      "path": "/api/settings",
+      "method": "GET",
+      "type": "fetch",
+      "app": false,
+      "status": 200
+    },
+    {
+      "ts": "2026-10-09T19:36:31.848Z",
+      "origin": "http://127.0.0.1:18900",
+      "path": "/api/settings",
+      "method": "GET",
+      "type": "fetch",
+      "app": true,
+      "status": 502
+    },
+    {
+      "ts": "2026-10-09T19:36:32.770Z",
+      "origin": "http://127.0.0.1:18900",
+      "path": "/api/settings",
+      "method": "GET",
+      "type": "fetch",
+      "app": true,
+      "status": 502
+    }
+  ]
+}
