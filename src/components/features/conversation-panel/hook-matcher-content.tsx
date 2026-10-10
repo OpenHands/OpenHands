@@ -2,7 +2,10 @@ import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { Typography } from "#/ui/typography";
 import { Pre } from "#/ui/pre";
-import { HookMatcher } from "#/api/conversation-service/agent-server-conversation-service.types";
+import {
+  HookDefinition,
+  HookMatcher,
+} from "#/api/conversation-service/agent-server-conversation-service.types";
 
 interface HookMatcherContentProps {
   matcher: HookMatcher;
@@ -10,6 +13,16 @@ interface HookMatcherContentProps {
 
 const HOOK_PILL_CLASS =
   "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium leading-4 border border-border bg-surface text-tertiary-light";
+
+function getHookText(hook: HookDefinition): string | undefined {
+  if (hook.type === "agent") {
+    return hook.system_prompt || undefined;
+  }
+  if (hook.type === "prompt") {
+    return hook.prompt || undefined;
+  }
+  return hook.command || undefined;
+}
 
 export function HookMatcherContent({ matcher }: HookMatcherContentProps) {
   const { t } = useTranslation("openhands");
@@ -28,9 +41,7 @@ export function HookMatcherContent({ matcher }: HookMatcherContentProps) {
           {t(I18nKey.HOOKS_MODAL$COMMANDS)}
         </Typography.Text>
         {(matcher.hooks ?? []).map((hook, index) => {
-          // Prompt and agent hooks carry their text in `prompt`/`system_prompt`
-          // with an empty `command`; only command hooks are guaranteed a command.
-          const text = hook.command || hook.prompt || hook.system_prompt;
+          const text = getHookText(hook);
           return (
             <div key={`${text}-${index}`} className="mt-2">
               {text ? (
