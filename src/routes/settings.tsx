@@ -102,9 +102,12 @@ function SettingsScreen() {
     return <Navigate to={LOCKED_CLOUD_SETTINGS_NAV_PATH} replace />;
   }
 
-  // SettingsLayout renders the page's only <main> landmark (#17909).
+  // SettingsLayout renders the page's only <main> landmark (#17909). Its
+  // h-full needs this definite height, as Customize roots provide: below lg,
+  // main then fills the column and scrolls, and popovers inside it are not
+  // clipped on short pages (#18255).
   return (
-    <div data-testid="settings-screen" className="min-h-0">
+    <div data-testid="settings-screen" className="h-full min-h-0">
       <SettingsSectionHeaderProvider
         setHideSectionHeader={setHideSectionHeader}
       >

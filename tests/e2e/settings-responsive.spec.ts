@@ -77,6 +77,24 @@ for (const width of [390, 767, 768, 820, 1023, 1024, 1440]) {
         await main.evaluate((el) => el.scrollWidth <= el.clientWidth + 1),
       ).toBe(true);
     }
+    if (compact) {
+      // As on Customize, Settings' main fills the column and scrolls itself,
+      // so a popover inside it is not clipped on a short page (#18255).
+      for (const [route, scrolls] of [
+        ["/settings/secrets", false],
+        ["/settings/app", true],
+      ] as const) {
+        await openMockPage(page, route);
+        const main = page.locator("main").last();
+        await expect(main).toBeVisible();
+        const fit = await main.evaluate((el) => ({
+          bottom: el.getBoundingClientRect().bottom,
+          scrolls: el.scrollHeight > el.clientHeight,
+        }));
+        expect(Math.abs(fit.bottom - 1024)).toBeLessThanOrEqual(1);
+        expect(fit.scrolls).toBe(scrolls);
+      }
+    }
     await openMockPage(page, "/settings");
     if (compact)
       await expect(page.getByTestId("settings-mobile-hub")).toBeVisible();
