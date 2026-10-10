@@ -58,6 +58,7 @@ import {
 import { AUTOMATION_DRAFTS_FEATURE } from "#/constants/automation-form";
 
 const AUTOMATION_BASE_PATH = "/api/automation";
+const AUTOMATION_PREFLIGHT_TIMEOUT_SECONDS = 90;
 
 type AutomationDraftCreateTarget = SetupEntry | "prompt" | "plugin" | "custom";
 
@@ -780,12 +781,14 @@ class AutomationService {
         path,
         body,
         headers: await buildAutomationRequestHeaders(),
+        timeoutSeconds: AUTOMATION_PREFLIGHT_TIMEOUT_SECONDS,
       });
     }
 
     const { data } = await localAutomationAxios.post<ValidateDraftResponse>(
       path,
       body,
+      { timeout: AUTOMATION_PREFLIGHT_TIMEOUT_SECONDS * 1000 },
     );
     return data;
   }
