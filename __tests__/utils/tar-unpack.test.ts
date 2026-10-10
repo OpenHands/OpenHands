@@ -68,6 +68,66 @@ describe("unpackTarGzip", () => {
     expect(entries[0].path).toBe("lib/util.py");
   });
 
+  it("reads back a UTF-8 member name the packer wrote", async () => {
+    // Arrange
+    const archive = new Uint8Array(
+      await packTarGzip([{ name: "café.py", content: "1" }]),
+    );
+
+    // Act
+    const entries = await unpackTarGzip(archive, budget);
+
+    // Assert
+    expect(entries[0].path).toBe("café.py");
+  });
+
+  it("reads a UTF-8 prefix field", async () => {
+    // Arrange
+    const archive = packTar([{ name: "main.py", content: "1" }]);
+    archive.set(new TextEncoder().encode("données"), PREFIX_OFFSET);
+
+    // Act
+    const entries = await unpackTarGzip(archive, budget);
+
+    // Assert
+    expect(entries[0].path).toBe("données/main.py");
+  });
+
+  it("reads a UTF-8 name up to its NUL, whatever follows", async () => {
+    // Arrange: a byte that is not UTF-8 in the name field after the NUL.
+    const archive = packTar([{ name: "café.py", content: "1" }]);
+    archive[40] = 0xff;
+
+    // Act
+    const entries = await unpackTarGzip(archive, budget);
+
+    // Assert
+    expect(entries[0].path).toBe("café.py");
+  });
+
+  it("keeps a leading U+FEFF as part of a name", async () => {
+    // Arrange
+    const archive = packTar([{ name: "\uFEFFmain.py", content: "1" }]);
+
+    // Act
+    const entries = await unpackTarGzip(archive, budget);
+
+    // Assert
+    expect(entries[0].path).toBe("\uFEFFmain.py");
+  });
+
+  it("still reads a legacy Latin-1 member name", async () => {
+    // Arrange: `café.py` with é as the single byte 0xe9, which is not UTF-8.
+    const archive = packTar([{ name: "cafe.py", content: "1" }]);
+    archive[3] = 0xe9;
+
+    // Act
+    const entries = await unpackTarGzip(archive, budget);
+
+    // Assert
+    expect(entries[0].path).toBe("café.py");
+  });
+
   it("skips members that are not regular files", async () => {
     // Arrange: mark the first member as a directory.
     const archive = packTar([

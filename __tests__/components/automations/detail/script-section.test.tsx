@@ -96,6 +96,30 @@ describe("ScriptSection", () => {
     expect(AutomationService.fetchTarballBytes).toHaveBeenCalledWith("auto-1");
   });
 
+  it("badges an entrypoint whose file name is not ASCII", async () => {
+    // Arrange
+    vi.spyOn(AutomationService, "fetchTarballBytes").mockResolvedValue(
+      new Uint8Array(
+        await packTarGzip([
+          { name: "app.py", content: "x = 1\n" },
+          { name: "café.py", content: "print('hi')\n" },
+        ]),
+      ),
+    );
+
+    // Act
+    renderSection({ ...automation, entrypoint: "python café.py" });
+
+    // Assert
+    expect(await screen.findAllByTestId("automation-script-file")).toHaveLength(
+      2,
+    );
+    expect(filePaths()).toEqual(["café.py", "app.py"]);
+    expect(
+      screen.getAllByText(I18nKey.AUTOMATIONS$DETAIL$SCRIPT_ENTRYPOINT),
+    ).toHaveLength(1);
+  });
+
   it("shows a loading message until the bundle arrives", () => {
     // Arrange
     vi.spyOn(AutomationService, "fetchTarballBytes").mockReturnValue(
