@@ -13,9 +13,10 @@ import type { Backend } from "#/api/backend-registry/types";
 
 // ─── SDK client mocks ───────────────────────────────────────────────────────
 
-const { executeCommandMock, downloadFileMock } = vi.hoisted(() => ({
+const { executeCommandMock, downloadFileMock, closeMock } = vi.hoisted(() => ({
   executeCommandMock: vi.fn(),
   downloadFileMock: vi.fn(),
+  closeMock: vi.fn(),
 }));
 
 vi.mock("@openhands/typescript-client/workspace/remote-workspace", () => ({
@@ -26,7 +27,7 @@ vi.mock("@openhands/typescript-client/workspace/remote-workspace", () => ({
 
 vi.mock("@openhands/typescript-client/clients", () => ({
   FileClient: vi.fn(function FileClientMock() {
-    return { downloadFile: downloadFileMock };
+    return { downloadFile: downloadFileMock, close: closeMock };
   }),
 }));
 
@@ -72,6 +73,7 @@ beforeEach(() => {
   vi.mocked(FileClient).mockClear();
   executeCommandMock.mockReset();
   downloadFileMock.mockReset();
+  closeMock.mockReset();
   vi.mocked(callCloudProxy).mockReset();
   vi.mocked(getAgentServerClientOptions).mockReset();
   vi.mocked(getAgentServerClientOptions).mockReturnValue({
@@ -258,6 +260,18 @@ describe("AgentServerRuntimeService.executeCommand", () => {
 // ─── downloadFile ─────────────────────────────────────────────────────────────
 
 describe("AgentServerRuntimeService.downloadFile", () => {
+  // @spec FD-001 — Release download clients even when the request fails
+  it("closes the client and preserves the download error", async () => {
+    const error = new Error("File not found");
+    downloadFileMock.mockRejectedValueOnce(error);
+
+    await expect(
+      AgentServerRuntimeService.downloadFile(null, null, "/missing.txt"),
+    ).rejects.toBe(error);
+
+    expect(closeMock).toHaveBeenCalledOnce();
+  });
+
   describe("local backend", () => {
     it("creates FileClient with resolved options and returns the ArrayBuffer", async () => {
       const fileBytes = new TextEncoder().encode("# README");
@@ -274,6 +288,7 @@ describe("AgentServerRuntimeService.downloadFile", () => {
         "/workspace/project/README.md",
       );
       expect(result).toBe(fileBytes.buffer);
+      expect(closeMock).toHaveBeenCalledOnce();
     });
 
     it("does not call callCloudProxy for local backends", async () => {
