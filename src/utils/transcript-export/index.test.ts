@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type {
   ActionEvent,
   AgentErrorEvent,
+  ConversationErrorEvent,
   MessageEvent,
   ObservationEvent,
 } from "#/types/agent-server/core";
@@ -189,6 +190,26 @@ describe("conversation transcript export", () => {
     expect(markdown).toContain("> Command failed with exit code 1");
     expect(markdown).toContain(`${"x".repeat(1000)}...`);
     expect(markdown).not.toContain("x".repeat(1001));
+  });
+
+  // @spec CE-002 — Transcript exports retain conversation error details
+  it("exports conversation errors in Markdown and HTML", () => {
+    const errorEvent: ConversationErrorEvent = {
+      id: "conversation-error-1",
+      timestamp,
+      kind: "ConversationErrorEvent",
+      source: "environment",
+      code: "LLMBadRequestError",
+      detail: 'The model "missing-model" does not exist.',
+    };
+
+    const markdown = eventsToMarkdown([errorEvent], defaultOptions);
+    const html = eventsToHtml([errorEvent], defaultOptions);
+
+    expect(markdown).toContain(`> ${errorEvent.detail}`);
+    expect(html).toContain(
+      "The model &quot;missing-model&quot; does not exist.",
+    );
   });
 
   it("exports assistant narration once when an observation replaces its action", () => {
