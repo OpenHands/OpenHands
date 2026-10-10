@@ -213,6 +213,14 @@ export function LlmSettingsScreen({
       currentSettings: Settings,
       filteredSchema: SettingsSchema,
     ): SettingsView => {
+      // Embedded profile forms (create/edit, onboarding) always start on
+      // Basic. The inference below reads the *global* settings, so an
+      // advanced override or custom base URL there would otherwise open an
+      // unrelated profile on Advanced/All.
+      if (embedded) {
+        return "basic";
+      }
+
       const schemaView = inferInitialView(currentSettings, filteredSchema);
       if (schemaView !== "basic") {
         return schemaView;
@@ -226,7 +234,7 @@ export function LlmSettingsScreen({
 
       return hasCustomBaseUrl ? "all" : "basic";
     },
-    [],
+    [embedded],
   );
 
   const buildHeader = React.useCallback(
