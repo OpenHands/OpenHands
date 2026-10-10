@@ -24,11 +24,27 @@ const localBackend: Backend = {
   kind: "local",
 };
 
+const secondLocalBackend: Backend = {
+  id: "local-2",
+  name: "Local 2",
+  host: "http://localhost:8001",
+  apiKey: "second-session-key",
+  kind: "local",
+};
+
 const cloudBackend: Backend = {
   id: "cloud-1",
   name: "Production",
   host: "https://app.all-hands.dev",
   apiKey: "bearer-key",
+  kind: "cloud",
+};
+
+const secondCloudBackend: Backend = {
+  id: "cloud-2",
+  name: "Staging",
+  host: "https://staging.all-hands.dev",
+  apiKey: "second-bearer-key",
   kind: "cloud",
 };
 
@@ -72,10 +88,12 @@ function makeSkill(name: string): SkillInfo {
   };
 }
 
-function makeWrapper(conversationId: string | null) {
-  const queryClient = new QueryClient({
+function makeWrapper(
+  conversationId: string | null,
+  queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
-  });
+  }),
+) {
   function Wrapper({ children }: { children: React.ReactNode }) {
     return (
       <QueryClientProvider client={queryClient}>
@@ -100,7 +118,12 @@ function makeWrapper(conversationId: string | null) {
 beforeEach(() => {
   window.localStorage.clear();
   __resetActiveStoreForTests();
-  setRegisteredBackends([localBackend, cloudBackend]);
+  setRegisteredBackends([
+    localBackend,
+    secondLocalBackend,
+    cloudBackend,
+    secondCloudBackend,
+  ]);
   // Mock the services the hook depends on, not the hooks themselves.
   vi.spyOn(
     AgentServerConversationService,
@@ -195,5 +218,58 @@ describe("useConversationSkills", () => {
     );
     expect(SkillsService.getSkills).toHaveBeenCalledWith(undefined);
     expect(SkillsService.getConversationSkills).not.toHaveBeenCalled();
+  });
+
+  it("refetches workspace skills after switching local backends", async () => {
+    setActiveSelection({ backendId: localBackend.id });
+    vi.mocked(SkillsService.getSkills).mockResolvedValue([
+      makeSkill("local-one"),
+    ]);
+    const { wrapper } = makeWrapper(CONVERSATION_ID);
+    const { result } = renderHook(() => useConversationSkills(), { wrapper });
+
+    await waitFor(() =>
+      expect(result.current.data).toEqual([makeSkill("local-one")]),
+    );
+
+    vi.mocked(SkillsService.getSkills).mockResolvedValue([
+      makeSkill("local-two"),
+    ]);
+    setActiveSelection({ backendId: secondLocalBackend.id });
+
+    await waitFor(() =>
+      expect(result.current.data).toEqual([makeSkill("local-two")]),
+    );
+  });
+
+  it("refetches conversation skills after switching cloud backends", async () => {
+    setActiveSelection({ backendId: cloudBackend.id });
+    vi.mocked(SkillsService.getConversationSkills).mockResolvedValue([
+      makeSkill("cloud-one"),
+    ]);
+    const { wrapper, queryClient } = makeWrapper(CONVERSATION_ID);
+    const first = renderHook(() => useConversationSkills(), { wrapper });
+
+    await waitFor(() =>
+      expect(first.result.current.data).toEqual([makeSkill("cloud-one")]),
+    );
+    first.unmount();
+
+    vi.mocked(SkillsService.getConversationSkills).mockResolvedValue([
+      makeSkill("cloud-two"),
+    ]);
+    setActiveSelection({ backendId: secondCloudBackend.id });
+    const { wrapper: secondWrapper } = makeWrapper(
+      CONVERSATION_ID,
+      queryClient,
+    );
+    const second = renderHook(() => useConversationSkills(), {
+      wrapper: secondWrapper,
+    });
+
+    await waitFor(() =>
+      expect(second.result.current.data).toEqual([makeSkill("cloud-two")]),
+    );
+    expect(SkillsService.getConversationSkills).toHaveBeenCalledTimes(2);
   });
 });
