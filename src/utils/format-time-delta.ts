@@ -34,12 +34,13 @@ export const parseDateAsUTC = (dateString: string): Date => {
  * formatTimeDelta(new Date("2023-12-31T23:59:59Z")); // "1s"
  * formatTimeDelta("2023-12-31T23:59:59Z"); // "1s"
  * formatTimeDelta("2025-12-01T11:53:37.273886"); // Parsed as UTC automatically
+ * formatTimeDelta(new Date("2024-01-01T00:00:05Z")); // "0s", a future date clamps to zero
  */
 export const formatTimeDelta = (date: Date | string) => {
   // Parse string dates as UTC if needed, or use Date object directly
   const dateObj = typeof date === "string" ? parseDateAsUTC(date) : date;
   const now = new Date();
-  const delta = now.getTime() - dateObj.getTime();
+  const delta = Math.max(0, now.getTime() - dateObj.getTime());
 
   const seconds = Math.floor(delta / 1000);
   const minutes = Math.floor(seconds / 60);

@@ -72,4 +72,12 @@ describe("formatTimeDelta", () => {
     const threeSecondsAgo = new Date("2023-12-31T23:59:57Z");
     expect(formatTimeDelta(threeSecondsAgo)).toBe("3s");
   });
+
+  it("shows 0s for a timestamp slightly in the future", () => {
+    const oneMillisecondAhead = new Date("2024-01-01T00:00:00.001Z");
+    expect(formatTimeDelta(oneMillisecondAhead)).toBe("0s");
+
+    const fiveSecondsAhead = new Date("2024-01-01T00:00:05Z");
+    expect(formatTimeDelta(fiveSecondsAhead)).toBe("0s");
+  });
 });
