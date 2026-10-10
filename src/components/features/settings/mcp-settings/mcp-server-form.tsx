@@ -170,16 +170,19 @@ export function MCPServerForm({
     return null;
   };
 
-  const validateEnvFormat = (envString: string): string | null => {
+  const validateEnvFormat = (
+    envString: string,
+    errorKey: I18nKey = I18nKey.SETTINGS$MCP_ERROR_ENV_INVALID_FORMAT,
+  ): string | null => {
     if (!envString.trim()) return null;
     const lines = envString.split("\n");
     for (let i = 0; i < lines.length; i += 1) {
       const trimmed = lines[i].trim();
       if (trimmed) {
         const eq = trimmed.indexOf("=");
-        if (eq === -1) return t(I18nKey.SETTINGS$MCP_ERROR_ENV_INVALID_FORMAT);
+        if (eq === -1) return t(errorKey);
         const key = trimmed.substring(0, eq).trim();
-        if (!key) return t(I18nKey.SETTINGS$MCP_ERROR_ENV_INVALID_FORMAT);
+        if (!key) return t(errorKey);
       }
     }
     return null;
@@ -190,7 +193,10 @@ export function MCPServerForm({
       const headerString = formData.get("headers")?.toString() || "";
       if (!headerString.trim())
         return t(I18nKey.SETTINGS$MCP_ERROR_HEADER_REQUIRED);
-      return validateEnvFormat(headerString);
+      return validateEnvFormat(
+        headerString,
+        I18nKey.SETTINGS$MCP_ERROR_HEADER_INVALID_FORMAT,
+      );
     }
     if (authMode === "oauth2") {
       const clientId = formData.get("oauth_client_id")?.toString().trim();

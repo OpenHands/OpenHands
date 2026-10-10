@@ -26128,6 +26128,23 @@
     "uk": "read write",
     "ca": "read write"
   },
+  "SETTINGS$MCP_ERROR_HEADER_INVALID_FORMAT": {
+    "en": "Headers must follow KEY=value format",
+    "ja": "ヘッダーは KEY=value 形式に従う必要があります",
+    "zh-CN": "请求头必须遵循 KEY=value 格式",
+    "zh-TW": "標頭必須遵循 KEY=value 格式",
+    "ko-KR": "헤더는 KEY=value 형식을 따라야 합니다",
+    "no": "Headere må følge formatet KEY=value",
+    "it": "Le intestazioni devono seguire il formato KEY=value",
+    "pt": "Os cabeçalhos devem seguir o formato KEY=value",
+    "es": "Los encabezados deben seguir el formato KEY=value",
+    "ar": "يجب أن تتبع الترويسات تنسيق KEY=value",
+    "fr": "Les en-têtes doivent suivre le format KEY=value",
+    "tr": "Üst bilgiler KEY=value biçiminde olmalıdır",
+    "de": "Header müssen dem Format KEY=value folgen",
+    "uk": "Заголовки мають відповідати формату KEY=value",
+    "ca": "Les capçaleres han de seguir el format KEY=value"
+  },
   "SETTINGS$MCP_ERROR_HEADER_REQUIRED": {
     "en": "Header authentication requires a header",
     "ja": "ヘッダー認証にはヘッダーが必要です",
