@@ -103,6 +103,7 @@ export function ModelMessages({
         return (
           <GenericEventMessage
             key={entry.id}
+            expansionId={`model-${entry.id}`}
             title={
               <span>
                 {isEmpty ? (

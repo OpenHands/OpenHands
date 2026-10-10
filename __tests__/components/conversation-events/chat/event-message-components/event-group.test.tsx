@@ -1,8 +1,10 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "test-utils";
 import { EventGroup } from "#/components/conversation-events/chat/event-message-components/event-group";
+import { RowExpansionContext } from "#/components/features/chat/row-expansion-context";
+import { useMessageExpansionStore } from "#/stores/message-expansion-store";
 import {
   ActionEvent,
   ObservationEvent,
@@ -67,6 +69,10 @@ const makeBashObservation = (
 });
 
 describe("EventGroup", () => {
+  beforeEach(() => {
+    useMessageExpansionStore.setState({ expanded: {} });
+  });
+
   it("returns null for an empty events array", () => {
     const { container } = renderWithProviders(
       <EventGroup events={[]}>
@@ -277,5 +283,35 @@ describe("EventGroup", () => {
       toggle.querySelector('[data-testid="path-component-link"]'),
     ).toBeNull();
     expect(toggle.querySelectorAll("button")).toHaveLength(0);
+  });
+
+  it("restores the expanded state when a row key is supplied", async () => {
+    const events = [
+      makeBashObservation("o1", "a1", "ls"),
+      makeBashObservation("o2", "a2", "pwd"),
+    ];
+    const user = userEvent.setup();
+    const renderGroup = () =>
+      renderWithProviders(
+        <RowExpansionContext.Provider value="row-1">
+          <EventGroup events={events}>
+            <div data-testid="child">child content</div>
+          </EventGroup>
+        </RowExpansionContext.Provider>,
+      );
+
+    const { unmount } = renderGroup();
+    await user.click(screen.getByTestId("event-group-toggle"));
+    expect(screen.getByTestId("child")).toBeInTheDocument();
+
+    // The virtualized list unmounts the row when it scrolls away…
+    unmount();
+    // …and remounts it, which must restore the user's expansion.
+    renderGroup();
+    expect(screen.getByTestId("child")).toBeInTheDocument();
+    expect(screen.getByTestId("event-group-toggle")).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
   });
 });

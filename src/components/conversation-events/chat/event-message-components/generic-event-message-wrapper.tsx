@@ -30,6 +30,13 @@ interface GenericEventMessageWrapperProps {
   event: OpenHandsEvent | SkillReadyEvent;
   isLastMessage: boolean;
   correspondingAction?: ActionEvent;
+  /**
+   * Distinguishes this card's expand control from any sibling rendered in the
+   * same virtualized row. Several wrappers can share one row (an event group,
+   * or model entries anchored to the same event), and without a distinct id
+   * they would all derive the same persisted key and expand together.
+   */
+  expansionId?: string;
 }
 
 /**
@@ -67,6 +74,7 @@ function getSkillKnowledge(
 export function GenericEventMessageWrapper({
   event,
   correspondingAction,
+  expansionId,
 }: GenericEventMessageWrapperProps) {
   const { title, details } = getEventContent(event, correspondingAction);
 
@@ -115,6 +123,7 @@ export function GenericEventMessageWrapper({
         details={bodyDetails}
         success={success}
         initiallyExpanded={initiallyExpanded}
+        expansionId={expansionId}
         timestamp={event.timestamp}
         titleIcon={
           skillKnowledge ? (
