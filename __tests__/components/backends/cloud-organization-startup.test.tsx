@@ -10,7 +10,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { QueryClient } from "@tanstack/react-query";
+import { QueryClient, useQuery } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AgentServerUIProviders } from "#/components/providers/agent-server-ui-providers";
 import {
@@ -25,6 +25,8 @@ import {
   getCurrentCloudApiKey,
 } from "#/api/cloud/organization-service.api";
 import SettingsService from "#/api/settings-service/settings-service.api";
+import { fetchCloudSettings } from "#/api/cloud/settings-service.api";
+import { useActiveBackendContext } from "#/contexts/active-backend-context";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import { useSettings } from "#/hooks/query/use-settings";
 
@@ -62,6 +64,16 @@ function SettingsConsumer() {
   return settings.isSuccess ? (
     <input aria-label="Draft" defaultValue="saved" />
   ) : null;
+}
+
+function CloudSettingsConsumer() {
+  const { active } = useActiveBackendContext();
+  const settings = useQuery({
+    queryKey: ["cloud-settings", active.orgId],
+    queryFn: fetchCloudSettings,
+    retry: false,
+  });
+  return settings.isSuccess ? <span>Workspace ready</span> : null;
 }
 
 function OrganizationConsumer() {
@@ -361,5 +373,97 @@ describe("Cloud organization startup", () => {
     await waitFor(() =>
       expect(getActiveSelection()?.orgId).toBe("current-org"),
     );
+  });
+
+  describe("suspended organization", () => {
+    const originalFetch = global.fetch;
+
+    // The cloud refuses org-scoped calls for `refusedOrgId` with `detail`.
+    function arrangeRefusedOrg(refusedOrgId: string, detail: string) {
+      setActiveSelection({ backendId: cloud.id, orgId: refusedOrgId });
+      vi.mocked(getCloudOrganizations).mockResolvedValue({
+        items: [
+          { id: "personal-org", name: "Personal", is_personal: true },
+          { id: refusedOrgId, name: "Acme" },
+          { id: "beta-org", name: "Beta" },
+        ],
+        currentOrgId: refusedOrgId,
+      });
+      global.fetch = vi.fn(
+        async (_url: RequestInfo | URL, init?: RequestInit) => {
+          const orgId = (init?.headers as Record<string, string>)["X-Org-Id"];
+          return orgId === refusedOrgId
+            ? new Response(JSON.stringify({ detail }), {
+                status: 403,
+                headers: { "content-type": "application/json" },
+              })
+            : new Response("{}", {
+                status: 200,
+                headers: { "content-type": "application/json" },
+              });
+        },
+      ) as typeof fetch;
+    }
+
+    function renderCloudSettingsConsumer() {
+      const client = new QueryClient({
+        defaultOptions: { queries: { retry: false, retryDelay: 0 } },
+      });
+      render(
+        <AgentServerUIProviders queryClient={client} resolveCloudOrganization>
+          <CloudSettingsConsumer />
+        </AgentServerUIProviders>,
+      );
+    }
+
+    afterEach(() => {
+      global.fetch = originalFetch;
+    });
+
+    it("replaces the app with an explanation and the user's other workspaces", async () => {
+      // Arrange
+      arrangeRefusedOrg("suspended-org", "Organization is suspended");
+
+      // Act
+      renderCloudSettingsConsumer();
+
+      // Assert
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "BACKEND$ORGANIZATION_SUSPENDED",
+      );
+      expect(screen.queryByText("Workspace ready")).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Beta" })).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Acme" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("explains a suspended membership", async () => {
+      // Arrange
+      arrangeRefusedOrg("membership-org", "User membership is suspended");
+
+      // Act
+      renderCloudSettingsConsumer();
+
+      // Assert
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "BACKEND$MEMBERSHIP_SUSPENDED",
+      );
+    });
+
+    it("restores the app after the user switches to another workspace", async () => {
+      // Arrange
+      arrangeRefusedOrg("switched-away-org", "Organization is suspended");
+      renderCloudSettingsConsumer();
+      const betaButton = await screen.findByRole("button", { name: "Beta" });
+
+      // Act
+      fireEvent.click(betaButton);
+
+      // Assert
+      expect(await screen.findByText("Workspace ready")).toBeInTheDocument();
+      expect(getActiveSelection()?.orgId).toBe("beta-org");
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
   });
 });

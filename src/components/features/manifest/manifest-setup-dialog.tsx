@@ -12,6 +12,7 @@ import { cn } from "#/utils/utils";
 import { modalTitleLgClassName } from "#/utils/modal-classes";
 import { getApiErrorBody } from "#/utils/api-error-message";
 import { useTracking } from "#/hooks/use-tracking";
+import { notifySuperAdminSetupStep } from "#/components/features/setup-guide/super-admin-setup-step-event";
 import { useSetupCapabilities } from "#/hooks/query/use-manifest-capabilities";
 import { useSetupPrerequisites } from "#/hooks/query/use-manifest-prerequisites";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
@@ -25,6 +26,7 @@ import {
   buildCreatePayload,
   deriveErrorMap,
   missingCreateEndpoints,
+  supportsAgentProfile,
 } from "#/manifests/automation-setup";
 import {
   actionKinds,
@@ -173,6 +175,9 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
         ),
       )
     : fields;
+  const canSelectAgentProfile =
+    capabilities.capabilities?.features.includes("agentProfiles") === true &&
+    supportsAgentProfile(entry, selectedAction);
   const hasLlmProfileField = useMemo(
     () => Object.values(fields).some((field) => field.type === "llm-profile"),
     [fields],
@@ -269,7 +274,11 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
   const setActionValue = (kind: string) => {
     setSelectedAction(kind);
     const defaults = getInitialFormValues(entry.setup, selectedTrigger, kind);
-    valuesRef.current = { ...defaults, ...valuesRef.current };
+    valuesRef.current = {
+      ...defaults,
+      ...valuesRef.current,
+      ...(supportsAgentProfile(entry, kind) ? {} : { agent_profile_id: "" }),
+    };
     setValues(valuesRef.current);
     setLocalErrors({});
     setServiceErrors(NO_SERVICE_ERRORS);
@@ -373,6 +382,8 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
         automationId: entry.id,
         setupMode,
       });
+      // An assisted setup only starts the conversation that creates it.
+      if (setupMode === "direct") notifySuperAdminSetupStep("first-automation");
       const destination = getDestination(response);
       if (destination) navigate(destination, { replace: true });
       else onClose();
@@ -535,9 +546,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
                   </p>
                 </div>
               )}
-              {capabilities.capabilities?.features.includes(
-                "agentProfiles",
-              ) && (
+              {canSelectAgentProfile && (
                 <AutomationAgentProfileSelector
                   value={
                     typeof values.agent_profile_id === "string"

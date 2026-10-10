@@ -15,7 +15,10 @@ import {
   type AutomationRun,
   type AutomationRunStatusDetail,
 } from "#/types/automation";
-import { getAutomationRunDisplay } from "#/utils/automation-run-display";
+import {
+  getAutomationRunDisplay,
+  getAutomationRunTaskSummary,
+} from "#/utils/automation-run-display";
 import { DebugAutomationButton } from "./debug-automation-button";
 import { RunStatusBadge } from "./run-status-badge";
 
@@ -102,7 +105,10 @@ function RunInspectionSummary({ run }: { run: AutomationRun | undefined }) {
   if (!run) return null;
 
   const display = getAutomationRunDisplay(run);
-  const taskSummary = display.taskOutcome?.outcomeSummary ?? null;
+  const taskSummary =
+    run.status === AutomationRunStatus.COMPLETED
+      ? display.summary
+      : getAutomationRunTaskSummary(run);
   const taskMetadataText = display.customTaskMetadataText;
   const taskStatus =
     run.status === AutomationRunStatus.COMPLETED || display.taskOutcome
@@ -266,7 +272,7 @@ export function RunLogsModal({
         }}
         role="presentation"
       />
-      <div className="relative flex max-h-[80vh] w-full max-w-3xl flex-col rounded-xl border border-border bg-surface p-6">
+      <div className="relative flex max-h-[80vh] w-full max-w-3xl flex-col overflow-y-auto rounded-xl border border-border bg-surface p-6">
         <button
           type="button"
           onClick={onClose}

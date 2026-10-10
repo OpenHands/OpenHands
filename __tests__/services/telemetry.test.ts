@@ -515,6 +515,25 @@ describe("Telemetry Service", () => {
     });
   });
 
+  describe("build-time do-not-track", () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it("never initializes PostHog, even when the provider asks", async () => {
+      vi.stubEnv("VITE_DO_NOT_TRACK", "1");
+      vi.resetModules();
+      const telemetry = await import("#/services/telemetry");
+
+      await expect(telemetry.initializePostHogClient()).resolves.toBeNull();
+      await telemetry.trackInstall();
+      await telemetry.setTelemetryConsent("granted");
+
+      expect(telemetry.getTelemetryConsent()).toBe("denied");
+      expect(mockPosthog.init).not.toHaveBeenCalled();
+    });
+  });
+
   describe("getTelemetryDistinctId", () => {
     it("returns null when consent is not granted", async () => {
       await expect(getTelemetryDistinctId()).resolves.toBeNull();

@@ -55,6 +55,8 @@ interface ToggleSwitchProps {
   enabled: boolean;
   label: string;
   onToggle: () => void;
+  /** Makes the switch inert: not focusable and ignores clicks and keys. */
+  disabled?: boolean;
   className?: string;
 }
 
@@ -62,6 +64,7 @@ export function ToggleSwitch({
   enabled,
   label,
   onToggle,
+  disabled = false,
   className,
 }: ToggleSwitchProps) {
   return (
@@ -70,6 +73,7 @@ export function ToggleSwitch({
       role="switch"
       aria-checked={enabled}
       aria-label={label}
+      disabled={disabled}
       onClick={(e) => {
         e.stopPropagation();
         onToggle();

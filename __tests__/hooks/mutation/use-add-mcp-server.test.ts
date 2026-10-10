@@ -3,7 +3,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import SettingsService from "#/api/settings-service/settings-service.api";
+import { SUPER_ADMIN_SETUP_STEP_EVENT } from "#/components/features/setup-guide/super-admin-setup-step-event";
 import { useAddMcpServer } from "#/hooks/mutation/use-add-mcp-server";
+import { SUPER_ADMIN_SETUP_QUERY_KEYS } from "#/hooks/query/query-keys";
 
 const useSettingsMock = vi.fn();
 vi.mock("#/hooks/query/use-settings", () => ({
@@ -85,6 +87,53 @@ describe("useAddMcpServer", () => {
       transport: "stdio",
       command: "npx",
     });
+  });
+
+  it("marks the Super Admin setup guide's progress stale after adding a server", async () => {
+    vi.spyOn(SettingsService, "createMcpServer").mockResolvedValue(true);
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    const setupStateKey = SUPER_ADMIN_SETUP_QUERY_KEYS.state("cloud-1", 0);
+    client.setQueryData(setupStateKey, { guide_steps: { mcp_server: false } });
+    const { result } = renderHook(() => useAddMcpServer(), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client }, children),
+    });
+
+    await result.current.mutateAsync({
+      id: "",
+      type: "shttp",
+      name: "docs",
+      url: "https://docs.example/mcp",
+    });
+
+    expect(client.getQueryState(setupStateKey)?.isInvalidated).toBe(true);
+  });
+
+  it("tells the Super Admin setup guide that a server was added", async () => {
+    vi.spyOn(SettingsService, "createMcpServer").mockResolvedValue(true);
+    const onSetupStep = vi.fn();
+    window.addEventListener(SUPER_ADMIN_SETUP_STEP_EVENT, onSetupStep);
+    const { result } = renderHook(() => useAddMcpServer(), {
+      wrapper: createWrapper(),
+    });
+
+    await result.current.mutateAsync({
+      id: "",
+      type: "shttp",
+      name: "docs",
+      url: "https://docs.example/mcp",
+    });
+
+    expect(onSetupStep).toHaveBeenCalledTimes(1);
+    expect((onSetupStep.mock.calls[0][0] as CustomEvent).detail).toEqual({
+      id: "add-integration",
+    });
+    window.removeEventListener(SUPER_ADMIN_SETUP_STEP_EVENT, onSetupStep);
   });
 
   it("fails instead of reporting a successful install before settings load", async () => {

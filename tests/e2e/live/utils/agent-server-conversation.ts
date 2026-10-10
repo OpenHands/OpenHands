@@ -197,24 +197,21 @@ function buildLiveLlmSettings(): Record<string, string | number> {
 
 function buildLiveVerificationSettings(
   options: ConfigureLiveAgentServerOptions = {},
-): Record<string, string | number | boolean> {
-  const verificationSettings: Record<string, string | number | boolean> =
-    options.enableCritic
-      ? {
-          critic_enabled: true,
-          critic_mode: "finish_and_message",
-          enable_iterative_refinement: false,
-          critic_api_key: llmApiKey,
-          critic_model_name: llmModel,
-        }
-      : {
-          critic_enabled: false,
-          enable_iterative_refinement: false,
-        };
-  if (options.enableCritic && llmBaseUrl) {
-    verificationSettings.critic_server_url = llmBaseUrl;
-  }
-  return verificationSettings;
+): Record<string, string | boolean> {
+  // The critic is a separate classification service, not the chat model:
+  // keep the Agent Server's default endpoint and model, which serve
+  // /vllm/classify on the LLM proxy (its root has no /classify route).
+  return options.enableCritic
+    ? {
+        critic_enabled: true,
+        critic_mode: "finish_and_message",
+        enable_iterative_refinement: false,
+        critic_api_key: llmApiKey,
+      }
+    : {
+        critic_enabled: false,
+        enable_iterative_refinement: false,
+      };
 }
 
 export async function createLiveConversation(

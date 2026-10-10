@@ -61,7 +61,17 @@ interface CreateConversationResponse {
   task_id?: string;
 }
 
-export const useCreateConversation = () => {
+interface UseCreateConversationOptions {
+  /**
+   * Set by callers that report a failed create themselves, so the global
+   * mutation error toast doesn't repeat it.
+   */
+  disableToast?: boolean;
+}
+
+export const useCreateConversation = ({
+  disableToast = false,
+}: UseCreateConversationOptions = {}) => {
   const queryClient = useQueryClient();
   const { trackConversationCreated } = useTracking();
   // Cache-warm on the home page (the profile picker reads the same query).
@@ -88,6 +98,7 @@ export const useCreateConversation = () => {
 
   return useMutation({
     mutationKey: CREATE_CONVERSATION_MUTATION_KEY,
+    meta: { disableToast },
     mutationFn: async (
       variables: CreateConversationVariables,
     ): Promise<CreateConversationResponse> => {
@@ -115,6 +126,9 @@ export const useCreateConversation = () => {
           queryKey: [...AGENT_PROFILES_QUERY_KEYS.all, backend.id, orgId],
           queryFn: AgentProfilesService.listProfiles,
           ...AGENT_PROFILES_RETRY_OPTIONS,
+          // A failure here rejects the mutation, which reports it; a query
+          // toast on top would show the same error twice.
+          meta: { disableToast: true },
         });
 
       const requestedAgentProfileId =
@@ -152,19 +166,18 @@ export const useCreateConversation = () => {
       ) {
         // The seeded OpenHands `default` profile is the enriched baseline, not a
         // deliberate profile pick — it mirrors global agent_settings. Launch it
-        // via agent_settings so the canvas-only enrichments the profile-resolution
-        // path drops survive for the common home-launch: the <RUNTIME_SERVICES>
-        // system-message suffix and project-skill loading (buildAgentContext).
+        // via agent_settings so the global settings and the canvas skill
+        // selection (buildAgentContext) apply to the common home-launch; the
+        // profile path resolves skills server-side instead.
         // Named profiles are deliberate custom configs and still use the profile
-        // path (accepting that enrichment boundary).
+        // path.
         // Trade-off: per-profile fields set on `default` itself don't apply on
         // home-launch — custom per-profile config belongs in a named profile.
         //
         // Scoped to OpenHands: an ACP `default` must keep the profile path.
         // Activation is pointer-only, so global agent_settings is stale (often
         // still OpenHands) when an ACP profile is active — launching it via
-        // agent_settings would start the wrong agent. ACP carries no
-        // <RUNTIME_SERVICES> enrichment, so there's nothing to preserve.
+        // agent_settings would start the wrong agent.
         //
         // Scoped to local: cloud never writes agent_settings, so it always
         // resolves `default` server-side via agent_profile_id (validated below).
@@ -185,6 +198,8 @@ export const useCreateConversation = () => {
             // errors, fall back to agent_settings immediately rather than
             // stalling the send through the default exponential backoff.
             retry: false,
+            // Handled by the fallback below, so there is nothing to report.
+            meta: { disableToast: true },
           });
           llmProfileExists = llm.profiles.some(
             (profile) => profile.name === resolvedAgentProfile.llm_profile_ref,
@@ -245,6 +260,8 @@ export const useCreateConversation = () => {
             queryFn: () =>
               AgentProfilesService.getProfile(resolvedAgentProfile.name),
             ...AGENT_PROFILES_RETRY_OPTIONS,
+            // Handled by failing closed below, so there is nothing to report.
+            meta: { disableToast: true },
           });
           const secretRefs = (detail.profile as { secret_refs?: unknown })
             .secret_refs;

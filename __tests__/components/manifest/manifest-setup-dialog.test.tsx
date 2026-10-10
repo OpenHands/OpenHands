@@ -1,9 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { AUTOMATION_CATALOG } from "@openhands/extensions/automations";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import AutomationService from "#/api/automation-service/automation-service.api";
 import { SetupDialog } from "#/components/features/manifest/manifest-setup-dialog";
+import { SUPER_ADMIN_SETUP_STEP_EVENT } from "#/components/features/setup-guide/super-admin-setup-step-event";
 import type { SetupPrerequisitesResult } from "#/hooks/query/use-manifest-prerequisites";
 import type { DeploymentCapabilities, SetupEntry } from "#/manifests/types";
 import {
@@ -95,6 +97,9 @@ const NOTHING_TO_CONNECT: SetupPrerequisitesResult = {
 };
 
 const ENTRY: SetupEntry = createSetupEntry();
+const CUSTOM_AUTOMATION_ENTRY = AUTOMATION_CATALOG.find(
+  (entry) => entry.id === "custom-automation",
+) as SetupEntry;
 
 function renderDialog(entry: SetupEntry = ENTRY) {
   const user = userEvent.setup();
@@ -191,6 +196,12 @@ const CRON_ONLY_CAPABILITIES: DeploymentCapabilities = {
   features: [],
 };
 
+const ACTION_CAPABILITIES: DeploymentCapabilities = {
+  ...CRON_ONLY_CAPABILITIES,
+  triggerKinds: ["cron", "event"],
+  features: ["agentProfiles", "presetPrompt", "presetPlugin", "customTarball"],
+};
+
 const EVENT_FIRST_MIXED_TRIGGER_ENTRY: SetupEntry = (() => {
   const { form } = createSetup();
   return createSetupEntry({
@@ -250,6 +261,43 @@ const LLM_PROFILE_ENTRY: SetupEntry = (() => {
 })();
 
 describe("SetupDialog", () => {
+  it("offers agent profiles only for actions that accept them", async () => {
+    mocks.capabilities.mockReturnValue({
+      capabilities: ACTION_CAPABILITIES,
+      supported: true,
+      unmet: [],
+      isLoading: false,
+    });
+    const { user } = renderDialog(CUSTOM_AUTOMATION_ENTRY);
+
+    await waitFor(() =>
+      expect(screen.getByTestId("setup-action-kind")).toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByTestId("automation-agent-profile"),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("setup-action-kind"));
+    await user.click(await screen.findByText("Upload tarball"));
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("automation-agent-profile"),
+      ).toBeInTheDocument(),
+    );
+
+    await user.click(screen.getByTestId("automation-agent-profile"));
+    await user.click(await screen.findByText("Reviewer"));
+    await user.click(screen.getByTestId("setup-action-kind"));
+    await user.click(await screen.findByText("Prompt"));
+
+    await waitFor(() => {
+      expect(
+        screen.queryByTestId("automation-agent-profile"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("setup-field-model")).toBeInTheDocument();
+    });
+  });
+
   it("asks about an unconnected integration before it asks anything else", async () => {
     // Arrange — an advisory integration, which is shown but does not block.
     mocks.prerequisites.mockReturnValue({
@@ -398,6 +446,54 @@ describe("SetupDialog", () => {
       repos: [{ url: "OpenHands/agent-server-gui", provider: "github" }],
       trigger: { type: "cron", schedule: "*/15 * * * *" },
     });
+  });
+
+  it("tells the Super Admin setup guide when it creates an automation", async () => {
+    // Arrange
+    const onSetupStep = vi.fn();
+    window.addEventListener(SUPER_ADMIN_SETUP_STEP_EVENT, onSetupStep);
+    mocks.runAction.mockResolvedValue({ response: { id: "automation-1" } });
+    const { user } = renderDialog();
+    await fillForm(user);
+
+    // Act
+    await user.click(screen.getByTestId("setup-continue-button"));
+    await waitFor(() =>
+      expect(screen.getByTestId("setup-review")).toBeInTheDocument(),
+    );
+    await user.click(screen.getByTestId("setup-continue-button"));
+
+    // Assert
+    await waitFor(() => expect(onSetupStep).toHaveBeenCalledTimes(1));
+    expect((onSetupStep.mock.calls[0][0] as CustomEvent).detail).toEqual({
+      id: "first-automation",
+    });
+    window.removeEventListener(SUPER_ADMIN_SETUP_STEP_EVENT, onSetupStep);
+  });
+
+  it("does not report an automation that a conversation will create", async () => {
+    // Arrange
+    const onSetupStep = vi.fn();
+    window.addEventListener(SUPER_ADMIN_SETUP_STEP_EVENT, onSetupStep);
+    mocks.capabilities.mockReturnValue(UNSUPPORTED);
+    mocks.runAction.mockResolvedValue({
+      response: { conversation_id: "conv-1" },
+    });
+    const { user } = renderDialog(
+      createSetupEntry({
+        setup: createSetup({
+          message: "Set this up in a conversation instead.",
+        }),
+      }),
+    );
+
+    // Act
+    await user.click(screen.getByTestId("setup-fallback-conversation"));
+
+    // Assert
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalled());
+    expect(onSetupStep).not.toHaveBeenCalled();
+    window.removeEventListener(SUPER_ADMIN_SETUP_STEP_EVENT, onSetupStep);
   });
 
   it("offers the conversation fallback when the deployment cannot run a direct entry", async () => {

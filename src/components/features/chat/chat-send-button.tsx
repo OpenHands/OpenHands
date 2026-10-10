@@ -1,4 +1,6 @@
 import { ArrowUp, Loader2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
 
 export interface ChatSendButtonProps {
@@ -14,6 +16,8 @@ export function ChatSendButton({
   disabled,
   isPending = false,
 }: ChatSendButtonProps) {
+  const { t } = useTranslation("openhands");
+
   return (
     <button
       type="button"
@@ -29,6 +33,7 @@ export function ChatSendButton({
       onClick={handleSubmit}
       disabled={disabled}
       aria-busy={isPending}
+      aria-label={t(I18nKey.CHAT_INTERFACE$TOOLTIP_SEND_MESSAGE)}
     >
       {isPending ? (
         <Loader2

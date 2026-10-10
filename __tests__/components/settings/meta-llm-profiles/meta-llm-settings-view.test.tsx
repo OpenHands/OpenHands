@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, type Mock } from "vitest";
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpError } from "@openhands/typescript-client";
 import { renderWithProviders } from "test-utils";
@@ -163,6 +163,24 @@ describe("MetaLlmSettingsView", () => {
     expect(screen.getByTestId("meta-profile-row-cheap")).toBeInTheDocument();
     // Only the active one shows the badge
     expect(screen.getAllByTestId("meta-profile-active-badge")).toHaveLength(1);
+  });
+
+  it("renders the list heading and router names in the theme's contrast ink", () => {
+    // Literal white is invisible on light palettes (#17918); `text-contrast`
+    // follows the selected color theme like the LLM profiles list does.
+    renderWithProviders(<MetaLlmSettingsView />);
+
+    const heading = screen.getByRole("heading", {
+      name: "SETTINGS$META_PROFILES_AVAILABLE",
+    });
+    const routerName = within(
+      screen.getByTestId("meta-profile-row-balanced"),
+    ).getByText("balanced");
+
+    for (const element of [heading, routerName]) {
+      expect(element).toHaveClass("text-contrast");
+      expect(element).not.toHaveClass("text-white");
+    }
   });
 
   it("shows the empty state when there are no meta-profiles", () => {

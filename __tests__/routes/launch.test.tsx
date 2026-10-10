@@ -399,7 +399,7 @@ describe("LaunchRoute", () => {
       // In test environment, the translation key is shown
       const label = document.querySelector('label[for="trust-checkbox"]');
       expect(label).toBeInTheDocument();
-      expect(label?.textContent).toContain("LAUNCH$TRUST_SKILL_CHECKBOX");
+      expect(label?.textContent).toContain("LAUNCH$TRUST_PLUGIN_CHECKBOX");
     });
 
     it("should disable start button when trust checkbox is unchecked", () => {
