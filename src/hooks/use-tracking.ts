@@ -10,7 +10,11 @@ import {
   type BackendConnectionMethod,
   getBackendTelemetryProperties,
 } from "#/services/telemetry-context";
-import { setTelemetryBackendContext, trackEvent } from "#/services/telemetry";
+import {
+  setTelemetryBackendContext,
+  setTelemetryPersonProperties,
+  trackEvent,
+} from "#/services/telemetry";
 
 /**
  * Stable semantic identifier for an onboarding link or CTA. Identifies the
@@ -436,6 +440,55 @@ export const useTracking = () => {
     });
   };
 
+  /**
+   * User-submitted feedback from the persistent feedback control.
+   *
+   * Awaited rather than fire-and-forget: the form tells the user whether the
+   * submission landed, so it needs the capture to settle. `trackEvent` resolves
+   * without capturing when consent has not been granted, so callers must check
+   * `isTelemetryEnabled()` first rather than reading a resolved promise as
+   * success.
+   *
+   * Every other event here sends a length rather than the text
+   * (`query_character_length`, `current_message_length`), because that prose is
+   * incidental to the event. This one is the exception on purpose: the feedback
+   * *is* the report, and a length alone would make the event useless. Flagged
+   * rather than assumed — happy to send a length instead if the convention
+   * should hold here too.
+   *
+   * The email is deliberately absent: it goes on the person, not repeated on
+   * every event.
+   */
+  const trackFeedbackSubmitted = ({
+    feedback,
+    hasEmail,
+    conversationId,
+  }: {
+    feedback: string;
+    hasEmail: boolean;
+    conversationId?: string;
+  }): Promise<void> => {
+    setTelemetryBackendContext(getBackendTelemetryContext());
+    return trackEvent("feedback_submitted", {
+      ...commonProperties,
+      feedback,
+      feedback_length: feedback.length,
+      has_email: hasEmail,
+      conversation_id: conversationId,
+    });
+  };
+
+  /**
+   * Attach a feedback author's email to their PostHog person.
+   *
+   * Uses `setPersonProperties` rather than `identify`: there is no account to
+   * identify here, and identifying would both promote an anonymous person using
+   * the device id and contend with `use-telemetry-identity`, which owns the
+   * identity state.
+   */
+  const attachFeedbackEmail = (email: string): Promise<void> =>
+    setTelemetryPersonProperties({ email });
+
   const trackOnboardingLinkClicked = ({
     linkId,
     destinationType,
@@ -496,5 +549,7 @@ export const useTracking = () => {
     trackOnboardingCompleted,
     trackOnboardingSkipped,
     trackOnboardingLinkClicked,
+    trackFeedbackSubmitted,
+    attachFeedbackEmail,
   };
 };
