@@ -1,0 +1,73 @@
+{
+  "sourceSha256": "46f8d7c66ed87f6e419fc4b6b7725a3143ec66a566b8ba94c1519c200b1502bd",
+  "baseCommit": "35dc8aafaad2d883cf0c6629dea857eb2235895e",
+  "backendVersion": "1.50.1",
+  "mockBackend": false,
+  "modelExecution": false,
+  "buildTimeDnt": "1",
+  "runtimeBrowserDntInjected": false,
+  "results": [
+    {
+      "label": "base",
+      "loads": 2,
+      "analyticsAttemptCount": 6,
+      "otherExternalBlocked": 16,
+      "posthogKeysPerLoad": [
+        [
+          "ph_agent-canvas",
+          "agent-canvas-consent",
+          "ph_agent-canvas",
+          "ph_agent-canvas_session_registered_properties",
+          "ph_agent-canvas_primary_window_exists"
+        ],
+        [
+          "ph_agent-canvas",
+          "agent-canvas-consent",
+          "ph_agent-canvas_primary_window_exists",
+          "ph_agent-canvas",
+          "ph_agent-canvas_session_registered_properties"
+        ]
+      ],
+      "realBackend200Count": 39,
+      "pageErrors": [],
+      "runtimeDntPerLoad": [
+        null,
+        null
+      ],
+      "navigatorDntPerLoad": [
+        null,
+        null
+      ],
+      "windowDntPerLoad": [
+        null,
+        null
+      ],
+      "appHomeVisible": true
+    },
+    {
+      "label": "head",
+      "loads": 2,
+      "analyticsAttemptCount": 0,
+      "otherExternalBlocked": 16,
+      "posthogKeysPerLoad": [
+        [],
+        []
+      ],
+      "realBackend200Count": 41,
+      "pageErrors": [],
+      "runtimeDntPerLoad": [
+        null,
+        null
+      ],
+      "navigatorDntPerLoad": [
+        null,
+        null
+      ],
+      "windowDntPerLoad": [
+        null,
+        null
+      ],
+      "appHomeVisible": true
+    }
+  ]
+}

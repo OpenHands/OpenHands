@@ -696,3 +696,203 @@ describe("Telemetry Service", () => {
     });
   });
 });
+
+describe("Do Not Track before telemetry initialization", () => {
+  const windowFlags = [
+    "doNotTrack",
+    "__AGENT_CANVAS_DO_NOT_TRACK__",
+    "__AGENT_CANVAS_LOCK_TO_CLOUD__",
+  ];
+  let originalWindowFlags: (PropertyDescriptor | undefined)[];
+  let originalNavigatorFlag: PropertyDescriptor | undefined;
+
+  beforeEach(() => {
+    vi.resetModules();
+    vi.clearAllMocks();
+    localStorage.clear();
+    sessionStorage.clear();
+    vi.stubEnv("VITE_DO_NOT_TRACK", undefined);
+    vi.stubEnv("DO_NOT_TRACK", undefined);
+    originalWindowFlags = windowFlags.map((key) =>
+      Object.getOwnPropertyDescriptor(window, key),
+    );
+    originalNavigatorFlag = Object.getOwnPropertyDescriptor(
+      navigator,
+      "doNotTrack",
+    );
+    windowFlags.forEach((key) => Reflect.deleteProperty(window, key));
+    Object.defineProperty(navigator, "doNotTrack", {
+      configurable: true,
+      value: undefined,
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.doMock("posthog-js", () => ({ default: mockPosthog }));
+    windowFlags.forEach((key, index) => {
+      const descriptor = originalWindowFlags[index];
+      if (descriptor) Object.defineProperty(window, key, descriptor);
+      else Reflect.deleteProperty(window, key);
+    });
+    if (originalNavigatorFlag) {
+      Object.defineProperty(navigator, "doNotTrack", originalNavigatorFlag);
+    } else {
+      Reflect.deleteProperty(navigator, "doNotTrack");
+    }
+    localStorage.clear();
+    sessionStorage.clear();
+  });
+
+  it.each([
+    "VITE_DO_NOT_TRACK",
+    "DO_NOT_TRACK",
+    "navigator.doNotTrack",
+    "window.doNotTrack",
+    "runtime flag",
+    "embedding host",
+  ])("does not initialize or opt in with %s", async (source) => {
+    if (source === "VITE_DO_NOT_TRACK" || source === "DO_NOT_TRACK") {
+      vi.stubEnv(source, "1");
+    } else if (source === "navigator.doNotTrack") {
+      Object.defineProperty(navigator, "doNotTrack", {
+        configurable: true,
+        value: "1",
+      });
+    } else if (source === "window.doNotTrack") {
+      Object.defineProperty(window, "doNotTrack", {
+        configurable: true,
+        value: "1",
+      });
+    } else if (source === "runtime flag") {
+      Object.defineProperty(window, "__AGENT_CANVAS_DO_NOT_TRACK__", {
+        configurable: true,
+        value: true,
+      });
+    }
+    const telemetry = await import("#/services/telemetry");
+    if (source === "embedding host") telemetry.configureTelemetry(false);
+
+    await expect(telemetry.initializePostHogClient(true)).resolves.toBeNull();
+    await telemetry.setTelemetryConsent("granted", { syncToCloud: false });
+    await telemetry.trackInstall();
+    await telemetry.trackSessionStart();
+    await telemetry.trackEvent("test_event");
+
+    expect(telemetry.getTelemetryConsent()).toBe("denied");
+    expect(mockPosthog.init).not.toHaveBeenCalled();
+    expect(mockPosthog.opt_in_capturing).not.toHaveBeenCalled();
+    expect(mockPosthog.capture).not.toHaveBeenCalled();
+  });
+
+  it("keeps locked Cloud consent and identity disabled with Vite Do Not Track", async () => {
+    vi.stubEnv("VITE_DO_NOT_TRACK", "1");
+    Object.defineProperty(window, "__AGENT_CANVAS_LOCK_TO_CLOUD__", {
+      configurable: true,
+      value: window.location.origin,
+    });
+    const telemetry = await import("#/services/telemetry");
+
+    await telemetry.setTelemetryConsent("granted", { syncToCloud: false });
+    await telemetry.setTelemetryIdentity("cloud-user", {
+      email: "cloud-user@example.com",
+    });
+    await telemetry.trackEvent("cloud_event");
+
+    expect(telemetry.getTelemetryConsent()).toBe("denied");
+    await expect(telemetry.initializePostHogClient(true)).resolves.toBeNull();
+    expect(mockPosthog.init).not.toHaveBeenCalled();
+    expect(mockPosthog.opt_in_capturing).not.toHaveBeenCalled();
+    expect(mockPosthog.identify).not.toHaveBeenCalled();
+    expect(mockPosthog.capture).not.toHaveBeenCalled();
+  });
+
+  it("initializes normally when no Do Not Track source is enabled", async () => {
+    const telemetry = await import("#/services/telemetry");
+
+    await telemetry.setTelemetryConsent("granted", { syncToCloud: false });
+
+    await expect(telemetry.initializePostHogClient()).resolves.toBe(
+      mockPosthog,
+    );
+    expect(mockPosthog.init).toHaveBeenCalledOnce();
+    expect(mockPosthog.opt_in_capturing).toHaveBeenCalled();
+  });
+
+  it.each(["runtime flag", "embedding host"])(
+    "cancels an SDK import when %s disables telemetry and permits a later retry",
+    async (source) => {
+      let releaseImport!: () => void;
+      let signalImportStarted!: () => void;
+      const importGate = new Promise<void>((resolve) => {
+        releaseImport = resolve;
+      });
+      const importStarted = new Promise<void>((resolve) => {
+        signalImportStarted = resolve;
+      });
+      vi.doMock("posthog-js", async () => {
+        signalImportStarted();
+        await importGate;
+        return { default: mockPosthog };
+      });
+      const telemetry = await import("#/services/telemetry");
+      const initialization = telemetry.initializePostHogClient(true);
+      await importStarted;
+
+      if (source === "embedding host") {
+        telemetry.configureTelemetry(false);
+      } else {
+        Object.defineProperty(window, "__AGENT_CANVAS_DO_NOT_TRACK__", {
+          configurable: true,
+          value: true,
+        });
+      }
+      releaseImport();
+
+      await expect(initialization).resolves.toBeNull();
+      expect(mockPosthog.init).not.toHaveBeenCalled();
+
+      telemetry.configureTelemetry({});
+      Reflect.deleteProperty(window, "__AGENT_CANVAS_DO_NOT_TRACK__");
+      await expect(telemetry.initializePostHogClient()).resolves.toBe(
+        mockPosthog,
+      );
+      expect(mockPosthog.init).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("does not return or opt in an existing client after browser Do Not Track is enabled", async () => {
+    const telemetry = await import("#/services/telemetry");
+    await telemetry.initializePostHogClient();
+    Object.defineProperty(navigator, "doNotTrack", {
+      configurable: true,
+      value: "1",
+    });
+    vi.clearAllMocks();
+
+    await expect(telemetry.initializePostHogClient()).resolves.toBeNull();
+    await telemetry.setTelemetryConsent("granted", { syncToCloud: false });
+
+    expect(mockPosthog.init).not.toHaveBeenCalled();
+    expect(mockPosthog.opt_in_capturing).not.toHaveBeenCalled();
+  });
+
+  it("does not apply a consent grant if Do Not Track changes while awaiting initialization", async () => {
+    const telemetry = await import("#/services/telemetry");
+    mockPosthog.init.mockImplementationOnce(() => {
+      queueMicrotask(() => {
+        Object.defineProperty(window, "__AGENT_CANVAS_DO_NOT_TRACK__", {
+          configurable: true,
+          value: true,
+        });
+        mockPosthog.opt_in_capturing.mockClear();
+      });
+      return mockPosthog;
+    });
+
+    await telemetry.setTelemetryConsent("granted", { syncToCloud: false });
+
+    expect(telemetry.getTelemetryConsent()).toBe("denied");
+    expect(mockPosthog.opt_in_capturing).not.toHaveBeenCalled();
+  });
+});
