@@ -159,19 +159,23 @@ describe("PendingUserMessages", () => {
     );
   });
 
-  it("re-sends and flips back to 'sending' when retry is clicked", async () => {
+  it("re-sends the original file context and flips back to 'sending'", async () => {
     mockSend.mockResolvedValueOnce({ queued: false });
-    const id = useOptimisticUserMessageStore
-      .getState()
-      .enqueuePendingMessage({
-        conversationId: ACTIVE_CONVO,
-        text: "retry me",
-      });
+    const filePath = "/workspace/report.csv";
+    const content = `retry me\n\nFiles uploaded: ${filePath}`;
+    const id = useOptimisticUserMessageStore.getState().enqueuePendingMessage({
+      conversationId: ACTIVE_CONVO,
+      text: "retry me",
+      content,
+      fileUrls: [filePath],
+    });
     useOptimisticUserMessageStore
       .getState()
       .markPendingMessageError(id, "Server unavailable");
 
     renderWithProviders(<PendingUserMessages />);
+    expect(screen.getByTestId("user-message")).toHaveTextContent("retry me");
+    expect(screen.getByTestId("user-message")).not.toHaveTextContent(filePath);
 
     const user = userEvent.setup();
     await user.click(screen.getByTestId("chat-message-retry"));
@@ -180,7 +184,10 @@ describe("PendingUserMessages", () => {
     expect(mockSend).toHaveBeenCalledWith(
       expect.objectContaining({
         action: "message",
-        args: expect.objectContaining({ content: "retry me" }),
+        args: expect.objectContaining({
+          content,
+          file_urls: [filePath],
+        }),
       }),
     );
 
