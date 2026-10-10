@@ -152,6 +152,7 @@ describe("mock agent-server discovery", () => {
       "openai",
       "openhands",
       "sambanova",
+      "openrouter",
     ]);
   });
 
@@ -166,6 +167,7 @@ describe("mock agent-server discovery", () => {
       { name: "openai", verified: true },
       { name: "openhands", verified: true },
       { name: "sambanova", verified: false },
+      { name: "openrouter", verified: false },
     ]);
 
     const matching = await fetchJson<{ items: { name: string }[] }>(
@@ -179,7 +181,10 @@ describe("mock agent-server discovery", () => {
     const unverified = await fetchJson<{
       items: { name: string; verified: boolean }[];
     }>("/api/v1/config/providers/search?verified__eq=false");
-    expect(unverified.items).toEqual([{ name: "sambanova", verified: false }]);
+    expect(unverified.items).toEqual([
+      { name: "sambanova", verified: false },
+      { name: "openrouter", verified: false },
+    ]);
   });
 
   it("searches models by provider, name, and verification", async () => {

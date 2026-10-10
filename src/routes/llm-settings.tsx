@@ -458,6 +458,14 @@ export function LlmSettingsScreen({
                   <ModelSelector
                     currentModel={modelValue || undefined}
                     onChange={(provider, model) => {
+                      // An emptied custom-model field reports "" (a provider
+                      // change reports null); clear the value so the
+                      // model-required check catches it instead of saving
+                      // whatever model was selected before.
+                      if (model === "") {
+                        onChange("llm.model", "");
+                        return;
+                      }
                       const nextModel = buildModelId(provider, model);
                       if (nextModel) {
                         onChange("llm.model", nextModel);
