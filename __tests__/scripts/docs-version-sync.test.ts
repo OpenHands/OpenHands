@@ -8,9 +8,11 @@
 // references drift from the central pin so the next bump cannot silently leave
 // docs behind.
 import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { DEFAULT_API_KEY_PATH } from "../../scripts/dev-safe.mjs";
 
 const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -70,5 +72,28 @@ describe("docs/example references stay in sync with config/defaults.json", () =>
     expect(src).toContain(
       `">=${agentServerVersion}", "==${agentServerVersion}", "(>=${agentServerVersion})", "~=${agentServerVersion}"`,
     );
+  });
+});
+
+// The launchers and the Docker entrypoint persist the auto-generated session
+// API key as `api-key.txt`. The contributor guides and the Helm NOTES kept the
+// older `session-api-key.txt` name, pointing readers at a file that is never
+// written.
+describe("documented session API key file matches the launcher", () => {
+  it.each([
+    ".agents/skills/local-stack-runtime/references/guide.md",
+    ".agents/skills/frontend-api-contracts/references/guide.md",
+    "helm/agent-canvas/templates/NOTES.txt",
+  ])("%s names the persisted key file", (file) => {
+    const keyPathFromHome = path
+      .relative(homedir(), DEFAULT_API_KEY_PATH)
+      .split(path.sep)
+      .join("/");
+    const refs = read(file).match(/[\w./~-]*api-key\.txt/g) ?? [];
+
+    expect(refs.length).toBeGreaterThan(0);
+    for (const ref of refs) {
+      expect(ref.endsWith(`/${keyPathFromHome}`), ref).toBe(true);
+    }
   });
 });
