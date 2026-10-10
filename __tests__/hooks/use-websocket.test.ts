@@ -451,6 +451,36 @@ describe("useWebSocket reconnection", () => {
     expect(result.current.attemptCount).toBe(0);
   });
 
+  it("a late close from a replaced socket does not set isConnected=false or error (#16842 regression)", () => {
+    const { result } = renderWebSocket("ws://acme.test/events");
+    const firstSocket = getSocket();
+
+    act(() => firstSocket.open());
+    expect(result.current.isConnected).toBe(true);
+    expect(result.current.error).toBe(null);
+
+    // Defer the old socket's close event, as a browser does: reconnect()
+    // returns before the TCP teardown delivers "close".
+    vi.mocked(firstSocket.close).mockImplementation(() => {});
+
+    act(() => result.current.reconnect());
+    const newSocket = getSocket();
+    expect(newSocket).not.toBe(firstSocket);
+    act(() => newSocket.open());
+    expect(result.current.isConnected).toBe(true);
+    expect(result.current.error).toBe(null);
+
+    // The stale socket's late close must not clobber the live state.
+    act(() => firstSocket.emitClose(1006, "Abnormal closure"));
+    expect(result.current.isConnected).toBe(true);
+    expect(result.current.error).toBe(null);
+
+    // Closing the live socket still updates state.
+    act(() => newSocket.emitClose(1000, "Normal closure"));
+    expect(result.current.isConnected).toBe(false);
+    expect(result.current.error).toBe(null);
+  });
+
   it("manual reconnect supersedes a pending retry without creating a duplicate", () => {
     vi.useFakeTimers();
     const { result } = renderWebSocket("ws://acme.test/events", {
