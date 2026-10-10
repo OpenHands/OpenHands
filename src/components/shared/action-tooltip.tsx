@@ -1,7 +1,12 @@
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
-import { cn } from "#/utils/utils";
+import { cn, isApplePlatform } from "#/utils/utils";
 import { StyledTooltip } from "./buttons/styled-tooltip";
+
+const SHORTCUT_HINTS = {
+  apple: { confirm: "⌘↩", reject: "⇧⌘⌫" },
+  other: { confirm: "Ctrl+↩", reject: "Ctrl+⇧+⌫" },
+} as const;
 
 interface ActionTooltipProps {
   type: "confirm" | "reject";
@@ -21,9 +26,11 @@ export function ActionTooltip({ type, onClick }: ActionTooltipProps) {
     ? t(I18nKey.CHAT_INTERFACE$USER_CONFIRMED)
     : t(I18nKey.CHAT_INTERFACE$USER_REJECTED);
 
+  const shortcutHint = SHORTCUT_HINTS[isApplePlatform() ? "apple" : "other"];
+
   const buttonLabel = isConfirm
-    ? `${t(I18nKey.CHAT_INTERFACE$INPUT_CONTINUE_MESSAGE)} ⌘↩`
-    : `${t(I18nKey.BUTTON$CANCEL)} ⇧⌘⌫`;
+    ? `${t(I18nKey.CHAT_INTERFACE$INPUT_CONTINUE_MESSAGE)} ${shortcutHint.confirm}`
+    : `${t(I18nKey.BUTTON$CANCEL)} ${shortcutHint.reject}`;
 
   return (
     <StyledTooltip closeDelay={100} content={content}>

@@ -35,6 +35,10 @@ export function ConversationConfirmationButtons() {
       return curAgentState === AgentState.AWAITING_USER_CONFIRMATION;
     });
 
+  const hasSubmitted =
+    awaitingAction?.id !== undefined &&
+    submittedEventIds.includes(awaitingAction.id);
+
   const handleConfirmation = useCallback(
     (accept: boolean) => {
       if (!awaitingAction || !conversation) {
@@ -59,42 +63,48 @@ export function ConversationConfirmationButtons() {
 
   // Handle keyboard shortcuts
   useEffect(() => {
-    if (!awaitingAction) {
+    // Ignore shortcuts once a response was sent, so a second press cannot
+    // submit another (or the opposite) answer before the server update arrives
+    if (!awaitingAction || hasSubmitted) {
       return undefined;
     }
 
     const handleCancelShortcut = (event: KeyboardEvent) => {
-      if (event.shiftKey && event.metaKey && event.key === "Backspace") {
+      if (
+        event.shiftKey &&
+        (event.metaKey || event.ctrlKey) &&
+        event.key === "Backspace"
+      ) {
         event.preventDefault();
         handleConfirmation(false);
       }
     };
 
     const handleContinueShortcut = (event: KeyboardEvent) => {
-      if (event.metaKey && event.key === "Enter") {
+      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
         event.preventDefault();
         handleConfirmation(true);
       }
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      // Cancel: Shift+Cmd+Backspace (⇧⌘⌫)
+      if (event.repeat) return;
+      // Cancel: Shift+Cmd+Backspace (Mac) or Shift+Ctrl+Backspace (Windows/Linux)
       handleCancelShortcut(event);
-      // Continue: Cmd+Enter (⌘↩)
+      // Continue: Cmd+Enter (Mac) or Ctrl+Enter (Windows/Linux)
       handleContinueShortcut(event);
     };
 
     document.addEventListener("keydown", handleKeyDown);
 
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [awaitingAction, handleConfirmation]);
+  }, [awaitingAction, hasSubmitted, handleConfirmation]);
 
   // Only show if agent is waiting for confirmation and we haven't already submitted
   if (
     curAgentState !== AgentState.AWAITING_USER_CONFIRMATION ||
     !awaitingAction ||
-    (awaitingAction.id !== undefined &&
-      submittedEventIds.includes(awaitingAction.id))
+    hasSubmitted
   ) {
     return null;
   }
