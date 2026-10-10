@@ -607,4 +607,47 @@ describe("AgentProfilesLocalView save mapping", () => {
     );
     expect(saveMutate).not.toHaveBeenCalled();
   });
+
+  it("shows name-taken error and disables Save when typing an existing agent profile name in create mode", async () => {
+    (agentProfilesData as { profiles: unknown[] }).profiles = [
+      { id: "p-existing", name: "existing-agent", agent_kind: "openhands" },
+    ];
+
+    emitControl = {
+      agentType: "openhands",
+      isValid: true,
+      isDirty: true,
+      buildAgentProfileFields: () => ({
+        agent_kind: "openhands",
+        mcp_server_refs: null,
+      }),
+      credentials: { isDirty: false, save: vi.fn(), reset: vi.fn() },
+    };
+
+    render(<AgentProfilesLocalView />);
+    await openCreateAndName("existing-agent");
+
+    const input = screen.getByTestId("agent-profile-name-input");
+    const saveButton = screen.getByTestId("save-agent-profile-btn");
+
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(input).toHaveAttribute(
+      "aria-describedby",
+      "agent-profile-name-input-error",
+    );
+    expect(
+      screen.getByTestId("agent-profile-name-input-error"),
+    ).toBeInTheDocument();
+    expect(saveButton).toBeDisabled();
+
+    // Type a unique name
+    const user = userEvent.setup();
+    await user.clear(input);
+    await user.type(input, "brand-new-agent");
+
+    expect(input).toHaveAttribute("aria-invalid", "false");
+    expect(
+      screen.queryByTestId("agent-profile-name-input-error"),
+    ).not.toBeInTheDocument();
+  });
 });

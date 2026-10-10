@@ -7,11 +7,13 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string) => {
       const translations: Record<string, string> = {
-        "SETTINGS$PROFILE_NAME_LABEL": "Profile Name",
-        "SETTINGS$PROFILE_NAME_PLACEHOLDER": "Enter profile name",
-        "SETTINGS$PROFILE_NAME_RULE":
+        SETTINGS$PROFILE_NAME_LABEL: "Profile Name",
+        SETTINGS$PROFILE_NAME_PLACEHOLDER: "Enter profile name",
+        SETTINGS$PROFILE_NAME_RULE:
           "1-64 chars, start with alphanumeric, then alphanumerics or . _ -",
-        "COMMON$OPTIONAL": "Optional",
+        SETTINGS$META_PROFILE_NAME_TAKEN:
+          "A profile with this name already exists",
+        COMMON$OPTIONAL: "Optional",
       };
       return translations[key] || key;
     },
@@ -107,11 +109,7 @@ describe("ProfileNameInput", () => {
 
   it("treats an empty optional value as valid", () => {
     render(
-      <ProfileNameInput
-        testId="profile-name"
-        value=""
-        onChange={() => {}}
-      />,
+      <ProfileNameInput testId="profile-name" value="" onChange={() => {}} />,
     );
 
     expect(screen.getByTestId("profile-name")).toHaveAttribute(
@@ -181,11 +179,7 @@ describe("ProfileNameInput", () => {
 
   it("shows default placeholder when not provided", () => {
     render(
-      <ProfileNameInput
-        testId="profile-name"
-        value=""
-        onChange={() => {}}
-      />,
+      <ProfileNameInput testId="profile-name" value="" onChange={() => {}} />,
     );
 
     expect(screen.getByTestId("profile-name")).toHaveAttribute(
@@ -195,9 +189,7 @@ describe("ProfileNameInput", () => {
   });
 
   it("shows optional label when isOptional is true", () => {
-    render(
-      <ProfileNameInput value="" onChange={() => {}} isOptional />,
-    );
+    render(<ProfileNameInput value="" onChange={() => {}} isOptional />);
 
     expect(screen.getByText("Profile Name (Optional)")).toBeInTheDocument();
   });
@@ -209,6 +201,91 @@ describe("ProfileNameInput", () => {
 
     expect(screen.getByText("Profile Name")).toBeInTheDocument();
     expect(screen.queryByText(/optional/i)).not.toBeInTheDocument();
+  });
+
+  describe("duplicate profile name handling", () => {
+    it("marks input as invalid and displays name-taken error when isNameTaken is true for a format-valid name", () => {
+      render(
+        <ProfileNameInput
+          testId="profile-name"
+          value="valid-name"
+          isNameTaken
+          onChange={() => {}}
+        />,
+      );
+
+      const input = screen.getByTestId("profile-name");
+      expect(input).toHaveAttribute("aria-invalid", "true");
+      expect(input).toHaveAttribute("aria-describedby", "profile-name-error");
+
+      const error = screen.getByTestId("profile-name-error");
+      expect(error).toBeInTheDocument();
+      expect(error).toHaveTextContent(
+        "A profile with this name already exists",
+      );
+    });
+
+    it("does not show duplicate-name error when name is format-invalid or empty even if isNameTaken is true", () => {
+      const { rerender } = render(
+        <ProfileNameInput
+          testId="profile-name"
+          value=""
+          isNameTaken
+          onChange={() => {}}
+        />,
+      );
+
+      expect(
+        screen.queryByTestId("profile-name-error"),
+      ).not.toBeInTheDocument();
+
+      rerender(
+        <ProfileNameInput
+          testId="profile-name"
+          value=".invalid-start"
+          isNameTaken
+          onChange={() => {}}
+        />,
+      );
+
+      expect(
+        screen.queryByTestId("profile-name-error"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("clears duplicate-name error and restores aria-invalid='false' when isNameTaken is false", () => {
+      const { rerender } = render(
+        <ProfileNameInput
+          testId="profile-name"
+          value="valid-name"
+          isNameTaken
+          onChange={() => {}}
+        />,
+      );
+
+      expect(screen.getByTestId("profile-name")).toHaveAttribute(
+        "aria-invalid",
+        "true",
+      );
+      expect(screen.getByTestId("profile-name-error")).toBeInTheDocument();
+
+      rerender(
+        <ProfileNameInput
+          testId="profile-name"
+          value="valid-name"
+          isNameTaken={false}
+          onChange={() => {}}
+        />,
+      );
+
+      expect(screen.getByTestId("profile-name")).toHaveAttribute(
+        "aria-invalid",
+        "false",
+      );
+      expect(
+        screen.queryByTestId("profile-name-error"),
+      ).not.toBeInTheDocument();
+    });
   });
 
   describe("boundary conditions", () => {

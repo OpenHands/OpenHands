@@ -155,22 +155,27 @@ export function LlmSettingsLocalView() {
     [profilesData],
   );
 
+  // Check if profile name is already taken by another profile
+  const isNameTaken = useMemo(() => {
+    if (viewMode === "create") {
+      return existingNames.has(profileName);
+    }
+    if (viewMode === "edit") {
+      return (
+        profileName !== editingProfile?.profile.name &&
+        existingNames.has(profileName)
+      );
+    }
+    return false;
+  }, [profileName, viewMode, existingNames, editingProfile?.profile.name]);
+
   // Validate profile name. The shared validator rejects any whitespace, so
-  // duplicate checks below compare the raw value directly.
+  // duplicate checks compare the raw value directly.
   const isNameValid = useMemo(() => {
     if (!isProfileNameValid(profileName, { isRequired: true })) return false;
-    // In create mode, check for duplicates
-    if (viewMode === "create" && existingNames.has(profileName)) return false;
-    // In edit mode, name can match current profile name
-    if (
-      viewMode === "edit" &&
-      profileName !== editingProfile?.profile.name &&
-      existingNames.has(profileName)
-    ) {
-      return false;
-    }
+    if (isNameTaken) return false;
     return true;
-  }, [profileName, viewMode, existingNames, editingProfile?.profile.name]);
+  }, [profileName, isNameTaken]);
 
   const handleProfileNameChange = useCallback((value: string) => {
     setProfileName(value);
@@ -509,6 +514,7 @@ export function LlmSettingsLocalView() {
         value={profileName}
         onChange={handleProfileNameChange}
         isRequired
+        isNameTaken={isNameTaken}
       />
 
       {/* Profile form - key ensures form remounts when switching profiles.

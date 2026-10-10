@@ -109,19 +109,25 @@ export function AgentProfilesLocalView() {
     [profilesData],
   );
 
+  // Check if profile name is already taken by another profile
+  const isNameTaken = useMemo(() => {
+    if (viewMode === "create") {
+      return existingNames.has(profileName);
+    }
+    if (viewMode === "edit") {
+      return (
+        profileName !== editingProfile?.name && existingNames.has(profileName)
+      );
+    }
+    return false;
+  }, [profileName, viewMode, existingNames, editingProfile?.name]);
+
   // The shared validator rejects whitespace, so duplicate checks compare raw.
   const isNameValid = useMemo(() => {
     if (!isProfileNameValid(profileName, { isRequired: true })) return false;
-    if (viewMode === "create" && existingNames.has(profileName)) return false;
-    if (
-      viewMode === "edit" &&
-      profileName !== editingProfile?.name &&
-      existingNames.has(profileName)
-    ) {
-      return false;
-    }
+    if (isNameTaken) return false;
     return true;
-  }, [profileName, viewMode, existingNames, editingProfile?.name]);
+  }, [profileName, isNameTaken]);
 
   const handleAddProfile = useCallback(() => {
     setProfileName("");
@@ -322,6 +328,7 @@ export function AgentProfilesLocalView() {
         value={profileName}
         onChange={setProfileName}
         isRequired
+        isNameTaken={isNameTaken}
       />
 
       {/* Reuse the existing Agent settings form to define the agent. */}
