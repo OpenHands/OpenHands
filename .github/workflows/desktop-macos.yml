@@ -1,17 +1,30 @@
 name: Desktop (macOS)
 
-# Builds the Agent Canvas macOS DMG (Apple Silicon).
-#   pull_request:      paths-filtered smoke build — the uploaded artifact is
-#                      what a tester downloads to verify a PR on macOS.
-#   release published: rebuilds from the release tag and attaches the .dmg
-#                      to the GitHub Release created by release-please.
-#   workflow_dispatch: manual escape hatch for any ref.
+# Builds the Agent Canvas macOS DMG.
+#   pull_request:      paths-filtered smoke build on BOTH native arches —
+#                      arm64 on macos-latest (Apple Silicon) and Intel x64 on
+#                      macos-15-intel (GitHub's last Intel macOS runner). Each
+#                      leg runs npm run build:desktop natively, so the per-arch
+#                      uv/node download + electron-builder path is exercised
+#                      for the runner's CPU on every PR, and testers on either
+#                      Mac architecture get a native artifact to download.
+#   release published: rebuilds from the release tag as a UNIVERSAL build
+#                      (arm64 + x64, with per-arch bundled uv/node runtimes
+#                      selected at runtime by process.arch) and attaches the
+#                      .dmg to the GitHub Release created by release-please.
+#                      Intel Macs are supported by the release DMG.
+#   workflow_dispatch: manual escape hatch for any ref — the native per-arch
+#                      builds above AND the universal build, so the universal
+#                      merge can be validated from a branch before a release
+#                      (the first release build is the worst time to find a
+#                      merger failure).
 # The app is only ad-hoc signed (no signing certs exist for any platform);
 # a downloaded DMG is quarantined by Gatekeeper, which reports the app as
 # "damaged" until the attribute is cleared:
 #   xattr -d com.apple.quarantine "/Applications/OpenHands Agent Canvas.app"
-# Intel DMGs are not produced — the bundled uv/node runtimes are host-arch
-# only, so Intel users build from source.
+#
+# Intel-leg removal date: macos-15-intel is available until August 2027, after
+# which GitHub drops x86_64 macOS support entirely and this leg must go.
 on:
   workflow_dispatch:
   pull_request:
@@ -19,6 +32,7 @@ on:
       - .github/workflows/desktop-macos.yml
       - electron/**
       - electron-builder.config.mjs
+      - scripts/download-arch-utils.mjs
       - scripts/download-uv.mjs
       - scripts/download-node.mjs
   release:
@@ -34,10 +48,26 @@ permissions:
   contents: write
 
 jobs:
+  # PR / manual smoke builds: one native DMG per CPU arch, in parallel.
   build-dmg:
-    name: Build macOS DMG
-    runs-on: macos-latest
-    timeout-minutes: 30
+    name: Build macOS DMG (${{ matrix.arch }})
+    if: github.event_name != 'release'
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-latest
+          # Intel x64: the last Intel GitHub runner (macos-15-intel) is
+          # available until August 2027; after that GitHub drops x86_64 macOS
+          # support and this leg must be removed (see header comment).
+          - arch: x64
+            runner: macos-15-intel
+    # Universal release builds download two Electron zips + two Node dists and
+    # lipo-merge them; single-arch native builds are much faster. 40 min leaves
+    # headroom for the slowest leg (Intel runners are slower than arm64).
+    timeout-minutes: 40
 
     steps:
       - name: Check out repository
@@ -52,17 +82,100 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build macOS DMG
+      - name: Build macOS DMG (${{ matrix.arch }})
+        env:
+          # PR/manual runs get the staging key (same split as docker.yml).
+          # Both are public client-side keys stored as repo vars — empty on
+          # fork PRs, which simply disables analytics in the built app.
+          VITE_POSTHOG_API_KEY: ${{ vars.POSTHOG_STAGING_KEY }}
+          # Authenticates download-uv.mjs's GitHub API version lookup so it
+          # doesn't hit the unauthenticated per-IP rate limit on shared runners.
+          GITHUB_TOKEN: ${{ github.token }}
+        # Native single-arch build: download-uv/node resolve to the runner's
+        # CPU arch and electron-builder packages that arch (fast, and proves
+        # the per-arch runtime download path for the runner's CPU).
+        run: npm run build:desktop
+
+      - name: Verify DMG output (${{ matrix.arch }})
+        run: |
+          ls -la dist-electron
+          dmg_count=$(find dist-electron -maxdepth 1 -name '*.dmg' | wc -l | tr -d ' ')
+          if [ "$dmg_count" -ne 1 ]; then
+            echo "::error::Expected exactly one DMG in dist-electron/, found $dmg_count"
+            exit 1
+          fi
+          dmg_path=$(find dist-electron -maxdepth 1 -name '*.dmg' | head -n 1)
+          # electron-builder names the DMG OpenHands-Agent-Canvas-<ver>-<arch>.dmg.
+          if ! echo "$dmg_path" | grep -q -- "-${{ matrix.arch }}.dmg$"; then
+            echo "::error::Expected ${{ matrix.arch }} DMG, got: $dmg_path"
+            exit 1
+          fi
+          # The filename suffix reflects electron-builder's target arch, but
+          # assert the actual Mach-O arch of the packaged binary too — the
+          # point of the Intel leg is catching an accidentally-arm64 artifact.
+          app_dir=$(find dist-electron -maxdepth 2 -name '*.app' | head -n 1)
+          if [ -n "$app_dir" ]; then
+            binary=$(find "$app_dir/Contents/MacOS" -maxdepth 1 -type f | head -n 1)
+            if [ -n "$binary" ]; then
+              file "$binary"
+              expected=$([ "${{ matrix.arch }}" = "arm64" ] && echo "arm64" || echo "x86_64")
+              if ! file "$binary" | grep -q "$expected"; then
+                echo "::error::Expected ${{ matrix.arch }} binary, got: $(file "$binary")"
+                exit 1
+              fi
+            fi
+          fi
+
+      - name: Upload DMG artifact (${{ matrix.arch }})
+        uses: actions/upload-artifact@v7
+        with:
+          name: agent-canvas-macos-dmg-${{ matrix.arch }}
+          path: dist-electron/*.dmg
+          if-no-files-found: error
+          # The DMG is large (~175 MB); keep PR artifacts long enough for
+          # manual QA without hoarding storage.
+          retention-days: 14
+
+  # Universal builds: one merged (arm64+x64) DMG on an arm64 runner.
+  build-universal-dmg:
+    name: Build universal macOS DMG
+    # Not on pull_request: the two-leg native matrix already proves the
+    # per-arch download/packaging path cheaply, and a full universal merge
+    # (two Electron zips + Node dists + lipo) is too heavy for every PR.
+    # Keeping it off pull_request also lets a maintainer run the universal
+    # build from a branch via workflow_dispatch, so the merger gets CI
+    # evidence before the first release exercises it.
+    if: github.event_name != 'pull_request'
+    runs-on: macos-latest
+    # Two Electron zips + two Node dists + lipo merge; 40 min leaves headroom
+    # over the observed ~25 min.
+    timeout-minutes: 40
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js with npm cache
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build universal macOS DMG
         env:
           # Production analytics key only for release builds (same split as
-          # docker.yml); PR/manual runs get the staging key. Both are public
-          # client-side keys stored as repo vars — empty on fork PRs, which
-          # simply disables analytics in the built app.
+          # docker.yml); workflow_dispatch runs get the staging key. Both are
+          # public client-side keys stored as repo vars.
           VITE_POSTHOG_API_KEY: ${{ github.event_name == 'release' && vars.POSTHOG_PROD_KEY || vars.POSTHOG_STAGING_KEY }}
           # Authenticates download-uv.mjs's GitHub API version lookup so it
           # doesn't hit the unauthenticated per-IP rate limit on shared runners.
           GITHUB_TOKEN: ${{ github.token }}
-        run: npm run build:desktop
+        # Universal build: downloads BOTH runtime arches into per-arch dirs
+        # (resources/{bin,node}-{arm64,x64}/) and merges two Electron binaries.
+        run: npm run build:desktop:universal
 
       - name: Verify DMG output
         run: |
@@ -72,18 +185,15 @@ jobs:
             echo "::error::Expected exactly one DMG in dist-electron/, found $dmg_count"
             exit 1
           fi
-
-      - name: Upload DMG artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: agent-canvas-macos-dmg
-          path: dist-electron/*.dmg
-          if-no-files-found: error
-          # The DMG is large (~175 MB); keep PR artifacts long enough for
-          # manual QA without hoarding storage.
-          retention-days: 14
+          dmg_path=$(find dist-electron -maxdepth 1 -name '*.dmg' | head -n 1)
+          if ! echo "$dmg_path" | grep -q -- "-universal.dmg$"; then
+            echo "::error::Expected universal DMG, got: $dmg_path"
+            exit 1
+          fi
 
       - name: Attach DMG to GitHub release
+        # Only release events have a tag to attach to; workflow_dispatch
+        # runs only build and verify the universal DMG.
         if: github.event_name == 'release'
         env:
           GH_TOKEN: ${{ github.token }}

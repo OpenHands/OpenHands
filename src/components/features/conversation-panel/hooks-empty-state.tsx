@@ -11,9 +11,9 @@ export function HooksEmptyState({ isError }: HooksEmptyStateProps) {
 
   return (
     <div className="flex items-center justify-center h-full p-4">
-      <Typography.Text className="text-[var(--oh-muted)]">
+      <Typography.Text className="text-muted">
         {isError
-          ? t(I18nKey.COMMON$FETCH_ERROR)
+          ? t(I18nKey.HOOKS_MODAL$FETCH_ERROR)
           : t(I18nKey.CONVERSATION$NO_HOOKS)}
       </Typography.Text>
     </div>

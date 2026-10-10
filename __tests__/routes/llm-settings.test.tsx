@@ -12,8 +12,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // Import the named export LlmSettingsScreen directly for testing the form component.
 // The default export now renders LlmSettingsLocalView (the profiles manager view).
 import LlmSettingsRoute, { LlmSettingsScreen } from "#/routes/llm-settings";
+import ConfigService from "#/api/config-service/config-service.api";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
+import { useFreeModelsStore } from "#/stores/free-models-store";
 import { Settings } from "#/types/settings";
 import * as activeBackendContext from "#/contexts/active-backend-context";
 import type { Backend } from "#/api/backend-registry/types";
@@ -22,6 +24,7 @@ import LLMSubscriptionService from "#/api/llm-subscription-service";
 import ProviderConnectionsService, {
   type ProviderConnection,
 } from "#/api/provider-connections-service/provider-connections-service.api";
+import type { SdkSectionSaveControl } from "#/components/features/settings/sdk-settings/sdk-section-page";
 
 vi.mock("#/hooks/query/use-llm-profiles");
 // The profile manager gates mutate controls on this hook; default to a user
@@ -117,6 +120,10 @@ function createMockLlmProfilesReturn(
 describe("LlmSettingsScreen", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    useFreeModelsStore.getState().setFlags({
+      freeModels: new Set(["openhands/kimi-k3"]),
+      defaultModel: "openhands/kimi-k3",
+    });
   });
 
   it("renders the OSS LLM settings form from the SDK schema fallback", async () => {
@@ -247,6 +254,53 @@ describe("LlmSettingsScreen", () => {
     expect(screen.queryByTestId("base-url-input")).not.toBeInTheDocument();
   });
 
+  it("exposes canonical subscription metadata through the save control", async () => {
+    vi.spyOn(LLMSubscriptionService, "getOpenAIStatus").mockResolvedValue({
+      vendor: "openai",
+      connected: true,
+      accountEmail: "graham@example.com",
+      expiresAt: null,
+    });
+    vi.spyOn(LLMSubscriptionService, "getOpenAIModels").mockResolvedValue([
+      "gpt-5.6-luna",
+    ]);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        llm_model: "gpt-5.6-luna",
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          llm: {
+            model: "gpt-5.6-luna",
+            auth_type: "subscription",
+            subscription_vendor: "openai",
+          },
+        },
+      }),
+    );
+    const saveControlRef: { current: SdkSectionSaveControl | null } = {
+      current: null,
+    };
+
+    renderLlmSettingsScreen({
+      onSaveControlChange: (control) => {
+        saveControlRef.current = control;
+      },
+    });
+
+    await screen.findByTestId("llm-subscription-settings");
+    await waitFor(() => expect(saveControlRef.current).not.toBeNull());
+    expect(saveControlRef.current?.getSavePayload()).toEqual({
+      agent_settings_diff: {
+        llm: {
+          auth_type: "subscription",
+          model: "gpt-5.6-luna",
+          subscription_vendor: "openai",
+          temperature: null,
+        },
+      },
+    });
+  });
+
   it("disables subscription model controls while models are loading", async () => {
     vi.spyOn(LLMSubscriptionService, "getOpenAIStatus").mockResolvedValue({
       vendor: "openai",
@@ -330,7 +384,7 @@ describe("LlmSettingsScreen", () => {
     fireEvent.click(screen.getByTestId("subscription-connect"));
     const userCode = await screen.findByTestId("subscription-user-code");
     expect(userCode).toHaveTextContent("USER-CODE");
-    expect(userCode.parentElement).toHaveClass("text-white");
+    expect(userCode.parentElement).toHaveClass("text-contrast");
 
     expect(openSpy).toHaveBeenCalledWith(
       "https://auth.openai.com/activate?user_code=USER-CODE",
@@ -480,12 +534,32 @@ describe("LlmSettingsScreen - provider connection selector", () => {
 describe("LlmSettingsScreen - OpenHands provider on cloud", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    useFreeModelsStore.getState().setFlags({
+      freeModels: new Set(["openhands/kimi-k3"]),
+      defaultModel: "openhands/kimi-k3",
+    });
     vi.spyOn(activeBackendContext, "useActiveBackend").mockReturnValue({
       backend: mockCloudBackend,
     } as ReturnType<typeof activeBackendContext.useActiveBackend>);
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
       buildSettings({ llm_model: "openhands/kimi-k3", llm_api_key_set: true }),
     );
+    vi.spyOn(ConfigService, "searchProviders").mockResolvedValue({
+      items: [{ name: "openhands", verified: true }],
+      next_page_id: null,
+    });
+    vi.spyOn(ConfigService, "searchModels").mockResolvedValue({
+      items: [
+        {
+          provider: "openhands",
+          name: "kimi-k3",
+          verified: true,
+          free: true,
+          default: true,
+        },
+      ],
+      next_page_id: null,
+    });
   });
 
   it("hides the inline API key and base URL inputs for an OpenHands provider model", async () => {
@@ -505,7 +579,7 @@ describe("LlmSettingsScreen - OpenHands provider on cloud", () => {
     expect(screen.queryByTestId("base-url-input")).not.toBeInTheDocument();
     // The free-models note is still surfaced so the user understands the model.
     expect(
-      screen.getByTestId("openhands-free-models-note"),
+      await screen.findByTestId("openhands-free-models-note"),
     ).toBeInTheDocument();
   });
 

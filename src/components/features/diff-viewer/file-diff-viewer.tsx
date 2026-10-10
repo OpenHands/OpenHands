@@ -17,7 +17,9 @@ import { getLanguageFromPath } from "#/utils/get-language-from-path";
 import { cn } from "#/utils/utils";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useUnifiedGitDiff } from "#/hooks/query/use-unified-git-diff";
+import { useColorTheme } from "#/hooks/use-color-theme";
 import { MarkdownRenderer } from "#/components/features/markdown/markdown-renderer";
+import { COLOR_THEMES, type ColorThemeKey } from "#/themes/color-themes";
 import { Typography } from "#/ui/typography";
 import { LoadingSpinner } from "./loading-spinner";
 import { EditorContainer } from "./editor-container";
@@ -25,10 +27,14 @@ import { AccordionPanel } from "./accordion-panel";
 
 type ViewMode = "diff" | "old" | "new";
 
-const VIEW_MODES: { mode: ViewMode; icon: IconType }[] = [
-  { mode: "old", icon: LuHistory },
-  { mode: "diff", icon: LuGitCompareArrows },
-  { mode: "new", icon: LuFileCheck },
+const VIEW_MODES: { mode: ViewMode; icon: IconType; labelKey: I18nKey }[] = [
+  { mode: "old", icon: LuHistory, labelKey: I18nKey.DIFF_VIEWER$VIEW_MODE_OLD },
+  { mode: "diff", icon: LuGitCompareArrows, labelKey: I18nKey.FILES$DIFF_VIEW },
+  {
+    mode: "new",
+    icon: LuFileCheck,
+    labelKey: I18nKey.DIFF_VIEWER$VIEW_MODE_NEW,
+  },
 ];
 
 const SHARED_EDITOR_OPTIONS: editor_t.IEditorOptions = {
@@ -55,8 +61,16 @@ const STATUS_MAP: Record<GitChangeStatus, string | IconType> = {
   U: "Untracked",
 };
 
+const MONACO_THEME_NAMES: Record<ColorThemeKey, string> = {
+  "openhands-deepsea": "openhands-diff-dark",
+  "openhands-neutral": "openhands-diff-dark",
+  "openhands-neo": "openhands-diff-dark",
+  "light-plus": "openhands-diff-light-plus",
+  "solarized-light": "openhands-diff-solarized-light",
+};
+
 const beforeMount = (monaco: Monaco) => {
-  monaco.editor.defineTheme("custom-diff-theme", {
+  monaco.editor.defineTheme("openhands-diff-dark", {
     base: "vs-dark",
     inherit: true,
     rules: [
@@ -73,6 +87,50 @@ const beforeMount = (monaco: Monaco) => {
       "diffEditor.border": "var(--oh-border-subtle)",
       "editorUnnecessaryCode.border": "#00000000",
       "editorUnnecessaryCode.opacity": "rgba(0, 0, 0, 0.467)",
+    },
+  });
+
+  monaco.editor.defineTheme("openhands-diff-light-plus", {
+    base: "vs",
+    inherit: true,
+    rules: [
+      { token: "comment", foreground: "008000" },
+      { token: "keyword", foreground: "0000FF" },
+      { token: "string", foreground: "A31515" },
+      { token: "number", foreground: "098658" },
+    ],
+    colors: {
+      "editor.background": "#FFFFFF",
+      "editor.foreground": "#1F1F1F",
+      "diffEditor.insertedTextBackground": "#9BB95566",
+      "diffEditor.removedTextBackground": "#FF818266",
+      "diffEditor.insertedLineBackground": "#E9F5DD",
+      "diffEditor.removedLineBackground": "#FFEBE9",
+      "diffEditor.border": "#D4D4D4",
+      "editorUnnecessaryCode.border": "#00000000",
+      "editorUnnecessaryCode.opacity": "rgba(31, 31, 31, 0.45)",
+    },
+  });
+
+  monaco.editor.defineTheme("openhands-diff-solarized-light", {
+    base: "vs",
+    inherit: true,
+    rules: [
+      { token: "comment", foreground: "93A1A1" },
+      { token: "keyword", foreground: "859900" },
+      { token: "string", foreground: "2AA198" },
+      { token: "number", foreground: "D33682" },
+    ],
+    colors: {
+      "editor.background": "#FDF6E3",
+      "editor.foreground": "#657B83",
+      "diffEditor.insertedTextBackground": "#85990044",
+      "diffEditor.removedTextBackground": "#DC322F3D",
+      "diffEditor.insertedLineBackground": "#E7E8C9",
+      "diffEditor.removedLineBackground": "#F5D5C8",
+      "diffEditor.border": "#D7D0BC",
+      "editorUnnecessaryCode.border": "#00000000",
+      "editorUnnecessaryCode.opacity": "rgba(88, 110, 117, 0.5)",
     },
   });
 };
@@ -103,6 +161,9 @@ export function FileDiffViewer({
   onToggle,
 }: FileDiffViewerProps) {
   const { t } = useTranslation("openhands");
+  const colorTheme = useColorTheme();
+  const monacoTheme = MONACO_THEME_NAMES[colorTheme];
+  const isLightTheme = COLOR_THEMES[colorTheme].appearance === "light";
   const [uncontrolledExpanded, setUncontrolledExpanded] = React.useState(false);
   const isControlled = controlledExpanded !== undefined;
   const isExpanded = isControlled ? controlledExpanded : uncontrolledExpanded;
@@ -238,7 +299,7 @@ export function FileDiffViewer({
           language={language}
           original={isAdded ? "" : (diff?.original ?? "")}
           modified={isDeleted ? "" : (diff?.modified ?? "")}
-          theme="custom-diff-theme"
+          theme={monacoTheme}
           onMount={handleDiffEditorMount}
           beforeMount={beforeMount}
           options={{
@@ -253,7 +314,10 @@ export function FileDiffViewer({
     if (isMarkdownFile) {
       return (
         <div
-          className="w-full border-b border-[var(--oh-border)] overflow-auto p-4 bg-base prose prose-invert max-w-none"
+          className={cn(
+            "w-full border-b border-border overflow-auto p-4 bg-base prose max-w-none",
+            !isLightTheme && "prose-invert",
+          )}
           data-testid="markdown-preview"
           style={{ maxHeight: MAX_DIFF_EDITOR_HEIGHT_PX }}
         >
@@ -272,7 +336,7 @@ export function FileDiffViewer({
         className="w-full h-full"
         language={language}
         value={singleViewContent}
-        theme="custom-diff-theme"
+        theme={monacoTheme}
         beforeMount={beforeMount}
         onMount={handleSingleEditorMount}
         options={SHARED_EDITOR_OPTIONS}
@@ -283,7 +347,7 @@ export function FileDiffViewer({
   return (
     <div data-testid="file-diff-viewer-outer" className="w-full flex flex-col">
       <div
-        className="flex h-10 items-center px-3 border-b border-[var(--oh-border)] hover:cursor-pointer"
+        className="flex h-10 items-center px-3 border-b border-border hover:cursor-pointer"
         onClick={handleToggle}
       >
         <span className="text-sm w-full text-content flex items-center gap-2 min-w-0">
@@ -306,19 +370,20 @@ export function FileDiffViewer({
               onClick={(e) => e.stopPropagation()}
               aria-hidden={!viewModeControlsVisible}
             >
-              {VIEW_MODES.map(({ mode, icon: Icon }) => (
+              {VIEW_MODES.map(({ mode, icon: Icon, labelKey }) => (
                 <button
                   key={mode}
                   data-testid={`view-mode-${mode}`}
                   type="button"
                   tabIndex={viewModeControlsVisible ? 0 : -1}
                   aria-pressed={viewMode === mode}
+                  aria-label={t(labelKey)}
                   onClick={() => setViewMode(mode)}
                   className={cn(
                     "p-1 rounded transition-colors cursor-pointer",
                     viewMode === mode
-                      ? "bg-[var(--oh-interactive-hover)] text-white"
-                      : "text-[var(--oh-muted)] hover:bg-[var(--oh-interactive-hover)] hover:text-white",
+                      ? "bg-interactive-hover text-contrast"
+                      : "text-muted hover:bg-interactive-hover hover:text-contrast",
                   )}
                 >
                   <Icon className="w-4 h-4" />
@@ -329,7 +394,10 @@ export function FileDiffViewer({
           <button
             data-testid="collapse"
             type="button"
-            className="shrink-0 text-[var(--oh-muted)]"
+            aria-label={t(
+              isCollapsed ? I18nKey.BUTTON$EXPAND : I18nKey.BUTTON$COLLAPSE,
+            )}
+            className="shrink-0 text-muted"
           >
             {isCollapsed ? (
               <ChevronRight className="w-4 h-4" aria-hidden />
@@ -344,7 +412,7 @@ export function FileDiffViewer({
         {isDeleted && !commit ? (
           <div
             data-testid="file-deleted-message"
-            className="w-full border-b border-[var(--oh-border)] p-4 bg-base text-[var(--oh-text-dim)] text-sm"
+            className="w-full border-b border-border p-4 bg-base text-text-dim text-sm"
           >
             {t(I18nKey.DIFF_VIEWER$FILE_DELETED)}
           </div>

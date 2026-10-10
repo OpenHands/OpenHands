@@ -164,7 +164,7 @@ export function SecretForm({
         pattern="^[a-zA-Z][a-zA-Z0-9_]{0,63}$"
         title={t(I18nKey.SETTINGS$SECRET_NAME_PATTERN_TITLE)}
       />
-      {error && <p className="text-red-500 text-sm">{error}</p>}
+      {error && <p className="text-danger text-sm">{error}</p>}
 
       <label className="flex flex-col gap-2.5 w-full min-w-0">
         <span className="text-sm">
@@ -182,7 +182,7 @@ export function SecretForm({
             "resize-none",
             formControlMultilineFieldClassName,
             "placeholder:italic",
-            "disabled:bg-[var(--oh-surface-raised)] disabled:border-[var(--oh-border-subtle)] disabled:cursor-not-allowed",
+            "disabled:bg-surface-raised disabled:border-border-subtle disabled:cursor-not-allowed",
           )}
           rows={8}
         />
@@ -200,7 +200,7 @@ export function SecretForm({
           onChange={(event) => setDescription(event.currentTarget.value)}
           className={cn(
             formControlSettingsFieldClassName,
-            "disabled:bg-[var(--oh-surface-raised)] disabled:border-[var(--oh-border-subtle)]",
+            "disabled:bg-surface-raised disabled:border-border-subtle",
           )}
         />
       </label>

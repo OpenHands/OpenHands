@@ -8,6 +8,7 @@ import {
 } from "#/services/telemetry";
 import type {
   Automation,
+  AutomationCreatedByFilter,
   AutomationRun,
   AutomationSpec,
   AutomationTrigger,
@@ -35,6 +36,8 @@ import type {
   SetupRequestBody,
   ValidateDraftResponse,
 } from "#/manifests/types";
+import { withPresetSources } from "#/utils/automation-preset-sources";
+import { downloadBlob } from "#/utils/utils";
 import type { Backend, ResolvedActiveBackend } from "../backend-registry/types";
 import {
   getActiveBackend,
@@ -128,10 +131,21 @@ function getAutomationSdkVersionFromResponse(
   );
 }
 
-function buildPaginationQuery(limit: number, offset: number): string {
+/**
+ * The query string for a paged list request. `extra` adds params such as
+ * filters; keys whose value is undefined are left out.
+ */
+function buildListQuery(
+  limit: number,
+  offset: number,
+  extra: Record<string, string | undefined> = {},
+): string {
   const params = new URLSearchParams();
   params.set("limit", String(limit));
   params.set("offset", String(offset));
+  for (const [key, value] of Object.entries(extra)) {
+    if (value !== undefined) params.set(key, value);
+  }
   return params.toString();
 }
 
@@ -272,49 +286,67 @@ class AutomationService {
   }
 
   static async listAutomations(
-    params: { limit?: number; offset?: number } = {},
+    params: {
+      limit?: number;
+      offset?: number;
+      createdBy?: AutomationCreatedByFilter;
+    } = {},
   ): Promise<AutomationsResponse> {
-    const { limit = 50, offset = 0 } = params;
+    const { limit = 50, offset = 0, createdBy } = params;
     const active = getActiveBackend().backend;
 
+    let response: AutomationsResponse;
     if (active.kind === "cloud") {
-      return callCloudProxy<AutomationsResponse>({
+      response = await callCloudProxy<AutomationsResponse>({
         backend: active,
         method: "GET",
-        path: `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}?${buildPaginationQuery(limit, offset)}`,
+        path: `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}?${buildListQuery(limit, offset, { created_by: createdBy })}`,
         headers: await buildAutomationRequestHeaders(),
       });
+    } else {
+      const { data } = await localAutomationAxios.get<AutomationsResponse>(
+        `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}`,
+        { params: { limit, offset, created_by: createdBy } },
+      );
+      response = data;
     }
 
-    const { data } = await localAutomationAxios.get<AutomationsResponse>(
-      `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}`,
-      { params: { limit, offset } },
-    );
-    return data;
+    return {
+      ...response,
+      automations: response.automations.map(withPresetSources),
+    };
   }
 
+  /**
+   * One page of the org's automations. `createdBy` narrows it on the server;
+   * an automation service that predates the param ignores it.
+   */
   static async getAutomations(
     limit = 50,
     offset = 0,
+    createdBy?: AutomationCreatedByFilter,
   ): Promise<AutomationsResponse> {
-    return AutomationService.listAutomations({ limit, offset });
+    return AutomationService.listAutomations({ limit, offset, createdBy });
   }
 
   static async getAutomation(id: string): Promise<Automation> {
     const active = getActiveBackend().backend;
     const path = `${AUTOMATION_BASE_PATH}${getAutomationIdEndpoint("detail", id)}`;
 
+    let automation: Automation;
     if (active.kind === "cloud") {
-      return callCloudProxy<Automation>({
+      automation = await callCloudProxy<Automation>({
         backend: active,
         method: "GET",
         path,
         headers: await buildAutomationRequestHeaders(),
       });
+    } else {
+      const { data } = await localAutomationAxios.get<Automation>(path);
+      automation = data;
     }
 
-    const { data } = await localAutomationAxios.get<Automation>(path);
-    return data;
+    return withPresetSources(automation);
   }
 
   static async createAutomation(spec: AutomationSpec): Promise<Automation> {
@@ -475,7 +507,7 @@ class AutomationService {
       return callCloudProxy<AutomationRunsResponse>({
         backend: active,
         method: "GET",
-        path: `${basePath}?${buildPaginationQuery(limit, offset)}`,
+        path: `${basePath}?${buildListQuery(limit, offset)}`,
         headers: await buildAutomationRequestHeaders(),
       });
     }
@@ -502,32 +534,34 @@ class AutomationService {
     return AutomationService.updateAutomation(id, { enabled });
   }
 
-  static async downloadTarball(id: string, name: string): Promise<void> {
+  /** The automation's bundle as the service stores it: (gzipped) tar bytes. */
+  static async fetchTarballBytes(id: string): Promise<Uint8Array<ArrayBuffer>> {
     const active = getActiveBackend().backend;
     const path = `${AUTOMATION_BASE_PATH}${getAutomationIdEndpoint("tarball", id)}`;
 
-    let blob: Blob;
     if (active.kind === "cloud") {
-      blob = await callCloudProxy<Blob>({
+      const buffer = await callCloudProxy<ArrayBuffer>({
         backend: active,
         method: "GET",
         path,
-        responseType: "blob",
+        responseType: "arrayBuffer",
         headers: await buildAutomationRequestHeaders(),
       });
-    } else {
-      const { data } = await localAutomationAxios.get<Blob>(path, {
-        responseType: "blob",
-      });
-      blob = data;
+      return new Uint8Array(buffer);
     }
 
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${name}.tar`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const { data } = await localAutomationAxios.get<ArrayBuffer>(path, {
+      responseType: "arraybuffer",
+    });
+    return new Uint8Array(data);
+  }
+
+  static async downloadTarball(id: string, name: string): Promise<void> {
+    const bytes = await AutomationService.fetchTarballBytes(id);
+    downloadBlob(
+      new Blob([bytes], { type: "application/x-tar" }),
+      `${name}.tar`,
+    );
   }
 
   /**
@@ -589,11 +623,15 @@ class AutomationService {
    */
   static async createAutomationDraft(
     body: SetupRequestBody,
-    /** The entry the draft came from, which decides the create endpoint. */
+    /** The entry and selected action decide the create endpoint. */
     entry?: SetupEntry,
+    selectedAction?: string | null,
   ): Promise<Record<string, unknown>> {
     const active = getActiveBackend().backend;
-    const path = `${AUTOMATION_BASE_PATH}${automationCreateEndpoint(entry)}`;
+    const path = `${AUTOMATION_BASE_PATH}${automationCreateEndpoint(
+      entry,
+      selectedAction,
+    )}`;
 
     if (active.kind === "cloud") {
       return callCloudProxy<Record<string, unknown>>({
@@ -678,8 +716,8 @@ class AutomationService {
   // Git sync paths are literal rather than routed through
   // `getAutomationEndpoint`. That manifest describes the automation surface a
   // host may remap, and `InterfaceEndpoints` requires every key it declares --
-  // adding these would break existing manifests. Git sync is a local-mode
-  // operator feature outside that surface.
+  // adding these would break existing manifests. Git sync is an org-admin
+  // feature outside that surface.
   static async getGitSyncStatus(): Promise<GitSyncStatus> {
     const active = getActiveBackend().backend;
     const path = `${AUTOMATION_BASE_PATH}/v1/git-sync/status`;
@@ -689,6 +727,7 @@ class AutomationService {
         backend: active,
         method: "GET",
         path,
+        headers: await buildAutomationRequestHeaders(),
       });
     }
 
@@ -708,6 +747,7 @@ class AutomationService {
         method: "PUT",
         path,
         body: body as Record<string, unknown>,
+        headers: await buildAutomationRequestHeaders(),
       });
     }
 
@@ -732,6 +772,7 @@ class AutomationService {
         method: "POST",
         path,
         body: body as Record<string, unknown>,
+        headers: await buildAutomationRequestHeaders(),
       });
     }
 
@@ -751,6 +792,7 @@ class AutomationService {
         backend: active,
         method: "POST",
         path,
+        headers: await buildAutomationRequestHeaders(),
       });
     }
 

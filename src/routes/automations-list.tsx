@@ -38,6 +38,10 @@ import { ImportAutomationModal } from "#/components/features/automations/import-
 import { RecommendedAutomationsLauncher } from "#/components/features/automations/recommended-automations-launcher";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { useTracking } from "#/hooks/use-tracking";
+import {
+  useAutomationCreatorFilterUserId,
+  useAutomationPermissions,
+} from "#/hooks/use-automation-permissions";
 import type { Automation, AutomationSpec } from "#/types/automation";
 import {
   getAutomationExportFilename,
@@ -57,6 +61,7 @@ import {
 } from "#/manifests/automation-insights";
 import { interpolateValues } from "#/manifests/manifest-template";
 import type {
+  DashboardCreatedByValue,
   DashboardSortValue,
   DashboardStatusValue,
   DashboardTriggerValue,
@@ -69,8 +74,7 @@ import { MANIFEST_ICON_BY_SLUG } from "#/components/features/manifest/manifest-i
 import { ManifestOverviewTiles } from "#/components/features/manifest/manifest-overview-tiles";
 import { ManifestSubpageLayout } from "#/components/features/manifest/manifest-subpage-layout";
 import { cn, downloadBlob } from "#/utils/utils";
-
-const PAGE_SIZE = 50;
+import { uniqueById } from "#/utils/unique-by-id";
 
 /**
  * The page renders the interface manifest's copy, so without an admitted
@@ -100,13 +104,14 @@ export default function AutomationsList() {
   const [statusFilter, setStatusFilter] = useState<DashboardStatusValue>("all");
   const [triggerFilter, setTriggerFilter] =
     useState<DashboardTriggerValue>("all");
+  const [createdByFilter, setCreatedByFilter] =
+    useState<DashboardCreatedByValue>("all");
   const [sortValue, setSortValue] = useState<DashboardSortValue>(
     dashboardSpec?.sort.default ?? "last-run",
   );
   const [viewMode, setViewMode] = useState<AutomationViewMode>(() =>
     readStoredAutomationViewMode(),
   );
-  const [limit, setLimit] = useState(PAGE_SIZE);
   const [deleteTarget, setDeleteTarget] = useState<{
     id: string;
     name: string;
@@ -118,9 +123,16 @@ export default function AutomationsList() {
 
   const active = useActiveBackend();
   const { navigate } = useNavigation();
-  // Edit is a local-backend-only feature in MVP — cloud automations
-  // are managed elsewhere and we don't yet surface them here.
-  const canEdit = active.backend.kind === "local";
+  // Git Sync is org-level config, so its entry point requires
+  // manage_automations (admins/owners) on every backend kind.
+  const { canManage } = useAutomationPermissions();
+  const creatorFilterUserId = useAutomationCreatorFilterUserId();
+  // The creator the server filters by; undefined while the filter is hidden
+  // or set to "all".
+  const serverCreatedBy =
+    creatorFilterUserId !== null && createdByFilter !== "all"
+      ? createdByFilter
+      : undefined;
 
   const {
     data: healthData,
@@ -131,13 +143,35 @@ export default function AutomationsList() {
   const isBackendHealthy = healthData?.status === "ok";
 
   // Only fetch automations if the backend is healthy
-  const { data, isLoading, isError, refetch } = useAutomations({
-    limit,
-    offset: 0,
+  const {
+    data,
+    isLoading,
+    isError,
+    refetch,
+    hasNextPage,
+    fetchNextPage,
+    isFetching,
+    isPlaceholderData,
+  } = useAutomations({
     enabled: isBackendHealthy,
+    // The server filters by creator so pages and `total` cover only matches;
+    // the client predicate in applyDashboardView stays as the fallback for
+    // an automation service that ignores the param.
+    createdBy: serverCreatedBy,
   });
-  // One runs query per listed automation — dashboard mode only.
-  const runSummaries = useAutomationRunSummaries(data?.automations ?? [], {
+  // The overview tiles summarize the org list above the filters, so they read
+  // it unfiltered; with no creator selected this is the same query as above.
+  const { data: orgData } = useAutomations({ enabled: isBackendHealthy });
+  const runSummaryAutomations = useMemo(
+    () =>
+      uniqueById([
+        ...(orgData?.automations ?? []),
+        ...(data?.automations ?? []),
+      ]),
+    [orgData?.automations, data?.automations],
+  );
+  // One runs query per automation in either list — dashboard mode only.
+  const runSummaries = useAutomationRunSummaries(runSummaryAutomations, {
     enabled: isBackendHealthy && dashboard !== null,
   });
   const { trackPrebuiltAutomationEnabled, trackAutomationExported } =
@@ -160,6 +194,11 @@ export default function AutomationsList() {
         search: searchQuery,
         status: statusFilter,
         trigger: triggerFilter,
+        // A null id (local backend, personal workspace, or /me loading)
+        // leaves the creator filter inert, so a selection made on a team
+        // workspace has no effect while the filter is hidden.
+        createdBy: createdByFilter,
+        currentUserId: creatorFilterUserId,
         sort: sortValue,
       },
       runSummaries,
@@ -170,6 +209,8 @@ export default function AutomationsList() {
     searchQuery,
     statusFilter,
     triggerFilter,
+    createdByFilter,
+    creatorFilterUserId,
     sortValue,
     runSummaries,
   ]);
@@ -286,11 +327,12 @@ export default function AutomationsList() {
     setSearchQuery("");
     setStatusFilter("all");
     setTriggerFilter("all");
+    setCreatedByFilter("all");
   };
 
   const overviewTiles = useMemo(() => {
     if (!dashboardSpec) return [];
-    const automations = data?.automations ?? [];
+    const automations = orgData?.automations ?? [];
     return dashboardSpec.overview.tiles.map((tile) => {
       const value = computeOverviewTile(tile.metric, automations, runSummaries);
       const template =
@@ -303,7 +345,7 @@ export default function AutomationsList() {
         Icon: MANIFEST_ICON_BY_SLUG[tile.icon],
       };
     });
-  }, [dashboardSpec, data?.automations, runSummaries]);
+  }, [dashboardSpec, orgData?.automations, runSummaries]);
 
   const groupInsights = dashboard
     ? { spec: dashboard.spec.insights, byId: runSummaries }
@@ -326,9 +368,17 @@ export default function AutomationsList() {
       </div>
     );
 
-  const hasMore = data ? data.total > data.automations.length : false;
-  const hasNoAutomations =
-    !isLoading && !isError && data?.automations.length === 0;
+  // A failed refetch or Load more keeps the loaded rows; Load more retries.
+  const isListError = isError && !data;
+  // Whether the org has any automations comes from the unfiltered list, so an
+  // empty filtered response shows the filtered empty state with Clear filters.
+  const hasNoAutomations = !isListError && orgData?.total === 0;
+  // The previous filter's rows stand in while the next page loads; when none
+  // of them match, show loading rather than a no-match that is not final. An
+  // empty org keeps its empty state instead.
+  const isListLoading =
+    !hasNoAutomations &&
+    (isLoading || (isPlaceholderData && visible.length === 0));
 
   // Show loading state while checking health
   if (isHealthLoading) {
@@ -363,8 +413,8 @@ export default function AutomationsList() {
   return renderShell(
     <>
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 flex-1 basis-64">
           <h1 className="text-xl font-semibold text-content">
             {interfaceCopy.listTitle}
           </h1>
@@ -373,7 +423,10 @@ export default function AutomationsList() {
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap justify-end gap-2">
-          {canEdit && (
+          {/* Git sync is org-level config, so it follows manage_automations
+              (admins/owners) on every backend kind, not the local-only edit
+              gate. */}
+          {canManage && (
             <BrandButton
               type="button"
               variant="secondary"
@@ -413,9 +466,12 @@ export default function AutomationsList() {
             spec={dashboard.spec}
             status={statusFilter}
             trigger={triggerFilter}
+            createdBy={createdByFilter}
+            canFilterByCreator={creatorFilterUserId !== null}
             sort={sortValue}
             onStatusChange={setStatusFilter}
             onTriggerChange={setTriggerFilter}
+            onCreatedByChange={setCreatedByFilter}
             onSortChange={setSortValue}
           />
         )}
@@ -428,7 +484,7 @@ export default function AutomationsList() {
 
       {/* Content */}
       <div className={cn("flex flex-col gap-6", !dashboard && "mt-6")}>
-        {isLoading && (
+        {isListLoading && (
           <div className="flex flex-col gap-3">
             {Array.from({ length: 3 }).map((_, i) => (
               <AutomationCardSkeleton key={`skeleton-${String(i)}`} />
@@ -436,64 +492,66 @@ export default function AutomationsList() {
           </div>
         )}
 
-        {isError && !isLoading && <ErrorState onRetry={refetch} />}
+        {isListError && !isLoading && <ErrorState onRetry={refetch} />}
 
         {hasNoAutomations && <EmptyState />}
 
-        {!isLoading &&
-          !isError &&
-          data &&
-          data.automations.length > 0 &&
-          (dashboard && visible.length === 0 ? (
-            <AutomationsFilteredEmptyState onClear={handleClearFilters} />
-          ) : (
-            <>
-              <AutomationGroup
-                title={t(I18nKey.AUTOMATIONS$ACTIVE)}
-                count={activeAutomations.length}
-                automations={activeAutomations}
-                view={viewMode}
-                onToggle={handleToggle}
-                onRunNow={handleRunNow}
-                runPendingId={
-                  dispatchMutation.isPending
-                    ? (dispatchMutation.variables ?? null)
-                    : null
-                }
-                onDelete={handleDeleteRequest}
-                onExport={handleExport}
-                onEdit={canEdit ? handleEditRequest : undefined}
-                insights={groupInsights}
-              />
-              <AutomationGroup
-                title={t(I18nKey.AUTOMATIONS$INACTIVE)}
-                count={inactive.length}
-                automations={inactive}
-                view={viewMode}
-                onToggle={handleToggle}
-                onRunNow={handleRunNow}
-                runPendingId={
-                  dispatchMutation.isPending
-                    ? (dispatchMutation.variables ?? null)
-                    : null
-                }
-                onDelete={handleDeleteRequest}
-                onExport={handleExport}
-                onEdit={canEdit ? handleEditRequest : undefined}
-                insights={groupInsights}
-              />
-
-              {hasMore && (
-                <button
-                  type="button"
-                  onClick={() => setLimit((prev) => prev + PAGE_SIZE)}
-                  className="self-center rounded-lg border border-[var(--oh-border)] px-6 py-2 text-sm text-white hover:bg-surface-raised"
-                >
-                  {t(I18nKey.AUTOMATIONS$LOAD_MORE)}
-                </button>
-              )}
-            </>
-          ))}
+        {!isListLoading && !isListError && data && !hasNoAutomations && (
+          <>
+            {dashboard && visible.length === 0 ? (
+              <AutomationsFilteredEmptyState onClear={handleClearFilters} />
+            ) : (
+              <>
+                <AutomationGroup
+                  title={t(I18nKey.AUTOMATIONS$ACTIVE)}
+                  count={activeAutomations.length}
+                  automations={activeAutomations}
+                  view={viewMode}
+                  onToggle={handleToggle}
+                  onRunNow={handleRunNow}
+                  runPendingId={
+                    dispatchMutation.isPending
+                      ? (dispatchMutation.variables ?? null)
+                      : null
+                  }
+                  onDelete={handleDeleteRequest}
+                  onExport={handleExport}
+                  onEdit={handleEditRequest}
+                  insights={groupInsights}
+                />
+                <AutomationGroup
+                  title={t(I18nKey.AUTOMATIONS$INACTIVE)}
+                  count={inactive.length}
+                  automations={inactive}
+                  view={viewMode}
+                  onToggle={handleToggle}
+                  onRunNow={handleRunNow}
+                  runPendingId={
+                    dispatchMutation.isPending
+                      ? (dispatchMutation.variables ?? null)
+                      : null
+                  }
+                  onDelete={handleDeleteRequest}
+                  onExport={handleExport}
+                  onEdit={handleEditRequest}
+                  insights={groupInsights}
+                />
+              </>
+            )}
+            {/* Also under the filtered empty state: the matches may be on a
+                  page that is not loaded yet. */}
+            {hasNextPage && (
+              <button
+                type="button"
+                onClick={() => fetchNextPage()}
+                disabled={isFetching}
+                className="self-center rounded-lg border border-border px-6 py-2 text-sm text-contrast hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {t(I18nKey.AUTOMATIONS$LOAD_MORE)}
+              </button>
+            )}
+          </>
+        )}
       </div>
 
       {/* The launcher lives on the templates sub-page in dashboard mode */}
@@ -511,7 +569,7 @@ export default function AutomationsList() {
         onCancel={() => setDeleteTarget(null)}
       />
 
-      {/* Edit modal — local backends only */}
+      {/* Edit modal */}
       {editTarget && (
         <EditAutomationModal
           automation={editTarget}

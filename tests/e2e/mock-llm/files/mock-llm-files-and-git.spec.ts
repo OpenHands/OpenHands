@@ -274,6 +274,7 @@ test.describe("files tab, conversation overview git, and browser tab", () => {
       if (await commitsTab.isVisible().catch(() => false)) {
         await commitsTab.click();
       } else {
+        // The sidebar card and the conversation title carry their own "⋯".
         await page
           .getByTestId("tabs-pane-header")
           .getByTestId("ellipsis-button")
