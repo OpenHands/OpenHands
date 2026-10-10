@@ -225,6 +225,19 @@ export interface AppConversation {
   active_profile?: string | null;
   public?: boolean;
   sub_conversation_ids: string[];
+  /**
+   * Models offered by the ACP server for this session (lifted off
+   * ``ACPAgent.available_models`` by the agent-server). Each entry carries
+   * ``model_id`` plus optional ``name`` / ``description``. Surfaced for ACP
+   * conversations so clients can render a runtime model picker.
+   */
+  available_models?: AcpModelInfo[] | null;
+}
+
+export interface AcpModelInfo {
+  model_id: string;
+  name?: string | null;
+  description?: string | null;
 }
 
 export interface AppConversationPage {

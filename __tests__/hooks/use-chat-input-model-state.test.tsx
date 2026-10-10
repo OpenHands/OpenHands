@@ -295,4 +295,163 @@ describe("useChatInputModelState", () => {
     // Unknown model id has no registry label → falls back to the raw id.
     expect(result.current.displayModel).toBe("custom-model");
   });
+
+  it("active ACP with runtime available_models: prefers runtime list over static catalogue, mapping name to label", () => {
+    const provider = getAcpProvider("claude-code");
+    expect(provider?.available_models?.length).toBeGreaterThan(0);
+
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "c1",
+        agent_kind: "acp",
+        acp_server: "claude-code",
+        llm_model: "m1",
+        available_models: [
+          { model_id: "m1", name: "Custom Model 1" },
+          { model_id: "m2", name: null },
+        ],
+      },
+    });
+    useOptionalConversationIdMock.mockReturnValue({ conversationId: "c1" });
+    useAcpModelContextMock.mockReturnValue(
+      acpContext({
+        isActiveAcpConversation: true,
+        isAcpContext: true,
+        destinationPath: "/settings/agents",
+        destinationLabel: "Agent",
+      }),
+    );
+
+    const { result } = renderHook(() => useChatInputModelState());
+
+    expect(result.current.isAcpContext).toBe(true);
+    expect(result.current.currentModelId).toBe("m1");
+    expect(result.current.displayModel).toBe("Custom Model 1");
+    expect(result.current.availableAcpModels).toEqual([
+      { id: "m1", label: "Custom Model 1" },
+      { id: "m2", label: "m2" },
+    ]);
+    expect(result.current.showAcpPicker).toBe(true);
+  });
+
+  it("active ACP with custom provider: shows picker when runtime available_models is non-empty", () => {
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "c1",
+        agent_kind: "acp",
+        acp_server: "custom",
+        llm_model: "swe-2-high",
+        available_models: [
+          { model_id: "swe-2-high", name: "Devin High (Runtime)" },
+          { model_id: "swe-2-fast", name: "Devin Fast" },
+        ],
+      },
+    });
+    useOptionalConversationIdMock.mockReturnValue({ conversationId: "c1" });
+    useAcpModelContextMock.mockReturnValue(
+      acpContext({
+        isActiveAcpConversation: true,
+        isAcpContext: true,
+        destinationPath: "/settings/agents",
+        destinationLabel: "Agent",
+      }),
+    );
+
+    const { result } = renderHook(() => useChatInputModelState());
+
+    expect(result.current.availableAcpModels).toEqual([
+      { id: "swe-2-high", label: "Devin High (Runtime)" },
+      { id: "swe-2-fast", label: "Devin Fast" },
+    ]);
+    expect(result.current.showAcpPicker).toBe(true);
+    expect(result.current.displayModel).toBe("Devin High (Runtime)");
+  });
+
+  it("active ACP with empty or absent runtime list: falls back to static catalogue", () => {
+    const provider = getAcpProvider("claude-code");
+    expect(provider?.available_models?.length).toBeGreaterThan(0);
+
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "c1",
+        agent_kind: "acp",
+        acp_server: "claude-code",
+        llm_model: "sonnet",
+        available_models: [],
+      },
+    });
+    useOptionalConversationIdMock.mockReturnValue({ conversationId: "c1" });
+    useAcpModelContextMock.mockReturnValue(
+      acpContext({
+        isActiveAcpConversation: true,
+        isAcpContext: true,
+        destinationPath: "/settings/agents",
+        destinationLabel: "Agent",
+      }),
+    );
+
+    const { result } = renderHook(() => useChatInputModelState());
+
+    expect(result.current.availableAcpModels).toEqual(
+      provider?.available_models,
+    );
+    expect(result.current.showAcpPicker).toBe(true);
+    expect(result.current.displayModel).toBe("Claude Sonnet");
+  });
+
+  it("active ACP displayModel: falls back to static catalogue label when runtime name is null", () => {
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "c1",
+        agent_kind: "acp",
+        acp_server: "claude-code",
+        llm_model: "sonnet",
+        available_models: [{ model_id: "sonnet", name: null }],
+      },
+    });
+    useOptionalConversationIdMock.mockReturnValue({ conversationId: "c1" });
+    useAcpModelContextMock.mockReturnValue(
+      acpContext({
+        isActiveAcpConversation: true,
+        isAcpContext: true,
+        destinationPath: "/settings/agents",
+        destinationLabel: "Agent",
+      }),
+    );
+
+    const { result } = renderHook(() => useChatInputModelState());
+
+    expect(result.current.displayModel).toBe("Claude Sonnet");
+  });
+
+  it("home ACP: continues to render from the static provider catalogue", () => {
+    const provider = getAcpProvider("claude-code");
+    useActiveConversationMock.mockReturnValue({ data: undefined });
+    useSettingsMock.mockReturnValue({
+      data: {
+        agent_settings: {
+          agent_kind: "acp",
+          acp_server: "claude-code",
+          acp_model: "claude-sonnet-4-6",
+        },
+      },
+    });
+    useOptionalConversationIdMock.mockReturnValue({ conversationId: null });
+    useAcpModelContextMock.mockReturnValue(
+      acpContext({
+        isHomeAcp: true,
+        isAcpContext: true,
+        destinationPath: "/settings/agents",
+        destinationLabel: "Agent",
+      }),
+    );
+
+    const { result } = renderHook(() => useChatInputModelState());
+
+    expect(result.current.availableAcpModels).toEqual(
+      provider?.available_models,
+    );
+    expect(result.current.showAcpPicker).toBe(true);
+    expect(result.current.switchConversationId).toBeNull();
+  });
 });

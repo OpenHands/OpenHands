@@ -30,6 +30,7 @@ import {
   PluginSpec,
   AppConversation,
   AppConversationPage,
+  AcpModelInfo,
   RuntimeConversationStats,
   SandboxStatus,
 } from "./conversation-service/agent-server-conversation-service.types";
@@ -128,6 +129,11 @@ export interface DirectConversationInfo {
   } | null;
   current_model_id?: string | null;
   current_model_name?: string | null;
+  /**
+   * Models the ACP server offers for this session (from
+   * ``ConversationInfo.available_models``). Read by {@link toAppConversation}.
+   */
+  available_models?: AcpModelInfo[] | null;
   workspace?: {
     working_dir?: string | null;
   } | null;
@@ -493,6 +499,7 @@ export function toAppConversation(
     },
     public: false,
     sub_conversation_ids: info.sub_conversation_ids ?? [],
+    available_models: isAcp ? (info.available_models ?? null) : null,
   };
 }
 
