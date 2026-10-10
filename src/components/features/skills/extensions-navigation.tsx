@@ -14,9 +14,9 @@ import { useActiveBackendContext } from "#/contexts/active-backend-context";
 import { isNoBackend } from "#/api/backend-registry/active-store";
 
 /** Only the Skills item points to a cloud-hosted page today. */
-const CLOUD_LINKED_EXTENSION_PATH = "/skills";
+export const CLOUD_LINKED_EXTENSION_PATH = "/skills";
 /** Backend-installed artifacts are not available on Cloud backends yet. */
-const CLOUD_HIDDEN_EXTENSION_PATHS = new Set(["/plugins", "/apps"]);
+export const CLOUD_HIDDEN_EXTENSION_PATHS = new Set(["/plugins", "/apps"]);
 
 interface ExtensionNavItem {
   to: string;

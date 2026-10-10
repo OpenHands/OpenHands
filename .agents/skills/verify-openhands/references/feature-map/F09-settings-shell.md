@@ -29,6 +29,7 @@ Source: `src/routes.ts`, `src/routes/settings.tsx`, `src/routes/settings-index.t
 - `F09.phone-hub`: below 1024 px (phones and tablets), `/settings` stays put and shows a "Settings" heading, the eight links, the version card and the synced note, with no page header and no horizontal overflow.
 - `F09.hub-resize-redirect`: widening the window to ≥1024 px while the phone hub is open replaces `/settings` with `/settings/agents`; narrowing on a sub-page keeps its URL and adds the Back chevron.
 - `F09.breakpoint-sweep`: at 767, 768, 820, 1023, 1024 and 1440 px, `/settings` is the hub below 1024 px and redirects to the desktop nav from 1024 px up, and the Application page's `main` is at least 340 px wide with no horizontal overflow.
+- `F09.tablet-sibling-nav`: at tablet widths (768–1023 px), Settings subpages show a compact section dropdown (`testid=tablet-sibling-nav`) naming the current section and offering direct navigation to sibling settings destinations without returning to the hub.
 - `F09.phone-back`: at phone width each settings page shows a Back chevron (label "Settings") in the top bar that returns to the hub.
 - `F09.synced-badge`: the nav footer reads "These settings are synced from Local backend (<origin>)" for the active backend.
 - `F09.cloud-links`: on a Cloud backend only, the nav adds "Integrations" and "All Cloud Settings" external links; on a local backend neither exists.
