@@ -59,7 +59,10 @@ import {
   type ConversationGroupLaunch,
 } from "./conversation-panel-list-helpers";
 import { useArchivedConversationsStore } from "#/stores/archived-conversations-store";
-import { usePinnedConversationsStore } from "#/stores/pinned-conversations-store";
+import {
+  getPinnedConversationsScopeKey,
+  usePinnedConversationsStore,
+} from "#/stores/pinned-conversations-store";
 import { uniqueById } from "#/utils/unique-by-id";
 
 interface ConversationPanelProps {
@@ -82,7 +85,7 @@ export function ConversationPanel({
 }: ConversationPanelProps) {
   const { t } = useTranslation("openhands");
   const { conversationId: currentConversationId, navigate } = useNavigation();
-  const { backend: activeBackend } = useActiveBackend();
+  const { backend: activeBackend, orgId: activeOrgId } = useActiveBackend();
   const backendScopedPath = useBackendScopedPath();
   // Click-outside is only relevant in the legacy drawer mode where an
   // onClose handler is provided. When the panel is rendered inline (e.g.
@@ -171,9 +174,14 @@ export function ConversationPanel({
   const [expandedPinnedPreview, setExpandedPinnedPreview] =
     React.useState(false);
 
+  const pinnedScopeKey = getPinnedConversationsScopeKey(
+    activeBackend.id,
+    activeOrgId,
+  );
+
   const pinnedIds = usePinnedConversationsStore(
     (state) =>
-      state.pinsByBackendId[activeBackend.id] ?? EMPTY_PINNED_CONVERSATION_IDS,
+      state.pinsByBackendId[pinnedScopeKey] ?? EMPTY_PINNED_CONVERSATION_IDS,
   );
   const togglePin = usePinnedConversationsStore((state) => state.togglePin);
   const unpinConversation = usePinnedConversationsStore(
@@ -388,17 +396,31 @@ export function ConversationPanel({
   );
 
   React.useEffect(() => {
-    if (!isFetched) {
+    // Only prune when the query has finished fetching AND there are no further
+    // pages on the backend (!hasNextPage). When hasNextPage is true, the loaded
+    // pages represent only a partial slice of the user's conversations, so
+    // conversations on subsequent pages must not be dropped as missing upon
+    // initial load or refresh. Also skip pruning on Cloud before the active
+    // organization is resolved.
+    if (
+      !isFetched ||
+      hasNextPage ||
+      (activeBackend.kind === "cloud" && !activeOrgId)
+    ) {
       return;
     }
-    // Prune pins against the unfiltered loaded pages so archived-but-still-
-    // pinned rows are not treated as missing. Archived IDs are intentionally
-    // not pruned here — pagination would otherwise drop archives that are not
-    // on the currently loaded pages and let them reappear in the list.
     const loadedIds =
       data?.pages.flatMap((page) => page.items.map((item) => item.id)) ?? [];
-    pruneMissingPinnedConversations(activeBackend.id, loadedIds);
-  }, [activeBackend.id, data, isFetched, pruneMissingPinnedConversations]);
+    pruneMissingPinnedConversations(pinnedScopeKey, loadedIds);
+  }, [
+    activeBackend.kind,
+    activeOrgId,
+    data,
+    hasNextPage,
+    isFetched,
+    pinnedScopeKey,
+    pruneMissingPinnedConversations,
+  ]);
 
   React.useEffect(() => {
     if (pinnedIds.length === 0) {
@@ -787,6 +809,7 @@ export function ConversationPanel({
         {
           onSuccess: () => {
             removeArchivedConversation(activeBackend.id, conversationId);
+            unpinConversation(pinnedScopeKey, conversationId);
             if (conversationId === currentConversationId) {
               navigate("/conversations");
             }
@@ -801,7 +824,7 @@ export function ConversationPanel({
       return;
     }
     archiveConversation(activeBackend.id, selectedConversationId);
-    unpinConversation(activeBackend.id, selectedConversationId);
+    unpinConversation(pinnedScopeKey, selectedConversationId);
     if (selectedConversationId === currentConversationId) {
       navigate("/conversations");
     }
@@ -833,6 +856,7 @@ export function ConversationPanel({
 
     for (const conversationId of deletedIds) {
       removeArchivedConversation(activeBackend.id, conversationId);
+      unpinConversation(pinnedScopeKey, conversationId);
     }
 
     if (
@@ -989,7 +1013,7 @@ export function ConversationPanel({
               showTags={showTagsMetadata}
               isArchived={isArchived}
               isPinned={isPinned}
-              onTogglePin={() => togglePin(activeBackend.id, conversation.id)}
+              onTogglePin={() => togglePin(pinnedScopeKey, conversation.id)}
               alwaysShowPinIcon={isPinned && !options?.inPinnedSection}
             />
           </NavigationLink>
@@ -1011,6 +1035,7 @@ export function ConversationPanel({
       onClose,
       openContextMenuId,
       pinnedIds,
+      pinnedScopeKey,
       showRepoBranchMetadata,
       showLlmProfiles,
       showTagsMetadata,
