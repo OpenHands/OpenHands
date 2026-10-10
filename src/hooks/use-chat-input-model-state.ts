@@ -70,6 +70,16 @@ export function useChatInputModelState(): ChatInputModelState {
       ? activeAcpProfile.acp_model
       : settingsAcpModel;
 
+  // Runtime model catalogue the ACP server reported for the active session
+  // (``available_models``, agent-server >= 1.51.0). Preferred over the static
+  // registry: it is the only source that lists models for a ``custom`` ACP
+  // profile, and for built-in providers it reflects the credentials actually
+  // configured. Only an active conversation has a live session to report it.
+  const runtimeAcpModels =
+    isActiveAcpConversation && conversation?.available_models
+      ? conversation.available_models
+      : [];
+
   let currentModelId: string | null = null;
   if (isActiveAcpConversation) {
     // ACP conversations store llm_model as the acp_model (persisted at
@@ -92,11 +102,26 @@ export function useChatInputModelState(): ChatInputModelState {
     currentModelId = conversation?.llm_model ?? settings?.llm_model ?? null;
   }
 
+  // Chip label precedence: the matching runtime entry's ``name`` (a custom
+  // server's own wording, e.g. ``swe-2-high`` → "SWE 2 High"), then the
+  // static registry label (``sonnet`` → "Claude Sonnet"), then the raw id
+  // (``labelForAcpModel`` already falls back to it for unknown ids).
+  const runtimeCurrentModel = runtimeAcpModels.find(
+    (modelEntry) => modelEntry.model_id === currentModelId,
+  );
   const displayModel =
     currentModelId && isAcpContext
-      ? (labelForAcpModel(acpServerKey, currentModelId) ?? currentModelId)
+      ? (runtimeCurrentModel?.name ??
+        labelForAcpModel(acpServerKey, currentModelId) ??
+        currentModelId)
       : currentModelId;
-  const availableAcpModels = acpProvider?.available_models ?? [];
+  const availableAcpModels =
+    runtimeAcpModels.length > 0
+      ? runtimeAcpModels.map((modelEntry) => ({
+          id: modelEntry.model_id,
+          label: modelEntry.name ?? modelEntry.model_id,
+        }))
+      : (acpProvider?.available_models ?? []);
   // A home-page pick persists into the active ACP profile, which on cloud is
   // org-owned — hide the selectable rows from members who'd only get a 403.
   // Conversation-scoped switches (blank or started) stay member-allowed.

@@ -1136,6 +1136,57 @@ describe("AgentServerConversationService", () => {
       expect(conversation?.llm_model).toBe("Claude Opus 4.7");
     });
 
+    it("preserves the runtime available_models catalogue through the wire normalizer (#18053)", async () => {
+      // Same rationale as the current_model_* fields above: the adapter
+      // tests build DirectConversationInfo in-process, so only this path
+      // catches the normalizer silently dropping the runtime model list.
+      // Malformed entries (no id, non-record) must be dropped, and an
+      // absent/empty list must read as ``null`` so consumers fall back to
+      // the static registry.
+      mockHttpGet.mockResolvedValue({
+        data: [
+          {
+            id: "conv-acp-runtime-models",
+            created_at: "2024-01-01",
+            updated_at: "2024-01-01",
+            agent: {
+              kind: "ACPAgent",
+              acp_server: "custom",
+              llm: { model: "acp-managed" },
+            },
+            available_models: [
+              { model_id: "swe-2-high", name: "SWE 2 High" },
+              { model_id: "  ", name: "dropped — blank id" },
+              { name: "dropped — no id" },
+              "dropped — not a record",
+            ],
+          },
+          {
+            id: "conv-acp-empty-runtime-models",
+            created_at: "2024-01-01",
+            updated_at: "2024-01-01",
+            agent: {
+              kind: "ACPAgent",
+              acp_server: "claude-code",
+              llm: { model: "acp-managed" },
+            },
+            available_models: [],
+          },
+        ],
+      });
+
+      const [withModels, emptyModels] =
+        await AgentServerConversationService.batchGetAppConversations([
+          "conv-acp-runtime-models",
+          "conv-acp-empty-runtime-models",
+        ]);
+
+      expect(withModels?.available_models).toEqual([
+        { model_id: "swe-2-high", name: "SWE 2 High", description: null },
+      ]);
+      expect(emptyModels?.available_models).toBeNull();
+    });
+
     it("sources acp_server from the agent when the acpserver tag is absent", async () => {
       // Profile launches don't stamp the ``acpserver`` tag client-side, so the
       // provider identity must survive from ``agent.acp_server`` (SDK #3692)
