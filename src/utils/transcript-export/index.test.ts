@@ -208,6 +208,42 @@ describe("conversation transcript export", () => {
     );
   });
 
+  // Regression (reviewer): an action thought with a leading inline reasoning
+  // block must not export raw tags, and identical explicit + inline reasoning
+  // must appear once — matching what the chat renders.
+  it("strips inline reasoning tags from action narration", () => {
+    const narratedAction: ActionEvent<ExecuteBashAction> = {
+      ...terminalAction,
+      reasoning_content: "Check the directory",
+      thought: [
+        {
+          type: "text",
+          text: "<think>Check the directory</think>\nRunning ls",
+        },
+      ],
+    };
+    const markdown = eventsToMarkdown([narratedAction], defaultOptions);
+
+    expect(markdown).not.toContain("&lt;think&gt;");
+    expect(markdown).not.toContain("<think>");
+    expect(markdown.match(/Check the directory/g)).toHaveLength(1);
+    expect(markdown).toContain("Running ls");
+  });
+
+  // Regression (reviewer): reasoning and the visible message are distinct parts
+  // of the action. When their text matches, the transcript must keep both (the
+  // chat shows a thinking section and a bubble), not drop one as a duplicate.
+  it("keeps a message that matches its reasoning", () => {
+    const narratedAction: ActionEvent<ExecuteBashAction> = {
+      ...terminalAction,
+      reasoning_content: "Run tests",
+      thought: [{ type: "text", text: "Run tests" }],
+    };
+    const markdown = eventsToMarkdown([narratedAction], defaultOptions);
+
+    expect(markdown.match(/Run tests/g)).toHaveLength(2);
+  });
+
   it("exports streaming reasoning with the same inline-think split as chat", () => {
     const streamingEvent: StreamingDeltaEvent = {
       id: "streaming-1",

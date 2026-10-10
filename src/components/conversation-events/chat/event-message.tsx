@@ -38,7 +38,12 @@ import { CorrectiveNudgeMessage } from "./event-message-components/corrective-nu
 import { createSkillReadyEvent } from "./event-content-helpers/create-skill-ready-event";
 import { isCorrectiveNudge } from "./event-content-helpers/should-render-event";
 import { shouldShowPlanPreview } from "./hooks/use-plan-preview-events";
-import { getReasoningContent, splitInlineThink } from "./event-thought-helpers";
+import {
+  getReasoningContent,
+  hasNonEmptyThought,
+  splitInlineThink,
+} from "./event-thought-helpers";
+import { isGroupableEvent } from "./group-events";
 import { useStreamedText } from "#/hooks/use-streamed-text";
 
 interface EventMessageProps {
@@ -285,7 +290,16 @@ function EventMessageComponent({
 
   // Action events - render thought + action (will be replaced by thought + observation)
   if (isActionEvent(event)) {
-    const reasoningContent = getReasoningContent(event);
+    // `ThoughtEventMessage` owns reasoning whenever it renders, and when the
+    // caller hoists the thought out of a group it owns it too. Rendering the
+    // explicit reasoning here as well would give the action two thinking
+    // controls (and repeat identical text). `ThinkAction` is handled above.
+    const reasoningRenderedByThoughtMessage =
+      !suppressThought ||
+      (isGroupableEvent(event) && hasNonEmptyThought(event));
+    const reasoningContent = reasoningRenderedByThoughtMessage
+      ? ""
+      : getReasoningContent(event);
     return (
       <>
         {reasoningContent && <CollapsibleThinking content={reasoningContent} />}
@@ -337,23 +351,34 @@ function EventMessageComponent({
         : (suppliedCorrespondingAction ?? undefined);
 
     // Skip ThoughtEventMessage for ThinkAction (thought IS the action)
+    const thoughtSourceAction =
+      correspondingAction && isActionEvent(correspondingAction)
+        ? correspondingAction
+        : undefined;
     const shouldShowThought =
       !suppressThought &&
-      correspondingAction &&
-      isActionEvent(correspondingAction) &&
-      correspondingAction.action.kind !== "ThinkAction";
+      thoughtSourceAction !== undefined &&
+      thoughtSourceAction.action.kind !== "ThinkAction";
 
+    // Same single-owner rule as the action path: when the thought source is
+    // hoisted as its own item (or `ThoughtEventMessage` renders here), that
+    // renderer owns the reasoning so this card must not add a second control.
+    const reasoningRenderedByThoughtMessage =
+      !suppressThought ||
+      (thoughtSourceAction !== undefined &&
+        isGroupableEvent(event, thoughtSourceAction) &&
+        hasNonEmptyThought(thoughtSourceAction));
     const reasoningContent =
-      correspondingAction && isActionEvent(correspondingAction)
-        ? getReasoningContent(correspondingAction)
+      thoughtSourceAction && !reasoningRenderedByThoughtMessage
+        ? getReasoningContent(thoughtSourceAction)
         : "";
 
     return (
       <>
         {reasoningContent && <CollapsibleThinking content={reasoningContent} />}
-        {shouldShowThought && (
+        {shouldShowThought && thoughtSourceAction && (
           <ThoughtEventMessage
-            event={correspondingAction}
+            event={thoughtSourceAction}
             isFromPlanningAgent={isFromPlanningAgent}
           />
         )}

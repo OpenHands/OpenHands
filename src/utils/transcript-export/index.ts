@@ -30,8 +30,7 @@ import {
 } from "#/components/conversation-events/chat/event-content-helpers/get-acp-tool-call-content";
 import { groupEvents } from "#/components/conversation-events/chat/group-events";
 import {
-  getActionThoughtText,
-  getReasoningContent,
+  splitActionNarration,
   splitInlineThink,
 } from "#/components/conversation-events/chat/event-thought-helpers";
 import i18n from "#/i18n";
@@ -253,11 +252,14 @@ const getHookDetails = (event: OpenHandsEvent): string => {
     .join("\n\n");
 };
 
-const getActionNarration = (event: ActionEvent): string =>
-  [getReasoningContent(event), getActionThoughtText(event)]
-    .map((content) => content.trim())
-    .filter(Boolean)
-    .join("\n\n");
+// Mirrors the chat: split a leading inline reasoning block out of the action
+// thought and merge it with explicit reasoning. `splitActionNarration` already
+// dedupes reasoning fragments; reasoning and the visible message are distinct
+// parts of the action, so both are kept even when their text matches.
+const getActionNarration = (event: ActionEvent): string => {
+  const { reasoning, message } = splitActionNarration(event);
+  return [reasoning, message].filter(Boolean).join("\n\n");
+};
 
 const canRenderActionNarration = (event: ActionEvent): boolean =>
   !["FinishAction", "SwitchLLMAction", "ThinkAction"].includes(
