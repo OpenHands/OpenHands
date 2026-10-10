@@ -18,6 +18,12 @@ Agent Canvas is not responsible for:
 - Hosting LLM provider credentials outside the configured backend.
 - Running scheduled or event-triggered automations without an automation backend.
 
+Agent Canvas provides the user interface for running and monitoring agents.
+For non-interactive tasks, orchestrators use the
+[Python SDK or Agent Server API](https://docs.openhands.dev/sdk/guides/agent-server/overview)
+directly. Agent Canvas does not currently provide a dedicated one-shot task
+command.
+
 ## Runtime services
 
 The primary backend is the [OpenHands Agent Server](https://github.com/OpenHands/software-agent-sdk/tree/main/openhands-agent-server/openhands/agent_server). Agent Canvas can connect to one or more Agent Server instances and switch between them from the UI.

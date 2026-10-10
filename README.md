@@ -143,6 +143,45 @@ Local (`npx` / `npm run dev`) listeners bind **loopback only** (`127.0.0.1`) so 
 
 Docker listens on all container interfaces so port publishing works, but does not inject its session key into HTML by default. The quickstart above explicitly enables injection while publishing the host port on `127.0.0.1` only. If you publish Docker on a LAN or public interface, omit `AGENT_CANVAS_ALLOW_LAN_SESSION_KEY` and enter the API key in the UI. Set `LOCAL_BACKEND_API_KEY` to a strong value, or retrieve the generated value with `docker exec <container> sh -c 'cat "$STATE_DIR/api-key.txt"'`. For internet-facing installs, follow [self-hosting](./docs/SELF_HOSTING.md).
 
+## Non-interactive tasks
+
+The supported long-term non-interactive integration surface is the
+[Python SDK](https://docs.openhands.dev/sdk/getting-started) and
+[Agent Server API](https://docs.openhands.dev/sdk/guides/agent-server/overview).
+Your program submits a conversation, waits for completion, collects the
+results, and determines its own exit status. See the
+[Docker sandbox guide](https://docs.openhands.dev/sdk/guides/agent-server/docker-sandbox)
+for an existing example.
+
+The legacy [OpenHands CLI](https://github.com/OpenHands/OpenHands-CLI#project-status)
+is no longer actively maintained. Its headless mode remains available but
+is not the recommended stable orchestrator contract. This includes
+`--headless`, `--always-approve`, and `--override-with-envs`.
+
+For legacy CLI headless, prompts may be supplied with `-t`/`--task` or
+`-f`/`--file`; for SDK/API integrations, the caller sends the message body
+programmatically. Use the Python SDK or Agent Server API for new
+orchestrator integrations.
+
+For a one-shot task, configure an agent and Docker workspace using the
+guide above. Send one message with `conversation.send_message()`, then
+wait with `conversation.run()`. Its `timeout` parameter limits how long
+your program waits; it does not cancel the remote run.
+`max_iteration_per_run` limits the number of agent iterations per run.
+
+For example, ask the agent to create `result.txt` containing
+`HEADLESS_OK`. For this small example, use `timeout=60` to wait up to
+60 seconds and `max_iteration_per_run=4` to allow up to four iterations.
+
+The orchestrator collects and checks the results as follows:
+
+| Result | Caller responsibility and Python SDK approach |
+|---|---|
+| Exit status | Set by the caller after checking `conversation.state.execution_status` and required outputs. OpenHands does not currently emit a standardized process exit code for SDK/API runs. For this example, return `0` only when the status is `finished` and expected outputs pass verification; otherwise return non-zero. |
+| Logs/events | The caller collects events using `callbacks=[events.append]` and saves them using `event.model_dump_json()`. Tool events include terminal output. Collect any additional required logs from the workspace/server you created. |
+| Artifacts | The caller selects and downloads workspace files using `workspace.file_download(source, destination)` and checks the returned `.success`. |
+| Workspace diff | The caller runs `workspace.execute_command("git diff", cwd=workspace.working_dir)`, checks its `.exit_code`, and saves its `.stdout`. |
+
 # Architecture
 
 Agent Canvas is powered by the [OpenHands Agent Server](https://github.com/OpenHands/software-agent-sdk/tree/main/openhands-agent-server/openhands/agent_server), a REST API for running multiple agents on a single machine. Each Agent Server runs on a single host/port; the Agent Canvas can connect to multiple Agent Servers and easily flip between them.
@@ -155,6 +194,7 @@ You can run an Agent Server anywhere:
 - Inside OpenHands Cloud (our commercial offering)
 
 The Agent Server is often paired with an [Automation Server](https://github.com/OpenHands/automation), which lets you set up agents that run on a schedule or in response to events.
+
 
 <img width="1456" height="1258" alt="image" src="https://github.com/user-attachments/assets/cb6de6f5-ac30-4d04-a76a-b5c259f0c163" />
 
