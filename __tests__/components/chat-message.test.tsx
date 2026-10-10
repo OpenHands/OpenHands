@@ -135,6 +135,19 @@ describe("ChatMessage", () => {
     expect(screen.getByText("Hello, World!")).toBeInTheDocument();
   });
 
+  it.each(["user", "agent"] as const)(
+    "lets the browser resolve direction for a %s message",
+    (type) => {
+      render(<ChatMessage type={type} message="سلام C:\\workspace" />);
+
+      expect(screen.getByTestId(`${type}-message`)).toHaveAttribute(
+        "dir",
+        "auto",
+      );
+      expect(screen.getByTestId(`${type}-message`)).toHaveClass("text-start");
+    },
+  );
+
   it("should support code syntax highlighting", () => {
     const code = "```js\nconsole.log('Hello, World!')\n```";
     render(<ChatMessage type="user" message={code} />);

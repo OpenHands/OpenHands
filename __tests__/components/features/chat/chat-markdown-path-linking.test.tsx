@@ -50,6 +50,14 @@ describe("assistant chat Markdown path linking", () => {
     expect(openWorkspaceFile).toHaveBeenCalledWith("test.md", "conv-1");
   });
 
+  it("keeps workspace path buttons LTR inside RTL messages", () => {
+    renderAgentMessage("متن `src/app.ts` و ادامه");
+
+    const pathLink = screen.getByTestId("markdown-file-path-link");
+    expect(pathLink).toHaveAttribute("dir", "ltr");
+    expect(pathLink).toHaveClass("text-left");
+  });
+
   it("opens the Files drawer for bold-emphasized existing paths", async () => {
     const user = userEvent.setup();
 
