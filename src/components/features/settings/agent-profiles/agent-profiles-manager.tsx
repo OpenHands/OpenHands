@@ -1,10 +1,23 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { AgentProfilesBody } from "./agent-profiles-body";
 import { DeleteAgentProfileModal } from "./delete-agent-profile-modal";
-import { type AgentProfileSummary } from "#/api/agent-profiles-service/agent-profiles-service.api";
+import {
+  allowsAgentSettingsLaunch,
+  getAgentProfileLlmDrift,
+} from "./agent-profile-llm-drift";
+import AgentProfilesService, {
+  type AgentProfileSummary,
+} from "#/api/agent-profiles-service/agent-profiles-service.api";
+import {
+  AGENT_PROFILES_QUERY_KEYS,
+  AGENT_PROFILES_RETRY_OPTIONS,
+} from "#/hooks/query/query-keys";
 import { useAgentProfiles } from "#/hooks/query/use-agent-profiles";
+import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useActivateAgentProfile } from "#/hooks/mutation/use-activate-agent-profile";
 import { useCanManageOrgProfiles } from "#/hooks/use-can-manage-org-profiles";
 import { displaySuccessToast } from "#/utils/custom-toast-handlers";
@@ -21,6 +34,12 @@ export function AgentProfilesManager({
 }: AgentProfilesManagerProps) {
   const { t } = useTranslation("openhands");
   const { data, isLoading, error } = useAgentProfiles();
+  const { backend, orgId } = useActiveBackend();
+  // A home launch only ignores the active profile's pinned `llm_profile_ref`
+  // on local backends (#16193/#16539), so only local rows can drift — skip the
+  // fetch entirely on cloud, where the ref is what launches.
+  const isLocal = backend.kind === "local";
+  const { data: llmProfilesData } = useLlmProfiles({ enabled: isLocal });
   const activateProfile = useActivateAgentProfile();
   // Cloud members are view-only; only owners/admins (and all local users) may
   // add, edit, delete, or activate agent profiles (org-scoped, same permission
@@ -31,6 +50,34 @@ export function AgentProfilesManager({
 
   const profiles = data?.profiles ?? [];
   const activeId = data?.active_agent_profile_id ?? null;
+  const activeProfile =
+    profiles.find((profile) => !!profile.id && profile.id === activeId) ?? null;
+  const localActiveLlmProfile = isLocal
+    ? (llmProfilesData?.active_profile ?? null)
+    : null;
+  // The launch re-reads the profile before downgrading and keeps a
+  // secret-scoped profile on its pinned ref, so the summary alone cannot tell
+  // whether the active profile drifts. Read the detail only when it might.
+  const activeProfileMayDrift =
+    !!activeProfile &&
+    getAgentProfileLlmDrift(activeProfile, true, localActiveLlmProfile) !==
+      null;
+  const { data: activeProfileDetail } = useQuery({
+    queryKey: AGENT_PROFILES_QUERY_KEYS.detail(
+      backend.id,
+      orgId,
+      activeProfile?.name ?? "",
+    ),
+    queryFn: () => AgentProfilesService.getProfile(activeProfile!.name),
+    ...AGENT_PROFILES_RETRY_OPTIONS,
+    enabled: activeProfileMayDrift,
+    meta: { disableToast: true },
+  });
+  const activeLlmProfile = allowsAgentSettingsLaunch(
+    activeProfileDetail?.profile,
+  )
+    ? localActiveLlmProfile
+    : null;
 
   const handleActivate = async (profile: AgentProfileSummary) => {
     if (!profile.id) return;
@@ -70,6 +117,7 @@ export function AgentProfilesManager({
           loadError={error ?? null}
           profiles={profiles}
           activeId={activeId}
+          activeLlmProfile={activeLlmProfile}
           canManage={canManage}
           onActivate={handleActivate}
           onEdit={(profile) => onEditProfile?.(profile)}
