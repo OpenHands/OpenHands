@@ -15,10 +15,13 @@ import "./index.css";
 import React from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Toaster } from "react-hot-toast";
+import { useTranslation } from "react-i18next";
+import { I18nKey } from "#/i18n/declaration";
 import {
   clearCachedAgentServerInfo,
   isAgentServerUnavailableError,
   isAgentServerAuthError,
+  isLockedCloudUnresolvedError,
 } from "#/api/agent-server-compatibility";
 import {
   getLockedCloudAuthMode,
@@ -134,8 +137,9 @@ function AgentServerBootstrapLoading() {
  * placeholder behind the Manage Backends modal so the user can edit,
  * add, or pick another backend right away.
  */
-function MissingAgentServerScreen() {
+function MissingAgentServerScreen({ error }: { error?: unknown }) {
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
 
   // The modal is the no-backend gate. Selecting or adding a reachable
   // backend must re-run the /server_info probe; otherwise the app stays
@@ -149,6 +153,41 @@ function MissingAgentServerScreen() {
       });
     }
   }, [queryClient]);
+
+  // Locked-to-Cloud deployments cannot add a backend, so the Manage Backends
+  // recovery modal is a dead end. When the locked Cloud backend simply failed
+  // to resolve for this page (wrong origin, or a stale `index.html`), show a
+  // recoverable message that points at the configured Cloud URL and offers a
+  // reload instead.
+  if (isLockedCloudUnresolvedError(error)) {
+    // The error message (defined in agent-server-compatibility.ts) already
+    // instructs the user to open the configured Cloud URL and reload. Render it
+    // verbatim plus a reload action, instead of the add-a-backend modal.
+    const message = error instanceof Error ? error.message : null;
+    return (
+      <main
+        data-testid="locked-cloud-unresolved-screen"
+        className="min-h-screen bg-base px-6 py-10 text-contrast"
+      >
+        <div className="mx-auto flex min-h-screen max-w-2xl items-center justify-center">
+          <div className="rounded-3xl border border-contrast/10 bg-base/80 px-8 py-10 shadow-2xl">
+            {message ? (
+              <p className="text-sm text-contrast/80">{message}</p>
+            ) : null}
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                className="rounded-xl bg-primary px-4 py-2 text-sm text-white hover:opacity-90"
+                onClick={() => window.location.reload()}
+              >
+                {t(I18nKey.BUTTON$REFRESH)}
+              </button>
+            </div>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main
@@ -395,7 +434,7 @@ export default function App() {
     activeCloudUnreachable ||
     isAgentServerUnavailableError(config.error)
   ) {
-    return <MissingAgentServerScreen />;
+    return <MissingAgentServerScreen error={config.error} />;
   }
 
   return (

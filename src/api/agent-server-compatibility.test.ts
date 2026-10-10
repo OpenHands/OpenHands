@@ -10,6 +10,7 @@ import {
   getDisplayAgentServerSdkVersion,
   isAgentServerAuthError,
   isAgentServerUnavailableError,
+  isLockedCloudUnresolvedError,
   isAgentServerUnknownVersionError,
   isAgentServerUnsupportedVersionError,
   isSdkHttpError,
@@ -152,6 +153,53 @@ describe("agent-server compatibility errors", () => {
       details: "No backend configured",
       noBackendConfigured: true,
     });
+  });
+
+  it("constructs a recoverable locked-Cloud-unresolved error with the host", () => {
+    const error = new AgentServerUnavailableError(
+      "Locked Cloud backend did not resolve for this page",
+      {
+        lockedCloudUnresolved: true,
+        lockedCloudHost: "https://app.example.dev",
+      },
+    );
+    expect(error).toMatchObject({
+      name: "AgentServerUnavailableError",
+      message:
+        "This deployment is locked to its OpenHands Cloud backend (https://app.example.dev), but it could not be resolved from this page. Open the app at the configured Cloud URL and reload the page.",
+      details: "Locked Cloud backend did not resolve for this page",
+      noBackendConfigured: false,
+      lockedCloudUnresolved: true,
+    });
+  });
+
+  it("omits the host when none is provided for a locked-Cloud-unresolved error", () => {
+    expect(
+      new AgentServerUnavailableError(null, { lockedCloudUnresolved: true })
+        .message,
+    ).toBe(
+      "This deployment is locked to its OpenHands Cloud backend, but it could not be resolved from this page. Open the app at the configured Cloud URL and reload the page.",
+    );
+  });
+
+  it("recognizes locked-Cloud-unresolved errors and nothing else", () => {
+    expect(
+      isLockedCloudUnresolvedError(
+        new AgentServerUnavailableError(null, { lockedCloudUnresolved: true }),
+      ),
+    ).toBe(true);
+    expect(isLockedCloudUnresolvedError({ lockedCloudUnresolved: true })).toBe(
+      true,
+    );
+    expect(
+      isLockedCloudUnresolvedError(
+        new AgentServerUnavailableError("No backend configured", {
+          noBackendConfigured: true,
+        }),
+      ),
+    ).toBe(false);
+    expect(isLockedCloudUnresolvedError(new Error("boom"))).toBe(false);
+    expect(isLockedCloudUnresolvedError(null)).toBe(false);
   });
 
   it("describes unsupported and unknown versions exactly", () => {
