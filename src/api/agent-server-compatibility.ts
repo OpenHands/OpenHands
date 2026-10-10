@@ -3,7 +3,10 @@ import {
   SettingsClient,
 } from "@openhands/typescript-client/clients";
 import type { ServerInfo as BaseServerInfo } from "@openhands/typescript-client";
-import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
+import {
+  getAgentServerClientOptions,
+  normalizeHost,
+} from "#/api/agent-server-client-options";
 import { isAuthRequired } from "#/api/agent-server-config";
 import {
   getActiveBackend,
@@ -35,8 +38,18 @@ export const INVALID_BACKEND_API_KEY_ERROR = "Invalid API key";
 export interface AgentServerInfo extends BaseServerInfo {
   sdk_version?: string;
   runtime_services?: unknown;
+  /**
+   * Execution boundary the server runs conversations in.
+   *
+   * The shipped agent-server reports this as `conversation_runtime` (inherited
+   * from the SDK's `ServerInfo`); `execution_runtime` is the forward-looking
+   * name Canvas also accepts, so the display keeps working if the server starts
+   * emitting it. `getBackendExecutionMode()` is the single reader of both.
+   */
   execution_runtime?: "local" | "docker";
 }
+
+export type BackendExecutionMode = "local" | "docker";
 
 let cachedAgentServerInfo: AgentServerInfo | null = null;
 let cachedAgentServerInfoHost: string | null = null;
@@ -143,10 +156,43 @@ export function clearCachedAgentServerInfo() {
 export function getCachedAgentServerInfo(options?: {
   host?: string | null;
 }): AgentServerInfo | null {
-  if (options?.host && options.host !== cachedAgentServerInfoHost) {
+  if (
+    options?.host &&
+    normalizeHost(options.host) !== cachedAgentServerInfoHost
+  ) {
     return null;
   }
   return cachedAgentServerInfo;
+}
+
+/**
+ * Publish a freshly probed `/server_info` into the bootstrap cache.
+ *
+ * The cache is otherwise written only by {@link loadAgentServerInfo} at app
+ * bootstrap, so a server that restarts in a different execution mode would
+ * keep feeding conversation creation the old mode even though the badge (read
+ * from the React Query cache) had updated. The backend health poll calls this
+ * on each successful probe so the displayed boundary and the workspace the next
+ * conversation requests cannot diverge (BM-004).
+ *
+ * Only the *effective local backend* owns the cache: a probe of any other
+ * registered backend (or a cloud row) is ignored, so it cannot point the
+ * local-protocol services at a different host. Hosts are compared and stored
+ * normalized (trailing slashes removed) to match
+ * {@link getAgentServerClientOptions}, so a persisted host with a trailing
+ * slash does not miss the cache and fall back to a fresh — possibly failing —
+ * probe during conversation creation.
+ */
+export function setCachedAgentServerInfo(
+  serverInfo: AgentServerInfo,
+  options?: { host?: string | null },
+): void {
+  const effectiveHost = getEffectiveLocalBackend()?.host;
+  if (!effectiveHost) return;
+  const normalized = normalizeHost(effectiveHost);
+  if (options?.host && normalizeHost(options.host) !== normalized) return;
+  cachedAgentServerInfo = serverInfo;
+  cachedAgentServerInfoHost = normalized;
 }
 
 export { isSdkHttpError };
@@ -210,6 +256,26 @@ export function getDisplayAgentServerSdkVersion(
     return null;
   }
   return version;
+}
+
+/**
+ * Resolve the execution boundary a backend's agent-server runs conversations in.
+ *
+ * Reads `execution_runtime` when present, falling back to the field the shipped
+ * server actually returns, `conversation_runtime`. Returns `null` when neither
+ * is reported (older servers), so callers can render nothing and leave the UI
+ * unchanged.
+ *
+ * @spec BM-004 — Display the active backend's execution mode
+ */
+export function getBackendExecutionMode(
+  serverInfo: AgentServerInfo | null | undefined,
+): BackendExecutionMode | null {
+  const raw =
+    serverInfo?.execution_runtime ??
+    (serverInfo as { conversation_runtime?: unknown } | null | undefined)
+      ?.conversation_runtime;
+  return raw === "local" || raw === "docker" ? raw : null;
 }
 
 export function getCachedAgentServerSdkVersion(
@@ -306,21 +372,22 @@ export function assertAgentServerVersionIsSupported(
 }
 
 /**
- * Validates a local agent-server backend with a two-step probe:
+ * Probes a local agent-server backend with a two-step request:
  *  1. GET /api/settings — authenticates the configured session API key;
  *     a 401 throws an Error with message {@link INVALID_BACKEND_API_KEY_ERROR}.
  *  2. GET /server_info  — asserts the server meets the minimum version floor.
  *
- * Returns the display version string reported by the server, or `null` when
- * the server does not report a parseable version. Throws on any failure.
+ * Returns the raw server info so callers can read both the display version
+ * ({@link getDisplayAgentServerVersion}) and the execution mode
+ * ({@link getBackendExecutionMode}) from one response. Throws on any failure.
  *
  * Used by both the backend health poller and the backend-form connection test
  * so that auth-check semantics (status codes, error messages) stay in one place.
  */
-export async function validateLocalBackend(
+export async function probeLocalBackendServerInfo(
   backend: Pick<Backend, "host" | "apiKey">,
   timeout: number,
-): Promise<string | null> {
+): Promise<AgentServerInfo> {
   const clientOptions = getAgentServerClientOptions({
     host: backend.host,
     sessionApiKey: backend.apiKey || null,
@@ -331,13 +398,21 @@ export async function validateLocalBackend(
     await new SettingsClient(clientOptions).getSettings();
     const serverInfo = await new ServerClient(clientOptions).getServerInfo();
     assertAgentServerVersionIsSupported(serverInfo);
-    return getDisplayAgentServerVersion(serverInfo);
+    return serverInfo as AgentServerInfo;
   } catch (error) {
     if (isSdkHttpStatusError(error, 401)) {
       throw new Error(INVALID_BACKEND_API_KEY_ERROR);
     }
     throw error;
   }
+}
+
+export async function validateLocalBackend(
+  backend: Pick<Backend, "host" | "apiKey">,
+  timeout: number,
+): Promise<string | null> {
+  const serverInfo = await probeLocalBackendServerInfo(backend, timeout);
+  return getDisplayAgentServerVersion(serverInfo);
 }
 
 export async function loadAgentServerInfo() {

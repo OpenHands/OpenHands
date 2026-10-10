@@ -19,6 +19,7 @@ import {
 } from "#/constants/acp-providers";
 import { getAgentServerClientOptions } from "./agent-server-client-options";
 import {
+  getBackendExecutionMode,
   getCachedAgentServerInfo,
   type AgentServerInfo,
 } from "./agent-server-compatibility";
@@ -247,7 +248,10 @@ export async function fetchBackendExecutionRuntime(): Promise<
   AgentServerInfo["execution_runtime"]
 > {
   const serverInfo = await fetchBackendServerInfo();
-  return serverInfo?.execution_runtime;
+  // The shipped server reports this as `conversation_runtime`; read it through
+  // the same resolver the badge uses so the displayed mode and the workspace
+  // request never disagree (BM-004).
+  return getBackendExecutionMode(serverInfo) ?? undefined;
 }
 
 /**
@@ -1791,7 +1795,7 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
   const runtimeServicesInfo = parseRuntimeServicesInfo(
     (serverInfo as { runtime_services?: unknown } | null)?.runtime_services,
   );
-  const executionRuntime = serverInfo?.execution_runtime;
+  const executionRuntime = getBackendExecutionMode(serverInfo) ?? undefined;
   const hasActiveMetaProfile = !!metaProfiles?.active_meta_profile;
 
   // A profile launch resolves the LLM server-side, so the current-settings

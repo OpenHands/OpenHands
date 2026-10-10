@@ -14,16 +14,25 @@ import { resolveNewConversationWorkspace } from "#/api/conversation-workspace";
 import GitService from "#/api/git-service/git-service.api";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import AgentServerRuntimeService from "#/api/runtime-service/agent-server-runtime-service";
+import { fetchBackendExecutionRuntime } from "#/api/agent-server-adapter";
 
 const host = "http://localhost:9876";
 const cid = "11111111-1111-4111-8111-111111111111";
 const paths: string[] = [];
 let isolated = true;
 let capabilities = true;
+let reportOnlyExecutionRuntime = false;
+// When true, the server reports BOTH runtime fields with conflicting values:
+// `execution_runtime: "local"` vs `conversation_runtime: "docker"`. The
+// forward-looking `execution_runtime` must win, so a conflicting server yields
+// the local (non-isolated) workspace.
+let conflictRuntimeFields = false;
 
 beforeEach(() => {
   isolated = true;
   capabilities = true;
+  reportOnlyExecutionRuntime = false;
+  conflictRuntimeFields = false;
   paths.length = 0;
   clearCachedAgentServerInfo();
   clearAgentServerHomeDirCache();
@@ -51,7 +60,13 @@ beforeEach(() => {
           uptime: 0,
           idle_time: 0,
           capabilities: capabilities ? ["conversation_runtime_routes_v1"] : [],
-          conversation_runtime: isolated ? "docker" : "local",
+          // The forward-looking `execution_runtime` field, when present, is
+          // authoritative over `conversation_runtime`.
+          ...(conflictRuntimeFields
+            ? { execution_runtime: "local", conversation_runtime: "docker" }
+            : reportOnlyExecutionRuntime
+              ? { execution_runtime: isolated ? "docker" : "local" }
+              : { conversation_runtime: isolated ? "docker" : "local" }),
           runtime_services: { mode: isolated ? "dev:automation" : "docker" },
         });
       if (url.pathname === "/api/file/home")
@@ -176,6 +191,40 @@ describe("conversation runtime boundaries", () => {
     ).toEqual({
       workingDir: "/home/user/project",
       hooksProjectDir: "/home/user/project",
+      isolated: false,
+    });
+  });
+
+  it("isolates the workspace when only the forward-looking execution_runtime reports docker", async () => {
+    reportOnlyExecutionRuntime = true;
+    expect(
+      await resolveNewConversationWorkspace({ conversationId: cid }),
+    ).toEqual({
+      workingDir: "/workspace",
+      hooksProjectDir: null,
+      isolated: true,
+    });
+  });
+
+  it("reports docker from the shipped conversation_runtime to conversation creation", async () => {
+    // The badge and the conversation builders must read one field, so a server
+    // that only reports `conversation_runtime: "docker"` yields a Docker
+    // workspace request instead of a contradictory local one.
+    expect(await fetchBackendExecutionRuntime()).toBe("docker");
+  });
+
+  it("reads execution_runtime when the server provides both fields", async () => {
+    // Conflicting values: `execution_runtime: "local"` must win over
+    // `conversation_runtime: "docker"`, so both the badge/adapter and the
+    // workspace resolver agree on local.
+    conflictRuntimeFields = true;
+    expect(await fetchBackendExecutionRuntime()).toBe("local");
+    clearCachedAgentServerInfo();
+    expect(
+      await resolveNewConversationWorkspace({ conversationId: cid }),
+    ).toEqual({
+      workingDir: expect.any(String),
+      hooksProjectDir: expect.any(String),
       isolated: false,
     });
   });
