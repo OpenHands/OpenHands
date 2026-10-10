@@ -156,7 +156,9 @@ export function SkillCardPillRow({ pills, testId }: SkillCardPillRowProps) {
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        event.stopPropagation();
         setIsOverflowOpen(false);
+        triggerRef.current?.focus();
       }
     };
     // mousedown (not click) so the opening click cannot race-close the panel,
@@ -175,6 +177,29 @@ export function SkillCardPillRow({ pills, testId }: SkillCardPillRowProps) {
   const overflowPills = pills.slice(visibleCount);
 
   const stopCardActivation = (event: React.SyntheticEvent) => {
+    event.stopPropagation();
+  };
+
+  const handleTriggerKeyDown = (
+    event: React.KeyboardEvent<HTMLButtonElement>,
+  ) => {
+    if (event.key === "Escape") {
+      if (isOverflowOpen) {
+        event.stopPropagation();
+        setIsOverflowOpen(false);
+      }
+      return;
+    }
+    event.stopPropagation();
+  };
+
+  const handlePopoverKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Escape") {
+      event.stopPropagation();
+      setIsOverflowOpen(false);
+      triggerRef.current?.focus();
+      return;
+    }
     event.stopPropagation();
   };
 
@@ -219,7 +244,7 @@ export function SkillCardPillRow({ pills, testId }: SkillCardPillRowProps) {
             })}
             onMouseDown={stopCardActivation}
             onClick={activateOverflow}
-            onKeyDown={stopCardActivation}
+            onKeyDown={handleTriggerKeyDown}
             className={cn(
               extensionModuleCardPillClassName,
               "cursor-pointer font-medium text-tertiary-alt hover:text-contrast",
@@ -255,6 +280,7 @@ export function SkillCardPillRow({ pills, testId }: SkillCardPillRowProps) {
               event.preventDefault();
               event.stopPropagation();
             }}
+            onKeyDown={handlePopoverKeyDown}
           >
             {overflowPills.map((pill) => (
               <div
