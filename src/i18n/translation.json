@@ -33217,6 +33217,23 @@
     "tr": "Bir sağlayıcı ve model seçin. OpenAI GPT-5.6 Sol'i önceden seçtik.",
     "uk": "Виберіть провайдера та модель. OpenAI GPT-5.6 Sol уже обрано."
   },
+  "ONBOARDING$LLM_SUBTITLE_CURRENT_PROFILE": {
+    "en": "Pick a provider and model. We've filled in your current LLM profile.",
+    "ja": "プロバイダーとモデルを選択してください。現在の LLM プロファイルを入力済みです。",
+    "zh-CN": "选择提供商和模型。我们已填入你当前的 LLM 配置文件。",
+    "zh-TW": "選擇供應商與模型。我們已填入你目前的 LLM 設定檔。",
+    "ko-KR": "공급자와 모델을 선택하세요. 현재 LLM 프로필이 입력되어 있습니다.",
+    "no": "Velg en leverandør og modell. Vi har fylt inn din nåværende LLM-profil.",
+    "ar": "اختر مزوّدًا ونموذجًا. لقد عبّأنا ملف LLM الشخصي الحالي الخاص بك.",
+    "de": "Wählen Sie Anbieter und Modell. Wir haben Ihr aktuelles LLM-Profil eingetragen.",
+    "fr": "Choisissez un fournisseur et un modèle. Nous avons rempli votre profil LLM actuel.",
+    "it": "Scegli un provider e un modello. Abbiamo compilato il tuo profilo LLM attuale.",
+    "pt": "Escolha um provedor e modelo. Preenchemos o seu perfil de LLM atual.",
+    "es": "Elige un proveedor y modelo. Hemos rellenado tu perfil de LLM actual.",
+    "ca": "Trieu un proveïdor i model. Hem omplert el vostre perfil de LLM actual.",
+    "tr": "Bir sağlayıcı ve model seçin. Mevcut LLM profilinizi doldurduk.",
+    "uk": "Виберіть провайдера та модель. Ми заповнили ваш поточний профіль LLM."
+  },
   "ONBOARDING$HELLO_TITLE": {
     "en": "Say hello 👋",
     "ja": "ハローと挨拶 👋",

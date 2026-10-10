@@ -339,7 +339,11 @@ export function SetupLlmStep({ onBack, onNext }: SetupLlmStepProps) {
           {t(I18nKey.ONBOARDING$LLM_TITLE)}
         </h2>
         <p className="text-sm text-muted">
-          {t(I18nKey.ONBOARDING$LLM_SUBTITLE)}
+          {t(
+            profileSeed?.profileName
+              ? I18nKey.ONBOARDING$LLM_SUBTITLE_CURRENT_PROFILE
+              : I18nKey.ONBOARDING$LLM_SUBTITLE,
+          )}
         </p>
       </header>
 

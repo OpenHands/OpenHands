@@ -231,6 +231,9 @@ describe("SetupLlmStep", () => {
     await waitFor(() => expect(onNext).toHaveBeenCalledTimes(1));
     expect(getProfile).toHaveBeenCalledWith("previous", "encrypted");
     // The form shows the active profile, its own model included.
+    expect(
+      screen.getByText("ONBOARDING$LLM_SUBTITLE_CURRENT_PROFILE"),
+    ).toBeInTheDocument();
     expect(formState.screenProps?.markInitialOverridesDirty).toBe(false);
     expect(formState.screenProps?.initialValueOverrides).toMatchObject({
       "llm.model": "openai/previous-model",
@@ -281,6 +284,7 @@ describe("SetupLlmStep", () => {
 
     await waitFor(() => expect(onNext).toHaveBeenCalledTimes(1));
     expect(getProfile).not.toHaveBeenCalled();
+    expect(screen.getByText("ONBOARDING$LLM_SUBTITLE")).toBeInTheDocument();
     expect(formState.screenProps?.initialValueOverrides).toMatchObject({
       "llm.model": ONBOARDING_DEFAULT_LLM_MODEL,
       "llm.api_key": "",
