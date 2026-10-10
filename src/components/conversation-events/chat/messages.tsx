@@ -3,6 +3,7 @@ import { ActionEvent, OpenHandsEvent } from "#/types/agent-server/core";
 import {
   isActionEvent,
   isObservationEvent,
+  isUserRejectObservation,
 } from "#/types/agent-server/type-guards";
 import { EventMessage } from "./event-message";
 import { usePlanPreviewEvents } from "./hooks/use-plan-preview-events";
@@ -85,7 +86,8 @@ export const Messages: React.FC<MessagesProps> = React.memo(
         key={event.id}
         event={event}
         correspondingAction={
-          isObservationEvent(event) && event.action_id
+          (isObservationEvent(event) || isUserRejectObservation(event)) &&
+          event.action_id
             ? (actionById.get(event.action_id) ?? null)
             : null
         }

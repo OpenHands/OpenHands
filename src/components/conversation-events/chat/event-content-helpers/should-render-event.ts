@@ -10,6 +10,7 @@ import {
   isHookExecutionEvent,
   isACPToolCallEvent,
   isStreamingDeltaEvent,
+  isUserRejectObservation,
 } from "#/types/agent-server/type-guards";
 
 // Prefixes of the SDK goal-loop re-prompts (FOLLOWUP_PROMPT / RESUME_PROMPT in
@@ -125,6 +126,11 @@ export const shouldRenderEvent = (event: OpenHandsEvent) => {
 
   // Render agent error events
   if (isAgentErrorEvent(event)) {
+    return true;
+  }
+
+  // Render user rejection observation events
+  if (isUserRejectObservation(event)) {
     return true;
   }
 

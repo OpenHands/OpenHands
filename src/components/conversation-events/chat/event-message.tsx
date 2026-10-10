@@ -19,6 +19,7 @@ import {
   isStreamingDeltaEvent,
   isConversationStateUpdateEvent,
   isGoalConversationStateUpdateEvent,
+  isUserRejectObservation,
 } from "#/types/agent-server/type-guards";
 import { useConfig } from "#/hooks/query/use-config";
 import { useConversationStore } from "#/stores/conversation-store";
@@ -370,8 +371,54 @@ function EventMessageComponent({
     );
   }
 
+  // User rejection observation events
+  if (isUserRejectObservation(event)) {
+    const correspondingAction =
+      suppliedCorrespondingAction === undefined
+        ? messages?.find(
+            (msg) => isActionEvent(msg) && msg.id === event.action_id,
+          )
+        : (suppliedCorrespondingAction ?? undefined);
+
+    const shouldShowThought =
+      !suppressThought &&
+      correspondingAction &&
+      isActionEvent(correspondingAction) &&
+      correspondingAction.action.kind !== "ThinkAction";
+
+    const reasoningContent =
+      correspondingAction && isActionEvent(correspondingAction)
+        ? getReasoningContent(correspondingAction)
+        : "";
+
+    return (
+      <>
+        {reasoningContent && <CollapsibleThinking content={reasoningContent} />}
+        {shouldShowThought && (
+          <ThoughtEventMessage
+            event={correspondingAction}
+            isFromPlanningAgent={isFromPlanningAgent}
+          />
+        )}
+        <GenericEventMessageWrapper
+          event={event}
+          isLastMessage={isLastMessage}
+          correspondingAction={
+            correspondingAction && isActionEvent(correspondingAction)
+              ? correspondingAction
+              : undefined
+          }
+        />
+      </>
+    );
+  }
+
   // Message events (user and assistant messages)
-  if (!isActionEvent(event) && !isObservationEvent(event)) {
+  if (
+    !isActionEvent(event) &&
+    !isObservationEvent(event) &&
+    !isUserRejectObservation(event)
+  ) {
     const messageEvent = event as MessageEvent;
 
     if (isCorrectiveNudge(messageEvent)) {

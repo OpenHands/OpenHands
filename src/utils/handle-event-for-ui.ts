@@ -3,6 +3,7 @@ import {
   isACPToolCallEvent,
   isObservationEvent,
   isStreamingDeltaEvent,
+  isUserRejectObservation,
 } from "#/types/agent-server/type-guards";
 import { StreamingDeltaEvent } from "#/types/agent-server/core/events/streaming-delta-event";
 import type {
@@ -302,17 +303,23 @@ export const handleEventForUI = (
     return newUiEvents;
   }
 
-  if (isObservationEvent(event)) {
+  if (isObservationEvent(event) || isUserRejectObservation(event)) {
     // Don't add ThinkObservation at all - we keep the ThinkAction instead
     // The thought content is in the action, not the observation
-    if (event.observation.kind === "ThinkObservation") {
+    if (
+      isObservationEvent(event) &&
+      event.observation.kind === "ThinkObservation"
+    ) {
       return newUiEvents;
     }
 
     // Don't add FinishObservation at all - we keep the FinishAction instead
     // Both contain the same message content, so we only need to display one
     // This also prevents duplicate messages when events arrive out of order due to React batching
-    if (event.observation.kind === "FinishObservation") {
+    if (
+      isObservationEvent(event) &&
+      event.observation.kind === "FinishObservation"
+    ) {
       return newUiEvents;
     }
 
