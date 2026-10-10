@@ -123,8 +123,9 @@ RUN if command -v apt-get >/dev/null 2>&1; then \
 # Install automation server and the tool models its SDK clients deserialize.
 # Versions are held to the shipped 1.23.0 dependency set; the patched base no longer pre-installs it.
 COPY docker/python-constraints.txt /tmp/python-constraints.txt
-RUN uv pip install --system -c /tmp/python-constraints.txt "openhands-automation==${AUTOMATION_VERSION}" "openhands-tools==${AGENT_SERVER_VERSION}" "openhands-agent-server==${AGENT_SERVER_VERSION}" 2>/dev/null \
-    || pip install --no-cache-dir -c /tmp/python-constraints.txt "openhands-automation==${AUTOMATION_VERSION}" "openhands-tools==${AGENT_SERVER_VERSION}" "openhands-agent-server==${AGENT_SERVER_VERSION}"
+RUN UV_CONSTRAINT=/tmp/python-constraints.txt PIP_CONSTRAINT=/tmp/python-constraints.txt \
+    uv pip install --system "openhands-automation==${AUTOMATION_VERSION}" "openhands-tools==${AGENT_SERVER_VERSION}" "openhands-agent-server==${AGENT_SERVER_VERSION}" 2>/dev/null \
+    || PIP_CONSTRAINT=/tmp/python-constraints.txt pip install --no-cache-dir "openhands-automation==${AUTOMATION_VERSION}" "openhands-tools==${AGENT_SERVER_VERSION}" "openhands-agent-server==${AGENT_SERVER_VERSION}"
 
 RUN if [ -n "${AGENT_SERVER_SDK_GIT_REF}" ]; then \
       BASE_GIT_URL="git+https://github.com/OpenHands/software-agent-sdk@${AGENT_SERVER_SDK_GIT_REF}" && \

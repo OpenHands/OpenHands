@@ -58,7 +58,7 @@ describe("Docker runtime package metadata", () => {
     );
 
     expect(readFileSync(candidate, "utf-8")).toContain(
-      "ARG DEBIAN_SNAPSHOT=20261008T000000Z",
+      "ARG DEBIAN_SNAPSHOT=20260930T000000Z",
     );
   });
 
