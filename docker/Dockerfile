@@ -125,7 +125,8 @@ RUN if command -v apt-get >/dev/null 2>&1; then \
 COPY docker/python-constraints.txt /tmp/python-constraints.txt
 RUN UV_CONSTRAINT=/tmp/python-constraints.txt PIP_CONSTRAINT=/tmp/python-constraints.txt \
     uv pip install --system "openhands-automation==${AUTOMATION_VERSION}" "openhands-tools==${AGENT_SERVER_VERSION}" "openhands-agent-server==${AGENT_SERVER_VERSION}" 2>/dev/null \
-    || PIP_CONSTRAINT=/tmp/python-constraints.txt pip install --no-cache-dir "openhands-automation==${AUTOMATION_VERSION}" "openhands-tools==${AGENT_SERVER_VERSION}" "openhands-agent-server==${AGENT_SERVER_VERSION}"
+    || PIP_CONSTRAINT=/tmp/python-constraints.txt pip install --no-cache-dir "openhands-automation==${AUTOMATION_VERSION}" "openhands-tools==${AGENT_SERVER_VERSION}" "openhands-agent-server==${AGENT_SERVER_VERSION}" && \
+    rm -f /tmp/python-constraints.txt
 
 RUN if [ -n "${AGENT_SERVER_SDK_GIT_REF}" ]; then \
       BASE_GIT_URL="git+https://github.com/OpenHands/software-agent-sdk@${AGENT_SERVER_SDK_GIT_REF}" && \
