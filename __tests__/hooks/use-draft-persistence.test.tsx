@@ -1034,7 +1034,7 @@ describe("useDraftPersistence", () => {
       expect(sessionStorage.getItem(HOME_PROMPT_DRAFT_KEY)).toBe("home prompt");
     });
 
-    it("clears pending timeout on unmount", () => {
+    it("flushes pending conversation draft on unmount", () => {
       // Arrange
       const conversationId = "conv-unmount";
       const chatInputRef = createMockChatInputRef();
@@ -1043,22 +1043,54 @@ describe("useDraftPersistence", () => {
         useDraftPersistence(conversationId, chatInputRef),
       );
 
-      // Start a save
-      chatInputRef.current!.textContent = "Draft";
+      // Start a save within debounce window
+      chatInputRef.current!.textContent = "Draft to flush";
       act(() => {
         result.current.saveDraft();
       });
 
-      // Unmount before debounce completes
+      // Advance partially within debounce window (e.g. 200ms < 500ms)
+      act(() => {
+        vi.advanceTimersByTime(200);
+      });
+      expect(
+        conversationLocalStorage.setConversationState,
+      ).not.toHaveBeenCalled();
+
+      // Unmount before debounce completes: must flush latest text
       unmount();
 
-      // Complete the debounce period
+      expect(
+        conversationLocalStorage.setConversationState,
+      ).toHaveBeenCalledWith(conversationId, {
+        draftMessage: "Draft to flush",
+      });
+    });
+
+    it("does not flush draft on unmount if draft was cleared", () => {
+      const conversationId = "conv-unmount-cleared";
+      const chatInputRef = createMockChatInputRef();
+
+      const { result, unmount } = renderHook(() =>
+        useDraftPersistence(conversationId, chatInputRef),
+      );
+
+      chatInputRef.current!.textContent = "Draft that gets cleared";
       act(() => {
-        vi.advanceTimersByTime(500);
+        result.current.saveDraft();
       });
 
-      // Assert - save should not have been called after unmount
-      expect(mockSetDraftMessage).not.toHaveBeenCalled();
+      act(() => {
+        result.current.clearDraft();
+      });
+
+      unmount();
+
+      expect(
+        conversationLocalStorage.setConversationState,
+      ).not.toHaveBeenCalledWith(conversationId, {
+        draftMessage: "Draft that gets cleared",
+      });
     });
   });
 

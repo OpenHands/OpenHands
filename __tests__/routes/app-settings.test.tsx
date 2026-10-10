@@ -199,4 +199,39 @@ describe("AppSettingsScreen", () => {
       );
     });
   });
+
+  it("retains unsaved edits and keeps Save enabled when save fails", async () => {
+    vi.spyOn(SettingsService, "saveSettings").mockRejectedValue(
+      new Error("Network Error"),
+    );
+
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        enable_sound_notifications: false,
+      }),
+    );
+
+    renderAppSettingsScreen();
+
+    const user = userEvent.setup();
+    const switchEl = await screen.findByTestId(
+      "enable-sound-notifications-switch",
+    );
+    expect(switchEl).not.toBeChecked();
+
+    const submitButton = screen.getByTestId("submit-button");
+    expect(submitButton).toBeDisabled();
+
+    await user.click(switchEl);
+    expect(switchEl).toBeChecked();
+    expect(submitButton).toBeEnabled();
+
+    await user.click(submitButton);
+
+    // After failure: switch must stay checked and submit button remains enabled
+    await waitFor(() => {
+      expect(switchEl).toBeChecked();
+      expect(submitButton).toBeEnabled();
+    });
+  });
 });
