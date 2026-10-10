@@ -110,6 +110,7 @@ export const useChatInputLogic = () => {
 
   return {
     chatInputRef,
+    conversationId,
     messageToSend,
     checkIsContentEmpty,
     clearEmptyContentHandler,
