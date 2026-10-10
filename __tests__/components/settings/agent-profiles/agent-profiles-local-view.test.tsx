@@ -93,7 +93,10 @@ vi.mock("#/hooks/mutation/use-rename-agent-profile", () => ({
   useRenameAgentProfile: () => ({ mutateAsync: renameMutate }),
 }));
 
-const agentProfilesData = { profiles: [], active_agent_profile_id: null };
+let agentProfilesData: {
+  profiles: { name: string }[];
+  active_agent_profile_id: string | null;
+};
 vi.mock("#/hooks/query/use-agent-profiles", () => ({
   useAgentProfiles: () => ({ data: agentProfilesData }),
 }));
@@ -132,6 +135,7 @@ describe("AgentProfilesLocalView save mapping", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     emitControl = null;
+    agentProfilesData = { profiles: [], active_agent_profile_id: null };
     llmProfilesData = {
       profiles: [{ name: "default", model: "gpt-5" }],
       active_profile: "default",
@@ -606,5 +610,78 @@ describe("AgentProfilesLocalView save mapping", () => {
       ),
     );
     expect(saveMutate).not.toHaveBeenCalled();
+  });
+
+  describe("duplicate profile name", () => {
+    beforeEach(() => {
+      agentProfilesData = {
+        profiles: [{ name: "default" }, { name: "triage" }],
+        active_agent_profile_id: null,
+      };
+      emitControl = {
+        agentType: "openhands",
+        isValid: true,
+        isDirty: false,
+        buildAgentProfileFields: () => ({
+          agent_kind: "openhands",
+          mcp_server_refs: null,
+        }),
+        credentials: { isDirty: false, save: vi.fn(), reset: vi.fn() },
+      };
+    });
+
+    it("tells the user a new profile's name is taken until it is unique", async () => {
+      render(<AgentProfilesLocalView />);
+      const user = await openCreateAndName("default");
+      const input = screen.getByTestId("agent-profile-name-input");
+
+      expect(input).toHaveAttribute("aria-invalid", "true");
+      expect(input).toHaveAccessibleDescription(
+        "SETTINGS$META_PROFILE_NAME_TAKEN",
+      );
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "SETTINGS$META_PROFILE_NAME_TAKEN",
+      );
+      expect(screen.getByTestId("save-agent-profile-btn")).toBeDisabled();
+
+      await user.type(input, "-2");
+
+      expect(input).toHaveAttribute("aria-invalid", "false");
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(screen.getByTestId("save-agent-profile-btn")).toBeEnabled();
+    });
+
+    it("flags a rename to another profile's name but not the profile's own name", async () => {
+      vi.mocked(AgentProfilesService.getProfile).mockResolvedValue({
+        name: "default",
+        profile: {
+          schema_version: 3,
+          id: "p-1",
+          name: "default",
+          revision: 1,
+          agent_kind: "openhands",
+          llm_profile_ref: "default",
+        },
+      } as never);
+
+      render(<AgentProfilesLocalView />);
+      const user = userEvent.setup();
+      await user.click(screen.getByTestId("edit-agent-profile"));
+      await screen.findByTestId("mock-agent-settings");
+      const input = screen.getByTestId("agent-profile-name-input");
+
+      expect(input).toHaveValue("default");
+      expect(input).toHaveAttribute("aria-invalid", "false");
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+      await user.clear(input);
+      await user.type(input, "triage");
+
+      expect(input).toHaveAttribute("aria-invalid", "true");
+      expect(input).toHaveAccessibleDescription(
+        "SETTINGS$META_PROFILE_NAME_TAKEN",
+      );
+      expect(screen.getByTestId("save-agent-profile-btn")).toBeDisabled();
+    });
   });
 });

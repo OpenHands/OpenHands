@@ -17,6 +17,11 @@ interface ProfileNameInputProps {
   isOptional?: boolean;
   /** When true, empty values will show red validation styling (required field behavior). */
   isRequired?: boolean;
+  /**
+   * A caller-side validation message, such as a name that is already taken.
+   * Marks the input invalid and becomes its accessible description.
+   */
+  error?: string;
 }
 
 export const ProfileNameInput = forwardRef<
@@ -33,6 +38,7 @@ export const ProfileNameInput = forwardRef<
     isDisabled,
     isOptional,
     isRequired = false,
+    error,
   },
   ref,
 ) {
@@ -63,6 +69,7 @@ export const ProfileNameInput = forwardRef<
         isDisabled={isDisabled}
         ariaDescribedBy={describedById}
         ariaInvalid={!isValid}
+        error={error}
       />
       <p
         id={describedById}
