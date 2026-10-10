@@ -1,0 +1,58 @@
+{
+  "viewport": "phone",
+  "selectedBackend": "Local",
+  "automationVersion": "1.19.3",
+  "results": [
+    {
+      "action": "key-only set",
+      "dirtyCount": 1,
+      "before": {
+        "sha": "dc1941b3a4a5df600cf72b182fd596a5004ac0d1",
+        "sha256": "bc4ad7a6280091680f7a00e6d83fac1b9bbc762d87fcc339b439013978d2fe36",
+        "prefix": "agent_profile_id: nu",
+        "encrypted": false
+      },
+      "after": {
+        "sha": "cb702b7229229c89e7da3ae45190f98c1ecffd6e",
+        "sha256": "d5742257f189e4e90aa3010420f78d61bbb0e1194a6c05123c42447b99d4de62",
+        "prefix": "gAAAAABqyednyKzzirJt",
+        "encrypted": true
+      },
+      "pass": true
+    },
+    {
+      "action": "key-only rotate",
+      "dirtyCount": 1,
+      "before": {
+        "sha": "cb702b7229229c89e7da3ae45190f98c1ecffd6e",
+        "sha256": "d5742257f189e4e90aa3010420f78d61bbb0e1194a6c05123c42447b99d4de62",
+        "prefix": "gAAAAABqyednyKzzirJt",
+        "encrypted": true
+      },
+      "after": {
+        "sha": "4549dd2653504f2133a8971cc874687335d6e4be",
+        "sha256": "cbbf27aa096d5f8415431dade45b212be8f00f105aaff4310155d65863ecd9cb",
+        "prefix": "gAAAAABqyedsYS_9FEyJ",
+        "encrypted": true
+      },
+      "pass": true
+    },
+    {
+      "action": "key-only clear",
+      "dirtyCount": 1,
+      "before": {
+        "sha": "4549dd2653504f2133a8971cc874687335d6e4be",
+        "sha256": "cbbf27aa096d5f8415431dade45b212be8f00f105aaff4310155d65863ecd9cb",
+        "prefix": "gAAAAABqyedsYS_9FEyJ",
+        "encrypted": true
+      },
+      "after": {
+        "sha": "1bf065bd7ee6a3a9633ce0d381ab927948010a9a",
+        "sha256": "bc4ad7a6280091680f7a00e6d83fac1b9bbc762d87fcc339b439013978d2fe36",
+        "prefix": "agent_profile_id: nu",
+        "encrypted": false
+      },
+      "pass": true
+    }
+  ]
+}

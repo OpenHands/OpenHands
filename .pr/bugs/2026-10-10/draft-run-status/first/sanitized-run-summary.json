@@ -1,0 +1,18 @@
+{
+  "revision": "5a8c3832154b14d2dad651801c0ab3f74c96f02e",
+  "agent_server": "1.54.0",
+  "automation": "1.19.3",
+  "viewport": "1440x1000",
+  "backend": "local; no-conversation; generated callback-only custom script",
+  "run_id": "3aff8e91-c7c3-4e02-8a52-bcf8025b5265",
+  "automation_id": "5a1f553d-2a16-4cb2-8464-aad7f6822489",
+  "status": "COMPLETED",
+  "created_at": "2026-10-10T07:24:20Z",
+  "started_at": "2026-10-10T07:24:27.818238Z",
+  "completed_at": "2026-10-10T07:24:27.939441Z",
+  "ui_before_reload": "Pending for at least 45 seconds after confirmed backend completion",
+  "ui_after_reload": "Successful; draft form Latest test passed",
+  "origin": "unconfirmed; no baseline live proof",
+  "model_calls": 0,
+  "cost_usd": 0
+}

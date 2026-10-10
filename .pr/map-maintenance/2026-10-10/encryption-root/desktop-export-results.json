@@ -1,0 +1,58 @@
+{
+  "viewport": "desktop",
+  "selectedBackend": "Local",
+  "automationVersion": "1.19.3",
+  "results": [
+    {
+      "action": "key-only set",
+      "dirtyCount": 1,
+      "before": {
+        "sha": "6035ce5a57c0a0dc67c602e37c86edf61b079950",
+        "sha256": "bc4ad7a6280091680f7a00e6d83fac1b9bbc762d87fcc339b439013978d2fe36",
+        "prefix": "agent_profile_id: nu",
+        "encrypted": false
+      },
+      "after": {
+        "sha": "c3523b145f00e802205d2116fd7f4d57b866a07c",
+        "sha256": "a34a8de9e291a53b349416163e28bb575357d23a856f6bcfa5308474d6346f76",
+        "prefix": "gAAAAABqyedTAbu4IiEw",
+        "encrypted": true
+      },
+      "pass": true
+    },
+    {
+      "action": "key-only rotate",
+      "dirtyCount": 1,
+      "before": {
+        "sha": "c3523b145f00e802205d2116fd7f4d57b866a07c",
+        "sha256": "a34a8de9e291a53b349416163e28bb575357d23a856f6bcfa5308474d6346f76",
+        "prefix": "gAAAAABqyedTAbu4IiEw",
+        "encrypted": true
+      },
+      "after": {
+        "sha": "0b7c56de51441cf026c16a85d55e398f2e8f1e3f",
+        "sha256": "6f70a1244ad84e095b0366ac4feb7f4a652e5d0de32a19f0e6f85a95f257370c",
+        "prefix": "gAAAAABqyedYk_e4lONk",
+        "encrypted": true
+      },
+      "pass": true
+    },
+    {
+      "action": "key-only clear",
+      "dirtyCount": 1,
+      "before": {
+        "sha": "0b7c56de51441cf026c16a85d55e398f2e8f1e3f",
+        "sha256": "6f70a1244ad84e095b0366ac4feb7f4a652e5d0de32a19f0e6f85a95f257370c",
+        "prefix": "gAAAAABqyedYk_e4lONk",
+        "encrypted": true
+      },
+      "after": {
+        "sha": "dc1941b3a4a5df600cf72b182fd596a5004ac0d1",
+        "sha256": "bc4ad7a6280091680f7a00e6d83fac1b9bbc762d87fcc339b439013978d2fe36",
+        "prefix": "agent_profile_id: nu",
+        "encrypted": false
+      },
+      "pass": true
+    }
+  ]
+}
