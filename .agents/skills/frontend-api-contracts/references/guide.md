@@ -129,6 +129,8 @@ return new ConversationClient(getAgentServerClientOptions()).someMethod(...);
 
 ## Backend and Contract Invariants
 
+- Local onboarding edits an LLM profile, the way the LLM profile editor does. It fills the form from the active LLM profile, else from the one the `default` agent profile points at, read with `X-Expose-Secrets: encrypted`; listing the agent profiles first runs the Agent Server's one-time backfill of legacy raw LLM settings into a `default` LLM profile. With neither, it starts a fresh profile with the onboarding default model; an existing profile keeps its own model. A failed read shows an error with a retry, never a fresh form. On Next an unchanged existing profile is kept as is; otherwise the form's changes are merged over that profile with `buildProfileLlmConfig` (`src/components/features/settings/llm-profiles/llm-profile-form.ts`), which also resolves a subscription profile's model to a loaded subscription model, and the result is saved and activated. It never reads or PATCHes raw `agent_settings.llm`; activating the profile syncs it on the server. A form's dirty fields alone are not a complete profile, because the profile endpoint replaces the whole LLM configuration. Cloud onboarding still saves through its settings path.
+
 - Use `@openhands/typescript-client` classes directly for agent-server-backed REST/workspace/event/VS Code calls. Centralize host/session API key/working-directory option assembly through `src/api/agent-server-client-options.ts`; the backend fallback policy itself lives in `src/api/backend-registry/active-store.ts`.
 - Local verification/build gotchas:
   - `npm run typecheck` assumes generated translation types exist; run `npm run make-i18n` first if `src/i18n/declaration.ts` is missing.
