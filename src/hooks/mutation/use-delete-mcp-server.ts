@@ -17,6 +17,7 @@ export function useDeleteMcpServer() {
   const queryClient = useQueryClient();
 
   return useMutation({
+    meta: { disableToast: true },
     mutationFn: async (target: MCPServerConfig): Promise<void> => {
       await SettingsService.deleteMcpServer(target.id);
     },

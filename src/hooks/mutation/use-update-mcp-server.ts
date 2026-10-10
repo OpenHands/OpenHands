@@ -18,6 +18,7 @@ export function useUpdateMcpServer() {
   const { data: settings } = useSettings();
 
   return useMutation({
+    meta: { disableToast: true },
     mutationFn: async ({
       serverId,
       server,
