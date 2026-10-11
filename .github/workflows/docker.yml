@@ -208,6 +208,25 @@ jobs:
           provenance: true
           sbom: true
 
+      - name: Verify Agent Server version in image
+        env:
+          BUILT_IMAGE: ${{ env.IMAGE }}:sha-${{ steps.prep.outputs.short_sha }}-${{ env.ARCH }}
+          EXPECTED_AGENT_SERVER_VERSION: ${{ steps.config.outputs.agent_server_version }}
+          AGENT_SERVER_IMAGE_INPUT: ${{ inputs.agent_server_image }}
+        run: |
+          if [[ -n "$AGENT_SERVER_IMAGE_INPUT" ]]; then
+            echo "Skipping the config version assertion for the explicitly overridden base image: $AGENT_SERVER_IMAGE_INPUT"
+            exit 0
+          fi
+          ACTUAL_AGENT_SERVER_VERSION=$(docker run --rm --pull=always --entrypoint python "$BUILT_IMAGE" \
+            -c 'from importlib.metadata import version; print(version("openhands-agent-server"))')
+          echo "Expected Agent Server: $EXPECTED_AGENT_SERVER_VERSION"
+          echo "Image Agent Server:    $ACTUAL_AGENT_SERVER_VERSION"
+          if [[ "$ACTUAL_AGENT_SERVER_VERSION" != "$EXPECTED_AGENT_SERVER_VERSION" ]]; then
+            echo "ERROR: the image contains a different Agent Server version than config/defaults.json." >&2
+            exit 1
+          fi
+
       - name: Summary (${{ matrix.arch }})
         env:
           TAGS: ${{ steps.prep.outputs.tags }}
