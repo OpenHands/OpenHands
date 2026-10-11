@@ -244,6 +244,32 @@ function normalizeSubConversationIds(value: unknown): string[] | null {
   return value.filter((entry): entry is string => typeof entry === "string");
 }
 
+/**
+ * ``ConversationInfo.available_models`` — the ACP server's runtime model
+ * catalogue (agent-server >= 1.51.0). Parsed defensively: drop entries
+ * without a usable ``model_id`` (the id is what switching needs; a nameless
+ * entry is fine). Absent/empty both normalize to ``null`` so consumers can
+ * treat "nothing to prefer" uniformly and fall back to the static registry.
+ */
+function normalizeAvailableModels(
+  value: unknown,
+): DirectConversationInfo["available_models"] {
+  if (!Array.isArray(value)) return null;
+  const models = value.filter(isRecord).flatMap((entry) => {
+    const modelId = stringOrNull(entry.model_id)?.trim();
+    if (!modelId) return [];
+    const name = stringOrNull(entry.name)?.trim();
+    return [
+      {
+        model_id: modelId,
+        name: name ? name : null,
+        description: stringOrNull(entry.description),
+      },
+    ];
+  });
+  return models.length > 0 ? models : null;
+}
+
 function normalizeLaunchedAgentProfile(
   value: unknown,
 ): DirectConversationInfo["launched_agent_profile"] {
@@ -319,6 +345,12 @@ function requireDirectConversationInfo(item: unknown): DirectConversationInfo {
     // omit these — adapter handles ``undefined`` / ``null`` gracefully.
     current_model_id: stringOrNull(item.current_model_id),
     current_model_name: stringOrNull(item.current_model_name),
+    // Runtime ACP model catalogue (agent-server >= 1.51.0) — feeds the
+    // in-conversation model picker, which prefers it over the static
+    // provider registry. Without the wire threading here, the adapter tests
+    // (which build DirectConversationInfo in-process) would pass while a
+    // real local-backend fetch silently dropped the list (#18053).
+    available_models: normalizeAvailableModels(item.available_models),
   };
 }
 

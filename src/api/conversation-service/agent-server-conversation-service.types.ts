@@ -144,6 +144,28 @@ export interface LaunchedAgentProfile {
   revision: number;
 }
 
+/**
+ * One entry of a conversation's runtime ACP model list, mirroring the SDK's
+ * ``AcpModelInfo`` wire shape (``model_id`` plus optional ``name`` /
+ * ``description``). Kept in the wire shape rather than Canvas's
+ * ``ACPModelOption`` (``{id, label}``) so the picker can apply the chip's
+ * precedence — runtime ``name`` first, then the static registry label, then
+ * the raw id — without losing the distinction between a server-provided
+ * name and the ``model_id`` fallback a mapped label would bake in.
+ */
+export interface AcpRuntimeModel {
+  /** Server-assigned id; the value passed back to switch to this model. */
+  model_id: string;
+  /** Human-readable label when the server supplies one. */
+  name?: string | null;
+  /**
+   * Optional longer description. The server does no name curation, so some
+   * opaque aliases carry their human identity here instead (e.g.
+   * claude-agent-acp's ``"default"``).
+   */
+  description?: string | null;
+}
+
 export interface AppConversation {
   id: string;
   created_by_user_id: string | null;
@@ -193,6 +215,16 @@ export interface AppConversation {
    */
   tags?: Record<string, string> | null;
   llm_model: string | null;
+  /**
+   * Models the ACP server reported for this conversation's session at
+   * ``session/new`` (``ConversationInfo.available_models``, agent-server >=
+   * 1.51.0): the runtime catalogue the in-conversation model picker prefers
+   * over the static provider registry — the only source that can list models
+   * for a ``custom`` ACP profile. ``null`` for native OpenHands agents, for
+   * ACP servers that don't surface the capability, and on older
+   * agent-servers.
+   */
+  available_models?: AcpRuntimeModel[] | null;
   metrics: MetricsSnapshot | null;
   created_at: string;
   updated_at: string;
