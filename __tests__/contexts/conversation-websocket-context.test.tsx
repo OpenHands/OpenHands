@@ -28,6 +28,7 @@ import {
 } from "#/api/conversation-metadata-store";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import type { MessageEvent } from "#/types/agent-server/core";
+import type { ACPToolCallEvent } from "#/types/agent-server/core/events/acp-tool-call-event";
 import { isStreamingDeltaEvent } from "#/types/agent-server/type-guards";
 
 type QueryParams = Record<string, string | boolean>;
@@ -1025,6 +1026,172 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
         ExecutionStatus.PAUSED,
       );
       expect(executionStatusByConversation["conv-main"]).toBeUndefined();
+    });
+
+    it("appends ACP execute tool calls to the terminal command store", async () => {
+      await renderMainCaptured("conv-main");
+      useCommandStore.getState().clearTerminal();
+
+      // 1. Started event: should append command input
+      deliverMain({
+        id: "evt-acp-start-1",
+        timestamp: new Date().toISOString(),
+        source: "agent",
+        kind: "ACPToolCallEvent",
+        tool_call_id: "call-acp-1",
+        title: "Run pytest",
+        status: "in_progress",
+        tool_kind: "execute",
+        raw_input: { command: "pytest tests/test_foo.py" },
+        raw_output: null,
+        content: null,
+        is_error: false,
+      });
+
+      expect(useCommandStore.getState().commands).toEqual([
+        { content: "pytest tests/test_foo.py", type: "input" },
+      ]);
+
+      // 2. Completed event: should append output without duplicating the command input
+      deliverMain({
+        id: "evt-acp-end-1",
+        timestamp: new Date().toISOString(),
+        source: "agent",
+        kind: "ACPToolCallEvent",
+        tool_call_id: "call-acp-1",
+        title: "Run pytest",
+        status: "completed",
+        tool_kind: "execute",
+        raw_input: { command: "pytest tests/test_foo.py" },
+        raw_output: "1 passed in 0.05s",
+        content: [{ type: "text", text: "1 passed in 0.05s" }],
+        is_error: false,
+      });
+
+      expect(useCommandStore.getState().commands).toEqual([
+        { content: "pytest tests/test_foo.py", type: "input" },
+        { content: "1 passed in 0.05s", type: "output" },
+      ]);
+    });
+
+    it("ignores ACP tool calls whose tool_kind is not execute", async () => {
+      await renderMainCaptured("conv-main");
+      useCommandStore.getState().clearTerminal();
+
+      deliverMain({
+        id: "evt-acp-read-1",
+        timestamp: new Date().toISOString(),
+        source: "agent",
+        kind: "ACPToolCallEvent",
+        tool_call_id: "call-acp-read",
+        title: "Read foo.ts",
+        status: "completed",
+        tool_kind: "read",
+        raw_input: { path: "foo.ts" },
+        raw_output: "file contents",
+        content: [{ type: "text", text: "file contents" }],
+        is_error: false,
+      });
+
+      expect(useCommandStore.getState().commands).toEqual([]);
+    });
+
+    it("surfaces error output when an ACP execute tool call fails", async () => {
+      await renderMainCaptured("conv-main");
+      useCommandStore.getState().clearTerminal();
+
+      deliverMain({
+        id: "evt-acp-err-1",
+        timestamp: new Date().toISOString(),
+        source: "agent",
+        kind: "ACPToolCallEvent",
+        tool_call_id: "call-acp-err-1",
+        title: "Run bad_command",
+        status: "failed",
+        tool_kind: "execute",
+        raw_input: { command: "bad_command" },
+        raw_output: "command not found: bad_command",
+        content: [{ type: "text", text: "command not found: bad_command" }],
+        is_error: true,
+      });
+
+      expect(useCommandStore.getState().commands).toEqual([
+        { content: "bad_command", type: "input" },
+        { content: "command not found: bad_command", type: "output" },
+      ]);
+    });
+
+    it("restores ACP execute commands and output from preloaded history on reload", async () => {
+      vi.mocked(EventService.searchEvents).mockResolvedValueOnce({
+        items: [
+          createUserMessageEvent("user-msg-history"),
+          {
+            id: "evt-history-acp-1",
+            timestamp: new Date().toISOString(),
+            source: "agent",
+            kind: "ACPToolCallEvent",
+            tool_call_id: "call-history-1",
+            title: "Run git log",
+            status: "completed",
+            tool_kind: "execute",
+            raw_input: { command: "git log -n 1" },
+            raw_output: "commit 123456",
+            content: [{ type: "text", text: "commit 123456" }],
+            is_error: false,
+          } as unknown as ACPToolCallEvent,
+        ],
+        next_page_id: null,
+      });
+
+      useCommandStore.getState().clearTerminal();
+      await renderMainCaptured("conv-history");
+
+      expect(useCommandStore.getState().commands).toEqual([
+        { content: "git log -n 1", type: "input" },
+        { content: "commit 123456", type: "output" },
+      ]);
+    });
+
+    it("deduplicates output when multiple events for the same tool_call_id contain output", async () => {
+      await renderMainCaptured("conv-main-dedup");
+      useCommandStore.getState().clearTerminal();
+
+      // 1. Initial event with output
+      deliverMain({
+        id: "evt-acp-out-1",
+        timestamp: new Date().toISOString(),
+        source: "agent",
+        kind: "ACPToolCallEvent",
+        tool_call_id: "call-dedup-1",
+        title: "Run pytest",
+        status: "in_progress",
+        tool_kind: "execute",
+        raw_input: { command: "pytest" },
+        raw_output: "1 passed",
+        content: [{ type: "text", text: "1 passed" }],
+        is_error: false,
+      });
+
+      // 2. Subsequent completed event with same or updated output
+      deliverMain({
+        id: "evt-acp-out-2",
+        timestamp: new Date().toISOString(),
+        source: "agent",
+        kind: "ACPToolCallEvent",
+        tool_call_id: "call-dedup-1",
+        title: "Run pytest",
+        status: "completed",
+        tool_kind: "execute",
+        raw_input: { command: "pytest" },
+        raw_output: "1 passed",
+        content: [{ type: "text", text: "1 passed" }],
+        is_error: false,
+      });
+
+      expect(useCommandStore.getState().commands).toEqual([
+        { content: "pytest", type: "input" },
+        { content: "1 passed", type: "output" },
+      ]);
     });
   });
 

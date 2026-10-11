@@ -33,6 +33,7 @@ import {
   isGoalConversationStateUpdateEvent,
   isExecuteBashActionEvent,
   isExecuteBashObservationEvent,
+  isACPToolCallEvent,
   isDisplayableErrorEvent,
   isPlanningFileEditorObservationEvent,
   isBrowserObservationEvent,
@@ -52,6 +53,10 @@ import {
   StreamingDeltaBatcher,
 } from "#/utils/streaming-delta-batcher";
 import { handleCanvasUIAction } from "#/services/canvas-ui";
+import {
+  extractACPExecuteCommand,
+  extractACPExecuteOutput,
+} from "#/utils/acp-terminal";
 import { handleAutomationFormUpdateAction } from "#/services/automation-form";
 import { handleLaunchChildConversationAction } from "#/services/child-conversation-launch";
 import { ConversationStateUpdateEventStats } from "#/types/agent-server/core/events/conversation-state-event";
@@ -229,7 +234,7 @@ export function ConversationWebSocketProvider({
     (state) => state.consumeMatchingPendingMessage,
   );
   const { setExecutionStatus } = useConversationStateStore();
-  const { appendInput, appendOutput } = useCommandStore();
+  const { appendInput, appendOutput, appendACPExecute } = useCommandStore();
   const resetBrowserStore = useBrowserStore((state) => state.reset);
 
   // Coalesce streaming deltas to ≤1 store commit/render per frame.
@@ -439,6 +444,21 @@ export function ConversationWebSocketProvider({
             extractMessageEventText(event),
             event,
           );
+        }
+        if (isExecuteBashActionEvent(event)) {
+          appendInput(event.action.command);
+        }
+        if (isExecuteBashObservationEvent(event)) {
+          const textContent = event.observation.content
+            .filter((c) => c.type === "text")
+            .map((c) => c.text)
+            .join("\n");
+          appendOutput(textContent);
+        }
+        if (isACPToolCallEvent(event) && event.tool_kind === "execute") {
+          const command = extractACPExecuteCommand(event);
+          const output = extractACPExecuteOutput(event);
+          appendACPExecute(command, output, event.tool_call_id);
         }
       }
     }
@@ -760,6 +780,13 @@ export function ConversationWebSocketProvider({
             appendOutput(textContent);
           }
 
+          // Handle ACP execute tool calls - mirror shell commands to terminal
+          if (isACPToolCallEvent(event) && event.tool_kind === "execute") {
+            const command = extractACPExecuteCommand(event);
+            const output = extractACPExecuteOutput(event);
+            appendACPExecute(command, output, event.tool_call_id);
+          }
+
           // Handle BrowserObservation events - update browser store with screenshot
           if (isBrowserObservationEvent(event)) {
             const { screenshot_data: screenshotData } = event.observation;
@@ -1046,6 +1073,13 @@ export function ConversationWebSocketProvider({
               .map((c) => c.text)
               .join("\n");
             appendOutput(textContent);
+          }
+
+          // Handle ACP execute tool calls - mirror shell commands to terminal
+          if (isACPToolCallEvent(event) && event.tool_kind === "execute") {
+            const command = extractACPExecuteCommand(event);
+            const output = extractACPExecuteOutput(event);
+            appendACPExecute(command, output, event.tool_call_id);
           }
 
           // Handle PlanningFileEditorObservation - only update plan for Plan.md
