@@ -44,6 +44,10 @@ import {
 const CLOUD_START_POLL_INTERVAL_MS = 3_000;
 const CLOUD_START_POLL_TIMEOUT_MS = 180_000;
 
+/** Cadence and default ceiling for waiting on a child conversation to finish. */
+const CHILD_WAIT_POLL_INTERVAL_MS = 50;
+const DEFAULT_CHILD_WAIT_TIMEOUT_MS = 180_000;
+
 /** Cloud and self-hosted Enterprise serve Agent Canvas here; the host root is the legacy UI. */
 const CLOUD_AGENT_CANVAS_BASE_PATH = "/canvas";
 
@@ -73,12 +77,20 @@ interface LaunchSuccess {
   parent_link: boolean;
   /** Present when `parent_link` is false, explaining why. */
   parent_link_note?: string;
+  /** Present when wait_for_response=true, indicating the child completed. */
+  finished?: boolean;
+  /** Present when wait_for_response=true, holding the FinishAction message. */
+  finish_message?: string | null;
+  /** Present when wait_for_response=true, indicating cleanup status. */
+  cleanup_outcome?: string;
 }
 
 interface LaunchFailure {
   status: "error";
   error: string;
   guidance: string;
+  conversation_id?: string | null;
+  cleanup_outcome?: string;
 }
 
 export type LaunchChildConversationResult = LaunchSuccess | LaunchFailure;
@@ -90,6 +102,10 @@ interface ValidatedParams {
   repository: string | null;
   branch: string | null;
   isolation: ChildConversationIsolation;
+  waitForResponse: boolean;
+  timeoutSeconds: number | null;
+  deleteOnFinish: boolean;
+  deleteOnTimeout: boolean;
 }
 
 const failure = (error: string, guidance: string): LaunchFailure => ({
@@ -190,6 +206,23 @@ function validateLaunchParams(
     };
   }
 
+  const timeoutSeconds = action.timeout_seconds;
+  if (timeoutSeconds !== undefined && timeoutSeconds !== null) {
+    if (
+      typeof timeoutSeconds !== "number" ||
+      Number.isNaN(timeoutSeconds) ||
+      timeoutSeconds <= 0
+    ) {
+      return {
+        ok: false,
+        failure: failure(
+          "`timeout_seconds` must be a positive number.",
+          "`timeout_seconds` must be a positive number of seconds to wait. Omit it to use the default timeout.",
+        ),
+      };
+    }
+  }
+
   return {
     ok: true,
     params: {
@@ -199,6 +232,10 @@ function validateLaunchParams(
       repository,
       branch,
       isolation: isolation ?? "worktree",
+      waitForResponse: Boolean(action.wait_for_response),
+      timeoutSeconds: timeoutSeconds ?? null,
+      deleteOnFinish: Boolean(action.delete_on_finish),
+      deleteOnTimeout: Boolean(action.delete_on_timeout),
     },
   };
 }
@@ -340,6 +377,140 @@ async function launchLocalChild(
     ...(isolationNote ? { isolation_note: isolationNote } : {}),
     parent_link: !parentLinkNote,
     ...(parentLinkNote ? { parent_link_note: parentLinkNote } : {}),
+  };
+}
+
+async function waitForChildConversation(
+  conversationId: string,
+  params: ValidatedParams,
+  launchSuccess: LaunchSuccess,
+): Promise<LaunchChildConversationResult> {
+  const timeoutMs = params.timeoutSeconds
+    ? params.timeoutSeconds * 1000
+    : DEFAULT_CHILD_WAIT_TIMEOUT_MS;
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    let runtimeStatus: string;
+    try {
+      const runtimeConv =
+        await AgentServerConversationService.getRuntimeConversation(
+          conversationId,
+        );
+      runtimeStatus = runtimeConv.status;
+    } catch {
+      runtimeStatus = "running";
+    }
+
+    if (runtimeStatus === "error" || runtimeStatus === "stuck") {
+      return {
+        status: "error",
+        conversation_id: conversationId,
+        error: `Child conversation ${conversationId} stopped with status "${runtimeStatus}".`,
+        guidance: "The child conversation encountered an error or became stuck.",
+      };
+    }
+
+    if (runtimeStatus === "finished") {
+      let finishMessage: string | null = null;
+      try {
+        const events =
+          await AgentServerConversationService.searchEvents(conversationId);
+        for (const item of events?.items ?? []) {
+          const actionAny = (item as unknown as { action?: { kind?: string; action?: string; message?: string } })
+            ?.action;
+          if (
+            actionAny &&
+            (actionAny.kind === "FinishAction" ||
+              actionAny.action === "FinishAction") &&
+            typeof actionAny.message === "string"
+          ) {
+            finishMessage = actionAny.message;
+            break;
+          }
+        }
+      } catch {
+        // Ignore search errors and check finishMessage
+      }
+
+      if (!finishMessage) {
+        return {
+          status: "error",
+          conversation_id: conversationId,
+          error: `Child conversation ${conversationId} finished without a finish message.`,
+          guidance:
+            "The child conversation completed but did not produce a FinishAction message.",
+        };
+      }
+
+      let cleanupOutcome = "retained";
+      if (params.deleteOnFinish && params.target === "local") {
+        await Promise.resolve(
+          AgentServerConversationService.deleteConversation(conversationId),
+        ).catch(() => undefined);
+        cleanupOutcome = "deleted";
+      }
+
+      return {
+        ...launchSuccess,
+        finished: true,
+        finish_message: finishMessage,
+        cleanup_outcome: cleanupOutcome,
+      };
+    }
+
+    await delay(CHILD_WAIT_POLL_INTERVAL_MS);
+  }
+
+  // Timeout reached
+  let cleanupOutcome = "left running";
+  if (params.deleteOnTimeout && params.target === "local") {
+    await Promise.resolve(
+      AgentServerConversationService.interruptConversation(conversationId),
+    ).catch(() => undefined);
+    await Promise.resolve(
+      AgentServerConversationService.deleteConversation(conversationId),
+    ).catch(() => undefined);
+    cleanupOutcome = "deleted";
+  } else if (
+    params.deleteOnFinish &&
+    !params.deleteOnTimeout &&
+    params.target === "local"
+  ) {
+    // Delete when it later finishes in background (bounded by 30min)
+    void (async () => {
+      try {
+        const bgDeadline = Date.now() + 30 * 60 * 1000;
+        while (Date.now() < bgDeadline) {
+          const c =
+            await AgentServerConversationService.getRuntimeConversation(
+              conversationId,
+            );
+          if (
+            c.status === "finished" ||
+            c.status === "error" ||
+            c.status === "stuck"
+          ) {
+            await Promise.resolve(
+              AgentServerConversationService.deleteConversation(conversationId),
+            ).catch(() => undefined);
+            break;
+          }
+          await delay(CHILD_WAIT_POLL_INTERVAL_MS);
+        }
+      } catch {
+        // ignore background poll errors
+      }
+    })();
+  }
+
+  return {
+    status: "error",
+    conversation_id: conversationId,
+    error: `Timed out waiting for child conversation ${conversationId} to finish after ${params.timeoutSeconds ?? timeoutMs / 1000}s.`,
+    guidance:
+      "The wait timeout expired before the child conversation finished processing.",
+    cleanup_outcome: cleanupOutcome,
   };
 }
 
@@ -534,6 +705,17 @@ export async function handleLaunchChildConversationAction(
         validation.params.target === "cloud"
           ? await launchCloudChild(validation.params, parentConversationId)
           : await launchLocalChild(validation.params, parentConversationId);
+      if (
+        validation.params.waitForResponse &&
+        result.status === "launched" &&
+        result.conversation_id
+      ) {
+        result = await waitForChildConversation(
+          result.conversation_id,
+          validation.params,
+          result,
+        );
+      }
     } catch (error) {
       result = failure(
         error instanceof Error ? error.message : String(error),
