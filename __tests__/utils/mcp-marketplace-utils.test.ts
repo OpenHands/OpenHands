@@ -6,6 +6,7 @@ import {
   getDefaultMcpConnectionOption,
   getDefaultMcpTransport,
   getInstallableMcpConnectionOption,
+  isMcpInstallableEntry,
   getMarketplaceEntriesByPopularity,
   getMarketplaceEntryById,
   getMcpConnectionOptions,
@@ -160,6 +161,48 @@ describe("getInstallableMcpConnectionOption", () => {
     };
     const option = getInstallableMcpConnectionOption(noOptionsEntry);
     expect(option).toBeUndefined();
+  });
+});
+
+describe("isMcpInstallableEntry and getMcpMarketplaceCatalog", () => {
+  it("returns true for entries with installable connection options", () => {
+    expect(isMcpInstallableEntry(slackEntry)).toBe(true);
+    expect(isMcpInstallableEntry(tavilyEntry)).toBe(true);
+    expect(isMcpInstallableEntry(linearEntry)).toBe(true);
+  });
+
+  it("returns false for provider OAuth entries without local install options (e.g. Sentry)", () => {
+    const sentry = MCP_MARKETPLACE.find((e) => e.id === "sentry");
+    if (sentry) {
+      expect(isMcpInstallableEntry(sentry)).toBe(false);
+      expect(
+        getMcpMarketplaceCatalog(MCP_MARKETPLACE).some(
+          (e) => e.id === "sentry",
+        ),
+      ).toBe(false);
+    }
+  });
+
+  it("filters out catalog entries that have no locally installable connection option", () => {
+    const uninstallableMockEntry = {
+      ...slackEntry,
+      id: "uninstallable-mock",
+      connectionOptions: [
+        {
+          id: "hosted-oauth",
+          provider: "mcp",
+          auth: {
+            strategy: "oauth2",
+            oauth: { authorizationUrl: "https://auth.example.com/oauth" },
+          },
+          transport: { kind: "shttp", url: "https://example.com/mcp" },
+        } as Parameters<
+          typeof getInstallableMcpConnectionOption
+        >[0]["connectionOptions"][number],
+      ],
+    };
+    expect(isMcpInstallableEntry(uninstallableMockEntry)).toBe(false);
+    expect(getMcpMarketplaceCatalog([uninstallableMockEntry])).toEqual([]);
   });
 });
 
