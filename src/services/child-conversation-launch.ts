@@ -407,25 +407,31 @@ async function waitForChildConversation(
         status: "error",
         conversation_id: conversationId,
         error: `Child conversation ${conversationId} stopped with status "${runtimeStatus}".`,
-        guidance: "The child conversation encountered an error or became stuck.",
+        guidance:
+          "The child conversation encountered an error or became stuck.",
       };
     }
 
     if (runtimeStatus === "finished") {
       let finishMessage: string | null = null;
+      let hasFinishAction = false;
       try {
         const events =
           await AgentServerConversationService.searchEvents(conversationId);
         for (const item of events?.items ?? []) {
-          const actionAny = (item as unknown as { action?: { kind?: string; action?: string; message?: string } })
-            ?.action;
+          const actionAny = (
+            item as unknown as {
+              action?: { kind?: string; action?: string; message?: string };
+            }
+          )?.action;
           if (
             actionAny &&
             (actionAny.kind === "FinishAction" ||
-              actionAny.action === "FinishAction") &&
-            typeof actionAny.message === "string"
+              actionAny.action === "FinishAction")
           ) {
-            finishMessage = actionAny.message;
+            hasFinishAction = true;
+            finishMessage =
+              typeof actionAny.message === "string" ? actionAny.message : "";
             break;
           }
         }
@@ -433,7 +439,7 @@ async function waitForChildConversation(
         // Ignore search errors and check finishMessage
       }
 
-      if (!finishMessage) {
+      if (!hasFinishAction) {
         return {
           status: "error",
           conversation_id: conversationId,
@@ -445,10 +451,14 @@ async function waitForChildConversation(
 
       let cleanupOutcome = "retained";
       if (params.deleteOnFinish && params.target === "local") {
-        await Promise.resolve(
-          AgentServerConversationService.deleteConversation(conversationId),
-        ).catch(() => undefined);
-        cleanupOutcome = "deleted";
+        try {
+          await AgentServerConversationService.deleteConversation(
+            conversationId,
+          );
+          cleanupOutcome = "deleted";
+        } catch {
+          cleanupOutcome = "retained";
+        }
       }
 
       return {
@@ -465,13 +475,21 @@ async function waitForChildConversation(
   // Timeout reached
   let cleanupOutcome = "left running";
   if (params.deleteOnTimeout && params.target === "local") {
-    await Promise.resolve(
-      AgentServerConversationService.interruptConversation(conversationId),
-    ).catch(() => undefined);
-    await Promise.resolve(
-      AgentServerConversationService.deleteConversation(conversationId),
-    ).catch(() => undefined);
-    cleanupOutcome = "deleted";
+    let deleted = false;
+    try {
+      await AgentServerConversationService.interruptConversation(
+        conversationId,
+      );
+    } catch {
+      // ignore interrupt failure and proceed to deletion
+    }
+    try {
+      await AgentServerConversationService.deleteConversation(conversationId);
+      deleted = true;
+    } catch {
+      deleted = false;
+    }
+    cleanupOutcome = deleted ? "deleted" : "delete_failed";
   } else if (
     params.deleteOnFinish &&
     !params.deleteOnTimeout &&
@@ -479,9 +497,9 @@ async function waitForChildConversation(
   ) {
     // Delete when it later finishes in background (bounded by 30min)
     void (async () => {
-      try {
-        const bgDeadline = Date.now() + 30 * 60 * 1000;
-        while (Date.now() < bgDeadline) {
+      const bgDeadline = Date.now() + 30 * 60 * 1000;
+      while (Date.now() < bgDeadline) {
+        try {
           const c =
             await AgentServerConversationService.getRuntimeConversation(
               conversationId,
@@ -491,15 +509,15 @@ async function waitForChildConversation(
             c.status === "error" ||
             c.status === "stuck"
           ) {
-            await Promise.resolve(
-              AgentServerConversationService.deleteConversation(conversationId),
+            await AgentServerConversationService.deleteConversation(
+              conversationId,
             ).catch(() => undefined);
             break;
           }
-          await delay(CHILD_WAIT_POLL_INTERVAL_MS);
+        } catch {
+          // continue polling until deadline
         }
-      } catch {
-        // ignore background poll errors
+        await delay(CHILD_WAIT_POLL_INTERVAL_MS);
       }
     })();
   }
