@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 import { cn } from "#/utils/utils";
 import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import { I18nKey } from "#/i18n/declaration";
+import { ToggleSwitchVisual } from "#/ui/toggle-switch";
 
 interface SaveAsSecretToggleProps {
   fieldKey: string;
@@ -20,9 +21,10 @@ export function SaveAsSecretToggle({
     <label
       data-testid={`mcp-install-save-secret-${fieldKey}`}
       className={cn(
-        "flex items-center gap-2 px-3 py-2 mt-0.5 rounded-lg border cursor-pointer transition-colors",
+        "flex items-center gap-2 px-3 py-2 mt-0.5 rounded-lg border cursor-pointer transition-colors min-w-0 max-w-full",
+        "has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-focus has-[:focus-visible]:outline-none",
         checked
-          ? "border-green-500/35 bg-green-500/10"
+          ? "border-contrast/30 bg-contrast/5"
           : "border-border bg-transparent hover:bg-contrast/[0.03]",
       )}
     >
@@ -35,30 +37,17 @@ export function SaveAsSecretToggle({
         checked={checked}
         onChange={(e) => onToggle(e.target.checked)}
       />
-      {/* aria-hidden: purely decorative — the checkbox above is the semantic control. */}
-      <span
-        aria-hidden="true"
-        className={cn(
-          "relative inline-flex h-5.5 w-10 shrink-0 items-center rounded-full border transition-colors duration-200",
-          checked
-            ? "border-green-500 bg-green-500"
-            : "border-border bg-surface-raised",
-        )}
-      >
-        <span
-          className={cn(
-            "inline-block size-4 rounded-full transition-transform duration-200",
-            checked ? "translate-x-5.25 bg-white" : "translate-x-0.5 bg-muted",
-          )}
-        />
+      <ToggleSwitchVisual enabled={checked} />
+      <span className="text-sm text-contrast shrink-0">
+        {t(I18nKey.MCP$ALSO_SAVE_AS_SECRET)}
       </span>
-      <span className="text-sm">{t(I18nKey.MCP$ALSO_SAVE_AS_SECRET)}</span>
       <code
+        title={fieldKey}
         className={cn(
-          "ml-auto text-[11px] font-mono tracking-tight border rounded px-1.5 py-0.5",
+          "ml-auto text-[11px] font-mono tracking-tight border rounded px-1.5 py-0.5 truncate min-w-0",
           checked
-            ? "text-green-500 border-green-500/35 bg-contrast/[0.04]"
-            : "text-tertiary-alt border-border",
+            ? "text-contrast border-contrast/30 bg-contrast/5"
+            : "text-contrast border-border",
         )}
       >
         {fieldKey}
@@ -72,7 +61,7 @@ export function SaveAsSecretToggle({
         <button
           type="button"
           aria-label={t(I18nKey.MCP$SAVE_AS_SECRET_TOOLTIP)}
-          className="flex items-center justify-center size-3.75 shrink-0 rounded-full border border-muted text-tertiary-alt text-[9px] font-bold cursor-help"
+          className="flex items-center justify-center size-3.75 shrink-0 rounded-full border border-contrast/30 text-contrast text-[9px] font-bold cursor-help hover:bg-contrast/10"
           onClick={(e) => e.preventDefault()}
         >
           ?
