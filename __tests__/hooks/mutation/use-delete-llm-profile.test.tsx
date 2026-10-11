@@ -111,6 +111,38 @@ describe("useDeleteLlmProfile", () => {
     });
   });
 
+  it("invalidates queries even if title profile settings cleanup fails, and rethrows cleanup error", async () => {
+    vi.mocked(ProfilesService.deleteProfile).mockResolvedValue({
+      name: "Titles",
+      message: "Profile deleted",
+    });
+    vi.mocked(SettingsService.getSettings).mockResolvedValue({
+      title_llm_profile: "Titles",
+    } as never);
+    const cleanupError = new Error("503 Service Unavailable");
+    vi.mocked(SettingsService.saveSettings).mockRejectedValue(cleanupError);
+
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    const invalidateCacheSpy = vi.spyOn(SettingsService, "invalidateCache");
+
+    const { result } = renderHook(() => useDeleteLlmProfile(), { wrapper });
+
+    await expect(
+      act(async () => {
+        await result.current.mutateAsync("Titles");
+      }),
+    ).rejects.toThrow("503 Service Unavailable");
+
+    // All cache invalidations must still occur despite the cleanup error
+    expect(invalidateCacheSpy).toHaveBeenCalled();
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: LLM_PROFILES_QUERY_KEYS.all,
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: SETTINGS_QUERY_KEYS.personal(),
+    });
+  });
+
   it("handles delete errors", async () => {
     const error = new Error("Profile not found");
     vi.mocked(ProfilesService.deleteProfile).mockRejectedValue(error);
