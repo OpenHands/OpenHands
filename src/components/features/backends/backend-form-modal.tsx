@@ -1,8 +1,6 @@
 import React from "react";
-import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { ChevronDown, Globe, Info, Monitor } from "lucide-react";
-import { ServerClient } from "@openhands/typescript-client/clients";
 import OpenHandsLogoWhite from "#/assets/branding/openhands-logo-white.svg?react";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import {
@@ -17,13 +15,10 @@ import { useActiveBackendContext } from "#/contexts/active-backend-context";
 import { useBackendsHealth } from "#/hooks/query/use-backends-health";
 import { useTracking } from "#/hooks/use-tracking";
 import type { CloudConnectionSource } from "#/services/cloud-funnel-analytics";
-import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
 import { getLockedCloudHost } from "#/api/agent-server-config";
 import { isOpenHandsCloudHost } from "#/api/device-flow-client";
-import {
-  getDisplayAgentServerVersion,
-  validateLocalBackend,
-} from "#/api/agent-server-compatibility";
+import { validateLocalBackend } from "#/api/agent-server-compatibility";
+import { useBackendVersion } from "#/hooks/query/use-backend-server-info";
 import ChevronDownSmallIcon from "#/icons/chevron-down-small.svg?react";
 import { I18nKey } from "#/i18n/declaration";
 import type { Backend, BackendKind } from "#/api/backend-registry/types";
@@ -207,22 +202,7 @@ function BackendStatusBadge({
   const consecutiveFailures = health?.consecutiveFailures ?? 0;
   const lastError = health?.lastError ?? null;
 
-  const { data: version } = useQuery({
-    queryKey: ["backend-version", backend.host, backend.apiKey],
-    queryFn: async () => {
-      const info = await new ServerClient(
-        getAgentServerClientOptions({
-          host: backend.host,
-          sessionApiKey: backend.apiKey || null,
-          timeout: 5000,
-        }),
-      ).getServerInfo();
-      return getDisplayAgentServerVersion(info);
-    },
-    retry: false,
-    staleTime: 60_000,
-    enabled: backend.kind === "local" && !disabled,
-  });
+  const version = useBackendVersion(backend, { enabled: !disabled });
 
   const statusLabel = getBackendStatusLabel(t, backend, health);
 

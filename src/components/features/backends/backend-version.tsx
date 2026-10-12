@@ -1,30 +1,12 @@
 import { useTranslation } from "react-i18next";
-import { useQuery } from "@tanstack/react-query";
 
-import { ServerClient } from "@openhands/typescript-client/clients";
 import { type Backend } from "#/api/backend-registry/types";
-import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
-import { getDisplayAgentServerVersion } from "#/api/agent-server-compatibility";
+import { useBackendVersion } from "#/hooks/query/use-backend-server-info";
 import { I18nKey } from "#/i18n/declaration";
 
 export function BackendVersion({ backend }: { backend: Backend }) {
   const { t } = useTranslation("openhands");
-  const { data: version } = useQuery({
-    queryKey: ["backend-version", backend.host, backend.apiKey],
-    queryFn: async () => {
-      const info = await new ServerClient(
-        getAgentServerClientOptions({
-          host: backend.host,
-          sessionApiKey: backend.apiKey || null,
-          timeout: 5000,
-        }),
-      ).getServerInfo();
-      return getDisplayAgentServerVersion(info);
-    },
-    retry: false,
-    staleTime: 60_000,
-    enabled: backend.kind === "local",
-  });
+  const version = useBackendVersion(backend);
 
   if (!version) return null;
 

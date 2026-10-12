@@ -37,7 +37,7 @@ export const isNoBackendAvailableError = (
     "name" in error &&
     error.name === "NoBackendAvailableError");
 
-function normalizeHost(host: string): string {
+export function normalizeHost(host: string): string {
   return host.replace(/\/+$/, "");
 }
 

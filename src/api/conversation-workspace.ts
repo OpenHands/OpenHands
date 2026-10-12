@@ -1,12 +1,15 @@
 import i18n from "#/i18n";
 import { I18nKey } from "#/i18n/declaration";
 import { ServerClient } from "@openhands/typescript-client/clients";
-import type { ServerInfo } from "@openhands/typescript-client";
 import {
   getAgentServerClientOptions,
   type AgentServerClientOverrides,
 } from "./agent-server-client-options";
-import { getCachedAgentServerInfo } from "./agent-server-compatibility";
+import {
+  getBackendExecutionMode,
+  getCachedAgentServerInfo,
+  type AgentServerInfo,
+} from "./agent-server-compatibility";
 import {
   buildConversationWorkingDirForBackend,
   getWorkspaceRootForBackend,
@@ -16,14 +19,17 @@ import { resolveAbsoluteAgentServerPath } from "./agent-server-home";
 const ISOLATED_WORKSPACE_DIR = "/workspace";
 
 export function usesIsolatedWorkspace(
-  info: ServerInfo | null | undefined,
+  info: AgentServerInfo | null | undefined,
 ): boolean {
-  return info?.conversation_runtime === "docker";
+  // Route through the same resolver as the execution-mode badge and the
+  // conversation builders so the displayed boundary always matches the
+  // workspace the server will actually be asked for (BM-004).
+  return getBackendExecutionMode(info) === "docker";
 }
 
 export async function getConversationServerInfo(
   overrides: AgentServerClientOverrides = {},
-): Promise<ServerInfo | null> {
+): Promise<AgentServerInfo | null> {
   const options = getAgentServerClientOptions(overrides);
   const cached = getCachedAgentServerInfo({ host: options.host });
   if (cached) return cached;

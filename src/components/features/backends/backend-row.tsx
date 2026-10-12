@@ -11,6 +11,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
 import { BackendStatusDot } from "./backend-status-dot";
 import { BackendVersion } from "./backend-version";
+import { BackendExecutionMode } from "./backend-execution-mode";
 import { DeviceFlowAuth } from "./device-flow-auth";
 import { getBackendStatusLabel } from "./backend-status-label";
 import { getLockedCloudHost } from "#/api/agent-server-config";
@@ -85,6 +86,7 @@ export function BackendRow({
               {backend.name}
             </span>
             <BackendVersion backend={backend} />
+            <BackendExecutionMode backend={backend} />
           </div>
           {orgLabel ? (
             <span
