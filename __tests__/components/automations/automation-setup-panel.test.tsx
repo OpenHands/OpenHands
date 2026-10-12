@@ -25,6 +25,7 @@ import {
   PENDING_AUTOMATION_SETUP_ID,
   getAutomationFormSession,
   initializeAutomationFormSession,
+  patchAutomationFormSession,
 } from "#/api/automation-form-session";
 import type { AutomationSetupDraft } from "#/api/automation-setup-types";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
@@ -2348,5 +2349,128 @@ describe("AutomationSetupPanel", () => {
     ).not.toEqual(
       expect.objectContaining({ setup_script_path: expect.anything() }),
     );
+  });
+
+  it("preserves bundle summary through session updates and never shows starter code for existing custom edits", async () => {
+    const draft = setupDraftFromAutomation({
+      id: "auto-custom-1",
+      name: "Slack Monitor",
+      prompt: null,
+      enabled: true,
+      created_at: "2026-01-01T00:00:00.000Z",
+      updated_at: "2026-01-01T00:00:00.000Z",
+      entrypoint: "python3 main.py",
+      setup_script_path: "setup.sh",
+      tarball_path: "oh-internal://uploads/slack-monitor.tar.gz",
+      trigger: {
+        type: "cron",
+        schedule: "0 9 * * *",
+        timezone: "UTC",
+      },
+    });
+
+    initializeAutomationFormSession("conv-edit-custom-1", draft);
+
+    const { rerender } = renderPanel(
+      getAutomationFormSession("conv-edit-custom-1") ?? draft,
+      "conv-edit-custom-1",
+    );
+
+    expect(
+      screen.getByTestId("automation-setup-existing-bundle"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("automation-setup-existing-bundle-name"),
+    ).toHaveTextContent("slack-monitor.tar.gz");
+    expect(
+      screen.queryByTestId("automation-setup-custom-code"),
+    ).not.toBeInTheDocument();
+
+    // Patch an unrelated field in session
+    act(() => {
+      patchAutomationFormSession(
+        "conv-edit-custom-1",
+        { name: "Updated Monitor Name" },
+        { source: "user" },
+      );
+    });
+
+    const navValue: NavigationContextValue = {
+      currentPath: `/conversations/conv-edit-custom-1`,
+      conversationId: "conv-edit-custom-1",
+      isNavigating: false,
+      navigate: mockNavigate,
+    };
+    rerender(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <NavigationProvider value={navValue}>
+          <AutomationSetupPanel
+            conversationId="conv-edit-custom-1"
+            draft={getAutomationFormSession("conv-edit-custom-1") ?? draft}
+          />
+        </NavigationProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(
+      screen.getByTestId("automation-setup-existing-bundle"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("automation-setup-existing-bundle-name"),
+    ).toHaveTextContent("slack-monitor.tar.gz");
+    expect(
+      screen.queryByTestId("automation-setup-custom-code"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows explicit unavailable state when existing custom automation lacks tarball reference", () => {
+    const draft = setupDraftFromAutomation({
+      id: "auto-custom-2",
+      name: "Corrupted Custom",
+      prompt: null,
+      enabled: true,
+      created_at: "2026-01-01T00:00:00.000Z",
+      updated_at: "2026-01-01T00:00:00.000Z",
+      entrypoint: "python3 main.py",
+      trigger: {
+        type: "cron",
+        schedule: "0 9 * * *",
+        timezone: "UTC",
+      },
+    });
+
+    renderPanel(draft, "conv-edit-custom-2");
+
+    expect(
+      screen.getByTestId("automation-setup-bundle-unavailable"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automation-setup-existing-bundle"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automation-setup-custom-code"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders starter python and setup script for new custom automations", () => {
+    renderPanel(
+      {
+        prompt: "",
+        kind: "custom",
+      },
+      "conv-new-custom",
+    );
+
+    expect(
+      screen.getByTestId("automation-setup-custom-code"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId<HTMLTextAreaElement>("automation-setup-custom-code")
+        .value,
+    ).toContain("def fire_callback");
   });
 });
