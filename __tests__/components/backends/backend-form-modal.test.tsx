@@ -349,4 +349,23 @@ describe("BackendFormModal – edit mode (BackendForm entry point)", () => {
       screen.queryByTestId("add-backend-cloud-host"),
     ).not.toBeInTheDocument();
   });
+
+  it("uses outline-focus on connection tab buttons and guidance toggle", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<BackendFormModal mode="add" onClose={vi.fn()} />);
+
+    const agentServerTab = screen.getByTestId("add-backend-option-agent-server");
+    expect(agentServerTab).toHaveClass("focus-visible:outline-focus");
+    expect(agentServerTab).not.toHaveClass("focus-visible:outline-blue-300");
+
+    const cloudTab = screen.getByTestId("add-backend-option-cloud");
+    expect(cloudTab).toHaveClass("focus-visible:outline-focus");
+    expect(cloudTab).not.toHaveClass("focus-visible:outline-blue-300");
+
+    await user.click(agentServerTab);
+
+    const guidanceToggle = screen.getByTestId("add-backend-local-guidance-toggle");
+    expect(guidanceToggle).toHaveClass("focus-visible:outline-focus");
+    expect(guidanceToggle).not.toHaveClass("focus-visible:outline-blue-300");
+  });
 });

@@ -113,6 +113,19 @@ describe("SettingsNavigation", () => {
       expect(link).not.toHaveAttribute("aria-disabled");
     }
   });
+
+  it("renders the mobile backdrop scrim with bg-black/50", () => {
+    const { container } = renderSettingsNavigation(
+      <SettingsNavigation
+        isMobileMenuOpen
+        onCloseMobileMenu={vi.fn()}
+        navigationItems={baseItems}
+      />,
+    );
+    const scrim = container.querySelector(".fixed.inset-0.z-40");
+    expect(scrim).toHaveClass("bg-black/50");
+    expect(scrim).not.toHaveClass("bg-opacity-50");
+  });
 });
 
 // Focused unit coverage for the two components extracted out of this file.

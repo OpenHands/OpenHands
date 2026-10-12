@@ -114,7 +114,7 @@ const SOLARIZED_LIGHT_TOKENS: Partial<
   "--oh-border-input": "#C8C1AE",
   "--oh-border-subtle": "#E6DFCC",
   "--oh-separator": "rgba(88, 110, 117, 0.22)",
-  "--oh-focus": "#268BD2",
+  "--oh-focus": "#1A74B6",
   "--oh-status-success": "#859900",
   "--oh-status-error": "#DC322F",
   "--oh-link": "#268BD2",
