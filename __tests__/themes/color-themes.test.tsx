@@ -39,7 +39,11 @@ describe("color themes", () => {
       };
       const surface = luminance(resolve("--oh-color-base-secondary"));
 
-      for (const role of ["--oh-feedback-error", "--oh-feedback-success"]) {
+      for (const role of [
+        "--oh-feedback-error",
+        "--oh-feedback-success",
+        "--oh-feedback-warning",
+      ]) {
         const ink = luminance(resolve(role));
         const ratio =
           (Math.max(ink, surface) + 0.05) / (Math.min(ink, surface) + 0.05);
@@ -78,6 +82,7 @@ describe("color themes", () => {
     const overrides = {
       "--oh-feedback-error": "#672727",
       "--oh-feedback-success": "#24542d",
+      "--oh-feedback-warning": "#895500",
     } as const;
     render(
       <AgentServerUIRoot
@@ -197,4 +202,73 @@ describe("color themes", () => {
       getComputedStyle(scopeRoot).getPropertyValue("--oh-color-primary"),
     ).toBe("#c9b974");
   });
+
+  // @spec MCP-004 — Warning feedback text meets 4.5:1 on real built-in surfaces
+  it.each(Object.entries(COLOR_THEMES))(
+    "keeps feedback-warning readable across built-in surfaces in %s",
+    (_key, theme) => {
+      const variables: Record<string, string> = {
+        ...AGENT_SERVER_UI_DEFAULT_CSS_VARIABLES,
+        ...theme.scale,
+        ...theme.tokens,
+      };
+      const resolve = (name: string): string => {
+        const value =
+          variables[name] ?? (name === "--oh-warning" ? "#c9b974" : undefined);
+        expect(value, `Missing theme token ${name}`).toBeDefined();
+        const reference = /^var\((--[\w-]+)\)$/.exec(value!);
+        return reference ? resolve(reference[1]) : value!;
+      };
+      const hexToRgb = (hex: string): [number, number, number] => [
+        Number.parseInt(hex.slice(1, 3), 16) / 255,
+        Number.parseInt(hex.slice(3, 5), 16) / 255,
+        Number.parseInt(hex.slice(5, 7), 16) / 255,
+      ];
+      const rgbToLuminance = (rgb: [number, number, number]): number => {
+        const channels = rgb.map((c) =>
+          c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4,
+        );
+        return (
+          channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722
+        );
+      };
+      const contrast = (l1: number, l2: number) =>
+        (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+
+      const warningTextHex = resolve("--oh-feedback-warning");
+      const warningTextLum = rgbToLuminance(hexToRgb(warningTextHex));
+
+      // 1. Home banner surface (bg-surface-raised)
+      const surfaceRaisedHex = resolve("--oh-surface-raised");
+      const surfaceRaisedLum = rgbToLuminance(hexToRgb(surfaceRaisedHex));
+      expect(
+        contrast(warningTextLum, surfaceRaisedLum),
+        `--oh-feedback-warning against surface-raised in ${_key}`,
+      ).toBeGreaterThanOrEqual(4.5);
+
+      // 2. Modal / credential surface (bg-base-secondary)
+      const baseSecondaryHex = resolve("--oh-color-base-secondary");
+      const baseSecondaryLum = rgbToLuminance(hexToRgb(baseSecondaryHex));
+      expect(
+        contrast(warningTextLum, baseSecondaryLum),
+        `--oh-feedback-warning against base-secondary in ${_key}`,
+      ).toBeGreaterThanOrEqual(4.5);
+
+      // 3. Trust panel (5% warning tint blended over page base background)
+      const baseHex = resolve("--oh-color-base");
+      const warningControlHex = resolve("--oh-warning");
+      const baseRgb = hexToRgb(baseHex);
+      const warningControlRgb = hexToRgb(warningControlHex);
+      const trustPanelRgb: [number, number, number] = [
+        warningControlRgb[0] * 0.05 + baseRgb[0] * 0.95,
+        warningControlRgb[1] * 0.05 + baseRgb[1] * 0.95,
+        warningControlRgb[2] * 0.05 + baseRgb[2] * 0.95,
+      ];
+      const trustPanelLum = rgbToLuminance(trustPanelRgb);
+      expect(
+        contrast(warningTextLum, trustPanelLum),
+        `--oh-feedback-warning against trust panel in ${_key}`,
+      ).toBeGreaterThanOrEqual(4.5);
+    },
+  );
 });

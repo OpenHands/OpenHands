@@ -65,6 +65,7 @@ export const LIGHT_PLUS_TOKENS: Partial<
   // Feedback text must remain readable on the light modal surface.
   "--oh-feedback-error": "#C0282D",
   "--oh-feedback-success": "#0F734D",
+  "--oh-feedback-warning": "#8A5800",
   "--oh-color-basic": "#616161",
   "--oh-color-tertiary": "#E5E5E5",
   "--oh-color-tertiary-light": "#4D4D4D",

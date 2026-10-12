@@ -67,6 +67,7 @@ const SOLARIZED_LIGHT_TOKENS: Partial<
   "--oh-color-success": "#859900",
   "--oh-feedback-error": "#BB2A26",
   "--oh-feedback-success": "#5D6A00",
+  "--oh-feedback-warning": "#7C4F00",
   "--oh-color-basic": "#839496",
   "--oh-color-tertiary": "#E6DFCC",
   "--oh-color-tertiary-light": "#657B83",

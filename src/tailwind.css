@@ -21,6 +21,7 @@
   /* @spec MCP-004 — Form feedback follows readable theme text roles */
   --color-feedback-error: var(--oh-feedback-error);
   --color-feedback-success: var(--oh-feedback-success);
+  --color-feedback-warning: var(--oh-feedback-warning);
   --color-basic: var(--oh-color-basic);
   --color-tertiary: var(--oh-color-tertiary);
   --color-tertiary-light: var(--oh-color-tertiary-light);
@@ -91,6 +92,7 @@
   /* Small feedback text has its own contrast contract, separate from controls. */
   --oh-feedback-error: var(--oh-color-danger);
   --oh-feedback-success: var(--oh-color-success);
+  --oh-feedback-warning: #f59e0b;
   --oh-color-basic: var(--cool-grey-400);
   --oh-color-tertiary: var(--cool-grey-800);
   --oh-color-tertiary-light: var(--cool-grey-300);

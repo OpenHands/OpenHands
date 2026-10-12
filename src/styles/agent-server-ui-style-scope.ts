@@ -27,6 +27,7 @@ export const AGENT_SERVER_UI_DEFAULT_CSS_VARIABLES = {
   // @spec MCP-004 — Form feedback follows readable theme text roles
   "--oh-feedback-error": "var(--oh-color-danger)",
   "--oh-feedback-success": "var(--oh-color-success)",
+  "--oh-feedback-warning": "#f59e0b",
   "--oh-color-basic": "var(--cool-grey-400)",
   "--oh-color-tertiary": "var(--cool-grey-800)",
   "--oh-color-tertiary-light": "var(--cool-grey-300)",
