@@ -6,13 +6,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BackendRow } from "#/components/features/backends/backend-row";
 import ApiKeyEntryScreen from "#/components/features/backends/api-key-entry-screen";
-import {
-  BackendFormModal,
-  BackendStatusBadge,
-} from "#/components/features/backends/backend-form-modal";
+import { BackendFormModal } from "#/components/features/backends/backend-form-modal";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { __resetActiveStoreForTests } from "#/api/backend-registry/active-store";
 import { type Backend } from "#/api/backend-registry/types";
+import { type BackendHealth } from "#/hooks/query/use-backends-health";
 import { COLOR_THEMES } from "#/themes/color-themes";
 import { AGENT_SERVER_UI_DEFAULT_CSS_VARIABLES } from "#/styles/agent-server-ui-style-scope";
 
@@ -79,10 +77,17 @@ describe("Backend connection feedback theme roles (Issue #18319)", () => {
 
   describe("BackendRow status and error detail classes", () => {
     it("uses text-feedback-success and no raw green classes when connected", () => {
+      const connectedHealth: BackendHealth = {
+        isConnected: true,
+        lastError: null,
+        consecutiveFailures: 0,
+        disabled: false,
+      };
+
       renderWithProviders(
         <BackendRow
           backend={mockBackend}
-          health={{ isConnected: true, lastError: null }}
+          health={connectedHealth}
           onSelect={vi.fn()}
           onEdit={vi.fn()}
           onRemove={vi.fn()}
@@ -95,10 +100,17 @@ describe("Backend connection feedback theme roles (Issue #18319)", () => {
     });
 
     it("uses text-feedback-error and no raw red classes when disconnected", () => {
+      const disconnectedHealth: BackendHealth = {
+        isConnected: false,
+        lastError: null,
+        consecutiveFailures: 1,
+        disabled: false,
+      };
+
       renderWithProviders(
         <BackendRow
           backend={mockBackend}
-          health={{ isConnected: false, lastError: null }}
+          health={disconnectedHealth}
           onSelect={vi.fn()}
           onEdit={vi.fn()}
           onRemove={vi.fn()}
@@ -111,13 +123,17 @@ describe("Backend connection feedback theme roles (Issue #18319)", () => {
     });
 
     it("uses text-feedback-error and no raw red classes for status detail line", () => {
+      const errorDetailHealth: BackendHealth = {
+        isConnected: false,
+        lastError: "Failed to connect to agent-server: 502",
+        consecutiveFailures: 1,
+        disabled: false,
+      };
+
       renderWithProviders(
         <BackendRow
           backend={mockBackend}
-          health={{
-            isConnected: false,
-            lastError: "Failed to connect to agent-server: 502",
-          }}
+          health={errorDetailHealth}
           onSelect={vi.fn()}
           onEdit={vi.fn()}
           onRemove={vi.fn()}
