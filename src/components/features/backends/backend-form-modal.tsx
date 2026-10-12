@@ -259,9 +259,9 @@ function BackendStatusBadge({
       {disabled ? (
         <div
           data-testid={`${testIdRoot}-status-error`}
-          className="flex flex-col gap-1 rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm"
+          className="flex flex-col gap-1 rounded-md border border-danger/40 bg-danger/5 p-3 text-sm"
         >
-          <span className="font-semibold text-red-300">
+          <span className="font-semibold text-feedback-error">
             {t(I18nKey.BACKEND$HEALTH_FAILED_TITLE)}
           </span>
           <span className="text-xs text-text-tertiary">
@@ -272,7 +272,7 @@ function BackendStatusBadge({
           {lastError ? (
             <span
               data-testid={`${testIdRoot}-status-error-message`}
-              className="text-xs text-red-300 whitespace-pre-wrap break-words"
+              className="text-xs text-feedback-error whitespace-pre-wrap break-words"
             >
               {lastError}
             </span>
@@ -647,7 +647,7 @@ export function BackendForm({
           <div
             role="alert"
             data-testid={`${testIdRoot}-error`}
-            className="rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-300 whitespace-pre-wrap break-words"
+            className="rounded-md border border-danger/40 bg-danger/5 p-3 text-sm text-feedback-error whitespace-pre-wrap break-words"
           >
             {connectionError}
           </div>
@@ -917,7 +917,7 @@ function ManualConnectionColumn({
         <div
           role="alert"
           data-testid={`${testIdRoot}-error`}
-          className="rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-300 whitespace-pre-wrap break-words"
+          className="rounded-md border border-danger/40 bg-danger/5 p-3 text-sm text-feedback-error whitespace-pre-wrap break-words"
         >
           {connectionError}
         </div>
