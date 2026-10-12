@@ -182,7 +182,7 @@ export function SetupFormField({
           onBlur={onBlur}
           className={cn(
             formControlMultilineFieldClassName,
-            error && "border-red-500",
+            error && "border-danger",
           )}
         />
         <FieldError testId={testId} error={error} />
@@ -209,7 +209,7 @@ export function SetupFormField({
           className={cn(
             formControlSettingsFieldClassName,
             "file:mr-3 file:rounded-md file:border-0 file:bg-neutral-700 file:px-3 file:py-1.5 file:text-sm file:text-white",
-            error && "border-red-500",
+            error && "border-danger",
           )}
         />
         {fieldText(value) && (
@@ -237,7 +237,7 @@ export function SetupFormField({
           onBlur={onBlur}
           className={cn(
             formControlMultilineFieldClassName,
-            error && "border-red-500",
+            error && "border-danger",
           )}
         />
         <FieldError testId={testId} error={error} />
@@ -281,7 +281,7 @@ function FieldLabelText({ field }: { field: SetupFormFieldDefinition }) {
     <span className="flex items-center gap-2 text-sm">
       {field.label}
       {field.required && (
-        <span className="text-sm leading-none text-red-400" aria-hidden>
+        <span className="text-sm leading-none text-danger" aria-hidden>
           *
         </span>
       )}
@@ -303,7 +303,7 @@ function FieldError({ testId, error }: { testId: string; error?: string }) {
     <p
       role="alert"
       data-testid={`${testId}-error`}
-      className="-mt-1 text-xs text-red-400"
+      className="-mt-1 text-xs text-feedback-error"
     >
       {error}
     </p>

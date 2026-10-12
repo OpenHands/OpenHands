@@ -347,7 +347,9 @@ export function MetaLlmSettingsView() {
         ) : null}
 
         {error ? (
-          <p className="text-sm text-red-400">{t(I18nKey.ERROR$GENERIC)}</p>
+          <p className="text-sm text-feedback-error">
+            {t(I18nKey.ERROR$GENERIC)}
+          </p>
         ) : null}
 
         {!isLoading && !error && metaProfiles.length === 0 ? (

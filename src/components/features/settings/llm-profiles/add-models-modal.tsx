@@ -508,12 +508,12 @@ export function AddModelsModal({
                     </span>
                     {row.status === "saving" && <LoadingSpinner size="small" />}
                     {row.status === "saved" && (
-                      <span className="text-xs text-green-400">
+                      <span className="text-xs text-feedback-success">
                         {t(I18nKey.SETTINGS$MODEL_ROW_SAVED)}
                       </span>
                     )}
                     {row.status === "failed" && (
-                      <span className="text-xs text-red-400">
+                      <span className="text-xs text-feedback-error">
                         {t(I18nKey.SETTINGS$MODEL_ROW_FAILED)}
                       </span>
                     )}

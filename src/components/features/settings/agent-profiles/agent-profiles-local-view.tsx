@@ -353,7 +353,7 @@ export function AgentProfilesLocalView() {
         ) : (
           <p
             data-testid="agent-profile-no-llm"
-            className="text-sm text-red-400"
+            className="text-sm text-feedback-error"
           >
             {t(I18nKey.SETTINGS$AGENT_PROFILE_NO_LLM)}
           </p>

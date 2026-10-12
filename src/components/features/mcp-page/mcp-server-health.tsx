@@ -139,7 +139,7 @@ export function McpServerHealthSection({
           data-testid={`mcp-health-label-${server.id}`}
           className={cn(
             "line-clamp-2 break-words text-xs",
-            isFailed ? "text-red-500" : "text-tertiary-alt",
+            isFailed ? "text-feedback-error" : "text-tertiary-alt",
           )}
           title={label}
         >

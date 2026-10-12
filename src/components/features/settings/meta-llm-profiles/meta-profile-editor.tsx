@@ -214,7 +214,7 @@ export function MetaProfileEditor({
         {isDuplicateName ? (
           <p
             data-testid="meta-profile-name-taken"
-            className="text-xs text-red-400"
+            className="text-xs text-feedback-error"
           >
             {t(I18nKey.SETTINGS$META_PROFILE_NAME_TAKEN)}
           </p>
