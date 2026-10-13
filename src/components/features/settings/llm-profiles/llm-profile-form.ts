@@ -58,6 +58,27 @@ export function profileConfigToFormValues(
   return values;
 }
 
+/**
+ * Strip credentials, model, and connection overrides from the active agent LLM
+ * settings so they can serve as the baseConfig when creating a fresh profile.
+ * This preserves non-credential options displayed in the form (such as temperature
+ * or max_output_tokens) without inheriting credentials or conflicting with the
+ * newly selected model.
+ */
+export function buildCreateProfileBaseConfig(
+  activeLlmSettings: Record<string, unknown> | null | undefined,
+): Record<string, unknown> {
+  if (!activeLlmSettings) return {};
+  const base = { ...activeLlmSettings };
+  delete base.model;
+  delete base.api_key;
+  delete base.base_url;
+  delete base.auth_type;
+  delete base.subscription_vendor;
+  delete base.provider_connection_id;
+  return base;
+}
+
 export interface BuildProfileLlmConfigOptions {
   /**
    * The full LLM config of the profile the form was filled from, or `{}` for a
