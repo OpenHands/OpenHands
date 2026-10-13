@@ -97,7 +97,11 @@ import type {
   DeploymentCapabilities,
   SetupRequestBody,
 } from "#/manifests/types";
-import type { Automation, AutomationRun } from "#/types/automation";
+import {
+  AutomationRunStatus,
+  type Automation,
+  type AutomationRun,
+} from "#/types/automation";
 import { formatRelativeTime } from "#/utils/format-relative-time";
 import { ActivityLogItem } from "../detail/activity-log-item";
 import { requestAutomationSetupAgent } from "./automation-setup-agent-request";
@@ -1764,7 +1768,9 @@ export function AutomationSetupPanel({
   };
 
   useEffect(() => {
-    const automationId = serverDraft?.materializedAutomationId;
+    const automationId =
+      serverDraft?.materializedAutomationId ||
+      (isEditingExisting ? editingAutomationId : undefined);
     if (!automationId) {
       setDraftRuns([]);
       return undefined;
@@ -1782,7 +1788,52 @@ export function AutomationSetupPanel({
     return () => {
       cancelled = true;
     };
-  }, [serverDraft?.materializedAutomationId]);
+  }, [
+    serverDraft?.materializedAutomationId,
+    isEditingExisting,
+    editingAutomationId,
+  ]);
+
+  useEffect(() => {
+    const automationId =
+      serverDraft?.materializedAutomationId ||
+      (isEditingExisting ? editingAutomationId : undefined);
+    if (!automationId) return undefined;
+
+    const hasInFlightRun = draftRuns.some(
+      (run) =>
+        run.status === AutomationRunStatus.PENDING ||
+        run.status === AutomationRunStatus.RUNNING,
+    );
+
+    if (!hasInFlightRun) return undefined;
+
+    let cancelled = false;
+    const intervalId = setInterval(() => {
+      AutomationService.listAutomationRuns(automationId, {
+        limit: 10,
+        offset: 0,
+      })
+        .then((response) => {
+          if (!cancelled && response.runs.length > 0) {
+            setDraftRuns(response.runs);
+          }
+        })
+        .catch(() => {
+          // Keep current state on transient poll failures.
+        });
+    }, 3000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [
+    serverDraft?.materializedAutomationId,
+    isEditingExisting,
+    editingAutomationId,
+    draftRuns,
+  ]);
 
   const saveStateLabel = () => {
     if (saveState === "saving") return t(I18nKey.AUTOMATION_SETUP$SAVING);
