@@ -175,9 +175,9 @@ export function startIngress(config) {
   const route = createRouter(config.routes, config.defaultBackend);
   const proxy = createProxyHandlers({ label: `ingress:${config.port}` });
   const uninstallDiagnostics = proxy.installDiagnostics();
-  // DigitalOcean Managed Agents for the browser: with MARS_WEB=1 this server
-  // hosts the MARS bridge and proxies to sessions' tunnel listeners, behind
-  // the session key (MARS_WEB_KEY; dev-with-automation passes the stack's key).
+  // DigitalOcean Managed Agents for the browser: this server hosts the MARS bridge
+  // by default and proxies to sessions' tunnel listeners, behind the session key
+  // (MARS_WEB_KEY; dev-with-automation passes the stack's key).
   const marsWeb = mountMarsWebBridge({ host: config.host });
 
   const noReferrerPrefixes = config.noReferrerPrefixes ?? [];

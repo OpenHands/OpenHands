@@ -661,12 +661,25 @@ describe("createMarsWebBridge with a session key", () => {
 });
 
 describe("mountMarsWebBridge", () => {
-  it("is off unless MARS_WEB=1", () => {
-    expect(isMarsWebEnabled({})).toBe(false);
+  it("mounts by default without MARS_WEB and respects opt-out with MARS_WEB=0", async () => {
+    expect(isMarsWebEnabled({})).toBe(true);
     expect(isMarsWebEnabled({ MARS_WEB: "0" })).toBe(false);
     expect(isMarsWebEnabled({ MARS_WEB: "1" })).toBe(true);
+
+    const defaultMounted = mountMarsWebBridge({
+      env: {},
+      host: "127.0.0.1",
+      log: () => {},
+    });
+    expect(defaultMounted).not.toBeNull();
+    await defaultMounted!.dispose();
+
     expect(
-      mountMarsWebBridge({ env: {}, host: "127.0.0.1", log: () => {} }),
+      mountMarsWebBridge({
+        env: { MARS_WEB: "0" },
+        host: "127.0.0.1",
+        log: () => {},
+      }),
     ).toBeNull();
   });
 
@@ -674,19 +687,28 @@ describe("mountMarsWebBridge", () => {
     const logs: string[] = [];
     expect(
       mountMarsWebBridge({
-        env: { MARS_WEB: "1" },
+        env: {},
         host: "0.0.0.0",
         log: (m) => logs.push(m),
       }),
     ).toBeNull();
     expect(logs[0]).toMatch(/not loopback/);
 
-    const mounted = mountMarsWebBridge({
-      env: { MARS_WEB: "1", MARS_WEB_KEY: "k" },
+    const mountedWithKey = mountMarsWebBridge({
+      env: { MARS_WEB_KEY: "k" },
       host: "0.0.0.0",
       log: () => {},
     });
-    expect(mounted).not.toBeNull();
-    await mounted!.dispose();
+    expect(mountedWithKey).not.toBeNull();
+    await mountedWithKey!.dispose();
+
+    const mountedWithSessionKey = mountMarsWebBridge({
+      env: {},
+      host: "0.0.0.0",
+      sessionApiKey: "session-k",
+      log: () => {},
+    });
+    expect(mountedWithSessionKey).not.toBeNull();
+    await mountedWithSessionKey!.dispose();
   });
 });
