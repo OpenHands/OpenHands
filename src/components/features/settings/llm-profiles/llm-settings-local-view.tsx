@@ -405,9 +405,9 @@ export function LlmSettingsLocalView() {
         },
       });
 
-      // Conversation start uses agent_settings.llm, not the profile row
-      // directly. Re-applying an active profile keeps those settings in sync
-      // after editing or recreating a profile with the active profile name.
+      // Activation copies the profile into agent_settings.llm, which the
+      // planner falls back to. Re-applying an active profile keeps that copy
+      // in sync after editing or recreating a profile with its name.
       if (shouldReapplyActiveProfile) {
         await activateProfile.mutateAsync(trimmedName);
       }

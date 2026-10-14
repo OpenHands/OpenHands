@@ -131,11 +131,11 @@ export const useCreateConversation = ({
           workspaceMode,
           parentConversationId,
           agentType,
-          // Only stamp the toggle when it's on so the default path stays
-          // byte-identical to the legacy launch (and the e2e snapshot tests
-          // that assert the exact createConversation payload). The active
-          // meta-profile gates the suffix: no router attached means no
-          // route-at-start instruction, even if the toggle was left on.
+          // Cloud only; a local launch reads the toggle itself and gates it
+          // on the launched profile's router. Only stamped when on, so the
+          // e2e snapshot tests that assert the exact createConversation
+          // payload stay stable. The active meta-profile gates the suffix:
+          // no router attached means no route-at-start instruction.
           ...(settings?.run_router_at_conversation_start
             ? {
                 runRouterAtConversationStart: true,

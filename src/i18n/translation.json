@@ -52216,5 +52216,23 @@
     "tr": "Yalnızca bağlantıyı kes",
     "uk": "Лише від'єднати",
     "id": "Hanya putuskan"
+  },
+  "CONVERSATION$NO_ACTIVE_AGENT_PROFILE": {
+    "en": "No agent profile is active. Choose one in Settings → Agent.",
+    "ja": "有効なエージェントプロファイルがありません。設定 → エージェントで選択してください。",
+    "zh-CN": "没有启用的智能体配置文件。请在“设置 → 智能体”中选择一个。",
+    "zh-TW": "沒有啟用的代理設定檔。請在「設定 → 代理」中選擇一個。",
+    "ko-KR": "활성화된 에이전트 프로필이 없습니다. 설정 → 에이전트에서 선택하세요.",
+    "no": "Ingen agentprofil er aktiv. Velg en under Innstillinger → Agent.",
+    "it": "Nessun profilo agente è attivo. Scegline uno in Impostazioni → Agente.",
+    "pt": "Nenhum perfil de agente está ativo. Escolha um em Configurações → Agente.",
+    "es": "No hay ningún perfil de agente activo. Elige uno en Configuración → Agente.",
+    "ar": "لا يوجد ملف تعريف وكيل نشط. اختر واحدًا من الإعدادات ← الوكيل.",
+    "fr": "Aucun profil d'agent n'est actif. Choisissez-en un dans Paramètres → Agent.",
+    "tr": "Etkin bir ajan profili yok. Ayarlar → Ajan bölümünden birini seçin.",
+    "de": "Kein Agentenprofil ist aktiv. Wählen Sie eines unter Einstellungen → Agent.",
+    "uk": "Немає активного профілю агента. Виберіть його в Налаштування → Агент.",
+    "ca": "No hi ha cap perfil d'agent actiu. Trieu-ne un a Configuració → Agent.",
+    "id": "Tidak ada profil agen yang aktif. Pilih satu di Pengaturan → Agen."
   }
 }

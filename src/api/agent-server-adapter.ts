@@ -1,8 +1,4 @@
-import {
-  ACP_SETTINGS_KEYS,
-  HOOK_EVENT_FIELDS,
-  HookType,
-} from "@openhands/typescript-client";
+import { HOOK_EVENT_FIELDS, HookType } from "@openhands/typescript-client";
 import type {
   ACPModelInfo,
   ConversationRuntimeInfo,
@@ -14,8 +10,6 @@ import { DEFAULT_SETTINGS } from "#/services/settings";
 import { ExecutionStatus } from "#/types/agent-server/core";
 import { AgentKind, Settings, SettingsValue } from "#/types/settings";
 import {
-  getAcpPreferredDefaultModel,
-  getAcpProvider,
   resolveEffectiveAcpModel,
   toAcpModelOptions,
 } from "#/constants/acp-providers";
@@ -46,11 +40,9 @@ import {
 import {
   buildSkillEnablementFilter,
   findInvokedCatalogSkill,
-  toSkillEnablement,
   type SkillEnablement,
 } from "#/utils/skill-enablement";
 import SettingsService from "./settings-service/settings-service.api";
-import MetaProfilesService from "./meta-profiles-service/meta-profiles-service.api";
 import { getStoredConversationMetadata } from "./conversation-metadata-store";
 import LLMSubscriptionService from "./llm-subscription-service";
 import {
@@ -239,14 +231,6 @@ async function fetchBackendServerInfo(): Promise<AgentServerInfo | null> {
   } catch {
     return null;
   }
-}
-
-/** Whether start requests accept `agent_launch_additions.llm_profile_ref`. */
-export async function backendSupportsLaunchLlmOverride(): Promise<boolean> {
-  const serverInfo = await fetchBackendServerInfo();
-  return (
-    serverInfo?.capabilities?.includes("agent_launch_pipeline_v1") ?? false
-  );
 }
 
 export async function fetchBackendExecutionRuntime(): Promise<
@@ -519,17 +503,6 @@ export function toConversationPage(data: {
 
 type SettingsRecord = Record<string, unknown>;
 
-interface AgentToolSpec {
-  name: string;
-  params: SettingsRecord;
-}
-
-type AgentSettingsPayload = SettingsRecord & {
-  llm?: SettingsRecord;
-  agent_context: SettingsRecord;
-  tools?: AgentToolSpec[];
-};
-
 interface LocalWorkspacePayload {
   kind: "LocalWorkspace";
   working_dir: string;
@@ -674,8 +647,6 @@ export function getDisplayConversationTags(
     });
 }
 
-const FERNET_TOKEN_PREFIX = "gAAAAA";
-
 const CONVERSATION_SETTINGS_METADATA_KEYS = new Set([
   "schema_version",
   "agent_settings",
@@ -740,27 +711,6 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
-function hasEncryptedString(value: unknown): boolean {
-  if (typeof value === "string") {
-    return value.startsWith(FERNET_TOKEN_PREFIX);
-  }
-  if (Array.isArray(value)) {
-    return value.some(hasEncryptedString);
-  }
-  if (isPlainRecord(value)) {
-    return Object.values(value).some(hasEncryptedString);
-  }
-  return false;
-}
-
-function hasEncryptedMcpSecrets(mcpConfig: unknown): boolean {
-  if (!isPlainRecord(mcpConfig)) {
-    return false;
-  }
-
-  return Object.values(mcpConfig).some(hasEncryptedString);
-}
-
 function getConversationConfirmationPolicy(
   conversationSettings: SettingsRecord,
 ) {
@@ -786,34 +736,6 @@ function getConversationSecurityAnalyzer(conversationSettings: SettingsRecord) {
     default:
       return undefined;
   }
-}
-
-function isToolRecord(
-  value: unknown,
-): value is { name: string; params?: unknown } {
-  return (
-    !!value &&
-    typeof value === "object" &&
-    !Array.isArray(value) &&
-    typeof (value as { name?: unknown }).name === "string"
-  );
-}
-
-/** Unset `tools` is left to the server; a list is sent as given. */
-function getAgentTools(
-  agentSettings: SettingsRecord,
-): AgentToolSpec[] | undefined {
-  const configuredTools = agentSettings.tools;
-  if (
-    !Array.isArray(configuredTools) ||
-    !configuredTools.every((tool) => isToolRecord(tool))
-  ) {
-    return undefined;
-  }
-  return configuredTools.map((tool) => ({
-    name: tool.name,
-    params: toRecord(tool.params),
-  }));
 }
 
 function buildInitialMessage(
@@ -888,18 +810,8 @@ function buildBundledSkills(): BundledSkill[] {
 
 function buildAgentContext(
   agentSettings: SettingsRecord,
-  runtimeServicesInfo?: RuntimeServicesInfo | null,
   enablement: SkillEnablement = {},
-  invokedCatalogSkill?: string,
-  runRouterAtStart?: boolean,
-  hasActiveRouter?: boolean,
 ): SettingsRecord {
-  const runtimeServicesSuffix =
-    buildRuntimeServicesSystemSuffix(runtimeServicesInfo);
-  const routerAtStartSuffix = buildRouterAtStartSystemSuffix(
-    runRouterAtStart ?? false,
-    hasActiveRouter ?? false,
-  );
   const existingContext = toRecord(agentSettings.agent_context);
 
   // Merge bundled public skills with any skills already present in the
@@ -914,17 +826,13 @@ function buildAgentContext(
   // The bundled catalog is allow-listed, not deny-listed: it is a build-time
   // snapshot of ~60 skills, so a deny-list puts every future addition into
   // every system prompt (OpenHands#16302). Skills the agent context already
-  // carries are user-authored and stay opt-out. A skill the opening message
-  // invokes by name overrides both, for this conversation only.
+  // carries are user-authored and stay opt-out.
   const mergedSkills = [
     ...existingSkills.filter(
       (skill) =>
         typeof skill.name !== "string" || !disabledSkillNames.has(skill.name),
     ),
-    ...buildBundledSkills().filter(
-      (skill) =>
-        skill.name === invokedCatalogSkill || isSkillEnabled(skill.name),
-    ),
+    ...buildBundledSkills().filter((skill) => isSkillEnabled(skill.name)),
   ];
 
   return {
@@ -947,177 +855,7 @@ function buildAgentContext(
     // prompt too. The allow-list has no counterpart to send: the backend
     // loads no catalog skills of its own (`load_public_skills` is false).
     disabled_skills: disabledSkills,
-    ...(runtimeServicesSuffix || routerAtStartSuffix
-      ? {
-          system_message_suffix: [
-            typeof existingContext.system_message_suffix === "string"
-              ? existingContext.system_message_suffix
-              : undefined,
-            runtimeServicesSuffix,
-            routerAtStartSuffix,
-          ]
-            .filter((s): s is string => Boolean(s))
-            .join("\n\n"),
-        }
-      : {}),
   };
-}
-
-function isAcpAgent(settings: Settings): boolean {
-  const agentSettings = toRecord(settings.agent_settings);
-  return agentSettings.agent_kind === "acp";
-}
-
-function getAcpServerTag(settings: Settings): string | undefined {
-  const agentSettings = toRecord(settings.agent_settings);
-  const value = agentSettings.acp_server;
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-function resolveAcpCommand(agentSettings: SettingsRecord): unknown {
-  const cmd = agentSettings.acp_command;
-  const isEmpty = Array.isArray(cmd) && cmd.length === 0;
-  const noCommand = cmd === undefined;
-  if (!isEmpty && !noCommand) {
-    return cmd;
-  }
-
-  const serverKey =
-    typeof agentSettings.acp_server === "string"
-      ? agentSettings.acp_server
-      : undefined;
-  const provider = getAcpProvider(serverKey);
-  return provider ? [...provider.default_command] : cmd;
-}
-
-function buildConfiguredAcpAgentSettings(
-  settings: Settings,
-  runtimeServicesInfo?: RuntimeServicesInfo | null,
-  query?: string,
-  hasActiveMetaProfile?: boolean,
-): AgentSettingsPayload {
-  const agentSettings = toRecord(settings.agent_settings);
-  const payload: AgentSettingsPayload = {
-    agent_kind: "acp",
-    agent_context: buildAgentContext(
-      agentSettings,
-      runtimeServicesInfo,
-      toSkillEnablement(settings),
-      findInvokedCatalogSkill(query),
-      settings.run_router_at_conversation_start,
-      hasActiveMetaProfile,
-    ),
-  };
-
-  // TODO(#1019): set ``acp_isolate_data_dir: true`` here for a containerized
-  // backend so concurrent same-provider conversations don't race on a shared
-  // HOME. The SDK supports it (software-agent-sdk#3492), but the released
-  // ``@openhands/typescript-client`` (1.24.3) doesn't surface it on
-  // ``ACPAgentSettings`` yet, so sending it risks a validation error on older
-  // servers. Cloud grouping isolation is separate (agent-canvas#1016).
-
-  for (const key of ACP_SETTINGS_KEYS) {
-    // ``acp_model`` is resolved separately below so a saved ``null`` still
-    // falls back to the provider's default rather than being dropped.
-    if (key === "acp_model") continue;
-    // ``acp_env`` is deprecated — provider creds now route via ``request.secrets``.
-    if (key === "acp_env") continue;
-    const value =
-      key === "acp_command"
-        ? resolveAcpCommand(agentSettings)
-        : agentSettings[key];
-    if (value !== undefined && value !== null) {
-      payload[key] = value;
-    }
-  }
-
-  // ``mcp_config`` is a shared field (not in ACP_SETTINGS_KEYS): forward it
-  // so the ACP subprocess connects to the configured MCP servers at session
-  // creation. Only include it when it actually carries servers — an empty or
-  // malformed value is dropped rather than sending ``mcp_config: {}``.
-  const mcpConfig = toRecord(agentSettings.mcp_config);
-  if (Object.keys(mcpConfig).length > 0) {
-    payload.mcp_config = mcpConfig;
-  }
-
-  // A saved ``acp_model: null`` leaves the agent on its own default, unless
-  // Canvas prefers another (see getAcpPreferredDefaultModel).
-  const serverKey =
-    typeof agentSettings.acp_server === "string"
-      ? agentSettings.acp_server
-      : undefined;
-  const effectiveModel = resolveEffectiveAcpModel({
-    configured: agentSettings.acp_model as string | null | undefined,
-    providerDefault: getAcpPreferredDefaultModel(serverKey),
-  });
-  if (effectiveModel) {
-    payload.acp_model = effectiveModel;
-  }
-
-  return payload;
-}
-
-function buildConfiguredOpenHandsAgentSettings(
-  settings: Settings,
-  runtimeServicesInfo?: RuntimeServicesInfo | null,
-  query?: string,
-  hasActiveMetaProfile?: boolean,
-): AgentSettingsPayload {
-  const agentSettings = toRecord(settings.agent_settings);
-  const llm = buildNormalizedLlmSettings(agentSettings.llm);
-
-  // Stream assistant tokens (parity with ACP agents). The agent-server only
-  // emits StreamingDeltaEvents for SDK LLM agents when an LLM has stream=True.
-  llm.stream = true;
-
-  const mcpConfig = toRecord(agentSettings.mcp_config);
-  if (Object.keys(mcpConfig).length === 0) {
-    delete agentSettings.mcp_config;
-  }
-
-  delete agentSettings.acp_server;
-  for (const key of ACP_SETTINGS_KEYS) {
-    delete agentSettings[key];
-  }
-  // ``acp_env`` is no longer a forwarded ACP setting (provider creds ride the
-  // Secrets panel), but a legacy value may linger on persisted settings —
-  // scrub it so it never leaks onto the OpenHands payload.
-  delete agentSettings.acp_env;
-
-  return {
-    ...agentSettings,
-    llm,
-    agent_context: buildAgentContext(
-      agentSettings,
-      runtimeServicesInfo,
-      toSkillEnablement(settings),
-      findInvokedCatalogSkill(query),
-      settings.run_router_at_conversation_start,
-      hasActiveMetaProfile,
-    ),
-    tools: getAgentTools(agentSettings),
-  };
-}
-
-function buildConfiguredAgentSettings(
-  settings: Settings,
-  runtimeServicesInfo?: RuntimeServicesInfo | null,
-  query?: string,
-  hasActiveMetaProfile?: boolean,
-): AgentSettingsPayload {
-  return isAcpAgent(settings)
-    ? buildConfiguredAcpAgentSettings(
-        settings,
-        runtimeServicesInfo,
-        query,
-        hasActiveMetaProfile,
-      )
-    : buildConfiguredOpenHandsAgentSettings(
-        settings,
-        runtimeServicesInfo,
-        query,
-        hasActiveMetaProfile,
-      );
 }
 
 function buildConfiguredConversationSettings(options: {
@@ -1200,18 +938,18 @@ type StartConversationPayloadBase = Record<string, unknown> & {
   tool_module_qualnames?: Record<string, string>;
 };
 
-type AgentSettingsStartConversationPayload = StartConversationPayloadBase & {
-  // Omitted when launching via ``agent_profile_id`` — the two are mutually
-  // exclusive agent sources; the server resolves the profile server-side.
-  agent_settings?: AgentSettingsPayload;
-  agent_profile_id?: string;
+type ProfileStartConversationPayload = StartConversationPayloadBase & {
+  agent_profile_id: string;
   agent_launch_additions?: {
     // Appended to the profile-resolved agent's system-message suffix.
     system_message_suffix_append?: string;
     // Runs the profile with this LLM profile instead of its own.
     llm_profile_ref?: string;
+    // Merged into the profile-resolved agent's skills by name.
+    skills?: BundledSkill[];
   };
   agent?: never;
+  agent_settings?: never;
 };
 
 // The local planner bypasses agent assembly entirely and sends a raw agent
@@ -1238,30 +976,21 @@ export interface StartConversationOptions {
   parentConversationId?: string;
   workingDir?: string;
   worktree?: boolean;
-  encryptedAgentSettings?: Record<string, SettingsValue>;
   encryptedConversationSettings?: Record<string, SettingsValue>;
-  secretsEncrypted?: boolean;
   customSecrets?: CustomSecretInput[];
-  // When set, the conversation launches from this AgentProfile (resolved
-  // server-side) instead of an inline ``agent_settings`` dump (#3727).
-  agentProfileId?: string;
+  /** The AgentProfile the server builds the agent from (#3727). */
+  agentProfileId: string;
   agentProfileKind?: AgentKind;
   /** LLM profile the agent profile runs with instead of its own. */
   llmProfileOverride?: string;
+  /** The profile carries a Model Router, so router-at-start can apply. */
+  profileHasRouter?: boolean;
+  /** The ACP profile's server, stamped as the `acpserver` tag. */
+  acpServer?: string;
   titleLlmProfile?: string;
   runtimeServicesInfo?: RuntimeServicesInfo | null;
   executionRuntime?: AgentServerInfo["execution_runtime"];
   workspaceHookConfig?: HookConfig | null;
-  /**
-   * Whether a Model Router meta-profile is currently active. The
-   * route-at-conversation-start system-message suffix is only emitted when
-   * this is true AND ``settings.run_router_at_conversation_start`` is on —
-   * without an active meta-profile the agent-server does not attach the
-   * ``route_task_to_model`` tool, so the instruction would be a no-op (or
-   * worse, tell the agent to call a tool it lacks). Defaults to false so a
-   * sync caller that omits it never emits the suffix.
-   */
-  hasActiveMetaProfile?: boolean;
 }
 
 /**
@@ -1298,45 +1027,32 @@ export function buildCustomSecrets(
 
 export function buildStartConversationRequest(
   options: StartConversationOptions,
-): AgentSettingsStartConversationPayload {
-  const sourceAgentSettings = options.encryptedAgentSettings
-    ? { ...options.settings, agent_settings: options.encryptedAgentSettings }
-    : options.settings;
-
-  const acpMode = isAcpAgent(sourceAgentSettings);
-  const launchAgentKind = options.agentProfileId
-    ? options.agentProfileKind
-    : acpMode
-      ? "acp"
-      : "openhands";
-  const agentSettings = buildConfiguredAgentSettings(
-    sourceAgentSettings,
-    options.runtimeServicesInfo,
-    options.query,
-    options.hasActiveMetaProfile,
-  );
-  const savedSuffix = toRecord(
-    toRecord(sourceAgentSettings.agent_settings).agent_context,
-  ).system_message_suffix;
-  // Router-at-start stays inline-only because profile-resolved agents do not
-  // have the route_task_to_model tool.
-  const profileLaunchSuffix = [
-    typeof savedSuffix === "string" ? savedSuffix : undefined,
+): ProfileStartConversationPayload {
+  const launchSuffix = [
     buildRuntimeServicesSystemSuffix(options.runtimeServicesInfo),
+    buildRouterAtStartSystemSuffix(
+      options.settings.run_router_at_conversation_start ?? false,
+      options.profileHasRouter ?? false,
+    ),
   ]
     .filter((suffix): suffix is string => Boolean(suffix))
     .join("\n\n");
+  // A catalog skill the opening message invokes loads for this conversation
+  // even when the profile does not select it.
+  const invokedSkillName =
+    options.agentProfileKind === "openhands"
+      ? findInvokedCatalogSkill(options.query)
+      : undefined;
+  const invokedSkill = invokedSkillName
+    ? buildBundledSkills().find((skill) => skill.name === invokedSkillName)
+    : undefined;
   const launchAdditions = {
-    ...(profileLaunchSuffix
-      ? { system_message_suffix_append: profileLaunchSuffix }
-      : {}),
+    ...(launchSuffix ? { system_message_suffix_append: launchSuffix } : {}),
     ...(options.llmProfileOverride
       ? { llm_profile_ref: options.llmProfileOverride }
       : {}),
+    ...(invokedSkill ? { skills: [invokedSkill] } : {}),
   };
-  const acpServerTag = acpMode
-    ? getAcpServerTag(sourceAgentSettings)
-    : undefined;
 
   const sourceConversationOptions = options.encryptedConversationSettings
     ? {
@@ -1353,39 +1069,11 @@ export function buildStartConversationRequest(
     executionRuntime: options.executionRuntime,
   });
 
-  const payload: AgentSettingsStartConversationPayload = {
-    // ``agent_profile_id`` and ``agent_settings`` are mutually exclusive agent
-    // sources; the profile path lets the server resolve the profile (#3727).
-    //
-    // Enrichment boundary: on the profile path the server rebuilds the agent
-    // purely from the stored profile fields, so the client-owned enrichments
-    // this adapter folds into ``agent_settings`` do NOT apply. The exec toolset
-    // (terminal/file_editor/task_tracker) and public-skill loading are the
-    // server/SDK's responsibility to restore on the profile path — tracked in
-    // software-agent-sdk#3967 (profile resolution must attach the default
-    // toolset + public skills, else a profile-launched OpenHands agent has only
-    // Finish/Think). The Canvas UI tool is a top-level client tool and
-    // therefore works on both inline-agent and profile launch paths.
-    //
-    // The saved global suffix and ``RUNTIME_SERVICES`` are not part of the
-    // stored profile, so the profile path sends them as
-    // ``agent_launch_additions``.
-    //
-    // Persistent memory is NOT on that boundary: ``load_memory`` is a global
-    // user preference, so the agent-server stamps the stored
-    // ``agent_settings.agent_context.load_memory`` onto the profile-resolved
-    // agent the same way it already applies the global ``mcp_config``. The
-    // toggle therefore applies to both launch paths, and the client must not
-    // re-send it here (``agent_profile_id`` and ``agent_settings`` are
-    // mutually exclusive).
-    ...(options.agentProfileId
-      ? {
-          agent_profile_id: options.agentProfileId,
-          ...(Object.keys(launchAdditions).length > 0
-            ? { agent_launch_additions: launchAdditions }
-            : {}),
-        }
-      : { agent_settings: agentSettings }),
+  const payload: ProfileStartConversationPayload = {
+    agent_profile_id: options.agentProfileId,
+    ...(Object.keys(launchAdditions).length > 0
+      ? { agent_launch_additions: launchAdditions }
+      : {}),
     workspace: conversationSettings.workspace,
     // The agent-server caches each client tool's schema per tool *name* for the
     // life of the process and rejects a re-registration with a different schema
@@ -1393,7 +1081,7 @@ export function buildStartConversationRequest(
     // requires restarting a long-running dev agent-server before new
     // conversations can start.
     client_tools:
-      launchAgentKind === "openhands"
+      options.agentProfileKind === "openhands"
         ? [
             CANVAS_UI_CLIENT_TOOL,
             LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL,
@@ -1419,37 +1107,15 @@ export function buildStartConversationRequest(
 
   // Stamp the client source tag so the agent-server can attribute the
   // conversation to Canvas in telemetry (conversation_source = "canvas").
-  // A profile launch resolves the ACP server server-side, so don't stamp the
-  // tag from current settings (it may not match the launched profile).
-  const baseTags = options.automationSetup
-    ? buildAutomationSetupModeTags(options.automationSetupTags)
-    : {};
-  if (!options.agentProfileId && acpServerTag) {
-    payload.tags = {
-      ...baseTags,
-      [ACP_SERVER_TAG_KEY]: acpServerTag,
-      [CLIENT_SOURCE_TAG_KEY]: AGENT_CANVAS_SOURCE,
-    };
-  } else {
-    payload.tags = {
-      ...baseTags,
-      [CLIENT_SOURCE_TAG_KEY]: AGENT_CANVAS_SOURCE,
-    };
-  }
-
-  // ``secrets_encrypted`` makes the agent-server decrypt request secrets at
-  // conversation start. Non-ACP conversations need it for encrypted LLM keys.
-  // ACP normally carries provider credentials as LookupSecrets, so avoid
-  // forcing a cipher on fresh ACP-only backends. The exception is MCP:
-  // encrypted settings round-trip mcp_config secrets as Fernet tokens,
-  // and ACP forwards mcp_config directly to the subprocess.
-  if (
-    !options.agentProfileId &&
-    options.secretsEncrypted &&
-    (!acpMode || hasEncryptedMcpSecrets(agentSettings.mcp_config))
-  ) {
-    payload.secrets_encrypted = true;
-  }
+  payload.tags = {
+    ...(options.automationSetup
+      ? buildAutomationSetupModeTags(options.automationSetupTags)
+      : {}),
+    ...(options.agentProfileKind === "acp" && options.acpServer
+      ? { [ACP_SERVER_TAG_KEY]: options.acpServer }
+      : {}),
+    [CLIENT_SOURCE_TAG_KEY]: AGENT_CANVAS_SOURCE,
+  };
 
   if (options.conversationId) {
     payload.conversation_id = options.conversationId;
@@ -1528,11 +1194,10 @@ export function buildStartPlanningConversationRequest(options: {
   const planPath = buildPlanPath(options.workingDir);
 
   // Put the planner's directive + boundaries in the system prompt (matching the
-  // OpenHands app-server's PLANNING_AGENT_INSTRUCTION), preserving any suffix
-  // buildAgentContext already set (e.g. the runtime-services block).
+  // OpenHands app-server's PLANNING_AGENT_INSTRUCTION), preserving any saved
+  // suffix.
   const agentContext = buildAgentContext(
     agentSettings,
-    undefined,
     options.skillEnablement,
   );
   const existingSuffix = agentContext.system_message_suffix;
@@ -1775,9 +1440,11 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
   /** Workspace root for the hooks lookup, not the per-conversation `workingDir` (#16907). */
   hooksProjectDir?: string | null;
   worktree?: boolean;
-  agentProfileId?: string;
+  agentProfileId: string;
   agentProfileKind?: AgentKind;
   llmProfileOverride?: string;
+  profileHasRouter?: boolean;
+  acpServer?: string;
   titleLlmProfile?: string;
 }): Promise<Record<string, unknown>> {
   const [{ SecretsService }, { default: HooksService }] = await Promise.all([
@@ -1785,48 +1452,25 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
     import("./hooks-service"),
   ]);
 
-  const [
-    settingsResult,
-    customSecrets,
-    serverInfo,
-    workspaceHookConfig,
-    metaProfiles,
-  ] = await Promise.all([
-    SettingsService.getSettingsForConversation(),
-    SecretsService.getSecrets(),
-    fetchBackendServerInfo(),
-    options.hooksProjectDir === null
-      ? Promise.resolve(null)
-      : HooksService.loadWorkspaceHooks(options.hooksProjectDir),
-    // Best-effort: if the meta-profiles endpoint is unreachable we cannot
-    // confirm a router is active, so fail closed (no route-at-start suffix).
-    MetaProfilesService.listMetaProfiles().catch(() => null),
-  ]);
-
-  const { agentSettings, conversationSettings, secretsEncrypted } =
-    settingsResult;
-  const runtimeServicesInfo = parseRuntimeServicesInfo(
-    (serverInfo as { runtime_services?: unknown } | null)?.runtime_services,
-  );
-  const executionRuntime = serverInfo?.execution_runtime;
-  const hasActiveMetaProfile = !!metaProfiles?.active_meta_profile;
-
-  // A profile launch resolves the LLM server-side, so the current-settings
-  // subscription check doesn't apply (and can't see the profile's LLM).
-  if (!options.agentProfileId) {
-    await assertSubscriptionAuthReady(agentSettings);
-  }
+  const [settingsResult, customSecrets, serverInfo, workspaceHookConfig] =
+    await Promise.all([
+      SettingsService.getSettingsForConversation(),
+      SecretsService.getSecrets(),
+      fetchBackendServerInfo(),
+      options.hooksProjectDir === null
+        ? Promise.resolve(null)
+        : HooksService.loadWorkspaceHooks(options.hooksProjectDir),
+    ]);
 
   return buildStartConversationRequest({
     ...options,
-    encryptedAgentSettings: agentSettings,
-    encryptedConversationSettings: conversationSettings,
-    secretsEncrypted,
+    encryptedConversationSettings: settingsResult.conversationSettings,
     customSecrets,
-    runtimeServicesInfo,
-    executionRuntime,
+    runtimeServicesInfo: parseRuntimeServicesInfo(
+      (serverInfo as { runtime_services?: unknown } | null)?.runtime_services,
+    ),
+    executionRuntime: serverInfo?.execution_runtime,
     workspaceHookConfig,
-    hasActiveMetaProfile,
   });
 }
 
