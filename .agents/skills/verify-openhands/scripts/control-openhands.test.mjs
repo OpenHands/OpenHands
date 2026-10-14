@@ -1867,7 +1867,7 @@ function fakeRun(revision = "abc") {
       baseUrl: "http://127.0.0.1:9",
       ports: { ingress: 9 },
       launcherPgid: 0,
-      versions: { agentServer: "1.54.0" },
+      versions: { agentServer: "1.55.0" },
       pins: { automation: "1.19.3" },
     }),
   );
