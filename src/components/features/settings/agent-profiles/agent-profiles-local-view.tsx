@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AgentProfilesManager } from "./agent-profiles-manager";
-import { GlobalToolsNotice } from "./global-tools-notice";
 import { mergeAgentProfileSaveInput } from "./merge-agent-profile-save-input";
 import { ProfileNameInput } from "#/components/features/settings/llm-profiles/profile-name-input";
 import { BrandButton } from "#/components/features/settings/brand-button";
@@ -11,7 +10,6 @@ import {
   type AgentSettingsSaveControl,
 } from "#/routes/agent-settings";
 import AgentProfilesService, {
-  WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME,
   type AgentProfile,
   type AgentProfileSummary,
   type AgentProfileSaveInput,
@@ -263,7 +261,6 @@ export function AgentProfilesLocalView() {
   if (viewMode === "list") {
     return (
       <div className="flex flex-col gap-4">
-        <GlobalToolsNotice />
         <AgentProfilesManager
           onAddProfile={handleAddProfile}
           onEditProfile={handleEditProfile}
@@ -331,9 +328,6 @@ export function AgentProfilesLocalView() {
         key={viewMode === "edit" ? `edit-${editingProfile?.id}` : "new-profile"}
         agentSettingsOverride={override}
         onSaveControlChange={setSaveControl}
-        isDefaultProfile={
-          profileName.trim() === WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME
-        }
       />
 
       {/* @spec FF-001 — Profile validation feedback follows the host error role */}

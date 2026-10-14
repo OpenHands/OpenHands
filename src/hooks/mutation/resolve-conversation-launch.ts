@@ -15,6 +15,7 @@ import {
   AGENT_PROFILES_RETRY_OPTIONS,
   LLM_PROFILES_QUERY_KEYS,
 } from "#/hooks/query/query-keys";
+import { ensureDefaultAgentProfileMigrated } from "#/hooks/use-migrate-default-agent-profile";
 import i18n from "#/i18n";
 import { I18nKey } from "#/i18n/declaration";
 
@@ -52,6 +53,14 @@ export async function resolveConversationLaunch({
   agentProfileId,
   llmProfile,
 }: ResolveConversationLaunchOptions): Promise<ConversationLaunch> {
+  if (!isCloud) {
+    // `default` must carry the global settings it used to launch from before
+    // it launches by id. A failed migration retries on the next launch; this
+    // one still runs the profile as stored.
+    await ensureDefaultAgentProfileMigrated(queryClient, backendId).catch(
+      (error) => console.warn("Could not migrate the default profile", error),
+    );
+  }
   // Await the list from the shared query cache: a send fired before the home
   // query resolves must still launch from the active profile.
   const agentProfiles: AgentProfileListResponse =

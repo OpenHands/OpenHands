@@ -2,13 +2,17 @@ import { QueryClient } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { resolveConversationLaunch } from "#/hooks/mutation/resolve-conversation-launch";
 
-const { listAgentProfiles, getAgentProfile, listLlmProfiles } = vi.hoisted(
-  () => ({
+const { listAgentProfiles, getAgentProfile, listLlmProfiles, migrate } =
+  vi.hoisted(() => ({
     listAgentProfiles: vi.fn(),
     getAgentProfile: vi.fn(),
     listLlmProfiles: vi.fn(),
-  }),
-);
+    migrate: vi.fn(),
+  }));
+
+vi.mock("#/hooks/use-migrate-default-agent-profile", () => ({
+  ensureDefaultAgentProfileMigrated: migrate,
+}));
 
 vi.mock("#/api/agent-profiles-service/agent-profiles-service.api", () => ({
   __esModule: true,
@@ -49,6 +53,7 @@ function arrange({
     profiles: [{ name: "slow" }, { name: "fast" }],
     active_profile: activeLlm,
   });
+  migrate.mockResolvedValue(true);
   getAgentProfile.mockImplementation(async (name: string) => ({
     name,
     profile: {
@@ -162,6 +167,39 @@ describe("resolveConversationLaunch", () => {
       acpServer: "claude-code",
       profileHasRouter: false,
     });
+  });
+
+  it("reads the profiles only after the default-profile migration settles", async () => {
+    arrange({ activeId: "profile-1" });
+    let finishMigration = () => {};
+    migrate.mockReturnValue(
+      new Promise<true>((resolve) => {
+        finishMigration = () => resolve(true);
+      }),
+    );
+
+    const pending = launch();
+    await Promise.resolve();
+    expect(listAgentProfiles).not.toHaveBeenCalled();
+
+    finishMigration();
+    await expect(pending).resolves.toMatchObject({
+      agentProfileId: "profile-1",
+    });
+  });
+
+  it("still launches when the migration fails, and skips it on Cloud", async () => {
+    arrange({ activeId: "profile-1" });
+    migrate.mockRejectedValue(new Error("offline"));
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await expect(launch()).resolves.toMatchObject({
+      agentProfileId: "profile-1",
+    });
+
+    migrate.mockClear();
+    await launch({ isCloud: true });
+    expect(migrate).not.toHaveBeenCalled();
   });
 
   it("still launches the profile when its detail cannot be read", async () => {

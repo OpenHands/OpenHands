@@ -3,6 +3,7 @@ import AgentProfilesService, {
   WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME,
   type AgentProfileSaveInput,
 } from "#/api/agent-profiles-service/agent-profiles-service.api";
+import { mergeAgentProfileSaveInput } from "#/components/features/settings/agent-profiles/merge-agent-profile-save-input";
 import { useSaveAgentProfile } from "#/hooks/mutation/use-save-agent-profile";
 import { useActivateAgentProfile } from "#/hooks/mutation/use-activate-agent-profile";
 
@@ -22,9 +23,8 @@ export const ONBOARDING_AGENT_PROFILE_NAME =
  * an OpenHands profile pointing at the LLM profile onboarding just created, or
  * an ACP profile for the chosen provider (which owns its own LLM — no key).
  *
- * Best-effort: a failure (e.g. an older backend without `/api/agent-profiles`)
- * is swallowed so onboarding is never blocked — the global agent_settings the
- * setup steps already wrote remain the fallback.
+ * Best-effort: a failure is swallowed so onboarding is never blocked; the
+ * error shows when the user starts a conversation.
  */
 export function useApplyOnboardingAgentProfile() {
   const saveProfile = useSaveAgentProfile();
@@ -33,15 +33,21 @@ export function useApplyOnboardingAgentProfile() {
   return useCallback(
     async (profile: AgentProfileSaveInput) => {
       try {
-        // Overwrite (not merge) is intentional: the `default` profile is the
-        // baseline that mirrors the current onboarding choice, not a durable
-        // store of per-profile customizations (home-launch resolves it via
-        // agent_settings — see `useCreateConversation`). Re-onboarding resets it
-        // to the fresh choice; users wanting durable custom config create a
-        // named profile, which the editor saves via `mergeAgentProfileSaveInput`.
+        // An OpenHands choice merges over the stored `default`: it carries the
+        // user's migrated skills, condenser and verification, which
+        // re-onboarding must keep. An ACP choice replaces the profile, so a
+        // previous provider's command never runs under the new one.
+        const stored =
+          profile.agent_kind === "openhands"
+            ? await AgentProfilesService.getProfile(
+                ONBOARDING_AGENT_PROFILE_NAME,
+              )
+                .then((detail) => detail.profile)
+                .catch(() => null)
+            : null;
         await saveProfile.mutateAsync({
           name: ONBOARDING_AGENT_PROFILE_NAME,
-          profile,
+          profile: mergeAgentProfileSaveInput(stored, profile),
         });
         // activate needs the stable id; the save response only echoes the name.
         const detail = await AgentProfilesService.getProfile(

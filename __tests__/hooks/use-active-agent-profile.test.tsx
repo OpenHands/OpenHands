@@ -38,6 +38,10 @@ vi.mock("#/hooks/query/use-settings", () => ({
     data: { agent_settings: { agent_kind: settingsKind.value } },
   }),
 }));
+// Covered by its own tests; here the launch only needs it resolved.
+vi.mock("#/hooks/use-migrate-default-agent-profile", () => ({
+  ensureDefaultAgentProfileMigrated: vi.fn().mockResolvedValue(true),
+}));
 vi.mock("#/hooks/query/use-active-conversation", () => ({
   useActiveConversation: () => ({ data: undefined }),
 }));

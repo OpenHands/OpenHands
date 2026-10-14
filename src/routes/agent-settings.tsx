@@ -305,14 +305,11 @@ interface AgentSettingsScreenProps {
   /** `agent_settings`-shaped profile fields the form opens on. */
   agentSettingsOverride?: Record<string, SettingsValue> | null;
   onSaveControlChange: (control: AgentSettingsSaveControl) => void;
-  /** Local launches route the `default` profile around its stored prompt and tools. */
-  isDefaultProfile?: boolean;
 }
 
 export function AgentSettingsScreen({
   agentSettingsOverride = null,
   onSaveControlChange,
-  isDefaultProfile = false,
 }: AgentSettingsScreenProps) {
   const { t } = useTranslation("openhands");
   const { data: settings, isLoading } = useSettings();
@@ -355,12 +352,11 @@ export function AgentSettingsScreen({
     initialTools.mode === "custom" ? initialTools.selected : null,
   );
   const toolsSupported = agentProfileSupportsTools();
-  const toolsEditable = toolsSupported && !isDefaultProfile;
   const {
     data: toolCatalog,
     isError: toolCatalogFailed,
     refetch: refetchToolCatalog,
-  } = useToolCatalog({ enabled: toolsEditable });
+  } = useToolCatalog({ enabled: toolsSupported });
   // Only a loaded catalog may write `tools`.
   const toolCatalogLoaded = toolCatalog !== undefined;
   const standardToolNames = React.useMemo(
@@ -400,7 +396,6 @@ export function AgentSettingsScreen({
 
   // --- System prompt (OpenHands path) ---
   const instructionsSupported = agentProfileSupportsInstructions();
-  const showSystemPrompt = instructionsSupported && !isDefaultProfile;
   const initialSystemPrompt = React.useMemo(
     () => readSystemPromptSeed(agentSettingsOverride),
     [agentSettingsOverride],
@@ -675,13 +670,13 @@ export function AgentSettingsScreen({
     (toolsMode === "custom" &&
       !sameScopeSelection(orderedSelectedTools, initialTools.selected));
   const systemPromptDirty =
-    showSystemPrompt &&
+    instructionsSupported &&
     (systemPromptMode !== initialSystemPrompt.mode ||
       (systemPromptMode !== "standard" &&
         systemPromptText !== initialSystemPrompt.text));
   const systemPromptMissing =
     agentType === "openhands" &&
-    showSystemPrompt &&
+    instructionsSupported &&
     systemPromptMode !== "standard" &&
     !systemPromptText.trim();
   const settingsDirty =
@@ -811,7 +806,7 @@ export function AgentSettingsScreen({
       toolCatalogLoaded,
       systemPromptMode,
       systemPromptText,
-      systemPromptEditable: showSystemPrompt,
+      systemPromptEditable: instructionsSupported,
     });
 
   const isSaving = acpCredentialForm.isSaving;
@@ -862,90 +857,73 @@ export function AgentSettingsScreen({
           <Typography.Text className="text-sm">
             {t(I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT)}
           </Typography.Text>
-          {isDefaultProfile ? (
+          <SettingsDropdownInput
+            testId="agent-settings-system-prompt-mode"
+            name="agent-system-prompt-mode"
+            label=""
+            items={[
+              {
+                key: "standard",
+                label: t(I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_STANDARD),
+              },
+              {
+                key: "append",
+                label: t(I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_APPEND),
+              },
+              {
+                key: "custom",
+                label: t(I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_CUSTOM),
+              },
+            ]}
+            selectedKey={systemPromptMode}
+            isDisabled={isSaving}
+            onSelectionChange={(key) => {
+              if (key) setSystemPromptMode(key as SystemPromptMode);
+            }}
+          />
+          {systemPromptMode !== "standard" ? (
+            <textarea
+              data-testid="agent-settings-system-prompt"
+              aria-label={t(I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT)}
+              className={cn(
+                formControlMultilineFieldClassName,
+                "min-h-48 font-mono placeholder:italic",
+                "disabled:bg-surface-raised disabled:border-border-subtle",
+              )}
+              value={systemPromptText}
+              maxLength={SYSTEM_PROMPT_MAX_LENGTH}
+              placeholder={t(
+                systemPromptMode === "custom"
+                  ? I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_PLACEHOLDER
+                  : I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_APPEND_PLACEHOLDER,
+              )}
+              disabled={isSaving}
+              onChange={(e) => setSystemPromptText(e.target.value)}
+            />
+          ) : null}
+          {systemPromptMissing ? (
             <Typography.Text
-              testId="agent-settings-system-prompt-default-profile"
-              className="text-xs text-tertiary-alt"
+              testId="agent-settings-system-prompt-required"
+              className="text-xs text-danger"
             >
-              {t(I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_DEFAULT_PROFILE)}
+              {t(I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_REQUIRED)}
             </Typography.Text>
-          ) : (
-            <>
-              <SettingsDropdownInput
-                testId="agent-settings-system-prompt-mode"
-                name="agent-system-prompt-mode"
-                label=""
-                items={[
-                  {
-                    key: "standard",
-                    label: t(
-                      I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_STANDARD,
-                    ),
-                  },
-                  {
-                    key: "append",
-                    label: t(
-                      I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_APPEND,
-                    ),
-                  },
-                  {
-                    key: "custom",
-                    label: t(
-                      I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_CUSTOM,
-                    ),
-                  },
-                ]}
-                selectedKey={systemPromptMode}
-                isDisabled={isSaving}
-                onSelectionChange={(key) => {
-                  if (key) setSystemPromptMode(key as SystemPromptMode);
-                }}
-              />
-              {systemPromptMode !== "standard" ? (
-                <textarea
-                  data-testid="agent-settings-system-prompt"
-                  aria-label={t(I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT)}
-                  className={cn(
-                    formControlMultilineFieldClassName,
-                    "min-h-48 font-mono placeholder:italic",
-                    "disabled:bg-surface-raised disabled:border-border-subtle",
-                  )}
-                  value={systemPromptText}
-                  maxLength={SYSTEM_PROMPT_MAX_LENGTH}
-                  placeholder={t(
-                    systemPromptMode === "custom"
-                      ? I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_PLACEHOLDER
-                      : I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_APPEND_PLACEHOLDER,
-                  )}
-                  disabled={isSaving}
-                  onChange={(e) => setSystemPromptText(e.target.value)}
-                />
-              ) : null}
-              {systemPromptMissing ? (
-                <Typography.Text
-                  testId="agent-settings-system-prompt-required"
-                  className="text-xs text-danger"
-                >
-                  {t(I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_REQUIRED)}
-                </Typography.Text>
-              ) : null}
-              <Typography.Text
-                testId="agent-settings-system-prompt-hint"
-                className="text-xs text-tertiary-alt"
-              >
-                {t(
-                  {
-                    standard:
-                      I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_STANDARD_HINT,
-                    append:
-                      I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_APPEND_HINT,
-                    custom:
-                      I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_CUSTOM_HINT,
-                  }[systemPromptMode],
-                )}
-              </Typography.Text>
-            </>
-          )}
+          ) : null}
+          <Typography.Text
+            testId="agent-settings-system-prompt-hint"
+            className="text-xs text-tertiary-alt"
+          >
+            {t(
+              {
+                standard:
+                  I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_STANDARD_HINT,
+                append:
+                  I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_APPEND_HINT,
+                custom:
+                  I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_CUSTOM_HINT,
+              }[systemPromptMode],
+            )}
+          </Typography.Text>
         </div>
       ) : null}
 
@@ -957,20 +935,7 @@ export function AgentSettingsScreen({
           onChange={setToolConcurrency}
         />
       ) : null}
-      {!isAcp && toolsSupported && isDefaultProfile ? (
-        <div className="flex flex-col gap-2.5">
-          <Typography.Text className="text-sm">
-            {t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS)}
-          </Typography.Text>
-          <Typography.Text
-            testId="agent-settings-tools-default-profile"
-            className="text-xs text-tertiary-alt"
-          >
-            {t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS_DEFAULT_PROFILE)}
-          </Typography.Text>
-        </div>
-      ) : null}
-      {!isAcp && toolsEditable ? (
+      {!isAcp && toolsSupported ? (
         <div className="flex flex-col gap-2.5">
           <Typography.Text className="text-sm">
             {t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS)}
