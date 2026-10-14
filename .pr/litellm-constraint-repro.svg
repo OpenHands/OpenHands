@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="560" viewBox="0 0 960 560" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1e1e2e"/>
+      <stop offset="1" stop-color="#181825"/>
+    </linearGradient>
+  </defs>
+  <rect width="960" height="560" fill="url(#bg)"/>
+  <text x="20" y="30" fill="#f38ba8" font-weight="bold" font-size="16">Issue #17706 — repository: OpenHands/OpenHands</text>
+  <text x="20" y="58" fill="#cdd6f4">Canvas conversations on openhands/claude-* fail with 400 on prompt_cache_key</text>
+  <text x="20" y="90" fill="#a6adc8">Root cause: SDK always sends prompt_cache_key; litellm &gt;= 1.99.0 forwards it to the</text>
+  <text x="20" y="110" fill="#a6adc8">LiteLLM proxy, which rejects it for Anthropic models (HTTP 400). The SDK only declares</text>
+  <text x="20" y="130" fill="#a6adc8">litellm&gt;=1.93.0, so a fresh uvx environment resolves litellm 1.102.1 (broken).</text>
+
+  <!-- Before -->
+  <text x="20" y="170" fill="#f9e2af" font-weight="bold">BEFORE — launcher uvx env without litellm constraint (current npx @openhands/agent-canvas)</text>
+  <rect x="20" y="182" width="920" height="92" rx="6" fill="#11111b" stroke="#f38ba8" stroke-width="1.5"/>
+  <text x="36" y="206" fill="#89b4fa">$ V=1.49.6</text>
+  <text x="36" y="226" fill="#89b4fa">$ uvx --from openhands-agent-server==$V --with openhands-sdk==$V --with openhands-tools==$V \</text>
+  <text x="52" y="244" fill="#89b4fa">--with openhands-workspace==$V --with 'posthog&gt;=6,&lt;7' \</text>
+  <text x="52" y="262" fill="#89b4fa">python -c "import importlib.metadata as m; print(m.version('litellm'))"</text>
+  <text x="36" y="284" fill="#a6e3a1">resolved litellm 1.102.1</text>
+
+  <!-- arrow -->
+  <text x="20" y="310" fill="#cdd6f4">litellm 1.102.1 forwards prompt_cache_key</text>
+  <text x="20" y="330" fill="#f38ba8">io: openai.BadRequestError: Error code: 400 — "litellm.UnsupportedParamsError:</text>
+  <text x="36" y="348" fill="#f38ba8">anthropic does not support parameters: ['prompt_cache_key'], for model=claude-opus-5-5."</text>
+
+  <!-- After -->
+  <text x="20" y="392" fill="#f9e2af" font-weight="bold">AFTER — same env + --with 'litellm&gt;=1.93,&lt;1.99' (the fix in this PR)</text>
+  <rect x="20" y="404" width="920" height="92" rx="6" fill="#11111b" stroke="#a6e3a1" stroke-width="1.5"/>
+  <text x="36" y="428" fill="#89b4fa">$ V=1.49.6</text>
+  <text x="36" y="448" fill="#89b4fa">$ uvx --from openhands-agent-server==$V --with openhands-sdk==$V --with openhands-tools==$V \</text>
+  <text x="52" y="466" fill="#89b4fa">--with openhands-workspace==$V --with 'posthog&gt;=6,&lt;7' --with 'litellm&gt;=1.93,&lt;1.99' \</text>
+  <text x="52" y="484" fill="#89b4fa">python -c "import importlib.metadata as m; print(m.version('litellm'))"</text>
+  <text x="36" y="506" fill="#a6e3a1">resolved litellm 1.98.1</text>
+
+  <text x="20" y="540" fill="#a6adc8">litellm &lt;= 1.98 never put prompt_cache_key on the wire → conversation completes (FINISHED).</text>
+</svg>
