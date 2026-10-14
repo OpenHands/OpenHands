@@ -10,6 +10,9 @@ import { useProviderConnections } from "#/hooks/query/use-provider-connections";
 import { useSaveMetaProfile } from "#/hooks/mutation/use-save-meta-profile";
 import { useSaveLlmProfile } from "#/hooks/mutation/use-save-llm-profile";
 import { useActivateMetaProfile } from "#/hooks/mutation/use-activate-meta-profile";
+import { useActiveProfileBehavior } from "#/hooks/use-active-profile-behavior";
+import { profileHasRouter } from "#/api/agent-profiles-service/profile-behavior";
+import { ActiveProfileScopeNotice } from "#/components/features/settings/agent-profiles/active-profile-scope-notice";
 import { useSettings } from "#/hooks/query/use-settings";
 import { useSaveSettings } from "#/hooks/mutation/use-save-settings";
 import { SettingsSwitch } from "#/components/features/settings/settings-switch";
@@ -60,6 +63,9 @@ export function MetaLlmSettingsView() {
   const saveMetaProfile = useSaveMetaProfile();
   const saveLlmProfile = useSaveLlmProfile();
   const activateMetaProfile = useActivateMetaProfile();
+  // Locally the router belongs to the active agent profile; Cloud keeps one
+  // account-wide active router.
+  const behavior = useActiveProfileBehavior();
   const { data: settings } = useSettings();
   const { mutate: saveSettings, mutateAsync: saveSettingsAsync } =
     useSaveSettings();
@@ -83,7 +89,31 @@ export function MetaLlmSettingsView() {
   >([]);
 
   const metaProfiles = data?.meta_profiles ?? [];
-  const active = data?.active_meta_profile ?? null;
+  const profileRouter =
+    behavior.profile && profileHasRouter(behavior.profile)
+      ? (behavior.profile.meta_profile_ref ?? null)
+      : null;
+  const active = behavior.isLocal
+    ? profileRouter
+    : (data?.active_meta_profile ?? null);
+
+  const activate = async (name: string) => {
+    if (!behavior.isLocal) {
+      await activateMetaProfile.mutateAsync(name);
+      return;
+    }
+    if (behavior.isAcp) {
+      throw new Error(
+        t(I18nKey.SETTINGS$BEHAVIOR_ACP_PROFILE, {
+          name: behavior.profileName,
+        }),
+      );
+    }
+    await behavior.save({
+      meta_profile_ref: name,
+      enable_classify_and_switch_llm_tool: true,
+    });
+  };
   const availableProfiles = (llmProfilesData?.profiles ?? []).map(
     (p) => p.name,
   );
@@ -106,7 +136,7 @@ export function MetaLlmSettingsView() {
 
   const handleActivate = async (name: string) => {
     try {
-      await activateMetaProfile.mutateAsync(name);
+      await activate(name);
       displaySuccessToast(t(I18nKey.SETTINGS$META_PROFILE_ACTIVATED, { name }));
     } catch (activateError) {
       const message =
@@ -232,8 +262,8 @@ export function MetaLlmSettingsView() {
           displayErrorToast(t(I18nKey.ERROR$GENERIC));
         }
       }
-      if (shouldActivateAfterCreate) {
-        await activateMetaProfile.mutateAsync(name);
+      if (shouldActivateAfterCreate && !(behavior.isLocal && behavior.isAcp)) {
+        await activate(name);
       }
       if (!autoEnableFailed) {
         displaySuccessToast(t(I18nKey.SETTINGS$META_PROFILE_SAVED, { name }));
@@ -314,6 +344,10 @@ export function MetaLlmSettingsView() {
   return (
     <>
       <div className="flex flex-col gap-4">
+        <ActiveProfileScopeNotice
+          profileName={behavior.profileName}
+          isAcp={behavior.isAcp}
+        />
         {availableProfiles.length === 0 ? (
           <p
             data-testid="meta-profile-no-llm-profiles"
@@ -371,7 +405,9 @@ export function MetaLlmSettingsView() {
                 onActivate={handleActivate}
                 onEdit={handleEdit}
                 onDelete={setNameToDelete}
-                isActivating={activateMetaProfile.isPending}
+                isActivating={
+                  activateMetaProfile.isPending || behavior.isSaving
+                }
               />
             ))}
           </div>

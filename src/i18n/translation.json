@@ -52162,5 +52162,41 @@
     "uk": "Немає активного профілю агента. Виберіть його в Налаштування → Агент.",
     "ca": "No hi ha cap perfil d'agent actiu. Trieu-ne un a Configuració → Agent.",
     "id": "Tidak ada profil agen yang aktif. Pilih satu di Pengaturan → Agen."
+  },
+  "SETTINGS$BEHAVIOR_ACTIVE_PROFILE": {
+    "en": "Changes apply to the agent profile “{{name}}”, which new conversations launch with.",
+    "ja": "変更は、新しい会話で使用されるエージェントプロファイル「{{name}}」に適用されます。",
+    "zh-CN": "更改将应用于新对话所使用的智能体配置文件“{{name}}”。",
+    "zh-TW": "變更會套用到新對話所使用的代理設定檔「{{name}}」。",
+    "ko-KR": "변경 사항은 새 대화가 사용하는 에이전트 프로필 “{{name}}”에 적용됩니다.",
+    "no": "Endringer gjelder agentprofilen «{{name}}», som nye samtaler starter med.",
+    "it": "Le modifiche si applicano al profilo agente “{{name}}”, con cui si avviano le nuove conversazioni.",
+    "pt": "As alterações se aplicam ao perfil de agente “{{name}}”, usado para iniciar novas conversas.",
+    "es": "Los cambios se aplican al perfil de agente «{{name}}», con el que se inician las conversaciones nuevas.",
+    "ar": "تنطبق التغييرات على ملف تعريف الوكيل “{{name}}” الذي تبدأ به المحادثات الجديدة.",
+    "fr": "Les modifications s'appliquent au profil d'agent « {{name}} », utilisé pour les nouvelles conversations.",
+    "tr": "Değişiklikler, yeni konuşmaların başlatıldığı “{{name}}” ajan profiline uygulanır.",
+    "de": "Änderungen gelten für das Agentenprofil „{{name}}“, mit dem neue Unterhaltungen starten.",
+    "uk": "Зміни застосовуються до профілю агента «{{name}}», з яким запускаються нові розмови.",
+    "ca": "Els canvis s'apliquen al perfil d'agent «{{name}}», amb què s'inicien les converses noves.",
+    "id": "Perubahan berlaku untuk profil agen “{{name}}”, yang digunakan untuk memulai percakapan baru."
+  },
+  "SETTINGS$BEHAVIOR_ACP_PROFILE": {
+    "en": "The active agent profile “{{name}}” runs an ACP agent, which manages this itself. Activate an OpenHands profile in Settings → Agent to change it here.",
+    "ja": "有効なエージェントプロファイル「{{name}}」は ACP エージェントを実行しており、これを自身で管理します。ここで変更するには、設定 → エージェントで OpenHands プロファイルを有効にしてください。",
+    "zh-CN": "当前启用的智能体配置文件“{{name}}”运行的是 ACP 智能体，它会自行管理此项。若要在此更改，请在“设置 → 智能体”中启用一个 OpenHands 配置文件。",
+    "zh-TW": "目前啟用的代理設定檔「{{name}}」執行的是 ACP 代理，會自行管理此項目。若要在此變更，請在「設定 → 代理」中啟用 OpenHands 設定檔。",
+    "ko-KR": "활성 에이전트 프로필 “{{name}}”은 이 항목을 직접 관리하는 ACP 에이전트를 실행합니다. 여기서 변경하려면 설정 → 에이전트에서 OpenHands 프로필을 활성화하세요.",
+    "no": "Den aktive agentprofilen «{{name}}» kjører en ACP-agent, som håndterer dette selv. Aktiver en OpenHands-profil under Innstillinger → Agent for å endre det her.",
+    "it": "Il profilo agente attivo “{{name}}” esegue un agente ACP, che gestisce questa impostazione da solo. Attiva un profilo OpenHands in Impostazioni → Agente per modificarla qui.",
+    "pt": "O perfil de agente ativo “{{name}}” executa um agente ACP, que gerencia isso por conta própria. Ative um perfil OpenHands em Configurações → Agente para alterar aqui.",
+    "es": "El perfil de agente activo «{{name}}» ejecuta un agente ACP, que gestiona esto por sí mismo. Activa un perfil de OpenHands en Configuración → Agente para cambiarlo aquí.",
+    "ar": "يشغّل ملف تعريف الوكيل النشط “{{name}}” وكيل ACP يدير هذا بنفسه. فعّل ملف تعريف OpenHands من الإعدادات ← الوكيل لتغييره هنا.",
+    "fr": "Le profil d'agent actif « {{name}} » exécute un agent ACP, qui gère cela lui-même. Activez un profil OpenHands dans Paramètres → Agent pour le modifier ici.",
+    "tr": "Etkin ajan profili “{{name}}” bunu kendisi yöneten bir ACP ajanı çalıştırıyor. Burada değiştirmek için Ayarlar → Ajan bölümünden bir OpenHands profilini etkinleştirin.",
+    "de": "Das aktive Agentenprofil „{{name}}“ führt einen ACP-Agenten aus, der dies selbst verwaltet. Aktivieren Sie unter Einstellungen → Agent ein OpenHands-Profil, um es hier zu ändern.",
+    "uk": "Активний профіль агента «{{name}}» запускає агента ACP, який керує цим сам. Щоб змінити це тут, активуйте профіль OpenHands у Налаштування → Агент.",
+    "ca": "El perfil d'agent actiu «{{name}}» executa un agent ACP, que ho gestiona ell mateix. Activeu un perfil d'OpenHands a Configuració → Agent per canviar-ho aquí.",
+    "id": "Profil agen aktif “{{name}}” menjalankan agen ACP, yang mengelola ini sendiri. Aktifkan profil OpenHands di Pengaturan → Agen untuk mengubahnya di sini."
   }
 }

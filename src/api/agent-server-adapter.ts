@@ -40,8 +40,10 @@ import {
 import {
   buildSkillEnablementFilter,
   findInvokedCatalogSkill,
+  profileSkillEnablement,
   type SkillEnablement,
 } from "#/utils/skill-enablement";
+import type { StoredOpenHandsProfile } from "./agent-profiles-service/profile-behavior";
 import SettingsService from "./settings-service/settings-service.api";
 import { getStoredConversationMetadata } from "./conversation-metadata-store";
 import LLMSubscriptionService from "./llm-subscription-service";
@@ -1178,7 +1180,7 @@ export function buildStartPlanningConversationRequest(options: {
   customSecrets?: CustomSecretInput[];
   /** Mirrors the parent's configured `conversation_settings.max_iterations` — see DEFAULT_MAX_ITERATIONS. */
   maxIterations?: number;
-  /** Mirrors the code agent's skill filtering — see buildConfiguredOpenHandsAgentSettings. */
+  /** The skills the parent's agent profile selects. */
   skillEnablement?: SkillEnablement;
   /** Mirrors the main conversation's workspace selection — see buildConfiguredConversationSettings. */
   executionRuntime?: AgentServerInfo["execution_runtime"];
@@ -1348,6 +1350,36 @@ async function resolveAgentProfileLlmSettings(
   }
 }
 
+/**
+ * The skill selection of the parent's agent profile, or of the active one when
+ * the parent recorded none. `null` — caller falls back to the global lists —
+ * for an ACP profile or a failed lookup.
+ */
+async function resolveAgentProfileSkillEnablement(
+  agentProfileId: string | null | undefined,
+): Promise<SkillEnablement | null> {
+  try {
+    const { default: AgentProfilesService } =
+      await import("./agent-profiles-service/agent-profiles-service.api");
+    const { profiles, active_agent_profile_id: activeId } =
+      await AgentProfilesService.listProfiles();
+    const summary = profiles.find(
+      (profile) => profile.id === (agentProfileId ?? activeId),
+    );
+    if (summary?.agent_kind !== "openhands") return null;
+    const { profile } = await AgentProfilesService.getProfile(summary.name);
+    return profile.agent_kind === "openhands"
+      ? profileSkillEnablement(profile as StoredOpenHandsProfile)
+      : null;
+  } catch (error) {
+    console.warn(
+      "Falling back to global skill settings for the planner",
+      error,
+    );
+    return null;
+  }
+}
+
 export async function buildStartPlanningConversationRequestWithEncryptedSettings(options: {
   workingDir: string;
   parentConversationId: string;
@@ -1372,10 +1404,12 @@ export async function buildStartPlanningConversationRequestWithEncryptedSettings
 }): Promise<RawAgentStartConversationPayload> {
   const { SecretsService } = await import("./secrets-service");
 
-  const [settingsResult, customSecrets] = await Promise.all([
-    SettingsService.getSettingsForConversation(),
-    SecretsService.getSecrets(),
-  ]);
+  const [settingsResult, customSecrets, profileSkillSelection] =
+    await Promise.all([
+      SettingsService.getSettingsForConversation(),
+      SecretsService.getSecrets(),
+      resolveAgentProfileSkillEnablement(options.parentAgentProfileId),
+    ]);
 
   const profileLlm =
     (options.parentActiveProfileName
@@ -1402,7 +1436,7 @@ export async function buildStartPlanningConversationRequestWithEncryptedSettings
     secretsEncrypted: settingsResult.secretsEncrypted,
     customSecrets,
     maxIterations,
-    skillEnablement: settingsResult.skillEnablement,
+    skillEnablement: profileSkillSelection ?? settingsResult.skillEnablement,
   });
 }
 

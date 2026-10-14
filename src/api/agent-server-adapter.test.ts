@@ -24,7 +24,7 @@ vi.mock("./secrets-service", () => ({
   SecretsService: { getSecrets: vi.fn().mockResolvedValue([]) },
 }));
 vi.mock("./agent-profiles-service/agent-profiles-service.api", () => ({
-  default: { listProfiles: vi.fn() },
+  default: { listProfiles: vi.fn(), getProfile: vi.fn() },
 }));
 vi.mock("./profiles-service/profiles-service.api", () => ({
   default: { getProfile: vi.fn() },
@@ -366,7 +366,7 @@ describe("buildStartPlanningConversationRequestWithEncryptedSettings", () => {
         parentAgentProfileId: null,
       });
 
-    expect(AgentProfilesService.listProfiles).not.toHaveBeenCalled();
+    expect(ProfilesService.getProfile).not.toHaveBeenCalled();
     expect(payload.agent.llm).toMatchObject({
       model: "openhands/globally-active-model",
     });
@@ -412,7 +412,7 @@ describe("buildStartPlanningConversationRequestWithEncryptedSettings", () => {
     );
     // The launched agent profile must not even be consulted once
     // active_profile resolves successfully.
-    expect(AgentProfilesService.listProfiles).not.toHaveBeenCalled();
+    expect(ProfilesService.getProfile).toHaveBeenCalledTimes(1);
     expect(payload.agent.llm).toMatchObject({
       model: "openhands/switched-model",
       api_key: "gAAAAAswitched-key",
@@ -513,6 +513,36 @@ describe("buildStartPlanningConversationRequestWithEncryptedSettings", () => {
     const skillNames = getPlannerAgentContextSkillNames(payload);
     expect(skillNames).not.toContain("agent-memory");
     expect(skillNames).toContain("add-javadoc");
+  });
+
+  it("gives the planner the parent profile's skill selection over the global lists", async () => {
+    vi.mocked(SettingsService.getSettingsForConversation).mockResolvedValue({
+      ...globallyActiveSettings,
+      skillEnablement: { enabledSkills: ["agent-memory"], disabledSkills: [] },
+    });
+    vi.mocked(AgentProfilesService.getProfile).mockResolvedValue({
+      name: "parent-profile",
+      profile: {
+        id: "profile-parent",
+        name: "parent-profile",
+        revision: 1,
+        agent_kind: "openhands",
+        llm_profile_ref: "parent-llm",
+        public_skills: ["add-javadoc"],
+        disabled_skills: [],
+      },
+    } as never);
+
+    const payload =
+      await buildStartPlanningConversationRequestWithEncryptedSettings({
+        workingDir: "/workspace/project",
+        parentConversationId: "parent-1",
+        parentAgentProfileId: "profile-parent",
+      });
+
+    const skillNames = getPlannerAgentContextSkillNames(payload);
+    expect(skillNames).toContain("add-javadoc");
+    expect(skillNames).not.toContain("agent-memory");
   });
 
   it("threads executionRuntime through to DockerExecutionWorkspace selection", async () => {

@@ -1,11 +1,14 @@
-import { SdkSectionPage } from "#/components/features/settings/sdk-settings/sdk-section-page";
+import { ActiveProfileSectionPage } from "#/components/features/settings/sdk-settings/active-profile-section-page";
+
+const CONDENSER_SOURCES = [
+  { settingsSource: "agent_settings" as const, sectionKeys: ["condenser"] },
+];
 
 function CondenserSettingsScreen() {
   return (
-    <SdkSectionPage
-      settingsSources={[
-        { settingsSource: "agent_settings", sectionKeys: ["condenser"] },
-      ]}
+    <ActiveProfileSectionPage
+      settingsSources={CONDENSER_SOURCES}
+      section="condenser"
       testId="condenser-settings-screen"
     />
   );

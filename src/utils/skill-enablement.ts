@@ -87,6 +87,17 @@ export function migrateSkillEnablement(
   };
 }
 
+/** A profile's skill selection; a profile without `public_skills` loads the whole catalog. */
+export function profileSkillEnablement(profile: {
+  public_skills?: string[] | null;
+  disabled_skills?: string[];
+}): SkillEnablement {
+  return {
+    enabledSkills: profile.public_skills ?? [...CATALOG_SKILL_NAMES],
+    disabledSkills: profile.disabled_skills ?? [],
+  };
+}
+
 export function toSkillEnablement(settings: {
   enabled_skills?: string[];
   disabled_skills?: string[];
