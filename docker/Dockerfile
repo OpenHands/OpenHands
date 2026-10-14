@@ -158,6 +158,9 @@ COPY --from=frontend-build /build/node_modules/sirv /opt/agent-canvas/node_modul
 COPY --from=frontend-build /build/node_modules/@polka /opt/agent-canvas/node_modules/@polka
 COPY --from=frontend-build /build/node_modules/mrmime /opt/agent-canvas/node_modules/mrmime
 COPY --from=frontend-build /build/node_modules/totalist /opt/agent-canvas/node_modules/totalist
+# The agent-server reads public skills from the package the frontend bundles
+# (EXTENSIONS_PATH in entrypoint.sh) instead of cloning the extensions repo.
+COPY --from=frontend-build /build/node_modules/@openhands/extensions /opt/agent-canvas/node_modules/@openhands/extensions
 
 # Copy the runtime-services-info builder (entrypoint.sh runs it as a CLI to
 # emit the agent's <RUNTIME_SERVICES> block; same builder the dev stack uses).

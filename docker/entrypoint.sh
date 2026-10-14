@@ -283,6 +283,10 @@ export AUTOMATION_AGENT_SERVER_URL="${AUTOMATION_AGENT_SERVER_URL:-http://127.0.
 # FinishTool registration lets automation runs resolve the tool on their
 # remote conversations (see the note at the bottom of tools/canvas_ui_tool.py).
 export OH_EXTRA_PYTHON_PATH="${OH_EXTRA_PYTHON_PATH:-/opt/agent-canvas/tools}"
+
+# Read public skills from the extensions package the frontend was built with,
+# so Canvas and the agent-server see the same catalog and nothing is cloned.
+export EXTENSIONS_PATH="${EXTENSIONS_PATH:-/opt/agent-canvas/node_modules/@openhands/extensions}"
 AGENT_SERVER_IMPORT_MODULES="canvas_ui_tool"
 
 # Track child PIDs so we can clean up on exit.
