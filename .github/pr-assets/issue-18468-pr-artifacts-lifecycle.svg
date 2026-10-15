@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 460" width="100%" height="100%">
+  <defs>
+    <style>
+      .bg { fill: #0f172a; }
+      .card { fill: #1e293b; stroke: #334155; stroke-width: 1.5; rx: 12; }
+      .title { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 18px; font-weight: 600; fill: #f8fafc; }
+      .subtitle { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 13px; fill: #94a3b8; }
+      .node-box { fill: #334155; rx: 8; stroke: #475569; stroke-width: 1; }
+      .node-text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 13px; fill: #f1f5f9; font-weight: 500; }
+      .node-subtext { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 11px; fill: #94a3b8; }
+      .arrow { stroke: #64748b; stroke-width: 2; fill: none; marker-end: url(#arrowhead); }
+      .tag { font-family: monospace; font-size: 11px; font-weight: bold; }
+      .tag-before { fill: #ef4444; }
+      .tag-after { fill: #10b981; }
+      .tag-bg-before { fill: rgba(239, 68, 68, 0.15); stroke: #ef4444; stroke-width: 1; rx: 4; }
+      .tag-bg-after { fill: rgba(16, 185, 129, 0.15); stroke: #10b981; stroke-width: 1; rx: 4; }
+    </style>
+    <marker id="arrowhead" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L6,3 z" fill="#64748b" />
+    </marker>
+  </defs>
+
+  <rect width="960" height="460" class="bg" />
+
+  <text x="40" y="45" class="title">OpenHands #18468: Defer PR Artifact Removal Until After Merge to Main</text>
+  <text x="40" y="70" class="subtitle">Eliminating redundant CI runs triggered by approval-time commits on PR branches</text>
+
+  <!-- Panel Before -->
+  <g transform="translate(40, 95)">
+    <rect width="420" height="325" class="card" />
+    <rect x="20" y="20" width="80" height="24" class="tag-bg-before" />
+    <text x="60" y="36" class="tag tag-before" text-anchor="middle">BEFORE</text>
+    <text x="115" y="37" class="subtitle">Approval-time cleanup pushes to branch</text>
+
+    <!-- Step 1 -->
+    <g transform="translate(30, 65)">
+      <rect width="360" height="55" class="node-box" />
+      <text x="15" y="25" class="node-text">1. Reviewer Approves PR</text>
+      <text x="15" y="42" class="node-subtext">Triggers pull_request_review (cleanup-on-approval)</text>
+    </g>
+
+    <!-- Arrow -->
+    <line x1="210" y1="125" x2="210" y2="145" class="arrow" />
+
+    <!-- Step 2 -->
+    <g transform="translate(30, 150)">
+      <rect width="360" height="55" class="node-box" stroke="#ef4444" />
+      <text x="15" y="25" class="node-text" fill="#fca5a5">2. Commits Removal to PR Branch</text>
+      <text x="15" y="42" class="node-subtext" fill="#f87171">⚠️ Triggers redundant 2nd full CI run</text>
+    </g>
+
+    <!-- Arrow -->
+    <line x1="210" y1="210" x2="210" y2="230" class="arrow" />
+
+    <!-- Step 3 -->
+    <g transform="translate(30, 235)">
+      <rect width="360" height="55" class="node-box" />
+      <text x="15" y="25" class="node-text">3. Merge to Main</text>
+      <text x="15" y="42" class="node-subtext">Runs duplicate cleanup-after-merge workflow</text>
+    </g>
+  </g>
+
+  <!-- Panel After -->
+  <g transform="translate(500, 95)">
+    <rect width="420" height="325" class="card" />
+    <rect x="20" y="20" width="80" height="24" class="tag-bg-after" />
+    <text x="60" y="36" class="tag tag-after" text-anchor="middle">AFTER</text>
+    <text x="115" y="37" class="subtitle">Single automated cleanup after merge</text>
+
+    <!-- Step 1 -->
+    <g transform="translate(30, 65)">
+      <rect width="360" height="55" class="node-box" />
+      <text x="15" y="25" class="node-text">1. Reviewer Approves PR</text>
+      <text x="15" y="42" class="node-subtext">No branch commit, no redundant CI run</text>
+    </g>
+
+    <!-- Arrow -->
+    <line x1="210" y1="125" x2="210" y2="145" class="arrow" />
+
+    <!-- Step 2 -->
+    <g transform="translate(30, 150)">
+      <rect width="360" height="55" class="node-box" stroke="#10b981" />
+      <text x="15" y="25" class="node-text" fill="#86efac">2. PR Merges Directly into Main</text>
+      <text x="15" y="42" class="node-subtext" fill="#4ade80">Clean merge, branch state kept stable</text>
+    </g>
+
+    <!-- Arrow -->
+    <line x1="210" y1="210" x2="210" y2="230" class="arrow" />
+
+    <!-- Step 3 -->
+    <g transform="translate(30, 235)">
+      <rect width="360" height="55" class="node-box" />
+      <text x="15" y="25" class="node-text">3. Automated Cleanup PR on Main</text>
+      <text x="15" y="42" class="node-subtext">cleanup-after-merge removes .pr/ in batch</text>
+    </g>
+  </g>
+</svg>
