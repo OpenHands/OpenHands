@@ -310,25 +310,56 @@ describe("EventService", () => {
       warn.mockRestore();
     });
 
-    it("treats a sort-only cloud failure as unsupported filtered pagination", async () => {
-      callCloudProxyMock.mockRejectedValue(new Error("pagination unsupported"));
-      const warn = vi
-        .spyOn(console, "warn")
-        .mockImplementation(() => undefined);
+    it("falls back to limit-only search when a sort-only cloud request fails, and succeeds if limit-only succeeds", async () => {
+      const fallbackEvent = { id: "event-fallback" };
+      callCloudProxyMock
+        .mockRejectedValueOnce(new Error("sort_order unsupported"))
+        .mockResolvedValueOnce({
+          items: [fallbackEvent],
+          next_page_id: null,
+        });
 
       await expect(
         EventService.searchEvents("conversation-cloud", null, null, {
           sortOrder: "TIMESTAMP_DESC",
         }),
-      ).resolves.toEqual({ items: [], next_page_id: null });
+      ).resolves.toEqual({ items: [fallbackEvent], next_page_id: null });
 
-      expect(callCloudProxyMock).toHaveBeenCalledWith({
+      expect(callCloudProxyMock).toHaveBeenNthCalledWith(1, {
         backend: cloudBackend,
         method: "GET",
         path: "/api/v1/conversation/conversation-cloud/events/search?limit=100&sort_order=TIMESTAMP_DESC",
       });
-      expect(warn).toHaveBeenCalledOnce();
-      warn.mockRestore();
+      expect(callCloudProxyMock).toHaveBeenNthCalledWith(2, {
+        backend: cloudBackend,
+        method: "GET",
+        path: "/api/v1/conversation/conversation-cloud/events/search?limit=100",
+      });
+    });
+
+    it("rethrows the error when a sort-only cloud request and its limit-only fallback both fail", async () => {
+      const primaryError = new Error("server error 500");
+      const fallbackError = new Error("fallback failed");
+      callCloudProxyMock
+        .mockRejectedValueOnce(primaryError)
+        .mockRejectedValueOnce(fallbackError);
+
+      await expect(
+        EventService.searchEvents("conversation-cloud", null, null, {
+          sortOrder: "TIMESTAMP_DESC",
+        }),
+      ).rejects.toBe(primaryError);
+
+      expect(callCloudProxyMock).toHaveBeenNthCalledWith(1, {
+        backend: cloudBackend,
+        method: "GET",
+        path: "/api/v1/conversation/conversation-cloud/events/search?limit=100&sort_order=TIMESTAMP_DESC",
+      });
+      expect(callCloudProxyMock).toHaveBeenNthCalledWith(2, {
+        backend: cloudBackend,
+        method: "GET",
+        path: "/api/v1/conversation/conversation-cloud/events/search?limit=100",
+      });
     });
 
     it("recognizes a lower timestamp bound as a cloud pagination filter", async () => {
