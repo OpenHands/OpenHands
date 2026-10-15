@@ -28,10 +28,12 @@ exactly what command you ran and include logs, screenshots, or reproduction note
 -
 
 ## Issue Number
+
 <!-- Required. The linked issue must carry the `ready-for-dev` label, which
 means it has clear acceptance criteria (and, for bugs, reproduction evidence).
 If no such issue exists yet, open one using the Bug or Feature Request template
 and wait for it to be labeled `ready-for-dev` before opening this PR. -->
+
 Fixes #
 
 ## How to Test
@@ -65,8 +67,8 @@ before/after of your change, then link it here via htmlpreview at the commit tha
 
   https://htmlpreview.github.io/?https://github.com/<your-fork>/<repo>/blob/<commit-sha>/.pr/design.html
 
-Use the commit SHA, not the branch name: `.pr/` is removed from the branch when a
-same-repository PR is approved, and a branch link stops working then.
+Use the commit SHA, not the branch name: `.pr/` is removed by a cleanup PR after
+merge to `main`, and a branch link stops working then.
 See docs/DEVELOPMENT.md ("Design doc for non-trivial PRs") for details.
 -->
 
