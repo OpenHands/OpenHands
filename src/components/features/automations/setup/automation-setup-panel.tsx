@@ -1111,20 +1111,20 @@ export function AutomationSetupPanel({
     );
   }, [clearQueuedStreams, conversationId, streamingField]);
 
+  const updateFields = (patch: AutomationSetupFormPatch) => {
+    clearQueuedStreams();
+    setStatusMessage(null);
+    setSaveState("idle");
+    setForm((previous) => ({ ...previous, ...patch }));
+    if (!conversationId) return;
+    patchAutomationFormSession(conversationId, patch, { source: "user" });
+  };
+
   const updateField = <FieldName extends AutomationSetupField>(
     field: FieldName,
     value: AutomationSetupFormValues[FieldName],
   ) => {
-    clearQueuedStreams();
-    setStatusMessage(null);
-    setSaveState("idle");
-    setForm((previous) => ({ ...previous, [field]: value }));
-    if (!conversationId) return;
-    patchAutomationFormSession(
-      conversationId,
-      { [field]: value } as AutomationSetupFormPatch,
-      { source: "user" },
-    );
+    updateFields({ [field]: value } as AutomationSetupFormPatch);
   };
 
   const pluginEntries = useMemo(
@@ -2100,13 +2100,21 @@ export function AutomationSetupPanel({
                   }}
                   streamingField={streamingField}
                   setFrequency={(value) => {
-                    updateField("frequency", value);
-                    if (value === "once" && !scheduleDateTime.trim()) {
-                      updateField(
-                        "scheduleDateTime",
-                        defaultScheduleDateTimeLocal(),
+                    const patch: AutomationSetupFormPatch = {
+                      frequency: value,
+                    };
+                    if (value === "custom" && frequency !== "custom") {
+                      patch.customSchedule = toCron(
+                        time,
+                        frequency,
+                        customSchedule,
+                        scheduleDateTime,
+                        weekday,
                       );
+                    } else if (value === "once" && !scheduleDateTime.trim()) {
+                      patch.scheduleDateTime = defaultScheduleDateTimeLocal();
                     }
+                    updateFields(patch);
                   }}
                   setTime={(value) => updateField("time", value)}
                   setWeekday={(value) => updateField("weekday", value)}

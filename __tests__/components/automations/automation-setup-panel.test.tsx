@@ -285,6 +285,45 @@ describe("AutomationSetupPanel", () => {
     );
   });
 
+  it("seeds custom schedule from chosen preset when switching to Custom and preserves typed cron on Custom to Custom", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    // 1. Choose Weekly
+    await user.click(screen.getByTestId("automation-setup-frequency-weekly"));
+    expect(
+      screen.getByTestId("automation-setup-frequency-weekly"),
+    ).toHaveAttribute("aria-checked", "true");
+
+    // 2. Set Day of week to Monday ("1") and time to "10:30"
+    const weekday = screen.getByTestId("automation-setup-weekday");
+    await user.selectOptions(weekday, "1");
+    const timeInput = screen.getByTestId("automation-setup-time");
+    await user.clear(timeInput);
+    await user.type(timeInput, "10:30");
+
+    // 3. Switch Frequency to Custom
+    await user.click(screen.getByTestId("automation-setup-frequency-custom"));
+    expect(
+      screen.getByTestId("automation-setup-frequency-custom"),
+    ).toHaveAttribute("aria-checked", "true");
+
+    // Expect custom schedule to be seeded with preset's cron "30 10 * * 1"
+    const customSchedule = screen.getByTestId(
+      "automation-setup-custom-schedule",
+    );
+    expect(customSchedule).toHaveValue("30 10 * * 1");
+
+    // 4. User types a custom cron
+    await user.clear(customSchedule);
+    await user.type(customSchedule, "*/15 * * * *");
+    expect(customSchedule).toHaveValue("*/15 * * * *");
+
+    // 5. Switching Custom to Custom preserves the typed cron
+    await user.click(screen.getByTestId("automation-setup-frequency-custom"));
+    expect(customSchedule).toHaveValue("*/15 * * * *");
+  });
+
   it("switches between prompt and custom, and reveals plugin fields on the prompt page", async () => {
     const user = userEvent.setup();
     renderPanel();
