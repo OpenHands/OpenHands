@@ -4,6 +4,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SecretsService } from "#/api/secrets-service";
 import { SecretRequestModal } from "#/components/features/conversation/secret-request-modal";
 import {
+  MODAL_MAX_WIDTH_VIEWPORT,
+  MODAL_WIDTH_CLASS,
+} from "#/components/shared/modals/modal-body";
+import {
   type SecretRequest,
   useSecretRequestStore,
 } from "#/stores/secret-request-store";
@@ -111,5 +115,13 @@ describe("SecretRequestModal", () => {
       request,
       null,
     );
+  });
+
+  it("constrains dialog width to the viewport on mobile devices", async () => {
+    await renderModal();
+
+    const modal = screen.getByTestId("secret-request-modal");
+    expect(modal).toHaveClass(MODAL_WIDTH_CLASS.md);
+    expect(modal).toHaveClass(MODAL_MAX_WIDTH_VIEWPORT);
   });
 });

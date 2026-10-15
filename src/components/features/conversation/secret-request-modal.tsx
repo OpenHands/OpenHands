@@ -5,7 +5,10 @@ import {
   BaseModalTitle,
 } from "#/components/shared/modals/confirmation-modals/base-modal";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
-import { ModalBody } from "#/components/shared/modals/modal-body";
+import {
+  MODAL_MAX_WIDTH_VIEWPORT,
+  ModalBody,
+} from "#/components/shared/modals/modal-body";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { I18nKey } from "#/i18n/declaration";
 import { completeSecretRequest } from "#/services/secret-request";
@@ -33,7 +36,11 @@ export function SecretRequestModal() {
       closeOnBackdropClick={false}
       aria-label={title}
     >
-      <ModalBody testID="secret-request-modal" width="md">
+      <ModalBody
+        testID="secret-request-modal"
+        width="md"
+        className={MODAL_MAX_WIDTH_VIEWPORT}
+      >
         <div className="flex flex-col gap-2 self-start">
           <BaseModalTitle title={title} />
           {request.reason ? (
