@@ -7,6 +7,14 @@ import { FileContentViewer } from "#/components/features/files-tab/file-content-
 import type { ViewMode } from "#/components/features/files-tab/view-mode";
 import { useWorkspaceMutationCounter } from "#/stores/use-workspace-mutation-counter";
 
+vi.mock("mermaid", () => ({
+  default: {
+    initialize: vi.fn(),
+    parse: vi.fn(async () => ({})),
+    render: vi.fn(async () => ({ svg: "<svg><text>diagram</text></svg>" })),
+  },
+}));
+
 // Mock the *services* the file-content hook depends on — not the hook itself —
 // so the real classification (text decoded, then flipped to binary on a NUL
 // sniff) runs end to end through the viewer.
@@ -121,4 +129,36 @@ describe("FileContentViewer", () => {
       ).toBeInTheDocument();
     },
   );
+
+  it("renders a .mmd file as an inline Mermaid diagram in rich mode", async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      arrayBuffer: () =>
+        Promise.resolve(new TextEncoder().encode("graph TD;\n  A-->B;").buffer),
+    });
+
+    renderViewer("flow.mmd", "rich");
+
+    expect(
+      await screen.findByTestId("file-content-viewer-mermaid"),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps raw Mermaid source visible in plain mode", async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      arrayBuffer: () =>
+        Promise.resolve(new TextEncoder().encode("graph TD;\n  A-->B;").buffer),
+    });
+
+    renderViewer("flow.mermaid", "plain");
+
+    // Plain mode shows the source, never the rendered diagram.
+    expect(
+      screen.queryByTestId("file-content-viewer-mermaid"),
+    ).not.toBeInTheDocument();
+    expect(await screen.findByText(/graph TD;/)).toBeInTheDocument();
+  });
 });

@@ -1,9 +1,46 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+const mermaidMock = vi.hoisted(() => ({
+  initialize: vi.fn(),
+  parse: vi.fn(async () => ({})),
+  render: vi.fn(async () => ({
+    svg: "<svg><text>rendered diagram</text></svg>",
+  })),
+}));
+
+vi.mock("mermaid", () => ({ default: mermaidMock }));
 import { code as Code } from "#/components/features/markdown/code";
 
 describe("code (markdown)", () => {
+  beforeEach(() => {
+    mermaidMock.render.mockClear();
+  });
+
+  it("renders a ```mermaid fenced block as an inline diagram, not code", async () => {
+    render(<Code className="language-mermaid">{"graph TD;\n  A-->B;"}</Code>);
+
+    await waitFor(() =>
+      expect(screen.getByTestId("mermaid-diagram")).toBeInTheDocument(),
+    );
+    expect(screen.getByText("rendered diagram")).toBeInTheDocument();
+    expect(mermaidMock.render).toHaveBeenCalledWith(
+      expect.any(String),
+      "graph TD;\n  A-->B;",
+    );
+    // The highlighted-code affordance must not be used for a diagram.
+    expect(screen.queryByTestId("copy-to-clipboard")).not.toBeInTheDocument();
+  });
+
+  it("renders a ```mmd fenced block as an inline diagram", async () => {
+    render(<Code className="language-mmd">{"graph TD; A-->B;"}</Code>);
+
+    await waitFor(() =>
+      expect(screen.getByTestId("mermaid-diagram")).toBeInTheDocument(),
+    );
+  });
+
   it("should render inline code without a copy button", () => {
     render(<Code>inline snippet</Code>);
 

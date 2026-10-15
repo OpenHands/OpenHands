@@ -5,7 +5,7 @@ import {
   isPlanningFileEditorObservationEvent,
   isUserRejectObservation,
 } from "#/types/agent-server/type-guards";
-import { isMarkdownFileEditorEvent } from "#/components/features/chat/tool-visualizers/primitives/markdown-file-preview";
+import { isInlinePreviewFileEditorEvent } from "#/components/features/chat/tool-visualizers/primitives/markdown-file-preview";
 import { getThoughtSourceAction } from "./event-thought-helpers";
 
 /** Minimum run-length before consecutive actions get folded into a single
@@ -32,7 +32,7 @@ export const isGroupableEvent = (
     }
     // Keep markdown *create* artifact cards outside collapsed groups so their
     // clipped preview is visible without expanding a parent summary.
-    if (isMarkdownFileEditorEvent(event, correspondingAction)) {
+    if (isInlinePreviewFileEditorEvent(event, correspondingAction)) {
       return false;
     }
     return true;
@@ -42,7 +42,7 @@ export const isGroupableEvent = (
     if (isPlanningFileEditorObservationEvent(event)) {
       return false;
     }
-    if (isMarkdownFileEditorEvent(event, correspondingAction)) {
+    if (isInlinePreviewFileEditorEvent(event, correspondingAction)) {
       return false;
     }
     if (event.observation.kind === "TaskTrackerObservation") {
