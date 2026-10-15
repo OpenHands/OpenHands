@@ -60,6 +60,27 @@ describe("color themes", () => {
         ).toBeGreaterThanOrEqual(4.5);
       }
 
+      // @spec FF-001 — Small error text stays readable on tinted draft error pills
+      const errorInk = luminance(resolve("--oh-feedback-error"));
+      const draftBarSurface = channels(resolve("--oh-surface"));
+      const errorPillTint = channels("#fb2c36");
+      const errorPillSurface = errorPillTint.map(
+        (channel, index) => channel * 0.05 + draftBarSurface[index] * 0.95,
+      );
+      expect(
+        contrast(errorInk, luminance(errorPillSurface)),
+        "--oh-feedback-error against the draft validity error pill",
+      ).toBeGreaterThanOrEqual(4.5);
+
+      const alertBackground = channels(resolve("--oh-background"));
+      const alertSurface = errorPillTint.map(
+        (channel, index) => channel * 0.1 + alertBackground[index] * 0.9,
+      );
+      expect(
+        contrast(errorInk, luminance(alertSurface)),
+        "--oh-feedback-error against the draft runs error alert",
+      ).toBeGreaterThanOrEqual(4.5);
+
       // @spec HL-001 — Home mode labels stay readable on the hover pill
       expect(
         contrast(

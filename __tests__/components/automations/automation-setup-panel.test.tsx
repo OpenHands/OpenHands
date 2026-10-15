@@ -1628,6 +1628,7 @@ describe("AutomationSetupPanel", () => {
 
       await saveDraftAndWaitForTest(user);
       const validity = screen.getByTestId("automation-setup-draft-validity");
+      expect(validity).toHaveClass("bg-red-500/5", "text-feedback-error");
       expect(validity.parentElement).toBe(
         screen.getByTestId("automation-setup-draft-details"),
       );
