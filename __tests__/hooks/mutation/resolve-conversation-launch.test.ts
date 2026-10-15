@@ -1,14 +1,27 @@
 import { QueryClient } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { resolveConversationLaunch } from "#/hooks/mutation/resolve-conversation-launch";
+import {
+  launchConversation,
+  resolveConversationLaunch,
+} from "#/hooks/mutation/resolve-conversation-launch";
+import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import { SUBSCRIPTION_LOGIN_REQUIRED_ERROR } from "#/api/agent-server-adapter";
 
-const { listAgentProfiles, getAgentProfile, listLlmProfiles, migrate } =
-  vi.hoisted(() => ({
-    listAgentProfiles: vi.fn(),
-    getAgentProfile: vi.fn(),
-    listLlmProfiles: vi.fn(),
-    migrate: vi.fn(),
-  }));
+const {
+  listAgentProfiles,
+  getAgentProfile,
+  listLlmProfiles,
+  getLlmProfile,
+  getOpenAIStatus,
+  migrate,
+} = vi.hoisted(() => ({
+  listAgentProfiles: vi.fn(),
+  getAgentProfile: vi.fn(),
+  listLlmProfiles: vi.fn(),
+  getLlmProfile: vi.fn(),
+  getOpenAIStatus: vi.fn(),
+  migrate: vi.fn(),
+}));
 
 vi.mock("#/hooks/use-migrate-default-agent-profile", () => ({
   ensureDefaultAgentProfileMigrated: migrate,
@@ -20,7 +33,11 @@ vi.mock("#/api/agent-profiles-service/agent-profiles-service.api", () => ({
 }));
 vi.mock("#/api/profiles-service/profiles-service.api", () => ({
   __esModule: true,
-  default: { listProfiles: listLlmProfiles },
+  default: { listProfiles: listLlmProfiles, getProfile: getLlmProfile },
+}));
+vi.mock("#/api/llm-subscription-service", () => ({
+  __esModule: true,
+  default: { getOpenAIStatus },
 }));
 
 const REVIEWER = {
@@ -210,5 +227,69 @@ describe("resolveConversationLaunch", () => {
       agentProfileId: "profile-1",
       profileHasRouter: false,
     });
+  });
+
+  it("launches Cloud's own default when the profile's LLM profile is gone", async () => {
+    arrange({ activeId: "profile-1" });
+    listLlmProfiles.mockResolvedValue({
+      profiles: [{ name: "fast" }],
+      active_profile: "fast",
+    });
+
+    await expect(launch({ isCloud: true })).resolves.toEqual({});
+  });
+
+  it("keeps a secret-restricted profile on Cloud even when its LLM profile is gone", async () => {
+    arrange({ activeId: "profile-1", detail: { secret_refs: [] } });
+    listLlmProfiles.mockResolvedValue({
+      profiles: [{ name: "fast" }],
+      active_profile: "fast",
+    });
+
+    await expect(launch({ isCloud: true })).resolves.toMatchObject({
+      agentProfileId: "profile-1",
+    });
+  });
+
+  it("launches the profile on Cloud when its LLM profile exists", async () => {
+    arrange({ activeId: "profile-1" });
+
+    await expect(launch({ isCloud: true })).resolves.toEqual({
+      agentProfileId: "profile-1",
+      agentProfileKind: "openhands",
+      llmProfile: "slow",
+    });
+    expect(getAgentProfile).not.toHaveBeenCalled();
+  });
+});
+
+describe("launchConversation", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("refuses to launch on a subscription LLM that isn't connected", async () => {
+    arrange({ activeId: "profile-1", activeLlm: "slow" });
+    getLlmProfile.mockResolvedValue({
+      name: "slow",
+      config: { model: "openai/gpt-5", auth_type: "subscription" },
+    });
+    getOpenAIStatus.mockResolvedValue({ connected: false });
+    const create = vi.spyOn(
+      AgentServerConversationService,
+      "createConversation",
+    );
+
+    await expect(
+      launchConversation(
+        {
+          queryClient: new QueryClient(),
+          backendId: "local-1",
+          orgId: null,
+          isCloud: false,
+        },
+        {},
+      ),
+    ).rejects.toThrow(SUBSCRIPTION_LOGIN_REQUIRED_ERROR);
+    expect(getLlmProfile).toHaveBeenCalledWith("slow");
+    expect(create).not.toHaveBeenCalled();
   });
 });

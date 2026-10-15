@@ -11,6 +11,7 @@ import { Settings } from "#/types/settings";
 function buildSettings(overrides: Partial<Settings> = {}): Settings {
   return {
     ...MOCK_DEFAULT_USER_SETTINGS,
+    default_profile_migrated: true,
     ...overrides,
     agent_settings: {
       ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
@@ -42,11 +43,6 @@ function renderVerificationSettingsScreen() {
     ),
   });
 }
-
-// Covered by its own tests; saves here only need it settled.
-vi.mock("#/hooks/use-migrate-default-agent-profile", () => ({
-  ensureDefaultAgentProfileMigrated: vi.fn().mockResolvedValue(true),
-}));
 
 const ACTIVE_PROFILE = {
   id: "profile-default",
@@ -287,6 +283,99 @@ describe("VerificationSettingsScreen", () => {
     ).not.toBeInTheDocument();
     expect(
       screen.queryByTestId("sdk-settings-verification.security_analyzer"),
+    ).not.toBeInTheDocument();
+  });
+  it("shows the profile's settings only once the default migration has run", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({ default_profile_migrated: false }),
+    );
+    vi.spyOn(SettingsService, "saveSettings").mockResolvedValue(true as never);
+    let finishMigration: () => void = () => {};
+    vi.spyOn(AgentProfilesService, "saveProfile").mockReturnValue(
+      new Promise((resolve) => {
+        finishMigration = () => resolve({} as never);
+      }),
+    );
+
+    renderVerificationSettingsScreen();
+
+    await waitFor(() =>
+      expect(AgentProfilesService.saveProfile).toHaveBeenCalled(),
+    );
+    expect(
+      screen.queryByTestId("sdk-settings-verification.critic_enabled"),
+    ).not.toBeInTheDocument();
+    finishMigration();
+    expect(
+      await screen.findByTestId("sdk-settings-verification.critic_enabled"),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the conversation settings editable when the profile can't load", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        conversation_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.conversation_settings,
+          confirmation_mode: true,
+        },
+      }),
+    );
+    vi.mocked(AgentProfilesService.getProfile).mockRejectedValue(
+      new Error("unreachable"),
+    );
+
+    renderVerificationSettingsScreen();
+
+    expect(
+      await screen.findByTestId("active-profile-load-error"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("sdk-settings-confirmation_mode"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("sdk-settings-verification.critic_enabled"),
+    ).not.toBeInTheDocument();
+
+    withActiveProfileVerification({ critic_enabled: false });
+    await userEvent.click(screen.getByTestId("active-profile-load-retry"));
+    expect(
+      await screen.findByTestId("sdk-settings-verification.critic_enabled"),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the conversation settings editable when an ACP profile is active", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        conversation_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.conversation_settings,
+          confirmation_mode: true,
+        },
+      }),
+    );
+    const acpProfile = {
+      ...ACTIVE_PROFILE,
+      agent_kind: "acp",
+      acp_server: "claude-code",
+    };
+    vi.spyOn(AgentProfilesService, "listProfiles").mockResolvedValue({
+      profiles: [acpProfile],
+      active_agent_profile_id: acpProfile.id,
+    } as never);
+    vi.spyOn(AgentProfilesService, "getProfile").mockResolvedValue({
+      name: acpProfile.name,
+      profile: acpProfile,
+    } as never);
+
+    renderVerificationSettingsScreen();
+
+    expect(
+      await screen.findByTestId("sdk-settings-confirmation_mode"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("active-profile-scope-notice")).toHaveTextContent(
+      /ACP/,
+    );
+    expect(
+      screen.queryByTestId("sdk-settings-verification.critic_enabled"),
     ).not.toBeInTheDocument();
   });
 });

@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { BrandButton } from "#/components/features/settings/brand-button";
 import { I18nKey } from "#/i18n/declaration";
 import { Typography } from "#/ui/typography";
 import { cn } from "#/utils/utils";
@@ -31,5 +32,34 @@ export function ActiveProfileScopeNotice({
         { name: profileName },
       )}
     </Typography.Text>
+  );
+}
+
+/** Say the profile a behavior page edits could not be loaded, with a retry. */
+export function ActiveProfileLoadError({
+  onRetry,
+  className,
+}: {
+  onRetry: () => void;
+  className?: string;
+}) {
+  const { t } = useTranslation("openhands");
+  return (
+    <div
+      data-testid="active-profile-load-error"
+      className={cn("flex flex-col items-start gap-2", className)}
+    >
+      <Typography.Text className="text-xs text-feedback-error">
+        {t(I18nKey.SETTINGS$BEHAVIOR_PROFILE_LOAD_FAILED)}
+      </Typography.Text>
+      <BrandButton
+        testId="active-profile-load-retry"
+        type="button"
+        variant="secondary"
+        onClick={onRetry}
+      >
+        {t(I18nKey.SETTINGS$BEHAVIOR_PROFILE_RETRY)}
+      </BrandButton>
+    </div>
   );
 }

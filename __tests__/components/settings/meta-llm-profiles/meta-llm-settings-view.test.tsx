@@ -110,6 +110,8 @@ describe("MetaLlmSettingsView", () => {
         profile: null,
         isAcp: false,
         isLoading: false,
+        isError: false,
+        retry: vi.fn(),
         save: saveProfileBehavior,
         isSaving: false,
         ...overrides,

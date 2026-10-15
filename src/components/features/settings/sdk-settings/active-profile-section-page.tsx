@@ -1,5 +1,8 @@
 import React from "react";
-import { ActiveProfileScopeNotice } from "#/components/features/settings/agent-profiles/active-profile-scope-notice";
+import {
+  ActiveProfileLoadError,
+  ActiveProfileScopeNotice,
+} from "#/components/features/settings/agent-profiles/active-profile-scope-notice";
 import { LlmSettingsInputsSkeleton } from "#/components/features/settings/llm-settings/llm-settings-inputs-skeleton";
 import { useSaveSettings } from "#/hooks/mutation/use-save-settings";
 import { useSettings } from "#/hooks/query/use-settings";
@@ -61,7 +64,27 @@ export function ActiveProfileSectionPage({
       isAcp={behavior.isAcp}
     />
   );
-  if (behavior.isAcp) return <div data-testid={testId}>{notice}</div>;
+  if (behavior.isAcp || behavior.isError) {
+    // The conversation settings stay global, so they remain editable.
+    const globalSources = settingsSources.filter(
+      (source) => source.settingsSource === "conversation_settings",
+    );
+    const header = () => (
+      <>
+        {notice}
+        {!behavior.isAcp && <ActiveProfileLoadError onRetry={behavior.retry} />}
+      </>
+    );
+    return globalSources.length > 0 ? (
+      <SdkSectionPage
+        settingsSources={globalSources}
+        header={header}
+        testId={testId}
+      />
+    ) : (
+      <div data-testid={testId}>{header()}</div>
+    );
+  }
   if (!settingsOverride) return <LlmSettingsInputsSkeleton />;
 
   const handleSave = async (payload: Record<string, unknown>) => {

@@ -159,11 +159,14 @@ export function ensureDefaultAgentProfileMigrated(
   return queryClient.ensureQueryData(migrationQuery(queryClient, backendId));
 }
 
-/** Run the migration as soon as a local backend is active. */
-export function useMigrateDefaultAgentProfile(): void {
+/**
+ * Run the migration as soon as a local backend is active. Anything that edits
+ * `default` waits for it, or the migration could overwrite the edit.
+ */
+export function useMigrateDefaultAgentProfile() {
   const queryClient = useQueryClient();
   const { backend } = useActiveBackend();
-  useQuery({
+  return useQuery({
     ...migrationQuery(queryClient, backend.id),
     enabled: backend.kind === "local" && !isNoBackend(backend),
   });

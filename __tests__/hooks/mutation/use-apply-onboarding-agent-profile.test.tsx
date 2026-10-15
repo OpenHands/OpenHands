@@ -1,8 +1,16 @@
 import { renderHook } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { HttpError } from "@openhands/typescript-client";
+import { DEFAULT_ENABLED_SKILL_NAMES } from "@openhands/extensions/skills";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import AgentProfilesService from "#/api/agent-profiles-service/agent-profiles-service.api";
+import * as activeBackendContext from "#/contexts/active-backend-context";
 import { useApplyOnboardingAgentProfile } from "#/hooks/mutation/use-apply-onboarding-agent-profile";
+import { ensureDefaultAgentProfileMigrated } from "#/hooks/use-migrate-default-agent-profile";
+
+vi.mock("#/hooks/use-migrate-default-agent-profile", () => ({
+  ensureDefaultAgentProfileMigrated: vi.fn(),
+}));
 
 vi.mock("#/api/agent-profiles-service/agent-profiles-service.api", () => ({
   __esModule: true,
@@ -36,6 +44,17 @@ function renderApply() {
 describe("useApplyOnboardingAgentProfile", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.spyOn(activeBackendContext, "useActiveBackend").mockReturnValue({
+      backend: {
+        id: "local-1",
+        name: "Local",
+        host: "http://127.0.0.1:18000",
+        apiKey: "",
+        kind: "local",
+      },
+      orgId: null,
+    });
+    vi.mocked(ensureDefaultAgentProfileMigrated).mockResolvedValue(true);
     vi.mocked(AgentProfilesService.getProfile).mockResolvedValue({
       name: "default",
       profile: STORED_DEFAULT,
@@ -87,5 +106,58 @@ describe("useApplyOnboardingAgentProfile", () => {
       acp_server: "claude-code",
       acp_model: null,
     });
+  });
+
+  it("configures `default` only after the default migration", async () => {
+    let finishMigration: (value: true) => void = () => {};
+    vi.mocked(ensureDefaultAgentProfileMigrated).mockReturnValue(
+      new Promise((resolve) => {
+        finishMigration = resolve;
+      }),
+    );
+
+    const applied = renderApply()({
+      agent_kind: "openhands",
+      llm_profile_ref: "new-llm",
+    });
+    await Promise.resolve();
+    expect(AgentProfilesService.getProfile).not.toHaveBeenCalled();
+
+    finishMigration(true);
+    await applied;
+    expect(AgentProfilesService.saveProfile).toHaveBeenCalledWith(
+      "default",
+      expect.objectContaining({ llm_profile_ref: "new-llm" }),
+    );
+  });
+
+  it("creates `default` fresh when none is stored", async () => {
+    vi.mocked(AgentProfilesService.getProfile)
+      .mockRejectedValueOnce(new HttpError(404, "Not Found"))
+      .mockResolvedValue({ name: "default", profile: STORED_DEFAULT } as never);
+
+    await renderApply()({
+      agent_kind: "openhands",
+      llm_profile_ref: "new-llm",
+    });
+
+    expect(AgentProfilesService.saveProfile).toHaveBeenCalledWith("default", {
+      agent_kind: "openhands",
+      llm_profile_ref: "new-llm",
+      public_skills: [...DEFAULT_ENABLED_SKILL_NAMES],
+    });
+  });
+
+  it("leaves `default` untouched when it can't be read", async () => {
+    vi.mocked(AgentProfilesService.getProfile).mockRejectedValue(
+      new HttpError(500, "Internal Server Error"),
+    );
+
+    await renderApply()({
+      agent_kind: "openhands",
+      llm_profile_ref: "new-llm",
+    });
+
+    expect(AgentProfilesService.saveProfile).not.toHaveBeenCalled();
   });
 });

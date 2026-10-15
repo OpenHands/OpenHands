@@ -1,4 +1,6 @@
 import { useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { HttpError } from "@openhands/typescript-client";
 import AgentProfilesService, {
   WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME,
   type AgentProfileSaveInput,
@@ -6,6 +8,9 @@ import AgentProfilesService, {
 import { mergeAgentProfileSaveInput } from "#/components/features/settings/agent-profiles/merge-agent-profile-save-input";
 import { useSaveAgentProfile } from "#/hooks/mutation/use-save-agent-profile";
 import { useActivateAgentProfile } from "#/hooks/mutation/use-activate-agent-profile";
+import { isNoBackend } from "#/api/backend-registry/active-store";
+import { useActiveBackend } from "#/contexts/active-backend-context";
+import { ensureDefaultAgentProfileMigrated } from "#/hooks/use-migrate-default-agent-profile";
 
 /**
  * The well-known agent profile onboarding configures. Conversations launch from
@@ -27,12 +32,21 @@ export const ONBOARDING_AGENT_PROFILE_NAME =
  * error shows when the user starts a conversation.
  */
 export function useApplyOnboardingAgentProfile() {
+  const queryClient = useQueryClient();
+  const { backend } = useActiveBackend();
   const saveProfile = useSaveAgentProfile();
   const activateProfile = useActivateAgentProfile();
 
   return useCallback(
     async (profile: AgentProfileSaveInput) => {
       try {
+        if (backend.kind === "local" && !isNoBackend(backend)) {
+          // A failed migration retries later and merges over this save.
+          await ensureDefaultAgentProfileMigrated(
+            queryClient,
+            backend.id,
+          ).catch(() => undefined);
+        }
         // An OpenHands choice merges over the stored `default`: it carries the
         // user's migrated skills, condenser and verification, which
         // re-onboarding must keep. An ACP choice replaces the profile, so a
@@ -43,7 +57,12 @@ export function useApplyOnboardingAgentProfile() {
                 ONBOARDING_AGENT_PROFILE_NAME,
               )
                 .then((detail) => detail.profile)
-                .catch(() => null)
+                .catch((error: unknown) => {
+                  if (error instanceof HttpError && error.status === 404) {
+                    return null;
+                  }
+                  throw error;
+                })
             : null;
         await saveProfile.mutateAsync({
           name: ONBOARDING_AGENT_PROFILE_NAME,
@@ -59,6 +78,6 @@ export function useApplyOnboardingAgentProfile() {
         console.error("Failed to configure onboarding agent profile:", error);
       }
     },
-    [saveProfile, activateProfile],
+    [queryClient, backend, saveProfile, activateProfile],
   );
 }

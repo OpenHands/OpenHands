@@ -21,14 +21,10 @@ import {
 } from "#/constants/skills-docs";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import { Settings, SkillInfo } from "#/types/settings";
+import * as activeBackendContext from "#/contexts/active-backend-context";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 
 const navigateMock = vi.fn();
-
-// Covered by its own tests; saves here only need it settled.
-vi.mock("#/hooks/use-migrate-default-agent-profile", () => ({
-  ensureDefaultAgentProfileMigrated: vi.fn().mockResolvedValue(true),
-}));
 
 const ACTIVE_PROFILE = {
   id: "profile-default",
@@ -69,6 +65,7 @@ vi.mock("#/context/navigation-context", () => ({
 function buildSettings(overrides: Partial<Settings> = {}): Settings {
   return {
     ...MOCK_DEFAULT_USER_SETTINGS,
+    default_profile_migrated: true,
     ...overrides,
     agent_settings: {
       ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
@@ -660,5 +657,59 @@ Full skill body.`,
 
     expect(toast).toHaveBeenCalledWith("SETTINGS$BEHAVIOR_ACP_PROFILE");
     expect(saveProfile).not.toHaveBeenCalled();
+  });
+
+  it("says when the profile can't load and refuses toggles until it does", async () => {
+    const user = userEvent.setup();
+    const skill = buildSkill({ name: "save-me" });
+    vi.spyOn(SkillsService, "getSkills").mockResolvedValue([skill]);
+    const saveProfile = withActiveProfile({});
+    vi.mocked(AgentProfilesService.getProfile).mockRejectedValue(
+      new Error("unreachable"),
+    );
+    const toast = vi.spyOn(ToastHandlers, "displayErrorToast");
+
+    renderSkillsSettingsScreen();
+    const card = await screen.findByTestId(`skill-card-${skill.name}`);
+    await screen.findByTestId("active-profile-load-error");
+
+    await user.click(within(card).getByTestId(`skill-toggle-${skill.name}`));
+
+    expect(toast).toHaveBeenCalledWith("SETTINGS$BEHAVIOR_PROFILE_LOAD_FAILED");
+    expect(saveProfile).not.toHaveBeenCalled();
+  });
+
+  it("saves a toggle to the account's deny-list on Cloud", async () => {
+    vi.spyOn(activeBackendContext, "useActiveBackend").mockReturnValue({
+      backend: {
+        id: "cloud-1",
+        name: "Cloud",
+        host: "https://app.all-hands.dev",
+        apiKey: "test-key",
+        kind: "cloud",
+      },
+      orgId: "org-1",
+    });
+    const user = userEvent.setup();
+    const skill = buildSkill({ name: "save-me" });
+    vi.spyOn(SkillsService, "getSkills").mockResolvedValue([skill]);
+    const saveProfile = withActiveProfile({});
+    const saveSettings = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true as never);
+
+    renderSkillsSettingsScreen();
+    const card = await screen.findByTestId(`skill-card-${skill.name}`);
+    await user.click(within(card).getByTestId(`skill-toggle-${skill.name}`));
+
+    await waitFor(() =>
+      expect(saveSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ disabled_skills: [skill.name] }),
+      ),
+    );
+    expect(saveProfile).not.toHaveBeenCalled();
+    expect(
+      screen.queryByTestId("active-profile-scope-notice"),
+    ).not.toBeInTheDocument();
   });
 });

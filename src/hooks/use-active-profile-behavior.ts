@@ -4,7 +4,11 @@ import type { StoredOpenHandsProfile } from "#/api/agent-profiles-service/profil
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { mergeAgentProfileSaveInput } from "#/components/features/settings/agent-profiles/merge-agent-profile-save-input";
 import { useActiveAgentProfile } from "#/hooks/use-active-agent-profile";
-import { ensureDefaultAgentProfileMigrated } from "#/hooks/use-migrate-default-agent-profile";
+import {
+  ensureDefaultAgentProfileMigrated,
+  useMigrateDefaultAgentProfile,
+} from "#/hooks/use-migrate-default-agent-profile";
+import { useAgentProfiles } from "#/hooks/query/use-agent-profiles";
 import {
   AGENT_PROFILES_QUERY_KEYS,
   AGENT_PROFILES_RETRY_OPTIONS,
@@ -18,25 +22,42 @@ export interface ActiveProfileBehavior {
   /** False on Cloud, where these settings stay global. */
   isLocal: boolean;
   profileName: string | null;
-  /** The active profile when it is an OpenHands agent. */
+  /** The profile when it is an OpenHands agent and safe to edit. */
   profile: StoredOpenHandsProfile | null;
-  /** The active profile runs an ACP agent, which these settings don't reach. */
+  /** The profile runs an ACP agent, which these settings don't reach. */
   isAcp: boolean;
   isLoading: boolean;
+  /** The profile could not be loaded, or no profile is active. */
+  isError: boolean;
+  retry: () => void;
   save: (patch: ProfileBehaviorPatch) => Promise<void>;
   isSaving: boolean;
 }
 
 /**
- * The local agent profile that new conversations launch with, and a save that
- * merges a patch over its latest stored copy.
+ * A local agent profile — the active one unless `agentProfileId` names
+ * another — and a save that merges a patch over its latest stored copy. The
+ * profile is withheld until the one-time `default` migration has run, so no
+ * edit is built from settings the migration would then overwrite.
  */
-export function useActiveProfileBehavior(): ActiveProfileBehavior {
+export function useActiveProfileBehavior(
+  agentProfileId?: string | null,
+): ActiveProfileBehavior {
   const queryClient = useQueryClient();
   const { backend, orgId } = useActiveBackend();
   const isLocal = backend.kind === "local";
-  const { activeProfile, isLoading: listLoading } = useActiveAgentProfile();
-  const profileName = isLocal ? (activeProfile?.name ?? null) : null;
+  const { activeProfile, isLoading: activeLoading } = useActiveAgentProfile();
+  const {
+    data: profiles,
+    isLoading: listLoading,
+    refetch: refetchProfiles,
+  } = useAgentProfiles();
+  const summary = agentProfileId
+    ? (profiles?.profiles?.find((p) => p.id === agentProfileId) ?? null)
+    : activeProfile;
+  const profileName = isLocal ? (summary?.name ?? null) : null;
+  const migration = useMigrateDefaultAgentProfile();
+  const migrated = migration.isSuccess;
 
   const detail = useQuery({
     queryKey: AGENT_PROFILES_QUERY_KEYS.detail(
@@ -45,7 +66,7 @@ export function useActiveProfileBehavior(): ActiveProfileBehavior {
       profileName ?? "",
     ),
     queryFn: () => AgentProfilesService.getProfile(profileName!),
-    enabled: profileName != null,
+    enabled: profileName != null && migrated,
     ...AGENT_PROFILES_RETRY_OPTIONS,
     meta: { disableToast: true },
   });
@@ -76,7 +97,8 @@ export function useActiveProfileBehavior(): ActiveProfileBehavior {
     meta: { disableToast: true },
   });
 
-  const stored = detail.data?.profile;
+  const stored = migrated ? detail.data?.profile : undefined;
+  const listSettled = !activeLoading && !listLoading;
   return {
     isLocal,
     profileName,
@@ -84,8 +106,20 @@ export function useActiveProfileBehavior(): ActiveProfileBehavior {
       stored?.agent_kind === "openhands"
         ? (stored as StoredOpenHandsProfile)
         : null,
-    isAcp: activeProfile?.agent_kind === "acp",
-    isLoading: isLocal && (listLoading || detail.isLoading),
+    isAcp: summary?.agent_kind === "acp",
+    isLoading:
+      isLocal &&
+      (!listSettled || migration.isPending || (migrated && detail.isLoading)),
+    isError:
+      isLocal &&
+      (migration.isError ||
+        detail.isError ||
+        (listSettled && profileName === null)),
+    retry: () => {
+      if (migration.isError) migration.refetch();
+      if (detail.isError) detail.refetch();
+      if (profileName === null) refetchProfiles();
+    },
     save: async (patch) => {
       await mutation.mutateAsync(patch);
     },

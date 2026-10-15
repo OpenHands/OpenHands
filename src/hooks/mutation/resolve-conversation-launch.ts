@@ -2,9 +2,11 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { AgentKind } from "@openhands/typescript-client";
 import AgentProfilesService, {
   type AgentProfileListResponse,
+  type AgentProfileSummary,
 } from "#/api/agent-profiles-service/agent-profiles-service.api";
 import { profileHasRouter } from "#/api/agent-profiles-service/profile-behavior";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
+import { assertSubscriptionAuthReady } from "#/api/agent-server-adapter";
 import AgentServerConversationService, {
   type CreateConversationOptions,
 } from "#/api/conversation-service/agent-server-conversation-service.api";
@@ -45,14 +47,11 @@ export interface ResolveConversationLaunchOptions {
 }
 
 /** Decide which agent profile and LLM a new conversation launches with. */
-export async function resolveConversationLaunch({
-  queryClient,
-  backendId,
-  orgId,
-  isCloud,
-  agentProfileId,
-  llmProfile,
-}: ResolveConversationLaunchOptions): Promise<ConversationLaunch> {
+export async function resolveConversationLaunch(
+  options: ResolveConversationLaunchOptions,
+): Promise<ConversationLaunch> {
+  const { queryClient, backendId, orgId, isCloud, agentProfileId, llmProfile } =
+    options;
   if (!isCloud) {
     // `default` must carry the global settings it used to launch from before
     // it launches by id. A failed migration retries on the next launch; this
@@ -82,6 +81,7 @@ export async function resolveConversationLaunch({
     (p) => p.id === requestedAgentProfileId,
   );
   if (isCloud) {
+    if (await cloudFallsBackToDefault(options, profile)) return {};
     return {
       agentProfileId: requestedAgentProfileId,
       agentProfileKind: profile?.agent_kind,
@@ -153,6 +153,59 @@ export async function resolveConversationLaunch({
   };
 }
 
+/**
+ * Cloud launches its own default instead of an OpenHands profile whose LLM
+ * profile is gone, unless the profile restricts secrets, which only a profile
+ * launch enforces.
+ */
+async function cloudFallsBackToDefault(
+  { queryClient, backendId, orgId }: ResolveConversationLaunchOptions,
+  profile: AgentProfileSummary | undefined,
+): Promise<boolean> {
+  if (profile?.agent_kind !== "openhands" || !profile.llm_profile_ref) {
+    return false;
+  }
+  const llm = await queryClient
+    .ensureQueryData({
+      queryKey: [...LLM_PROFILES_QUERY_KEYS.all, backendId, orgId],
+      queryFn: ProfilesService.listProfiles,
+      retry: false,
+      meta: { disableToast: true },
+    })
+    .catch(() => null);
+  if (llm?.profiles.some((p) => p.name === profile.llm_profile_ref)) {
+    return false;
+  }
+  try {
+    const detail = await queryClient.fetchQuery({
+      queryKey: AGENT_PROFILES_QUERY_KEYS.detail(
+        backendId,
+        orgId,
+        profile.name,
+      ),
+      queryFn: () => AgentProfilesService.getProfile(profile.name),
+      ...AGENT_PROFILES_RETRY_OPTIONS,
+      meta: { disableToast: true },
+    });
+    return !Array.isArray(
+      (detail.profile as { secret_refs?: unknown }).secret_refs,
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Fail before creating a conversation whose subscription LLM isn't connected. */
+async function assertLaunchLlmReady(llmProfile: string): Promise<void> {
+  let config: unknown;
+  try {
+    ({ config } = await ProfilesService.getProfile(llmProfile));
+  } catch {
+    return;
+  }
+  await assertSubscriptionAuthReady({ llm: config });
+}
+
 /** Create a conversation from the resolved launch and record the LLM it runs. */
 export async function launchConversation(
   { agentProfileId, llmProfile, ...context }: ResolveConversationLaunchOptions,
@@ -163,6 +216,9 @@ export async function launchConversation(
     agentProfileId,
     llmProfile,
   });
+  if (!context.isCloud && launch.llmProfile) {
+    await assertLaunchLlmReady(launch.llmProfile);
+  }
   const task = await AgentServerConversationService.createConversation({
     ...options,
     ...launchProfileOptions(launch),
