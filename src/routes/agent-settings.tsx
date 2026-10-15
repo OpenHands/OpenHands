@@ -1234,7 +1234,7 @@ export function AgentSettingsScreen({
             </Typography.Text>
             <textarea
               data-testid="agent-command-input"
-              className="bg-tertiary border border-[#717888] rounded-sm p-2 text-sm font-mono text-contrast placeholder:text-[#717888] min-h-15 resize-y focus:outline-none focus:border-contrast"
+              className="bg-tertiary border border-border-input dark:border-[#717888] rounded-sm p-2 text-sm font-mono text-contrast placeholder:text-text-dim dark:placeholder:text-[#717888] min-h-15 resize-y focus:outline-none focus:border-contrast"
               value={commandText}
               placeholder={commandPlaceholder}
               onChange={(e) => {
@@ -1259,7 +1259,7 @@ export function AgentSettingsScreen({
                 setCommandText(nextCommandText);
               }}
             />
-            <Typography.Text className="text-xs text-[#717888]">
+            <Typography.Text className="text-xs text-text-dim dark:text-[#717888]">
               {t(I18nKey.SETTINGS$AGENT_COMMAND_HINT)}
             </Typography.Text>
           </div>
@@ -1268,7 +1268,7 @@ export function AgentSettingsScreen({
 
       {isAcp && selectedPreset !== ACP_CUSTOM_PRESET_KEY && (
         <>
-          <hr className="border-[#3D4046]" />
+          <hr className="border-divider dark:border-[#3D4046]" />
           <AcpCredentialsSection
             form={acpCredentialForm}
             providerKey={selectedPreset}
@@ -1276,7 +1276,7 @@ export function AgentSettingsScreen({
               liveModels.discovery?.error?.code === "ACPAuthRequired"
             }
           />
-          <hr className="border-[#3D4046]" />
+          <hr className="border-divider dark:border-[#3D4046]" />
         </>
       )}
 
@@ -1352,7 +1352,7 @@ export function AgentSettingsScreen({
           {liveModels.isDiscovering && selectedProvider && (
             <Typography.Text
               testId="agent-model-discovering"
-              className="text-xs text-[#717888]"
+              className="text-xs text-text-dim dark:text-[#717888]"
             >
               {t(I18nKey.SETTINGS$AGENT_MODEL_DISCOVERING, {
                 agent: selectedProvider.display_name,
@@ -1363,7 +1363,7 @@ export function AgentSettingsScreen({
             selectedProvider && (
               <Typography.Text
                 testId="agent-model-discovery-needs-auth"
-                className="text-xs text-[#717888]"
+                className="text-xs text-text-dim dark:text-[#717888]"
               >
                 {t(I18nKey.SETTINGS$AGENT_MODEL_DISCOVERY_NEEDS_AUTH, {
                   agent: selectedProvider.display_name,
@@ -1373,12 +1373,12 @@ export function AgentSettingsScreen({
           {modelListHint && selectedProvider && (
             <Typography.Text
               testId={modelListHint.testId}
-              className="text-xs text-[#717888]"
+              className="text-xs text-text-dim dark:text-[#717888]"
             >
               {t(modelListHint.key, { agent: selectedProvider.display_name })}
             </Typography.Text>
           )}
-          <Typography.Text className="text-xs text-[#717888]">
+          <Typography.Text className="text-xs text-text-dim dark:text-[#717888]">
             {t(I18nKey.SETTINGS$AGENT_MODEL_HINT)}
           </Typography.Text>
         </div>

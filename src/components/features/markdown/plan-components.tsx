@@ -122,7 +122,7 @@ export function createPlanComponents(extraClassName?: string) {
     a: ({ children, className, href }: AnchorProps) => (
       <a
         className={cn(
-          "text-blue-500 hover:underline",
+          "text-info hover:underline dark:text-blue-500",
           className,
           extraClassName,
         )}

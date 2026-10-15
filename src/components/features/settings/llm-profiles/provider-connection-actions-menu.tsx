@@ -5,7 +5,7 @@ import {
   useCallback,
   useState,
 } from "react";
-import ReactDOM from "react-dom";
+import { AppearancePortal } from "#/components/shared/appearance-portal";
 import { useTranslation } from "react-i18next";
 import { cn } from "#/utils/utils";
 import { dropdownMenuListClassName } from "#/utils/dropdown-classes";
@@ -169,10 +169,10 @@ export function ProviderConnectionActionsMenu({
     if (typeof document === "undefined" || !portalStyle) {
       return null;
     }
-    return ReactDOM.createPortal(
-      // portal position computed from DOM bounding rect at runtime
-      <div style={portalStyle}>{menu}</div>,
-      document.body,
+    return (
+      <AppearancePortal>
+        <div style={portalStyle}>{menu}</div>
+      </AppearancePortal>
     );
   }
 

@@ -22,7 +22,7 @@ export function RemoveButton({
         className,
       )}
     >
-      <CloseIcon width={18} height={18} />
+      <CloseIcon width={18} height={18} className="text-white" />
     </button>
   );
 }

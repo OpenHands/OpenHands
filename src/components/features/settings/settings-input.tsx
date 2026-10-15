@@ -94,7 +94,10 @@ export const SettingsInput = forwardRef<HTMLInputElement, SettingsInputProps>(
           {startContent}
           <span className={cn("text-sm", labelClassName)}>{label}</span>
           {showRequiredTag && (
-            <span className="text-danger text-sm leading-none" aria-hidden>
+            <span
+              className="text-danger text-sm leading-none dark:text-red-400"
+              aria-hidden
+            >
               *
             </span>
           )}
@@ -132,7 +135,7 @@ export const SettingsInput = forwardRef<HTMLInputElement, SettingsInputProps>(
           className={cn(
             formControlSettingsFieldClassName,
             "disabled:bg-surface-raised disabled:border-border-subtle",
-            error && "border-danger",
+            error && "border-danger dark:border-red-500",
             inputClassName,
           )}
         />
@@ -141,7 +144,7 @@ export const SettingsInput = forwardRef<HTMLInputElement, SettingsInputProps>(
             id={errorId}
             role="alert"
             data-testid={testId ? `${testId}-error` : undefined}
-            className="text-xs text-danger -mt-1"
+            className="text-xs text-danger -mt-1 dark:text-red-400"
           >
             {error}
           </p>

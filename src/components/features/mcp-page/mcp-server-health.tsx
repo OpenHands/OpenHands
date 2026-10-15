@@ -25,7 +25,7 @@ const DOT_CLASS_BY_STATUS: Record<McpServerHealth["status"], string> = {
   unchecked: "bg-text-tertiary",
   checking: "bg-interactive-selected animate-pulse",
   healthy: "bg-status-success",
-  failed: "bg-red-500",
+  failed: "bg-danger dark:bg-red-500",
 };
 
 const actionClassName =

@@ -1,5 +1,4 @@
 import React, { useLayoutEffect, useState } from "react";
-import ReactDOM from "react-dom";
 import { GitCommitHorizontal } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import ArrowDownIcon from "#/icons/u-arrow-down.svg?react";
@@ -20,6 +19,7 @@ import {
   getGitPushPrompt,
 } from "#/utils/utils";
 import { Provider } from "#/types/settings";
+import { AppearancePortal } from "#/components/shared/appearance-portal";
 
 const GIT_MENU_ITEM_CLASSNAME = "!w-auto whitespace-nowrap";
 
@@ -102,65 +102,66 @@ export function ConversationGitActionsMenu({
     return null;
   }
 
-  return ReactDOM.createPortal(
-    <ContextMenu
-      ref={menuRef}
-      testId={`${testIdPrefix}-menu`}
-      theme="popover"
-      style={portalStyle}
-      className="w-max min-w-[8rem]"
-    >
-      <ContextMenuListItem
-        testId={`${testIdPrefix}-commit`}
-        onClick={handleCommit}
-        className={GIT_MENU_ITEM_CLASSNAME}
+  return (
+    <AppearancePortal>
+      <ContextMenu
+        ref={menuRef}
+        testId={`${testIdPrefix}-menu`}
+        theme="popover"
+        style={portalStyle}
+        className="w-max min-w-[8rem]"
       >
-        <ToolsContextMenuIconText
-          icon={<GitCommitHorizontal className="size-4" aria-hidden />}
-          text={t(I18nKey.DIFF_VIEWER$COMMITS)}
-        />
-      </ContextMenuListItem>
-      <ContextMenuListItem
-        testId={`${testIdPrefix}-pull`}
-        onClick={handlePull}
-        className={GIT_MENU_ITEM_CLASSNAME}
-      >
-        <ToolsContextMenuIconText
-          icon={<ArrowDownIcon width={16} height={16} aria-hidden />}
-          text={t(I18nKey.COMMON$PULL)}
-        />
-      </ContextMenuListItem>
-      <ContextMenuListItem
-        testId={`${testIdPrefix}-push`}
-        onClick={handlePush}
-        className={GIT_MENU_ITEM_CLASSNAME}
-      >
-        <ToolsContextMenuIconText
-          icon={<ArrowUpIcon width={16} height={16} aria-hidden />}
-          text={t(I18nKey.COMMON$PUSH)}
-        />
-      </ContextMenuListItem>
-      <ContextMenuListItem
-        testId={`${testIdPrefix}-create-pr`}
-        onClick={handleCreatePr}
-        className={GIT_MENU_ITEM_CLASSNAME}
-      >
-        <ToolsContextMenuIconText
-          icon={<PrIcon width={16} height={16} aria-hidden />}
-          text={t(I18nKey.COMMON$CREATE_PR)}
-        />
-      </ContextMenuListItem>
-      <ContextMenuListItem
-        testId={`${testIdPrefix}-create-new-branch`}
-        onClick={handleCreateNewBranch}
-        className={GIT_MENU_ITEM_CLASSNAME}
-      >
-        <ToolsContextMenuIconText
-          icon={<CodeBranchIcon width={16} height={16} aria-hidden />}
-          text={t(I18nKey.COMMON$CREATE_NEW_BRANCH)}
-        />
-      </ContextMenuListItem>
-    </ContextMenu>,
-    document.body,
+        <ContextMenuListItem
+          testId={`${testIdPrefix}-commit`}
+          onClick={handleCommit}
+          className={GIT_MENU_ITEM_CLASSNAME}
+        >
+          <ToolsContextMenuIconText
+            icon={<GitCommitHorizontal className="size-4" aria-hidden />}
+            text={t(I18nKey.DIFF_VIEWER$COMMITS)}
+          />
+        </ContextMenuListItem>
+        <ContextMenuListItem
+          testId={`${testIdPrefix}-pull`}
+          onClick={handlePull}
+          className={GIT_MENU_ITEM_CLASSNAME}
+        >
+          <ToolsContextMenuIconText
+            icon={<ArrowDownIcon width={16} height={16} aria-hidden />}
+            text={t(I18nKey.COMMON$PULL)}
+          />
+        </ContextMenuListItem>
+        <ContextMenuListItem
+          testId={`${testIdPrefix}-push`}
+          onClick={handlePush}
+          className={GIT_MENU_ITEM_CLASSNAME}
+        >
+          <ToolsContextMenuIconText
+            icon={<ArrowUpIcon width={16} height={16} aria-hidden />}
+            text={t(I18nKey.COMMON$PUSH)}
+          />
+        </ContextMenuListItem>
+        <ContextMenuListItem
+          testId={`${testIdPrefix}-create-pr`}
+          onClick={handleCreatePr}
+          className={GIT_MENU_ITEM_CLASSNAME}
+        >
+          <ToolsContextMenuIconText
+            icon={<PrIcon width={16} height={16} aria-hidden />}
+            text={t(I18nKey.COMMON$CREATE_PR)}
+          />
+        </ContextMenuListItem>
+        <ContextMenuListItem
+          testId={`${testIdPrefix}-create-new-branch`}
+          onClick={handleCreateNewBranch}
+          className={GIT_MENU_ITEM_CLASSNAME}
+        >
+          <ToolsContextMenuIconText
+            icon={<CodeBranchIcon width={16} height={16} aria-hidden />}
+            text={t(I18nKey.COMMON$CREATE_NEW_BRANCH)}
+          />
+        </ContextMenuListItem>
+      </ContextMenu>
+    </AppearancePortal>
   );
 }

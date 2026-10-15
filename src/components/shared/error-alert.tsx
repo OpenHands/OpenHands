@@ -14,7 +14,7 @@ export function ErrorAlert({ children, testId, className }: ErrorAlertProps) {
       role="alert"
       data-testid={testId}
       className={cn(
-        "rounded-md border border-status-error/40 bg-status-error/10 p-3 text-sm text-status-error whitespace-pre-wrap break-words",
+        "rounded-md border border-danger/40 bg-danger-soft p-3 text-sm text-danger-soft-foreground dark:border-status-error/40 dark:bg-status-error/10 dark:text-status-error whitespace-pre-wrap break-words",
         className,
       )}
     >

@@ -182,7 +182,7 @@ export function SetupFormField({
           onBlur={onBlur}
           className={cn(
             formControlMultilineFieldClassName,
-            error && "border-semantic-danger",
+            error && "border-semantic-danger dark:border-semantic-danger",
           )}
         />
         <FieldError testId={testId} error={error} />
@@ -209,7 +209,7 @@ export function SetupFormField({
           className={cn(
             formControlSettingsFieldClassName,
             "file:mr-3 file:rounded-md file:border-0 file:bg-neutral-700 file:px-3 file:py-1.5 file:text-sm file:text-white",
-            error && "border-semantic-danger",
+            error && "border-semantic-danger dark:border-semantic-danger",
           )}
         />
         {fieldText(value) && (
@@ -237,7 +237,7 @@ export function SetupFormField({
           onBlur={onBlur}
           className={cn(
             formControlMultilineFieldClassName,
-            error && "border-semantic-danger",
+            error && "border-semantic-danger dark:border-semantic-danger",
           )}
         />
         <FieldError testId={testId} error={error} />

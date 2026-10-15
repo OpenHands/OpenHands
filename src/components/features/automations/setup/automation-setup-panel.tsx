@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { createPortal } from "react-dom";
+import { AppearancePortal } from "#/components/shared/appearance-portal";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
@@ -1861,9 +1861,11 @@ export function AutomationSetupPanel({
 
   return (
     <>
-      {toolbarPortal
-        ? createPortal(renderToolbarActions(), toolbarPortal)
-        : null}
+      {toolbarPortal ? (
+        <AppearancePortal container={toolbarPortal}>
+          {renderToolbarActions()}
+        </AppearancePortal>
+      ) : null}
       <div
         data-testid="automation-setup-panel"
         className="flex h-full min-h-0 flex-col bg-canvas-base"

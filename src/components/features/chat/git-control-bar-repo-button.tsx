@@ -82,10 +82,10 @@ export function GitControlBarRepoButton({
       disabled={disabled}
       className={cn(
         "group flex flex-row items-center justify-between gap-2 pl-2.5 pr-2.5 py-1 rounded-[100px] truncate relative",
-        "border border-[rgba(71,74,84,0.50)] bg-transparent",
+        "border border-border-input bg-transparent dark:border-[rgba(71,74,84,0.50)]",
         disabled
           ? "cursor-not-allowed opacity-50"
-          : "cursor-pointer hover:border-border-subtle",
+          : "cursor-pointer hover:border-muted dark:hover:border-border-subtle",
       )}
     >
       <div className="w-3 h-3 flex items-center justify-center flex-shrink-0 text-contrast">
@@ -97,7 +97,7 @@ export function GitControlBarRepoButton({
             data-testid="git-control-bar-connect-repo-icon"
           />
         ) : (
-          <RepoForkedIcon width={12} height={12} color="white" />
+          <RepoForkedIcon width={12} height={12} color="var(--oh-contrast)" />
         )}
       </div>
       <div

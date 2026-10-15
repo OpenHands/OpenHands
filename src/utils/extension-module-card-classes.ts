@@ -8,7 +8,7 @@ export const extensionModuleCardInteractiveClassName =
 
 /** Shared pill chrome for Skills, automation cards, and related modals. */
 export const extensionModuleCardPillClassName =
-  "inline-flex max-w-full shrink-0 items-center whitespace-nowrap rounded-full bg-[rgba(255,255,255,0.04)] px-2 py-0.5 text-[11px] leading-4 text-tertiary-light";
+  "inline-flex max-w-full shrink-0 items-center whitespace-nowrap rounded-full bg-surface-raised px-2 py-0.5 text-[11px] leading-4 text-tertiary-light dark:bg-[rgba(255,255,255,0.04)]";
 
 /** Establishes the inline-size container queried by {@link extensionModuleCardGridClassName}. */
 export const extensionModuleCardGridContainerClassName =

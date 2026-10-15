@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Light theme contrast follow-up</title>
+    <style>
+      :root {
+        --fg: #1a1a1a;
+        --muted: #5a5a5a;
+        --subtle: #85857d;
+        --bg: #fdfdfb;
+        --card: #ffffff;
+        --elevated: #f7f6f1;
+        --accent: #2b4eaa;
+        --accent-soft: #e6ecfa;
+        --rule: #e2e2dc;
+        --rule-strong: #bdbcb4;
+        --code-bg: #f3f1ec;
+        --warn: #b25b0e;
+        --ok: #2f7a3a;
+        --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Helvetica,
+          Arial, sans-serif;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--sans); }
+      body { line-height: 1.6; font-size: 16px; }
+      .wrap { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 44px; max-width: 1160px; margin: 0 auto; padding: 32px 28px 96px; }
+      nav { position: sticky; top: 24px; align-self: start; font-size: 13px; }
+      nav h2 { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 0 0 10px; }
+      nav ol { list-style: none; padding: 0; margin: 0; counter-reset: toc; }
+      nav li { counter-increment: toc; margin: 6px 0; }
+      nav li::before { content: counter(toc) ". "; color: var(--muted); }
+      nav a { color: var(--fg); text-decoration: none; }
+      nav a:hover { color: var(--accent); }
+      header { border-bottom: 1px solid var(--rule); padding-bottom: 22px; margin-bottom: 28px; }
+      .eyebrow { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); font-weight: 700; }
+      h1 { font-size: 34px; line-height: 1.18; margin: 6px 0 8px; letter-spacing: -.01em; }
+      header p { color: var(--muted); max-width: 760px; }
+      h2 { font-size: 22px; margin: 44px 0 10px; }
+      h2 .num { color: var(--muted); font-weight: 500; margin-right: 8px; }
+      h3 { font-size: 16px; margin: 22px 0 8px; }
+      code { font-family: var(--mono); font-size: .88em; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+      table { border-collapse: collapse; width: 100%; font-size: 14px; margin: 14px 0; }
+      th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+      th { font-weight: 650; background: var(--code-bg); }
+      .callout { border-left: 3px solid var(--accent); background: var(--accent-soft); padding: 11px 14px; margin: 15px 0; border-radius: 0 4px 4px 0; font-size: 14.5px; }
+      .callout.note { border-color: var(--muted); background: var(--code-bg); }
+      .callout.warn { border-color: var(--warn); background: #fbf1e6; }
+      .fig { margin: 18px 0 24px; }
+      .fig svg { display: block; max-width: 100%; height: auto; background: #fff; border: 1px solid var(--rule); border-radius: 6px; }
+      .fig figcaption { font-size: 13px; color: var(--muted); margin-top: 7px; text-align: center; }
+      a.src { font-family: var(--mono); font-size: 12px; color: var(--accent); text-decoration: none; border-bottom: 1px dotted var(--accent); }
+      .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+      .metric { border: 1px solid var(--rule); border-radius: 6px; padding: 14px; background: var(--card); }
+      .metric strong { display: block; font-size: 22px; color: var(--ok); }
+      .metric span { color: var(--muted); font-size: 13px; }
+      details { border: 1px solid var(--rule); border-radius: 6px; margin: 12px 0; }
+      details > summary { cursor: pointer; padding: 8px 12px; color: var(--muted); font-size: 13px; }
+      details > div { padding: 0 12px 12px; }
+      ul.compact { columns: 2; padding-left: 22px; }
+      @media (max-width: 760px) { .wrap { grid-template-columns: 1fr; } .grid { grid-template-columns: 1fr; } ul.compact { columns: 1; } }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <nav aria-label="Contents">
+        <h2>Contents</h2>
+        <ol>
+          <li><a href="#decision">What changed</a></li>
+          <li><a href="#flow">Semantic design</a></li>
+          <li><a href="#evidence">Measured evidence</a></li>
+          <li><a href="#scope">Review map</a></li>
+          <li><a href="#verification">Verification</a></li>
+        </ol>
+      </nav>
+      <main>
+        <header>
+          <div class="eyebrow">PR design note · Light+ and Solarized Light</div>
+          <h1>Contrast now follows UI meaning, not the panel underneath</h1>
+          <p>
+            This follow-up addresses the visual QA raised after the light themes landed:
+            status badges, notifications, controls, icons, dividers, and hover states now use
+            shared semantic tokens that remain readable across real Canvas surfaces.
+          </p>
+        </header>
+
+        <section id="decision">
+          <h2><span class="num">1</span>The UI is more consistent without redesigning the themes</h2>
+          <div class="callout">
+            ★ Light+ and Solarized Light keep their visual character, while badges clear the
+            4.5:1 text threshold and interactive form boundaries clear 3:1 in browser measurements.
+          </div>
+          <p>
+            The follow-up commits audit exposed dark-only assumptions across Canvas and move the
+            light rendering onto theme-aware roles, while explicit <code>dark:</code> compatibility
+            overrides preserve the established Neutral palette. They also close the remaining
+            compositing gaps: a translucent badge no longer changes legibility when its parent card
+            changes surface, shared inputs no longer use the decorative border token, and UI rendered
+            through a portal now keeps the active appearance context.
+          </p>
+          <p>
+            Sources:
+            <a class="src" href="https://github.com/rajshah4/OpenHands/blob/af1b9afa76d508ca19a487a3869e0b14309edc39/src/utils/status-tone-classes.ts#L18">status-tone-classes.ts:18</a>,
+            <a class="src" href="https://github.com/rajshah4/OpenHands/blob/af1b9afa76d508ca19a487a3869e0b14309edc39/src/utils/form-control-classes.ts#L8">form-control-classes.ts:8</a>,
+            <a class="src" href="https://github.com/rajshah4/OpenHands/blob/af1b9afa76d508ca19a487a3869e0b14309edc39/src/components/shared/appearance-portal.tsx#L10">appearance-portal.tsx:10</a>,
+            <a class="src" href="https://github.com/rajshah4/OpenHands/blob/af1b9afa76d508ca19a487a3869e0b14309edc39/src/themes/color-theme/definitions/light-plus.ts#L106">light-plus.ts:106</a>
+          </p>
+        </section>
+
+        <section id="flow">
+          <h2><span class="num">2</span>One semantic path replaces surface-dependent color patches</h2>
+          <figure class="fig">
+            <svg viewBox="0 0 920 360" role="img" aria-labelledby="flow-title flow-desc">
+              <title id="flow-title">Status and form-control styling before and after</title>
+              <desc id="flow-desc">Ad-hoc translucent tone classes and decorative borders are replaced by semantic badge pairs and the interactive boundary token.</desc>
+              <defs>
+                <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+                  <path d="M0,0 L10,5 L0,10 Z" fill="var(--subtle)" />
+                </marker>
+                <marker id="arr-new" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+                  <path d="M0,0 L10,5 L0,10 Z" fill="var(--warn)" />
+                </marker>
+                <style>
+                  .old { fill: var(--code-bg); stroke: var(--subtle); stroke-width: 1.4; stroke-dasharray: 5 3; }
+                  .new { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2; }
+                  .ttl { font: 700 13px var(--sans); fill: var(--fg); }
+                  .sub { font: 11.5px var(--mono); fill: var(--muted); }
+                  .edge { stroke: var(--subtle); stroke-width: 1.5; stroke-dasharray: 5 3; fill: none; marker-end: url(#arr); }
+                  .edge-new { stroke: var(--warn); stroke-width: 1.8; fill: none; marker-end: url(#arr-new); }
+                  .label { font: 700 11px var(--mono); fill: var(--warn); }
+                </style>
+              </defs>
+              <text class="ttl" x="40" y="32">Before · color depends on ancestor surface</text>
+              <rect class="old" x="40" y="55" width="225" height="64" rx="6" />
+              <text class="ttl" x="152" y="82" text-anchor="middle">bg-info/10 + text-info</text>
+              <text class="sub" x="152" y="102" text-anchor="middle">same class · different result</text>
+              <rect class="old" x="340" y="55" width="180" height="64" rx="6" />
+              <text class="ttl" x="430" y="82" text-anchor="middle">parent surface</text>
+              <text class="sub" x="430" y="102" text-anchor="middle">base / raised / tertiary</text>
+              <path class="edge" d="M265,87 L340,87" />
+              <rect class="old" x="595" y="55" width="270" height="64" rx="6" />
+              <text class="ttl" x="730" y="82" text-anchor="middle">3.97–4.04:1 worst case</text>
+              <text class="sub" x="730" y="102" text-anchor="middle">small status text misses AA</text>
+              <path class="edge" d="M520,87 L595,87" />
+
+              <text class="ttl" x="40" y="178">After · components request a stable semantic pair</text>
+              <rect class="new" x="40" y="205" width="225" height="72" rx="6" />
+              <text class="ttl" x="152" y="234" text-anchor="middle">statusToneBadgeClassName</text>
+              <text class="sub" x="152" y="255" text-anchor="middle">success · warning · danger · info</text>
+              <rect class="new" x="340" y="205" width="180" height="72" rx="6" />
+              <text class="ttl" x="430" y="234" text-anchor="middle">soft fill + foreground</text>
+              <text class="sub" x="430" y="255" text-anchor="middle">opaque for light palettes</text>
+              <path class="edge-new" d="M265,241 L340,241" />
+              <text class="label" x="302" y="231" text-anchor="middle">semantic</text>
+              <rect class="new" x="595" y="205" width="270" height="72" rx="6" />
+              <text class="ttl" x="730" y="234" text-anchor="middle">4.97–5.00:1 worst case</text>
+              <text class="sub" x="730" y="255" text-anchor="middle">stable across every panel surface</text>
+              <path class="edge-new" d="M520,241 L595,241" />
+
+              <rect class="new" x="205" y="304" width="510" height="34" rx="6" />
+              <text class="ttl" x="460" y="326" text-anchor="middle">Shared fields → border-border-input → 3.56–3.61:1</text>
+            </svg>
+            <figcaption>
+              Fig 1 · Shared roles make contrast a theme contract instead of a component-by-component accident.
+            </figcaption>
+          </figure>
+          <p>
+            Sources:
+            <a class="src" href="https://github.com/rajshah4/OpenHands/blob/af1b9afa76d508ca19a487a3869e0b14309edc39/src/tailwind.css#L62">tailwind.css:62</a>,
+            <a class="src" href="https://github.com/rajshah4/OpenHands/blob/af1b9afa76d508ca19a487a3869e0b14309edc39/src/utils/status-tone-classes.ts#L18">status-tone-classes.ts:18</a>,
+            <a class="src" href="https://github.com/rajshah4/OpenHands/blob/af1b9afa76d508ca19a487a3869e0b14309edc39/src/utils/form-control-classes.ts#L75">form-control-classes.ts:75</a>
+          </p>
+        </section>
+
+        <section id="evidence">
+          <h2><span class="num">3</span>Browser measurements confirm the remaining gaps are closed</h2>
+          <div class="grid">
+            <div class="metric"><strong>3.97 → 4.97</strong><span>Light+ worst status badge</span></div>
+            <div class="metric"><strong>4.04 → 5.00</strong><span>Solarized Light worst status badge</span></div>
+            <div class="metric"><strong>1.57 → 3.56</strong><span>Light+ field boundary</span></div>
+            <div class="metric"><strong>1.54 → 3.61</strong><span>Solarized Light field boundary</span></div>
+            <div class="metric"><strong>4.17 → 5.06</strong><span>Light+ update badge while hovered</span></div>
+            <div class="metric"><strong>4.02 → 5.01</strong><span>Solarized update badge while hovered</span></div>
+          </div>
+          <p>
+            Measurements came from the real mock-mode Canvas at 1440×900. Badge fills and field
+            boundaries were sampled from browser-rendered pixels, including compositing. Tests model
+            the same behavior across base, secondary, surface, tertiary, raised, and hover surfaces.
+          </p>
+          <p>
+            Sources:
+            <a class="src" href="https://github.com/rajshah4/OpenHands/blob/af1b9afa76d508ca19a487a3869e0b14309edc39/__tests__/themes/status-tone-contrast.test.ts#L26">status-tone-contrast.test.ts:26</a>,
+            <a class="src" href="https://github.com/rajshah4/OpenHands/blob/af1b9afa76d508ca19a487a3869e0b14309edc39/__tests__/themes/light-theme-contrast.test.ts#L99">light-theme-contrast.test.ts:99</a>
+          </p>
+        </section>
+
+        <section id="scope">
+          <h2><span class="num">4</span>Review map: tokens first, migrations second</h2>
+          <table>
+            <thead><tr><th>Area</th><th>What to review</th><th>Representative source</th></tr></thead>
+            <tbody>
+              <tr><td>Theme contract</td><td>Soft status pairs, light palette values, input boundary and hover tokens</td><td><a class="src" href="https://github.com/rajshah4/OpenHands/blob/af1b9afa76d508ca19a487a3869e0b14309edc39/src/themes/color-theme/definitions/light-plus.ts#L106">light-plus.ts:106</a></td></tr>
+              <tr><td>Shared utilities</td><td>Status badges/banners and form/dropdown boundary classes</td><td><a class="src" href="https://github.com/rajshah4/OpenHands/blob/af1b9afa76d508ca19a487a3869e0b14309edc39/src/utils/status-tone-classes.ts#L18">status-tone-classes.ts:18</a></td></tr>
+              <tr><td>Portal context</td><td>Menus, drawers, and dialogs rendered under <code>document.body</code> retain the active light appearance</td><td><a class="src" href="https://github.com/rajshah4/OpenHands/blob/af1b9afa76d508ca19a487a3869e0b14309edc39/src/components/shared/appearance-portal.tsx#L10">appearance-portal.tsx:10</a></td></tr>
+              <tr><td>Component audit</td><td>Hard-coded white/gray and hand-rolled translucent states moved to semantic roles</td><td><a class="src" href="https://github.com/rajshah4/OpenHands/blob/af1b9afa76d508ca19a487a3869e0b14309edc39/src/components/features/settings/agent-canvas-update-card.tsx#L323">agent-canvas-update-card.tsx:323</a></td></tr>
+              <tr><td>Regression proof</td><td>Real compositing, actual class consumers, and source scan against reintroducing fragile pairs</td><td><a class="src" href="https://github.com/rajshah4/OpenHands/blob/af1b9afa76d508ca19a487a3869e0b14309edc39/__tests__/themes/status-tone-contrast.test.ts#L54">status-tone-contrast.test.ts:54</a></td></tr>
+            </tbody>
+          </table>
+          <details>
+            <summary>Why 133 files changed</summary>
+            <div>
+              <p>The behavioral center is small: theme tokens, shared utilities, and the appearance-preserving portal wrapper. Most remaining files are narrow utility substitutions that give Light+ and Solarized semantic colors while retaining each component's prior Neutral colors through explicit <code>dark:</code> overrides.</p>
+              <ul class="compact">
+                <li>status badges and inline notices</li>
+                <li>settings and backend forms</li>
+                <li>automation rows and activity states</li>
+                <li>conversation controls and modals</li>
+                <li>icons, dividers, and focus/hover states</li>
+                <li>portal-rendered menus, drawers, and dialogs</li>
+                <li>tests updated to assert semantic classes</li>
+              </ul>
+            </div>
+          </details>
+        </section>
+
+        <section id="verification">
+          <h2><span class="num">5</span>Verification covers code, builds, and rendered output</h2>
+          <table>
+            <thead><tr><th>Check</th><th>Result</th></tr></thead>
+            <tbody>
+              <tr><td>Focused theme/runtime/form-control and affected-component suite</td><td>64 / 64 passed independently</td></tr>
+              <tr><td>Full Vitest suite</td><td>8,010 passed; one pre-existing timezone-sensitive failure reproduced on the parent and passes with <code>TZ=UTC</code></td></tr>
+              <tr><td>TypeScript</td><td><code>npm run typecheck</code> passed</td></tr>
+              <tr><td>Standalone application</td><td><code>npm run build:app</code> passed</td></tr>
+              <tr><td>Embeddable library</td><td><code>npm run build:lib</code> passed</td></tr>
+              <tr><td>Formatting</td><td><code>git diff --check</code> clean</td></tr>
+            </tbody>
+          </table>
+          <div class="callout note">
+            ⓘ Neutral/dark is a compatibility boundary, not a target of this light-palette redesign.
+            Shared components retain their previous dark colors, including hover and focus states, through
+            explicit <code>dark:</code> overrides. Any dark-palette redesign should be proposed and reviewed separately.
+          </div>
+          <div class="callout warn">
+            ⚠ The automation-row hover remains intentionally restrained. A darker Solarized hover would
+            push the row's secondary text below 4.5:1; the row text itself remains readable and the hover
+            now uses the correct interaction token.
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

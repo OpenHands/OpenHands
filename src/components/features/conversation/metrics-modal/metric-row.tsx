@@ -20,7 +20,7 @@ export function MetricRow({
     <div
       className={cn(
         "flex justify-between items-center pb-2",
-        showBorder && "border-b border-border-subtle",
+        showBorder && "border-b border-divider",
       )}
     >
       <span className={labelClassName}>{label}</span>
