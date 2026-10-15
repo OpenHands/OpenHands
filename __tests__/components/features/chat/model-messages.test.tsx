@@ -32,6 +32,11 @@ describe("ModelMessages", () => {
       MODEL$NO_SAVED_PROFILES: "No saved profiles",
       MODEL$NO_PROFILES_HINT:
         "Use the LLM settings page to create a profile, then run /model <name> to switch.",
+      MODEL$USER_SWITCHED: "You switched models to <cmd>{{name}}</cmd>",
+      MODEL$AGENT_SWITCHED: "Agent switched models to <cmd>{{name}}</cmd>",
+      MODEL$ROUTER_SWITCHED:
+        "Model router switched models to <cmd>{{name}}</cmd>",
+      MODEL$AGENT_SWITCH_REASON: "Agent’s reason:",
       MODEL$SWITCHED_TO_PROFILE: "ℹ️ Switched to profile <cmd>{{name}}</cmd>",
     };
     i18n.addResourceBundle("en", "translation", resources, true, true);
@@ -106,8 +111,39 @@ describe("ModelMessages", () => {
     );
 
     expect(screen.getByTestId("model-messages")).toHaveTextContent(
-      "ℹ️ Switched to profile haiku",
+      "You switched models to haiku",
     );
+  });
+
+  it("shows an agent's rationale immediately as plain text", () => {
+    useModelStore.getState().recordSwitch(CONVERSATION_ID, null, "astra", {
+      initiator: "agent",
+      reason: "Careful audit <script>alert(1)</script>",
+    });
+    renderWithProviders(
+      <ModelMessages conversationId={CONVERSATION_ID} anchorEventId={null} />,
+    );
+    expect(screen.getByTestId("model-messages")).toHaveTextContent(
+      "Agent switched models to astra",
+    );
+    expect(screen.getByText("Agent’s reason:")).toBeVisible();
+    expect(
+      screen.getByText("Careful audit <script>alert(1)</script>"),
+    ).toBeVisible();
+    expect(document.querySelector("script")).toBeNull();
+  });
+
+  it("distinguishes router switches and omits unavailable reasons", () => {
+    useModelStore.getState().recordSwitch(CONVERSATION_ID, null, "fast", {
+      initiator: "router",
+    });
+    renderWithProviders(
+      <ModelMessages conversationId={CONVERSATION_ID} anchorEventId={null} />,
+    );
+    expect(screen.getByTestId("model-messages")).toHaveTextContent(
+      "Model router switched models to fast",
+    );
+    expect(screen.queryByText("Agent’s reason:")).not.toBeInTheDocument();
   });
 
   it("labels a DB-flagged free OpenHands route in expanded profile diagnostics", async () => {

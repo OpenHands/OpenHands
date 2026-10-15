@@ -1,5 +1,9 @@
 import { getLastRenderableEventId } from "#/hooks/chat/model-command-event-anchor";
-import { useModelStore, SeededSwitch } from "#/stores/model-store";
+import {
+  useModelStore,
+  SeededSwitch,
+  ModelSwitchDetails,
+} from "#/stores/model-store";
 import {
   getStoredConversationMetadata,
   mergeStoredConversationMetadata,
@@ -15,10 +19,11 @@ export function recordModelSwitchMessage(
   conversationId: string,
   profileName: string,
   anchorEventId: string | null = getLastRenderableEventId(),
+  details?: ModelSwitchDetails,
 ) {
   useModelStore
     .getState()
-    .recordSwitch(conversationId, anchorEventId, profileName);
+    .recordSwitch(conversationId, anchorEventId, profileName, details);
 }
 
 /**
@@ -105,6 +110,8 @@ export function seedModelSwitchesFromHistory(
         id: `history-switch:${event.id}`,
         anchorEventId: lastRenderableId,
         profileName: event.observation.profile_name,
+        initiator: "agent",
+        reason: event.observation.reason,
       });
       latestSwitch = {
         profileName: event.observation.profile_name,
@@ -125,6 +132,7 @@ export function seedModelSwitchesFromHistory(
         id: `history-classify-switch:${event.id}`,
         anchorEventId: lastRenderableId,
         profileName,
+        initiator: "router",
       });
       latestSwitch = {
         profileName,

@@ -803,6 +803,12 @@ export function ConversationWebSocketProvider({
             recordModelSwitchMessage(
               conversationId,
               switchLLMObservation.observation.profile_name,
+              undefined,
+              {
+                id: `history-switch:${switchLLMObservation.id}`,
+                initiator: "agent",
+                reason: switchLLMObservation.observation.reason,
+              },
             );
 
             // Mirror the user-driven `/model` path: persist the profile so the
@@ -844,7 +850,10 @@ export function ConversationWebSocketProvider({
             const profileName =
               classifyAndSwitchLLMObservation.observation.model;
 
-            recordModelSwitchMessage(conversationId, profileName);
+            recordModelSwitchMessage(conversationId, profileName, undefined, {
+              id: `history-classify-switch:${classifyAndSwitchLLMObservation.id}`,
+              initiator: "router",
+            });
 
             stampActiveLlmProfile(
               conversationId,
