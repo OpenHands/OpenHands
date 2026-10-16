@@ -25,6 +25,9 @@ export interface ConversationLaunch {
   llmProfileOverride?: string;
   /** The LLM profile the launch runs, when Canvas can tell. */
   llmProfile?: string;
+  // Profile summaries omit these; detail fetch fills them for Claude skill overlay (#16905).
+  agentProfileAcpServer?: string | null;
+  agentProfileAcpCommand?: string | readonly string[] | null;
 }
 
 export interface ResolveConversationLaunchOptions {
@@ -168,6 +171,36 @@ export async function resolveConversationLaunch({
     }
     return { llmProfile: activeLlmProfile ?? undefined };
   }
+  // Profile summaries omit ``acp_server``. Fetch the ACP profile detail so the
+  // Claude skill overlay can tell Claude Code from Codex/custom without
+  // launching the wrong overlay (#16905). Failures are ignored: conversation
+  // start must not block on a detail lookup.
+  let agentProfileAcpServer: string | null | undefined;
+  let agentProfileAcpCommand: string | readonly string[] | null | undefined;
+  if (!isCloud && profile?.agent_kind === "acp") {
+    try {
+      const detail = await queryClient.ensureQueryData({
+        queryKey: AGENT_PROFILES_QUERY_KEYS.detail(
+          backendId,
+          orgId,
+          profile.name,
+        ),
+        queryFn: () => AgentProfilesService.getProfile(profile.name),
+        ...AGENT_PROFILES_RETRY_OPTIONS,
+      });
+      const detailProfile = detail?.profile;
+      if (detailProfile?.agent_kind === "acp") {
+        agentProfileAcpServer = detailProfile.acp_server ?? null;
+        agentProfileAcpCommand = detailProfile.acp_command ?? null;
+      }
+    } catch {
+      console.warn(
+        `Could not load ACP profile "${profile.name}" ` +
+          "for Canvas skill projection; launching without the overlay.",
+      );
+    }
+  }
+
   return {
     agentProfileId: requestedAgentProfileId,
     agentProfileKind: profile?.agent_kind,
@@ -176,6 +209,8 @@ export async function resolveConversationLaunch({
       profile?.agent_kind === "openhands"
         ? (llmProfileOverride ?? profile.llm_profile_ref ?? undefined)
         : undefined,
+    agentProfileAcpServer,
+    agentProfileAcpCommand,
   };
 }
 
@@ -215,5 +250,7 @@ function launchProfileOptions(
     ...(launch.llmProfileOverride
       ? { agentLlmProfileOverride: launch.llmProfileOverride }
       : {}),
+    agentProfileAcpServer: launch.agentProfileAcpServer,
+    agentProfileAcpCommand: launch.agentProfileAcpCommand,
   };
 }

@@ -49,6 +49,10 @@ import {
   toSkillEnablement,
   type SkillEnablement,
 } from "#/utils/skill-enablement";
+import {
+  buildClaudeAcpSkillSuffixAppend,
+  isClaudeCodeAcpAgent,
+} from "#/utils/acp-claude-skill-bridge";
 import SettingsService from "./settings-service/settings-service.api";
 import MetaProfilesService from "./meta-profiles-service/meta-profiles-service.api";
 import { getStoredConversationMetadata } from "./conversation-metadata-store";
@@ -1246,6 +1250,10 @@ export interface StartConversationOptions {
   // server-side) instead of an inline ``agent_settings`` dump (#3727).
   agentProfileId?: string;
   agentProfileKind?: AgentKind;
+  // Profile summaries omit ``acp_server`` / ``acp_command``. The Claude skill
+  // overlay reads these from the profile detail fetched at launch (#16905).
+  agentProfileAcpServer?: string | null;
+  agentProfileAcpCommand?: string | readonly string[] | null;
   /** LLM profile the agent profile runs with instead of its own. */
   llmProfileOverride?: string;
   titleLlmProfile?: string;
@@ -1326,9 +1334,13 @@ export function buildStartConversationRequest(
   ]
     .filter((suffix): suffix is string => Boolean(suffix))
     .join("\n\n");
+  const claudeSkillSuffix = buildClaudeAcpSkillSuffixForLaunch(options);
+  const combinedLaunchSuffix = [profileLaunchSuffix, claudeSkillSuffix]
+    .filter((suffix): suffix is string => Boolean(suffix))
+    .join("\n\n");
   const launchAdditions = {
-    ...(profileLaunchSuffix
-      ? { system_message_suffix_append: profileLaunchSuffix }
+    ...(combinedLaunchSuffix
+      ? { system_message_suffix_append: combinedLaunchSuffix }
       : {}),
     ...(options.llmProfileOverride
       ? { llm_profile_ref: options.llmProfileOverride }
@@ -1501,6 +1513,37 @@ export function buildStartConversationRequest(
   }
 
   return payload;
+}
+
+
+function buildClaudeAcpSkillSuffixForLaunch(
+  options: StartConversationOptions,
+): string | undefined {
+  if (!isClaudeCodeAcpLaunch(options)) return undefined;
+  return buildClaudeAcpSkillSuffixAppend({
+    enablement: toSkillEnablement(options.settings),
+    invokedCatalogSkill: findInvokedCatalogSkill(options.query),
+  });
+}
+
+function isClaudeCodeAcpLaunch(options: StartConversationOptions): boolean {
+  if (options.agentProfileId) {
+    return isClaudeCodeAcpAgent({
+      agentKind: options.agentProfileKind,
+      acpServer: options.agentProfileAcpServer,
+      acpCommand: options.agentProfileAcpCommand,
+    });
+  }
+  if (!isAcpAgent(options.settings)) return false;
+  const agentSettings = toRecord(options.settings.agent_settings);
+  return isClaudeCodeAcpAgent({
+    agentKind: "acp",
+    acpServer: getAcpServerTag(options.settings),
+    acpCommand: resolveAcpCommand(agentSettings) as
+      | string
+      | readonly string[]
+      | null,
+  });
 }
 
 export function buildStartPlanningConversationRequest(options: {
@@ -1777,6 +1820,8 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
   worktree?: boolean;
   agentProfileId?: string;
   agentProfileKind?: AgentKind;
+  agentProfileAcpServer?: string | null;
+  agentProfileAcpCommand?: string | readonly string[] | null;
   llmProfileOverride?: string;
   titleLlmProfile?: string;
 }): Promise<Record<string, unknown>> {

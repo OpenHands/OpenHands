@@ -469,6 +469,9 @@ export interface CreateConversationOptions {
   agentLlmProfileRef?: string | null;
   /** Local only: run the agent profile with this LLM profile instead of its own. */
   agentLlmProfileOverride?: string;
+  // Profile summaries omit ACP fields; detail fetch fills these for Claude skill overlay (#16905).
+  agentProfileAcpServer?: string | null;
+  agentProfileAcpCommand?: string | readonly string[] | null;
 }
 
 class AgentServerConversationService {
@@ -528,6 +531,8 @@ class AgentServerConversationService {
       agentProfileKind,
       agentLlmProfileRef,
       agentLlmProfileOverride,
+      agentProfileAcpServer,
+      agentProfileAcpCommand,
     } = options;
 
     if (getActiveBackend().backend.kind === "cloud") {
@@ -625,6 +630,8 @@ class AgentServerConversationService {
       agentProfileId,
       agentProfileKind,
       llmProfileOverride: agentLlmProfileOverride,
+      agentProfileAcpServer,
+      agentProfileAcpCommand,
       titleLlmProfile,
     });
 
