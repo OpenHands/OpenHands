@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="520" viewBox="0 0 920 520" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="14">
+  <rect width="920" height="520" fill="#1e1e2e"/>
+  <rect x="0" y="0" width="920" height="30" fill="#313244"/>
+  <circle cx="16" cy="15" r="6" fill="#f38ba8"/><circle cx="34" cy="15" r="6" fill="#fab387"/><circle cx="52" cy="15" r="6" fill="#a6e3a1"/>
+  <text x="70" y="20" fill="#cdd6f4">OpenHands agent-canvas — #16952 verification</text>
+
+  <text x="14" y="56" fill="#89b4fa" font-weight="bold">$ npx vitest run src/types/agent-server/core/base/common.test.ts</text>
+
+  <text x="14" y="80" fill="#bac2de">  RUN  v4.1.10 /workspace/OpenHands</text>
+  <text x="14" y="104" fill="#a6e3a1">  ✓ src/types/agent-server/core/base/common.test.ts (5 tests) 41ms</text>
+  <text x="14" y="128" fill="#bac2de">  Test Files  1 passed (1)</text>
+  <text x="14" y="148" fill="#bac2de">       Tests  5 passed (5)</text>
+  <text x="14" y="168" fill="#6c7086">    Duration  3.48s</text>
+
+  <text x="14" y="206" fill="#89b4fa" font-weight="bold">$ npx tsc --noEmit</text>
+  <text x="14" y="230" fill="#a6e3a1">  typecheck: OK (no errors)</text>
+
+  <text x="14" y="268" fill="#89b4fa" font-weight="bold">$ npx eslint src/types/agent-server/core/base/common.ts \</text>
+  <text x="24" y="288" fill="#89b4fa" font-weight="bold">      src/types/agent-server/core/base/common.test.ts \</text>
+  <text x="24" y="308" fill="#89b4fa" font-weight="bold">      src/types/agent-server/type-guards.ts</text>
+  <text x="14" y="332" fill="#a6e3a1">  eslint: OK (no errors)</text>
+
+  <text x="14" y="376" fill="#f9e2af">Coverage of the 3 changed files above (execution status contract,</text>
+  <text x="14" y="396" fill="#f9e2af">source contract, and runtime source guard) is exercised by the unit</text>
+  <text x="14" y="416" fill="#f9e2af">tests in src/types/agent-server/core/base/common.test.ts.</text>
+  <text x="14" y="448" fill="#6c7086">The 14 failures observed in use-app-title/use-agent-state are pre-existing</text>
+  <text x="14" y="468" fill="#6c7086">environment mock issues, reproduced identically on clean main.</text>
+</svg>

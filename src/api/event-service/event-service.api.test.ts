@@ -1,7 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
-  buildHttpBaseUrlMock,
   callCloudProxyMock,
   conversationClientConstructorMock,
   getActiveBackendMock,
@@ -12,7 +11,6 @@ const {
   remoteSearchMock,
   respondToConfirmationMock,
 } = vi.hoisted(() => ({
-  buildHttpBaseUrlMock: vi.fn(),
   callCloudProxyMock: vi.fn(),
   conversationClientConstructorMock: vi.fn(),
   getActiveBackendMock: vi.fn(),
@@ -42,9 +40,6 @@ vi.mock("@openhands/typescript-client/events/remote-events-list", () => ({
 
     search = remoteSearchMock;
   },
-}));
-vi.mock("#/utils/websocket-url", () => ({
-  buildHttpBaseUrl: buildHttpBaseUrlMock,
 }));
 vi.mock("../backend-registry/active-store", () => ({
   getActiveBackend: getActiveBackendMock,
@@ -411,5 +406,45 @@ describe("EventService", () => {
       });
       expect(remoteSearchMock).toHaveBeenCalledWith({ limit: 100 });
     });
+  });
+});
+
+describe("EventService.searchEvents local path", () => {
+  beforeEach(() => {
+    activeBackendMock.mockReturnValue({ backend: { kind: "local" } });
+    remoteSearchMock.mockReset();
+  });
+
+  afterEach(() => {
+    activeBackendMock.mockReturnValue({ backend: { kind: "cloud" } });
+  });
+
+  it("narrows the canonical typed-client page via isAgentServerEvent", async () => {
+    const wellFormed = {
+      id: "evt-1",
+      timestamp: "2026-07-10T12:00:00.000Z",
+      source: "user",
+      kind: "MessageEvent",
+      llm_message: {
+        role: "user",
+        content: [{ type: "text", text: "hello" }],
+      },
+    };
+    const malformed = { nope: true };
+    remoteSearchMock.mockResolvedValue({
+      items: [wellFormed, malformed],
+      next_page_id: "p2",
+    });
+
+    await expect(
+      EventService.searchEvents(
+        "conversation-1",
+        "http://localhost:3000",
+        null,
+      ),
+    ).resolves.toEqual({ items: [wellFormed], next_page_id: "p2" });
+
+    // A valid wire envelope keeps its next-page cursor for pagination.
+    expect(remoteSearchMock).toHaveBeenCalledWith({ limit: 100 });
   });
 });

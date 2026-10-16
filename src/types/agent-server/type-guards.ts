@@ -65,6 +65,7 @@ export function isBaseEvent(value: unknown): value is BaseEvent {
     (value.source === "agent" ||
       value.source === "user" ||
       value.source === "environment" ||
+      value.source === "system" ||
       value.source === "hook")
   );
 }
