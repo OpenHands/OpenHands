@@ -71,8 +71,8 @@ export function ConversationName() {
   };
 
   const handleBlur = () => {
-    if (inputRef.current?.value && conversationId) {
-      const trimmed = inputRef.current.value.trim();
+    const trimmed = inputRef.current?.value.trim();
+    if (trimmed && conversationId) {
       if (trimmed !== conversation?.title) {
         updateConversation(
           { conversationId, newTitle: trimmed },
@@ -84,7 +84,7 @@ export function ConversationName() {
         );
       }
     } else if (inputRef.current) {
-      // reset the value if it's empty
+      // reset the value if it's empty or whitespace-only
       inputRef.current.value = conversation?.title ?? "";
     }
 
