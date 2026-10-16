@@ -57,6 +57,13 @@ vi.mock(
   }),
 );
 
+vi.mock(
+  "#/components/features/canvas-extensions/canvas-extension-companion-surface",
+  () => ({
+    CanvasExtensionCompanionDock: () => <div data-testid="companion-dock" />,
+  }),
+);
+
 vi.mock("#/hooks/use-app-title", () => ({
   useAppTitle: () => "OpenHands",
 }));
@@ -270,6 +277,10 @@ describe("root layout", () => {
     ).toBeInTheDocument();
     expect(await screen.findByTestId("command-menu")).toBeInTheDocument();
     expect(screen.queryByTestId("alert-banner")).not.toBeInTheDocument();
+    const outlet = document.getElementById("root-outlet");
+    const dock = screen.getByTestId("companion-dock");
+    expect(outlet?.parentElement?.nextElementSibling).toBe(dock);
+    expect(screen.getByTestId("root-layout")).toContainElement(dock);
   });
 
   it("updates the active language when the setting changes", () => {

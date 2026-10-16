@@ -3,6 +3,7 @@ import { SandboxStatus } from "#/api/conversation-service/agent-server-conversat
 import { isArchivedSandboxStatus } from "#/utils/conversation-archive-status";
 import { ConversationCardTitle } from "./conversation-card-title";
 import { ConversationStatusDot } from "../conversation-status-dot";
+import { InsiderCatBadge } from "../../conversation/insider-cat-badge";
 
 interface ConversationCardHeaderProps {
   title: string;
@@ -10,6 +11,8 @@ interface ConversationCardHeaderProps {
   onTitleSave: (title: string) => void;
   executionStatus?: ExecutionStatus | null;
   sandboxStatus?: SandboxStatus | null;
+  tags?: Record<string, string> | null;
+  parentConversationId?: string | null;
 }
 
 export function ConversationCardHeader({
@@ -18,6 +21,8 @@ export function ConversationCardHeader({
   onTitleSave,
   executionStatus,
   sandboxStatus,
+  tags,
+  parentConversationId,
 }: ConversationCardHeaderProps) {
   const isArchived = isArchivedSandboxStatus(sandboxStatus);
   return (
@@ -31,6 +36,11 @@ export function ConversationCardHeader({
           />
         </div>
       )}
+      <InsiderCatBadge
+        tags={tags}
+        parentConversationId={parentConversationId}
+        compact
+      />
       <ConversationCardTitle
         title={title}
         titleMode={titleMode}
