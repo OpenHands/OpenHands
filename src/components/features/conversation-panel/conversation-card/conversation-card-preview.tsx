@@ -5,12 +5,16 @@ import { FaCodeBranch } from "react-icons/fa";
 import type { IconType } from "react-icons/lib";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
-import type { RepositorySelection } from "#/api/open-hands.types";
+import type {
+  ConversationTrigger,
+  RepositorySelection,
+} from "#/api/open-hands.types";
 import type { Provider } from "#/types/settings";
 import type { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import type { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { getDisplayConversationTags } from "#/api/agent-server-adapter";
 import { resolveAcpProviderIcon } from "#/constants/acp-providers";
+import { getConversationTriggerLabel } from "../conversation-panel-list-helpers";
 import AzureDevOpsLogo from "#/assets/branding/azure-devops-logo.svg?react";
 import { AgentBrandIcon } from "#/components/shared/agent-brand-icon";
 import { ConversationStatusDot } from "../conversation-status-dot";
@@ -40,6 +44,12 @@ interface ConversationCardPreviewProps {
    * Sidebar card chips stay gated by the panel's Tags preference.
    */
   tags?: Record<string, string> | null;
+  /**
+   * Server-side trigger provenance (``AppConversation.trigger``). Rendered as a
+   * localized "why did this run start" row via ``getConversationTriggerLabel``;
+   * local agent-server rows fall back to the automation tags in ``tags``.
+   */
+  trigger?: ConversationTrigger | null;
 }
 
 const providerIcon: Partial<Record<Provider, IconType>> = {
@@ -114,6 +124,7 @@ export function ConversationCardPreview({
   acpServer = null,
   createdAt,
   tags = null,
+  trigger = null,
 }: ConversationCardPreviewProps) {
   const { t } = useTranslation("openhands");
 
@@ -130,6 +141,7 @@ export function ConversationCardPreview({
     : null;
 
   const previewTags = getDisplayConversationTags(tags);
+  const triggerLabelKey = getConversationTriggerLabel({ trigger, tags });
 
   return (
     <div
@@ -221,6 +233,14 @@ export function ConversationCardPreview({
             </PreviewRow>
           );
         })}
+
+        {triggerLabelKey ? (
+          <PreviewRow label={t(I18nKey.CONVERSATION_PANEL$PREVIEW_TRIGGER)}>
+            <span data-testid="conversation-card-preview-trigger">
+              {t(triggerLabelKey)}
+            </span>
+          </PreviewRow>
+        ) : null}
 
         {createdLabel ? (
           <PreviewRow label={t(I18nKey.CONVERSATION$CREATED)}>

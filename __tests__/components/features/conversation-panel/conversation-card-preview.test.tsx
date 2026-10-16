@@ -144,4 +144,66 @@ describe("ConversationCardPreview", () => {
     expect(rows[2]).toHaveAttribute("data-tag-key", "workwsid");
     expect(rows[2]).toHaveTextContent("abc");
   });
+
+  it("shows a trigger row for a recognized trigger and for the automation-tag fallback", () => {
+    const { rerender } = renderWithProviders(
+      <ConversationCardPreview
+        title={PREVIEW_TITLE}
+        selectedRepository={null}
+        trigger="gui"
+      />,
+    );
+
+    expect(
+      screen.getByTestId("conversation-card-preview-trigger"),
+    ).toBeInTheDocument();
+
+    rerender(
+      <ConversationCardPreview
+        title={PREVIEW_TITLE}
+        selectedRepository={null}
+        trigger={null}
+        tags={{ automationname: "Nightly Audit" }}
+      />,
+    );
+
+    expect(
+      screen.getByTestId("conversation-card-preview-trigger"),
+    ).toBeInTheDocument();
+  });
+
+  it("omits the trigger row for null, absent, or unknown triggers", () => {
+    const { rerender } = renderWithProviders(
+      <ConversationCardPreview title={PREVIEW_TITLE} selectedRepository={null} />,
+    );
+
+    expect(
+      screen.queryByTestId("conversation-card-preview-trigger"),
+    ).not.toBeInTheDocument();
+
+    rerender(
+      <ConversationCardPreview
+        title={PREVIEW_TITLE}
+        selectedRepository={null}
+        trigger={null}
+        tags={{ origin: "slack" }}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("conversation-card-preview-trigger"),
+    ).not.toBeInTheDocument();
+
+    rerender(
+      <ConversationCardPreview
+        title={PREVIEW_TITLE}
+        selectedRepository={null}
+        trigger={"standing_intent" as never}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("conversation-card-preview-trigger"),
+    ).not.toBeInTheDocument();
+  });
 });

@@ -5,10 +5,14 @@ import type { ACPModelOption } from "#/constants/acp-providers";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
-import { RepositorySelection } from "#/api/open-hands.types";
+import {
+  RepositorySelection,
+  type ConversationTrigger,
+} from "#/api/open-hands.types";
 import { cn } from "#/utils/utils";
 import { ConversationStatusDot } from "./conversation-status-dot";
 import { ConversationCardFooter } from "./conversation-card/conversation-card-footer";
+import { getConversationTriggerLabel } from "./conversation-panel-list-helpers";
 import { I18nKey } from "#/i18n/declaration";
 import { useBackendScopedPath } from "#/hooks/use-backend-scoped-path";
 
@@ -30,6 +34,13 @@ interface CompactConversationRowProps {
   acpServer?: string | null;
   acpModels?: readonly ACPModelOption[] | null;
   tags?: Record<string, string> | null;
+  /**
+   * Server-side trigger provenance (``AppConversation.trigger``). The compact
+   * hover preview renders the same localized "why did this run start" chip as
+   * the expanded card via {@link getConversationTriggerLabel}; local rows fall
+   * back to the automation tags in ``tags``.
+   */
+  trigger?: ConversationTrigger | null;
   showTags?: boolean;
 }
 
@@ -56,11 +67,13 @@ export function CompactConversationRow({
   acpServer = null,
   acpModels = null,
   tags = null,
+  trigger = null,
   showTags = false,
 }: CompactConversationRowProps) {
   const { t } = useTranslation("openhands");
   const backendScopedPath = useBackendScopedPath();
   const disableAnimation = import.meta.env.MODE === "test";
+  const triggerLabelKey = getConversationTriggerLabel({ trigger, tags });
 
   const preview = (
     <div className="w-65 p-3">
@@ -91,6 +104,7 @@ export function CompactConversationRow({
         acpModels={acpModels}
         tags={tags}
         showTags={showTags}
+        triggerLabelKey={triggerLabelKey}
       />
     </div>
   );

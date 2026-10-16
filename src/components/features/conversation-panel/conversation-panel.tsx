@@ -884,6 +884,7 @@ export function ConversationPanel({
             acpServer={conversation.acp_server}
             acpModels={conversation.acp_available_models}
             tags={conversation.tags}
+            trigger={conversation.trigger}
             showTags={showTagsMetadata}
           />
         );
@@ -918,6 +919,7 @@ export function ConversationPanel({
               acpServer={conversation.acp_server}
               createdAt={conversation.created_at}
               tags={conversation.tags}
+              trigger={conversation.trigger}
             />
           }
         >
@@ -988,6 +990,7 @@ export function ConversationPanel({
               acpServer={conversation.acp_server}
               acpModels={conversation.acp_available_models}
               tags={conversation.tags}
+              trigger={conversation.trigger}
               showTags={showTagsMetadata}
               isArchived={isArchived}
               isPinned={isPinned}
