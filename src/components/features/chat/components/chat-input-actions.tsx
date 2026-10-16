@@ -38,6 +38,7 @@ import { ContextMenuListItem } from "../../context-menu/context-menu-list-item";
 import { ContextMenu } from "#/ui/context-menu";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
 import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
+import { useSubmenuPlacement } from "#/hooks/use-submenu-placement";
 import { cn } from "#/utils/utils";
 import { useComposerDockedMinimal } from "#/context/composer-docked-context";
 import {
@@ -284,6 +285,20 @@ export function ChatInputActions({
     setIsOverflowOpen(false);
   };
 
+  const agentTriggerRef = React.useRef<HTMLDivElement>(null);
+  const agentSubmenuRef = React.useRef<HTMLDivElement>(null);
+  const { style: agentSubmenuStyle, updatePlacement: updateAgentPlacement } =
+    useSubmenuPlacement(agentTriggerRef, agentSubmenuRef, {
+      isOpen: isOverflowOpen && activeSubmenu === "agent",
+    });
+
+  const modelTriggerRef = React.useRef<HTMLDivElement>(null);
+  const modelSubmenuRef = React.useRef<HTMLDivElement>(null);
+  const { style: modelSubmenuStyle, updatePlacement: updateModelPlacement } =
+    useSubmenuPlacement(modelTriggerRef, modelSubmenuRef, {
+      isOpen: isOverflowOpen && activeSubmenu === "model",
+    });
+
   // Shared styling for the settings link inside the overflow submenu content.
   const overflowSettingsLinkClassName = cn(
     "group",
@@ -332,7 +347,11 @@ export function ChatInputActions({
       className="!static !top-auto !bottom-auto !left-auto !right-auto !mt-0 overflow-visible min-w-50"
     >
       {showChangeAgentButton && !showCodeInline && (
-        <div className="relative group/overflow-agent">
+        <div
+          ref={agentTriggerRef}
+          onMouseEnter={updateAgentPlacement}
+          className="relative group/overflow-agent"
+        >
           <ContextMenuListItem
             testId="overflow-agent-button"
             onClick={() =>
@@ -354,8 +373,10 @@ export function ChatInputActions({
           </ContextMenuListItem>
           {!isAgentSwitcherDisabled && (
             <div
+              ref={agentSubmenuRef}
+              style={agentSubmenuStyle}
               className={cn(
-                "absolute left-full top-[-4px] z-60 opacity-0 invisible pointer-events-none transition-all duration-200 ml-px",
+                "absolute left-full top-[-4px] z-60 opacity-0 invisible pointer-events-none transition-opacity duration-200 ml-px",
                 "group-hover/overflow-agent:opacity-100 group-hover/overflow-agent:visible group-hover/overflow-agent:pointer-events-auto",
                 "hover:opacity-100 hover:visible hover:pointer-events-auto",
                 activeSubmenu === "agent" &&
@@ -404,7 +425,11 @@ export function ChatInputActions({
         </div>
       )}
       {showOverflowModel && (
-        <div className="relative group/overflow-model">
+        <div
+          ref={modelTriggerRef}
+          onMouseEnter={updateModelPlacement}
+          className="relative group/overflow-model"
+        >
           <ContextMenuListItem
             testId="overflow-model-button"
             onClick={() =>
@@ -420,8 +445,10 @@ export function ChatInputActions({
             />
           </ContextMenuListItem>
           <div
+            ref={modelSubmenuRef}
+            style={modelSubmenuStyle}
             className={cn(
-              "absolute left-full top-[-4px] z-60 opacity-0 invisible pointer-events-none transition-all duration-200 ml-px",
+              "absolute left-full top-[-4px] z-60 opacity-0 invisible pointer-events-none transition-opacity duration-200 ml-px",
               "group-hover/overflow-model:opacity-100 group-hover/overflow-model:visible group-hover/overflow-model:pointer-events-auto",
               "hover:opacity-100 hover:visible hover:pointer-events-auto",
               activeSubmenu === "model" &&
