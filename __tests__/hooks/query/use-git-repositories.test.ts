@@ -273,6 +273,64 @@ describe("useGitRepositories", () => {
     expect(config().enabled).toBe(false);
   });
 
+  it("uses installation flow for azure_devops on cloud, and direct flow on local", async () => {
+    // 1. Cloud backend: should use installations
+    setupMocks();
+    mocks.providers = ["azure_devops"];
+    mocks.installations = ["org-alpha", "org-beta"];
+    mocks.backend = { id: "cloud", kind: "cloud" };
+    const retrieveInstallations = vi
+      .spyOn(GitService, "retrieveInstallationRepositories")
+      .mockResolvedValue(emptyPage("page-2"));
+
+    renderHook(() => useGitRepositories({ provider: "azure_devops" }));
+
+    expect(config().queryKey).toEqual([
+      "repositories",
+      "azure_devops",
+      true,
+      30,
+      "cloud",
+      null,
+      ["org-alpha", "org-beta"],
+    ]);
+    await config().queryFn({
+      pageParam: { installationIndex: 0, pageId: null },
+    });
+    expect(retrieveInstallations).toHaveBeenCalledWith(
+      "azure_devops",
+      0,
+      mocks.installations,
+      undefined,
+      30,
+    );
+
+    // 2. Local backend: should use direct flow
+    setupMocks();
+    mocks.providers = ["azure_devops"];
+    mocks.backend = { id: "local", kind: "local" };
+    const retrieveDirect = vi
+      .spyOn(GitService, "retrieveUserGitRepositories")
+      .mockResolvedValue(emptyPage("next"));
+
+    renderHook(() => useGitRepositories({ provider: "azure_devops" }));
+
+    expect(config().queryKey).toEqual([
+      "repositories",
+      "azure_devops",
+      false,
+      30,
+      "local",
+      null,
+    ]);
+    await config().queryFn({ pageParam: null });
+    expect(retrieveDirect).toHaveBeenCalledWith(
+      "azure_devops",
+      undefined,
+      30,
+    );
+  });
+
   it("stays disabled while connected providers are unresolved", () => {
     setupMocks();
     mocks.providers = undefined;

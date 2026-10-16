@@ -26,10 +26,15 @@ describe("shouldUseInstallationRepos", () => {
     );
   });
 
-  it("never uses installations for gitlab / azure / forgejo", () => {
+  it("uses installations for azure_devops only when active backend is cloud", () => {
+    expect(shouldUseInstallationRepos("azure_devops", "cloud")).toBe(true);
+    expect(shouldUseInstallationRepos("azure_devops", "local")).toBe(false);
+    expect(shouldUseInstallationRepos("azure_devops")).toBe(false);
+  });
+
+  it("never uses installations for gitlab / forgejo", () => {
     expect(shouldUseInstallationRepos("gitlab", "cloud")).toBe(false);
     expect(shouldUseInstallationRepos("gitlab", "local")).toBe(false);
-    expect(shouldUseInstallationRepos("azure_devops", "cloud")).toBe(false);
     expect(shouldUseInstallationRepos("forgejo", "cloud")).toBe(false);
   });
 });

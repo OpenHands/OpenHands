@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 480" width="960" height="480">
+  <defs>
+    <style>
+      .bg { fill: #0f172a; }
+      .card { fill: #1e293b; stroke: #334155; stroke-width: 1.5; rx: 8px; }
+      .title { font-family: ui-sans-serif, system-ui, sans-serif; font-size: 16px; font-weight: 600; fill: #f8fafc; }
+      .subtitle { font-family: ui-sans-serif, system-ui, sans-serif; font-size: 13px; font-weight: 500; fill: #94a3b8; }
+      .item { fill: #0f172a; stroke: #475569; stroke-width: 1; rx: 6px; }
+      .item-text { font-family: ui-sans-serif, system-ui, sans-serif; font-size: 13px; fill: #f1f5f9; }
+      .badge-err { fill: #7f1d1d; stroke: #ef4444; stroke-width: 1; rx: 4px; }
+      .badge-err-text { font-family: ui-sans-serif, system-ui, sans-serif; font-size: 11px; font-weight: 600; fill: #fecaca; }
+      .badge-ok { fill: #064e3b; stroke: #059669; stroke-width: 1; rx: 4px; }
+      .badge-ok-text { font-family: ui-sans-serif, system-ui, sans-serif; font-size: 11px; font-weight: 600; fill: #a7f3d0; }
+    </style>
+  </defs>
+
+  <rect width="960" height="480" class="bg" />
+
+  <!-- Header -->
+  <text x="40" y="44" class="title" font-size="20">Azure DevOps Organizations in Open Repository Picker (Issue #18480)</text>
+  <text x="40" y="70" class="subtitle">Multi-organization repository discovery on Cloud backends</text>
+
+  <!-- Left: Before (Bug) -->
+  <g transform="translate(40, 95)">
+    <rect width="420" height="345" class="card" />
+    <text x="24" y="36" class="title">Before: Single Organization Only</text>
+    <text x="24" y="60" class="subtitle">Direct search (/repositories/search?provider=azure_devops)</text>
+
+    <!-- Org Alpha -->
+    <rect x="24" y="80" width="372" height="44" class="item" />
+    <text x="36" y="107" class="item-text">org-alpha / backend-service</text>
+    <rect x="310" y="92" width="74" height="20" class="badge-ok" />
+    <text x="318" y="106" class="badge-ok-text">Loaded</text>
+
+    <rect x="24" y="132" width="372" height="44" class="item" />
+    <text x="36" y="159" class="item-text">org-alpha / web-frontend</text>
+    <rect x="310" y="144" width="74" height="20" class="badge-ok" />
+    <text x="318" y="158" class="badge-ok-text">Loaded</text>
+
+    <!-- Missing Org Beta callout -->
+    <rect x="24" y="196" width="372" height="110" fill="#450a0a" stroke="#dc2626" rx="6" />
+    <text x="36" y="222" font-family="ui-sans-serif, system-ui" font-size="13" font-weight="600" fill="#fca5a5">Defect:</text>
+    <text x="36" y="246" font-family="ui-sans-serif, system-ui" font-size="12" fill="#fecaca">• shouldUseInstallationRepos returned false for azure_devops</text>
+    <text x="36" y="268" font-family="ui-sans-serif, system-ui" font-size="12" fill="#fecaca">• /git/installations/search was never called</text>
+    <text x="36" y="290" font-family="ui-sans-serif, system-ui" font-size="12" fill="#fecaca">• Repositories in org-beta were completely invisible</text>
+  </g>
+
+  <!-- Right: After (Fixed) -->
+  <g transform="translate(500, 95)">
+    <rect width="420" height="345" class="card" />
+    <text x="24" y="36" class="title">After: All Organizations Discovered</text>
+    <text x="24" y="60" class="subtitle">Installation-based flow (/installations/search → per-org search)</text>
+
+    <!-- Org Alpha -->
+    <rect x="24" y="80" width="372" height="44" class="item" />
+    <text x="36" y="107" class="item-text">org-alpha / backend-service</text>
+    <rect x="310" y="92" width="74" height="20" class="badge-ok" />
+    <text x="318" y="106" class="badge-ok-text">Loaded</text>
+
+    <rect x="24" y="132" width="372" height="44" class="item" />
+    <text x="36" y="159" class="item-text">org-alpha / web-frontend</text>
+    <rect x="310" y="144" width="74" height="20" class="badge-ok" />
+    <text x="318" y="158" class="badge-ok-text">Loaded</text>
+
+    <!-- Org Beta -->
+    <rect x="24" y="184" width="372" height="44" class="item" />
+    <text x="36" y="211" class="item-text">org-beta / payment-gateway</text>
+    <rect x="310" y="196" width="74" height="20" class="badge-ok" />
+    <text x="318" y="210" class="badge-ok-text">Loaded</text>
+
+    <rect x="24" y="236" width="372" height="44" class="item" />
+    <text x="36" y="263" class="item-text">org-beta / analytics-worker</text>
+    <rect x="310" y="248" width="74" height="20" class="badge-ok" />
+    <text x="318" y="262" class="badge-ok-text">Loaded</text>
+
+    <rect x="24" y="295" width="372" height="30" fill="#064e3b" stroke="#059669" rx="4" />
+    <text x="36" y="315" font-family="ui-sans-serif, system-ui" font-size="12" font-weight="600" fill="#a7f3d0">✓ All organizations paginated via installation_id</text>
+  </g>
+</svg>

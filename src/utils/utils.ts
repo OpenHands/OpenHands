@@ -137,6 +137,7 @@ export const shouldUseInstallationRepos = (
     case "bitbucket_data_center":
       return true;
     case "github":
+    case "azure_devops":
       return appMode === "cloud";
     default:
       return false;
