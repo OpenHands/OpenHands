@@ -23,6 +23,7 @@
  */
 
 import { test, expect, type Page } from "@playwright/test";
+import { cmdClickAndExpectNewTab } from "../utils/cmd-click-new-tab";
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
@@ -815,9 +816,7 @@ test.describe("cross-connect: sidebar links pin their backend", () => {
 
     const href = await card.getAttribute("href");
 
-    const newTabPromise = context.waitForEvent("page");
-    await card.click({ modifiers: ["ControlOrMeta"] });
-    const newTab = await newTabPromise;
+    const newTab = await cmdClickAndExpectNewTab(context, card);
 
     // ── 7. The new tab must resolve the conversation on backend A ─────
     // A freshly opened tab starts at about:blank, so wait for the real
