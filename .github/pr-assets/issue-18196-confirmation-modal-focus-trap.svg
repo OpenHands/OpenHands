@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 480" width="100%" height="100%">
+  <defs>
+    <style>
+      .title { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 20px; font-weight: 700; fill: #ffffff; }
+      .subtitle { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 13px; fill: #94a3b8; }
+      .box-title { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 16px; font-weight: 600; }
+      .text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 13px; fill: #cbd5e1; }
+      .code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; }
+      .badge-fail { fill: #ef4444; font-weight: 700; }
+      .badge-pass { fill: #22c55e; font-weight: 700; }
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect width="960" height="480" fill="#0f172a" rx="12" />
+
+  <!-- Header -->
+  <text x="32" y="44" class="title">ConfirmationModal Keyboard Focus Management (Issue #18196)</text>
+  <text x="32" y="70" class="subtitle">Focus containment and restoration across confirmation dialogs (Customize → Apps &amp; other flows)</text>
+
+  <!-- Left: Before (Buggy Behavior) -->
+  <g transform="translate(32, 96)">
+    <rect width="432" height="344" fill="#1e293b" stroke="#ef4444" stroke-width="2" rx="8" />
+    <text x="20" y="32" class="box-title" fill="#f87171">BEFORE (Focus Escapes to Background)</text>
+
+    <!-- Background page simulation -->
+    <rect x="20" y="52" width="392" height="72" fill="#0f172a" stroke="#334155" rx="6" />
+    <text x="32" y="76" class="text" fill="#94a3b8">Background App Card (Obscured)</text>
+
+    <!-- Enable Switch -->
+    <rect x="32" y="88" width="60" height="24" fill="#3b82f6" rx="12" />
+    <circle cx="78" cy="100" r="9" fill="#ffffff" />
+    <text x="100" y="105" class="code" fill="#94a3b8">Enable [Focused]</text>
+
+    <!-- Update button in background -->
+    <rect x="270" y="88" width="70" height="24" fill="#ef4444" rx="4" />
+    <text x="282" y="104" class="code" fill="#ffffff">Update</text>
+
+    <!-- Modal dialog with no focus management -->
+    <rect x="30" y="144" width="372" height="136" fill="#1e293b" stroke="#e2e8f0" stroke-width="1.5" rx="8" filter="drop-shadow(0 8px 16px rgba(0,0,0,0.5))" />
+    <text x="46" y="176" class="text" font-weight="600" fill="#f8fafc">Trust Confirmation Dialog</text>
+    <text x="46" y="198" class="text">"This app runs trusted JavaScript..."</text>
+
+    <rect x="210" y="232" width="80" height="32" fill="#334155" rx="4" />
+    <text x="230" y="253" class="text">Cancel</text>
+    <rect x="302" y="232" width="84" height="32" fill="#dc2626" rx="4" />
+    <text x="322" y="253" class="text">Enable</text>
+
+    <!-- Action Arrow and Consequence -->
+    <path d="M 190 100 L 260 100" stroke="#f87171" stroke-width="2" stroke-dasharray="4,4" marker-end="url(#arrow)" />
+    <text x="20" y="304" class="text badge-fail">❌ Tab moves focus to background Update button</text>
+    <text x="20" y="324" class="text" fill="#fca5a5">Enter sends POST /api/canvas-extensions/install while dialog stays open!</text>
+  </g>
+
+  <!-- Right: After (Fixed with Focus Trap) -->
+  <g transform="translate(496, 96)">
+    <rect width="432" height="344" fill="#1e293b" stroke="#22c55e" stroke-width="2" rx="8" />
+    <text x="20" y="32" class="box-title" fill="#4ade80">AFTER (Trapped &amp; Restored Focus)</text>
+
+    <!-- Background page simulation -->
+    <rect x="20" y="52" width="392" height="72" fill="#0f172a" stroke="#334155" rx="6" />
+    <text x="32" y="76" class="text" fill="#94a3b8">Background App Card (Blocked)</text>
+
+    <!-- Enable Switch -->
+    <rect x="32" y="88" width="60" height="24" fill="#475569" rx="12" />
+    <circle cx="45" cy="100" r="9" fill="#ffffff" />
+    <text x="100" y="105" class="code" fill="#64748b">Enable (Restored on close)</text>
+
+    <!-- Update button in background -->
+    <rect x="270" y="88" width="70" height="24" fill="#334155" rx="4" />
+    <text x="282" y="104" class="code" fill="#64748b">Update</text>
+
+    <!-- Modal dialog with focus trap -->
+    <rect x="30" y="144" width="372" height="136" fill="#1e293b" stroke="#22c55e" stroke-width="2" rx="8" filter="drop-shadow(0 8px 16px rgba(0,0,0,0.5))" />
+    <text x="46" y="176" class="text" font-weight="600" fill="#f8fafc">Trust Confirmation Dialog</text>
+    <text x="46" y="198" class="text">"This app runs trusted JavaScript..."</text>
+
+    <rect x="210" y="232" width="80" height="32" fill="#334155" stroke="#38bdf8" stroke-width="2" rx="4" />
+    <text x="230" y="253" class="text" fill="#38bdf8" font-weight="600">Cancel</text>
+    <rect x="302" y="232" width="84" height="32" fill="#2563eb" rx="4" />
+    <text x="322" y="253" class="text">Enable</text>
+
+    <!-- Flow Description -->
+    <text x="20" y="304" class="text badge-pass">✅ Space → Focus enters dialog container</text>
+    <text x="20" y="324" class="text" fill="#86efac">Single Tab lands on Cancel; Enter closes safely without enabling</text>
+  </g>
+</svg>
