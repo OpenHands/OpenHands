@@ -38,9 +38,9 @@ describe("ConfirmationModal focus management", () => {
 
     await user.keyboard(" ");
 
-    const modal = screen.getByTestId("confirmation-modal");
+    const cancelButton = screen.getByTestId("cancel-button");
     await waitFor(() => {
-      expect(document.activeElement).toBe(modal);
+      expect(document.activeElement).toBe(cancelButton);
     });
     expect(document.activeElement).not.toBe(enableSwitch);
   });
@@ -68,18 +68,14 @@ describe("ConfirmationModal focus management", () => {
     render(<TestComponent />);
 
     const modal = screen.getByTestId("confirmation-modal");
+    expect(modal).toBeInTheDocument();
     const cancelButton = screen.getByTestId("cancel-button");
     const confirmButton = screen.getByTestId("confirm-button");
     const backgroundUpdate = screen.getByTestId("background-update");
 
     await waitFor(() => {
-      expect(document.activeElement).toBe(modal);
+      expect(document.activeElement).toBe(cancelButton);
     });
-
-    // First Tab from container -> lands on Cancel button (non-destructive)
-    await user.tab();
-    expect(document.activeElement).toBe(cancelButton);
-    expect(document.activeElement).not.toBe(backgroundUpdate);
 
     // Tab forward from Cancel -> Confirm
     await user.tab();
@@ -163,13 +159,11 @@ describe("ConfirmationModal focus management", () => {
     expect(document.activeElement).toBe(openerButton);
 
     await user.click(openerButton);
-    const modal = screen.getByTestId("confirmation-modal");
-
+    const cancelButton = screen.getByTestId("cancel-button");
     await waitFor(() => {
-      expect(document.activeElement).toBe(modal);
+      expect(document.activeElement).toBe(cancelButton);
     });
 
-    const cancelButton = screen.getByTestId("cancel-button");
     // Cancel closes the modal and returns focus to openerButton
     await user.click(cancelButton);
     expect(screen.queryByTestId("confirmation-modal")).toBeNull();
@@ -212,12 +206,11 @@ describe("ConfirmationModal focus management", () => {
     opener.focus();
     await user.click(opener);
 
-    const modal = screen.getByTestId("confirmation-modal");
+    const cancelButton = screen.getByTestId("cancel-button");
     await waitFor(() => {
-      expect(document.activeElement).toBe(modal);
+      expect(document.activeElement).toBe(cancelButton);
     });
 
-    const cancelButton = screen.getByTestId("cancel-button");
     // Close modal when opener is gone
     expect(() => user.click(cancelButton)).not.toThrow();
   });
@@ -247,12 +240,11 @@ describe("ConfirmationModal focus management", () => {
     const user = userEvent.setup();
     render(<TestComponent />);
 
-    const modal = screen.getByTestId("confirmation-modal");
+    const cancelButton = screen.getByTestId("cancel-button");
     await waitFor(() => {
-      expect(document.activeElement).toBe(modal);
+      expect(document.activeElement).toBe(cancelButton);
     });
 
-    const cancelButton = screen.getByTestId("cancel-button");
     await user.click(cancelButton);
     expect(screen.queryByTestId("confirmation-modal")).toBeNull();
 

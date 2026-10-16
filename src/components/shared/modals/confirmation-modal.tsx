@@ -38,11 +38,21 @@ export function ConfirmationModal({
     };
   }, []);
 
-  // Initial focus: target the dialog container so the first Tab lands on
-  // the non-destructive Cancel button instead of skipping to Confirm
+  // Initial focus: target the first focusable element (Cancel button)
   useEffect(() => {
     const timeoutId = setTimeout(() => {
-      modalRef.current?.focus();
+      const modal = modalRef.current;
+      if (!modal) return;
+      const focusable = Array.from(
+        modal.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      );
+      if (focusable.length > 0) {
+        focusable[0]?.focus();
+      } else {
+        modal.focus();
+      }
     }, 0);
 
     return () => clearTimeout(timeoutId);
