@@ -75,11 +75,12 @@ describe("ChatInputLlmProfilePicker", () => {
     rect.mockReturnValue({ top: 200 } as DOMRect);
     fireEvent.click(trigger);
     const menu = screen.getByTestId("chat-input-llm-profile-popover");
-    expect(menu).toHaveStyle({ maxHeight: "184px" });
+    // useAvailablePopoverSpace leaves an 8px gap above the trigger.
+    expect(menu).toHaveStyle({ maxHeight: "192px" });
 
     rect.mockReturnValue({ top: 100 } as DOMRect);
     act(() => window.dispatchEvent(new Event("scroll")));
-    expect(menu).toHaveStyle({ maxHeight: "84px" });
+    expect(menu).toHaveStyle({ maxHeight: "92px" });
     rect.mockRestore();
   });
 
