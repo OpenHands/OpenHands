@@ -762,5 +762,108 @@ describe("ConversationPanel list loading", () => {
         ),
       ).toHaveTextContent("CONVERSATION_PANEL$MORE");
     });
+
+    it("preserves pinned conversations across reloads when more pages exist instead of dropping as missing", async () => {
+      // Arrange: only page 1 is returned and hasNextPage is true. Conversation 2 is on page 2.
+      vi.spyOn(
+        AgentServerConversationService,
+        "searchConversations",
+      ).mockResolvedValue({
+        items: [mockConversations[0]],
+        next_page_id: "page-2",
+      });
+
+      usePinnedConversationsStore
+        .getState()
+        .pinConversation("default-local", "2");
+
+      // Act
+      renderConversationPanel();
+
+      await screen.findByText("Conversation 1");
+
+      // Assert: conversation 2 pin must survive rather than being dropped as missing
+      expect(
+        usePinnedConversationsStore.getState().pinsByBackendId["default-local"],
+      ).toEqual(["2"]);
+    });
+
+    it("attributes pinned conversations to active cloud org and isolates pins between orgs", async () => {
+      setRegisteredBackends([cloudBackend]);
+      setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
+
+      usePinnedConversationsStore
+        .getState()
+        .pinConversation("cloud-prod::org-1", "1");
+
+      const user = userEvent.setup();
+      const ScopedRouterStub = createRoutesStub([
+        {
+          Component: () => <ConversationPanel onClose={onCloseMock} />,
+          path: "/",
+        },
+        {
+          Component: () => null,
+          path: "/conversations/:conversationId",
+        },
+      ]);
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <I18nextProvider i18n={i18n}>
+            <ActiveBackendProvider>
+              <NavigationProvider
+                value={{
+                  currentPath: "/",
+                  conversationId: null,
+                  isNavigating: false,
+                  navigate: vi.fn(),
+                }}
+              >
+                <ScopedRouterStub />
+              </NavigationProvider>
+            </ActiveBackendProvider>
+          </I18nextProvider>
+        </QueryClientProvider>,
+      );
+
+      const pinnedSection = await screen.findByTestId(
+        "conversation-panel-pinned-section",
+      );
+      expect(
+        within(pinnedSection).getByText("Conversation 1"),
+      ).toBeInTheDocument();
+
+      // Switch to org-2
+      act(() => {
+        setActiveSelection({ backendId: cloudBackend.id, orgId: "org-2" });
+      });
+
+      // Org-2 does not show org-1's pin
+      await waitFor(() => {
+        expect(
+          screen.queryByTestId("conversation-panel-pinned-section"),
+        ).not.toBeInTheDocument();
+      });
+
+      // Pin conversation 2 in org-2
+      const card2 = await screen.findByText("Conversation 2");
+      await user.hover(card2);
+      await user.click(screen.getByTestId("conversation-pin-toggle-2"));
+
+      expect(
+        usePinnedConversationsStore.getState().pinsByBackendId[
+          "cloud-prod::org-2"
+        ],
+      ).toEqual(["2"]);
+      expect(
+        usePinnedConversationsStore.getState().pinsByBackendId[
+          "cloud-prod::org-1"
+        ],
+      ).toEqual(["1"]);
+    });
   });
 });
