@@ -13,3 +13,6 @@ export const modalTitleLgClassName = cn("text-lg font-medium text-modal-title");
 
 /** Alias of {@link modalTitleLgClassName} for historical call sites. */
 export const modalTitleLgMediumClassName = modalTitleLgClassName;
+
+/** Modal description text following readable theme text roles. */
+export const modalDescriptionClassName = cn("text-sm text-modal-description");

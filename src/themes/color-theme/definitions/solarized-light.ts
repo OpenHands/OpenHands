@@ -91,6 +91,7 @@ const SOLARIZED_LIGHT_TOKENS: Partial<
   "--oh-overlay": "#FDF6E3",
   "--oh-overlay-foreground": "#586E75",
   "--oh-modal-title-foreground": "#002B36",
+  "--oh-modal-description-foreground": "#52646B",
   "--oh-muted": "#839496",
   "--oh-text-secondary": "#657B83",
   "--oh-text-tertiary": "#586E75",
