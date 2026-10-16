@@ -194,12 +194,7 @@ export function ChatInterface({
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [
-    isAgentRunning,
-    curAgentState,
-    conversationMode,
-    planContent,
-  ]);
+  }, [isAgentRunning, curAgentState, conversationMode, planContent]);
 
   const { selectedRepository, replayJson } = useInitialQueryStore();
   const { conversationId } = useOptionalConversationId();
