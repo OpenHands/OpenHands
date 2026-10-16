@@ -47,6 +47,7 @@ import {
   resolveTestids,
   sourceLiterals,
 } from "./lib/testids.mjs";
+import { groupAlive, processAlive } from "./lib/process-liveness.mjs";
 import { tmuxPathFor } from "./lib/tmux-path.mjs";
 import { browserCallLimit } from "./lib/call-limit.mjs";
 import { keyDownArguments } from "./lib/held-keys.mjs";
@@ -212,26 +213,6 @@ function checkoutRevision() {
 // build instead of rebuilding under stacks that are already serving it.
 function buildId() {
   return buildIdentity(repoRoot);
-}
-
-function processAlive(pid) {
-  if (!pid) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return error.code === "EPERM";
-  }
-}
-
-function groupAlive(pgid) {
-  if (!pgid) return false;
-  try {
-    process.kill(-pgid, 0);
-    return true;
-  } catch (error) {
-    return error.code === "EPERM";
-  }
 }
 
 function commandLine(pid) {
@@ -1300,7 +1281,13 @@ async function cmdStop({ flags }) {
   const ports = {};
   for (const [name, port] of Object.entries(run.ports))
     ports[name] = (await portOpen(port)) ? "still open" : "closed";
-  result.launcherStopped = !groupAlive(pgid);
+  const allPortsClosed = Object.values(ports).every((v) => v === "closed");
+  const launcherAlive = groupAlive(pgid);
+  const browserPid = run.browserPid;
+  const browserAlive = Boolean(
+    browserPid && (processAlive(browserPid) || groupAlive(browserPid)),
+  );
+  result.launcherStopped = !launcherAlive && !browserAlive && allPortsClosed;
   if (result.launcherStopped) {
     releaseClaim(run);
     rmSync(tmuxPathFor(run.dir), { recursive: true, force: true });
@@ -1333,8 +1320,7 @@ async function cmdStop({ flags }) {
       join(run.dir, "evidence"),
     ).length;
   }
-  result.ok =
-    result.launcherStopped && Object.values(ports).every((v) => v === "closed");
+  result.ok = result.launcherStopped && allPortsClosed;
   out(result);
   if (!result.ok) process.exitCode = 3;
 }
