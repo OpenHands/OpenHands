@@ -27,12 +27,20 @@ windowStub.scrollTo = vi.fn();
 // Node.js 25+ ships a built-in localStorage that requires --localstorage-file
 // and is not functional without it. Stub it with a plain in-memory
 // implementation so zustand's persist middleware works in tests.
-if (
-  typeof localStorage === "undefined" ||
-  typeof localStorage.setItem !== "function"
-) {
+//
+// The shim is setup-owned global infrastructure. It is installed at module
+// load (so imports that read localStorage eagerly get a working object) and
+// re-installed in a global `beforeEach` (below) because test-local cleanups
+// commonly call `vi.unstubAllGlobals()`, which restores *every* stubbed global
+// and would otherwise drop this shim mid-run. On Node 25+, where the built-in
+// localStorage lacks usable `setItem`/`clear`, that made storage-heavy test
+// files fail in an order-dependent way: the first test's cleanup removed the
+// shim and the next test then hit the broken built-in. Re-installing per test
+// keeps Web Storage stable for the lifetime of each test worker while still
+// letting individual tests stub and restore their own globals.
+const webStorageShim: Storage = (() => {
   const store: Record<string, string> = {};
-  vi.stubGlobal("localStorage", {
+  const shim: Storage = {
     getItem: (key: string) => store[key] ?? null,
     setItem: (key: string, value: string) => {
       store[key] = String(value);
@@ -47,8 +55,26 @@ if (
       return Object.keys(store).length;
     },
     key: (index: number) => Object.keys(store)[index] ?? null,
-  });
+  } as Storage;
+  return shim;
+})();
+
+function installWebStorageShim(): void {
+  if (
+    typeof localStorage === "undefined" ||
+    typeof localStorage.setItem !== "function"
+  ) {
+    vi.stubGlobal("localStorage", webStorageShim);
+  }
 }
+
+installWebStorageShim();
+
+// Global re-install so a previous test's `vi.unstubAllGlobals()` cleanup can
+// never leave a storage-heavy test without a working localStorage on Node 25+.
+beforeEach(() => {
+  installWebStorageShim();
+});
 
 if (typeof requestAnimationFrame === "undefined") {
   vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) =>
