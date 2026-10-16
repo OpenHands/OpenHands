@@ -47,9 +47,15 @@ import {
 import { RecommendedAutomationsRail } from "./recommended-automations-rail";
 import { RecommendedAutomationsSection } from "./recommended-automations-section";
 import { ResponderDeploymentModal } from "./responder-deployment-modal";
+import type { TemplateFilters } from "./template-filter-chips";
 
 interface RecommendedAutomationsLauncherProps {
   query?: string;
+  /** Resets the search from the catalog's no-match state. */
+  onClearQuery?: () => void;
+  /** The templates page's integration and trigger filters. */
+  filters?: TemplateFilters;
+  onFiltersChange?: (next: TemplateFilters) => void;
   onLaunched?: () => void;
   /** When true, only the automation card grid scrolls inside its section. */
   scrollableGrid?: boolean;
@@ -91,6 +97,9 @@ const BUILT_IN_INTEGRATION_ID_BY_AUTOMATION_ID: Record<string, string> = {
 
 export function RecommendedAutomationsLauncher({
   query,
+  onClearQuery,
+  filters,
+  onFiltersChange,
   onLaunched,
   scrollableGrid = false,
   variant = "catalog",
@@ -408,6 +417,9 @@ export function RecommendedAutomationsLauncher({
           hiddenAutomationIds={hiddenAutomationIds}
           getNativeIntegration={getNativeIntegration}
           query={query}
+          onClearQuery={onClearQuery}
+          filters={filters}
+          onFiltersChange={onFiltersChange}
           onSelect={handleSelectAutomation}
           scrollableGrid={scrollableGrid}
         />
