@@ -185,6 +185,21 @@ describe("formatCommand", () => {
     }
   });
 
+  it("preserves $, backticks, and ! through the save/reload round trip", () => {
+    // Regression test for #17733: saving and reloading gained literal
+    // backslashes, and each further edit compounded them.
+    const argv = ["bash", "-c", "echo 'home:' $HOME with `whoami` and !"];
+    expect(parseCommand(formatCommand(argv))).toEqual(argv);
+    const once = parseCommand(formatCommand(argv));
+    expect(parseCommand(formatCommand(once))).toEqual(once);
+  });
+
+  it("round-trips a double-quoted bash -c argument containing a single quote", () => {
+    const parsed = parseCommand("bash -c \"echo 'home:' $HOME\"");
+    expect(parsed).toEqual(["bash", "-c", "echo 'home:' $HOME"]);
+    expect(parseCommand(formatCommand(parsed))).toEqual(parsed);
+  });
+
   it("renders an empty argv as an empty string", () => {
     expect(formatCommand([])).toBe("");
   });
