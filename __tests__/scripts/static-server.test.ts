@@ -535,6 +535,28 @@ describe("static-server.mjs", () => {
       expect(response.status).toBe(200);
       expect(body).toContain("__AGENT_CANVAS_LOCK_TO_CLOUD__");
     });
+
+    // Regression for the locked-to-cloud "No backend configured" bug
+    // (OpenHands#18029):theruntime-injected index.html encodes the
+    // locked Cloud URL, so a stale cached copy would strip the backend
+    // config and boot the app into the no-backend state. It must be
+    // served so no intermediate proxy/CDN ever stores it.
+    it("serves lock-to-cloud index.html with Cache-Control: no-store", async () => {
+      const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+      tempDirs.push(buildDir);
+      writeFileSync(
+        path.join(buildDir, "index.html"),
+        "<html><head></head><body>app</body></html>",
+      );
+
+      const origin = await startServerLockedToCloud(
+        buildDir,
+        "https://cloud.example.com",
+      );
+      const response = await fetch(`${origin}/`);
+
+      expect(response.headers.get("cache-control")).toBe("no-store");
+    });
   });
 
   describe("disable-telemetry injection", () => {
@@ -704,7 +726,7 @@ describe("static-server.mjs", () => {
       expect(response.headers.get("cache-control")).toBe("no-store");
     });
 
-    it("sets Cache-Control: no-cache when session key is not present but other config is injected", async () => {
+    it("sets Cache-Control: no-store when any runtime config is injected without a session key", async () => {
       const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
       tempDirs.push(buildDir);
       writeFileSync(
@@ -724,6 +746,20 @@ describe("static-server.mjs", () => {
       if (!address || typeof address === "string") throw new Error("No port");
       const origin = `http://127.0.0.1:${(address as { port: number }).port}`;
 
+      const response = await fetch(`${origin}/`);
+
+      expect(response.headers.get("cache-control")).toBe("no-store");
+    });
+
+    it("sets Cache-Control: no-cache when no runtime config is injected", async () => {
+      const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+      tempDirs.push(buildDir);
+      writeFileSync(
+        path.join(buildDir, "index.html"),
+        "<html><head></head><body>app</body></html>",
+      );
+
+      const origin = await startServer(buildDir);
       const response = await fetch(`${origin}/`);
 
       expect(response.headers.get("cache-control")).toBe("no-cache");
