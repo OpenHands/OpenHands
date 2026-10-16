@@ -21,6 +21,7 @@ import {
   buildAutomationRuntimeServicesInfo,
   buildConfig,
   buildRouteArgs,
+  buildStaticFrontendAuthArgs,
   buildViteBackendEnv,
   buildViteFrontendEnv,
   getAgentServerBaseUrl,
@@ -844,6 +845,108 @@ describe("stack mode routing", () => {
         envWithIsolatedKeyPath(),
       ),
     ).rejects.toThrow(/cannot be used together/);
+  });
+
+  it("parses and forwards allowLanSessionKey to buildConfig and vite env", async () => {
+    const config = await buildConfig(
+      { allowLanSessionKey: true, host: "0.0.0.0" },
+      envWithIsolatedKeyPath(),
+    );
+    expect(config.allowLanSessionKey).toBe(true);
+
+    const viteEnv = buildViteFrontendEnv(config);
+    expect(viteEnv.VITE_SESSION_API_KEY).toBe(config.sessionApiKey);
+  });
+
+  it("does not inject session key into vite env on non-loopback without allowLanSessionKey", async () => {
+    const config = await buildConfig(
+      { host: "0.0.0.0" },
+      envWithIsolatedKeyPath(),
+    );
+    expect(config.allowLanSessionKey).toBe(false);
+
+    const viteEnv = buildViteFrontendEnv(config);
+    expect(viteEnv.VITE_SESSION_API_KEY).toBeUndefined();
+  });
+});
+
+describe("buildStaticFrontendAuthArgs (static launcher path)", () => {
+  const keyDirs: string[] = [];
+
+  afterEach(() => {
+    while (keyDirs.length > 0) {
+      const dir = keyDirs.pop();
+      if (dir) rmSync(dir, { recursive: true, force: true });
+    }
+    resetPersistedSessionApiKeyCache();
+  });
+
+  function envWithIsolatedKeyPath(
+    extra: Record<string, string> = {},
+  ): Record<string, string> {
+    const dir = mkdtempSync(path.join(tmpdir(), "static-auth-key-"));
+    keyDirs.push(dir);
+    return {
+      OH_SESSION_API_KEY_PATH: path.join(dir, "session-api-key.txt"),
+      PORT: "19702",
+      OH_CANVAS_SAFE_BACKEND_PORT: "19700",
+      OH_CANVAS_SAFE_AUTOMATION_PORT: "19701",
+      OH_CANVAS_SAFE_VITE_PORT: "19703",
+      ...extra,
+    };
+  }
+
+  it("injects the session key into the static server on non-loopback with allowLanSessionKey", async () => {
+    const config = await buildConfig(
+      { allowLanSessionKey: true, host: "0.0.0.0" },
+      envWithIsolatedKeyPath(),
+    );
+    expect(config.allowLanSessionKey).toBe(true);
+
+    const flags = buildStaticFrontendAuthArgs(config);
+    expect(flags).toContain("--session-api-key");
+    expect(flags).toContain(config.sessionApiKey);
+    expect(flags).toContain("--allow-lan-session-key");
+    expect(flags).not.toContain("--auth-required");
+  });
+
+  it("strips the session key from the static server on non-loopback without allowLanSessionKey", async () => {
+    const config = await buildConfig(
+      { host: "0.0.0.0" },
+      envWithIsolatedKeyPath(),
+    );
+    expect(config.allowLanSessionKey).toBe(false);
+
+    const flags = buildStaticFrontendAuthArgs(config);
+    expect(flags).not.toContain("--session-api-key");
+    expect(flags).not.toContain("--allow-lan-session-key");
+    expect(flags).toContain("--auth-required");
+  });
+
+  it("keeps the session key in the static server on loopback without allowLanSessionKey", async () => {
+    const config = await buildConfig({}, envWithIsolatedKeyPath());
+    expect(config.bindHost).toBe("127.0.0.1");
+    expect(config.allowLanSessionKey).toBe(false);
+
+    const flags = buildStaticFrontendAuthArgs(config);
+    expect(flags).toContain("--session-api-key");
+    expect(flags).toContain(config.sessionApiKey);
+    expect(flags).not.toContain("--allow-lan-session-key");
+    expect(flags).not.toContain("--auth-required");
+  });
+
+  it("keeps public-mode static server key-free even with allowLanSessionKey", async () => {
+    const config = await buildConfig(
+      { public: true, allowLanSessionKey: true },
+      {
+        ...envWithIsolatedKeyPath(),
+        LOCAL_BACKEND_API_KEY: "test-public-key",
+      },
+    );
+
+    const flags = buildStaticFrontendAuthArgs(config);
+    expect(flags).not.toContain("--session-api-key");
+    expect(flags).toContain("--auth-required");
   });
 });
 
