@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Failed browser/glob/grep/file-editor results classified as success - repro evidence</title>
+</head>
+<body>
+  <h1>Reproduction evidence</h1>
+  <p>Terminal runs of <code>__tests__/components/conversation-events/chat/event-content-helpers/get-observation-result.test.ts</code>: failing on main (BrowserObservation/GlobObservation/GrepObservation/PlanningFileEditorObservation with is_error=true map to "success"), passing with the fix together with the new <code>success-indicator.test.tsx</code> (the fix also renders a red x-circle for error results; none was shown before).</p>
+  <img src="terminal.png" alt="vitest runs failing before the fix and passing after it" style="max-width:100%" />
+</body>
+</html>
