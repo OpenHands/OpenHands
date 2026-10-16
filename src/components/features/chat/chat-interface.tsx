@@ -163,9 +163,19 @@ export function ChatInterface({
   // when multiple PlanPreview components exist in the chat.
   // Gated on the same conditions as the Build button
   // (ConversationPlannerBuildBar's `isBuildDisabled`) so it cannot fire
-  // outside the plan flow.
+  // outside the plan flow, while streaming/loading, or when an action awaits confirmation.
+  const handleBuildPlanClickRef = React.useRef(handleBuildPlanClick);
+  handleBuildPlanClickRef.current = handleBuildPlanClick;
+  const scrollDomToBottomRef = React.useRef(scrollDomToBottom);
+  scrollDomToBottomRef.current = scrollDomToBottom;
+
   React.useEffect(() => {
-    if (isAgentRunning || conversationMode !== "plan" || !planContent) {
+    if (
+      isAgentRunning ||
+      curAgentState === AgentState.AWAITING_USER_CONFIRMATION ||
+      conversationMode !== "plan" ||
+      !planContent
+    ) {
       return undefined;
     }
 
@@ -174,8 +184,8 @@ export function ChatInterface({
       if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
         event.preventDefault();
         event.stopPropagation();
-        handleBuildPlanClick(event);
-        scrollDomToBottom();
+        handleBuildPlanClickRef.current(event);
+        scrollDomToBottomRef.current();
       }
     };
 
@@ -186,10 +196,9 @@ export function ChatInterface({
     };
   }, [
     isAgentRunning,
+    curAgentState,
     conversationMode,
     planContent,
-    handleBuildPlanClick,
-    scrollDomToBottom,
   ]);
 
   const { selectedRepository, replayJson } = useInitialQueryStore();

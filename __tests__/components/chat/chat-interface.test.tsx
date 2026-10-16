@@ -1142,6 +1142,10 @@ describe("ChatInterface - Build plan keyboard shortcut", () => {
       isLoading: false,
     });
     useEventStore.setState({ events: [], eventIds: new Set(), uiEvents: [] });
+    vi.mocked(useAgentState).mockReturnValue({
+      curAgentState: AgentState.AWAITING_USER_INPUT,
+      executionStatus: null,
+    });
   });
 
   function renderInterface() {
@@ -1208,6 +1212,24 @@ describe("ChatInterface - Build plan keyboard shortcut", () => {
     expect(sentBuildPrompt()).toBe(false);
   });
 
+  it("does not send the build prompt in plan mode when awaiting user confirmation", () => {
+    vi.mocked(useAgentState).mockReturnValue({
+      curAgentState: AgentState.AWAITING_USER_CONFIRMATION,
+      executionStatus: null,
+    });
+    act(() => {
+      useConversationStore.setState({
+        conversationMode: "plan",
+        planContent: "# Plan\n\n- step one",
+      });
+    });
+
+    renderInterface();
+    pressBuildShortcut();
+
+    expect(sentBuildPrompt()).toBe(false);
+  });
+
   it("sends the build prompt in plan mode when a plan exists", async () => {
     act(() => {
       useConversationStore.setState({
@@ -1218,6 +1240,24 @@ describe("ChatInterface - Build plan keyboard shortcut", () => {
 
     renderInterface();
     fireEvent.keyDown(document, { key: "Enter", metaKey: true });
+
+    await waitFor(() => {
+      expect(sentBuildPrompt()).toBe(true);
+    });
+  });
+
+  it("sends the build prompt in plan mode when empty composer has focus", async () => {
+    act(() => {
+      useConversationStore.setState({
+        conversationMode: "plan",
+        planContent: "# Plan\n\n- step one",
+      });
+    });
+
+    renderInterface();
+    const chatInput = screen.getByTestId("chat-input");
+    chatInput.focus();
+    fireEvent.keyDown(chatInput, { key: "Enter", metaKey: true });
 
     await waitFor(() => {
       expect(sentBuildPrompt()).toBe(true);

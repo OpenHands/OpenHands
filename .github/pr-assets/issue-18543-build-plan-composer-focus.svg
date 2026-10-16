@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1260" height="470" role="img" aria-label="Build plan keyboard shortcut composer focus verification">
+  <rect width="100%" height="100%" rx="18" fill="#0b1020"/>
+  <circle cx="34" cy="32" r="8" fill="#ff5f56"/>
+  <circle cx="60" cy="32" r="8" fill="#ffbd2e"/>
+  <circle cx="86" cy="32" r="8" fill="#27c93f"/>
+  <text x="28" y="78" fill="#d7e2ff" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21">Bug #18543: Ctrl/Cmd+Enter builds plan while composer has focus</text>
+  <text x="28" y="116" fill="#ff9b91" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21">Before: Empty composer Enter handler expanded height &amp; mutated store, disrupting shortcut dispatch</text>
+  <text x="28" y="164" fill="#8ef0a1" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21">After: Empty Ctrl/Cmd+Enter bubbles cleanly to build plan shortcut; stable refs prevent listener churn</text>
+  <text x="28" y="218" fill="#d7e2ff" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="18">Acceptance criteria coverage:</text>
+  <text x="28" y="256" fill="#8ef0a1" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21">Empty composer: builds plan · Non-empty composer: sends typed text · Awaiting confirmation: confirms action</text>
+  <text x="28" y="294" fill="#8ef0a1" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21">Build button, composer Enter/Shift+Enter &amp; slash-commands completely preserved</text>
+  <text x="28" y="348" fill="#d7e2ff" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21">$ npm test chat-interface use-chat-input-events</text>
+  <text x="28" y="386" fill="#8ef0a1" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21">Test Files 2 passed (2) · Tests 44 passed (44)</text>
+  <text x="28" y="440" fill="#8ef0a1" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21">Verified on main @ ccdb087 · Node 24.19.0 · TypeScript 0 errors</text>
+</svg>

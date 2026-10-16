@@ -73,6 +73,14 @@ export const useChatInputEvents = (
         return;
       }
 
+      // When the composer is empty and the user presses Ctrl/Cmd+Enter, do not
+      // treat it as an empty-content Enter (which expands composer height and
+      // updates the store, interrupting document shortcut handlers). Let the
+      // event bubble up to global shortcut listeners such as build plan.
+      if ((e.metaKey || e.ctrlKey) && checkIsContentEmpty()) {
+        return;
+      }
+
       if (checkIsContentEmpty()) {
         e.preventDefault();
         increaseHeightForEmptyContent();

@@ -18,14 +18,20 @@ const createKeyboardEvent = ({
   key = "Enter",
   composing = false,
   shiftKey = false,
+  ctrlKey = false,
+  metaKey = false,
 }: {
   key?: string;
   composing?: boolean;
   shiftKey?: boolean;
+  ctrlKey?: boolean;
+  metaKey?: boolean;
 } = {}) =>
   ({
     key,
     shiftKey,
+    ctrlKey,
+    metaKey,
     nativeEvent: { isComposing: composing },
     preventDefault: vi.fn(),
   }) as unknown as React.KeyboardEvent;
@@ -264,6 +270,27 @@ describe("chat input keyboard events", () => {
     act(() => result.current.handleKeyDown(event, disabled, submit));
 
     expect(event.preventDefault).not.toHaveBeenCalled();
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it("does not increase height or preventDefault for Ctrl/Cmd+Enter when content is empty", () => {
+    const increaseHeight = vi.fn();
+    const { result } = renderInputEvents({
+      increaseHeight,
+      isEmpty: () => true,
+    });
+    const ctrlEnter = createKeyboardEvent({ ctrlKey: true });
+    const cmdEnter = createKeyboardEvent({ metaKey: true });
+    const submit = vi.fn();
+
+    act(() => {
+      result.current.handleKeyDown(ctrlEnter, false, submit);
+      result.current.handleKeyDown(cmdEnter, false, submit);
+    });
+
+    expect(increaseHeight).not.toHaveBeenCalled();
+    expect(ctrlEnter.preventDefault).not.toHaveBeenCalled();
+    expect(cmdEnter.preventDefault).not.toHaveBeenCalled();
     expect(submit).not.toHaveBeenCalled();
   });
 });
