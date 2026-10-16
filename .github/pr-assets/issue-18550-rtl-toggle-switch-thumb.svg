@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1260" height="470" role="img" aria-label="Toggle switch thumb RTL mirrored translation verification">
+  <rect width="100%" height="100%" rx="18" fill="#0b1020"/>
+  <circle cx="34" cy="32" r="8" fill="#ff5f56"/>
+  <circle cx="60" cy="32" r="8" fill="#ffbd2e"/>
+  <circle cx="86" cy="32" r="8" fill="#27c93f"/>
+  <text x="28" y="78" fill="#d7e2ff" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21">Bug #18550: Mirror toggle switch thumb translation in RTL mode</text>
+  <text x="28" y="116" fill="#ff9b91" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21">Before: Fixed translate-x-* pushed thumb outside track in RTL flex containers</text>
+  <text x="28" y="164" fill="#8ef0a1" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21">After: Added mirrored rtl:-translate-x-* classes to ensure thumb stays inside track</text>
+  <text x="28" y="218" fill="#d7e2ff" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="18">Acceptance criteria coverage:</text>
+  <text x="28" y="256" fill="#8ef0a1" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21">Checked: translate-x-5.25 rtl:-translate-x-5.25 (md) · translate-x-2.5 rtl:-translate-x-2.5 (sm)</text>
+  <text x="28" y="294" fill="#8ef0a1" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21">Unchecked: translate-x-0.5 rtl:-translate-x-0.5 (md) · translate-x-0 rtl:-translate-x-0 (sm)</text>
+  <text x="28" y="348" fill="#d7e2ff" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21">$ npm test -- __tests__/components/automations/toggle-switch.test.tsx</text>
+  <text x="28" y="386" fill="#8ef0a1" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21">Test Files 1 passed (1) · Tests 6 passed (6)</text>
+  <text x="28" y="440" fill="#8ef0a1" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21">Verified on main @ 9d02893 · Node 24.19.0 · TypeScript 0 errors</text>
+</svg>
