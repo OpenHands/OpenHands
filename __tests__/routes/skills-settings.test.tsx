@@ -9,7 +9,7 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { RouterProvider, createMemoryRouter } from "react-router";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import SkillsSettingsScreen from "#/routes/skills-settings";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import SkillsService from "#/api/skills-service";
@@ -20,8 +20,31 @@ import {
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import { Settings, SkillInfo } from "#/types/settings";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
+import {
+  __resetActiveStoreForTests,
+  getActiveBackend,
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
+import type { Backend } from "#/api/backend-registry/types";
 
 const navigateMock = vi.fn();
+
+const backendA: Backend = {
+  id: "backend-a",
+  name: "Backend A",
+  host: "http://backend-a.test",
+  apiKey: "",
+  kind: "local",
+};
+
+const backendB: Backend = {
+  id: "backend-b",
+  name: "Backend B",
+  host: "http://backend-b.test",
+  apiKey: "",
+  kind: "local",
+};
 
 vi.mock("#/context/navigation-context", () => ({
   useNavigation: () => ({
@@ -65,6 +88,9 @@ function buildSkill(overrides: Partial<SkillInfo> = {}): SkillInfo {
 }
 
 function renderSkillsSettingsScreen(initialEntry = "/skills") {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   const router = createMemoryRouter(
     [
       {
@@ -81,26 +107,25 @@ function renderSkillsSettingsScreen(initialEntry = "/skills") {
 
   render(<RouterProvider router={router} />, {
     wrapper: ({ children }) => (
-      <QueryClientProvider
-        client={
-          new QueryClient({
-            defaultOptions: { queries: { retry: false } },
-          })
-        }
-      >
-        {children}
-      </QueryClientProvider>
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     ),
   });
 
-  return router;
+  return { router, queryClient };
 }
 
 describe("SkillsSettingsScreen", () => {
   beforeEach(() => {
+    window.localStorage.clear();
+    __resetActiveStoreForTests();
     vi.restoreAllMocks();
     navigateMock.mockReset();
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
+  });
+
+  afterEach(() => {
+    window.localStorage.clear();
+    __resetActiveStoreForTests();
   });
 
   it("renders the description text inside the description badge", async () => {
@@ -235,7 +260,7 @@ Full skill body.`,
       }),
     ]);
 
-    const router = renderSkillsSettingsScreen();
+    const { router } = renderSkillsSettingsScreen();
     await screen.findByTestId("skill-card-deno");
 
     await user.click(screen.getByTestId("skill-facet-type-repo"));
@@ -270,7 +295,7 @@ Full skill body.`,
       }),
     ]);
 
-    const router = renderSkillsSettingsScreen("/skills?q=helper");
+    const { router } = renderSkillsSettingsScreen("/skills?q=helper");
     await screen.findByTestId("skill-card-deno");
     const search = screen.getByTestId("skills-search-input");
 
@@ -420,6 +445,116 @@ Full skill body.`,
     await waitFor(() =>
       expect(saveSpy).toHaveBeenCalledWith(
         expect.objectContaining({ disabled_skills: [skill.name] }),
+      ),
+    );
+  });
+
+  it("does not overwrite a local toggle when settings refetch with stale data", async () => {
+    const user = userEvent.setup();
+    const previouslyDisabled = buildSkill({ name: "previously-disabled" });
+    const skill = buildSkill({ name: "keep-disabled" });
+    vi.spyOn(SkillsService, "getSkills").mockResolvedValue([
+      previouslyDisabled,
+      skill,
+    ]);
+    const getSettingsSpy = vi
+      .spyOn(SettingsService, "getSettings")
+      .mockResolvedValueOnce(
+        buildSettings({ disabled_skills: [previouslyDisabled.name] }),
+      )
+      .mockResolvedValue(buildSettings({ disabled_skills: [] }));
+    const pendingInitialSave = new Promise<boolean>(() => {});
+    const saveSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockImplementation((settings) =>
+        settings.disabled_skills?.includes(skill.name)
+          ? Promise.resolve(true)
+          : pendingInitialSave,
+      );
+
+    const { queryClient } = renderSkillsSettingsScreen();
+    const card = await screen.findByTestId(`skill-card-${skill.name}`);
+    const toggle = within(card).getByTestId(`skill-toggle-${skill.name}`);
+
+    await user.click(toggle);
+
+    await waitFor(() =>
+      expect(saveSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          disabled_skills: [previouslyDisabled.name, skill.name],
+        }),
+      ),
+    );
+    await waitFor(() =>
+      expect(getSettingsSpy.mock.calls.length).toBeGreaterThanOrEqual(2),
+    );
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+    expect(toggle).toHaveAttribute("aria-checked", "false");
+  });
+
+  it("re-hydrates disabled skills before saving after a backend switch", async () => {
+    const user = userEvent.setup();
+    const disabledOnA = buildSkill({ name: "disabled-on-a" });
+    const disabledOnB = buildSkill({ name: "disabled-on-b" });
+    const toggledOnB = buildSkill({ name: "toggle-on-b" });
+    vi.spyOn(SkillsService, "getSkills").mockResolvedValue([
+      disabledOnA,
+      disabledOnB,
+      toggledOnB,
+    ]);
+    setRegisteredBackends([backendA, backendB]);
+    setActiveSelection({ backendId: backendA.id });
+    const getSettingsSpy = vi
+      .spyOn(SettingsService, "getSettings")
+      .mockImplementation(() =>
+        Promise.resolve(
+          buildSettings({
+            disabled_skills:
+              getActiveBackend().backend.id === backendA.id
+                ? [disabledOnA.name]
+                : [disabledOnB.name],
+          }),
+        ),
+      );
+    const pendingHydrationSave = new Promise<boolean>(() => {});
+    const saveSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockImplementation((settings) =>
+        settings.disabled_skills?.includes(toggledOnB.name)
+          ? Promise.resolve(true)
+          : pendingHydrationSave,
+      );
+
+    renderSkillsSettingsScreen();
+
+    const toggleA = await screen.findByTestId(
+      `skill-toggle-${disabledOnA.name}`,
+    );
+    const toggleB = screen.getByTestId(`skill-toggle-${disabledOnB.name}`);
+    expect(toggleA).toHaveAttribute("aria-checked", "false");
+    expect(toggleB).toHaveAttribute("aria-checked", "true");
+
+    act(() => setActiveSelection({ backendId: backendB.id }));
+
+    await waitFor(() => expect(getSettingsSpy).toHaveBeenCalledTimes(2));
+    await waitFor(() => {
+      expect(
+        screen.getByTestId(`skill-toggle-${disabledOnA.name}`),
+      ).toHaveAttribute("aria-checked", "true");
+      expect(
+        screen.getByTestId(`skill-toggle-${disabledOnB.name}`),
+      ).toHaveAttribute("aria-checked", "false");
+    });
+    saveSpy.mockClear();
+
+    await user.click(screen.getByTestId(`skill-toggle-${toggledOnB.name}`));
+
+    await waitFor(() =>
+      expect(saveSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          disabled_skills: [disabledOnB.name, toggledOnB.name],
+        }),
       ),
     );
   });
