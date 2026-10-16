@@ -20,37 +20,79 @@
 
 import { defineConfig, devices } from "@playwright/test";
 import { randomBytes } from "node:crypto";
+import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import {
+  allocateMockLlmPorts,
+  mockLlmPortSpecs,
+  releasePortsCommand,
+} from "./tests/e2e/mock-llm/utils/allocate-mock-llm-ports";
+import { uvCacheEnvForIsolatedHome } from "./tests/e2e/mock-llm/utils/uv-cache-env";
 
-// ── Port allocation (separate from live E2E / dev to avoid collisions) ─
-const MOCK_LLM_PORT = process.env.MOCK_LLM_PORT ?? "9999";
+// ── Unique run namespace & directory isolation ─────────────────────────
+const runId =
+  process.env.MOCK_LLM_RUN_ID?.trim() || randomBytes(4).toString("hex");
+process.env.MOCK_LLM_RUN_ID = runId;
 
-// The agent-canvas binary exposes a single ingress port that routes:
-//   /api/automation/* → automation backend
-//   /api/*, /sockets  → agent-server
-//   /*                → static frontend
-// Tests use this single URL for both the browser (baseURL) and backend API
-// calls (the ingress proxies /api/* transparently).
-const INGRESS_PORT = process.env.MOCK_LLM_INGRESS_PORT ?? "18300";
+const RUN_ROOT = resolve(
+  process.env.MOCK_LLM_RUN_DIR ?? join(".tmp", `mock-llm-${runId}`),
+);
+process.env.MOCK_LLM_RUN_DIR = RUN_ROOT;
 
-// A second static-server instance for public-mode auth tests. It serves
-// the same build/ directory with --auth-required (no baked session key)
-// and proxies to the same backend.
-const PUBLIC_MODE_PORT = process.env.MOCK_LLM_PUBLIC_MODE_PORT ?? "18301";
+const STATE_DIR = resolve(
+  process.env.OH_CANVAS_SAFE_STATE_DIR ?? join(RUN_ROOT, "state"),
+);
+process.env.OH_CANVAS_SAFE_STATE_DIR = STATE_DIR;
+
+// Persistence dir is parent of STATE_DIR, so here it is RUN_ROOT.
+// All profiles, secrets, agent-profiles live inside RUN_ROOT and stay isolated.
+const AUTOMATION_DB_DIR = resolve(
+  process.env.MOCK_LLM_AUTOMATION_DIR ?? join(RUN_ROOT, "automation"),
+);
+process.env.MOCK_LLM_AUTOMATION_DIR = AUTOMATION_DB_DIR;
+
+// Isolated process home so the stack does not write into the developer's
+// real home. User skills live at dirname(STATE_DIR)/skills.
+const TEST_HOME = resolve(
+  process.env.MOCK_LLM_TEST_HOME ?? join(RUN_ROOT, "home"),
+);
+process.env.MOCK_LLM_TEST_HOME = TEST_HOME;
+
+// HOME is the isolated test home so the stack writes outside the developer's
+// real home. User skills are loaded from OH_PERSISTENCE_DIR/skills (the parent
+// of STATE_DIR). uv keeps using the runner home, where CI pre-warmed the cache.
+const runnerHome = process.env.HOME ?? homedir();
+const uvCacheEnv = uvCacheEnvForIsolatedHome(runnerHome, process.env);
+
+const SKILL_REPOS_DIR = resolve(
+  process.env.MOCK_LLM_SKILL_REPOS_HOST_DIR ?? join(RUN_ROOT, "skill-repos"),
+);
+process.env.MOCK_LLM_SKILL_REPOS_HOST_DIR = SKILL_REPOS_DIR;
+
+const USER_SKILLS_DIR = resolve(
+  process.env.MOCK_LLM_USER_SKILLS_HOST_DIR ??
+    join(dirname(STATE_DIR), "skills"),
+);
+process.env.MOCK_LLM_USER_SKILLS_HOST_DIR = USER_SKILLS_DIR;
+
+// Playwright re-imports this config in each worker. allocateMockLlmPorts
+// records the first result in MOCK_LLM_PORT_SNAPSHOT so workers reuse it
+// after the webServers have bound the ports. Every port stays held in this
+// process until its webServer command or spec releases it.
+const rawPorts = await allocateMockLlmPorts(mockLlmPortSpecs("npm"), "npm");
+
+const MOCK_LLM_PORT = rawPorts.mockLlm;
+const INGRESS_PORT = rawPorts.ingress;
+const PUBLIC_MODE_PORT = rawPorts.publicMode;
+const BACKEND_PORT = rawPorts.backend;
+const AUTOMATION_PORT = rawPorts.automation;
+const VITE_PORT = rawPorts.vite;
 
 // ── Session API key ────────────────────────────────────────────────────
 const sessionApiKey =
   process.env.MOCK_LLM_SESSION_API_KEY?.trim() ||
   randomBytes(32).toString("hex");
 process.env.MOCK_LLM_SESSION_API_KEY = sessionApiKey;
-
-// ── State directory (isolated per test run) ────────────────────────────
-const STATE_DIR = resolve(".tmp/mock-llm-state");
-
-// Automation DB lives at $parent_of_STATE_DIR/automation/automations.db,
-// mirroring docker/entrypoint.sh which uses $HOME/.openhands/automation/automations.db.
-// Both STATE_DIR and AUTOMATION_DB_DIR must be cleaned between runs to avoid stale data.
-const AUTOMATION_DB_DIR = join(dirname(STATE_DIR), "automation");
 
 // ── URLs ───────────────────────────────────────────────────────────────
 const INGRESS_URL = `http://127.0.0.1:${INGRESS_PORT}/`;
@@ -64,7 +106,6 @@ const MOCK_LLM_PYTHON = process.env.MOCK_LLM_PYTHON ?? "python3";
 // Export for the test helpers — BACKEND_URL points to the ingress (API
 // calls are proxied to the agent-server, so no direct backend port needed).
 process.env.MOCK_LLM_BACKEND_URL = `http://127.0.0.1:${INGRESS_PORT}`;
-process.env.MOCK_LLM_PORT = MOCK_LLM_PORT;
 process.env.MOCK_LLM_PUBLIC_MODE_URL = `http://127.0.0.1:${PUBLIC_MODE_PORT}`;
 
 function shellQuote(value: string) {
@@ -94,6 +135,7 @@ export default defineConfig({
   workers: 1,
   timeout: 60_000,
   globalTimeout: process.env.CI ? ciGlobalTimeoutMs : 0, // 20 min hard cap in CI
+  globalTeardown: resolve("tests/e2e/mock-llm/utils/global-teardown.ts"),
   reporter: [
     ["line"],
     ["json", { outputFile: "test-results-mock-llm/results.json" }],
@@ -116,10 +158,12 @@ export default defineConfig({
   webServer: [
     // 1. Mock LLM server (Python)
     {
-      command: `${MOCK_LLM_PYTHON} tests/e2e/mock-llm/scripts/mock-llm-server.py --port ${MOCK_LLM_PORT}`,
+      command:
+        releasePortsCommand(["mockLlm"]) +
+        `exec ${MOCK_LLM_PYTHON} tests/e2e/mock-llm/scripts/mock-llm-server.py --port ${MOCK_LLM_PORT}`,
       url: MOCK_LLM_URL,
       timeout: 30_000,
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: false,
       stdout: "pipe",
       stderr: "pipe",
     },
@@ -136,17 +180,25 @@ export default defineConfig({
     // kills children via process groups and exits cleanly.
     {
       command:
-        // Clean state dir and automation DB dir to avoid stale data between runs.
-        // Automation DB is stored outside STATE_DIR (at AUTOMATION_DB_DIR) so both
-        // must be cleaned; see scripts/dev-with-automation.mjs startAutomationBackend.
-        `node -e "const fs=require('node:fs'); fs.rmSync('${STATE_DIR}',{recursive:true,force:true}); fs.rmSync('${AUTOMATION_DB_DIR}',{recursive:true,force:true});" && ` +
+        // Clean isolated run root (or state dir and automation DB dir) before run
+        `node -e "const fs=require('node:fs'); fs.rmSync('${RUN_ROOT}',{recursive:true,force:true}); fs.rmSync('${STATE_DIR}',{recursive:true,force:true}); fs.rmSync('${AUTOMATION_DB_DIR}',{recursive:true,force:true});" && ` +
         // Build frontend if not already built (CI should pre-build for caching)
         "[ -f build/index.html ] || npm run build:app && " +
+        releasePortsCommand(["ingress", "backend", "automation", "vite"]) +
         [
           "exec env",
           envAssignment("OH_CANVAS_SAFE_STATE_DIR", STATE_DIR),
           envAssignment("PORT", INGRESS_PORT),
           envAssignment("LOCAL_BACKEND_API_KEY", sessionApiKey),
+          envAssignment("OH_CANVAS_SAFE_BACKEND_PORT", BACKEND_PORT),
+          envAssignment("OH_CANVAS_SAFE_AUTOMATION_PORT", AUTOMATION_PORT),
+          envAssignment("OH_CANVAS_SAFE_VITE_PORT", VITE_PORT),
+          envAssignment("HOME", TEST_HOME),
+          envAssignment("UV_CACHE_DIR", uvCacheEnv.UV_CACHE_DIR),
+          envAssignment(
+            "UV_PYTHON_INSTALL_DIR",
+            uvCacheEnv.UV_PYTHON_INSTALL_DIR,
+          ),
           "VITE_DO_NOT_TRACK=1",
           "VITE_ENABLE_BROWSER_TOOLS=false",
           // Bypass npm — exec directly into node so SIGTERM reaches
@@ -163,12 +215,12 @@ export default defineConfig({
       // auth on the list endpoint (confirmed in CI).
       url: `http://127.0.0.1:${INGRESS_PORT}/api/automation/v1`,
       timeout: 180_000, // allow extra time for build + agent-server + automation startup
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: false,
       // Without this, Playwright tears the webServer down with
       // process.kill(-pid, "SIGKILL"), which the stack cannot catch. Its
       // services are spawned detached (see scripts/dev-process-utils.mjs), so
       // they sit in their own process groups and survive that group kill,
-      // orphaning to PID 1 while still holding 18000/18001/18300/3001. Asking
+      // orphaning to PID 1 while still holding this run's ports. Asking
       // for SIGTERM lets the existing shutdown handler in
       // scripts/dev-with-automation.mjs run, which stops each service, waits
       // 3s, then force-kills stragglers. The timeout below leaves headroom
@@ -176,28 +228,29 @@ export default defineConfig({
       gracefulShutdown: { signal: "SIGTERM", timeout: 15_000 },
     },
     // 3. Public-mode static server — same build/, same backend, but with
-    //    --auth-required (no session key injected). The agent-server's
-    //    internal ports are the defaults from config/defaults.json (18000
-    //    for agent-server, 18001 for automation).
+    //    --auth-required (no session key injected). Proxies to the dynamically
+    //    configured agent-server and automation ports.
     {
-      command: [
-        // No DigitalOcean bridge on the e2e public-mode server: nothing here
-        // uses it, and the Providers entry must not appear in these specs.
-        "exec env",
-        envAssignment("MARS_WEB", "0"),
-        "node scripts/static-server.mjs",
-        "--dir build",
-        `--port ${PUBLIC_MODE_PORT}`,
-        "--host 127.0.0.1",
-        "--auth-required",
-        "--route /api/automation=http://localhost:18001",
-        "--route /api=http://localhost:18000",
-        "--route /server_info=http://localhost:18000",
-        "--route /sockets=http://localhost:18000",
-      ].join(" "),
+      command:
+        releasePortsCommand(["publicMode"]) +
+        [
+          // No DigitalOcean bridge on the e2e public-mode server: nothing here
+          // uses it, and the Providers entry must not appear in these specs.
+          "exec env",
+          envAssignment("MARS_WEB", "0"),
+          "node scripts/static-server.mjs",
+          "--dir build",
+          `--port ${PUBLIC_MODE_PORT}`,
+          "--host 127.0.0.1",
+          "--auth-required",
+          `--route /api/automation=http://localhost:${AUTOMATION_PORT}`,
+          `--route /api=http://localhost:${BACKEND_PORT}`,
+          `--route /server_info=http://localhost:${BACKEND_PORT}`,
+          `--route /sockets=http://localhost:${BACKEND_PORT}`,
+        ].join(" "),
       url: `http://127.0.0.1:${PUBLIC_MODE_PORT}/`,
       timeout: 15_000,
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: false,
     },
   ],
 });
