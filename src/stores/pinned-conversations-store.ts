@@ -22,6 +22,22 @@ const initialState: PinnedConversationsState = {
   pinsByBackendId: {},
 };
 
+/**
+ * Scope key a backend's pins are stored under.
+ *
+ * Pins follow the conversation list they were set from: local backends have
+ * no org, so their pins keep the bare backend id (and stay readable for
+ * anyone who pinned before pins became org-aware). Cloud backends are
+ * org-scoped — a conversation pinned in one org must not show as pinned
+ * while a different org is active.
+ */
+export function getPinnedConversationsScopeKey(
+  backendId: string,
+  orgId?: string | null,
+): string {
+  return orgId ? `${backendId}:${orgId}` : backendId;
+}
+
 function getPinsForBackend(
   pinsByBackendId: Record<string, string[]>,
   backendId: string,
