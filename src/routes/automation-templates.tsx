@@ -37,7 +37,10 @@ export default function AutomationTemplates() {
       <div className="w-full">
         <SearchInput value={searchQuery} onChange={setSearchQuery} />
       </div>
-      <RecommendedAutomationsLauncher query={searchQuery} />
+      <RecommendedAutomationsLauncher
+        query={searchQuery}
+        onClearQuery={() => setSearchQuery("")}
+      />
     </ManifestSubpageLayout>
   );
 }

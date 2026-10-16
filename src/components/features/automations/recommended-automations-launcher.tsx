@@ -45,6 +45,7 @@ import { ResponderDeploymentModal } from "./responder-deployment-modal";
 
 interface RecommendedAutomationsLauncherProps {
   query?: string;
+  onClearQuery?: () => void;
   onLaunched?: () => void;
   /** When true, only the automation card grid scrolls inside its section. */
   scrollableGrid?: boolean;
@@ -85,6 +86,7 @@ const BUILT_IN_INTEGRATION_ID_BY_AUTOMATION_ID: Record<string, string> = {
 
 export function RecommendedAutomationsLauncher({
   query,
+  onClearQuery,
   onLaunched,
   scrollableGrid = false,
   variant = "catalog",
@@ -373,6 +375,7 @@ export function RecommendedAutomationsLauncher({
           installedServers={installedMcpConfig}
           getNativeIntegration={getNativeIntegration}
           query={query}
+          onClearQuery={onClearQuery}
           onSelect={handleSelectAutomation}
           scrollableGrid={scrollableGrid}
         />

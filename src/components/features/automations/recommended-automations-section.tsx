@@ -29,6 +29,7 @@ import {
   getAutomationIcon,
   getAutomationLaunchPrompt,
   getIntegrationIds,
+  getRequiredIntegrationIds,
 } from "#/utils/automation-catalog";
 import { getAutomationsByPopularity } from "#/utils/recommended-automation-rail";
 import { cn } from "#/utils/utils";
@@ -39,6 +40,7 @@ import {
   extensionModuleCardPillClassName,
   extensionModuleCardSurfaceClassName,
 } from "#/utils/extension-module-card-classes";
+import { AutomationsFilteredEmptyState } from "./dashboard/automations-filtered-empty-state";
 import { StatusBadge } from "./status-badge";
 
 type GetNativeIntegration = (entryId: string) => NativeGitIntegration | null;
@@ -49,6 +51,7 @@ interface RecommendedAutomationsSectionProps {
   /** Resolves an integration's native (cloud) connection; none by default. */
   getNativeIntegration?: GetNativeIntegration;
   query?: string;
+  onClearQuery?: () => void;
   onSelect: (automation: RecommendedAutomation) => void;
   /** When true, title, description, and cards share one scroll area. */
   scrollableGrid?: boolean;
@@ -235,11 +238,15 @@ function AutomationCardGrid({
     <div className={cn("mt-3", extensionModuleCardGridClassName)}>
       {automations.map((automation) => {
         const integrations = getIntegrationEntries(automation);
-        // "N MCPs to connect" only counts entries the install flow can
-        // actually connect (as MCP or natively); an external-setup
-        // integration is surfaced on its own pill instead.
+        const requiredIds = new Set(getRequiredIntegrationIds(automation));
+        // "N MCPs to connect" only counts required entries the install flow can
+        // actually connect (as MCP or natively); an optional integration or
+        // external-setup integration is surfaced on its own pill instead.
         const missingCount = integrations.filter(
           ({ id, entry, mcpInstallable }) => {
+            if (!requiredIds.has(id)) {
+              return false;
+            }
             if (!entry || findInstalledEntryMatch(entry, installedServers)) {
               return false;
             }
@@ -309,6 +316,7 @@ export function RecommendedAutomationsSection({
   installedServers,
   getNativeIntegration = () => null,
   query = "",
+  onClearQuery,
   onSelect,
   scrollableGrid = false,
 }: RecommendedAutomationsSectionProps) {
@@ -326,7 +334,16 @@ export function RecommendedAutomationsSection({
     ),
   );
 
-  if (visibleAutomations.length === 0) return null;
+  if (visibleAutomations.length === 0) {
+    if (query.trim()) {
+      return (
+        <section data-testid="recommended-automations-section" className="mt-3">
+          <AutomationsFilteredEmptyState onClear={onClearQuery ?? (() => {})} />
+        </section>
+      );
+    }
+    return null;
+  }
 
   const provenAutomations = visibleAutomations.filter(isProvenAutomation);
   const betaAutomations = visibleAutomations.filter(
