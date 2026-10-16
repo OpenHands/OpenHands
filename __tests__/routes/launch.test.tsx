@@ -78,6 +78,27 @@ describe("LaunchRoute", () => {
       expect(screen.getByText("owner/repo")).toBeInTheDocument();
     });
 
+    it("should preserve Unicode parameters from UTF-8 base64", () => {
+      const expectedTask = "整理发布说明 🚀";
+      const plugins = [
+        {
+          source: "github:owner/repo",
+          parameters: { task: expectedTask },
+        },
+      ];
+      const bytes = new TextEncoder().encode(JSON.stringify(plugins));
+      const binary = Array.from(bytes, (byte) =>
+        String.fromCharCode(byte),
+      ).join("");
+      const encoded = btoa(binary);
+
+      renderLaunchRoute(`?plugins=${encodeURIComponent(encoded)}`);
+
+      expect(screen.getByTestId("plugin-0-param-task")).toHaveValue(
+        expectedTask,
+      );
+    });
+
     it("should parse multiple plugins from base64", async () => {
       const plugins = [
         { source: "github:owner/repo1", parameters: { key: "value1" } },
