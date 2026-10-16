@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 480" width="960" height="480">
+  <defs>
+    <style>
+      .bg { fill: #0f172a; }
+      .card { fill: #1e293b; stroke: #334155; stroke-width: 1.5; rx: 8px; }
+      .title { font-family: ui-sans-serif, system-ui, sans-serif; font-size: 16px; font-weight: 600; fill: #f8fafc; }
+      .subtitle { font-family: ui-sans-serif, system-ui, sans-serif; font-size: 13px; font-weight: 500; fill: #94a3b8; }
+      .item { fill: #0f172a; stroke: #475569; stroke-width: 1; rx: 6px; }
+      .item-focus { fill: #1e1b4b; stroke: #6366f1; stroke-width: 2; rx: 6px; }
+      .item-text { font-family: ui-sans-serif, system-ui, sans-serif; font-size: 13px; fill: #f1f5f9; }
+      .badge-err { fill: #7f1d1d; stroke: #ef4444; stroke-width: 1; rx: 4px; }
+      .badge-err-text { font-family: ui-sans-serif, system-ui, sans-serif; font-size: 11px; font-weight: 600; fill: #fecaca; }
+      .badge-ok { fill: #064e3b; stroke: #059669; stroke-width: 1; rx: 4px; }
+      .badge-ok-text { font-family: ui-sans-serif, system-ui, sans-serif; font-size: 11px; font-weight: 600; fill: #a7f3d0; }
+    </style>
+  </defs>
+
+  <rect width="960" height="480" class="bg" />
+
+  <!-- Header -->
+  <text x="40" y="44" class="title" font-size="20">Provider Connection Menu Keyboard Focus (Issue #18204)</text>
+  <text x="40" y="70" class="subtitle">Keyboard navigation and immediate focus management on open</text>
+
+  <!-- Left: Before (Bug) -->
+  <g transform="translate(40, 95)">
+    <rect width="420" height="345" class="card" />
+    <text x="24" y="36" class="title">Before: Focus Stuck on Trigger Button</text>
+    <text x="24" y="60" class="subtitle">useEffect[] ran before portaled DOM elements existed</text>
+
+    <!-- Trigger button focused -->
+    <rect x="24" y="80" width="372" height="44" class="item-focus" />
+    <text x="36" y="107" class="item-text">provider-connection-menu-trigger (⋮)</text>
+    <rect x="290" y="92" width="94" height="20" class="badge-err" />
+    <text x="298" y="106" class="badge-err-text">FOCUSED ⚠️</text>
+
+    <!-- Menu opened but unfocused -->
+    <rect x="48" y="136" width="324" height="40" class="item" />
+    <text x="60" y="161" class="item-text">Bulk add (provider-connection-add-models)</text>
+
+    <rect x="48" y="184" width="324" height="40" class="item" />
+    <text x="60" y="209" class="item-text">Edit (provider-connection-edit)</text>
+
+    <!-- Callout -->
+    <rect x="24" y="240" width="372" height="85" fill="#450a0a" stroke="#dc2626" rx="6" />
+    <text x="36" y="264" font-family="ui-sans-serif, system-ui" font-size="13" font-weight="600" fill="#fca5a5">Defect:</text>
+    <text x="36" y="286" font-family="ui-sans-serif, system-ui" font-size="12" fill="#fecaca">• ArrowDown does nothing because focus is on trigger</text>
+    <text x="36" y="306" font-family="ui-sans-serif, system-ui" font-size="12" fill="#fecaca">• Required unexpected Tab press to reach Bulk add</text>
+  </g>
+
+  <!-- Right: After (Fixed) -->
+  <g transform="translate(500, 95)">
+    <rect width="420" height="345" class="card" />
+    <text x="24" y="36" class="title">After: Immediate Focus on First Item</text>
+    <text x="24" y="60" class="subtitle">Focus waits for isMenuRendered measurement</text>
+
+    <!-- Trigger button unfocused -->
+    <rect x="24" y="80" width="372" height="44" class="item" />
+    <text x="36" y="107" class="item-text">provider-connection-menu-trigger (⋮)</text>
+
+    <!-- First item focused -->
+    <rect x="48" y="136" width="324" height="40" class="item-focus" />
+    <text x="60" y="161" class="item-text">Bulk add (provider-connection-add-models)</text>
+    <rect x="280" y="146" width="80" height="20" class="badge-ok" />
+    <text x="290" y="160" class="badge-ok-text">FOCUSED ✓</text>
+
+    <rect x="48" y="184" width="324" height="40" class="item" />
+    <text x="60" y="209" class="item-text">Edit (provider-connection-edit)</text>
+
+    <!-- Benefits -->
+    <rect x="24" y="240" width="372" height="85" fill="#064e3b" stroke="#059669" rx="6" />
+    <text x="36" y="264" font-family="ui-sans-serif, system-ui" font-size="13" font-weight="600" fill="#a7f3d0">Fixed behavior:</text>
+    <text x="36" y="286" font-family="ui-sans-serif, system-ui" font-size="12" fill="#a7f3d0">• Opening menu focuses Bulk add immediately</text>
+    <text x="36" y="306" font-family="ui-sans-serif, system-ui" font-size="12" fill="#a7f3d0">• ArrowDown/Up navigate cleanly; Tab/Escape restore trigger</text>
+  </g>
+</svg>

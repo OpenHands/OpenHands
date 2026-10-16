@@ -29,6 +29,11 @@ interface ProviderConnectionActionsMenuProps {
   anchorRef?: React.RefObject<HTMLElement | null>;
 }
 
+const getEnabledItems = (items: (HTMLButtonElement | null)[]) =>
+  items.filter((item): item is HTMLButtonElement =>
+    Boolean(item && !item.disabled),
+  );
+
 export function ProviderConnectionActionsMenu({
   onAddModels,
   onEdit,
@@ -68,9 +73,14 @@ export function ProviderConnectionActionsMenu({
     };
   }, [anchorElement]);
 
+  // The anchored menu renders nothing until its position is measured, so wait
+  // for the items to exist before focusing the first enabled one.
+  const isMenuRendered = !anchorElement || portalStyle !== undefined;
   useEffect(() => {
-    menuItemsRef.current[0]?.focus();
-  }, []);
+    if (isMenuRendered) {
+      getEnabledItems(menuItemsRef.current)[0]?.focus();
+    }
+  }, [isMenuRendered]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -82,6 +92,9 @@ export function ProviderConnectionActionsMenu({
 
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        if (menuRef.current?.contains(document.activeElement)) {
+          anchorElement?.focus();
+        }
         onClose();
       }
     };
@@ -103,21 +116,34 @@ export function ProviderConnectionActionsMenu({
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent, currentIndex: number) => {
       if (e.key === "Tab") {
+        e.preventDefault();
+        // The anchored menu is portaled to the end of <body>; move focus back
+        // to its trigger so focus returns to the row trigger and menu closes.
+        anchorElement?.focus();
         onClose();
         return;
       }
-      const itemCount = menuItemsRef.current.filter(Boolean).length;
+      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+      e.preventDefault();
+      const enabledItems = getEnabledItems(menuItemsRef.current);
+      if (enabledItems.length === 0) return;
+      const position = enabledItems.findIndex(
+        (item) => item === menuItemsRef.current[currentIndex],
+      );
+      if (position === -1) {
+        enabledItems[0]?.focus();
+        return;
+      }
       if (e.key === "ArrowDown") {
-        e.preventDefault();
-        const nextIndex = (currentIndex + 1) % itemCount;
-        menuItemsRef.current[nextIndex]?.focus();
+        const nextIndex = (position + 1) % enabledItems.length;
+        enabledItems[nextIndex]?.focus();
       } else if (e.key === "ArrowUp") {
-        e.preventDefault();
-        const prevIndex = (currentIndex - 1 + itemCount) % itemCount;
-        menuItemsRef.current[prevIndex]?.focus();
+        const prevIndex =
+          (position - 1 + enabledItems.length) % enabledItems.length;
+        enabledItems[prevIndex]?.focus();
       }
     },
-    [onClose],
+    [anchorElement, onClose],
   );
 
   const isPortaled = Boolean(anchorElement);
