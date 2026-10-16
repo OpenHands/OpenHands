@@ -84,20 +84,8 @@ export async function uploadFilesToConversation(
   );
   const isCloud = getActiveBackend().backend.kind === "cloud";
 
-  const sessionApiKey =
-    currentConversation?.id === conversationId
-      ? (currentConversation.session_api_key ?? runtime.sessionApiKey)
-      : runtime.sessionApiKey;
-  const conversationUrl =
-    currentConversation?.id === conversationId
-      ? (currentConversation.conversation_url ?? runtime.conversationUrl)
-      : runtime.conversationUrl;
-
   if (isCloud) {
-    const cloudRuntime = requireCloudRuntime({
-      conversationUrl,
-      sessionApiKey,
-    });
+    const cloudRuntime = requireCloudRuntime(runtime);
     return uploadFilesToRuntime({
       conversationId,
       files,
@@ -111,8 +99,8 @@ export async function uploadFilesToConversation(
     conversationId,
     files,
     workingDir,
-    conversationUrl,
-    sessionApiKey,
+    conversationUrl: runtime.conversationUrl,
+    sessionApiKey: runtime.sessionApiKey,
   });
 }
 
