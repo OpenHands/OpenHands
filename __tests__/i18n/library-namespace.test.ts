@@ -54,11 +54,6 @@ describe("library i18n namespace scoping", () => {
       expect(globalI18n.hasResourceBundle("en", "openhands")).toBe(false);
       expect(globalI18n.t("HOST_ONLY")).toBe("Host only");
     },
-    // No per-test timeout override here: importing the full `../../src/index`
-    // module graph is the heaviest import in the suite and can exceed a short
-    // budget under parallel load. Inherit the global 30s `testTimeout`
-    // (vite.config.ts) that was introduced specifically to keep the i18n
-    // namespace tests deterministic; a local 15s cap undercut that and made
-    // this test flaky.
+    60000,
   );
 });

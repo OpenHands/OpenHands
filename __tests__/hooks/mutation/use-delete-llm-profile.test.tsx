@@ -110,7 +110,39 @@ describe("useDeleteLlmProfile", () => {
       title_llm_profile: null,
     });
   });
+  it("invalidates caches when title profile cleanup fails", async () => {
+    const cleanupError = new Error("Settings update failed");
 
+    vi.mocked(ProfilesService.deleteProfile).mockResolvedValue({
+      name: "Titles",
+      message: "Profile deleted",
+    });
+
+    vi.mocked(SettingsService.getSettings).mockResolvedValue({
+      title_llm_profile: "Titles",
+    } as never);
+
+    vi.mocked(SettingsService.saveSettings).mockRejectedValue(cleanupError);
+
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    const invalidateCacheSpy = vi.spyOn(SettingsService, "invalidateCache");
+
+    const { result } = renderHook(() => useDeleteLlmProfile(), { wrapper });
+
+    await expect(
+      act(async () => {
+        await result.current.mutateAsync("Titles");
+      }),
+    ).rejects.toThrow("Settings update failed");
+
+    expect(invalidateCacheSpy).toHaveBeenCalled();
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: LLM_PROFILES_QUERY_KEYS.all,
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: SETTINGS_QUERY_KEYS.personal(),
+    });
+  });
   it("handles delete errors", async () => {
     const error = new Error("Profile not found");
     vi.mocked(ProfilesService.deleteProfile).mockRejectedValue(error);
