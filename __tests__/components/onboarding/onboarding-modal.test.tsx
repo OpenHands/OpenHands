@@ -1321,4 +1321,162 @@ describe("OnboardingModal", () => {
       ).toBe("true");
     });
   });
+
+  describe("DigitalOcean provider in first-run onboarding", () => {
+    function fakeMarsBridge() {
+      const bridge = {
+        getAuthState: vi.fn(async () => ({
+          connections: [],
+          active: null,
+          isPersistent: true,
+          canUseOAuth: false,
+        })),
+        savePat: vi.fn(async () => ({
+          connections: [],
+          active: null,
+          isPersistent: true,
+          canUseOAuth: false,
+        })),
+        listAgentConfigs: vi.fn(async () => ({
+          configs: [],
+          nextPageToken: null,
+        })),
+        listSessions: vi.fn(async () => ({
+          sessions: [],
+          nextPageToken: null,
+        })),
+        listConfigSessions: vi.fn(async () => ({
+          sessions: [],
+          nextPageToken: null,
+        })),
+        listSandboxSizes: vi.fn(async () => []),
+        createOpenHandsAgent: vi.fn(),
+        createSession: vi.fn(),
+        openTunnel: vi.fn(),
+        closeTunnel: vi.fn(async () => {}),
+        getTunnel: vi.fn(async () => undefined),
+        signInWithOAuth: vi.fn(),
+        setActiveConnection: vi.fn(),
+        signOut: vi.fn(),
+        pauseSession: vi.fn(),
+        resumeSession: vi.fn(),
+        destroySession: vi.fn(),
+        deleteAgentConfig: vi.fn(),
+      };
+      window.marsBridge = bridge as unknown as NonNullable<
+        typeof window.marsBridge
+      >;
+      return bridge;
+    }
+
+    function renderNoBackendFirstRun() {
+      window.localStorage.clear();
+      vi.stubEnv("VITE_BACKEND_BASE_URL", "");
+      vi.stubEnv("VITE_SESSION_API_KEY", "");
+      delete (window as unknown as Record<string, unknown>)
+        .__AGENT_CANVAS_SESSION_API_KEY__;
+      __resetActiveStoreForTests();
+      renderModal();
+    }
+
+    afterEach(() => {
+      delete window.marsBridge;
+    });
+
+    it("offers DigitalOcean alongside the manual and Cloud options when the bridge is present", async () => {
+      fakeMarsBridge();
+      renderNoBackendFirstRun();
+
+      expect(
+        await screen.findByTestId("onboarding-digitalocean-button"),
+      ).toBeInTheDocument();
+      // The existing local/Cloud options remain.
+      expect(
+        screen.getByTestId("onboarding-backend-cloud-title"),
+      ).toBeVisible();
+      expect(
+        screen.getByTestId("onboarding-backend-login-button"),
+      ).toBeVisible();
+    });
+
+    it("hides DigitalOcean when the bridge is absent", () => {
+      renderNoBackendFirstRun();
+
+      expect(
+        screen.queryByTestId("onboarding-digitalocean-button"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("onboarding-digitalocean-option"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("hides DigitalOcean in locked-to-Cloud mode even with the bridge present", () => {
+      fakeMarsBridge();
+      window.localStorage.clear();
+      vi.stubEnv("VITE_BACKEND_BASE_URL", "");
+      vi.stubEnv("VITE_SESSION_API_KEY", "");
+      vi.stubEnv("VITE_LOCK_TO_CLOUD", "https://cloud.example.com");
+      delete (window as unknown as Record<string, unknown>)
+        .__AGENT_CANVAS_SESSION_API_KEY__;
+      __resetActiveStoreForTests();
+      renderModal();
+
+      expect(
+        screen.queryByTestId("onboarding-digitalocean-button"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("onboarding-digitalocean-option"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("opens the bridge sign-in surface without provisioning a session, and back returns to the options", async () => {
+      const bridge = fakeMarsBridge();
+      const user = userEvent.setup();
+      renderNoBackendFirstRun();
+
+      await user.click(
+        await screen.findByTestId("onboarding-digitalocean-button"),
+      );
+
+      // The DigitalOcean sign-in surface (PAT token field) is shown; the
+      // manual host/key fields are hidden (still mounted to preserve state),
+      // and no session/tunnel was created.
+      expect(
+        await screen.findByTestId("managed-agents-token"),
+      ).toBeInTheDocument();
+      expect(screen.getByTestId("onboarding-backend-host")).not.toBeVisible();
+      expect(bridge.createSession).not.toHaveBeenCalled();
+      expect(bridge.openTunnel).not.toHaveBeenCalled();
+
+      // Back returns to the options without provisioning.
+      await user.click(screen.getByTestId("onboarding-digitalocean-back"));
+      expect(
+        await screen.findByTestId("onboarding-digitalocean-button"),
+      ).toBeInTheDocument();
+      expect(bridge.createSession).not.toHaveBeenCalled();
+      expect(bridge.openTunnel).not.toHaveBeenCalled();
+    });
+
+    it("preserves entered manual host on back from the DigitalOcean view", async () => {
+      fakeMarsBridge();
+      const user = userEvent.setup();
+      renderNoBackendFirstRun();
+
+      const hostInput = await screen.findByTestId("onboarding-backend-host");
+      await user.clear(hostInput);
+      await user.type(hostInput, "http://example.com:8000");
+
+      await user.click(screen.getByTestId("onboarding-digitalocean-button"));
+      expect(
+        await screen.findByTestId("managed-agents-token"),
+      ).toBeInTheDocument();
+
+      await user.click(screen.getByTestId("onboarding-digitalocean-back"));
+      await screen.findByTestId("onboarding-digitalocean-button");
+
+      expect(screen.getByTestId("onboarding-backend-host")).toHaveValue(
+        "http://example.com:8000",
+      );
+    });
+  });
 });

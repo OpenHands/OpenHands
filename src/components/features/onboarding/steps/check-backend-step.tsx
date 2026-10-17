@@ -1,8 +1,10 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { CheckCircle2, Loader2, AlertCircle } from "lucide-react";
+import { CheckCircle2, Loader2, AlertCircle, ChevronRight } from "lucide-react";
 import { isNoBackend } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
+import { getMarsBridge } from "#/api/mars/mars-tunnel-backend";
+import DigitalOceanLogo from "#/assets/branding/digitalocean-logo.svg?react";
 import {
   getAgentServerFormDefaults,
   getLockedCloudHost,
@@ -23,6 +25,7 @@ import { I18nKey } from "#/i18n/declaration";
 import ChevronDownSmallIcon from "#/icons/chevron-down-small.svg?react";
 import { cn } from "#/utils/utils";
 import { getBackendStatusLabel } from "#/components/features/backends/backend-status-label";
+import { OnboardingDigitalOceanConnect } from "./onboarding-digitalocean-connect";
 
 interface CheckBackendStepProps {
   onBack?: () => void;
@@ -161,6 +164,12 @@ export function CheckBackendStep({
     ? null
     : (healthByBackendId[backend.id]?.lastError ?? null);
   const [configurationOpen, setConfigurationOpen] = React.useState(false);
+  const [digitalOceanOpen, setDigitalOceanOpen] = React.useState(false);
+  // Match the Manage Backends gate: the tunnel lives in the main process, so
+  // only a page with `window.marsBridge` can offer DigitalOcean, and a
+  // locked-to-Cloud deployment offers Cloud alone.
+  const canUseDigitalOcean =
+    getMarsBridge() !== null && lockedCloudHost === null;
 
   React.useEffect(() => {
     if (isConnected === true) {
@@ -238,86 +247,132 @@ export function CheckBackendStep({
       data-testid="onboarding-step-check-backend"
       className="flex flex-col gap-6"
     >
-      <header className="flex flex-col gap-2">
-        <h2 className="text-2xl font-medium text-contrast">{t(titleKey)}</h2>
-        {treatAsNoBackend ? null : (
-          <p
-            data-testid="onboarding-backend-subtitle"
-            className="text-sm text-muted"
-          >
-            {t(I18nKey.ONBOARDING$BACKEND_SUBTITLE)}
-          </p>
-        )}
-      </header>
-
-      {treatAsNoBackend ? null : (
-        <ConnectionBanner
-          backend={backendForForm}
-          isConnected={isConnected}
-          lastError={lastError}
+      {digitalOceanOpen ? (
+        <OnboardingDigitalOceanConnect
+          onBack={() => setDigitalOceanOpen(false)}
+          onConnected={onNext}
         />
-      )}
-
-      {isConnected === true ? (
-        <button
-          type="button"
-          onClick={() => setConfigurationOpen((open) => !open)}
-          aria-expanded={configurationOpen}
-          data-testid="onboarding-backend-show-configuration"
-          className="flex w-full cursor-pointer items-center justify-center gap-1 text-center text-xs text-muted transition-colors hover:text-content-2"
-        >
-          <span>
-            {configurationOpen
-              ? t(I18nKey.ONBOARDING$BACKEND_HIDE_CONFIGURATION)
-              : t(I18nKey.ONBOARDING$BACKEND_SHOW_CONFIGURATION)}
-          </span>
-          <ChevronDownSmallIcon
-            className={cn(
-              "h-4 w-4 shrink-0 text-muted transition-transform",
-              configurationOpen && "rotate-180",
-            )}
-            aria-hidden
-          />
-        </button>
       ) : null}
 
-      <div data-testid="onboarding-backend-configuration-fields">
-        {!hideConfigurationFields ? (
-          <BackendConnectionOptions
-            onConnected={handleConnected}
-            testIdRoot="onboarding-backend"
-            initialManualBackend={backendForForm}
-            requireManualApiKey={isAuthRequired()}
-            manualSubmitLabel={t(I18nKey.ONBOARDING$NEXT)}
-            manualSubmittingLabel={t(I18nKey.SETTINGS$SAVING)}
-            manualSubmitTestId="onboarding-backend-next"
-            analyticsSource="onboarding"
+      {/* Keep the manual/Cloud form mounted while the provider view is open so
+          any already-entered name/host/apiKey survive a back/cancel; only the
+          visual visibility toggles (the HTML `hidden` attribute rather than a
+          CSS class so the state-preserving unmount is observable). */}
+      <div hidden={digitalOceanOpen} className="flex flex-col gap-6">
+        <header className="flex flex-col gap-2">
+          <h2 className="text-2xl font-medium text-contrast">{t(titleKey)}</h2>
+          {treatAsNoBackend ? null : (
+            <p
+              data-testid="onboarding-backend-subtitle"
+              className="text-sm text-muted"
+            >
+              {t(I18nKey.ONBOARDING$BACKEND_SUBTITLE)}
+            </p>
+          )}
+        </header>
+
+        {treatAsNoBackend ? null : (
+          <ConnectionBanner
+            backend={backendForForm}
+            isConnected={isConnected}
+            lastError={lastError}
           />
+        )}
+
+        {isConnected === true ? (
+          <button
+            type="button"
+            onClick={() => setConfigurationOpen((open) => !open)}
+            aria-expanded={configurationOpen}
+            data-testid="onboarding-backend-show-configuration"
+            className="flex w-full cursor-pointer items-center justify-center gap-1 text-center text-xs text-muted transition-colors hover:text-content-2"
+          >
+            <span>
+              {configurationOpen
+                ? t(I18nKey.ONBOARDING$BACKEND_HIDE_CONFIGURATION)
+                : t(I18nKey.ONBOARDING$BACKEND_SHOW_CONFIGURATION)}
+            </span>
+            <ChevronDownSmallIcon
+              className={cn(
+                "h-4 w-4 shrink-0 text-muted transition-transform",
+                configurationOpen && "rotate-180",
+              )}
+              aria-hidden
+            />
+          </button>
+        ) : null}
+
+        <div data-testid="onboarding-backend-configuration-fields">
+          {!hideConfigurationFields ? (
+            <BackendConnectionOptions
+              onConnected={handleConnected}
+              testIdRoot="onboarding-backend"
+              initialManualBackend={backendForForm}
+              requireManualApiKey={isAuthRequired()}
+              manualSubmitLabel={t(I18nKey.ONBOARDING$NEXT)}
+              manualSubmittingLabel={t(I18nKey.SETTINGS$SAVING)}
+              manualSubmitTestId="onboarding-backend-next"
+              analyticsSource="onboarding"
+            />
+          ) : null}
+        </div>
+
+        {canUseDigitalOcean && treatAsNoBackend ? (
+          <div
+            data-testid="onboarding-digitalocean-option"
+            className="flex flex-col gap-2"
+          >
+            <button
+              type="button"
+              data-testid="onboarding-digitalocean-button"
+              onClick={() => setDigitalOceanOpen(true)}
+              className="flex w-full cursor-pointer items-center gap-3 rounded-xl border border-border bg-base-secondary px-4 py-3 text-left transition-colors hover:bg-surface-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+            >
+              <span
+                className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-surface-raised"
+                aria-hidden
+              >
+                <DigitalOceanLogo width={32} height={32} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium text-contrast">
+                  {t(I18nKey.DO_AGENTS$BADGE)}
+                </span>
+                <span className="mt-0.5 block text-xs leading-tight text-muted">
+                  {t(I18nKey.DO_AGENTS$TAB_DESCRIPTION)}
+                </span>
+              </span>
+              <ChevronRight
+                className="size-4 shrink-0 text-muted"
+                aria-hidden
+              />
+            </button>
+          </div>
+        ) : null}
+
+        {hideConfigurationFields ? (
+          <div className={actionRowClassName}>
+            {onBack ? (
+              <BrandButton
+                testId="onboarding-backend-back"
+                type="button"
+                variant="secondary"
+                onClick={onBack}
+              >
+                {t(I18nKey.ONBOARDING$BACK)}
+              </BrandButton>
+            ) : null}
+            <BrandButton
+              testId="onboarding-backend-next"
+              type="button"
+              variant="primary"
+              onClick={onNext}
+            >
+              {t(I18nKey.ONBOARDING$NEXT)}
+            </BrandButton>
+          </div>
         ) : null}
       </div>
-
-      {hideConfigurationFields ? (
-        <div className={actionRowClassName}>
-          {onBack ? (
-            <BrandButton
-              testId="onboarding-backend-back"
-              type="button"
-              variant="secondary"
-              onClick={onBack}
-            >
-              {t(I18nKey.ONBOARDING$BACK)}
-            </BrandButton>
-          ) : null}
-          <BrandButton
-            testId="onboarding-backend-next"
-            type="button"
-            variant="primary"
-            onClick={onNext}
-          >
-            {t(I18nKey.ONBOARDING$NEXT)}
-          </BrandButton>
-        </div>
-      ) : null}
     </div>
   );
 }
