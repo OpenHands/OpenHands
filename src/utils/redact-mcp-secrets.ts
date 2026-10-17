@@ -46,20 +46,36 @@ function addRecordValues(
   }
 }
 
+function safeDecodeURIComponent(value: string): string | undefined {
+  // `new URL()` accepts bare '%' characters in userinfo, but
+  // `decodeURIComponent()` throws URIError on a non-escape. Fall back to
+  // the raw value so collection can continue for the rest of the URL
+  // (query-string secrets in particular).
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return undefined;
+  }
+}
+
 function addUrlSecrets(values: Set<string>, rawUrl: string | undefined): void {
   if (!rawUrl) return;
+  let url: URL;
   try {
-    const url = new URL(rawUrl);
-    addValue(values, url.username);
-    addValue(values, url.password);
-    addValue(values, decodeURIComponent(url.username));
-    addValue(values, decodeURIComponent(url.password));
-    url.searchParams.forEach((value, name) => {
-      if (SECRETLIKE_PARAM_NAME.test(name)) addValue(values, value);
-    });
+    url = new URL(rawUrl);
   } catch {
     // Not a parseable URL — nothing to collect.
+    return;
   }
+  addValue(values, url.username);
+  addValue(values, url.password);
+  const decodedUsername = safeDecodeURIComponent(url.username);
+  if (decodedUsername !== undefined) addValue(values, decodedUsername);
+  const decodedPassword = safeDecodeURIComponent(url.password);
+  if (decodedPassword !== undefined) addValue(values, decodedPassword);
+  url.searchParams.forEach((value, name) => {
+    if (SECRETLIKE_PARAM_NAME.test(name)) addValue(values, value);
+  });
 }
 
 function addAuthSecrets(

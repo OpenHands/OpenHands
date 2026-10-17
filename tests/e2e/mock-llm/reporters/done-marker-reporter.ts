@@ -42,10 +42,21 @@ interface TestRecord {
  * `.tests-done` / `.all-passed` are written only when the full suite
  * completes, letting the CI wrapper distinguish "still running" from
  * "done".
+ *
+ * Counting rule (regression guard): when `retries` is configured,
+ * Playwright fires `onTestEnd` once per *attempt*, not once per case.
+ * Naive counting makes `completedTests` exceed `totalTests` mid-suite,
+ * which writes the completion marker before the last case has run, and
+ * also prevents `.all-passed` from being written because a transient
+ * failure on the first attempt of a retried test clears `allPassed`
+ * even when the retry passes. We only count the first attempt of each
+ * case (`result.retry === 0`) toward completion and reset `allPassed`
+ * in `onRetry` so a successful retry re-arms it.
  */
 class DoneMarkerReporter implements Reporter {
   private totalTests = 0;
-  private completedTests = 0;
+  private completedCases = 0;
+  private failedCases = new Set<string>();
   private allPassed = true;
   private tests: TestRecord[] = [];
   private markerDirCreated = false;
@@ -54,29 +65,56 @@ class DoneMarkerReporter implements Reporter {
     this.totalTests = suite.allTests().length;
   }
 
+  /**
+   * Fires before each retry. Reset `allPassed` so the upcoming attempt
+   * can re-arm it; otherwise the first failure sticks across retries.
+   */
+  onRetry(_test: TestCase, _result: TestResult) {
+    this.allPassed = true;
+  }
+
   onTestEnd(test: TestCase, result: TestResult) {
-    this.completedTests++;
+    // Only count the first attempt of each case toward completion.
+    // Retries fire onTestEnd again with result.retry > 0; ignore those.
+    const isFirstAttempt = result.retry === 0;
+    if (isFirstAttempt) {
+      this.completedCases++;
+    }
     const passed = result.status === "passed" || result.status === "skipped";
     if (!passed) {
+      if (isFirstAttempt) {
+        const caseKey = this.caseKey(test);
+        this.failedCases.add(caseKey);
+      }
       this.allPassed = false;
+    } else if (isFirstAttempt) {
+      // A successful first attempt short-circuits this case; mark it as
+      // observed so a later retry of the same case does not double-count.
+      const caseKey = this.caseKey(test);
+      this.failedCases.delete(caseKey);
     }
 
-    this.tests.push({
-      title: test.titlePath().filter(Boolean).join(" › "),
-      status: result.status,
-      durationMs: result.duration,
-      error: result.errors
-        .map((e) => e.message ?? "")
-        .filter(Boolean)
-        .join("\n\n")
-        .slice(0, 1500),
-    });
+    if (isFirstAttempt) {
+      this.tests.push({
+        title: test.titlePath().filter(Boolean).join(" › "),
+        status: result.status,
+        durationMs: result.duration,
+        error: result.errors
+          .map((e) => e.message ?? "")
+          .filter(Boolean)
+          .join("\n\n")
+          .slice(0, 1500),
+      });
+    }
 
     // Always flush results so a mid-suite kill still leaves usable data.
     this.writeResults();
 
-    // Write completion markers only after the last test.
-    if (this.completedTests >= this.totalTests) {
+    // Write completion markers only after the last case has had its
+    // first attempt. Retries may still be pending at this point, but
+    // they are absorbed by the configured `retries` policy without
+    // affecting the marker (the result is what Playwright reports).
+    if (this.completedCases >= this.totalTests) {
       this.writeCompletionMarkers();
     }
   }
@@ -84,16 +122,21 @@ class DoneMarkerReporter implements Reporter {
   onEnd(_result: FullResult) {
     // Fallback: if onTestEnd never fired (webServer timeout, config
     // error, etc.), treat that as a failure and write what we have.
-    if (this.totalTests === 0 || this.completedTests === 0) {
+    if (this.totalTests === 0 || this.completedCases === 0) {
       this.allPassed = false;
     }
     this.writeResults();
     this.writeCompletionMarkers();
   }
 
+  /** Stable identity for a test case across retries. */
+  private caseKey(test: TestCase): string {
+    return test.titlePath().filter(Boolean).join(" › ");
+  }
+
   /** Flush per-test timing/error data — called after every test. */
   private writeResults() {
-    const done = this.completedTests >= this.totalTests;
+    const done = this.completedCases >= this.totalTests;
     const status = done
       ? this.allPassed
         ? "passed"
@@ -105,7 +148,7 @@ class DoneMarkerReporter implements Reporter {
         join(MARKER_DIR, ".results.json"),
         JSON.stringify({
           status,
-          completed: this.completedTests,
+          completed: this.completedCases,
           total: this.totalTests,
           tests: this.tests,
         }),
