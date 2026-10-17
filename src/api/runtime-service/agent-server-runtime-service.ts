@@ -1,7 +1,7 @@
-import { FileClient } from "@openhands/typescript-client/clients";
 import { RemoteWorkspace } from "@openhands/typescript-client/workspace/remote-workspace";
 import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
 import { getActiveBackend } from "#/api/backend-registry/active-store";
+import { downloadRuntimeFile } from "./file-download";
 
 export interface CommandResult {
   exit_code: number;
@@ -77,9 +77,10 @@ class AgentServerRuntimeService {
       );
     }
 
-    return new FileClient(
+    return downloadRuntimeFile(
       getAgentServerClientOptions({ conversationUrl, sessionApiKey }),
-    ).downloadFile(path);
+      path,
+    );
   }
 }
 
