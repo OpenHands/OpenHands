@@ -67,9 +67,11 @@ const VALIDATION_BY_ENTRY_ID: Record<string, CredentialValidation> = {
     // the raw Slack API JSON ({ok: boolean, error?: string}) as text.
     toolCall: { name: "slack_list_channels", arguments: { limit: 1 } },
     interpret: (toolResult) => {
-      if (toolResult.is_error) {
-        return toolResult.text || "tool call failed";
-      }
+      // The Slack MCP server returns actual Slack API responses with
+      // is_error: false. An is_error result indicates a runtime / network
+      // exception (e.g. fetch failed, proxy error, or probe timeout) rather
+      // than a Slack API error code, so it does not prove the credentials
+      // are invalid. Only definitive Slack auth failures are returned.
       try {
         const parsed = JSON.parse(toolResult.text);
         if (parsed?.ok === false && SLACK_AUTH_FAILURES.has(parsed.error)) {
