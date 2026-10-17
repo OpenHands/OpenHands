@@ -301,6 +301,9 @@ export function getDraftExecutionStatusText(
   runs: AutomationRun[],
   t: (key: I18nKey) => string,
 ): string {
+  if (draft.validationErrors?.[0]?.message) {
+    return draft.validationErrors[0].message;
+  }
   const latestRun = runs[0];
   if (latestRun) {
     if (draftRunFinishedSuccessfully(latestRun)) {
@@ -311,10 +314,7 @@ export function getDraftExecutionStatusText(
     }
     return t(I18nKey.AUTOMATION_SETUP$LATEST_TEST_RUNNING);
   }
-  return (
-    draft.validationErrors?.[0]?.message ??
-    t(I18nKey.AUTOMATION_SETUP$READY_TO_TEST)
-  );
+  return t(I18nKey.AUTOMATION_SETUP$READY_TO_TEST);
 }
 
 export function draftRunPageErrors(

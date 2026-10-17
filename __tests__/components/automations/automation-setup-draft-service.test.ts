@@ -3,10 +3,12 @@ import { HttpError } from "@openhands/typescript-client";
 import {
   extractDraftDispatchErrors,
   formFromServerDraft,
+  getDraftExecutionStatusText,
   setupDraftFromServerDraft,
 } from "#/components/features/automations/setup/automation-setup-draft-service";
 import type { AutomationSetupFormValues } from "#/api/automation-setup-types";
 import type { AutomationDraftApiResponse } from "#/manifests/types";
+import { AutomationRunStatus, type AutomationRun } from "#/types/automation";
 
 const detailEnvelope = {
   detail: {
@@ -128,3 +130,76 @@ describe("setupDraftFromServerDraft", () => {
     expect(form.eventKey).toBe("push,release.published");
   });
 });
+
+describe("getDraftExecutionStatusText", () => {
+  const dummyT = (key: string) => {
+    const map: Record<string, string> = {
+      "AUTOMATION_SETUP$LATEST_TEST_PASSED": "Latest test passed",
+      "AUTOMATION_SETUP$LATEST_TEST_FAILED": "Latest test failed",
+      "AUTOMATION_SETUP$LATEST_TEST_RUNNING": "Latest test running",
+      "AUTOMATION_SETUP$READY_TO_TEST": "Ready to test",
+    };
+    return map[key] ?? key;
+  };
+
+  const completedRun: AutomationRun = {
+    id: "run-1",
+    status: AutomationRunStatus.COMPLETED,
+    conversation_id: null,
+    bash_command_id: null,
+    error_detail: null,
+    started_at: "2026-01-01T00:00:00.000Z",
+    completed_at: "2026-01-01T00:01:00.000Z",
+  };
+
+  it("prioritizes current draft validation errors over historical completed test runs", () => {
+    const invalidDraftWithRun: AutomationDraftApiResponse = {
+      ...baseSavedDraft,
+      dispatchable: false,
+      validationErrors: [
+        {
+          field: "cron",
+          code: "invalid",
+          message: "Value error, Invalid cron expression: every day",
+        },
+      ],
+    };
+
+    const statusText = getDraftExecutionStatusText(
+      invalidDraftWithRun,
+      [completedRun],
+      dummyT,
+    );
+
+    expect(statusText).toBe("Value error, Invalid cron expression: every day");
+  });
+
+  it("returns latest test passed when there are no validation errors and the run completed", () => {
+    const validDraft: AutomationDraftApiResponse = {
+      ...baseSavedDraft,
+      dispatchable: true,
+      validationErrors: null,
+    };
+
+    const statusText = getDraftExecutionStatusText(
+      validDraft,
+      [completedRun],
+      dummyT,
+    );
+
+    expect(statusText).toBe("Latest test passed");
+  });
+
+  it("falls back to Ready to test when there are no validation errors and no runs", () => {
+    const validDraft: AutomationDraftApiResponse = {
+      ...baseSavedDraft,
+      dispatchable: true,
+      validationErrors: null,
+    };
+
+    const statusText = getDraftExecutionStatusText(validDraft, [], dummyT);
+
+    expect(statusText).toBe("Ready to test");
+  });
+});
+
