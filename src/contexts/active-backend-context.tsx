@@ -81,8 +81,9 @@ export function ActiveBackendProvider({
     getSnapshot,
   );
 
-  const contextQueryClient = React.useContext(QueryClientContext);
-  const queryClient = contextQueryClient ?? getQueryClient();
+  // Isolated unit tests often mount this provider without QueryClientProvider.
+  // Prefer the React-tree client when present; otherwise use the standalone default.
+  const queryClient = React.useContext(QueryClientContext) ?? getQueryClient();
 
   const retryBootstrapProbe = React.useCallback(() => {
     clearCachedAgentServerInfo();

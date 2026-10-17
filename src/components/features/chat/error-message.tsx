@@ -2,7 +2,7 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import ArrowDown from "#/icons/angle-down-solid.svg?react";
 import ArrowUp from "#/icons/angle-up-solid.svg?react";
-import i18n from "#/i18n";
+import { OPENHANDS_I18N_NAMESPACE } from "#/i18n";
 import { MarkdownRenderer } from "../markdown/markdown-renderer";
 
 interface ErrorMessageProps {
@@ -11,11 +11,11 @@ interface ErrorMessageProps {
 }
 
 export function ErrorMessage({ errorId, defaultMessage }: ErrorMessageProps) {
-  const { t, i18n: rootI18n } = useTranslation("openhands");
+  const { t, i18n } = useTranslation(OPENHANDS_I18N_NAMESPACE);
   const [showDetails, setShowDetails] = React.useState(false);
 
-  const activeI18n = rootI18n ?? i18n;
-  const hasValidTranslationId = !!errorId && activeI18n.exists(errorId);
+  const hasValidTranslationId =
+    !!errorId && i18n.exists(errorId, { ns: OPENHANDS_I18N_NAMESPACE });
   const errorKey = hasValidTranslationId
     ? errorId
     : "CHAT_INTERFACE$AGENT_ERROR_MESSAGE";

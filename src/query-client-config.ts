@@ -107,9 +107,11 @@ export const getDefaultQueryClient = () => {
   return defaultQueryClient;
 };
 
+/** Standalone / non-React accessor. Embedded React trees use `useQueryClient()`. */
 export const getQueryClient = () =>
   activeQueryClient ?? getDefaultQueryClient();
 
+/** Install a standalone default. `AgentServerUIProviders` does not call this. */
 export const setQueryClient = (client?: QueryClient | null) => {
   activeQueryClient = client ?? getDefaultQueryClient();
   return activeQueryClient;

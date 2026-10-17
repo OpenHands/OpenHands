@@ -50,6 +50,12 @@ function FreeModelsHydrator() {
   return null;
 }
 
+/**
+ * Public embedding entry. `queryClient` and `i18n` stay scoped to this React
+ * tree through `QueryClientProvider` and `I18nextProvider`. The provider does
+ * not mutate the module-level singletons; standalone and non-React callers
+ * keep using `getQueryClient()` / `setQueryClient()` and `getI18n()` / `setI18n()`.
+ */
 export function AgentServerUIProviders({
   children,
   queryClient,
