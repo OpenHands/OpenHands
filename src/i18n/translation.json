@@ -8459,6 +8459,24 @@
     "ca": "Error en carregar els fitxers. Torneu-ho a intentar.",
     "id": "Kesalahan mengunggah file. Silakan coba lagi."
   },
+  "FILE_SERVICE$UPLOAD_WORKSPACE_MISMATCH": {
+    "en": "Could not place the file inside this conversation's workspace. Reload the conversation and try again.",
+    "zh-CN": "无法将文件放入此对话的工作区。请重新加载对话后重试。",
+    "de": "Die Datei konnte nicht im Arbeitsbereich dieser Konversation abgelegt werden. Laden Sie die Konversation neu und versuchen Sie es erneut.",
+    "ko-KR": "이 대화의 작업 공간에 파일을 배치할 수 없습니다. 대화를 새로 고친 후 다시 시도하세요.",
+    "no": "Kunne ikke plassere filen i arbeidsområdet for denne samtalen. Last samtalen på nytt og prøv igjen.",
+    "zh-TW": "無法將檔案放入此對話的工作區。請重新載入對話後再試一次。",
+    "it": "Impossibile inserire il file nell'area di lavoro di questa conversazione. Ricarica la conversazione e riprova.",
+    "pt": "Não foi possível colocar o arquivo na área de trabalho desta conversa. Recarregue a conversa e tente novamente.",
+    "es": "No se pudo colocar el archivo en el espacio de trabajo de esta conversación. Vuelve a cargar la conversación e inténtalo de nuevo.",
+    "ar": "تعذر وضع الملف داخل مساحة عمل هذه المحادثة. أعد تحميل المحادثة وحاول مرة أخرى.",
+    "fr": "Impossible de placer le fichier dans l'espace de travail de cette conversation. Rechargez la conversation et réessayez.",
+    "tr": "Dosya bu konuşmanın çalışma alanına yerleştirilemedi. Konuşmayı yeniden yükleyip tekrar deneyin.",
+    "ja": "ファイルをこの会話のワークスペースに配置できませんでした。会話を再読み込みして再試行してください。",
+    "uk": "Не вдалося розмістити файл у робочому просторі цієї розмови. Перезавантажте розмову та спробуйте ще раз.",
+    "ca": "No s'ha pogut col·locar el fitxer a l'espai de treball d'aquesta conversa. Torneu a carregar la conversa i torneu-ho a intentar.",
+    "id": "Tidak dapat menempatkan file di dalam ruang kerja percakapan ini. Muat ulang percakapan lalu coba lagi."
+  },
   "FILE_SERVICE$LIST_FILES_ERROR": {
     "en": "Error listing files. Please try again.",
     "zh-CN": "列出文件时出错。请重试。",

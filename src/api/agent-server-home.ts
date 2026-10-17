@@ -16,7 +16,7 @@ import {
  */
 const homeDirCache = new Map<string, Promise<string>>();
 
-function isAbsolutePath(path: string): boolean {
+export function isAbsolutePath(path: string): boolean {
   // Treat POSIX-style and Windows-style absolute paths as absolute.
   // The agent-server itself is POSIX on Linux/macOS and uses `\\` style
   // on Windows; we just need to know whether `Path(path).is_absolute()`

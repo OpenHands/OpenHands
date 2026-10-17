@@ -1,0 +1,180 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fix: conversation attachment upload 422 workspace guard</title>
+<style>
+  :root{
+    --fg:#1a1a1a; --muted:#5a5a5a; --subtle:#8a8a82;
+    --bg:#fdfdfb; --card:#ffffff; --elevated:#f7f6f1;
+    --accent:#2b4eaa; --accent-soft:#e6ecfa;
+    --rule:#e2e2dc; --rule-strong:#bdbcb4;
+    --code-bg:#f3f1ec; --warn:#b25b0e; --ok:#2f7a3a; --crit:#a02020;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box} html,body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans)}
+  body{line-height:1.6;font-size:16px}
+  .wrap{display:grid;grid-template-columns:240px minmax(0,1fr);gap:48px;max-width:1180px;margin:0 auto;padding:32px 28px 96px}
+  nav.toc{position:sticky;top:24px;align-self:start;font-size:13px}
+  nav.toc h2{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+  nav.toc ol{list-style:none;padding:0;margin:0;counter-reset:toc}
+  nav.toc li{counter-increment:toc;margin:4px 0}
+  nav.toc li::before{content:counter(toc) ". ";color:var(--muted)}
+  nav.toc a{color:var(--fg);text-decoration:none} nav.toc a:hover{color:var(--accent)}
+  header.title{border-bottom:1px solid var(--rule);padding-bottom:22px;margin-bottom:28px}
+  header.title .eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700}
+  header.title h1{font-size:34px;margin:6px 0 4px;letter-spacing:-.01em}
+  header.title .sub{color:var(--muted);max-width:740px}
+  h2{font-size:22px;margin:44px 0 10px} h2 .num{color:var(--muted);font-weight:500;margin-right:8px}
+  h3{font-size:16px;margin:22px 0 8px}
+  code{font-family:var(--mono);font-size:.88em;background:var(--code-bg);padding:1px 5px;border-radius:3px}
+  pre{font-family:var(--mono);font-size:13px;background:var(--code-bg);padding:14px 16px;border-radius:6px;overflow-x:auto;border:1px solid var(--rule)}
+  pre code{background:transparent;padding:0}
+  .str{color:var(--ok)}.com{color:var(--subtle);font-style:italic}
+  table{border-collapse:collapse;width:100%;font-size:14px;margin:12px 0}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--rule);vertical-align:top}
+  th{font-weight:600;background:var(--code-bg)}
+  .callout{border-left:3px solid var(--accent);background:var(--accent-soft);padding:10px 14px;margin:14px 0;border-radius:0 4px 4px 0;font-size:14.5px}
+  .callout.warn{border-color:var(--warn);background:#fbf1e6} .callout.note{border-color:var(--muted);background:#f3f1ec}
+  .fig{margin:18px 0 22px}
+  .fig svg{display:block;max-width:100%;height:auto;background:#fff;border:1px solid var(--rule);border-radius:6px}
+  .fig figcaption{font-size:13px;color:var(--muted);margin-top:6px;text-align:center}
+  a.src{font-family:var(--mono);font-size:12px;color:var(--accent);text-decoration:none;border-bottom:1px dotted var(--accent)}
+  details{border:1px solid var(--rule);border-radius:6px;margin:12px 0}
+  details>summary{cursor:pointer;padding:8px 12px;color:var(--muted);font-size:13px;list-style:none}
+  details>summary::-webkit-details-marker{display:none}
+  details>summary::before{content:"▸ "} details[open]>summary::before{content:"▾ "}
+  .ba{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+  @media(max-width:760px){.wrap{grid-template-columns:1fr}.ba{grid-template-columns:1fr}}
+  .tag{display:inline-block;font-size:11px;font-weight:600;padding:1px 7px;border-radius:10px;vertical-align:middle}
+  .t-added{background:#e4f2e6;color:var(--ok)} .t-changed{background:#fbf1e6;color:var(--warn)}
+  .t-mech{background:#f3f1ec;color:var(--muted)}
+</style></head><body>
+<div class="wrap">
+  <nav class="toc"><h2>Contents</h2><ol>
+    <li><a href="#sec1">What changed</a></li>
+    <li><a href="#sec2">The bug, in one call chain</a></li>
+    <li><a href="#sec3">Fix 1 — runtime-authoritative path</a></li>
+    <li><a href="#sec4">Fix 2 — friendly 422 message</a></li>
+    <li><a href="#sec5">Evidence (live server)</a></li>
+    <li><a href="#sec6">Files &amp; risk</a></li>
+  </ol></nav>
+  <main>
+    <header class="title"><div class="eyebrow">Bug fix · Agent Canvas</div>
+      <h1>Chat attachment upload fails with <code>422 path must be inside the conversation workspace</code></h1>
+      <p class="sub">Uploading any attachment (e.g. a <code>.zip</code>) could be rejected by the agent-server's workspace guard because Canvas <em>guessed</em> the conversation's working directory instead of reading the one the runtime actually stored. This PR makes the destination authoritative by reading it from the runtime, and turns the leftover guard rejection into a readable message.</p></header>
+
+    <section id="sec1"><h2><span class="num">1</span>What changed</h2>
+      <div class="callout"><b>★ Key takeaway.</b> The upload destination is now derived from the conversation's own <code>workspace.working_dir</code> (read via <code>ConversationClient.getConversation</code>) instead of a locally-guessed default. When the guess diverged from the stored value, the guard rejected every file with a <code>422</code>; now the destination matches what the guard compares against.</div>
+      <p>Net effect: <b>2 behavior changes</b> in one file, plus a new i18n string. Compatibility is <b>additive</b> — no public API, wire contract, or persisted shape changes; the local resolution is retained as a lazy fallback, so the WUP-001 behavior is unchanged whenever the runtime read is unavailable.</p>
+      <p class="sub" style="font-size:14px">Base <code>bf483c1</code> · 6 files · +235 / −17 (incl. tests + design doc).</p>
+    </section>
+
+    <section id="sec2"><h2><span class="num">2</span>The bug, in one call chain</h2>
+      <p><code>uploadFilesToConversation</code> built the upload path from a <em>locally resolved</em> working dir, while the agent-server independently resolved the same conversation's stored <code>working_dir</code> against its own process CWD. Two resolvers, one comparison — any divergence lands the destination outside the workspace and trips <code>bind_local_conversation_runtime</code>.</p>
+      <div class="fig"><svg viewBox="0 0 860 300" role="img" aria-label="Before vs after call chain">
+        <text x="20" y="26" font-size="13" font-weight="700" fill="#a02020">BEFORE — destination guessed, guard compares to a different value</text>
+        <rect x="20" y="42" width="150" height="46" rx="6" fill="#fff" stroke="#bdbcb4"/>
+        <text x="95" y="63" font-size="12" text-anchor="middle" fill="#1a1a1a">uploadFilesToConversation</text>
+        <text x="95" y="79" font-size="10.5" text-anchor="middle" fill="#8a8a82">conversation-file-upload.api.ts:112</text>
+        <rect x="210" y="42" width="180" height="46" rx="6" fill="#fbf1e6" stroke="#b25b0e"/>
+        <text x="300" y="61" font-size="12" text-anchor="middle" fill="#1a1a1a">resolveConversationUploadWorkingDir</text>
+        <text x="300" y="77" font-size="10.5" text-anchor="middle" fill="#b25b0e">guess: DEFAULT_WORKING_DIR / stored meta</text>
+        <rect x="430" y="42" width="180" height="46" rx="6" fill="#fff" stroke="#bdbcb4"/>
+        <text x="520" y="61" font-size="12" text-anchor="middle" fill="#1a1a1a">/api/file/upload?path=…</text>
+        <text x="520" y="77" font-size="10.5" text-anchor="middle" fill="#8a8a82">POST destination</text>
+        <rect x="650" y="42" width="190" height="46" rx="6" fill="#fbe9e9" stroke="#a02020"/>
+        <text x="745" y="61" font-size="12" text-anchor="middle" fill="#a02020">422 guard</text>
+        <text x="745" y="77" font-size="10.5" text-anchor="middle" fill="#a02020">path must be inside workspace</text>
+        <line x1="170" y1="65" x2="208" y2="65" stroke="#8a8a82" stroke-width="1.5" marker-end="url(#ar)"/>
+        <line x1="390" y1="65" x2="428" y2="65" stroke="#8a8a82" stroke-width="1.5" marker-end="url(#ar)"/>
+        <line x1="610" y1="65" x2="648" y2="65" stroke="#a02020" stroke-width="1.5" marker-end="url(#ar)"/>
+        <text x="430" y="118" font-size="11" fill="#8a8a82">agent-server resolves stored</text>
+        <text x="430" y="133" font-size="11" fill="#8a8a82">working_dir against its own CWD → mismatch</text>
+
+        <text x="20" y="182" font-size="13" font-weight="700" fill="#2f7a3a">AFTER — destination read from the runtime the guard compares against</text>
+        <rect x="20" y="198" width="150" height="46" rx="6" fill="#fff" stroke="#bdbcb4"/>
+        <text x="95" y="219" font-size="12" text-anchor="middle" fill="#1a1a1a">uploadFilesToConversation</text>
+        <text x="95" y="235" font-size="10.5" text-anchor="middle" fill="#8a8a82">conversation-file-upload.api.ts:144</text>
+        <rect x="210" y="198" width="180" height="46" rx="6" fill="#e6ecfa" stroke="#2b4eaa"/>
+        <text x="300" y="217" font-size="12" text-anchor="middle" fill="#1a1a1a">readRuntimeWorkingDir</text>
+        <text x="300" y="233" font-size="10.5" text-anchor="middle" fill="#2b4eaa">GET /conversations/{id}</text>
+        <rect x="430" y="198" width="180" height="46" rx="6" fill="#fff" stroke="#bdbcb4"/>
+        <text x="520" y="217" font-size="12" text-anchor="middle" fill="#1a1a1a">/api/file/upload?path=…</text>
+        <text x="520" y="233" font-size="10.5" text-anchor="middle" fill="#8a8a82">POST destination</text>
+        <rect x="650" y="198" width="190" height="46" rx="6" fill="#e4f2e6" stroke="#2f7a3a"/>
+        <text x="745" y="217" font-size="12" text-anchor="middle" fill="#2f7a3a">200 OK</text>
+        <text x="745" y="233" font-size="10.5" text-anchor="middle" fill="#2f7a3a">success:true</text>
+        <line x1="170" y1="221" x2="208" y2="221" stroke="#8a8a82" stroke-width="1.5" marker-end="url(#ar)"/>
+        <line x1="390" y1="221" x2="428" y2="221" stroke="#8a8a82" stroke-width="1.5" marker-end="url(#ar)"/>
+        <line x1="610" y1="221" x2="648" y2="221" stroke="#2f7a3a" stroke-width="1.5" marker-end="url(#ar)"/>
+        <text x="300" y="262" font-size="11" text-anchor="middle" fill="#2f7a3a">same value the guard resolves</text>
+        <defs><marker id="ar" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#8a8a82"/></marker></defs>
+      </svg><figcaption>The guessed resolver (orange) is replaced by a runtime read (blue) whose value is exactly what the guard resolves against.</figcaption></div>
+    </section>
+
+    <section id="sec3"><h2><span class="num">3</span>Fix 1 — read the working dir from the runtime</h2>
+      <p>New helper <code>readRuntimeWorkingDir</code> (<a class="src" href="https://github.com/OpenHands/OpenHands/blob/fix/conversation-attachment-upload-workspace-422/src/api/conversation-file-upload.api.ts#L88">conversation-file-upload.api.ts:88</a>) calls <code>ConversationClient.getConversation(conversationId)</code> against the target runtime and returns its <code>workspace.working_dir</code> when that value is absolute, or <code>null</code> otherwise (no value, a relative value, or any failure). A relative value is <em>not</em> adopted because the guard resolves it against the server's own CWD, which Canvas cannot reproduce. The call site prefers it and falls back to <code>resolveConversationUploadWorkingDir</code>:</p>
+      <pre><code><span class="com">// conversation-file-upload.api.ts:149 (after)</span>
+const workingDir =
+  (await readRuntimeWorkingDir({ conversationUrl, sessionApiKey }, conversationId)) ??
+  (await resolveConversationUploadWorkingDir(conversationId, currentConversation));</code></pre>
+      <div class="callout note">ⓘ The fallback is <b>lazily</b> evaluated (<code>??</code> on the awaited result), so when the runtime answers, the local resolver's own network read is skipped entirely. An early draft passed it eagerly and a throwing fallback aborted the upload before the runtime was consulted — the live harness caught that regression, hence the current shape.</div>
+      <div class="callout warn">⚠ Scope: this fixes the <em>destination</em>, not the server's stored value. A relative runtime <code>working_dir</code> is ignored in favour of Canvas's own local resolution, so Canvas stops adopting a value it cannot resolve identically to the guard.</div>
+    </section>
+
+    <section id="sec4"><h2><span class="num">4</span>Fix 2 — readable message for a leftover guard 422</h2>
+      <p>If the guard still fires (e.g. a server-persisted relative dir), the raw <code>HTTP request failed (422 …): {"detail":"path must be inside …"}</code> is replaced by <code>FILE_SERVICE$UPLOAD_WORKSPACE_MISMATCH</code> via <code>friendlyUploadError</code> (<a class="src" href="https://github.com/OpenHands/OpenHands/blob/fix/conversation-attachment-upload-workspace-422/src/api/conversation-file-upload.api.ts#L175">conversation-file-upload.api.ts:175</a>).</p>
+      <div class="ba">
+        <div><h3 style="color:#a02020">Before</h3><pre><code><span class="com">// raw error surfaced to the user</span>
+HTTP request failed (422 ): {"detail":
+ "path must be inside the conversation
+ workspace"}</code></pre></div>
+        <div><h3 style="color:#2f7a3a">After</h3><pre><code><span class="com">// i18n key, 15 languages</span>
+"Could not place the file inside this
+ conversation's workspace. Reload the
+ conversation and try again."</code></pre></div>
+      </div>
+    </section>
+
+    <section id="sec5"><h2><span class="num">5</span>Evidence — reproduced against the live agent-server</h2>
+      <p>The local stack runs the real bundled agent-server at <code>127.0.0.1:60000</code>; conversation <code>742aa796…</code> reports <code>working_dir: /workspace/project/OpenHands</code> while <code>/api/file/home</code> is <code>/home/openhands</code>.</p>
+      <div class="ba">
+        <div><h3 style="color:#a02020">Before (guessed anchor)</h3><pre><code>$ curl -F file=@test.zip \
+  ".../file/upload?path=/home/openhands/\
+workspace/project/test.zip"
+<span style="color:#a02020">422</span>
+{"detail":"path must be inside the
+ conversation workspace"}</code></pre></div>
+        <div><h3 style="color:#2f7a3a">After (runtime anchor)</h3><pre><code>$ curl -F file=@test.zip \
+  ".../file/upload?path=/workspace/\
+project/OpenHands/test.zip"
+<span style="color:#2f7a3a">200</span>
+{"success":true}
+<span class="com"># file landed in the workspace</span></code></pre></div>
+      </div>
+      <details><summary>Reproduction commands (full)</summary><pre><code>CID=742aa796-a112-4016-8f92-13f839b266a9
+H=http://127.0.0.1:60000
+K="X-Session-API-Key: $SESSION_API_KEY"
+HOME=$(curl -s -H "$K" $H/api/file/home | jq -r .home)   <span class="com"># /home/openhands</span>
+curl -s -H "$K" $H/api/conversations/$CID | jq .workspace  <span class="com"># /workspace/project/OpenHands</span>
+
+<span class="com"># guessed (old) → 422</span>
+curl -X POST -H "$K" -F file=@test.zip "$H/api/conversations/$CID/file/upload?path=$HOME/workspace/project/test.zip"
+<span class="com"># runtime value (new) → 200</span>
+curl -X POST -H "$K" -F file=@test.zip "$H/api/conversations/$CID/file/upload?path=/workspace/project/OpenHands/test.zip"</code></pre></details>
+      <p style="font-size:14px">Unit coverage added in <code>__tests__/api/conversation-file-upload.test.ts</code> (<code>@spec WUP-002</code>): runtime value overrides a divergent attached workspace; empty runtime dir falls back to the home-anchored path; a failed runtime read still uploads; a guard 422 maps to the i18n key. All affected suites green; <code>npm run lint</code> clean (0 errors).</p>
+    </section>
+
+    <section id="sec6"><h2><span class="num">6</span>Files &amp; risk</h2>
+      <table>
+        <tr><th>File</th><th>Tag</th><th>+/−</th><th>Change</th></tr>
+        <tr><td><code>src/api/conversation-file-upload.api.ts</code></td><td><span class="tag t-changed">✏️ changed</span></td><td>+52 / −8</td><td>runtime read + lazy fallback; friendly 422</td></tr>
+        <tr><td><code>src/api/agent-server-home.ts</code></td><td><span class="tag t-mech">⚙️ mechanical</span></td><td>+1 / −1</td><td><code>isAbsolutePath</code> exported</td></tr>
+        <tr><td><code>src/i18n/translation.json</code></td><td><span class="tag t-added">🟢 added</span></td><td>+17 / −0</td><td><code>FILE_SERVICE$UPLOAD_WORKSPACE_MISMATCH</code> (15 langs)</td></tr>
+        <tr><td><code>specs/workspace-upload-path.md</code></td><td><span class="tag t-changed">✏️ changed</span></td><td>+12 / −0</td><td>WUP-002 acceptance criteria</td></tr>
+        <tr><td><code>__tests__/api/conversation-file-upload.test.ts</code></td><td><span class="tag t-changed">✏️ changed</span></td><td>+~116</td><td>5 new WUP-002 cases</td></tr>
+      </table>
+      <div class="callout note">ⓘ Follow-up, not in this PR: an agent-server that persists a <em>relative</em> <code>workspace.working_dir</code> rejects its own uploads. That normalization belongs in the SDK/server; this PR only stops Canvas from adding a second divergent value.</div>
+    </section>
+  </main>
+</div></body></html>
