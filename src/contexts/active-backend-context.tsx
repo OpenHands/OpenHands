@@ -20,7 +20,8 @@ import {
   type ResolvedActiveBackend,
 } from "#/api/backend-registry/types";
 import { getMarsBridge } from "#/api/mars/mars-tunnel-backend";
-import { useQueryClient } from "@tanstack/react-query";
+import { QueryClientContext } from "@tanstack/react-query";
+import { getQueryClient } from "#/query-client-config";
 import { QUERY_KEYS } from "#/hooks/query/query-keys";
 import {
   setTelemetryCloudContext,
@@ -80,7 +81,8 @@ export function ActiveBackendProvider({
     getSnapshot,
   );
 
-  const queryClient = useQueryClient();
+  const contextQueryClient = React.useContext(QueryClientContext);
+  const queryClient = contextQueryClient ?? getQueryClient();
 
   const retryBootstrapProbe = React.useCallback(() => {
     clearCachedAgentServerInfo();
