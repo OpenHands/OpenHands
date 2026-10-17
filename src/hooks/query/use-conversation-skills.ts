@@ -4,6 +4,7 @@ import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { SkillInfo } from "#/types/settings";
 import { useActiveConversation } from "./use-active-conversation";
+import { SKILLS_QUERY_KEYS } from "./query-keys";
 
 /**
  * Skills catalog scoped to the active conversation, so the slash-command menu
@@ -20,7 +21,8 @@ import { useActiveConversation } from "./use-active-conversation";
  * "No workspace" conversations (`selected_workspace` is null).
  */
 export const useConversationSkills = () => {
-  const isCloud = useActiveBackend().backend.kind === "cloud";
+  const { backend, orgId } = useActiveBackend();
+  const isCloud = backend.kind === "cloud";
   const { conversationId } = useOptionalConversationId();
   const { data: conversation } = useActiveConversation();
   const projectDir = conversation?.selected_workspace ?? undefined;
@@ -30,8 +32,8 @@ export const useConversationSkills = () => {
 
   return useQuery<SkillInfo[]>({
     queryKey: cloudConversationId
-      ? ["conversation", cloudConversationId, "skills"]
-      : ["skills", projectDir ?? null],
+      ? SKILLS_QUERY_KEYS.conversation(backend.id, orgId, cloudConversationId)
+      : SKILLS_QUERY_KEYS.catalog(backend.id, orgId, projectDir ?? null),
     queryFn: () =>
       cloudConversationId
         ? SkillsService.getConversationSkills(cloudConversationId)
