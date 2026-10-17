@@ -3,10 +3,13 @@ import { HttpError } from "@openhands/typescript-client";
 import {
   extractDraftDispatchErrors,
   formFromServerDraft,
+  getDraftExecutionStatusText,
   setupDraftFromServerDraft,
 } from "#/components/features/automations/setup/automation-setup-draft-service";
 import type { AutomationSetupFormValues } from "#/api/automation-setup-types";
 import type { AutomationDraftApiResponse } from "#/manifests/types";
+import { AutomationRunStatus, type AutomationRun } from "#/types/automation";
+import { I18nKey } from "#/i18n/declaration";
 
 const detailEnvelope = {
   detail: {
@@ -128,3 +131,124 @@ describe("setupDraftFromServerDraft", () => {
     expect(form.eventKey).toBe("push,release.published");
   });
 });
+
+describe("getDraftExecutionStatusText", () => {
+  const t = (key: I18nKey) => key;
+
+  const successfulRun: AutomationRun = {
+    id: "run-1",
+    status: AutomationRunStatus.COMPLETED,
+    conversation_id: null,
+    bash_command_id: null,
+    error_detail: null,
+    started_at: "2026-01-01T00:00:00.000Z",
+    completed_at: "2026-01-01T00:01:00.000Z",
+  };
+
+  const failedRun: AutomationRun = {
+    id: "run-2",
+    status: AutomationRunStatus.FAILED,
+    conversation_id: null,
+    bash_command_id: null,
+    error_detail: "Sandbox timed out",
+    started_at: "2026-01-01T00:00:00.000Z",
+    completed_at: "2026-01-01T00:01:00.000Z",
+  };
+
+  const runningRun: AutomationRun = {
+    id: "run-3",
+    status: AutomationRunStatus.RUNNING,
+    conversation_id: null,
+    bash_command_id: null,
+    error_detail: null,
+    started_at: "2026-01-01T00:00:00.000Z",
+    completed_at: null,
+  };
+
+  it("prioritizes draft validation error over a historical successful test run", () => {
+    const invalidDraftWithPastSuccess: AutomationDraftApiResponse = {
+      ...baseSavedDraft,
+      validationErrors: [
+        {
+          field: "cron",
+          code: "value_error",
+          message: "Value error, Invalid cron expression: every day",
+        },
+      ],
+    };
+
+    const status = getDraftExecutionStatusText(
+      invalidDraftWithPastSuccess,
+      [successfulRun],
+      t,
+    );
+
+    expect(status).toBe("Value error, Invalid cron expression: every day");
+  });
+
+  it("prioritizes draft validation error over a historical failed test run", () => {
+    const invalidDraftWithPastFailure: AutomationDraftApiResponse = {
+      ...baseSavedDraft,
+      validationErrors: [
+        {
+          field: "cron",
+          code: "value_error",
+          message: "Value error, Invalid cron expression: every day",
+        },
+      ],
+    };
+
+    const status = getDraftExecutionStatusText(
+      invalidDraftWithPastFailure,
+      [failedRun],
+      t,
+    );
+
+    expect(status).toBe("Value error, Invalid cron expression: every day");
+  });
+
+  it("returns latest test passed when the draft is valid and the latest run succeeded", () => {
+    const validDraft: AutomationDraftApiResponse = {
+      ...baseSavedDraft,
+      validationErrors: null,
+    };
+
+    const status = getDraftExecutionStatusText(validDraft, [successfulRun], t);
+
+    expect(status).toBe(I18nKey.AUTOMATION_SETUP$LATEST_TEST_PASSED);
+  });
+
+  it("returns latest test failed when the draft is valid and the latest run failed", () => {
+    const validDraft: AutomationDraftApiResponse = {
+      ...baseSavedDraft,
+      validationErrors: null,
+    };
+
+    const status = getDraftExecutionStatusText(validDraft, [failedRun], t);
+
+    expect(status).toBe(I18nKey.AUTOMATION_SETUP$LATEST_TEST_FAILED);
+  });
+
+  it("returns latest test running when the draft is valid and the latest run is running", () => {
+    const validDraft: AutomationDraftApiResponse = {
+      ...baseSavedDraft,
+      validationErrors: null,
+    };
+
+    const status = getDraftExecutionStatusText(validDraft, [runningRun], t);
+
+    expect(status).toBe(I18nKey.AUTOMATION_SETUP$LATEST_TEST_RUNNING);
+  });
+
+  it("returns ready to test when the draft is valid and has no historical runs", () => {
+    const validDraft: AutomationDraftApiResponse = {
+      ...baseSavedDraft,
+      validationErrors: null,
+    };
+
+    const status = getDraftExecutionStatusText(validDraft, [], t);
+
+    expect(status).toBe(I18nKey.AUTOMATION_SETUP$READY_TO_TEST);
+  });
+});
+
