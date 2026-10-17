@@ -34,6 +34,8 @@ import {
   getCloudAppConversationStartTask,
   readCloudConversationFile,
   searchCloudConversations,
+  searchCloudPinnedConversations,
+  updateCloudConversationPinned,
   updateCloudConversationPublicFlag,
   updateCloudConversationTitle,
 } from "../cloud/conversation-service.api";
@@ -873,6 +875,23 @@ class AgentServerConversationService {
       throw new Error("Public sharing requires a cloud backend.");
     }
     return updateCloudConversationPublicFlag(conversationId, isPublic);
+  }
+
+  static async updateConversationPinned(
+    conversationId: string,
+    pinned: boolean,
+  ): Promise<AppConversation> {
+    if (getActiveBackend().backend.kind !== "cloud") {
+      throw new Error("Server-side pins require a cloud backend.");
+    }
+    return updateCloudConversationPinned(conversationId, pinned);
+  }
+
+  static async searchPinnedConversations(): Promise<AppConversation[]> {
+    if (getActiveBackend().backend.kind !== "cloud") {
+      throw new Error("Server-side pins require a cloud backend.");
+    }
+    return searchCloudPinnedConversations();
   }
 
   static async updateConversationRepository(

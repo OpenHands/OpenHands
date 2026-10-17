@@ -54,12 +54,11 @@ import {
   MAX_PAGES_PER_LOAD_MORE_CLICK,
   OLDER_CONVERSATION_CUTOFF_MS,
   partitionByCutoff,
-  resolvePinnedConversations,
   sortConversationsByField,
   type ConversationGroupLaunch,
 } from "./conversation-panel-list-helpers";
 import { useArchivedConversationsStore } from "#/stores/archived-conversations-store";
-import { usePinnedConversationsStore } from "#/stores/pinned-conversations-store";
+import { useConversationPins } from "#/hooks/use-conversation-pins";
 import { uniqueById } from "#/utils/unique-by-id";
 
 interface ConversationPanelProps {
@@ -75,6 +74,7 @@ interface ConversationPanelProps {
 const noop = () => {};
 
 const EMPTY_PINNED_CONVERSATION_IDS: readonly string[] = [];
+const EMPTY_HIDDEN_CONVERSATION_IDS: ReadonlySet<string> = new Set();
 
 export function ConversationPanel({
   onClose,
@@ -171,17 +171,6 @@ export function ConversationPanel({
   const [expandedPinnedPreview, setExpandedPinnedPreview] =
     React.useState(false);
 
-  const pinnedIds = usePinnedConversationsStore(
-    (state) =>
-      state.pinsByBackendId[activeBackend.id] ?? EMPTY_PINNED_CONVERSATION_IDS,
-  );
-  const togglePin = usePinnedConversationsStore((state) => state.togglePin);
-  const unpinConversation = usePinnedConversationsStore(
-    (state) => state.unpinConversation,
-  );
-  const pruneMissingPinnedConversations = usePinnedConversationsStore(
-    (state) => state.pruneMissingConversations,
-  );
   const archivedIds = useArchivedConversationsStore(
     (state) =>
       state.archivesByBackendId[activeBackend.id] ??
@@ -382,10 +371,19 @@ export function ConversationPanel({
     [automationFilteredConversations, selectedTagFacets, tagFacets],
   );
 
-  const pinnedConversations = React.useMemo(
-    () => resolvePinnedConversations(pinnedIds, conversations),
-    [conversations, pinnedIds],
-  );
+  const {
+    pinnedIds,
+    pinnedConversations,
+    togglePin,
+    unpin: unpinConversation,
+    pruneMissing: pruneMissingPinnedConversations,
+  } = useConversationPins({
+    loadedConversations: allLoadedConversations,
+    visibleConversations: conversations,
+    hiddenIds: showArchivedConversations
+      ? EMPTY_HIDDEN_CONVERSATION_IDS
+      : archivedIdSet,
+  });
 
   React.useEffect(() => {
     if (!isFetched) {
@@ -397,8 +395,8 @@ export function ConversationPanel({
     // on the currently loaded pages and let them reappear in the list.
     const loadedIds =
       data?.pages.flatMap((page) => page.items.map((item) => item.id)) ?? [];
-    pruneMissingPinnedConversations(activeBackend.id, loadedIds);
-  }, [activeBackend.id, data, isFetched, pruneMissingPinnedConversations]);
+    pruneMissingPinnedConversations(loadedIds);
+  }, [data, isFetched, pruneMissingPinnedConversations]);
 
   React.useEffect(() => {
     if (pinnedIds.length === 0) {
@@ -801,7 +799,7 @@ export function ConversationPanel({
       return;
     }
     archiveConversation(activeBackend.id, selectedConversationId);
-    unpinConversation(activeBackend.id, selectedConversationId);
+    unpinConversation(selectedConversationId);
     if (selectedConversationId === currentConversationId) {
       navigate("/conversations");
     }
@@ -991,7 +989,7 @@ export function ConversationPanel({
               showTags={showTagsMetadata}
               isArchived={isArchived}
               isPinned={isPinned}
-              onTogglePin={() => togglePin(activeBackend.id, conversation.id)}
+              onTogglePin={() => togglePin(conversation.id)}
               alwaysShowPinIcon={isPinned && !options?.inPinnedSection}
             />
           </NavigationLink>
