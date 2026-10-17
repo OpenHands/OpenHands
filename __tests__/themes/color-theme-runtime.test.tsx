@@ -1,3 +1,4 @@
+/* eslint-disable i18next/no-literal-string */
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AgentServerUIRoot } from "#/components/providers/agent-server-ui-root";
@@ -123,4 +124,27 @@ describe("color themes", () => {
       ).toBe(getColorThemeCss(DEFAULT_COLOR_THEME));
     },
   );
+
+  it("syncs appearance to desktopShell on theme change and during bootstrap", () => {
+    const setAppearance = vi.fn();
+    window.desktopShell = {
+      platform: "win32",
+      setAppearance,
+    };
+
+    try {
+      applyColorTheme("light-plus");
+      expect(setAppearance).toHaveBeenCalledWith("light");
+
+      applyColorTheme("openhands-neutral");
+      expect(setAppearance).toHaveBeenCalledWith("dark");
+
+      setAppearance.mockClear();
+      localStorage.setItem("openhands-color-theme", "light-plus");
+      window.eval(COLOR_THEME_BOOTSTRAP_SCRIPT);
+      expect(setAppearance).toHaveBeenCalledWith("light");
+    } finally {
+      delete window.desktopShell;
+    }
+  });
 });

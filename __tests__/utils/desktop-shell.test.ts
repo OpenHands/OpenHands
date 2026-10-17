@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   isDesktopFullScreen,
   isMacDesktopShell,
+  setDesktopThemeAppearance,
   subscribeDesktopFullScreen,
 } from "#/utils/desktop-shell";
 
@@ -86,5 +87,25 @@ describe("isDesktopFullScreen", () => {
       isFullScreen: () => true,
     };
     expect(isDesktopFullScreen()).toBe(true);
+  });
+});
+
+describe("setDesktopThemeAppearance", () => {
+  it("is a no-op in a browser tab without desktopShell", () => {
+    expect(() => setDesktopThemeAppearance("light")).not.toThrow();
+  });
+
+  it("calls setAppearance on the bridge when available", () => {
+    const setAppearance = vi.fn();
+    window.desktopShell = {
+      platform: "win32",
+      setAppearance,
+    };
+
+    setDesktopThemeAppearance("light");
+    expect(setAppearance).toHaveBeenCalledWith("light");
+
+    setDesktopThemeAppearance("dark");
+    expect(setAppearance).toHaveBeenCalledWith("dark");
   });
 });
