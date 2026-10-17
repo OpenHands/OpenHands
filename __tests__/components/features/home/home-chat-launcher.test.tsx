@@ -12,6 +12,7 @@ import {
   LAST_LOCAL_WORKSPACE_MODE_STORAGE_KEY,
   writeStoredLocalWorkspaceMode,
 } from "#/utils/workspace-mode";
+import { HOME_RECOMMENDED_AUTOMATIONS_DISMISSED_STORAGE_KEY } from "#/components/features/home/home-recommended-automations.constants";
 
 const mockNavigate = vi.fn();
 const mockUseActiveBackend = vi.fn();
@@ -236,12 +237,26 @@ vi.mock(
     RecommendedAutomationsLauncher: ({
       variant,
       className,
+      dismissible,
+      onDismiss,
     }: {
       variant?: string;
       className?: string;
+      dismissible?: boolean;
+      onDismiss?: () => void;
     }) =>
       variant === "rail" ? (
-        <div data-testid="recommended-automations-rail" className={className} />
+        <div data-testid="recommended-automations-rail" className={className}>
+          {dismissible && onDismiss && (
+            <button
+              type="button"
+              data-testid="recommended-automations-rail-dismiss"
+              onClick={onDismiss}
+            >
+              Hide
+            </button>
+          )}
+        </div>
       ) : null,
   }),
 );
@@ -872,5 +887,41 @@ describe("HomeChatLauncher", () => {
     expect(
       screen.getByTestId("recommended-automations-rail"),
     ).toBeInTheDocument();
+  });
+
+  it("renders recommended automations rail by default and hides it when dismissed", async () => {
+    const user = userEvent.setup();
+    renderLauncher();
+
+    expect(
+      screen.getByTestId("recommended-automations-rail"),
+    ).toBeInTheDocument();
+
+    const dismissBtn = screen.getByTestId(
+      "recommended-automations-rail-dismiss",
+    );
+    await user.click(dismissBtn);
+
+    expect(
+      screen.queryByTestId("recommended-automations-rail"),
+    ).not.toBeInTheDocument();
+    expect(
+      window.localStorage.getItem(
+        HOME_RECOMMENDED_AUTOMATIONS_DISMISSED_STORAGE_KEY,
+      ),
+    ).toBe("true");
+  });
+
+  it("does not render recommended automations rail when previously dismissed", () => {
+    window.localStorage.setItem(
+      HOME_RECOMMENDED_AUTOMATIONS_DISMISSED_STORAGE_KEY,
+      "true",
+    );
+
+    renderLauncher();
+
+    expect(
+      screen.queryByTestId("recommended-automations-rail"),
+    ).not.toBeInTheDocument();
   });
 });

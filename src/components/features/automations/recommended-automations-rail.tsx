@@ -31,11 +31,15 @@ import {
   extensionModuleCardInteractiveClassName,
   extensionModuleCardSurfaceClassName,
 } from "#/utils/extension-module-card-classes";
+import { X } from "lucide-react";
+import { hoverRevealActionClassName } from "#/utils/hover-reveal-classes";
 
 interface RecommendedAutomationsRailProps {
   installedAutomations: readonly Pick<Automation, "name">[];
   onSelect: (automation: RecommendedAutomation) => void;
   className?: string;
+  dismissible?: boolean;
+  onDismiss?: () => void;
 }
 
 /** Current catalog tiles reserve 40px for the icon; keep that row height. */
@@ -104,6 +108,8 @@ export function RecommendedAutomationsRail({
   installedAutomations,
   onSelect,
   className,
+  dismissible = false,
+  onDismiss,
 }: RecommendedAutomationsRailProps) {
   const { t } = useTranslation("openhands");
   const items = flattenRecommendedRailGroups(
@@ -148,11 +154,32 @@ export function RecommendedAutomationsRail({
     <section
       data-testid="recommended-automations-rail"
       aria-label={t(I18nKey.RECOMMENDED_AUTOMATIONS$SECTION_LABEL)}
-      className={cn("w-full", AUTOMATION_STACK_SECTION_BOTTOM_CLASS, className)}
+      className={cn(
+        "group w-full",
+        AUTOMATION_STACK_SECTION_BOTTOM_CLASS,
+        className,
+      )}
     >
-      <h2 className="mb-2 text-sm font-medium text-foreground">
-        {t(I18nKey.RECOMMENDED_AUTOMATIONS$SECTION_LABEL)}
-      </h2>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <h2 className="text-sm font-medium text-foreground">
+          {t(I18nKey.RECOMMENDED_AUTOMATIONS$SECTION_LABEL)}
+        </h2>
+        {dismissible && onDismiss && (
+          <button
+            type="button"
+            data-testid="recommended-automations-rail-dismiss"
+            aria-label={t(I18nKey.RECOMMENDED_AUTOMATIONS$DISMISS_LABEL)}
+            onClick={onDismiss}
+            className={cn(
+              "inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted",
+              "transition-opacity motion-reduce:transition-none hover:text-content",
+              hoverRevealActionClassName(),
+            )}
+          >
+            <X className="size-4" />
+          </button>
+        )}
+      </div>
 
       <div className="relative">
         {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- mouse drag-to-scroll is a pointer convenience; keyboard users scroll the list natively via the focusable cards. */}

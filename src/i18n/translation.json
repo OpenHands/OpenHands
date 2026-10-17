@@ -38915,6 +38915,24 @@
     "uk": "Рекомендовані автоматизації",
     "id": "Otomatisasi yang disarankan"
   },
+  "RECOMMENDED_AUTOMATIONS$DISMISS_LABEL": {
+    "en": "Hide Recommended automations",
+    "ja": "おすすめの自動化を非表示",
+    "zh-CN": "隐藏推荐的自动化",
+    "zh-TW": "隱藏推薦的自動化",
+    "ko-KR": "추천 자동화 숨기기",
+    "no": "Skjul anbefalte automatiseringer",
+    "ar": "إخفاء الأتمتات الموصى بها",
+    "de": "Empfohlene Automatisierungen ausblenden",
+    "fr": "Masquer les automatisations recommandées",
+    "it": "Nascondi automazioni consigliate",
+    "pt": "Ocultar automações recomendadas",
+    "es": "Ocultar automatizaciones recomendadas",
+    "ca": "Amaga les automatitzacions recomanades",
+    "tr": "Önerilen otomasyonları gizle",
+    "uk": "Сховати рекомендовані автоматизації",
+    "id": "Sembunyikan otomatisasi yang disarankan"
+  },
   "RECOMMENDED_AUTOMATIONS$SECTION_TITLE": {
     "en": "Start from a proven workflow",
     "ja": "実績のあるワークフローから始める",
@@ -45916,6 +45934,24 @@
     "uk": "Показувати контрольний список «Початок роботи»",
     "ca": "Mostra la llista Per començar",
     "id": "Tampilkan daftar periksa Memulai"
+  },
+  "SETTINGS$SHOW_RECOMMENDED_AUTOMATIONS": {
+    "en": "Show Recommended automations",
+    "ja": "おすすめの自動化を表示",
+    "zh-CN": "显示推荐的自动化",
+    "zh-TW": "顯示推薦的自動化",
+    "ko-KR": "추천 자동화 표시",
+    "de": "Empfohlene Automatisierungen anzeigen",
+    "no": "Vis anbefalte automatiseringer",
+    "it": "Mostra automazioni consigliate",
+    "pt": "Mostrar automações recomendadas",
+    "es": "Mostrar automatizaciones recomendadas",
+    "ar": "إظهار الأتمتات الموصى بها",
+    "fr": "Afficher les automatisations recommandées",
+    "tr": "Önerilen otomasyonları göster",
+    "uk": "Показувати рекомендовані автоматизації",
+    "ca": "Mostra les automatitzacions recomanades",
+    "id": "Tampilkan otomatisasi yang disarankan"
   },
   "ONBOARDING$SKIP_GETTING_STARTED_CHECKLIST": {
     "en": "Skip Getting Started checklist",

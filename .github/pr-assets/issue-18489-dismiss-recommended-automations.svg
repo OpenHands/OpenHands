@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1260" height="470" role="img" aria-label="Dismiss Home Recommended automations rail verification">
+  <rect width="100%" height="100%" rx="18" fill="#0b1020"/>
+  <circle cx="34" cy="32" r="8" fill="#ff5f56"/>
+  <circle cx="60" cy="32" r="8" fill="#ffbd2e"/>
+  <circle cx="86" cy="32" r="8" fill="#27c93f"/>
+  <text x="28" y="78" fill="#d7e2ff" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21">Feature #18489: Dismiss Recommended automations rail &amp; Application settings switch</text>
+  <text x="28" y="116" fill="#ff9b91" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21">Home: Hovering rail header exposes dismiss X button; click removes rail immediately</text>
+  <text x="28" y="164" fill="#d7e2ff" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21">Settings: Application settings switch toggles rail visibility with persistent localStorage sync</text>
+  <text x="28" y="218" fill="#d7e2ff" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="18">$ npm test recommended-automations-switch recommended-automations-rail home-chat-launcher</text>
+  <text x="28" y="256" fill="#8ef0a1" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21">Test Files 3 passed (3) · Tests 35 passed (35)</text>
+  <text x="28" y="310" fill="#d7e2ff" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21">$ npm run check-translation-completeness &amp;&amp; npm run build</text>
+  <text x="28" y="348" fill="#8ef0a1" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21">All 16 locales 100% complete · Production build succeeded in 3.49s</text>
+  <text x="28" y="402" fill="#d7e2ff" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21">A11y &amp; Touch: hoverRevealActionClassName() active on fine hover, focus-within, and coarse touch</text>
+  <text x="28" y="440" fill="#8ef0a1" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21">Verified on main @ d3a58cd · Node 24.19.0</text>
+</svg>
