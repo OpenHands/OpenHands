@@ -256,11 +256,28 @@ describe("useWorkspaceFiles — cloud backend", () => {
     });
 
     await waitFor(() => expect(result.current.data).toEqual(["hello.txt"]));
-    // Falls back to the default working dir when the conversation metadata
-    // (and thus its working_dir) isn't available yet.
-    expect(listCloudFilesMock).toHaveBeenCalledWith(
-      "conv-1",
-      "/workspace/project",
+    // With no conversation metadata (no working_dir, no repository) the whole
+    // workspace root is listed so files the agent wrote outside
+    // `/workspace/project` still show up.
+    expect(listCloudFilesMock).toHaveBeenCalledWith("conv-1", "/workspace");
+  });
+
+  it("anchors at the repo clone when a repository is selected", async () => {
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        ...conversation,
+        workspace: undefined,
+        selected_repository: "o/r",
+      },
+    });
+
+    renderHook(() => useWorkspaceFiles(), { wrapper: makeWrapper() });
+
+    await waitFor(() =>
+      expect(listCloudFilesMock).toHaveBeenCalledWith(
+        "conv-1",
+        "/workspace/project/r",
+      ),
     );
   });
 });
