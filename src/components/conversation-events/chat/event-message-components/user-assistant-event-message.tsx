@@ -8,8 +8,8 @@ import { parseMessageFromEvent } from "../event-content-helpers/parse-message-fr
 import { CriticResultDisplay } from "./critic-result-display";
 import { CollapsibleThinking } from "./collapsible-thinking";
 import {
-  getReasoningContent,
   splitInlineThink,
+  getMessageReasoningContent,
 } from "../event-thought-helpers";
 import RepoForkedIcon from "#/icons/repo-forked.svg?react";
 import { I18nKey } from "#/i18n/declaration";
@@ -40,21 +40,19 @@ function UserAssistantEventMessageComponent({
   const forkInFlightRef = React.useRef(false);
 
   const parsed = parseMessageFromEvent(event);
-  // Route an inline <think> block (e.g. from a streamed reply) to the thinking
-  // section so reloaded conversations match the live rendering.
-  const { reasoning: inlineThink, message } =
-    event.source === "agent"
-      ? splitInlineThink(parsed)
-      : { reasoning: "", message: parsed };
-  // The finished message replaces its streaming slot outright, so reasoning the
-  // model streamed must render from the message itself or it vanishes on
-  // finalize (and never shows after a reload).
-  const reasoning = [
-    event.source === "agent" ? getReasoningContent(event.llm_message) : "",
-    inlineThink,
-  ]
-    .filter(Boolean)
-    .join("\n\n");
+  // Prefer the SDK's structured reasoning (`llm_message.reasoning_content` /
+  // `thinking_blocks`), which carries the reasoning for text-only final replies
+  // where no inline `<think>` block exists. Fall back to routing an inline
+  // `<think>` block (e.g. from a streamed reply) to the thinking section so
+  // reloaded conversations match the live rendering.
+  let reasoning = "";
+  let message = parsed;
+  if (event.source === "agent") {
+    reasoning = getMessageReasoningContent(event);
+    if (!reasoning) {
+      ({ reasoning, message } = splitInlineThink(parsed));
+    }
+  }
 
   const imageUrls: string[] = [];
   if (Array.isArray(event.llm_message.content)) {

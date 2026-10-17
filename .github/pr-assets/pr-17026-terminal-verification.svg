@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="520" role="img" aria-label="Terminal verification passed">
+  <rect width="100%" height="100%" rx="18" fill="#0b1020"/>
+  <circle cx="34" cy="32" r="8" fill="#ff5f56"/>
+  <circle cx="60" cy="32" r="8" fill="#ffbd2e"/>
+  <circle cx="86" cy="32" r="8" fill="#27c93f"/>
+  <text x="28" y="78" fill="#d7e2ff" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="22">$ npx tsc --noEmit</text>
+  <text x="28" y="116" fill="#8ef0a1" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="22">(no type errors)</text>
+  <text x="28" y="170" fill="#d7e2ff" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="22">$ npx eslint src/... event-thought-helpers.ts user-assistant-event-message.tsx ...</text>
+  <text x="28" y="208" fill="#8ef0a1" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="22">(no lint errors)</text>
+  <text x="28" y="262" fill="#d7e2ff" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="22">$ npx vitest run __tests__/.../event-thought-helpers.test.ts</text>
+  <text x="28" y="300" fill="#d7e2ff" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="22">  __tests__/components/features/chat/user-assistant-event-message.test.tsx (14 tests)</text>
+  <text x="28" y="338" fill="#d7e2ff" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="22">  __tests__/components/conversation-events/chat/event-thought-helpers.test.ts (15 tests)</text>
+  <text x="28" y="376" fill="#d7e2ff" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="22">  __tests__/utils/handle-event-for-ui.test.ts (45 tests)</text>
+  <text x="28" y="430" fill="#d7e2ff" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="22">$ npx vitest run (3 files above)</text>
+  <text x="28" y="468" fill="#8ef0a1" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="22">Test Files 3 passed (3) · Tests 74 passed (74)</text>
+</svg>
