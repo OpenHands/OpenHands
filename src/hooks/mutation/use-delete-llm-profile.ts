@@ -13,23 +13,26 @@ export function useDeleteLlmProfile() {
   return useMutation({
     mutationFn: (name: string) => ProfilesService.deleteProfile(name),
     onSuccess: async (_response, name) => {
-      if (getActiveBackend().backend.kind === "local") {
-        const settings = await SettingsService.getSettings();
-        if (settings?.title_llm_profile === name) {
-          await SettingsService.saveSettings({ title_llm_profile: null });
+      try {
+        if (getActiveBackend().backend.kind === "local") {
+          const settings = await SettingsService.getSettings();
+          if (settings?.title_llm_profile === name) {
+            await SettingsService.saveSettings({ title_llm_profile: null });
+          }
         }
+      } finally {
+        // Invalidate the SettingsService internal cache so getSettingsForConversation
+        // fetches fresh settings after the profile is deleted (backend may have
+        // deactivated it or reset agent_settings.llm)
+        SettingsService.invalidateCache();
+        await queryClient.invalidateQueries({
+          queryKey: LLM_PROFILES_QUERY_KEYS.all,
+        });
+        // Use personal() scope for consistency with other settings hooks
+        await queryClient.invalidateQueries({
+          queryKey: SETTINGS_QUERY_KEYS.personal(),
+        });
       }
-      // Invalidate the SettingsService internal cache so getSettingsForConversation
-      // fetches fresh settings after the profile is deleted (backend may have
-      // deactivated it or reset agent_settings.llm)
-      SettingsService.invalidateCache();
-      await queryClient.invalidateQueries({
-        queryKey: LLM_PROFILES_QUERY_KEYS.all,
-      });
-      // Use personal() scope for consistency with other settings hooks
-      await queryClient.invalidateQueries({
-        queryKey: SETTINGS_QUERY_KEYS.personal(),
-      });
     },
     // Consumers handle errors with try-catch and manual toasts; disable global toast
     meta: { disableToast: true },
