@@ -19,7 +19,7 @@ export function Probe() {
     <svg><path fill="#ec4899" /></svg>
     <div className="text-danger bg-surface text-foreground" />
     <div className="bg-background bg-content1 text-primary-foreground text-medium" />
-    <div className="bg-status-fail-bg text-status-fail-text text-content-muted text-modal-muted" />
+    <div className="bg-status-fail-bg text-status-fail-text text-content-muted" />
     <div className="bg-content9" />
   </>;
 }

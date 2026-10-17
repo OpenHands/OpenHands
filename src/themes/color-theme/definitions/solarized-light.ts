@@ -85,6 +85,8 @@ const SOLARIZED_LIGHT_TOKENS: Partial<
   "--oh-overlay": "#FDF6E3",
   "--oh-overlay-foreground": "#586E75",
   "--oh-modal-title-foreground": "#002B36",
+  // Darker than base01 (#586E75) so descriptions reach 4.5:1 on the modal surface.
+  "--oh-modal-description-foreground": "#4F6369",
   "--oh-muted": "#839496",
   "--oh-text-secondary": "#657B83",
   "--oh-text-tertiary": "#586E75",

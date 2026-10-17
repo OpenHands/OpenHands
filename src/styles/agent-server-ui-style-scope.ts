@@ -43,6 +43,7 @@ export const AGENT_SERVER_UI_DEFAULT_CSS_VARIABLES = {
   "--oh-overlay": "var(--cool-grey-925)",
   "--oh-overlay-foreground": "var(--cool-grey-100)",
   "--oh-modal-title-foreground": "#ffffff",
+  "--oh-modal-description-foreground": "#a3a3a3",
   "--oh-muted": "var(--cool-grey-400)",
   "--oh-text-secondary": "var(--cool-grey-300)",
   "--oh-text-tertiary": "var(--cool-grey-200)",

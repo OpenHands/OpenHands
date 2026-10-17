@@ -42,6 +42,9 @@ them; changing the page background alone is not a complete theme.
   the built-in modal surface and leave the general danger/success/warning control
   colors unchanged. Embedded hosts can override `--oh-feedback-error`,
   `--oh-feedback-success`, and `--oh-feedback-warning` for their surfaces.
+- Modal headings and descriptions use `modal-title` and `modal-description`
+  (`--oh-modal-title-foreground` / `--oh-modal-description-foreground`). Each
+  palette sets a description shade that meets 4.5:1 on the modal surface.
 - Use `focus` for keyboard outlines and rings on neutral controls. The default
   role meets 3:1 against base, modal, raised, and interactive-hover surfaces;
   retain the control's outline width/offset and preserve host `--oh-focus`

@@ -46,6 +46,7 @@
   --color-text-dim: var(--oh-text-dim);
   --color-text-subtle: var(--oh-text-subtle);
   --color-modal-title: var(--oh-modal-title-foreground);
+  --color-modal-description: var(--oh-modal-description-foreground);
 
   /* Semantic border aliases */
   --color-border: var(--oh-border);
@@ -110,6 +111,7 @@
   --oh-overlay: var(--cool-grey-925);
   --oh-overlay-foreground: var(--cool-grey-100);
   --oh-modal-title-foreground: #ffffff;
+  --oh-modal-description-foreground: #a3a3a3;
   --oh-muted: var(--cool-grey-400);
   --oh-text-secondary: var(--cool-grey-300);  /* readable secondary text */
   --oh-text-tertiary: var(--cool-grey-200);   /* tertiary, slightly dimmer */

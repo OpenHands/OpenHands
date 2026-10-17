@@ -83,6 +83,7 @@ export const LIGHT_PLUS_TOKENS: Partial<
   "--oh-overlay": "#FFFFFF",
   "--oh-overlay-foreground": "#1F1F1F",
   "--oh-modal-title-foreground": "#1F1F1F",
+  "--oh-modal-description-foreground": "#616161",
   "--oh-muted": "#616161",
   "--oh-text-secondary": "#424242",
   "--oh-text-tertiary": "#4D4D4D",

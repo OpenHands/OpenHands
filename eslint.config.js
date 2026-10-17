@@ -460,7 +460,6 @@ export default [
             "bg-status-fail-bg",
             "text-status-fail-text",
             "text-content-muted",
-            "text-modal-muted",
           ],
         },
       ],
