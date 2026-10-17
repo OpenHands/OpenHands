@@ -96,6 +96,9 @@ vi.mock("react-i18next", async (importOriginal) => {
     useTranslation: (namespace?: string) => ({
       t: (key: string) =>
         namespace === "openhands" ? key : `missing-namespace:${key}`,
+      i18n: {
+        changeLanguage: (...args: unknown[]) => changeLanguageMock(...args),
+      },
     }),
   };
 });
