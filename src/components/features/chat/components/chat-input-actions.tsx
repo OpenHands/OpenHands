@@ -284,6 +284,8 @@ export function ChatInputActions({
     setIsOverflowOpen(false);
   };
 
+  useCloseOnEscape(isOverflowOpen, closeOverflowMenus, overflowTriggerRef);
+
   // Shared styling for the settings link inside the overflow submenu content.
   const overflowSettingsLinkClassName = cn(
     "group",

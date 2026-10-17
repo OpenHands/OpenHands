@@ -537,4 +537,39 @@ describe("ChatInputActions — More input actions overflow menu (#17925)", () =>
       within(submenu).getByTestId("llm-profile-menu-stub"),
     ).toBeInTheDocument();
   });
+
+  it("closes the overflow menu on Escape and returns focus to the trigger", () => {
+    renderWithProviders(<ChatInputActions disabled={false} />);
+
+    clickTrigger();
+
+    expect(getTrigger()).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByTestId("chat-input-overflow-menu")).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(getTrigger()).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.queryByTestId("chat-input-overflow-menu"),
+    ).not.toBeInTheDocument();
+    expect(document.activeElement).toBe(getTrigger());
+  });
+
+  it("closes the overflow menu and open submenu on Escape when an item is focused", () => {
+    renderWithProviders(<ChatInputActions disabled={false} />);
+
+    clickTrigger();
+    fireEvent.click(screen.getByTestId("overflow-model-button"));
+
+    const modelButton = screen.getByTestId("overflow-model-button");
+    modelButton.focus();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(getTrigger()).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.queryByTestId("chat-input-overflow-menu"),
+    ).not.toBeInTheDocument();
+    expect(document.activeElement).toBe(getTrigger());
+  });
 });
