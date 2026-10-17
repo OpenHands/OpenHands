@@ -88,11 +88,15 @@ class EventService {
       // Full pagination params (sort_order, page_id, timestamp filters)
       // require the server-side fix from OpenHands/OpenHands#14399. If
       // the cloud backend hasn't been updated yet, the timestamp filters
-      // trigger a 500 (str-vs-datetime comparison). We attempt the full
-      // request first and fall back to a limit-only request on failure.
+      // trigger a 500 (str-vs-datetime comparison).
+      //
+      // Only the *older-events* page (a cursor or timestamp filter) degrades
+      // quietly: it is retried as the user scrolls, so an unsupported filter
+      // just stops pagination. The *initial tail* load sends `sort_order`
+      // only, and its empty-page fallback is what let the socket resume past
+      // unloaded history (#18445) — so it must propagate instead.
       const cloudLimit = Math.min(limit, 100);
-      const hasFilterParams = !!(
-        options.sortOrder ||
+      const isOlderPageRequest = !!(
         options.pageId ||
         options.timestampGte ||
         options.timestampLt
@@ -120,7 +124,7 @@ class EventService {
           next_page_id: data?.next_page_id ?? null,
         };
       } catch (err) {
-        if (!hasFilterParams) throw err;
+        if (!isOlderPageRequest) throw err;
         if (options.strictPagination) throw err;
 
         // Server doesn't support timestamp filters yet — stop pagination

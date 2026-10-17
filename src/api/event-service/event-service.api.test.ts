@@ -310,24 +310,24 @@ describe("EventService", () => {
       warn.mockRestore();
     });
 
-    it("treats a sort-only cloud failure as unsupported filtered pagination", async () => {
-      callCloudProxyMock.mockRejectedValue(new Error("pagination unsupported"));
+    it("rethrows a sort-only cloud failure so the initial tail load is not silently empty", async () => {
+      // #18445: the initial history load sends only `sort_order`, so treating
+      // it as an unsupported-pagination fallback swallowed a failed tail fetch
+      // into an empty page — the chat rendered silently empty.
+      const searchError = new Error("Internal Server Error");
+      callCloudProxyMock.mockRejectedValue(searchError);
       const warn = vi
         .spyOn(console, "warn")
         .mockImplementation(() => undefined);
 
       await expect(
         EventService.searchEvents("conversation-cloud", null, null, {
+          limit: 50,
           sortOrder: "TIMESTAMP_DESC",
         }),
-      ).resolves.toEqual({ items: [], next_page_id: null });
+      ).rejects.toBe(searchError);
 
-      expect(callCloudProxyMock).toHaveBeenCalledWith({
-        backend: cloudBackend,
-        method: "GET",
-        path: "/api/v1/conversation/conversation-cloud/events/search?limit=100&sort_order=TIMESTAMP_DESC",
-      });
-      expect(warn).toHaveBeenCalledOnce();
+      expect(warn).not.toHaveBeenCalled();
       warn.mockRestore();
     });
 

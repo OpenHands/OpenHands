@@ -1292,6 +1292,55 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
       await waitFor(() => expect(mainAfterSeq()).toBe("41"));
     });
 
+    it("connects with after_seq=-1 and renders replayed history when the tail fetch rejects (#18445)", async () => {
+      // The cloud `events/search` tail request REJECTS (e.g. a 500, or one
+      // un-serializable event) while `events/count` still succeeds. The error
+      // must not leave an error state or an empty window: the socket has to
+      // connect with `after_seq=-1` and replay the log, which the store renders.
+      vi.mocked(EventService.getEventCount).mockResolvedValue(326);
+      vi.mocked(EventService.searchEvents).mockRejectedValue(
+        new Error("Internal Server Error"),
+      );
+
+      renderProviderWithUrl("conv-rejected-tail");
+
+      // The failed history query must not gate the socket closed. The hook
+      // retries once, so the error (and the connect that follows it) lands
+      // after ~1s — past `waitFor`'s default timeout.
+      await waitFor(() => expect(wsCapture.mainOnMessage).not.toBeNull(), {
+        timeout: 5000,
+      });
+      // …and the first connect resumes from the start of the log, not `count - 1`.
+      await waitFor(() => expect(mainAfterSeq()).toBe("-1"));
+
+      // The `after_seq=-1` replay is what repopulates the window; without it the
+      // chat stays empty because the REST preload seeded nothing.
+      act(() => {
+        wsCapture.mainOnMessage!({
+          data: durable(makeAgentMessage("agent-replayed", "prior turn"), 1),
+        });
+      });
+      await waitFor(() => expect(eventIds()).toEqual(["agent-replayed"]));
+    });
+
+    it("does not skip history when the cloud tail search is swallowed into an empty page (#18445)", async () => {
+      // Pre-fix, `EventService` caught the failed cloud `events/search` and
+      // returned `{ items: [] }` (no throw). The hook then trusted the
+      // successful count and resumed at `count - 1`, skipping every unloaded
+      // event. This is the exact shape the regression suite must keep out.
+      vi.mocked(EventService.getEventCount).mockResolvedValue(326);
+      vi.mocked(EventService.searchEvents).mockResolvedValue({
+        items: [],
+        next_page_id: null,
+      });
+
+      renderProviderWithUrl("conv-empty-tail");
+      await waitFor(() => expect(wsCapture.mainOnMessage).not.toBeNull());
+
+      await waitFor(() => expect(mainAfterSeq()).toBe("-1"));
+      expect(useEventStore.getState().events).toEqual([]);
+    });
+
     it("advances past each durable frame, so a reconnect resumes there", async () => {
       renderProviderWithUrl("conv-advance");
       await waitFor(() => expect(wsCapture.mainOnMessage).not.toBeNull());

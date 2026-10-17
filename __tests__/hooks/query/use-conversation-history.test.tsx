@@ -516,5 +516,25 @@ describe("useConversationHistory cache key stability", () => {
       expect(result.current.data?.events).toHaveLength(1);
       expect(result.current.data?.afterSeq).toBeNull();
     });
+
+    it("leaves the resume cursor unset when the tail page is empty but the count succeeds (#18445)", async () => {
+      withUrl();
+      // The failed cloud tail search is swallowed into an empty page while the
+      // count read still succeeds. Advancing the cursor to `count - 1` here is
+      // what made the socket skip the entire unloaded history.
+      vi.spyOn(EventService, "getEventCount").mockResolvedValue(326);
+      vi.spyOn(EventService, "searchEvents").mockResolvedValue(makePage([]));
+
+      const { result } = renderHook(
+        () => useConversationHistory("conv-seq-3"),
+        {
+          wrapper,
+        },
+      );
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(result.current.data?.events).toEqual([]);
+      expect(result.current.data?.afterSeq).toBeNull();
+    });
   });
 });

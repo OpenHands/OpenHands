@@ -19,8 +19,12 @@ export interface ConversationHistoryPage {
   /**
    * Session-socket resume cursor for the first connect: the last `seq` on
    * disk *before* this page was read, so nothing appended in between is
-   * missed and nothing older than the page is replayed. `null` when the count
-   * could not be read.
+   * missed and nothing older than the page is replayed.
+   *
+   * `null` when the count could not be read, **or** when this page is empty.
+   * An empty tail page means the preload seeded nothing, so the socket must
+   * replay the whole log (`after_seq = -1`) instead of resuming at
+   * `count - 1` and skipping the entire history (#18445).
    */
   afterSeq: number | null;
 }
@@ -88,12 +92,19 @@ export const useConversationHistory = (conversationId?: string) => {
 
       // Reverse so callers can append in chronological order.
       const events = [...page.items].reverse();
+      // Only resume past the page when it actually seeded history. An empty
+      // page (e.g. a failed cloud tail search swallowed into an empty page)
+      // must leave the socket at `after_seq = -1` so it replays the log —
+      // otherwise `count - 1` skips every prior event and the chat renders
+      // silently empty (#18445). A genuinely empty conversation replays its
+      // (empty) log, which is harmless.
+      const loadedHistory = events.length > 0;
       return {
         events,
         hasMore:
           !!page.next_page_id || page.items.length >= INITIAL_HISTORY_PAGE_SIZE,
         nextPageId: page.next_page_id ?? null,
-        afterSeq: typeof count === "number" ? count - 1 : null,
+        afterSeq: loadedHistory && typeof count === "number" ? count - 1 : null,
       };
     },
     // Keep the cached page so returning to a conversation renders the
