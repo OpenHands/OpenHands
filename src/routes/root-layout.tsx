@@ -128,6 +128,7 @@ function MainAppContent() {
   const config = useConfig();
   const showTitleBarBand = useShowTitleBarBand();
 
+  const { i18n: rootI18n } = useTranslation();
   useSyncAutomationTelemetryConsent();
 
   useSyncTelemetryConsent();
@@ -139,9 +140,10 @@ function MainAppContent() {
 
   React.useEffect(() => {
     if (settings?.language) {
-      i18n.changeLanguage(settings.language);
+      const activeI18n = rootI18n ?? i18n;
+      activeI18n.changeLanguage(settings.language);
     }
-  }, [settings?.language]);
+  }, [settings?.language, rootI18n]);
   useSyncDocumentLanguage();
 
   if (config.isLoading) {

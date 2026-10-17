@@ -11,7 +11,12 @@ export function useSyncDocumentLanguage() {
     const applyLanguage = (language: string) => {
       const root = document.documentElement;
       root.lang = language;
-      root.dir = i18n.dir(language);
+      root.dir =
+        typeof i18n.dir === "function"
+          ? i18n.dir(language)
+          : language === "ar"
+            ? "rtl"
+            : "ltr";
     };
 
     if (i18n.language) {
