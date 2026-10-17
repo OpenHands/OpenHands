@@ -556,7 +556,44 @@ describe("AgentServerConversationService", () => {
       );
     });
   });
+  it("downloads the plan when the conversation workspace uses a Windows path", async () => {
+    const encodedPlan = new TextEncoder().encode("# Windows PLAN").buffer;
 
+    mockHttpGet.mockImplementation((url: string) => {
+      if (url === "/api/conversations") {
+        return Promise.resolve({
+          data: [
+            {
+              id: "conv-windows",
+              created_at: "2024-01-01",
+              updated_at: "2024-01-01",
+              workspace: {
+                working_dir: "C:\\Users\\DELL\\workspaces\\conv-windows",
+              },
+            },
+          ],
+        });
+      }
+
+      return Promise.resolve({ data: encodedPlan });
+    });
+
+    const content =
+      await AgentServerConversationService.readConversationFile(
+        "conv-windows",
+      );
+
+    expect(content).toBe("# Windows PLAN");
+    expect(mockHttpGet).toHaveBeenCalledWith(
+      "/api/file/download",
+      expect.objectContaining({
+        params: {
+          path: "C:/Users/DELL/workspaces/conv-windows/.agents_tmp/PLAN.md",
+        },
+        responseType: "arrayBuffer",
+      }),
+    );
+  });
   describe("createConversation", () => {
     // #16885 — A named agent profile's pinned LLM (llm_profile_ref) must reach
     // the agent-server as `title_llm_profile` when no explicit preference is
