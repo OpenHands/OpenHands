@@ -37,6 +37,10 @@ import {
   getTriggerSource,
 } from "#/components/features/home/featured-automations/automation-run-health";
 import type { AutomationInsightsProps } from "./automation-card";
+import {
+  AutomationPendingCount,
+  pendingRunsDisplay,
+} from "./automation-run-insights";
 import { toLatestRunState } from "./to-latest-run-state";
 import { resolveAutomationImpactStatement } from "#/utils/automation-catalog";
 import { isDraftAutomation } from "#/utils/automation-state";
@@ -101,6 +105,7 @@ export function AutomationListRow({
   );
 
   const runState = toLatestRunState(insights?.state);
+  const pendingCount = pendingRunsDisplay(insights?.state);
   const health = deriveRunHealth(runState);
   const impactStatement = resolveAutomationImpactStatement(
     automation,
@@ -203,6 +208,14 @@ export function AutomationListRow({
                       status={display?.badgeStatus ?? latestRun.status}
                       compact
                     />
+                  </>
+                ) : null}
+                {pendingCount !== null ? (
+                  <>
+                    <span className="shrink-0" aria-hidden="true">
+                      ·
+                    </span>
+                    <AutomationPendingCount state={insights?.state} />
                   </>
                 ) : null}
                 {impactStatement ? (
