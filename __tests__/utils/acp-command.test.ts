@@ -93,13 +93,16 @@ describe("parseCommand", () => {
     expect(parseCommand('foo\\"bar')).toEqual(['foo"bar']);
   });
 
-  it('honors ``\\\\`` and ``\\"`` inside double-quoted segments', () => {
+  it('honors ``\\\\``, ``\\"``, ``\\$``, ``\\```, and ``\\!`` inside double-quoted segments', () => {
     expect(parseCommand('bash -c "echo \\"hi\\""')).toEqual([
       "bash",
       "-c",
       'echo "hi"',
     ]);
     expect(parseCommand('"foo\\\\bar"')).toEqual(["foo\\bar"]);
+    expect(parseCommand('"\\$FOO \\`cmd\\` \\!exp"')).toEqual([
+      "$FOO `cmd` !exp",
+    ]);
   });
 
   it("does not env-expand $VAR refs — keeps them as literal", () => {
@@ -183,6 +186,11 @@ describe("formatCommand", () => {
     for (const argv of cases) {
       expect(parseCommand(formatCommand(argv))).toEqual(argv);
     }
+  });
+
+  it("round-trips single quotes combined with $, backticks, and !", () => {
+    const argv = ["bash", "-c", "echo 'home:' $HOME with `whoami` and !"];
+    expect(parseCommand(formatCommand(argv))).toEqual(argv);
   });
 
   it("renders an empty argv as an empty string", () => {

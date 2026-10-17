@@ -97,7 +97,7 @@ export function parseCommand(value: string): string[] {
 
     if (ch === '"') {
       // Double-quoted segment: literal with backslash escapes for
-      // ``\\"`` and ``\\\\``. We intentionally do NOT expand $VAR
+      // ``\\"``, ``\\\\``, ``\\$``, ``\\```, and ``\\!``. We intentionally do NOT expand $VAR
       // (so a user typing ``"--key=$X"`` keeps it literal — the
       // agent-server doesn't run a shell anyway). Other backslash
       // sequences pass through verbatim (matches what most users
@@ -109,7 +109,13 @@ export function parseCommand(value: string): string[] {
       while (i < value.length && value[i] !== '"') {
         if (value[i] === "\\" && i + 1 < value.length) {
           const next = value[i + 1];
-          if (next === '"' || next === "\\") {
+          if (
+            next === '"' ||
+            next === "\\" ||
+            next === "$" ||
+            next === "`" ||
+            next === "!"
+          ) {
             current += next;
             i += 2;
             continue;
