@@ -267,6 +267,19 @@ describe("EventService", () => {
       });
     });
 
+    it("returns an empty page for Missing event file in cloud mode", async () => {
+      const missingError = Object.assign(new Error("HttpError"), {
+        name: "HttpError",
+        status: 500,
+        response: { body: "Missing event file" },
+      });
+      callCloudProxyMock.mockRejectedValue(missingError);
+
+      await expect(
+        EventService.searchEvents("conversation-cloud"),
+      ).resolves.toEqual({ items: [], next_page_id: null });
+    });
+
     it("rethrows cloud failures when no pagination filter was requested", async () => {
       const searchError = new Error("cloud unavailable");
       callCloudProxyMock.mockRejectedValue(searchError);
@@ -395,6 +408,20 @@ describe("EventService", () => {
         timestamp__lt: "2026-07-12T00:00:00.000Z",
       });
       expect(callCloudProxyMock).not.toHaveBeenCalled();
+    });
+
+    it("returns an empty page for Missing event file in local mode", async () => {
+      useBackend(localBackend);
+      const missingError = Object.assign(new Error("HttpError"), {
+        name: "HttpError",
+        status: 500,
+        response: { body: "Missing event file" },
+      });
+      remoteSearchMock.mockRejectedValue(missingError);
+
+      await expect(
+        EventService.searchEvents("conversation-local"),
+      ).resolves.toEqual({ items: [], next_page_id: null });
     });
 
     it("uses default local options and normalizes a missing page", async () => {
