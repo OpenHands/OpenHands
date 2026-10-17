@@ -68,6 +68,11 @@ import {
   parseBugPredicate,
   proofVerdict,
 } from "./lib/known-bug.mjs";
+import {
+  createLivenessCheckers,
+  isZombieStat,
+  parseProcStat,
+} from "./lib/process-liveness.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const cli = join(here, "control-openhands.mjs");
@@ -2582,3 +2587,179 @@ test("help documents assert and bug, and the shipped map's known-bug blocks are 
   assert.equal(list.json.ok, true, list.stdout);
   assert.ok(list.json.count >= 1);
 });
+
+test("Linux liveness classification: all-zombie process group is not alive, still-live-member is alive, and conservative fallback works", () => {
+  // 1. All-zombie process group on Linux: kill(0) succeeds, ps shows only Z/Zs -> groupAlive is false
+  const zombieCheckers = createLivenessCheckers({
+    platform: "linux",
+    kill: () => true,
+    readProcStat: () => null,
+    readProcPids: () => null,
+    runPs: (args) => {
+      if (args[0] === "-eo" && args[1] === "pid=,pgid=,stat=") {
+        return {
+          status: 0,
+          stdout: "  620   620 Zs\n  621   620 Z\n",
+        };
+      }
+      return { status: 0, stdout: "" };
+    },
+  });
+  assert.equal(zombieCheckers.groupAlive(620), false);
+  assert.equal(zombieCheckers.processAlive(620), false);
+
+  // 2. Still-live-member: group leader is zombie, but a child member is alive (e.g. state S) -> groupAlive is true
+  const mixedCheckers = createLivenessCheckers({
+    platform: "linux",
+    kill: () => true,
+    readProcStat: () => null,
+    readProcPids: () => null,
+    runPs: (args) => {
+      if (args[0] === "-eo" && args[1] === "pid=,pgid=,stat=") {
+        return {
+          status: 0,
+          stdout: "  620   620 Zs\n  622   620 S\n",
+        };
+      }
+      return { status: 0, stdout: "" };
+    },
+  });
+  assert.equal(mixedCheckers.groupAlive(620), true);
+
+  // 3. Fallback to /proc when ps fails: all-zombie in /proc -> groupAlive is false
+  const procFallbackCheckers = createLivenessCheckers({
+    platform: "linux",
+    kill: () => true,
+    runPs: () => null,
+    readProcPids: () => ["620", "621"],
+    readProcStat: (pid) => ` ${pid} (defunct) Z 1 620 620 `,
+  });
+  assert.equal(procFallbackCheckers.groupAlive(620), false);
+  assert.equal(procFallbackCheckers.processAlive(620), false);
+
+  // 4. Fallback to /proc with live child member -> groupAlive is true
+  const procLiveCheckers = createLivenessCheckers({
+    platform: "linux",
+    kill: () => true,
+    runPs: () => null,
+    readProcPids: () => ["620", "622"],
+    readProcStat: (pid) =>
+      pid === "620"
+        ? ` 620 (leader) Z 1 620 620 `
+        : ` 622 (worker) S 620 620 620 `,
+  });
+  assert.equal(procLiveCheckers.groupAlive(620), true);
+  assert.equal(procLiveCheckers.processAlive(622), true);
+
+  // 5. Unknown inspection state (both ps and /proc fail/unavailable) -> conservative true
+  const unknownCheckers = createLivenessCheckers({
+    platform: "linux",
+    kill: () => true,
+    runPs: () => null,
+    readProcPids: () => null,
+    readProcStat: () => null,
+  });
+  assert.equal(unknownCheckers.groupAlive(620), true);
+  assert.equal(unknownCheckers.processAlive(620), true);
+
+  // 6. Kernel ESRCH (group does not exist) -> false
+  const deadCheckers = createLivenessCheckers({
+    platform: "linux",
+    kill: () => {
+      const err = new Error("ESRCH");
+      err.code = "ESRCH";
+      throw err;
+    },
+  });
+  assert.equal(deadCheckers.groupAlive(620), false);
+  assert.equal(deadCheckers.processAlive(620), false);
+
+  // 7. Non-Linux platform (darwin) -> kill(0) success is directly alive
+  const darwinCheckers = createLivenessCheckers({
+    platform: "darwin",
+    kill: () => true,
+  });
+  assert.equal(darwinCheckers.groupAlive(620), true);
+  assert.equal(darwinCheckers.processAlive(620), true);
+});
+
+test("control-openhands stop and runs: zombie-only run reports stopped/clean, open-port fails, and private purge works", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "cov-stop-"));
+  const privDir = join(dir, "private");
+  const evDir = join(dir, "evidence");
+  mkdirSync(privDir, { recursive: true });
+  mkdirSync(evDir, { recursive: true });
+  writeFileSync(join(evDir, "note.txt"), "evidence preserved");
+  writeFileSync(join(privDir, "secret.key"), "sensitive");
+
+  // Create an open port
+  const listener = createServer();
+  await new Promise((done) => listener.listen(0, "127.0.0.1", done));
+  const openPort = listener.address().port;
+
+  // Run with an open port: stop must fail with exit code 3 and launcherStopped: false, ok: false
+  writeFileSync(
+    join(dir, "run.json"),
+    JSON.stringify({
+      runId: "r-open-port",
+      revision: "rev1",
+      baseUrl: `http://127.0.0.1:${openPort}`,
+      ports: { ingress: openPort },
+      launcherPgid: 999999999, // non-existent/dead pgid
+    }),
+  );
+
+  const failStop = run(["stop", "--run", dir]);
+  assert.equal(failStop.status, 3);
+  assert.equal(failStop.json.launcherStopped, false);
+  assert.equal(failStop.json.ok, false);
+  assert.equal(failStop.json.ports.ingress, "still open");
+
+  // Close the open port
+  await new Promise((done) => listener.close(done));
+
+  // Now all ports are closed and process group is stopped -> stop succeeds with ok: true
+  const successStop = run(["stop", "--run", dir]);
+  assert.equal(successStop.status, 0);
+  assert.equal(successStop.json.launcherStopped, true);
+  assert.equal(successStop.json.ok, true);
+  assert.equal(successStop.json.ports.ingress, "closed");
+
+  // Subsequent runs report alive: false
+  const envWithHome = { OH_VERIFY_HOME: dirname(dir) };
+  const runsReport = run(["runs"], envWithHome);
+  assert.equal(runsReport.status, 0);
+  const foundRun = runsReport.json.runs.find((r) => r.run === dir);
+  assert.ok(foundRun);
+  assert.equal(foundRun.alive, false);
+
+  // Repeating stop on already-stopped run is safe and keeps reporting ok: true
+  const repeatStop = run(["stop", "--run", dir]);
+  assert.equal(repeatStop.status, 0);
+  assert.equal(repeatStop.json.ok, true);
+
+  // Purge private state deletes private/ while keeping evidence/
+  const purgeStop = run(["stop", "--run", dir, "--purge-private"]);
+  assert.equal(purgeStop.status, 0);
+  assert.equal(purgeStop.json.privatePurged, true);
+  assert.equal(existsSync(privDir), false);
+  assert.equal(existsSync(join(evDir, "note.txt")), true);
+
+  // When a recorded browser process is still alive, stop must report launcherStopped: false and ok: false
+  const liveBrowserDir = mkdtempSync(join(tmpdir(), "cov-browser-"));
+  writeFileSync(
+    join(liveBrowserDir, "run.json"),
+    JSON.stringify({
+      runId: "r-live-browser",
+      revision: "rev1",
+      baseUrl: "http://127.0.0.1:9",
+      ports: { ingress: 9 },
+      launcherPgid: 999999999,
+      browserPid: process.pid,
+    }),
+  );
+  const liveBrowserStop = run(["stop", "--run", liveBrowserDir]);
+  assert.equal(liveBrowserStop.status, 3);
+  assert.equal(liveBrowserStop.json.launcherStopped, false);
+  assert.equal(liveBrowserStop.json.ok, false);
+}, 60_000);
