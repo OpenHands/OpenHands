@@ -29,9 +29,11 @@ const visualFor = (status: ExecutionStatus | null | undefined): Visual => {
       return "check";
     case ExecutionStatus.RUNNING:
       return "working";
-    case ExecutionStatus.IDLE:
     case ExecutionStatus.WAITING_FOR_CONFIRMATION:
       return "active";
+    // IDLE covers conversations that were never messaged or whose agent
+    // stopped without finishing — nothing is running, so show it as paused.
+    case ExecutionStatus.IDLE:
     case ExecutionStatus.PAUSED:
       return "paused";
     case ExecutionStatus.ERROR:

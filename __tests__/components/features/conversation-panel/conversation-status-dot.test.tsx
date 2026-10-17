@@ -25,7 +25,7 @@ describe("ConversationStatusDot", () => {
     [ExecutionStatus.FINISHED, "conversation-status-check", "COMMON$FINISHED"],
     [ExecutionStatus.RUNNING, "conversation-status-working", "COMMON$WORKING"],
     [ExecutionStatus.PAUSED, "conversation-status-paused", "COMMON$PAUSED"],
-    [ExecutionStatus.IDLE, "conversation-status-active", "COMMON$WORKING"],
+    [ExecutionStatus.IDLE, "conversation-status-paused", "COMMON$PAUSED"],
     [
       ExecutionStatus.WAITING_FOR_CONFIRMATION,
       "conversation-status-active",
