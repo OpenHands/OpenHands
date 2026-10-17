@@ -331,6 +331,36 @@ describe("Dropdown", () => {
 
       expect(input).toHaveValue("Option 1");
     });
+
+    it("should keep selected value when Escape is pressed while menu is closed on non-clearable dropdown", async () => {
+      const user = userEvent.setup();
+      render(<Dropdown options={mockOptions} defaultValue={mockOptions[0]} />);
+
+      const input = screen.getByRole("combobox");
+      expect(input).toHaveValue("Option 1");
+
+      input.focus();
+      await user.keyboard("{Escape}");
+
+      expect(input).toHaveValue("Option 1");
+    });
+
+    it("should keep selected value when Escape is pressed twice (once to close, once while closed)", async () => {
+      const user = userEvent.setup();
+      render(<Dropdown options={mockOptions} defaultValue={mockOptions[0]} />);
+
+      const trigger = screen.getByTestId("dropdown-trigger");
+      await user.click(trigger);
+
+      const input = screen.getByRole("combobox");
+      // First Escape closes the open menu
+      await user.keyboard("{Escape}");
+      expect(input).toHaveValue("Option 1");
+
+      // Second Escape while menu is closed should NOT clear selectedItem
+      await user.keyboard("{Escape}");
+      expect(input).toHaveValue("Option 1");
+    });
   });
 
   describe("onChange", () => {
