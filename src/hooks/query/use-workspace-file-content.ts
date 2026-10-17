@@ -2,7 +2,10 @@ import { useQuery } from "@tanstack/react-query";
 
 import { readCloudConversationFile } from "#/api/cloud/conversation-service.api";
 import { getActiveBackend } from "#/api/backend-registry/active-store";
+import AgentServerRuntimeService from "#/api/runtime-service/agent-server-runtime-service";
+import { isAbsolutePath } from "#/api/agent-server-home";
 import { getGitPath } from "#/utils/get-git-path";
+import { getApiErrorMessage } from "#/utils/api-error-message";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useRuntimeIsReady } from "#/hooks/use-runtime-is-ready";
 import {
@@ -162,6 +165,10 @@ export function useWorkspaceFileContent(relativePath: string | null) {
   const workingDir = conversation?.workspace?.working_dir?.trim();
   const baseUrl = workspaceSession?.baseUrl;
   const isCloud = getActiveBackend().backend.kind === "cloud";
+  // An absolute path (e.g. an evidence file outside the working directory)
+  // must not be reinterpreted as workspace-relative: `joinWorkspaceUrl` would
+  // strip the leading slash and point at `.../workspace/<abs-path>` (404).
+  const isAbsolute = !!relativePath && isAbsolutePath(relativePath);
 
   // The cloud `/file` endpoint downloads via the runtime's
   // `/api/file/download`, which rejects relative paths (400 → the cloud API
@@ -182,6 +189,7 @@ export function useWorkspaceFileContent(relativePath: string | null) {
       sessionApiKey,
       isCloud ? "cloud" : baseUrl,
       relativePath,
+      isAbsolute,
       absoluteFilePath,
       workspaceMutationCount,
     ],
@@ -190,6 +198,54 @@ export function useWorkspaceFileContent(relativePath: string | null) {
 
       const kind = classifyKind(relativePath);
       const mimeType = guessMimeType(relativePath);
+
+      // Absolute paths outside the workspace work on local backends through the
+      // authorized download channel and do not depend on the minted workspace
+      // session (baseUrl). Cloud keeps its own anchored `/file` path.
+      if (!isCloud && isAbsolute) {
+        let buffer: ArrayBuffer;
+        try {
+          buffer = await AgentServerRuntimeService.downloadFile(
+            conversationUrl,
+            sessionApiKey,
+            relativePath,
+          );
+        } catch (error) {
+          throw new Error(
+            getApiErrorMessage(error, `Could not read ${relativePath}`),
+          );
+        }
+
+        if (kind === "text") {
+          if (isLikelyBinary(buffer)) {
+            return {
+              path: relativePath,
+              kind: "binary",
+              text: null,
+              staticUrl: `data:application/octet-stream;base64,${arrayBufferToBase64(buffer)}`,
+              mimeType: "application/octet-stream",
+            };
+          }
+          const text = new TextDecoder("utf-8", { fatal: false }).decode(
+            buffer,
+          );
+          return {
+            path: relativePath,
+            kind: "text",
+            text,
+            staticUrl: `data:${mimeType};charset=utf-8;base64,${arrayBufferToBase64(buffer)}`,
+            mimeType,
+          };
+        }
+
+        return {
+          path: relativePath,
+          kind,
+          text: null,
+          staticUrl: `data:${mimeType};base64,${arrayBufferToBase64(buffer)}`,
+          mimeType,
+        };
+      }
 
       if (isCloud) {
         // Cloud: fetch through the cloud API's first-class runtime proxy
@@ -303,7 +359,7 @@ export function useWorkspaceFileContent(relativePath: string | null) {
       runtimeIsReady &&
       !!conversationId &&
       !!relativePath &&
-      (isCloud || !!baseUrl),
+      (isCloud || isAbsolute || !!baseUrl),
     retry: false,
     staleTime: 1000 * 5,
     gcTime: 1000 * 60,
