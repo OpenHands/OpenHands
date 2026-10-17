@@ -1,12 +1,19 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AUTOMATION_CATALOG } from "@openhands/extensions/automations";
-import { render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import AutomationService from "#/api/automation-service/automation-service.api";
 import { SetupDialog } from "#/components/features/manifest/manifest-setup-dialog";
 import { SUPER_ADMIN_SETUP_STEP_EVENT } from "#/components/features/setup-guide/super-admin-setup-step-event";
 import { I18nKey } from "#/i18n/declaration";
+import type { ResolvedActiveBackend } from "#/api/backend-registry/types";
 import type { SetupPrerequisitesResult } from "#/hooks/query/use-manifest-prerequisites";
 import type { DeploymentCapabilities, SetupEntry } from "#/manifests/types";
 import {
@@ -26,6 +33,8 @@ const mocks = vi.hoisted(() => ({
   prerequisites: vi.fn(),
   capabilities: vi.fn(),
   llmProfiles: vi.fn(),
+  activeBackend: null as unknown as ResolvedActiveBackend,
+  nativeConnectedIntegrationIds: new Set<string>(),
   missingCreateEndpoints: vi.fn<(entry: SetupEntry) => string[]>(() => []),
   tracking: {
     trackAutomationSetupOpened: vi.fn(),
@@ -43,10 +52,7 @@ vi.mock("react-router", async (importOriginal) => ({
 // A local backend, where the repository field is a plain input rather than the
 // picker only a cloud backend can populate.
 vi.mock("#/contexts/active-backend-context", () => ({
-  useActiveBackend: () => ({
-    backend: { id: "local-1", kind: "local" },
-    orgId: null,
-  }),
+  useActiveBackend: () => mocks.activeBackend,
 }));
 
 vi.mock("#/hooks/query/use-manifest-capabilities", () => ({
@@ -55,6 +61,22 @@ vi.mock("#/hooks/query/use-manifest-capabilities", () => ({
 
 vi.mock("#/hooks/query/use-manifest-prerequisites", () => ({
   useSetupPrerequisites: () => mocks.prerequisites(),
+}));
+
+vi.mock("#/hooks/query/use-native-git-integrations", () => ({
+  useNativeGitIntegrations: () => ({
+    getNativeIntegration: (entryId: string) =>
+      mocks.activeBackend.backend.kind === "cloud" &&
+      mocks.nativeConnectedIntegrationIds.has(entryId)
+        ? {
+            provider: entryId as "github" | "gitlab" | "bitbucket",
+            isConnected: true,
+          }
+        : null,
+    isJiraEnabled: false,
+    isLinearEnabled: false,
+    isLoading: false,
+  }),
 }));
 
 vi.mock("#/hooks/query/use-agent-profiles", () => ({
@@ -98,22 +120,59 @@ const NOTHING_TO_CONNECT: SetupPrerequisitesResult = {
 };
 
 const ENTRY: SetupEntry = createSetupEntry();
+const HTTP_INTEGRATION_ENTRY: SetupEntry = createSetupEntry({
+  requires: {
+    integrations: { jira: { message: "Reads Jira issues." } },
+  },
+});
+const NATIVE_GITHUB_ENTRY: SetupEntry = createSetupEntry({
+  requires: {
+    integrations: { github: { message: "Reads repositories." } },
+  },
+});
 const CUSTOM_AUTOMATION_ENTRY = AUTOMATION_CATALOG.find(
   (entry) => entry.id === "custom-automation",
 ) as SetupEntry;
 
+function requirementsSchemaFailure() {
+  return Object.assign(new Error("Request failed with status 422"), {
+    isAxiosError: true,
+    response: {
+      status: 422,
+      data: {
+        detail: [
+          {
+            loc: ["body", "requirements"],
+            type: "extra_forbidden",
+            msg: "Extra inputs are not permitted",
+          },
+        ],
+      },
+    },
+  });
+}
+
+function httpFailure(status: number) {
+  return Object.assign(new Error(`Request failed with status ${status}`), {
+    name: "HttpError",
+    status,
+  });
+}
+
 function renderDialog(entry: SetupEntry = ENTRY) {
   const user = userEvent.setup();
-  render(
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const makeUi = () => (
     <QueryClientProvider
-      client={
-        new QueryClient({ defaultOptions: { queries: { retry: false } } })
-      }
+      client={queryClient}
     >
       <SetupDialog entry={entry} onClose={vi.fn()} />
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
-  return { user };
+  const rendered = render(makeUi());
+  return { user, rerender: () => rendered.rerender(makeUi()) };
 }
 
 /** Answer the two required fields the entry ships without a default. */
@@ -127,9 +186,23 @@ async function fillForm(user: ReturnType<typeof userEvent.setup>) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(AutomationService.validateDraft).mockReset();
   // clearAllMocks resets calls, not implementations, so the one case that
   // stubs a manifest without the bundle endpoints would leak into the rest.
   mocks.missingCreateEndpoints.mockReturnValue([]);
+  mocks.activeBackend = {
+    backend: {
+      id: "local-1",
+      name: "Local",
+      host: "http://localhost:3000",
+      apiKey: "session-key",
+      kind: "local",
+      connectionRevision: 0,
+    },
+    orgId: null,
+  };
+  mocks.nativeConnectedIntegrationIds.clear();
+
   mocks.prerequisites.mockReturnValue(NOTHING_TO_CONNECT);
   mocks.capabilities.mockReturnValue({
     capabilities: null,
@@ -261,7 +334,127 @@ const LLM_PROFILE_ENTRY: SetupEntry = (() => {
   });
 })();
 
+const MIXED_ACTION_ENTRY = createSetupEntry({
+  setup: createSetup({
+    prompt: undefined,
+    actions: {
+      prompt: {
+        label: "Run prompt",
+        help: "Use a prompt.",
+        features: [],
+        args: {},
+        prompt: "Report on {{form.widgetName}}.",
+      },
+      plugin: {
+        label: "Run plugin",
+        help: "Use a plugin.",
+        features: [],
+        args: {},
+        prompt: "Report using the plugin.",
+        plugins: "https://github.com/OpenHands/extensions",
+      },
+    },
+  }),
+});
+
 describe("SetupDialog", () => {
+  it.each([
+    {
+      kind: "trigger",
+      entry: EVENT_FIRST_MIXED_TRIGGER_ENTRY,
+      selector: "setup-trigger-kind",
+      option: "Scheduled",
+      expectedDraft: { trigger: { type: "cron", schedule: "*/15 * * * *" } },
+    },
+    {
+      kind: "action",
+      entry: MIXED_ACTION_ENTRY,
+      selector: "setup-action-kind",
+      option: "Run plugin",
+      expectedDraft: {
+        prompt: "Report using the plugin.",
+        plugins: [{ source: "https://github.com/OpenHands/extensions" }],
+      },
+    },
+  ])(
+    "discards a passing preflight when the selected $kind changes",
+    async ({ entry, selector, option, expectedDraft }) => {
+      let resolve!: (value: { valid: true; errors: never[] }) => void;
+      const { user } = renderDialog(entry);
+      await fillForm(user);
+      vi.mocked(AutomationService.validateDraft).mockImplementationOnce(
+        () =>
+          new Promise((done) => {
+            resolve = done;
+          }),
+      );
+      await user.click(screen.getByTestId("setup-continue-button"));
+      await waitFor(() => expect(resolve).toBeDefined());
+
+      await user.click(screen.getByTestId(selector));
+      await user.click(await screen.findByRole("option", { name: option }));
+      await act(async () => {
+        resolve({ valid: true, errors: [] });
+      });
+
+      expect(screen.queryByTestId("setup-review")).toBeNull();
+      expect(
+        mocks.tracking.trackAutomationSetupValidated,
+      ).not.toHaveBeenCalled();
+      expect(mocks.runAction).not.toHaveBeenCalled();
+
+      await user.click(screen.getByTestId("setup-continue-button"));
+      expect(
+        await screen.findByTestId("setup-preflight-passed"),
+      ).toBeInTheDocument();
+      expect(
+        vi.mocked(AutomationService.validateDraft).mock.lastCall?.[0].draft,
+      ).toMatchObject(expectedDraft);
+      expect(screen.getByTestId("setup-review")).not.toHaveTextContent(
+        "Event source",
+      );
+      await user.click(screen.getByTestId("setup-continue-button"));
+      await waitFor(() => expect(mocks.runAction).toHaveBeenCalledTimes(1));
+      expect(mocks.runAction.mock.calls[0][2]).toMatchObject(expectedDraft);
+    },
+  );
+
+  it("cancels a blur preflight scheduled for the previous trigger", () => {
+    renderDialog(EVENT_FIRST_MIXED_TRIGGER_ENTRY);
+    vi.useFakeTimers();
+    try {
+      fireEvent.blur(screen.getByTestId("setup-field-widgetName"));
+      fireEvent.click(screen.getByTestId("setup-trigger-kind"));
+      fireEvent.change(screen.getByTestId("setup-trigger-kind"), {
+        target: { value: "Scheduled" },
+      });
+      fireEvent.click(screen.getByRole("option", { name: "Scheduled" }));
+      act(() => vi.advanceTimersByTime(401));
+
+      expect(screen.getByTestId("setup-field-schedule")).toBeInTheDocument();
+      expect(AutomationService.validateDraft).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps a transient background preflight outage quiet while editing", async () => {
+    vi.mocked(AutomationService.validateDraft).mockRejectedValue(
+      httpFailure(503),
+    );
+    renderDialog();
+    vi.useFakeTimers();
+    try {
+      fireEvent.blur(screen.getByTestId("setup-field-widgetName"));
+      await act(async () => vi.advanceTimersByTime(401));
+
+      expect(AutomationService.validateDraft).toHaveBeenCalledTimes(1);
+      expect(screen.queryByTestId("setup-form-error")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("offers agent profiles only for actions that accept them", async () => {
     mocks.capabilities.mockReturnValue({
       capabilities: ACTION_CAPABILITIES,
@@ -440,6 +633,254 @@ describe("SetupDialog", () => {
     expect(screen.queryByTestId("setup-review")).toBeNull();
   });
 
+  it("blocks review and highlights every field rejected by preflight", async () => {
+    // Arrange
+    vi.mocked(AutomationService.validateDraft).mockResolvedValue({
+      valid: false,
+      errors: [
+        {
+          field: "repos[0].url",
+          code: "repository_denied",
+          message: "You do not have access to this repository.",
+        },
+        {
+          field: "trigger.schedule",
+          code: "interval_too_short",
+          message: "Choose a schedule of at least five minutes.",
+        },
+      ],
+    });
+    const { user } = renderDialog();
+    await fillForm(user);
+
+    // Act
+    await user.click(screen.getByTestId("setup-continue-button"));
+
+    // Assert
+    expect(
+      await screen.findByTestId("setup-field-repository-error"),
+    ).toHaveTextContent("You do not have access to this repository.");
+    expect(screen.getByTestId("setup-field-schedule-error")).toHaveTextContent(
+      "Choose a schedule of at least five minutes.",
+    );
+    expect(screen.queryByTestId("setup-review")).toBeNull();
+    expect(mocks.runAction).not.toHaveBeenCalled();
+
+    // Editing one field invalidates the verdict but does not hide an
+    // independent error on another field before the next preflight.
+    await user.type(screen.getByTestId("setup-field-repository"), "-updated");
+    expect(screen.queryByTestId("setup-field-repository-error")).toBeNull();
+    expect(screen.getByTestId("setup-field-schedule-error")).toHaveTextContent(
+      "Choose a schedule of at least five minutes.",
+    );
+  });
+
+  it("returns prerequisite failures to the step where they can be fixed", async () => {
+    // Arrange
+    vi.mocked(AutomationService.validateDraft).mockResolvedValue({
+      valid: false,
+      errors: [
+        {
+          field: null,
+          step: "prerequisites",
+          code: "integration_unavailable",
+          message: "Reconnect GitHub before continuing.",
+        },
+      ],
+    });
+    const { user } = renderDialog();
+    await fillForm(user);
+
+    // Act
+    await user.click(screen.getByTestId("setup-continue-button"));
+
+    // Assert
+    expect(
+      await screen.findByTestId("setup-prerequisites"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("setup-prerequisite-error")).toHaveTextContent(
+      "Reconnect GitHub before continuing.",
+    );
+    expect(screen.queryByTestId("setup-review")).toBeNull();
+  });
+
+  it("blocks a real service outage without exposing provider details", async () => {
+    // Arrange
+    const secretSentinel = "provider-secret-sentinel";
+    vi.mocked(AutomationService.validateDraft).mockRejectedValue(
+      Object.assign(new Error(secretSentinel), {
+        name: "HttpError",
+        status: 503,
+        response: { detail: secretSentinel },
+      }),
+    );
+    const { user } = renderDialog();
+    await fillForm(user);
+
+    // Act
+    await user.click(screen.getByTestId("setup-continue-button"));
+
+    // Assert
+    expect(await screen.findByTestId("setup-form-error")).toHaveTextContent(
+      "SETUP$PREFLIGHT_UNAVAILABLE",
+    );
+    expect(screen.getByTestId("setup-dialog")).not.toHaveTextContent(
+      secretSentinel,
+    );
+    expect(screen.queryByTestId("setup-review")).toBeNull();
+    expect(mocks.runAction).not.toHaveBeenCalled();
+  });
+
+  it("does not admit a verdict for values edited during preflight", async () => {
+    // Arrange
+    let resolve!: (value: { valid: true; errors: never[] }) => void;
+    vi.mocked(AutomationService.validateDraft).mockImplementation(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    const { user } = renderDialog();
+    await fillForm(user);
+
+    // Act - the fields stay editable while the explicit service check runs.
+    await user.click(screen.getByTestId("setup-continue-button"));
+    await user.type(screen.getByTestId("setup-field-widgetName"), " changed");
+    resolve({ valid: true, errors: [] });
+
+    // Assert - editing invalidated that request, so its later success cannot
+    // unlock review or the create action.
+    await waitFor(() =>
+      expect(screen.getByTestId("setup-continue-button")).not.toBeDisabled(),
+    );
+    expect(screen.queryByTestId("setup-review")).toBeNull();
+    expect(mocks.runAction).not.toHaveBeenCalled();
+  });
+
+  it("treats a missing legacy endpoint as advisory on review", async () => {
+    // Arrange
+    vi.mocked(AutomationService.validateDraft).mockRejectedValue(
+      Object.assign(new Error("Not implemented"), {
+        name: "HttpError",
+        status: 501,
+      }),
+    );
+    const { user } = renderDialog();
+    await fillForm(user);
+
+    // Act
+    await user.click(screen.getByTestId("setup-continue-button"));
+
+    // Assert
+    expect(
+      await screen.findByTestId("setup-preflight-unsupported"),
+    ).toHaveTextContent("SETUP$PREFLIGHT_UNSUPPORTED");
+    expect(screen.getByTestId("setup-review")).toBeInTheDocument();
+  });
+
+  it("keeps an old validate contract advisory while still allowing creation", async () => {
+    // Arrange - the first call rejects only the additive requirements envelope;
+    // the compatibility retry validates the same draft through the old route.
+    vi.mocked(AutomationService.validateDraft)
+      .mockRejectedValueOnce(requirementsSchemaFailure())
+      .mockResolvedValue({ valid: true, errors: [] });
+    mocks.runAction.mockResolvedValue({
+      response: { id: "legacy-automation" },
+    });
+    const { user } = renderDialog();
+    await fillForm(user);
+
+    // Act
+    await user.click(screen.getByTestId("setup-continue-button"));
+
+    // Assert - the old validator did not perform deployment checks, so the
+    // review says advisory while preserving the creation path.
+    expect(
+      await screen.findByTestId("setup-preflight-unsupported"),
+    ).toBeInTheDocument();
+    await user.click(screen.getByTestId("setup-continue-button"));
+    await waitFor(() => expect(mocks.runAction).toHaveBeenCalled());
+    expect(mocks.navigate).toHaveBeenCalledWith(
+      "/automations/legacy-automation",
+      {
+        replace: true,
+      },
+    );
+  });
+
+  it("shows partial coverage for an HTTP integration and rechecks before creation", async () => {
+    mocks.runAction.mockResolvedValue({ response: { id: "automation-1" } });
+    const { user } = renderDialog(HTTP_INTEGRATION_ENTRY);
+    await fillForm(user);
+
+    await user.click(screen.getByTestId("setup-continue-button"));
+    expect(
+      await screen.findByTestId("setup-preflight-partial-integrations"),
+    ).toHaveTextContent("Jira");
+    expect(screen.queryByTestId("setup-preflight-passed")).toBeNull();
+    expect(mocks.runAction).not.toHaveBeenCalled();
+
+    await user.click(screen.getByTestId("setup-continue-button"));
+    await waitFor(() => expect(mocks.runAction).toHaveBeenCalledTimes(1));
+    expect(AutomationService.validateDraft).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows a newly partial confirm-time warning before creating", async () => {
+    mocks.activeBackend = {
+      backend: {
+        id: "cloud-1",
+        name: "Cloud",
+        host: "https://app.example.test",
+        apiKey: "cloud-key",
+        kind: "cloud",
+        connectionRevision: 0,
+      },
+      orgId: "org-1",
+    };
+    mocks.runAction.mockResolvedValue({ response: { id: "automation-1" } });
+    const { user, rerender } = renderDialog(NATIVE_GITHUB_ENTRY);
+    await fillForm(user);
+
+    await user.click(screen.getByTestId("setup-continue-button"));
+    expect(await screen.findByTestId("setup-preflight-passed")).toBeVisible();
+    expect(mocks.runAction).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(screen.getByTestId("setup-continue-button")).not.toBeDisabled(),
+    );
+
+    mocks.nativeConnectedIntegrationIds.add("github");
+    rerender();
+
+    await user.click(screen.getByTestId("setup-continue-button"));
+    expect(
+      await screen.findByTestId("setup-preflight-partial-integrations"),
+    ).toHaveTextContent("GitHub");
+    expect(mocks.runAction).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(screen.getByTestId("setup-continue-button")).not.toBeDisabled(),
+    );
+
+    await user.click(screen.getByTestId("setup-continue-button"));
+    await waitFor(() => expect(mocks.runAction).toHaveBeenCalledTimes(1));
+  });
+
+  it("does not create after a partial verdict if confirm-time preflight fails", async () => {
+    vi.mocked(AutomationService.validateDraft)
+      .mockResolvedValueOnce({ valid: true, errors: [] })
+      .mockRejectedValueOnce(httpFailure(503));
+    const { user } = renderDialog(HTTP_INTEGRATION_ENTRY);
+    await fillForm(user);
+
+    await user.click(screen.getByTestId("setup-continue-button"));
+    expect(await screen.findByTestId("setup-preflight-partial")).toBeVisible();
+    await user.click(screen.getByTestId("setup-continue-button"));
+
+    expect(await screen.findByTestId("setup-form-error")).toHaveTextContent(
+      "SETUP$PREFLIGHT_UNAVAILABLE",
+    );
+    expect(mocks.runAction).not.toHaveBeenCalled();
+  });
+
   it("creates from the derived payload and opens what was created", async () => {
     // Arrange
     mocks.runAction.mockResolvedValue({ response: { id: "automation-1" } });
@@ -450,6 +891,9 @@ describe("SetupDialog", () => {
     await user.click(screen.getByTestId("setup-continue-button"));
     await waitFor(() =>
       expect(screen.getByTestId("setup-review")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("setup-preflight-passed")).toHaveTextContent(
+      "SETUP$PREFLIGHT_PASSED",
     );
     await user.click(screen.getByTestId("setup-continue-button"));
 
@@ -466,6 +910,33 @@ describe("SetupDialog", () => {
       repos: [{ url: "OpenHands/agent-server-gui", provider: "github" }],
       trigger: { type: "cron", schedule: "*/15 * * * *" },
     });
+  });
+
+  it("revalidates on confirm and blocks creation when readiness changed", async () => {
+    const sentinel = "provider-secret-sentinel";
+    vi.mocked(AutomationService.validateDraft)
+      .mockResolvedValueOnce({ valid: true, errors: [] })
+      .mockRejectedValueOnce(
+        Object.assign(new Error(sentinel), {
+          name: "HttpError",
+          status: 503,
+        }),
+      );
+    const { user } = renderDialog();
+    await fillForm(user);
+    await user.click(screen.getByTestId("setup-continue-button"));
+    await waitFor(() =>
+      expect(screen.getByTestId("setup-review")).toBeInTheDocument(),
+    );
+
+    await user.click(screen.getByTestId("setup-continue-button"));
+
+    expect(await screen.findByTestId("setup-form-error")).toHaveTextContent(
+      "SETUP$PREFLIGHT_UNAVAILABLE",
+    );
+    expect(screen.getByTestId("setup-dialog")).not.toHaveTextContent(sentinel);
+    expect(screen.queryByTestId("setup-review")).toBeNull();
+    expect(mocks.runAction).not.toHaveBeenCalled();
   });
 
   it("waits for LLM profiles before continuing", () => {

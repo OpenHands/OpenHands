@@ -1,12 +1,11 @@
 import { useMemo } from "react";
 import {
-  INTEGRATION_CATALOG as MCP_MARKETPLACE,
+  INTEGRATION_CATALOG,
   type IntegrationCatalogEntry as MarketplaceEntry,
 } from "@openhands/extensions/integrations";
 import {
   findInstalledEntryMatch,
   getMarketplaceEntryById,
-  getMcpMarketplaceCatalog,
 } from "#/utils/mcp-marketplace-utils";
 import { flattenMcpConfig } from "#/utils/mcp-installed-servers";
 import { parseMcpConfig } from "#/utils/mcp-config";
@@ -55,19 +54,32 @@ export function useSetupPrerequisites(
   );
 
   const missingIntegrations = useMemo<MissingSetupIntegration[]>(() => {
-    const catalog = getMcpMarketplaceCatalog(MCP_MARKETPLACE);
     return Object.entries(integrations)
       .map(([id, requirement]) => ({
         id,
         requirement,
-        entry: getMarketplaceEntryById(id, catalog) ?? null,
+        entry: getMarketplaceEntryById(id, INTEGRATION_CATALOG) ?? null,
       }))
-      .filter(
-        ({ id, entry: catalogEntry }) =>
+      .filter(({ id, entry: catalogEntry }) => {
+        // The MCP settings store cannot observe HTTP credentials. If an
+        // integration has an HTTP alternative, do not claim it is missing
+        // merely because no MCP/native connection is present. The preflight
+        // verdict will explicitly mark an unchecked required HTTP-only or
+        // mixed integration as partial.
+        if (
+          catalogEntry?.connectionOptions.some(
+            (option) => option.provider === "http",
+          )
+        ) {
+          return false;
+        }
+
+        return (
           !getNativeIntegration(id)?.isConnected &&
           (!catalogEntry ||
-            !findInstalledEntryMatch(catalogEntry, installedServers)),
-      );
+            !findInstalledEntryMatch(catalogEntry, installedServers))
+        );
+      });
   }, [getNativeIntegration, integrations, installedServers]);
 
   const blockingIntegrations = missingIntegrations.filter(

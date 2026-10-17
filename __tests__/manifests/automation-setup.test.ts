@@ -2,11 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 import incidentFixture from "@openhands/extensions/testing/automations/incident-retrospective-drafter.json";
 import prReviewerFixture from "@openhands/extensions/testing/automations/github-pr-reviewer.json";
 import repoMonitorFixture from "@openhands/extensions/testing/automations/github-repo-monitor.json";
+import { INTEGRATION_CATALOG } from "@openhands/extensions/integrations";
 import {
   automationCreateEndpoint,
   buildAssistedMessage,
   buildCreatePayload,
   buildPreflightBody,
+  buildPreflightRequirements,
   deriveErrorMap,
 } from "#/manifests/automation-setup";
 import {
@@ -96,6 +98,27 @@ const BUNDLES = [
   repoMonitorFixture,
   incidentFixture,
 ] as FixtureBundle[];
+
+const GITHUB_PREFLIGHT_REQUIREMENTS = {
+  integrations: [
+    {
+      id: "github",
+      alternatives: [
+        {
+          transport: "shttp",
+          locator: "https://api.githubcopilot.com/mcp/",
+          authStrategy: "oauth2",
+        },
+        {
+          transport: "shttp",
+          locator: "https://api.githubcopilot.com/mcp/",
+          authStrategy: "api_key",
+          secretNames: ["GITHUB_PERSONAL_ACCESS_TOKEN"],
+        },
+      ],
+    },
+  ],
+};
 
 function requireEntry(automationId: string): SetupEntry {
   const entry = SETUP_REGISTRY.findById(automationId);
@@ -336,6 +359,30 @@ describe("buildCreatePayload", () => {
 });
 
 describe("buildPreflightBody", () => {
+  it("never asserts an empty or incomplete MCP alternative set from the catalog", () => {
+    for (const catalogEntry of INTEGRATION_CATALOG) {
+      const entry = createSetupEntry({
+        requires: {
+          integrations: { [catalogEntry.id]: { message: "Required." } },
+        },
+      });
+      const requirements = buildPreflightRequirements(entry).integrations;
+      const hasNonMcpOption = catalogEntry.connectionOptions.some(
+        (option) => option.provider !== "mcp",
+      );
+
+      if (hasNonMcpOption || catalogEntry.connectionOptions.length === 0) {
+        expect(requirements, catalogEntry.id).toEqual([]);
+      } else {
+        expect(requirements, catalogEntry.id).toHaveLength(1);
+        expect(requirements[0].alternatives.length).toBeGreaterThan(0);
+        expect(requirements[0].alternatives).toHaveLength(
+          catalogEntry.connectionOptions.length,
+        );
+      }
+    }
+  });
+
   it.each(PREFLIGHT_CASES)(
     "derives the $name preflight envelope its fixture pins",
     ({ automationId, formValues, body, selectedTrigger }) => {
@@ -346,9 +393,118 @@ describe("buildPreflightBody", () => {
       const envelope = buildPreflightBody(entry, formValues, selectedTrigger);
 
       // Assert
-      expect(envelope).toEqual(body);
+      expect(envelope).toEqual({
+        ...body,
+        // The reviewer now ships a bundle using an agent profile; its
+        // published contract no longer requires a GitHub MCP integration.
+        requirements:
+          automationId === "github-pr-reviewer"
+            ? { integrations: [] }
+            : GITHUB_PREFLIGHT_REQUIREMENTS,
+      });
     },
   );
+
+  it("derives required secret references from each catalog alternative", () => {
+    // Arrange — the plain Slack team id configures the server but is not a
+    // secret reference; the required bot token is. Optional integrations are
+    // not promoted into blocking preflight requirements.
+    const entry = createSetupEntry({
+      requires: {
+        integrations: {
+          slack: { message: "Posts the report." },
+          notion: { message: "Optionally archives it.", required: false },
+        },
+      },
+    });
+
+    // Act
+    const envelope = buildPreflightBody(entry, {
+      repository: "OpenHands/OpenHands",
+      widgetName: "Widgets",
+    });
+
+    // Assert
+    expect(envelope?.requirements).toEqual({
+      integrations: [
+        {
+          id: "slack",
+          alternatives: [
+            {
+              transport: "shttp",
+              locator: "https://mcp.slack.com/mcp",
+              authStrategy: "oauth2",
+            },
+            {
+              transport: "stdio",
+              locator: "slack",
+              authStrategy: "api_key",
+              secretNames: ["SLACK_BOT_TOKEN"],
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  it("omits HTTP-only integrations without dropping checkable MCP requirements", () => {
+    const entry = createSetupEntry({
+      requires: {
+        integrations: {
+          jira: { message: "Reads issues." },
+          slack: { message: "Posts the report." },
+        },
+      },
+    });
+
+    const envelope = buildPreflightBody(entry, {
+      repository: "OpenHands/OpenHands",
+      widgetName: "Widgets",
+    });
+
+    expect(envelope?.requirements?.integrations.map(({ id }) => id)).toEqual([
+      "slack",
+    ]);
+  });
+
+  it("does not assert that GitLab is missing when HTTP is an uncheckable alternative", () => {
+    const entry = createSetupEntry({
+      requires: {
+        integrations: { gitlab: { message: "Reads GitLab issues." } },
+      },
+    });
+
+    const envelope = buildPreflightBody(entry, {
+      repository: "OpenHands/OpenHands",
+      widgetName: "Widgets",
+    });
+
+    expect(envelope?.requirements).toEqual({ integrations: [] });
+  });
+
+  it("does not invent a secret reference for Redis CLI arguments", () => {
+    const entry = createSetupEntry({
+      requires: {
+        integrations: { redis: { message: "Reads the cache." } },
+      },
+    });
+
+    const envelope = buildPreflightBody(entry, {
+      repository: "OpenHands/OpenHands",
+      widgetName: "Widgets",
+    });
+
+    expect(envelope?.requirements).toEqual({
+      integrations: [
+        {
+          id: "redis",
+          alternatives: [
+            { transport: "stdio", locator: "redis", authStrategy: "api_key" },
+          ],
+        },
+      ],
+    });
+  });
 });
 
 describe("buildAssistedMessage", () => {
@@ -396,6 +552,7 @@ describe("service rejections mapped back to fields", () => {
       expect(mapped).toEqual({
         fieldErrors: expectedFieldErrors,
         formErrors: [],
+        stepErrors: {},
       });
     },
   );

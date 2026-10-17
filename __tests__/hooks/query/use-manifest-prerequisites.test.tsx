@@ -87,10 +87,10 @@ describe("useSetupPrerequisites", () => {
     expect(result.current.isBlocked).toBe(true);
   });
 
-  it("lets setup continue when an unconnected integration is only advisory", async () => {
+  it("lets setup continue when an unconnected MCP integration is only advisory", async () => {
     // Arrange
     const entry = withIntegrations({
-      notion: { message: "Publishes the result.", required: false },
+      github: { message: "Reads pull requests.", required: false },
     });
 
     // Act
@@ -101,7 +101,63 @@ describe("useSetupPrerequisites", () => {
     expect({
       isBlocked: result.current.isBlocked,
       warned: result.current.warningIntegrations.map(({ id }) => id),
-    }).toEqual({ isBlocked: false, warned: ["notion"] });
+    }).toEqual({ isBlocked: false, warned: ["github"] });
+  });
+
+  it("does not block on an HTTP-only integration that the MCP store cannot represent", async () => {
+    const entry = withIntegrations({
+      jira: { message: "Reads Jira issues." },
+    });
+
+    const { result } = renderPrerequisites(entry);
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.isBlocked).toBe(false);
+    expect(result.current.blockingIntegrations).toEqual([]);
+  });
+
+  it("does not warn that an optional HTTP connection is absent without evidence", async () => {
+    const entry = withIntegrations({
+      jira: { message: "May read Jira issues.", required: false },
+    });
+
+    const { result } = renderPrerequisites(entry);
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.warningIntegrations).toEqual([]);
+  });
+
+  it("does not reject a mixed integration when the HTTP connection cannot be observed", async () => {
+    const entry = withIntegrations({
+      gitlab: { message: "Reads GitLab issues." },
+    });
+
+    const { result } = renderPrerequisites(entry);
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.isBlocked).toBe(false);
+    expect(result.current.blockingIntegrations).toEqual([]);
+  });
+
+  it("accepts a mixed integration connected through Cloud's native provider", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+    server.use(
+      http.get("*/api/v1/web-client/config", () =>
+        HttpResponse.json({ providers_configured: ["gitlab"] }),
+      ),
+    );
+    vi.mocked(SettingsService.getSettings).mockResolvedValue({
+      provider_tokens_set: { gitlab: null },
+    } as never);
+    const entry = withIntegrations({
+      gitlab: { message: "Reads GitLab issues." },
+    });
+
+    const { result } = renderPrerequisites(entry);
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.isBlocked).toBe(false);
   });
 
   it("has nothing to block on once the integration is connected", async () => {
