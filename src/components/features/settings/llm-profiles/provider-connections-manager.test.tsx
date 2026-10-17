@@ -262,4 +262,74 @@ describe("ProviderConnectionsManager", () => {
     });
     expect(deleteSpy).toHaveBeenCalledWith("conn-1");
   });
+
+  describe("actions menu keyboard focus and navigation", () => {
+    it("moves focus to the first item (Bulk add) upon opening the menu", async () => {
+      const user = userEvent.setup();
+      renderWith(
+        <ProviderConnectionsManager
+          connections={[connection]}
+          linkedCountById={{}}
+          isLoading={false}
+          onAddModels={vi.fn()}
+          loadError={null}
+        />,
+      );
+
+      const trigger = screen.getByTestId("provider-connection-menu-trigger");
+      await user.click(trigger);
+
+      const bulkAddButton = screen.getByTestId(
+        "provider-connection-add-models",
+      );
+      expect(document.activeElement).toBe(bulkAddButton);
+    });
+
+    it("navigates items with ArrowDown and ArrowUp and restores focus to trigger on Escape", async () => {
+      const user = userEvent.setup();
+      renderWith(
+        <ProviderConnectionsManager
+          connections={[connection]}
+          linkedCountById={{}}
+          isLoading={false}
+          onAddModels={vi.fn()}
+          loadError={null}
+        />,
+      );
+
+      const trigger = screen.getByTestId("provider-connection-menu-trigger");
+      await user.click(trigger);
+
+      const bulkAddButton = screen.getByTestId(
+        "provider-connection-add-models",
+      );
+      const editButton = screen.getByTestId("provider-connection-edit");
+      const deleteButton = screen.getByTestId("provider-connection-delete");
+
+      expect(document.activeElement).toBe(bulkAddButton);
+
+      // ArrowDown moves from Bulk add to Edit
+      await user.keyboard("{ArrowDown}");
+      expect(document.activeElement).toBe(editButton);
+
+      // ArrowDown moves from Edit to Delete
+      await user.keyboard("{ArrowDown}");
+      expect(document.activeElement).toBe(deleteButton);
+
+      // ArrowDown wraps around from Delete to Bulk add
+      await user.keyboard("{ArrowDown}");
+      expect(document.activeElement).toBe(bulkAddButton);
+
+      // ArrowUp wraps around from Bulk add to Delete
+      await user.keyboard("{ArrowUp}");
+      expect(document.activeElement).toBe(deleteButton);
+
+      // Escape closes menu and returns focus to trigger
+      await user.keyboard("{Escape}");
+      expect(
+        screen.queryByTestId("provider-connection-actions-menu"),
+      ).not.toBeInTheDocument();
+      expect(document.activeElement).toBe(trigger);
+    });
+  });
 });
