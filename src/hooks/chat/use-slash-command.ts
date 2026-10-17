@@ -6,6 +6,7 @@ import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useFreeModels } from "#/hooks/query/use-free-models";
 import { formatModelNameForDisplay } from "#/utils/format-model-name";
+import { isImeComposingEvent } from "#/components/features/chat/utils/chat-input.utils";
 
 export type SlashCommandSkill = SkillInfo;
 
@@ -269,6 +270,12 @@ export const useSlashCommand = (
   // Uses refs to always read the latest state, avoiding stale closures.
   const handleSlashKeyDown = useCallback(
     (e: React.KeyboardEvent): boolean => {
+      // Arrow / Enter / number keys belong to the IME candidate list while
+      // composing; do not steal them for slash-menu navigation.
+      if (isImeComposingEvent(e)) {
+        return false;
+      }
+
       const items = filteredItemsRef.current;
       if (!isMenuOpenRef.current || items.length === 0) return false;
 

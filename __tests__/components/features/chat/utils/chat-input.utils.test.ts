@@ -2,13 +2,18 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   clearEmptyContent,
   clearFileInput,
+  clearImeComposing,
   clearTextContent,
   ensureCursorVisible,
   focusContentEditableAtEnd,
   getClipboardFiles,
   getTextContent,
+  IME_KEY_CODE,
   insertTextAtCaret,
   isContentEmpty,
+  isImeComposingElement,
+  isImeComposingEvent,
+  markImeComposing,
   normalizePastedFile,
   partitionImagesForUpload,
 } from "#/components/features/chat/utils/chat-input.utils";
@@ -222,6 +227,22 @@ describe("content-editable helpers", () => {
     expect(empty.textContent).toBe("");
   });
 
+  it("does not clear empty markup while IME composition is marked", () => {
+    const composing = document.createElement("div");
+    composing.innerText = " ";
+    composing.innerHTML = "<br>";
+    markImeComposing(composing);
+
+    clearEmptyContent(composing);
+
+    expect(isImeComposingElement(composing)).toBe(true);
+    expect(composing.innerHTML).toBe("<br>");
+
+    clearImeComposing(composing);
+    clearEmptyContent(composing);
+    expect(composing.innerHTML).toBe("");
+  });
+
   it("gets and clears editable text and file inputs safely", () => {
     expect(getTextContent(null)).toBe("");
     const editable = document.createElement("div");
@@ -356,5 +377,20 @@ describe("insertTextAtCaret", () => {
     insertTextAtCaret(element, "world");
 
     expect(execCommand).toHaveBeenCalledWith("insertText", false, " world");
+  });
+});
+
+describe("IME composition detection", () => {
+  it("treats composing flags, keyCode 229, and an open session as IME", () => {
+    expect(isImeComposingEvent(null)).toBe(false);
+    expect(isImeComposingEvent({ isComposing: true })).toBe(true);
+    expect(isImeComposingEvent({ keyCode: IME_KEY_CODE })).toBe(true);
+    expect(
+      isImeComposingEvent({ nativeEvent: { isComposing: true } }),
+    ).toBe(true);
+    expect(isImeComposingEvent(undefined, true)).toBe(true);
+    expect(isImeComposingEvent({ isComposing: false, keyCode: 13 })).toBe(
+      false,
+    );
   });
 });

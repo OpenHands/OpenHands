@@ -100,10 +100,11 @@ function setInputText(
   selection?.addRange(range);
 }
 
-function makeKeyboardEvent(key: string) {
+function makeKeyboardEvent(key: string, composing = false) {
   return {
     key,
     preventDefault: vi.fn(),
+    nativeEvent: { isComposing: composing },
   } as unknown as React.KeyboardEvent;
 }
 
@@ -829,6 +830,21 @@ describe("useSlashCommand", () => {
       expect(result.current.isMenuOpen).toBe(false);
     },
   );
+
+  it("does not steal IME candidate keys while composing", () => {
+    const ref = makeChatInputRef();
+    setInputText(ref.current, "/");
+    const { result } = renderHook(() => useSlashCommand(ref));
+    act(() => result.current.updateSlashMenu());
+    const enter = makeKeyboardEvent("Enter", true);
+    const down = makeKeyboardEvent("ArrowDown", true);
+
+    expect(result.current.handleSlashKeyDown(enter)).toBe(false);
+    expect(result.current.handleSlashKeyDown(down)).toBe(false);
+    expect(enter.preventDefault).not.toHaveBeenCalled();
+    expect(down.preventDefault).not.toHaveBeenCalled();
+    expect(result.current.isMenuOpen).toBe(true);
+  });
 
   it("leaves the menu open for an unrelated key", () => {
     const ref = makeChatInputRef();

@@ -18,17 +18,24 @@ const createKeyboardEvent = ({
   key = "Enter",
   composing = false,
   shiftKey = false,
+  keyCode,
 }: {
   key?: string;
   composing?: boolean;
   shiftKey?: boolean;
+  keyCode?: number;
 } = {}) =>
   ({
     key,
     shiftKey,
-    nativeEvent: { isComposing: composing },
+    nativeEvent: { isComposing: composing, keyCode },
     preventDefault: vi.fn(),
   }) as unknown as React.KeyboardEvent;
+
+const createInputEvent = ({ composing = false }: { composing?: boolean } = {}) =>
+  ({
+    nativeEvent: { isComposing: composing },
+  }) as unknown as React.FormEvent<HTMLDivElement>;
 
 const createClipboardEvent = ({
   files = [],
@@ -93,14 +100,30 @@ describe("chat input DOM events", () => {
     });
 
     act(() => {
-      mountedHook.result.current.handleInput();
-      unmountedHook.result.current.handleInput();
+      mountedHook.result.current.handleInput(createInputEvent());
+      unmountedHook.result.current.handleInput(createInputEvent());
     });
 
     expect(mountedResize).toHaveBeenCalledOnce();
     expect(unmountedResize).toHaveBeenCalledOnce();
     expect(mounted.element.textContent).toBe("");
     expect(mounted.element.innerHTML).toBe("");
+  });
+
+  it("does not wipe whitespace while an IME composition is active", () => {
+    const mounted = createElementRef("   ");
+    const { result } = renderInputEvents({ inputRef: mounted.ref });
+
+    act(() => {
+      result.current.handleCompositionStart();
+      result.current.handleInput(createInputEvent({ composing: true }));
+    });
+
+    expect(mounted.element.getAttribute("data-composing")).toBe("true");
+    expect(mounted.element.textContent).toBe("   ");
+
+    act(() => result.current.handleCompositionEnd());
+    expect(mounted.element.hasAttribute("data-composing")).toBe(false);
   });
 
   it("dispatches pasted files to the attachment system", () => {
@@ -163,6 +186,7 @@ describe("chat input DOM events", () => {
   });
 
   it("clears whitespace on blur and invokes optional focus callbacks", () => {
+    vi.useFakeTimers();
     const input = createElementRef("  ");
     const onFocus = vi.fn();
     const onBlur = vi.fn();
@@ -179,11 +203,26 @@ describe("chat input DOM events", () => {
         result.current.handleBlur();
         withoutOptions.result.current.handleFocus();
         withoutOptions.result.current.handleBlur();
+        vi.runOnlyPendingTimers();
       }),
     ).not.toThrow();
     expect(onFocus).toHaveBeenCalledOnce();
     expect(onBlur).toHaveBeenCalledOnce();
     expect(input.element.textContent).toBe("");
+  });
+
+  it("does not clear whitespace on blur during IME composition", () => {
+    vi.useFakeTimers();
+    const input = createElementRef("  ");
+    const { result } = renderInputEvents({ inputRef: input.ref });
+
+    act(() => {
+      result.current.handleCompositionStart();
+      result.current.handleBlur();
+      vi.runOnlyPendingTimers();
+    });
+
+    expect(input.element.textContent).toBe("  ");
   });
 });
 
@@ -193,15 +232,18 @@ describe("chat input keyboard events", () => {
     const { result } = renderInputEvents({ isEmpty });
     const letter = createKeyboardEvent({ key: "a" });
     const composingEnter = createKeyboardEvent({ composing: true });
+    const imeKeyCodeEnter = createKeyboardEvent({ keyCode: 229 });
     const submit = vi.fn();
 
     act(() => {
       result.current.handleKeyDown(letter, false, submit);
       result.current.handleKeyDown(composingEnter, false, submit);
+      result.current.handleKeyDown(imeKeyCodeEnter, false, submit);
     });
 
     expect(letter.preventDefault).not.toHaveBeenCalled();
     expect(composingEnter.preventDefault).not.toHaveBeenCalled();
+    expect(imeKeyCodeEnter.preventDefault).not.toHaveBeenCalled();
     expect(isEmpty).not.toHaveBeenCalled();
     expect(submit).not.toHaveBeenCalled();
   });
@@ -290,7 +332,7 @@ describe("chat input callback freshness", () => {
     );
 
     rerender({ inputRef: latest.ref, resize: latestResize });
-    act(() => result.current.handleInput());
+    act(() => result.current.handleInput(createInputEvent()));
     act(() =>
       result.current.handlePaste(createClipboardEvent({ text: "latest" })),
     );
@@ -358,9 +400,11 @@ describe("chat input callback freshness", () => {
     );
 
     rerender({ inputRef: latest.ref, focus: latestFocus, blur: latestBlur });
+    vi.useFakeTimers();
     act(() => {
       result.current.handleFocus();
       result.current.handleBlur();
+      vi.runOnlyPendingTimers();
     });
 
     expect(firstFocus).not.toHaveBeenCalled();

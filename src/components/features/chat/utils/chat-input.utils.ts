@@ -74,6 +74,73 @@ export function getClipboardFiles(clipboardData: DataTransfer): File[] {
 
   return fromItems;
 }
+
+/**
+ * Windows IME keydown uses keyCode 229 while the composition session is
+ * active. Some third-party IMEs omit `isComposing` on that keystroke.
+ */
+export const IME_KEY_CODE = 229;
+
+const COMPOSING_ATTRIBUTE = "data-composing";
+
+type ImeEventLike = {
+  isComposing?: boolean;
+  keyCode?: number;
+  nativeEvent?: {
+    isComposing?: boolean;
+    keyCode?: number;
+  };
+};
+
+/** DOM events, React synthetic events, and test doubles. */
+export type ImeEventInput =
+  | ImeEventLike
+  | { nativeEvent: Event; isComposing?: boolean; keyCode?: number }
+  | null
+  | undefined;
+
+/**
+ * True while an IME (Chinese / Japanese / Korean) composition session is
+ * active. Writing innerHTML/textContent during that window cancels the
+ * session — third-party Windows IMEs are especially sensitive because they
+ * often keep preedit out of the DOM until confirm.
+ */
+export const isImeComposingEvent = (
+  event: ImeEventInput,
+  composingSession = false,
+): boolean => {
+  if (composingSession) {
+    return true;
+  }
+  if (!event) {
+    return false;
+  }
+  const native =
+    "nativeEvent" in event && event.nativeEvent ? event.nativeEvent : undefined;
+  const nativeIme = native as
+    | { isComposing?: boolean; keyCode?: number }
+    | undefined;
+  const isComposing =
+    ("isComposing" in event && event.isComposing === true) ||
+    nativeIme?.isComposing === true;
+  const keyCode =
+    ("keyCode" in event && typeof event.keyCode === "number"
+      ? event.keyCode
+      : undefined) ?? nativeIme?.keyCode;
+  return isComposing || keyCode === IME_KEY_CODE;
+};
+
+export const markImeComposing = (element: HTMLElement | null): void => {
+  element?.setAttribute(COMPOSING_ATTRIBUTE, "true");
+};
+
+export const clearImeComposing = (element: HTMLElement | null): void => {
+  element?.removeAttribute(COMPOSING_ATTRIBUTE);
+};
+
+export const isImeComposingElement = (element: HTMLElement | null): boolean =>
+  Boolean(element?.hasAttribute(COMPOSING_ATTRIBUTE));
+
 /**
  * Check if contentEditable element is truly empty
  */
@@ -86,10 +153,12 @@ export const isContentEmpty = (element: HTMLDivElement | null): boolean => {
 };
 
 /**
- * Clear empty content from contentEditable element for placeholder display
+ * Clear empty content from contentEditable element for placeholder display.
+ * Must not run during IME composition: assigning innerHTML/textContent aborts
+ * the composition session even when the DOM already looks empty.
  */
 export const clearEmptyContent = (element: HTMLDivElement | null): void => {
-  if (element && isContentEmpty(element)) {
+  if (element && !isImeComposingElement(element) && isContentEmpty(element)) {
     element.innerHTML = "";
     element.textContent = "";
   }

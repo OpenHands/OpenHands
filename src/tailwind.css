@@ -346,8 +346,11 @@ button.extension-module-card-interactive {
   }
 }
 
-/* Custom styles for contenteditable */
-.chat-input:empty:before {
+/* Custom styles for contenteditable.
+   Hide the :empty placeholder while an IME is composing — the pseudo
+   element otherwise occupies the caret and third-party Windows IMEs that
+   keep preedit out of the DOM cannot insert composition text. */
+.chat-input:empty:not([data-composing]):before {
   content: attr(data-placeholder);
   color: var(--cool-grey-400);
   pointer-events: none;

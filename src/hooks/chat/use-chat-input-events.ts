@@ -1,9 +1,13 @@
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import { isMobileUserAgent } from "#/utils/utils";
 import {
   ensureCursorVisible,
   clearEmptyContent,
+  clearImeComposing,
   getClipboardFiles,
+  isImeComposingEvent,
+  markImeComposing,
+  type ImeEventInput,
 } from "#/components/features/chat/utils/chat-input.utils";
 
 /**
@@ -17,18 +21,46 @@ export const useChatInputEvents = (
   onFocus?: () => void,
   onBlur?: () => void,
 ) => {
-  // Handle input events
-  const handleInput = useCallback(() => {
+  // Some Windows IMEs omit `isComposing` on individual events; the session
+  // flag covers compositionstart → compositionend.
+  const composingRef = useRef(false);
+
+  const isImeSessionActive = useCallback(
+    (event?: ImeEventInput) => isImeComposingEvent(event, composingRef.current),
+    [],
+  );
+
+  const handleCompositionStart = useCallback(() => {
+    composingRef.current = true;
+    markImeComposing(chatInputRef.current);
+  }, [chatInputRef]);
+
+  const handleCompositionEnd = useCallback(() => {
+    composingRef.current = false;
+    clearImeComposing(chatInputRef.current);
     smartResize();
+  }, [chatInputRef, smartResize]);
 
-    // Clear empty content to ensure placeholder shows
-    if (chatInputRef.current) {
-      clearEmptyContent(chatInputRef.current);
-    }
+  // Handle input events. Mutating the editor during IME composition (even to
+  // "clear empty" markup) cancels the composition, which is why third-party
+  // Chinese IMEs can appear to type nothing while the OS IME still works.
+  const handleInput = useCallback(
+    (e?: React.FormEvent<HTMLDivElement>) => {
+      const composing = isImeComposingEvent(e, composingRef.current);
+      smartResize();
 
-    // Ensure cursor stays visible when content is scrollable
-    ensureCursorVisible(chatInputRef.current);
-  }, [smartResize, chatInputRef]);
+      if (composing) {
+        return;
+      }
+
+      if (chatInputRef.current) {
+        clearEmptyContent(chatInputRef.current);
+      }
+
+      ensureCursorVisible(chatInputRef.current);
+    },
+    [smartResize, chatInputRef],
+  );
 
   // Handle paste events to clean up formatting and handle files
   const handlePaste = useCallback(
@@ -67,9 +99,9 @@ export const useChatInputEvents = (
         return;
       }
 
-      // Ignore Enter key during IME composition (e.g., Chinese, Japanese, Korean input)
-      // When using IME, Enter is used to confirm the composition, not to submit
-      if (e.nativeEvent.isComposing) {
+      // Ignore Enter during IME composition (confirm candidate, not submit).
+      // Also treat keyCode 229: some Windows IMEs leave isComposing false.
+      if (isImeComposingEvent(e, composingRef.current)) {
         return;
       }
 
@@ -91,17 +123,26 @@ export const useChatInputEvents = (
     [checkIsContentEmpty, increaseHeightForEmptyContent],
   );
 
-  // Handle blur events to ensure placeholder shows when empty
+  // Handle blur events to ensure placeholder shows when empty.
+  // Third-party IMEs may steal focus for their candidate window; delay the
+  // DOM cleanup so a composing session is not aborted on that spurious blur.
   const handleBlur = useCallback(() => {
-    // Clear empty content to ensure placeholder shows
-    if (chatInputRef.current) {
-      clearEmptyContent(chatInputRef.current);
-    }
-
-    // Call the original onBlur callback if provided
     if (onBlur) {
       onBlur();
     }
+
+    window.setTimeout(() => {
+      if (composingRef.current) {
+        return;
+      }
+      if (
+        chatInputRef.current &&
+        document.activeElement === chatInputRef.current
+      ) {
+        return;
+      }
+      clearEmptyContent(chatInputRef.current);
+    }, 0);
   }, [chatInputRef, onBlur]);
 
   // Handle focus events
@@ -117,5 +158,8 @@ export const useChatInputEvents = (
     handleKeyDown,
     handleBlur,
     handleFocus,
+    handleCompositionStart,
+    handleCompositionEnd,
+    isImeSessionActive,
   };
 };

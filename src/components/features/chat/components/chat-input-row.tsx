@@ -5,9 +5,11 @@ interface ChatInputRowProps {
   chatInputRef: React.RefObject<HTMLDivElement | null>;
   isNewConversationPending?: boolean;
   placeholder?: string;
-  onInput: () => void;
+  onInput: (e: React.FormEvent<HTMLDivElement>) => void;
   onPaste: (e: React.ClipboardEvent) => void;
   onKeyDown: (e: React.KeyboardEvent) => void;
+  onCompositionStart?: (e: React.CompositionEvent<HTMLDivElement>) => void;
+  onCompositionEnd?: (e: React.CompositionEvent<HTMLDivElement>) => void;
   onFocus?: () => void;
   onBlur?: () => void;
 }
@@ -19,6 +21,8 @@ export function ChatInputRow({
   onInput,
   onPaste,
   onKeyDown,
+  onCompositionStart,
+  onCompositionEnd,
   onFocus,
   onBlur,
 }: ChatInputRowProps) {
@@ -32,6 +36,8 @@ export function ChatInputRow({
           onInput={onInput}
           onPaste={onPaste}
           onKeyDown={onKeyDown}
+          onCompositionStart={onCompositionStart}
+          onCompositionEnd={onCompositionEnd}
           onFocus={onFocus}
           onBlur={onBlur}
         />
