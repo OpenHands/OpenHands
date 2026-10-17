@@ -276,6 +276,37 @@ describe("useConversationHistory", () => {
 
     expect(searchEventsSpy).toHaveBeenCalledTimes(1);
   });
+
+  it("does not advance afterSeq cursor when events are empty but count is positive", async () => {
+    vi.mocked(useUserConversation).mockReturnValue({
+      data: {
+        ...makeConversation("V1"),
+        conversation_url: "https://runtime.example.com",
+        session_api_key: "key-1",
+      },
+      isLoading: false,
+      isPending: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useUserConversation>);
+
+    vi.spyOn(EventService, "getEventCount").mockResolvedValue(50);
+    vi.spyOn(EventService, "searchEvents").mockResolvedValue(makePage([]));
+
+    const { result } = renderHook(
+      () => useConversationHistory("conv-empty-preload-with-count"),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(result.current.data).toBeDefined();
+    });
+
+    // When events are empty but server has history, afterSeq must remain null so WebSocket replays from -1
+    expect(result.current.data?.events).toEqual([]);
+    expect(result.current.data?.afterSeq).toBeNull();
+  });
 });
 
 describe("useConversationHistory cache key stability", () => {

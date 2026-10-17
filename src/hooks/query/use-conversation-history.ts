@@ -88,12 +88,23 @@ export const useConversationHistory = (conversationId?: string) => {
 
       // Reverse so callers can append in chronological order.
       const events = [...page.items].reverse();
+      const hasEvents = events.length > 0;
       return {
         events,
         hasMore:
           !!page.next_page_id || page.items.length >= INITIAL_HISTORY_PAGE_SIZE,
         nextPageId: page.next_page_id ?? null,
-        afterSeq: typeof count === "number" ? count - 1 : null,
+        // Only advance the socket resume cursor past history that was actually loaded.
+        // If the server reports events exist (count > 0) but none were loaded (events.length === 0),
+        // leave afterSeq as null so the socket falls back to replaying from -1 rather than skipping history.
+        afterSeq:
+          typeof count === "number"
+            ? hasEvents
+              ? count - 1
+              : count === 0
+                ? -1
+                : null
+            : null,
       };
     },
     // Keep the cached page so returning to a conversation renders the

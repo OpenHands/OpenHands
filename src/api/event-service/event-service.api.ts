@@ -91,8 +91,7 @@ class EventService {
       // trigger a 500 (str-vs-datetime comparison). We attempt the full
       // request first and fall back to a limit-only request on failure.
       const cloudLimit = Math.min(limit, 100);
-      const hasFilterParams = !!(
-        options.sortOrder ||
+      const hasPaginationFilters = !!(
         options.pageId ||
         options.timestampGte ||
         options.timestampLt
@@ -120,7 +119,27 @@ class EventService {
           next_page_id: data?.next_page_id ?? null,
         };
       } catch (err) {
-        if (!hasFilterParams) throw err;
+        if (!hasPaginationFilters) {
+          // If the initial request passed sortOrder, an older server might not support sort_order yet.
+          // Fall back to a limit-only request before giving up.
+          if (options.sortOrder) {
+            try {
+              const fallbackParams = new URLSearchParams();
+              fallbackParams.set("limit", String(cloudLimit));
+              const data = await doCloudSearch(fallbackParams);
+              return {
+                items: data?.items ?? [],
+                next_page_id: data?.next_page_id ?? null,
+              };
+            } catch {
+              // Limit-only fallback also failed — genuine error (5xx / network).
+              // Throw so callers know the initial history fetch failed.
+              throw err;
+            }
+          }
+          throw err;
+        }
+
         if (options.strictPagination) throw err;
 
         // Server doesn't support timestamp filters yet — stop pagination
