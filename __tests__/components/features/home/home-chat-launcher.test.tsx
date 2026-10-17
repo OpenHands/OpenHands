@@ -855,6 +855,11 @@ describe("HomeChatLauncher", () => {
           metadata: null,
         }),
       );
+      // Creation includes async work after the service call. Wait for the
+      // launcher to finish before checking either handoff outcome.
+      await waitFor(() =>
+        expect(mockNavigate).toHaveBeenCalledWith("/conversations/conv-abc"),
+      );
       if (marksAutomationSetup) {
         expect(mockMarkAutomationSetupHandoff).toHaveBeenCalledWith("conv-abc");
       } else {

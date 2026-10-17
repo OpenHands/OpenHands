@@ -1,5 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
+import { getActiveBackend } from "#/api/backend-registry/active-store";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useSaveSettings } from "#/hooks/mutation/use-save-settings";
 import { useSettings } from "#/hooks/query/use-settings";
@@ -81,20 +82,60 @@ function withMembership(
  */
 export function useSkillEnablement(): SkillEnablementController {
   const { t } = useTranslation("openhands");
-  const { backend } = useActiveBackend();
+  const { backend, orgId } = useActiveBackend();
   const usesCatalogAllowList = backend.kind !== "cloud";
   const { data: settings, isLoading: settingsLoading } = useSettings();
-  const { mutate: saveSettings } = useSaveSettings();
 
   const [enablement, setEnablement] = React.useState<SkillEnablement>({});
   const savedRef = React.useRef<string | null>(null);
+  const persistedRef = React.useRef<SkillEnablement>({});
+  const hydratingRef = React.useRef(false);
+  const hydrationVersionRef = React.useRef(0);
+  const ownerGenerationRef = React.useRef(0);
 
   React.useEffect(() => {
+    ownerGenerationRef.current += 1;
+  }, [backend.id, orgId]);
+
+  const { mutate: saveSettings } = useSaveSettings("personal", {
+    onMutate: () => ({
+      backendId: backend.id,
+      orgId,
+      ownerGeneration: ownerGenerationRef.current,
+    }),
+    onPersisted: (saved, dispatched) => {
+      if (!dispatched) return;
+      const active = getActiveBackend();
+      if (
+        active.backend.id !== dispatched.backendId ||
+        active.orgId !== dispatched.orgId ||
+        ownerGenerationRef.current !== dispatched.ownerGeneration
+      ) {
+        return;
+      }
+      persistedRef.current = {
+        enabledSkills:
+          saved.enabled_skills ?? persistedRef.current.enabledSkills,
+        disabledSkills:
+          saved.disabled_skills ?? persistedRef.current.disabledSkills,
+      };
+    },
+  });
+
+  React.useEffect(() => {
+    // Invalidate pending callbacks even while the next backend is loading, or
+    // when a switch back reuses identical cached skill lists.
+    hydrationVersionRef.current += 1;
+    savedRef.current = null;
     if (settingsLoading || !settings) return;
     const hydrated = readSkillEnablement(settings, usesCatalogAllowList);
+    persistedRef.current = hydrated;
+    hydratingRef.current = true;
     savedRef.current = snapshot(hydrated);
     setEnablement(hydrated);
   }, [
+    backend.id,
+    orgId,
     settingsLoading,
     settings?.enabled_skills,
     settings?.disabled_skills,
@@ -102,10 +143,16 @@ export function useSkillEnablement(): SkillEnablementController {
   ]);
 
   React.useEffect(() => {
+    // Hydration schedules a render; this effect still sees the preceding state.
+    if (hydratingRef.current) {
+      hydratingRef.current = false;
+      return;
+    }
     // Writing the hydrated value straight back would race the one-shot
     // migration and could narrow a workspace it had just preserved.
     const next = snapshot(enablement);
     if (savedRef.current === null || savedRef.current === next) return;
+    const hydrationVersion = hydrationVersionRef.current;
     savedRef.current = next;
 
     const disabledSkills = enablement.disabledSkills ?? [];
@@ -118,13 +165,32 @@ export function useSkillEnablement(): SkillEnablementController {
         : { disabled_skills: disabledSkills },
       {
         onError: (error) => {
+          // An older failure must not undo a newer edit or refreshed settings.
+          if (
+            hydrationVersionRef.current === hydrationVersion &&
+            savedRef.current === next
+          ) {
+            const previous = persistedRef.current;
+            savedRef.current = snapshot(previous);
+            setEnablement((current) =>
+              snapshot(current) === next ? previous : current,
+            );
+          }
           displayErrorToast(
             retrieveAxiosErrorMessage(error) || t(I18nKey.ERROR$GENERIC),
           );
         },
       },
     );
-  }, [enablement, usesCatalogAllowList, saveSettings, t]);
+  }, [
+    enablement,
+    settingsLoading,
+    settings?.enabled_skills,
+    settings?.disabled_skills,
+    usesCatalogAllowList,
+    saveSettings,
+    t,
+  ]);
 
   const isEnabled = React.useMemo(() => {
     const enabled = buildSkillEnablementFilter(enablement);
