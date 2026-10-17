@@ -97,8 +97,8 @@ describe("hook execution event message", () => {
     );
     expect(message).toHaveAttribute("data-success", "success");
     expect(screen.getByText("ok")).toHaveClass(
-      "bg-green-900/50",
-      "text-green-300",
+      "bg-status-success/10",
+      "text-feedback-success",
     );
   });
 
@@ -129,8 +129,15 @@ describe("hook execution event message", () => {
       "py-0.5",
       "rounded",
       "text-xs",
-      "bg-amber-900/50",
-      "text-amber-300",
+      "bg-warning/10",
+      "text-feedback-warning",
+    );
+    expect(screen.getByText(/Command denied by policy/)).toHaveClass(
+      "text-feedback-warning",
+    );
+    expect(screen.getByText(/hook failed/)).toHaveClass("text-feedback-error");
+    expect(screen.getByText("policy warning")).toHaveClass(
+      "text-feedback-warning",
     );
     expect(message).toHaveTextContent(`${I18nKey.HOOK$COMMAND}: check-policy`);
     expect(message).toHaveTextContent(`${I18nKey.HOOK$EXIT_CODE}: 13`);
@@ -156,8 +163,8 @@ describe("hook execution event message", () => {
     const message = screen.getByTestId("generic-event-message");
     expect(message).toHaveAttribute("data-success", "error");
     expect(screen.getByText("failed")).toHaveClass(
-      "bg-red-900/50",
-      "text-red-300",
+      "bg-status-error/10",
+      "text-feedback-error",
     );
     expect(screen.getByText(`${"x".repeat(77)}...`)).toBeInTheDocument();
     expect(message).not.toHaveTextContent(longCommand);
@@ -188,5 +195,32 @@ describe("hook execution event message", () => {
     expect(screen.getByTestId("generic-event-message")).not.toHaveTextContent(
       I18nKey.HOOK$EXIT_CODE,
     );
+  });
+
+  it("uses semantic feedback tokens rather than raw Tailwind palette classes", () => {
+    const { container } = renderHookEvent({
+      blocked: true,
+      reason: "denied",
+      error: "timed out",
+      stderr: "diagnostic output",
+    });
+
+    const rawClasses = [
+      "bg-amber-900/50",
+      "text-amber-300",
+      "bg-green-900/50",
+      "text-green-300",
+      "bg-red-900/50",
+      "text-red-300",
+      "text-amber-400",
+      "text-red-400",
+    ];
+
+    for (const rawClass of rawClasses) {
+      expect(
+        container.querySelector(`.${CSS.escape(rawClass)}`),
+        `Expected no element with raw class ${rawClass}`,
+      ).toBeNull();
+    }
   });
 });
