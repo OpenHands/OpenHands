@@ -59,7 +59,8 @@ const RUNS_POLL_INTERVAL_MS = 3000;
 
 let captureMock: ReturnType<typeof vi.spyOn>;
 
-vi.mock("#/hooks/query/use-settings", () => ({
+vi.mock("#/hooks/query/use-settings", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#/hooks/query/use-settings")>()),
   useSettings: () => ({ data: { user_consents_to_analytics: true } }),
 }));
 
