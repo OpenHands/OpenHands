@@ -18,6 +18,11 @@ import { useFreeModels } from "#/hooks/query/use-free-models";
 import { formatModelPillLabel } from "#/utils/format-model-name";
 import { useModelCatalogWarning } from "#/hooks/use-model-catalog-warning";
 import { ModelCatalogWarning } from "#/components/shared/model-catalog-warning";
+import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
+import {
+  ChatInputModelSearch,
+  matchesModelSearch,
+} from "./chat-input-model-search";
 
 const PROFILE_LABEL_MAX_CHARS = 18;
 
@@ -29,6 +34,7 @@ function truncateLabel(label: string): string {
 
 interface ChatInputLlmProfileMenuContentProps {
   onClose: () => void;
+  focusSearchOnMount?: boolean;
   dividerInset?: "menu";
   settingsLinkClassName?: string;
   settingsIconClassName?: string;
@@ -42,6 +48,7 @@ interface ChatInputLlmProfileMenuContentProps {
  */
 export function ChatInputLlmProfileMenuContent({
   onClose,
+  focusSearchOnMount = false,
   dividerInset,
   settingsLinkClassName,
   settingsIconClassName,
@@ -59,10 +66,22 @@ export function ChatInputLlmProfileMenuContent({
   // Read-only surfaces (a cloud member on the home page, or a start-task route)
   // still name the active profile — the same shape ChatInputModelMenuContent
   // uses when the ACP picker is gated off.
+  // @spec MDS-005 — Read-only model surfaces
   const showProfileList = canSwitchProfile && profiles.length > 0;
   const readOnlyProfileName = canSwitchProfile ? null : currentProfileName;
   // Locked-to-Cloud blocks the Canvas LLM page this links to (OHE-3457).
   const showSettingsLink = getLockedCloudHost() === null;
+  const [search, setSearch] = React.useState("");
+  const firstOptionRef = React.useRef<HTMLButtonElement>(null);
+  // @spec MDS-001 — Search LLM profiles by name and model
+  const visibleProfiles = profiles.filter((profile) =>
+    matchesModelSearch(
+      search,
+      profile.name,
+      profile.model,
+      formatModelPillLabel(profile.model, freeModels),
+    ),
+  );
 
   const handleSelect = (profileName: string) => {
     selectProfile(profileName);
@@ -73,6 +92,12 @@ export function ChatInputLlmProfileMenuContent({
     <>
       {showProfileList && (
         <>
+          <ChatInputModelSearch
+            value={search}
+            onChange={setSearch}
+            firstOptionRef={firstOptionRef}
+            focusOnMount={focusSearchOnMount}
+          />
           {/* role="presentation" keeps this a valid <li> child of the
               ContextMenu <ul> without exposing the label as a menu item. */}
           <li role="presentation" className="px-2 pt-1 pb-0.5">
@@ -80,7 +105,13 @@ export function ChatInputLlmProfileMenuContent({
               {t(I18nKey.SETTINGS$AVAILABLE_PROFILES)}
             </Typography.Text>
           </li>
-          {profiles.map((profile) => {
+          {/* @spec MDS-003 — Empty results and search reset */}
+          {visibleProfiles.length === 0 && (
+            <li role="presentation" className="px-2 py-2 text-sm text-muted">
+              <span role="status">{t(I18nKey.COMMON$NO_RESULTS)}</span>
+            </li>
+          )}
+          {visibleProfiles.map((profile, index) => {
             const isCurrent = profile.name === currentProfileName;
             const displayModel = formatModelPillLabel(
               profile.model,
@@ -89,6 +120,7 @@ export function ChatInputLlmProfileMenuContent({
             return (
               <ContextMenuListItem
                 key={profile.name}
+                ref={index === 0 ? firstOptionRef : undefined}
                 testId={`chat-input-llm-profile-option-${profile.name}`}
                 onClick={(event) => {
                   event.preventDefault();
@@ -190,6 +222,7 @@ export function ChatInputLlmProfilePicker() {
     () => setIsPopoverOpen(false),
     triggerRef,
   );
+  useCloseOnEscape(isPopoverOpen, () => setIsPopoverOpen(false), triggerRef);
 
   React.useLayoutEffect(() => {
     if (!isPopoverOpen) return undefined;
@@ -262,6 +295,7 @@ export function ChatInputLlmProfilePicker() {
         >
           <ChatInputLlmProfileMenuContent
             onClose={() => setIsPopoverOpen(false)}
+            focusSearchOnMount
           />
         </ContextMenu>
       )}

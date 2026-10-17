@@ -269,6 +269,24 @@
     "zh-TW": "結果 ({{count}})",
     "id": "Hasil ({{count}})"
   },
+  "MODEL$SEARCH_MODELS": {
+    "ar": "البحث عن النماذج…",
+    "ca": "Cerca models…",
+    "de": "Modelle suchen…",
+    "en": "Search models…",
+    "es": "Buscar modelos…",
+    "fr": "Rechercher des modèles…",
+    "it": "Cerca modelli…",
+    "ja": "モデルを検索…",
+    "ko-KR": "모델 검색…",
+    "no": "Søk etter modeller…",
+    "pt": "Buscar modelos…",
+    "tr": "Model ara…",
+    "uk": "Пошук моделей…",
+    "zh-CN": "搜索模型…",
+    "zh-TW": "搜尋模型…",
+    "id": "Cari model…"
+  },
   "COMMON$NO_RESULTS": {
     "ar": "لم يتم العثور على نتائج",
     "ca": "No s'han trobat resultats",

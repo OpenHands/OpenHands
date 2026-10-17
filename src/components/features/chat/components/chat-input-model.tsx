@@ -18,6 +18,11 @@ import { cn } from "#/utils/utils";
 import { getLockedCloudHost } from "#/api/agent-server-config";
 import { chatInputPillButtonClassName } from "#/utils/form-control-classes";
 import React from "react";
+import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
+import {
+  ChatInputModelSearch,
+  matchesModelSearch,
+} from "./chat-input-model-search";
 
 const MODEL_LABEL_MAX_CHARS = 10;
 // ACP surfaces show the provider's human label (e.g. "Claude Opus 4.7"),
@@ -38,6 +43,7 @@ function truncateModelLabel(
 interface ChatInputModelMenuContentProps {
   model: ChatInputModelState;
   onClose: () => void;
+  focusSearchOnMount?: boolean;
   dividerInset?: "menu";
   settingsLinkClassName?: string;
   settingsIconClassName?: string;
@@ -46,6 +52,7 @@ interface ChatInputModelMenuContentProps {
 export function ChatInputModelMenuContent({
   model,
   onClose,
+  focusSearchOnMount = false,
   dividerInset,
   settingsLinkClassName,
   settingsIconClassName,
@@ -55,6 +62,15 @@ export function ChatInputModelMenuContent({
   const hasModelRows = model.showAcpPicker || Boolean(model.displayModel);
   // Locked-to-Cloud blocks the Canvas settings pages this links to (OHE-3457).
   const showSettingsLink = getLockedCloudHost() === null;
+  const [search, setSearch] = React.useState("");
+  const firstOptionRef = React.useRef<HTMLButtonElement>(null);
+  // @spec MDS-002 — Search ACP model labels and IDs
+  const visibleModels = [
+    ...(model.agentDefaultLabel
+      ? [{ id: null, label: model.agentDefaultLabel }]
+      : []),
+    ...model.availableAcpModels,
+  ].filter((option) => matchesModelSearch(search, option.label, option.id));
 
   const handleSelectAcpModel = (modelId: string | null) => {
     if (modelId !== model.selectedModelId) {
@@ -70,6 +86,12 @@ export function ChatInputModelMenuContent({
     <>
       {model.showAcpPicker ? (
         <>
+          <ChatInputModelSearch
+            value={search}
+            onChange={setSearch}
+            firstOptionRef={firstOptionRef}
+            focusOnMount={focusSearchOnMount}
+          />
           {/* role="presentation" keeps this a valid <li> child of the
               ContextMenu <ul> without exposing the section label as a
               selectable menu item (the label text is still announced). */}
@@ -78,16 +100,17 @@ export function ChatInputModelMenuContent({
               {t(I18nKey.MODEL$AVAILABLE_MODELS)}
             </Typography.Text>
           </li>
-          {[
-            ...(model.agentDefaultLabel
-              ? [{ id: null, label: model.agentDefaultLabel }]
-              : []),
-            ...model.availableAcpModels,
-          ].map((option) => {
+          {visibleModels.length === 0 && (
+            <li role="presentation" className="px-2 py-2 text-sm text-muted">
+              <span role="status">{t(I18nKey.COMMON$NO_RESULTS)}</span>
+            </li>
+          )}
+          {visibleModels.map((option, index) => {
             const isSelected = option.id === model.selectedModelId;
             return (
               <ContextMenuListItem
                 key={option.id ?? ""}
+                ref={index === 0 ? firstOptionRef : undefined}
                 testId={`chat-input-acp-model-option-${option.id ?? "agent-default"}`}
                 onClick={(event) => {
                   event.preventDefault();
@@ -157,6 +180,7 @@ export function ChatInputModel() {
     () => setIsPopoverOpen(false),
     triggerRef,
   );
+  useCloseOnEscape(isPopoverOpen, () => setIsPopoverOpen(false), triggerRef);
 
   if (!model.displayModel) {
     return null;
@@ -199,6 +223,7 @@ export function ChatInputModel() {
           <ChatInputModelMenuContent
             model={model}
             onClose={() => setIsPopoverOpen(false)}
+            focusSearchOnMount
           />
         </ContextMenu>
       )}
