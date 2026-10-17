@@ -31,6 +31,7 @@ const harness = vi.hoisted(() => ({
   } | null,
   adaptSystemMessage: vi.fn(),
   displaySuccessToast: vi.fn(),
+  displayErrorToast: vi.fn(),
   navigateToTab: vi.fn(),
 }));
 
@@ -84,6 +85,7 @@ vi.mock("#/utils/system-message-adapter", () => ({
 
 vi.mock("#/utils/custom-toast-handlers", () => ({
   displaySuccessToast: harness.displaySuccessToast,
+  displayErrorToast: harness.displayErrorToast,
 }));
 
 const clickEvent = () => {
@@ -185,19 +187,23 @@ describe("useConversationNameContextMenu", () => {
     expect(harness.updatePublicFlag).not.toHaveBeenCalled();
 
     const copyClick = clickEvent();
-    act(() => result.current.handleCopyShareLink(copyClick.event));
+    await act(async () => {
+      await result.current.handleCopyShareLink(copyClick.event);
+    });
     expect(navigator.clipboard.writeText).not.toHaveBeenCalled();
     expect(harness.displaySuccessToast).not.toHaveBeenCalled();
   });
 
-  it("closes the menu without copying when no share link is available", () => {
+  it("closes the menu without copying when no share link is available", async () => {
     const onContextMenuToggle = vi.fn();
     const { result } = renderHook(() =>
       useConversationNameContextMenu({ onContextMenuToggle }),
     );
     const click = clickEvent();
 
-    act(() => result.current.handleCopyShareLink(click.event));
+    await act(async () => {
+      await result.current.handleCopyShareLink(click.event);
+    });
 
     expect(click.preventDefault).toHaveBeenCalledOnce();
     expect(click.stopPropagation).toHaveBeenCalledOnce();
@@ -358,13 +364,16 @@ describe("useConversationNameContextMenu", () => {
     });
 
     const copyClick = clickEvent();
-    act(() => result.current.handleCopyShareLink(copyClick.event));
+    await act(async () => {
+      await result.current.handleCopyShareLink(copyClick.event);
+    });
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
       `${window.location.origin}/shared/conversations/conv-active`,
     );
     expect(harness.displaySuccessToast).toHaveBeenCalledWith(
       I18nKey.CONVERSATION$LINK_COPIED,
     );
+    expect(harness.displayErrorToast).not.toHaveBeenCalled();
 
     const stopClick = clickEvent();
     onContextMenuToggle.mockClear();
@@ -546,5 +555,41 @@ describe("useConversationNameContextMenu", () => {
     expect(result.current.shouldShowDownloadConversation).toBe(false);
     expect(result.current.shouldShowSkills).toBe(false);
     expect(result.current.shouldShowPlugins).toBe(false);
+  });
+
+  it("shows an error toast and no success toast when copy fails", async () => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: vi.fn().mockRejectedValue(new Error("Permission denied")),
+      },
+    });
+    document.execCommand = vi.fn().mockReturnValue(false);
+
+    harness.backend = {
+      id: "local",
+      name: "Local",
+      host: "https://local-api.example.com",
+      apiKey: "",
+      kind: "local",
+    };
+
+    const onContextMenuToggle = vi.fn();
+    const { result } = renderHook(() =>
+      useConversationNameContextMenu({
+        conversationId: "conv-active",
+        onContextMenuToggle,
+      }),
+    );
+
+    const copyClick = clickEvent();
+    await act(async () => {
+      await result.current.handleCopyShareLink(copyClick.event);
+    });
+
+    expect(harness.displaySuccessToast).not.toHaveBeenCalled();
+    expect(harness.displayErrorToast).toHaveBeenCalledWith(
+      I18nKey.CHAT_INTERFACE$CHAT_MESSAGE_COPY_FAILED,
+    );
   });
 });

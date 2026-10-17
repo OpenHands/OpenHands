@@ -12,6 +12,7 @@ import {
 import { useOpenAISubscriptionStatus } from "#/hooks/query/use-llm-subscription-status";
 import { I18nKey } from "#/i18n/declaration";
 import { Typography } from "#/ui/typography";
+import { copyToClipboard } from "#/utils/copy-to-clipboard";
 import {
   displayErrorToast,
   displaySuccessToast,
@@ -50,11 +51,15 @@ export function OpenAISubscriptionAuthCard({
     }
   }, []);
 
-  const handleCopyCode = () => {
+  const handleCopyCode = async () => {
     if (!challenge) return;
-    navigator.clipboard.writeText(challenge.userCode);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    const success = await copyToClipboard(challenge.userCode);
+    if (success) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } else {
+      displayErrorToast(t(I18nKey.CHAT_INTERFACE$CHAT_MESSAGE_COPY_FAILED));
+    }
   };
 
   const isBusy =
