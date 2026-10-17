@@ -686,7 +686,7 @@ describe("ConversationPanel list loading", () => {
 
     it("renders pinned conversations only in the pinned section in grouped mode", async () => {
       useConversationPanelPreferencesStore.setState({
-        organizeMode: "grouped",
+        groupByWorkspace: true,
       });
       usePinnedConversationsStore
         .getState()

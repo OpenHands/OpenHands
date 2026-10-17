@@ -306,7 +306,8 @@ describe("ConversationPanel filters and pagination", () => {
 
     useConversationPanelPreferencesStore.setState({
       conversationSort: "updated",
-      organizeMode: "chronological",
+      groupByContainer: false,
+      groupByWorkspace: false,
       showOlderConversations: true,
     });
 
@@ -880,7 +881,7 @@ describe("ConversationPanel filters and pagination", () => {
 
     it("keeps collapsed folder previews stable while still exposing later-page conversations on expand", async () => {
       useConversationPanelPreferencesStore.setState({
-        organizeMode: "grouped",
+        groupByWorkspace: true,
       });
       const noWorkspaceConversations = Array.from({ length: 6 }, (_, index) =>
         createMockConversation({
@@ -966,7 +967,7 @@ describe("ConversationPanel filters and pagination", () => {
 
     it("caps a grouped load-more click at three pages when no new folder appears", async () => {
       useConversationPanelPreferencesStore.setState({
-        organizeMode: "grouped",
+        groupByWorkspace: true,
       });
       const deepenOnlyPage = (page: number, nextPageId: string) => ({
         items: Array.from({ length: 2 }, (_, index) =>
@@ -1011,7 +1012,7 @@ describe("ConversationPanel filters and pagination", () => {
 
     it("force-includes the active conversation in a folder preview even when it arrived on a later page", async () => {
       useConversationPanelPreferencesStore.setState({
-        organizeMode: "grouped",
+        groupByWorkspace: true,
       });
       vi.spyOn(AgentServerConversationService, "searchConversations")
         .mockResolvedValueOnce({

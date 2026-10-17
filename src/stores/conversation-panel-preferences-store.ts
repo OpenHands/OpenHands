@@ -6,7 +6,6 @@ import {
   type AutomationFilterMode,
   type ConversationSortField,
   type OlderConversationCutoff,
-  type OrganizeMode,
   type ThreadScope,
 } from "#/components/features/conversation-panel/conversation-panel-list-helpers";
 
@@ -40,7 +39,15 @@ interface ConversationPanelPreferencesState {
   showLlmProfiles: boolean;
   showTagsMetadata: boolean;
   showHoverMetadata: boolean;
-  organizeMode: OrganizeMode;
+  /**
+   * Independent grouping toggles (#15607). Both may be active at once, in
+   * which case the sidebar nests container folders around workspace/
+   * repository folders (see `buildConversationGroups`). Neither active is
+   * the pre-existing "chronological" list — there is no longer a distinct
+   * persisted mode for it, it's just the all-off state.
+   */
+  groupByContainer: boolean;
+  groupByWorkspace: boolean;
   conversationSort: ConversationSortField;
   threadScope: ThreadScope;
   automationFilterMode: AutomationFilterMode;
@@ -52,7 +59,8 @@ interface ConversationPanelPreferencesState {
 /** The complete preference bundle controlled by conversation layout presets. */
 export type LayoutSettingsSlice = Pick<
   ConversationPanelPreferencesState,
-  | "organizeMode"
+  | "groupByContainer"
+  | "groupByWorkspace"
   | "conversationSort"
   | "threadScope"
   | "showOlderConversations"
@@ -63,7 +71,8 @@ export type LayoutSettingsSlice = Pick<
 >;
 
 export const DEFAULT_LAYOUT_SETTINGS: LayoutSettingsSlice = {
-  organizeMode: "chronological",
+  groupByContainer: false,
+  groupByWorkspace: false,
   conversationSort: "updated",
   threadScope: "all",
   showOlderConversations: true,
@@ -87,7 +96,10 @@ interface ConversationPanelPreferencesActions {
   toggleShowTagsMetadata: () => void;
   setShowHoverMetadata: (value: boolean) => void;
   toggleShowHoverMetadata: () => void;
-  setOrganizeMode: (value: OrganizeMode) => void;
+  setGroupByContainer: (value: boolean) => void;
+  toggleGroupByContainer: () => void;
+  setGroupByWorkspace: (value: boolean) => void;
+  toggleGroupByWorkspace: () => void;
   setConversationSort: (value: ConversationSortField) => void;
   setThreadScope: (value: ThreadScope) => void;
   setAutomationFilterMode: (value: AutomationFilterMode) => void;
@@ -173,7 +185,16 @@ export const useConversationPanelPreferencesStore =
             showHoverMetadata: !state.showHoverMetadata,
           })),
 
-        setOrganizeMode: (value) => set(() => ({ organizeMode: value })),
+        setGroupByContainer: (value) =>
+          set(() => ({ groupByContainer: value })),
+        toggleGroupByContainer: () =>
+          set((state) => ({ groupByContainer: !state.groupByContainer })),
+
+        setGroupByWorkspace: (value) =>
+          set(() => ({ groupByWorkspace: value })),
+        toggleGroupByWorkspace: () =>
+          set((state) => ({ groupByWorkspace: !state.groupByWorkspace })),
+
         setConversationSort: (value) =>
           set(() => ({ conversationSort: value })),
         setThreadScope: (value) => set(() => ({ threadScope: value })),
@@ -215,6 +236,32 @@ export const useConversationPanelPreferencesStore =
       {
         name: "conversation-panel-preferences",
         storage: createJSONStorage(() => localStorage),
+        // Preserve the previous single-axis grouped preference when upgrading
+        // to the two independent toggles. Explicit new toggle values always
+        // win once they have been persisted by this version.
+        merge: (persistedState, currentState) => {
+          const persisted = persistedState as
+            | (Partial<ConversationPanelPreferencesState> & {
+                organizeMode?: unknown;
+              })
+            | undefined;
+          if (!persisted) {
+            return currentState;
+          }
+          const { organizeMode, ...preferences } = persisted;
+          return {
+            ...currentState,
+            ...preferences,
+            groupByContainer:
+              typeof preferences.groupByContainer === "boolean"
+                ? preferences.groupByContainer
+                : false,
+            groupByWorkspace:
+              typeof preferences.groupByWorkspace === "boolean"
+                ? preferences.groupByWorkspace
+                : organizeMode === "grouped",
+          };
+        },
         // Only persist the data fields — actions are recreated on each load.
         partialize: (state): ConversationPanelPreferencesState => ({
           showOlderConversations: state.showOlderConversations,
@@ -228,7 +275,8 @@ export const useConversationPanelPreferencesStore =
           showLlmProfiles: state.showLlmProfiles,
           showTagsMetadata: state.showTagsMetadata,
           showHoverMetadata: state.showHoverMetadata,
-          organizeMode: state.organizeMode,
+          groupByContainer: state.groupByContainer,
+          groupByWorkspace: state.groupByWorkspace,
           conversationSort: state.conversationSort,
           threadScope: state.threadScope,
           automationFilterMode: state.automationFilterMode,

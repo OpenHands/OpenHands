@@ -21185,6 +21185,24 @@
     "uk": "За репозиторієм",
     "id": "Berdasarkan repositori"
   },
+  "CONVERSATION_PANEL$BY_CONTAINER": {
+    "en": "By container",
+    "ja": "コンテナ別",
+    "zh-CN": "按容器",
+    "zh-TW": "依容器",
+    "ko-KR": "컨테이너별",
+    "no": "Etter container",
+    "ar": "حسب الحاوية",
+    "de": "Nach Container",
+    "fr": "Par conteneur",
+    "it": "Per container",
+    "pt": "Por container",
+    "es": "Por contenedor",
+    "ca": "Per contenidor",
+    "tr": "Konteynere göre",
+    "uk": "За контейнером",
+    "id": "Berdasarkan kontainer"
+  },
   "CONVERSATION_PANEL$CHRONOLOGICAL": {
     "en": "By date",
     "ja": "日付順",
@@ -21976,6 +21994,24 @@
     "tr": "Depo yok",
     "uk": "Немає репозиторію",
     "id": "Tidak ada repositori"
+  },
+  "CONVERSATION_PANEL$NO_CONTAINER": {
+    "en": "No container",
+    "ja": "コンテナなし",
+    "zh-CN": "无容器",
+    "zh-TW": "無容器",
+    "ko-KR": "컨테이너 없음",
+    "no": "Ingen container",
+    "ar": "لا توجد حاوية",
+    "de": "Kein Container",
+    "fr": "Aucun conteneur",
+    "it": "Nessun container",
+    "pt": "Sem container",
+    "es": "Sin contenedor",
+    "ca": "Sense contenidor",
+    "tr": "Konteyner yok",
+    "uk": "Немає контейнера",
+    "id": "Tidak ada kontainer"
   },
   "CONVERSATION_PANEL$NEW_THREAD_FOLDER_ARIA": {
     "en": "Create thread folder — choose workspace or repository",

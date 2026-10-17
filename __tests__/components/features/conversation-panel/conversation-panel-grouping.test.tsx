@@ -56,7 +56,7 @@ describe("ConversationPanel grouped folder ordering", () => {
 
     beforeEach(() => {
       useConversationPanelPreferencesStore.setState({
-        organizeMode: "grouped",
+        groupByWorkspace: true,
         groupFolderOrder: [],
       });
     });
@@ -104,7 +104,8 @@ describe("ConversationPanel grouped folder ordering", () => {
 
     it("stays a static label in chronological mode", async () => {
       useConversationPanelPreferencesStore.setState({
-        organizeMode: "chronological",
+        groupByContainer: false,
+        groupByWorkspace: false,
       });
 
       renderConversationPanel();
@@ -136,7 +137,7 @@ describe("ConversationPanel grouped folder ordering", () => {
 
   it("reorders grouped folders via drag and drop", async () => {
     useConversationPanelPreferencesStore.setState({
-      organizeMode: "grouped",
+      groupByWorkspace: true,
       groupFolderOrder: [],
     });
 
@@ -199,5 +200,138 @@ describe("ConversationPanel grouped folder ordering", () => {
     expect(
       useConversationPanelPreferencesStore.getState().groupFolderOrder,
     ).toEqual(["ws:/workspace/beta", "ws:/workspace/alpha"]);
+  });
+
+  describe("nested container + workspace grouping (#15607)", () => {
+    it("renders a container header per sandbox with that container's workspace folders nested underneath", async () => {
+      useConversationPanelPreferencesStore.setState({
+        groupByContainer: true,
+        groupByWorkspace: true,
+      });
+      vi.spyOn(
+        AgentServerConversationService,
+        "searchConversations",
+      ).mockResolvedValue({
+        items: [
+          createMockConversation({
+            id: "a1",
+            title: "Alpha in Sandbox A",
+            sandbox_id: "sandbox-a",
+            selected_workspace: "/workspace/alpha",
+          }),
+          createMockConversation({
+            id: "b1",
+            title: "Alpha in Sandbox B",
+            sandbox_id: "sandbox-b",
+            selected_workspace: "/workspace/alpha",
+          }),
+        ],
+        next_page_id: null,
+      });
+
+      renderConversationPanel();
+
+      const headers = await screen.findAllByTestId(
+        "conversation-group-section-header",
+      );
+      expect(headers.map((h) => h.textContent)).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining("sandbox-a"),
+          expect.stringContaining("sandbox-b"),
+        ]),
+      );
+      expect(headers).toHaveLength(2);
+
+      // Both containers happen to share the workspace name "alpha", but the
+      // qualified folder ids keep them as two distinct, independently
+      // collapsible folders rather than one merged "alpha" folder.
+      expect(
+        screen.getByTestId(
+          "thread-folder-container-sandbox-a-ws--workspace-alpha",
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId(
+          "thread-folder-container-sandbox-b-ws--workspace-alpha",
+        ),
+      ).toBeInTheDocument();
+      expect(await screen.findByText("Alpha in Sandbox A")).toBeInTheDocument();
+      expect(await screen.findByText("Alpha in Sandbox B")).toBeInTheDocument();
+    });
+
+    it("scopes drag-and-drop folder reordering to its own container, leaving other containers' order untouched", async () => {
+      useConversationPanelPreferencesStore.setState({
+        groupByContainer: true,
+        groupByWorkspace: true,
+        groupFolderOrder: [],
+      });
+      vi.spyOn(
+        AgentServerConversationService,
+        "searchConversations",
+      ).mockResolvedValue({
+        items: [
+          createMockConversation({
+            id: "a1",
+            title: "A1",
+            sandbox_id: "sandbox-a",
+            selected_workspace: "/workspace/alpha",
+          }),
+          createMockConversation({
+            id: "a2",
+            title: "A2",
+            sandbox_id: "sandbox-a",
+            selected_workspace: "/workspace/beta",
+          }),
+          createMockConversation({
+            id: "b1",
+            title: "B1",
+            sandbox_id: "sandbox-b",
+            selected_workspace: "/workspace/gamma",
+          }),
+        ],
+        next_page_id: null,
+      });
+
+      renderConversationPanel();
+
+      const betaFolder = await screen.findByTestId(
+        "thread-folder-container-sandbox-a-ws--workspace-beta",
+      );
+      const dragHandle = screen.getByTestId(
+        "thread-folder-drag-container-sandbox-a-ws--workspace-alpha",
+      );
+
+      const dataTransfer = {
+        effectAllowed: "move",
+        dropEffect: "move",
+        data: {} as Record<string, string>,
+        setData(format: string, value: string) {
+          this.data[format] = value;
+        },
+        getData(format: string) {
+          return this.data[format];
+        },
+      };
+      fireEvent.dragStart(dragHandle, { dataTransfer });
+      fireEvent.dragOver(betaFolder, { dataTransfer });
+      fireEvent.drop(betaFolder, { dataTransfer });
+
+      await waitFor(() => {
+        const order =
+          useConversationPanelPreferencesStore.getState().groupFolderOrder;
+        expect(order).toEqual([
+          "container:sandbox-a|ws:/workspace/beta",
+          "container:sandbox-a|ws:/workspace/alpha",
+        ]);
+      });
+      // sandbox-b's single folder was never part of the drag and is not
+      // dropped from the persisted order (it just has nothing to reorder
+      // against yet, since it's the only folder in its container).
+      expect(
+        screen.getByTestId(
+          "thread-folder-container-sandbox-b-ws--workspace-gamma",
+        ),
+      ).toBeInTheDocument();
+    });
   });
 });

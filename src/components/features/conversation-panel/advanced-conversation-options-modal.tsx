@@ -3,8 +3,8 @@ import { useTranslation } from "react-i18next";
 import {
   Archive,
   Bot,
+  Box,
   CalendarArrowDown,
-  Clock3,
   ClockArrowDown,
   EyeOff,
   Folder,
@@ -100,7 +100,7 @@ export function AdvancedConversationOptionsModal({
 
   if (!open) return null;
 
-  const groupedLabel =
+  const groupByWorkspaceLabel =
     backendKind === "local"
       ? t(I18nKey.CONVERSATION_PANEL$BY_WORKSPACE)
       : t(I18nKey.CONVERSATION_PANEL$BY_REPOSITORY);
@@ -154,17 +154,19 @@ export function AdvancedConversationOptionsModal({
             <MenuHeading>{t(I18nKey.CONVERSATION_PANEL$ORGANIZE)}</MenuHeading>
             <MenuRow
               icon={Folder}
-              label={groupedLabel}
-              selected={preferences.organizeMode === "grouped"}
-              testId="organize-grouped"
-              onClick={() => preferences.setOrganizeMode("grouped")}
+              label={groupByWorkspaceLabel}
+              selected={preferences.groupByWorkspace}
+              variant="toggle"
+              testId="organize-group-by-workspace"
+              onClick={preferences.toggleGroupByWorkspace}
             />
             <MenuRow
-              icon={Clock3}
-              label={t(I18nKey.CONVERSATION_PANEL$CHRONOLOGICAL)}
-              selected={preferences.organizeMode === "chronological"}
-              testId="organize-chronological"
-              onClick={() => preferences.setOrganizeMode("chronological")}
+              icon={Box}
+              label={t(I18nKey.CONVERSATION_PANEL$BY_CONTAINER)}
+              selected={preferences.groupByContainer}
+              variant="toggle"
+              testId="organize-group-by-container"
+              onClick={preferences.toggleGroupByContainer}
             />
 
             <MenuSeparator />
