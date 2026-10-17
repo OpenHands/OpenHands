@@ -58,6 +58,95 @@ interface ChatInputActionsProps {
   isDictationDisabled?: boolean;
 }
 
+// Margin kept between a clamped submenu and the viewport edge.
+const OVERFLOW_SUBMENU_VIEWPORT_MARGIN = 8;
+
+/**
+ * The Model (and Code/Plan) submenu opens to the right of its row and grows
+ * downward, which at narrow widths puts the profile rows and the settings
+ * link past the viewport edge — unreachable by click or tap, and focused
+ * off screen by Tab (#18063). While the row's submenu is open, measure it
+ * and pin it with offsets clamped into the viewport: pulled left of the
+ * row's right edge when there is no room, and pulled up when there is no
+ * room below. With room, the computed offsets coincide with the class-based
+ * placement (right of the menu, 4 px above the row top), so the desktop
+ * open-in-place behavior is unchanged. Only the click/keyboard open state is
+ * pinned; the desktop hover reveal keeps the class-based position.
+ *
+ * The offsets are relative to the row (the submenu's positioned ancestor),
+ * not to the viewport: the overflow menu is portaled into a fixed container
+ * carrying a `translateY(-100%)` transform, and a transformed ancestor
+ * becomes the containing block for fixed-position descendants — so
+ * viewport coordinates used as `position: fixed` left/top would be offset
+ * by the container's origin and land off screen.
+ */
+function useOverflowSubmenuStyle(
+  open: boolean,
+  rowRef: React.RefObject<HTMLElement | null>,
+  submenuRef: React.RefObject<HTMLElement | null>,
+): React.CSSProperties | undefined {
+  const [style, setStyle] = React.useState<React.CSSProperties>();
+
+  React.useLayoutEffect(() => {
+    if (!open) {
+      setStyle(undefined);
+      return undefined;
+    }
+
+    const update = () => {
+      const row = rowRef.current;
+      const submenu = submenuRef.current;
+      if (!row || !submenu) return;
+      const rowRect = row.getBoundingClientRect();
+      // The wrapper is only a zero-size anchor: the ContextMenu inside it
+      // positions itself absolutely, so measure the visible menu (the
+      // wrapper's child) for size and for its offset within the anchor.
+      const content = submenu.firstElementChild ?? submenu;
+      const contentRect = content.getBoundingClientRect();
+      const anchorRect = submenu.getBoundingClientRect();
+      const left = Math.max(
+        OVERFLOW_SUBMENU_VIEWPORT_MARGIN,
+        Math.min(
+          // Row right edge + the 1px gap the `ml-px` class used to supply.
+          rowRect.right + 1,
+          window.innerWidth -
+            OVERFLOW_SUBMENU_VIEWPORT_MARGIN -
+            contentRect.width,
+        ),
+      );
+      const top = Math.max(
+        OVERFLOW_SUBMENU_VIEWPORT_MARGIN,
+        Math.min(
+          // The `top-[-4px]` offset the hover path uses.
+          rowRect.top - 4,
+          window.innerHeight -
+            OVERFLOW_SUBMENU_VIEWPORT_MARGIN -
+            contentRect.height,
+        ),
+      );
+      setStyle({
+        left: `${left - rowRect.left - (contentRect.left - anchorRect.left)}px`,
+        top: `${top - rowRect.top - (contentRect.top - anchorRect.top)}px`,
+        // The wrapper's `ml-px` gap is already part of the measured
+        // coordinates; keeping the margin would shift the pinned menu 1 px
+        // past the clamped target.
+        marginLeft: 0,
+      });
+    };
+
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [open, rowRef, submenuRef]);
+
+  return style;
+}
+
 export function ChatInputActions({
   disabled,
   canSubmit = true,
@@ -118,6 +207,20 @@ export function ChatInputActions({
   >(null);
   const [overflowPortalStyle, setOverflowPortalStyle] =
     React.useState<React.CSSProperties>();
+  const overflowAgentRowRef = React.useRef<HTMLDivElement>(null);
+  const overflowAgentSubmenuRef = React.useRef<HTMLDivElement>(null);
+  const overflowModelRowRef = React.useRef<HTMLDivElement>(null);
+  const overflowModelSubmenuRef = React.useRef<HTMLDivElement>(null);
+  const overflowAgentSubmenuStyle = useOverflowSubmenuStyle(
+    activeSubmenu === "agent",
+    overflowAgentRowRef,
+    overflowAgentSubmenuRef,
+  );
+  const overflowModelSubmenuStyle = useOverflowSubmenuStyle(
+    activeSubmenu === "model",
+    overflowModelRowRef,
+    overflowModelSubmenuRef,
+  );
 
   React.useEffect(() => {
     const rowEl = actionsRowRef.current;
@@ -332,7 +435,10 @@ export function ChatInputActions({
       className="!static !top-auto !bottom-auto !left-auto !right-auto !mt-0 overflow-visible min-w-50"
     >
       {showChangeAgentButton && !showCodeInline && (
-        <div className="relative group/overflow-agent">
+        <div
+          ref={overflowAgentRowRef}
+          className="relative group/overflow-agent"
+        >
           <ContextMenuListItem
             testId="overflow-agent-button"
             onClick={() =>
@@ -354,6 +460,8 @@ export function ChatInputActions({
           </ContextMenuListItem>
           {!isAgentSwitcherDisabled && (
             <div
+              ref={overflowAgentSubmenuRef}
+              style={overflowAgentSubmenuStyle}
               className={cn(
                 "absolute left-full top-[-4px] z-60 opacity-0 invisible pointer-events-none transition-all duration-200 ml-px",
                 "group-hover/overflow-agent:opacity-100 group-hover/overflow-agent:visible group-hover/overflow-agent:pointer-events-auto",
@@ -404,7 +512,10 @@ export function ChatInputActions({
         </div>
       )}
       {showOverflowModel && (
-        <div className="relative group/overflow-model">
+        <div
+          ref={overflowModelRowRef}
+          className="relative group/overflow-model"
+        >
           <ContextMenuListItem
             testId="overflow-model-button"
             onClick={() =>
@@ -420,6 +531,8 @@ export function ChatInputActions({
             />
           </ContextMenuListItem>
           <div
+            ref={overflowModelSubmenuRef}
+            style={overflowModelSubmenuStyle}
             className={cn(
               "absolute left-full top-[-4px] z-60 opacity-0 invisible pointer-events-none transition-all duration-200 ml-px",
               "group-hover/overflow-model:opacity-100 group-hover/overflow-model:visible group-hover/overflow-model:pointer-events-auto",
