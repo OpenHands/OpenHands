@@ -115,12 +115,13 @@ export function getMcpMarketplaceCatalog(
 
 /**
  * Whether this backend can install/configure the entry as an MCP server.
- * Entries whose only connection options use another provider or transport
- * (e.g. Jira's HTTP/OpenAPI option) exist in the catalog but cannot go
- * through the local MCP install flow.
+ * Entries whose only connection options use another provider, transport
+ * (e.g. Jira's HTTP/OpenAPI option), or hosted OAuth endpoints that cannot
+ * be configured locally exist in the catalog but cannot go through the
+ * local MCP install flow.
  */
 export function isMcpInstallableEntry(entry: MarketplaceEntry): boolean {
-  return !!getDefaultMcpConnectionOption(entry);
+  return !!getInstallableMcpConnectionOption(entry);
 }
 
 const tryUrl = (raw: string): URL | null => {
