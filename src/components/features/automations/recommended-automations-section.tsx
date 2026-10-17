@@ -98,10 +98,8 @@ function getIntegrationEntries(
 function automationMatchesQuery(
   automation: RecommendedAutomation,
   integrations: AutomationIntegration[],
-  rawQuery: string,
+  queryTokens: string[],
 ) {
-  const query = rawQuery.trim().toLowerCase();
-  if (!query) return true;
   const haystack = [
     automation.name,
     automation.category,
@@ -113,7 +111,7 @@ function automationMatchesQuery(
   ]
     .join(" ")
     .toLowerCase();
-  return haystack.includes(query);
+  return queryTokens.every((token) => haystack.includes(token));
 }
 
 function buildRecommendedAutomationPills(
@@ -313,18 +311,23 @@ export function RecommendedAutomationsSection({
   scrollableGrid = false,
 }: RecommendedAutomationsSectionProps) {
   const { t } = useTranslation("openhands");
+  const normalizedQuery = query.trim().toLowerCase();
+  const queryTokens = normalizedQuery ? normalizedQuery.split(/\s+/) : [];
 
   // Only the query narrows the grid. An automation that declares no
   // integration needs nothing connected, and one naming an integration this
   // host cannot resolve is shown with that gap on its pill, so neither is a
   // reason to hide a card the catalog ships.
-  const visibleAutomations = RECOMMENDED_AUTOMATIONS.filter((automation) =>
-    automationMatchesQuery(
-      automation,
-      getIntegrationEntries(automation),
-      query,
-    ),
-  );
+  const visibleAutomations =
+    queryTokens.length === 0
+      ? RECOMMENDED_AUTOMATIONS
+      : RECOMMENDED_AUTOMATIONS.filter((automation) =>
+          automationMatchesQuery(
+            automation,
+            getIntegrationEntries(automation),
+            queryTokens,
+          ),
+        );
 
   if (visibleAutomations.length === 0) return null;
 
