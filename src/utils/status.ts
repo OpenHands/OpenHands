@@ -2,6 +2,12 @@ import { I18nKey } from "#/i18n/declaration";
 import { AppConversationStartTaskStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import { WebSocketConnectionState } from "#/contexts/conversation-websocket-context";
+import type { OHEvent } from "#/stores/use-event-store";
+import {
+  isAgentStatusConversationStateUpdateEvent,
+  isConversationStateUpdateEvent,
+  isFullStateConversationStateUpdateEvent,
+} from "#/types/agent-server/type-guards";
 
 const ACTIVE_EXECUTION_STATUSES: ReadonlySet<ExecutionStatus> = new Set([
   ExecutionStatus.IDLE,
@@ -9,6 +15,43 @@ const ACTIVE_EXECUTION_STATUSES: ReadonlySet<ExecutionStatus> = new Set([
   ExecutionStatus.WAITING_FOR_CONFIRMATION,
   ExecutionStatus.FINISHED,
 ]);
+
+/**
+ * Latest run status carried by this conversation's `ConversationStateUpdateEvent`s.
+ *
+ * The event store holds both live WebSocket frames and the REST-preloaded tail
+ * (`useConversationHistory` seeds it before the socket connects). State updates
+ * are deliberately excluded from the UI-event list, so without this the status a
+ * run reached *before* the socket connected would be invisible: the WebSocket
+ * resumes from `after_seq` (after the preloaded tail) and never replays it.
+ *
+ * Returns `null` when the store holds no usable state update for the
+ * conversation — callers then fall back to the REST conversation field.
+ * Planning helper events are ignored so the planner's run/idle transitions can
+ * never show as the main conversation's status.
+ */
+export const latestExecutionStatusFromEvents = (
+  events: readonly OHEvent[],
+): ExecutionStatus | null => {
+  // The event store keeps events in chronological order (it sorts by timestamp
+  // whenever a new event lands out of order), so the last matching update is
+  // the newest. Mirroring `deriveLiveActivity`, iterate back-to-front.
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event.isFromPlanningAgent) {
+      continue;
+    }
+    if (isConversationStateUpdateEvent(event)) {
+      if (isFullStateConversationStateUpdateEvent(event)) {
+        return event.value.execution_status;
+      }
+      if (isAgentStatusConversationStateUpdateEvent(event)) {
+        return event.value;
+      }
+    }
+  }
+  return null;
+};
 
 export function isExecutionActive(
   status: ExecutionStatus | null | undefined,

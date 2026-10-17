@@ -5,6 +5,7 @@ import { useParams } from "react-router";
 import { useUserConversation } from "./query/use-user-conversation";
 import { useAppTitle } from "./use-app-title";
 import { useConversationStateStore } from "#/stores/conversation-state-store";
+import { useEventStore } from "#/stores/use-event-store";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 
 const renderAppTitleHook = () =>
@@ -34,6 +35,12 @@ describe("useAppTitle", () => {
     mockUseUserConversation.mockReturnValue({ data: null });
     mockUseParams.mockReturnValue({});
     useConversationStateStore.getState().reset();
+    useEventStore.setState({
+      events: [],
+      eventIds: new Set(),
+      uiEvents: [],
+      loadedConversationId: null,
+    });
   });
 
   it("returns the OSS app title outside conversations", async () => {
@@ -120,6 +127,41 @@ describe("useAppTitle", () => {
 
     await waitFor(() =>
       expect(result.current).toBe("My Conversation | OpenHands"),
+    );
+  });
+
+  it("shows a running emoji from a preloaded state update before any live update", async () => {
+    // The first-prompt path: the REST history preload carried the conversation's
+    // early `execution_status: running` update; the cached conversation (which
+    // raced the run start) still reads idle and the live store is empty.
+    useEventStore.setState({
+      events: [
+        {
+          id: "state-preload-running",
+          timestamp: "2026-10-13T00:00:00Z",
+          source: "environment",
+          kind: "ConversationStateUpdateEvent",
+          key: "execution_status",
+          value: ExecutionStatus.RUNNING,
+        } as never,
+      ],
+      eventIds: new Set(["state-preload-running"]),
+      uiEvents: [],
+      loadedConversationId: "123",
+    });
+    mockUseParams.mockReturnValue({ conversationId: "123" });
+    mockUseUserConversation.mockReturnValue({
+      // @ts-expect-error - only returning partial config for test
+      data: {
+        title: "My Conversation",
+        execution_status: ExecutionStatus.IDLE,
+      },
+    });
+
+    const { result } = renderAppTitleHook();
+
+    await waitFor(() =>
+      expect(result.current).toBe("🟢 My Conversation | OpenHands"),
     );
   });
 });
