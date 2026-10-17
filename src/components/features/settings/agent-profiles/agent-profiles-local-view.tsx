@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useActiveBackend } from "#/contexts/active-backend-context";
+import { ensureDefaultAgentProfileMigrated } from "#/hooks/use-migrate-default-agent-profile";
 import { useTranslation } from "react-i18next";
 import { AgentProfilesManager } from "./agent-profiles-manager";
-import { GlobalToolsNotice } from "./global-tools-notice";
 import { mergeAgentProfileSaveInput } from "./merge-agent-profile-save-input";
 import { ProfileNameInput } from "#/components/features/settings/llm-profiles/profile-name-input";
 import { BrandButton } from "#/components/features/settings/brand-button";
@@ -11,7 +13,6 @@ import {
   type AgentSettingsSaveControl,
 } from "#/routes/agent-settings";
 import AgentProfilesService, {
-  WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME,
   type AgentProfile,
   type AgentProfileSummary,
   type AgentProfileSaveInput,
@@ -80,6 +81,16 @@ export function AgentProfilesLocalView() {
   const { data: profilesData } = useAgentProfiles();
   const { data: llmProfilesData, isLoading: isLlmProfilesLoading } =
     useLlmProfiles();
+  const queryClient = useQueryClient();
+  const { backend } = useActiveBackend();
+  // Edits must build on, and land after, the one-time `default` migration.
+  const waitForMigration = useCallback(
+    () =>
+      backend.kind === "local"
+        ? ensureDefaultAgentProfileMigrated(queryClient, backend.id)
+        : Promise.resolve(true as const),
+    [backend.kind, backend.id, queryClient],
+  );
 
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [profileName, setProfileName] = useState("");
@@ -132,6 +143,7 @@ export function AgentProfilesLocalView() {
   const handleEditProfile = useCallback(
     async (summary: AgentProfileSummary) => {
       try {
+        await waitForMigration();
         // Fetch with encrypted secret exposure so any `skills[].mcp_tools`
         // values arrive as Fernet tokens rather than masks — the save below
         // round-trips the stored profile, and posting back a mask would
@@ -168,7 +180,13 @@ export function AgentProfilesLocalView() {
         displayErrorToast(t(I18nKey.ERROR$GENERIC));
       }
     },
-    [t, llmProfiles, isLlmProfilesLoading, defaultLlmProfileRef],
+    [
+      t,
+      llmProfiles,
+      isLlmProfilesLoading,
+      defaultLlmProfileRef,
+      waitForMigration,
+    ],
   );
 
   const handleBackToList = useCallback(() => {
@@ -210,6 +228,7 @@ export function AgentProfilesLocalView() {
 
     setIsSaving(true);
     try {
+      await waitForMigration();
       // Persist ACP credentials (global secrets) before the profile spec.
       if (saveControl.credentials.isDirty) {
         const ok = await saveControl.credentials.save({ silent: true });
@@ -258,12 +277,12 @@ export function AgentProfilesLocalView() {
     renameProfile,
     t,
     handleBackToList,
+    waitForMigration,
   ]);
 
   if (viewMode === "list") {
     return (
       <div className="flex flex-col gap-4">
-        <GlobalToolsNotice />
         <AgentProfilesManager
           onAddProfile={handleAddProfile}
           onEditProfile={handleEditProfile}
@@ -331,9 +350,6 @@ export function AgentProfilesLocalView() {
         key={viewMode === "edit" ? `edit-${editingProfile?.id}` : "new-profile"}
         agentSettingsOverride={override}
         onSaveControlChange={setSaveControl}
-        isDefaultProfile={
-          profileName.trim() === WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME
-        }
       />
 
       {/* @spec FF-001 — Profile validation feedback follows the host error role */}

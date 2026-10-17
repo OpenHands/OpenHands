@@ -1,4 +1,6 @@
+import { DEFAULT_ENABLED_SKILL_NAMES } from "@openhands/extensions/skills";
 import { render, screen, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { useEffect } from "react";
@@ -6,6 +8,7 @@ import type { AgentSettingsSaveControl } from "#/routes/agent-settings";
 import { AgentProfilesLocalView } from "#/components/features/settings/agent-profiles/agent-profiles-local-view";
 import AgentProfilesService from "#/api/agent-profiles-service/agent-profiles-service.api";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import { ensureDefaultAgentProfileMigrated } from "#/hooks/use-migrate-default-agent-profile";
 
 // The embedded Agent settings form is stubbed to emit a caller-provided
 // control, so the tests exercise the view's mapping to AgentProfileSaveInput.
@@ -24,11 +27,9 @@ vi.mock("#/routes/agent-settings", () => {
   const MockAgentSettings = ({
     agentSettingsOverride,
     onSaveControlChange,
-    isDefaultProfile,
   }: {
     agentSettingsOverride?: Record<string, unknown> | null;
     onSaveControlChange?: (c: AgentSettingsSaveControl) => void;
-    isDefaultProfile?: boolean;
   }) => {
     useEffect(() => {
       if (emitControl) onSaveControlChange?.(emitControl);
@@ -39,7 +40,6 @@ vi.mock("#/routes/agent-settings", () => {
       <div
         data-testid="mock-agent-settings"
         data-override={JSON.stringify(agentSettingsOverride)}
-        data-default-profile={String(Boolean(isDefaultProfile))}
       />
     );
   };
@@ -78,11 +78,6 @@ vi.mock(
   }),
 );
 
-vi.mock(
-  "#/components/features/settings/agent-profiles/global-tools-notice",
-  () => ({ GlobalToolsNotice: () => null }),
-);
-
 const saveMutate = vi.fn().mockResolvedValue({ name: "x", message: "ok" });
 vi.mock("#/hooks/mutation/use-save-agent-profile", () => ({
   useSaveAgentProfile: () => ({ mutateAsync: saveMutate }),
@@ -115,6 +110,20 @@ vi.mock("#/contexts/settings-section-header-context", () => ({
 
 vi.mock("#/utils/custom-toast-handlers");
 
+vi.mock("#/hooks/use-migrate-default-agent-profile", () => ({
+  ensureDefaultAgentProfileMigrated: vi.fn(),
+}));
+
+function renderView() {
+  return render(<AgentProfilesLocalView />, {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={new QueryClient()}>
+        {children}
+      </QueryClientProvider>
+    ),
+  });
+}
+
 vi.mock("#/api/agent-profiles-service/agent-profiles-service.api", () => ({
   __esModule: true,
   default: { getProfile: vi.fn(), renameProfile: vi.fn() },
@@ -134,6 +143,7 @@ async function openCreateAndName(name: string) {
 describe("AgentProfilesLocalView save mapping", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(ensureDefaultAgentProfileMigrated).mockResolvedValue(true);
     emitControl = null;
     agentProfilesData = { profiles: [], active_agent_profile_id: null };
     llmProfilesData = {
@@ -143,7 +153,7 @@ describe("AgentProfilesLocalView save mapping", () => {
   });
 
   it("describes the add editor with agent copy, not the LLM-profile hint", async () => {
-    render(<AgentProfilesLocalView />);
+    renderView();
     await openCreateAndName("my-agent");
 
     expect(
@@ -163,7 +173,7 @@ describe("AgentProfilesLocalView save mapping", () => {
       credentials: { isDirty: false, save: vi.fn(), reset: vi.fn() },
     };
 
-    render(<AgentProfilesLocalView />);
+    renderView();
     const user = await openCreateAndName("my-oh");
     await user.click(screen.getByTestId("save-agent-profile-btn"));
 
@@ -174,6 +184,7 @@ describe("AgentProfilesLocalView save mapping", () => {
         agent_kind: "openhands",
         mcp_server_refs: null,
         llm_profile_ref: "default",
+        public_skills: [...DEFAULT_ENABLED_SKILL_NAMES],
       },
     });
   });
@@ -194,7 +205,7 @@ describe("AgentProfilesLocalView save mapping", () => {
       credentials: { isDirty: false, save: vi.fn(), reset: vi.fn() },
     };
 
-    render(<AgentProfilesLocalView />);
+    renderView();
     const user = await openCreateAndName("my-claude");
     await user.click(screen.getByTestId("save-agent-profile-btn"));
 
@@ -250,7 +261,7 @@ describe("AgentProfilesLocalView save mapping", () => {
       credentials: { isDirty: false, save: vi.fn(), reset: vi.fn() },
     };
 
-    render(<AgentProfilesLocalView />);
+    renderView();
     const user = userEvent.setup();
     await user.click(screen.getByTestId("edit-agent-profile"));
     await screen.findByTestId("mock-agent-settings");
@@ -322,7 +333,7 @@ describe("AgentProfilesLocalView save mapping", () => {
       credentials: { isDirty: false, save: vi.fn(), reset: vi.fn() },
     };
 
-    render(<AgentProfilesLocalView />);
+    renderView();
     const user = userEvent.setup();
     await user.click(screen.getByTestId("edit-agent-profile"));
     await screen.findByTestId("mock-agent-settings");
@@ -361,7 +372,7 @@ describe("AgentProfilesLocalView save mapping", () => {
       credentials: { isDirty: false, save: vi.fn(), reset: vi.fn() },
     };
 
-    render(<AgentProfilesLocalView />);
+    renderView();
     const user = userEvent.setup();
     await user.click(screen.getByTestId("edit-agent-profile"));
     await screen.findByTestId("mock-agent-settings");
@@ -372,11 +383,6 @@ describe("AgentProfilesLocalView save mapping", () => {
         .getAttribute("data-override") as string,
     );
     expect(seededOverride.secret_refs).toEqual(["DATADOG_API_KEY"]);
-    expect(
-      screen
-        .getByTestId("mock-agent-settings")
-        .getAttribute("data-default-profile"),
-    ).toBe("true");
   });
 
   it("seeds the editor with a stored persona and instructions", async () => {
@@ -404,7 +410,7 @@ describe("AgentProfilesLocalView save mapping", () => {
       credentials: { isDirty: false, save: vi.fn(), reset: vi.fn() },
     };
 
-    render(<AgentProfilesLocalView />);
+    renderView();
     const user = userEvent.setup();
     await user.click(screen.getByTestId("edit-agent-profile"));
     await screen.findByTestId("mock-agent-settings");
@@ -416,18 +422,6 @@ describe("AgentProfilesLocalView save mapping", () => {
     );
     expect(seededOverride.persona).toBe("You triage issues.");
     expect(seededOverride.system_message_suffix).toBe("Be terse.");
-  });
-
-  it("does not flag a named profile as the default", async () => {
-    emitControl = null;
-    render(<AgentProfilesLocalView />);
-    await openCreateAndName("triage");
-
-    expect(
-      screen
-        .getByTestId("mock-agent-settings")
-        .getAttribute("data-default-profile"),
-    ).toBe("false");
   });
 
   it("edit-save persists an edited secret scope over the stored value", async () => {
@@ -455,7 +449,7 @@ describe("AgentProfilesLocalView save mapping", () => {
       credentials: { isDirty: false, save: vi.fn(), reset: vi.fn() },
     };
 
-    render(<AgentProfilesLocalView />);
+    renderView();
     const user = userEvent.setup();
     await user.click(screen.getByTestId("edit-agent-profile"));
     await screen.findByTestId("mock-agent-settings");
@@ -495,7 +489,7 @@ describe("AgentProfilesLocalView save mapping", () => {
       credentials: { isDirty: false, save: vi.fn(), reset: vi.fn() },
     };
 
-    render(<AgentProfilesLocalView />);
+    renderView();
     const user = userEvent.setup();
     await user.click(screen.getByTestId("edit-agent-profile"));
     await screen.findByTestId("mock-agent-settings");
@@ -543,7 +537,7 @@ describe("AgentProfilesLocalView save mapping", () => {
       credentials: { isDirty: false, save: vi.fn(), reset: vi.fn() },
     };
 
-    render(<AgentProfilesLocalView />);
+    renderView();
     const user = userEvent.setup();
     await user.click(screen.getByTestId("edit-agent-profile"));
     await screen.findByTestId("mock-agent-settings");
@@ -580,7 +574,7 @@ describe("AgentProfilesLocalView save mapping", () => {
       credentials: { isDirty: false, save: vi.fn(), reset: vi.fn() },
     };
 
-    render(<AgentProfilesLocalView />);
+    renderView();
     const user = userEvent.setup();
     await user.click(screen.getByTestId("edit-agent-profile"));
     await screen.findByTestId("mock-agent-settings");
@@ -600,7 +594,7 @@ describe("AgentProfilesLocalView save mapping", () => {
       credentials: { isDirty: false, save: vi.fn(), reset: vi.fn() },
     };
 
-    render(<AgentProfilesLocalView />);
+    renderView();
     const user = await openCreateAndName("my-oh");
     await user.click(screen.getByTestId("save-agent-profile-btn"));
 
@@ -610,6 +604,38 @@ describe("AgentProfilesLocalView save mapping", () => {
       ),
     );
     expect(saveMutate).not.toHaveBeenCalled();
+  });
+
+  it("reads a profile to edit only after the default migration", async () => {
+    let finishMigration: (value: true) => void = () => {};
+    vi.mocked(ensureDefaultAgentProfileMigrated).mockReturnValue(
+      new Promise((resolve) => {
+        finishMigration = resolve;
+      }),
+    );
+    vi.mocked(AgentProfilesService.getProfile).mockResolvedValue({
+      name: "default",
+      profile: {
+        id: "p-1",
+        name: "default",
+        revision: 1,
+        agent_kind: "openhands",
+        llm_profile_ref: "default",
+      },
+    } as never);
+
+    renderView();
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("edit-agent-profile"));
+
+    expect(ensureDefaultAgentProfileMigrated).toHaveBeenCalled();
+    expect(AgentProfilesService.getProfile).not.toHaveBeenCalled();
+    finishMigration(true);
+    await screen.findByTestId("mock-agent-settings");
+    expect(AgentProfilesService.getProfile).toHaveBeenCalledWith(
+      "default",
+      "encrypted",
+    );
   });
 
   describe("duplicate profile name", () => {
@@ -631,7 +657,7 @@ describe("AgentProfilesLocalView save mapping", () => {
     });
 
     it("tells the user a new profile's name is taken until it is unique", async () => {
-      render(<AgentProfilesLocalView />);
+      renderView();
       const user = await openCreateAndName("default");
       const input = screen.getByTestId("agent-profile-name-input");
 
@@ -664,7 +690,7 @@ describe("AgentProfilesLocalView save mapping", () => {
         },
       } as never);
 
-      render(<AgentProfilesLocalView />);
+      renderView();
       const user = userEvent.setup();
       await user.click(screen.getByTestId("edit-agent-profile"));
       await screen.findByTestId("mock-agent-settings");

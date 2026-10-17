@@ -204,6 +204,8 @@ export function SdkSectionPage({
   hideSaveButton = false,
   suppressSuccessToast = false,
   onSaveControlChange,
+  settingsOverride,
+  onSave,
   testId = "sdk-section-settings-screen",
 }: {
   settingsSources: SettingsSourceConfig[];
@@ -252,11 +254,19 @@ export function SdkSectionPage({
    * embedded in a custom flow and the built-in Save button is hidden.
    */
   onSaveControlChange?: (control: SdkSectionSaveControl) => void;
+  /** Values to show instead of the saved settings, e.g. an agent profile's. */
+  settingsOverride?: Settings;
+  /** Persist the save payload somewhere other than the settings. */
+  onSave?: (payload: Record<string, unknown>) => Promise<void>;
   testId?: string;
 }) {
   const { t } = useTranslation("openhands");
-  const { mutate: saveSettings, isPending } = useSaveSettings(scope);
-  const { data: settings, isLoading, isFetching } = useSettings(scope);
+  const { mutate: saveSettings, isPending: isSettingsSavePending } =
+    useSaveSettings(scope);
+  const [isCustomSavePending, setIsCustomSavePending] = React.useState(false);
+  const isPending = isSettingsSavePending || isCustomSavePending;
+  const { data: savedSettings, isLoading, isFetching } = useSettings(scope);
+  const settings = settingsOverride ?? savedSettings;
   const agentSchemaQuery = useAgentSettingsSchema(
     settings?.agent_settings_schema,
   );
@@ -649,16 +659,21 @@ export function SdkSectionPage({
 
     if (Object.keys(payload).length === 0) return;
 
-    saveSettings(payload, {
-      onError: handleError,
-      onSuccess: () => {
-        if (!suppressSuccessToast) {
-          displaySuccessToast(t(I18nKey.SETTINGS$SAVED_WARNING));
-        }
-        setDirtyBySource({});
-        onSaveSuccess?.();
-      },
-    });
+    const handleSuccess = () => {
+      if (!suppressSuccessToast) {
+        displaySuccessToast(t(I18nKey.SETTINGS$SAVED_WARNING));
+      }
+      setDirtyBySource({});
+      onSaveSuccess?.();
+    };
+    if (onSave) {
+      setIsCustomSavePending(true);
+      onSave(payload)
+        .then(handleSuccess, (error) => handleError(error as AxiosError))
+        .finally(() => setIsCustomSavePending(false));
+      return;
+    }
+    saveSettings(payload, { onError: handleError, onSuccess: handleSuccess });
   };
 
   handleSaveRef.current = handleSave;

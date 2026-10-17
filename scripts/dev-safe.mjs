@@ -10,6 +10,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import net from "node:net";
+import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -629,7 +630,25 @@ export async function buildSafeDevConfigAsync(
  * @property {string} secretKey
  * @property {string} sessionApiKey
  * @property {string} canvasToolsDir
+ * @property {string | null} extensionsDir
  */
+
+/**
+ * The installed `@openhands/extensions` package, so the agent-server reads the
+ * same public skills Canvas bundles instead of cloning the repository.
+ * @returns {string | null}
+ */
+export function resolveExtensionsDir() {
+  try {
+    return path.dirname(
+      createRequire(import.meta.url).resolve(
+        "@openhands/extensions/package.json",
+      ),
+    );
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Internal helper to build config from already-resolved ports.
@@ -704,6 +723,7 @@ function buildConfigFromPorts(ports, cwd, env) {
     secretKey,
     sessionApiKey,
     canvasToolsDir,
+    extensionsDir: resolveExtensionsDir(),
   };
 }
 
@@ -849,6 +869,9 @@ export function buildAgentServerEnv(config, options = {}) {
     // Let the agent-server resolve canvas_ui_tool when old persisted metadata
     // requests that compatibility module during startup.
     OH_EXTRA_PYTHON_PATH: config.canvasToolsDir,
+    ...(env.EXTENSIONS_PATH || config.extensionsDir
+      ? { EXTENSIONS_PATH: env.EXTENSIONS_PATH || config.extensionsDir }
+      : {}),
   };
 }
 

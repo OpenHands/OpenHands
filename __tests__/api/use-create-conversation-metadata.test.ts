@@ -165,6 +165,7 @@ describe("useCreateConversation persists selected repository metadata", () => {
       git_provider: "github",
       selected_workspace: null,
       workspace_mode: "new_worktree",
+      active_profile: "default",
     });
   });
 
@@ -186,17 +187,23 @@ describe("useCreateConversation persists selected repository metadata", () => {
       git_provider: null,
       selected_workspace: "/home/me/code/some-project",
       workspace_mode: "local_repo",
+      active_profile: "default",
     });
   });
 
-  it("does not write metadata when neither a repository nor a workspace is attached", async () => {
+  it("writes no source metadata when neither a repository nor a workspace is attached", async () => {
     const { result } = renderHook(() => useCreateConversation(), { wrapper });
 
     result.current.mutate({ query: "scratch session" });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    expect(getStoredConversationMetadata("conv-new")).toBeNull();
+    expect(getStoredConversationMetadata("conv-new")).toEqual({
+      selected_repository: null,
+      selected_branch: null,
+      git_provider: null,
+      active_profile: "default",
+    });
   });
 
   it("stamps the active LLM profile even when no repo or workspace is attached (#1082)", async () => {

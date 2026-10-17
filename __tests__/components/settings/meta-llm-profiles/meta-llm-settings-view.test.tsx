@@ -12,6 +12,8 @@ import * as useActivateMetaProfileHook from "#/hooks/mutation/use-activate-meta-
 import * as useDeleteMetaProfileHook from "#/hooks/mutation/use-delete-meta-profile";
 import * as useSettingsHook from "#/hooks/query/use-settings";
 import * as useSaveSettingsHook from "#/hooks/mutation/use-save-settings";
+import * as useActiveProfileBehaviorHook from "#/hooks/use-active-profile-behavior";
+import type { ActiveProfileBehavior } from "#/hooks/use-active-profile-behavior";
 import MetaProfilesService from "#/api/meta-profiles-service/meta-profiles-service.api";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
 import {
@@ -34,6 +36,7 @@ vi.mock("#/hooks/mutation/use-activate-meta-profile");
 vi.mock("#/hooks/mutation/use-delete-meta-profile");
 vi.mock("#/hooks/query/use-settings");
 vi.mock("#/hooks/mutation/use-save-settings");
+vi.mock("#/hooks/use-active-profile-behavior");
 vi.mock("#/api/meta-profiles-service/meta-profiles-service.api");
 vi.mock("#/api/profiles-service/profiles-service.api");
 vi.mock("#/utils/custom-toast-handlers", () => ({
@@ -94,9 +97,29 @@ describe("MetaLlmSettingsView", () => {
   const activateMutateAsync = vi.fn();
   const saveMutateAsync = vi.fn();
   const saveSettingsMutate = vi.fn();
+  const saveProfileBehavior = vi.fn();
+
+  // Cloud keeps one account-wide active router; locally the router belongs to
+  // the active agent profile.
+  const withBehavior = (overrides: Partial<ActiveProfileBehavior> = {}) =>
+    vi
+      .mocked(useActiveProfileBehaviorHook.useActiveProfileBehavior)
+      .mockReturnValue({
+        isLocal: false,
+        profileName: null,
+        profile: null,
+        isAcp: false,
+        isLoading: false,
+        isError: false,
+        retry: vi.fn(),
+        save: saveProfileBehavior,
+        isSaving: false,
+        ...overrides,
+      });
 
   beforeEach(() => {
     vi.clearAllMocks();
+    withBehavior();
 
     vi.mocked(useMetaProfilesHook.useMetaProfiles).mockReturnValue({
       data: {
@@ -436,7 +459,10 @@ describe("MetaLlmSettingsView", () => {
     const user = userEvent.setup();
     // A router already exists (and is active), so this is not a 0 → 1 create.
     vi.mocked(useMetaProfilesHook.useMetaProfiles).mockReturnValue({
-      data: { meta_profiles: mockMetaProfiles, active_meta_profile: "balanced" },
+      data: {
+        meta_profiles: mockMetaProfiles,
+        active_meta_profile: "balanced",
+      },
       isLoading: false,
       error: null,
     } as unknown as ReturnType<typeof useMetaProfilesHook.useMetaProfiles>);
@@ -541,6 +567,63 @@ describe("MetaLlmSettingsView", () => {
     await waitFor(() =>
       expect(activateMutateAsync).toHaveBeenCalledWith("cheap"),
     );
+  });
+
+  describe("on a local backend", () => {
+    const localProfile = (router: string | null) =>
+      withBehavior({
+        isLocal: true,
+        profileName: "default",
+        profile: {
+          agent_kind: "openhands",
+          meta_profile_ref: router,
+          enable_classify_and_switch_llm_tool: router !== null,
+        } as ActiveProfileBehavior["profile"],
+      });
+
+    it("marks the active agent profile's router, not the account-wide one", () => {
+      localProfile("cheap");
+      renderWithProviders(<MetaLlmSettingsView />);
+
+      expect(
+        within(screen.getByTestId("meta-profile-row-cheap")).getByTestId(
+          "meta-profile-active-badge",
+        ),
+      ).toBeInTheDocument();
+      expect(screen.getAllByTestId("meta-profile-active-badge")).toHaveLength(
+        1,
+      );
+      expect(
+        screen.getByTestId("active-profile-scope-notice"),
+      ).toBeInTheDocument();
+    });
+
+    it("sets the router on the active agent profile", async () => {
+      const user = userEvent.setup();
+      localProfile(null);
+      saveProfileBehavior.mockResolvedValue(undefined);
+      renderWithProviders(<MetaLlmSettingsView />);
+
+      await user.click(screen.getByTestId("meta-profile-menu-trigger-cheap"));
+      await user.click(screen.getByTestId("meta-profile-set-active"));
+
+      await waitFor(() =>
+        expect(saveProfileBehavior).toHaveBeenCalledWith({
+          meta_profile_ref: "cheap",
+          enable_classify_and_switch_llm_tool: true,
+        }),
+      );
+      expect(activateMutateAsync).not.toHaveBeenCalled();
+    });
+
+    it("only offers Run on first message when the profile carries a router", () => {
+      localProfile(null);
+      renderWithProviders(<MetaLlmSettingsView />);
+
+      expect(
+        screen.getByTestId("meta-profile-run-at-conversation-start-switch"),
+      ).toBeDisabled();
+    });
   });
 
   it("loads the config and opens the editor via the actions menu", async () => {

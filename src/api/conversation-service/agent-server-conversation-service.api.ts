@@ -440,22 +440,19 @@ export interface CreateConversationOptions {
   parentConversationId?: string;
   agentType?: "default" | "plan";
   sandboxId?: string;
-  // Launch from a saved AgentProfile (resolved server-side) instead of the
-  // current encrypted agent_settings (#3727). Supported on both local and the
-  // cloud app-server (OpenHands #15060): local threads it through the
-  // encrypted-settings builder; cloud sends it as a flat request field.
+  // The saved AgentProfile the server builds the agent from (#3727). Required
+  // on local; cloud without one launches the org's default (OpenHands #15060).
   agentProfileId?: string;
   agentProfileKind?: AgentKind;
   /**
-   * Whether the first message should be routed through the active Model
-   * Router. Only consumed on the cloud path — the local path reads the
-   * toggle from its own settings fetch. Threaded in by the caller from the
-   * warmed settings query to avoid a settings round-trip on the cloud hot
-   * path.
+   * Cloud only: whether the first message should be routed through the
+   * active Model Router. The local path reads the toggle from its own
+   * settings fetch. Threaded in by the caller from the warmed settings query
+   * to avoid a settings round-trip on the cloud hot path.
    */
   runRouterAtConversationStart?: boolean;
   /**
-   * Whether a Model Router meta-profile is currently active. The
+   * Cloud only: whether a Model Router meta-profile is currently active. The
    * route-at-start suffix is only emitted when this is true AND
    * ``runRouterAtConversationStart`` is on — without an active meta-profile
    * the agent-server does not attach ``route_task_to_model``, so the
@@ -463,6 +460,10 @@ export interface CreateConversationOptions {
    * by the caller from the warmed meta-profiles query.
    */
   hasActiveMetaProfile?: boolean;
+  /** Local only: the launched profile carries a Model Router. */
+  profileHasRouter?: boolean;
+  /** Local only: the launched ACP profile's server, for the conversation tag. */
+  acpServer?: string;
   // The LLM profile the launched agent profile runs. When set and no explicit
   // title_llm_profile preference exists, title generation uses this profile so
   // both the agent and its title use the same model.
@@ -528,6 +529,8 @@ class AgentServerConversationService {
       agentProfileKind,
       agentLlmProfileRef,
       agentLlmProfileOverride,
+      profileHasRouter,
+      acpServer,
     } = options;
 
     if (getActiveBackend().backend.kind === "cloud") {
@@ -585,6 +588,9 @@ class AgentServerConversationService {
       return createCloudAppConversation(request);
     }
 
+    if (!agentProfileId) {
+      throw new Error("A local conversation needs an agent profile.");
+    }
     const [settings, profiles] = await Promise.all([
       SettingsService.getSettings(),
       ProfilesService.listProfiles().catch(() => undefined),
@@ -625,6 +631,8 @@ class AgentServerConversationService {
       agentProfileId,
       agentProfileKind,
       llmProfileOverride: agentLlmProfileOverride,
+      profileHasRouter,
+      acpServer,
       titleLlmProfile,
     });
 

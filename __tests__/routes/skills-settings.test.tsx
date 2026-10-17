@@ -12,6 +12,8 @@ import { RouterProvider, createMemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import SkillsSettingsScreen from "#/routes/skills-settings";
 import SettingsService from "#/api/settings-service/settings-service.api";
+import AgentProfilesService from "#/api/agent-profiles-service/agent-profiles-service.api";
+import * as ToastHandlers from "#/utils/custom-toast-handlers";
 import SkillsService from "#/api/skills-service";
 import {
   ADD_SKILL_DOCS_URL,
@@ -19,9 +21,36 @@ import {
 } from "#/constants/skills-docs";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import { Settings, SkillInfo } from "#/types/settings";
+import * as activeBackendContext from "#/contexts/active-backend-context";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 
 const navigateMock = vi.fn();
+
+const ACTIVE_PROFILE = {
+  id: "profile-default",
+  name: "default",
+  revision: 1,
+  agent_kind: "openhands",
+  llm_profile_ref: "default",
+  mcp_server_refs: null,
+};
+
+/** The skill selection the active agent profile stores. */
+function withActiveProfile(fields: Record<string, unknown>) {
+  const profile = { ...ACTIVE_PROFILE, ...fields };
+  vi.spyOn(AgentProfilesService, "listProfiles").mockResolvedValue({
+    profiles: [profile],
+    active_agent_profile_id: profile.id,
+  } as never);
+  vi.spyOn(AgentProfilesService, "getProfile").mockResolvedValue({
+    name: profile.name,
+    profile,
+  } as never);
+  return vi.spyOn(AgentProfilesService, "saveProfile").mockResolvedValue({
+    name: profile.name,
+    message: "saved",
+  });
+}
 
 vi.mock("#/context/navigation-context", () => ({
   useNavigation: () => ({
@@ -36,6 +65,7 @@ vi.mock("#/context/navigation-context", () => ({
 function buildSettings(overrides: Partial<Settings> = {}): Settings {
   return {
     ...MOCK_DEFAULT_USER_SETTINGS,
+    default_profile_migrated: true,
     ...overrides,
     agent_settings: {
       ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
@@ -101,6 +131,7 @@ describe("SkillsSettingsScreen", () => {
     vi.restoreAllMocks();
     navigateMock.mockReset();
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
+    withActiveProfile({ public_skills: [], disabled_skills: [] });
   });
 
   it("renders the description text inside the description badge", async () => {
@@ -374,56 +405,36 @@ Full skill body.`,
     ).toBeInTheDocument();
   });
 
-  it("saves disabled_skills to the server when a skill is toggled off and settings has no prior disabled_skills field", async () => {
-    // Reproduces the bug where disabled_skills is absent from settings (undefined),
-    // causing hasHydratedInitialSettings to never become true and the save to be silently skipped.
+  it("saves a user skill toggled off to the active profile's deny-list", async () => {
     const user = userEvent.setup();
     const skill = buildSkill({ name: "save-me" });
     vi.spyOn(SkillsService, "getSkills").mockResolvedValue([skill]);
-    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
-      buildSettings({ disabled_skills: undefined }),
-    );
-    const saveSpy = vi
-      .spyOn(SettingsService, "saveSettings")
-      .mockResolvedValue(true);
+    const saveProfile = withActiveProfile({ public_skills: [] });
 
     renderSkillsSettingsScreen();
-    await screen.findByTestId(`skill-card-${skill.name}`);
-    const card = screen.getByTestId(`skill-card-${skill.name}`);
+    const card = await screen.findByTestId(`skill-card-${skill.name}`);
 
     await user.click(within(card).getByTestId(`skill-toggle-${skill.name}`));
 
     await waitFor(() =>
-      expect(saveSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ disabled_skills: [skill.name] }),
+      expect(saveProfile).toHaveBeenCalledWith(
+        "default",
+        expect.objectContaining({
+          public_skills: [],
+          disabled_skills: [skill.name],
+        }),
       ),
     );
   });
-
-  it("saves an updated disabled list when a skill is toggled off and settings already has disabled_skills", async () => {
-    const user = userEvent.setup();
-    const skill = buildSkill({ name: "another-skill" });
-    vi.spyOn(SkillsService, "getSkills").mockResolvedValue([skill]);
-    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
-      buildSettings({ disabled_skills: [] }),
-    );
-    const saveSpy = vi
-      .spyOn(SettingsService, "saveSettings")
-      .mockResolvedValue(true);
+  it("names the profile the page edits", async () => {
+    vi.spyOn(SkillsService, "getSkills").mockResolvedValue([]);
 
     renderSkillsSettingsScreen();
-    await screen.findByTestId(`skill-card-${skill.name}`);
-    const card = screen.getByTestId(`skill-card-${skill.name}`);
 
-    await user.click(within(card).getByTestId(`skill-toggle-${skill.name}`));
-
-    await waitFor(() =>
-      expect(saveSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ disabled_skills: [skill.name] }),
-      ),
-    );
+    expect(
+      await screen.findByTestId("active-profile-scope-notice"),
+    ).toHaveTextContent("SETTINGS$BEHAVIOR_ACTIVE_PROFILE");
   });
-
   it("toggles a skill from the card without opening the modal", async () => {
     const user = userEvent.setup();
     const skill = buildSkill({ name: "card-toggle" });
@@ -525,105 +536,180 @@ Full skill body.`,
     ).not.toBeInTheDocument();
   });
 
-  it("renders an unlisted catalog skill as off without it being denied", async () => {
+  it("renders a catalog skill the profile does not select as off", async () => {
     // The reported bug: everything in the catalog arrived switched on.
     vi.spyOn(SkillsService, "getSkills").mockResolvedValue([
       buildSkill({ name: CATALOG_OPTIONAL }),
     ]);
-    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
-      buildSettings({ enabled_skills: undefined, disabled_skills: [] }),
-    );
+    withActiveProfile({
+      public_skills: [CATALOG_RECOMMENDED],
+      disabled_skills: [],
+    });
 
     renderSkillsSettingsScreen();
     const card = await screen.findByTestId(`skill-card-${CATALOG_OPTIONAL}`);
 
-    expect(
-      within(card).getByTestId(`skill-toggle-${CATALOG_OPTIONAL}`),
-    ).toHaveAttribute("aria-checked", "false");
+    await waitFor(() =>
+      expect(
+        within(card).getByTestId(`skill-toggle-${CATALOG_OPTIONAL}`),
+      ).toHaveAttribute("aria-checked", "false"),
+    );
   });
-
   it("writes nothing back when the user toggles nothing", async () => {
-    // Persisting the hydrated state on mount would race the one-shot migration
-    // and could narrow a workspace it had just preserved.
     vi.spyOn(SkillsService, "getSkills").mockResolvedValue([
       buildSkill({ name: CATALOG_OPTIONAL }),
     ]);
-    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
-      buildSettings({ enabled_skills: undefined, disabled_skills: [] }),
-    );
-    const saveSpy = vi
-      .spyOn(SettingsService, "saveSettings")
-      .mockResolvedValue(true);
+    const saveProfile = withActiveProfile({ public_skills: null });
 
     renderSkillsSettingsScreen();
-    await screen.findByTestId(`skill-card-${CATALOG_OPTIONAL}`);
+    const card = await screen.findByTestId(`skill-card-${CATALOG_OPTIONAL}`);
+    // A profile without a selection loads the whole catalog.
     await waitFor(() =>
-      expect(screen.getByTestId("skills-result-summary")).toBeInTheDocument(),
+      expect(
+        within(card).getByTestId(`skill-toggle-${CATALOG_OPTIONAL}`),
+      ).toHaveAttribute("aria-checked", "true"),
     );
 
-    expect(saveSpy).not.toHaveBeenCalled();
+    expect(saveProfile).not.toHaveBeenCalled();
   });
-
-  it("saves a catalog toggle to enabled_skills rather than the deny-list", async () => {
+  it("saves a catalog toggle to the profile's allow-list rather than its deny-list", async () => {
     const user = userEvent.setup();
     vi.spyOn(SkillsService, "getSkills").mockResolvedValue([
       buildSkill({ name: CATALOG_RECOMMENDED }),
     ]);
-    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
-      buildSettings({ enabled_skills: [CATALOG_RECOMMENDED] }),
-    );
-    const saveSpy = vi
-      .spyOn(SettingsService, "saveSettings")
-      .mockResolvedValue(true);
+    const saveProfile = withActiveProfile({
+      public_skills: [CATALOG_RECOMMENDED],
+      disabled_skills: [],
+    });
 
     renderSkillsSettingsScreen();
     const card = await screen.findByTestId(`skill-card-${CATALOG_RECOMMENDED}`);
+    await waitFor(() =>
+      expect(
+        within(card).getByTestId(`skill-toggle-${CATALOG_RECOMMENDED}`),
+      ).toHaveAttribute("aria-checked", "true"),
+    );
 
     await user.click(
       within(card).getByTestId(`skill-toggle-${CATALOG_RECOMMENDED}`),
     );
 
     await waitFor(() =>
-      expect(saveSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          enabled_skills: [],
-          disabled_skills: [],
-        }),
+      expect(saveProfile).toHaveBeenCalledWith(
+        "default",
+        expect.objectContaining({ public_skills: [], disabled_skills: [] }),
       ),
     );
   });
-
-  it("drops a re-enabled catalog skill from an unmigrated deny-list", async () => {
+  it("drops a re-enabled catalog skill from the profile's deny-list", async () => {
     // A stale deny entry would otherwise veto the allow-list entry we just
     // wrote, leaving the toggle on and the skill still absent.
     const user = userEvent.setup();
     vi.spyOn(SkillsService, "getSkills").mockResolvedValue([
       buildSkill({ name: CATALOG_RECOMMENDED }),
     ]);
-    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
-      buildSettings({
-        enabled_skills: undefined,
-        disabled_skills: [CATALOG_RECOMMENDED],
-      }),
-    );
-    const saveSpy = vi
-      .spyOn(SettingsService, "saveSettings")
-      .mockResolvedValue(true);
+    const saveProfile = withActiveProfile({
+      public_skills: null,
+      disabled_skills: [CATALOG_RECOMMENDED],
+    });
 
     renderSkillsSettingsScreen();
     const card = await screen.findByTestId(`skill-card-${CATALOG_RECOMMENDED}`);
+    await waitFor(() =>
+      expect(
+        within(card).getByTestId(`skill-toggle-${CATALOG_RECOMMENDED}`),
+      ).toHaveAttribute("aria-checked", "false"),
+    );
 
     await user.click(
       within(card).getByTestId(`skill-toggle-${CATALOG_RECOMMENDED}`),
     );
 
     await waitFor(() =>
-      expect(saveSpy).toHaveBeenCalledWith(
+      expect(saveProfile).toHaveBeenCalledWith(
+        "default",
         expect.objectContaining({
-          enabled_skills: expect.arrayContaining([CATALOG_RECOMMENDED]),
+          public_skills: expect.arrayContaining([CATALOG_RECOMMENDED]),
           disabled_skills: [],
         }),
       ),
     );
+  });
+
+  it("refuses toggles while an ACP profile is active", async () => {
+    const user = userEvent.setup();
+    const skill = buildSkill({ name: "save-me" });
+    vi.spyOn(SkillsService, "getSkills").mockResolvedValue([skill]);
+    const saveProfile = withActiveProfile({
+      agent_kind: "acp",
+      acp_server: "claude-code",
+      llm_profile_ref: null,
+    });
+    const toast = vi.spyOn(ToastHandlers, "displayErrorToast");
+
+    renderSkillsSettingsScreen();
+    const card = await screen.findByTestId(`skill-card-${skill.name}`);
+    expect(
+      await screen.findByTestId("active-profile-scope-notice"),
+    ).toHaveTextContent("SETTINGS$BEHAVIOR_ACP_PROFILE");
+
+    await user.click(within(card).getByTestId(`skill-toggle-${skill.name}`));
+
+    expect(toast).toHaveBeenCalledWith("SETTINGS$BEHAVIOR_ACP_PROFILE");
+    expect(saveProfile).not.toHaveBeenCalled();
+  });
+
+  it("says when the profile can't load and refuses toggles until it does", async () => {
+    const user = userEvent.setup();
+    const skill = buildSkill({ name: "save-me" });
+    vi.spyOn(SkillsService, "getSkills").mockResolvedValue([skill]);
+    const saveProfile = withActiveProfile({});
+    vi.mocked(AgentProfilesService.getProfile).mockRejectedValue(
+      new Error("unreachable"),
+    );
+    const toast = vi.spyOn(ToastHandlers, "displayErrorToast");
+
+    renderSkillsSettingsScreen();
+    const card = await screen.findByTestId(`skill-card-${skill.name}`);
+    await screen.findByTestId("active-profile-load-error");
+
+    await user.click(within(card).getByTestId(`skill-toggle-${skill.name}`));
+
+    expect(toast).toHaveBeenCalledWith("SETTINGS$BEHAVIOR_PROFILE_LOAD_FAILED");
+    expect(saveProfile).not.toHaveBeenCalled();
+  });
+
+  it("saves a toggle to the account's deny-list on Cloud", async () => {
+    vi.spyOn(activeBackendContext, "useActiveBackend").mockReturnValue({
+      backend: {
+        id: "cloud-1",
+        name: "Cloud",
+        host: "https://app.all-hands.dev",
+        apiKey: "test-key",
+        kind: "cloud",
+      },
+      orgId: "org-1",
+    });
+    const user = userEvent.setup();
+    const skill = buildSkill({ name: "save-me" });
+    vi.spyOn(SkillsService, "getSkills").mockResolvedValue([skill]);
+    const saveProfile = withActiveProfile({});
+    const saveSettings = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true as never);
+
+    renderSkillsSettingsScreen();
+    const card = await screen.findByTestId(`skill-card-${skill.name}`);
+    await user.click(within(card).getByTestId(`skill-toggle-${skill.name}`));
+
+    await waitFor(() =>
+      expect(saveSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ disabled_skills: [skill.name] }),
+      ),
+    );
+    expect(saveProfile).not.toHaveBeenCalled();
+    expect(
+      screen.queryByTestId("active-profile-scope-notice"),
+    ).not.toBeInTheDocument();
   });
 });

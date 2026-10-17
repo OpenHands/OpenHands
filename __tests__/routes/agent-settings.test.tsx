@@ -1553,25 +1553,4 @@ describe("AgentSettingsScreen — system prompt", () => {
       system_message_suffix: null,
     });
   });
-
-  it("explains instead of editing on the default profile, and leaves both fields alone", async () => {
-    const { control } = renderAgentSettingsScreen({
-      agentSettingsOverride: {
-        ...OPENHANDS_PROFILE,
-        persona: "Set through the API.",
-        system_message_suffix: "Also set through the API.",
-      },
-      isDefaultProfile: true,
-    });
-
-    expect(
-      await screen.findByTestId("agent-settings-system-prompt-default-profile"),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByTestId("agent-settings-system-prompt-mode"),
-    ).not.toBeInTheDocument();
-    const fields = control().buildAgentProfileFields();
-    expect(fields).not.toHaveProperty("persona");
-    expect(fields).not.toHaveProperty("system_message_suffix");
-  });
 });

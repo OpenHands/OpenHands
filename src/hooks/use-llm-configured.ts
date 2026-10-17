@@ -6,7 +6,6 @@ import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useActiveAgentProfile } from "#/hooks/use-active-agent-profile";
 import { isSettingsPageHidden } from "#/utils/settings-utils";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
-import { WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME } from "#/api/agent-profiles-service/agent-profiles-service.api";
 import {
   CONFIG_CACHE_OPTIONS,
   LLM_PROFILES_QUERY_KEYS,
@@ -66,34 +65,23 @@ export function useLlmConfigured(): LlmConfiguredResult {
   } = useActiveAgentProfile();
   const isAcpAgent = activeAgentKind === "acp";
   const hasApiKey = settings?.llm_api_key_set === true;
-  // The LLM that will actually power the next conversation is the profile the
-  // active AGENT profile references (`llm_profile_ref`) — conversations launch
-  // from the agent profile, not the standalone "active LLM profile".
-  // Except the local seeded `default` profile: `useCreateConversation` launches
-  // it via `agent_settings` on the ACTIVE LLM, not the seed's ref, so gating on
-  // that ref blocks launches that would have succeeded (#16193).
-  const referencedLlmProfileName =
-    activeAgentProfile?.agent_kind === "openhands" &&
-    !(
-      isLocal &&
-      activeAgentProfile.name === WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME
-    )
-      ? activeAgentProfile.llm_profile_ref
+  // Check the LLM profile the next home launch runs. Locally that is the
+  // active LLM profile (the home pill), which overrides the agent profile's
+  // own `llm_profile_ref`; Cloud launches run the ref. Either falls back to
+  // the other when it names no saved profile.
+  const findLlmProfile = (name: string | null | undefined) =>
+    name
+      ? profilesData?.profiles.find((profile) => profile.name === name)
       : undefined;
-  const referencedProfile = referencedLlmProfileName
-    ? profilesData?.profiles.find(
-        (profile) => profile.name === referencedLlmProfileName,
-      )
-    : undefined;
-  // Fall back to the active LLM profile when the ref is absent (list loading,
-  // or an agent profile without a ref) OR stale (names a profile that no longer
-  // exists): a launch runs the active LLM profile for a stale ref, so gating on
-  // the ref would disable a composer whose launch succeeds.
-  const activeProfile =
-    referencedProfile ??
-    profilesData?.profiles.find(
-      (profile) => profile.name === profilesData?.active_profile,
-    );
+  const referencedProfile = findLlmProfile(
+    activeAgentProfile?.agent_kind === "openhands"
+      ? activeAgentProfile.llm_profile_ref
+      : undefined,
+  );
+  const selectedProfile = findLlmProfile(profilesData?.active_profile);
+  const activeProfile = isLocal
+    ? (selectedProfile ?? referencedProfile)
+    : (referencedProfile ?? selectedProfile);
   const hasActiveProfileApiKey = activeProfile?.api_key_set === true;
   const shouldLoadActiveProfileDetail =
     isLocal && !!activeProfile && !hasActiveProfileApiKey;

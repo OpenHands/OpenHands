@@ -176,11 +176,11 @@ point Canvas at it). In short:
 #    canvas_ui_control calls use client_tools; the Python mount keeps
 #    pre-migration conversations loadable when persisted metadata imports
 #    canvas_ui_tool.
-# Minimum image: 1.51.0-python (Canvas's minimumAgentServer, including the
-# managed Canvas App backend bridge). Override SHA with a newer build.
+# Minimum image: 1.55.0-python (Canvas's minimumAgentServer). Override SHA
+# with a newer build.
 docker run -d --name oh-acp -p 8010:8000 -v acp-data:/workspace \
   -v "$(pwd)/tools:/canvas-tools:ro" -e OH_EXTRA_PYTHON_PATH=/canvas-tools \
-  ghcr.io/openhands/agent-server:1.51.0-python
+  ghcr.io/openhands/agent-server:1.55.0-python
 
 # 2. Canvas pointed at the container.
 VITE_BACKEND_BASE_URL=http://localhost:8010 npm run dev:frontend

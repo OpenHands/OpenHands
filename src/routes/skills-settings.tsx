@@ -27,6 +27,10 @@ import { SkillsToolbar } from "#/components/features/skills/skills-toolbar";
 import { useSettings } from "#/hooks/query/use-settings";
 import { useSkills } from "#/hooks/query/use-skills";
 import { useSkillEnablement } from "#/hooks/use-skill-enablement";
+import {
+  ActiveProfileLoadError,
+  ActiveProfileScopeNotice,
+} from "#/components/features/settings/agent-profiles/active-profile-scope-notice";
 import { I18nKey } from "#/i18n/declaration";
 import type { SkillInfo } from "#/types/settings";
 import {
@@ -44,7 +48,8 @@ function SkillsSettingsScreen() {
 
   const { data: settings, isLoading: settingsLoading } = useSettings();
   const { data: skills, isLoading: skillsLoading } = useSkills();
-  const { isEnabled, setEnabled } = useSkillEnablement();
+  const { isEnabled, setEnabled, profileName, isAcp, isError, retry } =
+    useSkillEnablement();
 
   const [searchParams, setSearchParams] = useSearchParams();
   const [queryInput, setQueryInput] = React.useState(
@@ -156,6 +161,12 @@ function SkillsSettingsScreen() {
               >
                 {t(I18nKey.SETTINGS$SKILLS_NEW_CONVERSATION_NOTICE)}
               </div>
+              <ActiveProfileScopeNotice
+                profileName={profileName}
+                isAcp={isAcp}
+                className="max-w-2xl"
+              />
+              {isError && <ActiveProfileLoadError onRetry={retry} />}
             </div>
             <BrandButton
               type="button"
