@@ -249,9 +249,15 @@ export default function App() {
   // When the active backend is cloud, local session-key auth is irrelevant —
   // the cloud backend uses its own bearer token. Skip the API-key entry screen
   // in that case so Docker/public mode doesn't block cloud-only sessions.
+  // Similarly, when the active backend is a MARS session, authentication is handled
+  // through the same-origin session proxy and the guest apiKey is intentionally empty.
   const isActiveCloudBackend = active.backend.kind === "cloud";
+  const isActiveMarsBackend = Boolean(active.backend?.marsSessionId);
   const authMissing =
-    bakedKeyMissing && !hasRegisteredKey && !isActiveCloudBackend;
+    bakedKeyMissing &&
+    !hasRegisteredKey &&
+    !isActiveCloudBackend &&
+    !isActiveMarsBackend;
   const restoringMarsTunnel = useRestoreMarsTunnels();
   const queryClient = useQueryClient();
   // In locked-to-Cloud mode the only valid backend is a Cloud backend whose

@@ -23,6 +23,10 @@ vi.mock("#/components/features/backends/manage-backends-modal", () => ({
   ManageBackendsModal: () => <div data-testid="manage-backends-modal" />,
 }));
 
+vi.mock("#/components/features/backends/api-key-entry-screen", () => ({
+  default: () => <div data-testid="api-key-entry-screen" />,
+}));
+
 const cloudBackend: Backend = {
   id: "cloud-ohe",
   name: "Adorable Enterprise",
@@ -89,5 +93,64 @@ describe("App root — active cloud backend connectivity gate", () => {
       await screen.findByTestId("agent-server-onboarding-screen"),
     ).toBeInTheDocument();
     expect(screen.queryByTestId("app-outlet-content")).not.toBeInTheDocument();
+  });
+});
+
+describe("App root — active MARS session backend auth gate", () => {
+  const plainLocalBackend: Backend = {
+    id: "local-unkeyed",
+    name: "Unkeyed Local",
+    host: "http://localhost:3000",
+    apiKey: "",
+    kind: "local",
+  };
+
+  const marsBackend: Backend = {
+    id: "mars-do-session",
+    name: "DigitalOcean Session",
+    host: "http://localhost:8000/mars/sessions/session-123",
+    apiKey: "",
+    kind: "local",
+    marsSessionId: "session-123",
+  };
+
+  beforeEach(() => {
+    localStorage.clear();
+    __resetHealthStoreForTests();
+    localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
+    vi.stubEnv("VITE_SESSION_API_KEY", "");
+    vi.stubEnv("VITE_AUTH_REQUIRED", "true");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    setActiveSelection(null);
+    setRegisteredBackends([]);
+    localStorage.clear();
+    __resetHealthStoreForTests();
+  });
+
+  it("still shows the local API key entry screen for an ordinary unkeyed local backend", async () => {
+    setRegisteredBackends([plainLocalBackend]);
+    setActiveSelection({ backendId: plainLocalBackend.id });
+
+    renderApp();
+
+    expect(
+      await screen.findByTestId("api-key-entry-screen"),
+    ).toBeInTheDocument();
+  });
+
+  it("does not show the local API key entry screen for a healthy active MARS session backend", async () => {
+    setRegisteredBackends([marsBackend]);
+    setActiveSelection({ backendId: marsBackend.id });
+
+    renderApp();
+
+    // The MARS backend should not be blocked by the local key entry screen
+    await screen.findByTestId("app-outlet-content");
+    expect(
+      screen.queryByTestId("api-key-entry-screen"),
+    ).not.toBeInTheDocument();
   });
 });
