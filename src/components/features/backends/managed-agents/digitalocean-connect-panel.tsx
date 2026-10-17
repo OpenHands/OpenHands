@@ -37,7 +37,7 @@ import {
 const PANEL_CLASS =
   "flex min-h-[13.5rem] w-full flex-col rounded-xl border border-border";
 const ICON_BUTTON_CLASS =
-  "inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted hover:bg-interactive-hover hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300 disabled:cursor-not-allowed disabled:opacity-40";
+  "inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted hover:bg-interactive-hover hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:cursor-not-allowed disabled:opacity-40";
 
 type Launcher = ReturnType<typeof useLaunchMarsSession>;
 
@@ -60,7 +60,7 @@ function SessionChildRow({ session, launcher, onOpen }: SessionChildRowProps) {
         disabled={launcher.isBusy || !isConnectableSession(session)}
         aria-label={t(I18nKey.DO_AGENTS$OPEN_AGENT, { name })}
         data-testid={`digitalocean-session-${session.session_id}`}
-        className="flex w-full min-w-0 cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-left hover:bg-surface-raised focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue-300 disabled:cursor-not-allowed disabled:opacity-60"
+        className="flex w-full min-w-0 cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-left hover:bg-surface-raised focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus disabled:cursor-not-allowed disabled:opacity-60"
       >
         <SessionStatusDot phase={phase} className="size-1.5" />
         <span className="min-w-0 flex-1 truncate text-xs text-white">
@@ -154,7 +154,7 @@ function AgentRow({
           disabled={launcher.isBusy}
           aria-label={t(I18nKey.DO_AGENTS$OPEN_AGENT, { name })}
           data-testid={`digitalocean-agent-open-${config.id}`}
-          className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-lg px-2 py-2.5 text-left hover:bg-surface-raised focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue-300 disabled:cursor-not-allowed"
+          className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-lg px-2 py-2.5 text-left hover:bg-surface-raised focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus disabled:cursor-not-allowed"
         >
           <span
             aria-hidden
@@ -329,7 +329,7 @@ export function DigitalOceanConnectPanel({
           aria-expanded={isNewAgentOpen}
           data-testid="digitalocean-new-agent"
           className={cn(
-            "inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-muted hover:bg-interactive-hover hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300 disabled:cursor-not-allowed disabled:opacity-40",
+            "inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-muted hover:bg-interactive-hover hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:cursor-not-allowed disabled:opacity-40",
             isNewAgentOpen && "bg-interactive-hover text-white",
           )}
         >
