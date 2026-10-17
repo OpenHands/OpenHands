@@ -791,6 +791,7 @@ export function buildAgentServerEnv(config, options = {}) {
   const conversationRuntimeEnv = Object.fromEntries(
     [
       "OH_CONVERSATION_RUNTIME",
+      "OH_CONVERSATION_RUNTIME_SELECTABLE",
       "OH_CONVERSATION_IMAGE",
       "OH_CONVERSATION_IMAGE_HAS_BROWSER",
       "OH_CONVERSATION_CONTAINER_MEMORY",

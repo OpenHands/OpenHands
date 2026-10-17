@@ -1,4 +1,10 @@
-import { AppWindow, Brain, Route as RouteIcon, Shield } from "lucide-react";
+import {
+  AppWindow,
+  Brain,
+  Container,
+  Route as RouteIcon,
+  Shield,
+} from "lucide-react";
 import KeyIcon from "#/icons/key.svg?react";
 import MemoryIcon from "#/icons/memory_icon.svg?react";
 import CircuitIcon from "#/icons/u-circuit.svg?react";
@@ -58,6 +64,12 @@ export const OSS_NAV_ITEMS: SettingsNavItem[] = [
     to: "/settings/verification",
     text: "SETTINGS$NAV_VERIFICATION",
     subtitle: "SETTINGS$PAGE_VERIFICATION_SUBLINE",
+  },
+  {
+    icon: <Container className="size-4" strokeWidth={2} aria-hidden />,
+    to: "/settings/runtime",
+    text: "SETTINGS$NAV_RUNTIME",
+    subtitle: "SETTINGS$PAGE_RUNTIME_SUBLINE",
   },
   {
     icon: <AppWindow className="size-4" strokeWidth={2} aria-hidden />,

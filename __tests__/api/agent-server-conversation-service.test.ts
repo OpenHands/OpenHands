@@ -20,6 +20,7 @@ import {
 import type { Backend } from "#/api/backend-registry/types";
 import { clearCachedAgentServerInfo } from "#/api/agent-server-compatibility";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import HooksService from "#/api/hooks-service";
 import LLMSubscriptionService from "#/api/llm-subscription-service";
 import {
   LLM_AUTH_TYPE_SUBSCRIPTION,
@@ -865,6 +866,108 @@ describe("AgentServerConversationService", () => {
       };
       expect(payload.workspace.working_dir).toBe("/Users/jane/projects/foo");
       expect(payload.worktree).toBe(true);
+    });
+
+    it("asks for the docker runtime in docker-container mode", async () => {
+      const loadWorkspaceHooks = vi.spyOn(HooksService, "loadWorkspaceHooks");
+      mockGetSettings.mockResolvedValue({
+        agent_settings: { llm: { model: "gpt-4o" } },
+        conversation_settings: {},
+      });
+      mockGetSettingsForConversation.mockResolvedValue({
+        agentSettings: { llm: { model: "gpt-4o" } },
+        conversationSettings: {},
+        secretsEncrypted: true,
+      });
+      mockHttpPost.mockResolvedValue({
+        data: {
+          id: "ignored-server-id",
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+      });
+
+      await AgentServerConversationService.createConversation({
+        workingDirOverride: "/Users/jane/projects/foo",
+        workspaceMode: "docker_container",
+      });
+
+      const [payloadCall] = mockHttpPost.mock.calls;
+      const payload = payloadCall[1] as {
+        workspace: { working_dir: string };
+        worktree: boolean;
+        conversation_runtime?: string;
+      };
+      expect(payload.workspace.working_dir).toBe("/Users/jane/projects/foo");
+      expect(payload.worktree).toBe(false);
+      expect(payload.conversation_runtime).toBe("docker");
+      // The container cannot see host paths, so no host hooks are loaded.
+      expect(loadWorkspaceHooks).not.toHaveBeenCalled();
+    });
+
+    it("records a docker conversation started without a workspace", async () => {
+      mockGetSettings.mockResolvedValue({
+        agent_settings: { llm: { model: "gpt-4o" } },
+        conversation_settings: {},
+      });
+      mockGetSettingsForConversation.mockResolvedValue({
+        agentSettings: { llm: { model: "gpt-4o" } },
+        conversationSettings: {},
+        secretsEncrypted: true,
+      });
+      mockHttpPost.mockResolvedValue({
+        data: {
+          id: "docker-no-workspace",
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+      });
+
+      const created = await AgentServerConversationService.createConversation({
+        workspaceMode: "docker_container",
+      });
+
+      // Hooks and restarts read it to keep the conversation in its container.
+      expect(getStoredConversationMetadata(created.id)?.workspace_mode).toBe(
+        "docker_container",
+      );
+    });
+
+    it("asks a server offering both runtimes for the local one in a host mode", async () => {
+      server.use(
+        http.get("*/server_info", () =>
+          HttpResponse.json({
+            version: "1.54.0",
+            conversation_runtime: "docker",
+            available_conversation_runtimes: ["local", "docker"],
+          }),
+        ),
+      );
+      clearCachedAgentServerInfo();
+      mockGetSettings.mockResolvedValue({
+        agent_settings: { llm: { model: "gpt-4o" } },
+        conversation_settings: {},
+      });
+      mockGetSettingsForConversation.mockResolvedValue({
+        agentSettings: { llm: { model: "gpt-4o" } },
+        conversationSettings: {},
+        secretsEncrypted: true,
+      });
+      mockHttpPost.mockResolvedValue({
+        data: {
+          id: "ignored-server-id",
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+      });
+
+      await AgentServerConversationService.createConversation({
+        workingDirOverride: "/Users/jane/projects/foo",
+        workspaceMode: "local_repo",
+      });
+
+      const [payloadCall] = mockHttpPost.mock.calls;
+      expect(payloadCall[1]).toMatchObject({ conversation_runtime: "local" });
     });
   });
 

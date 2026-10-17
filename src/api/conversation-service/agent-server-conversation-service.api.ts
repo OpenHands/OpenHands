@@ -595,15 +595,24 @@ class AgentServerConversationService {
       agentLlmProfileRef,
     );
     const conversationId = uuidv4();
-    const { workingDir, hooksProjectDir, isolated } =
+    const resolvedWorkspaceMode =
+      workspaceMode ?? (workingDirOverride ? "local_repo" : "new_worktree");
+    const inContainer = resolvedWorkspaceMode === "docker_container";
+    const { workingDir, hooksProjectDir, isolated, runtimeSelectable } =
       await resolveNewConversationWorkspace({
         conversationId,
         workingDir: workingDirOverride,
         selectedRepository: metadata?.selected_repository,
         parentConversationId,
+        inContainer,
       });
-    const resolvedWorkspaceMode =
-      workspaceMode ?? (workingDirOverride ? "local_repo" : "new_worktree");
+    // A server offering both runtimes is told which one; whatever its default
+    // is, a host mode then runs on the host. Other servers keep their own.
+    const conversationRuntime = inContainer
+      ? "docker"
+      : runtimeSelectable
+        ? "local"
+        : undefined;
 
     // Use encrypted settings to avoid exposing secrets in the browser
     const payload = await buildStartConversationRequestWithEncryptedSettings({
@@ -633,12 +642,17 @@ class AgentServerConversationService {
       getAgentServerClientOptions({ timeout: CREATE_CONVERSATION_TIMEOUT_MS }),
     ).createConversation<DirectConversationInfo>({
       ...payload,
+      ...(conversationRuntime
+        ? { conversation_runtime: conversationRuntime }
+        : {}),
       ...(telemetryDistinctId ? { user_id: telemetryDistinctId } : {}),
     });
     const localBackend = getEffectiveLocalBackend();
     if (!localBackend) throw new NoBackendAvailableError();
 
-    if (metadata?.selected_repository || workingDirOverride) {
+    // A Docker conversation is recorded even without a workspace: hooks and
+    // restarts read its workspace_mode.
+    if (metadata?.selected_repository || workingDirOverride || inContainer) {
       // The agent-server runtime has no concept of selected repo/branch/
       // workspace, so persist the home-page selection client-side.
       // `toAppConversation` reads the repo/branch fields back to hydrate
@@ -942,8 +956,10 @@ class AgentServerConversationService {
     if (!conversationId || !getEffectiveLocalBackend()) {
       return emptyHooksResponse();
     }
+    const metadata = getStoredConversationMetadata(conversationId);
     const projectDir = await resolveConversationHooksProjectDir(
-      getStoredConversationMetadata(conversationId)?.selected_workspace,
+      metadata?.selected_workspace,
+      metadata?.workspace_mode === "docker_container",
     );
     if (projectDir === null) return emptyHooksResponse();
     return toHooksResponse(await HooksService.fetchWorkspaceHooks(projectDir));

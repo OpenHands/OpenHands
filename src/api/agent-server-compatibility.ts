@@ -36,6 +36,7 @@ export interface AgentServerInfo extends BaseServerInfo {
   sdk_version?: string;
   runtime_services?: unknown;
   execution_runtime?: "local" | "docker";
+  available_conversation_runtimes?: ("local" | "docker")[];
   capabilities?: string[];
 }
 

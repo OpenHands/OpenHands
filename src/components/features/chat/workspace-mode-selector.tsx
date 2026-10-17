@@ -14,25 +14,28 @@ import { WorkspaceModeIcon } from "./workspace-mode-icon";
 
 interface WorkspaceModeSelectorProps {
   value: WorkspaceMode;
+  options: WorkspaceMode[];
   backendKind: BackendKind;
   onChange: (value: WorkspaceMode) => void;
+  /** False on Home before a workspace is opened: the host option reads "Local". */
+  hasWorkspace?: boolean;
   disabled?: boolean;
   testId?: string;
 }
 
-const WORKSPACE_MODE_OPTIONS: WorkspaceMode[] = ["local_repo", "new_worktree"];
-
 export function WorkspaceModeSelector({
   value,
+  options,
   backendKind,
   onChange,
+  hasWorkspace = true,
   disabled = false,
   testId = "workspace-mode-selector",
 }: WorkspaceModeSelectorProps) {
   const { t } = useTranslation("openhands");
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const label = t(getWorkspaceModeI18nKey(value, backendKind));
+  const label = t(getWorkspaceModeI18nKey(value, backendKind, hasWorkspace));
 
   useEffect(() => {
     if (!open) return undefined;
@@ -97,8 +100,10 @@ export function WorkspaceModeSelector({
             dropdownMenuListClassName,
           )}
         >
-          {WORKSPACE_MODE_OPTIONS.map((option) => {
-            const optionLabel = t(getWorkspaceModeI18nKey(option, backendKind));
+          {options.map((option) => {
+            const optionLabel = t(
+              getWorkspaceModeI18nKey(option, backendKind, hasWorkspace),
+            );
             return (
               <button
                 key={option}

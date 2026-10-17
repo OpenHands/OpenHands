@@ -152,6 +152,52 @@ describe("buildStartConversationRequest", () => {
     expect(payload.title_llm_profile).toBe("Titles");
   });
 
+  it("sends no runtime options while Settings → Runtime is at its defaults", () => {
+    const payload = buildStartConversationRequest({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        conversation_settings: {
+          ...DEFAULT_SETTINGS.conversation_settings,
+          worktree_base: "default_branch",
+          worktree_base_ref: null,
+          worktree_branch_prefix: "openhands/",
+          container_memory: null,
+          container_cpus: null,
+          container_browser: true,
+        },
+      },
+    });
+
+    expect(payload).not.toHaveProperty("worktree_options");
+    expect(payload).not.toHaveProperty("container");
+  });
+
+  it("sends the Settings → Runtime options a user changed", () => {
+    const payload = buildStartConversationRequest({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        conversation_settings: {
+          ...DEFAULT_SETTINGS.conversation_settings,
+          worktree_base: "ref",
+          worktree_base_ref: "origin/release",
+          worktree_branch_prefix: "me/",
+          container_memory: "4g",
+          container_cpus: 2,
+          container_browser: false,
+        },
+      },
+    });
+
+    expect(payload).toMatchObject({
+      worktree_options: {
+        base: "ref",
+        ref: "origin/release",
+        branch_prefix: "me/",
+      },
+      container: { memory: "4g", cpus: 2, browser: false },
+    });
+  });
+
   it("omits the title LLM profile in automatic mode without a default", () => {
     const payload = buildStartConversationRequest({
       settings: DEFAULT_SETTINGS,
