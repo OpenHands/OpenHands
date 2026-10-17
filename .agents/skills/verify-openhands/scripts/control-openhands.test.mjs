@@ -16,7 +16,7 @@ import {
 import { createServer } from "node:net";
 import { createServer as createHttpServer } from "node:http";
 import { tmpdir } from "node:os";
-import { dirname, join, relative, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { test } from "vitest";
@@ -39,6 +39,7 @@ import {
 import { routePattern } from "./lib/route-pattern.mjs";
 import { resolveTestids } from "./lib/testids.mjs";
 import { tmuxPathFor } from "./lib/tmux-path.mjs";
+import { groupAlive } from "./lib/process-group.mjs";
 import { browserCallLimit } from "./lib/call-limit.mjs";
 import { HeldKeys, keyDownArguments } from "./lib/held-keys.mjs";
 import { agentProfileRepoint } from "./lib/agent-profile-repoint.mjs";
@@ -963,6 +964,85 @@ test("the tmux directory of a run comes from its whole path", () => {
   );
   assert.equal(tmuxPathFor("/tmp/x/run-1"), tmuxPathFor("/tmp/x/run-1"));
   assert.match(tmuxPathFor("/tmp/x/run-1"), /^\/tmp\/ohv-tmux-[0-9a-f]{10}$/);
+});
+
+function procStat(pid, pgid, state, command = "MainThread") {
+  return `${pid} (${command}) ${state} 1 ${pgid} ${pgid} 0 0 0 0`;
+}
+
+function linuxGroupAlive(stats, overrides = {}) {
+  return groupAlive(620, {
+    platform: "linux",
+    signal: () => {},
+    readProcDirectory: () => Object.keys(stats),
+    readProcStat: (path) => {
+      const value = stats[basename(dirname(path))];
+      if (value instanceof Error) throw value;
+      return value;
+    },
+    ...overrides,
+  });
+}
+
+test("a Linux process group containing only zombies is not alive", () => {
+  assert.equal(
+    linuxGroupAlive({
+      620: procStat(620, 620, "Z"),
+      621: procStat(621, 620, "Z", "chrome"),
+    }),
+    false,
+  );
+});
+
+test("a live process-group member is detected after its leader exits", () => {
+  assert.equal(
+    linuxGroupAlive({
+      700: procStat(700, 620, "S", "node"),
+      701: procStat(701, 701, "Z", "unrelated"),
+    }),
+    true,
+  );
+});
+
+test("unknown Linux process state and macOS groups stay conservatively alive", () => {
+  assert.equal(linuxGroupAlive({}, { readProcDirectory: () => [] }), true);
+  assert.equal(
+    linuxGroupAlive(
+      {},
+      {
+        readProcDirectory: () => {
+          throw new Error("no /proc");
+        },
+      },
+    ),
+    true,
+  );
+  const inaccessible = new Error("not visible");
+  inaccessible.code = "EACCES";
+  assert.equal(
+    linuxGroupAlive({
+      620: procStat(620, 620, "Z"),
+      621: inaccessible,
+    }),
+    true,
+  );
+  assert.equal(linuxGroupAlive({}, { platform: "darwin" }), true);
+});
+
+test("a missing process group is not alive", () => {
+  assert.equal(
+    linuxGroupAlive(
+      {},
+      {
+        signal: () => {
+          const error = new Error("gone");
+          error.code = "ESRCH";
+          throw error;
+        },
+      },
+    ),
+    false,
+  );
 });
 
 test("help names every fixture kind and the new map verbs", () => {

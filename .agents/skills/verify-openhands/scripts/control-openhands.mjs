@@ -48,6 +48,7 @@ import {
   sourceLiterals,
 } from "./lib/testids.mjs";
 import { tmuxPathFor } from "./lib/tmux-path.mjs";
+import { groupAlive } from "./lib/process-group.mjs";
 import { browserCallLimit } from "./lib/call-limit.mjs";
 import { keyDownArguments } from "./lib/held-keys.mjs";
 import {
@@ -218,16 +219,6 @@ function processAlive(pid) {
   if (!pid) return false;
   try {
     process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return error.code === "EPERM";
-  }
-}
-
-function groupAlive(pgid) {
-  if (!pgid) return false;
-  try {
-    process.kill(-pgid, 0);
     return true;
   } catch (error) {
     return error.code === "EPERM";
