@@ -1,3 +1,8 @@
+import CanvasExtensionsService, {
+  type CanvasAppBackendStatus,
+} from "#/api/canvas-extensions-service";
+import { ProfileScopeList } from "#/components/features/settings/agent-profiles/profile-scope-list";
+import { useSearchSecrets } from "#/hooks/query/use-get-secrets";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { ExternalLink } from "lucide-react";
@@ -46,7 +51,72 @@ export default function CanvasExtensionsScreen() {
   const [pendingAction, setPendingAction] =
     React.useState<PendingAction | null>(null);
   const query = useCanvasExtensions();
+  const [approval, setApproval] = React.useState<CanvasAppBackendStatus | null>(
+    null,
+  );
+  const [selectedSecrets, setSelectedSecrets] = React.useState<string[]>([]);
+  const [approvalError, setApprovalError] = React.useState(false);
+  const catalog = useSearchSecrets({
+    enabled: pendingAction?.type === "enable",
+  });
+  React.useEffect(() => {
+    setPendingAction(null);
+  }, [backend.id, backend.connectionRevision]);
+  React.useEffect(() => {
+    let active = true;
+    setApproval(null);
+    setSelectedSecrets([]);
+    setApprovalError(false);
+    if (
+      pendingAction?.type === "enable" &&
+      pendingAction.extension.manifest?.backend
+    ) {
+      CanvasExtensionsService.backendStatus(
+        pendingAction.extension.name,
+        backend,
+      )
+        .then((status) => {
+          if (active) {
+            setApproval(status);
+            setSelectedSecrets(
+              status.secret_grant_revision === status.revision
+                ? (status.secret_refs ?? [])
+                : [],
+            );
+          }
+        })
+        .catch(() => {
+          if (active) setApprovalError(true);
+        });
+    }
+    return () => {
+      active = false;
+    };
+  }, [pendingAction, backend]);
+  const requiredSecrets =
+    pendingAction?.extension.manifest?.backend?.secret_refs ?? [];
+  const needsBackend =
+    pendingAction?.type === "enable" &&
+    !!pendingAction.extension.manifest?.backend;
+  const missingSecrets = requiredSecrets.filter(
+    (name) => !catalog.data.some((secret) => secret.name === name),
+  );
+  const consentReady =
+    !needsBackend ||
+    (!!approval?.revision &&
+      !approvalError &&
+      !catalog.isError &&
+      missingSecrets.length === 0 &&
+      requiredSecrets.every((name) => selectedSecrets.includes(name)));
+
   const setEnabled = useSetCanvasExtensionEnabled();
+  React.useEffect(() => {
+    const refresh = () => {
+      void query.refetch();
+    };
+    window.addEventListener("canvas-app-revoked", refresh);
+    return () => window.removeEventListener("canvas-app-revoked", refresh);
+  }, [query.refetch]);
   const uninstall = useUninstallCanvasExtension();
   const refresh = useRefreshCanvasExtension();
 
@@ -58,12 +128,28 @@ export default function CanvasExtensionsScreen() {
   const isBusy =
     setEnabled.isPending || uninstall.isPending || refresh.isPending;
 
+  const currentBackend = React.useRef(backend);
+  currentBackend.current = backend;
   const confirmAction = () => {
-    if (!pendingAction) return;
+    if (!pendingAction || !consentReady) return;
     if (pendingAction.type === "enable") {
       setEnabled.mutate(
-        { name: pendingAction.extension.name, enabled: true },
-        { onSuccess: () => setPendingAction(null) },
+        {
+          name: pendingAction.extension.name,
+          enabled: true,
+          backend,
+          consent: approval?.revision
+            ? {
+                revision: approval.revision,
+                secret_refs: selectedSecrets,
+              }
+            : undefined,
+        },
+        {
+          onSuccess: () => {
+            if (currentBackend.current === backend) setPendingAction(null);
+          },
+        },
       );
     } else {
       uninstall.mutate(pendingAction.extension.name, {
@@ -179,7 +265,7 @@ export default function CanvasExtensionsScreen() {
               <div className={extensionModuleCardGridClassName}>
                 {query.data.map((extension) => (
                   <CanvasExtensionCard
-                    key={extension.name}
+                    key={`${backend.id}:${backend.connectionRevision}:${extension.name}`}
                     extension={extension}
                     isBusy={isBusy}
                     onToggle={() => {
@@ -187,6 +273,7 @@ export default function CanvasExtensionsScreen() {
                         setEnabled.mutate({
                           name: extension.name,
                           enabled: false,
+                          backend,
                         });
                       } else {
                         setPendingAction({ type: "enable", extension });
@@ -224,7 +311,55 @@ export default function CanvasExtensionsScreen() {
               : undefined
           }
           isConfirming={isBusy}
-        />
+          confirmDisabled={!consentReady}
+        >
+          {needsBackend && (
+            <>
+              <p>{t(I18nKey.SETTINGS$APPS_BACKEND_WARNING)}</p>
+              <ProfileScopeList
+                testId="app-secret"
+                items={requiredSecrets.map((name) => ({
+                  name,
+                  description: catalog.data.find(
+                    (secret) => secret.name === name,
+                  )?.description,
+                }))}
+                selected={selectedSecrets}
+                isDisabled={
+                  isBusy ||
+                  !approval ||
+                  catalog.isLoading ||
+                  missingSecrets.length > 0
+                }
+                onToggle={(name, checked) =>
+                  setSelectedSecrets((previous) =>
+                    checked
+                      ? [...previous, name]
+                      : previous.filter((entry) => entry !== name),
+                  )
+                }
+              />
+              {missingSecrets.length > 0 && (
+                <p role="alert">
+                  {t(I18nKey.SETTINGS$APPS_BACKEND_SECRETS, {
+                    names: missingSecrets.join(", "),
+                  })}{" "}
+                  —{" "}
+                  <a href="/settings/secrets">
+                    {t(I18nKey.SETTINGS$APPS_BACKEND_SECRETS)}
+                  </a>
+                </p>
+              )}
+              {(approvalError || catalog.isError || setEnabled.isError) && (
+                <p role="alert">
+                  {setEnabled.error instanceof Error
+                    ? setEnabled.error.message
+                    : t(I18nKey.SETTINGS$APPS_BACKEND_ERROR)}
+                </p>
+              )}
+            </>
+          )}
+        </ConfirmationModal>
       ) : null}
     </div>
   );

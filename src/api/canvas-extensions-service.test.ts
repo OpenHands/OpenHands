@@ -322,3 +322,65 @@ describe("CanvasExtensionsService", () => {
     expect(revokeAppBackendSession).toHaveBeenCalledWith(extension.name);
   });
 });
+
+it("fails closed when secret grants capability is absent", async () => {
+  getServerInfo.mockResolvedValue({ capabilities: [] });
+  await expect(
+    CanvasExtensionsService.backendStatus("demo", localBackend),
+  ).rejects.toBeInstanceOf(CanvasExtensionsUnsupportedError);
+  expect(get).not.toHaveBeenCalled();
+});
+
+it("binds secret consent to the captured backend and sends names only", async () => {
+  const other = { ...localBackend, id: "other", host: "http://127.0.0.1:9999" };
+  setRegisteredBackends([localBackend, other]);
+  setActiveSelection({ backendId: other.id });
+  getServerInfo.mockResolvedValue({
+    capabilities: ["canvas_app_backend_secret_grants_v1"],
+  });
+  get.mockResolvedValue({ revision: "rev", secret_refs: ["DEMO_API_KEY"] });
+  await CanvasExtensionsService.backendStatus("demo", localBackend);
+  await CanvasExtensionsService.backendAction(
+    "demo",
+    "grant",
+    "rev",
+    ["DEMO_API_KEY"],
+    localBackend,
+  );
+  expect(AgentServerClient).toHaveBeenLastCalledWith(
+    expect.objectContaining({ host: localBackend.host }),
+  );
+  expect(post).toHaveBeenCalledWith(
+    "/api/canvas-extensions/installed/demo/backend/secret-grant",
+    { revision: "rev", secret_refs: ["DEMO_API_KEY"] },
+  );
+  await CanvasExtensionsService.backendAction(
+    "demo",
+    "revoke",
+    "rev",
+    [],
+    localBackend,
+  );
+  expect(remove).toHaveBeenCalledWith(
+    "/api/canvas-extensions/installed/demo/backend/secret-grant",
+  );
+});
+
+it("checks body-returning lifecycle capability before enabling a managed app", async () => {
+  get.mockResolvedValue({
+    capabilities: ["canvas_app_backend_enable_lifecycle_v1"],
+  });
+  patch.mockResolvedValue({ name: "demo", enabled: true });
+  const consent = { revision: "sha256:demo", secret_refs: ["DEMO_API_KEY"] };
+  await CanvasExtensionsService.setEnabled("demo", true, consent, localBackend);
+  expect(patch).toHaveBeenCalledWith("/api/canvas-extensions/installed/demo", {
+    enabled: true,
+    ...consent,
+  });
+  patch.mockClear();
+  get.mockResolvedValue({ capabilities: [] });
+  await expect(
+    CanvasExtensionsService.setEnabled("demo", true, consent, localBackend),
+  ).rejects.toThrow("Upgrade Agent Server");
+  expect(patch).not.toHaveBeenCalled();
+});

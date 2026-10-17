@@ -102,3 +102,15 @@ Preconditions:
 - Known issue [OpenHands/software-agent-sdk#5648](https://github.com/OpenHands/software-agent-sdk/issues/5648) (`F20.app-backend-view`): app-backend WebSocket subprotocols are reported dropped. Recheck on a Linux Agent Server with configured public ingress and reviewed platform-matching backend artifacts, using a genuine admitted app-backend session and subprotocol negotiation. SDK 1.55.0 supports only Linux app-backend artifacts, so a native macOS server cannot drive this branch. A default demo without the bridge capability cannot exercise the proxied WebSocket path.
 - Known issue [OpenHands/software-agent-sdk#5935](https://github.com/OpenHands/software-agent-sdk/issues/5935) (`F20.app-backend-view`): an explicit `OH_APP_BACKEND_PUBLIC_URL_IS_NONE=1` does not clear a bridge URL set in the Agent Server JSON configuration. Canvas can therefore be offered an app-backend view at the unwanted configured ingress. Recheck an owned bridge-capable server with a JSON public URL and that environment-null override, then inspect `/server_info` and the real app page; the default launcher has neither conflicting configuration source.
 - Known issue [OpenHands/software-agent-sdk#5914](https://github.com/OpenHands/software-agent-sdk/issues/5914) (`F20.app-backend-view`): app-backend HTTP responses can carry both the backend's and the Agent Server's `Date` and `Server` headers, producing an invalid joined date and disclosing the backend stack. Recheck a reviewed HTTP app backend on a supported Linux Agent Server that sends these headers through a real admitted app-backend session. A default demo page without the bridge capability or a direct backend request cannot establish the proxied response.
+
+
+## Managed App enable consent
+
+Enable uses the agent-profile `ProfileScopeList` secret picker in the trust modal.
+Select all declared store secret names and confirm Enable trusted app. The server
+prepares and waits for backend readiness before enabling. There are no ordinary
+Prepare/Start/Stop controls. Disable stops the backend and bridge sessions;
+re-enable preselects same-revision consent. Revoke disables, stops and clears
+consent. New installed bytes/requirements need fresh consent. Installation and
+page mounting never authorize startup. Older servers fail closed with an upgrade
+message. The harmless HTTP demo is not live Linear.
