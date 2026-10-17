@@ -3,14 +3,29 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   MarsWebBridgeError,
   createMarsWebBridge,
+  getMarsBridgeHeaders,
   installMarsWebBridge,
   probeMarsWebBridge,
 } from "#/api/mars/mars-web-bridge";
+import type { Backend } from "#/api/backend-registry/types";
 
-const sessionApiKey = vi.hoisted(() => ({ value: null as string | null }));
+const bakedSessionApiKey = vi.hoisted(() => ({ value: null as string | null }));
+const storedBackends = vi.hoisted(() => ({ value: [] as Backend[] }));
+
 vi.mock("#/api/agent-server-config", () => ({
+  getBakedSessionApiKey: () => bakedSessionApiKey.value,
+  isServedOriginHost: (host?: string | null) =>
+    !host ||
+    host === "http://localhost:3000" ||
+    host === "http://127.0.0.1:18960",
   getAgentServerHeaders: (): Record<string, string> =>
-    sessionApiKey.value ? { "X-Session-API-Key": sessionApiKey.value } : {},
+    bakedSessionApiKey.value
+      ? { "X-Session-API-Key": bakedSessionApiKey.value }
+      : {},
+}));
+
+vi.mock("#/api/backend-registry/storage", () => ({
+  readStoredBackends: () => storedBackends.value,
 }));
 
 function jsonResponse(status: number, body: unknown): Response {
@@ -23,7 +38,8 @@ function jsonResponse(status: number, body: unknown): Response {
 afterEach(() => {
   vi.unstubAllGlobals();
   delete window.marsBridge;
-  sessionApiKey.value = null;
+  bakedSessionApiKey.value = null;
+  storedBackends.value = [];
 });
 
 describe("createMarsWebBridge", () => {
@@ -80,7 +96,7 @@ describe("createMarsWebBridge", () => {
   });
 
   it("sends the page's session key on every call so the server can admit it", async () => {
-    sessionApiKey.value = "sk-page";
+    bakedSessionApiKey.value = "sk-page";
     const fetchImpl = vi.fn(async () => jsonResponse(200, { result: null }));
     const bridge = createMarsWebBridge(
       "",
@@ -97,6 +113,91 @@ describe("createMarsWebBridge", () => {
       },
       body: JSON.stringify({ args: ["s1"] }),
     });
+  });
+
+  it("sends the typed session key when no baked key exists on the page", async () => {
+    bakedSessionApiKey.value = null;
+    storedBackends.value = [
+      {
+        id: "default-local",
+        name: "Local",
+        host: "http://127.0.0.1:18960",
+        apiKey: "qa-typed-session-key",
+        kind: "local",
+      },
+    ];
+
+    expect(getMarsBridgeHeaders()).toEqual({
+      "X-Session-API-Key": "qa-typed-session-key",
+    });
+
+    const fetchImpl = vi.fn(async () => jsonResponse(200, { result: null }));
+    const bridge = createMarsWebBridge(
+      "",
+      fetchImpl as unknown as typeof fetch,
+    );
+
+    await bridge.pauseSession("s1");
+
+    expect(fetchImpl).toHaveBeenCalledWith("/mars/rpc/pauseSession", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Session-API-Key": "qa-typed-session-key",
+      },
+      body: JSON.stringify({ args: ["s1"] }),
+    });
+  });
+
+  it("never sends a session key stored for a different backend host or when baseUrl is foreign", async () => {
+    bakedSessionApiKey.value = null;
+    storedBackends.value = [
+      {
+        id: "remote-1",
+        name: "Remote",
+        host: "https://remote.openhands.dev",
+        apiKey: "remote-key",
+        kind: "local",
+      },
+      {
+        id: "mars-1",
+        name: "MARS Session",
+        host: "http://127.0.0.1:18960/mars/sessions/s1",
+        apiKey: "session-token",
+        kind: "cloud",
+      },
+    ];
+    const fetchImpl = vi.fn(async () => jsonResponse(200, { result: null }));
+    const bridge = createMarsWebBridge(
+      "",
+      fetchImpl as unknown as typeof fetch,
+    );
+
+    await bridge.pauseSession("s1");
+
+    expect(fetchImpl).toHaveBeenCalledWith("/mars/rpc/pauseSession", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ args: ["s1"] }),
+    });
+
+    const foreignBridge = createMarsWebBridge(
+      "https://foreign-host.com",
+      fetchImpl as unknown as typeof fetch,
+    );
+    await foreignBridge.pauseSession("s2");
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "https://foreign-host.com/mars/rpc/pauseSession",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ args: ["s2"] }),
+      },
+    );
   });
 
   it("never offers OAuth", async () => {
