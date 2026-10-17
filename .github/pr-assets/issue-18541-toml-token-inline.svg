@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1260" height="470" role="img" aria-label="TOML syntax highlighter token inline layout verification">
+  <rect width="100%" height="100%" rx="18" fill="#0b1020"/>
+  <circle cx="34" cy="32" r="8" fill="#ff5f56"/>
+  <circle cx="60" cy="32" r="8" fill="#ffbd2e"/>
+  <circle cx="86" cy="32" r="8" fill="#27c93f"/>
+  <text x="28" y="78" fill="#d7e2ff" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21">Bug #18541: TOML section headers like [build-system] inline layout verification</text>
+  <text x="28" y="116" fill="#ff9b91" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21">Before: Prism .token.table collided with Tailwind .table { display: table }, breaking headers onto 3 lines</text>
+  <text x="28" y="164" fill="#8ef0a1" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21">After: .token.table { display: inline }, .static, .italic override utility styling; headers stay on one line</text>
+  <text x="28" y="218" fill="#d7e2ff" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="18">Computed layout verification across consumers:</text>
+  <text x="28" y="256" fill="#8ef0a1" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21">Fenced code block: display computes inline · Files tab: section headers align with line numbers</text>
+  <text x="28" y="294" fill="#8ef0a1" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21">Tool CodeBlock: display computes inline · Collisions with table, static, and italic neutralized</text>
+  <text x="28" y="348" fill="#d7e2ff" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21">$ npm test syntax-highlighter-tokens code syntax-highlighter-themes</text>
+  <text x="28" y="386" fill="#8ef0a1" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21">Test Files 3 passed (3) · Tests 9 passed (9)</text>
+  <text x="28" y="440" fill="#8ef0a1" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21">Verified on main @ ccdb087 · Node 24.19.0 · TypeScript 0 errors</text>
+</svg>
