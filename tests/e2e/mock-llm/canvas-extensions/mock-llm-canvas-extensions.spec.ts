@@ -180,6 +180,32 @@ test.describe("Apps lifecycle", () => {
     await expect(confirmation).toContainText(
       "This app runs trusted JavaScript inside Agent Canvas",
     );
+
+    // Verify initial focus enters the dialog and single Tab lands on non-destructive Cancel
+    const cancelButton = confirmation.getByTestId("cancel-button");
+    const confirmButton = confirmation.getByTestId("confirm-button");
+    await expect(confirmation).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(cancelButton).toBeFocused();
+
+    // Verify Tab then Enter does not activate the background Update button;
+    // Enter on Cancel closes the dialog and restores focus to the toggle
+    await page.keyboard.press("Enter");
+    await expect(confirmation).toBeHidden();
+    await expect(cardToggle(page)).toHaveAttribute("aria-checked", "false");
+    await expect(cardToggle(page)).toBeFocused();
+
+    // Reopen and verify Tab wrap-around within the dialog
+    await cardToggle(page).click();
+    await expect(confirmation).toBeVisible();
+    await page.keyboard.press("Tab");
+    await expect(cancelButton).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(confirmButton).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(cancelButton).toBeFocused();
+
+    // Confirm to enable the extension
     await confirmation.getByTestId("confirm-button").click();
 
     await expect(cardToggle(page)).toHaveAttribute("aria-checked", "true");
