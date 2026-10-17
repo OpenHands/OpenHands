@@ -111,6 +111,7 @@ import {
   hasAutomationSetupModeTag,
   removeAutomationDraftTags,
 } from "#/utils/automation-draft-tags";
+import { parseTimeOfDay } from "#/utils/automation-schedule";
 import { setupDraftFromAutomation } from "#/utils/automation-edit-draft";
 
 const DEFAULT_TIMEZONE = "America/New_York";
@@ -301,6 +302,12 @@ function cronWeekday(weekday: string): number {
   return value;
 }
 
+function usesTimeOfDay(frequency: Frequency): boolean {
+  return (
+    frequency === "daily" || frequency === "weekdays" || frequency === "weekly"
+  );
+}
+
 function toCron(
   time: string,
   frequency: Frequency,
@@ -312,7 +319,12 @@ function toCron(
   if (frequency === "once") return onceCron(scheduleDateTime);
   if (frequency === "hourly") return "0 * * * *";
 
-  const [hour = "9", minute = "0"] = time.split(":");
+  // An empty or malformed time must not fall through to midnight: "".split(":")
+  // yields "", and Number("") is 0. Validation blocks saving first; the empty
+  // string here keeps an invalid time from ever turning into a valid-looking
+  // schedule (and stays distinguishable in the draft dirty-state check).
+  if (!usesTimeOfDay(frequency) || parseTimeOfDay(time) === null) return "";
+  const [hour, minute] = time.split(":");
   const cronTime = `${Number(minute)} ${Number(hour)}`;
   if (frequency === "weekdays") return `${cronTime} * * 1-5`;
   if (frequency === "weekly") return `${cronTime} * * ${cronWeekday(weekday)}`;
@@ -1436,6 +1448,23 @@ export function AutomationSetupPanel({
         : result.errors[0]?.message || t(I18nKey.SETUP$SUBMIT_FAILED),
     });
   };
+  const validateScheduleTime = (): boolean => {
+    if (
+      triggerKind === "cron" &&
+      usesTimeOfDay(frequency) &&
+      parseTimeOfDay(time) === null
+    ) {
+      // A cleared or malformed time cannot be applied to a preset schedule,
+      // and saving anyway would silently store midnight. Refuse the save and
+      // keep the page open so the field can be fixed first.
+      setStatusMessage({
+        kind: "error",
+        text: t(I18nKey.AUTOMATION_SETUP$TIME_REQUIRED),
+      });
+      return false;
+    }
+    return true;
+  };
   const validateRequiredFields = (): boolean => {
     if (!prompt.trim() && kind !== "custom") {
       setStatusMessage({
@@ -1444,6 +1473,7 @@ export function AutomationSetupPanel({
       });
       return false;
     }
+    if (!validateScheduleTime()) return false;
     if (
       kind !== "custom" &&
       pluginEntries.some((entry) => entry.ref.trim() && !entry.source.trim())
@@ -1489,6 +1519,7 @@ export function AutomationSetupPanel({
     return true;
   };
   const handleSaveDraft = async () => {
+    if (!validateScheduleTime()) return;
     setIsSubmitting(true);
     setSaveState("saving");
     try {
@@ -2764,8 +2795,7 @@ function ScheduleFields({
     updatedSuffixes.time ??
     updatedSuffixes.scheduleDateTime ??
     updatedSuffixes.timezone;
-  const showTime =
-    frequency === "daily" || frequency === "weekdays" || frequency === "weekly";
+  const showTime = usesTimeOfDay(frequency);
   const timezoneChoices = TIMEZONE_OPTIONS.includes(
     timezone as (typeof TIMEZONE_OPTIONS)[number],
   )

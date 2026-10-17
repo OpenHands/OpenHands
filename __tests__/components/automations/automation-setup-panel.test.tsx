@@ -1985,6 +1985,61 @@ describe("AutomationSetupPanel", () => {
         "/automations/automation-final",
       );
     });
+
+    it("blocks saving a draft with a cleared time and stores the rebuilt schedule after re-entry", async () => {
+      mockSavedDraftEcho();
+      const user = userEvent.setup();
+      renderPanel();
+
+      const time = screen.getByTestId("automation-setup-time");
+      fireEvent.change(time, { target: { value: "" } });
+      await user.click(screen.getByTestId("automation-setup-save-draft"));
+
+      expect(displayErrorToast).toHaveBeenCalledWith(
+        "AUTOMATION_SETUP$TIME_REQUIRED",
+      );
+      expect(AutomationService.createServerDraft).not.toHaveBeenCalled();
+      expect(AutomationService.updateServerDraft).not.toHaveBeenCalled();
+
+      fireEvent.change(time, { target: { value: "10:15" } });
+      await user.click(screen.getByTestId("automation-setup-save-draft"));
+
+      await waitFor(() =>
+        expect(AutomationService.createServerDraft).toHaveBeenCalledTimes(1),
+      );
+      expect(
+        vi.mocked(AutomationService.createServerDraft).mock.calls[0][0],
+      ).toEqual(
+        expect.objectContaining({
+          draft: expect.objectContaining({
+            trigger: expect.objectContaining({ schedule: "15 10 * * *" }),
+          }),
+        }),
+      );
+    });
+
+    it("marks a cleared time as unsaved changes instead of colliding with the saved 09:00", async () => {
+      mockSavedDraftEcho();
+      const user = userEvent.setup();
+      renderPanel();
+
+      await user.click(screen.getByTestId("automation-setup-save-draft"));
+      await waitFor(() =>
+        expect(
+          screen.getByTestId("automation-setup-save-state"),
+        ).toHaveTextContent("AUTOMATION_SETUP$SAVED_JUST_NOW"),
+      );
+
+      fireEvent.change(screen.getByTestId("automation-setup-time"), {
+        target: { value: "" },
+      });
+
+      await waitFor(() =>
+        expect(
+          screen.getByTestId("automation-setup-save-state"),
+        ).toHaveTextContent("AUTOMATION_SETUP$UNSAVED_CHANGES"),
+      );
+    });
   });
 
   it("saves and tests an existing automation instead of drafting or creating one", async () => {
@@ -2348,5 +2403,97 @@ describe("AutomationSetupPanel", () => {
     ).not.toEqual(
       expect.objectContaining({ setup_script_path: expect.anything() }),
     );
+  });
+
+  describe("cleared time of day on a preset schedule", () => {
+    it("blocks saving an edited automation and keeps the editor open", async () => {
+      vi.mocked(AutomationService.updateAutomation).mockResolvedValue({
+        id: "auto-1",
+      } as never);
+
+      const user = userEvent.setup();
+      renderPanel({
+        prompt: "Review every pull request",
+        kind: "prompt",
+        editingAutomationId: "auto-1",
+        form: {
+          kind: "prompt",
+          name: "Daily digest",
+          prompt: "Review every pull request",
+        },
+      });
+
+      const time = screen.getByTestId("automation-setup-time");
+      expect(time).toHaveValue("09:00");
+
+      fireEvent.change(time, { target: { value: "" } });
+      expect(time).toHaveValue("");
+      await user.click(screen.getByTestId("automation-setup-save"));
+
+      expect(AutomationService.updateAutomation).not.toHaveBeenCalled();
+      expect(displayErrorToast).toHaveBeenCalledWith(
+        "AUTOMATION_SETUP$TIME_REQUIRED",
+      );
+      expect(mockToastSuccess).not.toHaveBeenCalled();
+
+      // Re-entering a time clears the error and saves the rebuilt schedule.
+      fireEvent.change(time, { target: { value: "07:45" } });
+      await user.click(screen.getByTestId("automation-setup-save"));
+      await waitFor(() =>
+        expect(AutomationService.updateAutomation).toHaveBeenCalledWith(
+          "auto-1",
+          expect.objectContaining({
+            trigger: expect.objectContaining({ schedule: "45 7 * * *" }),
+          }),
+        ),
+      );
+    });
+
+    it("does not require a time once the trigger is an event", async () => {
+      const user = userEvent.setup();
+      renderPanel();
+
+      fireEvent.change(screen.getByTestId("automation-setup-time"), {
+        target: { value: "" },
+      });
+      await user.click(screen.getByText("AUTOMATIONS$DETAIL$TRIGGER_EVENT"));
+      await user.click(screen.getByTestId("automation-setup-save-draft"));
+
+      expect(displayErrorToast).not.toHaveBeenCalled();
+      expect(mockToastSuccess).toHaveBeenCalledWith(
+        "AUTOMATION_SETUP$DRAFT_SAVED",
+      );
+    });
+
+    it("blocks creating the automation while the time is cleared", async () => {
+      const user = userEvent.setup();
+      renderPanel();
+
+      fireEvent.change(screen.getByTestId("automation-setup-time"), {
+        target: { value: "" },
+      });
+      await user.click(screen.getByTestId("automation-setup-create"));
+
+      expect(AutomationService.createAutomationDraft).not.toHaveBeenCalled();
+      expect(displayErrorToast).toHaveBeenCalledWith(
+        "AUTOMATION_SETUP$TIME_REQUIRED",
+      );
+    });
+
+    it("ignores a cleared time once the schedule stops using one", async () => {
+      const user = userEvent.setup();
+      renderPanel();
+
+      fireEvent.change(screen.getByTestId("automation-setup-time"), {
+        target: { value: "" },
+      });
+      await user.click(screen.getByTestId("automation-setup-frequency-hourly"));
+      await user.click(screen.getByTestId("automation-setup-save-draft"));
+
+      expect(displayErrorToast).not.toHaveBeenCalled();
+      expect(mockToastSuccess).toHaveBeenCalledWith(
+        "AUTOMATION_SETUP$DRAFT_SAVED",
+      );
+    });
   });
 });
