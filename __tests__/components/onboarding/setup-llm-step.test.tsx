@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ONBOARDING_DEFAULT_LLM_MODEL,
   SetupLlmStep,
+  resolveOnboardingProfileName,
 } from "#/components/features/onboarding/steps/setup-llm-step";
 import { I18nKey } from "#/i18n/declaration";
 import type { SdkSectionSaveControl } from "#/components/features/settings/sdk-settings/sdk-section-page";
@@ -269,6 +270,73 @@ describe("SetupLlmStep", () => {
     expect(applyAgentProfile).toHaveBeenCalledWith("default", {
       agent_kind: "openhands",
       llm_profile_ref: "mock-onboarding-model",
+    });
+  });
+
+  it("saves in place under the starting profile when the derived name matches another existing profile", async () => {
+    const activeConfig = {
+      model: "openai/deepseek-chat",
+      base_url: "https://api.deepseek.com/v1",
+      api_key: "encrypted:work-key",
+    };
+    listProfiles.mockResolvedValue({
+      profiles: [{ name: "deepseek-v4-flash" }, { name: "work" }],
+      active_profile: "work",
+    });
+    getProfile.mockResolvedValue({
+      name: "work",
+      config: activeConfig,
+      api_key_set: true,
+    });
+    formState.dirtyLlm = { model: "openai/deepseek-v4-flash" };
+    const onNext = vi.fn();
+    renderWithProviders(<SetupLlmStep onBack={vi.fn()} onNext={onNext} />);
+
+    await clickNext();
+
+    await waitFor(() => expect(onNext).toHaveBeenCalledTimes(1));
+    expect(saveProfile).toHaveBeenCalledWith("work", {
+      llm: {
+        ...activeConfig,
+        ...API_KEY_PROFILE_DEFAULTS,
+        model: "openai/deepseek-v4-flash",
+      },
+      include_secrets: true,
+    });
+    expect(activateProfile).toHaveBeenCalledWith("work");
+    expect(applyAgentProfile).toHaveBeenCalledWith("default", {
+      agent_kind: "openhands",
+      llm_profile_ref: "work",
+    });
+  });
+
+  it("appends a numeric suffix when a fresh profile's derived name collides with an existing profile", async () => {
+    listProfiles.mockResolvedValue({
+      profiles: [{ name: "gpt-4o-mini" }],
+      active_profile: null,
+    });
+    formState.dirtyLlm = {
+      model: "openai/gpt-4o-mini",
+      api_key: "sk-fresh",
+    };
+    const onNext = vi.fn();
+    renderWithProviders(<SetupLlmStep onBack={vi.fn()} onNext={onNext} />);
+
+    await clickNext();
+
+    await waitFor(() => expect(onNext).toHaveBeenCalledTimes(1));
+    expect(saveProfile).toHaveBeenCalledWith("gpt-4o-mini-2", {
+      llm: {
+        ...API_KEY_PROFILE_DEFAULTS,
+        model: "openai/gpt-4o-mini",
+        api_key: "sk-fresh",
+      },
+      include_secrets: true,
+    });
+    expect(activateProfile).toHaveBeenCalledWith("gpt-4o-mini-2");
+    expect(applyAgentProfile).toHaveBeenCalledWith("default", {
+      agent_kind: "openhands",
+      llm_profile_ref: "gpt-4o-mini-2",
     });
   });
 
@@ -642,5 +710,56 @@ describe("SetupLlmStep", () => {
       agent_kind: "openhands",
       llm_profile_ref: "gpt-4o-mini",
     });
+  });
+});
+
+describe("resolveOnboardingProfileName", () => {
+  it("uses the derived name when there are no collisions", () => {
+    const name = resolveOnboardingProfileName({
+      derivedName: "gpt-4o-mini",
+      startingProfileName: null,
+      existingNames: new Set(["other-profile"]),
+    });
+    expect(name).toBe("gpt-4o-mini");
+  });
+
+  it("uses the derived name when it matches the starting profile being edited", () => {
+    const name = resolveOnboardingProfileName({
+      derivedName: "work",
+      startingProfileName: "work",
+      existingNames: new Set(["work", "personal"]),
+    });
+    expect(name).toBe("work");
+  });
+
+  it("saves in place under the starting profile when derived name collides with another profile", () => {
+    const name = resolveOnboardingProfileName({
+      derivedName: "deepseek-v4-flash",
+      startingProfileName: "work",
+      existingNames: new Set(["deepseek-v4-flash", "work"]),
+    });
+    expect(name).toBe("work");
+  });
+
+  it("appends numeric suffix when a fresh profile derived name collides", () => {
+    const name = resolveOnboardingProfileName({
+      derivedName: "deepseek-v4-flash",
+      startingProfileName: null,
+      existingNames: new Set(["deepseek-v4-flash"]),
+    });
+    expect(name).toBe("deepseek-v4-flash-2");
+  });
+
+  it("increments numeric suffix when multiple suffixes already exist", () => {
+    const name = resolveOnboardingProfileName({
+      derivedName: "deepseek-v4-flash",
+      startingProfileName: null,
+      existingNames: new Set([
+        "deepseek-v4-flash",
+        "deepseek-v4-flash-2",
+        "deepseek-v4-flash-3",
+      ]),
+    });
+    expect(name).toBe("deepseek-v4-flash-4");
   });
 });
