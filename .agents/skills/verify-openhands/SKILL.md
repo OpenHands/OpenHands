@@ -199,6 +199,13 @@ prerequisite; never substitute a mock and call it a pass.
   `src/` paths no family owns (a map gap) and non-user-facing paths. Drive every entry point those features list at
   desktop and phone viewports, and report with
   [the report contract](references/report.md).
+- **Verify an Agent Server change** (a software-agent-sdk PR): the families
+  whose `Server:` line names the changed server features are where a user
+  could see it ([mapping.md](references/mapping.md)). Launch the baseline
+  with `--sdk-ref main` and the change with `--sdk-ref <PR branch>` (`launch
+  --new` for each) and drive those families on both. A difference is
+  user-facing; no difference means the change does not reach Canvas users
+  on those paths.
 - **Verify a fix for a known bug** (an open PR or a merged commit that claims
   to fix a bug the map records): launch the baseline and the fix as two runs
   (`launch --new` from each worktree, same backend pins), then run the note's

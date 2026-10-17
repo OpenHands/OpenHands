@@ -97,8 +97,27 @@ checks and `map affected`; keep other implementation detail out). Every path
 must exist (`map check` verifies it); a directory ends with `/`, names in
 parentheses after a directory are relative to it, and `name-*.tsx` matches by
 prefix. For a family spread over many files, list the route modules and
-top-level component directories, not every file. Then exactly four H2
-sections, in this order:
+top-level component directories, not every file.
+
+When the family calls the Agent Server, add one `Server:` line after `Source:`
+naming the server features it uses, as IDs of the verify-agent-server map
+(OpenHands/software-agent-sdk, `.agents/skills/verify-agent-server/`): a whole
+family (`F15`) or one sub-feature (`F15.changes`), comma-separated and not
+backticked, so they never read as this map's own IDs:
+`Server: F13, F14, F15, F16.` Read them from the code the `Source:` paths
+reach (the `src/api/` clients and the routes they request), not from memory.
+The four OpenHands repositories only work together, and this is where the
+link between them lives: the consumer declares what it calls, because only
+its code knows, and the server side looks it up
+(`control-agent-server map dependents <ID>` lists the Canvas and automation
+families to drive for a server change). `map check` rejects an ID that is
+not shaped like one; `map check --server-map <software-agent-sdk checkout>`
+also rejects one the server map does not declare. A server bug that a
+`Server:` family shows to users gets a known-bug block here, citing the
+software-agent-sdk issue; one that no Canvas path reaches stays in the server
+map only.
+
+Then exactly four H2 sections, in this order:
 
 1. `## Sub-features`: one bullet per ID: `` - `F14.create`: add a dummy secret; it persists after reload. ``
 2. `## How to get to it (user POV)`: every entry point, in user language: the
