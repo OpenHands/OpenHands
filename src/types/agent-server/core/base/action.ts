@@ -352,6 +352,12 @@ export interface LaunchChildConversationAction extends ActionBase<
   repository?: string | null;
   branch?: string | null;
   isolation?: string | null;
+  /**
+   * Saved agent profile name or id. Omitted means the child keeps the default
+   * settings path. Validated before launch; a misspelled value never creates
+   * a conversation.
+   */
+  agent_profile?: string | null;
 }
 
 /**
