@@ -1,0 +1,13 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>chat file input re-pick - repro evidence</title>
+<style>body{font-family:system-ui;margin:2rem;background:#141414;color:#eee}img{max-width:100%;border:1px solid #444}code{background:#222;padding:2px 6px;border-radius:4px}</style></head>
+<body>
+<h1>use-file-handling: picked file input is never reset</h1>
+<p>The chat attachment picker's <code>change</code> handler consumes <code>e.target.files</code> but leaves the
+input's value set. In a real browser, picking the <em>same</em> file again does not fire <code>change</code> while
+the value is unchanged, so after removing an attachment chip the user cannot re-attach that file - the click
+opens the picker, the pick is silently ignored. The fix clears the input (<code>value = ""</code>) after the files
+are consumed; the regression test asserts the reset so jsdom captures the browser contract.</p>
+<h2>Terminal evidence (before / after, repro run twice)</h2>
+<img src="terminal.png" alt="vitest before: 1 failed (no reset call); after: 2 passed">
+</body></html>
