@@ -141,4 +141,32 @@ describe("CanvasExtensionsScreen", () => {
     await user.keyboard(" ");
     expect(screen.getByTestId("confirmation-modal")).toBeInTheDocument();
   });
+
+  it("submits install using raw trimmed input as fallback when tree URL has malformed percent escapes", async () => {
+    const user = userEvent.setup();
+    const installSpy = vi
+      .spyOn(CanvasExtensionsService, "install")
+      .mockResolvedValue(buildExtension());
+    vi.spyOn(CanvasExtensionsService, "listInstalled").mockResolvedValue([]);
+    renderAppsScreen();
+
+    await user.click(await screen.findByTestId("canvas-extensions-add-button"));
+    expect(
+      screen.getByTestId("add-canvas-extension-modal"),
+    ).toBeInTheDocument();
+
+    const sourceInput = screen.getByTestId("add-canvas-extension-source-input");
+    await user.type(sourceInput, "https://github.com/o/r/tree/main%/apps/demo");
+
+    const submitBtn = screen.getByTestId("add-canvas-extension-submit");
+    await user.click(submitBtn);
+
+    await waitFor(() =>
+      expect(installSpy).toHaveBeenCalledWith({
+        source: "https://github.com/o/r/tree/main%/apps/demo",
+        ref: null,
+        repo_path: null,
+      }),
+    );
+  });
 });
