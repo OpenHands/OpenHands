@@ -21,6 +21,16 @@ vi.mock("#/utils/custom-toast-handlers", () => ({
   displayErrorToast: vi.fn(),
   TOAST_OPTIONS: {},
 }));
+vi.mock("react-i18next", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-i18next")>()),
+  useTranslation: () => ({
+    t: (key: string, values?: { count?: number }) =>
+      key === "CONVERSATION$CONFIRM_DELETE_ALL_DESC"
+        ? `${key} ${values?.count}`
+        : key,
+    i18n: { language: "en", exists: () => false },
+  }),
+}));
 
 describe("ConversationPanel filters and pagination", () => {
   setupConversationPanelTest();
@@ -539,6 +549,97 @@ describe("ConversationPanel filters and pagination", () => {
       ).toHaveTextContent("main");
     });
 
+    it("loads every page before confirming deletion, including hidden archives and overlapping rows", async () => {
+      // Arrange: only the first page is visible; the second page is still
+      // loading and repeats a row while introducing a hidden archived row.
+      const user = userEvent.setup();
+      const deleteSpy = vi
+        .spyOn(AgentServerConversationService, "deleteConversation")
+        .mockResolvedValue();
+      let resolveSecondPage!: (page: {
+        items: ReturnType<typeof createMockConversation>[];
+        next_page_id: null;
+      }) => void;
+      const secondPage = new Promise<{
+        items: ReturnType<typeof createMockConversation>[];
+        next_page_id: null;
+      }>((resolve) => {
+        resolveSecondPage = resolve;
+      });
+      vi.spyOn(
+        AgentServerConversationService,
+        "searchConversations",
+      ).mockImplementation(async (_, pageId) =>
+        pageId === "second-page"
+          ? secondPage
+          : {
+              items: [createMockConversation({ id: "visible" })],
+              next_page_id: "second-page",
+            },
+      );
+      useArchivedConversationsStore.setState({
+        archivesByBackendId: { "default-local": ["archived"] },
+      });
+      renderConversationPanel();
+      await screen.findByTestId("conversation-card");
+
+      // Act: request the destructive action without loading more rows.
+      await user.click(screen.getByTestId("conversation-layouts-toggle"));
+      await user.click(screen.getByTestId("delete-all-conversations"));
+
+      // Assert: an incomplete count cannot authorize a partial deletion.
+      expect(screen.getByTestId("confirm-button")).toBeDisabled();
+      expect(deleteSpy).not.toHaveBeenCalled();
+      await act(async () => {
+        resolveSecondPage({
+          items: [
+            createMockConversation({ id: "visible" }),
+            createMockConversation({ id: "archived" }),
+            createMockConversation({ id: "unloaded" }),
+          ],
+          next_page_id: null,
+        });
+      });
+      await screen.findByText("CONVERSATION$CONFIRM_DELETE_ALL_DESC 3");
+      await user.click(screen.getByTestId("confirm-button"));
+      await waitFor(() => expect(deleteSpy).toHaveBeenCalledTimes(3));
+      expect(new Set(deleteSpy.mock.calls.map(([, scope]) => scope)).size).toBe(1);
+      expect(deleteSpy.mock.calls.map(([id]) => id).sort()).toEqual([
+        "archived",
+        "unloaded",
+        "visible",
+      ]);
+    });
+
+    it("does not allow a partial delete when a later conversation page fails to load", async () => {
+      // Arrange: the list loads, but enumerating the backend fails midway.
+      const user = userEvent.setup();
+      const deleteSpy = vi
+        .spyOn(AgentServerConversationService, "deleteConversation")
+        .mockResolvedValue();
+      vi.spyOn(
+        AgentServerConversationService,
+        "searchConversations",
+      ).mockImplementation(async (_, pageId) => {
+        if (pageId) throw new Error("second page unavailable");
+        return {
+          items: [createMockConversation({ id: "visible" })],
+          next_page_id: "second-page",
+        };
+      });
+      renderConversationPanel();
+      await screen.findByTestId("conversation-card");
+
+      // Act + Assert: the failure keeps confirmation disabled and Cancel
+      // available, without issuing any delete request against the loaded page.
+      await user.click(screen.getByTestId("conversation-layouts-toggle"));
+      await user.click(screen.getByTestId("delete-all-conversations"));
+      await screen.findByText("ERROR$GENERIC");
+      expect(screen.getByTestId("confirm-button")).toBeDisabled();
+      expect(screen.getByTestId("cancel-button")).toBeEnabled();
+      expect(deleteSpy).not.toHaveBeenCalled();
+    });
+
     it("delete-all is enabled when no conversations are older than the cutoff and deletes every loaded conversation", async () => {
       const user = userEvent.setup();
       const deleteSpy = vi
@@ -581,8 +682,8 @@ describe("ConversationPanel filters and pagination", () => {
       await waitFor(() => {
         expect(deleteSpy).toHaveBeenCalledTimes(2);
       });
-      expect(deleteSpy).toHaveBeenCalledWith("recent-1");
-      expect(deleteSpy).toHaveBeenCalledWith("recent-2");
+      expect(deleteSpy).toHaveBeenCalledWith("recent-1", expect.objectContaining({ kind: "local" }));
+      expect(deleteSpy).toHaveBeenCalledWith("recent-2", expect.objectContaining({ kind: "local" }));
     });
 
     it("delete-all still deletes hidden archived conversations", async () => {
@@ -649,9 +750,9 @@ describe("ConversationPanel filters and pagination", () => {
       await waitFor(() => {
         expect(deleteSpy).toHaveBeenCalledTimes(3);
       });
-      expect(deleteSpy).toHaveBeenCalledWith("visible-1");
-      expect(deleteSpy).toHaveBeenCalledWith("archived-1");
-      expect(deleteSpy).toHaveBeenCalledWith("archived-2");
+      expect(deleteSpy).toHaveBeenCalledWith("visible-1", expect.objectContaining({ kind: "local" }));
+      expect(deleteSpy).toHaveBeenCalledWith("archived-1", expect.objectContaining({ kind: "local" }));
+      expect(deleteSpy).toHaveBeenCalledWith("archived-2", expect.objectContaining({ kind: "local" }));
     });
 
     it("navigates away after the active conversation is deleted successfully even when another deletion fails", async () => {

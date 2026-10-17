@@ -5,6 +5,23 @@ import AgentServerConversationService from "#/api/conversation-service/agent-ser
 import { useDeleteConversation } from "#/hooks/mutation/use-delete-conversation";
 
 describe("useDeleteConversation", () => {
+  it("keeps the caller's captured delete scope across an asynchronous onMutate", async () => {
+    const deleteSpy = vi.spyOn(AgentServerConversationService, "deleteConversation").mockResolvedValue(undefined);
+    const scope = AgentServerConversationService.createConversationDeletionScope();
+    let release!: () => void;
+    const queryClient = new QueryClient();
+    vi.spyOn(queryClient, "cancelQueries").mockReturnValue(new Promise<void>(resolve => { release = resolve; }));
+    const { result } = renderHook(() => useDeleteConversation(), {
+      wrapper: ({ children }) => <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>,
+    });
+    const deletion = result.current.mutateAsync({ conversationId: "captured", deletionScope: scope });
+    await waitFor(() => expect(release).toBeDefined());
+    expect(deleteSpy).not.toHaveBeenCalled();
+    release();
+    await deletion;
+    expect(deleteSpy).toHaveBeenCalledWith("captured", scope);
+  });
+
   it("invalidates the conversation list and start-tasks queries on settle", async () => {
     vi.spyOn(
       AgentServerConversationService,

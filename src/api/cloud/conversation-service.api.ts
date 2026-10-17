@@ -191,12 +191,13 @@ export async function downloadCloudConversation(
  */
 export async function deleteCloudConversation(
   conversationId: string,
+  scope?: { backend: Backend; orgId: string | null },
 ): Promise<void> {
-  const backend = getActiveCloudBackend();
   await callCloudProxy<unknown>({
-    backend,
+    backend: scope?.backend ?? getActiveCloudBackend(),
     method: "DELETE",
     path: `/api/v1/app-conversations/${conversationId}`,
+    ...(scope ? { orgId: scope.orgId } : {}),
   });
 }
 
