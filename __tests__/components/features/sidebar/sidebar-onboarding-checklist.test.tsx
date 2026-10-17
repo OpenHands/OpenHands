@@ -46,6 +46,16 @@ const mockUseAutomations = vi.fn();
 const mockUseSettings = vi.fn();
 const mockUseLlmConfigured = vi.fn();
 const mockUseLlmProfiles = vi.fn();
+const mockHasAutomationInterface = vi.fn(() => true);
+
+vi.mock("#/manifests/automation-interface", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("#/manifests/automation-interface")>();
+  return {
+    ...actual,
+    hasAutomationInterface: () => mockHasAutomationInterface(),
+  };
+});
 
 vi.mock("#/hooks/query/use-paginated-conversations", () => ({
   usePaginatedConversations: () => mockUsePaginatedConversations(),
@@ -134,6 +144,7 @@ describe("SidebarOnboardingChecklist", () => {
       data: { active_profile: null, profiles: [] },
       isLoading: false,
     });
+    mockHasAutomationInterface.mockReturnValue(true);
   });
 
   it("renders setup items including LLM keys, agent profiles, schedule a task, and Slack", () => {
@@ -255,6 +266,24 @@ describe("SidebarOnboardingChecklist", () => {
     expect(
       screen.getByText(I18nKey.SIDEBAR$ONBOARDING_CHECKLIST_CONFIGURE_LLM),
     ).toHaveClass("line-through");
+  });
+
+  it("omits Schedule a task when automation interface is absent", () => {
+    mockHasAutomationInterface.mockReturnValue(false);
+    renderChecklist();
+
+    expect(
+      screen.getByTestId("sidebar-onboarding-checklist"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("sidebar-onboarding-checklist-item-schedule-task"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("sidebar-onboarding-checklist-item-configure-llm"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("sidebar-onboarding-checklist-item-connect-mcp"),
+    ).toBeInTheDocument();
   });
 
   it("hides when the welcome onboarding flow is not complete", () => {

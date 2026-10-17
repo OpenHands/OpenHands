@@ -10,6 +10,7 @@ import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useLlmConfigured } from "#/hooks/use-llm-configured";
 import { parseMcpConfig } from "#/utils/mcp-config";
 import { getLockedCloudHost } from "#/api/agent-server-config";
+import { hasAutomationInterface } from "#/manifests/automation-interface";
 import {
   isCustomizeChecklistPath,
   SIDEBAR_ONBOARDING_CHECKLIST_ITEM_IDS,
@@ -123,8 +124,9 @@ export function useSidebarOnboardingChecklist() {
     (): SidebarOnboardingChecklistItemState[] =>
       SIDEBAR_ONBOARDING_CHECKLIST_ITEM_IDS.filter(
         (id) =>
-          !isLockedToCloud ||
-          (id !== "configure-llm" && id !== "customize-agent"),
+          (!isLockedToCloud ||
+            (id !== "configure-llm" && id !== "customize-agent")) &&
+          (hasAutomationInterface() || id !== "schedule-task"),
       ).map((id) => ({
         id,
         isComplete: completionById[id],
