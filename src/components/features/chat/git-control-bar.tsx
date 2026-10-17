@@ -26,6 +26,7 @@ import { getStoredConversationMetadata } from "#/api/conversation-metadata-store
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useUserProviders } from "#/hooks/use-user-providers";
 import { useOptionalScrollContext } from "#/context/scroll-context";
+import { getHomeLaunchScope } from "#/utils/home-launch-scope";
 
 interface GitControlBarProps {
   onSuggestionsClick: (value: string) => void;
@@ -44,7 +45,8 @@ export function GitControlBar({ onSuggestionsClick }: GitControlBarProps) {
   const markPendingMessageError = useOptimisticUserMessageStore(
     (state) => state.markPendingMessageError,
   );
-  const { backend } = useActiveBackend();
+  const active = useActiveBackend();
+  const { backend } = active;
   const isLocalBackend = backend.kind === "local";
   const { providers } = useUserProviders();
   const providerTokensReady = isLocalBackend || providers.length > 0;
@@ -141,7 +143,7 @@ export function GitControlBar({ onSuggestionsClick }: GitControlBarProps) {
     if (!conversationId) return;
 
     // Persist to recent repositories list (matches home page behavior)
-    addRecentRepository(repository);
+    addRecentRepository(repository, getHomeLaunchScope(active));
 
     // Note: We update repository metadata first, then send clone command.
     // The clone command is sent to the agent via WebSocket (fire-and-forget).
