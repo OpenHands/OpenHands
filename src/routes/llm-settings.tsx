@@ -39,6 +39,12 @@ import {
   isFreeOpenHandsModel,
   isOpenHandsProviderModel,
 } from "#/utils/format-model-name";
+import {
+  MIN_LLM_API_KEY_LENGTH,
+  validateLlmApiKey,
+  validateLlmBaseUrl,
+  validateLlmCredentials,
+} from "#/utils/validate-llm-credentials";
 import { FreeOpenHandsModelsNote } from "#/components/shared/free-models-note";
 import { LLM_PROVIDER_CONNECTION_KEY } from "#/constants/llm-provider-connection";
 
@@ -260,6 +266,15 @@ export function LlmSettingsScreen({
         ? apiKeyValue.length > 0
         : Boolean(settings?.llm_api_key_set);
 
+      // Surfaced inline as the user types; `buildPayload` below rejects the
+      // same values so an invalid credential can never be persisted.
+      const apiKeyErrorKey = validateLlmApiKey(apiKeyValue);
+      const apiKeyError = apiKeyErrorKey
+        ? t(apiKeyErrorKey, { min: MIN_LLM_API_KEY_LENGTH })
+        : undefined;
+      const baseUrlErrorKey = validateLlmBaseUrl(baseUrlValue);
+      const baseUrlError = baseUrlErrorKey ? t(baseUrlErrorKey) : undefined;
+
       // A profile linked to a provider connection reads its api_key / base_url
       // from that connection, so the inline key + base URL inputs are hidden.
       const connectionValue =
@@ -330,6 +345,7 @@ export function LlmSettingsScreen({
             placeholder={apiKeyIsSet ? "<hidden>" : ""}
             onChange={(value) => onChange("llm.api_key", value)}
             isDisabled={isDisabled}
+            error={apiKeyError}
             startContent={
               apiKeyIsSet ? <KeyStatusIcon isSet={apiKeyIsSet} /> : undefined
             }
@@ -523,6 +539,7 @@ export function LlmSettingsScreen({
                       placeholder="https://api.openai.com"
                       onChange={(value) => onChange("llm.base_url", value)}
                       isDisabled={isDisabled}
+                      error={baseUrlError}
                     />
                   )}
 
@@ -612,6 +629,16 @@ export function LlmSettingsScreen({
           delete llm.api_key;
           delete llm.base_url;
         }
+      }
+
+      // Reject a malformed base URL / API key before it reaches the backend.
+      // Only keys still present in `llm` are checked, so the branches above
+      // that delete them (subscription auth, cloud OpenHands provider) are
+      // unaffected. SdkSectionPage turns the throw into an error toast and
+      // skips the save.
+      const credentialErrorKey = validateLlmCredentials(llm);
+      if (credentialErrorKey) {
+        throw new Error(t(credentialErrorKey, { min: MIN_LLM_API_KEY_LENGTH }));
       }
 
       agentSettings.llm = llm;
