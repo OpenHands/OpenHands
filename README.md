@@ -59,7 +59,16 @@ like Slack, GitHub, and Datadog. See [SELF_HOSTING.md](docs/SELF_HOSTING.md) for
 Notably, you can run the backend in _multiple different environments_, and switch between
 them from the same Agent Canvas frontend. E.g. you can share an Agent Server with your team for agents doing
 code review and dependency updates, then have your personal agents running on your laptop.
+### Connecting to OpenHands Cloud
 
+To connect Agent Canvas to OpenHands Cloud, go to **Settings → API Keys** in OpenHands Cloud.
+
+There are two types of keys:
+
+- **OpenHands API Key:** A session key used to connect Agent Canvas to an OpenHands Cloud backend.
+- **OpenHands LLM Key:** An inference key used with the OpenHands LLM provider. Usage is charged against your OpenHands Cloud credits.
+
+Use the key that matches the purpose of your connection.
 ### Option 1: Without a Sandbox
 
 > [!WARNING]
