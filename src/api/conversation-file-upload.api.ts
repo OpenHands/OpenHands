@@ -2,6 +2,7 @@ import { RemoteWorkspace } from "@openhands/typescript-client/workspace/remote-w
 import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
 import { getActiveBackend } from "#/api/backend-registry/active-store";
 import { batchGetCloudConversations } from "#/api/cloud/conversation-service.api";
+import ConversationService from "#/api/conversation-service/conversation-service.api";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import type { FileUploadSuccessResponse } from "#/api/open-hands.types";
 import {
@@ -15,6 +16,7 @@ const FILE_UPLOAD_CONCURRENCY = 5;
 export interface ConversationRuntimeContext {
   conversationUrl: string | null;
   sessionApiKey: string | null;
+  workingDir?: string | null;
 }
 
 /**
@@ -26,14 +28,21 @@ export async function resolveConversationRuntime(
   conversationId: string,
   currentConversation?: AppConversation | null,
 ): Promise<ConversationRuntimeContext> {
+  const activeConversation =
+    currentConversation?.id === conversationId
+      ? currentConversation
+      : ConversationService.getCurrentConversation()?.id === conversationId
+        ? ConversationService.getCurrentConversation()
+        : null;
+
   if (
-    currentConversation?.id === conversationId &&
-    currentConversation.conversation_url?.trim() &&
-    currentConversation.session_api_key?.trim()
+    activeConversation?.conversation_url?.trim() &&
+    activeConversation.session_api_key?.trim()
   ) {
     return {
-      conversationUrl: currentConversation.conversation_url.trim(),
-      sessionApiKey: currentConversation.session_api_key.trim(),
+      conversationUrl: activeConversation.conversation_url.trim(),
+      sessionApiKey: activeConversation.session_api_key.trim(),
+      workingDir: activeConversation.workspace?.working_dir?.trim() ?? null,
     };
   }
 
@@ -42,10 +51,15 @@ export async function resolveConversationRuntime(
     return {
       conversationUrl: conversation?.conversation_url?.trim() ?? null,
       sessionApiKey: conversation?.session_api_key?.trim() ?? null,
+      workingDir: conversation?.workspace?.working_dir?.trim() ?? null,
     };
   }
 
-  return { conversationUrl: null, sessionApiKey: null };
+  return {
+    conversationUrl: null,
+    sessionApiKey: null,
+    workingDir: activeConversation?.workspace?.working_dir?.trim() ?? null,
+  };
 }
 
 function requireCloudRuntime(
@@ -74,46 +88,63 @@ export async function uploadFilesToConversation(
   files: File[],
   currentConversation?: AppConversation | null,
 ): Promise<FileUploadSuccessResponse> {
-  const workingDir = await resolveConversationUploadWorkingDir(
-    conversationId,
-    currentConversation,
-  );
-  const runtime = await resolveConversationRuntime(
-    conversationId,
-    currentConversation,
-  );
-  const isCloud = getActiveBackend().backend.kind === "cloud";
+  try {
+    const activeConversation =
+      currentConversation?.id === conversationId
+        ? currentConversation
+        : ConversationService.getCurrentConversation()?.id === conversationId
+          ? ConversationService.getCurrentConversation()
+          : null;
 
-  const sessionApiKey =
-    currentConversation?.id === conversationId
-      ? (currentConversation.session_api_key ?? runtime.sessionApiKey)
-      : runtime.sessionApiKey;
-  const conversationUrl =
-    currentConversation?.id === conversationId
-      ? (currentConversation.conversation_url ?? runtime.conversationUrl)
-      : runtime.conversationUrl;
+    const runtime = await resolveConversationRuntime(
+      conversationId,
+      activeConversation,
+    );
+    const isCloud = getActiveBackend().backend.kind === "cloud";
 
-  if (isCloud) {
-    const cloudRuntime = requireCloudRuntime({
-      conversationUrl,
-      sessionApiKey,
-    });
-    return uploadFilesToRuntime({
+    const sessionApiKey =
+      activeConversation?.session_api_key ?? runtime.sessionApiKey;
+    const conversationUrl =
+      activeConversation?.conversation_url ?? runtime.conversationUrl;
+
+    const workingDir =
+      runtime.workingDir?.trim() ||
+      (await resolveConversationUploadWorkingDir(
+        conversationId,
+        activeConversation,
+      ));
+
+    if (isCloud) {
+      const cloudRuntime = requireCloudRuntime({
+        conversationUrl,
+        sessionApiKey,
+      });
+      return await uploadFilesToRuntime({
+        conversationId,
+        files,
+        workingDir,
+        conversationUrl: cloudRuntime.conversationUrl,
+        sessionApiKey: cloudRuntime.sessionApiKey,
+      });
+    }
+
+    return await uploadFilesToRuntime({
       conversationId,
       files,
       workingDir,
-      conversationUrl: cloudRuntime.conversationUrl,
-      sessionApiKey: cloudRuntime.sessionApiKey,
+      conversationUrl,
+      sessionApiKey,
     });
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "Upload failed";
+    return {
+      uploaded_files: [],
+      skipped_files: files.map((file) => ({
+        name: file.name,
+        reason,
+      })),
+    };
   }
-
-  return uploadFilesToRuntime({
-    conversationId,
-    files,
-    workingDir,
-    conversationUrl,
-    sessionApiKey,
-  });
 }
 
 async function uploadFilesToRuntime(options: {

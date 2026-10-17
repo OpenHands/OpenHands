@@ -144,4 +144,65 @@ describe("uploadFilesToConversation", () => {
     );
     expect(result.uploaded_files).toEqual(["notes.md"]);
   });
+
+  it("prioritizes cloud runtime working_dir over client-stored selected_workspace", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+    const conversationId = "cloud-conv-with-stored-meta";
+
+    // Set a local stored selected_workspace which should NOT override the cloud sandbox's actual working dir
+    window.localStorage.setItem(
+      "openhands-agent-server-conversation-metadata",
+      JSON.stringify({
+        [conversationId]: {
+          selected_workspace: "/local/user/developer-folder",
+        },
+      }),
+    );
+
+    batchGetCloudConversations.mockResolvedValue([
+      {
+        id: conversationId,
+        conversation_url: "http://runtime.example.dev/api/conversations/123",
+        session_api_key: "runtime-session-key",
+        workspace: { working_dir: "/workspace/project/custom-cloud" },
+      },
+    ]);
+
+    const result = await uploadFilesToConversation(conversationId, [
+      makeFile("attachment.zip"),
+    ]);
+
+    expect(fileUploadMock).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "attachment.zip" }),
+      "/workspace/project/custom-cloud/attachment.zip",
+    );
+    expect(result.uploaded_files).toEqual(["attachment.zip"]);
+  });
+
+  it("surfaces skipped_files with reasons when working directory resolution or upload fails", async () => {
+    setRegisteredBackends([
+      {
+        id: "local-1",
+        name: "Local",
+        host: "http://127.0.0.1:18000",
+        apiKey: "local-key",
+        kind: "local",
+      },
+    ]);
+    setActiveSelection({ backendId: "local-1" });
+    getHomeMock.mockRejectedValue(new Error("Agent server connection refused"));
+
+    const result = await uploadFilesToConversation("conv-relative", [
+      makeFile("test.txt"),
+    ]);
+
+    expect(result.uploaded_files).toEqual([]);
+    expect(result.skipped_files).toEqual([
+      {
+        name: "test.txt",
+        reason: "Agent server connection refused",
+      },
+    ]);
+  });
 });
