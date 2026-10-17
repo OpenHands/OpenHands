@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 420" width="880" height="420" style="background:#0f172a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="880" height="420" fill="url(#bg)"/>
+
+  <!-- Title Header -->
+  <text x="40" y="44" fill="#f8fafc" font-size="20" font-weight="700">Canvas App Browser Tab Title Behavior (#18557)</text>
+  <text x="40" y="68" fill="#94a3b8" font-size="13">Resolving document.title for registered Canvas extension app pages</text>
+
+  <!-- BEFORE PANEL -->
+  <g transform="translate(40, 95)" filter="url(#shadow)">
+    <rect width="380" height="280" rx="10" fill="#1e293b" stroke="#334155" stroke-width="1.5"/>
+    <rect width="380" height="38" rx="10" fill="#0f172a"/>
+    <rect y="28" width="380" height="10" fill="#0f172a"/>
+    
+    <!-- Window controls -->
+    <circle cx="20" cy="19" r="5" fill="#ef4444"/>
+    <circle cx="36" cy="19" r="5" fill="#eab308"/>
+    <circle cx="52" cy="19" r="5" fill="#22c55e"/>
+
+    <!-- Tab 1: Generic -->
+    <path d="M 75 38 L 85 10 L 225 10 L 235 38 Z" fill="#1e293b"/>
+    <text x="105" y="26" fill="#94a3b8" font-size="12" font-weight="500">OpenHands</text>
+    <circle cx="95" cy="22" r="3.5" fill="#38bdf8"/>
+
+    <!-- URL bar -->
+    <rect x="20" y="50" width="340" height="26" rx="6" fill="#0f172a" stroke="#334155" stroke-width="1"/>
+    <text x="32" y="67" fill="#64748b" font-size="11">https://localhost:3000/extensions/demo-page/hello</text>
+
+    <!-- Status badge -->
+    <rect x="20" y="92" width="60" height="22" rx="4" fill="#ef4444" fill-opacity="0.2"/>
+    <text x="30" y="107" fill="#f87171" font-size="11" font-weight="700">BEFORE</text>
+
+    <!-- Description -->
+    <text x="20" y="145" fill="#e2e8f0" font-size="14" font-weight="600">Generic Tab Title</text>
+    <text x="20" y="172" fill="#94a3b8" font-size="12">Browser tab document.title:</text>
+    
+    <rect x="20" y="186" width="340" height="36" rx="6" fill="#020617" stroke="#dc2626" stroke-width="1"/>
+    <text x="32" y="209" fill="#f87171" font-family="monospace" font-size="13">"OpenHands"</text>
+
+    <text x="20" y="246" fill="#64748b" font-size="11">⚠️ Indistinguishable from home, settings, or other app tabs</text>
+  </g>
+
+  <!-- AFTER PANEL -->
+  <g transform="translate(460, 95)" filter="url(#shadow)">
+    <rect width="380" height="280" rx="10" fill="#1e293b" stroke="#38bdf8" stroke-width="1.5"/>
+    <rect width="380" height="38" rx="10" fill="#0f172a"/>
+    <rect y="28" width="380" height="10" fill="#0f172a"/>
+
+    <!-- Window controls -->
+    <circle cx="20" cy="19" r="5" fill="#ef4444"/>
+    <circle cx="36" cy="19" r="5" fill="#eab308"/>
+    <circle cx="52" cy="19" r="5" fill="#22c55e"/>
+
+    <!-- Tab 1: App title -->
+    <path d="M 75 38 L 85 10 L 290 10 L 300 38 Z" fill="#1e293b"/>
+    <text x="105" y="26" fill="#f1f5f9" font-size="12" font-weight="600">Hello from an extension - ...</text>
+    <circle cx="95" cy="22" r="3.5" fill="#10b981"/>
+
+    <!-- URL bar -->
+    <rect x="20" y="50" width="340" height="26" rx="6" fill="#0f172a" stroke="#334155" stroke-width="1"/>
+    <text x="32" y="67" fill="#64748b" font-size="11">https://localhost:3000/extensions/demo-page/hello</text>
+
+    <!-- Status badge -->
+    <rect x="20" y="92" width="52" height="22" rx="4" fill="#10b981" fill-opacity="0.2"/>
+    <text x="30" y="107" fill="#34d399" font-size="11" font-weight="700">AFTER</text>
+
+    <!-- Description -->
+    <text x="20" y="145" fill="#e2e8f0" font-size="14" font-weight="600">Registered Extension App Title</text>
+    <text x="20" y="172" fill="#94a3b8" font-size="12">Browser tab document.title:</text>
+
+    <rect x="20" y="186" width="340" height="36" rx="6" fill="#020617" stroke="#10b981" stroke-width="1"/>
+    <text x="32" y="209" fill="#34d399" font-family="monospace" font-size="12">"Hello from an extension - OpenHands App"</text>
+
+    <text x="20" y="246" fill="#38bdf8" font-size="11">✓ Uses contribution title + " - OpenHands App" suffix</text>
+    <text x="20" y="262" fill="#64748b" font-size="11">✓ Fallback to "OpenHands" for unknown/disabled/uninstalled apps</text>
+  </g>
+</svg>
