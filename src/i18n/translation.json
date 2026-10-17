@@ -16595,6 +16595,24 @@
     "ca": "Ha fallat",
     "id": "Gagal"
   },
+  "AUTOMATIONS$DASHBOARD$PENDING_RUNS_COUNT": {
+    "en": "{{count}} Pending",
+    "ja": "保留中 {{count}} 件",
+    "zh-CN": "待处理 {{count}} 项",
+    "zh-TW": "待處理 {{count}} 項",
+    "ko-KR": "대기 중 {{count}}개",
+    "no": "{{count}} venter",
+    "ar": "{{count}} قيد الانتظار",
+    "de": "{{count}} ausstehend",
+    "fr": "{{count}} en attente",
+    "it": "{{count}} in attesa",
+    "pt": "{{count}} pendentes",
+    "es": "{{count}} pendientes",
+    "ca": "{{count}} pendents",
+    "tr": "{{count}} bekliyor",
+    "uk": "{{count}} в очікуванні",
+    "id": "{{count}} tertunda"
+  },
   "AUTOMATIONS$DETAIL$PENDING": {
     "en": "Pending",
     "ja": "保留中",

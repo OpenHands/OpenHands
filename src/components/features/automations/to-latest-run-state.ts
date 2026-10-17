@@ -20,6 +20,7 @@ export function toLatestRunState(
     latestRun: state.summary?.latestRun ?? null,
     recentRuns: state.summary?.recentRuns ?? [],
     total: state.summary?.total,
+    pendingTotal: state.summary?.pendingTotal ?? null,
     isLoading: state.isLoading,
     isError: state.isError,
   };

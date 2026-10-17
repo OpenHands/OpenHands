@@ -160,6 +160,7 @@ describe("AutomationListRow", () => {
             summary: {
               total: 4,
               completedTotal: 4,
+              pendingTotal: null,
               latestRun,
               recentRuns: [latestRun],
               recentSuccessRate: 1,
@@ -205,6 +206,7 @@ describe("AutomationListRow", () => {
             summary: {
               total: 5,
               completedTotal: 4,
+              pendingTotal: null,
               latestRun,
               recentRuns: [latestRun],
               recentSuccessRate: 1,
@@ -221,6 +223,154 @@ describe("AutomationListRow", () => {
     expect(
       screen.getByTestId("automation-impact-automation-1"),
     ).toHaveTextContent("4 widget checks completed");
+  });
+
+  it("renders a pending runs indicator when queued runs are present", () => {
+    const latestRun = createRun();
+
+    render(
+      <AutomationListRow
+        automation={automation}
+        onToggle={vi.fn()}
+        onRunNow={vi.fn()}
+        onExport={vi.fn()}
+        onDelete={vi.fn()}
+        insights={{
+          spec: insightsSpec satisfies InterfaceListInsights,
+          state: {
+            summary: {
+              total: 10,
+              completedTotal: 5,
+              pendingTotal: 3,
+              latestRun,
+              recentRuns: [latestRun],
+              recentSuccessRate: 1,
+              averageDurationMs: 120_000,
+            },
+            isLoading: false,
+            isError: false,
+          },
+        }}
+      />,
+    );
+
+    const badge = screen.getByTestId("automation-pending-runs-automation-1");
+    expect(badge).toBeInTheDocument();
+    expect(badge).toHaveTextContent(
+      I18nKey.AUTOMATIONS$DASHBOARD$PENDING_RUNS_COUNT,
+    );
+  });
+
+  it("hides the pending runs indicator when pendingTotal is zero, null, loading, or errored", () => {
+    const latestRun = createRun();
+
+    // 1. pendingTotal is 0
+    const { rerender } = render(
+      <AutomationListRow
+        automation={automation}
+        onToggle={vi.fn()}
+        onRunNow={vi.fn()}
+        onExport={vi.fn()}
+        onDelete={vi.fn()}
+        insights={{
+          spec: insightsSpec satisfies InterfaceListInsights,
+          state: {
+            summary: {
+              total: 5,
+              completedTotal: 5,
+              pendingTotal: 0,
+              latestRun,
+              recentRuns: [latestRun],
+              recentSuccessRate: 1,
+              averageDurationMs: 120_000,
+            },
+            isLoading: false,
+            isError: false,
+          },
+        }}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("automation-pending-runs-automation-1"),
+    ).not.toBeInTheDocument();
+
+    // 2. pendingTotal is null (e.g. partial sample without status_counts)
+    rerender(
+      <AutomationListRow
+        automation={automation}
+        onToggle={vi.fn()}
+        onRunNow={vi.fn()}
+        onExport={vi.fn()}
+        onDelete={vi.fn()}
+        insights={{
+          spec: insightsSpec satisfies InterfaceListInsights,
+          state: {
+            summary: {
+              total: 20,
+              completedTotal: null,
+              pendingTotal: null,
+              latestRun,
+              recentRuns: [latestRun],
+              recentSuccessRate: 1,
+              averageDurationMs: 120_000,
+            },
+            isLoading: false,
+            isError: false,
+          },
+        }}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("automation-pending-runs-automation-1"),
+    ).not.toBeInTheDocument();
+
+    // 3. state is loading
+    rerender(
+      <AutomationListRow
+        automation={automation}
+        onToggle={vi.fn()}
+        onRunNow={vi.fn()}
+        onExport={vi.fn()}
+        onDelete={vi.fn()}
+        insights={{
+          spec: insightsSpec satisfies InterfaceListInsights,
+          state: {
+            summary: null,
+            isLoading: true,
+            isError: false,
+          },
+        }}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("automation-pending-runs-automation-1"),
+    ).not.toBeInTheDocument();
+
+    // 4. state is errored
+    rerender(
+      <AutomationListRow
+        automation={automation}
+        onToggle={vi.fn()}
+        onRunNow={vi.fn()}
+        onExport={vi.fn()}
+        onDelete={vi.fn()}
+        insights={{
+          spec: insightsSpec satisfies InterfaceListInsights,
+          state: {
+            summary: null,
+            isLoading: false,
+            isError: true,
+          },
+        }}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("automation-pending-runs-automation-1"),
+    ).not.toBeInTheDocument();
   });
 
   it("opens the actions menu without triggering row navigation handlers", async () => {

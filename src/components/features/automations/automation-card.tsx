@@ -107,6 +107,7 @@ export function AutomationCard({
     automation,
     insights?.state?.summary?.completedTotal ?? null,
   );
+  const pendingTotal = runState.pendingTotal ?? null;
   const { latestRun, recentRuns, isLoading, isError } = runState;
   const timestamp = latestRun ? getLastRunTimestamp(latestRun) : null;
   const display = latestRun ? getAutomationRunDisplay(latestRun) : null;
@@ -143,6 +144,22 @@ export function AutomationCard({
             </h3>
             {showDraftBadge ? (
               <ActiveStatusBadge automation={automation} compact />
+            ) : null}
+            {pendingTotal !== null && pendingTotal > 0 ? (
+              <span
+                data-testid={`automation-pending-runs-${automation.id}`}
+                aria-label={t(
+                  I18nKey.AUTOMATIONS$DASHBOARD$PENDING_RUNS_COUNT,
+                  {
+                    count: pendingTotal,
+                  },
+                )}
+                className="inline-flex shrink-0 items-center rounded-full bg-surface-raised px-2 py-0.5 text-[10px] font-medium text-muted"
+              >
+                {t(I18nKey.AUTOMATIONS$DASHBOARD$PENDING_RUNS_COUNT, {
+                  count: pendingTotal,
+                })}
+              </span>
             ) : null}
           </div>
           <div className="flex shrink-0 items-center gap-0.5">

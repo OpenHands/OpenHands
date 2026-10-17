@@ -49,6 +49,7 @@ function settled(summary: Partial<AutomationRunSummary>): RunSummaryState {
     summary: {
       total: 0,
       completedTotal: null,
+      pendingTotal: null,
       latestRun: null,
       recentRuns: [],
       recentSuccessRate: null,
@@ -199,6 +200,7 @@ describe("summarizeAutomationRuns", () => {
     expect(summary).toEqual({
       total: 40,
       completedTotal: null,
+      pendingTotal: null,
       latestRun: runs[0],
       recentRuns: runs,
       recentSuccessRate: 1 / 3,
@@ -265,6 +267,50 @@ describe("summarizeAutomationRuns", () => {
 
     // Assert
     expect(summary.completedTotal).toBe(1);
+  });
+
+  it("takes the lifetime pending count from status_counts", () => {
+    const runs = [createRun({ status: AutomationRunStatus.FAILED })];
+
+    const summary = summarizeAutomationRuns({
+      runs,
+      total: 80,
+      status_counts: { COMPLETED: 70, PENDING: 5, FAILED: 5 },
+    });
+
+    expect(summary.pendingTotal).toBe(5);
+  });
+
+  it("treats a missing PENDING key as zero when status_counts is present", () => {
+    const runs = [createRun({ status: AutomationRunStatus.FAILED })];
+
+    const summary = summarizeAutomationRuns({
+      runs,
+      total: 1,
+      status_counts: { FAILED: 1 },
+    });
+
+    expect(summary.pendingTotal).toBe(0);
+  });
+
+  it("counts sample pending runs exactly when it holds the whole history", () => {
+    const runs = [
+      createRun({ status: AutomationRunStatus.PENDING }),
+      createRun({ status: AutomationRunStatus.PENDING }),
+      createRun({ status: AutomationRunStatus.COMPLETED }),
+    ];
+
+    const summary = summarizeAutomationRuns({ runs, total: 3 });
+
+    expect(summary.pendingTotal).toBe(2);
+  });
+
+  it("leaves pendingTotal null when status_counts is missing and the sample is partial", () => {
+    const runs = [createRun({ status: AutomationRunStatus.PENDING })];
+
+    const summary = summarizeAutomationRuns({ runs, total: 10 });
+
+    expect(summary.pendingTotal).toBeNull();
   });
 });
 
