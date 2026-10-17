@@ -66,6 +66,8 @@ RUN node -e " \
     'CONFIG_VSCODE_BASE_PATH=' + c.paths.vscodeBasePath, \
     'CONFIG_POSTHOG_API_KEY=' + c.telemetry.posthogApiKey, \
     'CONFIG_POSTHOG_HOST=' + c.telemetry.posthogHost, \
+    'CONFIG_MAX_FILE_SIZE_MB=' + c.upload.maxFileMb, \
+    'CONFIG_MAX_TOTAL_SIZE_MB=' + c.upload.maxTotalMb, \
   ]; \
   require('fs').writeFileSync('/tmp/defaults.env', lines.join('\n') + '\n'); \
 "

@@ -57,6 +57,16 @@
 #                          Override in production when the external URL differs.
 #   AUTOMATION_WORKSPACE_BASE – Directory for automation run workspaces
 #                          (default: ~/.openhands/workspaces)
+#   AGENT_CANVAS_MAX_FILE_MB  – Maximum size (MB) of a single chat
+#                          attachment, enforced by the frontend before it is
+#                          uploaded (default: 3 from config/defaults.json).
+#   AGENT_CANVAS_MAX_TOTAL_MB – Maximum combined size (MB) of all chat
+#                          attachments in one message (default: 3).
+#                          Both are injected into the served frontend as
+#                          window.__AGENT_CANVAS_MAX_FILE_SIZE__ /
+#                          __AGENT_CANVAS_MAX_TOTAL_SIZE__ (bytes), so a
+#                          pre-built bundle can be reconfigured without
+#                          rebuilding.
 #   Any agent-server or automation env vars are passed through.
 # ═══════════════════════════════════════════════════════════════════════════════
 set -uo pipefail
@@ -98,6 +108,13 @@ AUTOMATION_PORT="${AUTOMATION_PORT:-${CONFIG_AUTOMATION_PORT:-18001}}"
 AGENT_CANVAS_BASE_PATH="${AGENT_CANVAS_BASE_PATH:-${CONFIG_CANVAS_BASE_PATH:-/canvas}}"
 VSCODE_PORT="${OH_VSCODE_PORT:-${VSCODE_PORT:-${CONFIG_VSCODE_PORT:-8001}}}"
 VSCODE_BASE_PATH="${OH_VSCODE_BASE_PATH:-${VSCODE_BASE_PATH:-${CONFIG_VSCODE_BASE_PATH:-/vscode}}}"
+
+# Chat-attachment size limits (MB). The static server converts these to the
+# injected byte-based window globals. The frontend validates client-side before
+# upload; keep the values at or below what the WebSocket layer can carry for
+# base64-embedded images (4MB frame cap → ~2.5MB binary) — see config/defaults.json.
+MAX_FILE_SIZE_MB="${AGENT_CANVAS_MAX_FILE_MB:-${CONFIG_MAX_FILE_SIZE_MB:-3}}"
+MAX_TOTAL_SIZE_MB="${AGENT_CANVAS_MAX_TOTAL_MB:-${CONFIG_MAX_TOTAL_SIZE_MB:-3}}"
 
 # Accept "editor", "/editor" and "/editor/" alike: agent-server strips the
 # slashes when it builds the advertised URL, the static-server route table
@@ -435,7 +452,9 @@ node /opt/agent-canvas/static-server.mjs \
   --route "/openapi.json=http://127.0.0.1:${AGENT_SERVER_PORT}" \
   --route "$VSCODE_ROUTE" \
   --vscode-base-path "$VSCODE_BASE_PATH" \
-  --no-referrer-prefix "$VSCODE_BASE_PATH" &
+  --no-referrer-prefix "$VSCODE_BASE_PATH" \
+  --max-file-size-mb "$MAX_FILE_SIZE_MB" \
+  --max-total-size-mb "$MAX_TOTAL_SIZE_MB" &
 STATIC_PID=$!
 PIDS+=("$STATIC_PID")
 
@@ -475,6 +494,8 @@ if [ -n "${PUBLIC_MODE_PORT:-}" ]; then
     --base-path "$AGENT_CANVAS_BASE_PATH" \
     --auth-required \
     --runtime-services-info "$RUNTIME_SERVICES_INFO" \
+    --max-file-size-mb "$MAX_FILE_SIZE_MB" \
+    --max-total-size-mb "$MAX_TOTAL_SIZE_MB" \
     --route "/api/automation=http://127.0.0.1:${AUTOMATION_PORT}" \
     --route "/api=http://127.0.0.1:${AGENT_SERVER_PORT}" \
     --route "/server_info=http://127.0.0.1:${AGENT_SERVER_PORT}" \

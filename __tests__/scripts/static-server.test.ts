@@ -178,6 +178,38 @@ describe("static-server.mjs", () => {
       expect(config.disableTelemetry).toBe(false);
     });
 
+    it("defaults maxFileSizeMb / maxTotalSizeMb to null", () => {
+      const config = parseArgs([], {});
+      expect(config.maxFileSizeMb).toBeNull();
+      expect(config.maxTotalSizeMb).toBeNull();
+    });
+
+    it("parses --max-file-size-mb and --max-total-size-mb", () => {
+      const config = parseArgs(
+        ["--max-file-size-mb", "512", "--max-total-size-mb", "10"],
+        {},
+      );
+      expect(config.maxFileSizeMb).toBe(512);
+      expect(config.maxTotalSizeMb).toBe(10);
+    });
+
+    it("accepts a fractional MB value", () => {
+      const config = parseArgs(["--max-file-size-mb", "2.5"], {});
+      expect(config.maxFileSizeMb).toBe(2.5);
+    });
+
+    it("rejects a non-positive --max-file-size-mb", () => {
+      expect(() => parseArgs(["--max-file-size-mb", "0"], {})).toThrowError(
+        /--max-file-size-mb/,
+      );
+    });
+
+    it("rejects a non-numeric --max-total-size-mb", () => {
+      expect(() => parseArgs(["--max-total-size-mb", "big"], {})).toThrowError(
+        /--max-total-size-mb/,
+      );
+    });
+
     it("defaults basePath to root", () => {
       const config = parseArgs([]);
       expect(config.basePath).toBe("/");
@@ -1035,6 +1067,59 @@ describe("static-server.mjs", () => {
     expect(response.body).toContain("Bad Gateway");
     expect(response.body).toContain("Invalid URL");
     expect(server.listening).toBe(true);
+  });
+
+  describe("max upload size injection", () => {
+    function makeBuildDir() {
+      const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+      tempDirs.push(buildDir);
+      writeFileSync(
+        path.join(buildDir, "index.html"),
+        "<html><head></head><body>app</body></html>",
+      );
+      return buildDir;
+    }
+
+    it("exposes both window globals as bytes when configured", async () => {
+      const origin = await startServer(makeBuildDir(), {
+        maxFileSizeMb: 512,
+        maxTotalSizeMb: 10,
+      });
+      const body = await (await fetch(`${origin}/`)).text();
+
+      expect(body).toContain("window.__AGENT_CANVAS_MAX_FILE_SIZE__=536870912");
+      expect(body).toContain("window.__AGENT_CANVAS_MAX_TOTAL_SIZE__=10485760");
+    });
+
+    it("injects the globals into the SPA fallback index.html", async () => {
+      const origin = await startServer(makeBuildDir(), {
+        maxFileSizeMb: 5,
+        maxTotalSizeMb: 5,
+      });
+      const response = await fetch(`${origin}/some/deep/route`);
+      const body = await response.text();
+
+      expect(response.status).toBe(200);
+      expect(body).toContain("window.__AGENT_CANVAS_MAX_FILE_SIZE__=5242880");
+    });
+
+    it("omits a global that was not configured", async () => {
+      const origin = await startServer(makeBuildDir(), {
+        maxFileSizeMb: 512,
+      });
+      const body = await (await fetch(`${origin}/`)).text();
+
+      expect(body).toContain("window.__AGENT_CANVAS_MAX_FILE_SIZE__=536870912");
+      expect(body).not.toContain("__AGENT_CANVAS_MAX_TOTAL_SIZE__");
+    });
+
+    it("injects nothing when no limit is configured", async () => {
+      const origin = await startServer(makeBuildDir());
+      const body = await (await fetch(`${origin}/`)).text();
+
+      expect(body).not.toContain("__AGENT_CANVAS_MAX_FILE_SIZE__");
+      expect(body).not.toContain("__AGENT_CANVAS_MAX_TOTAL_SIZE__");
+    });
   });
 });
 

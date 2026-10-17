@@ -100,6 +100,10 @@ export function parseArgs(argv = process.argv.slice(2), env = process.env) {
     lockToCloud: null,
     basePath: "/",
     vscodeBasePath: null,
+    // Chat-attachment size limits (MB); injected into index.html as window
+    // __AGENT_CANVAS_MAX_FILE_SIZE__ / __AGENT_CANVAS_MAX_TOTAL_SIZE__ (bytes).
+    maxFileSizeMb: null,
+    maxTotalSizeMb: null,
     // Also settable via the --disable-telemetry flag below.
     disableTelemetry: isEnvFlagEnabled(env.AGENT_CANVAS_DISABLE_TELEMETRY),
   };
@@ -154,6 +158,28 @@ export function parseArgs(argv = process.argv.slice(2), env = process.env) {
           );
         }
         config.vscodeBasePath = prefix.replace(/\/+$/, "") || "/";
+        break;
+      }
+
+      case "--max-file-size-mb": {
+        const value = Number.parseFloat(argv[++i]);
+        if (!Number.isFinite(value) || value <= 0) {
+          throw new Error(
+            `--max-file-size-mb must be a positive number: ${argv[i - 1]}`,
+          );
+        }
+        config.maxFileSizeMb = value;
+        break;
+      }
+
+      case "--max-total-size-mb": {
+        const value = Number.parseFloat(argv[++i]);
+        if (!Number.isFinite(value) || value <= 0) {
+          throw new Error(
+            `--max-total-size-mb must be a positive number: ${argv[i - 1]}`,
+          );
+        }
+        config.maxTotalSizeMb = value;
         break;
       }
 
@@ -272,6 +298,14 @@ OPTIONS:
                                baked in. Injects
                                window.__AGENT_CANVAS_DO_NOT_TRACK__ = true.
                                Equivalent to AGENT_CANVAS_DISABLE_TELEMETRY=1.
+  --max-file-size-mb <mb>      Maximum single chat-attachment size (MB) the
+                               pre-built frontend enforces before upload.
+                               Injects window.__AGENT_CANVAS_MAX_FILE_SIZE__
+                               (bytes). Equivalent to AGENT_CANVAS_MAX_FILE_MB.
+  --max-total-size-mb <mb>     Maximum combined chat-attachment size (MB) per
+                               message. Injects
+                               window.__AGENT_CANVAS_MAX_TOTAL_SIZE__ (bytes).
+                               Equivalent to AGENT_CANVAS_MAX_TOTAL_MB.
   --base-path <path>           Mount the SPA under <path> (default: /).
                                For example, --base-path /canvas serves
                                index.html and assets under /canvas.
@@ -355,6 +389,13 @@ ROUTING:
  *   event) at runtime without VITE_DO_NOT_TRACK baked in. Read by
  *   `isDoNotTrackEnabled()` in `#/services/telemetry`. Enabled by
  *   AGENT_CANVAS_DISABLE_TELEMETRY=1 or the --disable-telemetry flag.
+ *
+ * - `maxFileSizeMb` / `maxTotalSizeMb`: chat-attachment size caps (MB) exposed
+ *   as `window.__AGENT_CANVAS_MAX_FILE_SIZE__` / `__AGENT_CANVAS_MAX_TOTAL_SIZE__`
+ *   (bytes). Read at module init by `#/utils/file-validation` so a pre-built
+ *   bundle enforces the deployment's cap without rebuilding. Sourced from
+ *   AGENT_CANVAS_MAX_FILE_MB / AGENT_CANVAS_MAX_TOTAL_MB (docker/entrypoint.sh)
+ *   or config/defaults.json; omit to let the frontend fall back to its default.
  */
 export function serializeForInlineScript(value) {
   return JSON.stringify(value)
@@ -372,6 +413,8 @@ function makeConfigInjectionScript(
   basePath,
   vscodeBasePath,
   disableTelemetry,
+  maxFileSizeMb,
+  maxTotalSizeMb,
 ) {
   const parts = [];
 
@@ -431,6 +474,18 @@ function makeConfigInjectionScript(
     parts.push(`window.__AGENT_CANVAS_DO_NOT_TRACK__=true;`);
   }
 
+  if (maxFileSizeMb) {
+    parts.push(
+      `window.__AGENT_CANVAS_MAX_FILE_SIZE__=${Math.round(maxFileSizeMb * 1024 * 1024)};`,
+    );
+  }
+
+  if (maxTotalSizeMb) {
+    parts.push(
+      `window.__AGENT_CANVAS_MAX_TOTAL_SIZE__=${Math.round(maxTotalSizeMb * 1024 * 1024)};`,
+    );
+  }
+
   if (parts.length === 0) return "";
 
   return `<script>(function(){${parts.join("")}}());</script>`;
@@ -452,6 +507,8 @@ async function serveInjectedIndexHtml(
     basePath,
     vscodeBasePath,
     disableTelemetry,
+    maxFileSizeMb,
+    maxTotalSizeMb,
   } = {},
 ) {
   let content;
@@ -469,6 +526,8 @@ async function serveInjectedIndexHtml(
     basePath,
     vscodeBasePath,
     disableTelemetry,
+    maxFileSizeMb,
+    maxTotalSizeMb,
   );
   // Inject right before </head> so the key is available before any app code runs.
   // replace() targets the first (and only) </head> in well-formed HTML.
@@ -519,6 +578,8 @@ function needsRuntimeInjection(injectionOpts) {
     injectionOpts.lockToCloud ||
     injectionOpts.vscodeBasePath ||
     injectionOpts.disableTelemetry ||
+    injectionOpts.maxFileSizeMb ||
+    injectionOpts.maxTotalSizeMb ||
     (injectionOpts.basePath && injectionOpts.basePath !== "/"),
   );
 }
@@ -673,6 +734,8 @@ export function startStaticServer(config) {
     basePath: normalizeBasePath(config.basePath),
     vscodeBasePath: config.vscodeBasePath || null,
     disableTelemetry: config.disableTelemetry || false,
+    maxFileSizeMb: config.maxFileSizeMb || null,
+    maxTotalSizeMb: config.maxTotalSizeMb || null,
   };
   const basePath = injectionOpts.basePath;
   const rejectPrefixes = config.rejectPrefixes ?? [];
