@@ -36,6 +36,7 @@ import { setupDraftFromAutomation } from "#/utils/automation-edit-draft";
 import { useDeploymentCapabilities } from "#/hooks/query/use-manifest-capabilities";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import type { AutomationDraftApiResponse } from "#/manifests/types";
+import type { Automation } from "#/types/automation";
 
 const mockNavigate = vi.fn();
 const mockToastSuccess = vi.fn();
@@ -118,6 +119,7 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
     dispatchAutomation: vi.fn(),
     updateAutomation: vi.fn(),
     getAutomation: vi.fn(),
+    fetchTarballBytes: vi.fn(),
     createCustomWebhook: vi.fn(),
     supportsAutomationDrafts: vi.fn(),
   },
@@ -2348,5 +2350,71 @@ describe("AutomationSetupPanel", () => {
     ).not.toEqual(
       expect.objectContaining({ setup_script_path: expect.anything() }),
     );
+  });
+
+  it("shows the saved bundle's files when Edit opens a custom automation and keeps them after other edits", async () => {
+    // Arrange
+    const automation: Automation = {
+      id: "auto-1",
+      name: "Nightly scan",
+      prompt: null,
+      enabled: true,
+      created_at: "2026-01-01T00:00:00.000Z",
+      updated_at: "2026-01-01T00:00:00.000Z",
+      entrypoint: "python3 scan.py",
+      tarball_path: "oh-internal://uploads/REAL-user-code.tar.gz",
+      trigger: { type: "cron", schedule: "0 9 * * *", timezone: "UTC" },
+    };
+    const tarGzip =
+      await vi.importActual<typeof import("#/utils/tar-gzip")>(
+        "#/utils/tar-gzip",
+      );
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue(automation);
+    vi.mocked(AutomationService.fetchTarballBytes).mockResolvedValue(
+      new Uint8Array(
+        await tarGzip.packTarGzip([
+          { name: "lib/helpers.py", content: "def helper():\n    pass\n" },
+          { name: "scan.py", content: "print('scanning the real repo')\n" },
+        ]),
+      ),
+    );
+    initializeAutomationFormSession(
+      PENDING_AUTOMATION_SETUP_ID,
+      setupDraftFromAutomation(automation),
+    );
+    const user = userEvent.setup();
+
+    // Act
+    renderPanel(
+      getAutomationFormSession(PENDING_AUTOMATION_SETUP_ID)!,
+      PENDING_AUTOMATION_SETUP_ID,
+      null,
+    );
+
+    // Assert
+    const files = await screen.findAllByTestId("automation-script-file");
+    expect(
+      files.map((file) => file.querySelector(".truncate")?.textContent),
+    ).toEqual(["scan.py", "lib/helpers.py"]);
+    expect(files[0]).toHaveTextContent("print('scanning the real repo')");
+    expect(
+      screen.queryByTestId("automation-setup-custom-code"),
+    ).not.toBeInTheDocument();
+
+    // Act
+    await user.type(screen.getByTestId("automation-setup-name"), " v2");
+
+    // Assert
+    expect(getAutomationFormSession(PENDING_AUTOMATION_SETUP_ID)).toEqual(
+      expect.objectContaining({
+        existingCustomTarballPath:
+          "oh-internal://uploads/REAL-user-code.tar.gz",
+        form: expect.objectContaining({ name: "Nightly scan v2" }),
+      }),
+    );
+    expect(screen.getAllByTestId("automation-script-file")).toHaveLength(2);
+    expect(
+      screen.queryByTestId("automation-setup-custom-code"),
+    ).not.toBeInTheDocument();
   });
 });

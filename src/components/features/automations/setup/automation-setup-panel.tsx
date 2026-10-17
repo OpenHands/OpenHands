@@ -90,7 +90,9 @@ import type {
 } from "#/manifests/types";
 import type { Automation, AutomationRun } from "#/types/automation";
 import { formatRelativeTime } from "#/utils/format-relative-time";
+import { useAutomationDetail } from "#/hooks/query/use-automation-detail";
 import { ActivityLogItem } from "../detail/activity-log-item";
+import { AutomationBundleFiles } from "../detail/automation-bundle-files";
 import { requestAutomationSetupAgent } from "./automation-setup-agent-request";
 import {
   draftEndpoint,
@@ -2026,6 +2028,7 @@ export function AutomationSetupPanel({
                     />
                   ) : hasExistingCustomBundle ? (
                     <ExistingCustomBundleSummary
+                      automationId={editingAutomationId}
                       tarballPath={existingCustomTarballPath}
                     />
                   ) : (
@@ -2441,10 +2444,21 @@ function SetupKindCrossfade({
   );
 }
 
-function ExistingCustomBundleSummary({ tarballPath }: { tarballPath: string }) {
+function ExistingCustomBundleSummary({
+  automationId,
+  tarballPath,
+}: {
+  automationId: string;
+  tarballPath: string;
+}) {
   const { t } = useTranslation("openhands");
   const bundleName = existingTarballDisplayName(tarballPath) || tarballPath;
   const helpText = t(I18nKey.AUTOMATION_SETUP$EXISTING_BUNDLE_HELP);
+  // The saved record, not the form, says what the bundle runs and keys the
+  // unpacked files to the upload they came from.
+  const { data: automation, isError } = useAutomationDetail({
+    id: automationId,
+  });
 
   return (
     <div
@@ -2471,6 +2485,19 @@ function ExistingCustomBundleSummary({ tarballPath }: { tarballPath: string }) {
         className="truncate rounded-lg border border-[var(--oh-border)] bg-[var(--oh-surface-raised)] px-3 py-2 font-mono text-sm text-content"
       >
         {bundleName}
+      </div>
+      <div className="mt-3 flex flex-col gap-3">
+        {automation ? (
+          <AutomationBundleFiles automation={automation} />
+        ) : (
+          <p className="text-sm italic text-muted">
+            {t(
+              isError
+                ? I18nKey.AUTOMATIONS$DETAIL$SCRIPT_UNAVAILABLE
+                : I18nKey.AUTOMATIONS$DETAIL$SCRIPT_LOADING,
+            )}
+          </p>
+        )}
       </div>
     </div>
   );
