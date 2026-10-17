@@ -120,6 +120,22 @@ describe("color themes", () => {
         "--oh-contrast against the configured credential banner surface",
       ).toBeGreaterThanOrEqual(4.5);
 
+      // Hook status badges tint the same feedback role over the chat canvas.
+      const hookCanvas = channels(resolve("--oh-color-base"));
+      for (const role of [
+        "--oh-feedback-success",
+        "--oh-feedback-warning",
+        "--oh-feedback-error",
+      ]) {
+        const tint = channels(resolve(role)).map(
+          (channel, index) => channel * 0.1 + hookCanvas[index] * 0.9,
+        );
+        expect(
+          contrast(luminance(resolve(role)), luminance(tint)),
+          `${role} against its 10% hook status tint`,
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+
       // Focus contrast includes each neutral control surface.
       for (const surfaceRole of [
         "--oh-color-base",
