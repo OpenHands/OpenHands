@@ -13,35 +13,14 @@ import { I18nKey } from "#/i18n/declaration";
 import { MarkdownRenderer } from "#/components/features/markdown/markdown-renderer";
 import { planComponents } from "#/components/features/markdown/plan-components";
 import { Typography } from "#/ui/typography";
-import { isMarkdownFilePath } from "#/utils/is-markdown-file-path";
-import type {
-  ActionEvent,
-  ObservationEvent,
-  OpenHandsEvent,
-} from "#/types/agent-server/core";
+import type { ActionEvent, OpenHandsEvent } from "#/types/agent-server/core";
+import { isPreviewableArtifactPath } from "#/utils/is-previewable-file-path";
 import {
-  isActionEvent,
-  isObservationEvent,
-} from "#/types/agent-server/type-guards";
-import type {
-  FileEditorAction,
-  StrReplaceEditorAction,
-} from "#/types/agent-server/core/base/action";
-import type {
-  FileEditorObservation,
-  StrReplaceEditorObservation,
-} from "#/types/agent-server/core/base/observation";
+  getFileEditorEventCommand,
+  getFileEditorEventPath,
+} from "./file-editor-event";
 
 export { isMarkdownFilePath } from "#/utils/is-markdown-file-path";
-
-const FILE_EDITOR_ACTION_KINDS = new Set([
-  "FileEditorAction",
-  "StrReplaceEditorAction",
-]);
-const FILE_EDITOR_OBSERVATION_KINDS = new Set([
-  "FileEditorObservation",
-  "StrReplaceEditorObservation",
-]);
 
 interface MarkdownFilePreviewProps {
   content: string;
@@ -51,104 +30,26 @@ interface MarkdownFilePreviewProps {
 }
 
 /**
- * Resolves the file path for a file-editor action/observation, including the
- * observation's originating action when the observation omits `path`.
- */
-function getFileEditorEventPath(
-  event: OpenHandsEvent,
-  correspondingAction?: ActionEvent,
-): string | null {
-  if (isActionEvent(event) && FILE_EDITOR_ACTION_KINDS.has(event.action.kind)) {
-    return (
-      (event as ActionEvent<FileEditorAction | StrReplaceEditorAction>).action
-        .path || null
-    );
-  }
-
-  if (
-    isObservationEvent(event) &&
-    FILE_EDITOR_OBSERVATION_KINDS.has(event.observation.kind)
-  ) {
-    const path = (
-      event as ObservationEvent<
-        FileEditorObservation | StrReplaceEditorObservation
-      >
-    ).observation.path;
-    if (path) return path;
-    if (
-      correspondingAction &&
-      FILE_EDITOR_ACTION_KINDS.has(correspondingAction.action.kind)
-    ) {
-      return (
-        (
-          correspondingAction as ActionEvent<
-            FileEditorAction | StrReplaceEditorAction
-          >
-        ).action.path || null
-      );
-    }
-  }
-
-  return null;
-}
-
-/**
- * Resolves the file-editor command (`create` / `view` / …), including the
- * observation's originating action when the observation omits `command`.
- */
-function getFileEditorEventCommand(
-  event: OpenHandsEvent,
-  correspondingAction?: ActionEvent,
-): string | null {
-  if (isActionEvent(event) && FILE_EDITOR_ACTION_KINDS.has(event.action.kind)) {
-    return (
-      (event as ActionEvent<FileEditorAction | StrReplaceEditorAction>).action
-        .command || null
-    );
-  }
-
-  if (
-    isObservationEvent(event) &&
-    FILE_EDITOR_OBSERVATION_KINDS.has(event.observation.kind)
-  ) {
-    const command = (
-      event as ObservationEvent<
-        FileEditorObservation | StrReplaceEditorObservation
-      >
-    ).observation.command;
-    if (command) return command;
-    if (
-      correspondingAction &&
-      FILE_EDITOR_ACTION_KINDS.has(correspondingAction.action.kind)
-    ) {
-      return (
-        (
-          correspondingAction as ActionEvent<
-            FileEditorAction | StrReplaceEditorAction
-          >
-        ).action.command || null
-      );
-    }
-  }
-
-  return null;
-}
-
-/**
- * True for file-editor *create* events whose path is a markdown artifact.
+ * True for file-editor *create* events whose path is an inline-previewable
+ * artifact (Markdown, HTML, or SVG).
  *
  * Used to keep those cards expanded and outside collapsed action groups so
- * the clipped preview is visible by default. Reads/edits of `.md` files stay
- * on the normal groupable path.
+ * the clipped preview is visible by default. Reads/edits stay on the normal
+ * groupable path.
  */
-export function isMarkdownFileEditorEvent(
+export function isPreviewableFileEditorEvent(
   event: OpenHandsEvent,
   correspondingAction?: ActionEvent,
 ): boolean {
   const path = getFileEditorEventPath(event, correspondingAction);
   const command = getFileEditorEventCommand(event, correspondingAction);
-  return Boolean(path && command === "create" && isMarkdownFilePath(path));
+  return Boolean(
+    path && command === "create" && isPreviewableArtifactPath(path),
+  );
 }
+
+/** @deprecated Use {@link isPreviewableFileEditorEvent}. */
+export const isMarkdownFileEditorEvent = isPreviewableFileEditorEvent;
 
 /**
  * Height-clipped markdown card with an optional View bar that opens the file.

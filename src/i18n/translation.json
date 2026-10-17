@@ -28511,6 +28511,23 @@
     "ca": "No s'ha pogut carregar aquest fitxer",
     "id": "Tidak dapat memuat file ini"
   },
+  "FILES$FILE_TOO_LARGE": {
+    "en": "File is too large to preview",
+    "ja": "ファイルが大きすぎるためプレビューできません",
+    "zh-CN": "文件太大，无法预览",
+    "zh-TW": "檔案太大，無法預覽",
+    "ko-KR": "파일이 너무 커서 미리 볼 수 없습니다",
+    "no": "Filen er for stor til å forhåndsvises",
+    "it": "Il file è troppo grande per l'anteprima",
+    "pt": "O arquivo é grande demais para visualizar",
+    "es": "El archivo es demasiado grande para previsualizarlo",
+    "ar": "الملف كبير جدًا بحيث لا يمكن معاينته",
+    "fr": "Le fichier est trop volumineux pour l'aperçu",
+    "tr": "Dosya önizlemek için çok büyük",
+    "de": "Die Datei ist zu groß für eine Vorschau",
+    "uk": "Файл завеликий для попереднього перегляду",
+    "ca": "El fitxer és massa gran per previsualitzar-lo"
+  },
   "FILES$BINARY_FALLBACK": {
     "en": "Binary file – preview not available",
     "ja": "バイナリファイル - プレビューを利用できません",
@@ -49786,6 +49803,23 @@
     "zh-CN": "请先停止此代理的会话。",
     "zh-TW": "請先停止此代理程式的工作階段。",
     "id": "Hentikan sesi agen ini terlebih dahulu."
+  },
+  "BUTTON$DOWNLOAD": {
+    "en": "Download",
+    "ja": "ダウンロード",
+    "zh-CN": "下载",
+    "zh-TW": "下載",
+    "ko-KR": "다운로드",
+    "fr": "Télécharger",
+    "es": "Descargar",
+    "de": "Herunterladen",
+    "it": "Scarica",
+    "pt": "Baixar",
+    "ar": "تنزيل",
+    "no": "Last ned",
+    "tr": "İndir",
+    "uk": "Завантажити",
+    "ca": "Baixa"
   },
   "SCHEMA$ENABLE_SUB_AGENTS$DESCRIPTION": {
     "en": "Enable sub-agent delegation via TaskToolSet.",

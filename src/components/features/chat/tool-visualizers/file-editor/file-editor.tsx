@@ -13,7 +13,9 @@
 import React from "react";
 import { getLanguageFromPath } from "#/utils/get-language-from-path";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
+import ConversationService from "#/api/conversation-service/conversation-service.api";
 import { openWorkspaceFile } from "#/services/canvas-ui";
+import { toFilesTabPath } from "#/utils/path-utils";
 import type {
   FileEditorAction,
   StrReplaceEditorAction,
@@ -27,10 +29,10 @@ import { textFromContent } from "../text-content";
 import { CodeBlock } from "../primitives/code-block";
 import { DiffView } from "../primitives/diff-view";
 import { FilePathChip } from "../primitives/file-path-chip";
-import {
-  isMarkdownFilePath,
-  MarkdownFilePreview,
-} from "../primitives/markdown-file-preview";
+import { getArtifactPreviewKind } from "#/utils/is-previewable-file-path";
+import { MarkdownFilePreview } from "../primitives/markdown-file-preview";
+import { ArtifactPreview } from "../primitives/artifact-preview";
+import { OfficeArtifactPreview } from "../primitives/office-artifact-preview";
 
 type FileEditorCardProps = VisualizerProps<
   FileEditorAction | StrReplaceEditorAction,
@@ -48,16 +50,27 @@ interface FileEditorCardBodyProps extends FileEditorCardProps {
    * Also omitted for in-flight creates so View does not open a missing file.
    */
   onOpenFile?: () => void;
+  /**
+   * Workspace-relative form of the event path, used for the inline preview's
+   * file fetch. The event path itself may be absolute (rooted at the
+   * conversation's working dir), which the workspace file hook would resolve
+   * against the wrong URL.
+   */
+  previewPath?: string;
 }
 
 function FileEditorCardBody({
   action,
   observation,
   onOpenFile,
+  previewPath,
 }: FileEditorCardBodyProps) {
   const path = resolvePath({ action, observation });
   const command = observation?.observation.command ?? action?.action.command;
   const language = getLanguageFromPath(path);
+  // Fall back to the raw path when no workspace-relative form was supplied
+  // (e.g. the card is rendered outside a conversation route).
+  const previewSource = previewPath || path;
 
   const viewRange = action?.action.view_range;
   const range =
@@ -68,18 +81,56 @@ function FileEditorCardBody({
     <FilePathChip path={path} range={range} onClick={onOpenFile} />
   ) : null;
 
+  // Only *created* artifacts get a rich preview — `view` returns `cat -n`
+  // numbered snippets that must stay in a CodeBlock.
+  const previewKind =
+    path && command === "create" ? getArtifactPreviewKind(path) : null;
+
   const renderFileContent = (content: string) => {
-    // Only created Markdown artifacts get the rich preview — `view` returns
-    // `cat -n` numbered snippets that must stay in a CodeBlock.
-    if (path && command === "create" && isMarkdownFilePath(path)) {
-      // Markdown artifacts own their card (clipped preview + optional View),
-      // so skip the separate path chip to avoid a duplicate filename affordance.
+    // Artifacts own their card (clipped preview + optional View), so skip the
+    // separate path chip to avoid a duplicate filename affordance.
+    if (previewKind === "markdown") {
       return {
         chip: null as React.ReactNode,
         body: (
           <MarkdownFilePreview
             content={content}
             path={path}
+            onView={onOpenFile}
+          />
+        ),
+      };
+    }
+    // HTML/SVG render live in a sandboxed frame pointed at the workspace
+    // fileserver, so relative assets resolve and agent script stays inert.
+    // Images and PDFs render from the same URL (the PDF frame is deliberately
+    // unsandboxed so Chromium's viewer can instantiate).
+    if (
+      previewKind === "frame" ||
+      previewKind === "image" ||
+      previewKind === "pdf"
+    ) {
+      return {
+        chip: null as React.ReactNode,
+        body: (
+          <ArtifactPreview
+            content={content}
+            path={path}
+            sourcePath={previewSource}
+            onView={onOpenFile}
+          />
+        ),
+      };
+    }
+    // Office documents are unpacked client-side and shown as an outline.
+    if (previewKind === "ooxml") {
+      return {
+        chip: null as React.ReactNode,
+        body: (
+          <OfficeArtifactPreview
+            path={path}
+            sourcePath={previewSource}
+            content={content}
             onView={onOpenFile}
           />
         ),
@@ -109,14 +160,27 @@ function FileEditorCardBody({
       // `view` returns the snippet the agent saw in `content` (the `cat -n`
       // output) rather than `output`/`new_content`, so fall back to it.
       // Mirrors the markdown path's "prefer content for view" handling.
-      const content =
-        obs.new_content ||
-        obs.output ||
-        (obs.content ? textFromContent(obs.content) : "");
-      if (content) {
-        const rendered = renderFileContent(content);
+      // A binary create carries no source text: its `output` is a status line
+      // ("Created docs/plan.docx"), which must never reach a preview card as if
+      // it were content, or Copy would put the status message on the clipboard.
+      const sourceText =
+        obs.new_content || (obs.content ? textFromContent(obs.content) : "");
+      const render = (text: string) => {
+        const rendered = renderFileContent(text);
         leadingChip = rendered.chip;
         body = rendered.body;
+      };
+      if (previewKind === "markdown") {
+        if (sourceText) render(sourceText);
+      } else if (previewKind) {
+        // A binary artifact (Office / image / PDF / frame) fetches its own
+        // bytes from the workspace, so a successful create still mounts its
+        // card even when it carries no source text. Passing "" (rather than the
+        // status `output`) keeps Copy disabled instead of copying the status.
+        render(sourceText);
+      } else {
+        const content = obs.new_content || obs.output || sourceText;
+        if (content) render(content);
       }
     }
     return (
@@ -156,14 +220,20 @@ function FileEditorCardBody({
 }
 
 /**
- * Conversation-scoped wrapper: owns the Files-drawer deep link. Split from the
- * card so conversation-only navigation never runs outside a conversation route.
+ * Conversation-scoped wrapper: owns the Files-drawer deep link and the
+ * workspace-relative preview path. Split from the card so conversation-only
+ * navigation never runs outside a conversation route.
  */
 function FileEditorCardWithDrawerLink({
   conversationId,
   ...props
 }: FileEditorCardProps & { conversationId: string }) {
   const path = resolvePath(props);
+  // The same current-conversation source `openWorkspaceFile` uses, so the
+  // preview and the View deep link agree on the workspace root. Reading the
+  // active-conversation *query* here would diverge in tests and add a fetch.
+  const workingDir =
+    ConversationService.getCurrentConversation()?.workspace?.working_dir;
 
   // Only deep-link once the observation exists — the file is not guaranteed
   // to be on disk while the create action is still in flight.
@@ -172,7 +242,19 @@ function FileEditorCardWithDrawerLink({
       ? () => openWorkspaceFile(path, conversationId)
       : undefined;
 
-  return <FileEditorCardBody {...props} onOpenFile={onOpenFile} />;
+  // Create events may carry an absolute path (`/workspace/project/report.html`)
+  // while the workspace file hook resolves *relative* to the working dir, so
+  // the preview would request the wrong URL. Convert once here and keep the
+  // original path for the filename / drawer navigation.
+  const previewPath = path ? toFilesTabPath(path, workingDir) : "";
+
+  return (
+    <FileEditorCardBody
+      {...props}
+      previewPath={previewPath}
+      onOpenFile={onOpenFile}
+    />
+  );
 }
 
 export const fileEditorVisualizer = defineVisualizer({
