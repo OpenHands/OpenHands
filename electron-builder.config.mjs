@@ -489,7 +489,21 @@ const config = {
       { target: "deb", arch: ["x64"] },
     ],
     category: "Development",
-    // Icon auto-discovered from directories.buildResources/icon.png.
+    // Hicolor icon set installed by the deb/AppImage. A single oversized
+    // (1024×1024) icon renders inconsistently across GNOME/KDE surfaces —
+    // docks and alt-tab switchers expect the standard freedesktop sizes.
+    // Generated from the icon.png master with ImageMagick:
+    //   for s in 16 24 32 48 64 96 128 256 512; do
+    //     convert electron/build-resources/icon.png -resize ${s}x${s} \
+    //       electron/build-resources/icons/${s}x${s}.png
+    //   done
+    // (fpm installs each at /usr/share/icons/hicolor/<s>x<s>/apps/…)
+    icon: "electron/build-resources/icons",
+    // Electron's window class / Wayland app-id is the executable basename
+    // ("agent-canvas"), not the productName. Without this hint GNOME can't
+    // match the running window back to the desktop entry, so the dock shows
+    // a generic icon while the app is open.
+    desktop: { StartupWMClass: "agent-canvas" },
     // fpm-backed targets (deb) require a maintainer with an email address;
     // electron/package.json carries no author, so set it here. Without this
     // the deb step fails with "Please specify author 'email'".
