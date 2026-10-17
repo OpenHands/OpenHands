@@ -1,8 +1,14 @@
 import { useMemo } from "react";
-import { useQueries } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { isAgentServerVersionError } from "@openhands/typescript-client/clients";
 
+import {
+  fetchBackendRuntimeServicesInfo,
+  getDeploymentMode,
+} from "#/api/agent-server-adapter";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useLocalWorkspaces } from "#/hooks/query/use-local-workspaces";
+import { RUNTIME_SERVICES_QUERY_KEYS } from "#/hooks/query/query-keys";
 import { searchAllSubdirectories } from "#/hooks/query/use-search-subdirs";
 import { LocalWorkspace, LocalWorkspaceParent } from "#/types/workspace";
 
@@ -11,9 +17,10 @@ interface UseResolvedWorkspacesResult {
   /**
    * The merged workspace parents that produced the dynamic children above:
    * the user's stored parents plus any implicit built-in parents (currently
-   * `/projects` in dev). Consumers use this to label a child's group by its
-   * parent's `name` — `parentPath` alone only yields a path. Includes the
-   * implicit parents that `useLocalWorkspaces` does not expose on its own.
+   * `/projects` in development and Docker deployments). Consumers use this to
+   * label a child's group by its `name` — `parentPath` alone only yields a path.
+   * Includes the implicit parents that `useLocalWorkspaces` does not expose on
+   * its own.
    */
   parents: LocalWorkspaceParent[];
   isLoading: boolean;
@@ -25,14 +32,19 @@ interface UseResolvedWorkspacesResult {
  * Implicit workspace parents that are always considered when resolving
  * workspaces. `/projects` is a well-known directory that some agent-server
  * setups use as the projects root. We surface its immediate subdirectories
- * as workspaces automatically in dev mode.
+ * as workspaces automatically in development and Docker deployments.
  *
- * This is a development convenience only. Production previews may point at
- * arbitrary remote agent servers that do not expose the file-browser endpoint;
- * probing `/projects` there creates noisy 404s before the user has added any
- * workspace parent explicitly.
+ * Other production deployments may point at arbitrary remote agent servers
+ * that do not expose the file-browser endpoint; probing `/projects` there
+ * creates noisy 404s before the user has added any workspace parent explicitly.
  */
-const INCLUDE_IMPLICIT_WORKSPACE_PARENTS = import.meta.env.DEV;
+
+export function shouldIncludeImplicitWorkspaceParents(
+  isDevelopment: boolean,
+  deploymentMode: string | null,
+): boolean {
+  return isDevelopment || deploymentMode === "docker";
+}
 
 const IMPLICIT_WORKSPACE_PARENTS: LocalWorkspaceParent[] = [
   { id: "implicit:/projects", name: "/projects", path: "/projects" },
@@ -50,6 +62,23 @@ const IMPLICIT_WORKSPACE_PARENTS: LocalWorkspaceParent[] = [
  * same path so that user-selected names/ids are preserved.
  */
 export function useResolvedWorkspaces(): UseResolvedWorkspacesResult {
+  const active = useActiveBackend();
+  const needsRuntimeMode = !import.meta.env.DEV;
+  const runtimeServicesQuery = useQuery({
+    queryKey: RUNTIME_SERVICES_QUERY_KEYS.byBackend(
+      active.backend.id,
+      active.orgId,
+      active.backend.connectionRevision,
+    ),
+    queryFn: fetchBackendRuntimeServicesInfo,
+    enabled: needsRuntimeMode,
+    retry: false,
+    meta: { disableToast: true },
+  });
+  const includeImplicitWorkspaceParents = shouldIncludeImplicitWorkspaceParents(
+    import.meta.env.DEV,
+    getDeploymentMode(runtimeServicesQuery.data),
+  );
   const {
     data,
     isLoading: isLoadingList,
@@ -67,12 +96,12 @@ export function useResolvedWorkspaces(): UseResolvedWorkspacesResult {
     // Filter out implicit parents that conflict with user-added ones (by path)
     // so custom names/ids are preserved.
     const implicitParents =
-      INCLUDE_IMPLICIT_WORKSPACE_PARENTS && !workspacesUnsupported
+      includeImplicitWorkspaceParents && !workspacesUnsupported
         ? IMPLICIT_WORKSPACE_PARENTS
         : [];
     const extras = implicitParents.filter((p) => !seen.has(p.path));
     return extras.length === 0 ? storedParents : [...storedParents, ...extras];
-  }, [storedParents, workspacesUnsupported]);
+  }, [storedParents, workspacesUnsupported, includeImplicitWorkspaceParents]);
 
   const parentQueries = useQueries({
     queries: workspacesUnsupported
@@ -85,7 +114,10 @@ export function useResolvedWorkspaces(): UseResolvedWorkspacesResult {
         })),
   });
 
-  const isLoading = isLoadingList || parentQueries.some((q) => q.isLoading);
+  const isLoading =
+    isLoadingList ||
+    (needsRuntimeMode && runtimeServicesQuery.isLoading) ||
+    parentQueries.some((q) => q.isLoading);
   const isError = isErrorList || parentQueries.some((q) => q.isError);
 
   // Stable string fingerprint that changes whenever any parent's subdir
