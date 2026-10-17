@@ -237,13 +237,22 @@ export interface CloudIntegrationsConfig {
   isJiraEnabled: boolean;
   /** Whether the built-in Linear integration is enabled. */
   isLinearEnabled: boolean;
+  /**
+   * How the instance is deployed: `cloud` for OpenHands Cloud, `self_hosted`
+   * for an OpenHands Enterprise install, or null when it reports neither.
+   */
+  deploymentMode: string | null;
 }
 
 export async function fetchCloudIntegrationsConfig(): Promise<CloudIntegrationsConfig> {
   const backend = getActiveCloudBackend();
   const config = await callCloudProxy<{
     providers_configured?: Provider[];
-    feature_flags?: { enable_jira?: boolean; enable_linear?: boolean };
+    feature_flags?: {
+      enable_jira?: boolean;
+      enable_linear?: boolean;
+      deployment_mode?: string;
+    };
   }>({
     backend,
     method: "GET",
@@ -253,5 +262,6 @@ export async function fetchCloudIntegrationsConfig(): Promise<CloudIntegrationsC
     providersConfigured: config.providers_configured ?? [],
     isJiraEnabled: config.feature_flags?.enable_jira === true,
     isLinearEnabled: config.feature_flags?.enable_linear === true,
+    deploymentMode: config.feature_flags?.deployment_mode ?? null,
   };
 }

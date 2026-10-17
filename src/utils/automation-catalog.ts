@@ -65,6 +65,36 @@ export function getRequiredIntegrationIds(
 }
 
 /**
+ * Catalog entries an OpenHands Enterprise install does not offer: each one
+ * overlaps a built-in integration, depends on a user-managed secret, or is
+ * covered by the Create Automation UI. They stay in the catalog for OpenHands
+ * Cloud and local backends.
+ */
+const SELF_HOSTED_HIDDEN_AUTOMATION_IDS: ReadonlySet<string> = new Set([
+  "github-repo-monitor",
+  "slack-standup-digest",
+  "github-issue-triage",
+  "github-delivery-watchdog",
+  "github-stale-ci-pr-closer",
+  "custom-automation",
+]);
+
+const NO_HIDDEN_AUTOMATION_IDS: ReadonlySet<string> = new Set();
+
+/**
+ * The catalog entries to hide for a backend reporting `deploymentMode` (the
+ * cloud web-client config's `feature_flags.deployment_mode`). Only a
+ * self-hosted (Enterprise) instance hides anything.
+ */
+export function getHiddenAutomationIds(
+  deploymentMode: string | null | undefined,
+): ReadonlySet<string> {
+  return deploymentMode === "self_hosted"
+    ? SELF_HOSTED_HIDDEN_AUTOMATION_IDS
+    : NO_HIDDEN_AUTOMATION_IDS;
+}
+
+/**
  * The command that invokes this automation's skill, or null when that skill is
  * invoked by description instead.
  *

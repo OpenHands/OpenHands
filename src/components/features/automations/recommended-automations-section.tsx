@@ -46,6 +46,8 @@ type GetNativeIntegration = (entryId: string) => NativeGitIntegration | null;
 interface RecommendedAutomationsSectionProps {
   backendKind: "local" | "cloud";
   installedServers: MCPServerConfig[];
+  /** Catalog entries the active backend's deployment does not offer. */
+  hiddenAutomationIds?: ReadonlySet<string>;
   /** Resolves an integration's native (cloud) connection; none by default. */
   getNativeIntegration?: GetNativeIntegration;
   query?: string;
@@ -307,6 +309,7 @@ function AutomationCardGrid({
 export function RecommendedAutomationsSection({
   backendKind: _backendKind,
   installedServers,
+  hiddenAutomationIds,
   getNativeIntegration = () => null,
   query = "",
   onSelect,
@@ -314,16 +317,18 @@ export function RecommendedAutomationsSection({
 }: RecommendedAutomationsSectionProps) {
   const { t } = useTranslation("openhands");
 
-  // Only the query narrows the grid. An automation that declares no
-  // integration needs nothing connected, and one naming an integration this
-  // host cannot resolve is shown with that gap on its pill, so neither is a
-  // reason to hide a card the catalog ships.
-  const visibleAutomations = RECOMMENDED_AUTOMATIONS.filter((automation) =>
-    automationMatchesQuery(
-      automation,
-      getIntegrationEntries(automation),
-      query,
-    ),
+  // Only the deployment's hide list and the query narrow the grid. An
+  // automation that declares no integration needs nothing connected, and one
+  // naming an integration this host cannot resolve is shown with that gap on
+  // its pill, so neither is a reason to hide a card the catalog ships.
+  const visibleAutomations = RECOMMENDED_AUTOMATIONS.filter(
+    (automation) =>
+      !hiddenAutomationIds?.has(automation.id) &&
+      automationMatchesQuery(
+        automation,
+        getIntegrationEntries(automation),
+        query,
+      ),
   );
 
   if (visibleAutomations.length === 0) return null;

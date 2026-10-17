@@ -72,16 +72,20 @@ export interface RecommendedRailGroups {
 /**
  * Home / dashboard rail: remaining proven workflows, then other useful
  * automations that open in a new conversation. Already-created automations
- * are dropped from both groups.
+ * are dropped from both groups, as are the entries the active backend's
+ * deployment hides (`hiddenAutomationIds`).
  */
 export function getRecommendedRailGroups(
   installed: readonly Pick<Automation, "name">[],
+  hiddenAutomationIds?: ReadonlySet<string>,
 ): RecommendedRailGroups {
   // Every catalog entry is offerable: one that declares no integration needs
   // nothing connected, and one that names an integration this host cannot
   // resolve stays visible so the drift is actionable rather than hidden.
   const available = getAutomationsByPopularity(AUTOMATION_CATALOG).filter(
-    (entry) => !isCatalogAutomationAdded(entry, installed),
+    (entry) =>
+      !hiddenAutomationIds?.has(entry.id) &&
+      !isCatalogAutomationAdded(entry, installed),
   );
 
   return {

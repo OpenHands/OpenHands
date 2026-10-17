@@ -34,6 +34,8 @@ import {
 
 interface RecommendedAutomationsRailProps {
   installedAutomations: readonly Pick<Automation, "name">[];
+  /** Catalog entries the active backend's deployment does not offer. */
+  hiddenAutomationIds?: ReadonlySet<string>;
   onSelect: (automation: RecommendedAutomation) => void;
   className?: string;
 }
@@ -102,12 +104,13 @@ function RailIntegrationIcons({
 
 export function RecommendedAutomationsRail({
   installedAutomations,
+  hiddenAutomationIds,
   onSelect,
   className,
 }: RecommendedAutomationsRailProps) {
   const { t } = useTranslation("openhands");
   const items = flattenRecommendedRailGroups(
-    getRecommendedRailGroups(installedAutomations),
+    getRecommendedRailGroups(installedAutomations, hiddenAutomationIds),
   );
   const scrollRef = useRef<HTMLDivElement>(null);
   const { handleMouseDown, handleClickCapture, handleDragStart } =
