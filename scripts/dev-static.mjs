@@ -119,6 +119,7 @@ export function parseArgs(argv = process.argv.slice(2)) {
     skipBuild: false,
     verbose: false,
     host: null,
+    allowLanSessionKey: false,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -130,6 +131,9 @@ export function parseArgs(argv = process.argv.slice(2)) {
       case "-H":
       case "--host":
         config.host = argv[++i];
+        break;
+      case "--allow-lan-session-key":
+        config.allowLanSessionKey = true;
         break;
       case "--automation-ref":
         config.automationGitRef = argv[++i];
@@ -168,6 +172,7 @@ USAGE:
 OPTIONS:
   -p, --port <port>           Ingress port (default: 8000)
   -H, --host <host>           Bind address for ingress/static (default: 127.0.0.1)
+  --allow-lan-session-key      Inject the session key on a non-loopback bind (opt-in)
   --automation-ref <ref>      Git ref for automation backend (default: main)
   --automation-repo <url>     Git repo URL for automation
   --skip-build                Reuse existing build/ directory (faster restart)
@@ -456,12 +461,14 @@ function startStaticServer(config) {
       ...(() => {
         const policy = applySessionKeyPolicy({
           host: config.bindHost,
+          allowLanSessionKey: config.allowLanSessionKey,
           sessionApiKey: config.sessionApiKey,
           warn: (msg) => logService("static", msg, c.yellow),
         });
         const flags = [];
         if (policy.sessionApiKey) {
           flags.push("--session-api-key", policy.sessionApiKey);
+          if (config.allowLanSessionKey) flags.push("--allow-lan-session-key");
         }
         if (policy.authRequired) {
           flags.push("--auth-required");
@@ -695,7 +702,7 @@ const isMainModule =
 if (isMainModule) {
   main().catch((err) => {
     logError(`Fatal error: ${err.message}`);
-    if (err.stack) {
+    if (err.stack && err.code !== "EADDRINUSE") {
       console.error(c.dim + err.stack + c.reset);
     }
     process.exit(1);

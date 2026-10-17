@@ -9,6 +9,12 @@ import {
 import { buildFrontendEnv } from "../../scripts/static-build.mjs";
 
 describe("dev-static CLI", () => {
+  it("parses the explicit LAN session-key opt-in", () => {
+    expect(parseArgs(["--allow-lan-session-key"]).allowLanSessionKey).toBe(
+      true,
+    );
+    expect(parseArgs([]).allowLanSessionKey).toBe(false);
+  });
   it.each([
     [["--host", "0.0.0.0"], "0.0.0.0"],
     [["-H", "::"], "::"],

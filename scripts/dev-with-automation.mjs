@@ -183,6 +183,7 @@ function parseArgs() {
     frontendOnly: false,
     backendOnly: false,
     host: null,
+    allowLanSessionKey: false,
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -222,6 +223,9 @@ function parseArgs() {
       case "--backend-only":
         config.backendOnly = true;
         break;
+      case "--allow-lan-session-key":
+        config.allowLanSessionKey = true;
+        break;
       case "-H":
       case "--host":
         config.host = args[++i];
@@ -259,6 +263,7 @@ OPTIONS:
   --dynamic                   Force Vite dev server when a wrapper defaults static
   --frontend-only             Start only the frontend behind ingress
   --backend-only              Start only agent-server + automation behind ingress
+  --allow-lan-session-key      Inject the session key on a non-loopback bind (opt-in)
   -v, --verbose               Show detailed output
   -h, --help                  Show this help
 
@@ -497,7 +502,7 @@ async function buildConfig(args, env = process.env) {
       env.OH_BIND_HOST ||
       (env.OH_CONVERSATION_RUNTIME === "docker" ? "0.0.0.0" : undefined),
   });
-  if (!isLoopbackBind(bindHost) && !isPublic) {
+  if (!isLoopbackBind(bindHost) && !isPublic && !args.allowLanSessionKey) {
     logService(
       "auth",
       `Bind host ${bindHost} is not loopback — session key will not be injected into HTML`,
@@ -538,6 +543,7 @@ async function buildConfig(args, env = process.env) {
 
     // Public mode — the session key should NOT be baked into the frontend
     isPublic,
+    allowLanSessionKey: Boolean(args.allowLanSessionKey),
 
     frontendOnly,
     backendOnly,
@@ -1288,6 +1294,7 @@ function buildViteFrontendEnv(config) {
   // and shows the API-key entry screen.
   const policy = applySessionKeyPolicy({
     host: config.bindHost,
+    allowLanSessionKey: config.allowLanSessionKey,
     sessionApiKey:
       config.launchAgentServer && !config.isPublic
         ? config.sessionApiKey
@@ -1778,6 +1785,7 @@ function startStaticFrontend(config, staticDir) {
       ...(() => {
         const policy = applySessionKeyPolicy({
           host: config.bindHost,
+          allowLanSessionKey: config.allowLanSessionKey,
           sessionApiKey:
             config.launchAgentServer && !config.isPublic
               ? config.sessionApiKey
@@ -1788,6 +1796,7 @@ function startStaticFrontend(config, staticDir) {
         const flags = [];
         if (policy.sessionApiKey) {
           flags.push("--session-api-key", policy.sessionApiKey);
+          if (config.allowLanSessionKey) flags.push("--allow-lan-session-key");
         }
         if (policy.authRequired) {
           flags.push("--auth-required");
@@ -1863,7 +1872,7 @@ const isMainModule =
 if (isMainModule) {
   main().catch((err) => {
     logError(`Fatal error: ${err.message}`);
-    if (err.stack) {
+    if (err.stack && err.code !== "EADDRINUSE") {
       console.error(c.dim + err.stack + c.reset);
       fileLog("error", err.stack);
     }
