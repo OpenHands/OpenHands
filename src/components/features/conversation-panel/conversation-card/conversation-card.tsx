@@ -10,6 +10,7 @@ import ConversationService from "#/api/conversation-service/conversation-service
 import { getDisplayConversationTags } from "#/api/agent-server-adapter";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
+import { isConversationArchived } from "#/utils/conversation-archive-status";
 import { RepositorySelection } from "#/api/open-hands.types";
 import { formatTimeDelta } from "#/utils/format-time-delta";
 import {
@@ -108,6 +109,10 @@ export function ConversationCard({
   const [titleMode, setTitleMode] = React.useState<"view" | "edit">("view");
   const { mutateAsync: downloadConversation } = useDownloadConversation();
 
+  const isEffectivelyArchived = isConversationArchived(
+    sandboxStatus,
+    isArchived,
+  );
   const displayTags = getDisplayConversationTags(tags);
   const hasDisplayTags = displayTags.length > 0;
   const showTagChipRow = showTags && hasDisplayTags;
@@ -249,7 +254,7 @@ export function ConversationCard({
   const showPersistentPinIcon = alwaysShowPinIcon && isPinned && !!onTogglePin;
   const shouldRenderFooter =
     showRepositoryMetadata ||
-    isArchived ||
+    isEffectivelyArchived ||
     (showLlmProfiles && (agentKind === "acp" || !!llmModel)) ||
     (showTagChipRow && displayTags.length > 0);
 
@@ -273,6 +278,7 @@ export function ConversationCard({
             onTitleSave={onTitleSave}
             executionStatus={executionStatus}
             sandboxStatus={sandboxStatus}
+            isArchived={isEffectivelyArchived}
           />
           {sandboxStatus === "ERROR" && <ConversationStatusBadges />}
         </div>
@@ -384,7 +390,7 @@ export function ConversationCard({
           acpModels={acpModels}
           tags={tags}
           showTags={showTagChipRow}
-          isArchived={isArchived}
+          isArchived={isEffectivelyArchived}
         />
       )}
     </div>

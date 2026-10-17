@@ -1063,4 +1063,133 @@ describe("ConversationPanel filters and pagination", () => {
       ).toHaveLength(5);
     });
   });
+
+  describe("archived conversations and sandbox status handling", () => {
+    it("hides MISSING sandbox conversation by default and reveals it under Show archived with Archived chip", async () => {
+      vi.spyOn(
+        AgentServerConversationService,
+        "searchConversations",
+      ).mockResolvedValue({
+        items: [
+          createMockConversation({
+            id: "active-1",
+            title: "Active Running",
+            sandbox_status: "RUNNING",
+          }),
+          createMockConversation({
+            id: "missing-1",
+            title: "Finished Cloud Automation",
+            sandbox_status: "MISSING",
+          }),
+        ],
+        next_page_id: null,
+      });
+
+      renderConversationPanel();
+
+      // Default: MISSING conversation is hidden from the list.
+      const cards = await screen.findAllByTestId("conversation-card");
+      expect(cards).toHaveLength(1);
+      expect(screen.getByText("Active Running")).toBeInTheDocument();
+      expect(
+        screen.queryByText("Finished Cloud Automation"),
+      ).not.toBeInTheDocument();
+
+      // Act: enable "Show archived".
+      act(() => {
+        useConversationPanelPreferencesStore.setState({
+          showArchivedConversations: true,
+        });
+      });
+
+      // Both conversations are visible, and the MISSING conversation has the Archived chip.
+      const allCards = await screen.findAllByTestId("conversation-card");
+      expect(allCards).toHaveLength(2);
+      const archivedCard = allCards.find((card) =>
+        within(card).queryByText("Finished Cloud Automation"),
+      )!;
+      expect(
+        within(archivedCard).getByTestId("conversation-card-archived-chip"),
+      ).toBeInTheDocument();
+
+      // Its context menu offers Unarchive, not Archive.
+      const user = userEvent.setup();
+      await user.click(within(archivedCard).getByTestId("ellipsis-button"));
+      expect(screen.getByTestId("unarchive-button")).toBeInTheDocument();
+      expect(screen.queryByTestId("archive-button")).not.toBeInTheDocument();
+    });
+
+    it("hides local conversation with runtime_info.runtime_status missing and can_resume false by default", async () => {
+      // Per agent-server-adapter, local runtime_info missing + can_resume false maps to sandbox_status: "MISSING".
+      vi.spyOn(
+        AgentServerConversationService,
+        "searchConversations",
+      ).mockResolvedValue({
+        items: [
+          createMockConversation({
+            id: "local-missing",
+            title: "Local Torn Down Run",
+            sandbox_status: "MISSING",
+          }),
+        ],
+        next_page_id: null,
+      });
+
+      renderConversationPanel();
+
+      // By default it is filtered out.
+      await waitFor(() => {
+        expect(
+          screen.queryByText("Local Torn Down Run"),
+        ).not.toBeInTheDocument();
+      });
+
+      // Revealed under Show archived with Archived chip.
+      act(() => {
+        useConversationPanelPreferencesStore.setState({
+          showArchivedConversations: true,
+        });
+      });
+
+      expect(
+        await screen.findByText("Local Torn Down Run"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId("conversation-card-archived-chip"),
+      ).toBeInTheDocument();
+    });
+
+    it("keeps ERROR sandbox conversation visible in default list without Archived chip and offers Archive", async () => {
+      vi.spyOn(
+        AgentServerConversationService,
+        "searchConversations",
+      ).mockResolvedValue({
+        items: [
+          createMockConversation({
+            id: "error-1",
+            title: "Errored Conversation",
+            sandbox_status: "ERROR",
+          }),
+        ],
+        next_page_id: null,
+      });
+
+      renderConversationPanel();
+
+      // Visible in the default list without needing Show archived.
+      const card = await screen.findByTestId("conversation-card");
+      expect(
+        within(card).getByText("Errored Conversation"),
+      ).toBeInTheDocument();
+      expect(
+        within(card).queryByTestId("conversation-card-archived-chip"),
+      ).not.toBeInTheDocument();
+
+      // Its menu offers Archive, not Unarchive.
+      const user = userEvent.setup();
+      await user.click(within(card).getByTestId("ellipsis-button"));
+      expect(screen.getByTestId("archive-button")).toBeInTheDocument();
+      expect(screen.queryByTestId("unarchive-button")).not.toBeInTheDocument();
+    });
+  });
 });

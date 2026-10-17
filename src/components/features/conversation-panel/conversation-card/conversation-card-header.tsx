@@ -1,6 +1,6 @@
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
-import { isArchivedSandboxStatus } from "#/utils/conversation-archive-status";
+import { isConversationArchived } from "#/utils/conversation-archive-status";
 import { ConversationCardTitle } from "./conversation-card-title";
 import { ConversationStatusDot } from "../conversation-status-dot";
 
@@ -10,6 +10,7 @@ interface ConversationCardHeaderProps {
   onTitleSave: (title: string) => void;
   executionStatus?: ExecutionStatus | null;
   sandboxStatus?: SandboxStatus | null;
+  isArchived?: boolean;
 }
 
 export function ConversationCardHeader({
@@ -18,8 +19,9 @@ export function ConversationCardHeader({
   onTitleSave,
   executionStatus,
   sandboxStatus,
+  isArchived: isArchivedProp = false,
 }: ConversationCardHeaderProps) {
-  const isArchived = isArchivedSandboxStatus(sandboxStatus);
+  const isArchived = isConversationArchived(sandboxStatus, isArchivedProp);
   return (
     <div className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden">
       {executionStatus !== undefined && (

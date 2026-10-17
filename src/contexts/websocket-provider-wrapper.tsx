@@ -94,10 +94,11 @@ export function WebSocketProviderWrapper({
       planningConversationIds.includes(subConversation.id),
   );
 
-  // A paused or archived runtime cannot accept a WebSocket connection. Its
-  // persisted event history remains available through the backend API.
+  // A paused, errored, or archived runtime cannot accept a WebSocket connection.
+  // Its persisted event history remains available through the backend API.
   const conversationUrl =
     conversation?.sandbox_status === "PAUSED" ||
+    conversation?.sandbox_status === "ERROR" ||
     isArchivedSandboxStatus(conversation?.sandbox_status)
       ? null
       : conversation?.conversation_url;
