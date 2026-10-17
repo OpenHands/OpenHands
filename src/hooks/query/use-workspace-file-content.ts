@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 
+import AgentServerRuntimeService from "#/api/runtime-service/agent-server-runtime-service";
 import { readCloudConversationFile } from "#/api/cloud/conversation-service.api";
 import { getActiveBackend } from "#/api/backend-registry/active-store";
 import { getGitPath } from "#/utils/get-git-path";
@@ -171,7 +172,9 @@ export function useWorkspaceFileContent(relativePath: string | null) {
   const gitPath = getGitPath(selectedRepository, workingDir);
   const workspaceRoot = gitPath.startsWith("/") ? gitPath : `/${gitPath}`;
   const absoluteFilePath = relativePath
-    ? `${workspaceRoot}/${relativePath}`
+    ? relativePath.startsWith("/")
+      ? relativePath
+      : `${workspaceRoot}/${relativePath}`
     : null;
 
   return useQuery<WorkspaceFileContent>({
@@ -234,6 +237,48 @@ export function useWorkspaceFileContent(relativePath: string | null) {
           kind,
           text: null,
           staticUrl: `data:${mimeType};base64,${arrayBufferToBase64(buf.buffer)}`,
+          mimeType,
+        };
+      }
+
+      // Local:
+      // When the path is absolute (e.g. out-of-workspace evidence, reports or logs),
+      // the workspace static fileserver will 404 because it is confined to the conversation
+      // workspace directory. Fetch through the authenticated agent-server download API instead.
+      if (relativePath.startsWith("/")) {
+        const buffer = await AgentServerRuntimeService.downloadFile(
+          conversationUrl,
+          sessionApiKey,
+          relativePath,
+        );
+        const base64 = arrayBufferToBase64(buffer);
+        const dataUrl = `data:${mimeType};base64,${base64}`;
+
+        if (kind === "text") {
+          if (isLikelyBinary(buffer)) {
+            return {
+              path: relativePath,
+              kind: "binary",
+              text: null,
+              staticUrl: `data:application/octet-stream;base64,${base64}`,
+              mimeType: "application/octet-stream",
+            };
+          }
+          const text = new TextDecoder("utf-8").decode(buffer);
+          return {
+            path: relativePath,
+            kind: "text",
+            text,
+            staticUrl: `data:${mimeType};charset=utf-8;base64,${base64}`,
+            mimeType,
+          };
+        }
+
+        return {
+          path: relativePath,
+          kind,
+          text: null,
+          staticUrl: dataUrl,
           mimeType,
         };
       }

@@ -180,6 +180,55 @@ describe("useWorkspaceFileContent", () => {
     });
   });
 
+  it("reads out-of-workspace absolute images via authenticated downloadFile instead of workspace staticUrl", async () => {
+    const pngBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]).buffer;
+    downloadFileMock.mockResolvedValue(pngBytes);
+
+    const { result } = renderHook(
+      () =>
+        useWorkspaceFileContent(
+          "/home/openhands/.cache/evidence/duplicate-name.png",
+        ),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(downloadFileMock).toHaveBeenCalledWith(
+      "https://agent.example.com/api/conversations/conv-1",
+      "session-key",
+      "/home/openhands/.cache/evidence/duplicate-name.png",
+    );
+    expect(result.current.data?.staticUrl).toMatch(/^data:image\/png;base64,/);
+    expect(result.current.data?.kind).toBe("image");
+  });
+
+  it("reads out-of-workspace absolute text files via authenticated downloadFile", async () => {
+    const textBytes = arrayBufferFromString(
+      "Audit log line 1\nAudit log line 2",
+    );
+    downloadFileMock.mockResolvedValue(textBytes);
+
+    const { result } = renderHook(
+      () => useWorkspaceFileContent("/var/log/audit.txt"),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(downloadFileMock).toHaveBeenCalledWith(
+      "https://agent.example.com/api/conversations/conv-1",
+      "session-key",
+      "/var/log/audit.txt",
+    );
+    expect(result.current.data?.kind).toBe("text");
+    expect(result.current.data?.text).toBe(
+      "Audit log line 1\nAudit log line 2",
+    );
+  });
+
   it("does not fetch PDF bytes — PDF staticUrl is rendered directly", async () => {
     const { result } = renderHook(() => useWorkspaceFileContent("report.pdf"), {
       wrapper: makeWrapper(),
