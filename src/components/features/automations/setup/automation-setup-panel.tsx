@@ -390,6 +390,8 @@ function buildInitialForm(
   const form = draft.form ?? {};
   const prompt = form.prompt ?? draft.prompt;
   const kind = form.kind ?? draft.kind;
+  const isEditingExisting = Boolean(draft.editingAutomationId?.trim());
+  const isCustom = kind === "custom";
   const pluginEntries = resolveAutomationSetupPlugins(form, draft.plugins);
   return {
     kind,
@@ -402,10 +404,16 @@ function buildInitialForm(
       pluginEntries.length > 0
         ? serializeAutomationSetupPluginList(pluginEntries)
         : "",
-    customCode: form.customCode ?? buildStarterPython(prompt),
+    customCode:
+      form.customCode ??
+      (isEditingExisting && isCustom ? "" : buildStarterPython(prompt)),
     entrypoint: form.entrypoint ?? DEFAULT_CUSTOM_ENTRYPOINT,
-    setupScriptPath: form.setupScriptPath ?? DEFAULT_CUSTOM_SETUP_SCRIPT_PATH,
-    setupScript: form.setupScript ?? DEFAULT_CUSTOM_SETUP_SCRIPT,
+    setupScriptPath:
+      form.setupScriptPath ??
+      (isEditingExisting && isCustom ? "" : DEFAULT_CUSTOM_SETUP_SCRIPT_PATH),
+    setupScript:
+      form.setupScript ??
+      (isEditingExisting && isCustom ? "" : DEFAULT_CUSTOM_SETUP_SCRIPT),
     triggerKind: form.triggerKind ?? "cron",
     frequency: form.frequency ?? "daily",
     time: form.time ?? DEFAULT_TIME,
@@ -2024,10 +2032,19 @@ export function AutomationSetupPanel({
                         updateField("agentProfileId", value)
                       }
                     />
-                  ) : hasExistingCustomBundle ? (
-                    <ExistingCustomBundleSummary
-                      tarballPath={existingCustomTarballPath}
-                    />
+                  ) : isEditingExisting && kind === "custom" ? (
+                    hasExistingCustomBundle ? (
+                      <ExistingCustomBundleSummary
+                        tarballPath={existingCustomTarballPath}
+                      />
+                    ) : (
+                      <div
+                        data-testid="automation-setup-bundle-unavailable"
+                        className="rounded-[15px] border border-[var(--oh-border)] bg-[var(--oh-surface)] p-4 text-sm text-[var(--oh-muted)]"
+                      >
+                        {t(I18nKey.AUTOMATIONS$DETAIL$SCRIPT_UNAVAILABLE)}
+                      </div>
+                    )
                   ) : (
                     <CustomCodeFields
                       code={customCode}

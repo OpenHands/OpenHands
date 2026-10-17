@@ -1,0 +1,129 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 780" width="1200" height="780" role="img" aria-label="Fix 18341: Preserve custom automation bundle on edit before and after comparison">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0b1020"/>
+      <stop offset="100%" stop-color="#141a2e"/>
+    </linearGradient>
+    <linearGradient id="beforeCard" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1c1622"/>
+      <stop offset="100%" stop-color="#241926"/>
+    </linearGradient>
+    <linearGradient id="afterCard" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#122422"/>
+      <stop offset="100%" stop-color="#142b26"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="100%" height="100%" rx="16" fill="url(#bg)"/>
+
+  <!-- Window controls -->
+  <circle cx="36" cy="32" r="7" fill="#ff5f56"/>
+  <circle cx="60" cy="32" r="7" fill="#ffbd2e"/>
+  <circle cx="84" cy="32" r="7" fill="#27c93f"/>
+
+  <!-- Title -->
+  <text x="110" y="38" fill="#d7e2ff" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="16" font-weight="600">OpenHands #18341: Custom Automation Edit Bundle Preservation</text>
+
+  <!-- Section Title -->
+  <text x="40" y="85" fill="#f1f5f9" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="22" font-weight="700">UI Comparison: Editing an Existing Custom Automation</text>
+  <text x="40" y="112" fill="#94a3b8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="14">Triggered via Dashboard Edit menu for an automation with an uploaded tarball</text>
+
+  <!-- BEFORE CARD -->
+  <g transform="translate(40, 135)">
+    <rect width="540" height="420" rx="12" fill="url(#beforeCard)" stroke="#ef4444" stroke-width="2" stroke-opacity="0.6"/>
+
+    <!-- Badge -->
+    <rect x="20" y="20" width="90" height="26" rx="6" fill="#ef4444" fill-opacity="0.2"/>
+    <text x="32" y="38" fill="#fca5a5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="700">BEFORE</text>
+    <text x="120" y="38" fill="#f87171" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13">Starter code replaces saved bundle</text>
+
+    <!-- Simulated UI Header -->
+    <rect x="20" y="62" width="500" height="44" rx="8" fill="#0f172a" stroke="#334155" stroke-width="1"/>
+    <text x="36" y="88" fill="#e2e8f0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="600">Edit Automation: Slack Monitor</text>
+    <text x="440" y="88" fill="#94a3b8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12">Type: Custom</text>
+
+    <!-- Code Editor Box -->
+    <rect x="20" y="118" width="500" height="230" rx="8" fill="#090d16" stroke="#475569" stroke-width="1"/>
+
+    <!-- Code Editor Tab -->
+    <rect x="20" y="118" width="500" height="32" rx="8" fill="#1e293b"/>
+    <text x="36" y="139" fill="#94a3b8" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="12">main.py (Generic Starter Code)</text>
+    <rect x="420" y="124" width="85" height="20" rx="4" fill="#dc2626" fill-opacity="0.3"/>
+    <text x="428" y="138" fill="#fca5a5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11">UNSAVED CODE</text>
+
+    <!-- Code snippet -->
+    <text x="36" y="175" fill="#f43f5e" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="12">def <tspan fill="#60a5fa">main</tspan>():</text>
+    <text x="52" y="197" fill="#64748b" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="12"># Generated starter script</text>
+    <text x="52" y="219" fill="#e2e8f0" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="12">fire_callback()</text>
+    <text x="52" y="241" fill="#e2e8f0" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="12">print(<tspan fill="#34d399">"Reviewing open PRs..."</tspan>)</text>
+    <text x="36" y="275" fill="#f43f5e" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="12">if <tspan fill="#e2e8f0">__name__ == </tspan><tspan fill="#34d399">"__main__"</tspan>:</text>
+    <text x="52" y="297" fill="#e2e8f0" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="12">main()</text>
+
+    <!-- Defect explanation banner -->
+    <rect x="20" y="360" width="500" height="42" rx="6" fill="#7f1d1d" fill-opacity="0.4" stroke="#b91c1c" stroke-width="1"/>
+    <text x="32" y="386" fill="#fecaca" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="500">❌ Bug: existingCustomTarballPath lost in normalizeDraft</text>
+  </g>
+
+  <!-- AFTER CARD -->
+  <g transform="translate(620, 135)">
+    <rect width="540" height="420" rx="12" fill="url(#afterCard)" stroke="#10b981" stroke-width="2" stroke-opacity="0.6"/>
+
+    <!-- Badge -->
+    <rect x="20" y="20" width="80" height="26" rx="6" fill="#10b981" fill-opacity="0.2"/>
+    <text x="32" y="38" fill="#6ee7b7" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="700">AFTER</text>
+    <text x="110" y="38" fill="#34d399" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13">Saved bundle summary correctly preserved</text>
+
+    <!-- Simulated UI Header -->
+    <rect x="20" y="62" width="500" height="44" rx="8" fill="#0f172a" stroke="#334155" stroke-width="1"/>
+    <text x="36" y="88" fill="#e2e8f0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="600">Edit Automation: Slack Monitor</text>
+    <text x="440" y="88" fill="#94a3b8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12">Type: Custom</text>
+
+    <!-- Existing Bundle Summary Card -->
+    <rect x="20" y="118" width="500" height="230" rx="8" fill="#042f2e" fill-opacity="0.4" stroke="#059669" stroke-width="1.5"/>
+
+    <g transform="translate(36, 140)">
+      <!-- Card header -->
+      <text x="0" y="18" fill="#ecfdf5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="15" font-weight="600">Saved custom automation bundle</text>
+
+      <!-- Info Icon & Tooltip hint -->
+      <circle cx="250" cy="13" r="8" fill="#0d9488" fill-opacity="0.3"/>
+      <text x="247" y="18" fill="#5eead4" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="700">i</text>
+
+      <!-- Archive box -->
+      <rect x="0" y="36" width="468" height="64" rx="8" fill="#0f172a" stroke="#14b8a6" stroke-width="1"/>
+      <!-- Archive icon representation -->
+      <rect x="16" y="52" width="32" height="32" rx="4" fill="#0f766e"/>
+      <text x="24" y="73" fill="#ccfbf1" font-family="ui-monospace, monospace" font-size="16">📦</text>
+
+      <text x="60" y="62" fill="#f8fafc" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="600">slack_monitor.tar.gz</text>
+      <text x="60" y="82" fill="#94a3b8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12">Uploaded custom Python automation source code</text>
+
+      <!-- Explanation note -->
+      <text x="0" y="130" fill="#94a3b8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13">Source files are safely preserved. Configuration and schedule can be updated.</text>
+      <text x="0" y="152" fill="#64748b" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12">Starter python and setup script are reserved strictly for new automations.</text>
+    </g>
+
+    <!-- Success explanation banner -->
+    <rect x="20" y="360" width="500" height="42" rx="6" fill="#064e3b" fill-opacity="0.6" stroke="#059669" stroke-width="1"/>
+    <text x="32" y="386" fill="#a7f3d0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="500">✅ Fixed: existingCustomTarballPath preserved across all updates</text>
+  </g>
+
+  <!-- TEST SUITE TERMINAL BANNER -->
+  <g transform="translate(40, 580)">
+    <rect width="1120" height="160" rx="10" fill="#030712" stroke="#374151" stroke-width="1"/>
+
+    <!-- Terminal header -->
+    <rect width="1120" height="30" rx="10" fill="#111827"/>
+    <circle cx="20" cy="15" r="5" fill="#ef4444"/>
+    <circle cx="36" cy="15" r="5" fill="#f59e0b"/>
+    <circle cx="52" cy="15" r="5" fill="#10b981"/>
+    <text x="75" y="20" fill="#9ca3af" font-family="ui-monospace, monospace" font-size="12">Terminal — Vitest Automated Test Verification</text>
+
+    <!-- Output lines -->
+    <text x="24" y="60" fill="#38bdf8" font-family="ui-monospace, monospace" font-size="13">$ npx vitest run automation-form-session automation-setup-panel</text>
+    <text x="24" y="85" fill="#4ade80" font-family="ui-monospace, monospace" font-size="13">✓ __tests__/api/automation-form-session.test.ts (11 tests passed)</text>
+    <text x="24" y="107" fill="#4ade80" font-family="ui-monospace, monospace" font-size="13">✓ __tests__/components/automations/automation-setup-panel.test.tsx (47 tests passed)</text>
+    <text x="24" y="132" fill="#facc15" font-family="ui-monospace, monospace" font-size="13">Test Files 2 passed (2) · Tests 58 passed (58) · All regression checks passed</text>
+  </g>
+</svg>
