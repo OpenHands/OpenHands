@@ -842,7 +842,10 @@ export async function resetToOpenHandsAgentViaUI(page: Page) {
 
 /**
  * Register a named trajectory on the mock LLM server.
- * Each turn is: { tool_call: { name, arguments } } or { text: "..." }
+ * Each turn is: { tool_call: { name, arguments, content? } } or { text: "..." }
+ *
+ * A tool_call turn's optional `content` is streamed before the tool call and
+ * becomes the `ActionEvent.thought` on the agent-server.
  */
 export async function registerTrajectory(
   request: APIRequestContext,
@@ -852,6 +855,7 @@ export async function registerTrajectory(
         tool_call: {
           name: string;
           arguments: Record<string, unknown> | string;
+          content?: string;
         };
       }
     | { text: string }
