@@ -54,6 +54,7 @@ const SOURCE_VALUE_DRIVEN_TAG_KEYS = new Set([
   "origin",
   "source",
   "git_provider",
+  "gitprovider",
 ]);
 
 /**

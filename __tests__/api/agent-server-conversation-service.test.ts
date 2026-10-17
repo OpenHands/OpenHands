@@ -30,6 +30,7 @@ const {
   mockHttpGet,
   mockHttpPost,
   mockHttpDelete,
+  mockHttpPatch,
   mockConversationClient,
   mockFileClient,
   mockSettingsClient,
@@ -53,6 +54,7 @@ const {
   mockHttpGet: vi.fn(),
   mockHttpPost: vi.fn(),
   mockHttpDelete: vi.fn(),
+  mockHttpPatch: vi.fn(),
   mockConversationClient: vi.fn(),
   mockFileClient: vi.fn(),
   mockSettingsClient: vi.fn(),
@@ -218,6 +220,7 @@ describe("AgentServerConversationService", () => {
     mockHttpGet.mockReset();
     mockHttpPost.mockReset();
     mockHttpDelete.mockReset();
+    mockHttpPatch.mockReset();
     mockGetProfile.mockReset();
     mockActivateProfile.mockReset();
     mockListProfiles.mockReset();
@@ -866,6 +869,77 @@ describe("AgentServerConversationService", () => {
       expect(payload.workspace.working_dir).toBe("/Users/jane/projects/foo");
       expect(payload.worktree).toBe(true);
     });
+
+    it("stamps workspace and repo metadata as server-side tags", async () => {
+      mockGetSettings.mockResolvedValue({
+        agent_settings: { llm: { model: "gpt-4o" } },
+        conversation_settings: {},
+      });
+      mockGetSettingsForConversation.mockResolvedValue({
+        agentSettings: { llm: { model: "gpt-4o" } },
+        conversationSettings: {},
+        secretsEncrypted: true,
+      });
+      mockHttpPost.mockResolvedValue({
+        data: {
+          id: "ignored-server-id",
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+      });
+
+      await AgentServerConversationService.createConversation({
+        workingDirOverride: "/Users/jane/projects/foo",
+        metadata: {
+          selected_repository: "OpenHands/OpenHands",
+          selected_branch: "main",
+          git_provider: "github",
+        },
+      });
+
+      const [payloadCall] = mockHttpPost.mock.calls;
+      const payload = payloadCall[1] as { tags: Record<string, string> };
+      expect(payload.tags).toMatchObject({
+        repository: "OpenHands/OpenHands",
+        selectedbranch: "main",
+        gitprovider: "github",
+        workspace: "/Users/jane/projects/foo",
+      });
+      // The agent-server rejects the whole request (422) when any tag key
+      // falls outside its ^[a-z0-9]+$ pattern, so every stamped key must match.
+      for (const key of Object.keys(payload.tags)) {
+        expect(key).toMatch(/^[a-z0-9]+$/);
+      }
+      // The client-source tag is stamped by buildStartConversationRequest;
+      // the metadata tags must merge into it, not replace it.
+      expect(payload.tags.clientsource).toBe("agentcanvas");
+    });
+
+    it("omits metadata tags entirely when nothing was selected", async () => {
+      mockGetSettings.mockResolvedValue({
+        agent_settings: { llm: { model: "gpt-4o" } },
+        conversation_settings: {},
+      });
+      mockGetSettingsForConversation.mockResolvedValue({
+        agentSettings: { llm: { model: "gpt-4o" } },
+        conversationSettings: {},
+        secretsEncrypted: true,
+      });
+      mockHttpPost.mockResolvedValue({
+        data: {
+          id: "ignored-server-id",
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+      });
+
+      await AgentServerConversationService.createConversation();
+
+      const [payloadCall] = mockHttpPost.mock.calls;
+      const payload = payloadCall[1] as { tags: Record<string, string> };
+      expect(payload.tags).not.toHaveProperty("repository");
+      expect(payload.tags).not.toHaveProperty("workspace");
+    });
   });
 
   describe("downloadConversation local branch", () => {
@@ -918,6 +992,8 @@ describe("AgentServerConversationService", () => {
 
   describe("conversation update fallbacks", () => {
     it("throws a useful error when repository update cannot reload the conversation", async () => {
+      // getConversation (tag read) succeeds; getConversations (re-fetch) returns empty.
+      mockGetConversation.mockResolvedValue({ id: "missing-conv" });
       mockHttpGet.mockResolvedValue({ data: [] });
 
       await expect(
@@ -926,6 +1002,31 @@ describe("AgentServerConversationService", () => {
           "OpenHands/agent-canvas",
         ),
       ).rejects.toThrow("Conversation missing-conv was not found");
+    });
+
+    it("merges new repo metadata into existing tags without clobbering unrelated keys", async () => {
+      mockGetConversation.mockResolvedValue({
+        id: "conv-abc",
+        tags: { clientsource: "agentcanvas", acpserver: "my-acp" },
+      });
+      mockHttpGet.mockResolvedValue({ data: [{ id: "conv-abc" }] });
+
+      await AgentServerConversationService.updateConversationRepository(
+        "conv-abc",
+        "OpenHands/agent-canvas",
+        "main",
+        "github",
+      );
+
+      expect(mockUpdateConversation).toHaveBeenCalledWith("conv-abc", {
+        tags: {
+          repository: "OpenHands/agent-canvas",
+          selectedbranch: "main",
+          gitprovider: "github",
+          clientsource: "agentcanvas",
+          acpserver: "my-acp",
+        },
+      });
     });
 
     it("throws a useful error when title update cannot reload the conversation", async () => {
@@ -2291,6 +2392,9 @@ describe("AgentServerConversationService", () => {
     });
 
     it("hydrates repository selections after updating a conversation", async () => {
+      mockGetConversation.mockResolvedValue(
+        makeDirectConversation({ id: "conv-repo" }),
+      );
       mockHttpGet.mockResolvedValue({
         data: [makeDirectConversation({ id: "conv-repo" })],
       });
@@ -2323,6 +2427,9 @@ describe("AgentServerConversationService", () => {
     });
 
     it("clears repository selections from a conversation", async () => {
+      mockGetConversation.mockResolvedValue(
+        makeDirectConversation({ id: "conv-repo" }),
+      );
       mockHttpGet.mockResolvedValue({
         data: [makeDirectConversation({ id: "conv-repo" })],
       });
@@ -2552,6 +2659,9 @@ describe("AgentServerConversationService", () => {
     });
 
     it("forks at an event, keeps the supplied title, and carries repository metadata", async () => {
+      mockGetConversation.mockResolvedValue(
+        makeDirectConversation({ id: "source-conv" }),
+      );
       mockHttpGet.mockResolvedValue({
         data: [makeDirectConversation({ id: "source-conv" })],
       });
@@ -3095,6 +3205,9 @@ describe("AgentServerConversationService", () => {
         selected_workspace: "/Users/jane/projects/canvas",
         workspace_mode: "local_repo",
       });
+      mockGetConversation.mockResolvedValue(
+        makeDirectConversation({ id: "conv-repo" }),
+      );
       mockHttpGet.mockResolvedValue({
         data: [makeDirectConversation({ id: "conv-repo" })],
       });
@@ -3125,6 +3238,9 @@ describe("AgentServerConversationService", () => {
         selected_workspace: "/Users/jane/projects/canvas",
         workspace_mode: "local_repo",
       });
+      mockGetConversation.mockResolvedValue(
+        makeDirectConversation({ id: "conv-repo" }),
+      );
       mockHttpGet.mockResolvedValue({
         data: [makeDirectConversation({ id: "conv-repo" })],
       });
