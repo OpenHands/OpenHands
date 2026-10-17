@@ -6,6 +6,7 @@ import { I18nKey } from "#/i18n/declaration";
  * code-specific header and, for credential failures, a recovery action.
  */
 export const ACP_AUTH_REQUIRED_CODE = "ACPAuthRequired";
+export const ACP_PLUGIN_ERROR_CODE = "PluginManifestError";
 
 const ACP_ERROR_HEADER_KEYS: Record<string, I18nKey> = {
   ACPAuthRequired: I18nKey.ERROR$ACP_AUTH_REQUIRED_TITLE,
@@ -15,6 +16,8 @@ const ACP_ERROR_HEADER_KEYS: Record<string, I18nKey> = {
   ACPInitError: I18nKey.CHAT_INTERFACE$AGENT_ERROR_MESSAGE,
   ACPPromptError: I18nKey.CHAT_INTERFACE$AGENT_ERROR_MESSAGE,
   UsagePolicyRefusal: I18nKey.CHAT_INTERFACE$AGENT_ERROR_MESSAGE,
+  // Plugin manifest failures get a plugin-specific header
+  PluginManifestError: I18nKey.ERROR$PLUGIN_ERROR_TITLE,
 };
 
 /** Localized header key for an error code, or null when the code is unknown. */

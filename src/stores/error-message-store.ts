@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { ErrorClassification } from "@openhands/typescript-client";
+import type { PluginErrorDetail } from "#/types/plugin-error";
 
 /**
  * "connection" errors auto-clear once connectivity recovers; "conversation"
@@ -18,6 +19,11 @@ interface ErrorMessageState {
    */
   errorCode: string | null;
   errorClassification: ErrorClassification | null;
+  /**
+   * Structured plugin error payload when the error is a PluginManifestError.
+   * When non-null, the UI renders PluginErrorBanner instead of ErrorMessageBanner.
+   */
+  pluginError: PluginErrorDetail | null;
 }
 
 interface ErrorMessageActions {
@@ -26,6 +32,7 @@ interface ErrorMessageActions {
     type?: ErrorMessageType,
     code?: string | null,
     classification?: ErrorClassification | null,
+    pluginError?: PluginErrorDetail | null,
   ) => void;
   removeErrorMessage: () => void;
   /** Clears the error only when it is a transient connection error. */
@@ -39,6 +46,7 @@ const initialState: ErrorMessageState = {
   errorType: null,
   errorCode: null,
   errorClassification: null,
+  pluginError: null,
 };
 
 export const useErrorMessageStore = create<ErrorMessageStore>((set) => ({
@@ -49,12 +57,14 @@ export const useErrorMessageStore = create<ErrorMessageStore>((set) => ({
     type: ErrorMessageType = "conversation",
     code: string | null = null,
     classification: ErrorClassification | null = null,
+    pluginError: PluginErrorDetail | null = null,
   ) =>
     set(() => ({
       errorMessage: message,
       errorType: type,
       errorCode: code,
       errorClassification: classification,
+      pluginError,
     })),
 
   removeErrorMessage: () => set(() => ({ ...initialState })),
