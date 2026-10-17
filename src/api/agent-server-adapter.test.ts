@@ -3,7 +3,7 @@ import { CANVAS_UI_CLIENT_TOOL_NAME } from "#/constants/canvas-ui";
 import { LAUNCH_CHILD_CONVERSATION_TOOL_NAME } from "#/constants/child-conversation";
 import { REQUEST_SECRET_TOOL_NAME } from "#/constants/secret-request";
 import { DEFAULT_SETTINGS } from "#/services/settings";
-import type { Settings } from "#/types/settings";
+import type { Settings, SettingsValue } from "#/types/settings";
 import {
   AGENT_CANVAS_SOURCE,
   CLIENT_SOURCE_TAG_KEY,
@@ -63,6 +63,137 @@ function getPlannerAgentContextSkillNames(payload: {
 }
 
 describe("buildStartConversationRequest", () => {
+  describe("git identity from Settings > Application (#17899)", () => {
+    const llmOnly = {
+      agent_kind: "openhands",
+      llm: { model: "litellm_proxy/openai/gpt-5.5", api_key: "gAAAAAkey" },
+    };
+    const identity = {
+      git_user_name: "QA Tester",
+      git_user_email: "qa-tester@example.com",
+    };
+    const identityEnv = {
+      GIT_AUTHOR_NAME: "QA Tester",
+      GIT_COMMITTER_NAME: "QA Tester",
+      GIT_AUTHOR_EMAIL: "qa-tester@example.com",
+      GIT_COMMITTER_EMAIL: "qa-tester@example.com",
+    };
+
+    function start(
+      settings: Settings,
+      agentSettings: Record<string, unknown>,
+      defaultToolNames?: string[],
+    ) {
+      return buildStartConversationRequest({
+        settings,
+        encryptedAgentSettings: agentSettings as Record<string, SettingsValue>,
+        encryptedConversationSettings: settings.conversation_settings!,
+        defaultToolNames,
+      });
+    }
+
+    it("spells out the default tools with the identity in the terminal env", () => {
+      const settings = { ...makeSettings(llmOnly), ...identity };
+
+      const payload = start(settings, llmOnly, [
+        "terminal",
+        "file_editor",
+        "task_tracker",
+      ]);
+
+      expect(payload.agent_settings!.tools).toEqual([
+        { name: "terminal", params: { env: identityEnv } },
+        { name: "file_editor", params: {} },
+        { name: "task_tracker", params: {} },
+      ]);
+    });
+
+    it("adds the identity to a saved terminal's params and keeps the rest", () => {
+      const agentSettings = {
+        ...llmOnly,
+        tools: [
+          {
+            name: "terminal",
+            params: { terminal_type: "subprocess", env: { FOO: "bar" } },
+          },
+          { name: "file_editor", params: {} },
+        ],
+      };
+      const settings = {
+        ...makeSettings(agentSettings as Record<string, SettingsValue>),
+        ...identity,
+      };
+
+      const payload = start(settings, agentSettings);
+
+      expect(payload.agent_settings!.tools).toEqual([
+        {
+          name: "terminal",
+          params: {
+            terminal_type: "subprocess",
+            env: { FOO: "bar", ...identityEnv },
+          },
+        },
+        { name: "file_editor", params: {} },
+      ]);
+    });
+
+    it("applies only the fields the user changed from the default", () => {
+      const settings = {
+        ...makeSettings(llmOnly),
+        git_user_name: "QA Tester",
+        git_user_email: DEFAULT_SETTINGS.git_user_email,
+      };
+
+      const payload = start(settings, llmOnly, ["terminal"]);
+
+      expect(payload.agent_settings!.tools).toEqual([
+        {
+          name: "terminal",
+          params: {
+            env: {
+              GIT_AUTHOR_NAME: "QA Tester",
+              GIT_COMMITTER_NAME: "QA Tester",
+            },
+          },
+        },
+      ]);
+    });
+
+    it("leaves the tools alone when the identity is still the default", () => {
+      const settings = makeSettings(llmOnly);
+
+      const payload = start(settings, llmOnly, ["terminal", "file_editor"]);
+
+      expect(payload.agent_settings!.tools).toBeUndefined();
+    });
+
+    it("keeps the server default when the tool catalog is unavailable", () => {
+      const settings = { ...makeSettings(llmOnly), ...identity };
+
+      const payload = start(settings, llmOnly);
+
+      expect(payload.agent_settings!.tools).toBeUndefined();
+    });
+
+    it("does not add a terminal the user's tools leave out", () => {
+      const agentSettings = {
+        ...llmOnly,
+        tools: [{ name: "file_editor", params: {} }],
+      };
+      const settings = {
+        ...makeSettings(agentSettings as Record<string, SettingsValue>),
+        ...identity,
+      };
+
+      const payload = start(settings, agentSettings);
+
+      expect(payload.agent_settings!.tools).toEqual([
+        { name: "file_editor", params: {} },
+      ]);
+    });
+  });
+
   it("marks OpenHands start requests as encrypted when MCP headers are encrypted", () => {
     const agentSettings = {
       agent_kind: "openhands",

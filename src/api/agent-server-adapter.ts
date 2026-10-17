@@ -524,6 +524,60 @@ interface AgentToolSpec {
   params: SettingsRecord;
 }
 
+const TERMINAL_TOOL_NAME = "terminal";
+
+/**
+ * The git identity from Settings > Application as git's own environment
+ * variables, for the agent's terminal session. A field still at its built-in
+ * default (or empty) is left out, so the host's own git config keeps
+ * authoring commits until the user enters an identity (#17899).
+ */
+export function buildGitIdentityEnv(
+  settings: Pick<Settings, "git_user_name" | "git_user_email">,
+): Record<string, string> | null {
+  const env: Record<string, string> = {};
+  const name = settings.git_user_name?.trim();
+  if (name && name !== DEFAULT_SETTINGS.git_user_name) {
+    env.GIT_AUTHOR_NAME = name;
+    env.GIT_COMMITTER_NAME = name;
+  }
+  const email = settings.git_user_email?.trim();
+  if (email && email !== DEFAULT_SETTINGS.git_user_email) {
+    env.GIT_AUTHOR_EMAIL = email;
+    env.GIT_COMMITTER_EMAIL = email;
+  }
+  return Object.keys(env).length > 0 ? env : null;
+}
+
+/**
+ * Add `env` to the terminal tool's session environment (TerminalTool's
+ * client-only `env` param, software-agent-sdk#3813). Unset `tools` means the
+ * server's default set, so it is spelled out from `defaultToolNames` first:
+ * a tools list is used exactly as given. Without a list to edit, or without a
+ * terminal in it, the tools are returned unchanged.
+ */
+function withTerminalEnv(
+  tools: AgentToolSpec[] | undefined,
+  env: Record<string, string>,
+  defaultToolNames: string[] | undefined,
+): AgentToolSpec[] | undefined {
+  const base =
+    tools ??
+    defaultToolNames?.map((name): AgentToolSpec => ({ name, params: {} }));
+  if (!base?.some((tool) => tool.name === TERMINAL_TOOL_NAME)) return tools;
+  return base.map((tool) =>
+    tool.name === TERMINAL_TOOL_NAME
+      ? {
+          ...tool,
+          params: {
+            ...tool.params,
+            env: { ...toRecord(tool.params.env), ...env },
+          },
+        }
+      : tool,
+  );
+}
+
 type AgentSettingsPayload = SettingsRecord & {
   llm?: SettingsRecord;
   agent_context: SettingsRecord;
@@ -1062,6 +1116,7 @@ function buildConfiguredOpenHandsAgentSettings(
   runtimeServicesInfo?: RuntimeServicesInfo | null,
   query?: string,
   hasActiveMetaProfile?: boolean,
+  defaultToolNames?: string[],
 ): AgentSettingsPayload {
   const agentSettings = toRecord(settings.agent_settings);
   const llm = buildNormalizedLlmSettings(agentSettings.llm);
@@ -1084,6 +1139,8 @@ function buildConfiguredOpenHandsAgentSettings(
   // scrub it so it never leaks onto the OpenHands payload.
   delete agentSettings.acp_env;
 
+  const gitIdentityEnv = buildGitIdentityEnv(settings);
+
   return {
     ...agentSettings,
     llm,
@@ -1095,7 +1152,13 @@ function buildConfiguredOpenHandsAgentSettings(
       settings.run_router_at_conversation_start,
       hasActiveMetaProfile,
     ),
-    tools: getAgentTools(agentSettings),
+    tools: gitIdentityEnv
+      ? withTerminalEnv(
+          getAgentTools(agentSettings),
+          gitIdentityEnv,
+          defaultToolNames,
+        )
+      : getAgentTools(agentSettings),
   };
 }
 
@@ -1104,6 +1167,7 @@ function buildConfiguredAgentSettings(
   runtimeServicesInfo?: RuntimeServicesInfo | null,
   query?: string,
   hasActiveMetaProfile?: boolean,
+  defaultToolNames?: string[],
 ): AgentSettingsPayload {
   return isAcpAgent(settings)
     ? buildConfiguredAcpAgentSettings(
@@ -1117,6 +1181,7 @@ function buildConfiguredAgentSettings(
         runtimeServicesInfo,
         query,
         hasActiveMetaProfile,
+        defaultToolNames,
       );
 }
 
@@ -1262,6 +1327,12 @@ export interface StartConversationOptions {
    * sync caller that omits it never emits the suffix.
    */
   hasActiveMetaProfile?: boolean;
+  /**
+   * The server's default tool set (tool catalog `in_default_set` and
+   * `usable`), so the Settings git identity can reach the terminal when the
+   * agent's `tools` are unset. Without it that case keeps the server default.
+   */
+  defaultToolNames?: string[];
 }
 
 /**
@@ -1314,6 +1385,7 @@ export function buildStartConversationRequest(
     options.runtimeServicesInfo,
     options.query,
     options.hasActiveMetaProfile,
+    options.defaultToolNames,
   );
   const savedSuffix = toRecord(
     toRecord(sourceAgentSettings.agent_settings).agent_context,
@@ -1780,10 +1852,22 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
   llmProfileOverride?: string;
   titleLlmProfile?: string;
 }): Promise<Record<string, unknown>> {
-  const [{ SecretsService }, { default: HooksService }] = await Promise.all([
+  const [
+    { SecretsService },
+    { default: HooksService },
+    { default: ToolCatalogService },
+  ] = await Promise.all([
     import("./secrets-service"),
     import("./hooks-service"),
+    import("./tool-catalog-service/tool-catalog-service.api"),
   ]);
+  // Only an inline OpenHands agent with unset `tools` and a git identity to
+  // apply needs the server's default tool set spelled out.
+  const needsDefaultTools =
+    !options.agentProfileId &&
+    !isAcpAgent(options.settings) &&
+    buildGitIdentityEnv(options.settings) !== null &&
+    !Array.isArray(toRecord(options.settings.agent_settings).tools);
 
   const [
     settingsResult,
@@ -1791,6 +1875,7 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
     serverInfo,
     workspaceHookConfig,
     metaProfiles,
+    toolCatalog,
   ] = await Promise.all([
     SettingsService.getSettingsForConversation(),
     SecretsService.getSecrets(),
@@ -1801,6 +1886,11 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
     // Best-effort: if the meta-profiles endpoint is unreachable we cannot
     // confirm a router is active, so fail closed (no route-at-start suffix).
     MetaProfilesService.listMetaProfiles().catch(() => null),
+    // Best-effort: without the catalog the server default stands, without
+    // the identity.
+    needsDefaultTools
+      ? ToolCatalogService.getCatalog().catch(() => null)
+      : Promise.resolve(null),
   ]);
 
   const { agentSettings, conversationSettings, secretsEncrypted } =
@@ -1827,6 +1917,9 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
     executionRuntime,
     workspaceHookConfig,
     hasActiveMetaProfile,
+    defaultToolNames: toolCatalog
+      ?.filter((tool) => tool.in_default_set && tool.usable)
+      .map((tool) => tool.name),
   });
 }
 
