@@ -751,9 +751,8 @@ async function cmdLaunch({ flags }) {
     OH_CANVAS_SAFE_BACKEND_PORT: String(ports.agentServer),
     OH_CANVAS_SAFE_AUTOMATION_PORT: String(ports.automation),
     OH_CANVAS_SAFE_VITE_PORT: String(ports.frontend),
-    // A private tmux server per run (OpenHands/OpenHands#17946: the launcher's
-    // <stateDir>/tmux is never created, so runs would share one server). It
-    // lives under /tmp because a socket below the long run path would exceed
+    // A private tmux socket directory per run. It lives under /tmp, not the launcher's
+    // <stateDir>/tmux, because a socket below the long run path would exceed
     // the 108-byte Unix socket limit.
     TMUX_TMPDIR: tmuxDirFor(dir),
   });
