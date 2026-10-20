@@ -49,9 +49,9 @@ python-multipart = ">=0.0.22"
 tenacity = ">=8.5,<10.0"
 zope-interface = "7.2"
 pathspec = "^0.12.1"
-pyjwt = "^2.9.0"
+pyjwt = ">=2.14.0"                                    # Bumped to address CVE-2026-102266/102267/102268/102271/102272/102273 (COMP-406)
 dirhash = "*"
-tornado = "*"
+tornado = ">=6.5.9"                                         # Bumped to address GHSA-c2m8-h5v5-343r/chx6-46f5-w4vp (COMP-406)
 python-dotenv = "*"
 rapidfuzz = "^3.9.0"
 whatthepatch = "^1.0.6"
@@ -83,11 +83,11 @@ python-docx = "*"
 bashlex = "^0.18"
 
 # Explicitly pinned packages for security
-pypdf = "^6.0.0"
+pypdf = ">=6.19.0"                                     # Bumped to address CVE-2026-102993 through CVE-2026-103000 (COMP-406)
 pillow = ">=11.3,<13.0"
 starlette = ">=1.3.1,<2.0"
 authlib = "^1.6.6"
-urllib3 = "^2.5.0"
+urllib3 = ">=2.8.0"                                  # Bumped to address CVE-2026-97687/97689 (COMP-406)
 requests = "^2.32.5"
 setuptools = ">=78.1.1"
 h2 = ">=4.3.0"
@@ -95,7 +95,11 @@ nbconvert = ">=7.17.0"
 filelock = ">=3.20.3"
 nltk = ">=3.9.4"
 cryptography = ">=50.0.0"                          # Updated to address CVE-2026-69247 (COMP-171); versions >= 44.0.0, < 50.0.0 are vulnerable
+
 gitpython = ">=3.1.58"                             # Bumped to address GHSA-4gmw-gg2m-w46p/9rj7-rf2p-w77r/hmq2-w58f-27jc/jm78-9fvv-mhgr/wvpp-8hx9-p66j (COMP-204)
+dulwich = ">=1.2.9"                                # Bumped to address GHSA-8mcx-5rqc-vhmf/cm62-gvxx-vmxx/5fqc-mrg8-w798/8w8g-wq8h-fq33 (COMP-406)
+virtualenv = ">=21.7.13"                           # Bumped to address CVE-2026-102925/102930/102937 (COMP-406)
+
 
 # TODO: These are integrations that should probably be optional
 redis = ">=5.2,<7.0"
@@ -163,7 +167,7 @@ gevent = ">=24.2.1,<26.0.0"
 optional = true
 
 [tool.poetry.group.runtime.dependencies]
-jupyterlab = ">=4.4.8"
+jupyterlab = ">=4.5.11"                           # Bumped to address CVE-2026-102831 (COMP-406)
 notebook = "*"
 flake8 = "*"
 
@@ -195,5 +199,6 @@ lint.pydocstyle.convention = "google"
 concurrency = [ "gevent" ]
 relative_files = true
 omit = [ "**/test_*" ]
+
 
 
