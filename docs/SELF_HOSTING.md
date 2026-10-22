@@ -179,6 +179,28 @@ before they can use it. Without `--public`, the key is auto-injected into
 the frontend (convenient for local-only use, but unsafe for a
 publicly-reachable deployment).
 
+### Limit what users can change (optional)
+
+A feature policy turns off individual Agent Canvas controls at startup, so you
+can configure an instance fully and then hand it to users without the controls
+for changing that setup:
+
+```ini
+Environment=AGENT_CANVAS_FEATURES={"version":1,"disabled":["backends.add"]}
+```
+
+Or put the same JSON in a file and set
+`AGENT_CANVAS_FEATURES_FILE=/etc/agent-canvas/policy.json`. Every feature is on
+unless listed. The IDs you can use, and exactly which controls each one hides,
+are in [`config/features.json`](../config/features.json); the list grows one
+control at a time. An invalid policy stops Agent Canvas from starting rather
+than serving the full UI. Changing the policy needs a restart, not a rebuild.
+
+> [!IMPORTANT]
+> The policy hides controls in the Agent Canvas UI; it is not a security
+> boundary. Anyone with the API key can call the agent server directly, and
+> the agent itself has a shell on the machine.
+
 ## 4. (Optional) Get a domain and put nginx + Let's Encrypt in front
 
 If you want to reach the UI from a browser without an SSH tunnel — for
