@@ -26,7 +26,7 @@ include = [
 python = "^3.12,<3.14"
 litellm = ">=1.83.10"                              # Bumped to address CVE-2026-42208/42271/42203/40217 (CRO-12735)
 openai = ">=2.8.0,<3.0.0"                         # Updated to be compatible with litellm and browser-use
-aiohttp = ">=3.14.3"                               # Updated to address CVE-2026-69244 (COMP-171); versions <= 3.14.2 are vulnerable
+aiohttp = ">=3.14.4"                               # Bumped to address CVE-2026-69244 (COMP-171/COMP-482); versions <= 3.14.3 are vulnerable
 google-genai = "*"                                 # To use litellm with Gemini Pro API
 google-api-python-client = "^2.164.0"              # For Google Sheets API
 google-auth-httplib2 = "*"                         # For Google Sheets authentication
@@ -99,7 +99,7 @@ cryptography = ">=50.0.0"                          # Updated to address CVE-2026
 gitpython = ">=3.1.58"                             # Bumped to address GHSA-4gmw-gg2m-w46p/9rj7-rf2p-w77r/hmq2-w58f-27jc/jm78-9fvv-mhgr/wvpp-8hx9-p66j (COMP-204)
 dulwich = ">=1.2.9"                                # Bumped to address GHSA-8mcx-5rqc-vhmf/cm62-gvxx-vmxx/5fqc-mrg8-w798/8w8g-wq8h-fq33 (COMP-406)
 virtualenv = ">=21.7.13"                           # Bumped to address CVE-2026-102925/102930/102937 (COMP-406)
-
+fsspec = ">=2026.6.0"                              # Bumped to address CVE-2026-103009 (COMP-482); versions < 2026.6.0 are vulnerable
 
 # TODO: These are integrations that should probably be optional
 redis = ">=5.2,<7.0"
@@ -168,7 +168,7 @@ optional = true
 
 [tool.poetry.group.runtime.dependencies]
 jupyterlab = ">=4.5.11"                           # Bumped to address CVE-2026-102831 (COMP-406)
-notebook = "*"
+notebook = ">=7.6.3"                              # Bumped to address CVE-2026-103001 through CVE-2026-103008 (COMP-482); versions < 7.6.3 are vulnerable
 flake8 = "*"
 
 [tool.poetry.group.testgeneval.dependencies]
@@ -199,6 +199,5 @@ lint.pydocstyle.convention = "google"
 concurrency = [ "gevent" ]
 relative_files = true
 omit = [ "**/test_*" ]
-
 
 
