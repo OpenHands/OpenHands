@@ -7,6 +7,7 @@ import {
   AGENT_PROFILES_QUERY_KEYS,
   SETTINGS_QUERY_KEYS,
 } from "#/hooks/query/query-keys";
+import { syncCloudAgentSettings } from "./sync-cloud-agent-settings";
 
 /**
  * Shared key so any picker instance can observe an in-flight activation via
@@ -19,7 +20,8 @@ export const ACTIVATE_AGENT_PROFILE_MUTATION_KEY = ["activate-agent-profile"];
  * Activate an agent profile by its stable UUID `id`. Activation is
  * pointer-only (it does NOT write agent_settings), but it changes the launch
  * default the backend resolves for new conversations, so the settings cache is
- * invalidated defensively alongside the profiles list.
+ * invalidated defensively alongside the profiles list. On Cloud the account's
+ * agent_settings are then matched to the profile (`syncCloudAgentSettings`).
  *
  * The active pointer is flipped optimistically so the picker label and the
  * launch default (`useCreateConversation` reads `active_agent_profile_id`)
@@ -54,7 +56,8 @@ export function useActivateAgentProfile() {
         queryClient.setQueryData(key, data);
       });
     },
-    onSuccess: async () => {
+    onSuccess: async ({ agent_settings_applied: applied }) => {
+      if (!applied) await syncCloudAgentSettings();
       SettingsService.invalidateCache();
       await queryClient.invalidateQueries({
         queryKey: AGENT_PROFILES_QUERY_KEYS.all,
