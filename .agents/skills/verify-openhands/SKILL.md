@@ -124,6 +124,11 @@ control-openhands stop                         # stops only this run; evidence s
   preconditions (a configured profile, a git repo, a dummy secret). They never
   count as proof that the UI path works; the map says which steps are UI proof.
   Never intercept routes or add mock LLM responses to make a live check pass.
+  An outside service a run cannot use is stood in by a server in
+  `scripts/fixtures/`, which Canvas reaches the way it reaches the real one:
+  `digitalocean-standin.mjs` for DigitalOcean's Managed Agents
+  ([F25](references/feature-map/F25-backends-and-cloud.md)). Evidence from a
+  stand-in says so.
 - **Essential pathways** are single commands so recipes can start from a known
   state: `onboard`, `llm preset|set`, `conversation start --prompt ... --wait`
   (add `--workspace qa-repo` to run it in a `fixture git-repo`),
