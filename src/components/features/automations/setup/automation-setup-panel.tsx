@@ -3585,17 +3585,12 @@ function Field({
           )}
         >
           <span>{label}</span>
-          {suffix && (
-            <span className="font-normal text-muted">{suffix}</span>
-          )}
+          {suffix && <span className="font-normal text-muted">{suffix}</span>}
         </span>
       ) : null}
       <div className="min-w-0 flex-1">{children}</div>
       {errorText ? (
-        <span
-          role="alert"
-          className="text-xs leading-5 text-warning"
-        >
+        <span role="alert" className="text-xs leading-5 text-warning">
           {errorText}
         </span>
       ) : null}

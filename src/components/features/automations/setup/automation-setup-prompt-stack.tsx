@@ -398,9 +398,7 @@ export function AutomationSetupPromptStack({
           <span className="flex items-center gap-2 text-sm">
             {t(I18nKey.AUTOMATIONS$PROMPT)}
             {updatedSuffix ? (
-              <span className="font-normal text-muted">
-                {updatedSuffix}
-              </span>
+              <span className="font-normal text-muted">{updatedSuffix}</span>
             ) : null}
           </span>
           {titleAction ? (
@@ -467,9 +465,7 @@ export function AutomationSetupPromptStack({
                   {t(I18nKey.AUTOMATIONS$DETAIL$REPOSITORIES)}
                 </span>
                 {repositorySuffix ? (
-                  <span className="text-xs text-muted">
-                    {repositorySuffix}
-                  </span>
+                  <span className="text-xs text-muted">{repositorySuffix}</span>
                 ) : null}
                 {repositoryReadOnly ? (
                   <span
@@ -703,10 +699,7 @@ export function AutomationSetupPromptStack({
           </div>
         </div>
         {errorText ? (
-          <span
-            role="alert"
-            className="text-xs leading-5 text-warning"
-          >
+          <span role="alert" className="text-xs leading-5 text-warning">
             {errorText}
           </span>
         ) : null}
