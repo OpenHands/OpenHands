@@ -421,9 +421,6 @@ describe("AutomationSetupPanel", () => {
       screen.queryByText("AUTOMATION_SETUP$PYTHON_CODE"),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByTestId("automation-setup-model"),
-    ).not.toBeInTheDocument();
-    expect(
       screen.getByTestId("automation-setup-custom-code-grip"),
     ).toBeInTheDocument();
     expect(
@@ -1566,7 +1563,7 @@ describe("AutomationSetupPanel", () => {
     );
   });
 
-  it("creates custom bundle drafts with entrypoint and setup script path", async () => {
+  it("creates custom bundle drafts with entrypoint, setup script path and model", async () => {
     vi.mocked(AutomationService.uploadAutomationTarball).mockResolvedValue(
       "oh-internal://uploads/custom-archive",
     );
@@ -1588,6 +1585,8 @@ describe("AutomationSetupPanel", () => {
       screen.getByTestId("automation-setup-entrypoint"),
       "python3 main.py --once",
     );
+    await user.click(screen.getByTestId("automation-setup-model"));
+    await user.click(screen.getByTestId("automation-setup-model-option-fast"));
     await user.click(screen.getByTestId("automation-setup-create"));
 
     await waitFor(() =>
@@ -1605,6 +1604,7 @@ describe("AutomationSetupPanel", () => {
         tarball_path: "oh-internal://uploads/custom-archive",
         entrypoint: "python3 main.py --once",
         setup_script_path: "setup.sh",
+        model: "fast",
       }),
       "custom",
     );
@@ -3017,7 +3017,7 @@ describe("AutomationSetupPanel", () => {
     expect(queryClient.getQueryState(listKey)?.isInvalidated).toBe(true);
   });
 
-  it("shows existing custom bundle metadata without replacing it on save", async () => {
+  it("shows existing custom bundle metadata and saves a model change without replacing the bundle", async () => {
     vi.mocked(AutomationService.updateAutomation).mockResolvedValue({
       id: "auto-1",
     } as never);
@@ -3034,6 +3034,7 @@ describe("AutomationSetupPanel", () => {
         entrypoint: "python3 scan.py",
         setup_script_path: "install.sh",
         tarball_path: "oh-internal://uploads/REAL-user-code.tar.gz",
+        model: "fast",
         trigger: {
           type: "cron",
           schedule: "0 9 * * *",
@@ -3055,6 +3056,16 @@ describe("AutomationSetupPanel", () => {
       screen.queryByTestId("automation-setup-custom-code"),
     ).not.toBeInTheDocument();
 
+    expect(screen.getByTestId("automation-setup-model")).toHaveAttribute(
+      "aria-label",
+      "fast",
+    );
+    await user.click(screen.getByTestId("automation-setup-model"));
+    await user.click(
+      screen.getByTestId(
+        "automation-setup-model-option-claude-opus-4-5-20251101",
+      ),
+    );
     await user.click(screen.getByTestId("automation-setup-save"));
 
     await waitFor(() =>
@@ -3062,6 +3073,7 @@ describe("AutomationSetupPanel", () => {
         "auto-1",
         expect.objectContaining({
           name: "Nightly scan",
+          model: "claude-opus-4-5-20251101",
         }),
       ),
     );

@@ -57,7 +57,7 @@ function parseRepositories(value: string): string[] {
     });
 }
 
-function SetupModelPill({
+export function SetupModelPill({
   value,
   onChange,
 }: {
