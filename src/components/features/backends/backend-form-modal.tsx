@@ -1202,8 +1202,14 @@ function AnimatedPanelHeight({ children }: AnimatedPanelHeightProps) {
   return (
     <div
       data-testid="add-backend-panel-height"
-      style={height === undefined ? undefined : { height }}
-      className="overflow-hidden transition-[height] duration-300 ease-in-out motion-reduce:transition-none"
+      style={
+        height === undefined
+          ? undefined
+          : ({
+              "--add-backend-panel-height": `${height}px`,
+            } as React.CSSProperties)
+      }
+      className="add-backend-panel-height overflow-hidden duration-300 ease-in-out motion-reduce:transition-none"
     >
       <div ref={contentRef}>{children}</div>
     </div>

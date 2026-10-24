@@ -704,3 +704,24 @@ code .token {
 @utility app-region-drag {
   -webkit-app-region: drag;
 }
+
+/* Reset each nested panel locally until its own measurement is available. */
+@utility add-backend-panel-height {
+  --add-backend-panel-height: auto;
+  height: var(--add-backend-panel-height);
+  transition-property: height;
+}
+
+/* Keep content fixed while the desktop Overview drawer opens or closes. */
+@utility conversation-overview-drawer {
+  width: var(--conversation-overview-drawer-width);
+  transition-property: width, transform, opacity;
+
+  &[aria-hidden="true"] {
+    width: 0px;
+  }
+
+  &[data-resizing="true"] {
+    transition-property: transform, opacity;
+  }
+}

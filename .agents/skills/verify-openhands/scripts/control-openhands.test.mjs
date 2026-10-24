@@ -38,6 +38,10 @@ import {
   specMatches,
 } from "./lib/map-sources.mjs";
 import { routePattern } from "./lib/route-pattern.mjs";
+import {
+  networkTiming,
+  orderNetworkEntries,
+} from "./lib/network-timing.mjs";
 import { resolveTestids } from "./lib/testids.mjs";
 import { tmuxPathFor } from "./lib/tmux-path.mjs";
 import { browserCallLimit } from "./lib/call-limit.mjs";
@@ -2940,6 +2944,66 @@ test("browser media validates motion before dispatch and preserves playback obse
     await new Promise((resolve) => server.close(resolve));
     rmSync(runDir, { recursive: true, force: true });
   }
+});
+
+test("browser network times responses and can list them in completion order", () => {
+  let clock = 1_000;
+  const timing = networkTiming(() => clock);
+  // Two schema requests leave together; the second one answers first.
+  const agent = { ts: "t0", path: "/api/settings/agent-schema" };
+  const conversation = { ts: "t0", path: "/api/settings/conversation-schema" };
+  const pending = { ts: "t0", path: "/sockets/events" };
+  for (const entry of [agent, conversation, pending]) timing.start(entry);
+  clock = 1_040;
+  timing.response(conversation);
+  clock = 1_050;
+  timing.complete(conversation, "finished");
+  clock = 1_120;
+  timing.response(agent);
+  timing.response(agent); // a second call does not move the first answer
+  clock = 1_130;
+  timing.complete(agent, "finished");
+  timing.complete(agent, "failed"); // nor does a late failure
+  assert.deepEqual(networkEntryForOutput(conversation, false), {
+    ts: "t0",
+    path: "/api/settings/conversation-schema",
+    responseMs: 40,
+    outcome: "finished",
+    durationMs: 50,
+    completedTs: new Date(1_050).toISOString(),
+    completedSeq: 1,
+  });
+  assert.equal(agent.responseMs, 120);
+  assert.equal(agent.outcome, "finished");
+  assert.equal(agent.completedSeq, 2);
+  const list = [agent, conversation, pending];
+  assert.deepEqual(orderNetworkEntries(list), list);
+  assert.deepEqual(
+    orderNetworkEntries(list, "completion").map((e) => e.path),
+    [
+      "/api/settings/conversation-schema",
+      "/api/settings/agent-schema",
+      "/sockets/events",
+    ],
+  );
+  assert.throws(() => orderNetworkEntries(list, "size"), /request or completion/);
+  // --last windows completed and pending rows separately: 15 open sockets
+  // must not push the two completions out of a --last 15 listing.
+  const sockets = Array.from({ length: 15 }, (_, i) => ({ path: `/ws/${i}` }));
+  const busy = orderNetworkEntries([...list, ...sockets], "completion", 15);
+  assert.deepEqual(
+    busy.slice(0, 2).map((e) => e.path),
+    ["/api/settings/conversation-schema", "/api/settings/agent-schema"],
+  );
+  assert.equal(busy.length, 17);
+  assert.deepEqual(
+    orderNetworkEntries([...list, ...sockets], "request", 2).map((e) => e.path),
+    ["/ws/13", "/ws/14"],
+  );
+  const help = spawnSync(process.execPath, [cli, "help", "browser"], {
+    encoding: "utf8",
+  });
+  assert.match(help.stdout, /--order request\|completion/);
 });
 
 test("bug run puts back the viewport a block changed", () => {

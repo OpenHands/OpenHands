@@ -99,25 +99,30 @@ Preconditions:
 
 - **Disabled plugin reconciles on resume (`F19.enabled-autoload`).** Arrange an own installed `qa-resume-plugin` with a valid `.plugin/plugin.json`, `commands/qa-hello.md`, `skills/qa-plugin-skill/SKILL.md` and a `UserPromptSubmit` hook containing only `echo QA_HOOK`. Start a real Home chat with the dummy loopback profile; inspect its HookExecutionEvent (one) and plugin skill names through `api GET '/api/conversations/<id>?include_skills=true' --pick agent.agent_context.skills` (keep the full response private). Disable the real `plugin-toggle-qa-resume-plugin` with `--hover-first 250`, verify `GET /api/plugins/installed` says false, leave Plugins, `restart`, `doctor`, reload the conversation and `conversation send <id> --prompt '/qa-resume-plugin:qa-hello'`. Expected: the disabled command does not activate and plugin skills disappear. Known failure, reproduced in two independent persisted conversations on 2026-10-12 ([OpenHands/software-agent-sdk#5628](https://github.com/OpenHands/software-agent-sdk/issues/5628)): the resumed user MessageEvent activated `qa-resume-plugin:qa-hello`, and both plugin skills remained; the original hook count stayed one, so hooks did follow disable. A fresh chat begun while disabled activated no command and ran no hook. These are real pre-model activation/state observations; no successful reply or plugin MCP reconciliation is claimed. Uninstall only the own plugin and remove its source fixture afterwards.
 
-- **Unavailable plugin source is a handled Update error (`F19.refresh`).** Expected:400 for a vanished source, with the installation unchanged. Known failure (reproduced twice 2026-10-19, [OpenHands/software-agent-sdk#5897](https://github.com/OpenHands/software-agent-sdk/issues/5897)): two real Update clicks after moving only the owned source aside toasted `Unable to parse extension source: local. Expected formats: 'github:owner/repo', git URL, or local path` and returned 500; installed version/enabled state stayed unchanged. This is the plugin branch; Canvas has no skill-management Refresh action.
+- **Unavailable plugin source is a handled Update error (`F19.refresh`).** Install a disposable local plugin, move only its owned source aside, then click Update: the refresh request answers 400, `browser toasts --history` has `Failed to fetch the source of plugin 'qa-known-refresh-plugin'. The installed copy was kept.`, and the installation is unchanged (still installed, version `0.1.0`, enabled). This is the plugin branch; Canvas has no skill-management Refresh action.
 
-  ```sh known-bug F19.refresh missing-source
+  ```sh
   QA_PLUGIN_SOURCE="$OH_VERIFY_RUN/workspace/qa-known-refresh-plugin"
   mkdir -p "$QA_PLUGIN_SOURCE/.plugin"
   printf '%s\n' '{"name":"qa-known-refresh-plugin","version":"0.1.0","description":"Inert disposable Update check."}' > "$QA_PLUGIN_SOURCE/.plugin/plugin.json"
-  trap 'if [ -d "$QA_PLUGIN_SOURCE.hidden" ]; then mv "$QA_PLUGIN_SOURCE.hidden" "$QA_PLUGIN_SOURCE"; fi; control-openhands api DELETE /api/plugins/installed/qa-known-refresh-plugin --write >/dev/null; rm -rf "$QA_PLUGIN_SOURCE"; control-openhands browser reload >/dev/null' EXIT
+  trap 'if [ -d "$QA_PLUGIN_SOURCE.hidden" ]; then mv "$QA_PLUGIN_SOURCE.hidden" "$QA_PLUGIN_SOURCE"; fi; control-openhands api DELETE /api/plugins/installed/qa-known-refresh-plugin --write >/dev/null || true; rm -rf "$QA_PLUGIN_SOURCE"; control-openhands browser reload >/dev/null' EXIT
   control-openhands browser viewport desktop
   control-openhands browser goto /plugins
   control-openhands browser click 'testid=plugins-add-plugin-button'
   control-openhands browser fill 'testid=add-plugin-source-input' "$QA_PLUGIN_SOURCE"
   control-openhands browser click 'testid=add-plugin-submit'
   control-openhands browser wait 'testid=add-plugin-modal' --state hidden --timeout 30000
+  control-openhands browser wait 'testid=plugin-card-qa-known-refresh-plugin' --timeout 30000
   control-openhands assert --field status --equals 200 -- api GET /api/plugins/installed/qa-known-refresh-plugin
   control-openhands browser click 'testid=plugin-card-qa-known-refresh-plugin'
   mv "$QA_PLUGIN_SOURCE" "$QA_PLUGIN_SOURCE.hidden"
   control-openhands browser network --clear
   control-openhands browser click 'testid=plugin-detail-refresh-qa-known-refresh-plugin' --observe 'role=status' --observe-ms 1000
-  control-openhands assert --field recent.0.status --equals 400 --bug 'recent.0.status eq 500 && recent.0.path eq "/api/plugins/installed/qa-known-refresh-plugin/refresh"' -- browser network --filter '/api/plugins/installed/qa-known-refresh-plugin/refresh'  # bug
+  control-openhands browser screenshot --feature F19.refresh --name missing-source-400
+  control-openhands assert --field recent.0.status --equals 400 -- browser network --filter '/api/plugins/installed/qa-known-refresh-plugin/refresh'
+  control-openhands browser toasts --history
+  control-openhands assert --field value --equals 0.1.0 -- api GET /api/plugins/installed/qa-known-refresh-plugin --pick version
+  control-openhands assert --field value --equals true -- api GET /api/plugins/installed/qa-known-refresh-plugin --pick enabled
   ```
 
 - **Local rejection with an owned fixture (`F19.launch-parameters`).** The same check on an inert run-owned plugin, asserting the alert, the disabled Start and that no create request is sent:
