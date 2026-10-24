@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -205,9 +212,13 @@ function FilesTab() {
             {isTreeVisible && (
               <>
                 <aside
-                  className="shrink-0 border-r border-border overflow-y-auto custom-scrollbar-always"
+                  className="w-(--files-tab-tree-width) shrink-0 border-r border-border overflow-y-auto custom-scrollbar-always"
                   data-testid="files-tab-tree"
-                  style={{ width: `${treeWidth}px` }}
+                  style={
+                    {
+                      "--files-tab-tree-width": `${treeWidth}px`,
+                    } as CSSProperties
+                  }
                 >
                   <FileTreeView
                     paths={paths}

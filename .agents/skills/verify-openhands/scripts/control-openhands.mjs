@@ -2808,6 +2808,15 @@ function inspectDownload(path, needle) {
   return info;
 }
 
+function networkOrder(value) {
+  if (value === undefined) return undefined;
+  if (value === "request" || value === "completion") return value;
+  usage(
+    `--order must be request or completion, got ${value === true ? "nothing" : value}`,
+    "control-openhands browser network --filter 'schema' --order completion",
+  );
+}
+
 async function cmdBrowser({ positional, flags }) {
   const run = loadRun(flags);
   const [verb, ...rest] = positional;
@@ -3021,6 +3030,7 @@ async function cmdBrowser({ positional, flags }) {
         last: flags.last,
         filter:
           flags.filter && flags.filter !== true ? flags.filter : undefined,
+        order: networkOrder(flags.order),
       });
       break;
     case "hover":
@@ -4991,7 +5001,12 @@ Verbs
                                          observe playback; optionally emulate active-page motion preference
   network-state offline|online|status     interrupt or restore this browser context's real network; status is read-only
                                          (all its tabs; restore online before doctor/cleanup; no request interception)
-  network [--external] [--filter REGEX] [--clear] [--last N] [--bodies]   requests with status and redacted query (rows under "recent")
+  network [--external] [--filter REGEX] [--clear] [--last N] [--bodies] [--order request|completion]
+                                        requests with status and redacted query (rows under "recent"); each row
+                                        also has responseMs (headers), durationMs and completedTs (body done or
+                                        failed), outcome and completedSeq. --order completion lists the last N
+                                        rows in the order they completed, then the last N still pending: use it
+                                        for response races
         (--bodies adds each app-origin write's body, JSON with credential values and env/header maps
          replaced by their length, URL userinfo and secret-named query values redacted in any string;
          the settings API's ********** placeholder is kept as is; body is capped at 2000 chars.

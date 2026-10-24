@@ -101,10 +101,10 @@ Preconditions:
 
 - **Published stale ACP binary on PATH (`F13.acp-conversation`).** Install the real published `@zed-industries/codex-acp@0.16.0` under the owned run's `workspace/qa-stale-adapter` (no global install). Create/activate a real Codex ACP profile through Settings > Agents with only a dummy API-key presence marker and loopback Base URL. Prepend that package's `node_modules/.bin` only during the own backend `restart`; keep its private HOME, set default OpenAI routes plus HTTP(S)/ALL proxy to refused loopback and `NO_PROXY=127.0.0.1,localhost`, with cached dependencies offline. Doctor, then start two actual Home chats and inspect the sanitized runtime command and initialization version. Expected: the SDK uses the pinned `1.10.0` adapter. Known failure, reproduced twice 2026-10-12 ([OpenHands/software-agent-sdk#5466](https://github.com/OpenHands/software-agent-sdk/issues/5466)): `acp_command` became bare `codex-acp`, and actual ACP initialization reported `agent_version=0.16.0`; the version warning still wrongly blamed npx fallback. Both then stopped at `Authentication required`. This proves selection/warning before authentication, not a usable session, the historical model-cache error or the Claude counterpart. Restore the launcher environment/PATH and default agent, delete the own profile/dummy secrets/package fixture, then doctor and stop.
 
-- **Suffixed profile keeps its identity (`F13.edit`).** A normal edit preserves the profile UUID and increments its revision. Known failure (reproduced 2026-10-22, [OpenHands/software-agent-sdk#5873](https://github.com/OpenHands/software-agent-sdk/issues/5873)): two real concurrency-only saves of a `.json` name each minted a new UUID at revision0. SDK 1.55 repaired the active pointer to default; do not claim it remained dangling. The credential-free block checks the revision symptom and cleans its own fixtures.
+- **Suffixed profile keeps its identity (`F13.edit`).** A profile created under a `.json` name (`Profile "QA_KNOWN_SUFFIX.json" created`) is stored and listed without the suffix as `QA_KNOWN_SUFFIX`, its editor reopens on that name, and a normal edit (`Profile "QA_KNOWN_SUFFIX" updated`) keeps the same profile id and moves the revision from 0 to 1. Credential-free; the steps clean up their own profile.
 
-  ```sh known-bug F13.edit json-suffix
-  trap 'control-openhands api DELETE /api/agent-profiles/QA_KNOWN_SUFFIX --write >/dev/null' EXIT
+  ```sh
+  trap 'control-openhands api DELETE /api/agent-profiles/QA_KNOWN_SUFFIX --write >/dev/null || true' EXIT
   control-openhands browser viewport desktop
   control-openhands browser goto /settings/agents
   control-openhands browser click 'testid=add-agent-profile'
@@ -112,12 +112,16 @@ Preconditions:
   control-openhands browser click 'testid=save-agent-profile-btn'
   control-openhands browser wait-text 'Profile "QA_KNOWN_SUFFIX.json" created' --timeout 10000
   control-openhands assert --field value --equals 0 -- api GET /api/agent-profiles/QA_KNOWN_SUFFIX --pick profile.revision
+  QA_SUFFIX_ID="$(control-openhands api GET /api/agent-profiles/QA_KNOWN_SUFFIX --pick profile.id | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
   control-openhands browser click 'testid=agent-profile-row >> has-text=QA_KNOWN_SUFFIX >> testid=agent-profile-menu-trigger'
   control-openhands browser click 'testid=agent-profile-edit'
+  control-openhands assert --field value --equals QA_KNOWN_SUFFIX -- browser value 'testid=agent-profile-name-input'
   control-openhands browser fill 'testid=sdk-settings-tool_concurrency_limit' 2
   control-openhands browser click 'testid=save-agent-profile-btn'
-  control-openhands browser wait-text 'Profile "QA_KNOWN_SUFFIX.json" updated' --timeout 10000
-  control-openhands assert --field value --equals 1 --bug-shows 0 -- api GET /api/agent-profiles/QA_KNOWN_SUFFIX --pick profile.revision  # bug
+  control-openhands browser wait-text 'Profile "QA_KNOWN_SUFFIX" updated' --timeout 10000
+  control-openhands browser screenshot --feature F13.edit --name json-suffix-updated
+  control-openhands assert --field value --equals 1 -- api GET /api/agent-profiles/QA_KNOWN_SUFFIX --pick profile.revision
+  control-openhands assert --field value --equals "$QA_SUFFIX_ID" -- api GET /api/agent-profiles/QA_KNOWN_SUFFIX --pick profile.id
   ```
 
 ## Gotchas

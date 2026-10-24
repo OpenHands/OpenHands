@@ -159,7 +159,9 @@ control-openhands stop                         # stops only this run; evidence s
   projection is bounded to 16384 UTF-8 bytes; an oversized projection is omitted
   with `bodyFieldsOmitted.plugins` explaining why. No projection of other
   top-level fields is made, and neither body fields nor omission metadata appear
-  without `--bodies`),
+  without `--bodies`; every row also times its response: `responseMs`,
+  `durationMs`, `completedTs`, `outcome` and `completedSeq`, and `--order
+  completion` lists rows in the order they completed, for response races),
   `browser toasts` and `browser media` observe requests by origin, toasts and
   sound without changing anything; `click --observe SEL` and `scroll
   --observe SEL` record the transient states SEL shows while the action's

@@ -1,3 +1,6 @@
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { compile } from "@tailwindcss/node";
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
@@ -221,6 +224,43 @@ async function completeAgentStep(user: ReturnType<typeof userEvent.setup>) {
       ),
     { timeout: 3000 },
   );
+}
+
+async function createSlideOffsetAssertion() {
+  const compiler = await compile(
+    await readFile(resolve("src/tailwind.css"), "utf8"),
+    { base: resolve("src"), onDependency: () => {} },
+  );
+
+  return (expectedOffsets: number[]) => {
+    const slides = screen.getAllByTestId(/^onboarding-slide-\d+$/);
+    expect(slides).toHaveLength(expectedOffsets.length);
+    // Compile the real slide classes, then follow their property reader to
+    // the value owned by that render. Neither side's spelling is prescribed.
+    const css = compiler.build(slides.flatMap((slide) => [...slide.classList]));
+    slides.forEach((slide, index) => {
+      const declarations = [
+        ...css.matchAll(/\.((?:\\.|[\w-])+)\s*\{([^}]+)\}/g),
+      ]
+        .filter(([, selector]) =>
+          slide.classList.contains(selector.replace(/\\(.)/g, "$1")),
+        )
+        .map(([, , body]) => body)
+        .join("\n");
+      const horizontalOffset = /--tw-translate-x:\s*var\((--[\w-]+)\);/.exec(
+        declarations,
+      );
+      expect(horizontalOffset).not.toBeNull();
+      expect(declarations).toMatch(
+        /translate:\s*var\(--tw-translate-x\) var\(--tw-translate-y\);/,
+      );
+      expect(slide.style.getPropertyValue(horizontalOffset![1])).toBe(
+        `${expectedOffsets[index]}%`,
+      );
+      const transition = /transition-property:\s*([^;]+);/.exec(declarations);
+      expect(transition?.[1].split(/,\s*/)).toContain("translate");
+    });
+  };
 }
 
 function seedCloudBackend() {
@@ -646,6 +686,9 @@ describe("OnboardingModal", () => {
     renderModal();
     const user = userEvent.setup();
 
+    const expectSlideOffsets = await createSlideOffsetAssertion();
+    expectSlideOffsets([0, 100, 200, 300]);
+
     // Both columns should be visible in standard mode.
     expect(screen.getByTestId("onboarding-backend-host")).toBeInTheDocument();
     expect(
@@ -669,7 +712,8 @@ describe("OnboardingModal", () => {
       "data-active",
       "true",
     );
-    // The Set Up LLM slide is always mounted (transform-translated off-screen),
+    expectSlideOffsets([0, 100, 200]);
+    // The Set Up LLM slide is always mounted (translated off-screen),
     // but it must not be the active slide after Cloud login completes.
     expect(screen.getByTestId("onboarding-slide-1")).toHaveAttribute(
       "data-active",
@@ -821,8 +865,12 @@ describe("OnboardingModal", () => {
       "true",
     );
 
+    const expectSlideOffsets = await createSlideOffsetAssertion();
+    expectSlideOffsets([0, 100, 200]);
+
     // Step 0 → 1. ChooseAgentStep does an async save before advancing.
     await completeAgentStep(user);
+    expectSlideOffsets([-100, 0, 100]);
     expect(screen.getByTestId("onboarding-slide-1")).toHaveAttribute(
       "data-active",
       "true",
@@ -848,6 +896,13 @@ describe("OnboardingModal", () => {
       "data-active",
       "true",
     );
+    expectSlideOffsets([-200, -100, 0]);
+
+    // Back moves the same rail in reverse without changing the step's owner.
+    await user.click(screen.getByTestId("onboarding-hello-back"));
+    expectSlideOffsets([-100, 0, 100]);
+    await user.click(screen.getByTestId("onboarding-llm-back"));
+    expectSlideOffsets([0, 100, 200]);
   });
 
   it("Skip immediately closes the modal", async () => {

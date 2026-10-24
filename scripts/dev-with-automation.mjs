@@ -1808,6 +1808,13 @@ function startStaticFrontend(config, staticDir) {
     : null;
 
   const staticServerScript = join(projectRoot, "scripts", "static-server.mjs");
+  const keyPolicy = applySessionKeyPolicy({
+    host: config.bindHost,
+    sessionApiKey:
+      config.launchAgentServer && !config.isPublic ? config.sessionApiKey : null,
+    authRequired: Boolean(config.launchAgentServer && config.isPublic),
+    warn: (msg) => logService("static", msg, c.yellow),
+  });
   spawnService(
     "static",
     "node",
@@ -1821,28 +1828,8 @@ function startStaticFrontend(config, staticDir) {
       ...(process.env.VITE_BASE_PATH
         ? ["--base-path", process.env.VITE_BASE_PATH]
         : []),
-      // In local mode on loopback, inject the API key so the pre-built
-      // frontend can authenticate transparently. Off-loopback binds (and
-      // public mode) use the API key entry screen instead.
-      ...(() => {
-        const policy = applySessionKeyPolicy({
-          host: config.bindHost,
-          sessionApiKey:
-            config.launchAgentServer && !config.isPublic
-              ? config.sessionApiKey
-              : null,
-          authRequired: Boolean(config.launchAgentServer && config.isPublic),
-          warn: (msg) => logService("static", msg, c.yellow),
-        });
-        const flags = [];
-        if (policy.sessionApiKey) {
-          flags.push("--session-api-key", policy.sessionApiKey);
-        }
-        if (policy.authRequired) {
-          flags.push("--auth-required");
-        }
-        return flags;
-      })(),
+      // Off-loopback binds and public mode show the API key entry screen.
+      ...(keyPolicy.authRequired ? ["--auth-required"] : []),
       // Inject runtime-services info so the agent knows what's reachable.
       ...(runtimeServicesInfo
         ? ["--runtime-services-info", runtimeServicesInfo]
@@ -1862,7 +1849,11 @@ function startStaticFrontend(config, staticDir) {
     {
       cwd: config.canvasPath,
       color: c.magenta,
-      env: buildMarsWebEnv("static", config),
+      // Clear an inherited key in public or frontend-only mode.
+      env: {
+        ...buildMarsWebEnv("static", config),
+        SESSION_API_KEY: keyPolicy.sessionApiKey || "",
+      },
     },
   );
 }
