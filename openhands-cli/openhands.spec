@@ -32,6 +32,8 @@ a = Analysis(
         *collect_data_files('litellm'),
         *collect_data_files('fastmcp'),
         *collect_data_files('mcp'),
+        # binaryornot loads its CSV signatures via importlib.resources.
+        *collect_data_files('binaryornot'),
         # Include all data files from openhands.sdk (templates, configs, etc.)
         *collect_data_files('openhands.sdk'),
         # Include package metadata for importlib.metadata
@@ -48,6 +50,8 @@ a = Analysis(
         *collect_submodules('tiktoken_ext'),
         *collect_submodules('litellm'),
         *collect_submodules('fastmcp'),
+        # Include binaryornot.data so importlib.resources can resolve it.
+        *collect_submodules('binaryornot'),
         # Include mcp but exclude CLI parts that require typer
         'mcp.types',
         'mcp.client',
