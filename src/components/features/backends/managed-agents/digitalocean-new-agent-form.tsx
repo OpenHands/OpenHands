@@ -62,30 +62,39 @@ export function DigitalOceanNewAgentForm({
   const [name, setName] = React.useState(() =>
     buildNewSessionName(DEFAULT_NAME_STEM),
   );
-  const [sizeKey, setSizeKey] = React.useState(DEFAULT_SIZE_KEY);
-  // A failed or pending catalog just leaves the default; it never blocks create.
+  const [chosenSizeKey, setChosenSizeKey] = React.useState<string | null>(null);
   const { data: sizes } = useMarsSandboxSizes();
   const trimmedName = name.trim();
   const isNameValid = isValidAgentName(trimmedName);
   const showNameError = trimmedName !== "" && !isNameValid;
 
+  const sortedSizes = React.useMemo(
+    () =>
+      [...(sizes ?? [])].sort(
+        (a, b) => a.vcpus - b.vcpus || a.memory_mb - b.memory_mb,
+      ),
+    [sizes],
+  );
+  const sizeKey = chosenSizeKey ?? sortedSizes[0]?.slug;
+  const canSubmit = isNameValid && sizeKey !== undefined && !isCreating;
+
   const sizeItems = React.useMemo(
     () => [
+      ...sortedSizes.map((size) => ({
+        key: size.slug,
+        label: formatSizeLabel(size, t, i18n.language),
+      })),
       {
         key: DEFAULT_SIZE_KEY,
         label: t(I18nKey.DO_AGENTS$SANDBOX_SIZE_DEFAULT),
       },
-      ...(sizes ?? []).map((size) => ({
-        key: size.slug,
-        label: formatSizeLabel(size, t, i18n.language),
-      })),
     ],
-    [sizes, t, i18n.language],
+    [sortedSizes, t, i18n.language],
   );
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
-    if (!isNameValid || isCreating) return;
+    if (!canSubmit) return;
     onSubmit({
       name: trimmedName,
       size: sizeKey === DEFAULT_SIZE_KEY ? undefined : sizeKey,
@@ -125,9 +134,9 @@ export function DigitalOceanNewAgentForm({
             name="digitalocean-new-agent-size"
             label={t(I18nKey.DO_AGENTS$SANDBOX_SIZE)}
             items={sizeItems}
-            selectedKey={sizeKey}
+            selectedKey={sizeKey ?? null}
             onSelectionChange={(key) =>
-              setSizeKey(key === null ? DEFAULT_SIZE_KEY : String(key))
+              key !== null && setChosenSizeKey(String(key))
             }
             onInputChange={() => {}}
             isClearable={false}
@@ -160,7 +169,7 @@ export function DigitalOceanNewAgentForm({
         <BrandButton
           type="submit"
           variant="primary"
-          isDisabled={!isNameValid || isCreating}
+          isDisabled={!canSubmit}
           testId="digitalocean-new-agent-submit"
           startContent={
             isCreating ? (

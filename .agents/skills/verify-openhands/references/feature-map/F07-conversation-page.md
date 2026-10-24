@@ -88,8 +88,8 @@ Preconditions:
 
 - **Whitespace-only header rename (`F07.rename-inline`).** After the named-title check, run `control-openhands browser network --clear`, double-click `testid=conversation-name-title`, fill `testid=conversation-name-input` with one space, and `control-openhands browser press Enter`. Read `control-openhands browser network --filter '/api/conversations' --bodies`, then reload and read the title. Expected: restore the previous title with no write. Known failure (reproduced 2026-10-12, [#17061](https://github.com/OpenHands/OpenHands/issues/17061)): Canvas submits `PATCH` with an empty title. Agent Server 1.54.0 rejects it with 422 and restores the prior title; a persistently blank server title was not observed.
 
-- **Already-deleted conversation (`F07.delete-confirm`, `F07.rename-inline`).** Expected: a stale action reports that the conversation is missing, and a stale rename never reports success. Known failure (reproduced 2026-10-16, SDK 1.55.1, [OpenHands/software-agent-sdk#5800](https://github.com/OpenHands/software-agent-sdk/issues/5800)): confirming Delete after another client removed this disposable conversation returns 400 and displays `Bad Request`, instead of a missing-conversation404. The separate stale-rename control receives PATCH 200 but re-fetches missing metadata and displays not-found, so its false-success variant is prevented by Canvas. Pause/interrupt were not tested.
-  ```sh known-bug F07.delete-confirm already-deleted
+- **Already-deleted conversation (`F07.delete-confirm`, `F07.rename-inline`).** Expected: a stale action reports that the conversation is missing, and a stale rename never reports success. Confirming Delete after another client removed this disposable conversation gets DELETE 404 and toasts `Not Found` (the block below; screenshot `stale-delete`). Stale rename, after the block: create a second disposable conversation with the block's `QA_ID=...` command, `browser goto "/conversations/$QA_ID"`, `control-openhands browser dblclick 'testid=conversation-name-title'`, `control-openhands browser fill 'testid=conversation-name-input' QA_stale_rename`, remove it with `control-openhands api DELETE "/api/conversations/$QA_ID" --write`, then `control-openhands browser network --clear` and `control-openhands browser press Enter`: `browser network --filter "/api/conversations/$QA_ID"` shows `PATCH` `404`, `browser toasts --history` has `Not Found` and `This conversation does not exist, or you do not have permission to access it. …`, and `browser url` ends `/conversations` (screenshot `--feature F07.rename-inline --name stale-rename`).
+  ```sh
   control-openhands browser viewport desktop
   QA_ID="$(python3 - <<'PY'
   import json, os, pathlib, subprocess, tempfile
@@ -119,7 +119,9 @@ Preconditions:
   control-openhands browser network --clear
   control-openhands browser click 'role=dialog >> testid=confirm-button' --observe 'role=status' --observe-ms 1000
   control-openhands browser screenshot --feature F07.delete-confirm --name stale-delete
-  control-openhands assert --field recent.0.status --equals 404 --bug-shows 400 -- browser network --filter "/api/conversations/$QA_ID"  # bug
+  control-openhands assert --field recent.0.status --equals 404 -- browser network --filter "/api/conversations/$QA_ID"
+  control-openhands browser toasts --history
+  rm -rf "$OH_VERIFY_RUN"/workspace/qa-surface-*
   ```
 
 Regression check (`F07.display-cost`, phone-menu):

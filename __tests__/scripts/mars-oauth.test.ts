@@ -361,6 +361,29 @@ describe("signInWithDigitalOcean (desktop)", () => {
     expect(endpoint.requests[0].get("redirect_uri")).toBe(redirect.toString());
   });
 
+  it("ignores a declined return for another sign-in, and stops on its own", async () => {
+    let forgedStatus: number | undefined;
+    const signingIn = signInWithDigitalOcean({
+      clientId: "client-1",
+      fetchImpl: fakeTokenEndpoint().fetchImpl,
+      openExternal: async (authorizeUrl) => {
+        const url = new URL(authorizeUrl);
+        const redirect = url.searchParams.get("redirect_uri");
+        const state = url.searchParams.get("state");
+        // A page that can reach the listener but doesn't know the state.
+        forgedStatus = (
+          await fetch(`${redirect}?error=access_denied&state=guessed`)
+        ).status;
+        await fetch(
+          `${redirect}?error=access_denied&error_description=The+user+denied+access&state=${state}`,
+        );
+      },
+    });
+
+    await expect(signingIn).rejects.toThrow("The user denied access");
+    expect(forgedStatus).toBe(400);
+  });
+
   it("explains that sign-in is not set up when no client is configured", async () => {
     await expect(
       signInWithDigitalOcean({ clientId: "", openExternal: async () => {} }),
