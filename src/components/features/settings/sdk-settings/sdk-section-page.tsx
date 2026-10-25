@@ -204,6 +204,7 @@ export function SdkSectionPage({
   hideSaveButton = false,
   suppressSuccessToast = false,
   onSaveControlChange,
+  onDraftChange,
   testId = "sdk-section-settings-screen",
 }: {
   settingsSources: SettingsSourceConfig[];
@@ -252,6 +253,8 @@ export function SdkSectionPage({
    * embedded in a custom flow and the built-in Save button is hidden.
    */
   onSaveControlChange?: (control: SdkSectionSaveControl) => void;
+  /** Synchronous notification of user field or view changes in an embedded draft. */
+  onDraftChange?: () => void;
   testId?: string;
 }) {
   const { t } = useTranslation("openhands");
@@ -534,6 +537,7 @@ export function SdkSectionPage({
       const sourceKey =
         fieldKeyToSource.get(fieldKey) ?? resolvedSources[0]?.settingsSource;
       if (!sourceKey) return;
+      if (flatValues[fieldKey] !== nextValue) onDraftChange?.();
       setValuesBySource((prev) => ({
         ...prev,
         [sourceKey]: {
@@ -568,7 +572,7 @@ export function SdkSectionPage({
         };
       });
     },
-    [fieldKeyToSource, resolvedSources],
+    [fieldKeyToSource, resolvedSources, flatValues, onDraftChange],
   );
 
   const handleError = React.useCallback(
@@ -738,7 +742,11 @@ export function SdkSectionPage({
     >
       <ViewToggle
         view={view}
-        setView={setView}
+        setView={(nextView) => {
+          if (nextView === view) return;
+          onDraftChange?.();
+          setView(nextView);
+        }}
         showBasic={showBasic}
         showAdvanced={showAdvanced}
         showAll={showAll}

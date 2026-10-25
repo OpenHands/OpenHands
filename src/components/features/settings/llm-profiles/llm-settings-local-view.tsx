@@ -12,6 +12,10 @@ import { BrandButton } from "#/components/features/settings/brand-button";
 import { LlmSettingsScreen } from "#/routes/llm-settings";
 import { LLM_PROVIDER_CONNECTION_KEY } from "#/constants/llm-provider-connection";
 import { useActiveBackend } from "#/contexts/active-backend-context";
+import {
+  getActiveBackend,
+  subscribeActiveBackend,
+} from "#/api/backend-registry/active-store";
 import { useSaveLlmProfile } from "#/hooks/mutation/use-save-llm-profile";
 import { useActivateLlmProfile } from "#/hooks/mutation/use-activate-llm-profile";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
@@ -167,6 +171,37 @@ export function LlmSettingsLocalView() {
   const automaticCreateBooleanKeys = useRef<Set<string> | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
+  const [validationFailure, setValidationFailure] = useState<I18nKey | null>(
+    null,
+  );
+  const draftGeneration = useRef(0);
+  // A submission owns the pending state until its entire chain settles, even
+  // when the user leaves this draft and opens another one.
+  const pendingGeneration = useRef<number | null>(null);
+  const invalidateDraft = useCallback(() => {
+    draftGeneration.current += 1;
+    setValidationFailure(null);
+  }, []);
+
+  useEffect(() => {
+    let previous = getActiveBackend();
+    const unsubscribe = subscribeActiveBackend(() => {
+      const next = getActiveBackend();
+      if (
+        previous.backend.id !== next.backend.id ||
+        previous.backend.connectionRevision !==
+          next.backend.connectionRevision ||
+        previous.orgId !== next.orgId
+      ) {
+        invalidateDraft();
+      }
+      previous = next;
+    });
+    return () => {
+      unsubscribe();
+      draftGeneration.current += 1;
+    };
+  }, [invalidateDraft]);
 
   useEffect(() => {
     setHideSectionHeader(viewMode !== "list");
@@ -192,21 +227,27 @@ export function LlmSettingsLocalView() {
       (viewMode === "edit" && profileName !== editingProfile?.profile.name));
   const isNameValid = isNameFormatValid && !isDuplicateName;
 
-  const handleProfileNameChange = useCallback((value: string) => {
-    setProfileName(value);
-    setIsProfileNameUserEdited(value !== "");
-  }, []);
+  const handleProfileNameChange = useCallback(
+    (value: string) => {
+      invalidateDraft();
+      setProfileName(value);
+      setIsProfileNameUserEdited(value !== "");
+    },
+    [invalidateDraft],
+  );
 
   const handleAddProfile = useCallback(() => {
+    invalidateDraft();
     automaticCreateBooleanKeys.current = null;
     setProfileName("");
     setIsProfileNameUserEdited(false);
     setEditingProfile(null);
     setViewMode("create");
-  }, []);
+  }, [invalidateDraft]);
 
   const handleEditProfile = useCallback(
     async (profile: ProfileInfo) => {
+      invalidateDraft();
       try {
         // Fetch profile details with encrypted secrets to preserve API key
         const detail = await ProfilesService.getProfile(
@@ -229,6 +270,7 @@ export function LlmSettingsLocalView() {
           config,
         );
 
+        invalidateDraft();
         setEditingProfile({ profile, initialValues, baseConfig: config });
         setProfileName(profile.name);
         setViewMode("edit");
@@ -237,16 +279,17 @@ export function LlmSettingsLocalView() {
         displayErrorToast(t(I18nKey.ERROR$GENERIC));
       }
     },
-    [t],
+    [t, invalidateDraft],
   );
 
   const handleBackToList = useCallback(() => {
+    invalidateDraft();
     automaticCreateBooleanKeys.current = null;
     setViewMode("list");
     setEditingProfile(null);
     setProfileName("");
     setSaveControl(null);
-  }, []);
+  }, [invalidateDraft]);
 
   const handleSaveControlChange = useCallback(
     (control: SdkSectionSaveControl) => {
@@ -300,7 +343,9 @@ export function LlmSettingsLocalView() {
 
   // @spec LLP-001 — New profiles preserve options and credential boundaries.
   const handleSave = useCallback(async () => {
-    if (!saveControl || !isNameValid) return;
+    if (!saveControl || !isNameValid || pendingGeneration.current !== null)
+      return;
+    setValidationFailure(null);
 
     // Coerced, dirty-only changes from the embedded form. Merging these over
     // the profile's existing full config preserves fields the user did not
@@ -372,6 +417,9 @@ export function LlmSettingsLocalView() {
       savedName: trimmedName,
     });
 
+    const generation = draftGeneration.current;
+    const isCurrentDraft = () => generation === draftGeneration.current;
+    pendingGeneration.current = generation;
     setIsSaving(true);
     setIsValidating(true);
     try {
@@ -384,9 +432,15 @@ export function LlmSettingsLocalView() {
           llm: llmConfig as SaveProfileRequest["llm"],
           include_secrets: true,
         });
+        if (!isCurrentDraft()) return;
         if (preflight && !preflight.valid) {
-          const errorMsg = preflight.error?.message ?? t(I18nKey.ERROR$GENERIC);
-          displayErrorToast(errorMsg);
+          // Provider diagnostics can contain credentials and raw payloads.
+          // Only use the SDK's known error type to select safe local copy.
+          setValidationFailure(
+            preflight.error?.type === "LLMAuthenticationError"
+              ? I18nKey.SETTINGS$PROFILE_CHECK_AUTH_ERROR
+              : I18nKey.SETTINGS$PROFILE_CHECK_GENERIC_ERROR,
+          );
           return;
         }
       }
@@ -413,6 +467,9 @@ export function LlmSettingsLocalView() {
         await activateProfile.mutateAsync(trimmedName);
       }
 
+      // Once persistence starts, finish its existing reapply chain. Only UI
+      // feedback belongs to the draft that originally submitted it.
+      if (!isCurrentDraft()) return;
       displaySuccessToast(
         viewMode === "create"
           ? t(I18nKey.SETTINGS$PROFILE_CREATED, { name: trimmedName })
@@ -420,9 +477,11 @@ export function LlmSettingsLocalView() {
       );
       handleBackToList();
     } catch (error) {
+      if (!isCurrentDraft()) return;
       console.error("Failed to save profile:", error);
       displayErrorToast(getApiErrorMessage(error, t(I18nKey.ERROR$GENERIC)));
     } finally {
+      pendingGeneration.current = null;
       setIsValidating(false);
       setIsSaving(false);
     }
@@ -519,8 +578,17 @@ export function LlmSettingsLocalView() {
               : createProfileInitialValues
           }
           showProviderConnection={supportsConnections}
+          showApiKeySetIndicator={false}
+          onDraftChange={invalidateDraft}
           onSaveControlChange={handleSaveControlChange}
         />
+      )}
+
+      {validationFailure && (
+        <div role="alert" className="text-sm text-feedback-error">
+          <p>{t(I18nKey.SETTINGS$PROFILE_CHECK_FAILED)}</p>
+          <p>{t(validationFailure)}</p>
+        </div>
       )}
 
       {/* Action buttons */}
@@ -551,11 +619,13 @@ export function LlmSettingsLocalView() {
           }
           aria-busy={isSaving || isValidating}
         >
-          {isValidating
-            ? t(I18nKey.STATUS$VALIDATING)
-            : isSaving
-              ? t(I18nKey.STATUS$SAVING)
-              : t(I18nKey.BUTTON$SAVE)}
+          {isSaving && pendingGeneration.current !== draftGeneration.current
+            ? t(I18nKey.SETTINGS$PROFILE_WAITING_FOR_SUBMISSION)
+            : isValidating
+              ? t(I18nKey.STATUS$VALIDATING)
+              : isSaving
+                ? t(I18nKey.STATUS$SAVING)
+                : t(I18nKey.BUTTON$SAVE)}
         </BrandButton>
       </div>
     </div>
