@@ -16,6 +16,8 @@ export const useCondenseConversation = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
+    // Every caller reports a failure itself; skip the global error toast.
+    meta: { disableToast: true },
     mutationFn: (variables: CondenseConversationVariables) =>
       AgentServerConversationService.condenseConversation(
         variables.conversationId,
