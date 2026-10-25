@@ -745,3 +745,9 @@ code .token {
   --tw-prose-captions: var(--oh-muted);
   --tw-prose-kbd: var(--oh-foreground);
 }
+
+/* Keep extension add/detail dialogs within their existing viewport limits. */
+@utility extension-dialog-viewport {
+  max-width: 90vw;
+  max-height: 85vh;
+}
