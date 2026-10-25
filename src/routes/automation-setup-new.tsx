@@ -106,7 +106,7 @@ export default function AutomationSetupNew() {
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-canvas-base">
       <header
         data-testid="automation-setup-topbar"
-        className="flex h-10 min-h-10 shrink-0 items-center justify-between gap-2 border-b border-[var(--oh-border)] bg-canvas-base px-3"
+        className="flex h-10 min-h-10 shrink-0 items-center justify-between gap-2 border-b border-border bg-canvas-base px-3"
       >
         <h2 className="min-w-0 truncate text-sm font-medium text-content">
           {title}
@@ -130,7 +130,7 @@ export default function AutomationSetupNew() {
         ) : (
           <div
             role="status"
-            className="flex flex-1 items-center justify-center text-sm text-[var(--oh-muted)]"
+            className="flex flex-1 items-center justify-center text-sm text-muted"
           >
             {t(I18nKey.AUTOMATION_SETUP$LOADING_DRAFT)}
           </div>

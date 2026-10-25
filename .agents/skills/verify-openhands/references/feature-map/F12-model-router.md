@@ -101,4 +101,3 @@ Preconditions:
 - The selection in the classifier and connection pickers is a combobox: open it with a click on the input, then click `role=option[name="..."]`; `browser fill` on the classifier sets a free-text value (allowed) instead of picking a profile.
 - At 390 px the row truncates the name (`QA_route…`) and summary; read names with `browser text`, not the screenshot.
 - The Model table placeholder displays separate lines (`F12.template-custom`).
-- Known issue [OpenHands/software-agent-sdk#5878](https://github.com/OpenHands/software-agent-sdk/issues/5878): Router files can be written under a literal `~` directory when Agent Server was configured with leading-tilde `OH_PERSISTENCE_DIR`. Blocked on the normal absolute-path launcher fixture: needs a disposable server with private HOME/cwd and literal `~/...` or relative persistence configuration, then a router save and filesystem readback. Never point it at user state. (`F12.create-first`, `F12.list`).
