@@ -32,6 +32,7 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
     deleteAutomation: vi.fn(),
     dispatchAutomation: vi.fn(),
     fetchTarballBytes: vi.fn(),
+    downloadTarball: vi.fn(),
     checkHealth: vi.fn(),
   },
 }));
@@ -153,6 +154,7 @@ beforeEach(() => {
   vi.mocked(AutomationService.getAutomationRuns).mockReset();
   vi.mocked(AutomationService.getAutomationRuns).mockResolvedValue(emptyRuns);
   vi.mocked(AutomationService.fetchTarballBytes).mockReset();
+  vi.mocked(AutomationService.downloadTarball).mockReset();
   vi.mocked(ProfilesService.listProfiles).mockReset();
   vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
     profiles: [],
@@ -480,7 +482,7 @@ describe("AutomationDetail — disabled reason banner", () => {
 });
 
 describe("AutomationDetail — script automations", () => {
-  it("renders plugin-spec response details while retaining the automation actions", async () => {
+  it("renders plugin-spec details and only offers supported automation actions", async () => {
     // Arrange — this is the existing detail API response, with no extra lookup.
     const pluginAutomation: Automation = {
       ...automation,
@@ -525,12 +527,16 @@ describe("AutomationDetail — script automations", () => {
     await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
     for (const name of [
       I18nKey.AUTOMATIONS$EXPORT,
-      I18nKey.AUTOMATIONS$DOWNLOAD_TARBALL,
       I18nKey.AUTOMATIONS$EDIT,
       I18nKey.AUTOMATIONS$DELETE,
     ]) {
       expect(screen.getByRole("button", { name })).toBeInTheDocument();
     }
+    expect(
+      screen.queryByRole("button", {
+        name: I18nKey.AUTOMATIONS$DOWNLOAD_TARBALL,
+      }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows the bundle's script in place of the prompt for an automation without a prompt", async () => {
@@ -541,12 +547,15 @@ describe("AutomationDetail — script automations", () => {
       ...automation,
       prompt: null,
       entrypoint: "python main.py",
+      tarball_path: "/uploads/script.tar.gz",
     });
     vi.mocked(AutomationService.fetchTarballBytes).mockResolvedValue(
       new Uint8Array(
         await packTarGzip([{ name: "main.py", content: "print('hi')\n" }]),
       ),
     );
+
+    const user = userEvent.setup();
 
     // Act
     renderDetail();
@@ -558,5 +567,15 @@ describe("AutomationDetail — script automations", () => {
     expect(
       screen.queryByTestId("automation-prompt-content"),
     ).not.toBeInTheDocument();
+    await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+    await user.click(
+      screen.getByRole("button", {
+        name: I18nKey.AUTOMATIONS$DOWNLOAD_TARBALL,
+      }),
+    );
+    expect(AutomationService.downloadTarball).toHaveBeenCalledWith(
+      automation.id,
+      automation.name,
+    );
   });
 });

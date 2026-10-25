@@ -1,6 +1,9 @@
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
-import type { Automation } from "#/types/automation";
+import {
+  PLUGIN_SPEC_RUNTIME_TARBALL_PATH,
+  type Automation,
+} from "#/types/automation";
 import { ToggleSwitch } from "#/components/features/automations/toggle-switch";
 import { KebabMenu } from "#/components/features/automations/kebab-menu";
 import PowerIcon from "#/icons/power.svg?react";
@@ -45,17 +48,21 @@ export function DetailHeader({
   const { t } = useTranslation("openhands");
 
   const kebabItems = [
-    // Read-only items are always available to anyone who can view.
+    // Read-only items are available to anyone who can view.
     {
       label: t(I18nKey.AUTOMATIONS$EXPORT),
       icon: <DownloadIcon className="size-4" />,
       onClick: onExport,
     },
-    {
-      label: t(I18nKey.AUTOMATIONS$DOWNLOAD_TARBALL),
-      icon: <DownloadIcon className="size-4" />,
-      onClick: onDownloadTarball,
-    },
+    ...(automation.tarball_path !== PLUGIN_SPEC_RUNTIME_TARBALL_PATH
+      ? [
+          {
+            label: t(I18nKey.AUTOMATIONS$DOWNLOAD_TARBALL),
+            icon: <DownloadIcon className="size-4" />,
+            onClick: onDownloadTarball,
+          },
+        ]
+      : []),
     // Write items — only when the user may mutate this automation.
     ...(canManage && onEdit
       ? [

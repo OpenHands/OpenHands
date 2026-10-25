@@ -3,15 +3,16 @@ import { I18nKey } from "#/i18n/declaration";
 import TerminalIcon from "#/icons/terminal.svg?react";
 import { HighlightedSourceView } from "#/components/features/files-tab/highlighted-source-view";
 import { useAutomationTarballFiles } from "#/hooks/query/use-automation-tarball-files";
-import type { Automation } from "#/types/automation";
+import {
+  PLUGIN_SPEC_RUNTIME_TARBALL_PATH,
+  type Automation,
+} from "#/types/automation";
 import type { TarEntry } from "#/utils/tar-unpack";
 import { SectionCard } from "./section-card";
 
 interface ScriptSectionProps {
   automation: Automation;
 }
-
-const PLUGIN_SPEC_RUNTIME_TARBALL_PATH = "plugin-spec://runtime";
 
 /**
  * The bundle member the entrypoint runs, if it names one: the first token

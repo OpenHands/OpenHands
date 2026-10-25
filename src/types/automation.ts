@@ -36,6 +36,9 @@ export interface AutomationRepository {
 
 export type AutomationState = "ACTIVE" | "INACTIVE" | "DRAFT";
 
+/** The service generates this bundle at dispatch time, so it cannot be downloaded. */
+export const PLUGIN_SPEC_RUNTIME_TARBALL_PATH = "plugin-spec://runtime";
+
 /** Definition returned by the automation service for a plugin-spec automation. */
 export interface AutomationPluginSpec {
   plugin: {
