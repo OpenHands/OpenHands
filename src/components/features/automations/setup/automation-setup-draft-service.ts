@@ -113,10 +113,6 @@ export function setupDraftFromServerDraft(
   }
   const savedEntrypoint = getStringField(body, "entrypoint");
   if (savedEntrypoint !== undefined) form.entrypoint = savedEntrypoint;
-  const savedSetupScriptPath = getStringField(body, "setup_script_path");
-  if (savedSetupScriptPath !== undefined) {
-    form.setupScriptPath = savedSetupScriptPath;
-  }
   if (trigger) {
     form.triggerKind =
       getStringField(trigger, "type") === "event" ? "event" : "cron";
@@ -189,8 +185,6 @@ export function formFromServerDraft(
         ? serializeAutomationSetupPluginList(savedPlugins)
         : "",
     entrypoint: getStringField(body, "entrypoint") ?? base.entrypoint,
-    setupScriptPath:
-      getStringField(body, "setup_script_path") ?? base.setupScriptPath,
     triggerKind:
       getStringField(trigger ?? {}, "type") === "event" ? "event" : "cron",
     frequency: getStringField(trigger ?? {}, "schedule")

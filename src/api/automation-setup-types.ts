@@ -21,7 +21,6 @@ export interface AutomationSetupFormValues {
   pluginList: string;
   customCode: string;
   entrypoint: string;
-  setupScriptPath: string;
   setupScript: string;
   triggerKind: AutomationSetupTriggerKind;
   frequency: AutomationSetupFrequency;

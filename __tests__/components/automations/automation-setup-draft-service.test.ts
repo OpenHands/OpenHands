@@ -120,7 +120,6 @@ const baseForm: AutomationSetupFormValues = {
   pluginList: "",
   customCode: "",
   entrypoint: "",
-  setupScriptPath: "",
   setupScript: "",
   triggerKind: "cron",
   frequency: "daily",

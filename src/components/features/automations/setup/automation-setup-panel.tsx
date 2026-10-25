@@ -134,10 +134,9 @@ const FALLBACK_EVENT_SOURCES = ["github", "gitlab", "slack", "linear", "jira"];
 const DEFAULT_EVENT_KEY = "issue_comment.created";
 const DEFAULT_CUSTOM_ENTRYPOINT = "python3 main.py";
 const MAIN_PY_FILENAME = "main.py";
-const DEFAULT_CUSTOM_SETUP_SCRIPT_PATH = "setup.sh";
-const DEFAULT_CUSTOM_SETUP_SCRIPT = `#!/usr/bin/env bash
-:
-`;
+// The automation service only runs a setup script named setup.sh at the
+// bundle root, so the name is fixed rather than user-editable.
+const CUSTOM_SETUP_SCRIPT_FILENAME = "setup.sh";
 const addOptionButtonClassName = cn(
   "inline-flex w-fit shrink-0 cursor-pointer items-center rounded-lg border border-border bg-tertiary px-3 py-1.5 text-sm text-content hover:bg-interactive-hover",
   formControlTransitionClassName,
@@ -181,7 +180,6 @@ const AUTOMATION_SETUP_FIELD_RENDER_ORDER: AutomationSetupField[] = [
   "repository",
   "customCode",
   "entrypoint",
-  "setupScriptPath",
   "setupScript",
   "triggerKind",
   "frequency",
@@ -416,8 +414,7 @@ function buildInitialForm(
         : "",
     customCode: form.customCode ?? buildStarterPython(prompt),
     entrypoint: form.entrypoint ?? DEFAULT_CUSTOM_ENTRYPOINT,
-    setupScriptPath: form.setupScriptPath ?? DEFAULT_CUSTOM_SETUP_SCRIPT_PATH,
-    setupScript: form.setupScript ?? DEFAULT_CUSTOM_SETUP_SCRIPT,
+    setupScript: form.setupScript ?? "",
     triggerKind: form.triggerKind ?? "cron",
     frequency: form.frequency ?? "daily",
     time: form.time ?? DEFAULT_TIME,
@@ -955,7 +952,6 @@ export function AutomationSetupPanel({
     pluginList,
     customCode,
     entrypoint,
-    setupScriptPath,
     setupScript,
     triggerKind,
     frequency,
@@ -1277,7 +1273,9 @@ export function AutomationSetupPanel({
       trigger: buildTrigger(),
       tarball_path: tarballPath,
       entrypoint: entrypoint.trim(),
-      setup_script_path: setupScriptPath.trim(),
+      ...(setupScript.trim()
+        ? { setup_script_path: CUSTOM_SETUP_SCRIPT_FILENAME }
+        : {}),
       ...(showTimeout && timeoutSeconds.trim()
         ? { timeout: Number(timeoutSeconds) }
         : {}),
@@ -1343,7 +1341,6 @@ export function AutomationSetupPanel({
       pluginList,
       customCode,
       entrypoint,
-      setupScriptPath,
       setupScript,
       triggerKind,
       frequency,
@@ -1431,11 +1428,15 @@ export function AutomationSetupPanel({
   const uploadCustomArchive = async (): Promise<string> => {
     const archive = await packTarGzip([
       { name: MAIN_PY_FILENAME, content: customCode, mode: 0o644 },
-      {
-        name: setupScriptPath.trim(),
-        content: setupScript,
-        mode: 0o755,
-      },
+      ...(setupScript.trim()
+        ? [
+            {
+              name: CUSTOM_SETUP_SCRIPT_FILENAME,
+              content: setupScript,
+              mode: 0o755,
+            },
+          ]
+        : []),
     ]);
     return AutomationService.uploadAutomationTarball(normalizedName(), archive);
   };
@@ -1509,24 +1510,6 @@ export function AutomationSetupPanel({
       setStatusMessage({
         kind: "error",
         text: t(I18nKey.AUTOMATION_SETUP$ENTRYPOINT_REQUIRED),
-      });
-      return false;
-    }
-    if (
-      kind === "custom" &&
-      !hasExistingCustomBundle &&
-      !setupScriptPath.trim()
-    ) {
-      setStatusMessage({
-        kind: "error",
-        text: t(I18nKey.AUTOMATION_SETUP$SETUP_SCRIPT_PATH_REQUIRED),
-      });
-      return false;
-    }
-    if (kind === "custom" && !hasExistingCustomBundle && !setupScript.trim()) {
-      setStatusMessage({
-        kind: "error",
-        text: t(I18nKey.AUTOMATION_SETUP$SETUP_SCRIPT_REQUIRED),
       });
       return false;
     }
@@ -2101,21 +2084,16 @@ export function AutomationSetupPanel({
                     <CustomCodeFields
                       code={customCode}
                       entrypoint={entrypoint}
-                      setupScriptPath={setupScriptPath}
                       setupScript={setupScript}
                       updatedSuffixes={{
                         customCode: agentUpdatedSuffix("customCode"),
                         entrypoint: agentUpdatedSuffix("entrypoint"),
-                        setupScriptPath: agentUpdatedSuffix("setupScriptPath"),
                         setupScript: agentUpdatedSuffix("setupScript"),
                       }}
                       streamingField={streamingField}
                       onCodeChange={(value) => updateField("customCode", value)}
                       onEntrypointChange={(value) =>
                         updateField("entrypoint", value)
-                      }
-                      onSetupScriptPathChange={(value) =>
-                        updateField("setupScriptPath", value)
                       }
                       onSetupScriptChange={(value) =>
                         updateField("setupScript", value)
@@ -2557,29 +2535,22 @@ const CUSTOM_CODE_MAX_HEIGHT =
 function CustomCodeFields({
   code,
   entrypoint,
-  setupScriptPath,
   setupScript,
   updatedSuffixes,
   streamingField,
   onCodeChange,
   onEntrypointChange,
-  onSetupScriptPathChange,
   onSetupScriptChange,
 }: {
   code: string;
   entrypoint: string;
-  setupScriptPath: string;
   setupScript: string;
   updatedSuffixes: Partial<
-    Record<
-      "customCode" | "entrypoint" | "setupScriptPath" | "setupScript",
-      string | undefined
-    >
+    Record<"customCode" | "entrypoint" | "setupScript", string | undefined>
   >;
   streamingField: AutomationSetupField | null;
   onCodeChange: (value: string) => void;
   onEntrypointChange: (value: string) => void;
-  onSetupScriptPathChange: (value: string) => void;
   onSetupScriptChange: (value: string) => void;
 }) {
   const { t } = useTranslation("openhands");
@@ -2587,10 +2558,7 @@ function CustomCodeFields({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
   const [detailsOpen, setDetailsOpen] = useState(
-    () =>
-      entrypoint !== DEFAULT_CUSTOM_ENTRYPOINT ||
-      setupScriptPath !== DEFAULT_CUSTOM_SETUP_SCRIPT_PATH ||
-      setupScript !== DEFAULT_CUSTOM_SETUP_SCRIPT,
+    () => entrypoint !== DEFAULT_CUSTOM_ENTRYPOINT || setupScript !== "",
   );
   const { gripRef, isGripDragging, handleGripMouseDown, handleGripTouchStart } =
     usePromptTextareaResize(frameRef, {
@@ -2679,34 +2647,18 @@ function CustomCodeFields({
         </button>
         <CustomDetailsReveal open={detailsOpen} instant={reduceMotion}>
           <div className="flex flex-col gap-4 pt-3">
-            <div className="grid gap-3 md:grid-cols-[2fr_1fr]">
-              <Field
-                label={t(I18nKey.AUTOMATION_SETUP$ENTRYPOINT)}
-                suffix={updatedSuffixes.entrypoint}
-                isStreaming={streamingField === "entrypoint"}
-              >
-                <input
-                  data-testid="automation-setup-entrypoint"
-                  value={entrypoint}
-                  onChange={(event) => onEntrypointChange(event.target.value)}
-                  className={formControlFieldClassName}
-                />
-              </Field>
-              <Field
-                label={t(I18nKey.AUTOMATION_SETUP$SETUP_SCRIPT_PATH)}
-                suffix={updatedSuffixes.setupScriptPath}
-                isStreaming={streamingField === "setupScriptPath"}
-              >
-                <input
-                  data-testid="automation-setup-setup-script-path"
-                  value={setupScriptPath}
-                  onChange={(event) =>
-                    onSetupScriptPathChange(event.target.value)
-                  }
-                  className={formControlFieldClassName}
-                />
-              </Field>
-            </div>
+            <Field
+              label={t(I18nKey.AUTOMATION_SETUP$ENTRYPOINT)}
+              suffix={updatedSuffixes.entrypoint}
+              isStreaming={streamingField === "entrypoint"}
+            >
+              <input
+                data-testid="automation-setup-entrypoint"
+                value={entrypoint}
+                onChange={(event) => onEntrypointChange(event.target.value)}
+                className={formControlFieldClassName}
+              />
+            </Field>
             <Field
               label={t(I18nKey.AUTOMATION_SETUP$SETUP_SCRIPT)}
               suffix={updatedSuffixes.setupScript}

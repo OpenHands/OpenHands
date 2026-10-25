@@ -462,8 +462,9 @@ describe("AutomationSetupPanel", () => {
         ) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
-      screen.getByTestId("automation-setup-setup-script-path"),
-    ).toHaveValue("setup.sh");
+      screen.queryByTestId("automation-setup-setup-script-path"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("automation-setup-setup-script")).toHaveValue("");
     expect(
       (
         screen.getByTestId(
@@ -1613,7 +1614,7 @@ describe("AutomationSetupPanel", () => {
     );
   });
 
-  it("creates custom bundle drafts with entrypoint and setup script path", async () => {
+  it("creates custom bundle drafts without a setup script", async () => {
     vi.mocked(AutomationService.uploadAutomationTarball).mockResolvedValue(
       "oh-internal://uploads/custom-archive",
     );
@@ -1645,17 +1646,57 @@ describe("AutomationSetupPanel", () => {
     );
     expect(packTarGzip).toHaveBeenCalledWith([
       expect.objectContaining({ name: "main.py", mode: 0o644 }),
-      expect.objectContaining({ name: "setup.sh", mode: 0o755 }),
     ]);
     expect(AutomationService.createAutomationDraft).toHaveBeenCalledWith(
       expect.objectContaining({
         tarball_path: "oh-internal://uploads/custom-archive",
         entrypoint: "python3 main.py --once",
-        setup_script_path: "setup.sh",
       }),
       "custom",
     );
+    expect(
+      vi.mocked(AutomationService.createAutomationDraft).mock.calls[0][0],
+    ).not.toHaveProperty("setup_script_path");
     expect(mockNavigate).toHaveBeenCalledWith("/automations/automation-custom");
+  });
+
+  it("packs a provided setup script as setup.sh at the bundle root", async () => {
+    vi.mocked(AutomationService.uploadAutomationTarball).mockResolvedValue(
+      "oh-internal://uploads/custom-archive",
+    );
+    vi.mocked(AutomationService.createAutomationDraft).mockResolvedValue({
+      id: "automation-custom",
+    });
+
+    const user = userEvent.setup();
+    renderPanel({
+      prompt: "Run a custom security check",
+      kind: "custom",
+    });
+
+    await user.click(
+      screen.getByTestId("automation-setup-custom-details-toggle"),
+    );
+    await user.type(
+      screen.getByTestId("automation-setup-setup-script"),
+      "pip install requests",
+    );
+    await user.click(screen.getByTestId("automation-setup-create"));
+
+    await waitFor(() =>
+      expect(packTarGzip).toHaveBeenCalledWith([
+        expect.objectContaining({ name: "main.py", mode: 0o644 }),
+        expect.objectContaining({
+          name: "setup.sh",
+          content: "pip install requests",
+          mode: 0o755,
+        }),
+      ]),
+    );
+    expect(AutomationService.createAutomationDraft).toHaveBeenCalledWith(
+      expect.objectContaining({ setup_script_path: "setup.sh" }),
+      "custom",
+    );
   });
 
   describe("server-backed drafts (PR OpenHands/automation#417)", () => {
@@ -1865,7 +1906,6 @@ describe("AutomationSetupPanel", () => {
             draft: expect.objectContaining({
               tarball_path: "oh-internal://uploads/custom-draft-1",
               entrypoint: "python3 main.py",
-              setup_script_path: "setup.sh",
             }),
           }),
         ),
@@ -1883,7 +1923,6 @@ describe("AutomationSetupPanel", () => {
       );
       expect(packTarGzip).toHaveBeenCalledWith([
         expect.objectContaining({ name: "main.py", mode: 0o644 }),
-        expect.objectContaining({ name: "setup.sh", mode: 0o755 }),
       ]);
 
       await user.click(screen.getByTestId("automation-setup-save-draft"));

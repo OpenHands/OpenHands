@@ -52,7 +52,6 @@ const STRING_FIELDS = [
   "pluginList",
   "customCode",
   "entrypoint",
-  "setupScriptPath",
   "setupScript",
   "time",
   "scheduleDateTime",

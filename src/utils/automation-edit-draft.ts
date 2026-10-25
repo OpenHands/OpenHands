@@ -104,7 +104,6 @@ export function setupDraftFromAutomation(
     model: automation.model ?? "",
     agentProfileId: automation.agent_profile_id ?? "",
     entrypoint: automation.entrypoint ?? "",
-    setupScriptPath: automation.setup_script_path ?? "",
     ...(trigger.type === "event"
       ? {
           triggerKind: "event" as const,

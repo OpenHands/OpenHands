@@ -16,7 +16,7 @@ Useful fields:
 * prompt: natural-language instruction for prompt/plugin automations.
 * repository: optional GitHub repository URL or owner/repo for prompt/plugin automations.
 * pluginSource and pluginRef: source and optional ref for the first plugin. The form can hold more than one plugin; these fields only change the first.
-* customCode, entrypoint, setupScriptPath, setupScript: custom Python bundle fields.
+* customCode, entrypoint, setupScript: custom Python bundle fields. setupScript is optional and, when set, is saved as setup.sh at the root of the bundle.
 * triggerKind: "cron" or "event".
 * frequency: "once", "hourly", "daily", "weekdays", "weekly", or "custom" for cron triggers.
 * time, scheduleDateTime, timezone, weekday, customSchedule: cron scheduling fields. "scheduleDateTime" is a local "YYYY-MM-DDTHH:MM" value used when frequency is "once". "weekday" is "0" (Sunday) through "6" (Saturday) and applies when frequency is "weekly".
@@ -46,7 +46,6 @@ export const AUTOMATION_FORM_UPDATE_CLIENT_TOOL: ClientToolSpec = {
           pluginRef: { type: "string" },
           customCode: { type: "string" },
           entrypoint: { type: "string" },
-          setupScriptPath: { type: "string" },
           setupScript: { type: "string" },
           triggerKind: { type: "string", enum: ["cron", "event"] },
           frequency: {
