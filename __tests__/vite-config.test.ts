@@ -6,6 +6,7 @@ import { mkdtemp, writeFile, symlink, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Script } from "node:vm";
+import { parse, type Rule } from "postcss";
 import { afterEach, describe, expect, it } from "vitest";
 
 afterEach(() => {
@@ -180,6 +181,26 @@ describe("vite library build", () => {
     };
 
     const css = file("styles.css");
+    const stylesheet = parse(css);
+    const declarations = (rule: Rule) => {
+      const values: Record<string, string> = {};
+      rule.walkDecls(({ prop, value }) => {
+        values[prop] = value;
+      });
+      return values;
+    };
+    const recipe = (name: string) => {
+      const selector = `[data-agent-server-ui] .${name.replace(
+        /([^\w-])/g,
+        "\\$1",
+      )}`;
+      const matches: Rule[] = [];
+      stylesheet.walkRules((rule) => {
+        if (rule.selectors.includes(selector)) matches.push(rule);
+      });
+      expect(matches, `Shipped scoped recipe: ${name}`).toHaveLength(1);
+      return matches[0];
+    };
     // Scoped to the Canvas root so it never restyles the host page.
     expect(css).toContain("[data-agent-server-ui] .flex{display:flex}");
     expect(css).not.toMatch(/(^|[{},])\.flex\{/);
@@ -187,23 +208,68 @@ describe("vite library build", () => {
     expect(css).toContain("fonts.googleapis.com");
 
     // Extension dialogs keep their viewport limits in the shipped library.
-    const dialogViewportRule =
-      css.match(
-        /\[data-agent-server-ui\]\s+\.extension-dialog-viewport\s*\{([^}]*)\}/,
-      )?.[1] ?? "";
-    const dialogViewportDeclarations = Object.fromEntries(
-      dialogViewportRule
-        .split(";")
-        .filter((declaration) => declaration.trim())
-        .map((declaration) =>
-          declaration.split(":").map((part) => part.trim()),
-        ),
-    );
-    expect(dialogViewportDeclarations).toMatchObject({
+    expect(declarations(recipe("extension-dialog-viewport"))).toMatchObject({
       "max-width": "90vw",
       "max-height": "85vh",
     });
     expect(css).not.toMatch(/(^|[{},])\.extension-dialog-viewport\{/);
+
+    // Every shipped setup rule, including width references and media variants,
+    // stays inside Canvas rather than affecting the embedding host.
+    const setupRules: Rule[] = [];
+    stylesheet.walkRules((rule) => {
+      if (rule.selector.includes("automation-setup-")) setupRules.push(rule);
+    });
+    for (const rule of setupRules) {
+      for (const selector of rule.selectors) {
+        expect(selector).toMatch(/^\[data-agent-server-ui\]\s/);
+      }
+    }
+    expect(declarations(recipe("automation-setup-joined-card"))).toMatchObject({
+      "border-radius": "15px",
+      "margin-bottom": "-15px",
+    });
+    const tray = declarations(recipe("automation-setup-joined-tray"));
+    expect(tray).toMatchObject({
+      "border-bottom-right-radius": "15px",
+      "border-bottom-left-radius": "15px",
+    });
+    expect(tray["padding-top"].replace(/\s/g, "")).toMatch(
+      /^calc\(15px\+0?\.5rem\)$/,
+    );
+    const dock = declarations(recipe("automation-setup-composer-dock"));
+    expect(dock["border-radius"]).toBe("15px");
+    expect(dock["--tw-shadow"]).toContain("0 12px 40px");
+    expect(dock["box-shadow"]).toMatch(
+      /var\(--tw-ring-shadow\).*var\(--tw-shadow\)/,
+    );
+
+    // Fields consume row-owned rem widths after merging shared form classes.
+    const scheduleRow = recipe("automation-setup-schedule-row");
+    const scheduleWidths = {
+      "--automation-setup-cron-width": "14rem",
+      "--automation-setup-datetime-width": "15rem",
+      "--automation-setup-time-width": "9.5rem",
+      "--automation-setup-timezone-width": "16rem",
+    };
+    expect(declarations(scheduleRow)).toMatchObject(scheduleWidths);
+    for (const property of Object.keys(scheduleWidths)) {
+      expect(declarations(recipe(`w-(${property})`))).toMatchObject({
+        width: `var(${property})`,
+      });
+      const owners = setupRules.filter(
+        (rule) => property in declarations(rule),
+      );
+      expect(owners).toHaveLength(1);
+      expect(owners[0]).toBe(scheduleRow);
+    }
+    const grid = recipe("md:automation-setup-details-grid");
+    expect(declarations(grid)["grid-template-columns"]).toBe("2fr 1fr");
+    expect(grid.parent).toMatchObject({
+      type: "atrule",
+      name: "media",
+      params: expect.stringMatching(/^\(width\s*>=\s*48rem\)$/),
+    });
 
     // `package.json` routes `require` here; stripped CSS imports must not
     // leave it unparseable.
