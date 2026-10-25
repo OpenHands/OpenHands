@@ -435,21 +435,6 @@ export function RecommendedAutomationsSection({
       query.trim().length > 0 ||
       (!!filters && hasActiveTemplateFilter(filters));
     if (!canClear || !isNarrowed) return null;
-    return (
-      <section
-        data-testid="recommended-automations-section"
-        className={cn("flex flex-col gap-4", filterChips ? "mt-0" : "mt-3")}
-      >
-        {filterChips}
-        <AutomationsFilteredEmptyState
-          message={t(I18nKey.RECOMMENDED_AUTOMATIONS$NO_MATCHING_TEMPLATES)}
-          onClear={() => {
-            onClearQuery?.();
-            onFiltersChange?.(EMPTY_TEMPLATE_FILTERS);
-          }}
-        />
-      </section>
-    );
   }
 
   const provenAutomations = visibleAutomations.filter(isProvenAutomation);
@@ -474,6 +459,16 @@ export function RecommendedAutomationsSection({
         )}
       >
         {filterChips && <div className="mb-4">{filterChips}</div>}
+
+        {visibleAutomations.length === 0 && (
+          <AutomationsFilteredEmptyState
+            message={t(I18nKey.RECOMMENDED_AUTOMATIONS$NO_MATCHING_TEMPLATES)}
+            onClear={() => {
+              onClearQuery?.();
+              onFiltersChange?.(EMPTY_TEMPLATE_FILTERS);
+            }}
+          />
+        )}
 
         {provenAutomations.length > 0 && (
           <>
