@@ -1,19 +1,15 @@
 import React from "react";
 import { create } from "zustand";
 
-/**
- * Reveal pace, in characters per millisecond (60 chars/s). Fast models deliver
- * several hundred characters a second; revealing at that pace reads as text
- * being dumped rather than written.
- */
+/** Reveal pace, in characters per millisecond (60 chars/s). */
 const PACE = 0.06;
 
 /**
- * How far the reveal may trail the model before it speeds up beyond `PACE`:
- * past this backlog, it drains at least `backlog / MAX_LAG_MS`, so a long
- * reply from a fast model never ends up more than ~10 seconds behind.
+ * Backlog is drained at `backlog / MAX_LAG_MS` per ms once that exceeds
+ * `PACE`, so the reveal trails a fast model by about this long and catches
+ * up within about a second of it stopping.
  */
-const MAX_LAG_MS = 10000;
+const MAX_LAG_MS = 500;
 
 /**
  * Hooks still revealing text, so the chat can keep following a reply that is

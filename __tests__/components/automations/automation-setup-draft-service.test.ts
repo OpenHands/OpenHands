@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 import { HttpError } from "@openhands/typescript-client";
 import {
   extractDraftDispatchErrors,
+  getDraftExecutionStatusText,
   formFromServerDraft,
   setupDraftFromServerDraft,
 } from "#/components/features/automations/setup/automation-setup-draft-service";
 import type { AutomationSetupFormValues } from "#/api/automation-setup-types";
+import { AutomationRunStatus } from "#/types/automation";
+import { I18nKey } from "#/i18n/declaration";
 import type { AutomationDraftApiResponse } from "#/manifests/types";
 
 const detailEnvelope = {
@@ -59,6 +62,54 @@ const baseSavedDraft: AutomationDraftApiResponse = {
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z",
 };
+
+describe("getDraftExecutionStatusText", () => {
+  const run = {
+    id: "run-1",
+    status: AutomationRunStatus.COMPLETED,
+    conversation_id: null,
+    bash_command_id: null,
+    error_detail: null,
+    started_at: "2026-01-01T00:00:00Z",
+    completed_at: "2026-01-01T00:01:00Z",
+  };
+  const translate = (key: I18nKey) => String(key);
+
+  it.each([
+    AutomationRunStatus.COMPLETED,
+    AutomationRunStatus.FAILED,
+    AutomationRunStatus.RUNNING,
+  ])(
+    "shows the current draft error ahead of a historical %s test",
+    (status) => {
+      const invalidDraft = {
+        ...baseSavedDraft,
+        dispatchable: false,
+        validationErrors: [
+          {
+            field: "trigger",
+            code: "invalid",
+            message: "Invalid cron expression: every day",
+          },
+        ],
+      };
+
+      const text = getDraftExecutionStatusText(
+        invalidDraft,
+        [{ ...run, status }],
+        translate,
+      );
+
+      expect(text).toBe("Invalid cron expression: every day");
+    },
+  );
+
+  it("keeps the successful test status for a currently valid draft", () => {
+    expect(getDraftExecutionStatusText(baseSavedDraft, [run], translate)).toBe(
+      I18nKey.AUTOMATION_SETUP$LATEST_TEST_PASSED,
+    );
+  });
+});
 
 const baseForm: AutomationSetupFormValues = {
   name: "",

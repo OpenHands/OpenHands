@@ -71,10 +71,11 @@ describe("useStreamedText", () => {
     expect(result.current.length).toBeGreaterThan("Hi".length);
     expect(result.current.length).toBeLessThan(202);
 
-    // At ~60 chars/s, 200 characters take about 3.3s rather than one burst.
+    // A 200-character burst is spread over about 1.5s rather than shown at
+    // once: quickly at first, then at the reading pace for the last of it.
     frames.tick(60);
-    expect(result.current.length).toBeLessThan(100);
-    frames.tick(160);
+    expect(result.current.length).toBeLessThan(202);
+    frames.tick(60);
     expect(result.current).toBe(`Hi${"x".repeat(200)}`);
     expect(frames.pending()).toBe(0);
   });
@@ -105,7 +106,7 @@ describe("useStreamedText", () => {
     expect(Math.max(...halves)).toBeLessThan(1.5);
   });
 
-  it("caps the pace for a fast model but never trails it far", () => {
+  it("follows a fast model closely and catches up once it stops", () => {
     const { result, rerender } = renderHook(
       ({ text }) => useStreamedText(text),
       { initialProps: { text: "" } },
@@ -120,13 +121,15 @@ describe("useStreamedText", () => {
       }
     };
 
-    stream(62); // ~1s
-    // Revealed at a reading pace, not at the model's 600 chars/s.
-    expect(result.current.length).toBeLessThan(100);
+    stream(300); // ~5s
+    // Smoothed rather than shown as it lands, but never more than about half
+    // a second of the model's output behind.
+    expect(result.current.length).toBeLessThan(length);
+    expect(length - result.current.length).toBeLessThan(600 * 0.6);
 
-    stream(1180); // ~20s in total
-    // Past ~10s of backlog it speeds up, so it never trails further.
-    expect(length - result.current.length).toBeLessThan(600 * 10);
+    frames.tick(120); // ~2s after the model stopped
+    expect(result.current).toBe("x".repeat(length));
+    expect(frames.pending()).toBe(0);
   });
 
   it("reports while text is still being revealed", () => {

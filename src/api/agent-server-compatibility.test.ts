@@ -81,7 +81,7 @@ describe("agent-server version compatibility", () => {
     });
   });
 
-  it.each(["0.99.99", "1.27.999", "1.50.1", "1.51.0-rc.1"])(
+  it.each(["0.99.99", "1.27.999", "1.54.0", "1.55.0-rc.1"])(
     "rejects older version %s",
     (version) => {
       const error = getThrownError(() =>
@@ -99,10 +99,10 @@ describe("agent-server version compatibility", () => {
 
   it.each([
     MINIMUM_COMPATIBLE_AGENT_SERVER_VERSION,
-    "1.51.1",
-    "1.52.0",
+    "1.55.1",
+    "1.56.0",
     "2.0.0",
-    " v1.51.0+build.7 ",
+    " v1.55.0+build.7 ",
   ])("accepts compatible version %s", (version) => {
     expect(() =>
       assertAgentServerVersionIsSupported(serverInfo(version)),

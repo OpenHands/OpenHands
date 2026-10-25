@@ -111,6 +111,22 @@ function serveSetupGuide({
   return requests;
 }
 
+/** Serves the guide's dismissal and records each request body. */
+function serveDismissal() {
+  const dismissals: unknown[] = [];
+  server.use(
+    http.patch("*/api/admin/setup-state", async ({ request }) => {
+      dismissals.push(await request.json());
+      return HttpResponse.json({
+        ...guideState(),
+        guide_dismissed: true,
+        guide_steps: null,
+      });
+    }),
+  );
+  return dismissals;
+}
+
 function activateBackend(backend: Backend) {
   setRegisteredBackends([backend]);
   setActiveSelection({ backendId: backend.id, orgId: GUIDE_ORG_ID });
@@ -489,6 +505,46 @@ describe("SuperAdminSetupGuide", () => {
     expect(
       screen.getByTestId("super-admin-setup-guide-panel"),
     ).toBeInTheDocument();
+  });
+
+  it("turns the guide off when the admin confirms closing it", async () => {
+    const user = userEvent.setup();
+    activateBackend(cloudBackend);
+    serveSetupGuide();
+    const dismissals = serveDismissal();
+    renderGuide();
+    await screen.findByTestId("super-admin-setup-guide-panel");
+
+    await user.click(
+      screen.getByRole("button", { name: I18nKey.BUTTON$CLOSE }),
+    );
+    await user.click(screen.getByTestId("confirm-button"));
+
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId("super-admin-setup-guide"),
+      ).not.toBeInTheDocument(),
+    );
+    expect(dismissals).toEqual([{ guide_dismissed: true }]);
+  });
+
+  it("keeps the guide on the pill when the admin cancels closing it", async () => {
+    const user = userEvent.setup();
+    activateBackend(cloudBackend);
+    serveSetupGuide();
+    const dismissals = serveDismissal();
+    renderGuide();
+    await screen.findByTestId("super-admin-setup-guide-panel");
+
+    await user.click(
+      screen.getByRole("button", { name: I18nKey.BUTTON$CLOSE }),
+    );
+    await user.click(screen.getByTestId("cancel-button"));
+
+    expect(
+      screen.getByTestId("super-admin-setup-guide-toggle"),
+    ).toHaveAttribute("aria-expanded", "false");
+    expect(dismissals).toEqual([]);
   });
 
   it("does not ask for the setup state for a user who is not a Super Admin", async () => {

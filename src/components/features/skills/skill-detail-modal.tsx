@@ -24,6 +24,7 @@ interface SkillDetailModalProps {
   enabled: boolean;
   onToggle: (enabled: boolean) => void;
   onClose: () => void;
+  isToggleDisabled?: boolean;
 }
 
 function ReadonlyTextArea({
@@ -57,6 +58,7 @@ export function SkillDetailModal({
   enabled,
   onToggle,
   onClose,
+  isToggleDisabled = false,
 }: SkillDetailModalProps) {
   const { t } = useTranslation("openhands");
   const launchSkillInChat = useLaunchSkillInChat();
@@ -158,6 +160,7 @@ export function SkillDetailModal({
               testId={`skill-modal-toggle-${skill.name}`}
               isToggled={enabled}
               onToggle={onToggle}
+              isDisabled={isToggleDisabled}
               togglePosition="right"
             >
               {t(

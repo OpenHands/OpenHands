@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import AutomationService from "#/api/automation-service/automation-service.api";
 import { SetupDialog } from "#/components/features/manifest/manifest-setup-dialog";
+import type { useNativeGitIntegrations } from "#/hooks/query/use-native-git-integrations";
 import { SUPER_ADMIN_SETUP_STEP_EVENT } from "#/components/features/setup-guide/super-admin-setup-step-event";
 import { I18nKey } from "#/i18n/declaration";
 import type { SetupPrerequisitesResult } from "#/hooks/query/use-manifest-prerequisites";
@@ -26,6 +27,7 @@ const mocks = vi.hoisted(() => ({
   prerequisites: vi.fn(),
   capabilities: vi.fn(),
   llmProfiles: vi.fn(),
+  nativeIntegrations: vi.fn(),
   missingCreateEndpoints: vi.fn<(entry: SetupEntry) => string[]>(() => []),
   tracking: {
     trackAutomationSetupOpened: vi.fn(),
@@ -69,6 +71,10 @@ vi.mock("#/hooks/query/use-llm-profiles", () => ({
     mocks.llmProfiles(options),
 }));
 
+vi.mock("#/hooks/query/use-native-git-integrations", () => ({
+  useNativeGitIntegrations: () => mocks.nativeIntegrations(),
+}));
+
 // Which endpoints an entry cannot be created without is read off the published
 // interface manifest, so a real one that declares them leaves the refusal path
 // unreachable. Stubbed so the case states the manifest it is about, rather than
@@ -96,6 +102,30 @@ const NOTHING_TO_CONNECT: SetupPrerequisitesResult = {
   isBlocked: false,
   isLoading: false,
 };
+
+type NativeGitIntegrations = ReturnType<typeof useNativeGitIntegrations>;
+
+/** A backend with no native git integration to use: local, or cloud with none. */
+const NO_NATIVE_INTEGRATIONS: NativeGitIntegrations = {
+  getNativeIntegration: () => null,
+  isJiraEnabled: false,
+  isLinearEnabled: false,
+  isSlackEnabled: false,
+  deploymentMode: null,
+  isLoading: false,
+};
+
+/** An Enterprise instance offering GitHub natively, connected when `connected`. */
+function selfHostedGithub(connected: boolean): NativeGitIntegrations {
+  return {
+    ...NO_NATIVE_INTEGRATIONS,
+    deploymentMode: "self_hosted",
+    getNativeIntegration: (entryId) =>
+      entryId === "github"
+        ? { provider: "github", isConnected: connected }
+        : null,
+  };
+}
 
 const ENTRY: SetupEntry = createSetupEntry();
 const CUSTOM_AUTOMATION_ENTRY = AUTOMATION_CATALOG.find(
@@ -131,6 +161,7 @@ beforeEach(() => {
   // stubs a manifest without the bundle endpoints would leak into the rest.
   mocks.missingCreateEndpoints.mockReturnValue([]);
   mocks.prerequisites.mockReturnValue(NOTHING_TO_CONNECT);
+  mocks.nativeIntegrations.mockReturnValue(NO_NATIVE_INTEGRATIONS);
   mocks.capabilities.mockReturnValue({
     capabilities: null,
     supported: "unknown",
@@ -175,6 +206,38 @@ const BUNDLE_ENTRY: SetupEntry = createSetupEntry({
     },
   }),
 });
+
+/** A bundle naming the secret that holds its GitHub token, as the GitHub entries do. */
+const SECRET_NAME_BUNDLE_ENTRY: SetupEntry = (() => {
+  const { form } = createSetup();
+  return createSetupEntry({
+    setup: createSetup({
+      prompt: undefined,
+      form: {
+        ...form,
+        args: {
+          ...form.args,
+          githubTokenSecret: {
+            type: "text",
+            label: "GitHub token secret",
+            help: "Name of the secret holding the GitHub token.",
+            default: "GITHUB_PERSONAL_ACCESS_TOKEN",
+            required: true,
+          },
+        },
+      },
+      bundle: {
+        version: "1.0.0",
+        entrypoint: "python3 main.py",
+        files: { "main.py": "skills/widget-monitor/scripts/main.py" },
+        config: {
+          repos: ["{{form.repository}}"],
+          github_token_secret: "{{form.githubTokenSecret}}",
+        },
+      },
+    }),
+  });
+})();
 
 /** A deployment that answered discovery and came up short. */
 const UNSUPPORTED = {
@@ -682,6 +745,72 @@ describe("SetupDialog", () => {
     expect(screen.queryByTestId("setup-review")).toBeNull();
     expect(mocks.navigate).not.toHaveBeenCalled();
   });
+
+  it("omits a connected provider's secret-name field on a self-hosted instance and still names the default", async () => {
+    // Arrange — OpenHands Enterprise with GitHub connected under
+    // Settings > Integrations: the bundle will use that account's token, so
+    // there is nothing to ask, but its config must still name a secret.
+    mocks.nativeIntegrations.mockReturnValue(selfHostedGithub(true));
+    mocks.runAction.mockResolvedValue({ response: { id: "automation-1" } });
+    const { user } = renderDialog(SECRET_NAME_BUNDLE_ENTRY);
+
+    // Assert — not asked, on the form or on the review step.
+    expect(screen.queryByTestId("setup-field-githubTokenSecret")).toBeNull();
+    await fillForm(user);
+    await user.click(screen.getByTestId("setup-continue-button"));
+    await waitFor(() =>
+      expect(screen.getByTestId("setup-review")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("setup-review")).not.toHaveTextContent(
+      "GitHub token secret",
+    );
+
+    // Act
+    await user.click(screen.getByTestId("setup-continue-button"));
+
+    // Assert — the declared default still reaches the bundle and its config.
+    await waitFor(() => expect(mocks.runAction).toHaveBeenCalled());
+    expect(mocks.runAction.mock.calls[0][1]).toMatchObject({
+      githubTokenSecret: "GITHUB_PERSONAL_ACCESS_TOKEN",
+    });
+    expect(mocks.runAction.mock.calls[0][2]).toMatchObject({
+      template: {
+        config: { github_token_secret: "GITHUB_PERSONAL_ACCESS_TOKEN" },
+      },
+    });
+  });
+
+  it.each([
+    [
+      "GitHub is not connected on a self-hosted instance",
+      selfHostedGithub(false),
+    ],
+    [
+      "GitHub is connected on OpenHands Cloud",
+      { ...selfHostedGithub(true), deploymentMode: "cloud" },
+    ],
+  ])(
+    "keeps asking for the secret name when %s",
+    async (_case, integrations) => {
+      // Arrange — without the connected account's token to fall back on, or
+      // outside Enterprise, the field is shown as the manifest declares it.
+      mocks.nativeIntegrations.mockReturnValue(integrations);
+      const { user } = renderDialog(SECRET_NAME_BUNDLE_ENTRY);
+
+      // Assert
+      expect(screen.getByTestId("setup-field-githubTokenSecret")).toHaveValue(
+        "GITHUB_PERSONAL_ACCESS_TOKEN",
+      );
+      await fillForm(user);
+      await user.click(screen.getByTestId("setup-continue-button"));
+      await waitFor(() =>
+        expect(screen.getByTestId("setup-review")).toBeInTheDocument(),
+      );
+      expect(screen.getByTestId("setup-review")).toHaveTextContent(
+        "GitHub token secret",
+      );
+    },
+  );
 });
 
 it("creates a bundle with an optional selected agent profile", async () => {

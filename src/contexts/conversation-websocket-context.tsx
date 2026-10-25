@@ -890,8 +890,8 @@ export function ConversationWebSocketProvider({
             );
           }
 
-          // Same pattern again: the user answers in a modal, and the outcome
-          // is posted back once they close it.
+          // Same pattern again: the user answers in a chat card, and the
+          // outcome is posted back once they save or cancel it.
           if (conversationId && isRequestSecretActionEvent(event)) {
             void handleRequestSecretAction(
               event.action,

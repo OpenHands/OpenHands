@@ -61,7 +61,7 @@ function MenuItem({
 
 interface MetaProfileActionsMenuProps {
   onEdit: () => void;
-  onSetActive: () => void;
+  onSetActive?: () => void;
   onDelete: () => void;
   isActive: boolean;
   isActivating: boolean;
@@ -194,18 +194,20 @@ export function MetaProfileActionsMenu({
         menuItemsRef={menuItemsRef}
         testId="meta-profile-edit"
       />
+      {onSetActive ? (
+        <MenuItem
+          index={1}
+          icon={<CheckCircleIcon width={16} height={16} />}
+          label={t(I18nKey.SETTINGS$META_PROFILE_ACTIVATE)}
+          onClick={() => handleAction(onSetActive)}
+          onKeyDown={handleKeyDown}
+          menuItemsRef={menuItemsRef}
+          disabled={setActiveDisabled}
+          testId="meta-profile-set-active"
+        />
+      ) : null}
       <MenuItem
-        index={1}
-        icon={<CheckCircleIcon width={16} height={16} />}
-        label={t(I18nKey.SETTINGS$META_PROFILE_ACTIVATE)}
-        onClick={() => handleAction(onSetActive)}
-        onKeyDown={handleKeyDown}
-        menuItemsRef={menuItemsRef}
-        disabled={setActiveDisabled}
-        testId="meta-profile-set-active"
-      />
-      <MenuItem
-        index={2}
+        index={onSetActive ? 2 : 1}
         icon={<DeleteIcon width={16} height={16} />}
         label={t(I18nKey.BUTTON$DELETE)}
         onClick={() => handleAction(onDelete)}

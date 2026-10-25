@@ -352,3 +352,16 @@ export function proofVerdict({ baseline, fix, sha, min = 2 }) {
     ignored,
   };
 }
+
+/**
+ * The viewport to put back after an attempt, as `browser viewport` takes it
+ * (`WxH`), or null when the block left it as it found it. A block may switch
+ * to phone (F07.overview-toggle phone-overview); without the restore the next
+ * attempt, and the caller's next check, would silently run at phone width.
+ */
+export function viewportToRestore(before, after) {
+  if (!before?.width || !before?.height) return null;
+  if (after?.width === before.width && after?.height === before.height)
+    return null;
+  return `${before.width}x${before.height}`;
+}

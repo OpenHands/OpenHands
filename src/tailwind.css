@@ -23,6 +23,12 @@
   --color-feedback-success: var(--oh-feedback-success);
   /* @spec WN-001 — Warning text has a separate readable theme role */
   --color-feedback-warning: var(--oh-feedback-warning);
+  /* GitHub Markdown alert ink also owns its border and translucent fill. */
+  --color-markdown-alert-note: var(--oh-markdown-alert-note);
+  --color-markdown-alert-tip: var(--oh-markdown-alert-tip);
+  --color-markdown-alert-important: var(--oh-markdown-alert-important);
+  --color-markdown-alert-warning: var(--oh-markdown-alert-warning);
+  --color-markdown-alert-caution: var(--oh-markdown-alert-caution);
   --color-basic: var(--oh-color-basic);
   --color-tertiary: var(--oh-color-tertiary);
   --color-tertiary-light: var(--oh-color-tertiary-light);
@@ -85,7 +91,7 @@
 
 :root {
   color-scheme: dark;
-  --oh-color-primary: #c9b974;
+  --oh-color-primary: #ffffff;
   --oh-color-logo: #cfb755;
   --oh-color-base: var(--cool-grey-950);
   --oh-color-base-secondary: var(--cool-grey-925);
@@ -94,6 +100,11 @@
   /* Small feedback text has its own contrast contract, separate from controls. */
   --oh-feedback-error: var(--oh-color-danger);
   --oh-feedback-success: var(--oh-color-success);
+  --oh-markdown-alert-note: #8EC5FF;
+  --oh-markdown-alert-tip: #5EE9B5;
+  --oh-markdown-alert-important: #D8B4FE;
+  --oh-markdown-alert-warning: #FFE02A;
+  --oh-markdown-alert-caution: #FFB3BF;
   --oh-color-basic: var(--cool-grey-400);
   --oh-color-tertiary: var(--cool-grey-800);
   --oh-color-tertiary-light: var(--cool-grey-300);
@@ -692,4 +703,25 @@ code .token {
 /* Window drag handle for the macOS desktop app's hidden title bar. */
 @utility app-region-drag {
   -webkit-app-region: drag;
+}
+
+/* Reset each nested panel locally until its own measurement is available. */
+@utility add-backend-panel-height {
+  --add-backend-panel-height: auto;
+  height: var(--add-backend-panel-height);
+  transition-property: height;
+}
+
+/* Keep content fixed while the desktop Overview drawer opens or closes. */
+@utility conversation-overview-drawer {
+  width: var(--conversation-overview-drawer-width);
+  transition-property: width, transform, opacity;
+
+  &[aria-hidden="true"] {
+    width: 0px;
+  }
+
+  &[data-resizing="true"] {
+    transition-property: transform, opacity;
+  }
 }

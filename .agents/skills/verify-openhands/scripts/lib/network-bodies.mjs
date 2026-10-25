@@ -111,3 +111,49 @@ export function redactBody(text, { limit = BODY_LIMIT, all = false } = {}) {
   }
   return shown.length > limit ? `${shown.slice(0, limit)}…` : shown;
 }
+
+// Only this explicit top-level field is projected before the display body's
+// truncation. Never retain the full parsed request (system prompts, LLM
+// configuration and unrelated fields are deliberately outside this allowlist).
+export const BODY_FIELDS_LIMIT_BYTES = 16 * 1024;
+
+export function redactBodyFields(
+  text,
+  { all = false, limitBytes = BODY_FIELDS_LIMIT_BYTES } = {},
+) {
+  if (text === undefined || text === null || text === "") return {};
+  let parsed;
+  try {
+    parsed = JSON.parse(String(text));
+  } catch {
+    return {};
+  }
+  if (
+    !parsed ||
+    typeof parsed !== "object" ||
+    Array.isArray(parsed) ||
+    !Object.hasOwn(parsed, "plugins")
+  )
+    return {};
+
+  const bodyFields = { plugins: redactNode(parsed.plugins, all) };
+  // Measure UTF-8 bytes, not characters: a Unicode parameter must not bypass
+  // the bound. Oversized projections are omitted as a whole, never clipped
+  // into invalid JSON or replaced with an unredacted excerpt.
+  if (Buffer.byteLength(JSON.stringify(bodyFields), "utf8") > limitBytes) {
+    return {
+      bodyFieldsOmitted: {
+        plugins: `redacted projection exceeds ${limitBytes} UTF-8 bytes`,
+      },
+    };
+  }
+  return { bodyFields };
+}
+
+// Body observations are opt-in at the output boundary, including omission
+// metadata. This also keeps future additions to request metadata from making
+// bodyFields visible in the default network report.
+export function networkEntryForOutput(entry, bodies) {
+  const { body, bodyFields, bodyFieldsOmitted, ...rest } = entry;
+  return bodies ? { ...rest, body, bodyFields, bodyFieldsOmitted } : rest;
+}

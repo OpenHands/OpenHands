@@ -24,6 +24,7 @@ import { describe, expect, it, afterEach } from "vitest";
 import {
   buildAgentServerAutomationEnv,
   buildAutomationCommand,
+  buildAutomationLogArgs,
   buildAutomationTelemetryEnv,
   buildAutomationRuntimeServicesInfo,
   buildConfig,
@@ -45,8 +46,10 @@ import {
 } from "../../scripts/dev-with-automation.mjs";
 import {
   buildAgentServerEnv,
+  buildBackendLogEnv,
   buildSafeDevConfig,
   resetPersistedSessionApiKeyCache,
+  uvicornLogLevel,
 } from "../../scripts/dev-safe.mjs";
 import { createRouter } from "../../scripts/proxy-utils.mjs";
 
@@ -109,6 +112,25 @@ describe("buildAutomationCommand", () => {
     expect(cmd.args).toContain("uvicorn");
     expect(cmd.args).toContain("openhands.automation.app:app");
     expect(cmd.source).toBe(`PyPI (${DEFAULT_AUTOMATION_VERSION}, default)`);
+  });
+
+  it("requests the shared Python range for uvx in every source mode", () => {
+    // See buildUvxPythonArgs in dev-safe.mjs and #18654.
+    const variants = [
+      {},
+      { OH_AUTOMATION_VERSION: "1.0.0" },
+      { OH_AUTOMATION_GIT_REF: "main" },
+    ];
+    for (const env of variants) {
+      const { command, args } = buildAutomationCommand(env);
+      expect(command).toBe("uvx");
+      expect(args.slice(0, 2)).toEqual(["--python", ">=3.12,<3.15"]);
+    }
+  });
+
+  it("leaves the interpreter choice to uv when UV_PYTHON is set", () => {
+    const { args } = buildAutomationCommand({ UV_PYTHON: "3.13" });
+    expect(args).not.toContain("--python");
   });
 
   it("uses custom git ref from OH_AUTOMATION_GIT_REF", () => {
@@ -1531,11 +1553,219 @@ describe("dev-with-automation CLI", () => {
   });
 });
 
+describe("backend logging defaults", () => {
+  // Minimal SafeDevConfig for buildAgentServerEnv; only the fields it reads
+  // matter, but it accesses them directly rather than via optional chaining.
+  const baseConfig = () => ({
+    cwd: process.cwd(),
+    backendPort: 18000,
+    vscodePort: 18001,
+    vscodeBasePath: "/vscode",
+    stateDir: "/tmp/state",
+    tmuxTmpDir: "/tmp/tmux",
+    conversationsPath: "/tmp/conversations",
+    workspacesPath: "/tmp/workspaces",
+    bashEventsDir: "/tmp/bash-events",
+    backendBaseUrl: "http://127.0.0.1:18000",
+    backendHost: "127.0.0.1",
+    workingDir: process.cwd(),
+    secretKey: "secret",
+    sessionApiKey: "session",
+    canvasToolsDir: "/tmp/tools",
+    extensionsDir: null,
+  });
+
+  it("quiets the automation service by default", () => {
+    const env = buildBackendLogEnv({ automation: true, env: {} });
+
+    expect(env.LOG_LEVEL).toBe("WARNING");
+    expect(env.AUTOMATION_LOG_LEVEL).toBe("WARNING");
+  });
+
+  it("leaves AUTOMATION_LOG_LEVEL unset for the agent-server", () => {
+    // The agent-server does not read AUTOMATION_LOG_LEVEL; setting it there
+    // would suggest it has an effect it does not.
+    const env = buildBackendLogEnv({ env: {} });
+
+    expect(env.LOG_LEVEL).toBe("WARNING");
+    expect(env).not.toHaveProperty("AUTOMATION_LOG_LEVEL");
+  });
+
+  it("honors an explicit LOG_LEVEL from the caller's environment", () => {
+    const env = buildBackendLogEnv({
+      automation: true,
+      env: { LOG_LEVEL: "INFO" },
+    });
+
+    expect(env.LOG_LEVEL).toBe("INFO");
+    expect(env.AUTOMATION_LOG_LEVEL).toBe("INFO");
+  });
+
+  it("lets AUTOMATION_LOG_LEVEL diverge from LOG_LEVEL", () => {
+    const env = buildBackendLogEnv({
+      automation: true,
+      env: { LOG_LEVEL: "ERROR", AUTOMATION_LOG_LEVEL: "DEBUG" },
+    });
+
+    expect(env.LOG_LEVEL).toBe("ERROR");
+    expect(env.AUTOMATION_LOG_LEVEL).toBe("DEBUG");
+  });
+
+  it("raises both services to DEBUG under --verbose, overriding the environment", () => {
+    const env = buildBackendLogEnv({
+      verbose: true,
+      automation: true,
+      env: { LOG_LEVEL: "ERROR" },
+    });
+
+    expect(env.LOG_LEVEL).toBe("DEBUG");
+    expect(env.AUTOMATION_LOG_LEVEL).toBe("DEBUG");
+  });
+
+  it("passes the same level to uvicorn as to the automation service", () => {
+    const args = buildAutomationLogArgs({ autoBackendPort: 18001 }, {});
+
+    expect(args).toEqual([
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "18001",
+      "--log-level",
+      "warning",
+    ]);
+  });
+
+  it("passes debug to uvicorn under --verbose", () => {
+    const args = buildAutomationLogArgs(
+      { autoBackendPort: 18001, verbose: true },
+      {},
+    );
+
+    expect(args.at(-1)).toBe("debug");
+  });
+
+  // Uvicorn validates --log-level with a click.Choice and exits 2 on anything
+  // outside its set, which takes the whole dev stack down. The app accepts
+  // more than Uvicorn does, so an explicit override must be narrowed rather
+  // than forwarded verbatim.
+  describe("narrows the Uvicorn --log-level to a value Uvicorn accepts", () => {
+    const UVICORN_ACCEPTS = [
+      "critical",
+      "error",
+      "warning",
+      "info",
+      "debug",
+      "trace",
+    ];
+
+    it("keeps every level Uvicorn already accepts", () => {
+      for (const level of UVICORN_ACCEPTS) {
+        expect(uvicornLogLevel(level)).toBe(level);
+        expect(uvicornLogLevel(level.toUpperCase())).toBe(level);
+      }
+    });
+
+    it("maps the Python aliases Uvicorn rejects", () => {
+      expect(uvicornLogLevel("WARN")).toBe("warning");
+      expect(uvicornLogLevel("warn")).toBe("warning");
+      expect(uvicornLogLevel("FATAL")).toBe("critical");
+      expect(uvicornLogLevel("fatal")).toBe("critical");
+    });
+
+    it("maps numeric levels onto the nearest Uvicorn name", () => {
+      expect(uvicornLogLevel("50")).toBe("critical");
+      expect(uvicornLogLevel("40")).toBe("error");
+      expect(uvicornLogLevel("30")).toBe("warning");
+      expect(uvicornLogLevel("20")).toBe("info");
+      expect(uvicornLogLevel("10")).toBe("debug");
+      expect(uvicornLogLevel("5")).toBe("trace");
+    });
+
+    it("falls back to Uvicorn's own default for unrepresentable values", () => {
+      // `NOTSET` means "inherit", not "most verbose", and Uvicorn has no
+      // equivalent; the pre-PR launchers passed no --log-level at all, which
+      // left Uvicorn at `info`.
+      expect(uvicornLogLevel("NOTSET")).toBe("info");
+      expect(uvicornLogLevel("0")).toBe("info");
+      expect(uvicornLogLevel("")).toBe("info");
+      expect(uvicornLogLevel(undefined)).toBe("info");
+      expect(uvicornLogLevel("verbose")).toBe("info");
+    });
+
+    it("never returns a value outside Uvicorn's accepted set", () => {
+      const inputs = [
+        "WARN",
+        "FATAL",
+        "NOTSET",
+        "30",
+        "0",
+        "",
+        "bogus",
+        "999999999999999999999",
+        "  30  ",
+        "warning",
+      ];
+      for (const input of inputs) {
+        expect(UVICORN_ACCEPTS).toContain(uvicornLogLevel(input));
+      }
+    });
+
+    it("narrows an explicit LOG_LEVEL alias in the built args", () => {
+      // The regression: `LOG_LEVEL=WARN npm run dev` aborted Uvicorn.
+      const args = buildAutomationLogArgs(
+        { autoBackendPort: 18001 },
+        { LOG_LEVEL: "WARN" },
+      );
+
+      expect(args.at(-1)).toBe("warning");
+    });
+
+    it("leaves the app's LOG_LEVEL env untouched for an alias", () => {
+      // The app reads LOG_LEVEL through Python's logging module, which does
+      // accept WARN — only the Uvicorn argument is narrowed.
+      const env = buildBackendLogEnv({
+        automation: true,
+        env: { LOG_LEVEL: "WARN" },
+      });
+
+      expect(env.LOG_LEVEL).toBe("WARN");
+      expect(env.AUTOMATION_LOG_LEVEL).toBe("WARN");
+    });
+  });
+
+  it("gives the agent-server the quiet default without an opt-out needed", () => {
+    const env = buildAgentServerEnv(baseConfig(), { env: {} });
+
+    expect(env.LOG_LEVEL).toBe("WARNING");
+  });
+
+  it("raises the agent-server to DEBUG under --verbose", () => {
+    const env = buildAgentServerEnv(baseConfig(), { env: {}, verbose: true });
+
+    expect(env.LOG_LEVEL).toBe("DEBUG");
+  });
+});
+
 describe("buildMarsWebEnv", () => {
   it("puts the bridge on the ingress behind the session key, off the static child", () => {
     const config = { sessionApiKey: "stack-key", marsWebBridge: true } as never;
     expect(buildMarsWebEnv("ingress", config)).toEqual({
       MARS_WEB_KEY: "stack-key",
+    });
+    expect(buildMarsWebEnv("static", config)).toEqual({ MARS_WEB: "0" });
+  });
+
+  it("tells the ingress bridge where to keep sign-ins and how to encrypt them", () => {
+    const config = {
+      sessionApiKey: "stack-key",
+      marsWebBridge: true,
+      stateDir: "/home/me/.openhands/agent-canvas",
+      secretKey: "settings-key",
+    } as never;
+    expect(buildMarsWebEnv("ingress", config)).toEqual({
+      MARS_WEB_KEY: "stack-key",
+      MARS_STATE_DIR: "/home/me/.openhands/agent-canvas",
+      OH_SECRET_KEY: "settings-key",
     });
     expect(buildMarsWebEnv("static", config)).toEqual({ MARS_WEB: "0" });
   });

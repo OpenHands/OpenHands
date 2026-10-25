@@ -6,6 +6,7 @@ import userEvent from "@testing-library/user-event";
 
 import { ConfirmationModal } from "#/components/shared/modals/confirmation-modal";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
+import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 
 describe("ModalBackdrop", () => {
   it("portals out of a transformed ancestor so position: fixed resolves against the viewport", () => {
@@ -260,6 +261,67 @@ describe("ModalBackdrop focus management", () => {
     expect(popoverInput).toHaveFocus();
   });
 
+  // A combobox that opens on focus moves virtual focus to its selected option
+  // (portaled outside the dialog) while its own focus event is still on the
+  // way to window: browsers flush React's update between the event's
+  // listeners. A document listener gives jsdom the same order.
+  function ComboboxOpeningOnFocus() {
+    const optionRef = React.useRef<HTMLLIElement>(null);
+    React.useEffect(() => {
+      const moveVirtualFocus = (event: FocusEvent) => {
+        if ((event.target as Element).getAttribute("role") !== "combobox") {
+          return;
+        }
+        optionRef.current?.dispatchEvent(
+          new FocusEvent("focusin", { bubbles: true }),
+        );
+      };
+      document.addEventListener("focusin", moveVirtualFocus);
+      return () => document.removeEventListener("focusin", moveVirtualFocus);
+    }, []);
+    return (
+      <>
+        <input
+          role="combobox"
+          aria-label="provider"
+          aria-controls="providers"
+          aria-expanded="true"
+        />
+        {createPortal(
+          <ul id="providers" role="listbox" aria-label="providers">
+            <li ref={optionRef} role="option" aria-selected="true">
+              OpenAI
+            </li>
+          </ul>,
+          document.body,
+        )}
+      </>
+    );
+  }
+
+  it("keeps focus on a combobox that moves virtual focus to its option as it opens", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    render(
+      <PageWithModal
+        renderModalContent={() => (
+          <>
+            <button type="button">first</button>
+            <ComboboxOpeningOnFocus />
+          </>
+        )}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "open" }));
+    const combobox = screen.getByRole("combobox", { name: "provider" });
+
+    // Act
+    combobox.focus();
+
+    // Assert
+    expect(combobox).toHaveFocus();
+  });
+
   it("restores focus to the opener when the dialog closes", async () => {
     const user = userEvent.setup();
     render(<PageWithModal renderModalContent={threeButtons} />);
@@ -335,5 +397,74 @@ describe("ModalBackdrop focus management", () => {
     await user.click(screen.getByTestId("confirm-button"));
 
     expect(screen.getByRole("button", { name: "outer first" })).toHaveFocus();
+  });
+});
+
+describe("ModalBackdrop Escape layering", () => {
+  function EscapeLayer({ onClose }: { onClose: () => void }) {
+    useCloseOnEscape(true, onClose);
+    return null;
+  }
+
+  function DrawerWithDialog({
+    isDialogOpen,
+    closeOnEscape,
+    onCloseDrawer,
+    onCloseDialog,
+  }: {
+    isDialogOpen: boolean;
+    closeOnEscape: boolean;
+    onCloseDrawer: () => void;
+    onCloseDialog: () => void;
+  }) {
+    return (
+      <>
+        <EscapeLayer onClose={onCloseDrawer} />
+        {isDialogOpen ? (
+          <ModalBackdrop onClose={onCloseDialog} closeOnEscape={closeOnEscape}>
+            <p>dialog content</p>
+          </ModalBackdrop>
+        ) : null}
+      </>
+    );
+  }
+
+  it.each([
+    { closeOnEscape: false, dialogCloses: 0 },
+    { closeOnEscape: true, dialogCloses: 1 },
+  ])(
+    "keeps Escape from a drawer opened under it (closeOnEscape: $closeOnEscape)",
+    async ({ closeOnEscape, dialogCloses }) => {
+      // Arrange: the drawer is open first, then a dialog opens over it.
+      const user = userEvent.setup();
+      const onCloseDrawer = vi.fn();
+      const onCloseDialog = vi.fn();
+      const props = { closeOnEscape, onCloseDrawer, onCloseDialog };
+      const { rerender } = render(
+        <DrawerWithDialog {...props} isDialogOpen={false} />,
+      );
+      rerender(<DrawerWithDialog {...props} isDialogOpen />);
+
+      // Act
+      await user.keyboard("{Escape}");
+
+      // Assert
+      expect(onCloseDrawer).not.toHaveBeenCalled();
+      expect(onCloseDialog).toHaveBeenCalledTimes(dialogCloses);
+    },
+  );
+
+  it("lets a menu that is open inside the dialog take Escape", async () => {
+    const user = userEvent.setup();
+    const onCloseMenu = vi.fn();
+    render(
+      <ModalBackdrop onClose={vi.fn()} closeOnEscape={false}>
+        <EscapeLayer onClose={onCloseMenu} />
+      </ModalBackdrop>,
+    );
+
+    await user.keyboard("{Escape}");
+
+    expect(onCloseMenu).toHaveBeenCalledTimes(1);
   });
 });

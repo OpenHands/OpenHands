@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -8,10 +8,13 @@ import { HomeChatLauncher } from "#/components/features/home/home-chat-launcher"
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import AutomationService from "#/api/automation-service/automation-service.api";
 import WorkspacesService from "#/api/workspaces-service/workspaces-service.api";
+import ProfilesService from "#/api/profiles-service/profiles-service.api";
+import { useModelStore } from "#/stores/model-store";
 import {
   LAST_LOCAL_WORKSPACE_MODE_STORAGE_KEY,
   writeStoredLocalWorkspaceMode,
 } from "#/utils/workspace-mode";
+import { HOME_RECOMMENDED_AUTOMATIONS_DISMISSED_STORAGE_KEY } from "#/components/features/home/home-recommended-automations.constants";
 
 const mockNavigate = vi.fn();
 const mockUseActiveBackend = vi.fn();
@@ -236,12 +239,26 @@ vi.mock(
     RecommendedAutomationsLauncher: ({
       variant,
       className,
+      dismissible,
+      onDismiss,
     }: {
       variant?: string;
       className?: string;
+      dismissible?: boolean;
+      onDismiss?: () => void;
     }) =>
       variant === "rail" ? (
-        <div data-testid="recommended-automations-rail" className={className} />
+        <div data-testid="recommended-automations-rail" className={className}>
+          {dismissible && onDismiss && (
+            <button
+              type="button"
+              data-testid="recommended-automations-rail-dismiss"
+              onClick={onDismiss}
+            >
+              Hide
+            </button>
+          )}
+        </div>
       ) : null,
   }),
 );
@@ -371,6 +388,7 @@ describe("HomeChatLauncher", () => {
   afterEach(() => {
     toast.remove();
     window.localStorage.removeItem(LAST_LOCAL_WORKSPACE_MODE_STORAGE_KEY);
+    useModelStore.setState({ homeLlmProfile: null });
   });
 
   it("defaults to Code mode and switches to Automate mode", async () => {
@@ -673,6 +691,47 @@ describe("HomeChatLauncher", () => {
     );
   });
 
+  it.each([
+    {
+      description: "forwards a member's home LLM pick",
+      pick: "ops55",
+      expected: "ops55",
+    },
+    {
+      description: "drops a home LLM pick whose profile is gone",
+      pick: "Deleted",
+      expected: undefined,
+    },
+  ])("$description on a cloud launch", async ({ pick, expected }) => {
+    mockUseActiveBackend.mockReturnValue(cloudBackend);
+    const listProfilesSpy = vi
+      .spyOn(ProfilesService, "listProfiles")
+      .mockResolvedValue({
+        profiles: [
+          {
+            name: "ops55",
+            model: "anthropic/claude-opus-5-5",
+            base_url: null,
+            api_key_set: true,
+          },
+        ],
+        active_profile: null,
+      });
+    useModelStore.setState({ homeLlmProfile: pick });
+    const createSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue(makeConversationResponse());
+    renderLauncher();
+    await waitFor(() => expect(listProfilesSpy).toHaveBeenCalled());
+    // Let the resolved profile list reach the launcher before submitting.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+
+    await userEvent.click(screen.getByTestId("stub-chat-submit"));
+
+    await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
+    expect(createSpy.mock.lastCall?.[0]?.llmProfile).toBe(expected);
+  });
+
   it("does not pass query to createConversation when attachments are present", async () => {
     mockImages = [new File(["x"], "shot.png", { type: "image/png" })];
     const createSpy = vi
@@ -856,7 +915,12 @@ describe("HomeChatLauncher", () => {
         }),
       );
       if (marksAutomationSetup) {
-        expect(mockMarkAutomationSetupHandoff).toHaveBeenCalledWith("conv-abc");
+        // Marked once the create mutation settles, after the call above.
+        await waitFor(() =>
+          expect(mockMarkAutomationSetupHandoff).toHaveBeenCalledWith(
+            "conv-abc",
+          ),
+        );
       } else {
         expect(mockMarkAutomationSetupHandoff).not.toHaveBeenCalled();
       }
@@ -872,5 +936,43 @@ describe("HomeChatLauncher", () => {
     expect(
       screen.getByTestId("recommended-automations-rail"),
     ).toBeInTheDocument();
+  });
+
+  // @spec HL-002 — Dismissing Home's rail removes it and persists the choice.
+  it("renders recommended automations rail by default and hides it when dismissed", async () => {
+    const user = userEvent.setup();
+    renderLauncher();
+
+    expect(
+      screen.getByTestId("recommended-automations-rail"),
+    ).toBeInTheDocument();
+
+    const dismissBtn = screen.getByTestId(
+      "recommended-automations-rail-dismiss",
+    );
+    await user.click(dismissBtn);
+
+    expect(
+      screen.queryByTestId("recommended-automations-rail"),
+    ).not.toBeInTheDocument();
+    expect(
+      window.localStorage.getItem(
+        HOME_RECOMMENDED_AUTOMATIONS_DISMISSED_STORAGE_KEY,
+      ),
+    ).toBe("true");
+  });
+
+  // @spec HL-002 — A stored dismissal keeps the rail off Home.
+  it("does not render recommended automations rail when previously dismissed", () => {
+    window.localStorage.setItem(
+      HOME_RECOMMENDED_AUTOMATIONS_DISMISSED_STORAGE_KEY,
+      "true",
+    );
+
+    renderLauncher();
+
+    expect(
+      screen.queryByTestId("recommended-automations-rail"),
+    ).not.toBeInTheDocument();
   });
 });

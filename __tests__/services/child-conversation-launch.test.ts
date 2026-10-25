@@ -51,6 +51,16 @@ const {
 }));
 
 vi.mock(
+  "#/hooks/use-migrate-default-agent-profile",
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import("#/hooks/use-migrate-default-agent-profile")
+    >()),
+    ensureDefaultAgentProfileMigrated: vi.fn().mockResolvedValue(true),
+  }),
+);
+
+vi.mock(
   "#/api/conversation-service/agent-server-conversation-service.api",
   () => ({
     default: {
@@ -186,9 +196,20 @@ describe("handleLaunchChildConversationAction", () => {
     });
     mockBatchGetAppConversations.mockResolvedValue([]);
     getQueryClient().clear();
+    // A parent without a recorded profile launches its child from the active
+    // one, the seeded `default` here.
     mockListAgentProfiles.mockResolvedValue({
-      profiles: [],
-      active_agent_profile_id: null,
+      profiles: [
+        {
+          id: "profile-default",
+          name: "default",
+          agent_kind: "openhands",
+          revision: 1,
+          llm_profile_ref: "default",
+          mcp_server_refs: null,
+        },
+      ],
+      active_agent_profile_id: "profile-default",
     });
     mockListLlmProfiles.mockResolvedValue({
       profiles: [],
@@ -264,6 +285,9 @@ describe("handleLaunchChildConversationAction", () => {
       );
 
       expect(mockCreateConversation).toHaveBeenCalledWith({
+        agentProfileId: "profile-default",
+        agentProfileKind: "openhands",
+        agentLlmProfileRef: "default",
         initialUserMsg: "Add a regression test for the parser",
         metadata: PARENT_REPO_METADATA,
         workingDirOverride: "/Users/jane/projects/foo",
@@ -362,6 +386,9 @@ describe("handleLaunchChildConversationAction", () => {
       );
 
       expect(mockCreateConversation).toHaveBeenCalledWith({
+        agentProfileId: "profile-default",
+        agentProfileKind: "openhands",
+        agentLlmProfileRef: "default",
         initialUserMsg: expect.anything(),
         metadata: null,
         workingDirOverride: "/Users/jane/projects/foo",
@@ -416,6 +443,9 @@ describe("handleLaunchChildConversationAction", () => {
 
       expect(mockCreateConversation).toHaveBeenCalledTimes(1);
       expect(mockCreateConversation).toHaveBeenCalledWith({
+        agentProfileId: "profile-default",
+        agentProfileKind: "openhands",
+        agentLlmProfileRef: "default",
         initialUserMsg: expect.anything(),
         metadata: null,
         workingDirOverride: "/Users/jane/projects/foo",
@@ -446,6 +476,9 @@ describe("handleLaunchChildConversationAction", () => {
 
       expect(mockCreateConversation).toHaveBeenCalledTimes(2);
       expect(mockCreateConversation).toHaveBeenLastCalledWith({
+        agentProfileId: "profile-default",
+        agentProfileKind: "openhands",
+        agentLlmProfileRef: "default",
         initialUserMsg: expect.anything(),
         metadata: PARENT_REPO_METADATA,
         workingDirOverride: "/Users/jane/projects/foo",

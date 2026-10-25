@@ -26,6 +26,46 @@ export function Probe() {
 `;
 
 describe("Canvas raw color rollout", () => {
+  it("warns on palette classes reached through an adopted dynamic map", async () => {
+    const [result] = await eslint.lintText(
+      `
+const toneClasses = {
+  warning: "text-yellow-500",
+  muted: "text-muted",
+};
+export function Probe({ tone }: { tone: keyof typeof toneClasses }) {
+  return <div className={toneClasses[tone]} />;
+}
+`,
+      { filePath: "src/components/features/markdown/blockquote.tsx" },
+    );
+
+    expect(
+      result.messages.filter(
+        (message) => message.ruleId === "shadcn/no-raw-colors",
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        severity: 1,
+        messageId: expect.stringMatching(/^paletteClass/),
+      }),
+    ]);
+  });
+
+  it("keeps unrelated program tags outside broad string scanning", async () => {
+    const [result] = await eslint.lintText(
+      'export type Variant = "default" | "text-like";',
+      { filePath: "src/components/shared/buttons/modal-button.tsx" },
+    );
+
+    expect(result.fatalErrorCount).toBe(0);
+    expect(
+      result.messages.filter(
+        (message) => message.ruleId === "shadcn/no-raw-colors",
+      ),
+    ).toEqual([]);
+  });
+
   it("accepts SVG classes that disable paint", async () => {
     const [result] = await eslint.lintText(
       'export function Probe() { return <svg className="fill-none stroke-none" />; }',

@@ -1202,8 +1202,14 @@ function AnimatedPanelHeight({ children }: AnimatedPanelHeightProps) {
   return (
     <div
       data-testid="add-backend-panel-height"
-      style={height === undefined ? undefined : { height }}
-      className="overflow-hidden transition-[height] duration-300 ease-in-out motion-reduce:transition-none"
+      style={
+        height === undefined
+          ? undefined
+          : ({
+              "--add-backend-panel-height": `${height}px`,
+            } as React.CSSProperties)
+      }
+      className="add-backend-panel-height overflow-hidden duration-300 ease-in-out motion-reduce:transition-none"
     >
       <div ref={contentRef}>{children}</div>
     </div>
@@ -1624,9 +1630,9 @@ function AddBackendAddModeBody({
         <div
           aria-hidden={providerOpen}
           inert={providerOpen ? true : undefined}
-          style={{ transform: `translateX(${providerOpen ? -100 : 0}%)` }}
           className={cn(
             "w-full transition-transform duration-300 ease-out motion-reduce:transition-none",
+            providerOpen ? "-translate-x-full" : "translate-x-0",
             providerOpen && "pointer-events-none absolute inset-0",
           )}
         >
@@ -1669,9 +1675,9 @@ function AddBackendAddModeBody({
         <div
           aria-hidden={!providerOpen}
           inert={!providerOpen ? true : undefined}
-          style={{ transform: `translateX(${providerOpen ? 0 : 100}%)` }}
           className={cn(
             "w-full transition-transform duration-300 ease-out motion-reduce:transition-none",
+            providerOpen ? "translate-x-0" : "translate-x-full",
             !providerOpen && "pointer-events-none absolute inset-0",
           )}
         >
