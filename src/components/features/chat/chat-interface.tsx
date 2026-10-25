@@ -58,6 +58,9 @@ import { setConversationState } from "#/utils/conversation-local-storage";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { I18nKey } from "#/i18n/declaration";
 import { hasConversationStarted } from "./components/resolve-picker-kind";
+import { useCompactContextAction } from "#/hooks/use-compact-context-action";
+import { CONDENSE_COMMAND, NEW_CONVERSATION_COMMAND } from "#/utils/constants";
+import { isInsiderConversation } from "#/utils/insider-cat";
 import { ComposerDockedProvider } from "#/context/composer-docked-context";
 import { isContentEmpty } from "./utils/chat-input.utils";
 
@@ -154,6 +157,8 @@ export function ChatInterface({
     mutate: newConversationCommand,
     isPending: isNewConversationPending,
   } = useNewConversationCommand();
+  const { handleCompact, isDisabled: isCompactionDisabled } =
+    useCompactContextAction();
 
   const { curAgentState } = useAgentState();
   const { isPlanningAgentRunning } = usePlanningAgentState();
@@ -372,7 +377,7 @@ export function ChatInterface({
     originalFiles: File[],
   ) => {
     // Handle /new command for V1 conversations
-    if (content.trim() === "/new") {
+    if (content.trim() === NEW_CONVERSATION_COMMAND) {
       if (!conversationId) {
         displayErrorToast(t(I18nKey.CONVERSATION$CLEAR_NO_ID));
         return;
@@ -380,7 +385,7 @@ export function ChatInterface({
       // The command never reaches the agent, so no echo clears its saved
       // draft; clear it here so the cleared composer stays empty.
       setConversationState(conversationId, { draftMessage: null });
-      if (totalEvents === 0) {
+      if (totalEvents === 0 && !isInsiderConversation(activeConversation)) {
         displayErrorToast(t(I18nKey.CONVERSATION$CLEAR_EMPTY));
         return;
       }
@@ -388,6 +393,18 @@ export function ChatInterface({
         return;
       }
       newConversationCommand();
+      return;
+    }
+
+    if (content.trim() === CONDENSE_COMMAND) {
+      if (isCompactionDisabled) {
+        displayErrorToast(t(I18nKey.CONVERSATION$COMPACT_CONTEXT_FAILED));
+      } else {
+        if (conversationId) {
+          setConversationState(conversationId, { draftMessage: null });
+        }
+        handleCompact();
+      }
       return;
     }
 
