@@ -15,8 +15,7 @@ function agentSettingsDiff(
   profile: AgentProfile,
 ): Record<string, SettingsValue> {
   if (profile.agent_kind === "openhands") return { agent_kind: "openhands" };
-  // A kind flip resets the other acp_* fields server-side, so send the whole
-  // ACP block, as onboarding does.
+  // A kind flip resets the other acp_* fields, so send them all.
   return {
     agent_kind: "acp",
     acp_server: profile.acp_server,
@@ -26,15 +25,7 @@ function agentSettingsDiff(
   };
 }
 
-/**
- * Matches the account's `agent_settings` to the active agent profile on Cloud.
- * Activation is pointer-only, but a Cloud launch with no resolvable profile
- * reads `agent_settings` (#18883). Pass `savedName` to sync only when that
- * profile is the active one.
- *
- * Resolves `true` once the settings changed. A failure is reported, never
- * thrown: the profile change already succeeded.
- */
+/** Match Cloud `agent_settings` to the active agent profile (#18883). */
 export async function syncCloudAgentSettings(
   savedName?: string,
 ): Promise<boolean> {

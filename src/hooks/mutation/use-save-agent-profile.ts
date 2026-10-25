@@ -25,7 +25,6 @@ export function useSaveAgentProfile() {
       await queryClient.invalidateQueries({
         queryKey: AGENT_PROFILES_QUERY_KEYS.all,
       });
-      // Only a Cloud save of the active profile rewrites agent_settings.
       if (settingsSynced) {
         await queryClient.invalidateQueries({
           queryKey: SETTINGS_QUERY_KEYS.personal(),

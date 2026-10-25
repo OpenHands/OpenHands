@@ -20,8 +20,7 @@ export const ACTIVATE_AGENT_PROFILE_MUTATION_KEY = ["activate-agent-profile"];
  * Activate an agent profile by its stable UUID `id`. Activation is
  * pointer-only (it does NOT write agent_settings), but it changes the launch
  * default the backend resolves for new conversations, so the settings cache is
- * invalidated defensively alongside the profiles list. On Cloud the account's
- * agent_settings are then matched to the profile (`syncCloudAgentSettings`).
+ * invalidated defensively alongside the profiles list.
  *
  * The active pointer is flipped optimistically so the picker label and the
  * launch default (`useCreateConversation` reads `active_agent_profile_id`)
@@ -57,6 +56,7 @@ export function useActivateAgentProfile() {
       });
     },
     onSuccess: async ({ agent_settings_applied: applied }) => {
+      // Cloud only.
       if (!applied) await syncCloudAgentSettings();
       SettingsService.invalidateCache();
       await queryClient.invalidateQueries({
