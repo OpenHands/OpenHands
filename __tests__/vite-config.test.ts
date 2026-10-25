@@ -6,7 +6,7 @@ import { mkdtemp, writeFile, symlink, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Script } from "node:vm";
-import { parse, type Rule } from "postcss";
+import { parse, type AtRule, type Rule } from "postcss";
 import { afterEach, describe, expect, it } from "vitest";
 
 afterEach(() => {
@@ -190,16 +190,39 @@ describe("vite library build", () => {
       return values;
     };
     const recipe = (name: string) => {
-      const selector = `[data-agent-server-ui] .${name.replace(
-        /([^\w-])/g,
-        "\\$1",
-      )}`;
+      const classSelector = `.${name.replace(/([^\w-])/g, "\\$1")}`;
       const matches: Rule[] = [];
       stylesheet.walkRules((rule) => {
-        if (rule.selectors.includes(selector)) matches.push(rule);
+        if (
+          rule.selectors.some(
+            (selector) =>
+              selector === classSelector ||
+              selector.endsWith(` ${classSelector}`),
+          )
+        ) {
+          matches.push(rule);
+        }
       });
       expect(matches, `Shipped scoped recipe: ${name}`).toHaveLength(1);
-      return matches[0];
+      const rule = matches[0];
+      expect(rule.selectors).toContain(
+        `[data-agent-server-ui] ${classSelector}`,
+      );
+      for (const selector of rule.selectors) {
+        expect(selector).toMatch(/^\[data-agent-server-ui\]\s/);
+      }
+      let inUtilitiesLayer = false;
+      for (let parent = rule.parent; parent; parent = parent.parent) {
+        if (
+          parent.type === "atrule" &&
+          (parent as AtRule).name === "layer" &&
+          (parent as AtRule).params === "utilities"
+        ) {
+          inUtilitiesLayer = true;
+        }
+      }
+      expect(inUtilitiesLayer, `Utilities-layer recipe: ${name}`).toBe(true);
+      return rule;
     };
     // Scoped to the Canvas root so it never restyles the host page.
     expect(css).toContain("[data-agent-server-ui] .flex{display:flex}");
@@ -214,17 +237,19 @@ describe("vite library build", () => {
     });
     expect(css).not.toMatch(/(^|[{},])\.extension-dialog-viewport\{/);
 
-    // Every shipped setup rule, including width references and media variants,
-    // stays inside Canvas rather than affecting the embedding host.
-    const setupRules: Rule[] = [];
-    stylesheet.walkRules((rule) => {
-      if (rule.selector.includes("automation-setup-")) setupRules.push(rule);
+    // Require the setup rail and editor geometry in the extracted stylesheet;
+    // every recipe must remain a scoped utility even inside media conditions.
+    expect(declarations(recipe("automation-setup-content"))).toMatchObject({
+      "max-width": "800px",
     });
-    for (const rule of setupRules) {
-      for (const selector of rule.selectors) {
-        expect(selector).toMatch(/^\[data-agent-server-ui\]\s/);
-      }
-    }
+    expect(
+      declarations(recipe("automation-setup-scroll-gutter")),
+    ).toMatchObject({
+      "scrollbar-gutter": "stable",
+    });
+    expect(declarations(recipe("automation-setup-card"))).toMatchObject({
+      "border-radius": "15px",
+    });
     expect(declarations(recipe("automation-setup-joined-card"))).toMatchObject({
       "border-radius": "15px",
       "margin-bottom": "-15px",
@@ -243,6 +268,41 @@ describe("vite library build", () => {
     expect(dock["box-shadow"]).toMatch(
       /var\(--tw-ring-shadow\).*var\(--tw-shadow\)/,
     );
+    expect(declarations(recipe("automation-setup-prompt-input"))).toMatchObject(
+      {
+        "min-height": "120px",
+      },
+    );
+    expect(declarations(recipe("automation-setup-code-scroll"))).toMatchObject({
+      "min-height": "256px",
+    });
+
+    // Setup pickers preserve their fixed and viewport-relative limits.
+    expect(
+      declarations(recipe("automation-setup-model-trigger")),
+    ).toMatchObject({
+      "max-width": "200px",
+    });
+    expect(
+      declarations(recipe("automation-setup-model-popover")),
+    ).toMatchObject({
+      "min-width": "200px",
+      "max-width": "320px",
+      "max-height": "60vh",
+    });
+    expect(
+      declarations(recipe("automation-setup-repository-dialog")),
+    ).toMatchObject({
+      width: "520px",
+      "max-width": "90vw",
+      "max-height": "85vh",
+    });
+    const repositoryMenu = declarations(
+      recipe("automation-setup-repository-menu"),
+    );
+    expect(repositoryMenu.width.replace(/\s/g, "")).toBe(
+      "min(28rem,100vw-3rem)",
+    );
 
     // Fields consume row-owned rem widths after merging shared form classes.
     const scheduleRow = recipe("automation-setup-schedule-row");
@@ -257,9 +317,12 @@ describe("vite library build", () => {
       expect(declarations(recipe(`w-(${property})`))).toMatchObject({
         width: `var(${property})`,
       });
-      const owners = setupRules.filter(
-        (rule) => property in declarations(rule),
-      );
+      const owners: Rule[] = [];
+      stylesheet.walkDecls(property, (declaration) => {
+        if (declaration.parent?.type === "rule") {
+          owners.push(declaration.parent as Rule);
+        }
+      });
       expect(owners).toHaveLength(1);
       expect(owners[0]).toBe(scheduleRow);
     }
