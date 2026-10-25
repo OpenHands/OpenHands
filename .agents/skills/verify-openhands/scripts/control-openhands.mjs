@@ -2808,6 +2808,15 @@ function inspectDownload(path, needle) {
   return info;
 }
 
+function networkOrder(value) {
+  if (value === undefined) return undefined;
+  if (value === "request" || value === "completion") return value;
+  usage(
+    `--order must be request or completion, got ${value === true ? "nothing" : value}`,
+    "control-openhands browser network --filter 'schema' --order completion",
+  );
+}
+
 async function cmdBrowser({ positional, flags }) {
   const run = loadRun(flags);
   const [verb, ...rest] = positional;
@@ -3021,6 +3030,7 @@ async function cmdBrowser({ positional, flags }) {
         last: flags.last,
         filter:
           flags.filter && flags.filter !== true ? flags.filter : undefined,
+        order: networkOrder(flags.order),
       });
       break;
     case "hover":
@@ -3964,6 +3974,12 @@ async function cmdBug({ positional, flags }) {
         "bug proof needs a sub-feature ID, --baseline RUN_DIR and --fix RUN_DIR",
         "control-openhands bug proof F05.prefill-send --baseline $BASE_RUN --fix $FIX_RUN",
       );
+    const vary = flags.vary === undefined ? "revision" : String(flags.vary);
+    if (vary !== "revision" && vary !== "backend")
+      usage(
+        "bug proof --vary takes revision or backend",
+        "control-openhands bug proof F08.diff-view-modes --vary backend --baseline $OLD_SDK_RUN --fix $RUN",
+      );
     const blocks = selectBlocks(id, flags);
     const read = (dir) => {
       const path = attemptsFile(resolve(String(dir)));
@@ -3988,6 +4004,7 @@ async function cmdBug({ positional, flags }) {
         fix: fix.filter((r) => r.name === block.name),
         sha: block.sha,
         min: intFlag(flags.min, 2),
+        vary,
       }),
     }));
     const verified = verdicts.every((v) => v.verdict === "verified");
@@ -4991,7 +5008,12 @@ Verbs
                                          observe playback; optionally emulate active-page motion preference
   network-state offline|online|status     interrupt or restore this browser context's real network; status is read-only
                                          (all its tabs; restore online before doctor/cleanup; no request interception)
-  network [--external] [--filter REGEX] [--clear] [--last N] [--bodies]   requests with status and redacted query (rows under "recent")
+  network [--external] [--filter REGEX] [--clear] [--last N] [--bodies] [--order request|completion]
+                                        requests with status and redacted query (rows under "recent"); each row
+                                        also has responseMs (headers), durationMs and completedTs (body done or
+                                        failed), outcome and completedSeq. --order completion lists the last N
+                                        rows in the order they completed, then the last N still pending: use it
+                                        for response races
         (--bodies adds each app-origin write's body, JSON with credential values and env/header maps
          replaced by their length, URL userinfo and secret-named query values redacted in any string;
          the settings API's ********** placeholder is kept as is; body is capped at 2000 chars.
@@ -5041,7 +5063,7 @@ spaces. The result lists each clause under bugChecks.
 `,
   bug: `control-openhands bug list [--file PATH]
 control-openhands bug run ID [--name N] [--attempts N] [--label L] [--timeout SEC] [--no-doctor] [--file PATH]
-control-openhands bug proof ID --baseline RUN_DIR --fix RUN_DIR [--baseline-label L] [--fix-label L] [--min 2]
+control-openhands bug proof ID --baseline RUN_DIR --fix RUN_DIR [--baseline-label L] [--fix-label L] [--min 2] [--vary revision|backend]
 
 A known bug in the map can carry a fenced block, opened with
 "\`\`\`sh known-bug <ID> [name]", whose commands assert the correct behavior. Its one
@@ -5069,10 +5091,15 @@ marked command's observation.
 run: verified only when the baseline has at least two attempts, all xfail, the
 fix at least two, all xpass, on different revisions with the same viewport and
 backend. A fix that still reproduces is not-fixed; anything else is inconclusive.
+--vary backend proves an Agent Server or automation fix instead: both runs serve
+the same revision at the same viewport, and each side has its own backend
+versions (the baseline launched with --sdk-version or --automation-version set
+to a release before the fix).
 
   control-openhands bug run F25.selector-dropdown --attempts 2 --label baseline --run $BASE_RUN
   control-openhands bug run F25.selector-dropdown --attempts 2 --label fix --run $FIX_RUN
   control-openhands bug proof F25.selector-dropdown --baseline $BASE_RUN --baseline-label baseline --fix $FIX_RUN --fix-label fix
+  control-openhands bug proof F08.diff-view-modes --vary backend --baseline $OLD_SDK_RUN --baseline-label baseline --fix $RUN --fix-label fix
 `,
   map: `control-openhands map check [--file Fnn-name.md]   lint the map (or one entry, skipping index links): four H2s, unique IDs, links, known commands, index counts
 control-openhands map check --fix-counts   rewrite the index's sub-feature counts and total from the files, then lint

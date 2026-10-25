@@ -87,7 +87,9 @@ describe("SecretRequestCard", () => {
       .mockResolvedValue(undefined);
     await renderCards();
 
-    await user.type(screen.getByTestId("value-input"), "ghp_example");
+    const valueInput = screen.getByTestId("value-input");
+    expect(valueInput).toHaveAttribute("type", "password");
+    await user.type(valueInput, "ghp_example");
     await user.click(screen.getByTestId("submit-button"));
 
     await waitFor(() =>

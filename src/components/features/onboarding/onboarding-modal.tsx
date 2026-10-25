@@ -88,10 +88,11 @@ function Slide({ index, currentStep, children }: SlideProps) {
       data-testid={`onboarding-slide-${index}`}
       data-active={isActive}
       aria-hidden={!isActive}
-      // slide offset computed from step index at runtime
-      style={{ transform: `translateX(${offsetPct}%)` }}
+      style={
+        { "--onboarding-slide-offset": `${offsetPct}%` } as React.CSSProperties
+      }
       className={cn(
-        "w-full transition-transform duration-300 ease-out",
+        "w-full translate-x-(--onboarding-slide-offset) transition-transform duration-300 ease-out",
         // Inactive slides are taken out of flow so the rail's height
         // tracks just the active step; they stay overlaid via inset-0
         // so they slide in/out of view across the same horizontal box.
