@@ -156,5 +156,5 @@ Preconditions:
   control-openhands browser eval 'new Promise(r=>setTimeout(r,6000))'
   control-openhands browser text '[data-testid="qa-bridge-result"]'
   control-openhands browser screenshot --feature F20.app-backend-view --name proxied-headers
-  control-openhands assert --field value --equals true -- browser eval '(()=>{const h=JSON.parse(document.querySelector("[data-testid=\"qa-bridge-result\"]").textContent).http;return (h.date.match(/GMT/g)||[]).length===1 && !h.server.includes(",")})()'
+  control-openhands assert --field value --equals true -- browser eval '(()=>{const h=JSON.parse(document.querySelector("[data-testid=\"qa-bridge-result\"]").textContent).http;return (h.date.match(/GMT/g)||[]).length===1 && h.server==="uvicorn"})()'
   ```
