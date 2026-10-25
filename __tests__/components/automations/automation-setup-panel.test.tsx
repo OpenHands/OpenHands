@@ -660,6 +660,53 @@ describe("AutomationSetupPanel", () => {
     ).not.toHaveProperty("agent_profile_id");
   });
 
+  it("closes the model menu on Escape and returns focus to its trigger", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    const modelTrigger = screen.getByTestId("automation-setup-model");
+    await user.click(modelTrigger);
+    expect(
+      screen.getByTestId("automation-setup-model-popover"),
+    ).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(
+      screen.queryByTestId("automation-setup-model-popover"),
+    ).not.toBeInTheDocument();
+    expect(modelTrigger).toHaveAttribute("aria-expanded", "false");
+    expect(modelTrigger).toHaveFocus();
+  });
+
+  it("closes the repository menu on Escape, also from its search field", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    const repositoryTrigger = screen.getByTestId(
+      "automation-setup-repository-add",
+    );
+    await user.click(repositoryTrigger);
+    expect(
+      screen.getByTestId("automation-setup-repository-menu"),
+    ).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(
+      screen.queryByTestId("automation-setup-repository-menu"),
+    ).not.toBeInTheDocument();
+    expect(repositoryTrigger).toHaveFocus();
+
+    // Escape typed in the menu's search field closes the menu too, while
+    // other keys stay in the field.
+    await user.click(repositoryTrigger);
+    const search = screen.getByTestId("automation-setup-repository-search");
+    await user.type(search, "qa");
+    expect(search).toHaveValue("qa");
+    await user.keyboard("{Escape}");
+    expect(
+      screen.queryByTestId("automation-setup-repository-menu"),
+    ).not.toBeInTheDocument();
+    expect(repositoryTrigger).toHaveFocus();
+  });
+
   it("sends each comma-separated repository to the automation service", async () => {
     vi.mocked(AutomationService.createServerDraft).mockRejectedValue({
       response: { status: 404 },

@@ -104,10 +104,44 @@ Preconditions:
 
 - **Rich fenced code (`F08.files-rich-plain`).** Arrange a Markdown file in the selected workspace containing a heading and a fenced Python `print("qa")` block. Open it from Files in Rich mode and take `browser screenshot --feature F08.files-rich-plain --name fenced-code`. Known failure (reproduced 2026-10-12, [#16802](https://github.com/OpenHands/OpenHands/issues/16802)): the code renders in nested dark/gray containers with repeated padding. This is a layout-only observation; the measured `pre` and prose ancestor had zero border width, so it is not a claim of visible CSS borders.
 - **Git filename with a space (`F08.uncommitted-changes`).** In a disposable workspace Git fixture, create and commit `my notes.md`, then modify it (plain shell Git/file commands are fixture setup, not UI proof). Open its empty Local conversation's Commits tab and read `browser network --filter '/git/'`. Expected: the modified path and other changes stay listed. Known failure (reproduced 2026-10-12, [OpenHands/software-agent-sdk#5642](https://github.com/OpenHands/software-agent-sdk/issues/5642)): the scoped changes call returns 400 and hides the Uncommitted changes. Only the space-name case was tested; the same issue's non-ASCII and rename cases still require their own checks.
-- **File listing above one MiB (`F08.files-tree`).** In a disposable fixture, arrange 1800 tiny files beneath three 220-character directory segments so the sorted relative-path listing exceeds one MiB while remaining below the 2000-file cap. Keep a normal tracked README at the root. Open Files, click `testid=files-tab-refresh`, then count `role=button[name="README.md"][exact]` and inspect the tree. Known failure (reproduced 2026-10-12, [OpenHands/software-agent-sdk#5638](https://github.com/OpenHands/software-agent-sdk/issues/5638)): the README disappears and a spurious partial-path folder appears because the command API returns the tail output chunk only. The greater-than-100-chunk/null-exit case was not driven.
+- **File listing above one MiB (`F08.files-tree`).** A workspace whose sorted relative-path listing exceeds one MiB (1800 tiny files beneath three 220-character directory segments, below the 2000-file cap) still lists every root entry: after `files-tab-refresh` the tree shows the one long top-level folder and `README.md` (`browser count 'testid=file-tree-file-README.md'` is `1`, one `file-tree-dir-` row). The recipe creates only a disposable, idle offline conversation.
+  ```sh
+  control-openhands browser viewport desktop
+  QA_ID="$(python3 - <<'PY'
+  import json, os, pathlib, subprocess, tempfile
+  base = pathlib.Path(os.environ["OH_VERIFY_RUN"]) / "workspace"
+  base.mkdir(exist_ok=True)
+  fixture = pathlib.Path(tempfile.mkdtemp(prefix="qa-surface-", dir=base))
+  llm = {"model":"openai/gpt-4o", "base_url":"http://127.0.0.1:1/v1", "api_key":"qa-not-real", "num_retries":0, "timeout":2}
+  repo = fixture / "repo"
+  deep = repo / ("a" * 220) / ("b" * 220) / ("c" * 220)
+  deep.mkdir(parents=True)
+  (repo / "README.md").write_text("root readme\n")
+  for i in range(1800):
+      (deep / f"f{i:04d}.txt").write_text("x\n")
+  subprocess.run(["git", "-C", str(repo), "init", "-q", "-b", "main"], check=True)
+  subprocess.run(["git", "-C", str(repo), "add", "README.md"], check=True)
+  subprocess.run(["git", "-C", str(repo), "-c", "user.name=QA", "-c", "user.email=qa@example.invalid", "commit", "-qm", "Owned fixture"], check=True)
+  payload = {"agent":{"kind":"Agent", "llm":llm, "tools":[]}, "workspace":{"working_dir":str(repo)}, "autotitle":False}
+  request = fixture / "request.json"
+  request.write_text(json.dumps(payload))
+  result = subprocess.run(["control-openhands", "api", "POST", "/api/conversations", "--write", "--data", "@"+str(request), "--pick", "id"], check=True, capture_output=True, text=True)
+  print(json.loads(result.stdout)["value"])
+  PY
+  )"
+  control-openhands browser goto "/conversations/$QA_ID"
+  control-openhands browser click 'testid=right-panel-toggle'
+  control-openhands browser wait 'testid=files-tab-refresh'
+  control-openhands browser click 'testid=files-tab-refresh'
+  control-openhands browser wait 'testid=file-tree-view' --timeout 20000
+  control-openhands browser eval 'new Promise(r=>setTimeout(r,2000))'
+  control-openhands browser screenshot --feature F08.files-tree --name listing-1mib
+  control-openhands assert --field count --equals 1 -- browser count 'testid=file-tree-file-README.md'
+  control-openhands assert --field value --equals 1 -- browser eval 'document.querySelectorAll("[data-testid^=file-tree-dir-]").length'
+  ```
 
-- **Subdirectory Git paths (`F08.uncommitted-changes`, `F08.diff-view-modes`).** Expected: a workspace at `repo/src` lists changes beneath that folder relative to it, and its diffs open. Known failure (reproduced 2026-10-19, SDK 1.55.1, [OpenHands/software-agent-sdk#5843](https://github.com/OpenHands/software-agent-sdk/issues/5843)): tracked paths retain the repository prefix while untracked paths are relative to `src`; opening displayed `src/app.py` requests `repo/src/src/app.py` and returns 400. The ordinary repository-root control lists correct paths. The recipe creates only disposable, idle offline conversations.
-  ```sh known-bug F08.diff-view-modes subdirectory-paths
+- **Subdirectory Git paths (`F08.uncommitted-changes`, `F08.diff-view-modes`).** A workspace at `repo/src` lists the changes beneath that folder relative to it: Commits → Uncommitted reads `app.py` and `new.py` (the root `README.md` change is outside the workspace and is not listed), and opening `app.py` shows its diff (`x = 1` → `x = 2`; `GET /api/conversations/<id>/git/diff` answers `200`). The recipe creates only disposable, idle offline conversations.
+  ```sh
   control-openhands browser viewport desktop
   QA_ID="$(python3 - <<'PY'
   import json, os, pathlib, subprocess, tempfile
@@ -143,10 +177,11 @@ Preconditions:
   control-openhands browser click 'testid=conversation-tab-commits'
   control-openhands browser wait-text Uncommitted --timeout 10000
   control-openhands browser click 'testid=uncommitted-changes-row-toggle'
+  control-openhands assert --field text --matches '^app\.py\nnew\.py$' -- browser text 'testid=uncommitted-changes-row-content'
   control-openhands browser network --clear
-  control-openhands browser click 'testid=file-diff-viewer-outer >> has-text=src/app.py >> testid=collapse' --observe 'testid=uncommitted-changes-row-content' --observe-ms 1000
-  control-openhands browser screenshot --feature F08.diff-view-modes --name subdir-mixed-paths
-  control-openhands assert --field recent.0.status --equals 200 --bug-shows 400 -- browser network --filter '/git/diff'  # bug
+  control-openhands browser click 'testid=file-diff-viewer-outer >> has-text=app.py >> testid=collapse' --observe 'testid=uncommitted-changes-row-content' --observe-ms 1000
+  control-openhands browser screenshot --feature F08.diff-view-modes --name subdir-relative-paths
+  control-openhands assert --field recent.0.status --equals 200 -- browser network --filter '/git/diff'
   ```
 
 - **Plain parent containing a repository (`F08.uncommitted-changes`).** Expected: a plain workspace holding one dirty repository exposes that repository's changes. Commits shows one Uncommitted row listing the child repository's paths (`proj/README.md`, `proj/notes.txt`), and their diffs open. The recipe removes only its own verified empty parent `.git`; never remove a user's repository.
@@ -250,5 +285,4 @@ control-openhands assert --field value --equals inline -- browser eval 'getCompu
 - Known issue [#15501](https://github.com/OpenHands/OpenHands/issues/15501) (`F08.files-rich-plain`): Generated-page JavaScript was blocked by an iframe sandbox. Files Rich intentionally disables scripts; the report does not identify whether Files or Browser was used. Live prerequisite: The original preview panel and file URL or minimal page identifying the intended surface; Files Rich deliberately blocks scripts, while Browser is separate.
 - Known issue [OpenHands/software-agent-sdk#4562](https://github.com/OpenHands/software-agent-sdk/issues/4562) (`F08.files-load-error`): Plain-HTTP non-loopback workspace previews can return 401 after the browser rejects the workspace-session cookie. Live prerequisite: A plain-HTTP non-loopback same-origin browser deployment with real workspace-cookie observation.
 - Known issue [#16871](https://github.com/OpenHands/OpenHands/issues/16871) (`F08.vscode-link`): the shared `transformVSCodeUrl` still accepts arbitrary schemes, and the current Cloud `use-unified-vscode-url.ts` branch passes sandbox `exposed_urls` editor values through it without the Local origin gate. Live prerequisite: an authorized Cloud account/sandbox whose editor `exposed_urls` value can be controlled for safe URL-scheme rejection checks. Local inspection on 2026-10-12 at `fa1f724ab573` found no Download via VS Code action in the real card menu: its only production caller does not supply the required `showOptions` prop. The current drawer opens with `noopener,noreferrer`. Neither the old opener exploit nor the remaining Cloud scheme scenario was reproduced. Evidence: `backfill-18309-surface-rechecks/F04.download/vscode-card-action-absent-16871.png` and its ARIA snapshot. Keep this linked to the live editor-link consumer; do not infer the whole issue resolved from the removed card action.
-- Known issue [OpenHands/software-agent-sdk#5845](https://github.com/OpenHands/software-agent-sdk/issues/5845) (`F08.vscode-link`): reserved characters in the workspace path can split the editor URL's unencoded `folder` parameter and open the wrong folder. Live prerequisite: a supported origin serving a genuinely enabled/running editor and an owned conversation in a path containing `&` or `#`. A direct URL-constructor call does not exercise the link; Cloud `exposed_urls` takes another path.
 - Known issue [OpenHands/software-agent-sdk#5784](https://github.com/OpenHands/software-agent-sdk/issues/5784) (`F08.files-rich-plain`, `F08.files-fallbacks`, `F08.files-open-new-window`): a path-prefixed Agent Server can set a workspace cookie whose Path omits the prefix, leaving HTML/image/file previews unauthorized. Live prerequisite: an authenticated path-prefixed owned Local server with `OH_WEB_URL` and a real cookie-authenticated preview; the ordinary root-path launch cannot exercise that cookie Path.
