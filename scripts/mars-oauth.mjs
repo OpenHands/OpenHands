@@ -539,6 +539,10 @@ export async function signInWithDigitalOcean({
     });
   });
 
+  // The race below observes it, but a return can land while openExternal is
+  // still resolving; until then its rejection must not count as unhandled.
+  returned.catch(() => {});
+
   const failed = new Promise((_, reject) => server.on("error", reject));
 
   let timer;
