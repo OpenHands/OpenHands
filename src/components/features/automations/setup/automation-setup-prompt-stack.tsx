@@ -1,4 +1,9 @@
-import { useRef, useState, type ReactNode } from "react";
+import {
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from "react";
 import { Info, Plus, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { getActiveBackend } from "#/api/backend-registry/active-store";
@@ -13,6 +18,7 @@ import { useGitRepositories } from "#/hooks/query/use-git-repositories";
 import { useSearchRepositories } from "#/hooks/query/use-search-repositories";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
+import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { useDebounce } from "#/hooks/use-debounce";
 import { useUserProviders } from "#/hooks/use-user-providers";
 import { useDeploymentCapabilities } from "#/hooks/query/use-manifest-capabilities";
@@ -57,6 +63,12 @@ function parseRepositories(value: string): string[] {
     });
 }
 
+// Typing in the repository menu stays inside it, except Escape, which closes
+// the menu through `useCloseOnEscape`.
+function stopMenuKeyPropagation(event: ReactKeyboardEvent) {
+  if (event.key !== "Escape") event.stopPropagation();
+}
+
 function SetupModelPill({
   value,
   onChange,
@@ -74,6 +86,7 @@ function SetupModelPill({
     () => setIsOpen(false),
     triggerRef,
   );
+  useCloseOnEscape(isOpen, () => setIsOpen(false), triggerRef);
   const pinnedProfileName = value.trim() || null;
   const displayName = pinnedProfileName ?? activeProfileName;
   const pillLabel =
@@ -286,6 +299,11 @@ export function AutomationSetupPromptStack({
   const [repositorySearch, setRepositorySearch] = useState("");
   const repositoryAddRef = useRef<HTMLButtonElement>(null);
   const repositoryMenuRef = useClickOutsideElement<HTMLDivElement>(
+    () => setIsRepositoryMenuOpen(false),
+    repositoryAddRef,
+  );
+  useCloseOnEscape(
+    isRepositoryMenuOpen,
     () => setIsRepositoryMenuOpen(false),
     repositoryAddRef,
   );
@@ -534,7 +552,7 @@ export function AutomationSetupPromptStack({
                           onChange={(event) =>
                             setRepositorySearch(event.target.value)
                           }
-                          onKeyDown={(event) => event.stopPropagation()}
+                          onKeyDown={stopMenuKeyPropagation}
                           placeholder={t(I18nKey.COMMON$SEARCH_REPOSITORIES)}
                           aria-label={t(I18nKey.COMMON$SEARCH_REPOSITORIES)}
                           className="w-full border-0 bg-transparent py-1.5 pr-0 pl-6 text-sm text-contrast outline-none placeholder:text-muted focus:ring-0 focus:outline-none"
@@ -551,7 +569,7 @@ export function AutomationSetupPromptStack({
                             setSelectedProvider(event.target.value as Provider);
                             setRepositorySearch("");
                           }}
-                          onKeyDown={(event) => event.stopPropagation()}
+                          onKeyDown={stopMenuKeyPropagation}
                           className="w-full rounded-md border border-border-subtle bg-tertiary px-2 py-1 text-sm text-content outline-none"
                         >
                           {connectedCloneProviders.map((provider) => (
