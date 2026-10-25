@@ -6,7 +6,7 @@ import { mkdtemp, writeFile, symlink, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Script } from "node:vm";
-import { parse, type AtRule, type Rule } from "postcss";
+import { parse, type AnyNode, type AtRule, type Rule } from "postcss";
 import { afterEach, describe, expect, it } from "vitest";
 
 afterEach(() => {
@@ -212,7 +212,11 @@ describe("vite library build", () => {
         expect(selector).toMatch(/^\[data-agent-server-ui\]\s/);
       }
       let inUtilitiesLayer = false;
-      for (let parent = rule.parent; parent; parent = parent.parent) {
+      for (
+        let parent: AnyNode | undefined = rule.parent;
+        parent;
+        parent = parent.parent
+      ) {
         if (
           parent.type === "atrule" &&
           (parent as AtRule).name === "layer" &&
