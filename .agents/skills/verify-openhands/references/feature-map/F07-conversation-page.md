@@ -181,7 +181,46 @@ control-openhands assert --field count --equals 1 --bug-shows 0 -- browser count
 - Known failure [OpenHands/software-agent-sdk#5539](https://github.com/OpenHands/software-agent-sdk/issues/5539) (`F07.download-zip`), reproduced 2026-10-12 at `fa1f724ab573`, SDK 1.54.0: three real overlapping receivers of one idle conversation made 929 requests in 20 seconds, including 31 completed corrupt ZIPs with status 200, 106 server 500s, 269 ingress 502s and 133 RemoteProtocolErrors. A sequential 2,000-request control returned valid ZIPs. Recipe (use the pinned SDK Python with httpx): `python .agents/skills/verify-openhands/scripts/fixtures/download-trajectory-overlap.py --base-url <own-base-url> --conversation-id <id> --api-key-file <run>/private/session-key --output-dir <run>/private/trajectory-overlap --seconds 20 --clients 3 --rounds 5000 --slow-ms 2`. It enforces loopback, request/duration/network/uncompressed/member budgets and bounded CRC reads; aborts and unsupported archives remain unverified. While it runs, use `browser goto /conversations/<id>`, open `chat-pane-header >> ellipsis-button`, click `download-trajectory-button`, then `browser downloads --last 3 --inspect` (all CLI commands with `--run <run>`). That Canvas click downloaded an inspectable ZIP; its particular result is not claimed corrupt. Private raw samples stay private. Evidence: `backfill-18309-surface-rechecks/F07.download-zip/trajectory-overlap-5539-summary.json` and `overlapping-download-5539.png`. The summary correction excludes two ambiguous Content-Length differences that could be intentional deadline aborts; only completed corrupt ZIPs count as corrupt downloads.
 - Known issue [OpenHands/software-agent-sdk#5094](https://github.com/OpenHands/software-agent-sdk/issues/5094) (`F07.open-by-url`): After ACP session/load fails, the backend can create a fresh model session while Canvas still shows the old context. Live prerequisite: An authenticated Codex ACP session whose original session/load fails while persisted history remains.
 - Known issue [OpenHands/software-agent-sdk#4893](https://github.com/OpenHands/software-agent-sdk/issues/4893) (`F07.status-menu`): A sandbox frozen mid-run can resume with a stale Running state that rejects normal resume requests. Live prerequisite: A disposable sandbox/VM frozen mid-run with a live model and persisted ownership state.
-- Known failure [OpenHands/software-agent-sdk#4800](https://github.com/OpenHands/software-agent-sdk/issues/4800) (`F07.rename-inline`), reproduced 2026-10-12 at `fa1f724ab573`, SDK 1.54.0. A refused rename changed the server's GET title while `meta.json` kept the previous title; graceful shutdown subsequently persisted the rejected title. Recipe: create an idle dummy-profile conversation, then double-click `conversation-name-title`, fill `conversation-name-input` with `QA_META_BEFORE_4800` and press Enter; verify GET/disk. Record the original mode and temporarily `chmod 0500 <run>/private/state/dev_conversations/<id-hex>` to deny an atomic metadata replacement. Rename through that UI to `QA_META_REFUSED_4800`: the permission-denied toast/HTTP 500 appears, GET shows REFUSED, disk still shows BEFORE. Restore the exact original directory mode in `finally`, then `restart`, `doctor`, GET and reload (CLI with `--run <run>`): REFUSED was persisted during graceful shutdown. Only the owned temporary directory is changed; evidence contains title/timestamp fields, not stored secrets. Evidence: `backfill-18309-surface-rechecks/F07.rename-inline/metadata-before-4800.json`, `metadata-denied-4800.json`, `refused-title-4800.png`, `metadata-after-graceful-restart-4800.json`. Tags/autotitle and ownership-conflict branches remain untested.
+- A rename the server cannot persist is refused without changing the title (`F07.rename-inline`). The fixture blocks the atomic `meta.json` replacement (`chmod 0500` on the owned conversation directory as a non-root user, `chattr +i` as root): the rename toasts `[Errno 1] Operation not permitted: …/.meta.json.<tmp>`, and the header, `GET /api/conversations/<id>` and `meta.json` keep the previous title, also after `restart`. The recipe changes only its own idle offline conversation's directory and restores it on exit.
+```sh
+control-openhands browser viewport desktop
+QA_ID="$(python3 - <<'PY'
+import json, os, pathlib, subprocess, tempfile
+base = pathlib.Path(os.environ["OH_VERIFY_RUN"]) / "workspace"
+base.mkdir(exist_ok=True)
+fixture = pathlib.Path(tempfile.mkdtemp(prefix="qa-surface-", dir=base))
+llm = {"model":"openai/gpt-4o", "base_url":"http://127.0.0.1:1/v1", "api_key":"qa-not-real", "num_retries":0, "timeout":2}
+payload = {"agent":{"kind":"Agent", "llm":llm, "tools":[]}, "workspace":{"working_dir":str(fixture)}, "autotitle":False}
+request = fixture / "request.json"
+request.write_text(json.dumps(payload))
+result = subprocess.run(["control-openhands", "api", "POST", "/api/conversations", "--write", "--data", "@"+str(request), "--pick", "id"], check=True, capture_output=True, text=True)
+print(json.loads(result.stdout)["value"])
+PY
+)"
+QA_DIR="$OH_VERIFY_RUN/private/state/dev_conversations/${QA_ID//-/}"
+trap 'chattr -i "$QA_DIR" 2>/dev/null || true' EXIT
+control-openhands browser goto "/conversations/$QA_ID"
+control-openhands browser wait 'testid=conversation-name-title'
+control-openhands browser dblclick 'testid=conversation-name-title'
+control-openhands browser fill 'testid=conversation-name-input' QA_META_BEFORE_4800
+control-openhands browser press Enter
+control-openhands browser eval 'new Promise(r=>setTimeout(r,1500))'
+control-openhands assert --field value --equals QA_META_BEFORE_4800 -- api GET "/api/conversations/$QA_ID" --pick title
+chattr +i "$QA_DIR"
+control-openhands browser toasts --clear
+control-openhands browser dblclick 'testid=conversation-name-title'
+control-openhands browser fill 'testid=conversation-name-input' QA_META_REFUSED_4800
+control-openhands browser press Enter
+control-openhands browser eval 'new Promise(r=>setTimeout(r,2500))'
+control-openhands browser toasts --history
+control-openhands browser screenshot --feature F07.rename-inline --name refused-rename
+chattr -i "$QA_DIR"
+python3 -c 'import json,sys; t=json.load(open(sys.argv[1]))["title"]; print(t); assert t=="QA_META_BEFORE_4800"' "$QA_DIR/meta.json"
+control-openhands assert --field value --equals QA_META_BEFORE_4800 -- api GET "/api/conversations/$QA_ID" --pick title
+control-openhands restart --timeout 240
+control-openhands doctor
+control-openhands assert --field value --equals QA_META_BEFORE_4800 -- api GET "/api/conversations/$QA_ID" --pick title
+```
 
 - Known issue [#16877](https://github.com/OpenHands/OpenHands/issues/16877) (`F07.open-by-url`): Untitled terminal-status conversations are reported to keep the 3-second title polling interval. On frozen target `fa1f724ab5737a17453ad6081129eb91c5a423c6`, a real Local `autotitle:false`/idle conversation retained `title:null`, while eight browser batch GETs had 30.008–30.031-second intervals over 210 seconds. The direct adapter supplies a default display title. This does not exercise the Cloud null-title IDLE/FINISHED branch, which needs an approved Cloud conversation with a failed/unsupported title job. Run `backfill-18309-coordinator-checks`, Agent Server/SDK 1.54.0, automation 1.19.3; retained `evidence/F07.open-by-url/16877-local-polling.json` and `16877-local-idle.png`. Arrange the empty conversation with `api POST /api/conversations --write --data @<idle-autotitle-disabled-payload>`, open `/conversations/<id>`, clear `browser network`, leave the tab foreground, then read `browser network --filter ids= --last 100` and `conversation status <id>`. No model call or response was used.
 - Known issue [#18539](https://github.com/OpenHands/OpenHands/issues/18539) (`F07.delete-confirm`): the Delete, Stop and Archive confirmations share the consent dialog's description style; in Light+ and Solarized Light the description measures 2.27:1 and 2.06:1 on the modal surface, below 4.5:1.

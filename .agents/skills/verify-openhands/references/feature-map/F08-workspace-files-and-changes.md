@@ -104,7 +104,41 @@ Preconditions:
 
 - **Rich fenced code (`F08.files-rich-plain`).** Arrange a Markdown file in the selected workspace containing a heading and a fenced Python `print("qa")` block. Open it from Files in Rich mode and take `browser screenshot --feature F08.files-rich-plain --name fenced-code`. Known failure (reproduced 2026-10-12, [#16802](https://github.com/OpenHands/OpenHands/issues/16802)): the code renders in nested dark/gray containers with repeated padding. This is a layout-only observation; the measured `pre` and prose ancestor had zero border width, so it is not a claim of visible CSS borders.
 - **Git filename with a space (`F08.uncommitted-changes`).** In a disposable workspace Git fixture, create and commit `my notes.md`, then modify it (plain shell Git/file commands are fixture setup, not UI proof). Open its empty Local conversation's Commits tab and read `browser network --filter '/git/'`. Expected: the modified path and other changes stay listed. Known failure (reproduced 2026-10-12, [OpenHands/software-agent-sdk#5642](https://github.com/OpenHands/software-agent-sdk/issues/5642)): the scoped changes call returns 400 and hides the Uncommitted changes. Only the space-name case was tested; the same issue's non-ASCII and rename cases still require their own checks.
-- **File listing above one MiB (`F08.files-tree`).** In a disposable fixture, arrange 1800 tiny files beneath three 220-character directory segments so the sorted relative-path listing exceeds one MiB while remaining below the 2000-file cap. Keep a normal tracked README at the root. Open Files, click `testid=files-tab-refresh`, then count `role=button[name="README.md"][exact]` and inspect the tree. Known failure (reproduced 2026-10-12, [OpenHands/software-agent-sdk#5638](https://github.com/OpenHands/software-agent-sdk/issues/5638)): the README disappears and a spurious partial-path folder appears because the command API returns the tail output chunk only. The greater-than-100-chunk/null-exit case was not driven.
+- **File listing above one MiB (`F08.files-tree`).** A workspace whose sorted relative-path listing exceeds one MiB (1800 tiny files beneath three 220-character directory segments, below the 2000-file cap) still lists every root entry: after `files-tab-refresh` the tree shows the one long top-level folder and `README.md` (`browser count 'testid=file-tree-file-README.md'` is `1`, one `file-tree-dir-` row). The recipe creates only a disposable, idle offline conversation.
+  ```sh
+  control-openhands browser viewport desktop
+  QA_ID="$(python3 - <<'PY'
+  import json, os, pathlib, subprocess, tempfile
+  base = pathlib.Path(os.environ["OH_VERIFY_RUN"]) / "workspace"
+  base.mkdir(exist_ok=True)
+  fixture = pathlib.Path(tempfile.mkdtemp(prefix="qa-surface-", dir=base))
+  llm = {"model":"openai/gpt-4o", "base_url":"http://127.0.0.1:1/v1", "api_key":"qa-not-real", "num_retries":0, "timeout":2}
+  repo = fixture / "repo"
+  deep = repo / ("a" * 220) / ("b" * 220) / ("c" * 220)
+  deep.mkdir(parents=True)
+  (repo / "README.md").write_text("root readme\n")
+  for i in range(1800):
+      (deep / f"f{i:04d}.txt").write_text("x\n")
+  subprocess.run(["git", "-C", str(repo), "init", "-q", "-b", "main"], check=True)
+  subprocess.run(["git", "-C", str(repo), "add", "README.md"], check=True)
+  subprocess.run(["git", "-C", str(repo), "-c", "user.name=QA", "-c", "user.email=qa@example.invalid", "commit", "-qm", "Owned fixture"], check=True)
+  payload = {"agent":{"kind":"Agent", "llm":llm, "tools":[]}, "workspace":{"working_dir":str(repo)}, "autotitle":False}
+  request = fixture / "request.json"
+  request.write_text(json.dumps(payload))
+  result = subprocess.run(["control-openhands", "api", "POST", "/api/conversations", "--write", "--data", "@"+str(request), "--pick", "id"], check=True, capture_output=True, text=True)
+  print(json.loads(result.stdout)["value"])
+  PY
+  )"
+  control-openhands browser goto "/conversations/$QA_ID"
+  control-openhands browser click 'testid=right-panel-toggle'
+  control-openhands browser wait 'testid=files-tab-refresh'
+  control-openhands browser click 'testid=files-tab-refresh'
+  control-openhands browser wait 'testid=file-tree-view' --timeout 20000
+  control-openhands browser eval 'new Promise(r=>setTimeout(r,2000))'
+  control-openhands browser screenshot --feature F08.files-tree --name listing-1mib
+  control-openhands assert --field count --equals 1 -- browser count 'testid=file-tree-file-README.md'
+  control-openhands assert --field value --equals 1 -- browser eval 'document.querySelectorAll("[data-testid^=file-tree-dir-]").length'
+  ```
 
 - **Subdirectory Git paths (`F08.uncommitted-changes`, `F08.diff-view-modes`).** A workspace at `repo/src` lists the changes beneath that folder relative to it: Commits → Uncommitted reads `app.py` and `new.py` (the root `README.md` change is outside the workspace and is not listed), and opening `app.py` shows its diff (`x = 1` → `x = 2`; `GET /api/conversations/<id>/git/diff` answers `200`). The recipe creates only disposable, idle offline conversations.
   ```sh
