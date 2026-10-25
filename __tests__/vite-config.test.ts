@@ -186,6 +186,25 @@ describe("vite library build", () => {
     expect(css).toContain("[data-agent-server-ui] .xterm");
     expect(css).toContain("fonts.googleapis.com");
 
+    // Extension dialogs keep their viewport limits in the shipped library.
+    const dialogViewportRule =
+      css.match(
+        /\[data-agent-server-ui\]\s+\.extension-dialog-viewport\s*\{([^}]*)\}/,
+      )?.[1] ?? "";
+    const dialogViewportDeclarations = Object.fromEntries(
+      dialogViewportRule
+        .split(";")
+        .filter((declaration) => declaration.trim())
+        .map((declaration) =>
+          declaration.split(":").map((part) => part.trim()),
+        ),
+    );
+    expect(dialogViewportDeclarations).toMatchObject({
+      "max-width": "90vw",
+      "max-height": "85vh",
+    });
+    expect(css).not.toMatch(/(^|[{},])\.extension-dialog-viewport\{/);
+
     // `package.json` routes `require` here; stripped CSS imports must not
     // leave it unparseable.
     expect(() => new Script(file("index.cjs"))).not.toThrow();
