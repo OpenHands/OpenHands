@@ -239,7 +239,10 @@ prerequisite; never substitute a mock and call it a pass.
   times. `control-openhands bug proof <ID> --baseline $BASE_RUN --baseline-label
   baseline --fix $FIX_RUN --fix-label fix` gives the verdict: `verified`,
   `not-fixed`, or `inconclusive`. A baseline that does not reproduce twice is
-  inconclusive, never "fixed". When the note has no block yet, write one first
+  inconclusive, never "fixed". For a fix in the Agent Server or automation,
+  launch both runs from this checkout, the baseline with `--sdk-version` (or
+  `--automation-version`) before the fix, and add `--vary backend` to
+  `bug proof`. When the note has no block yet, write one first
   ([mapping.md](references/mapping.md)) and prove it reproduces on the
   baseline. Every attempt runs the same recipe, viewport and fixtures, and
   screenshots or recordings stay part of the proof.

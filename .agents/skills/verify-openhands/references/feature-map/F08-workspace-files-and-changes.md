@@ -106,8 +106,8 @@ Preconditions:
 - **Git filename with a space (`F08.uncommitted-changes`).** In a disposable workspace Git fixture, create and commit `my notes.md`, then modify it (plain shell Git/file commands are fixture setup, not UI proof). Open its empty Local conversation's Commits tab and read `browser network --filter '/git/'`. Expected: the modified path and other changes stay listed. Known failure (reproduced 2026-10-12, [OpenHands/software-agent-sdk#5642](https://github.com/OpenHands/software-agent-sdk/issues/5642)): the scoped changes call returns 400 and hides the Uncommitted changes. Only the space-name case was tested; the same issue's non-ASCII and rename cases still require their own checks.
 - **File listing above one MiB (`F08.files-tree`).** In a disposable fixture, arrange 1800 tiny files beneath three 220-character directory segments so the sorted relative-path listing exceeds one MiB while remaining below the 2000-file cap. Keep a normal tracked README at the root. Open Files, click `testid=files-tab-refresh`, then count `role=button[name="README.md"][exact]` and inspect the tree. Known failure (reproduced 2026-10-12, [OpenHands/software-agent-sdk#5638](https://github.com/OpenHands/software-agent-sdk/issues/5638)): the README disappears and a spurious partial-path folder appears because the command API returns the tail output chunk only. The greater-than-100-chunk/null-exit case was not driven.
 
-- **Subdirectory Git paths (`F08.uncommitted-changes`, `F08.diff-view-modes`).** Expected: a workspace at `repo/src` lists changes beneath that folder relative to it, and its diffs open. Known failure (reproduced 2026-10-19, SDK 1.55.1, [OpenHands/software-agent-sdk#5843](https://github.com/OpenHands/software-agent-sdk/issues/5843)): tracked paths retain the repository prefix while untracked paths are relative to `src`; opening displayed `src/app.py` requests `repo/src/src/app.py` and returns 400. The ordinary repository-root control lists correct paths. The recipe creates only disposable, idle offline conversations.
-  ```sh known-bug F08.diff-view-modes subdirectory-paths
+- **Subdirectory Git paths (`F08.uncommitted-changes`, `F08.diff-view-modes`).** A workspace at `repo/src` lists the changes beneath that folder relative to it: Commits → Uncommitted reads `app.py` and `new.py` (the root `README.md` change is outside the workspace and is not listed), and opening `app.py` shows its diff (`x = 1` → `x = 2`; `GET /api/conversations/<id>/git/diff` answers `200`). The recipe creates only disposable, idle offline conversations.
+  ```sh
   control-openhands browser viewport desktop
   QA_ID="$(python3 - <<'PY'
   import json, os, pathlib, subprocess, tempfile
@@ -143,10 +143,11 @@ Preconditions:
   control-openhands browser click 'testid=conversation-tab-commits'
   control-openhands browser wait-text Uncommitted --timeout 10000
   control-openhands browser click 'testid=uncommitted-changes-row-toggle'
+  control-openhands assert --field text --matches '^app\.py\nnew\.py$' -- browser text 'testid=uncommitted-changes-row-content'
   control-openhands browser network --clear
-  control-openhands browser click 'testid=file-diff-viewer-outer >> has-text=src/app.py >> testid=collapse' --observe 'testid=uncommitted-changes-row-content' --observe-ms 1000
-  control-openhands browser screenshot --feature F08.diff-view-modes --name subdir-mixed-paths
-  control-openhands assert --field recent.0.status --equals 200 --bug-shows 400 -- browser network --filter '/git/diff'  # bug
+  control-openhands browser click 'testid=file-diff-viewer-outer >> has-text=app.py >> testid=collapse' --observe 'testid=uncommitted-changes-row-content' --observe-ms 1000
+  control-openhands browser screenshot --feature F08.diff-view-modes --name subdir-relative-paths
+  control-openhands assert --field recent.0.status --equals 200 -- browser network --filter '/git/diff'
   ```
 
 - **Plain parent containing a repository (`F08.uncommitted-changes`).** Expected: a plain workspace holding one dirty repository exposes that repository's changes. Commits shows one Uncommitted row listing the child repository's paths (`proj/README.md`, `proj/notes.txt`), and their diffs open. The recipe removes only its own verified empty parent `.git`; never remove a user's repository.
