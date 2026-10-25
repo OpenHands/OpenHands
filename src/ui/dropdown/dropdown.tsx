@@ -197,6 +197,7 @@ export function Dropdown({
           ) : null}
           <DropdownInput
             placeholder={placeholder}
+            title={liveSelectedOption?.label}
             isDisabled={isDisabled}
             getInputProps={getInputPropsWithCursorFix}
             italicPlaceholder={italicPlaceholder}

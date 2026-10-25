@@ -180,6 +180,21 @@ describe("Dropdown", () => {
     });
   });
 
+  describe("Full label on hover", () => {
+    it("should expose the full label as a title on the trigger and each option", async () => {
+      const user = userEvent.setup();
+      render(<Dropdown options={mockOptions} defaultValue={mockOptions[1]} />);
+
+      expect(screen.getByRole("combobox")).toHaveAttribute("title", "Option 2");
+
+      await user.click(screen.getByTestId("dropdown-trigger"));
+
+      mockOptions.forEach(({ label }) => {
+        expect(screen.getByText(label)).toHaveAttribute("title", label);
+      });
+    });
+  });
+
   describe("Clear button", () => {
     it("should not render clear button by default", () => {
       render(<Dropdown options={mockOptions} />);

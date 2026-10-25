@@ -319,7 +319,7 @@ export function FolderBrowserModal({
               )}
               {isError && (
                 <li
-                  className="px-4 py-2 text-sm text-red-400"
+                  className="px-4 py-2 text-sm text-feedback-error"
                   data-testid="folder-browser-error"
                 >
                   {(error as Error | undefined)?.message ??

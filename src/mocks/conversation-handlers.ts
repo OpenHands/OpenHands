@@ -1,4 +1,5 @@
 import { http, delay, HttpResponse, passthrough } from "msw";
+import { SKILLS_CATALOG } from "@openhands/extensions/skills";
 import type { DirectConversationInfo } from "#/api/agent-server-adapter";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import {
@@ -480,6 +481,20 @@ export const CONVERSATION_HANDLERS = [
   http.get("*/api/vscode/url", async () => HttpResponse.json({ url: null })),
 
   http.post("*/api/skills", async () => HttpResponse.json({ skills: [] })),
+
+  http.get("*/api/skills/catalog", async () =>
+    HttpResponse.json({
+      skills: SKILLS_CATALOG.map((entry) => ({
+        name: entry.name,
+        type: "knowledge",
+        content: entry.content,
+        triggers: entry.triggers ?? [],
+        source: null,
+        description: entry.description,
+        origin: "public",
+      })),
+    }),
+  ),
 
   http.post(
     "/api/v1/conversations/:conversationId/pending-messages",

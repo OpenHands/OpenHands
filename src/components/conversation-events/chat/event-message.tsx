@@ -11,6 +11,7 @@ import {
 import {
   isActionEvent,
   isObservationEvent,
+  isUserRejectObservation,
   isAgentErrorEvent,
   isUserMessageEvent,
   isPlanningFileEditorObservationEvent,
@@ -19,6 +20,7 @@ import {
   isStreamingDeltaEvent,
   isConversationStateUpdateEvent,
   isGoalConversationStateUpdateEvent,
+  isMessageEvent,
 } from "#/types/agent-server/type-guards";
 import { useConfig } from "#/hooks/query/use-config";
 import { useConversationStore } from "#/stores/conversation-store";
@@ -36,6 +38,7 @@ import { CollapsibleThinking } from "./event-message-components/collapsible-thin
 import { HookExecutionEventMessage } from "./event-message-components/hook-execution-event-message";
 import { CorrectiveNudgeMessage } from "./event-message-components/corrective-nudge-message";
 import { createSkillReadyEvent } from "./event-content-helpers/create-skill-ready-event";
+import { parseMessageFromEvent } from "./event-content-helpers/parse-message-from-event";
 import { isCorrectiveNudge } from "./event-content-helpers/should-render-event";
 import { shouldShowPlanPreview } from "./hooks/use-plan-preview-events";
 import { getReasoningContent, splitInlineThink } from "./event-thought-helpers";
@@ -199,9 +202,16 @@ function EventMessageComponent({
 
   // Streaming slots render on a clock rather than at the granularity the
   // network delivered (#15493). Unconditional: hooks cannot be nested in the
-  // per-kind branches below, and a non-slot event has no streamed content.
+  // per-kind branches below. A finished agent message is fed through it too:
+  // it replaces its slot in place, so the reveal carries on from where the
+  // slot left off instead of the unrevealed rest appearing at once. Any other
+  // message mounts complete and is shown as is.
+  const finishedReply =
+    isMessageEvent(event) && event.source === "agent"
+      ? parseMessageFromEvent(event)
+      : "";
   const streamedContent = useStreamedText(
-    isStreamingDeltaEvent(event) ? (event.content ?? "") : "",
+    isStreamingDeltaEvent(event) ? (event.content ?? "") : finishedReply,
   );
 
   // Common props for components that need them
@@ -241,13 +251,13 @@ function EventMessageComponent({
     );
   }
 
-  if (isStreamingDeltaEvent(event)) {
+  const renderStreamingReply = (reasoning: string) => {
     // Route an inline <think> block to the thinking section, not the bubble.
     const { reasoning: inlineThink, message } = splitInlineThink(
       streamedContent,
       { streaming: true },
     );
-    const reasoningContent = [event.reasoning_content ?? "", inlineThink]
+    const reasoningContent = [reasoning, inlineThink]
       .filter(Boolean)
       .join("\n\n");
     return (
@@ -259,10 +269,20 @@ function EventMessageComponent({
             message={message}
             isFromPlanningAgent={isFromPlanningAgent}
             timestamp={event.timestamp}
+            isStreaming
           />
         )}
       </>
     );
+  };
+
+  if (isStreamingDeltaEvent(event)) {
+    return renderStreamingReply(event.reasoning_content ?? "");
+  }
+
+  // The finished reply is still being revealed: keep the streaming bubble.
+  if (isMessageEvent(event) && streamedContent.length < finishedReply.length) {
+    return renderStreamingReply(getReasoningContent(event.llm_message));
   }
 
   // Finish actions
@@ -365,6 +385,31 @@ function EventMessageComponent({
               ? correspondingAction
               : undefined
           }
+        />
+      </>
+    );
+  }
+
+  // Rejected actions - render thought + the rejected action
+  if (isUserRejectObservation(event)) {
+    const correspondingAction = suppliedCorrespondingAction ?? undefined;
+    const reasoningContent = correspondingAction
+      ? getReasoningContent(correspondingAction)
+      : "";
+
+    return (
+      <>
+        {reasoningContent && <CollapsibleThinking content={reasoningContent} />}
+        {!suppressThought && correspondingAction && (
+          <ThoughtEventMessage
+            event={correspondingAction}
+            isFromPlanningAgent={isFromPlanningAgent}
+          />
+        )}
+        <GenericEventMessageWrapper
+          event={event}
+          isLastMessage={isLastMessage}
+          correspondingAction={correspondingAction}
         />
       </>
     );

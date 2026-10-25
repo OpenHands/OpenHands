@@ -22,10 +22,29 @@ one passing example into a pass for its whole family. Record rows as you go with
 | Feature/check + entry point | Revision/backend/viewport | Action or command | Expected → actual | Result | Evidence |
 |---|---|---|---|---|---|
 
-Use `pass`, `fail`, `blocked`, or `not-run`. For blocked rows name the missing
+Use `pass`, `fail`, `blocked`, or `not-run`; `bug run` adds `xfail` (a known
+bug reproduced at its marked assertion) and `xpass` (it stopped reproducing,
+which needs map review). Keep both apart from `pass` and `fail` in the counts:
+an `xfail` is neither a regression nor a pass, and an `xpass` is never folded
+into a family pass. For blocked rows name the missing
 prerequisite, attempted action, and next step. Identify checks outside the declared
 scope separately; do not count them as passed. Report denominator and counts for
 both feature families and individual checks. A layout-only inspection must say so.
+
+## Fix verification
+
+For each fix claimed, list one row per known-bug block (ID and name, which
+names the entry point or viewport):
+
+| Feature/block | Baseline revision → attempts | Fix revision → attempts | Inputs (viewport, backend) | Verdict | Evidence |
+|---|---|---|---|---|---|
+
+Copy the attempt counts and verdict from `control-openhands bug proof`, and
+link each attempt's transcript and screenshots. Only `verified` (two `xfail`
+on the baseline, two `xpass` on the fix, same inputs) is reported as fixed;
+`inconclusive` names its reason and `not-fixed` says the fix still
+reproduces. A partial proof (one entry point verified, another not run) says
+so per row.
 
 ## Change / intent ledger (weekly)
 

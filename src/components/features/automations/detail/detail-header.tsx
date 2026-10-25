@@ -90,14 +90,14 @@ export function DetailHeader({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-3">
-          <h1 className="text-xl font-medium text-content">
+      <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 flex-wrap items-center gap-3">
+          <h1 className="min-w-0 break-words text-xl font-medium text-content">
             {automation.name}
           </h1>
-          <ActiveStatusBadge active={automation.enabled} />
+          <ActiveStatusBadge automation={automation} />
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
           {canManage && onRunNow && (
             <button
               type="button"

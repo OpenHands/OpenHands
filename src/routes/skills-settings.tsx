@@ -2,7 +2,10 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router";
 import { BrandButton } from "#/components/features/settings/brand-button";
-import { ExtensionsNavigation } from "#/components/features/skills/extensions-navigation";
+import {
+  ExtensionsNavigation,
+  ExtensionsCompactNavigation,
+} from "#/components/features/skills/extensions-navigation";
 import { AddSkillModal } from "#/components/features/skills/add-skill-modal";
 import { SkillCard } from "#/components/features/skills/skill-card";
 import { SkillDetailModal } from "#/components/features/skills/skill-detail-modal";
@@ -21,7 +24,9 @@ import {
   type SkillFilterState,
 } from "#/components/features/skills/skill-filter";
 import { SkillsToolbar } from "#/components/features/skills/skills-toolbar";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useSettings } from "#/hooks/query/use-settings";
+import { useSkillCatalog } from "#/hooks/query/use-skill-catalog";
 import { useSkills } from "#/hooks/query/use-skills";
 import { useSkillEnablement } from "#/hooks/use-skill-enablement";
 import { I18nKey } from "#/i18n/declaration";
@@ -39,9 +44,16 @@ const SEARCH_URL_SYNC_DELAY_MS = 300;
 function SkillsSettingsScreen() {
   const { t } = useTranslation("openhands");
 
+  const { backend } = useActiveBackend();
+  const isCloud = backend.kind === "cloud";
   const { data: settings, isLoading: settingsLoading } = useSettings();
-  const { data: skills, isLoading: skillsLoading } = useSkills();
-  const { isEnabled, setEnabled } = useSkillEnablement();
+  // Locally the page lists what agent profiles can select; Cloud lists its own skills.
+  const catalog = useSkillCatalog();
+  const cloudSkills = useSkills(undefined, { enabled: isCloud });
+  const { data: skills, isLoading: skillsLoading } = isCloud
+    ? cloudSkills
+    : catalog;
+  const { isEnabled, setEnabled, isUnavailable } = useSkillEnablement();
 
   const [searchParams, setSearchParams] = useSearchParams();
   const [queryInput, setQueryInput] = React.useState(
@@ -135,6 +147,7 @@ function SkillsSettingsScreen() {
           data-testid="skills-page"
           className="mx-auto flex w-full min-w-0 max-w-275 flex-col gap-6"
         >
+          <ExtensionsCompactNavigation />
           <div className="flex min-w-0 items-start justify-between gap-4">
             <div className="min-w-0 space-y-1">
               <h2 className="text-xl font-semibold leading-6 text-foreground">
@@ -146,12 +159,21 @@ function SkillsSettingsScreen() {
               >
                 {t(I18nKey.SETTINGS$SKILLS_PAGE_DESCRIPTION)}
               </div>
-              <div
-                data-testid="skills-new-conversation-notice"
-                className="max-w-2xl text-xs text-tertiary-alt"
-              >
-                {t(I18nKey.SETTINGS$SKILLS_NEW_CONVERSATION_NOTICE)}
-              </div>
+              {isCloud ? (
+                <div
+                  data-testid="skills-new-conversation-notice"
+                  className="max-w-2xl text-xs text-tertiary-alt"
+                >
+                  {t(I18nKey.SETTINGS$SKILLS_NEW_CONVERSATION_NOTICE)}
+                </div>
+              ) : (
+                <div
+                  data-testid="skills-default-list-notice"
+                  className="max-w-2xl text-xs text-tertiary-alt"
+                >
+                  {t(I18nKey.SETTINGS$SKILLS_DEFAULT_LIST_NOTICE)}
+                </div>
+              )}
             </div>
             <BrandButton
               type="button"
@@ -246,6 +268,7 @@ function SkillsSettingsScreen() {
                             onToggle={(enabled) =>
                               setEnabled(skill.name, enabled)
                             }
+                            isToggleDisabled={isUnavailable}
                           />
                         ))}
                       </div>
@@ -273,6 +296,7 @@ function SkillsSettingsScreen() {
             enabled={isEnabled(selectedSkill)}
             onToggle={(enabled) => setEnabled(selectedSkill.name, enabled)}
             onClose={() => setSelectedSkill(null)}
+            isToggleDisabled={isUnavailable}
           />
         )}
 

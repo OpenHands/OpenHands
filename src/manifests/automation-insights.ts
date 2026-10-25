@@ -26,7 +26,6 @@ import type {
   DashboardSortValue,
   DashboardStatusValue,
   DashboardTriggerValue,
-  InterfaceListInsights,
   OverviewMetric,
 } from "./types";
 
@@ -37,19 +36,6 @@ export type AutomationHealth =
   | "disabled"
   | "never-run"
   | "unknown";
-
-/** Which caption of the manifest's `insights.health` block names each state. */
-export const HEALTH_LABEL_KEYS: Record<
-  AutomationHealth,
-  keyof InterfaceListInsights["health"]
-> = {
-  healthy: "healthy",
-  failing: "failing",
-  running: "running",
-  disabled: "disabled",
-  "never-run": "neverRun",
-  unknown: "checking",
-};
 
 export interface AutomationRunSummary {
   /** Lifetime run count, from the response — not the sample's length. */
@@ -180,6 +166,9 @@ export function matchesAutomationSearch(
   return (
     automation.name.toLowerCase().includes(q) ||
     (automation.prompt ?? "").toLowerCase().includes(q) ||
+    (automation.repositories ?? []).some(({ url }) =>
+      url.toLowerCase().includes(q),
+    ) ||
     automation.repository?.toLowerCase().includes(q) === true ||
     automation.model?.toLowerCase().includes(q) === true
   );

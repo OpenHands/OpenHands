@@ -73,8 +73,15 @@ describe("startGuidedTour", () => {
 
   afterEach(() => {
     stopGuidedTour();
+    vi.useRealTimers();
     document.body.innerHTML = "";
   });
+
+  const pickThenDialog = () =>
+    tour(
+      stop({ id: "pick", advanceOnClick: "#card" }),
+      stop({ id: "dialog", anchor: "#dialog" }),
+    );
 
   it("ends the tour when the step its last stop waits for succeeds", async () => {
     // Arrange
@@ -134,6 +141,91 @@ describe("startGuidedTour", () => {
     // Assert
     expect(afterOtherClick).toBe(0);
     await waitFor(() => expect(drivers[0].moveTo).toHaveBeenCalledWith(1));
+  });
+
+  it("hides while a click opens something else first, then shows the next stop once its element appears", async () => {
+    // Arrange
+    await startGuidedTour(pickThenDialog(), NAV, LABELS);
+    await wait(60);
+
+    // Act: the click opens a choice first, so the next stop's dialog is late.
+    document.getElementById("card")!.click();
+    await wait(1_400);
+
+    // Assert: the tour is hidden and not marked active, so the setup guide
+    // can show; nothing has moved yet.
+    expect(document.body).toHaveClass("oh-setup-tour-waiting");
+    expect(isGuidedTourActive()).toBe(false);
+    expect(drivers[0].moveTo).not.toHaveBeenCalled();
+
+    // Act
+    document.body.insertAdjacentHTML("beforeend", '<div id="dialog"></div>');
+
+    // Assert
+    await waitFor(() => expect(drivers[0].moveTo).toHaveBeenCalledWith(1));
+    expect(document.body).not.toHaveClass("oh-setup-tour-waiting");
+    expect(isGuidedTourActive()).toBe(true);
+  });
+
+  it("ends the tour when the next stop's element never appears", async () => {
+    // Arrange
+    vi.useFakeTimers();
+    await startGuidedTour(pickThenDialog(), NAV, LABELS);
+    await vi.advanceTimersByTimeAsync(60);
+
+    // Act: the admin went another way, so the dialog never opens.
+    document.getElementById("card")!.click();
+    await vi.advanceTimersByTimeAsync(61_000);
+
+    // Assert: never shown away from its element.
+    expect(drivers[0].moveTo).not.toHaveBeenCalled();
+    expect(drivers[0].destroy).toHaveBeenCalledTimes(1);
+    expect(document.body).not.toHaveClass("oh-setup-tour-waiting");
+    expect(isGuidedTourActive()).toBe(false);
+  });
+
+  it("lets Tab move through the page, not the hidden tour, while it waits", async () => {
+    // Arrange: driver.js keeps Tab in its stop with a listener on window.
+    const tourTabListener = vi.fn();
+    window.addEventListener("keydown", tourTabListener);
+    const pressTab = () =>
+      document.body.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Tab", bubbles: true }),
+      );
+    await startGuidedTour(pickThenDialog(), NAV, LABELS);
+    await wait(60);
+
+    try {
+      // Act
+      document.getElementById("card")!.click();
+      await wait(350);
+      pressTab();
+      stopGuidedTour();
+      pressTab();
+
+      // Assert
+      expect(tourTabListener).toHaveBeenCalledTimes(1);
+    } finally {
+      window.removeEventListener("keydown", tourTabListener);
+    }
+  });
+
+  it("does not start when the first stop's element is missing", async () => {
+    // Arrange
+    vi.useFakeTimers();
+
+    // Act
+    const started = startGuidedTour(
+      tour(stop({ anchor: "#missing" })),
+      NAV,
+      LABELS,
+    );
+    await vi.advanceTimersByTimeAsync(6_000);
+    await started;
+
+    // Assert: driver.js would float the popover over the page.
+    expect(drivers).toHaveLength(0);
+    expect(isGuidedTourActive()).toBe(false);
   });
 
   it("hides the popover footer only on a stop that asks for it", async () => {

@@ -1,3 +1,6 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, vi } from "vitest";
 import { cleanup } from "@testing-library/react";
 import { server } from "#/mocks/node";
@@ -7,6 +10,10 @@ import "@testing-library/jest-dom/vitest";
 // The beforeEach below restores the same default after tests call
 // `vi.unstubAllEnvs()`.
 vi.stubEnv("VITE_SESSION_API_KEY", "test-session-key");
+// Servers started by tests host the DigitalOcean bridge, which reads saved
+// sign-ins from the Canvas state directory: never the developer's own.
+const MARS_STATE_DIR = mkdtempSync(join(tmpdir(), "mars-state-"));
+vi.stubEnv("MARS_STATE_DIR", MARS_STATE_DIR);
 
 if (typeof HTMLCanvasElement !== "undefined") {
   HTMLCanvasElement.prototype.getContext = vi.fn();
@@ -202,6 +209,7 @@ beforeAll(() => {
 
 beforeEach(() => {
   vi.stubEnv("VITE_SESSION_API_KEY", "test-session-key");
+  vi.stubEnv("MARS_STATE_DIR", MARS_STATE_DIR);
 });
 
 afterEach(async () => {

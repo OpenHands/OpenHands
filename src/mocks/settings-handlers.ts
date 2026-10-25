@@ -47,23 +47,6 @@ const DEFAULT_MODEL =
     ? llmDefaults.model
     : "openhands/claude-opus-4-5-20251101";
 
-export const createMockWebClientConfig = (
-  overrides: Partial<WebClientConfig> = {},
-): WebClientConfig => ({
-  feature_flags: {
-    hide_llm_settings: false,
-    hide_users_page: false,
-    ...overrides.feature_flags,
-  },
-  providers_configured: [],
-  maintenance_start_time: null,
-  recaptcha_site_key: null,
-  faulty_models: [],
-  error_message: null,
-  updated_at: new Date().toISOString(),
-  ...overrides,
-});
-
 const MOCK_AGENT_SETTINGS_SCHEMA: NonNullable<
   Settings["agent_settings_schema"]
 > = {
@@ -641,7 +624,7 @@ const MOCK_VERIFIED_MODELS_BY_PROVIDER = MOCK_MODELS.reduce<
 
 // Matches the pinned `@openhands/typescript-client`, so mock mode models a
 // server that actually ships this schema.
-const MOCK_AGENT_SERVER_VERSION = "1.54.0";
+const MOCK_AGENT_SERVER_VERSION = "1.55.0";
 
 // --- Handlers for options/config/settings ---
 // Uses wildcard "*" prefix to match both relative paths and absolute URLs
@@ -943,6 +926,16 @@ export const SETTINGS_HANDLERS = [
 
     return HttpResponse.json(config);
   }),
+
+  // Built-in integration connection lookups of a cloud instance; the default
+  // user has linked neither Slack nor a Jira Cloud workspace (Jira answers
+  // 404 for "no link").
+  http.get("*/slack/status", () => HttpResponse.json({ connected: false })),
+
+  http.get(
+    "*/integration/jira/workspaces/link",
+    () => new HttpResponse(null, { status: 404 }),
+  ),
 
   http.get("*/api/settings/conversation-schema", async () => {
     await delay();

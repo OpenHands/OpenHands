@@ -5,7 +5,6 @@ import {
   toSchemaTranslationKey,
   resolveSchemaFieldLabel,
   resolveSchemaFieldDescription,
-  resolveSchemaFieldSectionLabel,
   resolveSchemaChoiceLabel,
   getSettingsFieldConstraints,
 } from "./sdk-settings-field-metadata";
@@ -136,32 +135,6 @@ describe("resolveSchemaFieldDescription", () => {
       "CUSTOM$DESC",
     );
     expect(result).toBe("Custom Description");
-  });
-});
-
-describe("resolveSchemaFieldSectionLabel", () => {
-  it("returns translated section label when conventional key exists", () => {
-    const mockT = vi.fn((key: string, options?: { defaultValue: string }) => {
-      if (key === "SCHEMA$LLM$SECTION_LABEL") return "Language Model";
-      return options?.defaultValue ?? key;
-    }) as unknown as TFunction;
-
-    const result = resolveSchemaFieldSectionLabel(mockT, "llm", "LLM");
-    expect(result).toBe("Language Model");
-  });
-
-  it("returns schema value when no translation exists", () => {
-    const mockT = vi.fn(
-      (key: string, options?: { defaultValue: string }) =>
-        options?.defaultValue ?? key,
-    ) as unknown as TFunction;
-
-    const result = resolveSchemaFieldSectionLabel(
-      mockT,
-      "custom_section",
-      "Custom Section",
-    );
-    expect(result).toBe("Custom Section");
   });
 });
 

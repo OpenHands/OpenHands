@@ -1,11 +1,6 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { Provider } from "#/types/settings";
-import { SuggestedTaskGroup } from "#/utils/types";
-import { ConversationStatus } from "#/types/conversation-status";
-import { GitRepository } from "#/types/git";
-import { sanitizeQuery } from "#/utils/sanitize-query";
-import { PRODUCT_URL } from "#/utils/constants";
 import { AgentState } from "#/types/agent-state";
 import { I18nKey } from "#/i18n/declaration";
 import { getTaskStatusI18nKey } from "#/utils/status";
@@ -104,70 +99,6 @@ export const isMobileDevice = (): boolean => {
 };
 
 /**
- * Checks if the current domain is the production domain
- * @returns True if the current domain matches the production URL
- */
-export const isProductionDomain = (): boolean =>
-  window.location.origin === PRODUCT_URL.PRODUCTION;
-
-interface EventActionHistory {
-  args?: {
-    LLM_API_KEY?: string;
-    [key: string]: unknown;
-  };
-  extras?: {
-    open_page_urls: string[];
-    active_page_index: number;
-    dom_object: Record<string, unknown>;
-    axtree_object: Record<string, unknown>;
-    extra_element_properties: Record<string, unknown>;
-    last_browser_action: string;
-    last_browser_action_error: unknown;
-    focused_element_bid: string;
-  };
-  [key: string]: unknown;
-}
-
-export const removeUnwantedKeys = (
-  data: EventActionHistory[],
-): EventActionHistory[] => {
-  const UNDESIRED_KEYS = [
-    "open_page_urls",
-    "active_page_index",
-    "dom_object",
-    "axtree_object",
-    "extra_element_properties",
-    "last_browser_action",
-    "last_browser_action_error",
-    "focused_element_bid",
-  ];
-
-  return data
-    .filter((item) => {
-      // Skip items that have a status key
-      if ("status" in item) {
-        return false;
-      }
-      return true;
-    })
-    .map((item) => {
-      // Create a shallow copy of item
-      const newItem = { ...item };
-
-      // Check if extras exists and delete it from a new extras object
-      if (newItem.extras) {
-        const newExtras = { ...newItem.extras };
-        UNDESIRED_KEYS.forEach((key) => {
-          delete newExtras[key as keyof typeof newExtras];
-        });
-        newItem.extras = newExtras;
-      }
-
-      return newItem;
-    });
-};
-
-/**
  * Get file extension from file name in uppercase format
  * @param fileName The file name to extract extension from
  * @returns The file extension in uppercase, or "FILE" if no extension found
@@ -189,8 +120,9 @@ export const getFileExtension = (fileName: string): string => {
  *
  * Mirrors OpenHands' cloud frontend (parameterized by `app_mode`):
  *   - bitbucket / bitbucket_data_center → always installation-based
- *   - github → installation-based ONLY when the active backend is cloud
- *   - gitlab / azure_devops / forgejo → direct (search) flow
+ *   - github / azure_devops → installation-based ONLY when the active backend
+ *     is cloud (Azure DevOps organizations are its installations)
+ *   - gitlab / forgejo → direct (search) flow
  *
  * `appMode` accepts the active backend `kind` ("local" | "cloud") so call
  * sites can hand it through directly.
@@ -206,6 +138,7 @@ export const shouldUseInstallationRepos = (
     case "bitbucket_data_center":
       return true;
     case "github":
+    case "azure_devops":
       return appMode === "cloud";
     default:
       return false;
@@ -318,6 +251,19 @@ export const constructPullRequestUrl = (
 };
 
 /**
+ * Percent-encode one URL path segment. Names parsed from a remote URL arrive
+ * encoded (`Web%20Apps`) while provider APIs return them raw (`Web Apps`), so
+ * decode first to avoid encoding twice.
+ */
+const encodePathSegment = (segment: string): string => {
+  try {
+    return encodeURIComponent(decodeURIComponent(segment));
+  } catch {
+    return encodeURIComponent(segment);
+  }
+};
+
+/**
  * Construct the repository URL for different providers
  * @param provider The git provider
  * @param repositoryName The repository name in format "owner/repo"
@@ -327,6 +273,7 @@ export const constructPullRequestUrl = (
  * constructRepositoryUrl("github", "owner/repo") // "https://github.com/owner/repo"
  * constructRepositoryUrl("gitlab", "owner/repo") // "https://gitlab.com/owner/repo"
  * constructRepositoryUrl("bitbucket", "owner/repo") // "https://bitbucket.org/owner/repo"
+ * constructRepositoryUrl("azure_devops", "org/Web Apps/repo") // "https://dev.azure.com/org/Web%20Apps/_git/repo"
  */
 export const constructRepositoryUrl = (
   provider: Provider,
@@ -337,6 +284,14 @@ export const constructRepositoryUrl = (
   if (provider === "bitbucket_data_center") {
     const [project, repo] = repositoryName.split("/");
     return `${baseUrl}/projects/${project}/repos/${repo}`;
+  }
+  if (provider === "azure_devops") {
+    // Azure DevOps format: org/project/repo
+    const parts = repositoryName.split("/");
+    if (parts.length === 3) {
+      const [org, project, repo] = parts.map(encodePathSegment);
+      return `${baseUrl}/${org}/${project}/_git/${repo}`;
+    }
   }
   return `${baseUrl}/${repositoryName}`;
 };
@@ -447,191 +402,11 @@ export const getCreatePRPrompt = (gitProvider: Provider): string => {
 };
 
 /**
- * Generate a push to existing PR prompt
- * @param gitProvider The git provider
- * @returns The push to PR prompt
- */
-export const getPushToPRPrompt = (gitProvider: Provider): string => {
-  const pr = getPR(gitProvider === "gitlab");
-
-  return `Please push the latest changes to the existing ${pr}.`;
-};
-
-/**
  * Generate a create new branch prompt
  * @returns The create new branch prompt
  */
 export const getCreateNewBranchPrompt = (): string =>
   "Please create a new branch with a descriptive name related to the work you plan to do.";
-
-// Helper functions
-export function getTotalTaskCount(
-  suggestedTasks: SuggestedTaskGroup[] | undefined,
-): number {
-  if (!suggestedTasks) return 0;
-  return suggestedTasks.flatMap((group) => group.tasks).length;
-}
-
-export function getLimitedTaskGroups(
-  suggestedTasks: SuggestedTaskGroup[],
-  maxTasks: number,
-): SuggestedTaskGroup[] {
-  const limitedGroups: SuggestedTaskGroup[] = [];
-  let taskCount = 0;
-
-  for (const group of suggestedTasks) {
-    if (taskCount >= maxTasks) break;
-
-    const remainingTasksNeeded = maxTasks - taskCount;
-    const tasksToShow = group.tasks.slice(0, remainingTasksNeeded);
-
-    if (tasksToShow.length > 0) {
-      limitedGroups.push({
-        ...group,
-        tasks: tasksToShow,
-      });
-      taskCount += tasksToShow.length;
-    }
-  }
-
-  return limitedGroups;
-}
-
-export function getDisplayedTaskGroups(
-  suggestedTasks: SuggestedTaskGroup[] | undefined,
-  isExpanded: boolean,
-): SuggestedTaskGroup[] {
-  if (!suggestedTasks || suggestedTasks.length === 0) {
-    return [];
-  }
-
-  if (isExpanded) {
-    return suggestedTasks;
-  }
-
-  return getLimitedTaskGroups(suggestedTasks, 3);
-}
-
-/**
- * Get the label for a conversation status
- * @param status The conversation status
- * @returns The localized label for the status
- */
-export const getConversationStatusLabel = (
-  status: ConversationStatus,
-): string => {
-  switch (status) {
-    case "STOPPED":
-      return "COMMON$STOPPED";
-    case "RUNNING":
-      return "COMMON$RUNNING";
-    case "STARTING":
-      return "COMMON$STARTING";
-    case "ERROR":
-      return "COMMON$ERROR";
-    case "ARCHIVED":
-      return "COMMON$ARCHIVED"; // Use STOPPED for archived conversations
-    default:
-      return "COMMON$UNKNOWN";
-  }
-};
-
-// Task Tracking Utility Functions
-
-/**
- * Get the status icon for a task status
- * @param status The task status
- * @returns The emoji icon for the status
- */
-export const getStatusIcon = (status: string) => {
-  switch (status) {
-    case "todo":
-      return "⏳";
-    case "in_progress":
-      return "🔄";
-    case "done":
-      return "✅";
-    default:
-      return "❓";
-  }
-};
-
-/**
- * Get the CSS class names for a task status badge
- * @param status The task status
- * @returns The CSS class names for styling the status badge
- */
-export const getStatusClassName = (status: string) => {
-  if (status === "done") {
-    return "bg-green-800 text-green-200";
-  }
-  if (status === "in_progress") {
-    return "bg-yellow-800 text-yellow-200";
-  }
-  return "bg-tertiary text-text-tertiary";
-};
-
-/**
- * Helper function to apply client-side filtering based on search query
- * @param repo The Git repository to check
- * @param searchQuery The search query string
- * @returns True if the repository should be included based on the search query
- */
-export const shouldIncludeRepository = (
-  repo: GitRepository,
-  searchQuery: string,
-): boolean => {
-  if (!searchQuery.trim()) {
-    return true;
-  }
-
-  const sanitizedQuery = sanitizeQuery(searchQuery);
-  const sanitizedRepoName = sanitizeQuery(repo.full_name);
-  return sanitizedRepoName.includes(sanitizedQuery);
-};
-
-/**
- * Get the OpenHands query string based on the provider
- * @param provider The git provider
- * @returns The query string for searching OpenHands repositories
- */
-export const getOpenHandsQuery = (provider: Provider | null): string => {
-  const providerRepositorySuffix: Record<string, string> = {
-    gitlab: "openhands-config",
-    azure_devops: "openhands-config",
-    default: ".openhands",
-  } as const;
-
-  return provider && provider in providerRepositorySuffix
-    ? providerRepositorySuffix[provider]
-    : providerRepositorySuffix.default;
-};
-
-/**
- * Check if a repository has the OpenHands suffix based on the provider
- * @param repo The Git repository to check
- * @param provider The git provider
- * @returns True if the repository has the OpenHands suffix
- */
-export const hasOpenHandsSuffix = (
-  repo: GitRepository,
-  provider: Provider | null,
-): boolean => repo.full_name.endsWith(`/${getOpenHandsQuery(provider)}`);
-
-/**
- * Build headers for V1 API requests that require session authentication
- * @param sessionApiKey Session API key for authentication
- * @returns Headers object with X-Session-API-Key if provided
- */
-export const buildSessionHeaders = (
-  sessionApiKey?: string | null,
-): Record<string, string> => {
-  const headers: Record<string, string> = {};
-  if (sessionApiKey) {
-    headers["X-Session-API-Key"] = sessionApiKey;
-  }
-  return headers;
-};
 
 /**
  * Check if a task is currently being polled (loading state)

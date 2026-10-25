@@ -14,6 +14,7 @@ import { SidebarMobileNavProvider } from "#/components/features/sidebar/sidebar-
 import { SidebarMobileMenuBar } from "#/components/features/sidebar/sidebar-mobile-menu-bar";
 import { useSettings } from "#/hooks/query/use-settings";
 import { useEnsureActiveProfile } from "#/hooks/use-ensure-active-profile";
+import { useMigrateDefaultAgentProfile } from "#/hooks/use-migrate-default-agent-profile";
 import { useMigrateEnabledSkills } from "#/hooks/use-migrate-enabled-skills";
 import { useSyncTelemetryConsent } from "#/hooks/use-sync-telemetry-consent";
 import { useSyncAutomationTelemetryConsent } from "#/hooks/use-sync-automation-telemetry-consent";
@@ -136,6 +137,8 @@ function MainAppContent() {
   useEnsureActiveProfile();
   // One-shot move from the catalog deny-list to an explicit allow-list.
   useMigrateEnabledSkills();
+  // One-shot move of global agent behavior into the `default` profile.
+  useMigrateDefaultAgentProfile();
 
   React.useEffect(() => {
     if (settings?.language) {
@@ -146,7 +149,7 @@ function MainAppContent() {
 
   if (config.isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-base">
+      <div className="min-h-screen flex items-center justify-center bg-canvas-base">
         <TitleBarDragRegion />
         <LoadingSpinner size="large" />
       </div>
@@ -167,7 +170,7 @@ function MainAppContent() {
           <div
             data-testid="root-layout"
             className={cn(
-              "h-screen lg:min-w-5xl flex flex-col md:flex-row bg-base overflow-hidden p-0",
+              "h-screen lg:min-w-5xl flex flex-col md:flex-row bg-canvas-base overflow-hidden p-0",
               showTitleBarBand && "pt-7",
             )}
           >

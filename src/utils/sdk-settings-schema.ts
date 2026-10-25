@@ -112,13 +112,6 @@ export function getAgentSettingValue(
   return getSettingValue(settings, key, "agent_settings");
 }
 
-export function getConversationSettingValue(
-  settings: Settings,
-  key: string,
-): SettingsValue {
-  return getSettingValue(settings, key, "conversation_settings");
-}
-
 function isChoiceField(field: SettingsFieldSchema): boolean {
   return field.choices.length > 0;
 }
@@ -323,12 +316,6 @@ export function inferInitialView(
   if (hasMinorOverride) return "all";
   if (hasMajorOverride) return "advanced";
   return "basic";
-}
-
-/** Determine which view tier to default to based on whether the user has
- *  overridden any non-critical settings. */
-export function hasAdvancedSettingsOverrides(settings: Settings): boolean {
-  return inferInitialView(settings) !== "basic";
 }
 
 export function isSettingsFieldVisible(

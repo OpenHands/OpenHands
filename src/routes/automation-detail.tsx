@@ -36,7 +36,7 @@ import { NotFoundState } from "#/components/features/automations/detail/not-foun
 import { ErrorState } from "#/components/features/automations/error-state";
 import { BackendNotConfigured } from "#/components/features/automations/backend-not-configured";
 import { DeleteConfirmationModal } from "#/components/features/automations/delete-confirmation-modal";
-import { EditAutomationModal } from "#/components/features/automations/detail/edit-automation-modal";
+import { useOpenAutomationEditor } from "#/hooks/use-open-automation-editor";
 import { useTracking } from "#/hooks/use-tracking";
 import {
   useAutomationPermissions,
@@ -44,6 +44,7 @@ import {
 } from "#/hooks/use-automation-permissions";
 import AutomationService from "#/api/automation-service/automation-service.api";
 import type { Automation } from "#/types/automation";
+import { isDraftAutomation } from "#/utils/automation-state";
 import {
   getAutomationExportFilename,
   serializeAutomation,
@@ -84,7 +85,7 @@ export default function AutomationDetail() {
   const highlightedRunId = searchParams.get("run");
   const { navigate } = useNavigation();
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
+  const { openEditor } = useOpenAutomationEditor();
 
   const {
     data: healthData,
@@ -235,8 +236,10 @@ export default function AutomationDetail() {
       creatorQuery.data?.email ??
       (creatorQuery.isError ? automation.user_id : null);
   }
-  // Non-creators may turn an automation off but not back on.
-  const canToggle = automation.enabled ? canManage : isOwner;
+  const isDraft = isDraftAutomation(automation);
+  // Non-creators may turn an automation off but not back on. Draft test
+  // artifacts are finalized through the draft setup flow, not this toggle.
+  const canToggle = isDraft ? false : automation.enabled ? canManage : isOwner;
 
   return (
     <div className="min-h-full">
@@ -246,7 +249,7 @@ export default function AutomationDetail() {
           <DetailHeader
             automation={automation}
             onToggle={handleToggle}
-            onEdit={() => setShowEditModal(true)}
+            onEdit={() => openEditor(automation)}
             onDelete={() => setShowDeleteModal(true)}
             onExport={handleExport}
             onDownloadTarball={() =>
@@ -281,13 +284,6 @@ export default function AutomationDetail() {
             onConfirm={handleDelete}
             onCancel={() => setShowDeleteModal(false)}
           />
-          {showEditModal && (
-            <EditAutomationModal
-              automation={automation}
-              isOpen={showEditModal}
-              onClose={() => setShowEditModal(false)}
-            />
-          )}
         </div>
       </div>
     </div>

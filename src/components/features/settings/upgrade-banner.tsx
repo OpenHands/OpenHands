@@ -18,7 +18,7 @@ export function UpgradeBanner({
   return (
     <div
       className={cn(
-        "bg-primary text-base flex items-center justify-center gap-3 p-2 w-full rounded",
+        "bg-primary text-on-primary flex items-center justify-center gap-3 p-2 w-full rounded",
         className,
       )}
       data-testid="upgrade-banner"

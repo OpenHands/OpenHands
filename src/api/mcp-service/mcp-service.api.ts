@@ -183,6 +183,16 @@ function oauthStatusToTestResponse(
       }),
     };
   }
+  // The backend's probe gives up after its own budget. When it had already
+  // handed out an authorization URL, that budget ran out waiting for the
+  // person to finish the sign-in, not for the server.
+  if (status.error_kind === "timeout" && status.authorization_url) {
+    return {
+      ok: false,
+      error: status.error || "OAuth authorization was not completed",
+      error_kind: "authorization",
+    };
+  }
   return {
     ok: false,
     error: status.error || "OAuth authorization did not complete",
@@ -362,6 +372,16 @@ class McpService {
         }
       }
 
+      // With a pop-up, nothing on the server timed out: the person did not
+      // finish the sign-in. Without one, the app server was still probing the
+      // stored tokens, which is a plain timeout.
+      if (start.authorization_url) {
+        return {
+          ok: false,
+          error: "OAuth authorization was not completed",
+          error_kind: "authorization",
+        };
+      }
       return {
         ok: false,
         error: "OAuth authorization timed out",

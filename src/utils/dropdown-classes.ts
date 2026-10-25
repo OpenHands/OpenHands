@@ -63,16 +63,6 @@ export const dropdownFilterTriggerClassName = cn(
 );
 
 /**
- * Scroll cap for the switch-profile menu: four two-line rows
- * (p-2 + leading-5 title + gap-0.5 + leading-4 subtitle) plus list gaps.
- */
-export const switchProfileMenuListScrollClassName = cn(
-  dropdownMenuListClassName,
-  "overflow-y-auto custom-scrollbar-always",
-  "max-h-[13.875rem]",
-);
-
-/**
  * Tall sidebar/context menus: cap height to the viewport and scroll with the
  * custom scrollbar when content overflows (no scrollbar when everything fits).
  */

@@ -54,7 +54,7 @@ describe("setup guide tours", () => {
     },
   );
 
-  it("hides the footer only on the stop that waits for a template card", async () => {
+  it("hides the footer only on the stops that wait for a card in a list", async () => {
     await startSetupGuideTour("first-automation", NAV, t);
     await startSetupGuideTour("add-integration", NAV, t);
 
@@ -63,7 +63,7 @@ describe("setup guide tours", () => {
       .mock.calls.flatMap(([tour]) => tour.stops);
     expect(
       stops.filter((stop) => stop.hideFooter).map((stop) => stop.id),
-    ).toEqual(["choose-template"]);
+    ).toEqual(["choose-template", "pick-server"]);
   });
 
   it("starts nothing for a step done in the enterprise app", async () => {

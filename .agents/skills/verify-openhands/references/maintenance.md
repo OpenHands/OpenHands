@@ -65,7 +65,7 @@ issue acceptance criteria, relevant review discussion and file list.
 
 Record direct commits and unresolvable PRs as unknown intent. Keep intent
 (`documented`, `undocumented`, `contradictory`) independent of runtime
-(`pass`, `fail`, `blocked`, `not-run`). A working change can still be
+(`pass`, `fail`, `blocked`, `not-run`, and `xfail`/`xpass` for known bugs). A working change can still be
 undocumented. Never edit a PR description (the `HUMAN:` section is human-only)
 to justify a change after the fact.
 
@@ -79,6 +79,14 @@ feature file (parallel if delegation is available). Each reads current source fo
 summary, source entry points, likely drift with citations (or none), new
 surfaces missing from the map, and one live recipe. Readers never edit files or
 drive the browser.
+
+Reconcile before driving. Every feature file has a returned summary; re-run a
+reader that came back empty or failed instead of treating its feature as clean.
+Merge the readers' recipes into as few app states as practical (one fixture
+set, one LLM setup) so the live pass does not rebuild the same state per
+family. Spot-check each cited drift against source before you trust it; do not
+repeat the source analysis for claims a reader found clean (their live coverage
+in §4 still applies).
 
 Re-check stale harness claims whenever the CLI gained verbs: grep the map for
 `blocked`, `not run`, `harness gap`, `no verb` and `cannot be driven`, and
@@ -100,22 +108,47 @@ and drives it serially; parallel live work needs one `launch --new` per worker.
 Exercise every feature at least once and every changed behavior on all its entry
 points, at desktop and phone viewports for UI changes. Hold three invariants:
 
-1. Never drive an instance not doctored since its last surprise
-   (`control-openhands doctor`; reload or relaunch when the UI is wedged).
-2. Evidence captured so far survives every cleanup (check it after `stop`).
+1. Never drive an instance not doctored since its last surprise. Run
+   `control-openhands doctor` before the first drive, on each `launch --new`,
+   and again after any failed drive. Doctor cannot see a wedged UI on a healthy
+   stack: `browser reload`, return to a known state or relaunch rather than
+   driving on and hoping.
+2. Evidence captured so far survives every cleanup: check it at its recorded
+   path after `stop`, do not assume it.
 3. Nothing a drive started outlives its usefulness: fixtures deleted, schedules
-   disabled, runs stopped.
+   disabled, runs stopped. Clean a failed drive's leftovers too, whether the
+   run is stuck or exited. Clean only that drive's own leftovers: never touch
+   another worker's run, and leave up a run that the coordinator still uses.
 
-A doctor failure caused by skill drift is drift: fix it and retry once. A
-feature that cannot be reached is `blocked` only with the concrete prerequisite
-and the route attempted; if the map omits that prerequisite, that is drift too.
-Re-drive any CLI fix before shipping it.
+A doctor failure caused by skill drift is drift: fix it in this skill's
+directory, restart only what the fix invalidated, and retry once; a second
+failure makes the pass blocked. A feature that cannot be reached is `blocked`
+only with the concrete prerequisite and the route attempted; if the map omits
+that prerequisite, that is drift too. Re-drive any CLI fix before shipping it.
+Run the final `control-openhands stop` after the last drive of the pass,
+including those re-drives.
 
 For an apparent regression, run the same minimal recipe on BASE and TARGET.
 Claim introduced-in-range only when BASE passes and TARGET fails under
 comparable conditions (same browser, viewport, fixture state, backend pins).
 Otherwise classify as reproduced-on-both, environment/harness gap, intent gap,
-or origin-unconfirmed. Use screenshots side by side; a pixel difference is not
+or origin-unconfirmed. Once the regression is a known bug with a `known-bug`
+block, the same rule is executable: `bug run <ID> --attempts 2` on each run and
+`bug proof` (introduced-in-range is the proof read the other way: BASE `xpass`
+twice, TARGET `xfail` twice).
+
+To attribute a **fix** (a PR that closes a recorded bug, or an issue closed
+since BASE), reproduce twice on the baseline and confirm twice on the fix,
+with the same recipe, viewport, entry point and backend pins:
+`control-openhands bug run <ID> --attempts 2 --label baseline --run "$BASE_RUN"`,
+the same with `--label fix --run "$FIX_RUN"`, then
+`control-openhands bug proof <ID> --baseline "$BASE_RUN" --baseline-label baseline --fix "$FIX_RUN" --fix-label fix`.
+Each attempt records its revision, backend versions, viewport, recipe hash,
+failing line and assertion in `evidence/known-bugs/attempts.jsonl`. Only
+`verified` is a fix. A baseline that reproduces fewer than two times out of
+two, or attempts under different inputs, are `inconclusive`: say so and do not
+remove the note. A setup failure, a stopped backend, a timeout or another
+symptom is a `fail`, never a reproduction. Use screenshots side by side; a pixel difference is not
 automatically a bug and a zero difference does not prove behavior.
 
 ## 5. Triage
@@ -127,11 +160,28 @@ automatically a bug and a zero difference does not prove behavior.
 - **Product defect**: keep the evidence, search existing issues, then file in the
   owning repository (Canvas here; Agent Server/SDK in
   `OpenHands/software-agent-sdk`; scheduling/dispatch in `OpenHands/automation`),
-  following that repository's issue template. Keep it out of the maintenance PR.
+  following that repository's issue template. The fix stays out of the
+  maintenance PR, but the defect goes in: the same PR adds a `Known failure
+  (reproduced <date>, #<issue>)` note to the bullet that reproduces it, next to
+  the expected result, or a `Known issue #<issue>` Gotchas entry when no recipe
+  can drive it.
+- **Bugs filed outside the pass**: open `bug` issues without a supported
+  map or ledger outcome are repro candidates too, regardless of creation date.
+  Include newly opened, reopened and newly bug-labeled reports. Reproduce each and add its
+  note; when one does not reproduce, comment on the issue with the run instead.
+  `ready-for-dev` prioritizes live work but does not exclude older actionable
+  reports. [bug-backfill.md](bug-backfill.md) defines the inventory outcomes and
+  their optional GitHub labels; a label must have a map note or report behind it.
 - **Undocumented or contradictory change**: cite the PR and the observed
   difference; ask the maintainer instead of rewriting the expectation.
 - **Known issues** linked in Gotchas are repro candidates: retest, link fresh
-  results, never file duplicates or silently waive the check.
+  results, never file duplicates or silently waive the check. Run every
+  `known-bug` block (`control-openhands bug list`, then `bug run <ID>`): an
+  `xfail` keeps the note, with its date refreshed. An `xpass` is a map review,
+  not a pass: find what fixed it (a merged PR, a backend release), prove it
+  with `bug proof` where a baseline is at hand, then drop the note and keep the
+  block's commands as the bullet's normal steps. A `fail` is a broken recipe or
+  a new symptom: triage it like any other failure.
 
 ## 6. Report and hand off
 

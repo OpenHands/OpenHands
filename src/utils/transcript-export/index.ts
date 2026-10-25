@@ -17,6 +17,7 @@ import {
   isStreamingDeltaEvent,
   isSwitchLLMObservationEvent,
   isClassifyAndSwitchLLMObservationEvent,
+  isUserRejectObservation,
 } from "#/types/agent-server/type-guards";
 import { handleEventForUI } from "#/utils/handle-event-for-ui";
 import { markdownFence } from "#/utils/markdown-fence";
@@ -323,7 +324,7 @@ const buildTranscriptEntries = (
     try {
       const narrationAction = isActionEvent(event)
         ? event
-        : isObservationEvent(event)
+        : isObservationEvent(event) || isUserRejectObservation(event)
           ? actionsById.get(event.action_id)
           : undefined;
       if (narrationAction) addActionNarration(narrationAction);
@@ -468,6 +469,21 @@ const buildTranscriptEntries = (
           details: includeToolDetails
             ? getSafeObservationDetails(event, correspondingAction)
             : "",
+          timestamp: event.timestamp ?? "",
+        });
+        continue;
+      }
+
+      if (isUserRejectObservation(event)) {
+        const rejectedAction = actionsById.get(event.action_id);
+        entries.push({
+          kind: "tool",
+          summary: `${
+            rejectedAction
+              ? getActionSummary(rejectedAction)
+              : cleanInlineText(event.tool_name)
+          } (${i18n.t(I18nKey.EVENT$REJECTED)})`,
+          details: includeToolDetails ? event.rejection_reason : "",
           timestamp: event.timestamp ?? "",
         });
         continue;

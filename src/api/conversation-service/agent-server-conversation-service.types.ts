@@ -1,7 +1,9 @@
 import { ConversationTrigger } from "../open-hands.types";
+import type { ClientToolSpec } from "../canvas-ui-client-tool";
 import { Provider } from "#/types/settings";
 import { SuggestedTask } from "#/utils/types";
 import { ExecutionStatus } from "#/types/agent-server/core";
+import type { ACPModelOption } from "#/constants/acp-providers";
 
 /**
  * Lifecycle state of a cloud sandbox. Mirrors OpenHands' V1SandboxStatus.
@@ -71,6 +73,8 @@ export interface AppConversationStartRequest {
   initial_message?: SendMessageRequest | null;
   processors?: unknown[]; // EventCallbackProcessor - keeping as unknown for now
   llm_model?: string | null;
+  // One-off launch on a saved LLM profile (by name), without activating it.
+  llm_profile?: string | null;
   selected_repository?: string | null;
   selected_branch?: string | null;
   git_provider?: Provider | null;
@@ -82,6 +86,8 @@ export interface AppConversationStartRequest {
   agent_type?: "default" | "plan";
   sandbox_id?: string | null;
   plugins?: PluginSpec[] | null; // Plugins to load when starting the conversation
+  client_tools?: ClientToolSpec[] | null; // Browser/client-handled tools registered with the runtime
+  tags?: Record<string, string> | null; // Conversation tags to persist at start
   // One-off launch from a saved AgentProfile, resolved server-side (#3727).
   // Accepted by the cloud app-server (OpenHands #15060) on
   // POST /api/v1/app-conversations; the local path uses the encrypted
@@ -127,11 +133,6 @@ export interface SendMessageResponse {
   content: MessageContent[];
 }
 
-export interface AppConversationStartTaskPage {
-  items: AppConversationStartTask[];
-  next_page_id: string | null;
-}
-
 export interface ConversationWorkspace {
   working_dir: string | null;
 }
@@ -139,6 +140,8 @@ export interface ConversationWorkspace {
 export interface LaunchedAgentProfile {
   agent_profile_id: string;
   revision: number;
+  /** The secrets the conversation may use; null is every saved secret. */
+  secret_refs?: string[] | null;
 }
 
 export interface AppConversation {
@@ -173,6 +176,11 @@ export interface AppConversation {
    * "ACP" chip when the key is unknown or null.
    */
   acp_server?: string | null;
+  /**
+   * Models the conversation's ACP session offers, as its server reported them.
+   * Empty before the session starts and on servers that don't report models.
+   */
+  acp_available_models?: ACPModelOption[] | null;
   /**
    * Server-side key-value tags from the agent-server's
    * ``ConversationInfo.tags`` (settable at creation and via
@@ -245,10 +253,6 @@ export interface Skill {
   disable_model_invocation?: boolean;
 }
 
-export interface GetSkillsResponse {
-  skills: Skill[];
-}
-
 export interface HookDefinition {
   type: string; // 'command', 'prompt' or 'agent'
   command: string; // Empty for prompt and agent hooks
@@ -307,4 +311,6 @@ export interface RuntimeConversationInfo {
   updated_at: string;
   status: ExecutionStatus;
   stats: RuntimeConversationStats;
+  /** Models an ACP session reported; empty otherwise. */
+  available_models: ACPModelOption[];
 }

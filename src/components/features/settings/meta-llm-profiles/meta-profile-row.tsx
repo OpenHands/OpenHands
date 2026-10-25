@@ -14,7 +14,8 @@ import {
 interface MetaProfileRowProps {
   info: MetaProfileInfo;
   isActive: boolean;
-  onActivate: (name: string) => void;
+  /** Omitted when routers aren't activated here. */
+  onActivate?: (name: string) => void;
   onEdit: (name: string) => void;
   onDelete: (name: string) => void;
   isActivating: boolean;
@@ -78,7 +79,7 @@ export function MetaProfileRow({
           <MetaProfileActionsMenu
             anchorRef={triggerRef}
             onEdit={() => onEdit(info.name)}
-            onSetActive={() => onActivate(info.name)}
+            onSetActive={onActivate ? () => onActivate(info.name) : undefined}
             onDelete={() => onDelete(info.name)}
             isActive={isActive}
             isActivating={isActivating}

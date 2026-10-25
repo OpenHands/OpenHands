@@ -128,8 +128,20 @@ describe("HomeChatLauncher failed launch", () => {
         this.textContent = value;
       },
     });
-    // <Toaster /> asks for the reduced-motion preference, which jsdom lacks.
-    vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
+    // <Toaster /> and framer-motion ask for the reduced-motion preference, which jsdom lacks.
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn().mockReturnValue({
+        matches: true,
+        media: "(prefers-reduced-motion)",
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }),
+    );
     vi.spyOn(WorkspacesService, "listWorkspaces").mockResolvedValue({
       workspaces: [],
       workspaceParents: [],

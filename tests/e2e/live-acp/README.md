@@ -24,7 +24,7 @@ and needs a running container + real host credentials).
 docker run -d --name oh-acp -p 8010:8000 \
   -v oh-acp-data:/workspace \
   -v "$(pwd)/tools:/canvas-tools:ro" -e OH_EXTRA_PYTHON_PATH=/canvas-tools \
-  ghcr.io/openhands/agent-server:1.53.0-python
+  ghcr.io/openhands/agent-server:1.56.0-python
 
 # 2. Run the e2e (all providers, or a subset).
 npx vite-node -c tests/e2e/live-acp/vite-node.config.mts \

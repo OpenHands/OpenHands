@@ -131,20 +131,6 @@ export function resolveSchemaFieldDescription(
 }
 
 /**
- * Resolves a section label using the i18n fallback chain.
- * @see resolveSchemaFieldText for the fallback chain details.
- */
-export function resolveSchemaFieldSectionLabel(
-  t: TFunction,
-  sectionKey: string,
-  schemaValue: string,
-): string {
-  return (
-    resolveSchemaFieldText(t, sectionKey, "SECTION_LABEL", schemaValue) ?? ""
-  );
-}
-
-/**
  * Resolves a choice label for select fields using the i18n fallback chain.
  * Convention: SCHEMA$<FIELD_PATH>$CHOICE$<CHOICE_VALUE>
  *

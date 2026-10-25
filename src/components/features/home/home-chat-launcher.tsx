@@ -6,11 +6,13 @@ import { CustomChatInput } from "#/components/features/chat/custom-chat-input";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
 import { useLocalWorkspaces } from "#/hooks/query/use-local-workspaces";
+import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useModelInterceptor } from "#/hooks/chat/use-model-interceptor";
 import { useLlmConfigured } from "#/hooks/use-llm-configured";
 import { HOME_PROMPT_DRAFT_KEY } from "#/hooks/chat/use-draft-persistence";
 import { useChatAttachmentUpload } from "#/hooks/chat/use-chat-attachment-upload";
 import { useConversationStore } from "#/stores/conversation-store";
+import { useModelStore } from "#/stores/model-store";
 import type { WorkspaceMode } from "#/api/conversation-metadata-store";
 import { setPendingTaskAttachments } from "#/stores/pending-task-attachments-store";
 import { enqueueHomeTaskPendingMessage } from "#/utils/enqueue-home-task-pending-message";
@@ -21,6 +23,7 @@ import { Branch, GitRepository } from "#/types/git";
 import { Provider } from "#/types/settings";
 import { LocalWorkspace } from "#/types/workspace";
 import { I18nKey } from "#/i18n/declaration";
+import { cn } from "#/utils/utils";
 import {
   displayErrorToast,
   TOAST_OPTIONS,
@@ -32,12 +35,19 @@ import {
   writeStoredLocalWorkspaceMode,
 } from "#/utils/workspace-mode";
 import type { PluginSpec } from "#/api/conversation-service/agent-server-conversation-service.types";
+import { markAutomationSetupHandoff } from "#/api/automation-setup-handoff-store";
 import { PluginPickerModal } from "#/components/features/plugins/plugin-picker-modal";
 import { PluginPickerTrigger } from "#/components/features/plugins/plugin-picker-trigger";
 import { RecommendedAutomationsLauncher } from "#/components/features/automations/recommended-automations-launcher";
+import { useHomeRecommendedAutomationsDismissed } from "./use-home-recommended-automations-dismissed";
+import { writeHomeRecommendedAutomationsDismissed } from "./home-recommended-automations-storage";
 import { PinnedAutomationsDashboard } from "./featured-automations/pinned-automations-dashboard";
 import { RunningAutomationsList } from "./featured-automations/running-automations-list";
 import { HomeHeaderTitle } from "./home-header/home-header-title";
+import {
+  HomeLauncherModeToggle,
+  type HomeLauncherMode,
+} from "./home-launcher-mode-toggle";
 import { OpenLauncherButton } from "./open-launcher-button";
 import { OpenWorkspaceDialog } from "./open-workspace-dialog";
 import { OpenRepositoryDialog } from "./open-repository-dialog";
@@ -59,8 +69,14 @@ export function HomeChatLauncher() {
   const [workspaceMode, setWorkspaceModeState] = useState<WorkspaceMode>(() =>
     readStoredLocalWorkspaceMode(),
   );
+  const isRecommendedAutomationsDismissed =
+    useHomeRecommendedAutomationsDismissed();
   const [selectedPlugins, setSelectedPlugins] = useState<PluginSpec[]>([]);
   const [isPluginPickerOpen, setIsPluginPickerOpen] = useState(false);
+  const [launcherMode, setLauncherMode] = useState<HomeLauncherMode>("code");
+  const displayedLauncherMode = launcherMode;
+  const isAutomateMode = launcherMode === "automate";
+  const handleLauncherModeChange = setLauncherMode;
   const isMountedRef = useRef(true);
 
   useEffect(() => {
@@ -90,6 +106,8 @@ export function HomeChatLauncher() {
     restoreMessageToInputIfEmpty,
   } = useConversationStore();
   const { handleUpload } = useChatAttachmentUpload();
+  const homeLlmProfile = useModelStore((s) => s.homeLlmProfile);
+  const { data: llmProfiles } = useLlmProfiles();
   const { error: workspacesError } = useLocalWorkspaces({ enabled: isLocal });
   const { isolated, unsupportedMessage: runtimeWorkspaceMessage } =
     useConversationWorkspace();
@@ -129,6 +147,7 @@ export function HomeChatLauncher() {
     // query here would create a duplicate text-only initial_message.
     let variables: Parameters<typeof createConversation>[0] = {
       query: hasAttachments ? undefined : trimmed || undefined,
+      automationSetup: isAutomateMode,
       entryPoint: "home_chat_launcher",
     };
     // An isolated backend owns its workspace, so a host selection left over
@@ -156,9 +175,23 @@ export function HomeChatLauncher() {
     // Explicitly-attached plugins are additive on top of any ambient set and
     // are resolved from git at run time. Omitted entirely when none selected so
     // nothing attaches unless the user picked it.
-    if (selectedPlugins.length > 0) {
+    if (!isAutomateMode && selectedPlugins.length > 0) {
       variables = { ...variables, plugins: selectedPlugins };
     }
+
+    // A cloud member's home LLM pick (see useChatInputLlmProfileState), unless
+    // that profile has since gone.
+    if (
+      homeLlmProfile &&
+      llmProfiles?.profiles.some((p) => p.name === homeLlmProfile)
+    ) {
+      variables = { ...variables, llmProfile: homeLlmProfile };
+    }
+
+    const openAutomationSetupMode = (conversationId: string) => {
+      if (!isAutomateMode) return;
+      markAutomationSetupHandoff(conversationId);
+    };
 
     // Loading toast gives the user a clear signal that the request is in
     // flight; dismissed precisely once the mutation resolves.
@@ -211,6 +244,7 @@ export function HomeChatLauncher() {
               images: attachmentSnapshot.images,
               imagesMarkedUploadAsFile,
             });
+            openAutomationSetupMode(targetConversationId);
             navigate(`/conversations/${targetConversationId}`);
             return;
           } else {
@@ -240,6 +274,7 @@ export function HomeChatLauncher() {
           });
         }
 
+        openAutomationSetupMode(targetConversationId);
         navigate(`/conversations/${targetConversationId}`);
       } catch (error) {
         toast.dismiss(toastId);
@@ -275,12 +310,23 @@ export function HomeChatLauncher() {
           <HomeHeaderTitle />
         </div>
 
+        <div className="flex w-full justify-center">
+          <HomeLauncherModeToggle
+            mode={displayedLauncherMode}
+            onChange={handleLauncherModeChange}
+          />
+        </div>
+
         <div className="w-full">
           <CustomChatInput
             onSubmit={handleSubmitWithModelGuard}
             onFilesPaste={handleUpload}
-            placeholder={t(I18nKey.HOME$DESCRIBE_ENGINEERING_TASK)}
             disabled={isCreating || llmBlocked}
+            placeholder={
+              isAutomateMode
+                ? t(I18nKey.HOME$AUTOMATE_PROMPT_PLACEHOLDER)
+                : t(I18nKey.SUGGESTIONS$WHAT_TO_BUILD)
+            }
           />
         </div>
 
@@ -300,7 +346,14 @@ export function HomeChatLauncher() {
             )}
           </p>
         )}
-        <div className="flex items-center justify-start gap-2">
+        <div
+          data-testid="home-composer-actions"
+          aria-disabled={isAutomateMode}
+          className={cn(
+            "flex items-center justify-start gap-2",
+            isAutomateMode && "pointer-events-none opacity-40",
+          )}
+        >
           {hasSelection ? (
             <HomeGitControlBarPreview
               workspace={pendingWorkspace}
@@ -316,19 +369,30 @@ export function HomeChatLauncher() {
             <OpenLauncherButton
               kind={isLocal ? "local" : "cloud"}
               onClick={() => setIsDialogOpen(true)}
-              disabled={isCreating || Boolean(workspacesUnsupportedMessage)}
+              disabled={
+                isCreating ||
+                isAutomateMode ||
+                Boolean(workspacesUnsupportedMessage)
+              }
               disabledTooltip={workspacesUnsupportedMessage}
             />
           )}
           <PluginPickerTrigger
             count={selectedPlugins.length}
             onClick={() => setIsPluginPickerOpen(true)}
-            disabled={isCreating}
+            disabled={isCreating || isAutomateMode}
           />
         </div>
 
         <div className="mt-8 flex w-full flex-col gap-8">
-          <RecommendedAutomationsLauncher variant="rail" />
+          {/* @spec HL-002 — Only Home's rail is dismissible; dismissal unmounts it, inset included */}
+          {!isRecommendedAutomationsDismissed && (
+            <RecommendedAutomationsLauncher
+              variant="rail"
+              dismissible
+              onDismiss={() => writeHomeRecommendedAutomationsDismissed(true)}
+            />
+          )}
           <PinnedAutomationsDashboard />
           <RunningAutomationsList />
         </div>

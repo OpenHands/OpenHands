@@ -49,6 +49,20 @@ describe("makeMcpTestErrorMessage", () => {
     },
   );
 
+  it("tells the user to finish the sign-in when an OAuth authorization was not completed", () => {
+    const message = makeMcpTestErrorMessage(
+      t,
+      "authorization",
+      "OAuth authorization was not completed",
+      "shttp",
+    );
+
+    expect(message).toBe(
+      "Sign-in was not completed. Finish signing in from the pop-up window, then try again.",
+    );
+    expect(message).not.toContain("URL");
+  });
+
   it("leaves timeout and credentials failures unchanged for stdio servers", () => {
     expect(makeMcpTestErrorMessage(t, "timeout", "late", "stdio")).toBe(
       "Connection timed out. Check the URL and try again.",

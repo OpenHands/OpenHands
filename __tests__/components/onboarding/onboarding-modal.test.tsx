@@ -1,3 +1,6 @@
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { compile } from "@tailwindcss/node";
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
@@ -29,7 +32,11 @@ const saveAgentProfileMock = vi.hoisted(() => vi.fn().mockResolvedValue({}));
 const getAgentProfileMock = vi.hoisted(() =>
   vi.fn().mockResolvedValue({ profile: { id: "default-profile-id" } }),
 );
-const activateAgentProfileMock = vi.hoisted(() => vi.fn().mockResolvedValue({}));
+const activateAgentProfileMock = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({}),
+);
+const saveLlmProfileMock = vi.hoisted(() => vi.fn().mockResolvedValue({}));
+const activateLlmProfileMock = vi.hoisted(() => vi.fn().mockResolvedValue({}));
 let captureMock: MockInstance<typeof telemetry.trackEvent>;
 
 // Both the backend status badge in the embedded edit form and the
@@ -48,11 +55,30 @@ vi.mock("@openhands/typescript-client/clients", () => ({
       getSettings: vi.fn(() => getSettingsMock()),
     };
   }),
+  // The local LLM step edits the active LLM profile (none here, so a fresh
+  // one) and saves the form as a profile.
+  ProfilesClient: vi.fn(function ProfilesClientMock() {
+    return {
+      listProfiles: vi.fn(() =>
+        Promise.resolve({ profiles: [], active_profile: null }),
+      ),
+      getProfile: vi.fn(() =>
+        Promise.resolve({ name: "", config: {}, api_key_set: false }),
+      ),
+      saveProfile: vi.fn((...args) => saveLlmProfileMock(...args)),
+      activateProfile: vi.fn((...args) => activateLlmProfileMock(...args)),
+    };
+  }),
   AgentProfilesClient: vi.fn(function AgentProfilesClientMock() {
     return {
+      listAgentProfiles: vi.fn(() =>
+        Promise.resolve({ profiles: [], active_agent_profile_id: null }),
+      ),
       saveAgentProfile: vi.fn((...args) => saveAgentProfileMock(...args)),
       getAgentProfile: vi.fn((...args) => getAgentProfileMock(...args)),
-      activateAgentProfile: vi.fn((...args) => activateAgentProfileMock(...args)),
+      activateAgentProfile: vi.fn((...args) =>
+        activateAgentProfileMock(...args),
+      ),
     };
   }),
 }));
@@ -72,8 +98,25 @@ vi.mock("#/routes/llm-settings", async () => {
   const React = await import("react");
 
   return {
-    LlmSettingsScreen: (props: Record<string, unknown>) => {
+    LlmSettingsScreen: (props: {
+      initialValueOverrides?: Record<string, string | boolean>;
+      onSaveSuccess?: () => void;
+      onSaveControlChange?: (control: unknown) => void;
+    }) => {
       llmSettingsScreenMock(props);
+      const { onSaveControlChange } = props;
+      // Expose the save control the real form provides, with no changes.
+      React.useEffect(() => {
+        onSaveControlChange?.({
+          save: () => props.onSaveSuccess?.(),
+          isSaving: false,
+          isDirty: false,
+          values: props.initialValueOverrides ?? {},
+          view: "basic",
+          getDirtyPayload: () => ({ llm: {} }),
+          getSavePayload: () => ({}),
+        });
+      }, [onSaveControlChange]);
       return React.createElement(
         "div",
         { "data-testid": "llm-settings-screen-stub" },
@@ -164,6 +207,13 @@ async function waitForConfiguredBackendToBeSkipped() {
   );
 }
 
+// The LLM step's Next waits for the form's save control.
+async function clickLlmNext(user: ReturnType<typeof userEvent.setup>) {
+  const next = screen.getByTestId("onboarding-llm-next");
+  await waitFor(() => expect(next).toBeEnabled());
+  await user.click(next);
+}
+
 async function completeAgentStep(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByTestId("onboarding-agent-next"));
   await waitFor(
@@ -174,6 +224,43 @@ async function completeAgentStep(user: ReturnType<typeof userEvent.setup>) {
       ),
     { timeout: 3000 },
   );
+}
+
+async function createSlideOffsetAssertion() {
+  const compiler = await compile(
+    await readFile(resolve("src/tailwind.css"), "utf8"),
+    { base: resolve("src"), onDependency: () => {} },
+  );
+
+  return (expectedOffsets: number[]) => {
+    const slides = screen.getAllByTestId(/^onboarding-slide-\d+$/);
+    expect(slides).toHaveLength(expectedOffsets.length);
+    // Compile the real slide classes, then follow their property reader to
+    // the value owned by that render. Neither side's spelling is prescribed.
+    const css = compiler.build(slides.flatMap((slide) => [...slide.classList]));
+    slides.forEach((slide, index) => {
+      const declarations = [
+        ...css.matchAll(/\.((?:\\.|[\w-])+)\s*\{([^}]+)\}/g),
+      ]
+        .filter(([, selector]) =>
+          slide.classList.contains(selector.replace(/\\(.)/g, "$1")),
+        )
+        .map(([, , body]) => body)
+        .join("\n");
+      const horizontalOffset = /--tw-translate-x:\s*var\((--[\w-]+)\);/.exec(
+        declarations,
+      );
+      expect(horizontalOffset).not.toBeNull();
+      expect(declarations).toMatch(
+        /translate:\s*var\(--tw-translate-x\) var\(--tw-translate-y\);/,
+      );
+      expect(slide.style.getPropertyValue(horizontalOffset![1])).toBe(
+        `${expectedOffsets[index]}%`,
+      );
+      const transition = /transition-property:\s*([^;]+);/.exec(declarations);
+      expect(transition?.[1].split(/,\s*/)).toContain("translate");
+    });
+  };
 }
 
 function seedCloudBackend() {
@@ -233,7 +320,7 @@ beforeEach(() => {
     if (options?.host?.startsWith("https://127.0.0.1:8000")) {
       return Promise.reject(new Error("Failed to fetch"));
     }
-    return Promise.resolve({ version: "1.52.0" });
+    return Promise.resolve({ version: "1.56.0" });
   });
   // ChooseAgentStep's Next button now persists the selection via
   // saveSettings before advancing. Stub it so the rest of the flow
@@ -584,6 +671,9 @@ describe("OnboardingModal", () => {
     renderModal();
     const user = userEvent.setup();
 
+    const expectSlideOffsets = await createSlideOffsetAssertion();
+    expectSlideOffsets([0, 100, 200, 300]);
+
     // Both columns should be visible in standard mode.
     expect(screen.getByTestId("onboarding-backend-host")).toBeInTheDocument();
     expect(
@@ -607,7 +697,8 @@ describe("OnboardingModal", () => {
       "data-active",
       "true",
     );
-    // The Set Up LLM slide is always mounted (transform-translated off-screen),
+    expectSlideOffsets([0, 100, 200]);
+    // The Set Up LLM slide is always mounted (translated off-screen),
     // but it must not be the active slide after Cloud login completes.
     expect(screen.getByTestId("onboarding-slide-1")).toHaveAttribute(
       "data-active",
@@ -705,20 +796,21 @@ describe("OnboardingModal", () => {
     );
   });
 
-  it("pre-fills the LLM step with the OpenHands default model", () => {
+  it("pre-fills the LLM step with the OpenHands default model", async () => {
     renderModal();
 
-    expect(llmSettingsScreenMock).toHaveBeenCalledTimes(1);
-    expect(llmSettingsScreenMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        initialValueOverrides: {
-          "llm.model": ONBOARDING_DEFAULT_LLM_MODEL,
-        },
-      }),
+    await waitFor(() =>
+      expect(llmSettingsScreenMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          initialValueOverrides: expect.objectContaining({
+            "llm.model": ONBOARDING_DEFAULT_LLM_MODEL,
+          }),
+        }),
+      ),
     );
   });
 
-  it("pre-fills the LLM step with the DB-selected OpenHands default", () => {
+  it("pre-fills the LLM step with the DB-selected OpenHands default", async () => {
     useFreeModelsStore.getState().setFlags({
       freeModels: new Set(["openhands/gpt-5.2"]),
       defaultModel: "openhands/gpt-5.2",
@@ -726,13 +818,14 @@ describe("OnboardingModal", () => {
 
     renderModal();
 
-    expect(llmSettingsScreenMock).toHaveBeenCalledTimes(1);
-    expect(llmSettingsScreenMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        initialValueOverrides: {
-          "llm.model": "openhands/gpt-5.2",
-        },
-      }),
+    await waitFor(() =>
+      expect(llmSettingsScreenMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          initialValueOverrides: expect.objectContaining({
+            "llm.model": "openhands/gpt-5.2",
+          }),
+        }),
+      ),
     );
   });
 
@@ -757,23 +850,44 @@ describe("OnboardingModal", () => {
       "true",
     );
 
+    const expectSlideOffsets = await createSlideOffsetAssertion();
+    expectSlideOffsets([0, 100, 200]);
+
     // Step 0 → 1. ChooseAgentStep does an async save before advancing.
     await completeAgentStep(user);
+    expectSlideOffsets([-100, 0, 100]);
     expect(screen.getByTestId("onboarding-slide-1")).toHaveAttribute(
       "data-active",
       "true",
     );
 
-    // Step 1 → 2
-    await user.click(screen.getByTestId("onboarding-llm-next"));
-    expect(screen.getByTestId("onboarding-modal")).toHaveAttribute(
-      "data-current-step",
-      "2",
+    // Step 1 → 2. On a local backend Next saves the form as an LLM profile
+    // and activates it before advancing.
+    await clickLlmNext(user);
+    await waitFor(() =>
+      expect(screen.getByTestId("onboarding-modal")).toHaveAttribute(
+        "data-current-step",
+        "2",
+      ),
     );
+    expect(saveLlmProfileMock).toHaveBeenCalledWith(
+      "gpt-5.6-sol",
+      expect.objectContaining({
+        llm: expect.objectContaining({ model: ONBOARDING_DEFAULT_LLM_MODEL }),
+      }),
+    );
+    expect(activateLlmProfileMock).toHaveBeenCalledWith("gpt-5.6-sol");
     expect(screen.getByTestId("onboarding-slide-2")).toHaveAttribute(
       "data-active",
       "true",
     );
+    expectSlideOffsets([-200, -100, 0]);
+
+    // Back moves the same rail in reverse without changing the step's owner.
+    await user.click(screen.getByTestId("onboarding-hello-back"));
+    expectSlideOffsets([-100, 0, 100]);
+    await user.click(screen.getByTestId("onboarding-llm-back"));
+    expectSlideOffsets([0, 100, 200]);
   });
 
   it("Skip immediately closes the modal", async () => {
@@ -1014,7 +1128,7 @@ describe("OnboardingModal", () => {
 
     await waitForConfiguredBackendToBeSkipped();
     await completeAgentStep(user);
-    await user.click(screen.getByTestId("onboarding-llm-next"));
+    await clickLlmNext(user);
 
     const helloInput = screen.getByTestId(
       "onboarding-hello-input",
@@ -1039,7 +1153,7 @@ describe("OnboardingModal", () => {
         "true",
       ),
     );
-    await user.click(screen.getByTestId("onboarding-llm-next"));
+    await clickLlmNext(user);
     await waitFor(() =>
       expect(screen.getByTestId("onboarding-slide-2")).toHaveAttribute(
         "data-active",
@@ -1053,7 +1167,7 @@ describe("OnboardingModal", () => {
     );
     expect(
       helloInput.compareDocumentPosition(recommendations) &
-      Node.DOCUMENT_POSITION_FOLLOWING,
+        Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
       within(recommendations).getByTestId(
@@ -1170,7 +1284,7 @@ describe("OnboardingModal", () => {
       const user = userEvent.setup();
       await waitForConfiguredBackendToBeSkipped();
       await completeAgentStep(user);
-      await user.click(screen.getByTestId("onboarding-llm-next"));
+      await clickLlmNext(user);
       await waitFor(() =>
         expect(screen.getByTestId("onboarding-slide-2")).toHaveAttribute(
           "data-active",

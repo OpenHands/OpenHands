@@ -12,12 +12,23 @@
 @theme inline {
   --color-primary: var(--oh-color-primary);
   --color-logo: var(--oh-color-logo);
-  --color-base: var(--oh-color-base);
-  /* Avoid text-base: tailwind-merge interprets it as a font size. */
+  --color-canvas-base: var(--oh-color-base);
+  /* Keep color names distinct from font sizes such as text-base. */
   --color-on-primary: var(--oh-color-base);
   --color-base-secondary: var(--oh-color-base-secondary);
   --color-danger: var(--oh-color-danger);
   --color-success: var(--oh-color-success);
+  /* @spec MCP-004 — Form feedback follows readable theme text roles */
+  --color-feedback-error: var(--oh-feedback-error);
+  --color-feedback-success: var(--oh-feedback-success);
+  /* @spec WN-001 — Warning text has a separate readable theme role */
+  --color-feedback-warning: var(--oh-feedback-warning);
+  /* GitHub Markdown alert ink also owns its border and translucent fill. */
+  --color-markdown-alert-note: var(--oh-markdown-alert-note);
+  --color-markdown-alert-tip: var(--oh-markdown-alert-tip);
+  --color-markdown-alert-important: var(--oh-markdown-alert-important);
+  --color-markdown-alert-warning: var(--oh-markdown-alert-warning);
+  --color-markdown-alert-caution: var(--oh-markdown-alert-caution);
   --color-basic: var(--oh-color-basic);
   --color-tertiary: var(--oh-color-tertiary);
   --color-tertiary-light: var(--oh-color-tertiary-light);
@@ -37,6 +48,7 @@
   --color-text-secondary: var(--oh-text-secondary);
   --color-text-tertiary: var(--oh-text-tertiary);
   --color-muted: var(--oh-muted);
+  --color-link: var(--oh-link);
   --color-text-dim: var(--oh-text-dim);
   --color-text-subtle: var(--oh-text-subtle);
   --color-modal-title: var(--oh-modal-title-foreground);
@@ -79,12 +91,20 @@
 
 :root {
   color-scheme: dark;
-  --oh-color-primary: #c9b974;
+  --oh-color-primary: #ffffff;
   --oh-color-logo: #cfb755;
   --oh-color-base: var(--cool-grey-950);
   --oh-color-base-secondary: var(--cool-grey-925);
   --oh-color-danger: #e76a5e;
   --oh-color-success: #a5e75e;
+  /* Small feedback text has its own contrast contract, separate from controls. */
+  --oh-feedback-error: var(--oh-color-danger);
+  --oh-feedback-success: var(--oh-color-success);
+  --oh-markdown-alert-note: #8EC5FF;
+  --oh-markdown-alert-tip: #5EE9B5;
+  --oh-markdown-alert-important: #D8B4FE;
+  --oh-markdown-alert-warning: #FFE02A;
+  --oh-markdown-alert-caution: #FFB3BF;
   --oh-color-basic: var(--cool-grey-400);
   --oh-color-tertiary: var(--cool-grey-800);
   --oh-color-tertiary-light: var(--cool-grey-300);
@@ -122,6 +142,8 @@
   --oh-success-foreground: var(--cool-grey-950);
   --oh-warning: #c9b974;
   --oh-warning-foreground: var(--cool-grey-950);
+  /* @spec WN-001 — Default warning text stays distinct from warning controls */
+  --oh-feedback-warning: #c9b974;
   --oh-danger: #e76a5e;
   --oh-danger-foreground: var(--cool-grey-50);
   --oh-segment: var(--cool-grey-925);
@@ -473,6 +495,19 @@ button.extension-module-card-interactive {
   }
 }
 
+/*
+ * Syntax-highlighter tokens are inline text runs. Prism names each span after
+ * its grammar type (`token table` for TOML section headers and Markdown
+ * tables, `token static`, ...), and Tailwind generates a utility for any of
+ * those words it finds in the sources (`.table` is `display: table`, which
+ * puts `[`, the section name and `]` on separate lines). Theme colors arrive
+ * as inline styles, so they still apply. Unlayered, so it outranks utilities.
+ */
+code .token {
+  display: inline;
+  position: static;
+}
+
 /* Custom styling for xterm */
 /* XTerm.js scrollbar styling - follows custom-scrollbar pattern */
 .xterm-viewport::-webkit-scrollbar {
@@ -668,4 +703,25 @@ button.extension-module-card-interactive {
 /* Window drag handle for the macOS desktop app's hidden title bar. */
 @utility app-region-drag {
   -webkit-app-region: drag;
+}
+
+/* Reset each nested panel locally until its own measurement is available. */
+@utility add-backend-panel-height {
+  --add-backend-panel-height: auto;
+  height: var(--add-backend-panel-height);
+  transition-property: height;
+}
+
+/* Keep content fixed while the desktop Overview drawer opens or closes. */
+@utility conversation-overview-drawer {
+  width: var(--conversation-overview-drawer-width);
+  transition-property: width, transform, opacity;
+
+  &[aria-hidden="true"] {
+    width: 0px;
+  }
+
+  &[data-resizing="true"] {
+    transition-property: transform, opacity;
+  }
 }

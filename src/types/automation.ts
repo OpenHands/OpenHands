@@ -30,13 +30,19 @@ export interface AutomationRepository {
   url: string;
   /** Branch, tag or commit to check out; absent uses the default branch. */
   ref?: string;
+  /** Git provider that authenticates the clone; required for the shorthand. */
+  provider?: string;
 }
+
+export type AutomationState = "ACTIVE" | "INACTIVE" | "DRAFT";
 
 export interface Automation {
   id: string;
   name: string;
   trigger: AutomationTrigger;
   enabled: boolean;
+  /** Backend automation lifecycle state. Prefer this over deprecated `enabled` when present. */
+  state?: AutomationState | string | null;
   /**
    * Human-readable reason the automation was last disabled (the latest
    * disablement event overwrites this). Mirrors the automation service's
@@ -91,6 +97,10 @@ export interface Automation {
    * detail page uses it to point out which bundle file is the script.
    */
   entrypoint?: string;
+  /** Service-owned upload identifier/path for custom automation bundles. */
+  tarball_path?: string | null;
+  /** Optional setup script path inside the custom automation bundle. */
+  setup_script_path?: string | null;
   branch?: string;
   /**
    * Every repository the automation clones. The service layer derives it on
@@ -222,20 +232,12 @@ export interface AutomationRun {
    */
   cost?: number | null;
   /**
-   * Machine-readable code for the run's current or last-known phase (e.g.
-   * "sandbox_provisioning"). `null` means nothing has reported one; absent
-   * entirely against an automation service that predates phase reporting.
-   * Code and label are one value, always written together.
+   * User-facing live phase from automation ≥1.9.0. Free-form text the
+   * service already sanitised for the dashboard — not a translation key.
+   * `null` means nothing has been reported; absent entirely against a
+   * service older than phase reporting.
    */
-  phase_code?: string | null;
-  /**
-   * Author-supplied description of the phase (at most 200 characters, no
-   * control or separator characters, emoji and non-Latin text allowed).
-   * Data, not translatable interface copy.
-   */
-  phase_label?: string | null;
-  /** UTC datetime the phase was last written. Same nullability as `phase_code`. */
-  phase_updated_at?: string | null;
+  current_phase?: string | null;
   started_at: string;
   completed_at: string | null;
 }
@@ -274,8 +276,7 @@ export interface AutomationRunExportRow {
    */
   cost: number | null;
   /**
-   * The raw `phase_code`, like `status`, falling back to `phase_label` for a
-   * phase reported without a code. Null only when the run has no phase.
+   * The run's `current_phase` as stored. Null only when the run has no phase.
    */
   phase: string | null;
 }

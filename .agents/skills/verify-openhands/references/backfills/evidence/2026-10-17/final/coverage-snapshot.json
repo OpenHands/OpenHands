@@ -1,0 +1,440 @@
+{
+  "attribution": "I am an AI agent helping Engel Nyst (@enyst) with project work.",
+  "provisional": false,
+  "aggregate_utc": "2026-10-17T22:18:33.083173+00:00",
+  "baseline": "d3a58cd1cc045bbb1b24f2c8c0d79a8404ef239b",
+  "target": "61a3bd93e642a0ff4def73b29496a73245628209",
+  "denominator": 779,
+  "source_families": 28,
+  "live_families_with_scoped_observations": 28,
+  "observed_ids": 733,
+  "reviewed_id_categories": {
+    "observed_pass_only": 633,
+    "observed_existing_known_failure": 88,
+    "blocked_only": 46,
+    "observed_fix_assertion": 8,
+    "observed_newly_filed_failure": 4,
+    "observed_unresolved_failure": 0,
+    "not_run_only": 0,
+    "unreconciled": 0
+  },
+  "raw_ledger_id_categories": {
+    "observed_pass_only": 633,
+    "observed_with_fail": 88,
+    "blocked_only": 46,
+    "observed_fix_assertion": 8,
+    "observed_known_fail": 4
+  },
+  "latest_recorded_check_results": {
+    "pass": 1157,
+    "xpass": 13,
+    "fail": 146,
+    "xfail": 14,
+    "not-run": 126,
+    "blocked": 98
+  },
+  "unresolved_failing_checks": 1,
+  "reviewed_definition": "Mutually exclusive per stableID: newly filed product failure > existing known product failure > invalid measurement only; unresolved failure stays explicit. Actual fail and xfail both enter failure review. Otherwise xpass > pass > blocked > explicit not-run > unreconciled. An observed ID covers only recorded entry points, not every branch.",
+  "raw_definition": "Categories are mutually exclusive per stable ID using priority fail > xfail > xpass > pass > blocked > explicit not-run > no record. Any observed category proves only recorded entry points, not every branch of that ID. Fail can include harness/setup problems and must not be called a new product defect. No-record is unreconciled, not proof of untested. Blocked-only excludes IDs with an actual observation. Historical superseded rows remain private; latest per run+ID+entry only.",
+  "families": [
+    {
+      "family": "F01",
+      "denominator": 22,
+      "reviewed_categories": {
+        "observed_pass_only": 18,
+        "observed_existing_known_failure": 1,
+        "blocked_only": 3
+      },
+      "raw_id_categories": {
+        "observed_pass_only": 18,
+        "observed_with_fail": 1,
+        "blocked_only": 3
+      }
+    },
+    {
+      "family": "F02",
+      "denominator": 28,
+      "reviewed_categories": {
+        "observed_pass_only": 23,
+        "blocked_only": 5
+      },
+      "raw_id_categories": {
+        "observed_pass_only": 23,
+        "blocked_only": 5
+      }
+    },
+    {
+      "family": "F03",
+      "denominator": 42,
+      "reviewed_categories": {
+        "observed_pass_only": 35,
+        "observed_existing_known_failure": 4,
+        "blocked_only": 3
+      },
+      "raw_id_categories": {
+        "observed_pass_only": 35,
+        "observed_with_fail": 4,
+        "blocked_only": 3
+      }
+    },
+    {
+      "family": "F04",
+      "denominator": 41,
+      "reviewed_categories": {
+        "observed_pass_only": 35,
+        "observed_existing_known_failure": 4,
+        "blocked_only": 2
+      },
+      "raw_id_categories": {
+        "observed_pass_only": 35,
+        "observed_with_fail": 4,
+        "blocked_only": 2
+      }
+    },
+    {
+      "family": "F05",
+      "denominator": 25,
+      "reviewed_categories": {
+        "observed_pass_only": 20,
+        "observed_fix_assertion": 2,
+        "observed_existing_known_failure": 3
+      },
+      "raw_id_categories": {
+        "observed_pass_only": 20,
+        "observed_fix_assertion": 2,
+        "observed_with_fail": 3
+      }
+    },
+    {
+      "family": "F06",
+      "denominator": 36,
+      "reviewed_categories": {
+        "observed_pass_only": 31,
+        "observed_existing_known_failure": 5
+      },
+      "raw_id_categories": {
+        "observed_pass_only": 31,
+        "observed_with_fail": 5
+      }
+    },
+    {
+      "family": "F07",
+      "denominator": 25,
+      "reviewed_categories": {
+        "observed_pass_only": 20,
+        "observed_existing_known_failure": 4,
+        "observed_fix_assertion": 1
+      },
+      "raw_id_categories": {
+        "observed_pass_only": 20,
+        "observed_with_fail": 3,
+        "observed_fix_assertion": 1,
+        "observed_known_fail": 1
+      }
+    },
+    {
+      "family": "F08",
+      "denominator": 34,
+      "reviewed_categories": {
+        "observed_pass_only": 30,
+        "blocked_only": 2,
+        "observed_fix_assertion": 1,
+        "observed_existing_known_failure": 1
+      },
+      "raw_id_categories": {
+        "observed_pass_only": 30,
+        "blocked_only": 2,
+        "observed_fix_assertion": 1,
+        "observed_with_fail": 1
+      }
+    },
+    {
+      "family": "F09",
+      "denominator": 26,
+      "reviewed_categories": {
+        "observed_pass_only": 23,
+        "blocked_only": 3
+      },
+      "raw_id_categories": {
+        "observed_pass_only": 23,
+        "blocked_only": 3
+      }
+    },
+    {
+      "family": "F10",
+      "denominator": 34,
+      "reviewed_categories": {
+        "observed_pass_only": 27,
+        "observed_existing_known_failure": 3,
+        "blocked_only": 3,
+        "observed_fix_assertion": 1
+      },
+      "raw_id_categories": {
+        "observed_pass_only": 27,
+        "observed_with_fail": 2,
+        "blocked_only": 3,
+        "observed_fix_assertion": 1,
+        "observed_known_fail": 1
+      }
+    },
+    {
+      "family": "F11",
+      "denominator": 21,
+      "reviewed_categories": {
+        "observed_pass_only": 15,
+        "observed_existing_known_failure": 5,
+        "blocked_only": 1
+      },
+      "raw_id_categories": {
+        "observed_pass_only": 15,
+        "observed_with_fail": 5,
+        "blocked_only": 1
+      }
+    },
+    {
+      "family": "F12",
+      "denominator": 25,
+      "reviewed_categories": {
+        "observed_pass_only": 22,
+        "blocked_only": 2,
+        "observed_existing_known_failure": 1
+      },
+      "raw_id_categories": {
+        "observed_pass_only": 22,
+        "blocked_only": 2,
+        "observed_known_fail": 1
+      }
+    },
+    {
+      "family": "F13",
+      "denominator": 22,
+      "reviewed_categories": {
+        "observed_pass_only": 18,
+        "observed_existing_known_failure": 3,
+        "blocked_only": 1
+      },
+      "raw_id_categories": {
+        "observed_pass_only": 18,
+        "observed_known_fail": 1,
+        "observed_with_fail": 2,
+        "blocked_only": 1
+      }
+    },
+    {
+      "family": "F14",
+      "denominator": 12,
+      "reviewed_categories": {
+        "observed_pass_only": 11,
+        "observed_existing_known_failure": 1
+      },
+      "raw_id_categories": {
+        "observed_pass_only": 11,
+        "observed_with_fail": 1
+      }
+    },
+    {
+      "family": "F15",
+      "denominator": 23,
+      "reviewed_categories": {
+        "observed_pass_only": 18,
+        "observed_existing_known_failure": 4,
+        "blocked_only": 1
+      },
+      "raw_id_categories": {
+        "observed_pass_only": 18,
+        "observed_with_fail": 4,
+        "blocked_only": 1
+      }
+    },
+    {
+      "family": "F16",
+      "denominator": 20,
+      "reviewed_categories": {
+        "observed_pass_only": 16,
+        "observed_fix_assertion": 1,
+        "blocked_only": 1,
+        "observed_existing_known_failure": 2
+      },
+      "raw_id_categories": {
+        "observed_pass_only": 16,
+        "observed_fix_assertion": 1,
+        "blocked_only": 1,
+        "observed_with_fail": 2
+      }
+    },
+    {
+      "family": "F17",
+      "denominator": 31,
+      "reviewed_categories": {
+        "observed_pass_only": 26,
+        "blocked_only": 2,
+        "observed_existing_known_failure": 3
+      },
+      "raw_id_categories": {
+        "observed_pass_only": 26,
+        "blocked_only": 2,
+        "observed_with_fail": 3
+      }
+    },
+    {
+      "family": "F18",
+      "denominator": 22,
+      "reviewed_categories": {
+        "observed_existing_known_failure": 4,
+        "observed_pass_only": 17,
+        "blocked_only": 1
+      },
+      "raw_id_categories": {
+        "observed_with_fail": 4,
+        "observed_pass_only": 17,
+        "blocked_only": 1
+      }
+    },
+    {
+      "family": "F19",
+      "denominator": 25,
+      "reviewed_categories": {
+        "observed_pass_only": 17,
+        "observed_existing_known_failure": 7,
+        "observed_newly_filed_failure": 1
+      },
+      "raw_id_categories": {
+        "observed_pass_only": 17,
+        "observed_with_fail": 8
+      }
+    },
+    {
+      "family": "F20",
+      "denominator": 24,
+      "reviewed_categories": {
+        "observed_pass_only": 18,
+        "observed_existing_known_failure": 5,
+        "blocked_only": 1
+      },
+      "raw_id_categories": {
+        "observed_pass_only": 18,
+        "observed_with_fail": 5,
+        "blocked_only": 1
+      }
+    },
+    {
+      "family": "F21",
+      "denominator": 35,
+      "reviewed_categories": {
+        "observed_pass_only": 32,
+        "observed_existing_known_failure": 3
+      },
+      "raw_id_categories": {
+        "observed_pass_only": 32,
+        "observed_with_fail": 3
+      }
+    },
+    {
+      "family": "F22",
+      "denominator": 29,
+      "reviewed_categories": {
+        "observed_existing_known_failure": 4,
+        "observed_pass_only": 25
+      },
+      "raw_id_categories": {
+        "observed_with_fail": 4,
+        "observed_pass_only": 25
+      }
+    },
+    {
+      "family": "F23",
+      "denominator": 41,
+      "reviewed_categories": {
+        "observed_pass_only": 35,
+        "observed_existing_known_failure": 5,
+        "observed_newly_filed_failure": 1
+      },
+      "raw_id_categories": {
+        "observed_pass_only": 35,
+        "observed_with_fail": 6
+      }
+    },
+    {
+      "family": "F24",
+      "denominator": 26,
+      "reviewed_categories": {
+        "observed_pass_only": 23,
+        "observed_existing_known_failure": 1,
+        "blocked_only": 2
+      },
+      "raw_id_categories": {
+        "observed_pass_only": 23,
+        "observed_with_fail": 1,
+        "blocked_only": 2
+      }
+    },
+    {
+      "family": "F25",
+      "denominator": 33,
+      "reviewed_categories": {
+        "observed_existing_known_failure": 6,
+        "observed_pass_only": 18,
+        "blocked_only": 9
+      },
+      "raw_id_categories": {
+        "observed_with_fail": 6,
+        "observed_pass_only": 18,
+        "blocked_only": 9
+      }
+    },
+    {
+      "family": "F26",
+      "denominator": 34,
+      "reviewed_categories": {
+        "observed_pass_only": 27,
+        "observed_existing_known_failure": 3,
+        "blocked_only": 3,
+        "observed_newly_filed_failure": 1
+      },
+      "raw_id_categories": {
+        "observed_pass_only": 27,
+        "observed_with_fail": 4,
+        "blocked_only": 3
+      }
+    },
+    {
+      "family": "F27",
+      "denominator": 30,
+      "reviewed_categories": {
+        "observed_pass_only": 24,
+        "observed_existing_known_failure": 4,
+        "blocked_only": 1,
+        "observed_fix_assertion": 1
+      },
+      "raw_id_categories": {
+        "observed_pass_only": 24,
+        "observed_with_fail": 4,
+        "blocked_only": 1,
+        "observed_fix_assertion": 1
+      }
+    },
+    {
+      "family": "F28",
+      "denominator": 13,
+      "reviewed_categories": {
+        "observed_pass_only": 9,
+        "observed_fix_assertion": 1,
+        "observed_newly_filed_failure": 1,
+        "observed_existing_known_failure": 2
+      },
+      "raw_id_categories": {
+        "observed_pass_only": 9,
+        "observed_fix_assertion": 1,
+        "observed_with_fail": 3
+      }
+    }
+  ],
+  "publication_status": "Reviewed final artifact published on the existing fork audit branch.",
+  "semantic_latest_not_run_checks": {
+    "denominator": 126,
+    "historical_generic_placeholders_replaced": 105,
+    "scope_matched_replacements": 21,
+    "genuinely_unfinished_constructible": 0,
+    "note": "Original labels unchanged; exact unavailable historical comparison/nonobject producer now current blocked."
+  }
+}

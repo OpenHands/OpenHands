@@ -7,7 +7,6 @@ import {
   buildAcpAgentSettingsDiff,
   getAcpCredentialConflicts,
   getAcpPreferredDefaultModel,
-  getAcpProvider,
   getAcpProviderDisplayName,
   getAcpProviderSecrets,
 } from "#/constants/acp-providers";
@@ -43,7 +42,7 @@ describe("getAcpProviderDisplayName", () => {
 });
 
 describe("ACP provider registry", () => {
-  it("sources display_name / default_command / models from the SDK, not a local mirror", () => {
+  it("sources display_name / default_command from the SDK, not a local mirror", () => {
     // Core invariant of agent-canvas#678: the registry data fields must come
     // straight from @openhands/typescript-client's getAcpProvider(), so the
     // Python SDK stays the single source of truth. Only the UI-only overlay
@@ -53,52 +52,18 @@ describe("ACP provider registry", () => {
       expect(sdk, provider.key).not.toBeNull();
       expect(provider.display_name).toBe(sdk!.display_name);
       expect(provider.default_command).toEqual([...sdk!.default_command]);
-      expect(provider.available_models).toEqual(
-        sdk!.available_models.map((m) => ({ id: m.id, label: m.label })),
-      );
-      expect(provider.default_model).toBe(sdk!.default_model ?? undefined);
+      // Models come from the agent itself, never from a hardcoded list.
+      expect(provider).not.toHaveProperty("available_models");
+      expect(provider).not.toHaveProperty("default_model");
       // UI-only overlay stays local.
       expect(provider.icon).toBeTruthy();
       expect(provider.description_key).toBeTruthy();
     }
   });
 
-  it("keeps every built-in default model in the UX suggestions", () => {
-    // Pi has no default: it picks a model from whichever credential is set.
-    for (const provider of ACP_PROVIDERS.filter(({ key }) => key !== "pi")) {
-      expect(provider.default_model, provider.key).toBeTruthy();
-      expect(provider.available_models, provider.key).toBeTruthy();
-      expect(
-        provider.available_models?.some(
-          (model) => model.id === provider.default_model,
-        ),
-        provider.key,
-      ).toBe(true);
-    }
-  });
-
-  it("does not suggest generic default model placeholders", () => {
-    // Model lists are SDK-owned (see ACP_PROVIDERS) — Canvas no longer hand-keeps
-    // them. The claude-code registry intentionally offers an id ``default``
-    // labeled "Default (recommended)", a legitimate, well-labeled choice. Guard
-    // against genuinely empty ids and bare placeholder labels, not the qualified
-    // "Default (recommended)" entry.
-    for (const provider of ACP_PROVIDERS) {
-      for (const model of provider.available_models ?? []) {
-        expect(model.id.trim(), provider.key).toBeTruthy();
-        expect(
-          model.label.trim().toLowerCase(),
-          `${provider.key}:${model.id}`,
-        ).not.toBe("default");
-      }
-    }
-  });
-
   it("seeds built-in ACP diffs with the provider's preferred default model", () => {
-    // Preferred default = registry default everywhere except Gemini, where
-    // the Vertex-safe override applies (see getAcpPreferredDefaultModel) —
-    // EVERY default-model surface must agree on this, including this diff
-    // builder's fallback.
+    // EVERY default-model surface must agree with getAcpPreferredDefaultModel,
+    // including this diff builder's fallback.
     for (const provider of ACP_PROVIDERS) {
       expect(buildAcpAgentSettingsDiff(provider.key)).toMatchObject({
         agent_kind: "acp",
@@ -201,14 +166,11 @@ describe("getAcpProviderSecrets — containerized credentials", () => {
 });
 
 describe("getAcpPreferredDefaultModel", () => {
-  it("overrides Gemini with the Vertex-safe model rather than the registry default", () => {
+  it("overrides Gemini with the Vertex-safe model rather than its own default", () => {
     // gemini-cli's own default 404s on many Vertex projects; canvas preselects
     // a broadly-available model instead.
     expect(getAcpPreferredDefaultModel("gemini-cli")).toBe(
       ACP_VERTEX_SAFE_MODEL,
-    );
-    expect(getAcpPreferredDefaultModel("gemini-cli")).not.toBe(
-      getAcpProvider("gemini-cli")?.default_model,
     );
   });
 
@@ -219,13 +181,10 @@ describe("getAcpPreferredDefaultModel", () => {
     expect(ACP_VERTEX_SAFE_MODEL).not.toMatch(/flash/);
   });
 
-  it("keeps the registry default for the other providers", () => {
-    expect(getAcpPreferredDefaultModel("codex")).toBe(
-      getAcpProvider("codex")?.default_model,
-    );
-    expect(getAcpPreferredDefaultModel("claude-code")).toBe(
-      getAcpProvider("claude-code")?.default_model,
-    );
+  it("leaves the other providers on their own default", () => {
+    for (const key of ["claude-code", "codex", "pi", "opencode"]) {
+      expect(getAcpPreferredDefaultModel(key), key).toBeNull();
+    }
   });
 
   it("returns null for OpenHands / custom / unknown", () => {

@@ -1,9 +1,20 @@
 import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, Globe, Info, Monitor } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  CloudCog,
+  Globe,
+  Info,
+  Monitor,
+} from "lucide-react";
 import { ServerClient } from "@openhands/typescript-client/clients";
 import OpenHandsLogoWhite from "#/assets/branding/openhands-logo-white.svg?react";
+import DigitalOceanLogo from "#/assets/branding/digitalocean-logo.svg?react";
+import { getMarsBridge } from "#/api/mars/mars-tunnel-backend";
+import { DigitalOceanConnectPanel } from "./managed-agents/digitalocean-connect-panel";
+import { BackNavButton } from "#/components/shared/buttons/back-nav-button";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import {
   MODAL_MAX_WIDTH_VIEWPORT,
@@ -155,7 +166,7 @@ const DEPLOYMENT_OPTIONS_URL =
 export type BackendConnectionMethod = "manual" | "cloud_login";
 
 export type BackendAddedSource = CloudConnectionSource;
-type AddBackendOption = "cloud" | "agent-server";
+type AddBackendOption = "cloud" | "agent-server" | "providers";
 type AgentServerLocation = "local" | "remote";
 
 function getConnectionTestFailedTitle(
@@ -256,12 +267,13 @@ function BackendStatusBadge({
         ) : null}
       </div>
 
+      {/* @spec BM-004 — Theme-aware backend connection feedback */}
       {disabled ? (
         <div
           data-testid={`${testIdRoot}-status-error`}
-          className="flex flex-col gap-1 rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm"
+          className="flex flex-col gap-1 rounded-md border border-semantic-danger/40 bg-semantic-danger/5 p-3 text-sm"
         >
-          <span className="font-semibold text-red-300">
+          <span className="font-semibold text-feedback-error">
             {t(I18nKey.BACKEND$HEALTH_FAILED_TITLE)}
           </span>
           <span className="text-xs text-text-tertiary">
@@ -272,7 +284,7 @@ function BackendStatusBadge({
           {lastError ? (
             <span
               data-testid={`${testIdRoot}-status-error-message`}
-              className="text-xs text-red-300 whitespace-pre-wrap break-words"
+              className="text-xs text-feedback-error whitespace-pre-wrap break-words"
             >
               {lastError}
             </span>
@@ -647,7 +659,7 @@ export function BackendForm({
           <div
             role="alert"
             data-testid={`${testIdRoot}-error`}
-            className="rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-300 whitespace-pre-wrap break-words"
+            className="rounded-md border border-semantic-danger/40 bg-semantic-danger/5 p-3 text-sm text-feedback-error whitespace-pre-wrap break-words"
           >
             {connectionError}
           </div>
@@ -917,7 +929,7 @@ function ManualConnectionColumn({
         <div
           role="alert"
           data-testid={`${testIdRoot}-error`}
-          className="rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-300 whitespace-pre-wrap break-words"
+          className="rounded-md border border-semantic-danger/40 bg-semantic-danger/5 p-3 text-sm text-feedback-error whitespace-pre-wrap break-words"
         >
           {connectionError}
         </div>
@@ -1124,26 +1136,27 @@ function BackendOptionTab({
       role="tab"
       aria-selected={isSelected}
       aria-controls={panelId}
+      aria-describedby={`${tabId}-description`}
       data-testid={testId}
       onClick={() => onSelect(value)}
       className={cn(
-        "relative flex min-h-16 w-full cursor-pointer items-center gap-3 px-3 py-3 text-left transition-colors",
-        "first:border-r first:border-r-border",
-        "focus-visible:z-10 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue-300",
+        "relative flex min-h-14 w-full cursor-pointer items-center gap-2.5 px-2.5 py-2.5 text-left transition-colors",
+        "not-last:border-r not-last:border-r-border",
+        "focus-visible:z-10 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus",
         isSelected
           ? "bg-surface-raised text-contrast after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-primary"
           : "text-muted hover:bg-surface-raised hover:text-contrast",
       )}
     >
       <span
-        className="flex size-8 shrink-0 items-center justify-center"
+        className="flex size-7 shrink-0 items-center justify-center"
         aria-hidden
       >
         {icon}
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-medium">{title}</span>
-        <span className="mt-0.5 block text-xs leading-tight text-muted">
+        <span id={`${tabId}-description`} className="sr-only">
           {description}
         </span>
       </span>
@@ -1189,8 +1202,14 @@ function AnimatedPanelHeight({ children }: AnimatedPanelHeightProps) {
   return (
     <div
       data-testid="add-backend-panel-height"
-      style={height === undefined ? undefined : { height }}
-      className="overflow-hidden transition-[height] duration-300 ease-in-out motion-reduce:transition-none"
+      style={
+        height === undefined
+          ? undefined
+          : ({
+              "--add-backend-panel-height": `${height}px`,
+            } as React.CSSProperties)
+      }
+      className="add-backend-panel-height overflow-hidden duration-300 ease-in-out motion-reduce:transition-none"
     >
       <div ref={contentRef}>{children}</div>
     </div>
@@ -1251,7 +1270,7 @@ function AgentServerGuidance({ location }: { location: AgentServerLocation }) {
             // fill spans the full row.
             "flex w-full cursor-pointer items-center justify-between gap-2 rounded-lg px-3 py-2 text-left font-medium",
             "transition-colors hover:bg-interactive-hover",
-            "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300",
+            "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
           )}
         >
           <span className="flex min-w-0 items-center gap-2">
@@ -1326,6 +1345,7 @@ function AgentServerGuidance({ location }: { location: AgentServerLocation }) {
 
 function AddBackendChooser({
   onConnected,
+  onSelectProvider,
   source,
 }: {
   onConnected: (
@@ -1333,6 +1353,7 @@ function AddBackendChooser({
     connectionMethod: BackendConnectionMethod,
     metadata?: BackendConnectionTestMetadata,
   ) => void;
+  onSelectProvider: () => void;
   source: BackendAddedSource;
 }) {
   const { t } = useTranslation("openhands");
@@ -1343,13 +1364,124 @@ function AddBackendChooser({
   const panelId = "add-backend-selected-panel";
   const selectedTabId = `add-backend-option-${selectedOption}-tab`;
   const isCloudSelected = selectedOption === "cloud";
+  const canUseDigitalOcean = getMarsBridge() !== null;
+
+  let panel: React.ReactNode;
+  if (selectedOption === "providers") {
+    panel = (
+      <div
+        data-testid="add-backend-providers-panel"
+        className="flex flex-col gap-4"
+      >
+        <button
+          type="button"
+          data-testid="add-backend-provider-digitalocean"
+          onClick={onSelectProvider}
+          className="flex w-full cursor-pointer items-center gap-3 rounded-xl border border-border bg-base-secondary px-4 py-3 text-left transition-colors hover:bg-surface-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+        >
+          <span
+            className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-surface-raised"
+            aria-hidden
+          >
+            <DigitalOceanLogo width={32} height={32} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-medium text-contrast">
+              {t(I18nKey.DO_AGENTS$BADGE)}
+            </span>
+            <span className="mt-0.5 block text-xs leading-tight text-muted">
+              {t(I18nKey.DO_AGENTS$TAB_DESCRIPTION)}
+            </span>
+          </span>
+          <ChevronRight className="size-4 shrink-0 text-muted" aria-hidden />
+        </button>
+        <p className="text-xs text-muted">
+          {t(I18nKey.BACKEND$PROVIDERS_COMING_SOON)}
+        </p>
+      </div>
+    );
+  } else if (isCloudSelected) {
+    /* Padding keeps the CTA and Advanced host field from hugging the
+       border; when Advanced expands the panel grows with the content
+       instead of squeezing it into the reserved min-height. */
+    panel = (
+      <div
+        data-testid="add-backend-cloud-panel"
+        className={cn(
+          "relative isolate flex min-h-[13.5rem] w-full items-center justify-center rounded-xl border border-border px-5 py-6",
+          // A soft greyscale halo sits behind the CTA; -z-10 keeps it under the
+          // content rather than washing over it.
+          "before:pointer-events-none before:absolute before:inset-0 before:-z-10 before:rounded-xl",
+          "before:bg-[radial-gradient(75%_75%_at_50%_50%,rgba(255,255,255,0.1)_0%,rgba(255,255,255,0)_70%)]",
+        )}
+      >
+        <CloudLoginColumn
+          onConnected={onConnected}
+          testIdRoot="add-backend"
+          analyticsSource={source}
+          showBranding={false}
+        />
+      </div>
+    );
+  } else {
+    panel = (
+      <div
+        data-testid="add-backend-agent-server-panel"
+        className="mx-auto w-full max-w-xl"
+      >
+        {/* Rules on either side center the toggle and read as a
+            divider between the chooser and the connection form. */}
+        <div className="flex items-center gap-3">
+          <span className="h-px flex-1 bg-border" aria-hidden />
+          <SegmentedToggle<AgentServerLocation>
+            value={agentServerLocation}
+            options={[
+              {
+                value: "local",
+                label: t(I18nKey.BACKEND$KIND_LOCAL),
+                icon: <Monitor aria-hidden />,
+              },
+              {
+                value: "remote",
+                label: t(I18nKey.BACKEND$KIND_REMOTE),
+                icon: <Globe aria-hidden />,
+              },
+            ]}
+            onChange={setAgentServerLocation}
+            ariaLabel={t(I18nKey.BACKEND$AGENT_SERVER_LOCATION)}
+            testId="add-backend-location"
+          />
+          <span className="h-px flex-1 bg-border" aria-hidden />
+        </div>
+
+        <div className="mt-4 flex flex-col gap-4">
+          <AgentServerGuidance
+            key={agentServerLocation}
+            location={agentServerLocation}
+          />
+          <ManualConnectionColumn
+            onConnected={onConnected}
+            testIdRoot="add-backend"
+            requireApiKey={agentServerLocation === "remote"}
+            submitLabel={t(I18nKey.BACKEND$CONNECT)}
+            submittingLabel={t(I18nKey.ONBOARDING$BACKEND_STATUS_CHECKING)}
+            fixedKind="local"
+            showKindSelector={false}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div data-testid="add-backend-chooser" className="flex flex-col">
       <div
         role="tablist"
         aria-label={t(I18nKey.BACKEND$CHOOSER_TITLE)}
-        className="grid grid-cols-2 overflow-hidden rounded-lg border border-border"
+        className={cn(
+          "grid overflow-hidden rounded-lg border border-border",
+          canUseDigitalOcean ? "grid-cols-3" : "grid-cols-2",
+        )}
       >
         <BackendOptionTab
           value="cloud"
@@ -1378,6 +1510,18 @@ function AddBackendChooser({
           panelId={panelId}
           testId="add-backend-option-agent-server"
         />
+        {canUseDigitalOcean ? (
+          <BackendOptionTab
+            value="providers"
+            selectedValue={selectedOption}
+            title={t(I18nKey.BACKEND$PROVIDERS_TITLE)}
+            description={t(I18nKey.BACKEND$PROVIDERS_OPTION_DESCRIPTION)}
+            icon={<CloudCog className="size-6" aria-hidden />}
+            onSelect={setSelectedOption}
+            panelId={panelId}
+            testId="add-backend-option-providers"
+          />
+        ) : null}
       </div>
 
       <div className="mt-6">
@@ -1388,76 +1532,7 @@ function AddBackendChooser({
             aria-labelledby={selectedTabId}
             className="min-w-0"
           >
-            {isCloudSelected ? (
-              /* Padding keeps the CTA and Advanced host field from hugging the
-                 border; when Advanced expands the panel grows with the content
-                 instead of squeezing it into the reserved min-height. */
-              <div
-                data-testid="add-backend-cloud-panel"
-                className={cn(
-                  "relative isolate flex min-h-[13.5rem] w-full items-center justify-center rounded-xl border border-border px-5 py-6",
-                  // A soft greyscale halo sits behind the CTA; -z-10 keeps it under the
-                  // content rather than washing over it.
-                  "before:pointer-events-none before:absolute before:inset-0 before:-z-10 before:rounded-xl",
-                  "before:bg-[radial-gradient(75%_75%_at_50%_50%,rgba(255,255,255,0.1)_0%,rgba(255,255,255,0)_70%)]",
-                )}
-              >
-                <CloudLoginColumn
-                  onConnected={onConnected}
-                  testIdRoot="add-backend"
-                  analyticsSource={source}
-                  showBranding={false}
-                />
-              </div>
-            ) : (
-              <div
-                data-testid="add-backend-agent-server-panel"
-                className="mx-auto w-full max-w-xl"
-              >
-                {/* Rules on either side center the toggle and read as a
-                    divider between the chooser and the connection form. */}
-                <div className="flex items-center gap-3">
-                  <span className="h-px flex-1 bg-border" aria-hidden />
-                  <SegmentedToggle<AgentServerLocation>
-                    value={agentServerLocation}
-                    options={[
-                      {
-                        value: "local",
-                        label: t(I18nKey.BACKEND$KIND_LOCAL),
-                        icon: <Monitor aria-hidden />,
-                      },
-                      {
-                        value: "remote",
-                        label: t(I18nKey.BACKEND$KIND_REMOTE),
-                        icon: <Globe aria-hidden />,
-                      },
-                    ]}
-                    onChange={setAgentServerLocation}
-                    ariaLabel={t(I18nKey.BACKEND$AGENT_SERVER_LOCATION)}
-                    testId="add-backend-location"
-                  />
-                  <span className="h-px flex-1 bg-border" aria-hidden />
-                </div>
-
-                <div className="mt-4 flex flex-col gap-4">
-                  <AgentServerGuidance
-                    key={agentServerLocation}
-                    location={agentServerLocation}
-                  />
-                  <ManualConnectionColumn
-                    onConnected={onConnected}
-                    testIdRoot="add-backend"
-                    requireApiKey={agentServerLocation === "remote"}
-                    submitLabel={t(I18nKey.BACKEND$CONNECT)}
-                    submittingLabel={t(
-                      I18nKey.ONBOARDING$BACKEND_STATUS_CHECKING,
-                    )}
-                    fixedKind="local"
-                    showKindSelector={false}
-                  />
-                </div>
-              </div>
-            )}
+            {panel}
           </section>
         </AnimatedPanelHeight>
       </div>
@@ -1468,9 +1543,11 @@ function AddBackendChooser({
 function AddBackendConnectionOptions({
   onClose,
   source,
+  onSelectProvider,
 }: {
   onClose: () => void;
   source: BackendAddedSource;
+  onSelectProvider: () => void;
 }) {
   const { addBackend } = useActiveBackendContext();
   // @spec BM-002 — Adding a backend auto-switches the active selection to it
@@ -1510,7 +1587,126 @@ function AddBackendConnectionOptions({
     );
   }
 
-  return <AddBackendChooser onConnected={handleConnected} source={source} />;
+  return (
+    <AddBackendChooser
+      onConnected={handleConnected}
+      onSelectProvider={onSelectProvider}
+      source={source}
+    />
+  );
+}
+
+function AddBackendAddModeBody({
+  hideCloseButton,
+  onClose,
+  source,
+}: {
+  hideCloseButton: boolean;
+  onClose: () => void;
+  source: BackendAddedSource;
+}) {
+  const { t } = useTranslation("openhands");
+  const [providerOpen, setProviderOpen] = React.useState(false);
+  const railRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    const focusTarget = providerOpen
+      ? "add-backend-providers-back"
+      : "add-backend-provider-digitalocean";
+    railRef.current
+      ?.querySelector<HTMLButtonElement>(`[data-testid="${focusTarget}"]`)
+      ?.focus();
+  }, [providerOpen]);
+
+  const goBack = () => setProviderOpen(false);
+
+  return (
+    <AnimatedPanelHeight>
+      <div
+        ref={railRef}
+        data-testid="add-backend-slide-rail"
+        className="relative overflow-hidden"
+      >
+        <div
+          aria-hidden={providerOpen}
+          inert={providerOpen ? true : undefined}
+          className={cn(
+            "w-full transition-transform duration-300 ease-out motion-reduce:transition-none",
+            providerOpen ? "-translate-x-full" : "translate-x-0",
+            providerOpen && "pointer-events-none absolute inset-0",
+          )}
+        >
+          {hideCloseButton ? null : (
+            <div className="pr-8">
+              <h2 className={modalTitleLgClassName}>
+                {t(I18nKey.BACKEND$CHOOSER_TITLE)}
+              </h2>
+              <p
+                className="mt-2 text-sm leading-6 text-muted"
+                data-testid="add-backend-description"
+              >
+                {t(I18nKey.BACKEND$CHOOSER_DESCRIPTION)}{" "}
+                <a
+                  href={DEPLOYMENT_OPTIONS_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={t(I18nKey.BACKEND$DEPLOYMENT_OPTIONS)}
+                  data-testid="add-backend-deployment-options-link"
+                  className="text-primary hover:underline"
+                >
+                  {t(I18nKey.CTA$LEARN_MORE)}
+                  <ExternalLinkIcon
+                    className="ml-1 inline size-3.5 align-[-0.125em]"
+                    aria-hidden
+                  />
+                </a>
+              </p>
+            </div>
+          )}
+
+          <div className={hideCloseButton ? undefined : "mt-5"}>
+            <AddBackendConnectionOptions
+              onClose={onClose}
+              source={source}
+              onSelectProvider={() => setProviderOpen(true)}
+            />
+          </div>
+        </div>
+        <div
+          aria-hidden={!providerOpen}
+          inert={!providerOpen ? true : undefined}
+          className={cn(
+            "w-full transition-transform duration-300 ease-out motion-reduce:transition-none",
+            providerOpen ? "translate-x-0" : "translate-x-full",
+            !providerOpen && "pointer-events-none absolute inset-0",
+          )}
+        >
+          {providerOpen ? (
+            <div className="flex flex-col gap-4">
+              <BackNavButton
+                onClick={goBack}
+                testId="add-backend-providers-back"
+              >
+                {t(I18nKey.BUTTON$BACK)}
+              </BackNavButton>
+              <div className="flex min-w-0 items-center gap-3 pr-8">
+                <span
+                  className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-surface-raised"
+                  aria-hidden
+                >
+                  <DigitalOceanLogo width={32} height={32} />
+                </span>
+                <h2 className={modalTitleLgMediumClassName}>
+                  {t(I18nKey.DO_AGENTS$BADGE)}
+                </h2>
+              </div>
+              <DigitalOceanConnectPanel onConnected={onClose} />
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </AnimatedPanelHeight>
+  );
 }
 
 // ── Modal wrappers ──────────────────────────────────────────────────
@@ -1542,44 +1738,18 @@ export function BackendFormModal({
             hideCloseButton ? "onboarding-modal" : "add-backend-modal"
           }
           className={cn(
-            "relative max-h-[92vh] w-180 overflow-y-auto rounded-xl border border-border bg-base-secondary p-6",
+            "relative max-h-[92vh] w-180 overflow-x-hidden overflow-y-auto rounded-xl border border-border bg-base-secondary p-6",
             MODAL_MAX_WIDTH_VIEWPORT,
           )}
         >
           {hideCloseButton ? null : (
             <ModalCloseButton onClose={onClose} testId="add-backend-close" />
           )}
-          {hideCloseButton ? null : (
-            <div className="pr-8">
-              <h2 className={modalTitleLgClassName}>
-                {t(I18nKey.BACKEND$CHOOSER_TITLE)}
-              </h2>
-              <p
-                className="mt-2 text-sm leading-6 text-muted"
-                data-testid="add-backend-description"
-              >
-                {t(I18nKey.BACKEND$CHOOSER_DESCRIPTION)}{" "}
-                <a
-                  href={DEPLOYMENT_OPTIONS_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label={t(I18nKey.BACKEND$DEPLOYMENT_OPTIONS)}
-                  data-testid="add-backend-deployment-options-link"
-                  className="text-primary hover:underline"
-                >
-                  {t(I18nKey.CTA$LEARN_MORE)}
-                  <ExternalLinkIcon
-                    className="ml-1 inline size-3.5 align-[-0.125em]"
-                    aria-hidden
-                  />
-                </a>
-              </p>
-            </div>
-          )}
-
-          <div className={hideCloseButton ? undefined : "mt-5"}>
-            <AddBackendConnectionOptions onClose={onClose} source={source} />
-          </div>
+          <AddBackendAddModeBody
+            hideCloseButton={hideCloseButton}
+            onClose={onClose}
+            source={source}
+          />
         </div>
       </ModalBackdrop>
     );

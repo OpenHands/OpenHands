@@ -124,18 +124,21 @@ function makeConversation(
   };
 }
 
-function renderConversation() {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  return render(
-    <MemoryRouter initialEntries={[`/conversations/${CLOUD_CONVERSATION_ID}`]}>
+// Shared by `conversationTree` so a `rerender` keeps the same cache; each
+// `renderConversation` starts a fresh one, like a real remount.
+let queryClient: QueryClient;
+
+function conversationTree(conversationId: string, search = "") {
+  return (
+    <MemoryRouter
+      initialEntries={[`/conversations/${conversationId}${search}`]}
+    >
       <QueryClientProvider client={queryClient}>
         <ActiveBackendProvider>
           <NavigationProvider
             value={{
-              currentPath: `/conversations/${CLOUD_CONVERSATION_ID}`,
-              conversationId: CLOUD_CONVERSATION_ID,
+              currentPath: `/conversations/${conversationId}`,
+              conversationId,
               isNavigating: false,
               navigate: vi.fn(),
             }}
@@ -144,8 +147,15 @@ function renderConversation() {
           </NavigationProvider>
         </ActiveBackendProvider>
       </QueryClientProvider>
-    </MemoryRouter>,
+    </MemoryRouter>
   );
+}
+
+function renderConversation(search = "") {
+  queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(conversationTree(CLOUD_CONVERSATION_ID, search));
 }
 
 function makeSharedConversation(id: string): SharedConversation {
@@ -244,6 +254,40 @@ describe("conversation route — backend switch", () => {
     await waitFor(() => {
       expect(screen.queryByTestId("conversation-main")).not.toBeInTheDocument();
     });
+  });
+
+  it("tears down the view when the org changes away from the one the URL pins", async () => {
+    // Arrange — the link pins the conversation to org-a of the cloud backend.
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    renderConversation(`?backend=${cloudBackend.id}&org=org-a`);
+    expect(await screen.findByTestId("conversation-main")).toBeInTheDocument();
+
+    // Act — same backend, another org.
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-b" });
+
+    // Assert
+    await waitFor(() => {
+      expect(screen.queryByTestId("conversation-main")).not.toBeInTheDocument();
+    });
+  });
+
+  it("renders a conversation of the new backend reached without leaving the route", async () => {
+    // Arrange — switching DigitalOcean sessions swaps the backend and goes
+    // straight to that session's conversation, never via /conversations.
+    const LOCAL_CONVERSATION_ID = "conv-local";
+    vi.mocked(
+      AgentServerConversationService.batchGetAppConversations,
+    ).mockImplementation(async (ids) => ids.map((id) => makeConversation(id)));
+    setActiveSelection({ backendId: cloudBackend.id });
+    const { rerender } = renderConversation();
+    await screen.findByTestId("conversation-main");
+
+    // Act
+    setActiveSelection({ backendId: localBackend.id });
+    rerender(conversationTree(LOCAL_CONVERSATION_ID));
+
+    // Assert
+    expect(await screen.findByTestId("conversation-main")).toBeInTheDocument();
   });
 });
 

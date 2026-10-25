@@ -4,6 +4,7 @@ import type {
   AgentErrorEvent,
   MessageEvent,
   ObservationEvent,
+  UserRejectObservation,
 } from "#/types/agent-server/core";
 import type {
   ExecuteBashAction,
@@ -28,6 +29,7 @@ vi.mock("#/i18n", () => ({
         ACTION_MESSAGE$ACP_TOOL: "Use tool",
         CHAT_INTERFACE$ASSISTANT: "Assistant",
         COMMON$ERROR: "Error",
+        EVENT$REJECTED: "Rejected",
         TASK$QUERY: "Query",
         TASK$RESULT: "Result",
         TASK$SUBAGENT: "Subagent",
@@ -189,6 +191,26 @@ describe("conversation transcript export", () => {
     expect(markdown).toContain("> Command failed with exit code 1");
     expect(markdown).toContain(`${"x".repeat(1000)}...`);
     expect(markdown).not.toContain("x".repeat(1001));
+  });
+
+  it("exports a rejected tool call as rejected with its reason", () => {
+    const rejection: UserRejectObservation = {
+      id: "rejection-1",
+      timestamp,
+      source: "environment",
+      tool_name: "terminal",
+      tool_call_id: "tool-1",
+      action_id: "action-1",
+      rejection_reason: "User rejected the action",
+    };
+
+    const markdown = eventsToMarkdown(
+      [terminalAction, rejection],
+      defaultOptions,
+    );
+
+    expect(markdown).toContain("Run the unit tests (Rejected)");
+    expect(markdown).toContain("User rejected the action");
   });
 
   it("exports assistant narration once when an observation replaces its action", () => {

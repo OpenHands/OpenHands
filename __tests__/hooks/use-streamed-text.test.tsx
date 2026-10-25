@@ -1,6 +1,9 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { act, renderHook } from "@testing-library/react";
-import { useStreamedText } from "#/hooks/use-streamed-text";
+import {
+  useIsRevealingStreamedText,
+  useStreamedText,
+} from "#/hooks/use-streamed-text";
 
 /** Drive `requestAnimationFrame` by hand so the reveal cadence is explicit. */
 function manualFrames() {
@@ -17,6 +20,8 @@ function manualFrames() {
   vi.stubGlobal("cancelAnimationFrame", (handle: number) => {
     callbacks.delete(handle);
   });
+  // Arrivals are timed with `performance.now()`; keep it on the same clock.
+  vi.spyOn(performance, "now").mockImplementation(() => now);
 
   return {
     /** Advance one 16ms frame. */
@@ -43,6 +48,7 @@ describe("useStreamedText", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   it("shows the initial text immediately", () => {
@@ -60,14 +66,84 @@ describe("useStreamedText", () => {
     // Not committed on arrival — the clock has not ticked yet.
     expect(result.current).toBe("Hi");
 
-    frames.tick();
+    // Under one character per frame at this pace, so give it a few.
+    frames.tick(3);
     expect(result.current.length).toBeGreaterThan("Hi".length);
     expect(result.current.length).toBeLessThan(202);
 
-    // It still catches up: the backlog drains within a short window.
-    frames.tick(40);
+    // A 200-character burst is spread over about 1.5s rather than shown at
+    // once: quickly at first, then at the reading pace for the last of it.
+    frames.tick(60);
+    expect(result.current.length).toBeLessThan(202);
+    frames.tick(60);
     expect(result.current).toBe(`Hi${"x".repeat(200)}`);
     expect(frames.pending()).toBe(0);
+  });
+
+  it("reveals bursty chunks at a steady pace", () => {
+    // ~55 chars/s: one 12-char burst every 13 frames.
+    const chunk = "x".repeat(12);
+    const framesPerChunk = 13;
+    const { result, rerender } = renderHook(
+      ({ text }) => useStreamedText(text),
+      { initialProps: { text: "" } },
+    );
+
+    const halves: number[] = [];
+    for (let i = 1; i <= 8; i += 1) {
+      rerender({ text: chunk.repeat(i) });
+      // Compare the first and second half of each gap between bursts.
+      for (const frameCount of [6, framesPerChunk - 6]) {
+        const before = result.current.length;
+        frames.tick(frameCount);
+        halves.push((result.current.length - before) / frameCount);
+      }
+    }
+
+    // Each burst is spread across the gap until the next one rather than
+    // revealed up front and followed by a pause.
+    expect(Math.min(...halves)).toBeGreaterThan(0.5);
+    expect(Math.max(...halves)).toBeLessThan(1.5);
+  });
+
+  it("follows a fast model closely and catches up once it stops", () => {
+    const { result, rerender } = renderHook(
+      ({ text }) => useStreamedText(text),
+      { initialProps: { text: "" } },
+    );
+    // A model streaming ~600 chars/s, one 10-char chunk per frame.
+    let length = 0;
+    const stream = (frameCount: number) => {
+      for (let f = 0; f < frameCount; f += 1) {
+        length += 10;
+        rerender({ text: "x".repeat(length) });
+        frames.tick();
+      }
+    };
+
+    stream(300); // ~5s
+    // Smoothed rather than shown as it lands, but never more than about half
+    // a second of the model's output behind.
+    expect(result.current.length).toBeLessThan(length);
+    expect(length - result.current.length).toBeLessThan(600 * 0.6);
+
+    frames.tick(120); // ~2s after the model stopped
+    expect(result.current).toBe("x".repeat(length));
+    expect(frames.pending()).toBe(0);
+  });
+
+  it("reports while text is still being revealed", () => {
+    const revealing = renderHook(() => useIsRevealingStreamedText());
+    const { rerender } = renderHook(({ text }) => useStreamedText(text), {
+      initialProps: { text: "Hi" },
+    });
+    expect(revealing.result.current).toBe(false);
+
+    rerender({ text: `Hi${"x".repeat(40)}` });
+    expect(revealing.result.current).toBe(true);
+
+    frames.tick(60);
+    expect(revealing.result.current).toBe(false);
   });
 
   it("snaps when the text is not an extension of what is shown", () => {

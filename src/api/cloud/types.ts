@@ -50,19 +50,6 @@ export interface CloudApiKeyMetadata {
 }
 
 /**
- * Response from `GET /api/v1/users/git-info`. Identifies the currently
- * authenticated user across the connected git providers.
- */
-export interface CloudGitUser {
-  id: string;
-  login: string;
-  avatar_url: string;
-  company: string | null;
-  name: string | null;
-  email: string | null;
-}
-
-/**
  * Server-derived Super Admin setup-guide steps, from
  * `GET /api/admin/setup-state` on an OpenHands Enterprise backend.
  */

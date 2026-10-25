@@ -10,25 +10,11 @@ import {
 } from "./acp-providers";
 
 describe("ACP_PROVIDERS", () => {
-  it("passes every codex data field through from the pinned client registry", () => {
-    // No local override may sit between the registry and the picker: a
-    // hand-maintained model entry survives an upstream *removal*, so Canvas
-    // would keep offering an id the live ACP server has started rejecting.
+  it("passes the codex launch command through from the pinned client registry", () => {
     const codex = ACP_PROVIDERS.find(({ key }) => key === "codex");
-    const client = CLIENT_ACP_PROVIDERS.codex;
-    expect(codex?.default_command).toEqual([...client.default_command]);
-    expect(codex?.available_models).toEqual(
-      client.available_models.map(({ id, label }) => ({ id, label })),
-    );
-  });
-
-  it("carries GPT-6 Astra, so the pin is new enough to launch it", () => {
-    // Canary for the pin's freshness, not a catalog Canvas maintains: Astra
-    // needs codex-acp >= 1.10.0, which only client >= 1.45.0 mirrors.
-    const codex = ACP_PROVIDERS.find(({ key }) => key === "codex");
-    expect(codex?.available_models?.map(({ id }) => id)).toContain(
-      "gpt-6-astra",
-    );
+    expect(codex?.default_command).toEqual([
+      ...CLIENT_ACP_PROVIDERS.codex.default_command,
+    ]);
   });
 });
 

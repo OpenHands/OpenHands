@@ -6,9 +6,15 @@
 // http://localhost:3000/), breaking that resolution; the Node environment
 // has the standard WHATWG URL behavior that honors the file:// base.
 import net from "node:net";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -17,6 +23,7 @@ import { describe, expect, it, afterEach } from "vitest";
 import {
   buildAgentServerAutomationEnv,
   buildAutomationCommand,
+  buildAutomationLogArgs,
   buildAutomationTelemetryEnv,
   buildAutomationRuntimeServicesInfo,
   buildConfig,
@@ -33,11 +40,14 @@ import {
   DEFAULT_AUTOMATION_REPO,
   DEFAULT_AUTOMATION_PACKAGE,
   DEFAULT_AUTOMATION_VERSION,
+  buildMarsWebEnv,
 } from "../../scripts/dev-with-automation.mjs";
 import {
   buildAgentServerEnv,
+  buildBackendLogEnv,
   buildSafeDevConfig,
   resetPersistedSessionApiKeyCache,
+  uvicornLogLevel,
 } from "../../scripts/dev-safe.mjs";
 import { createRouter } from "../../scripts/proxy-utils.mjs";
 
@@ -100,6 +110,25 @@ describe("buildAutomationCommand", () => {
     expect(cmd.args).toContain("uvicorn");
     expect(cmd.args).toContain("openhands.automation.app:app");
     expect(cmd.source).toBe(`PyPI (${DEFAULT_AUTOMATION_VERSION}, default)`);
+  });
+
+  it("requests the shared Python range for uvx in every source mode", () => {
+    // See buildUvxPythonArgs in dev-safe.mjs and #18654.
+    const variants = [
+      {},
+      { OH_AUTOMATION_VERSION: "1.0.0" },
+      { OH_AUTOMATION_GIT_REF: "main" },
+    ];
+    for (const env of variants) {
+      const { command, args } = buildAutomationCommand(env);
+      expect(command).toBe("uvx");
+      expect(args.slice(0, 2)).toEqual(["--python", ">=3.12,<3.15"]);
+    }
+  });
+
+  it("leaves the interpreter choice to uv when UV_PYTHON is set", () => {
+    const { args } = buildAutomationCommand({ UV_PYTHON: "3.13" });
+    expect(args).not.toContain("--python");
   });
 
   it("uses custom git ref from OH_AUTOMATION_GIT_REF", () => {
@@ -326,6 +355,61 @@ describe("buildConfig", () => {
     };
   }
 
+  // Exercise the public launcher entry point through its existing embedder
+  // prerequisite callback. Stop before services start; no test-only exports.
+  function launchDirectoryProbe(env: Record<string, string>, args: string[]) {
+    const probeHome = path.dirname(env.OH_SESSION_API_KEY_PATH);
+    const script = `
+      import { main } from ${JSON.stringify(pathToFileURL(path.join(repoRoot, "scripts/dev-with-automation.mjs")).href)};
+      process.argv = [process.execPath, "directory-probe", ...${JSON.stringify(args)}];
+      try {
+        await main({
+          staticMode: true,
+          skipNpmCheck: true,
+          extraPrereqs(config) {
+            console.log("QA_DIRECTORY_PROBE=" + JSON.stringify({ stateDir: config.stateDir, tmuxTmpDir: config.tmuxTmpDir }));
+            throw new Error("qa-directory-probe-complete");
+          },
+        });
+      } catch (error) {
+        if (error.message !== "qa-directory-probe-complete") throw error;
+      }
+    `;
+    // Only command discovery is stubbed. No backend executes in this probe.
+    if (process.platform === "win32") {
+      writeFileSync(path.join(probeHome, "uvx.cmd"), "@exit /b 0\r\n");
+    } else {
+      writeFileSync(path.join(probeHome, "uvx"), "#!/bin/sh\nexit 0\n", {
+        mode: 0o700,
+      });
+    }
+    // An ambient TMUX_TMPDIR (e.g. npm test run inside tmux) would mask the
+    // default; only the case's own env may set it.
+    const { TMUX_TMPDIR: _ambientTmuxTmpDir, ...parentEnv } = process.env;
+    const result = spawnSync(
+      process.execPath,
+      ["--input-type=module", "-e", script],
+      {
+        env: {
+          ...parentEnv,
+          ...env,
+          HOME: probeHome,
+          PATH: `${probeHome}${path.delimiter}${process.env.PATH ?? ""}`,
+          OH_AGENT_SERVER_LOCAL_PATH: "",
+          OH_AUTOMATION_LOCAL_PATH: "",
+        },
+        encoding: "utf8",
+        timeout: 15_000,
+      },
+    );
+    expect(result.status, result.stderr).toBe(0);
+    const line = result.stdout
+      .split("\n")
+      .find((item) => item.startsWith("QA_DIRECTORY_PROBE="));
+    expect(line, result.stdout).toBeDefined();
+    return JSON.parse(line!.slice("QA_DIRECTORY_PROBE=".length));
+  }
+
   it("builds default config with correct ports", async () => {
     const config = await buildConfig({}, envWithIsolatedKeyPath());
 
@@ -348,6 +432,49 @@ describe("buildConfig", () => {
       config.vitePort,
     ]);
     expect(ports.size).toBe(4);
+  });
+
+  it("creates separate default tmux directories before local backends start", async () => {
+    const configs = [];
+    for (let n = 0; n < 2; n += 1) {
+      const env = envWithIsolatedKeyPath();
+      env.OH_CANVAS_SAFE_STATE_DIR = path.join(
+        path.dirname(env.OH_SESSION_API_KEY_PATH),
+        "state",
+      );
+      const config = launchDirectoryProbe(env, ["--backend-only"]);
+      const expected = path.join(config.stateDir, "tmux");
+      expect(config.tmuxTmpDir).toBe(expected);
+      expect(existsSync(expected)).toBe(true);
+      configs.push(config);
+    }
+    expect(configs[0].tmuxTmpDir).not.toBe(configs[1].tmuxTmpDir);
+  });
+
+  it("creates and preserves an explicit socket-capable TMUX_TMPDIR", async () => {
+    const env = envWithIsolatedKeyPath();
+    env.OH_CANVAS_SAFE_STATE_DIR = path.join(
+      path.dirname(env.OH_SESSION_API_KEY_PATH),
+      "state",
+    );
+    env.TMUX_TMPDIR = path.join(
+      path.dirname(env.OH_SESSION_API_KEY_PATH),
+      "sockets",
+    );
+    const config = launchDirectoryProbe(env, ["--backend-only"]);
+    expect(config.tmuxTmpDir).toBe(env.TMUX_TMPDIR);
+    expect(existsSync(env.TMUX_TMPDIR)).toBe(true);
+    expect(existsSync(path.join(config.stateDir, "tmux"))).toBe(false);
+  });
+
+  it("does not create a local terminal directory in frontend-only mode", async () => {
+    const env = envWithIsolatedKeyPath();
+    env.OH_CANVAS_SAFE_STATE_DIR = path.join(
+      path.dirname(env.OH_SESSION_API_KEY_PATH),
+      "state",
+    );
+    const config = launchDirectoryProbe(env, ["--frontend-only"]);
+    expect(existsSync(path.join(config.stateDir, "tmux"))).toBe(false);
   });
 
   it("lets --automation-git-ref win over an exported OH_AUTOMATION_LOCAL_PATH", async () => {
@@ -1034,6 +1161,197 @@ describe("dev-with-automation CLI", () => {
     15_000,
   );
 
+  // Runs the real `main()` with `--backend-only` and lets the caller decide
+  // what the automation backend does. `main()` starts it as
+  // `uv run --project <checkout> uvicorn ... --host 127.0.0.1 --port <port>`;
+  // the fake `uv` hands those arguments to `automationSource` (a Node ESM
+  // script). The agent-server is an in-process stub that answers every request,
+  // so the launcher reaches the automation wait without delay.
+  async function launchBackendOnly(automationSource: string) {
+    const moduleUrl = pathToFileURL(
+      path.join(repoRoot, "scripts", "dev-with-automation.mjs"),
+    ).href;
+    const dir = mkdtempSync(path.join(tmpdir(), "automation-startup-"));
+    const bin = path.join(dir, "bin");
+    const checkout = path.join(dir, "automation");
+    mkdirSync(bin);
+    mkdirSync(checkout);
+    writeFileSync(path.join(checkout, "pyproject.toml"), "");
+    const automationScript = path.join(dir, "automation.mjs");
+    writeFileSync(automationScript, automationSource);
+    // `uvx` only has to exist; the agent-server is stubbed below.
+    writeFileSync(path.join(bin, "uvx"), "#!/bin/sh\nexit 0\n", {
+      mode: 0o755,
+    });
+    writeFileSync(
+      path.join(bin, "uv"),
+      `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(automationScript)} "$@"\n`,
+      { mode: 0o755 },
+    );
+    const ports: number[] = [];
+    for (let i = 0; i < 3; i += 1) {
+      const server = net.createServer();
+      await new Promise<void>((resolve) =>
+        server.listen(0, "127.0.0.1", resolve),
+      );
+      ports.push((server.address() as net.AddressInfo).port);
+      await new Promise((resolve) => server.close(resolve));
+    }
+    const [ingressPort, agentServerPort, automationPort] = ports;
+    const launcherScript = path.join(dir, "launch.mjs");
+    writeFileSync(
+      launcherScript,
+      [
+        'import http from "node:http";',
+        `import { main } from ${JSON.stringify(moduleUrl)};`,
+        "const startAgentServer = (config) =>",
+        '  http.createServer((_req, res) => res.end("{}")).listen(config.agentServerPort, "127.0.0.1");',
+        "main({ startAgentServer, agentServerReadyTimeoutMs: 10_000 })",
+        '  .then(() => console.log("LAUNCHED"))',
+        '  .catch((error) => { console.log("FAILED:", error.message); process.exit(1); });',
+      ].join("\n"),
+    );
+
+    const launcher = spawn(
+      process.execPath,
+      [launcherScript, "--backend-only", "--port", String(ingressPort)],
+      {
+        cwd: repoRoot,
+        env: {
+          ...process.env,
+          PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}`,
+          HOME: dir,
+          OH_CANVAS_SAFE_STATE_DIR: path.join(dir, "state"),
+          OH_CANVAS_SAFE_BACKEND_PORT: String(agentServerPort),
+          OH_CANVAS_SAFE_AUTOMATION_PORT: String(automationPort),
+          OH_AUTOMATION_LOCAL_PATH: checkout,
+        },
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+    let output = "";
+    launcher.stdout.on("data", (chunk) => {
+      output += chunk.toString();
+    });
+    launcher.stderr.on("data", (chunk) => {
+      output += chunk.toString();
+    });
+    const exited = once(launcher, "exit").then(([code]) => code as number);
+
+    return {
+      ingressPort,
+      automationPort,
+      output: () => output,
+      exitCode: (timeoutMs: number) =>
+        Promise.race([exited, delay(timeoutMs).then(() => "timed out")]),
+      async waitForOutput(text: string, timeoutMs: number) {
+        const deadline = Date.now() + timeoutMs;
+        while (!output.includes(text) && Date.now() < deadline) {
+          if (launcher.exitCode !== null) break;
+          await delay(50);
+        }
+        return output.includes(text);
+      },
+      async stop() {
+        // SIGTERM lets the launcher's shutdown handler stop its detached
+        // services; that is also the cleanup when a regression leaves it up.
+        if (launcher.exitCode === null) {
+          launcher.kill("SIGTERM");
+          await Promise.race([exited, delay(6_000)]);
+          if (launcher.exitCode === null) launcher.kill("SIGKILL");
+        }
+        rmSync(dir, { recursive: true, force: true });
+      },
+    };
+  }
+
+  const isListening = (port: number) =>
+    new Promise<boolean>((resolve) => {
+      const socket = net.connect(port, "127.0.0.1");
+      socket.once("connect", () => {
+        socket.destroy();
+        resolve(true);
+      });
+      socket.once("error", () => resolve(false));
+    });
+
+  it.skipIf(process.platform === "win32")(
+    "stops the stack and exits 1 when the automation backend exits during startup",
+    async () => {
+      // Exits the way automation does when a database migration fails.
+      const stack = await launchBackendOnly(
+        'console.error("Failed to apply SQLite migrations");\nprocess.exit(3);\n',
+      );
+
+      try {
+        const exitCode = await stack.exitCode(25_000);
+
+        const output = stack.output();
+        expect(exitCode, output).toBe(1);
+        // The stack is announced without waiting for automation, then
+        // stopped once automation exits. "Ingress:" is the banner's first
+        // entry, printed in every launch mode.
+        const banner = output.indexOf("Ingress:");
+        const failure = output.indexOf(
+          "The automation backend exited during startup (code 3).",
+        );
+        expect(banner, output).toBeGreaterThan(-1);
+        expect(failure, output).toBeGreaterThan(banner);
+        expect(await isListening(stack.ingressPort)).toBe(false);
+      } finally {
+        await stack.stop();
+      }
+    },
+    30_000,
+  );
+
+  it.skipIf(process.platform === "win32")(
+    "announces the stack without waiting for the automation backend",
+    async () => {
+      // Listening but not ready yet: the first two health probes get 503, so
+      // "Ready" is only logged after the launcher has polled and waited.
+      const stack = await launchBackendOnly(
+        [
+          'import http from "node:http";',
+          'const port = Number(process.argv[process.argv.indexOf("--port") + 1]);',
+          "let probes = 0;",
+          "http",
+          "  .createServer((req, res) => {",
+          '    const healthy = req.url === "/api/automation/health" && ++probes > 2;',
+          "    res.writeHead(healthy ? 200 : 503).end(healthy ? '{\"status\":\"ok\"}' : '');",
+          "  })",
+          '  .listen(port, "127.0.0.1");',
+          "// Never outlive the test, even if the launcher is killed.",
+          "setTimeout(() => process.exit(0), 30_000);",
+        ].join("\n"),
+      );
+
+      try {
+        expect(
+          await stack.waitForOutput("LAUNCHED", 20_000),
+          stack.output(),
+        ).toBe(true);
+
+        const readyLine = `Ready at http://127.0.0.1:${stack.automationPort}/api/automation/health`;
+        expect(
+          await stack.waitForOutput(readyLine, 20_000),
+          stack.output(),
+        ).toBe(true);
+
+        const output = stack.output();
+        const ready = output.indexOf(readyLine);
+        expect(output.indexOf("Ingress:"), output).toBeGreaterThan(-1);
+        expect(output.indexOf("Ingress:"), output).toBeLessThan(ready);
+        // A healthy start keeps the stack up.
+        expect(await stack.exitCode(1_000)).toBe("timed out");
+        expect(await isListening(stack.ingressPort)).toBe(true);
+      } finally {
+        await stack.stop();
+      }
+    },
+    30_000,
+  );
+
   it("shows help with --help flag", async () => {
     const child = spawn(
       process.execPath,
@@ -1177,5 +1495,238 @@ describe("dev-with-automation CLI", () => {
     expect(exitResult.timedOut).toBe(false);
     expect(exitResult.code).toBe(1);
     expect(output).toContain("uvx");
+  });
+});
+
+describe("backend logging defaults", () => {
+  // Minimal SafeDevConfig for buildAgentServerEnv; only the fields it reads
+  // matter, but it accesses them directly rather than via optional chaining.
+  const baseConfig = () => ({
+    cwd: process.cwd(),
+    backendPort: 18000,
+    vscodePort: 18001,
+    vscodeBasePath: "/vscode",
+    stateDir: "/tmp/state",
+    tmuxTmpDir: "/tmp/tmux",
+    conversationsPath: "/tmp/conversations",
+    workspacesPath: "/tmp/workspaces",
+    bashEventsDir: "/tmp/bash-events",
+    backendBaseUrl: "http://127.0.0.1:18000",
+    backendHost: "127.0.0.1",
+    workingDir: process.cwd(),
+    secretKey: "secret",
+    sessionApiKey: "session",
+    canvasToolsDir: "/tmp/tools",
+    extensionsDir: null,
+  });
+
+  it("quiets the automation service by default", () => {
+    const env = buildBackendLogEnv({ automation: true, env: {} });
+
+    expect(env.LOG_LEVEL).toBe("WARNING");
+    expect(env.AUTOMATION_LOG_LEVEL).toBe("WARNING");
+  });
+
+  it("leaves AUTOMATION_LOG_LEVEL unset for the agent-server", () => {
+    // The agent-server does not read AUTOMATION_LOG_LEVEL; setting it there
+    // would suggest it has an effect it does not.
+    const env = buildBackendLogEnv({ env: {} });
+
+    expect(env.LOG_LEVEL).toBe("WARNING");
+    expect(env).not.toHaveProperty("AUTOMATION_LOG_LEVEL");
+  });
+
+  it("honors an explicit LOG_LEVEL from the caller's environment", () => {
+    const env = buildBackendLogEnv({
+      automation: true,
+      env: { LOG_LEVEL: "INFO" },
+    });
+
+    expect(env.LOG_LEVEL).toBe("INFO");
+    expect(env.AUTOMATION_LOG_LEVEL).toBe("INFO");
+  });
+
+  it("lets AUTOMATION_LOG_LEVEL diverge from LOG_LEVEL", () => {
+    const env = buildBackendLogEnv({
+      automation: true,
+      env: { LOG_LEVEL: "ERROR", AUTOMATION_LOG_LEVEL: "DEBUG" },
+    });
+
+    expect(env.LOG_LEVEL).toBe("ERROR");
+    expect(env.AUTOMATION_LOG_LEVEL).toBe("DEBUG");
+  });
+
+  it("raises both services to DEBUG under --verbose, overriding the environment", () => {
+    const env = buildBackendLogEnv({
+      verbose: true,
+      automation: true,
+      env: { LOG_LEVEL: "ERROR" },
+    });
+
+    expect(env.LOG_LEVEL).toBe("DEBUG");
+    expect(env.AUTOMATION_LOG_LEVEL).toBe("DEBUG");
+  });
+
+  it("passes the same level to uvicorn as to the automation service", () => {
+    const args = buildAutomationLogArgs({ autoBackendPort: 18001 }, {});
+
+    expect(args).toEqual([
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "18001",
+      "--log-level",
+      "warning",
+    ]);
+  });
+
+  it("passes debug to uvicorn under --verbose", () => {
+    const args = buildAutomationLogArgs(
+      { autoBackendPort: 18001, verbose: true },
+      {},
+    );
+
+    expect(args.at(-1)).toBe("debug");
+  });
+
+  // Uvicorn validates --log-level with a click.Choice and exits 2 on anything
+  // outside its set, which takes the whole dev stack down. The app accepts
+  // more than Uvicorn does, so an explicit override must be narrowed rather
+  // than forwarded verbatim.
+  describe("narrows the Uvicorn --log-level to a value Uvicorn accepts", () => {
+    const UVICORN_ACCEPTS = [
+      "critical",
+      "error",
+      "warning",
+      "info",
+      "debug",
+      "trace",
+    ];
+
+    it("keeps every level Uvicorn already accepts", () => {
+      for (const level of UVICORN_ACCEPTS) {
+        expect(uvicornLogLevel(level)).toBe(level);
+        expect(uvicornLogLevel(level.toUpperCase())).toBe(level);
+      }
+    });
+
+    it("maps the Python aliases Uvicorn rejects", () => {
+      expect(uvicornLogLevel("WARN")).toBe("warning");
+      expect(uvicornLogLevel("warn")).toBe("warning");
+      expect(uvicornLogLevel("FATAL")).toBe("critical");
+      expect(uvicornLogLevel("fatal")).toBe("critical");
+    });
+
+    it("maps numeric levels onto the nearest Uvicorn name", () => {
+      expect(uvicornLogLevel("50")).toBe("critical");
+      expect(uvicornLogLevel("40")).toBe("error");
+      expect(uvicornLogLevel("30")).toBe("warning");
+      expect(uvicornLogLevel("20")).toBe("info");
+      expect(uvicornLogLevel("10")).toBe("debug");
+      expect(uvicornLogLevel("5")).toBe("trace");
+    });
+
+    it("falls back to Uvicorn's own default for unrepresentable values", () => {
+      // `NOTSET` means "inherit", not "most verbose", and Uvicorn has no
+      // equivalent; the pre-PR launchers passed no --log-level at all, which
+      // left Uvicorn at `info`.
+      expect(uvicornLogLevel("NOTSET")).toBe("info");
+      expect(uvicornLogLevel("0")).toBe("info");
+      expect(uvicornLogLevel("")).toBe("info");
+      expect(uvicornLogLevel(undefined)).toBe("info");
+      expect(uvicornLogLevel("verbose")).toBe("info");
+    });
+
+    it("never returns a value outside Uvicorn's accepted set", () => {
+      const inputs = [
+        "WARN",
+        "FATAL",
+        "NOTSET",
+        "30",
+        "0",
+        "",
+        "bogus",
+        "999999999999999999999",
+        "  30  ",
+        "warning",
+      ];
+      for (const input of inputs) {
+        expect(UVICORN_ACCEPTS).toContain(uvicornLogLevel(input));
+      }
+    });
+
+    it("narrows an explicit LOG_LEVEL alias in the built args", () => {
+      // The regression: `LOG_LEVEL=WARN npm run dev` aborted Uvicorn.
+      const args = buildAutomationLogArgs(
+        { autoBackendPort: 18001 },
+        { LOG_LEVEL: "WARN" },
+      );
+
+      expect(args.at(-1)).toBe("warning");
+    });
+
+    it("leaves the app's LOG_LEVEL env untouched for an alias", () => {
+      // The app reads LOG_LEVEL through Python's logging module, which does
+      // accept WARN — only the Uvicorn argument is narrowed.
+      const env = buildBackendLogEnv({
+        automation: true,
+        env: { LOG_LEVEL: "WARN" },
+      });
+
+      expect(env.LOG_LEVEL).toBe("WARN");
+      expect(env.AUTOMATION_LOG_LEVEL).toBe("WARN");
+    });
+  });
+
+  it("gives the agent-server the quiet default without an opt-out needed", () => {
+    const env = buildAgentServerEnv(baseConfig(), { env: {} });
+
+    expect(env.LOG_LEVEL).toBe("WARNING");
+  });
+
+  it("raises the agent-server to DEBUG under --verbose", () => {
+    const env = buildAgentServerEnv(baseConfig(), { env: {}, verbose: true });
+
+    expect(env.LOG_LEVEL).toBe("DEBUG");
+  });
+});
+
+describe("buildMarsWebEnv", () => {
+  it("puts the bridge on the ingress behind the session key, off the static child", () => {
+    const config = { sessionApiKey: "stack-key", marsWebBridge: true } as never;
+    expect(buildMarsWebEnv("ingress", config)).toEqual({
+      MARS_WEB_KEY: "stack-key",
+    });
+    expect(buildMarsWebEnv("static", config)).toEqual({ MARS_WEB: "0" });
+  });
+
+  it("tells the ingress bridge where to keep sign-ins and how to encrypt them", () => {
+    const config = {
+      sessionApiKey: "stack-key",
+      marsWebBridge: true,
+      stateDir: "/home/me/.openhands/agent-canvas",
+      secretKey: "settings-key",
+    } as never;
+    expect(buildMarsWebEnv("ingress", config)).toEqual({
+      MARS_WEB_KEY: "stack-key",
+      MARS_STATE_DIR: "/home/me/.openhands/agent-canvas",
+      OH_SECRET_KEY: "settings-key",
+    });
+    expect(buildMarsWebEnv("static", config)).toEqual({ MARS_WEB: "0" });
+  });
+
+  it("mounts nothing without a session key", () => {
+    expect(
+      buildMarsWebEnv("ingress", { marsWebBridge: true } as never),
+    ).toEqual({ MARS_WEB: "0" });
+  });
+
+  it("mounts nothing under Electron (marsWebBridge: false), even with a key", () => {
+    expect(
+      buildMarsWebEnv("ingress", {
+        sessionApiKey: "k",
+        marsWebBridge: false,
+      } as never),
+    ).toEqual({ MARS_WEB: "0" });
   });
 });

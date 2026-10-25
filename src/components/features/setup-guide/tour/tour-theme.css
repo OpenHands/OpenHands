@@ -179,3 +179,20 @@
 [data-agent-server-ui].oh-setup-tour-interactive.driver-active * {
   pointer-events: auto;
 }
+
+/*
+ * While the tour looks for the next stop's element (a click opened a choice
+ * or a dialog first), it shows nothing and the whole page stays usable.
+ */
+[data-agent-server-ui].oh-setup-tour-waiting .driver-overlay {
+  display: none;
+}
+
+/* driver.js shows the popover with an inline `display: block`. */
+[data-agent-server-ui].oh-setup-tour-waiting .driver-popover {
+  display: none !important;
+}
+
+[data-agent-server-ui].oh-setup-tour-waiting.driver-active * {
+  pointer-events: auto;
+}
