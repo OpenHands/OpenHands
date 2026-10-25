@@ -21,7 +21,7 @@ export default function MetaLlmSettingsRoute() {
     return (
       <p
         data-testid="meta-profile-cloud-unsupported"
-        className="text-sm text-[var(--oh-muted)]"
+        className="text-sm text-muted"
       >
         {t(I18nKey.SETTINGS$META_PROFILE_CLOUD_UNSUPPORTED)}
       </p>
