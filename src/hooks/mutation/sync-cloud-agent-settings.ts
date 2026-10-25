@@ -27,11 +27,13 @@ function agentSettingsDiff(
 }
 
 /**
- * Cloud launches a conversation with no resolvable agent profile from the
- * account's `agent_settings`, and activation is pointer-only, so match those
- * settings to the active profile (#18883). Pass `savedName` to sync only when
- * that profile is the active one. Resolves `true` once the settings changed;
- * a failure is reported, never thrown: the profile change already succeeded.
+ * Matches the account's `agent_settings` to the active agent profile on Cloud.
+ * Activation is pointer-only, but a Cloud launch with no resolvable profile
+ * reads `agent_settings` (#18883). Pass `savedName` to sync only when that
+ * profile is the active one.
+ *
+ * Resolves `true` once the settings changed. A failure is reported, never
+ * thrown: the profile change already succeeded.
  */
 export async function syncCloudAgentSettings(
   savedName?: string,
