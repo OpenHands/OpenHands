@@ -1,3 +1,6 @@
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { compile } from "@tailwindcss/node";
 import {
   act,
   fireEvent,
@@ -364,6 +367,119 @@ describe("AutomationSetupPanel", () => {
     vi.useRealTimers();
   });
 
+  it("preserves fixed card edges and root-scaled schedule fields in compiled CSS", async () => {
+    // Arrange: use the real stylesheet and classes emitted by the panel.
+    const compiler = await compile(
+      await readFile(resolve("src/tailwind.css"), "utf8"),
+      { base: resolve("src"), onDependency: () => {} },
+    );
+    const user = userEvent.setup();
+    const { container } = renderPanel();
+    const style = document.createElement("style");
+    const originalRootFontSize = document.documentElement.style.fontSize;
+    document.head.appendChild(style);
+    const applyLayout = () => {
+      const classes = new Set(
+        [...container.querySelectorAll("[class]")].flatMap((element) => [
+          ...element.classList,
+        ]),
+      );
+      // jsdom does not apply cascade layers. Keep each matching compiled rule
+      // in its original order, so shared form styles still participate.
+      style.textContent = [
+        ...compiler
+          .build([...classes])
+          .matchAll(/\.((?:\\.|[\w-])+)\s*\{([^{}]+)\}/g),
+      ]
+        .filter(([, selector]) => classes.has(selector.replace(/\\(.)/g, "$1")))
+        .map(([rule]) => rule)
+        .join("\n");
+    };
+    const assertJoinedCard = (card: HTMLElement, tray: HTMLElement) => {
+      expect(getComputedStyle(card).borderRadius).toBe("15px");
+      expect(getComputedStyle(card).marginBottom).toBe("-15px");
+      const trayStyle = getComputedStyle(tray);
+      expect(trayStyle.borderBottomLeftRadius).toBe("15px");
+      expect(trayStyle.borderBottomRightRadius).toBe("15px");
+      expect(trayStyle.paddingTop).toBe("23px");
+    };
+    const scheduleWidth = (element: HTMLElement) => {
+      // jsdom keeps var() in computed widths. Resolve it from the actual row
+      // to verify both the field's winning width and the variable's owner.
+      const rowStyle = getComputedStyle(
+        screen.getByTestId("automation-setup-at-row"),
+      );
+      return getComputedStyle(element).width.replace(
+        /var\((--[\w-]+)\)/g,
+        (_, property: string) => rowStyle.getPropertyValue(property).trim(),
+      );
+    };
+
+    try {
+      // Act / Assert: the prompt and custom-code modes share the joined edge,
+      // while their editing areas retain their distinct minimum heights.
+      applyLayout();
+      assertJoinedCard(
+        screen.getByTestId("automation-setup-prompt-container"),
+        screen.getByTestId("automation-setup-prompt-drawer"),
+      );
+      expect(
+        getComputedStyle(screen.getByTestId("automation-setup-prompt"))
+          .minHeight,
+      ).toBe("120px");
+      expect(scheduleWidth(screen.getByTestId("automation-setup-time"))).toBe(
+        "9.5rem",
+      );
+
+      // Host font-size changes scale the rem-based fields, while the joined
+      // card edge stays fixed and the tray keeps its mixed px/rem inset.
+      document.documentElement.style.fontSize = "20px";
+      expect(
+        scheduleWidth(
+          screen.getByTestId("automation-setup-timezone").parentElement!,
+        ),
+      ).toBe("16rem");
+      expect(
+        getComputedStyle(screen.getByTestId("automation-setup-prompt-drawer"))
+          .paddingTop,
+      ).toBe("25px");
+      expect(
+        getComputedStyle(
+          screen.getByTestId("automation-setup-prompt-container"),
+        ).borderRadius,
+      ).toBe("15px");
+
+      await user.click(screen.getByTestId("automation-setup-frequency-once"));
+      applyLayout();
+      expect(
+        scheduleWidth(screen.getByTestId("automation-setup-datetime")),
+      ).toBe("15rem");
+      await user.click(screen.getByTestId("automation-setup-frequency-custom"));
+      applyLayout();
+      expect(
+        scheduleWidth(screen.getByTestId("automation-setup-custom-schedule")),
+      ).toBe("14rem");
+
+      document.documentElement.style.fontSize = originalRootFontSize;
+      await user.click(screen.getByTestId("automation-setup-kind-custom"));
+      applyLayout();
+      const codeScroll = screen.getByTestId(
+        "automation-setup-custom-code-scroll",
+      );
+      assertJoinedCard(
+        codeScroll.parentElement!,
+        screen.getByTestId("automation-setup-custom-details-drawer"),
+      );
+      expect(getComputedStyle(codeScroll).minHeight).toBe("256px");
+      const grip = screen.getByTestId("automation-setup-custom-code-grip");
+      expect(getComputedStyle(grip.children[0]).zIndex).toBe("1");
+      expect(getComputedStyle(grip.children[1]).zIndex).toBe("2");
+    } finally {
+      document.documentElement.style.fontSize = originalRootFontSize;
+      style.remove();
+    }
+  });
+
   it("shows a one-time date when Once is selected and a time of day otherwise", async () => {
     const user = userEvent.setup();
     renderPanel();
@@ -435,9 +551,6 @@ describe("AutomationSetupPanel", () => {
     expect(
       screen.queryByTestId("automation-setup-entrypoint"),
     ).not.toBeInTheDocument();
-    expect(
-      screen.getByTestId("automation-setup-custom-details-drawer"),
-    ).toHaveClass("border-x", "border-b", "rounded-b-[15px]");
     await user.click(
       screen.getByTestId("automation-setup-custom-details-toggle"),
     );

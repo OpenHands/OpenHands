@@ -102,7 +102,7 @@ function SetupModelPill({
           type="button"
           className={cn(
             chatInputPillButtonClassName,
-            "max-w-[200px] rounded-lg",
+            "automation-setup-model-trigger rounded-lg",
           )}
           data-testid="automation-setup-model"
           aria-label={displayName ?? pillLabel}
@@ -129,7 +129,7 @@ function SetupModelPill({
           position="top"
           alignment="left"
           spacing="none"
-          className="z-[60] mb-2 min-w-[200px] max-w-[320px] max-h-[60vh] overflow-y-auto"
+          className="automation-setup-model-popover z-60 mb-2 overflow-y-auto"
         >
           <ContextMenuListItem
             testId="automation-setup-model-option-active"
@@ -215,7 +215,7 @@ function AddRepositoryModal({
           onClose();
         }}
         data-testid="automation-setup-add-repository-modal"
-        className="relative flex w-[520px] max-w-[90vw] max-h-[85vh] flex-col rounded-xl border border-border bg-base-secondary"
+        className="automation-setup-repository-dialog relative flex flex-col rounded-xl border border-border bg-base-secondary"
       >
         <ModalCloseButton
           onClose={onClose}
@@ -434,7 +434,7 @@ export function AutomationSetupPromptStack({
         >
           <div
             data-testid="automation-setup-prompt-container"
-            className="relative z-10 -mb-[15px] flex flex-col rounded-[15px] border border-border bg-surface p-4"
+            className="automation-setup-joined-card relative z-10 flex flex-col border border-border bg-surface p-4"
           >
             <textarea
               ref={textareaRef}
@@ -444,7 +444,7 @@ export function AutomationSetupPromptStack({
               onChange={(event) => onPromptChange(event.target.value)}
               placeholder={t(I18nKey.HOME$AUTOMATE_PROMPT_PLACEHOLDER)}
               rows={5}
-              className="min-h-[120px] w-full resize-none border-0 bg-transparent p-0 text-sm text-content outline-none placeholder:text-tertiary-alt"
+              className="automation-setup-prompt-input w-full resize-none border-0 bg-transparent p-0 text-sm text-content outline-none placeholder:text-tertiary-alt"
             />
             <div className="flex min-w-0 items-center gap-2 pt-2">
               <SetupModelPill value={model} onChange={onModelChange} />
@@ -454,7 +454,7 @@ export function AutomationSetupPromptStack({
               className="group absolute bottom-0 left-0 z-20 h-3 w-full"
             >
               <div
-                className="absolute inset-0 z-[1] cursor-ns-resize select-none"
+                className="absolute inset-0 z-1 cursor-ns-resize select-none"
                 onMouseDown={handleGripMouseDown}
                 onTouchStart={handleGripTouchStart}
                 aria-hidden
@@ -462,7 +462,7 @@ export function AutomationSetupPromptStack({
               <div
                 ref={gripRef}
                 className={cn(
-                  "pointer-events-none absolute bottom-0 left-0 z-[2] h-px w-full bg-white transition-opacity duration-200",
+                  "pointer-events-none absolute bottom-0 left-0 z-2 h-px w-full bg-white transition-opacity duration-200",
                   isGripDragging
                     ? "opacity-100"
                     : "opacity-0 group-hover:opacity-100",
@@ -472,7 +472,7 @@ export function AutomationSetupPromptStack({
           </div>
           <div
             data-testid="automation-setup-prompt-drawer"
-            className="flex min-h-9 items-center rounded-b-[15px] border-x border-b border-border bg-surface-raised px-4 pb-2 pt-[calc(15px+0.5rem)]"
+            className="automation-setup-joined-tray flex min-h-9 items-center border-x border-b border-border bg-surface-raised px-4 pb-2"
           >
             <div
               data-testid="automation-setup-repository"
@@ -535,7 +535,7 @@ export function AutomationSetupPromptStack({
                     ref={repositoryMenuRef}
                     role="menu"
                     data-testid="automation-setup-repository-menu"
-                    className="absolute top-full left-0 z-[60] mt-1 flex max-h-72 w-[min(28rem,calc(100vw-3rem))] flex-col overflow-hidden rounded-md border border-border-subtle bg-tertiary py-1 shadow-lg"
+                    className="automation-setup-repository-menu absolute top-full left-0 z-60 mt-1 flex max-h-72 flex-col overflow-hidden rounded-md border border-border-subtle bg-tertiary py-1 shadow-lg"
                   >
                     <div className="shrink-0 px-2">
                       <div className="relative">
