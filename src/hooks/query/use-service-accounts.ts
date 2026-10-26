@@ -14,11 +14,12 @@ import { useDeploymentCapabilities } from "./use-manifest-capabilities";
 export function useServiceAccountOwnersEnabled(): boolean {
   const { backend, orgId } = useActiveBackend();
   const { canManage, userId } = useAutomationPermissions();
-  const capabilities = useDeploymentCapabilities();
+  const isTeamWorkspace =
+    backend.kind === "cloud" && !!orgId && !!userId && orgId !== userId;
+  // Skip the capabilities request where the answer would be discarded.
+  const capabilities = useDeploymentCapabilities({ enabled: isTeamWorkspace });
 
-  if (backend.kind !== "cloud" || !orgId || !userId || orgId === userId) {
-    return false;
-  }
+  if (!isTeamWorkspace) return false;
   if (!capabilities.data?.features?.includes(SERVICE_ACCOUNT_OWNERS_FEATURE)) {
     return false;
   }

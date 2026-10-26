@@ -209,6 +209,9 @@ describe("ConfigurationSection", () => {
 
     expect(screen.getByText("AUTOMATIONS$OWNED_BY")).toBeInTheDocument();
     expect(screen.getByText("ci-bot")).toBeInTheDocument();
-    expect(screen.getByTestId("service-account-badge")).toBeInTheDocument();
+    expect(screen.getByTestId("service-account-badge")).toHaveAttribute(
+      "title",
+      "AUTOMATIONS$SERVICE_ACCOUNT_LABEL",
+    );
   });
 });

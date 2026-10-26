@@ -502,6 +502,12 @@ function buildInitialForm(
   };
 }
 
+/** The service account id stored in a server draft body; empty for the caller. */
+function ownerFromDraftBody(body: unknown): string {
+  const owner = (body as { owner_user_id?: unknown } | null)?.owner_user_id;
+  return typeof owner === "string" ? owner : "";
+}
+
 function DraftStatusBar({
   draft,
   runs,
@@ -740,8 +746,8 @@ export function AutomationSetupPanel({
     : draft;
   const [form, setForm] = useState(() => buildInitialForm(initialDraft));
   // "Create as service account": the service account that will own a new
-  // automation; empty means the caller. Not part of the form session, so a
-  // reloaded draft starts as the caller again.
+  // automation; empty means the caller. It is saved in the server draft body
+  // (`owner_user_id`) and restored from there when a saved draft is reopened.
   const [ownerUserId, setOwnerUserId] = useState("");
   const serviceAccountOwnersEnabled = useServiceAccountOwnersEnabled();
   const serviceAccounts = useServiceAccounts().data;
@@ -991,6 +997,7 @@ export function AutomationSetupPanel({
         setServerDraft(saved);
         setDraftRuns([]);
         setForm(nextForm);
+        setOwnerUserId(ownerFromDraftBody(saved.draft));
         saveDraftInFormSession(saved, nextForm);
       })
       .catch((error: unknown) => {
@@ -1441,6 +1448,7 @@ export function AutomationSetupPanel({
       agentProfileId,
       showTimeout,
       timeoutSeconds,
+      newAutomationOwnerId,
     ],
   );
   const isDraftDirty = savedDraftRequestKey
@@ -2109,6 +2117,19 @@ export function AutomationSetupPanel({
                       <option value="">
                         {t(I18nKey.AUTOMATIONS$OWNER_ME)}
                       </option>
+                      {/* A resumed draft's owner may be disabled or deleted by
+                          now. Keep it selected, shown by its id. */}
+                      {ownerUserId &&
+                      !(serviceAccounts ?? []).some(
+                        (account) =>
+                          account.id === ownerUserId && !account.is_disabled,
+                      ) ? (
+                        <option value={ownerUserId}>
+                          {(serviceAccounts ?? []).find(
+                            (account) => account.id === ownerUserId,
+                          )?.name ?? ownerUserId}
+                        </option>
+                      ) : null}
                       {(serviceAccounts ?? [])
                         .filter((account) => !account.is_disabled)
                         .map((account) => (

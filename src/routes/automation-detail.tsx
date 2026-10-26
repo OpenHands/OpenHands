@@ -338,6 +338,8 @@ export default function AutomationDetail() {
             serviceAccounts={serviceAccountsQuery.data ?? []}
             currentOwnerId={automation.user_id}
             canTransferToSelf={!isOwner}
+            isLoading={serviceAccountsQuery.isLoading}
+            isError={serviceAccountsQuery.isError}
             isPending={transferMutation.isPending}
             onConfirm={handleTransfer}
             onCancel={() => setShowTransferModal(false)}

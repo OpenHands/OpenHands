@@ -35,9 +35,7 @@ export const featureService = {
   },
 
   createFeature: async (params: CreateFeatureParams): Promise<Feature> => {
-    return new FeatureClient(getAgentServerClientOptions()).createFeature(
-      params,
-    );
+    return new FeatureClient(getAgentServerClientOptions()).createFeature(params);
   },
 };
 ```

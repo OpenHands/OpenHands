@@ -24,6 +24,10 @@ interface TransferAutomationModalProps {
   currentOwnerId?: string;
   /** Whether "me" is offered: only `manage_automations` holders may take ownership. */
   canTransferToSelf: boolean;
+  /** The service account list is still loading. */
+  isLoading?: boolean;
+  /** The service account list failed to load. */
+  isError?: boolean;
   isPending?: boolean;
   onConfirm: (body: TransferAutomationRequest) => void;
   onCancel: () => void;
@@ -39,6 +43,8 @@ export function TransferAutomationModal({
   serviceAccounts,
   currentOwnerId,
   canTransferToSelf,
+  isLoading = false,
+  isError = false,
   isPending = false,
   onConfirm,
   onCancel,
@@ -48,12 +54,24 @@ export function TransferAutomationModal({
     (account) => !account.is_disabled && account.id !== currentOwnerId,
   );
   const [target, setTarget] = React.useState<string>("");
+  const defaultTarget = canTransferToSelf
+    ? SELF_TARGET
+    : (targets[0]?.id ?? "");
 
+  // Reset when the dialog opens, and again when a list that arrives later
+  // changes the default target.
   React.useEffect(() => {
     if (!isOpen) return;
-    setTarget(canTransferToSelf ? SELF_TARGET : (targets[0]?.id ?? ""));
-    // Reset only when the dialog opens.
-  }, [isOpen]);
+    setTarget(defaultTarget);
+  }, [isOpen, defaultTarget]);
+
+  // Nothing to pick: say why instead of showing an empty select.
+  let emptyMessage: string | null = null;
+  if (targets.length === 0 && !canTransferToSelf) {
+    if (isLoading) emptyMessage = t(I18nKey.AUTOMATIONS$TRANSFER_LOADING);
+    else if (isError) emptyMessage = t(I18nKey.AUTOMATIONS$TRANSFER_LOAD_ERROR);
+    else emptyMessage = t(I18nKey.AUTOMATIONS$TRANSFER_NO_TARGETS);
+  }
 
   if (!isOpen) return null;
 
@@ -88,7 +106,20 @@ export function TransferAutomationModal({
         <p className="mt-2 text-sm text-muted">
           {t(I18nKey.AUTOMATIONS$TRANSFER_MESSAGE, { name: automationName })}
         </p>
-        <label className="mt-4 flex flex-col gap-2 text-sm">
+        {emptyMessage ? (
+          <p
+            data-testid="transfer-automation-empty"
+            className="mt-4 text-sm text-muted"
+          >
+            {emptyMessage}
+          </p>
+        ) : null}
+        <label
+          className={cn(
+            "mt-4 flex flex-col gap-2 text-sm",
+            emptyMessage && "hidden",
+          )}
+        >
           {t(I18nKey.AUTOMATIONS$TRANSFER_TARGET)}
           <select
             data-testid="transfer-automation-target"

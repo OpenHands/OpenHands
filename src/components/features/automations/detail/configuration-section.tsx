@@ -163,7 +163,7 @@ export function ConfigurationSection({
               <span className="break-all">{serviceAccountOwner}</span>
               <span
                 data-testid="service-account-badge"
-                title={t(I18nKey.AUTOMATION_SETUP$CREATE_AS_SERVICE_ACCOUNT)}
+                title={t(I18nKey.AUTOMATIONS$SERVICE_ACCOUNT_LABEL)}
                 className="rounded-md bg-surface-raised px-1.5 py-0.5 text-xs font-medium text-muted"
               >
                 {t(I18nKey.AUTOMATIONS$SERVICE_ACCOUNT_BADGE)}
