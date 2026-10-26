@@ -232,14 +232,19 @@ prerequisite; never substitute a mock and call it a pass.
   [the report contract](references/report.md).
 - **Verify a fix for a known bug** (an open PR or a merged commit that claims
   to fix a bug the map records): launch the baseline and the fix as two runs
-  (`launch --new` from each worktree, same backend pins), then run the note's
+  (`launch --new` with each worktree's own `control-openhands`: the CLI
+  launches the checkout it lives in, whatever the current directory; same
+  backend pins), then run the note's
   known-bug block twice on each with this checkout's CLI:
   `control-openhands bug run <ID> --attempts 2 --label baseline --run $BASE_RUN`
   must report `xfail` both times, and `--label fix --run $FIX_RUN` `xpass` both
   times. `control-openhands bug proof <ID> --baseline $BASE_RUN --baseline-label
   baseline --fix $FIX_RUN --fix-label fix` gives the verdict: `verified`,
   `not-fixed`, or `inconclusive`. A baseline that does not reproduce twice is
-  inconclusive, never "fixed". When the note has no block yet, write one first
+  inconclusive, never "fixed". For a fix in the Agent Server or automation,
+  launch both runs from this checkout, the baseline with `--sdk-version` (or
+  `--automation-version`) before the fix, and add `--vary backend` to
+  `bug proof`. When the note has no block yet, write one first
   ([mapping.md](references/mapping.md)) and prove it reproduces on the
   baseline. Every attempt runs the same recipe, viewport and fixtures, and
   screenshots or recordings stay part of the proof.

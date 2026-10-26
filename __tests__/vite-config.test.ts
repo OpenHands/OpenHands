@@ -6,6 +6,7 @@ import { mkdtemp, writeFile, symlink, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Script } from "node:vm";
+import { parse, type AnyNode, type AtRule, type Rule } from "postcss";
 import { afterEach, describe, expect, it } from "vitest";
 
 afterEach(() => {
@@ -180,11 +181,162 @@ describe("vite library build", () => {
     };
 
     const css = file("styles.css");
+    const stylesheet = parse(css);
+    const declarations = (rule: Rule) => {
+      const values: Record<string, string> = {};
+      rule.walkDecls(({ prop, value }) => {
+        values[prop] = value;
+      });
+      return values;
+    };
+    const recipe = (name: string) => {
+      const classSelector = `.${name.replace(/([^\w-])/g, "\\$1")}`;
+      const matches: Rule[] = [];
+      stylesheet.walkRules((rule) => {
+        if (
+          rule.selectors.some(
+            (selector) =>
+              selector === classSelector ||
+              selector.endsWith(` ${classSelector}`),
+          )
+        ) {
+          matches.push(rule);
+        }
+      });
+      expect(matches, `Shipped scoped recipe: ${name}`).toHaveLength(1);
+      const rule = matches[0];
+      expect(rule.selectors).toContain(
+        `[data-agent-server-ui] ${classSelector}`,
+      );
+      for (const selector of rule.selectors) {
+        expect(selector).toMatch(/^\[data-agent-server-ui\]\s/);
+      }
+      let inUtilitiesLayer = false;
+      for (
+        let parent: AnyNode | undefined = rule.parent;
+        parent;
+        parent = parent.parent
+      ) {
+        if (
+          parent.type === "atrule" &&
+          (parent as AtRule).name === "layer" &&
+          (parent as AtRule).params === "utilities"
+        ) {
+          inUtilitiesLayer = true;
+        }
+      }
+      expect(inUtilitiesLayer, `Utilities-layer recipe: ${name}`).toBe(true);
+      return rule;
+    };
     // Scoped to the Canvas root so it never restyles the host page.
     expect(css).toContain("[data-agent-server-ui] .flex{display:flex}");
     expect(css).not.toMatch(/(^|[{},])\.flex\{/);
     expect(css).toContain("[data-agent-server-ui] .xterm");
     expect(css).toContain("fonts.googleapis.com");
+
+    // Extension dialogs keep their viewport limits in the shipped library.
+    expect(declarations(recipe("extension-dialog-viewport"))).toMatchObject({
+      "max-width": "90vw",
+      "max-height": "85vh",
+    });
+    expect(css).not.toMatch(/(^|[{},])\.extension-dialog-viewport\{/);
+
+    // Require the setup rail and editor geometry in the extracted stylesheet;
+    // every recipe must remain a scoped utility even inside media conditions.
+    expect(declarations(recipe("automation-setup-content"))).toMatchObject({
+      "max-width": "800px",
+    });
+    expect(
+      declarations(recipe("automation-setup-scroll-gutter")),
+    ).toMatchObject({
+      "scrollbar-gutter": "stable",
+    });
+    expect(declarations(recipe("automation-setup-card"))).toMatchObject({
+      "border-radius": "15px",
+    });
+    expect(declarations(recipe("automation-setup-joined-card"))).toMatchObject({
+      "border-radius": "15px",
+      "margin-bottom": "-15px",
+    });
+    const tray = declarations(recipe("automation-setup-joined-tray"));
+    expect(tray).toMatchObject({
+      "border-bottom-right-radius": "15px",
+      "border-bottom-left-radius": "15px",
+    });
+    expect(tray["padding-top"].replace(/\s/g, "")).toMatch(
+      /^calc\(15px\+0?\.5rem\)$/,
+    );
+    const dock = declarations(recipe("automation-setup-composer-dock"));
+    expect(dock["border-radius"]).toBe("15px");
+    expect(dock["--tw-shadow"]).toContain("0 12px 40px");
+    expect(dock["box-shadow"]).toMatch(
+      /var\(--tw-ring-shadow\).*var\(--tw-shadow\)/,
+    );
+    expect(declarations(recipe("automation-setup-prompt-input"))).toMatchObject(
+      {
+        "min-height": "120px",
+      },
+    );
+    expect(declarations(recipe("automation-setup-code-scroll"))).toMatchObject({
+      "min-height": "256px",
+    });
+
+    // Setup pickers preserve their fixed and viewport-relative limits.
+    expect(
+      declarations(recipe("automation-setup-model-trigger")),
+    ).toMatchObject({
+      "max-width": "200px",
+    });
+    expect(
+      declarations(recipe("automation-setup-model-popover")),
+    ).toMatchObject({
+      "min-width": "200px",
+      "max-width": "320px",
+      "max-height": "60vh",
+    });
+    expect(
+      declarations(recipe("automation-setup-repository-dialog")),
+    ).toMatchObject({
+      width: "520px",
+      "max-width": "90vw",
+      "max-height": "85vh",
+    });
+    const repositoryMenu = declarations(
+      recipe("automation-setup-repository-menu"),
+    );
+    expect(repositoryMenu.width.replace(/\s/g, "")).toBe(
+      "min(28rem,100vw-3rem)",
+    );
+
+    // Fields consume row-owned rem widths after merging shared form classes.
+    const scheduleRow = recipe("automation-setup-schedule-row");
+    const scheduleWidths = {
+      "--automation-setup-cron-width": "14rem",
+      "--automation-setup-datetime-width": "15rem",
+      "--automation-setup-time-width": "9.5rem",
+      "--automation-setup-timezone-width": "16rem",
+    };
+    expect(declarations(scheduleRow)).toMatchObject(scheduleWidths);
+    for (const property of Object.keys(scheduleWidths)) {
+      expect(declarations(recipe(`w-(${property})`))).toMatchObject({
+        width: `var(${property})`,
+      });
+      const owners: Rule[] = [];
+      stylesheet.walkDecls(property, (declaration) => {
+        if (declaration.parent?.type === "rule") {
+          owners.push(declaration.parent as Rule);
+        }
+      });
+      expect(owners).toHaveLength(1);
+      expect(owners[0]).toBe(scheduleRow);
+    }
+    const grid = recipe("md:automation-setup-details-grid");
+    expect(declarations(grid)["grid-template-columns"]).toBe("2fr 1fr");
+    expect(grid.parent).toMatchObject({
+      type: "atrule",
+      name: "media",
+      params: expect.stringMatching(/^\(width\s*>=\s*48rem\)$/),
+    });
 
     // `package.json` routes `require` here; stripped CSS imports must not
     // leave it unparseable.

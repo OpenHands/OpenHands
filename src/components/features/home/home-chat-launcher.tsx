@@ -331,7 +331,7 @@ export function HomeChatLauncher() {
         </div>
 
         {isolated && (
-          <p role="status" className="text-xs text-[var(--oh-text-secondary)]">
+          <p role="status" className="text-xs text-text-secondary">
             {pendingWorkspace
               ? runtimeWorkspaceMessage
               : t(I18nKey.HOME$ISOLATED_WORKSPACE_NEW)}
