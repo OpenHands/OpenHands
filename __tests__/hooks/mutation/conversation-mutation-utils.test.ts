@@ -13,6 +13,7 @@ import {
   startGoal,
   stopGoal,
   updateConversationSecrets,
+  wakeConversation,
 } from "#/hooks/mutation/conversation-mutation-utils";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 
@@ -303,6 +304,66 @@ describe("conversation runtime commands", () => {
     expect(mocks.resumeCloudSandbox).not.toHaveBeenCalled();
     expect(mocks.runConversation).not.toHaveBeenCalled();
   });
+
+  it("wakes a paused cloud sandbox straight from the list row", async () => {
+    mocks.getActiveBackend.mockReturnValueOnce({ backend: { kind: "cloud" } });
+    mocks.resumeCloudSandbox.mockResolvedValueOnce(undefined);
+
+    await expect(
+      wakeConversation({
+        id: CONV_ID,
+        sandbox_id: "sandbox-9",
+        sandbox_status: "PAUSED",
+      }),
+    ).resolves.toEqual({ success: true });
+
+    expect(mocks.resumeCloudSandbox).toHaveBeenCalledOnce();
+    expect(mocks.resumeCloudSandbox).toHaveBeenCalledWith("sandbox-9");
+    expect(mocks.batchGetAppConversations).not.toHaveBeenCalled();
+    expect(ConversationClient).not.toHaveBeenCalled();
+    expect(mocks.runConversation).not.toHaveBeenCalled();
+  });
+
+  it("wakes a paused execution through its runtime client", async () => {
+    const conversation = prepareRuntimeConversation({
+      execution_status: ExecutionStatus.PAUSED,
+    });
+    mocks.getActiveBackend.mockReturnValueOnce({ backend: { kind: "local" } });
+    const response = { status: "running" };
+    mocks.runConversation.mockResolvedValueOnce(response);
+
+    await expect(
+      wakeConversation({
+        id: CONV_ID,
+        sandbox_id: "sandbox-1",
+        sandbox_status: null,
+      }),
+    ).resolves.toBe(response);
+
+    expectRuntimeClient(CONV_ID, conversation);
+    expect(mocks.runConversation).toHaveBeenCalledOnce();
+    expect(mocks.runConversation).toHaveBeenCalledWith(CONV_ID);
+    expect(mocks.resumeCloudSandbox).not.toHaveBeenCalled();
+  });
+
+  it("names the conversation when a cloud wake has no sandbox id", async () => {
+    mocks.getActiveBackend.mockReturnValueOnce({ backend: { kind: "cloud" } });
+
+    await expect(
+      wakeConversation({
+        id: CONV_ID,
+        sandbox_id: null,
+        sandbox_status: "PAUSED",
+      }),
+    ).rejects.toThrow(
+      `Cannot wake: cloud conversation ${CONV_ID} has no sandbox_id.`,
+    );
+
+    expect(mocks.resumeCloudSandbox).not.toHaveBeenCalled();
+    expect(mocks.batchGetAppConversations).not.toHaveBeenCalled();
+    expect(mocks.runConversation).not.toHaveBeenCalled();
+  });
+
   it("hands saved secrets to a local conversation as value-free lookups", async () => {
     const conversation = prepareRuntimeConversation();
     mocks.getActiveBackend.mockReturnValueOnce({ backend: { kind: "local" } });

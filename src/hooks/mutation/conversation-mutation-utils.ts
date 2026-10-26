@@ -169,6 +169,34 @@ export const resumeConversation = async (conversationId: string) => {
 };
 
 /**
+ * Wake a sleeping conversation without opening it (the bulk "wake all"
+ * action's per-conversation step).
+ * - Cloud sandbox PAUSED: resume the sandbox directly, mirroring the
+ *   conversation route's auto-resume — the same thing clicking the
+ *   conversation does today.
+ * - Otherwise: resume the agent through the conversation's runtime (the
+ *   status menu's "Start server" action).
+ */
+export const wakeConversation = async (
+  conversation: Pick<AppConversation, "id" | "sandbox_id" | "sandbox_status">,
+) => {
+  if (
+    getActiveBackend().backend.kind === "cloud" &&
+    conversation.sandbox_status === "PAUSED"
+  ) {
+    if (!conversation.sandbox_id) {
+      throw new Error(
+        `Cannot wake: cloud conversation ${conversation.id} has no sandbox_id.`,
+      );
+    }
+    await resumeCloudSandbox(conversation.sandbox_id);
+    return { success: true };
+  }
+
+  return resumeConversation(conversation.id);
+};
+
+/**
  * Patch arbitrary fields on a cached AppConversation in both the single-item
  * and paginated list query caches.  Prefer this over the narrower
  * `updateConversationExecutionStatusInCache` when you need to update more than

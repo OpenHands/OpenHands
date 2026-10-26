@@ -10,6 +10,7 @@ import { useResolvedWorkspaces } from "#/hooks/query/use-resolved-workspaces";
 import { useStartTasks } from "#/hooks/query/use-start-tasks";
 import { useDeleteConversation } from "#/hooks/mutation/use-delete-conversation";
 import { useUnifiedPauseConversation } from "#/hooks/mutation/use-unified-stop-conversation";
+import { useWakeAllConversations } from "#/hooks/mutation/use-wake-all-conversations";
 import { ConfirmArchiveModal } from "./confirm-archive-modal";
 import { ConfirmDeleteModal } from "./confirm-delete-modal";
 import { ConfirmStopModal } from "./confirm-stop-modal";
@@ -38,6 +39,7 @@ import { cn } from "#/utils/utils";
 import { ConversationLayoutsMenu } from "./conversation-layouts-menu";
 import { ConversationActiveTagFilters } from "./conversation-active-tag-filters";
 import { ConversationPanelNewThreadPicker } from "./conversation-panel-new-thread-picker";
+import { WakeAllAgentsButton } from "./wake-all-agents-button";
 import { ConversationGroupFolderList } from "./conversation-group-folder-list";
 import { ConversationPanelPinnedSection } from "./conversation-panel-pinned-section";
 import {
@@ -65,6 +67,7 @@ import {
   isEffectivelyArchivedConversation,
   isMissingSandboxStatus,
 } from "#/utils/conversation-archive-status";
+import { collectWakeableConversations } from "#/utils/wakeable-conversations";
 import type { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
 
 interface ConversationPanelProps {
@@ -320,6 +323,15 @@ export function ConversationPanel({
       (conversation) => !isRowArchived(conversation),
     );
   }, [allLoadedConversations, isRowArchived, showArchivedConversations]);
+
+  // Asleep conversations a "wake all agents" click would resume. Reads the
+  // unfiltered loaded set (like "Delete all") but skips archived rows: waking
+  // an archived sandbox bills for a runtime nobody is about to use.
+  const wakeableConversations = React.useMemo(
+    () => collectWakeableConversations(allLoadedConversations, isRowArchived),
+    [allLoadedConversations, isRowArchived],
+  );
+  const wakeAllConversations = useWakeAllConversations();
 
   // Facets derive from the unfiltered list so the automation-name rows in the
   // advanced-options modal don't vanish while a narrowing selection is active.
@@ -1151,6 +1163,17 @@ export function ConversationPanel({
               </span>
             )}
             <div className="ml-auto flex shrink-0 items-center gap-0.5">
+              {wakeableConversations.length > 0 && (
+                <WakeAllAgentsButton
+                  count={wakeableConversations.length}
+                  disabled={wakeAllConversations.isPending}
+                  onClick={() =>
+                    wakeAllConversations.mutate({
+                      conversations: wakeableConversations,
+                    })
+                  }
+                />
+              )}
               <ConversationPanelNewThreadPicker
                 backendKind={activeBackend.kind}
               />

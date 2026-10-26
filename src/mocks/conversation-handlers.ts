@@ -91,6 +91,23 @@ const conversations: MockConversation[] = [
     execution_status: "idle",
     sandbox_status: "ERROR",
   },
+  // Sleeping conversations ("wake all agents" targets): one stopped mid-run
+  // (paused execution) and one whose sandbox auto-paused while idle.
+  {
+    id: "6",
+    title: "Stopped Project",
+    created_at: new Date(now - 3 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date(now - 3 * 24 * 60 * 60 * 1000).toISOString(),
+    execution_status: "paused",
+  },
+  {
+    id: "7",
+    title: "Paused Sandbox Project",
+    created_at: new Date(now - 4 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date(now - 4 * 24 * 60 * 60 * 1000).toISOString(),
+    execution_status: "idle",
+    sandbox_status: "PAUSED",
+  },
   {
     id: PAGINATION_LOCAL_CONVERSATION_ID,
     title: "Local pagination fixture",
