@@ -148,7 +148,7 @@ export function AutomationTagsEditor({
           disabled={updateTags.isPending}
           className="rounded-md border border-border px-3 py-1 text-xs font-medium text-content hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {t(I18nKey.AUTOMATIONS$SAVE)}
+          {t(I18nKey.BUTTON$SAVE)}
         </button>
         <button
           type="button"
