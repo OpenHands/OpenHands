@@ -101,4 +101,86 @@ describe("SchemaField", () => {
       screen.queryByText("Server schema description should be replaced."),
     ).not.toBeInTheDocument();
   });
+
+  it("flags a malformed URL value inline on generic URL fields", () => {
+    // #15774: the same rule the save-time coercion enforces should be
+    // visible under the field, not only as a toast after clicking Save.
+    render(
+      <SchemaField
+        field={buildField({
+          key: "llm.base_url",
+          label: "Base URL",
+          value_type: "string",
+        })}
+        value="."
+        isDisabled={false}
+        onChange={() => {}}
+      />,
+    );
+
+    const input = screen.getByTestId("sdk-settings-llm.base_url");
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(
+      screen.getByTestId("sdk-settings-llm.base_url-error"),
+    ).toBeInTheDocument();
+  });
+
+  it("flags a single-character API key inline on generic API key fields", () => {
+    render(
+      <SchemaField
+        field={buildField({
+          key: "verification.critic_api_key",
+          label: "Critic API Key",
+          value_type: "string",
+          secret: true,
+        })}
+        value="-"
+        isDisabled={false}
+        onChange={() => {}}
+      />,
+    );
+
+    const input = screen.getByTestId("sdk-settings-verification.critic_api_key");
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(
+      screen.getByTestId("sdk-settings-verification.critic_api_key-error"),
+    ).toBeInTheDocument();
+  });
+
+  it("leaves blank and well-formed values unflagged", () => {
+    const { rerender } = render(
+      <SchemaField
+        field={buildField({
+          key: "llm.base_url",
+          label: "Base URL",
+          value_type: "string",
+        })}
+        value=""
+        isDisabled={false}
+        onChange={() => {}}
+      />,
+    );
+
+    // Optional fields clear through blank — never flag it.
+    expect(
+      screen.queryByTestId("sdk-settings-llm.base_url-error"),
+    ).not.toBeInTheDocument();
+
+    rerender(
+      <SchemaField
+        field={buildField({
+          key: "llm.base_url",
+          label: "Base URL",
+          value_type: "string",
+        })}
+        value="https://api.openai.com/v1"
+        isDisabled={false}
+        onChange={() => {}}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("sdk-settings-llm.base_url-error"),
+    ).not.toBeInTheDocument();
+  });
 });
