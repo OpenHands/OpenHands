@@ -101,7 +101,7 @@ ignore_missing_imports = true
 
 [tool.uv]
 constraint-dependencies = [
-  "aiohttp>=3.14.3",
+  "aiohttp>=3.14.4",
   "cryptography>=50.0.0",
   "fastmcp>=2.13.0",
   "litellm>=1.83.10",
@@ -109,7 +109,7 @@ constraint-dependencies = [
   "pyasn1>=0.6.2",
   "python-multipart>=0.0.22",
   "starlette>=0.49.1",
-  "urllib3>=2.6.0",
+  "urllib3>=2.8.0",
 ]
 
 # UNCOMMENT TO USE EXACT COMMIT FROM AGENT-SDK
@@ -117,3 +117,4 @@ constraint-dependencies = [
 # [tool.uv.sources]
 # openhands-sdk = { git = "https://github.com/OpenHands/agent-sdk.git", subdirectory = "openhands-sdk", rev = "7b695dc519084e75c482b34473e714845d6cef92" }
 # openhands-tools = { git = "https://github.com/OpenHands/agent-sdk.git", subdirectory = "openhands-tools", rev = "7b695dc519084e75c482b34473e714845d6cef92" }
+
