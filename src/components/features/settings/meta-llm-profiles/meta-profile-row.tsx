@@ -14,7 +14,8 @@ import {
 interface MetaProfileRowProps {
   info: MetaProfileInfo;
   isActive: boolean;
-  onActivate: (name: string) => void;
+  /** Omitted when routers aren't activated here. */
+  onActivate?: (name: string) => void;
   onEdit: (name: string) => void;
   onDelete: (name: string) => void;
   isActivating: boolean;
@@ -46,13 +47,13 @@ export function MetaProfileRow({
     >
       <div className="flex min-w-0 flex-1 items-center gap-3">
         <span
-          className="min-w-0 max-w-full truncate text-sm font-medium text-white"
+          className="min-w-0 max-w-full truncate text-sm font-medium text-contrast"
           title={info.name}
         >
           {info.name}
         </span>
         <span
-          className="min-w-0 max-w-full truncate text-sm text-[var(--oh-muted)]"
+          className="min-w-0 max-w-full truncate text-sm text-muted"
           title={summary}
         >
           {summary}
@@ -78,7 +79,7 @@ export function MetaProfileRow({
           <MetaProfileActionsMenu
             anchorRef={triggerRef}
             onEdit={() => onEdit(info.name)}
-            onSetActive={() => onActivate(info.name)}
+            onSetActive={onActivate ? () => onActivate(info.name) : undefined}
             onDelete={() => onDelete(info.name)}
             isActive={isActive}
             isActivating={isActivating}

@@ -1,6 +1,10 @@
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { compile } from "@tailwindcss/node";
+import type { MarsSandboxSize } from "#/api/mars/mars-tunnel-backend";
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MockInstance } from "vitest";
@@ -83,7 +87,7 @@ beforeEach(() => {
   captureMock = vi.spyOn(telemetry, "trackEvent").mockResolvedValue(undefined);
   window.localStorage.clear();
   getServerInfoMock.mockReset();
-  getServerInfoMock.mockResolvedValue({ version: "1.48.0" });
+  getServerInfoMock.mockResolvedValue({ version: "1.58.0" });
   deviceFlowMocks.startDeviceFlow.mockReset();
   deviceFlowMocks.startDeviceFlow.mockResolvedValue({
     device_code: "device-code",
@@ -95,7 +99,7 @@ beforeEach(() => {
     interval: 5,
   });
   deviceFlowMocks.pollForToken.mockReset();
-  deviceFlowMocks.pollForToken.mockImplementation(() => new Promise(() => { }));
+  deviceFlowMocks.pollForToken.mockImplementation(() => new Promise(() => {}));
   __resetActiveStoreForTests();
 });
 
@@ -121,8 +125,10 @@ describe("AddBackendModal – connection chooser", () => {
     expect(
       within(tabs[0]).getByTestId("add-backend-option-cloud-logo"),
     ).toBeInTheDocument();
-    expect(tabs[0]).toHaveTextContent("BACKEND$CLOUD_OPTION_DESCRIPTION");
-    expect(tabs[1]).toHaveTextContent(
+    expect(tabs[0]).toHaveAccessibleDescription(
+      "BACKEND$CLOUD_OPTION_DESCRIPTION",
+    );
+    expect(tabs[1]).toHaveAccessibleDescription(
       "BACKEND$AGENT_SERVER_OPTION_DESCRIPTION",
     );
 
@@ -141,6 +147,119 @@ describe("AddBackendModal – connection chooser", () => {
     expect(
       screen.getByTestId("add-backend-deployment-options-link"),
     ).toHaveTextContent("CTA$LEARN_MORE");
+  });
+
+  it("keeps each nested panel's measured height and automatic fallback in compiled CSS", async () => {
+    const compiler = await compile(
+      await readFile(resolve("src/tailwind.css"), "utf8"),
+      { base: resolve("src"), onDependency: () => {} },
+    );
+    const heights = new Map<Element, number>();
+    const observers = new Map<
+      Element,
+      { notify: () => void; disconnect: ReturnType<typeof vi.fn> }
+    >();
+    const originalRect = HTMLElement.prototype.getBoundingClientRect;
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockImplementation(function (this: HTMLElement) {
+        if (this.parentElement?.dataset.testid !== "add-backend-panel-height") {
+          return originalRect.call(this);
+        }
+        const height =
+          heights.get(this) ??
+          (this.firstElementChild?.getAttribute("data-testid") ===
+          "add-backend-slide-rail"
+            ? 440
+            : 0);
+        return new DOMRect(0, 0, 640, height);
+      });
+    const originalObserver = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = class {
+      disconnect = vi.fn();
+      constructor(private callback: ResizeObserverCallback) {}
+      observe = (target: Element) => {
+        observers.set(target, {
+          notify: () => this.callback([], this as unknown as ResizeObserver),
+          disconnect: this.disconnect,
+        });
+      };
+      unobserve = vi.fn();
+    } as unknown as typeof ResizeObserver;
+    const style = document.createElement("style");
+
+    try {
+      const { unmount } = renderWithProviders(
+        <AddBackendModal onClose={vi.fn()} />,
+      );
+      const [outer, inner] = screen.getAllByTestId("add-backend-panel-height");
+      expect(outer).toContainElement(inner);
+      const css = compiler.build([...inner.classList]);
+      const rules = [
+        ...css.matchAll(/\.((?:\\.|[\w-])+)\s*\{([^}]+)\}/g),
+      ].filter(([, selector]) =>
+        inner.classList.contains(selector.replace(/\\(.)/g, "$1")),
+      );
+      const heightRule = rules.find(([, , body]) =>
+        /(?:^|\n)\s*height:\s*var\((--[\w-]+)\);/.test(body),
+      );
+      expect(heightRule).toBeDefined();
+      const property = /height:\s*var\((--[\w-]+)\);/.exec(heightRule![2])![1];
+      // Apply the actual compiled rule: its local default must beat the
+      // measured ancestor's inherited variable before this panel is measured.
+      style.textContent = heightRule![0];
+      document.head.appendChild(style);
+      const renderedHeight = (panel: HTMLElement) => {
+        expect(panel.style.height).toBe("");
+        return getComputedStyle(panel).getPropertyValue(property);
+      };
+      expect(renderedHeight(outer)).toBe("440px");
+      expect(renderedHeight(inner)).toBe("auto");
+
+      const declarations = rules.map(([, , body]) => body).join("\n");
+      expect(heightRule![2]).toMatch(/transition-property:\s*height;/);
+      expect(declarations).toMatch(/transition-duration:\s*300ms;/);
+      const easing = /transition-timing-function:\s*var\((--[\w-]+)\);/.exec(
+        declarations,
+      );
+      expect(easing).not.toBeNull();
+      expect(css).toMatch(
+        new RegExp(
+          `${easing![1]}:\\s*cubic-bezier\\(0\\.4,\\s*0,\\s*0\\.2,\\s*1\\)`,
+        ),
+      );
+      const reducedMotion =
+        /@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{\s*\.((?:\\.|[\w-])+)\s*\{\s*transition-property:\s*none;/.exec(
+          css,
+        );
+      expect(reducedMotion).not.toBeNull();
+      expect(
+        inner.classList.contains(reducedMotion![1].replace(/\\(.)/g, "$1")),
+      ).toBe(true);
+
+      const resize = (panel: HTMLElement, height: number) => {
+        const content = panel.firstElementChild!;
+        heights.set(content, height);
+        act(() => observers.get(content)!.notify());
+      };
+      await selectAgentServer();
+      resize(inner, 380);
+      resize(outer, 520);
+      expect(renderedHeight(inner)).toBe("380px");
+      expect(renderedHeight(outer)).toBe("520px");
+      resize(inner, 0);
+      expect(renderedHeight(inner)).toBe("auto");
+      resize(inner, 240);
+      expect(renderedHeight(inner)).toBe("240px");
+      unmount();
+      for (const observer of observers.values()) {
+        expect(observer.disconnect).toHaveBeenCalledOnce();
+      }
+    } finally {
+      style.remove();
+      rectSpy.mockRestore();
+      globalThis.ResizeObserver = originalObserver;
+    }
   });
 
   it("hides the Advanced host disclosure while authorization is pending", async () => {
@@ -413,7 +532,7 @@ describe("AddBackendModal – connection chooser", () => {
     await user.click(screen.getByTestId("add-backend-submit"));
 
     expect(await screen.findByTestId("add-backend-error")).toHaveTextContent(
-      "Agent Canvas requires agent-server 1.47.0 or newer",
+      "Agent Canvas requires agent-server 1.57.0 or newer",
     );
     expect(onClose).not.toHaveBeenCalled();
   });
@@ -564,5 +683,252 @@ describe("AddBackendModal – analytics", () => {
       ([event]) => event === "backend_added",
     );
     expect(backendAddedCalls).toHaveLength(1);
+  });
+});
+
+describe("AddBackendModal – DigitalOcean", () => {
+  const CONNECTION = {
+    id: "conn_1",
+    kind: "pat" as const,
+    label: "My team",
+    teamName: "Acme",
+    expiresAt: null,
+    isExpired: false,
+  };
+
+  function fakeMarsBridge({ signedIn }: { signedIn: boolean }) {
+    let active = signedIn ? CONNECTION : null;
+    const authState = () => ({
+      connections: active ? [active] : [],
+      active,
+      isPersistent: true,
+      canUseOAuth: false,
+    });
+    const configs: { id: string; name: string; agent: string | null }[] = [
+      { id: "cfg_oh", name: "Web agent", agent: "openhands" },
+      { id: "cfg_cc", name: "Claude agent", agent: "claude-code" },
+      { id: "cfg_legacy", name: "cursor-github-test", agent: null },
+    ];
+    const configSessions = [
+      {
+        session_id: "sess_1",
+        name: "fix-login",
+        status: "SESSION_STATUS_READY",
+        config_id: "cfg_oh",
+      },
+    ];
+    const bridge = {
+      getAuthState: vi.fn(async () => authState()),
+      savePat: vi.fn(async () => {
+        active = CONNECTION;
+        return authState();
+      }),
+      listAgentConfigs: vi.fn(async () => ({
+        configs: [...configs],
+        nextPageToken: null,
+      })),
+      listConfigSessions: vi.fn(async (configId: string) => ({
+        sessions: configSessions.filter((s) => s.config_id === configId),
+        nextPageToken: null,
+      })),
+      listSandboxSizes: vi.fn(async (): Promise<MarsSandboxSize[]> => []),
+      createOpenHandsAgent: vi.fn(async ({ name }: { name: string }) => {
+        const config = { id: "cfg_new", name, agent: "openhands" };
+        configs.push(config);
+        return config;
+      }),
+      createSession: vi.fn(async (configId: string, name: string) => ({
+        session_id: "sess_new",
+        name,
+        status: "SESSION_STATUS_READY",
+        config_id: configId,
+      })),
+      listSessions: vi.fn(async () => ({
+        sessions: [
+          {
+            session_id: "sess_codex",
+            status: "SESSION_STATUS_READY",
+            agent_kind: "AGENT_KIND_CODEX_CLI",
+          },
+          {
+            session_id: "sess_legacy",
+            status: "SESSION_STATUS_READY",
+            config_id: "cfg_legacy",
+          },
+        ],
+        nextPageToken: null,
+      })),
+      openTunnel: vi.fn(async ({ sessionId }: { sessionId: string }) => ({
+        sessionId,
+        status: "connected" as const,
+        remotePort: 8000,
+        localPort: 51001,
+        error: undefined,
+      })),
+      getTunnel: vi.fn(async () => undefined),
+      closeTunnel: vi.fn(async () => {}),
+    };
+    window.marsBridge = bridge as unknown as NonNullable<
+      typeof window.marsBridge
+    >;
+    return bridge;
+  }
+
+  afterEach(() => {
+    delete window.marsBridge;
+  });
+
+  it("opens the provider flow and returns to the catalog without connecting", async () => {
+    // Arrange
+    const bridge = fakeMarsBridge({ signedIn: false });
+    const user = userEvent.setup();
+    renderWithProviders(<AddBackendModal onClose={vi.fn()} />);
+
+    // Act
+    await user.click(screen.getByTestId("add-backend-option-providers"));
+    await user.click(screen.getByTestId("add-backend-provider-digitalocean"));
+    await screen.findByTestId("managed-agents-token");
+    await user.click(screen.getByTestId("add-backend-providers-back"));
+
+    // Assert
+    expect(
+      screen.getByTestId("add-backend-provider-digitalocean"),
+    ).toBeVisible();
+    expect(screen.getByTestId("add-backend-option-providers")).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.queryByTestId("managed-agents-token")).toBeNull();
+    expect(bridge.openTunnel).not.toHaveBeenCalled();
+  });
+
+  it("signs in with a token and lists only the team's OpenHands agents", async () => {
+    // Arrange
+    fakeMarsBridge({ signedIn: false });
+    const user = userEvent.setup();
+    renderWithProviders(<AddBackendModal onClose={vi.fn()} />);
+
+    // Act
+    await user.click(screen.getByTestId("add-backend-option-providers"));
+    await user.click(screen.getByTestId("add-backend-provider-digitalocean"));
+    await user.type(
+      await screen.findByTestId("managed-agents-token"),
+      `dop_v1_${"a".repeat(64)}`,
+    );
+    await user.click(screen.getByTestId("managed-agents-token-submit"));
+
+    // Assert
+    expect(
+      await screen.findByTestId("digitalocean-agent-cfg_oh"),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("digitalocean-agent-cfg_cc")).toBeNull();
+    expect(screen.queryByTestId("digitalocean-agent-cfg_legacy")).toBeNull();
+    expect(screen.queryByText("sess_codex")).toBeNull();
+    expect(screen.queryByText("sess_legacy")).toBeNull();
+  });
+
+  it("opening an agent resumes its latest session and closes the modal", async () => {
+    // Arrange
+    const bridge = fakeMarsBridge({ signedIn: true });
+    const onClose = vi.fn();
+    const navigate = vi.fn();
+    renderWithProviders(<AddBackendModal onClose={onClose} />, {
+      currentPath: "/",
+      conversationId: null,
+      isNavigating: false,
+      navigate,
+    });
+
+    // Act
+    await userEvent.click(screen.getByTestId("add-backend-option-providers"));
+    await userEvent.click(
+      screen.getByTestId("add-backend-provider-digitalocean"),
+    );
+    await userEvent.click(
+      await screen.findByTestId("digitalocean-agent-open-cfg_oh"),
+    );
+
+    // Assert
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(bridge.openTunnel).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: "sess_1" }),
+    );
+    expect(navigate).toHaveBeenCalledWith(
+      expect.stringContaining("/conversations"),
+    );
+  });
+
+  it("New Agent creates an OpenHands agent and launches its first session", async () => {
+    // Arrange
+    const bridge = fakeMarsBridge({ signedIn: true });
+    bridge.listSandboxSizes.mockResolvedValue([
+      { slug: "mars-2vcpu-4gb", vcpus: 2, memory_mb: 4096 },
+      { slug: "mars-1vcpu-1gb", vcpus: 1, memory_mb: 1024 },
+    ]);
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    renderWithProviders(<AddBackendModal onClose={onClose} />);
+    await user.click(screen.getByTestId("add-backend-option-providers"));
+    await user.click(screen.getByTestId("add-backend-provider-digitalocean"));
+
+    // Act
+    await user.click(await screen.findByTestId("digitalocean-new-agent"));
+    const nameInput = screen.getByTestId("digitalocean-new-agent-name");
+    await user.clear(nameInput);
+    await user.type(nameInput, "team-agent");
+    await user.click(screen.getByTestId("digitalocean-new-agent-submit"));
+
+    // Assert
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(bridge.createOpenHandsAgent).toHaveBeenCalledWith({
+      name: "team-agent",
+      size: "mars-1vcpu-1gb",
+    });
+    expect(bridge.createSession).toHaveBeenCalledWith(
+      "cfg_new",
+      expect.stringMatching(/^team-agent-/),
+    );
+    expect(bridge.openTunnel).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: "sess_new" }),
+    );
+  });
+
+  it("expanding an agent lists its sessions and opens the chosen one", async () => {
+    // Arrange
+    const bridge = fakeMarsBridge({ signedIn: true });
+    bridge.listConfigSessions.mockResolvedValue({
+      sessions: [
+        {
+          session_id: "sess_1",
+          name: "fix-login",
+          status: "SESSION_STATUS_READY",
+          config_id: "cfg_oh",
+        },
+        {
+          session_id: "sess_2",
+          name: "refactor-api",
+          status: "SESSION_STATUS_PAUSED",
+          config_id: "cfg_oh",
+        },
+      ],
+      nextPageToken: null,
+    });
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    renderWithProviders(<AddBackendModal onClose={onClose} />);
+    await user.click(screen.getByTestId("add-backend-option-providers"));
+    await user.click(screen.getByTestId("add-backend-provider-digitalocean"));
+
+    // Act
+    await user.click(
+      await screen.findByTestId("digitalocean-agent-toggle-cfg_oh"),
+    );
+    await user.click(screen.getByTestId("digitalocean-session-sess_2"));
+
+    // Assert
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(bridge.openTunnel).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: "sess_2" }),
+    );
   });
 });

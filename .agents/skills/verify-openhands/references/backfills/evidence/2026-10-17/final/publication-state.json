@@ -1,0 +1,162 @@
+{
+  "baseRefName": "main",
+  "headRefName": "codex/weekly-verify-2026-10-17",
+  "isDraft": true,
+  "mergedAt": null,
+  "number": 129,
+  "state": "OPEN",
+  "statusCheckRollup": [
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-17T22:20:06Z",
+      "conclusion": "FAILURE",
+      "detailsUrl": "https://github.com/enyst/playground/actions/runs/39074626629/job/117519125551",
+      "name": "Validate PR description",
+      "startedAt": "2026-10-17T22:20:00Z",
+      "status": "COMPLETED",
+      "workflowName": "PR Description Check"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-17T22:19:58Z",
+      "conclusion": "SKIPPED",
+      "detailsUrl": "https://github.com/enyst/playground/actions/runs/39074626621/job/117519125953",
+      "name": "Build & Push (${{ matrix.arch }})",
+      "startedAt": "2026-10-17T22:19:58Z",
+      "status": "COMPLETED",
+      "workflowName": "Docker"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-17T22:20:02Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/enyst/playground/actions/runs/39074626616/job/117519125026",
+      "name": "prepare-test-matrix",
+      "startedAt": "2026-10-17T22:19:59Z",
+      "status": "COMPLETED",
+      "workflowName": "CI"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-17T22:20:05Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/enyst/playground/actions/runs/39074626643/job/117519125634",
+      "name": "check-pr-artifacts",
+      "startedAt": "2026-10-17T22:20:00Z",
+      "status": "COMPLETED",
+      "workflowName": "PR Artifacts"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-17T22:20:06Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/enyst/playground/actions/runs/39074626680/job/117519125917",
+      "name": "Verify skill isolation",
+      "startedAt": "2026-10-17T22:20:00Z",
+      "status": "COMPLETED",
+      "workflowName": "Verify skill isolation"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-17T22:20:03Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/enyst/playground/actions/runs/39074626891/job/117519126468",
+      "name": "pr-title / Lint PR title (conventional)",
+      "startedAt": "2026-10-17T22:20:00Z",
+      "status": "COMPLETED",
+      "workflowName": "pr"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-17T22:19:58Z",
+      "conclusion": "SKIPPED",
+      "detailsUrl": "https://github.com/enyst/playground/actions/runs/39074626616/job/117519125962",
+      "name": "live-e2e",
+      "startedAt": "2026-10-17T22:19:58Z",
+      "status": "COMPLETED",
+      "workflowName": "CI"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-17T22:19:58Z",
+      "conclusion": "SKIPPED",
+      "detailsUrl": "https://github.com/enyst/playground/actions/runs/39074626621/job/117519126331",
+      "name": "Merge Multi-Arch Manifests",
+      "startedAt": "2026-10-17T22:19:58Z",
+      "status": "COMPLETED",
+      "workflowName": "Docker"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-17T22:19:58Z",
+      "conclusion": "SKIPPED",
+      "detailsUrl": "https://github.com/enyst/playground/actions/runs/39074626643/job/117519126925",
+      "name": "cleanup-after-merge",
+      "startedAt": "2026-10-17T22:19:58Z",
+      "status": "COMPLETED",
+      "workflowName": "PR Artifacts"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-17T22:20:12Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/enyst/playground/actions/runs/39074626891/job/117519144829",
+      "name": "pr-title / Apply conventional-type label",
+      "startedAt": "2026-10-17T22:20:05Z",
+      "status": "COMPLETED",
+      "workflowName": "pr"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "0001-01-01T00:00:00Z",
+      "conclusion": "",
+      "detailsUrl": "https://github.com/enyst/playground/actions/runs/39074626616/job/117519138176",
+      "name": "test-and-build (ubuntu)",
+      "startedAt": "2026-10-17T22:20:04Z",
+      "status": "IN_PROGRESS",
+      "workflowName": "CI"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-17T22:19:58Z",
+      "conclusion": "SKIPPED",
+      "detailsUrl": "https://github.com/enyst/playground/actions/runs/39074626621/job/117519126794",
+      "name": "Consolidate Build Information",
+      "startedAt": "2026-10-17T22:19:58Z",
+      "status": "COMPLETED",
+      "workflowName": "Docker"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "0001-01-01T00:00:00Z",
+      "conclusion": "",
+      "detailsUrl": "https://github.com/enyst/playground/actions/runs/39074626616/job/117519138229",
+      "name": "test-and-build (windows)",
+      "startedAt": "2026-10-17T22:20:04Z",
+      "status": "IN_PROGRESS",
+      "workflowName": "CI"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-17T22:19:58Z",
+      "conclusion": "SKIPPED",
+      "detailsUrl": "https://github.com/enyst/playground/actions/runs/39074626621/job/117519126797",
+      "name": "Update PR description with Docker image",
+      "startedAt": "2026-10-17T22:19:58Z",
+      "status": "COMPLETED",
+      "workflowName": "Docker"
+    },
+    {
+      "__typename": "StatusContext",
+      "context": "CodeRabbit",
+      "startedAt": "2026-10-17T22:20:04Z",
+      "state": "SUCCESS",
+      "targetUrl": ""
+    }
+  ],
+  "title": "docs(verify-openhands): reconcile weekly map and prove controller corrections",
+  "url": "https://github.com/enyst/playground/pull/129",
+  "attribution_first_line_correct": true,
+  "body_exactly_matches_prepared_artifact": true,
+  "snapshot_utc": "2026-10-17T22:20:23.713142+00:00"
+}

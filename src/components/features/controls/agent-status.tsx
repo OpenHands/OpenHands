@@ -12,7 +12,10 @@ import { AgentLoading } from "./agent-loading";
 import { useConversationStore } from "#/stores/conversation-store";
 import CircleErrorIcon from "#/icons/circle-error.svg?react";
 import { useAgentState } from "#/hooks/use-agent-state";
-import { useUnifiedWebSocketStatus } from "#/hooks/use-unified-websocket-status";
+import {
+  useHasConnectedOnceWebSocket,
+  useUnifiedWebSocketStatus,
+} from "#/hooks/use-unified-websocket-status";
 import { useTaskPolling } from "#/hooks/query/use-task-polling";
 import { useSubConversationTaskPolling } from "#/hooks/query/use-sub-conversation-task-polling";
 import { useAgentNotification } from "#/hooks/use-agent-notification";
@@ -40,6 +43,7 @@ export function AgentStatus({
   // Trigger browser tab flash and notification sound on state changes
   useAgentNotification(curAgentState);
   const webSocketStatus = useUnifiedWebSocketStatus();
+  const hasConnectedOnce = useHasConnectedOnceWebSocket();
   const { data: conversation } = useActiveConversation();
   const { taskStatus } = useTaskPolling();
 
@@ -57,6 +61,7 @@ export function AgentStatus({
     executionStatus ?? null,
     taskStatus,
     subConversationTaskStatus,
+    hasConnectedOnce,
   );
 
   const shouldShownAgentLoading =
@@ -95,6 +100,14 @@ export function AgentStatus({
   useEffect(() => {
     setShouldShownAgentLoading(!!shouldShownAgentLoading);
   }, [shouldShownAgentLoading, setShouldShownAgentLoading]);
+
+  // This status is the flag's only writer, and the phone panel page renders
+  // the drawer without it. Clear the flag on unmount so a value captured while
+  // the chat was still connecting cannot cover the panel's tab content.
+  useEffect(
+    () => () => setShouldShownAgentLoading(false),
+    [setShouldShownAgentLoading],
+  );
 
   useEffect(() => {
     if (!isTransientCheckStatus) {

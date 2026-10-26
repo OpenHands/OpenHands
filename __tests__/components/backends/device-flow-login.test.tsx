@@ -544,6 +544,44 @@ describe("device-flow login", () => {
     expect(flow.reset).not.toHaveBeenCalled();
   });
 
+  it("closes each attempt's blank popup when the flow fails", async () => {
+    const user = userEvent.setup();
+    const idleFlow = createFlow();
+    const errorFlow = createFlow({
+      status: "error",
+      error: "Failed to start device flow: Failed to fetch",
+    });
+    const startingFlow = createFlow({ status: "starting" });
+    useDeviceFlowMock.mockReset();
+    useDeviceFlowMock
+      .mockReturnValueOnce(idleFlow)
+      .mockReturnValueOnce(errorFlow)
+      .mockReturnValueOnce(startingFlow)
+      .mockReturnValue(errorFlow);
+    const first = createPopup();
+    const second = createPopup();
+    const open = vi
+      .spyOn(window, "open")
+      .mockReturnValueOnce(first.popup)
+      .mockReturnValueOnce(second.popup);
+    const props = createProps();
+
+    const { rerender, unmount } = render(<DeviceFlowAuth {...props} />);
+    await user.click(screen.getByTestId("cloud-login-login-button"));
+    rerender(<DeviceFlowAuth {...props} />);
+    expect(first.close).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByTestId("cloud-login-auth-retry"));
+    rerender(<DeviceFlowAuth {...props} />);
+    rerender(<DeviceFlowAuth {...props} />);
+
+    expect(open).toHaveBeenCalledTimes(2);
+    expect(second.close).toHaveBeenCalledTimes(1);
+    unmount();
+    expect(first.close).toHaveBeenCalledTimes(1);
+    expect(second.close).toHaveBeenCalledTimes(1);
+  });
+
   it("shows an authorization error and retries an explicit host", async () => {
     const user = userEvent.setup();
     const flow = createFlow({

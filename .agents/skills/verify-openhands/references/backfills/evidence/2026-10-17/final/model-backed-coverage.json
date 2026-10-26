@@ -1,0 +1,67 @@
+{
+  "attribution": "I am an AI agent helping Engel Nyst (@enyst) with project work.",
+  "verified_at_utc": "2026-10-17T21:40:42.217776+00:00",
+  "configured_deepseek_key_present": true,
+  "successful_request_model_ids": [
+    "deepseek/deepseek-flash",
+    "deepseek/deepseek-v4-pro"
+  ],
+  "profile_alias_not_model_id": "deepseek-pro",
+  "scope": "Configured credential availability, successful provider requests, and behavior proof are distinct. No credential value or private prompt is exported. Model IDs name the actual successful requested configurations, not an inferred provider-internal model revision.",
+  "observed_behaviors": [
+    {
+      "behavior": "Real conversation and terminal/tool execution",
+      "scope": "Successful Flash request and one real TerminalAction in Canvas-created container; matching hostname/workspace readback.",
+      "private_evidence_reference": "docker-current/conversation-container-proof.json",
+      "evidence_visibility": "retained privately; this public artifact contains only the reviewed summary"
+    },
+    {
+      "behavior": "Planning Build shortcut",
+      "scope": "F05 focused Build shortcut paired two-baseline/two-target fix proof; BODY-focus actual Build follow-up separate.",
+      "private_evidence_reference": "proof-summary.json",
+      "evidence_visibility": "retained privately; this public artifact contains only the reviewed summary"
+    },
+    {
+      "behavior": "Streaming",
+      "scope": "F06.streamed-reply: genuine 300/650-word replies; actual reduced-motion fade control.",
+      "private_evidence_reference": "runs/weekly-conversations/evidence/ledger.jsonl",
+      "evidence_visibility": "retained privately; this public artifact contains only the reviewed summary"
+    },
+    {
+      "behavior": "Compaction",
+      "scope": "Actual CondensationRequest at17:47:07.471778UTC followed by Condensation at17:47:10.812501UTC. Separate null-condenser failure SDK5820 does not negate this configured positive.",
+      "private_evidence_reference": "runs/weekly-conversations/evidence/ledger.jsonl:72",
+      "evidence_visibility": "retained privately; this public artifact contains only the reviewed summary"
+    },
+    {
+      "behavior": "MCP tool use",
+      "scope": "Genuine cached Time tool UTC result with per-fixture UV_OFFLINE; single HTTP echo succeeded separately. Multi-server package-fetch failure not claimed whole-catalog pass.",
+      "private_evidence_reference": "settings-remaining/40-mcp-time-isolated-output.jsonl",
+      "evidence_visibility": "retained privately; this public artifact contains only the reviewed summary"
+    },
+    {
+      "behavior": "Critic rendering",
+      "scope": "Real AgentFinishedCritic returns0 on nonempty patch (known SDK4554); built-in PassCritic constant1 is renderer diagnostic, not AI quality classifier.",
+      "private_evidence_reference": "intent-ui/final-report.json",
+      "evidence_visibility": "retained privately; this public artifact contains only the reviewed summary"
+    },
+    {
+      "behavior": "Real manual automation dispatch and Finish outcome UI",
+      "scope": "Actual Flash-backed manually dispatched automation completed and reported the intentionally requested blocked task outcome; task outcome is separate from execution completion. No enabled recurring schedule used.",
+      "execution_status": "COMPLETED",
+      "trigger_source": "manual",
+      "task_outcome": "blocked",
+      "reported_run_cost_usd": 0.0009083399999999999,
+      "cost_limit": "Reported run metric, not aggregate provider billing.",
+      "private_evidence_reference": "runs/weekly-automation/evidence/ledger.jsonl:293",
+      "evidence_visibility": "retained privately; this public artifact contains only the reviewed summary"
+    }
+  ],
+  "gaps": [
+    "Authorized Cloud critic endpoint/key and richer genuine category probabilities absent.",
+    "Authenticated Cloud/provider/ACP positive paths remain explicit prerequisites.",
+    "Minimal Docker image does not prove browser/ACP or full all-in-one packaging."
+  ],
+  "billing": "No aggregate provider billing total or invented numeric spend cap.",
+  "publication_status": "Reviewed final artifact published on the existing fork audit branch."
+}

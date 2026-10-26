@@ -168,11 +168,7 @@ describe("useSettingsNavItems", () => {
         ),
     );
 
-    for (const path of [
-      "/settings/llm",
-      "/settings/condenser",
-      "/settings/verification",
-    ]) {
+    for (const path of ["/settings/llm", "/settings/verification"]) {
       const renderedItem = byPath.get(path);
       expect(renderedItem).toEqual({
         type: "item",
@@ -181,9 +177,25 @@ describe("useSettingsNavItems", () => {
     }
   });
 
-  it("lists every Canvas settings page when locked to an organization Cloud host", () => {
+  it("lists the Condenser page only on cloud backends", () => {
+    useConfigMock.mockReturnValue({ data: createConfig() });
+    const paths = () =>
+      renderHook(() => useSettingsNavItems()).result.current.map((item) =>
+        item.type === "item" ? item.item.to : null,
+      );
+
+    expect(paths()).not.toContain("/settings/condenser");
+
+    useActiveBackendMock.mockReturnValue({
+      backend: { kind: "cloud" },
+      orgId: null,
+    });
+    expect(paths()).toContain("/settings/condenser");
+  });
+
+  it("lists only the Application page when the canvas is locked to a Cloud host", () => {
     // Arrange — SaaS / self-hosted OHE serve the canvas with `--lock-to-cloud`;
-    // the Cloud settings shell stays reachable through "All Cloud Settings".
+    // the OHE settings shell ("All Cloud Settings") owns every other page.
     vi.stubEnv("VITE_LOCK_TO_CLOUD", "https://app.all-hands.dev");
     useConfigMock.mockReturnValue({ data: createConfig() });
     useActiveBackendMock.mockReturnValue({
@@ -198,6 +210,6 @@ describe("useSettingsNavItems", () => {
     const paths = result.current
       .filter((item) => item.type === "item")
       .map((item) => (item.type === "item" ? item.item.to : null));
-    expect(paths).toEqual(OSS_NAV_ITEMS.map((item) => item.to));
+    expect(paths).toEqual(["/settings/app"]);
   });
 });

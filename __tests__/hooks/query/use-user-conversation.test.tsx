@@ -96,7 +96,7 @@ afterEach(() => {
 describe("useUserConversation — backend switch", () => {
   it("does not load the conversation id against a different backend after switching", async () => {
     // Arrange — the conversation is opened while the cloud backend is active.
-    setActiveSelection({ backendId: cloudBackend.id });
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
     const { result } = renderHook(
       () => useUserConversation(CLOUD_CONVERSATION_ID),
       { wrapper: makeWrapper() },
@@ -139,6 +139,33 @@ describe("useUserConversation — backend switch", () => {
       expect(
         AgentServerConversationService.batchGetAppConversations,
       ).toHaveBeenCalledTimes(2),
+    );
+  });
+
+  it("waits for a Cloud org before loading a conversation", async () => {
+    // Arrange — locked-cloud bootstraps with the backend selected before its
+    // organization boundary has resolved the concrete workspace.
+    setActiveSelection({ backendId: cloudBackend.id });
+    const { result } = renderHook(
+      () => useUserConversation(CLOUD_CONVERSATION_ID),
+      { wrapper: makeWrapper() },
+    );
+
+    // Assert — the detail lookup does not fall back to the server's mutable
+    // current_org_id while Canvas still has no explicit org scope.
+    expect(result.current.fetchStatus).toBe("idle");
+    expect(
+      AgentServerConversationService.batchGetAppConversations,
+    ).not.toHaveBeenCalled();
+
+    // Act — once the Cloud organization boundary resolves the workspace, the
+    // query can run under the org-scoped key.
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+
+    await waitFor(() =>
+      expect(
+        AgentServerConversationService.batchGetAppConversations,
+      ).toHaveBeenCalledTimes(1),
     );
   });
 });

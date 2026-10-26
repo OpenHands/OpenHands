@@ -1,12 +1,14 @@
 import i18n from "#/i18n";
 import { I18nKey } from "#/i18n/declaration";
 import { ServerClient } from "@openhands/typescript-client/clients";
-import type { ServerInfo } from "@openhands/typescript-client";
 import {
   getAgentServerClientOptions,
   type AgentServerClientOverrides,
 } from "./agent-server-client-options";
-import { getCachedAgentServerInfo } from "./agent-server-compatibility";
+import {
+  getCachedAgentServerInfo,
+  type AgentServerInfo,
+} from "./agent-server-compatibility";
 import {
   buildConversationWorkingDirForBackend,
   getWorkspaceRootForBackend,
@@ -15,15 +17,26 @@ import { resolveAbsoluteAgentServerPath } from "./agent-server-home";
 
 const ISOLATED_WORKSPACE_DIR = "/workspace";
 
+/** A Docker-only server: a server that also offers `local` is not isolated. */
 export function usesIsolatedWorkspace(
-  info: ServerInfo | null | undefined,
+  info: AgentServerInfo | null | undefined,
 ): boolean {
-  return info?.conversation_runtime === "docker";
+  return (
+    info?.conversation_runtime === "docker" &&
+    !info.available_conversation_runtimes?.includes("local")
+  );
+}
+
+/** Whether a start request may pick `conversation_runtime: "docker"`. */
+export function supportsDockerConversations(
+  info: AgentServerInfo | null | undefined,
+): boolean {
+  return !!info?.available_conversation_runtimes?.includes("docker");
 }
 
 export async function getConversationServerInfo(
   overrides: AgentServerClientOverrides = {},
-): Promise<ServerInfo | null> {
+): Promise<AgentServerInfo | null> {
   const options = getAgentServerClientOptions(overrides);
   const cached = getCachedAgentServerInfo({ host: options.host });
   if (cached) return cached;
@@ -44,6 +57,7 @@ export async function resolveNewConversationWorkspace(options: {
   workingDir?: string;
   selectedRepository?: string | null;
   parentConversationId?: string;
+  inContainer?: boolean;
 }) {
   const clientOptions = getAgentServerClientOptions();
   const info = await getConversationServerInfo(clientOptions);
@@ -62,6 +76,7 @@ export async function resolveNewConversationWorkspace(options: {
       workingDir: ISOLATED_WORKSPACE_DIR,
       hooksProjectDir: null,
       isolated: true,
+      runtimeSelectable: false,
     };
   }
   // @spec WUP-001 — Resolve relative local defaults against the backend home.
@@ -72,10 +87,45 @@ export async function resolveNewConversationWorkspace(options: {
       clientOptions.host,
     );
   const workingDir = await resolveAbsoluteAgentServerPath(base);
-  const hooksProjectDir = options.workingDir
-    ? workingDir
-    : await resolveAbsoluteAgentServerPath(
-        getWorkspaceRootForBackend(clientOptions.host),
-      );
-  return { workingDir, hooksProjectDir, isolated: false };
+  // A container does not see host paths, so host hooks do not apply.
+  const hooksProjectDir = options.inContainer
+    ? null
+    : await resolveHooksProjectDir(options.workingDir, clientOptions.host);
+  return {
+    workingDir,
+    hooksProjectDir,
+    isolated: false,
+    runtimeSelectable: supportsDockerConversations(info),
+  };
+}
+
+/**
+ * Workspace root whose `.openhands/hooks.json` a host-workspace conversation
+ * loads: the folder the user attached, else the backend's workspace root,
+ * never the per-conversation working dir or worktree (#16907).
+ */
+function resolveHooksProjectDir(
+  selectedWorkspace: string | null | undefined,
+  host: string,
+): Promise<string> {
+  return resolveAbsoluteAgentServerPath(
+    selectedWorkspace || getWorkspaceRootForBackend(host),
+  );
+}
+
+/**
+ * The hooks project dir of an existing conversation, resolved as
+ * `resolveNewConversationWorkspace()` resolved it at start from the workspace
+ * the user attached. `null` on an isolated (Docker) backend or for a
+ * conversation in its own container, which never load host hooks.
+ */
+export async function resolveConversationHooksProjectDir(
+  selectedWorkspace: string | null | undefined,
+  inContainer = false,
+): Promise<string | null> {
+  if (inContainer) return null;
+  const clientOptions = getAgentServerClientOptions();
+  const info = await getConversationServerInfo(clientOptions);
+  if (usesIsolatedWorkspace(info)) return null;
+  return resolveHooksProjectDir(selectedWorkspace, clientOptions.host);
 }

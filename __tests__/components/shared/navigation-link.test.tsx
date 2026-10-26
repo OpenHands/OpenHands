@@ -125,4 +125,28 @@ describe("NavigationLink", () => {
       "aria-current",
     );
   });
+
+  it("keeps a caller-supplied aria-current when the path does not match", () => {
+    // A section link (e.g. the sidebar Customize row) is current on routes
+    // other than its own redirecting destination.
+    render(
+      <NavigationProvider
+        value={{
+          currentPath: "/mcp",
+          conversationId: null,
+          isNavigating: false,
+          navigate: vi.fn(),
+        }}
+      >
+        <NavigationLink to="/customize" aria-current="page">
+          Customize
+        </NavigationLink>
+      </NavigationProvider>,
+    );
+
+    expect(screen.getByRole("link", { name: "Customize" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+  });
 });

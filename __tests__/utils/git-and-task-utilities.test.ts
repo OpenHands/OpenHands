@@ -1,36 +1,22 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildSessionHeaders,
   constructBranchUrl,
   constructPullRequestUrl,
   constructRepositoryUrl,
-  getConversationStatusLabel,
   getCreateNewBranchPrompt,
   getCreatePRPrompt,
-  getDisplayedTaskGroups,
   getGitCommitPrompt,
   getGitProviderBaseUrl,
   getGitPullPrompt,
   getGitPushPrompt,
-  getLimitedTaskGroups,
-  getOpenHandsQuery,
   getPR,
   getPRShort,
   getProviderName,
-  getPushToPRPrompt,
-  getStatusClassName,
   getStatusColor,
-  getStatusIcon,
-  getTotalTaskCount,
-  hasOpenHandsSuffix,
   isTaskPolling,
-  shouldIncludeRepository,
 } from "#/utils/utils";
 import { AgentState } from "#/types/agent-state";
 import { Provider } from "#/types/settings";
-import { ConversationStatus } from "#/types/conversation-status";
-import { GitRepository } from "#/types/git";
-import { SuggestedTask, SuggestedTaskGroup } from "#/utils/types";
 import {
   OH_STATUS_ERROR_COLOR,
   OH_STATUS_SUCCESS_COLOR,
@@ -38,28 +24,6 @@ import {
 
 const PAUSING_COLOR = "#FFD600";
 const STOPPED_COLOR = "#ffffff";
-
-const repository = (fullName: string): GitRepository => ({
-  id: "1",
-  full_name: fullName,
-  git_provider: "github",
-  is_public: true,
-});
-
-const task = (repo: string, issueNumber: number): SuggestedTask => ({
-  git_provider: "github",
-  issue_number: issueNumber,
-  repo,
-  title: `Task ${issueNumber}`,
-  task_type: "OPEN_ISSUE",
-});
-
-const group = (title: string, taskCount: number): SuggestedTaskGroup => ({
-  title,
-  tasks: Array.from({ length: taskCount }, (_, index) =>
-    task(`owner/${title}`, index + 1),
-  ),
-});
 
 describe("getGitProviderBaseUrl", () => {
   it.each([
@@ -263,6 +227,47 @@ describe("constructRepositoryUrl", () => {
     ).toBe("https://bitbucket.example.com/projects/PROJECT/repos/repo");
   });
 
+  it("uses the _git layout for Azure DevOps", () => {
+    expect(constructRepositoryUrl("azure_devops", "org/project/repo")).toBe(
+      "https://dev.azure.com/org/project/_git/repo",
+    );
+  });
+
+  it("percent-encodes Azure DevOps path segments such as a project with a space", () => {
+    expect(constructRepositoryUrl("azure_devops", "org/Web Apps/repo")).toBe(
+      "https://dev.azure.com/org/Web%20Apps/_git/repo",
+    );
+  });
+
+  it("does not encode an already-encoded Azure DevOps name twice", () => {
+    // Names parsed from a git remote URL keep its percent-encoding.
+    expect(constructRepositoryUrl("azure_devops", "org/Web%20Apps/repo")).toBe(
+      "https://dev.azure.com/org/Web%20Apps/_git/repo",
+    );
+  });
+
+  it("encodes a stray % in an Azure DevOps name", () => {
+    expect(constructRepositoryUrl("azure_devops", "org/100%/repo")).toBe(
+      "https://dev.azure.com/org/100%25/_git/repo",
+    );
+  });
+
+  it("uses a custom host for Azure DevOps", () => {
+    expect(
+      constructRepositoryUrl(
+        "azure_devops",
+        "org/project/repo",
+        "ado.example.com",
+      ),
+    ).toBe("https://ado.example.com/org/project/_git/repo");
+  });
+
+  it("keeps the plain path for an Azure DevOps name without three parts", () => {
+    expect(constructRepositoryUrl("azure_devops", "org/repo")).toBe(
+      "https://dev.azure.com/org/repo",
+    );
+  });
+
   it("leaves the repo segment undefined for a single-part Bitbucket Data Center name", () => {
     expect(
       constructRepositoryUrl(
@@ -379,249 +384,6 @@ describe("git action prompts", () => {
     expect(prompt).toContain("push the changes to GitLab");
     expect(prompt).toContain("open a merge request");
     expect(prompt).toContain("follow it when creating the MR description");
-  });
-
-  it("references the existing PR in the push-to-PR prompt", () => {
-    expect(getPushToPRPrompt("github")).toBe(
-      "Please push the latest changes to the existing pull request.",
-    );
-    expect(getPushToPRPrompt("gitlab")).toBe(
-      "Please push the latest changes to the existing merge request.",
-    );
-  });
-});
-
-describe("getTotalTaskCount", () => {
-  it("returns 0 when there are no task groups", () => {
-    expect(getTotalTaskCount(undefined)).toBe(0);
-    expect(getTotalTaskCount([])).toBe(0);
-  });
-
-  it("sums tasks across every group", () => {
-    expect(getTotalTaskCount([group("a", 2), group("b", 3)])).toBe(5);
-  });
-
-  it("ignores groups with no tasks", () => {
-    expect(getTotalTaskCount([group("a", 0), group("b", 1)])).toBe(1);
-  });
-});
-
-describe("getLimitedTaskGroups", () => {
-  it("returns every group when the limit is not reached", () => {
-    const groups = [group("a", 1), group("b", 1)];
-
-    expect(getLimitedTaskGroups(groups, 3)).toEqual(groups);
-  });
-
-  it("truncates the group that crosses the limit", () => {
-    const result = getLimitedTaskGroups([group("a", 2), group("b", 3)], 4);
-
-    expect(result).toHaveLength(2);
-    expect(result[0].tasks).toHaveLength(2);
-    expect(result[1].tasks).toHaveLength(2);
-  });
-
-  it("stops once the limit is reached instead of emitting empty groups", () => {
-    const result = getLimitedTaskGroups([group("a", 3), group("b", 2)], 3);
-
-    expect(result).toHaveLength(1);
-    expect(result[0].title).toBe("a");
-  });
-
-  it("omits groups that have no tasks to show", () => {
-    // Without the `tasksToShow.length > 0` guard an empty group would be
-    // emitted with an empty task list.
-    const result = getLimitedTaskGroups([group("empty", 0), group("b", 1)], 3);
-
-    expect(result).toHaveLength(1);
-    expect(result[0].title).toBe("b");
-  });
-
-  it("returns nothing when the limit is zero", () => {
-    expect(getLimitedTaskGroups([group("a", 2)], 0)).toEqual([]);
-  });
-
-  it("preserves non-task group fields while truncating", () => {
-    const result = getLimitedTaskGroups([group("a", 5)], 1);
-
-    expect(result[0].title).toBe("a");
-    expect(result[0].tasks).toHaveLength(1);
-  });
-
-  it("does not mutate the input groups", () => {
-    const groups = [group("a", 4)];
-
-    getLimitedTaskGroups(groups, 1);
-
-    expect(groups[0].tasks).toHaveLength(4);
-  });
-});
-
-describe("getDisplayedTaskGroups", () => {
-  it("returns nothing when there are no groups", () => {
-    expect(getDisplayedTaskGroups(undefined, false)).toEqual([]);
-    expect(getDisplayedTaskGroups(undefined, true)).toEqual([]);
-    expect(getDisplayedTaskGroups([], true)).toEqual([]);
-  });
-
-  it("returns every group when expanded", () => {
-    const groups = [group("a", 5), group("b", 5)];
-
-    expect(getDisplayedTaskGroups(groups, true)).toBe(groups);
-  });
-
-  it("limits collapsed output to three tasks", () => {
-    const groups = [group("a", 5), group("b", 5)];
-    const result = getDisplayedTaskGroups(groups, false);
-
-    expect(getTotalTaskCount(result)).toBe(3);
-  });
-});
-
-describe("getConversationStatusLabel", () => {
-  it.each([
-    { status: "STOPPED" as ConversationStatus, expected: "COMMON$STOPPED" },
-    { status: "RUNNING" as ConversationStatus, expected: "COMMON$RUNNING" },
-    { status: "STARTING" as ConversationStatus, expected: "COMMON$STARTING" },
-    { status: "ERROR" as ConversationStatus, expected: "COMMON$ERROR" },
-    { status: "ARCHIVED" as ConversationStatus, expected: "COMMON$ARCHIVED" },
-  ])("maps $status to $expected", ({ status, expected }) => {
-    expect(getConversationStatusLabel(status)).toBe(expected);
-  });
-
-  it.each([
-    "PAUSED",
-    "AWAITING_USER_INPUT",
-    "FINISHED",
-  ] as ConversationStatus[])("falls back to UNKNOWN for %s", (status) => {
-    expect(getConversationStatusLabel(status)).toBe("COMMON$UNKNOWN");
-  });
-});
-
-describe("getStatusIcon", () => {
-  it.each([
-    { status: "todo", expected: "⏳" },
-    { status: "in_progress", expected: "🔄" },
-    { status: "done", expected: "✅" },
-    { status: "cancelled", expected: "❓" },
-    { status: "", expected: "❓" },
-  ])("maps $status to $expected", ({ status, expected }) => {
-    expect(getStatusIcon(status)).toBe(expected);
-  });
-});
-
-describe("getStatusClassName", () => {
-  it("styles done and in_progress distinctly from every other status", () => {
-    expect(getStatusClassName("done")).toBe("bg-green-800 text-green-200");
-    expect(getStatusClassName("in_progress")).toBe(
-      "bg-yellow-800 text-yellow-200",
-    );
-    expect(getStatusClassName("todo")).toBe("bg-tertiary text-text-tertiary");
-    expect(getStatusClassName("")).toBe("bg-tertiary text-text-tertiary");
-  });
-});
-
-describe("shouldIncludeRepository", () => {
-  it("includes every repository when the query is blank", () => {
-    expect(shouldIncludeRepository(repository("owner/repo"), "")).toBe(true);
-    expect(shouldIncludeRepository(repository("owner/repo"), "   ")).toBe(true);
-  });
-
-  it("matches on a substring of the full name", () => {
-    expect(shouldIncludeRepository(repository("owner/repo"), "own")).toBe(true);
-    expect(shouldIncludeRepository(repository("owner/repo"), "repo")).toBe(
-      true,
-    );
-  });
-
-  it("ignores case", () => {
-    expect(shouldIncludeRepository(repository("Owner/Repo"), "OWNER")).toBe(
-      true,
-    );
-  });
-
-  it("matches when the query is a full clone URL", () => {
-    expect(
-      shouldIncludeRepository(
-        repository("owner/repo"),
-        "https://github.com/owner/repo.git",
-      ),
-    ).toBe(true);
-  });
-
-  it("excludes repositories that do not contain the query", () => {
-    expect(shouldIncludeRepository(repository("owner/repo"), "other")).toBe(
-      false,
-    );
-  });
-});
-
-describe("getOpenHandsQuery", () => {
-  it.each(["gitlab", "azure_devops"] as Provider[])(
-    "uses openhands-config for %s",
-    (provider) => {
-      expect(getOpenHandsQuery(provider)).toBe("openhands-config");
-    },
-  );
-
-  it.each([
-    "github",
-    "bitbucket",
-    "bitbucket_data_center",
-    "forgejo",
-  ] as Provider[])("uses .openhands for %s", (provider) => {
-    expect(getOpenHandsQuery(provider)).toBe(".openhands");
-  });
-
-  it("uses .openhands when no provider is selected", () => {
-    expect(getOpenHandsQuery(null)).toBe(".openhands");
-  });
-});
-
-describe("hasOpenHandsSuffix", () => {
-  it("requires the suffix to be its own path segment", () => {
-    expect(hasOpenHandsSuffix(repository("owner/.openhands"), "github")).toBe(
-      true,
-    );
-    expect(hasOpenHandsSuffix(repository("owner/my.openhands"), "github")).toBe(
-      false,
-    );
-  });
-
-  it("uses the provider-specific suffix", () => {
-    expect(
-      hasOpenHandsSuffix(repository("group/openhands-config"), "gitlab"),
-    ).toBe(true);
-    expect(hasOpenHandsSuffix(repository("group/.openhands"), "gitlab")).toBe(
-      false,
-    );
-  });
-
-  it("falls back to the default suffix when no provider is selected", () => {
-    expect(hasOpenHandsSuffix(repository("owner/.openhands"), null)).toBe(true);
-  });
-});
-
-describe("buildSessionHeaders", () => {
-  it("adds the session header when a key is present", () => {
-    expect(buildSessionHeaders("secret")).toEqual({
-      "X-Session-API-Key": "secret",
-    });
-  });
-
-  it.each([null, undefined, ""])(
-    "omits the header entirely when the key is %j",
-    (sessionApiKey) => {
-      expect(buildSessionHeaders(sessionApiKey)).toEqual({});
-    },
-  );
-
-  it("returns a fresh object on each call", () => {
-    const first = buildSessionHeaders("a");
-    const second = buildSessionHeaders("b");
-
-    expect(first).not.toBe(second);
-    expect(first).toEqual({ "X-Session-API-Key": "a" });
   });
 });
 

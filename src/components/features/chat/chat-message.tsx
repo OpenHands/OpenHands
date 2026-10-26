@@ -31,6 +31,8 @@ interface ChatMessageProps {
   onDismiss?: () => void;
   onStop?: () => void;
   timestamp?: string;
+  /** The message is a reply still being streamed in. */
+  isStreaming?: boolean;
 }
 
 export function ChatMessage({
@@ -44,6 +46,7 @@ export function ChatMessage({
   onDismiss,
   onStop,
   timestamp,
+  isStreaming = false,
 }: React.PropsWithChildren<ChatMessageProps>) {
   const { t, i18n } = useTranslation("openhands");
   const [isHovering, setIsHovering] = React.useState(false);
@@ -134,6 +137,7 @@ export function ChatMessage({
         includeHeadings
         allowHtml={type !== "user"}
         components={chatBubbleMarkdownComponents}
+        streaming={isStreaming}
       >
         {message}
       </MarkdownRenderer>

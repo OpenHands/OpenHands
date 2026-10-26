@@ -36,6 +36,43 @@ describe("Dropdown", () => {
     });
   });
 
+  describe("Hidden trigger", () => {
+    it("keeps Downshift controls connected while selecting from the popover", async () => {
+      // Arrange: collapsed navigation supplies its own visible trigger.
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      const { container } = render(
+        <Dropdown
+          options={mockOptions}
+          placeholder="Choose a backend"
+          hideTrigger
+          defaultOpen
+          onChange={onChange}
+        />,
+      );
+      const input = screen.getByRole("combobox", {
+        name: "Choose a backend",
+      });
+      const toggle = container.querySelector("button[aria-hidden]");
+      expect(input).toHaveAttribute("tabindex", "-1");
+      expect(input).toHaveAttribute(
+        "aria-controls",
+        screen.getByRole("listbox").id,
+      );
+      expect(toggle).toHaveAttribute("tabindex", "-1");
+      expect(toggle).toHaveAttribute("aria-hidden", "true");
+      expect(screen.queryByTestId("dropdown-trigger")).not.toBeInTheDocument();
+
+      // Act: choose through the visible option, not the hidden input or toggle.
+      await user.click(screen.getByRole("option", { name: "Option 2" }));
+
+      // Assert: the same real combobox owns the selected value and closes.
+      expect(onChange).toHaveBeenCalledExactlyOnceWith(mockOptions[1]);
+      expect(input).toHaveValue("Option 2");
+      expect(input).toHaveAttribute("aria-expanded", "false");
+    });
+  });
+
   describe("Type-ahead / Search", () => {
     it("should filter options based on input text", async () => {
       const user = userEvent.setup();
@@ -177,6 +214,21 @@ describe("Dropdown", () => {
       expect(
         screen.getByRole("option", { name: "Option 3" }),
       ).toBeInTheDocument();
+    });
+  });
+
+  describe("Full label on hover", () => {
+    it("should expose the full label as a title on the trigger and each option", async () => {
+      const user = userEvent.setup();
+      render(<Dropdown options={mockOptions} defaultValue={mockOptions[1]} />);
+
+      expect(screen.getByRole("combobox")).toHaveAttribute("title", "Option 2");
+
+      await user.click(screen.getByTestId("dropdown-trigger"));
+
+      mockOptions.forEach(({ label }) => {
+        expect(screen.getByText(label)).toHaveAttribute("title", label);
+      });
     });
   });
 

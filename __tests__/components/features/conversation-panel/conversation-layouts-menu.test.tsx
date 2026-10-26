@@ -81,9 +81,10 @@ describe("ConversationLayoutsMenu", () => {
     ).toBe(true);
 
     await user.click(screen.getByTestId("layout-preset-recent-activity"));
-    expect(
-      screen.getByTestId("layout-preset-recent-activity"),
-    ).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByTestId("layout-preset-recent-activity")).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
 
     await user.click(screen.getByTestId("layout-preset-by-workspace"));
     expect(screen.getByTestId("layout-preset-by-workspace")).toHaveAttribute(
@@ -92,9 +93,40 @@ describe("ConversationLayoutsMenu", () => {
     );
   });
 
+  it("selects a preset for the untouched default and reads Custom after one deviation", async () => {
+    const user = userEvent.setup();
+    useConversationPanelPreferencesStore.setState(
+      useConversationPanelPreferencesStore.getInitialState(),
+    );
+    renderMenu();
+
+    const checkedPresets = screen
+      .getAllByRole("menuitemradio")
+      .filter((row) => row.getAttribute("aria-checked") === "true");
+    expect(checkedPresets).toEqual([
+      screen.getByTestId("layout-preset-recent-activity"),
+    ]);
+    expect(screen.getByTestId("advanced-options-row")).not.toHaveTextContent(
+      "CONVERSATION_PANEL$ADVANCED_OPTIONS_CUSTOM",
+    );
+
+    await user.click(screen.getByTestId("advanced-options-row"));
+    await user.click(screen.getByTestId("toggle-hover-metadata"));
+    await user.click(screen.getByTestId("advanced-options-close"));
+
+    expect(
+      screen
+        .getAllByRole("menuitemradio")
+        .filter((row) => row.getAttribute("aria-checked") === "true"),
+    ).toHaveLength(0);
+    expect(screen.getByTestId("advanced-options-row")).toHaveTextContent(
+      "CONVERSATION_PANEL$ADVANCED_OPTIONS_CUSTOM",
+    );
+  });
+
   it("labels the Advanced options row Custom when no preset matches", async () => {
-    // Matches no preset: the chronological presets all hide older
-    // conversations, and by-workspace requires grouped mode.
+    // Matches no preset: Recent shows every thread, Active and Compact hide
+    // older conversations, and by-workspace requires grouped mode.
     useConversationPanelPreferencesStore.getState().applyLayoutSettings({
       organizeMode: "chronological",
       conversationSort: "updated",

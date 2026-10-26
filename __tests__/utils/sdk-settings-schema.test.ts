@@ -6,12 +6,10 @@ import {
   buildSdkSettingsPayloadForView,
   coerceFieldValue,
   getAgentSettingValue,
-  getConversationSettingValue,
   getSettingValue,
   getVisibleSettingsSections,
   hasCriticalSettings,
   hasAdvancedSettings,
-  hasAdvancedSettingsOverrides,
   hasMinorSettings,
   inferInitialView,
   isSettingsFieldVisible,
@@ -210,7 +208,6 @@ describe("sdk settings schema helpers", () => {
   });
 
   it("detects advanced overrides from non-default values", () => {
-    expect(hasAdvancedSettingsOverrides(BASE_SETTINGS)).toBe(false);
     expect(inferInitialView(BASE_SETTINGS)).toBe("basic");
 
     const withMinorOverride: Settings = {
@@ -224,7 +221,6 @@ describe("sdk settings schema helpers", () => {
         },
       },
     };
-    expect(hasAdvancedSettingsOverrides(withMinorOverride)).toBe(true);
     expect(inferInitialView(withMinorOverride)).toBe("all");
   });
 
@@ -449,9 +445,6 @@ describe("sdk settings schema helpers", () => {
       expect(getAgentSettingValue(settings, "llm.enabled")).toBe(false);
       expect(getAgentSettingValue(settings, "llm.retries")).toBe(0);
       expect(getAgentSettingValue(settings, "empty")).toBe("");
-      expect(getConversationSettingValue(settings, "llm.model")).toBe(
-        "conversation-model",
-      );
       expect(
         getSettingValue(settings, "llm.model", "conversation_settings"),
       ).toBe("conversation-model");
@@ -472,7 +465,9 @@ describe("sdk settings schema helpers", () => {
       expect(getAgentSettingValue(settings, "llm.model")).toBeNull();
       expect(getAgentSettingValue(settings, "nullable.child")).toBeNull();
       expect(getAgentSettingValue(settings, "text.length")).toBeNull();
-      expect(getConversationSettingValue(settings, "llm.model")).toBeNull();
+      expect(
+        getSettingValue(settings, "llm.model", "conversation_settings"),
+      ).toBeNull();
     });
   });
 
@@ -1063,6 +1058,19 @@ describe("sdk settings schema helpers", () => {
       );
     });
 
+    it("refuses a container CPU limit docker run would reject", () => {
+      const cpusField = getMockField({
+        key: "container_cpus",
+        label: "Container CPU limit",
+        value_type: "number",
+      });
+
+      expect(() => coerceFieldValue(cpusField, "0.001")).toThrow(
+        "Container CPU limit must be at least 0.01",
+      );
+      expect(coerceFieldValue(cpusField, "0.5")).toBe(0.5);
+    });
+
     it("rejects a negative condenser max size", () => {
       const field = getMockField({
         key: "condenser.condenser_max_size",
@@ -1202,6 +1210,19 @@ describe("sdk settings schema helpers", () => {
         false,
       );
       expect(isSettingsFieldVisible(dependent, { one: true })).toBe(false);
+    });
+
+    it("shows a field that depends on a choice only for that value", () => {
+      const dockerOnly = getMockField({
+        depends_on: ["default_runtime=docker"],
+      });
+
+      expect(
+        isSettingsFieldVisible(dockerOnly, { default_runtime: "docker" }),
+      ).toBe(true);
+      expect(
+        isSettingsFieldVisible(dockerOnly, { default_runtime: "worktree" }),
+      ).toBe(false);
     });
 
     it("keeps only fields allowed by exclusions, view, and dependencies", () => {

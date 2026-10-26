@@ -1,10 +1,20 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { Messages } from "#/components/conversation-events/chat/messages";
 import { useEventStore } from "#/stores/use-event-store";
 import { AgentState } from "#/types/agent-state";
-import { ActionEvent, SecurityRisk } from "#/types/agent-server/core";
+import {
+  ActionEvent,
+  ObservationEvent,
+  OpenHandsEvent,
+  SecurityRisk,
+  UserRejectObservation,
+} from "#/types/agent-server/core";
 import { ExecuteBashAction } from "#/types/agent-server/core/base/action";
+import { ExecuteBashObservation } from "#/types/agent-server/core/base/observation";
+import { shouldRenderEvent } from "#/components/conversation-events/chat/event-content-helpers/should-render-event";
+import { handleEventForUI } from "#/utils/handle-event-for-ui";
 import { renderWithProviders } from "test-utils";
 
 vi.mock("#/hooks/query/use-config", () => ({
@@ -61,6 +71,38 @@ const createBashActionEvent = (
   security_risk: SecurityRisk.HIGH,
 });
 
+const createBashObservationEvent = (
+  action: ActionEvent<ExecuteBashAction>,
+): ObservationEvent<ExecuteBashObservation> => ({
+  id: `observation-${action.id}`,
+  timestamp: new Date().toISOString(),
+  source: "environment",
+  tool_name: action.tool_name,
+  tool_call_id: action.tool_call_id,
+  action_id: action.id,
+  observation: {
+    kind: "ExecuteBashObservation",
+    content: [{ type: "text", text: "ok" }],
+    command: action.action.command,
+    exit_code: 0,
+    error: false,
+    timeout: false,
+    metadata: {} as never,
+  },
+});
+
+const createUserRejectObservation = (
+  action: ActionEvent,
+): UserRejectObservation => ({
+  id: `rejection-${action.id}`,
+  timestamp: new Date().toISOString(),
+  source: "environment",
+  tool_name: action.tool_name,
+  tool_call_id: action.tool_call_id,
+  action_id: action.id,
+  rejection_reason: "User rejected the action",
+});
+
 describe("Messages confirmation prompt", () => {
   beforeEach(() => {
     useEventStore.setState({
@@ -96,5 +138,29 @@ describe("Messages confirmation prompt", () => {
     ).toBeInTheDocument();
     expect(screen.getByTestId("action-reject-button")).toBeInTheDocument();
     expect(screen.getByTestId("action-confirm-button")).toBeInTheDocument();
+  });
+
+  it("settles the group and marks the action as rejected after the user rejects it", async () => {
+    const user = userEvent.setup();
+    const confirmed = createBashActionEvent("action-1", "echo first");
+    const rejected = createBashActionEvent("action-2", "echo second");
+    const allEvents: OpenHandsEvent[] = [
+      confirmed,
+      createBashObservationEvent(confirmed),
+      rejected,
+      createUserRejectObservation(rejected),
+    ];
+    // Same projection the live chat, shared route and transcript export use.
+    const messages = allEvents
+      .reduce<
+        OpenHandsEvent[]
+      >((uiEvents, event) => handleEventForUI(event, uiEvents), [])
+      .filter(shouldRenderEvent);
+
+    renderWithProviders(<Messages messages={messages} allEvents={allEvents} />);
+
+    expect(screen.queryByTestId("spinner-icon")).not.toBeInTheDocument();
+    await user.click(screen.getByTestId("event-group-toggle"));
+    expect(screen.getByTestId("rejected-indicator")).toBeInTheDocument();
   });
 });

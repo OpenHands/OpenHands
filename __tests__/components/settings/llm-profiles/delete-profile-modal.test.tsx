@@ -124,16 +124,17 @@ describe("DeleteProfileModal", () => {
 
     await user.click(screen.getByTestId("delete-profile-confirm"));
 
+    // The toast and close run after the mutation's async onSuccess, which
+    // settles later than the deleteProfile call itself.
     await waitFor(() => {
       expect(ProfilesService.deleteProfile).toHaveBeenCalledWith(
         "profile-to-delete",
       );
+      expect(toastHandlers.displaySuccessToast).toHaveBeenCalledWith(
+        'Profile "profile-to-delete" deleted',
+      );
+      expect(handleClose).toHaveBeenCalled();
     });
-
-    expect(toastHandlers.displaySuccessToast).toHaveBeenCalledWith(
-      'Profile "profile-to-delete" deleted',
-    );
-    expect(handleClose).toHaveBeenCalled();
   });
 
   it("shows error toast on delete failure", async () => {

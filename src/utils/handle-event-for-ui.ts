@@ -1,8 +1,10 @@
 import { OpenHandsEvent } from "#/types/agent-server/core";
 import {
   isACPToolCallEvent,
+  isActionEvent,
   isObservationEvent,
   isStreamingDeltaEvent,
+  isUserRejectObservation,
 } from "#/types/agent-server/type-guards";
 import { StreamingDeltaEvent } from "#/types/agent-server/core/events/streaming-delta-event";
 import type {
@@ -315,7 +317,27 @@ export const handleEventForUI = (
     if (event.observation.kind === "FinishObservation") {
       return newUiEvents;
     }
+  }
 
+  if (isUserRejectObservation(event)) {
+    // Like their observations above, a rejection never replaces a ThinkAction
+    // or FinishAction: the content to display is in the action itself
+    const rejectedAction = newUiEvents.find(
+      (uiEvent) => uiEvent.id === event.action_id,
+    );
+    if (
+      rejectedAction &&
+      isActionEvent(rejectedAction) &&
+      (rejectedAction.action.kind === "ThinkAction" ||
+        rejectedAction.action.kind === "FinishAction")
+    ) {
+      return newUiEvents;
+    }
+  }
+
+  // A UserRejectObservation resolves its action just like an observation
+  // does; left unreplaced, the rejected action would keep reading as in flight.
+  if (isObservationEvent(event) || isUserRejectObservation(event)) {
     // Find and replace the corresponding action from uiEvents
     const actionIndex = newUiEvents.findIndex(
       (uiEvent) => uiEvent.id === event.action_id,

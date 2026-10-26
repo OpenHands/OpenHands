@@ -47,6 +47,14 @@ const FIELD_METADATA: Record<string, SettingsFieldMetadata> = {
       step: 1,
     },
   },
+  // Mirrors the SDK's ``container_cpus`` minimum (``ge=0.01``, what
+  // ``docker run --cpus`` accepts).
+  container_cpus: {
+    constraints: {
+      min: 0.01,
+      step: 0.01,
+    },
+  },
   // A negative cap is meaningless; blank means unlimited (the field is
   // nullable), so the floor is 0 rather than 1 (#15813).
   "condenser.condenser_max_size": {
@@ -136,20 +144,6 @@ export function resolveSchemaFieldDescription(
   schemaValue?: string | null,
 ): string | null {
   return resolveSchemaFieldText(t, fieldKey, "DESCRIPTION", schemaValue);
-}
-
-/**
- * Resolves a section label using the i18n fallback chain.
- * @see resolveSchemaFieldText for the fallback chain details.
- */
-export function resolveSchemaFieldSectionLabel(
-  t: TFunction,
-  sectionKey: string,
-  schemaValue: string,
-): string {
-  return (
-    resolveSchemaFieldText(t, sectionKey, "SECTION_LABEL", schemaValue) ?? ""
-  );
 }
 
 /**

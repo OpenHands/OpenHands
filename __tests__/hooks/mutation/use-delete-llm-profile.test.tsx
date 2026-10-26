@@ -12,6 +12,13 @@ import {
 
 vi.mock("#/api/profiles-service/profiles-service.api");
 vi.mock("#/api/settings-service/settings-service.api");
+const updateDefaultAgentProfileMock = vi.hoisted(() => vi.fn());
+vi.mock("#/hooks/mutation/sync-agent-profiles", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("#/hooks/mutation/sync-agent-profiles")
+  >()),
+  updateDefaultAgentProfile: updateDefaultAgentProfileMock,
+}));
 
 describe("useDeleteLlmProfile", () => {
   let queryClient: QueryClient;
@@ -34,6 +41,45 @@ describe("useDeleteLlmProfile", () => {
         { client: queryClient },
         children,
       );
+    vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
+      profiles: [],
+      active_profile: null,
+    } as never);
+    updateDefaultAgentProfileMock.mockResolvedValue(undefined);
+  });
+
+  it("moves default to the profile that will become active, then deletes", async () => {
+    vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
+      profiles: [
+        { name: "old", api_key_set: true },
+        { name: "keyless", api_key_set: false },
+        { name: "keyed", api_key_set: true },
+      ],
+      active_profile: "old",
+    } as never);
+    vi.mocked(ProfilesService.deleteProfile).mockResolvedValue({
+      name: "old",
+      message: "Profile deleted",
+    });
+
+    const { result } = renderHook(() => useDeleteLlmProfile(), { wrapper });
+    await act(async () => {
+      await result.current.mutateAsync("old");
+    });
+
+    const [, change, options] = updateDefaultAgentProfileMock.mock.calls[0];
+    expect(options).toEqual({ throwOnError: true });
+    expect(change({ agent_kind: "openhands", llm_profile_ref: "old" })).toEqual(
+      { llm_profile_ref: "keyed" },
+    );
+    expect(
+      change({ agent_kind: "openhands", llm_profile_ref: "keyless" }),
+    ).toBeNull();
+    expect(
+      updateDefaultAgentProfileMock.mock.invocationCallOrder[0],
+    ).toBeLessThan(
+      vi.mocked(ProfilesService.deleteProfile).mock.invocationCallOrder[0],
+    );
   });
 
   afterEach(() => {

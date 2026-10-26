@@ -57,10 +57,9 @@ const LAYOUT_PRESETS: LayoutPreset[] = [
     id: "recent-activity",
     icon: Clock3,
     labelKey: I18nKey.CONVERSATION_PANEL$LAYOUT_RECENT_ACTIVITY,
-    settings: {
-      ...DEFAULT_LAYOUT_SETTINGS,
-      showOlderConversations: false,
-    },
+    // Exactly the default bundle, so a profile that never changed a layout
+    // preference reads as Recent rather than Custom.
+    settings: DEFAULT_LAYOUT_SETTINGS,
   },
   {
     id: "focused",
@@ -247,7 +246,7 @@ export function ConversationLayoutsMenu({
                 <MenuRow
                   key={facet}
                   icon={Tag}
-                  label={formatTagFacetLabel(facet)}
+                  label={formatTagFacetLabel(facet, t)}
                   selected={preferences.selectedTagFacets.includes(facet)}
                   testId={`tag-facet-row-${facet}`}
                   onClick={() => preferences.toggleTagFacet(facet)}

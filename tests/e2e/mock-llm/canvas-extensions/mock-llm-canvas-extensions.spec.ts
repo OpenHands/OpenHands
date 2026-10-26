@@ -194,6 +194,9 @@ test.describe("Apps lifecycle", () => {
     await expect(extensionPage(page)).toContainText(
       "Host API 1 on backend default-local",
     );
+    await expect(
+      page.getByTestId("demo-extension-app-backend-status"),
+    ).toHaveText("App backend view unavailable");
 
     await page.goto(`${PAGE_PATH}/nested`, { waitUntil: "domcontentloaded" });
     await expect(extensionPage(page)).toContainText(

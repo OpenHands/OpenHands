@@ -1,16 +1,18 @@
 import { useConversationWorkspace } from "#/hooks/query/use-conversation-workspace";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { CustomChatInput } from "#/components/features/chat/custom-chat-input";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
 import { useLocalWorkspaces } from "#/hooks/query/use-local-workspaces";
+import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useModelInterceptor } from "#/hooks/chat/use-model-interceptor";
 import { useLlmConfigured } from "#/hooks/use-llm-configured";
 import { HOME_PROMPT_DRAFT_KEY } from "#/hooks/chat/use-draft-persistence";
 import { useChatAttachmentUpload } from "#/hooks/chat/use-chat-attachment-upload";
 import { useConversationStore } from "#/stores/conversation-store";
+import { useModelStore } from "#/stores/model-store";
 import type { WorkspaceMode } from "#/api/conversation-metadata-store";
 import { setPendingTaskAttachments } from "#/stores/pending-task-attachments-store";
 import { enqueueHomeTaskPendingMessage } from "#/utils/enqueue-home-task-pending-message";
@@ -21,22 +23,36 @@ import { Branch, GitRepository } from "#/types/git";
 import { Provider } from "#/types/settings";
 import { LocalWorkspace } from "#/types/workspace";
 import { I18nKey } from "#/i18n/declaration";
+import { cn } from "#/utils/utils";
 import {
   displayErrorToast,
   TOAST_OPTIONS,
 } from "#/utils/custom-toast-handlers";
+import { getApiErrorMessage } from "#/utils/api-error-message";
 import { getWorkspacesUnsupportedMessage } from "#/utils/workspaces-compatibility";
 import {
+  DEFAULT_WORKSPACE_MODE,
+  getDefaultWorkspaceMode,
+  getWorkspaceModeOptions,
   readStoredLocalWorkspaceMode,
   writeStoredLocalWorkspaceMode,
 } from "#/utils/workspace-mode";
+import { useSettings } from "#/hooks/query/use-settings";
+import { WorkspaceModeSelector } from "#/components/features/chat/workspace-mode-selector";
 import type { PluginSpec } from "#/api/conversation-service/agent-server-conversation-service.types";
+import { markAutomationSetupHandoff } from "#/api/automation-setup-handoff-store";
 import { PluginPickerModal } from "#/components/features/plugins/plugin-picker-modal";
 import { PluginPickerTrigger } from "#/components/features/plugins/plugin-picker-trigger";
 import { RecommendedAutomationsLauncher } from "#/components/features/automations/recommended-automations-launcher";
+import { useHomeRecommendedAutomationsDismissed } from "./use-home-recommended-automations-dismissed";
+import { writeHomeRecommendedAutomationsDismissed } from "./home-recommended-automations-storage";
 import { PinnedAutomationsDashboard } from "./featured-automations/pinned-automations-dashboard";
 import { RunningAutomationsList } from "./featured-automations/running-automations-list";
 import { HomeHeaderTitle } from "./home-header/home-header-title";
+import {
+  HomeLauncherModeToggle,
+  type HomeLauncherMode,
+} from "./home-launcher-mode-toggle";
 import { OpenLauncherButton } from "./open-launcher-button";
 import { OpenWorkspaceDialog } from "./open-workspace-dialog";
 import { OpenRepositoryDialog } from "./open-repository-dialog";
@@ -55,14 +71,39 @@ export function HomeChatLauncher() {
     useState<GitRepository | null>(null);
   const [pendingBranch, setPendingBranch] = useState<Branch | null>(null);
   const [pendingProvider, setPendingProvider] = useState<Provider | null>(null);
-  const [workspaceMode, setWorkspaceModeState] = useState<WorkspaceMode>(() =>
-    readStoredLocalWorkspaceMode(),
-  );
+  const { data: settings } = useSettings();
+  const [lastUsedWorkspaceMode] = useState(readStoredLocalWorkspaceMode);
+  const [pickedWorkspaceMode, setPickedWorkspaceMode] =
+    useState<WorkspaceMode | null>(null);
+  // Picked here > Settings → Runtime default > last used in this browser.
+  const workspaceMode =
+    pickedWorkspaceMode ??
+    getDefaultWorkspaceMode(
+      isLocal ? settings?.conversation_settings?.default_runtime : null,
+      lastUsedWorkspaceMode,
+    );
+  const isRecommendedAutomationsDismissed =
+    useHomeRecommendedAutomationsDismissed();
   const [selectedPlugins, setSelectedPlugins] = useState<PluginSpec[]>([]);
   const [isPluginPickerOpen, setIsPluginPickerOpen] = useState(false);
+  const [launcherMode, setLauncherMode] = useState<HomeLauncherMode>("code");
+  const displayedLauncherMode = launcherMode;
+  const isAutomateMode = launcherMode === "automate";
+  const handleLauncherModeChange = setLauncherMode;
+  const isMountedRef = useRef(true);
 
-  const { mutateAsync: createConversation, isPending } =
-    useCreateConversation();
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  // The launcher reports a failed create itself (see handleSubmit), so the
+  // global mutation error toast is turned off to keep it to one toast.
+  const { mutateAsync: createConversation, isPending } = useCreateConversation({
+    disableToast: true,
+  });
   const isCreatingElsewhere = useIsCreatingConversation();
   const isCreating = isPending || isCreatingElsewhere;
   const { isConfigured: isLlmConfigured, isLoading: isLlmConfigLoading } =
@@ -70,18 +111,40 @@ export function HomeChatLauncher() {
   // Block sending entirely when there's no usable LLM; the banner above the
   // launcher (rendered by the home route) explains it and offers setup.
   const llmBlocked = !isLlmConfigLoading && !isLlmConfigured;
-  const { images, files, imagesMarkedUploadAsFile, clearAllFiles } =
-    useConversationStore();
+  const {
+    images,
+    files,
+    imagesMarkedUploadAsFile,
+    clearAllFiles,
+    restoreMessageToInputIfEmpty,
+  } = useConversationStore();
   const { handleUpload } = useChatAttachmentUpload();
+  const homeLlmProfile = useModelStore((s) => s.homeLlmProfile);
+  const { data: llmProfiles } = useLlmProfiles();
   const { error: workspacesError } = useLocalWorkspaces({ enabled: isLocal });
-  const { isolated, unsupportedMessage: runtimeWorkspaceMessage } =
-    useConversationWorkspace();
+  const {
+    isolated,
+    dockerSelectable,
+    serverInfoLoading,
+    unsupportedMessage: runtimeWorkspaceMessage,
+  } = useConversationWorkspace();
+  const workspaceModes = getWorkspaceModeOptions(
+    dockerSelectable,
+    !isLocal || !!pendingWorkspace,
+  );
+  // A remembered mode the server no longer offers falls back, but only once
+  // server_info has answered: a pending probe must not silently turn a Docker
+  // choice into Local (a server that cannot run it rejects the start).
+  const effectiveWorkspaceMode =
+    serverInfoLoading || workspaceModes.includes(workspaceMode)
+      ? workspaceMode
+      : DEFAULT_WORKSPACE_MODE;
   const workspacesUnsupportedMessage =
     runtimeWorkspaceMessage ??
     (isLocal ? getWorkspacesUnsupportedMessage(workspacesError, t) : null);
 
   const setWorkspaceMode = (mode: WorkspaceMode) => {
-    setWorkspaceModeState(mode);
+    setPickedWorkspaceMode(mode);
     if (isLocal) writeStoredLocalWorkspaceMode(mode);
   };
 
@@ -112,6 +175,7 @@ export function HomeChatLauncher() {
     // query here would create a duplicate text-only initial_message.
     let variables: Parameters<typeof createConversation>[0] = {
       query: hasAttachments ? undefined : trimmed || undefined,
+      automationSetup: isAutomateMode,
       entryPoint: "home_chat_launcher",
     };
     // An isolated backend owns its workspace, so a host selection left over
@@ -123,8 +187,11 @@ export function HomeChatLauncher() {
       variables = {
         ...variables,
         workingDir: pendingWorkspace.path,
-        workspaceMode,
+        workspaceMode: effectiveWorkspaceMode,
       };
+    } else if (isLocal && effectiveWorkspaceMode === "docker_container") {
+      // No workspace: the container gets its own, so only the runtime is sent.
+      variables = { ...variables, workspaceMode: effectiveWorkspaceMode };
     } else if (!isLocal && pendingRepository && pendingBranch) {
       variables = {
         ...variables,
@@ -139,9 +206,23 @@ export function HomeChatLauncher() {
     // Explicitly-attached plugins are additive on top of any ambient set and
     // are resolved from git at run time. Omitted entirely when none selected so
     // nothing attaches unless the user picked it.
-    if (selectedPlugins.length > 0) {
+    if (!isAutomateMode && selectedPlugins.length > 0) {
       variables = { ...variables, plugins: selectedPlugins };
     }
+
+    // A cloud member's home LLM pick (see useChatInputLlmProfileState), unless
+    // that profile has since gone.
+    if (
+      homeLlmProfile &&
+      llmProfiles?.profiles.some((p) => p.name === homeLlmProfile)
+    ) {
+      variables = { ...variables, llmProfile: homeLlmProfile };
+    }
+
+    const openAutomationSetupMode = (conversationId: string) => {
+      if (!isAutomateMode) return;
+      markAutomationSetupHandoff(conversationId);
+    };
 
     // Loading toast gives the user a clear signal that the request is in
     // flight; dismissed precisely once the mutation resolves.
@@ -151,8 +232,10 @@ export function HomeChatLauncher() {
     );
 
     void (async () => {
+      let isCreated = false;
       try {
         const data = await createConversation(variables);
+        isCreated = true;
         toast.dismiss(toastId);
         try {
           sessionStorage.removeItem(HOME_PROMPT_DRAFT_KEY);
@@ -192,6 +275,7 @@ export function HomeChatLauncher() {
               images: attachmentSnapshot.images,
               imagesMarkedUploadAsFile,
             });
+            openAutomationSetupMode(targetConversationId);
             navigate(`/conversations/${targetConversationId}`);
             return;
           } else {
@@ -221,10 +305,22 @@ export function HomeChatLauncher() {
           });
         }
 
+        openAutomationSetupMode(targetConversationId);
         navigate(`/conversations/${targetConversationId}`);
       } catch (error) {
         toast.dismiss(toastId);
-        displayErrorToast(error instanceof Error ? error.message : null);
+        // Prefer the server's own message; without one, keep the launcher's
+        // existing wording (the error's message).
+        const fallback = error instanceof Error ? error.message : "";
+        displayErrorToast(getApiErrorMessage(error, fallback) || null);
+        // The composer cleared itself on submit; hand the prompt back so the
+        // user can retry without retyping it. Only when the create itself
+        // failed and this composer is still on screen: the request is consumed
+        // by whichever composer is mounted, so otherwise the prompt would
+        // replay into a conversation.
+        if (!isCreated && isMountedRef.current) {
+          restoreMessageToInputIfEmpty(message);
+        }
       }
     })();
   };
@@ -245,17 +341,28 @@ export function HomeChatLauncher() {
           <HomeHeaderTitle />
         </div>
 
+        <div className="flex w-full justify-center">
+          <HomeLauncherModeToggle
+            mode={displayedLauncherMode}
+            onChange={handleLauncherModeChange}
+          />
+        </div>
+
         <div className="w-full">
           <CustomChatInput
             onSubmit={handleSubmitWithModelGuard}
             onFilesPaste={handleUpload}
-            placeholder={t(I18nKey.HOME$DESCRIBE_ENGINEERING_TASK)}
             disabled={isCreating || llmBlocked}
+            placeholder={
+              isAutomateMode
+                ? t(I18nKey.HOME$AUTOMATE_PROMPT_PLACEHOLDER)
+                : t(I18nKey.SUGGESTIONS$WHAT_TO_BUILD)
+            }
           />
         </div>
 
         {isolated && (
-          <p role="status" className="text-xs text-[var(--oh-text-secondary)]">
+          <p role="status" className="text-xs text-text-secondary">
             {pendingWorkspace
               ? runtimeWorkspaceMessage
               : t(I18nKey.HOME$ISOLATED_WORKSPACE_NEW)}
@@ -270,14 +377,22 @@ export function HomeChatLauncher() {
             )}
           </p>
         )}
-        <div className="flex items-center justify-start gap-2">
+        <div
+          data-testid="home-composer-actions"
+          aria-disabled={isAutomateMode}
+          className={cn(
+            "flex items-center justify-start gap-2",
+            isAutomateMode && "pointer-events-none opacity-40",
+          )}
+        >
           {hasSelection ? (
             <HomeGitControlBarPreview
               workspace={pendingWorkspace}
               repository={pendingRepository}
               branch={pendingBranch}
               provider={pendingProvider}
-              workspaceMode={workspaceMode}
+              workspaceMode={effectiveWorkspaceMode}
+              workspaceModes={workspaceModes}
               backendKind={backend.kind}
               onRepoClick={() => setIsDialogOpen(true)}
               onWorkspaceModeChange={setWorkspaceMode}
@@ -286,19 +401,38 @@ export function HomeChatLauncher() {
             <OpenLauncherButton
               kind={isLocal ? "local" : "cloud"}
               onClick={() => setIsDialogOpen(true)}
-              disabled={isCreating || Boolean(workspacesUnsupportedMessage)}
+              disabled={
+                isCreating ||
+                isAutomateMode ||
+                Boolean(workspacesUnsupportedMessage)
+              }
               disabledTooltip={workspacesUnsupportedMessage}
             />
           )}
+          {isLocal && !hasSelection && workspaceModes.length > 0 ? (
+            <WorkspaceModeSelector
+              value={effectiveWorkspaceMode}
+              options={workspaceModes}
+              backendKind={backend.kind}
+              onChange={setWorkspaceMode}
+            />
+          ) : null}
           <PluginPickerTrigger
             count={selectedPlugins.length}
             onClick={() => setIsPluginPickerOpen(true)}
-            disabled={isCreating}
+            disabled={isCreating || isAutomateMode}
           />
         </div>
 
         <div className="mt-8 flex w-full flex-col gap-8">
-          <RecommendedAutomationsLauncher variant="rail" />
+          {/* @spec HL-002 — Only Home's rail is dismissible; dismissal unmounts it, inset included */}
+          {!isRecommendedAutomationsDismissed && (
+            <RecommendedAutomationsLauncher
+              variant="rail"
+              dismissible
+              onDismiss={() => writeHomeRecommendedAutomationsDismissed(true)}
+            />
+          )}
           <PinnedAutomationsDashboard />
           <RunningAutomationsList />
         </div>
@@ -324,7 +458,7 @@ export function HomeChatLauncher() {
             setPendingBranch(branch);
             setPendingProvider(provider ?? repository.git_provider);
             setPendingWorkspace(null);
-            setWorkspaceModeState("local_repo");
+            setPickedWorkspaceMode("local_repo");
           }}
         />
       )}

@@ -35,6 +35,33 @@ describe("getStatusCode", () => {
     expect(result).toBe(I18nKey.CHAT_INTERFACE$DISCONNECTED);
   });
 
+  it("returns CONNECTING for a first-ever connect (hasConnectedOnce omitted)", () => {
+    const result = getStatusCode("CONNECTING", ExecutionStatus.IDLE);
+    expect(result).toBe(I18nKey.CHAT_INTERFACE$CONNECTING);
+  });
+
+  it("returns CONNECTING, not RECONNECTING, while hasConnectedOnce is false", () => {
+    const result = getStatusCode(
+      "CONNECTING",
+      ExecutionStatus.IDLE,
+      undefined,
+      undefined,
+      false,
+    );
+    expect(result).toBe(I18nKey.CHAT_INTERFACE$CONNECTING);
+  });
+
+  it("returns RECONNECTING when a previously-open connection is connecting again", () => {
+    const result = getStatusCode(
+      "CONNECTING",
+      ExecutionStatus.IDLE,
+      undefined,
+      undefined,
+      true,
+    );
+    expect(result).toBe(I18nKey.CHAT_INTERFACE$RECONNECTING);
+  });
+
   it("returns COMMON$WAITING_FOR_SANDBOX when task is waiting for sandbox", () => {
     const result = getStatusCode("OPEN", null, "WAITING_FOR_SANDBOX");
     expect(result).toBe(I18nKey.COMMON$WAITING_FOR_SANDBOX);

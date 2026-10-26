@@ -151,7 +151,6 @@ export function RepositorySelectionForm({
         placeholder="user/repo"
         disabled={!selectedProvider || isLoadingSettings}
         onChange={handleRepoSelection}
-        className="max-w-auto"
       />
     );
   };

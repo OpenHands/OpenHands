@@ -3,6 +3,7 @@ import { ActionEvent, OpenHandsEvent } from "#/types/agent-server/core";
 import {
   isActionEvent,
   isObservationEvent,
+  isUserRejectObservation,
 } from "#/types/agent-server/type-guards";
 import { EventMessage } from "./event-message";
 import { usePlanPreviewEvents } from "./hooks/use-plan-preview-events";
@@ -13,6 +14,11 @@ import { useModelStore } from "#/stores/model-store";
 import { ModelMessages } from "#/components/features/chat/model-messages";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { ConversationConfirmationButtons } from "#/components/shared/buttons/conversation-confirmation-buttons";
+import type { SecretRequest } from "#/stores/secret-request-store";
+import {
+  SecretRequestCard,
+  usePendingSecretRequests,
+} from "#/components/features/conversation/secret-request-card";
 
 interface MessagesProps {
   messages: OpenHandsEvent[]; // UI events (actions replaced by observations)
@@ -65,6 +71,31 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       );
     };
 
+    // Pending `request_secret` forms sit right after their tool call, so what
+    // the agent writes next lands below them. A call that is not loaded falls
+    // back to the end of the chat.
+    const pendingSecretRequests = usePendingSecretRequests();
+    const secretRequests = React.useMemo(() => {
+      const unanchored = new Map(
+        pendingSecretRequests.map((request) => [request.toolCallId, request]),
+      );
+      const byAnchorId = new Map<string, SecretRequest>();
+      for (const event of messages) {
+        if (unanchored.size === 0) break;
+        if (!isActionEvent(event) && !isObservationEvent(event)) continue;
+        const request = unanchored.get(event.tool_call_id);
+        if (!request) continue;
+        unanchored.delete(event.tool_call_id);
+        byAnchorId.set(event.id, request);
+      }
+      return { byAnchorId, unanchored: [...unanchored.values()] };
+    }, [pendingSecretRequests, messages]);
+
+    const maybeRenderSecretRequest = (eventId: string | undefined) => {
+      const request = eventId && secretRequests.byAnchorId.get(eventId);
+      return request ? <SecretRequestCard request={request} /> : null;
+    };
+
     // Fold consecutive action/observation events into collapsible groups so a
     // long sequence of tool calls doesn't dominate the chat scroll. Items that
     // can't be grouped (or that fall in a short run) are still rendered one by
@@ -85,7 +116,8 @@ export const Messages: React.FC<MessagesProps> = React.memo(
         key={event.id}
         event={event}
         correspondingAction={
-          isObservationEvent(event) && event.action_id
+          (isObservationEvent(event) || isUserRejectObservation(event)) &&
+          event.action_id
             ? (actionById.get(event.action_id) ?? null)
             : null
         }
@@ -107,6 +139,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
                     duplication. */}
                 {renderEventMessage(item.event, item.index, true)}
                 {maybeRenderModelMessages(item.event.id)}
+                {maybeRenderSecretRequest(item.event.id)}
               </React.Fragment>
             );
           }
@@ -140,11 +173,15 @@ export const Messages: React.FC<MessagesProps> = React.memo(
               {item.events.map((event) => (
                 <React.Fragment key={`model-${event.id}`}>
                   {maybeRenderModelMessages(event.id)}
+                  {maybeRenderSecretRequest(event.id)}
                 </React.Fragment>
               ))}
             </React.Fragment>
           );
         })}
+        {secretRequests.unanchored.map((request) => (
+          <SecretRequestCard key={request.toolCallId} request={request} />
+        ))}
         <ConversationConfirmationButtons />
       </>
     );
