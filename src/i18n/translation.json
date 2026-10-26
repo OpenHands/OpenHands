@@ -14492,7 +14492,7 @@
   "SETTINGS$OPENHANDS_API_KEY_HELP_LINK": {
     "en": "OpenHands LLM Key",
     "ja": "OpenHands LLM Key",
-    "zh-CN": "OpenHands LLM Key",
+    "zh-CN": "OpenHands LLM 密钥",
     "zh-TW": "OpenHands LLM Key",
     "ko-KR": "OpenHands LLM Key",
     "no": "OpenHands LLM Key",
@@ -15860,7 +15860,7 @@
   "AUTOMATIONS$DOWNLOAD_TARBALL": {
     "en": "Tarball",
     "ja": "Tarball",
-    "zh-CN": "Tarball",
+    "zh-CN": "下载压缩包",
     "zh-TW": "Tarball",
     "ko-KR": "Tarball",
     "no": "Tarball",
@@ -34202,7 +34202,7 @@
   "SETTINGS$CLOUD_SETTINGS_LINK": {
     "en": "All Cloud Settings",
     "ja": "All Cloud Settings",
-    "zh-CN": "All Cloud Settings",
+    "zh-CN": "所有云端设置",
     "zh-TW": "All Cloud Settings",
     "ko-KR": "All Cloud Settings",
     "no": "All Cloud Settings",
@@ -40045,7 +40045,7 @@
     "pt": "Command menu",
     "tr": "Komut menüsü",
     "uk": "Command menu",
-    "zh-CN": "Command menu",
+    "zh-CN": "命令菜单",
     "zh-TW": "Command menu",
     "id": "Menu perintah"
   },
@@ -40081,7 +40081,7 @@
     "pt": "Close command menu",
     "tr": "Komut menüsünü kapat",
     "uk": "Close command menu",
-    "zh-CN": "Close command menu",
+    "zh-CN": "关闭命令菜单",
     "zh-TW": "Close command menu",
     "id": "Tutup menu perintah"
   },
@@ -40099,7 +40099,7 @@
     "pt": "Clear search",
     "tr": "Aramayı temizle",
     "uk": "Clear search",
-    "zh-CN": "Clear search",
+    "zh-CN": "清除搜索",
     "zh-TW": "Clear search",
     "id": "Hapus pencarian"
   },
@@ -40117,7 +40117,7 @@
     "pt": "Search actions, pages, and settings...",
     "tr": "Eylemlerde, sayfalarda ve ayarlarda ara...",
     "uk": "Search actions, pages, and settings...",
-    "zh-CN": "Search actions, pages, and settings...",
+    "zh-CN": "搜索操作、页面和设置...",
     "zh-TW": "Search actions, pages, and settings...",
     "id": "Cari tindakan, halaman, dan pengaturan..."
   },
@@ -40135,7 +40135,7 @@
     "pt": "Search commands",
     "tr": "Komutlarda ara",
     "uk": "Search commands",
-    "zh-CN": "Search commands",
+    "zh-CN": "搜索命令",
     "zh-TW": "Search commands",
     "id": "Cari perintah"
   },
@@ -40189,7 +40189,7 @@
     "pt": "Navigation",
     "tr": "Gezinme",
     "uk": "Navigation",
-    "zh-CN": "Navigation",
+    "zh-CN": "导航",
     "zh-TW": "Navigation",
     "id": "Navigasi"
   },
@@ -40207,7 +40207,7 @@
     "pt": "Settings",
     "tr": "Ayarlar",
     "uk": "Settings",
-    "zh-CN": "Settings",
+    "zh-CN": "设置",
     "zh-TW": "Settings",
     "id": "Pengaturan"
   },
@@ -40225,7 +40225,7 @@
     "pt": "Actions",
     "tr": "Eylemler",
     "uk": "Actions",
-    "zh-CN": "Actions",
+    "zh-CN": "操作",
     "zh-TW": "Actions",
     "id": "Tindakan"
   },
@@ -40243,7 +40243,7 @@
     "pt": "No commands found",
     "tr": "Komut bulunamadı",
     "uk": "No commands found",
-    "zh-CN": "No commands found",
+    "zh-CN": "未找到命令",
     "zh-TW": "No commands found",
     "id": "Tidak ada perintah yang ditemukan"
   },
@@ -40261,7 +40261,7 @@
     "pt": "Try a page, action, or setting name.",
     "tr": "Bir sayfa, eylem veya ayar adı deneyin.",
     "uk": "Try a page, action, or setting name.",
-    "zh-CN": "Try a page, action, or setting name.",
+    "zh-CN": "请尝试页面、操作或设置名称。",
     "zh-TW": "Try a page, action, or setting name.",
     "id": "Coba nama halaman, tindakan, atau pengaturan."
   },
@@ -40279,7 +40279,7 @@
     "pt": "↑↓ select · Enter run · Esc close",
     "tr": "↑↓ seç · Enter çalıştır · Esc kapat",
     "uk": "↑↓ select · Enter run · Esc close",
-    "zh-CN": "↑↓ select · Enter run · Esc close",
+    "zh-CN": "↑↓ 选择 · Enter 执行 · Esc 关闭",
     "zh-TW": "↑↓ select · Enter run · Esc close",
     "id": "↑↓ pilih · Enter jalankan · Esc tutup"
   },
@@ -40297,7 +40297,7 @@
     "pt": "Go",
     "tr": "Aç",
     "uk": "Go",
-    "zh-CN": "Go",
+    "zh-CN": "跳转",
     "zh-TW": "Go",
     "id": "Buka"
   },
@@ -40315,7 +40315,7 @@
     "pt": "Run",
     "tr": "Çalıştır",
     "uk": "Run",
-    "zh-CN": "Run",
+    "zh-CN": "运行",
     "zh-TW": "Run",
     "id": "Jalankan"
   },
@@ -40333,7 +40333,7 @@
     "pt": "New chat",
     "tr": "Yeni sohbet",
     "uk": "New chat",
-    "zh-CN": "New chat",
+    "zh-CN": "新对话",
     "zh-TW": "New chat",
     "id": "Chat baru"
   },
@@ -40351,7 +40351,7 @@
     "pt": "Start a fresh OpenHands conversation.",
     "tr": "Yeni bir OpenHands sohbeti başlatın.",
     "uk": "Start a fresh OpenHands conversation.",
-    "zh-CN": "Start a fresh OpenHands conversation.",
+    "zh-CN": "开始一个新的 OpenHands 对话。",
     "zh-TW": "Start a fresh OpenHands conversation.",
     "id": "Mulai percakapan OpenHands yang baru."
   },
@@ -40369,7 +40369,7 @@
     "pt": "home conversation task prompt launch",
     "tr": "home conversation task prompt launch ana sayfa sohbet görev istem başlat",
     "uk": "home conversation task prompt launch",
-    "zh-CN": "home conversation task prompt launch",
+    "zh-CN": "主页 对话 任务 提示词 启动",
     "zh-TW": "home conversation task prompt launch",
     "id": "beranda percakapan tugas prompt peluncuran"
   },
@@ -40387,7 +40387,7 @@
     "pt": "Customize",
     "tr": "Özelleştir",
     "uk": "Customize",
-    "zh-CN": "Customize",
+    "zh-CN": "自定义",
     "zh-TW": "Customize",
     "id": "Sesuaikan"
   },
@@ -40405,7 +40405,7 @@
     "pt": "Browse skills, plugins, and integrations.",
     "tr": "Becerilere, eklentilere ve entegrasyonlara göz atın.",
     "uk": "Browse skills, plugins, and integrations.",
-    "zh-CN": "Browse skills, plugins, and integrations.",
+    "zh-CN": "浏览技能、插件和集成。",
     "zh-TW": "Browse skills, plugins, and integrations.",
     "id": "Jelajahi skill, plugin, dan integrasi."
   },
@@ -40423,7 +40423,7 @@
     "pt": "skills extensions plugins customize marketplace",
     "tr": "skills extensions plugins customize marketplace beceriler uzantılar eklentiler özelleştir pazar yeri",
     "uk": "skills extensions plugins customize marketplace",
-    "zh-CN": "skills extensions plugins customize marketplace",
+    "zh-CN": "技能 扩展 插件 自定义 市场",
     "zh-TW": "skills extensions plugins customize marketplace",
     "id": "skill ekstensi plugin sesuaikan marketplace"
   },
@@ -40441,7 +40441,7 @@
     "pt": "MCP servers",
     "tr": "MCP sunucuları",
     "uk": "MCP servers",
-    "zh-CN": "MCP servers",
+    "zh-CN": "MCP 服务器",
     "zh-TW": "MCP servers",
     "id": "Server MCP"
   },
@@ -40459,7 +40459,7 @@
     "pt": "Manage Model Context Protocol integrations.",
     "tr": "Model Context Protocol entegrasyonlarını yönetin.",
     "uk": "Manage Model Context Protocol integrations.",
-    "zh-CN": "Manage Model Context Protocol integrations.",
+    "zh-CN": "管理模型上下文协议集成。",
     "zh-TW": "Manage Model Context Protocol integrations.",
     "id": "Kelola integrasi Model Context Protocol."
   },
@@ -40477,7 +40477,7 @@
     "pt": "mcp tools integrations servers context protocol",
     "tr": "mcp tools integrations servers context protocol araçlar entegrasyonlar sunucular bağlam protokol",
     "uk": "mcp tools integrations servers context protocol",
-    "zh-CN": "mcp tools integrations servers context protocol",
+    "zh-CN": "mcp 工具 集成 服务器 上下文 协议",
     "zh-TW": "mcp tools integrations servers context protocol",
     "id": "mcp alat integrasi server konteks protokol"
   },
@@ -40495,7 +40495,7 @@
     "pt": "Settings",
     "tr": "Ayarlar",
     "uk": "Settings",
-    "zh-CN": "Settings",
+    "zh-CN": "设置",
     "zh-TW": "Settings",
     "id": "Pengaturan"
   },
@@ -40513,7 +40513,7 @@
     "pt": "Open the settings overview.",
     "tr": "Ayarlar genel görünümünü açın.",
     "uk": "Open the settings overview.",
-    "zh-CN": "Open the settings overview.",
+    "zh-CN": "打开设置概览。",
     "zh-TW": "Open the settings overview.",
     "id": "Buka ringkasan pengaturan."
   },
@@ -40531,7 +40531,7 @@
     "pt": "preferences configuration options",
     "tr": "preferences configuration options tercihler yapılandırma seçenekler",
     "uk": "preferences configuration options",
-    "zh-CN": "preferences configuration options",
+    "zh-CN": "偏好设置 配置 选项",
     "zh-TW": "preferences configuration options",
     "id": "preferensi konfigurasi opsi"
   },
@@ -40549,7 +40549,7 @@
     "pt": "Agent settings",
     "tr": "Ajan ayarları",
     "uk": "Agent settings",
-    "zh-CN": "Agent settings",
+    "zh-CN": "代理设置",
     "zh-TW": "Agent settings",
     "id": "Pengaturan agen"
   },
@@ -40567,7 +40567,7 @@
     "pt": "Configure agent type and delegation.",
     "tr": "Ajan türünü ve görev devrini yapılandırın.",
     "uk": "Configure agent type and delegation.",
-    "zh-CN": "Configure agent type and delegation.",
+    "zh-CN": "配置代理类型和委托。",
     "zh-TW": "Configure agent type and delegation.",
     "id": "Konfigurasikan tipe agen dan delegasi."
   },
@@ -40585,7 +40585,7 @@
     "pt": "agent openhands acp sub agents delegation",
     "tr": "agent openhands acp sub agents delegation ajan alt ajanlar görev devri",
     "uk": "agent openhands acp sub agents delegation",
-    "zh-CN": "agent openhands acp sub agents delegation",
+    "zh-CN": "代理 openhands acp 子代理 委托",
     "zh-TW": "agent openhands acp sub agents delegation",
     "id": "agen openhands acp sub agen delegasi"
   },
@@ -40603,7 +40603,7 @@
     "pt": "LLM profiles",
     "tr": "LLM profilleri",
     "uk": "LLM profiles",
-    "zh-CN": "LLM profiles",
+    "zh-CN": "LLM 配置文件",
     "zh-TW": "LLM profiles",
     "id": "Profil LLM"
   },
@@ -40621,7 +40621,7 @@
     "pt": "Manage models, providers, and API keys.",
     "tr": "Modelleri, sağlayıcıları ve API anahtarlarını yönetin.",
     "uk": "Manage models, providers, and API keys.",
-    "zh-CN": "Manage models, providers, and API keys.",
+    "zh-CN": "管理模型、提供商和 API 密钥。",
     "zh-TW": "Manage models, providers, and API keys.",
     "id": "Kelola model, penyedia, dan kunci API."
   },
@@ -40639,7 +40639,7 @@
     "pt": "llm model provider api key profile inference",
     "tr": "llm model provider api key profile inference sağlayıcı anahtarı profil çıkarım",
     "uk": "llm model provider api key profile inference",
-    "zh-CN": "llm model provider api key profile inference",
+    "zh-CN": "llm 模型 提供商 api 密钥 配置文件 推理",
     "zh-TW": "llm model provider api key profile inference",
     "id": "llm model penyedia kunci api profil inferensi"
   },
@@ -40657,7 +40657,7 @@
     "pt": "model router meta llm routing profile roteador modelos roteamento perfil",
     "tr": "model router meta llm routing profile model yönlendirici yönlendirme profil",
     "uk": "model router meta llm routing profile маршрутизатор моделей маршрутизація профіль",
-    "zh-CN": "model router meta llm routing profile 模型 路由器 路由 配置文件",
+    "zh-CN": "模型 路由器 元 llm 路由 配置文件",
     "zh-TW": "model router meta llm routing profile 模型 路由器 路由 設定檔",
     "id": "model router meta llm perutean profil"
   },
@@ -40675,7 +40675,7 @@
     "pt": "Condenser settings",
     "tr": "Bağlam yoğunlaştırıcı ayarları",
     "uk": "Condenser settings",
-    "zh-CN": "Condenser settings",
+    "zh-CN": "上下文压缩设置",
     "zh-TW": "Condenser settings",
     "id": "Pengaturan condenser"
   },
@@ -40693,7 +40693,7 @@
     "pt": "Tune context condensation behavior.",
     "tr": "Bağlam yoğunlaştırma davranışını ayarlayın.",
     "uk": "Tune context condensation behavior.",
-    "zh-CN": "Tune context condensation behavior.",
+    "zh-CN": "调整上下文压缩行为。",
     "zh-TW": "Tune context condensation behavior.",
     "id": "Sesuaikan perilaku kondensasi konteks."
   },
@@ -40711,7 +40711,7 @@
     "pt": "condenser context memory summary",
     "tr": "condenser context memory summary yoğunlaştırıcı bağlam bellek özet",
     "uk": "condenser context memory summary",
-    "zh-CN": "condenser context memory summary",
+    "zh-CN": "压缩器 上下文 记忆 摘要",
     "zh-TW": "condenser context memory summary",
     "id": "condenser konteks memori ringkasan"
   },
@@ -40747,7 +40747,7 @@
     "pt": "Verification settings",
     "tr": "Doğrulama ayarları",
     "uk": "Verification settings",
-    "zh-CN": "Verification settings",
+    "zh-CN": "验证设置",
     "zh-TW": "Verification settings",
     "id": "Pengaturan verifikasi"
   },
@@ -40765,7 +40765,7 @@
     "pt": "Adjust risk and confirmation controls.",
     "tr": "Risk ve onay denetimlerini ayarlayın.",
     "uk": "Adjust risk and confirmation controls.",
-    "zh-CN": "Adjust risk and confirmation controls.",
+    "zh-CN": "调整风险和确认控制。",
     "zh-TW": "Adjust risk and confirmation controls.",
     "id": "Sesuaikan kontrol risiko dan konfirmasi."
   },
@@ -40783,7 +40783,7 @@
     "pt": "verification security risk confirmation guardrails",
     "tr": "verification security risk confirmation guardrails doğrulama güvenlik onay koruyucu önlemler",
     "uk": "verification security risk confirmation guardrails",
-    "zh-CN": "verification security risk confirmation guardrails",
+    "zh-CN": "验证 安全 风险 确认 防护",
     "zh-TW": "verification security risk confirmation guardrails",
     "id": "verifikasi keamanan risiko konfirmasi guardrail"
   },
@@ -40801,7 +40801,7 @@
     "pt": "Application settings",
     "tr": "Uygulama ayarları",
     "uk": "Application settings",
-    "zh-CN": "Application settings",
+    "zh-CN": "应用程序设置",
     "zh-TW": "Application settings",
     "id": "Pengaturan aplikasi"
   },
@@ -40819,7 +40819,7 @@
     "pt": "Change app language, theme, and preferences.",
     "tr": "Uygulama dilini, temasını ve tercihlerini değiştirin.",
     "uk": "Change app language, theme, and preferences.",
-    "zh-CN": "Change app language, theme, and preferences.",
+    "zh-CN": "更改应用语言、主题和偏好设置。",
     "zh-TW": "Change app language, theme, and preferences.",
     "id": "Ubah bahasa aplikasi, tema, dan preferensi."
   },
@@ -40837,7 +40837,7 @@
     "pt": "app application language theme analytics preferences",
     "tr": "app application language theme analytics preferences uygulama dil tema analiz tercihleri",
     "uk": "app application language theme analytics preferences",
-    "zh-CN": "app application language theme analytics preferences",
+    "zh-CN": "应用 应用程序 语言 主题 分析 偏好设置",
     "zh-TW": "app application language theme analytics preferences",
     "id": "aplikasi aplikasi bahasa tema analitik preferensi"
   },
@@ -40855,7 +40855,7 @@
     "pt": "Secrets settings",
     "tr": "Gizli değer ayarları",
     "uk": "Secrets settings",
-    "zh-CN": "Secrets settings",
+    "zh-CN": "密钥设置",
     "zh-TW": "Secrets settings",
     "id": "Pengaturan rahasia"
   },
@@ -40873,7 +40873,7 @@
     "pt": "Create and edit saved runtime secrets.",
     "tr": "Kayıtlı çalışma zamanı gizli değerlerini oluşturun ve düzenleyin.",
     "uk": "Create and edit saved runtime secrets.",
-    "zh-CN": "Create and edit saved runtime secrets.",
+    "zh-CN": "创建和编辑已保存的运行时密钥。",
     "zh-TW": "Create and edit saved runtime secrets.",
     "id": "Buat dan edit rahasia runtime yang tersimpan."
   },
@@ -40891,7 +40891,7 @@
     "pt": "secrets environment variables credentials tokens",
     "tr": "secrets environment variables credentials tokens gizli değerler ortam değişkenleri kimlik bilgileri jetonlar",
     "uk": "secrets environment variables credentials tokens",
-    "zh-CN": "secrets environment variables credentials tokens",
+    "zh-CN": "密钥 环境变量 凭据 令牌",
     "zh-TW": "secrets environment variables credentials tokens",
     "id": "rahasia variabel lingkungan kredensial token"
   },
@@ -40909,7 +40909,7 @@
     "pt": "Toggle sidebar",
     "tr": "Kenar çubuğunu aç/kapat",
     "uk": "Toggle sidebar",
-    "zh-CN": "Toggle sidebar",
+    "zh-CN": "切换侧边栏",
     "zh-TW": "Toggle sidebar",
     "id": "Alihkan bilah sisi"
   },
@@ -40927,7 +40927,7 @@
     "pt": "Collapse or expand the navigation rail.",
     "tr": "Gezinme çubuğunu daraltın veya genişletin.",
     "uk": "Collapse or expand the navigation rail.",
-    "zh-CN": "Collapse or expand the navigation rail.",
+    "zh-CN": "折叠或展开导航栏。",
     "zh-TW": "Collapse or expand the navigation rail.",
     "id": "Ciutkan atau bentangkan rel navigasi."
   },
@@ -40945,7 +40945,7 @@
     "pt": "sidebar collapse expand navigation rail",
     "tr": "sidebar collapse expand navigation rail kenar çubuğu daralt genişlet gezinme çubuğu",
     "uk": "sidebar collapse expand navigation rail",
-    "zh-CN": "sidebar collapse expand navigation rail",
+    "zh-CN": "侧边栏 折叠 展开 导航栏",
     "zh-TW": "sidebar collapse expand navigation rail",
     "id": "bilah sisi ciutkan bentangkan rel navigasi"
   },
@@ -50269,7 +50269,7 @@
     "pt": "Automation setup",
     "tr": "Automation setup",
     "uk": "Automation setup",
-    "zh-CN": "Automation setup",
+    "zh-CN": "自动化设置",
     "zh-TW": "Automation setup",
     "id": "Penyiapan otomatisasi"
   },
@@ -50287,7 +50287,7 @@
     "pt": "Close automation setup",
     "tr": "Close automation setup",
     "uk": "Close automation setup",
-    "zh-CN": "Close automation setup",
+    "zh-CN": "关闭自动化设置",
     "zh-TW": "Close automation setup",
     "id": "Tutup penyiapan otomatisasi"
   },
@@ -50305,7 +50305,7 @@
     "pt": "Save draft",
     "tr": "Save draft",
     "uk": "Save draft",
-    "zh-CN": "Save draft",
+    "zh-CN": "保存草稿",
     "zh-TW": "Save draft",
     "id": "Simpan draf"
   },
@@ -50323,7 +50323,7 @@
     "pt": "Test",
     "tr": "Test",
     "uk": "Test",
-    "zh-CN": "Test",
+    "zh-CN": "测试",
     "zh-TW": "Test",
     "id": "Uji"
   },
@@ -50341,7 +50341,7 @@
     "pt": "Automation type",
     "tr": "Automation type",
     "uk": "Automation type",
-    "zh-CN": "Automation type",
+    "zh-CN": "自动化类型",
     "zh-TW": "Automation type",
     "id": "Jenis otomatisasi"
   },
@@ -50359,7 +50359,7 @@
     "pt": "Prompt",
     "tr": "Prompt",
     "uk": "Prompt",
-    "zh-CN": "Prompt",
+    "zh-CN": "提示词",
     "zh-TW": "Prompt",
     "id": "Prompt"
   },
@@ -50377,7 +50377,7 @@
     "pt": "Plugin",
     "tr": "Plugin",
     "uk": "Plugin",
-    "zh-CN": "Plugin",
+    "zh-CN": "插件",
     "zh-TW": "Plugin",
     "id": "Plugin"
   },
@@ -50395,7 +50395,7 @@
     "pt": "Custom",
     "tr": "Custom",
     "uk": "Custom",
-    "zh-CN": "Custom",
+    "zh-CN": "自定义",
     "zh-TW": "Custom",
     "id": "Khusus"
   },
@@ -50413,7 +50413,7 @@
     "pt": "Standup digest",
     "tr": "Standup digest",
     "uk": "Standup digest",
-    "zh-CN": "Standup digest",
+    "zh-CN": "每日站会摘要",
     "zh-TW": "Standup digest",
     "id": "Ringkasan standup"
   },
@@ -50431,7 +50431,7 @@
     "pt": "Current LLM settings",
     "tr": "Current LLM settings",
     "uk": "Current LLM settings",
-    "zh-CN": "Current LLM settings",
+    "zh-CN": "当前 LLM 设置",
     "zh-TW": "Current LLM settings",
     "id": "Pengaturan LLM saat ini"
   },
@@ -50449,7 +50449,7 @@
     "pt": "Prompt preset",
     "tr": "Prompt preset",
     "uk": "Prompt preset",
-    "zh-CN": "Prompt preset",
+    "zh-CN": "提示词预设",
     "zh-TW": "Prompt preset",
     "id": "Preset prompt"
   },
@@ -50467,7 +50467,7 @@
     "pt": "Python code",
     "tr": "Python code",
     "uk": "Python code",
-    "zh-CN": "Python code",
+    "zh-CN": "Python 代码",
     "zh-TW": "Python code",
     "id": "Kode Python"
   },
@@ -50485,7 +50485,7 @@
     "pt": "Rendered Python code",
     "tr": "Rendered Python code",
     "uk": "Rendered Python code",
-    "zh-CN": "Rendered Python code",
+    "zh-CN": "渲染后的 Python 代码",
     "zh-TW": "Rendered Python code",
     "id": "Kode Python yang dirender"
   },
@@ -50503,7 +50503,7 @@
     "pt": "Plugin source",
     "tr": "Plugin source",
     "uk": "Plugin source",
-    "zh-CN": "Plugin source",
+    "zh-CN": "插件来源",
     "zh-TW": "Plugin source",
     "id": "Sumber plugin"
   },
@@ -50539,7 +50539,7 @@
     "pt": "Plugin ref",
     "tr": "Plugin ref",
     "uk": "Plugin ref",
-    "zh-CN": "Plugin ref",
+    "zh-CN": "插件引用分支",
     "zh-TW": "Plugin ref",
     "id": "Ref plugin"
   },
@@ -50575,7 +50575,7 @@
     "pt": "Schedule",
     "tr": "Schedule",
     "uk": "Schedule",
-    "zh-CN": "Schedule",
+    "zh-CN": "定时计划",
     "zh-TW": "Schedule",
     "id": "Jadwal"
   },
@@ -50593,7 +50593,7 @@
     "pt": "Run on an interval or at a set time",
     "tr": "Run on an interval or at a set time",
     "uk": "Run on an interval or at a set time",
-    "zh-CN": "Run on an interval or at a set time",
+    "zh-CN": "按间隔或指定时间运行",
     "zh-TW": "Run on an interval or at a set time",
     "id": "Berjalan pada interval atau pada waktu tertentu"
   },
@@ -50611,7 +50611,7 @@
     "pt": "Run when GitHub, Slack, or Linear fires",
     "tr": "Run when GitHub, Slack, or Linear fires",
     "uk": "Run when GitHub, Slack, or Linear fires",
-    "zh-CN": "Run when GitHub, Slack, or Linear fires",
+    "zh-CN": "当 GitHub、Slack 或 Linear 触发时运行",
     "zh-TW": "Run when GitHub, Slack, or Linear fires",
     "id": "Berjalan saat GitHub, Slack, atau Linear memicu"
   },
@@ -50629,7 +50629,7 @@
     "pt": "Frequency",
     "tr": "Frequency",
     "uk": "Frequency",
-    "zh-CN": "Frequency",
+    "zh-CN": "频率",
     "zh-TW": "Frequency",
     "id": "Frekuensi"
   },
@@ -50647,7 +50647,7 @@
     "pt": "Once",
     "tr": "Once",
     "uk": "Once",
-    "zh-CN": "Once",
+    "zh-CN": "执行一次",
     "zh-TW": "Once",
     "id": "Sekali"
   },
@@ -50665,7 +50665,7 @@
     "pt": "Hourly",
     "tr": "Hourly",
     "uk": "Hourly",
-    "zh-CN": "Hourly",
+    "zh-CN": "每小时",
     "zh-TW": "Hourly",
     "id": "Setiap jam"
   },
@@ -50683,7 +50683,7 @@
     "pt": "Weekdays (Mon–Fri)",
     "tr": "Weekdays (Mon–Fri)",
     "uk": "Weekdays (Mon–Fri)",
-    "zh-CN": "Weekdays (Mon–Fri)",
+    "zh-CN": "工作日（周一至周五）",
     "zh-TW": "Weekdays (Mon–Fri)",
     "id": "Hari kerja (Sen–Jum)"
   },
@@ -50701,7 +50701,7 @@
     "pt": "Weekly",
     "tr": "Weekly",
     "uk": "Weekly",
-    "zh-CN": "Weekly",
+    "zh-CN": "每周",
     "zh-TW": "Weekly",
     "id": "Mingguan"
   },
@@ -50719,7 +50719,7 @@
     "pt": "At",
     "tr": "At",
     "uk": "At",
-    "zh-CN": "At",
+    "zh-CN": "在",
     "zh-TW": "At",
     "id": "Pada"
   },
@@ -50755,7 +50755,7 @@
     "pt": "Event source",
     "tr": "Event source",
     "uk": "Event source",
-    "zh-CN": "Event source",
+    "zh-CN": "事件来源",
     "zh-TW": "Event source",
     "id": "Sumber peristiwa"
   },
@@ -50791,7 +50791,7 @@
     "pt": "Event key",
     "tr": "Event key",
     "uk": "Event key",
-    "zh-CN": "Event key",
+    "zh-CN": "事件键",
     "zh-TW": "Event key",
     "id": "Kunci peristiwa"
   },
@@ -50881,7 +50881,7 @@
     "pt": "Event filter",
     "tr": "Event filter",
     "uk": "Event filter",
-    "zh-CN": "Event filter",
+    "zh-CN": "事件过滤器",
     "zh-TW": "Event filter",
     "id": "Filter peristiwa"
   },
@@ -50899,7 +50899,7 @@
     "pt": "Additional options",
     "tr": "Additional options",
     "uk": "Additional options",
-    "zh-CN": "Additional options",
+    "zh-CN": "附加选项",
     "zh-TW": "Additional options",
     "id": "Opsi tambahan"
   },
@@ -50917,7 +50917,7 @@
     "pt": "Add Timeout",
     "tr": "Add Timeout",
     "uk": "Add Timeout",
-    "zh-CN": "Add Timeout",
+    "zh-CN": "添加超时",
     "zh-TW": "Add Timeout",
     "id": "Tambah Batas Waktu"
   },
@@ -50935,7 +50935,7 @@
     "pt": "Timeout seconds",
     "tr": "Timeout seconds",
     "uk": "Timeout seconds",
-    "zh-CN": "Timeout seconds",
+    "zh-CN": "超时秒数",
     "zh-TW": "Timeout seconds",
     "id": "Batas waktu dalam detik"
   },
@@ -50953,7 +50953,7 @@
     "pt": "Add a prompt before continuing.",
     "tr": "Add a prompt before continuing.",
     "uk": "Add a prompt before continuing.",
-    "zh-CN": "Add a prompt before continuing.",
+    "zh-CN": "请先添加提示词后再继续。",
     "zh-TW": "Add a prompt before continuing.",
     "id": "Tambahkan prompt sebelum melanjutkan."
   },
@@ -50971,7 +50971,7 @@
     "pt": "Add a plugin source before continuing.",
     "tr": "Add a plugin source before continuing.",
     "uk": "Add a plugin source before continuing.",
-    "zh-CN": "Add a plugin source before continuing.",
+    "zh-CN": "请先添加插件来源后再继续。",
     "zh-TW": "Add a plugin source before continuing.",
     "id": "Tambahkan sumber plugin sebelum melanjutkan."
   },
@@ -50989,7 +50989,7 @@
     "pt": "Add Python code before continuing.",
     "tr": "Add Python code before continuing.",
     "uk": "Add Python code before continuing.",
-    "zh-CN": "Add Python code before continuing.",
+    "zh-CN": "请先添加 Python 代码后再继续。",
     "zh-TW": "Add Python code before continuing.",
     "id": "Tambahkan kode Python sebelum melanjutkan."
   },
@@ -51007,7 +51007,7 @@
     "pt": "Draft saved in this conversation.",
     "tr": "Draft saved in this conversation.",
     "uk": "Draft saved in this conversation.",
-    "zh-CN": "Draft saved in this conversation.",
+    "zh-CN": "草稿已保存在此对话中。",
     "zh-TW": "Draft saved in this conversation.",
     "id": "Draf disimpan di percakapan ini."
   },
@@ -51025,7 +51025,7 @@
     "pt": "Draft looks valid.",
     "tr": "Draft looks valid.",
     "uk": "Draft looks valid.",
-    "zh-CN": "Draft looks valid.",
+    "zh-CN": "草稿验证通过。",
     "zh-TW": "Draft looks valid.",
     "id": "Draf tampak valid."
   },
@@ -51043,7 +51043,7 @@
     "pt": "Automation created.",
     "tr": "Automation created.",
     "uk": "Automation created.",
-    "zh-CN": "Automation created.",
+    "zh-CN": "自动化已创建。",
     "zh-TW": "Automation created.",
     "id": "Otomatisasi dibuat."
   },
@@ -51349,7 +51349,7 @@
     "pt": "Custom Python",
     "tr": "Custom Python",
     "uk": "Custom Python",
-    "zh-CN": "Custom Python",
+    "zh-CN": "自定义 Python",
     "zh-TW": "Custom Python",
     "id": "Python khusus"
   },
@@ -51547,7 +51547,7 @@
     "pt": "Test run started.",
     "tr": "Test run started.",
     "uk": "Test run started.",
-    "zh-CN": "Test run started.",
+    "zh-CN": "测试运行已启动。",
     "zh-TW": "Test run started.",
     "id": "Uji coba dimulai."
   },
@@ -52184,7 +52184,7 @@
   "AUTOMATION_SETUP$CUSTOM_WEBHOOK_TITLE": {
     "en": "Register this as a custom webhook source",
     "ja": "カスタム Webhook ソースとして登録",
-    "zh-CN": "Register this as a custom webhook source",
+    "zh-CN": "注册为自定义 Webhook 来源",
     "zh-TW": "Register this as a custom webhook source",
     "ko-KR": "Register this as a custom webhook source",
     "no": "Register this as a custom webhook source",
@@ -52202,7 +52202,7 @@
   "AUTOMATION_SETUP$CUSTOM_WEBHOOK_DESCRIPTION": {
     "en": "Use this when the event source is not already listed. OpenHands will create a webhook URL for the source before saving or testing the automation.",
     "ja": "イベントソースが一覧にない場合に使用します。OpenHands は保存またはテストの前に Webhook URL を作成します。",
-    "zh-CN": "Use this when the event source is not already listed. OpenHands will create a webhook URL for the source before saving or testing the automation.",
+    "zh-CN": "当事件来源未在列表中时使用此选项。OpenHands 将在保存或测试自动化之前为该来源创建 Webhook URL。",
     "zh-TW": "Use this when the event source is not already listed. OpenHands will create a webhook URL for the source before saving or testing the automation.",
     "ko-KR": "Use this when the event source is not already listed. OpenHands will create a webhook URL for the source before saving or testing the automation.",
     "no": "Use this when the event source is not already listed. OpenHands will create a webhook URL for the source before saving or testing the automation.",
@@ -52220,7 +52220,7 @@
   "AUTOMATION_SETUP$CUSTOM_WEBHOOK_NAME": {
     "en": "Webhook name",
     "ja": "Webhook 名",
-    "zh-CN": "Webhook name",
+    "zh-CN": "Webhook 名称",
     "zh-TW": "Webhook name",
     "ko-KR": "Webhook name",
     "no": "Webhook name",
@@ -52238,7 +52238,7 @@
   "AUTOMATION_SETUP$CUSTOM_WEBHOOK_NAME_PLACEHOLDER": {
     "en": "Incident webhook",
     "ja": "インシデント Webhook",
-    "zh-CN": "Incident webhook",
+    "zh-CN": "故障告警 Webhook",
     "zh-TW": "Incident webhook",
     "ko-KR": "Incident webhook",
     "no": "Incident webhook",
@@ -52256,7 +52256,7 @@
   "AUTOMATION_SETUP$CUSTOM_WEBHOOK_EVENT_KEY_EXPR": {
     "en": "Event key expression",
     "ja": "イベントキー式",
-    "zh-CN": "Event key expression",
+    "zh-CN": "事件键表达式",
     "zh-TW": "Event key expression",
     "ko-KR": "Event key expression",
     "no": "Event key expression",
@@ -52274,7 +52274,7 @@
   "AUTOMATION_SETUP$CUSTOM_WEBHOOK_SIGNATURE_HEADER": {
     "en": "Signature header",
     "ja": "署名ヘッダー",
-    "zh-CN": "Signature header",
+    "zh-CN": "签名请求头",
     "zh-TW": "Signature header",
     "ko-KR": "Signature header",
     "no": "Signature header",
@@ -52292,7 +52292,7 @@
   "AUTOMATION_SETUP$CUSTOM_WEBHOOK_SIGNATURE_SCHEME": {
     "en": "Signature scheme",
     "ja": "署名方式",
-    "zh-CN": "Signature scheme",
+    "zh-CN": "签名方案",
     "zh-TW": "Signature scheme",
     "ko-KR": "Signature scheme",
     "no": "Signature scheme",
@@ -52364,7 +52364,7 @@
   "AUTOMATION_SETUP$CUSTOM_WEBHOOK_SECRET": {
     "en": "Signing secret",
     "ja": "署名シークレット",
-    "zh-CN": "Signing secret",
+    "zh-CN": "签名密钥",
     "zh-TW": "Signing secret",
     "ko-KR": "Signing secret",
     "no": "Signing secret",
@@ -52382,7 +52382,7 @@
   "AUTOMATION_SETUP$CUSTOM_WEBHOOK_SECRET_PLACEHOLDER": {
     "en": "Leave blank to generate one",
     "ja": "生成する場合は空欄のまま",
-    "zh-CN": "Leave blank to generate one",
+    "zh-CN": "留空以自动生成",
     "zh-TW": "Leave blank to generate one",
     "ko-KR": "Leave blank to generate one",
     "no": "Leave blank to generate one",
@@ -52400,7 +52400,7 @@
   "AUTOMATION_SETUP$CUSTOM_WEBHOOK_SECRET_HELP": {
     "en": "If the external service already gave you a signing secret, paste it here. Otherwise OpenHands generates one and shows it once after registration.",
     "ja": "外部サービスから署名シークレットが提供されている場合はここに貼り付けます。ない場合は OpenHands が生成し、登録後に一度だけ表示します。",
-    "zh-CN": "If the external service already gave you a signing secret, paste it here. Otherwise OpenHands generates one and shows it once after registration.",
+    "zh-CN": "如果外部服务已提供签名密钥，请在此处粘贴。否则 OpenHands 将自动生成一个，并在注册完成后显示一次。",
     "zh-TW": "If the external service already gave you a signing secret, paste it here. Otherwise OpenHands generates one and shows it once after registration.",
     "ko-KR": "If the external service already gave you a signing secret, paste it here. Otherwise OpenHands generates one and shows it once after registration.",
     "no": "If the external service already gave you a signing secret, paste it here. Otherwise OpenHands generates one and shows it once after registration.",
@@ -52418,7 +52418,7 @@
   "AUTOMATION_SETUP$CUSTOM_WEBHOOK_CREATED": {
     "en": "Custom webhook source registered.",
     "ja": "カスタム Webhook ソースを登録しました。",
-    "zh-CN": "Custom webhook source registered.",
+    "zh-CN": "自定义 Webhook 来源已注册。",
     "zh-TW": "Custom webhook source registered.",
     "ko-KR": "Custom webhook source registered.",
     "no": "Custom webhook source registered.",
@@ -52436,7 +52436,7 @@
   "AUTOMATION_SETUP$CUSTOM_WEBHOOK_URL": {
     "en": "Webhook URL: {{url}}",
     "ja": "Webhook の URL: {{url}}",
-    "zh-CN": "Webhook URL: {{url}}",
+    "zh-CN": "Webhook URL：{{url}}",
     "zh-TW": "Webhook URL: {{url}}",
     "ko-KR": "Webhook URL: {{url}}",
     "no": "Webhook URL: {{url}}",
@@ -52454,7 +52454,7 @@
   "AUTOMATION_SETUP$CUSTOM_WEBHOOK_GENERATED_SECRET": {
     "en": "Generated signing secret: {{secret}}",
     "ja": "生成された署名シークレット: {{secret}}",
-    "zh-CN": "Generated signing secret: {{secret}}",
+    "zh-CN": "生成的签名密钥：{{secret}}",
     "zh-TW": "Generated signing secret: {{secret}}",
     "ko-KR": "Generated signing secret: {{secret}}",
     "no": "Generated signing secret: {{secret}}",
@@ -52472,7 +52472,7 @@
   "AUTOMATION_SETUP$CUSTOM_WEBHOOK_SOURCE_REQUIRED": {
     "en": "Enter an event source before registering a custom webhook.",
     "ja": "カスタム Webhook を登録する前にイベントソースを入力してください。",
-    "zh-CN": "Enter an event source before registering a custom webhook.",
+    "zh-CN": "请先输入事件来源，再注册自定义 Webhook。",
     "zh-TW": "Enter an event source before registering a custom webhook.",
     "ko-KR": "Enter an event source before registering a custom webhook.",
     "no": "Enter an event source before registering a custom webhook.",
@@ -52490,7 +52490,7 @@
   "AUTOMATION_SETUP$CUSTOM_WEBHOOK_DEFAULT_NAME": {
     "en": "{{source}} webhook",
     "ja": "{{source}} Webhook",
-    "zh-CN": "{{source}} webhook",
+    "zh-CN": "{{source}} Webhook",
     "zh-TW": "{{source}} webhook",
     "ko-KR": "{{source}} webhook",
     "no": "{{source}} webhook",
@@ -52508,7 +52508,7 @@
   "AUTOMATION_SETUP$CUSTOM_WEBHOOK_ALREADY_EXISTS": {
     "en": "Webhook source {{source}} already exists, so this automation will use the existing source.",
     "ja": "Webhook ソース {{source}} はすでに存在するため、この自動化は既存のソースを使用します。",
-    "zh-CN": "Webhook source {{source}} already exists, so this automation will use the existing source.",
+    "zh-CN": "Webhook 来源 {{source}} 已存在，此自动化将使用现有来源。",
     "zh-TW": "Webhook source {{source}} already exists, so this automation will use the existing source.",
     "ko-KR": "Webhook source {{source}} already exists, so this automation will use the existing source.",
     "no": "Webhook source {{source}} already exists, so this automation will use the existing source.",
