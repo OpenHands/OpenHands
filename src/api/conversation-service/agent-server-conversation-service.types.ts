@@ -10,11 +10,7 @@ import type { ACPModelOption } from "#/constants/acp-providers";
  * Local agent-server conversations do not carry this field (null).
  */
 export type SandboxStatus =
-  | "PAUSED"
-  | "RUNNING"
-  | "STARTING"
-  | "MISSING"
-  | "ERROR";
+  "PAUSED" | "RUNNING" | "STARTING" | "MISSING" | "ERROR";
 
 // Plugin specification for starting conversations with plugins
 export interface PluginSpec {

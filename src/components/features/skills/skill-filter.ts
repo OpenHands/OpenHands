@@ -24,11 +24,7 @@ const RECOMMENDATION_PARAM = "recommendation";
 export type SkillEnabledState = "enabled" | "disabled";
 export type SkillRecommendation = "recommended" | "other";
 export type SkillFacetGroupId =
-  | "state"
-  | "recommendation"
-  | "source"
-  | "category"
-  | "type";
+  "state" | "recommendation" | "source" | "category" | "type";
 
 const SKILL_ENABLED_STATE_ORDER: readonly SkillEnabledState[] = [
   "enabled",

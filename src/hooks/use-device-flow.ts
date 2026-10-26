@@ -12,11 +12,7 @@ import {
 } from "#/services/cloud-funnel-analytics";
 
 export type DeviceFlowStatus =
-  | "idle"
-  | "starting"
-  | "awaiting_authorization"
-  | "success"
-  | "error";
+  "idle" | "starting" | "awaiting_authorization" | "success" | "error";
 
 export interface DeviceFlowState {
   status: DeviceFlowStatus;

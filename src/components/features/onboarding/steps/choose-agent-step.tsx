@@ -25,12 +25,7 @@ import {
 import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
 
 export type OnboardingAgentId =
-  | "openhands"
-  | "claude-code"
-  | "codex"
-  | "gemini-cli"
-  | "pi"
-  | "opencode";
+  "openhands" | "claude-code" | "codex" | "gemini-cli" | "pi" | "opencode";
 
 function getAgentOptionIcon(id: string): AgentBrandIconKind {
   if (id === "openhands") return "openhands";

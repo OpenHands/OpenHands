@@ -270,9 +270,7 @@ export interface ValidateDraftResponse {
  * path an entry shipping its own tarball uses; the other two are presets.
  */
 export type AutomationDraftEndpoint =
-  | "/v1"
-  | "/v1/preset/prompt"
-  | "/v1/preset/plugin";
+  "/v1" | "/v1/preset/prompt" | "/v1/preset/plugin";
 
 /** `POST /v1/drafts` — create a server-backed automation setup draft. */
 export interface CreateAutomationDraftApiRequest {
@@ -334,18 +332,10 @@ export const INTERFACE_VERSION = "1.0";
 
 /** The closed set of runtime-model properties a client may offer for setting. */
 export type AutomationAttributeName =
-  | "name"
-  | "prompt"
-  | "model"
-  | "timeout"
-  | "schedule";
+  "name" | "prompt" | "model" | "timeout" | "schedule";
 
 export type InterfaceAttributeType =
-  | "text"
-  | "textarea"
-  | "number"
-  | "llm-profile"
-  | "schedule";
+  "text" | "textarea" | "number" | "llm-profile" | "schedule";
 
 /** How one settable attribute of an existing Automation is offered. */
 export interface InterfaceAttribute {
@@ -523,9 +513,7 @@ export interface InterfaceCreatedByFilter {
 }
 
 export type InterfaceDashboardFilter =
-  | InterfaceStatusFilter
-  | InterfaceTriggerFilter
-  | InterfaceCreatedByFilter;
+  InterfaceStatusFilter | InterfaceTriggerFilter | InterfaceCreatedByFilter;
 
 /** Sort values name comparators this host implements. */
 export const DASHBOARD_SORT_VALUES = ["last-run", "runs", "name"] as const;

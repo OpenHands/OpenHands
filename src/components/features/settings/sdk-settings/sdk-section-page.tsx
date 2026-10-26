@@ -617,8 +617,7 @@ export function SdkSectionPage({
         const diffKey = PAYLOAD_DIFF_KEY[src.settingsSource];
         defaultPayload[diffKey] = {
           ...((defaultPayload[diffKey] as
-            | Record<string, unknown>
-            | undefined) ?? {}),
+            Record<string, unknown> | undefined) ?? {}),
           ...diff,
         };
       }

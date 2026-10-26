@@ -9,10 +9,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
 
 type DeviceFlowButtonVariant =
-  | "primary"
-  | "secondary"
-  | "tertiary"
-  | "unstyled";
+  "primary" | "secondary" | "tertiary" | "unstyled";
 type DeviceFlowStatusDisplay = "inline" | "modal";
 
 interface DeviceFlowAuthProps {

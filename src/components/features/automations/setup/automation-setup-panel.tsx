@@ -201,9 +201,7 @@ const AUTOMATION_SETUP_FIELD_RENDER_ORDER: AutomationSetupField[] = [
 ];
 
 type CustomWebhookSignatureScheme =
-  | "hmac_sha256_hex"
-  | "standard_webhooks"
-  | "slack_v0";
+  "hmac_sha256_hex" | "standard_webhooks" | "slack_v0";
 
 interface CustomWebhookFormState {
   enabled: boolean;

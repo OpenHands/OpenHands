@@ -17,8 +17,7 @@ export interface NavigationLinkProps extends Omit<
   replace?: boolean;
   end?: boolean;
   className?:
-    | string
-    | ((state: NavigationLinkClassNameState) => string | undefined);
+    string | ((state: NavigationLinkClassNameState) => string | undefined);
 }
 
 function isModifiedEvent(event: React.MouseEvent<HTMLAnchorElement>) {
