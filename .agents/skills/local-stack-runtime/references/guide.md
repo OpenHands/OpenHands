@@ -93,11 +93,11 @@ you are running inside of — NOT the automation backend.
 - `scripts/dev-safe.mjs` uses `uvx` for temporary agent-server installation — no permanent `uv tool install` needed. Environment variables (highest precedence first):
   - `OH_AGENT_SERVER_LOCAL_PATH` — absolute path to a local `software-agent-sdk` checkout. Runs the local checkout via `uvx` with `--with-editable` for `openhands-sdk`/`openhands-tools`/`openhands-workspace` and `--reinstall` for `openhands-agent-server`, so SDK edits are picked up on restart. Highest precedence.
   - `OH_AGENT_SERVER_GIT_REF` — git commit SHA or branch name (takes precedence over version)
-  - `OH_AGENT_SERVER_VERSION` — specific PyPI version (e.g., "1.58.1")
+  - `OH_AGENT_SERVER_VERSION` — specific PyPI version (e.g., "1.58.2")
   - `UV_PYTHON` — Python version or range uvx may use for agent-server and automation. Defaults to `python.uvxRequest` in `config/defaults.json` (`>=3.12,<3.15`), so a machine with no supported Python downloads the newest 3.14 instead of the newest CPython, whose wheels the SDK's compiled dependencies lag behind (#18654).
   - `OH_SECRET_KEY` — secret key for settings encryption; auto-generated and persisted to `~/.openhands/agent-canvas/secret-key.txt` on first run (same file Docker uses), ensuring dev mode and Docker share the same key when both mount the same `~/.openhands` directory. Override with the env var to pin a specific key.
   - `SESSION_API_KEY` / `OH_SESSION_API_KEYS_0` / `VITE_SESSION_API_KEY` — session API key for agent-server authentication; auto-generated using `crypto.randomBytes(32)` if not set, passed to both agent-server (`OH_SESSION_API_KEYS_0`) and frontend (`VITE_SESSION_API_KEY`)
-  - Default: released PyPI version `1.58.1` for agent-server SDK libraries
+  - Default: released PyPI version `1.58.2` for agent-server SDK libraries
 
 - Security: launchers generate and persist a 64-character session API key at `~/.openhands/agent-canvas/session-api-key.txt` unless overridden. The agent-server and automation backend share that session key. `OH_SECRET_KEY` protects settings encryption and is persisted separately at `~/.openhands/agent-canvas/secret-key.txt`. `AUTOMATION_KV_SECRET` encrypts automation KV state and must not follow the session key: unless set explicitly, `dev-with-automation.mjs` and `docker/entrypoint.sh` pin it on first launch in `<state dir>/automation-kv-secret.txt` (`~/.openhands/agent-canvas/` by default), seeded with the session key earlier versions passed, and reuse it afterwards. Rotating the session key leaves it unchanged; deleting the file makes existing KV state unreadable.
 - `scripts/dev-safe.mjs` should fail fast if `uvx` cannot be spawned (for example missing PATH entries).
