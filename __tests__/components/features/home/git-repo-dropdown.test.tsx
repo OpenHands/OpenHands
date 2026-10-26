@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -11,6 +12,17 @@ import userEvent from "@testing-library/user-event";
 import { GitRepoDropdown } from "../../../../src/components/features/home/git-repo-dropdown/git-repo-dropdown";
 import { GitRepository } from "#/types/git";
 import { I18nKey } from "#/i18n/declaration";
+import { useHomeStore } from "#/stores/home-store";
+import { makeDefaultLocalBackend } from "#/api/backend-registry/default-backend";
+import {
+  NO_BACKEND,
+  getRegisteredBackends,
+  getActiveSelection,
+  setRegisteredBackends,
+  setActiveSelection,
+} from "#/api/backend-registry/active-store";
+import { ActiveBackendProvider } from "#/contexts/active-backend-context";
+import { getHomeLaunchScope } from "#/utils/home-launch-scope";
 
 const useTranslationMock = vi.hoisted(() =>
   vi.fn((namespace: string) => ({
@@ -48,14 +60,10 @@ vi.mock("#/hooks/query/use-config", () => ({
   useConfig: () => ({ data: null }),
 }));
 
-const homeStore = vi.hoisted(() => ({
-  recentRepositories: [] as GitRepository[],
-}));
-
-// Mock useHomeStore
-vi.mock("#/stores/home-store", () => ({
-  useHomeStore: () => homeStore,
-}));
+const scope = getHomeLaunchScope({
+  backend: makeDefaultLocalBackend() ?? NO_BACKEND,
+  orgId: null,
+});
 
 const MOCK_REPOSITORIES: GitRepository[] = [
   {
@@ -79,6 +87,92 @@ const MOCK_REPOSITORIES: GitRepository[] = [
 ];
 
 const mockOnChange = vi.fn();
+
+// @spec BM-002 — The shared picker exposes recents only for its current scope
+it.each(["backend", "organization"])(
+  "isolates recent selections after a cloud %s switch",
+  async (boundary) => {
+    const previousBackends = getRegisteredBackends();
+    const previousSelection = getActiveSelection();
+    const backendA = {
+      ...NO_BACKEND,
+      kind: "cloud" as const,
+      id: "cloud-a",
+      host: "https://cloud-a.example",
+    };
+    const backendB = { ...backendA, id: "cloud-b" };
+    const from = { backend: backendA, orgId: "org-a" };
+    const to =
+      boundary === "backend"
+        ? { backend: backendB, orgId: "org-a" }
+        : { backend: backendA, orgId: "org-b" };
+    const repositoryA = {
+      ...MOCK_REPOSITORIES[0],
+      id: "recent-a",
+      full_name: "org-a/recent",
+    };
+    const repositoryB = {
+      ...MOCK_REPOSITORIES[0],
+      id: "recent-b",
+      full_name: "org-b/recent",
+    };
+    useHomeStore.setState({ recentRepositoriesByScope: {} });
+    useHomeStore
+      .getState()
+      .addRecentRepository(repositoryA, getHomeLaunchScope(from));
+    useHomeStore
+      .getState()
+      .addRecentRepository(repositoryB, getHomeLaunchScope(to));
+    setupDefaultMocks({ repositories: [] });
+    setRegisteredBackends([backendA, backendB]);
+    setActiveSelection({ backendId: from.backend.id, orgId: from.orgId });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const onChange = vi.fn();
+    const { unmount } = render(
+      <QueryClientProvider client={queryClient}>
+        <ActiveBackendProvider>
+          <GitRepoDropdown provider="github" onChange={onChange} />
+        </ActiveBackendProvider>
+      </QueryClientProvider>,
+    );
+    const user = userEvent.setup();
+    try {
+      await user.click(screen.getByRole("combobox"));
+      await user.click(
+        await screen.findByRole("option", { name: /org-a\/recent/ }),
+      );
+
+      act(() =>
+        setActiveSelection({ backendId: to.backend.id, orgId: to.orgId }),
+      );
+
+      expect(screen.getByRole("combobox")).toHaveValue("");
+      await user.click(screen.getByRole("combobox"));
+      expect(
+        screen.queryByRole("option", { name: /org-a\/recent/ }),
+      ).not.toBeInTheDocument();
+      await user.click(
+        await screen.findByRole("option", { name: /org-b\/recent/ }),
+      );
+      expect(onChange).toHaveBeenLastCalledWith(repositoryB);
+
+      act(() =>
+        setActiveSelection({ backendId: from.backend.id, orgId: from.orgId }),
+      );
+      await user.click(screen.getByRole("combobox"));
+      expect(
+        await screen.findByRole("option", { name: /org-a\/recent/ }),
+      ).toBeInTheDocument();
+    } finally {
+      unmount();
+      queryClient.clear();
+      setRegisteredBackends(previousBackends);
+      setActiveSelection(previousSelection);
+    }
+  },
+);
 
 const setupDefaultMocks = (
   repositoryDataOverrides: Partial<
@@ -114,7 +208,9 @@ const renderDropdown = (
   recentRepositories: GitRepository[] = [],
 ) => {
   vi.clearAllMocks();
-  homeStore.recentRepositories = recentRepositories;
+  useHomeStore.setState({
+    recentRepositoriesByScope: { [scope]: recentRepositories },
+  });
   // Set up mocks with optional overrides
   setupDefaultMocks(repositoryDataOverrides, urlSearchOverrides);
 
@@ -249,7 +345,9 @@ describe("GitRepoDropdown", () => {
 
     it("keeps repository options uniquely keyed when results reorder", async () => {
       const user = userEvent.setup();
-      const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+      const consoleError = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
       const view = renderDropdown();
       const input = screen.getByTestId("git-repo-dropdown");
 
@@ -491,9 +589,7 @@ describe("GitRepoDropdown", () => {
       expect(selectedOption).toHaveAttribute("aria-selected", "true");
       expect(selectedOption).toHaveClass("bg-interactive-selected");
       expect(unselectedOption).toHaveAttribute("aria-selected", "false");
-      expect(unselectedOption).toHaveClass(
-        "hover:bg-interactive-hover",
-      );
+      expect(unselectedOption).toHaveClass("hover:bg-interactive-hover");
     });
 
     it("uses the latest callback when a selected repository is cleared", async () => {

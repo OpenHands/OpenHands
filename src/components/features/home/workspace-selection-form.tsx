@@ -14,6 +14,8 @@ import {
 import { useLocalWorkspaces } from "#/hooks/query/use-local-workspaces";
 import { useResolvedWorkspaces } from "#/hooks/query/use-resolved-workspaces";
 import { LocalWorkspace } from "#/types/workspace";
+import { useActiveBackend } from "#/contexts/active-backend-context";
+import { getHomeLaunchScope } from "#/utils/home-launch-scope";
 import { I18nKey } from "#/i18n/declaration";
 import FolderIcon from "#/icons/folder.svg?react";
 import { getWorkspacesUnsupportedMessage } from "#/utils/workspaces-compatibility";
@@ -38,37 +40,50 @@ interface WorkspaceSelectionFormProps {
 export const HOME_SELECTED_WORKSPACE_PATH_KEY =
   "oh:home-selected-workspace-path";
 
-function getStoredSelectedWorkspacePath(): string | null {
+function getStoredSelectedWorkspacePath(storageKey: string): string | null {
   if (typeof window === "undefined") return null;
 
   try {
-    const path = window.sessionStorage.getItem(
-      HOME_SELECTED_WORKSPACE_PATH_KEY,
-    );
+    const path = window.sessionStorage.getItem(storageKey);
     return path && path.length > 0 ? path : null;
   } catch {
     return null;
   }
 }
 
-function setStoredSelectedWorkspacePath(path: string | null): void {
+function setStoredSelectedWorkspacePath(
+  storageKey: string,
+  path: string | null,
+): void {
   if (typeof window === "undefined") return;
 
   try {
     if (path) {
-      window.sessionStorage.setItem(HOME_SELECTED_WORKSPACE_PATH_KEY, path);
+      window.sessionStorage.setItem(storageKey, path);
     } else {
-      window.sessionStorage.removeItem(HOME_SELECTED_WORKSPACE_PATH_KEY);
+      window.sessionStorage.removeItem(storageKey);
     }
   } catch {
     // sessionStorage may be unavailable in private browsing contexts.
   }
 }
 
-export function WorkspaceSelectionForm({
+export function WorkspaceSelectionForm(props: WorkspaceSelectionFormProps) {
+  const scope = getHomeLaunchScope(useActiveBackend());
+  return (
+    <ScopedWorkspaceSelectionForm
+      key={scope}
+      {...props}
+      storageKey={`${HOME_SELECTED_WORKSPACE_PATH_KEY}:${scope}`}
+    />
+  );
+}
+
+function ScopedWorkspaceSelectionForm({
   isLoadingSettings = false,
   onConfirm,
-}: WorkspaceSelectionFormProps) {
+  storageKey,
+}: WorkspaceSelectionFormProps & { storageKey: string }) {
   const { t } = useTranslation("openhands");
   const { navigate } = useNavigation();
 
@@ -110,13 +125,13 @@ export function WorkspaceSelectionForm({
   const handleWorkspaceChange = React.useCallback(
     (workspace: LocalWorkspace | null) => {
       setSelectedWorkspace(workspace);
-      setStoredSelectedWorkspacePath(workspace?.path ?? null);
+      setStoredSelectedWorkspacePath(storageKey, workspace?.path ?? null);
     },
-    [],
+    [storageKey],
   );
 
   React.useEffect(() => {
-    const storedPath = getStoredSelectedWorkspacePath();
+    const storedPath = getStoredSelectedWorkspacePath(storageKey);
     if (!storedPath) return;
 
     const restoredWorkspace = workspaces.find((w) => w.path === storedPath);
@@ -132,12 +147,13 @@ export function WorkspaceSelectionForm({
       !hasWorkspaceError &&
       !workspacesUnsupportedMessage
     ) {
-      setStoredSelectedWorkspacePath(null);
+      setStoredSelectedWorkspacePath(storageKey, null);
       setSelectedWorkspace((current) =>
         current?.path === storedPath ? null : current,
       );
     }
   }, [
+    storageKey,
     hasWorkspaceError,
     isLoadingWorkspaces,
     workspaces,
