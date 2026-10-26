@@ -859,6 +859,32 @@ describe("AddBackendModal – DigitalOcean", () => {
     await user.click(screen.getByTestId("add-backend-option-providers"));
     await user.click(screen.getByTestId("add-backend-provider-digitalocean"));
     await screen.findByTestId("managed-agents-token");
+
+    // The real provider panel keeps the same minimum in its compiled CSS.
+    const panel = screen.getByTestId("digitalocean-connect-panel");
+    const compiler = await compile(
+      await readFile(resolve("src/tailwind.css"), "utf8"),
+      { base: resolve("src"), onDependency: () => {} },
+    );
+    const minHeightRules: string[] = [];
+    parse(compiler.build([...panel.classList])).walkDecls(
+      "min-height",
+      (declaration) => {
+        const rule = declaration.parent;
+        if (rule?.type === "rule" && panel.matches(rule.selector)) {
+          minHeightRules.push(`${rule.selector}{${declaration.toString()}}`);
+        }
+      },
+    );
+    const style = document.createElement("style");
+    style.textContent = minHeightRules.join("\n");
+    document.head.appendChild(style);
+    try {
+      expect(getComputedStyle(panel).minHeight).toBe("216px");
+    } finally {
+      style.remove();
+    }
+
     await user.click(screen.getByTestId("add-backend-providers-back"));
 
     // Assert

@@ -189,7 +189,7 @@ describe("vite library build", () => {
       });
       return values;
     };
-    const recipe = (name: string, pseudo = "") => {
+    const recipes = (name: string, pseudo = "") => {
       const classSelector = `.${name.replace(/([^\w-])/g, "\\$1")}${pseudo}`;
       const matches: Rule[] = [];
       stylesheet.walkRules((rule) => {
@@ -203,30 +203,38 @@ describe("vite library build", () => {
           matches.push(rule);
         }
       });
-      expect(matches, `Shipped scoped recipe: ${name}`).toHaveLength(1);
-      const rule = matches[0];
-      expect(rule.selectors).toContain(
-        `[data-agent-server-ui] ${classSelector}`,
+      expect(matches.length, `Shipped scoped recipe: ${name}`).toBeGreaterThan(
+        0,
       );
-      for (const selector of rule.selectors) {
-        expect(selector).toMatch(/^\[data-agent-server-ui\]\s/);
-      }
-      let inUtilitiesLayer = false;
-      for (
-        let parent: AnyNode | undefined = rule.parent;
-        parent;
-        parent = parent.parent
-      ) {
-        if (
-          parent.type === "atrule" &&
-          (parent as AtRule).name === "layer" &&
-          (parent as AtRule).params === "utilities"
-        ) {
-          inUtilitiesLayer = true;
+      for (const rule of matches) {
+        expect(rule.selectors).toContain(
+          `[data-agent-server-ui] ${classSelector}`,
+        );
+        for (const selector of rule.selectors) {
+          expect(selector).toMatch(/^\[data-agent-server-ui\]\s/);
         }
+        let inUtilitiesLayer = false;
+        for (
+          let parent: AnyNode | undefined = rule.parent;
+          parent;
+          parent = parent.parent
+        ) {
+          if (
+            parent.type === "atrule" &&
+            (parent as AtRule).name === "layer" &&
+            (parent as AtRule).params === "utilities"
+          ) {
+            inUtilitiesLayer = true;
+          }
+        }
+        expect(inUtilitiesLayer, `Utilities-layer recipe: ${name}`).toBe(true);
       }
-      expect(inUtilitiesLayer, `Utilities-layer recipe: ${name}`).toBe(true);
-      return rule;
+      return matches;
+    };
+    const recipe = (name: string, pseudo = "") => {
+      const matches = recipes(name, pseudo);
+      expect(matches, `Single scoped recipe: ${name}`).toHaveLength(1);
+      return matches[0];
     };
     // Scoped to the Canvas root so it never restyles the host page.
     expect(css).toContain("[data-agent-server-ui] .flex{display:flex}");
@@ -337,6 +345,66 @@ describe("vite library build", () => {
       name: "media",
       params: expect.stringMatching(/^\(width\s*>=\s*48rem\)$/),
     });
+
+    // The sidebar shortcut ships to hosts; palette recipes also stay scoped
+    // for the standalone body portal without changing its mount boundary.
+    expect(declarations(recipe("z-70"))["z-index"]).toBe("70");
+    expect(declarations(recipe("command-menu-overlay"))["padding-top"]).toBe(
+      "10vh",
+    );
+    const commandPanel = declarations(recipe("command-menu-panel"));
+    expect(commandPanel["max-height"].replace(/\s/g, "")).toBe(
+      "min(720px,78vh)",
+    );
+    expect(commandPanel["--tw-shadow"]).toContain("0 24px 90px");
+    expect(commandPanel["--tw-shadow"]).toContain("inset");
+    // Vite may split color fallbacks into @supports rules. Check each
+    // emitted selector's scope and collect all supported declarations.
+    const commandSelection = Object.assign(
+      {},
+      ...recipes("command-menu-active-option").map(declarations),
+    );
+    expect(commandSelection["--tw-shadow"]).toContain("var(--oh-contrast)");
+    expect(commandSelection["--tw-shadow"]).toContain("8%");
+    for (const shadow of [commandPanel, commandSelection]) {
+      for (const variable of [
+        "--tw-inset-shadow",
+        "--tw-inset-ring-shadow",
+        "--tw-ring-offset-shadow",
+        "--tw-ring-shadow",
+        "--tw-shadow",
+      ]) {
+        expect(shadow["box-shadow"]).toContain(`var(${variable})`);
+      }
+    }
+    const commandBackdrop = declarations(recipe("command-menu-backdrop"));
+    expect(commandBackdrop["--tw-backdrop-blur"]).toBe("blur(2px)");
+    expect(commandBackdrop["backdrop-filter"]).toContain(
+      "var(--tw-backdrop-blur,)",
+    );
+    expect(commandBackdrop["backdrop-filter"]).toContain(
+      "var(--tw-backdrop-brightness,)",
+    );
+    expect(commandBackdrop["-webkit-backdrop-filter"]).toBe(
+      commandBackdrop["backdrop-filter"],
+    );
+    for (const [name, fontSize, tracking] of [
+      ["command-menu-label", "11px", 0.18],
+      ["command-menu-result-hint", "10px", 0.14],
+      ["command-menu-trigger-hint", "10px", 0.12],
+      ["command-menu-footer", "11px", undefined],
+    ] as const) {
+      const typography = declarations(recipe(name));
+      expect(typography["font-size"]).toBe(fontSize);
+      expect(typography["line-height"]).toBeUndefined();
+      if (tracking === undefined) {
+        expect(typography["letter-spacing"]).toBeUndefined();
+      } else {
+        expect(typography["letter-spacing"]).toMatch(/em$/);
+        expect(Number.parseFloat(typography["letter-spacing"])).toBe(tracking);
+        expect(typography["--tw-tracking"]).toBe(typography["letter-spacing"]);
+      }
+    }
 
     // Connection chooser disclosures retain exact fractional tracks and their
     // motion override after extraction and library selector scoping.

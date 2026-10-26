@@ -5,7 +5,7 @@ of Agent Canvas. Read this index before driving the app, then open the matching
 feature file and run its recipe with `control-openhands`. The map is not a claim
 that every row passes today; the run's evidence ledger is.
 
-Maintenance baseline: main@b185939d3dec3b203b0651c675f175ee5b4ed43e (2026-10-25). The next maintenance pass starts from this commit; a pass proposes the next baseline in its PR, and merging that PR accepts it.
+Maintenance baseline: main@ec0f70fe31b637e699ab3713ba477abe3c3d6b6f (2026-10-26). The next maintenance pass starts from this commit; a pass proposes the next baseline in its PR, and merging that PR accepts it.
 
 ## Baseline preconditions
 
