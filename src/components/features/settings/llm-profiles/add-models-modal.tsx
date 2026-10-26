@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { ApiKeyModalBase } from "#/components/features/settings/api-key-modal-base";
@@ -16,6 +16,7 @@ import {
 } from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
 import { isSdkHttpStatusError } from "#/api/agent-server-compatibility";
+import type { NewProfilePrefill } from "./llm-profile-form";
 /** Pull the server's own explanation out of an error, when it sent one. */
 function getServerDetail(error: unknown): string | null {
   const detail = (error as { response?: { detail?: unknown } })?.response
@@ -44,6 +45,12 @@ interface AddModelsModalProps {
    */
   initialConnectionId?: string | null;
   onClose: () => void;
+  /**
+   * Starts a single new profile for a model the catalog doesn't list, seeded
+   * with the selected provider and connection. When omitted, the hint names
+   * Add LLM Profile without linking to it.
+   */
+  onAddCustomProfile?: (prefill: NewProfilePrefill) => void;
 }
 
 type RowStatus = "idle" | "saving" | "saved" | "failed";
@@ -80,6 +87,7 @@ export function AddModelsModal({
   connections,
   initialConnectionId = null,
   onClose,
+  onAddCustomProfile,
 }: AddModelsModalProps) {
   const { t } = useTranslation("openhands");
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
@@ -461,11 +469,36 @@ export function AddModelsModal({
             data-testid="add-models-custom-model-hint"
             className="text-xs text-muted"
           >
-            {t(I18nKey.SETTINGS$ADD_MODELS_CUSTOM_MODEL_HINT, {
-              addProfile: t(I18nKey.SETTINGS$ADD_LLM_PROFILE),
-              customModel: t(I18nKey.SETTINGS$CUSTOM_MODEL),
-              advanced: t(I18nKey.SETTINGS$ADVANCED),
-            })}
+            <Trans
+              ns="openhands"
+              i18nKey={I18nKey.SETTINGS$ADD_MODELS_CUSTOM_MODEL_HINT}
+              values={{
+                addProfile: t(I18nKey.SETTINGS$ADD_LLM_PROFILE),
+                customModel: t(I18nKey.SETTINGS$CUSTOM_MODEL),
+                advanced: t(I18nKey.SETTINGS$ADVANCED),
+              }}
+              // "action", not "link": <link> is a void HTML element, so the
+              // Trans parser would drop the label it wraps.
+              components={{
+                action: onAddCustomProfile ? (
+                  <button
+                    type="button"
+                    data-testid="add-models-custom-model-link"
+                    disabled={submitting}
+                    onClick={() => {
+                      onClose();
+                      onAddCustomProfile({
+                        provider: selectedProvider,
+                        providerConnectionId: connectionId,
+                      });
+                    }}
+                    className="cursor-pointer text-contrast underline hover:no-underline disabled:cursor-not-allowed"
+                  />
+                ) : (
+                  <span />
+                ),
+              }}
+            />
           </p>
         )}
 

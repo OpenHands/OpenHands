@@ -8,6 +8,7 @@ import { DeleteProfileModal } from "./delete-profile-modal";
 import { AddModelsModal } from "./add-models-modal";
 import { ProfilesBody } from "./profiles-body";
 import { DefaultLlmProfileSelector } from "./default-llm-profile-selector";
+import type { NewProfilePrefill } from "./llm-profile-form";
 import { ProviderConnectionModal } from "./provider-connection-modal";
 import { DeleteProviderConnectionModal } from "./delete-provider-connection-modal";
 import ProfilesService, {
@@ -30,7 +31,8 @@ import { I18nKey } from "#/i18n/declaration";
 import { extensionModuleEmptyStateClassName } from "#/utils/extension-module-card-classes";
 
 interface LlmProfilesManagerProps {
-  onAddProfile?: () => void;
+  /** Starts a new profile; a prefill seeds it (e.g. from Add models' hint). */
+  onAddProfile?: (prefill?: NewProfilePrefill) => void;
   onEditProfile?: (profile: ProfileInfo) => void;
 }
 
@@ -179,7 +181,7 @@ export function LlmProfilesManager({
                 testId="add-llm-profile"
                 type="button"
                 variant="secondary"
-                onClick={onAddProfile}
+                onClick={() => onAddProfile()}
               >
                 {t(I18nKey.SETTINGS$ADD_LLM_PROFILE)}
               </BrandButton>
@@ -232,6 +234,9 @@ export function LlmProfilesManager({
         initialConnectionId={addModelsConnectionId}
         existingNames={profiles.map((p) => p.name)}
         onClose={() => setAddModelsConnectionId(null)}
+        onAddCustomProfile={
+          onAddProfile && canManage ? onAddProfile : undefined
+        }
       />
       {isCreatingConnection && (
         <ProviderConnectionModal

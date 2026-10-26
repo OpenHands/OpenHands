@@ -16,6 +16,20 @@ import type {
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 vi.mock("react-i18next", () => ({
+  // Renders the `<action>` component around the profile label, like the real
+  // Trans does for "<action>{{addProfile}}</action>" in the hint.
+  Trans: ({
+    values,
+    components,
+  }: {
+    values: Record<string, string>;
+    components: { action: React.ReactElement };
+  }) => (
+    <>
+      {React.cloneElement(components.action, {}, values.addProfile)}{" "}
+      {`with ${values.customModel} on ${values.advanced}`}
+    </>
+  ),
   useTranslation: () => ({
     t: (key: string, params?: Record<string, string>) => {
       const translations: Record<string, string> = {
@@ -42,7 +56,6 @@ vi.mock("react-i18next", () => ({
         SETTINGS$ADD_LLM_PROFILE: "Add LLM Profile",
         SETTINGS$CUSTOM_MODEL: "Custom Model",
         SETTINGS$ADVANCED: "Advanced",
-        SETTINGS$ADD_MODELS_CUSTOM_MODEL_HINT: `Use ${params?.addProfile ?? "?"} with ${params?.customModel ?? "?"} on ${params?.advanced ?? "?"}`,
         ERROR$GENERIC: "An error occurred",
       };
       return translations[key] || key;
@@ -256,7 +269,34 @@ describe("AddModelsModal", () => {
 
     expect(
       await screen.findByTestId("add-models-custom-model-hint"),
-    ).toHaveTextContent("Use Add LLM Profile with Custom Model on Advanced");
+    ).toHaveTextContent("Add LLM Profile with Custom Model on Advanced");
+  });
+
+  it("starts a prefilled profile from the hint's Add LLM Profile link", async () => {
+    const onClose = vi.fn();
+    const onAddCustomProfile = vi.fn();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <AddModelsModal
+          isOpen
+          connections={[OPENAI_CONNECTION]}
+          initialConnectionId={OPENAI_CONNECTION.id}
+          existingNames={[]}
+          onClose={onClose}
+          onAddCustomProfile={onAddCustomProfile}
+        />
+      </QueryClientProvider>,
+    );
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Add LLM Profile" }),
+    );
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onAddCustomProfile).toHaveBeenCalledWith({
+      provider: "openai",
+      providerConnectionId: "conn-openai",
+    });
   });
 
   it("lists all models for the connection's provider with short (unprefixed) names", async () => {

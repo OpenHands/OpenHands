@@ -40,7 +40,10 @@ import {
 import { SdkSectionSaveControl } from "../sdk-settings/sdk-section-page";
 import {
   buildProfileLlmConfig,
+  isBareProviderPrefix,
+  prefillToFormValues,
   profileConfigToFormValues,
+  type NewProfilePrefill,
 } from "./llm-profile-form";
 import {
   LLM_AUTH_TYPE_API_KEY,
@@ -115,6 +118,11 @@ export function LlmSettingsLocalView() {
   // the user can save the wrong model.
   const isDefaultModelReady = useDefaultModelReady();
   // @spec LLP-001 — A fresh profile never inherits schema-declared credentials.
+  // Set when a new profile starts from another flow (Add models' hint): the
+  // form then opens on Advanced with the provider and connection seeded.
+  const [createPrefill, setCreatePrefill] = useState<NewProfilePrefill | null>(
+    null,
+  );
   const createProfileInitialValues = useMemo(
     () => ({
       // A fresh profile may inherit options, but no existing credentials.
@@ -131,8 +139,9 @@ export function LlmSettingsLocalView() {
       [LLM_PROVIDER_CONNECTION_KEY]: "",
       [LLM_AUTH_TYPE_KEY]: LLM_AUTH_TYPE_API_KEY,
       [LLM_SUBSCRIPTION_VENDOR_KEY]: OPENAI_SUBSCRIPTION_VENDOR,
+      ...(createPrefill ? prefillToFormValues(createPrefill) : {}),
     }),
-    [agentSchema, createProfileDefaultModel],
+    [agentSchema, createProfileDefaultModel, createPrefill],
   );
 
   // Always hold the freshest schema. `handleEditProfile` awaits a network
@@ -197,8 +206,9 @@ export function LlmSettingsLocalView() {
     setIsProfileNameUserEdited(value !== "");
   }, []);
 
-  const handleAddProfile = useCallback(() => {
+  const handleAddProfile = useCallback((prefill?: NewProfilePrefill) => {
     automaticCreateBooleanKeys.current = null;
+    setCreatePrefill(prefill ?? null);
     setProfileName("");
     setIsProfileNameUserEdited(false);
     setEditingProfile(null);
@@ -242,6 +252,7 @@ export function LlmSettingsLocalView() {
 
   const handleBackToList = useCallback(() => {
     automaticCreateBooleanKeys.current = null;
+    setCreatePrefill(null);
     setViewMode("list");
     setEditingProfile(null);
     setProfileName("");
@@ -357,7 +368,8 @@ export function LlmSettingsLocalView() {
     });
 
     const model = typeof llmConfig.model === "string" ? llmConfig.model : "";
-    if (!model) {
+    // A bare "provider/" prefix (a prefilled draft left as-is) names no model.
+    if (!model || isBareProviderPrefix(model)) {
       displayErrorToast(t(I18nKey.SETTINGS$MODEL_REQUIRED));
       return;
     }
@@ -519,7 +531,13 @@ export function LlmSettingsLocalView() {
               : createProfileInitialValues
           }
           showProviderConnection={supportsConnections}
-          initialView={viewMode === "create" ? "basic" : undefined}
+          initialView={
+            viewMode === "create"
+              ? createPrefill
+                ? "advanced"
+                : "basic"
+              : undefined
+          }
           onSaveControlChange={handleSaveControlChange}
         />
       )}
