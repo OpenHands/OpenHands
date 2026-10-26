@@ -358,7 +358,7 @@ button.extension-module-card-interactive {
 }
 
 /* Custom styles for contenteditable */
-.chat-input:empty:before {
+.chat-input:empty:not([data-composing="true"]):before {
   content: attr(data-placeholder);
   color: var(--cool-grey-400);
   pointer-events: none;
