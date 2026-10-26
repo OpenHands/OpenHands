@@ -30,17 +30,21 @@ describe("buildInitialMeasurements", () => {
 });
 
 describe("shouldAdjustScrollOnSizeChange", () => {
-  const makeInstance = (scrollTop: number, clientHeight: number) => {
+  const makeInstance = (
+    scrollTop: number,
+    clientHeight: number,
+    scrollHeight: number,
+  ) => {
     const element = {
       scrollTop,
       clientHeight,
-      scrollHeight: 1000,
+      scrollHeight,
     } as unknown as HTMLElement;
     return { scrollOffset: scrollTop, scrollElement: element };
   };
 
   it("keeps the default behavior for a row above the viewport", () => {
-    const instance = makeInstance(500, 400);
+    const instance = makeInstance(500, 400, 1000);
 
     expect(shouldAdjustScrollOnSizeChange({ start: 100 }, 50, instance)).toBe(
       true,
@@ -48,9 +52,9 @@ describe("shouldAdjustScrollOnSizeChange", () => {
   });
 
   it("adjusts when a row below the viewport grows while the reader is pinned to the bottom", () => {
-    // Viewport bottom (900) sits at the content bottom (1000) before the row
-    // grows by 200; without an adjustment the list would end 200px short.
-    const instance = makeInstance(600, 400);
+    // The viewport bottom (1000) is already at the pre-change content bottom, so
+    // the reader is pinned and the row's growth must be followed.
+    const instance = makeInstance(600, 400, 1000);
 
     expect(shouldAdjustScrollOnSizeChange({ start: 800 }, 200, instance)).toBe(
       true,
@@ -58,9 +62,22 @@ describe("shouldAdjustScrollOnSizeChange", () => {
   });
 
   it("leaves the offset alone when the reader is not near the bottom", () => {
-    const instance = makeInstance(0, 400);
+    const instance = makeInstance(0, 400, 1000);
 
     expect(shouldAdjustScrollOnSizeChange({ start: 800 }, 200, instance)).toBe(
+      false,
+    );
+  });
+
+  it("does not treat growth below the viewport top as pinned when the reader is away from the bottom", () => {
+    // scrollTop=500, clientHeight=400, scrollHeight=1000 (before the change):
+    // the viewport bottom (900) is 100px short of the content bottom, so the
+    // reader is scrolling history. A visible row at 600 growing by 200 must not
+    // be read as pinned — comparing against a height that already includes the
+    // new 200px (`scrollHeight - delta` = 800) would wrongly return true.
+    const instance = makeInstance(500, 400, 1000);
+
+    expect(shouldAdjustScrollOnSizeChange({ start: 600 }, 200, instance)).toBe(
       false,
     );
   });
@@ -68,15 +85,7 @@ describe("shouldAdjustScrollOnSizeChange", () => {
   it("tolerates a change within the bottom threshold", () => {
     // Bottom is exactly BOTTOM_THRESHOLD_PX short of the pre-change content
     // bottom, which still counts as pinned.
-    const element = {
-      scrollTop: 600 - BOTTOM_THRESHOLD_PX,
-      clientHeight: 400,
-      scrollHeight: 1000,
-    } as unknown as HTMLElement;
-    const instance = {
-      scrollOffset: element.scrollTop,
-      scrollElement: element,
-    };
+    const instance = makeInstance(600 - BOTTOM_THRESHOLD_PX, 400, 1000);
 
     expect(shouldAdjustScrollOnSizeChange({ start: 800 }, 100, instance)).toBe(
       true,

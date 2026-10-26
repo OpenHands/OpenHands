@@ -169,6 +169,11 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     // for it and leave blank scroll space, so drop those rows on the
     // virtualized path only. The plain list keeps them, so the EventMessage
     // props (and therefore `showPlanPreview`) stay observable for every event.
+    //
+    // A row can also carry a /model entry, and `getLastRenderableEventId`
+    // anchors those to a planning observation. Dropping such a row would take
+    // the entry with it, so rows that anchor one are kept: their event content
+    // still renders null (exactly as in the plain list) while the entry shows.
     const renderedItems = React.useMemo(
       () =>
         shouldVirtualize
@@ -176,10 +181,11 @@ export const Messages: React.FC<MessagesProps> = React.memo(
               (item) =>
                 item.kind !== "single" ||
                 !isPlanningFileEditorObservationEvent(item.event) ||
-                (!!item.event.id && planPreviewEventIds.has(item.event.id)),
+                (!!item.event.id && planPreviewEventIds.has(item.event.id)) ||
+                (!!item.event.id && modelAnchorIds?.has(item.event.id)),
             )
           : plainItems,
-      [plainItems, shouldVirtualize, planPreviewEventIds],
+      [plainItems, shouldVirtualize, planPreviewEventIds, modelAnchorIds],
     );
 
     const renderEventMessage = (

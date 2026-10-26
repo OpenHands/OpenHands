@@ -61,8 +61,14 @@ interface SizeChangeInstance {
  * row above it is measured (`item.start < scrollOffset`). The case it misses is
  * a tall row at or below the viewport growing while the reader is pinned to the
  * bottom: nothing shifts the offset, so the list ends up short of the bottom
- * and "scroll to bottom" appears to have stopped early. Detecting that case
- * needs the height *before* the change, which is `scrollHeight - delta`.
+ * and "scroll to bottom" appears to have stopped early.
+ *
+ * Pinning has to be judged from the geometry *before* the change. TanStack
+ * calls this before it updates its size cache and before React re-renders the
+ * shell, so the element's `scrollHeight` is still the pre-change height and the
+ * new size is not in it yet — subtracting `delta` would compare against a
+ * height that was never laid out and misread a reader who is still far from the
+ * bottom as pinned.
  */
 export const shouldAdjustScrollOnSizeChange = (
   item: Pick<VirtualItem, "start">,
@@ -75,9 +81,8 @@ export const shouldAdjustScrollOnSizeChange = (
   const element = instance.scrollElement as HTMLElement | null;
   if (!element || delta === 0) return false;
 
-  const heightBefore = element.scrollHeight - delta;
   return (
     element.scrollTop + element.clientHeight >=
-    heightBefore - BOTTOM_THRESHOLD_PX
+    element.scrollHeight - BOTTOM_THRESHOLD_PX
   );
 };
