@@ -80,10 +80,6 @@ describe("useTerminal", () => {
     useCommandStore.setState({ commands: [] });
   });
 
-  it("should render", () => {
-    renderWithProviders(<TestTerminalComponent />);
-  });
-
   it("should render the commands in the terminal", () => {
     const commands: Command[] = [
       { content: "echo hello", type: "input" },
