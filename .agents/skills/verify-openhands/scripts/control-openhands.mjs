@@ -2096,7 +2096,7 @@ async function openWorkspace(run, name, { stay, mode } = {}) {
     selector: "testid=workspace-launch-button",
     timeout: 30_000,
   });
-  // The mode selector (Local / Worktree) sits in the preview bar
+  // The mode selector (Local Repo / New Worktree) sits in the preview bar
   // the launch click leaves behind.
   let preview;
   if (mode !== undefined) {
@@ -4906,7 +4906,7 @@ control-openhands conversation events ID [--last N] [--kinds MessageEvent,Action
 testid=submit-button and returns the new /conversations/<id>. --stay uses the
 current page's composer instead of navigating home first. --workspace PATH
 first picks that folder through Open Workspace (see 'workspace open'), so the
-conversation runs in it; --mode picks Local or Worktree there. 'wait' polls the
+conversation runs in it; --mode picks Local Repo or New Worktree there. 'wait' polls the
 conversation's execution_status until one of --until (default: any terminal).
 
 Examples:
@@ -4924,7 +4924,7 @@ control-openhands fixture file [--name qa-note.txt] [--content TEXT]
 control-openhands fixture tarball [--name qa-tarball]   # evidence/_fixtures/qa-tarball.tar.gz (main.py prints pong)
 control-openhands fixture skill [--name qa-hello] [--repo qa-repo] [--trigger qa-ping] [--body TEXT] [--commit]
         # SKILL.md in the run's private ~/.agents/skills, or in a fixture repo's .agents/skills;
-        # --commit records it in the repo (a Worktree conversation checks out commits only)
+        # --commit records it in the repo (a New Worktree conversation checks out commits only)
 `,
   workspace: `control-openhands workspace open PATH|NAME [--stay] [--mode local_repo|new_worktree]
 
@@ -4932,7 +4932,7 @@ NAME (no slash) resolves inside <run>/workspace, where 'fixture' creates repos.
 
 Drives Home > Open Workspace > workspace dropdown > + Add Workspace, walks the
 folder browser (folder-browser-up / folder-browser-entry-<name>) to PATH,
-clicks Use and Launch, then with --mode picks Local or Worktree in the
+clicks Use and Launch, then with --mode picks Local Repo or New Worktree in the
 preview bar's mode selector (printed back as mode and preview). The composer then
 carries the workspace chip; follow
 with 'conversation start --stay', or use 'conversation start --workspace PATH'.
