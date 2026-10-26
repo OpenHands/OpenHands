@@ -63,6 +63,7 @@ import { AutomationSetupPromptStack } from "#/components/features/automations/se
 import { ContextMenuListItem } from "#/components/features/context-menu/context-menu-list-item";
 import { formatTriggerSourceLabel } from "#/components/features/home/featured-automations/automation-run-health";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
+import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { useSettings } from "#/hooks/query/use-settings";
 import { usePromptTextareaResize } from "#/hooks/use-prompt-textarea-resize";
 import { useSendMessage } from "#/hooks/use-send-message";
@@ -3053,6 +3054,7 @@ function EventSourceControl({
     () => setIsMenuOpen(false),
     triggerRef,
   );
+  useCloseOnEscape(isMenuOpen, () => setIsMenuOpen(false), triggerRef);
 
   return (
     <div className="relative">
