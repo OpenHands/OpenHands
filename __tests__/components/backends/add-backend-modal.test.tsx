@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { compile } from "@tailwindcss/node";
+import { parse } from "postcss";
 import type { MarsSandboxSize } from "#/api/mars/mars-tunnel-backend";
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -259,6 +260,76 @@ describe("AddBackendModal – connection chooser", () => {
       style.remove();
       rectSpy.mockRestore();
       globalThis.ResizeObserver = originalObserver;
+    }
+  });
+
+  it("applies the compiled grid states to each mounted disclosure", async () => {
+    const compiler = await compile(
+      await readFile(resolve("src/tailwind.css"), "utf8"),
+      { base: resolve("src"), onDependency: () => {} },
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<AddBackendModal onClose={vi.fn()} />);
+    const style = document.createElement("style");
+    document.head.appendChild(style);
+    const candidates = new Set<string>();
+    const applyGridStyles = (grid: HTMLElement) => {
+      grid.classList.forEach((candidate) => candidates.add(candidate));
+      const stylesheet = parse(compiler.build([...candidates]));
+      const rules: string[] = [];
+      stylesheet.walkRules((rule) => {
+        // jsdom does not implement CSS layers or nested media. Install the
+        // compiler's base declarations; the library test covers their layers,
+        // scope and the reduced-motion override in the shipped stylesheet.
+        if (rule.parent?.type !== "atrule" || rule.parent.name !== "layer")
+          return;
+        const declarations = rule.nodes.filter((node) => node.type === "decl");
+        rules.push(`${rule.selector}{${declarations.join(";")}}`);
+      });
+      style.textContent = rules.join("\n");
+    };
+    const exerciseDisclosure = async (bodyId: string, toggleId: string) => {
+      const body = screen.getByTestId(bodyId);
+      const grid = body.parentElement!.parentElement!;
+      applyGridStyles(grid);
+      expect(getComputedStyle(grid).gridTemplateRows).toBe("0fr");
+      expect(getComputedStyle(grid).transitionProperty).toBe(
+        "grid-template-rows",
+      );
+      expect(getComputedStyle(grid).transitionDuration).toBe("200ms");
+      expect(body).toHaveAttribute("inert");
+
+      await user.click(screen.getByTestId(toggleId));
+      applyGridStyles(grid);
+      expect(screen.getByTestId(bodyId)).toBe(body);
+      expect(getComputedStyle(grid).gridTemplateRows).toBe("1fr");
+      expect(body).not.toHaveAttribute("inert");
+
+      await user.click(screen.getByTestId(toggleId));
+      expect(screen.getByTestId(bodyId)).toBe(body);
+      expect(getComputedStyle(grid).gridTemplateRows).toBe("0fr");
+      expect(body).toHaveAttribute("inert");
+    };
+
+    try {
+      await exerciseDisclosure(
+        "add-backend-advanced-panel",
+        "add-backend-advanced-toggle",
+      );
+      await selectAgentServer(user);
+      await exerciseDisclosure(
+        "add-backend-local-guidance-body",
+        "add-backend-local-guidance-toggle",
+      );
+      await user.click(
+        screen.getByTestId("add-backend-location-option-remote"),
+      );
+      await exerciseDisclosure(
+        "add-backend-remote-guidance-body",
+        "add-backend-remote-guidance-toggle",
+      );
+    } finally {
+      style.remove();
     }
   });
 
