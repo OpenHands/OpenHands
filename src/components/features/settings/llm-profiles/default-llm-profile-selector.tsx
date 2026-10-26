@@ -1,5 +1,7 @@
 import { useMemo } from "react";
+import { Info } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
 import { WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME } from "#/api/agent-profiles-service/agent-profiles-service.api";
 import type { ProfileInfo } from "#/api/profiles-service/profiles-service.api";
@@ -106,12 +108,28 @@ export function DefaultLlmProfileSelector({
       className={cn(settingsListContainerClassName, "flex flex-col gap-3 p-4")}
     >
       <div className="flex flex-col gap-1">
-        <h2
-          id="default-llm-profile-title"
-          className="text-base font-medium text-contrast"
-        >
-          {t(I18nKey.SETTINGS$DEFAULT_LLM_PROFILE_TITLE)}
-        </h2>
+        <div className="flex items-center gap-1.5">
+          <h2
+            id="default-llm-profile-title"
+            className="text-base font-medium text-contrast"
+          >
+            {t(I18nKey.SETTINGS$DEFAULT_LLM_PROFILE_TITLE)}
+          </h2>
+          <StyledTooltip
+            content={t(I18nKey.SETTINGS$DEFAULT_LLM_PROFILE_INFO)}
+            placement="right"
+            tooltipClassName="max-w-xs whitespace-pre-line text-left"
+          >
+            <button
+              type="button"
+              data-testid="default-llm-profile-info"
+              aria-label={t(I18nKey.SETTINGS$DEFAULT_LLM_PROFILE_INFO_LABEL)}
+              className="inline-flex cursor-help rounded-sm text-muted hover:text-contrast"
+            >
+              <Info aria-hidden className="h-4 w-4" />
+            </button>
+          </StyledTooltip>
+        </div>
         <p className="text-sm text-muted">
           {t(I18nKey.SETTINGS$DEFAULT_LLM_PROFILE_DESCRIPTION)}
         </p>

@@ -116,6 +116,22 @@ describe("DefaultLlmProfileSelector", () => {
     expect(onSelect).toHaveBeenCalledWith("terra");
   });
 
+  it("explains where the default profile is used from its info icon", async () => {
+    const user = userEvent.setup();
+    renderSelector();
+
+    // The test i18n returns keys, so the label and tooltip read as their keys.
+    await user.hover(
+      screen.getByRole("button", {
+        name: I18nKey.SETTINGS$DEFAULT_LLM_PROFILE_INFO_LABEL,
+      }),
+    );
+
+    expect(
+      await screen.findByText(I18nKey.SETTINGS$DEFAULT_LLM_PROFILE_INFO),
+    ).toBeInTheDocument();
+  });
+
   it("is read-only for view-only members", () => {
     renderSelector({ canManage: false });
 
