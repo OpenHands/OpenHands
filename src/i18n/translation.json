@@ -10205,6 +10205,24 @@
     "ca": "Cancel·la",
     "id": "Batal"
   },
+  "AUTOMATIONS$SAVE": {
+    "en": "Save",
+    "ja": "保存",
+    "zh-CN": "保存",
+    "zh-TW": "儲存",
+    "ko-KR": "저장",
+    "no": "Lagre",
+    "ar": "حفظ",
+    "de": "Speichern",
+    "fr": "Enregistrer",
+    "it": "Salva",
+    "pt": "Salvar",
+    "es": "Guardar",
+    "ca": "Desa",
+    "tr": "Kaydet",
+    "uk": "Зберегти",
+    "id": "Simpan"
+  },
   "AUTOMATIONS$EDIT": {
     "en": "Edit",
     "ja": "編集",
