@@ -56,9 +56,9 @@ export function ChatInputLlmProfileMenuContent({
     canSwitchProfile,
     selectProfile,
   } = useChatInputLlmProfileState();
-  // Read-only surfaces (a cloud member on the home page, or a start-task route)
-  // still name the active profile — the same shape ChatInputModelMenuContent
-  // uses when the ACP picker is gated off.
+  // A read-only surface (a cloud start-task route) still names the active
+  // profile — the same shape ChatInputModelMenuContent uses when the ACP
+  // picker is gated off.
   const showProfileList = canSwitchProfile && profiles.length > 0;
   const readOnlyProfileName = canSwitchProfile ? null : currentProfileName;
   // Locked-to-Cloud blocks the Canvas LLM page this links to (OHE-3457).

@@ -120,8 +120,9 @@ export const getFileExtension = (fileName: string): string => {
  *
  * Mirrors OpenHands' cloud frontend (parameterized by `app_mode`):
  *   - bitbucket / bitbucket_data_center → always installation-based
- *   - github → installation-based ONLY when the active backend is cloud
- *   - gitlab / azure_devops / forgejo → direct (search) flow
+ *   - github / azure_devops → installation-based ONLY when the active backend
+ *     is cloud (Azure DevOps organizations are its installations)
+ *   - gitlab / forgejo → direct (search) flow
  *
  * `appMode` accepts the active backend `kind` ("local" | "cloud") so call
  * sites can hand it through directly.
@@ -137,6 +138,7 @@ export const shouldUseInstallationRepos = (
     case "bitbucket_data_center":
       return true;
     case "github":
+    case "azure_devops":
       return appMode === "cloud";
     default:
       return false;
@@ -249,6 +251,19 @@ export const constructPullRequestUrl = (
 };
 
 /**
+ * Percent-encode one URL path segment. Names parsed from a remote URL arrive
+ * encoded (`Web%20Apps`) while provider APIs return them raw (`Web Apps`), so
+ * decode first to avoid encoding twice.
+ */
+const encodePathSegment = (segment: string): string => {
+  try {
+    return encodeURIComponent(decodeURIComponent(segment));
+  } catch {
+    return encodeURIComponent(segment);
+  }
+};
+
+/**
  * Construct the repository URL for different providers
  * @param provider The git provider
  * @param repositoryName The repository name in format "owner/repo"
@@ -258,6 +273,7 @@ export const constructPullRequestUrl = (
  * constructRepositoryUrl("github", "owner/repo") // "https://github.com/owner/repo"
  * constructRepositoryUrl("gitlab", "owner/repo") // "https://gitlab.com/owner/repo"
  * constructRepositoryUrl("bitbucket", "owner/repo") // "https://bitbucket.org/owner/repo"
+ * constructRepositoryUrl("azure_devops", "org/Web Apps/repo") // "https://dev.azure.com/org/Web%20Apps/_git/repo"
  */
 export const constructRepositoryUrl = (
   provider: Provider,
@@ -268,6 +284,14 @@ export const constructRepositoryUrl = (
   if (provider === "bitbucket_data_center") {
     const [project, repo] = repositoryName.split("/");
     return `${baseUrl}/projects/${project}/repos/${repo}`;
+  }
+  if (provider === "azure_devops") {
+    // Azure DevOps format: org/project/repo
+    const parts = repositoryName.split("/");
+    if (parts.length === 3) {
+      const [org, project, repo] = parts.map(encodePathSegment);
+      return `${baseUrl}/${org}/${project}/_git/${repo}`;
+    }
   }
   return `${baseUrl}/${repositoryName}`;
 };

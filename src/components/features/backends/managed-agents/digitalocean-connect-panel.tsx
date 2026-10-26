@@ -23,11 +23,13 @@ import { cn } from "#/utils/utils";
 import { DigitalOceanNewAgentForm } from "./digitalocean-new-agent-form";
 import {
   agentLabel,
+  connectionLabel,
   SESSION_COUNT_I18N_KEY,
   STAGE_LABEL_KEY,
 } from "./managed-agents-labels";
 import { ManagedAgentsSignIn } from "./managed-agents-sign-in";
 import { SessionStatusDot } from "./session-status-dot";
+import { SignInStorageNote } from "./sign-in-storage-note";
 import {
   getConnectStage,
   useSessionActivityLabel,
@@ -410,7 +412,7 @@ export function DigitalOceanConnectPanel({
         ) : null}
       </div>
 
-      <div className="mt-2 flex items-center gap-3 border-t border-border px-4 py-2.5 text-xs">
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-0.5 border-t border-border px-4 py-2.5 text-xs">
         <span
           aria-hidden
           className="size-1.5 shrink-0 rounded-full bg-status-success"
@@ -419,7 +421,7 @@ export function DigitalOceanConnectPanel({
           data-testid="digitalocean-account"
           className="min-w-0 flex-1 truncate text-muted"
         >
-          {active?.teamName ?? active?.label}
+          {active ? connectionLabel(active) : null}
         </span>
         <button
           type="button"
@@ -430,6 +432,7 @@ export function DigitalOceanConnectPanel({
         >
           {t(I18nKey.BACKEND$DIGITALOCEAN_SIGN_OUT)}
         </button>
+        <SignInStorageNote authState={authState} className="w-full pl-4.5" />
       </div>
     </div>
   );

@@ -94,6 +94,7 @@ ENVIRONMENT VARIABLES:
   OH_AGENT_SERVER_GIT_REF      Git ref for agent-server
   OH_AGENT_SERVER_LOCAL_PATH   Path to local SDK checkout (for development)
   OH_AGENT_SERVER_VERSION      Specific PyPI version for agent-server
+  UV_PYTHON                    Python version/range for uvx-run services
 
 Note: LLM settings are configured through the web UI settings page,
 not environment variables.

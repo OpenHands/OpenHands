@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, type CSSProperties } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ChatInterface } from "../../chat/chat-interface";
 import { ConversationOverviewPanel } from "../conversation-overview-panel";
@@ -80,8 +80,12 @@ export function ChatInterfaceWrapper({
             className="flex shrink-0 flex-col items-start overflow-hidden pt-4 pl-3 pr-4"
           >
             <div
-              className="w-full shrink-0"
-              style={{ width: CONVERSATION_OVERVIEW_COLUMN_WIDTH_PX }}
+              className="w-(--conversation-overview-column-width) shrink-0"
+              style={
+                {
+                  "--conversation-overview-column-width": `${CONVERSATION_OVERVIEW_COLUMN_WIDTH_PX}px`,
+                } as CSSProperties
+              }
             >
               <ConversationOverviewPanel />
             </div>

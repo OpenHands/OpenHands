@@ -36,7 +36,7 @@ const deviceFlowMocks = vi.hoisted(() => ({
   pollForToken: vi.fn(),
 }));
 
-const getServerInfoMock = vi.fn().mockResolvedValue({ version: "1.52.0" });
+const getServerInfoMock = vi.fn().mockResolvedValue({ version: "1.58.0" });
 const getSettingsMock = vi.fn().mockResolvedValue({});
 
 vi.mock("@openhands/typescript-client/clients", () => ({
@@ -164,7 +164,7 @@ beforeEach(() => {
   vi.spyOn(telemetry, "isTelemetryEnabled").mockReturnValue(true);
   window.localStorage.clear();
   getServerInfoMock.mockReset();
-  getServerInfoMock.mockResolvedValue({ version: "1.52.0" });
+  getServerInfoMock.mockResolvedValue({ version: "1.58.0" });
   getSettingsMock.mockReset();
   getSettingsMock.mockResolvedValue({});
   vi.mocked(getCloudOrganizations).mockReset();
@@ -260,7 +260,7 @@ describe("ManageBackendsModal", () => {
     );
     expect(
       screen.getByTestId("manage-backends-status-detail-Local"),
-    ).toHaveTextContent("Agent Canvas requires agent-server 1.51.0 or newer");
+    ).toHaveTextContent("Agent Canvas requires agent-server 1.57.0 or newer");
   });
 
   // @spec BM-002 — Switching backends from Manage backends redirects a
@@ -496,6 +496,55 @@ describe("ManageBackendsModal", () => {
       ).not.toBeInTheDocument();
     });
     expect(screen.getByTestId("manage-backends-modal")).toBeInTheDocument();
+  });
+
+  it("keeps the edit form and its draft open on Escape", async () => {
+    vi.stubEnv("VITE_LOCK_TO_CLOUD", "");
+    delete (window as unknown as Record<string, unknown>)
+      .__AGENT_CANVAS_LOCK_TO_CLOUD__;
+
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+
+    renderWithProviders(
+      <TestSeed
+        onMount={(ctx) => {
+          ctx.addBackend({
+            name: "Acme Local",
+            host: "http://localhost:9000",
+            apiKey: "old-key",
+            kind: "local",
+          });
+        }}
+      >
+        <ManageBackendsModal onClose={onClose} />
+      </TestSeed>,
+    );
+
+    await user.click(
+      await screen.findByTestId("manage-backends-edit-Acme Local"),
+    );
+    const nameInput = await screen.findByTestId("edit-backend-name");
+    await user.clear(nameInput);
+    await user.type(nameInput, "Draft name");
+    await user.keyboard("{Escape}");
+
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByTestId("manage-backends-modal")).toBeInTheDocument();
+    expect(screen.getByTestId("edit-backend-name")).toHaveValue("Draft name");
+  });
+
+  it("keeps the add form open on Escape", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    renderWithProviders(<ManageBackendsModal onClose={onClose} />);
+
+    await user.click(screen.getByTestId("manage-backends-add"));
+    await screen.findByTestId("add-backend-modal");
+    await user.keyboard("{Escape}");
+
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByTestId("add-backend-modal")).toBeInTheDocument();
   });
 
   it("shows each cloud backend's connected organization so same-named backends are distinguishable", async () => {

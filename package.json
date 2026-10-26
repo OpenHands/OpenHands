@@ -1,6 +1,6 @@
 {
   "name": "@openhands/agent-canvas",
-  "version": "1.27.1",
+  "version": "1.33.0",
   "description": "Agent Canvas UI for OpenHands - run AI coding agents with a visual interface",
   "license": "MIT",
   "private": false,
@@ -23,10 +23,9 @@
     "@heroui/react": "2.8.10",
     "@microlink/react-json-view": "1.31.25",
     "@monaco-editor/react": "4.7.0",
-    "@openhands/extensions": "0.30.0",
-    "@openhands/typescript-client": "1.54.0",
+    "@openhands/extensions": "0.35.0",
+    "@openhands/typescript-client": "1.58.1",
     "@react-router/node": "7.18.2",
-    "@react-router/serve": "7.18.2",
     "@tailwindcss/vite": "4.3.3",
     "@tanstack/react-query": "5.103.1",
     "@tanstack/react-virtual": "3.11.3",
@@ -46,6 +45,7 @@
     "i18next-http-backend": "4.0.2",
     "isbot": "5.2.1",
     "lucide-react": "1.25.0",
+    "mdast-util-from-markdown": "2.0.3",
     "monaco-editor": "0.56.0",
     "posthog-js": "1.415.0",
     "react": "19.3.0",
@@ -179,9 +179,10 @@
     "vite-plugin-svgr": "5.2.0",
     "vitest": "5.0.0"
   },
-  "packageManager": "npm@10.5.0",
+  "packageManager": "npm@11.12.1",
   "volta": {
-    "node": "24.21.0"
+    "node": "24.21.0",
+    "npm": "11.12.1"
   },
   "msw": {
     "workerDirectory": [
@@ -249,6 +250,7 @@
       "import": "./dist/i18n/index.js",
       "require": "./dist/i18n/index.cjs"
     },
+    "./styles.css": "./dist/styles.css",
     "./package.json": "./package.json"
   },
   "peerDependencies": {

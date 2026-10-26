@@ -25,7 +25,6 @@ import { useTaskPollingController } from "#/hooks/query/use-task-polling";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { useIsAuthed } from "#/hooks/query/use-is-authed";
 import { ConversationMain } from "#/components/features/conversation/conversation-main/conversation-main";
-import { SecretRequestModal } from "#/components/features/conversation/secret-request-modal";
 import { ConversationMobilePanelPage } from "#/components/features/conversation/conversation-main/conversation-mobile-panel-page";
 import { ConversationOverviewDrawerProvider } from "#/components/features/conversation/conversation-overview-drawer-context";
 
@@ -218,7 +217,6 @@ function AppContent() {
             <ConversationMain />
           )}
         </div>
-        <SecretRequestModal />
       </ConversationOverviewDrawerProvider>
     </EventHandler>
   );

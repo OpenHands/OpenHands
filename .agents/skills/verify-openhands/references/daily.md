@@ -1,7 +1,7 @@
 # The daily pass
 
 The weekly pass in [maintenance.md](maintenance.md) proves every feature live.
-A daily pass cannot: 27 families and 700-odd sub-features take longer than one
+A daily pass cannot: 28 families and 700-odd sub-features take longer than one
 agent's day, and most of the map did not change since yesterday. The daily
 pass answers a narrower question with the same rigor: **did anything that
 merged since the last pass change what a user sees, and does the rest still
@@ -72,12 +72,16 @@ cheaper than the next and catches a different kind of rot.
    results, as [maintenance.md](maintenance.md) step 2 describes. The delta
    pass has a second half: every bullet whose Gotchas or Known failure note
    links an issue that closed since `BASE` (check each linked issue's state)
-   is re-driven too, its row recorded and its note updated (a note with a
-   `known-bug` block is re-driven with `control-openhands bug run <ID>`; an
-   `xpass` goes to map review per [maintenance.md](maintenance.md) step 5). A fix that landed
-   in the Agent Server or the automation service shows up only this way. So is
-   every open `bug` issue opened since `BASE` that names a mapped feature: it
-   is reproduced and gets its note, so bugs filed outside a pass reach the map.
+   is re-driven too, its row recorded and its note updated. Re-drive a
+   `known-bug` block with `control-openhands bug run <ID>`; an `xpass` goes to
+   map review per [maintenance.md](maintenance.md) step 5. A fix in the Agent
+   Server or automation service shows up only this way. Query open `bug`
+   issues without a supported map or pass-ledger outcome, regardless of creation
+   date, and re-triage reopened or newly bug-labeled reports. Drive actionable
+   reports and add their note or recorded not-reproduced result. Include older
+   actionable reports: `ready-for-dev` sets priority, not inventory membership.
+   Reconcile outcome labels against their note or recorded run per
+   [bug-backfill.md](bug-backfill.md); labels alone are not reproduction evidence.
 3. **Smoke (every family, cheaply).** For each family not already driven in
    tier 2: open its first entry point, run the family's `errors --app-only`
    sweep, and drive the one bullet that proves the page's main state (a list
@@ -90,7 +94,7 @@ cheaper than the next and catches a different kind of rot.
    the date, not from yesterday's notes: with `d` the UTC day of the year,
    today's families are the ones at positions `(d mod 7) * 4` to
    `(d mod 7) * 4 + 3` of the index table, in ID order (position 24 onwards
-   holds F25 to F27). Model-backed bullets run only inside the LLM budget;
+   holds F25 to F28). Model-backed bullets run only inside the LLM budget;
    without a key they are `blocked` with the missing prerequisite.
 
 ## Reading the result

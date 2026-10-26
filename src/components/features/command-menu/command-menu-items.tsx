@@ -22,6 +22,7 @@ import {
   hasAutomationInterface,
 } from "#/manifests/automation-interface";
 import { getLockedCloudHost } from "#/api/agent-server-config";
+import { getActiveBackend } from "#/api/backend-registry/active-store";
 import { LOCKED_CLOUD_SETTINGS_NAV_PATH } from "#/constants/settings-nav";
 import { isApplePlatform } from "#/utils/utils";
 
@@ -254,12 +255,15 @@ export const createCommandMenuItems = ({
   // Locked-to-Cloud (SaaS / self-hosted OHE) lists only the Application page;
   // the OHE settings shell owns the rest (OHE-3168).
   const isLockedToCloud = getLockedCloudHost() !== null;
+  // Locally each agent profile has its own condenser.
+  const isCloud = getActiveBackend().backend.kind === "cloud";
 
   return items.filter(
     (item) =>
-      !isLockedToCloud ||
-      item.group !== "settings" ||
-      item.to === COMMAND_MENU_ROUTE.settings ||
-      item.to === LOCKED_CLOUD_SETTINGS_NAV_PATH,
+      (isCloud || item.to !== COMMAND_MENU_ROUTE.condenserSettings) &&
+      (!isLockedToCloud ||
+        item.group !== "settings" ||
+        item.to === COMMAND_MENU_ROUTE.settings ||
+        item.to === LOCKED_CLOUD_SETTINGS_NAV_PATH),
   );
 };

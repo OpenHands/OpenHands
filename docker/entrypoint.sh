@@ -32,6 +32,13 @@
 #                          the proxy route.
 #   PUBLIC_MODE_PORT     – If set, starts a second static server on this port
 #                          with --auth-required (no session key injected)
+#   MARS_WEB             – Set to exactly 1 to opt in to the experimental
+#                          DigitalOcean web bridge on $PORT (off by default).
+#                          The public-mode server never hosts it.
+#   MARS_WEB_KEY         – Key the bridge's /mars/* routes require (defaults to
+#                          the session API key)
+#   MARS_TOKEN           – DigitalOcean personal access token to sign the bridge
+#                          in with at start (needs MARS_WEB=1)
 #   AGENT_CANVAS_ALLOW_LAN_SESSION_KEY – Set to true only when the published
 #                          host port is restricted to loopback and you accept
 #                          embedding the session key in the served HTML
@@ -45,8 +52,11 @@
 #                          Setting this enables local-mode auth so the session
 #                          API key is validated internally instead of against the
 #                          OpenHands cloud API.
-#   AUTOMATION_KV_SECRET  – Signing key for scoped automation KV tokens
-#                          (defaults to the shared session API key).
+#   AUTOMATION_KV_SECRET  – Encrypts automation KV state and signs scoped KV
+#                          tokens. Unless set, it is pinned in
+#                          automation-kv-secret.txt on first start (seeded with
+#                          the session API key) and kept from then on, so
+#                          rotating the session key does not change it.
 #   FILE_STORE             – Storage backend for automation tarballs (default: local).
 #                          Without this the automation backend may fall back to
 #                          S3/GCS which fails without cloud credentials.
@@ -229,7 +239,110 @@ fi
 export OPENHANDS_AUTOMATION_API_KEY="${OPENHANDS_AUTOMATION_API_KEY:-${EFFECTIVE_SESSION_KEY}}"
 export AUTOMATION_LOCAL_API_KEY="${AUTOMATION_LOCAL_API_KEY:-${EFFECTIVE_SESSION_KEY}}"
 export AUTOMATION_AGENT_SERVER_API_KEY="${AUTOMATION_AGENT_SERVER_API_KEY:-${EFFECTIVE_SESSION_KEY}}"
-export AUTOMATION_KV_SECRET="${AUTOMATION_KV_SECRET:-${EFFECTIVE_SESSION_KEY}}"
+# >>> automation-kv-secret
+# AUTOMATION_KV_SECRET encrypts automation KV state, so it must not change
+# under existing data. Earlier versions passed the session key on every start,
+# so rotating that key silently changed the encryption key too (#18299). Pin
+# the session key in effect the first time -- the value those versions used --
+# and keep it. scripts/dev-with-automation.mjs pins to the same file and reads
+# it the same way: trailing line breaks are not part of the key, and a blank
+# file counts as not pinned yet.
+# The pin follows the same contract as the npm launcher: a regular file, not
+# a symbolic link; an existing pin is made private (0600) before it is used;
+# it is created without replacing anything (a fully written temporary file is
+# hard-linked into place), so concurrent first starts all end up with the one
+# value that won; a blank pin is replaced by one start holding
+# automation-kv-secret.txt.lock, while the others wait for its value; and
+# every failure stops the start.
+# Deleting the file does not rotate the KV key; it strands existing KV state.
+AUTOMATION_KV_SECRET_FILE="${STATE_DIR}/automation-kv-secret.txt"
+AUTOMATION_KV_SECRET_LOCK="${AUTOMATION_KV_SECRET_FILE}.lock"
+_kv_locked=""
+kv_secret_fail() {
+  [ -z "$_kv_locked" ] || rmdir "$AUTOMATION_KV_SECRET_LOCK" 2>/dev/null
+  log_error "$1"
+  exit 1
+}
+if [ -z "${AUTOMATION_KV_SECRET:-}" ]; then
+  mkdir -p "$STATE_DIR" ||
+    kv_secret_fail "Cannot create $STATE_DIR for automation-kv-secret.txt"
+  # Up to about 5 seconds of waiting on another start that replaces a blank pin.
+  for ((_kv_attempt = 0; _kv_attempt < 50; _kv_attempt++)); do
+    if [ -L "$AUTOMATION_KV_SECRET_FILE" ]; then
+      kv_secret_fail "$AUTOMATION_KV_SECRET_FILE is a symbolic link; refusing to use it"
+    fi
+    if [ -e "$AUTOMATION_KV_SECRET_FILE" ]; then
+      [ -f "$AUTOMATION_KV_SECRET_FILE" ] ||
+        kv_secret_fail "$AUTOMATION_KV_SECRET_FILE is not a regular file"
+      _kv_mode="$(stat -c '%a' "$AUTOMATION_KV_SECRET_FILE" 2>/dev/null ||
+        stat -f '%Lp' "$AUTOMATION_KV_SECRET_FILE")" ||
+        kv_secret_fail "Cannot read the permissions of $AUTOMATION_KV_SECRET_FILE"
+      [[ "$_kv_mode" =~ ^[0-7]+$ ]] ||
+        kv_secret_fail "Cannot read the permissions of $AUTOMATION_KV_SECRET_FILE"
+      if (( 8#$_kv_mode & 8#077 )); then
+        chmod 600 "$AUTOMATION_KV_SECRET_FILE" ||
+          kv_secret_fail "Cannot make $AUTOMATION_KV_SECRET_FILE private (chmod 600)"
+      fi
+      PINNED_KV_SECRET="$(cat "$AUTOMATION_KV_SECRET_FILE")" ||
+        kv_secret_fail "Cannot read $AUTOMATION_KV_SECRET_FILE"
+      while [[ "$PINNED_KV_SECRET" == *[$'\r\n'] ]]; do
+        PINNED_KV_SECRET="${PINNED_KV_SECRET%?}"
+      done
+      if [[ "$PINNED_KV_SECRET" == *[![:space:]]* ]]; then
+        AUTOMATION_KV_SECRET="$PINNED_KV_SECRET"
+        break
+      fi
+      # A blank pin counts as not pinned yet. One start takes the lock and
+      # reads the pin again under it; the others wait for the new value.
+      if [ -z "$_kv_locked" ]; then
+        if mkdir "$AUTOMATION_KV_SECRET_LOCK" 2>/dev/null; then
+          _kv_locked=1
+        else
+          sleep 0.1
+        fi
+        continue
+      fi
+      # Still blank under the lock: rename a fully written file over it, so
+      # the pin never goes missing for the starts that are waiting.
+      _kv_tmp="$(mktemp "${AUTOMATION_KV_SECRET_FILE}.XXXXXX")" ||
+        kv_secret_fail "Cannot write to $STATE_DIR"
+      if ! printf '%s' "$EFFECTIVE_SESSION_KEY" > "$_kv_tmp" ||
+        ! mv -f "$_kv_tmp" "$AUTOMATION_KV_SECRET_FILE"; then
+        rm -f "$_kv_tmp"
+        kv_secret_fail "Cannot replace the blank $AUTOMATION_KV_SECRET_FILE"
+      fi
+      AUTOMATION_KV_SECRET="$EFFECTIVE_SESSION_KEY"
+      log "Pinned AUTOMATION_KV_SECRET (persisted to $AUTOMATION_KV_SECRET_FILE)"
+      break
+    fi
+    # mktemp creates the file with mode 0600.
+    _kv_tmp="$(mktemp "${AUTOMATION_KV_SECRET_FILE}.XXXXXX")" ||
+      kv_secret_fail "Cannot write to $STATE_DIR"
+    if ! printf '%s' "$EFFECTIVE_SESSION_KEY" > "$_kv_tmp"; then
+      rm -f "$_kv_tmp"
+      kv_secret_fail "Cannot write $_kv_tmp"
+    fi
+    if ln "$_kv_tmp" "$AUTOMATION_KV_SECRET_FILE" 2>/dev/null; then
+      rm -f "$_kv_tmp"
+      AUTOMATION_KV_SECRET="$EFFECTIVE_SESSION_KEY"
+      log "Pinned AUTOMATION_KV_SECRET (persisted to $AUTOMATION_KV_SECRET_FILE)"
+      break
+    fi
+    rm -f "$_kv_tmp"
+    # Another start pinned first: read its value on the next pass. Anything
+    # else is a failure to persist.
+    [ -e "$AUTOMATION_KV_SECRET_FILE" ] || [ -L "$AUTOMATION_KV_SECRET_FILE" ] ||
+      kv_secret_fail "Cannot create $AUTOMATION_KV_SECRET_FILE"
+  done
+  [ -n "${AUTOMATION_KV_SECRET:-}" ] ||
+    kv_secret_fail "Could not pin AUTOMATION_KV_SECRET in $AUTOMATION_KV_SECRET_FILE (if no other start is running, remove $AUTOMATION_KV_SECRET_LOCK)"
+  if [ -n "$_kv_locked" ]; then
+    rmdir "$AUTOMATION_KV_SECRET_LOCK"
+    _kv_locked=""
+  fi
+fi
+export AUTOMATION_KV_SECRET
+# <<< automation-kv-secret
 export OPENHANDS_REMOTE_WS_READY_REQUIRED="${OPENHANDS_REMOTE_WS_READY_REQUIRED:-false}"
 if [ -z "${AUTOMATION_POSTHOG_API_KEY:-}" ]; then
   if [ -n "${VITE_POSTHOG_API_KEY:-}" ]; then
@@ -283,7 +396,60 @@ export AUTOMATION_AGENT_SERVER_URL="${AUTOMATION_AGENT_SERVER_URL:-http://127.0.
 # FinishTool registration lets automation runs resolve the tool on their
 # remote conversations (see the note at the bottom of tools/canvas_ui_tool.py).
 export OH_EXTRA_PYTHON_PATH="${OH_EXTRA_PYTHON_PATH:-/opt/agent-canvas/tools}"
+
+# Read public skills from the extensions package the frontend was built with,
+# so Canvas and the agent-server see the same catalog and nothing is cloned.
+export EXTENSIONS_PATH="${EXTENSIONS_PATH:-/opt/agent-canvas/node_modules/@openhands/extensions}"
 AGENT_SERVER_IMPORT_MODULES="canvas_ui_tool"
+
+# Both backends default LOG_LEVEL to INFO, at which level they emit
+# library-internal startup chatter — the automation service alone prints
+# several hundred lines of SQLAlchemy ORM model-mapping output — that buries
+# the service URLs and readiness lines a user actually needs. Default to
+# WARNING so a plain `docker run` is readable, while an explicit LOG_LEVEL
+# still raises verbosity for troubleshooting.
+#
+# >>> backend-log-level: extracted by __tests__/scripts/docker-log-level.test.ts
+# >>> — keep the markers.
+export LOG_LEVEL="${LOG_LEVEL:-WARNING}"
+export AUTOMATION_LOG_LEVEL="${AUTOMATION_LOG_LEVEL:-${LOG_LEVEL}}"
+
+# Narrow a logging level to something Uvicorn's `--log-level` accepts.
+#
+# The app reads LOG_LEVEL through Python's logging module, which also
+# understands the aliases WARN/FATAL/NOTSET and numeric levels; Uvicorn
+# validates the flag with a click.Choice over the names below and exits 2 on
+# anything else, which would take the automation service down. Unrepresentable
+# values fall back to `info`, Uvicorn's own default.
+uvicorn_log_level() {
+  local _uvicorn_level
+  _uvicorn_level="$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')"
+  case "${_uvicorn_level}" in
+    critical | error | warning | info | debug | trace) printf '%s' "${_uvicorn_level}" ;;
+    warn) printf 'warning' ;;
+    fatal) printf 'critical' ;;
+    '' | *[!0-9]*) printf 'info' ;;
+    *)
+      # Strip leading zeros so `030` reads as 30. Only two digits can fall
+      # below 50, so anything longer is clamped — `[` compares as a signed
+      # integer and errors out on a value it cannot hold.
+      while [ "${#_uvicorn_level}" -gt 1 ] && [ "${_uvicorn_level#0}" != "${_uvicorn_level}" ]; do
+        _uvicorn_level="${_uvicorn_level#0}"
+      done
+      # Python's NOTSET is 0 and means "inherit", not "most verbose".
+      if [ "${_uvicorn_level}" = "0" ]; then printf 'info'
+      elif [ "${#_uvicorn_level}" -gt 2 ]; then printf 'critical'
+      elif [ "${_uvicorn_level}" -ge 50 ]; then printf 'critical'
+      elif [ "${_uvicorn_level}" -ge 40 ]; then printf 'error'
+      elif [ "${_uvicorn_level}" -ge 30 ]; then printf 'warning'
+      elif [ "${_uvicorn_level}" -ge 20 ]; then printf 'info'
+      elif [ "${_uvicorn_level}" -ge 10 ]; then printf 'debug'
+      else printf 'trace'
+      fi
+      ;;
+  esac
+}
+# <<< backend-log-level
 
 # Track child PIDs so we can clean up on exit.
 PIDS=()
@@ -349,12 +515,14 @@ fi
 if command -v uvicorn >/dev/null 2>&1; then
   uvicorn openhands.automation.app:app \
     --host 0.0.0.0 \
-    --port "$AUTOMATION_PORT" &
+    --port "$AUTOMATION_PORT" \
+    --log-level "$(uvicorn_log_level "${LOG_LEVEL}")" &
   PIDS+=($!)
 elif python -c "import openhands.automation" 2>/dev/null; then
   python -m uvicorn openhands.automation.app:app \
     --host 0.0.0.0 \
-    --port "$AUTOMATION_PORT" &
+    --port "$AUTOMATION_PORT" \
+    --log-level "$(uvicorn_log_level "${LOG_LEVEL}")" &
   PIDS+=($!)
 else
   log "WARNING: Automation server not found, skipping."
@@ -415,13 +583,13 @@ if [ "${AGENT_CANVAS_ALLOW_LAN_SESSION_KEY:-false}" = "true" ]; then
   STATIC_SERVER_SESSION_KEY_ARGS+=(--allow-lan-session-key)
 fi
 # <<< docker-session-key-policy
-node /opt/agent-canvas/static-server.mjs \
+# Pass the key in the child environment, not its process arguments.
+SESSION_API_KEY="$EFFECTIVE_SESSION_KEY" node /opt/agent-canvas/static-server.mjs \
   --port "$PORT" \
   --host "$STATIC_SERVER_BIND_HOST" \
   "${STATIC_SERVER_SESSION_KEY_ARGS[@]}" \
   --dir /opt/agent-canvas/frontend \
   --base-path "$AGENT_CANVAS_BASE_PATH" \
-  --session-api-key "$EFFECTIVE_SESSION_KEY" \
   --runtime-services-info "$RUNTIME_SERVICES_INFO" \
   --route "/api/automation=http://127.0.0.1:${AUTOMATION_PORT}" \
   --route "/api=http://127.0.0.1:${AGENT_SERVER_PORT}" \
@@ -466,9 +634,14 @@ PIDS+=("$STATIC_PID")
 # The token's scope is upstream's to fix and is tracked in
 # OpenHands/software-agent-sdk#4317; if the editor gets a credential of its own,
 # this exclusion and the --no-referrer-prefix below can both be revisited.
+#
+# MARS_WEB=0 keeps the DigitalOcean bridge on the main instance only. This one
+# binds every interface with no key, so an opted-in container would otherwise
+# warn on every start, or, with MARS_WEB_KEY set, host a second bridge with its
+# own sign-in state.
 if [ -n "${PUBLIC_MODE_PORT:-}" ]; then
   log "Starting public-mode frontend on port $PUBLIC_MODE_PORT (--auth-required)..."
-  node /opt/agent-canvas/static-server.mjs \
+  MARS_WEB=0 node /opt/agent-canvas/static-server.mjs \
     --port "$PUBLIC_MODE_PORT" \
     --host "$STATIC_SERVER_BIND_HOST" \
     --dir /opt/agent-canvas/frontend \

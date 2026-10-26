@@ -2,7 +2,10 @@ import { QueryClient } from "@tanstack/react-query";
 import { ConversationClient } from "@openhands/typescript-client/clients";
 import type { StartGoalRequest } from "@openhands/typescript-client";
 import { getActiveBackend } from "#/api/backend-registry/active-store";
-import { pauseCloudSandbox } from "#/api/cloud/conversation-service.api";
+import {
+  pauseCloudSandbox,
+  resumeCloudSandbox,
+} from "#/api/cloud/conversation-service.api";
 import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
 import {
   buildCustomSecrets,
@@ -139,9 +142,27 @@ export const updateConversationSecrets = async (
   ).updateSecrets(conversationId, { secrets });
 };
 
+/**
+ * Resume a conversation.
+ * - Cloud mode with a paused/starting sandbox: the runtime has no URL until the
+ *   sandbox is RUNNING, so there is nothing to call; wake the sandbox instead
+ *   (mirrors `pauseConversation`). The status poll picks up the transition.
+ * - Otherwise: resume the agent through the conversation's runtime.
+ */
 export const resumeConversation = async (conversationId: string) => {
-  const { conversationUrl, sessionApiKey } =
+  const { conversationUrl, sessionApiKey, sandboxId } =
     await fetchConversationData(conversationId);
+
+  if (!conversationUrl && getActiveBackend().backend.kind === "cloud") {
+    if (!sandboxId) {
+      throw new Error(
+        `Cannot resume: cloud conversation ${conversationId} has no sandbox_id.`,
+      );
+    }
+    await resumeCloudSandbox(sandboxId);
+    return { success: true };
+  }
+
   return new ConversationClient(
     getAgentServerClientOptions({ conversationUrl, sessionApiKey }),
   ).runConversation(conversationId);

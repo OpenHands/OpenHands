@@ -83,8 +83,11 @@ describe("Secret form behavior", () => {
     );
     expect(screen.getByTestId("name-input")).toBeRequired();
     expect(screen.getByTestId("value-input")).toBeRequired();
+    expect(screen.getByTestId("value-input")).toHaveAttribute(
+      "type",
+      "password",
+    );
     expect(screen.getByTestId("value-input")).toHaveClass(
-      "resize-none",
       "placeholder:italic",
       "disabled:bg-surface-raised",
       "disabled:border-border-subtle",
@@ -121,6 +124,10 @@ describe("Secret form behavior", () => {
     // Edit mode now exposes an optional value field that starts blank; leaving
     // it blank keeps the existing secret value.
     expect(screen.getByTestId("value-input")).toHaveValue("");
+    expect(screen.getByTestId("value-input")).toHaveAttribute(
+      "type",
+      "password",
+    );
     expect(screen.getByTestId("description-input")).toHaveValue(
       "production credential",
     );
@@ -506,7 +513,7 @@ describe("Secret form behavior", () => {
     expect(submit).toBeDisabled();
   });
 
-  it("re-prefills the fields when the selected secret changes", () => {
+  it("re-prefills and masks the fields when the selected secret changes", async () => {
     mocks.secrets = [
       { name: "FIRST", description: "  one  " },
       { name: "SECOND", description: "two" },
@@ -514,6 +521,10 @@ describe("Secret form behavior", () => {
     const { rerender } = renderForm({ mode: "edit", selectedSecret: "FIRST" });
     expect(screen.getByTestId("name-input")).toHaveValue("FIRST");
     expect(screen.getByTestId("description-input")).toHaveValue("one");
+    await userEvent.click(
+      screen.getByRole("button", { name: I18nKey.SECRETS$SHOW_VALUE }),
+    );
+    expect(screen.getByTestId("value-input")).toHaveAttribute("type", "text");
 
     rerender(
       <QueryClientProvider client={new QueryClient()}>
@@ -522,5 +533,9 @@ describe("Secret form behavior", () => {
     );
     expect(screen.getByTestId("name-input")).toHaveValue("SECOND");
     expect(screen.getByTestId("description-input")).toHaveValue("two");
+    expect(screen.getByTestId("value-input")).toHaveAttribute(
+      "type",
+      "password",
+    );
   });
 });

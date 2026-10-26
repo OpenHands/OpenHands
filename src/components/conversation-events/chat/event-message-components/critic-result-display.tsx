@@ -35,18 +35,18 @@ function getStarRating(normalizedScore: number): {
  * Get the color class for the star rating based on score.
  */
 function getScoreColorClass(score: number): string {
-  if (score >= 0.6) return "text-green-400";
-  if (score >= 0.4) return "text-yellow-400";
-  return "text-red-400";
+  if (score >= 0.6) return "text-feedback-success";
+  if (score >= 0.4) return "text-feedback-warning";
+  return "text-feedback-error";
 }
 
 /**
  * Get the color class for an issue probability.
  */
 function getIssueColorClass(probability: number): string {
-  if (probability >= 0.7) return "text-red-400 font-semibold";
-  if (probability >= 0.5) return "text-yellow-400";
-  return "text-neutral-400";
+  if (probability >= 0.7) return "text-feedback-error font-semibold";
+  if (probability >= 0.5) return "text-feedback-warning";
+  return "text-text-tertiary";
 }
 
 function isSettingsRecord(value: unknown): value is Record<string, unknown> {
@@ -79,7 +79,7 @@ function FeatureItem({ feature }: { feature: CriticFeature }) {
 
   return (
     <span className="inline-flex items-center gap-1">
-      <span className="text-neutral-200">{feature.display_name}</span>
+      <span className="text-contrast">{feature.display_name}</span>
       <span className={colorClass}>({percentage}%)</span>
     </span>
   );
@@ -99,10 +99,10 @@ function FeatureCategory({
 
   return (
     <div className="flex flex-wrap items-center gap-x-1 text-xs">
-      <span className="font-semibold text-neutral-300">{label}</span>
+      <span className="font-semibold text-text-tertiary">{label}</span>
       {features.map((feature, i) => (
         <React.Fragment key={feature.name}>
-          {i > 0 && <span className="text-neutral-500">·</span>}
+          {i > 0 && <span className="text-text-tertiary">·</span>}
           <FeatureItem feature={feature} />
         </React.Fragment>
       ))}
@@ -202,9 +202,9 @@ export function CriticResultDisplay({
       (categorized.other ?? []).length > 0);
 
   return (
-    <div className="border-l-2 border-neutral-600 pl-2 my-2 py-1.5 text-sm">
+    <div className="border-l-2 border-border pl-2 my-2 py-1.5 text-sm">
       <div className="flex items-center gap-1">
-        <span className="font-semibold text-neutral-300 text-xs">
+        <span className="font-semibold text-text-tertiary text-xs">
           {t(I18nKey.CRITIC$SUCCESS_LIKELIHOOD_LABEL)}
         </span>
         <span
@@ -214,7 +214,7 @@ export function CriticResultDisplay({
           {"★".repeat(filled)}
           {"☆".repeat(empty)}
         </span>
-        <span className="text-neutral-500 text-xs">({percentage}%)</span>
+        <span className="text-text-tertiary text-xs">({percentage}%)</span>
 
         {hasDetails && (
           <button
@@ -228,9 +228,9 @@ export function CriticResultDisplay({
             }
           >
             {expanded ? (
-              <ArrowUp className="h-3 w-3 inline fill-neutral-400" />
+              <ArrowUp className="h-3 w-3 inline fill-text-tertiary" />
             ) : (
-              <ArrowDown className="h-3 w-3 inline fill-neutral-400" />
+              <ArrowDown className="h-3 w-3 inline fill-text-tertiary" />
             )}
           </button>
         )}
@@ -242,7 +242,7 @@ export function CriticResultDisplay({
 
       {showIterativeRefinementHint && (
         <p
-          className="mt-1.5 text-xs leading-5 text-neutral-500"
+          className="mt-1.5 text-xs leading-5 text-text-tertiary"
           data-testid="critic-iterative-refinement-hint"
         >
           {t(I18nKey.CRITIC$ITERATIVE_REFINEMENT_HINT)}

@@ -11,10 +11,12 @@ import { I18nKey } from "#/i18n/declaration";
 import { PluginSpec } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { Typography } from "#/ui/typography";
 import { cn } from "#/utils/utils";
+import { hasPluginParameters } from "#/utils/plugin-parameters";
 import { PluginLaunchPluginSection } from "./plugin-launch-plugin-section";
 
 interface PluginLaunchModalProps {
   plugins: PluginSpec[];
+  parametersSupported: boolean;
   message?: string;
   isLoading?: boolean;
   onStartConversation: (plugins: PluginSpec[], initialMessage?: string) => void;
@@ -27,6 +29,7 @@ interface ExpandedState {
 
 export function PluginLaunchModal({
   plugins,
+  parametersSupported,
   message,
   isLoading = false,
   onStartConversation,
@@ -117,7 +120,11 @@ export function PluginLaunchModal({
     return [...new Set(sources)];
   };
 
+  const unsupportedParameters =
+    !parametersSupported && hasPluginParameters(pluginConfigs);
+
   const handleStartConversation = () => {
+    if (unsupportedParameters) return;
     onStartConversation(pluginConfigs, message);
   };
 
@@ -192,6 +199,16 @@ export function PluginLaunchModal({
           )}
         </div>
 
+        {unsupportedParameters && (
+          <p
+            role="alert"
+            data-testid="plugin-parameters-unsupported"
+            className="text-sm text-feedback-error"
+          >
+            {t(I18nKey.LAUNCH$PARAMETERS_UNSUPPORTED_LOCAL)}
+          </p>
+        )}
+
         <div className="pt-4 border-t border-border-subtle">
           <div className="flex items-start gap-3 mb-4">
             <input
@@ -215,7 +232,7 @@ export function PluginLaunchModal({
               type="button"
               variant="primary"
               onClick={handleStartConversation}
-              isDisabled={isLoading || !trustConfirmed}
+              isDisabled={isLoading || !trustConfirmed || unsupportedParameters}
               className="px-4"
             >
               {isLoading

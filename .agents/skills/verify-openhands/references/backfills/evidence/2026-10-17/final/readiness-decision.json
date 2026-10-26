@@ -1,0 +1,9 @@
+{
+  "repo": "enyst/playground",
+  "issue": 128,
+  "label": "ready-for-dev",
+  "writer_capability_verified": true,
+  "policy": ".github/workflows/issue-readiness-check.yml explicitly permits repository writers",
+  "basis": "Dedicated verification maintenance tracker has concrete acceptance criteria; implementation accepted in original task and direct continuation; reviewed evidence ready. Deliberate PR readiness action, not product-issue map bookkeeping.",
+  "human_note": "No human testing text invented; upstream-only applicability clarified directly by Engel."
+}

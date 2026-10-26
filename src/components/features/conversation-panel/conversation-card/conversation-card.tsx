@@ -22,6 +22,7 @@ import { ConversationCardHeader } from "./conversation-card-header";
 import { ConversationCardActions } from "./conversation-card-actions";
 import { ConversationCardFooter } from "./conversation-card-footer";
 import { ConversationStatusBadges } from "./conversation-status-badges";
+import { isMissingSandboxStatus } from "#/utils/conversation-archive-status";
 import { useDownloadConversation } from "#/hooks/use-download-conversation";
 
 interface ConversationCardProps {
@@ -63,6 +64,12 @@ interface ConversationCardProps {
   tags?: Record<string, string> | null;
   /** Gates the tag-chip row; wired to the panel's "Tags" metadata toggle. */
   showTags?: boolean;
+  /**
+   * The row's effective archived state. Leave undefined to let the card infer
+   * it from `sandboxStatus` (a missing, non-resumable runtime); pass it
+   * explicitly when the panel also knows about an explicit archive so the
+   * chip, dot, and dimmed title stay in agreement.
+   */
   isArchived?: boolean;
   isPinned?: boolean;
   onTogglePin?: () => void;
@@ -98,7 +105,7 @@ export function ConversationCard({
   acpModels = null,
   tags = null,
   showTags = false,
-  isArchived = false,
+  isArchived,
   isPinned = false,
   onTogglePin,
   alwaysShowPinIcon = false,
@@ -111,6 +118,11 @@ export function ConversationCard({
   const displayTags = getDisplayConversationTags(tags);
   const hasDisplayTags = displayTags.length > 0;
   const showTagChipRow = showTags && hasDisplayTags;
+
+  // Effective archived state: an explicit prop (the panel passes the user's
+  // archive plus the missing-runtime inference), or the missing-runtime
+  // fallback for standalone callers that only pass `sandboxStatus`.
+  const effectiveArchived = isArchived ?? isMissingSandboxStatus(sandboxStatus);
 
   const onTitleSave = (newTitle: string) => {
     if (newTitle !== "" && newTitle !== title) {
@@ -249,7 +261,7 @@ export function ConversationCard({
   const showPersistentPinIcon = alwaysShowPinIcon && isPinned && !!onTogglePin;
   const shouldRenderFooter =
     showRepositoryMetadata ||
-    isArchived ||
+    effectiveArchived ||
     (showLlmProfiles && (agentKind === "acp" || !!llmModel)) ||
     (showTagChipRow && displayTags.length > 0);
 
@@ -273,8 +285,11 @@ export function ConversationCard({
             onTitleSave={onTitleSave}
             executionStatus={executionStatus}
             sandboxStatus={sandboxStatus}
+            isArchived={effectiveArchived}
           />
-          {sandboxStatus === "ERROR" && <ConversationStatusBadges />}
+          {sandboxStatus === "ERROR" && !effectiveArchived && (
+            <ConversationStatusBadges />
+          )}
         </div>
 
         <div
@@ -384,7 +399,7 @@ export function ConversationCard({
           acpModels={acpModels}
           tags={tags}
           showTags={showTagChipRow}
-          isArchived={isArchived}
+          isArchived={effectiveArchived}
         />
       )}
     </div>

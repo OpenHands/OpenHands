@@ -526,6 +526,7 @@ describe("SidebarOnboardingChecklist", () => {
 
     afterEach(() => {
       __resetActiveStoreForTests();
+      vi.unstubAllEnvs();
     });
 
     it("steps aside while the setup guide is shown", async () => {
@@ -552,6 +553,17 @@ describe("SidebarOnboardingChecklist", () => {
       expect(
         screen.queryByTestId("super-admin-setup-guide"),
       ).not.toBeInTheDocument();
+    });
+
+    it("never shows on a canvas locked to its Cloud host, even with no setup guide", async () => {
+      vi.stubEnv("VITE_LOCK_TO_CLOUD", "https://ohe.example.com");
+      serveCloudUser(["view_automations"]);
+
+      renderOnCloud();
+
+      await expect(
+        screen.findByTestId("sidebar-onboarding-checklist"),
+      ).rejects.toThrow();
     });
   });
 });

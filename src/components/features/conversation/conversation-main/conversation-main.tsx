@@ -58,12 +58,12 @@ function AutomationSetupDockedComposer({
   onTarget: (element: HTMLDivElement | null) => void;
 }) {
   return (
-    <div className="custom-scrollbar-always pointer-events-none absolute inset-0 z-20 overflow-y-scroll px-5 [scrollbar-gutter:stable] [&::-webkit-scrollbar-thumb]:bg-transparent">
-      <div className="relative mx-auto h-full w-full min-w-0 max-w-[800px]">
+    <div className="automation-setup-scroll-gutter custom-scrollbar-always pointer-events-none absolute inset-0 z-20 overflow-y-scroll px-5 [&::-webkit-scrollbar-thumb]:bg-transparent">
+      <div className="automation-setup-content relative mx-auto h-full w-full min-w-0">
         <div
           ref={onTarget}
           data-testid="automation-setup-docked-composer"
-          className="pointer-events-auto absolute inset-x-0 bottom-5 overflow-visible rounded-[15px] shadow-[0_12px_40px_rgba(0,0,0,0.55)]"
+          className="automation-setup-composer-dock pointer-events-auto absolute inset-x-0 bottom-5 overflow-visible"
         />
       </div>
     </div>

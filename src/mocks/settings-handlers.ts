@@ -624,7 +624,7 @@ const MOCK_VERIFIED_MODELS_BY_PROVIDER = MOCK_MODELS.reduce<
 
 // Matches the pinned `@openhands/typescript-client`, so mock mode models a
 // server that actually ships this schema.
-const MOCK_AGENT_SERVER_VERSION = "1.54.0";
+const MOCK_AGENT_SERVER_VERSION = "1.58.1";
 
 // --- Handlers for options/config/settings ---
 // Uses wildcard "*" prefix to match both relative paths and absolute URLs
@@ -926,6 +926,16 @@ export const SETTINGS_HANDLERS = [
 
     return HttpResponse.json(config);
   }),
+
+  // Built-in integration connection lookups of a cloud instance; the default
+  // user has linked neither Slack nor a Jira Cloud workspace (Jira answers
+  // 404 for "no link").
+  http.get("*/slack/status", () => HttpResponse.json({ connected: false })),
+
+  http.get(
+    "*/integration/jira/workspaces/link",
+    () => new HttpResponse(null, { status: 404 }),
+  ),
 
   http.get("*/api/settings/conversation-schema", async () => {
     await delay();

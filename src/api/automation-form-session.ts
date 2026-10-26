@@ -13,6 +13,8 @@ import type {
   AutomationSetupTriggerKind,
   AutomationSetupFrequency,
 } from "#/api/automation-setup-types";
+import type { AutomationRepository } from "#/types/automation";
+import { readAutomationRepositories } from "#/utils/automation-preset-sources";
 
 const AUTOMATION_FORM_SESSION_CHANGED_EVENT =
   "openhands:automation-form-session-changed";
@@ -169,6 +171,13 @@ function normalizeDraft(value: AutomationSetupDraft): AutomationSetupDraft {
     typeof value.editingAutomationId === "string"
       ? value.editingAutomationId.trim()
       : "";
+  const existingCustomTarballPath =
+    typeof value.existingCustomTarballPath === "string"
+      ? value.existingCustomTarballPath.trim()
+      : "";
+  const existingRepositories = readAutomationRepositories(
+    value.existingRepositories,
+  );
   const serverDraftId =
     typeof value.serverDraftId === "string" ? value.serverDraftId.trim() : "";
   const materializedAutomationId =
@@ -189,6 +198,11 @@ function normalizeDraft(value: AutomationSetupDraft): AutomationSetupDraft {
     ...(normalizedPlugins.length > 0 ? { plugins: normalizedPlugins } : {}),
     form: normalizedForm,
     ...(editingAutomationId ? { editingAutomationId } : {}),
+    ...(existingCustomTarballPath ? { existingCustomTarballPath } : {}),
+    ...(existingRepositories.length > 0 ? { existingRepositories } : {}),
+    ...(value.canUpdateRepositories === true
+      ? { canUpdateRepositories: true }
+      : {}),
     ...(serverDraftId ? { serverDraftId } : {}),
     ...(materializedAutomationId ? { materializedAutomationId } : {}),
     ...(fieldMetadata ? { fieldMetadata } : {}),
@@ -229,6 +243,19 @@ export function initializeAutomationFormSession(
   draft: AutomationSetupDraft,
 ) {
   sessions.set(conversationId, normalizeDraft(draft));
+}
+
+/** Record the repositories an edited automation clones after a save. */
+export function setAutomationFormSessionRepositories(
+  conversationId: string,
+  repositories: AutomationRepository[],
+) {
+  const existing = sessions.get(conversationId);
+  if (!existing) return;
+  sessions.set(
+    conversationId,
+    normalizeDraft({ ...existing, existingRepositories: repositories }),
+  );
 }
 
 export function getAutomationFormSession(

@@ -93,6 +93,20 @@ function createNoDirectAgentServerFetchRule() {
   };
 }
 
+// Retain these exact JS-config/plugin colors pending their token audit.
+// Do not exempt raw palettes or whole namespaces.
+const legacyColorClasses = [
+  // hero.ts / @heroui/theme.
+  "bg-background",
+  "bg-content1",
+  "text-primary-foreground",
+  // tailwind.config.js.
+  "bg-status-fail-bg",
+  "text-status-fail-text",
+  "text-content-muted",
+  "text-modal-muted",
+];
+
 export default [
   // Files / dirs we never want to lint.
   {
@@ -449,19 +463,7 @@ export default [
       "shadcn/no-raw-colors": [
         "warn",
         {
-          // Retain existing JS-config/plugin exceptions for a separate token audit.
-          // Exact classes only: do not exempt raw palettes or whole namespaces.
-          allow: [
-            // hero.ts / @heroui/theme: semantic colors pending the token audit.
-            "bg-background",
-            "bg-content1",
-            "text-primary-foreground",
-            // tailwind.config.js: existing named tokens, pending theme migration.
-            "bg-status-fail-bg",
-            "text-status-fail-text",
-            "text-content-muted",
-            "text-modal-muted",
-          ],
+          allow: legacyColorClasses,
         },
       ],
       // Warning-only while measured layout, portal placement, accessibility
@@ -482,6 +484,23 @@ export default [
             "conversation-overview-diffs-git-action",
           ],
         },
+      ],
+    },
+  },
+  {
+    // Audit literal class recipes that dynamic map/helper lookups hide.
+    // Keep broad string scanning away from unrelated program tags.
+    files: [
+      "src/components/features/backends/backend-status-dot.tsx",
+      "src/components/features/conversation-panel/start-task-card/start-task-status-badge.tsx",
+      "src/components/features/conversation-panel/start-task-card/start-task-status-indicator.tsx",
+      "src/components/features/markdown/blockquote.tsx",
+      "src/components/features/mcp-page/mcp-server-health.tsx",
+    ],
+    rules: {
+      "shadcn/no-raw-colors": [
+        "warn",
+        { allow: legacyColorClasses, scanAllStrings: true },
       ],
     },
   },

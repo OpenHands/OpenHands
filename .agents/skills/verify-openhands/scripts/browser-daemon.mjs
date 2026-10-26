@@ -23,7 +23,18 @@ import { basename, dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { redactStorage } from "./lib/redact-storage.mjs";
 import { HeldKeys } from "./lib/held-keys.mjs";
-import { SECRET_KEY, SECRET_PATH, redactBody } from "./lib/network-bodies.mjs";
+import {
+  observeWebSocket,
+  isWebSocketObservation,
+} from "./lib/websocket-events.mjs";
+import {
+  SECRET_KEY,
+  SECRET_PATH,
+  redactBody,
+  redactBodyFields,
+  networkEntryForOutput,
+} from "./lib/network-bodies.mjs";
+import { networkTiming, orderNetworkEntries } from "./lib/network-timing.mjs";
 import { buildLocator, toCss } from "./lib/selectors.mjs";
 import {
   RECORD_DEFAULTS,
@@ -48,6 +59,14 @@ if (!runDir) {
 const privateDir = join(runDir, "private");
 const evidenceDir = join(runDir, "evidence");
 const baseUrl = new URL(process.env.OH_VERIFY_BASE_URL);
+// Other origins this run serves (`launch --lock-to-cloud`): its own pages too.
+const runOrigins = new Set([
+  baseUrl.origin,
+  ...(process.env.OH_VERIFY_EXTRA_ORIGINS ?? "")
+    .split(",")
+    .filter(Boolean)
+    .map((u) => new URL(u).origin),
+]);
 const eventsPath = join(privateDir, "browser-events.jsonl");
 const VIEWPORTS = {
   desktop: { width: 1440, height: 1000 },
@@ -157,6 +176,7 @@ await context.addInitScript(() => {
 });
 
 let dialogPolicy = "dismiss";
+let networkOffline = false;
 // Events survive a daemon restart (`restart`, `browser reset`): reload the
 // ones recorded since the last `errors --clear` mark.
 const events = [];
@@ -179,6 +199,7 @@ if (existsSync(eventsPath)) {
 // bodies are never kept.
 const requests = [];
 const requestEntries = new WeakMap();
+const timing = networkTiming();
 
 function redactQuery(search) {
   if (!search) return "";
@@ -196,7 +217,10 @@ const heldKeys = new HeldKeys();
 
 function originOf(url) {
   try {
-    return new URL(url).origin;
+    const parsed = new URL(url);
+    if (parsed.protocol === "ws:") parsed.protocol = "http:";
+    if (parsed.protocol === "wss:") parsed.protocol = "https:";
+    return parsed.origin;
   } catch {
     return "";
   }
@@ -211,7 +235,7 @@ function record(kind, page, detail) {
     ...detail,
   };
   const subject = entry.url || entry.page;
-  entry.appOrigin = originOf(subject) === baseUrl.origin;
+  entry.appOrigin = runOrigins.has(originOf(subject));
   events.push(entry);
   try {
     appendFileSync(eventsPath, `${JSON.stringify(entry)}\n`, { mode: 0o600 });
@@ -221,6 +245,12 @@ function record(kind, page, detail) {
 }
 
 function watch(page) {
+  page.on("websocket", (socket) =>
+    observeWebSocket(socket, (kind, detail) => record(kind, page, detail), {
+      connectionId: randomBytes(8).toString("hex"),
+      pageUrl: () => page.url(),
+    }),
+  );
   page.on("pageerror", (error) =>
     record("pageerror", page, {
       message: String(error?.message ?? error).slice(0, 2000),
@@ -250,12 +280,16 @@ function watch(page) {
     // The body of an app-origin write, redacted (see lib/network-bodies.mjs);
     // `network --bodies` shows it, so a recipe can prove what the page sent.
     let body;
+    let bodyDetails = {};
     if (
       origin === baseUrl.origin &&
       /^(POST|PUT|PATCH|DELETE)$/.test(request.method())
     ) {
       try {
-        body = redactBody(request.postData(), { all: SECRET_PATH.test(path) });
+        const rawBody = request.postData();
+        const options = { all: SECRET_PATH.test(path) };
+        body = redactBody(rawBody, options);
+        bodyDetails = redactBodyFields(rawBody, options);
       } catch {
         body = undefined;
       }
@@ -267,14 +301,22 @@ function watch(page) {
       query: query || undefined,
       method: request.method(),
       type: request.resourceType(),
-      app: origin === baseUrl.origin,
+      app: runOrigins.has(origin),
       body,
+      ...bodyDetails,
     };
+    timing.start(entry);
     requestEntries.set(request, entry);
     requests.push(entry);
     if (requests.length > 5000) requests.splice(0, 1000);
   });
+  page.on("requestfinished", (request) => {
+    const entry = requestEntries.get(request);
+    if (entry) timing.complete(entry, "finished");
+  });
   page.on("requestfailed", (request) => {
+    const entry = requestEntries.get(request);
+    if (entry) timing.complete(entry, "failed");
     const failure = request.failure()?.errorText ?? "failed";
     if (failure === "net::ERR_ABORTED") return;
     record("requestfailed", page, {
@@ -285,7 +327,10 @@ function watch(page) {
   });
   page.on("response", (response) => {
     const entry = requestEntries.get(response.request());
-    if (entry) entry.status = response.status();
+    if (entry) {
+      entry.status = response.status();
+      timing.response(entry);
+    }
     if (response.status() >= 400) {
       record("http-error", page, {
         url: response.url().slice(0, 500),
@@ -512,9 +557,9 @@ function evidencePath(feature, name, ext) {
 
 function assertAppUrl(target, allowExternal) {
   const url = new URL(target, baseUrl);
-  if (!allowExternal && url.origin !== baseUrl.origin) {
+  if (!allowExternal && !runOrigins.has(url.origin)) {
     throw new Error(
-      `Refusing to navigate outside this run (${baseUrl.origin}); pass --allow-external for a deliberate external check`,
+      `Refusing to navigate outside this run (${[...runOrigins].join(", ")}); pass --allow-external for a deliberate external check`,
     );
   }
   return url.toString();
@@ -979,6 +1024,7 @@ const handlers = {
     const relevant = slice.filter(
       (e) =>
         !["page-opened", "download", "dialog", "mark"].includes(e.kind) &&
+        !isWebSocketObservation(e.kind) &&
         !(noWarnings && e.kind === "console.warning"),
     );
     const filtered = appOnly ? relevant.filter((e) => e.appOrigin) : relevant;
@@ -1168,7 +1214,19 @@ const handlers = {
     if (keysOnly !== false) return { area, keys: Object.keys(data).sort() };
     return { area, storage: redactStorage(data) };
   },
-  async network({ clear, external, last, filter, bodies }) {
+  async "network-state"({ state }) {
+    if (!["offline", "online", "status"].includes(state))
+      throw new Error("network-state needs offline | online | status");
+    if (state !== "status") {
+      const offline = state === "offline";
+      if (offline !== networkOffline) {
+        await context.setOffline(offline);
+        networkOffline = offline;
+      }
+    }
+    return { offline: networkOffline };
+  },
+  async network({ clear, external, last, filter, bodies, order }) {
     const re = filter ? new RegExp(filter) : null;
     const list = requests.filter(
       (r) =>
@@ -1180,9 +1238,10 @@ const handlers = {
     const result = {
       total: list.length,
       byOrigin,
-      recent: list
-        .slice(-Number(last ?? 15))
-        .map(({ body, ...rest }) => (bodies ? { ...rest, body } : rest)),
+      order: order ?? "request",
+      recent: orderNetworkEntries(list, order, Number(last ?? 15)).map(
+        (entry) => networkEntryForOutput(entry, bodies),
+      ),
     };
     if (clear) requests.length = 0;
     return result;
@@ -1372,13 +1431,25 @@ const handlers = {
       value: await input.inputValue().catch(() => undefined),
     };
   },
-  async media({ clear }) {
+  async media({ clear, reducedMotion }) {
+    if (reducedMotion !== undefined) {
+      if (!["reduce", "no-preference"].includes(reducedMotion))
+        throw new Error("media reduced-motion needs reduce | no-preference");
+      await activePage.emulateMedia({ reducedMotion });
+    }
     const plays = await activePage.evaluate((reset) => {
       const list = window.__ohMediaPlays ?? [];
       if (reset) window.__ohMediaPlays = [];
       return list;
     }, Boolean(clear));
-    return { plays };
+    return {
+      plays,
+      reducedMotion: await activePage.evaluate(() =>
+        matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? "reduce"
+          : "no-preference",
+      ),
+    };
   },
   async uiprobe({ target, timeout }) {
     // Read-only health probe in a throwaway tab: the driving tab keeps its URL.
