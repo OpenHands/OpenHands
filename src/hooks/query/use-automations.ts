@@ -20,6 +20,7 @@ import type {
   AutomationSpec,
   AutomationTagCount,
   AutomationsResponse,
+  TransferAutomationRequest,
 } from "#/types/automation";
 import type { AutomationDraftListResponse } from "#/manifests/types";
 import {
@@ -216,6 +217,29 @@ export function useToggleAutomation({
       if (!variables.enabled) {
         trackAutomationDisableButton({ backendKind: active.backend.kind });
       }
+    },
+  });
+}
+
+/**
+ * Move an automation to a service account, or back to the caller. The service
+ * turns it off, so every automation view is refetched. Callers toast the
+ * service's `detail` themselves.
+ */
+export function useTransferAutomation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      body,
+    }: {
+      id: string;
+      body: TransferAutomationRequest;
+    }) => AutomationService.transferAutomation(id, body),
+    meta: { disableToast: true },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: AUTOMATIONS_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: AUTOMATION_DETAIL_QUERY_KEY });
     },
   });
 }

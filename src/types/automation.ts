@@ -36,6 +36,14 @@ export interface AutomationRepository {
 
 export type AutomationState = "ACTIVE" | "INACTIVE" | "DRAFT";
 
+/**
+ * `POST /v1/{id}/transfer` body: hand the automation to a service account of
+ * the org, or back to the caller (managers only).
+ */
+export type TransferAutomationRequest =
+  | { to: "service"; service_account_id: string }
+  | { to: "self" };
+
 /** Who owns an automation. */
 export type AutomationOwnerKind = "user" | "service";
 

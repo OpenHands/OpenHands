@@ -14,3 +14,10 @@ export const AUTOMATION_FORM_UPDATE_ACTION_KIND =
  * deployment that predates the endpoints falls back to client-only state.
  */
 export const AUTOMATION_DRAFTS_FEATURE = "automationDrafts";
+
+/**
+ * The capabilities feature flag the automation service advertises when an
+ * automation can be owned by a service account (`owner_kind: "service"`,
+ * `owner_user_id` on create, `POST /v1/{id}/transfer`).
+ */
+export const SERVICE_ACCOUNT_OWNERS_FEATURE = "serviceAccountOwners";

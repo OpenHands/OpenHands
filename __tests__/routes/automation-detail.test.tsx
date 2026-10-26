@@ -9,7 +9,10 @@ import { HttpError } from "@openhands/typescript-client";
 import { I18nKey } from "#/i18n/declaration";
 
 import AutomationService from "#/api/automation-service/automation-service.api";
-import { getCloudOrganizationMember } from "#/api/cloud/organization-service.api";
+import {
+  getCloudOrganizationMember,
+  listCloudServiceAccounts,
+} from "#/api/cloud/organization-service.api";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
 import {
   __resetActiveStoreForTests,
@@ -23,6 +26,7 @@ import { AutomationRunStatus } from "#/types/automation";
 import type { Automation, AutomationRunsResponse } from "#/types/automation";
 import { withPresetSources } from "#/utils/automation-preset-sources";
 import { packTarGzip } from "#/utils/tar-gzip";
+import * as ToastHandlers from "#/utils/custom-toast-handlers";
 
 vi.mock("#/api/automation-service/automation-service.api", () => ({
   default: {
@@ -33,6 +37,8 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
     dispatchAutomation: vi.fn(),
     fetchTarballBytes: vi.fn(),
     checkHealth: vi.fn(),
+    getCapabilities: vi.fn(),
+    transferAutomation: vi.fn(),
   },
 }));
 
@@ -43,13 +49,15 @@ vi.mock("#/api/profiles-service/profiles-service.api", () => ({
 }));
 
 // Mock permission hooks so cloud-backend tests don't need a real /me endpoint.
+const permissionMocks = vi.hoisted(() => ({ isOwner: true }));
 vi.mock("#/hooks/use-automation-permissions", () => ({
   useAutomationPermissions: () => ({
     canView: true,
     canManage: true,
+    userId: "admin-user",
     isLoading: false,
   }),
-  useIsAutomationOwner: () => true,
+  useIsAutomationOwner: () => permissionMocks.isOwner,
 }));
 
 // Mock only the member lookup the "Automation Runs As" field depends on; the
@@ -59,6 +67,7 @@ vi.mock("#/api/cloud/organization-service.api", async (importOriginal) => ({
     typeof import("#/api/cloud/organization-service.api")
   >()),
   getCloudOrganizationMember: vi.fn(),
+  listCloudServiceAccounts: vi.fn(),
 }));
 
 const detailMocks = vi.hoisted(() => ({
@@ -131,7 +140,22 @@ function renderDetail() {
   );
 }
 
+let errorToast: ReturnType<typeof vi.spyOn>;
+
 beforeEach(() => {
+  errorToast = vi
+    .spyOn(ToastHandlers, "displayErrorToast")
+    .mockImplementation(() => "toast-id");
+  permissionMocks.isOwner = true;
+  vi.mocked(AutomationService.getCapabilities).mockReset();
+  vi.mocked(AutomationService.getCapabilities).mockResolvedValue({
+    ready: true,
+    triggerKinds: [],
+    eventSources: [],
+    eventTypes: [],
+    triggers: {},
+    features: [],
+  });
   window.localStorage.clear();
   __resetActiveStoreForTests();
   vi.mocked(AutomationService.checkHealth).mockReset();
@@ -164,6 +188,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  errorToast.mockRestore();
   window.localStorage.clear();
   __resetActiveStoreForTests();
 });
@@ -429,6 +454,162 @@ describe("AutomationDetail — Automation Runs As", () => {
       screen.queryByText(I18nKey.AUTOMATIONS$DETAIL$RUNS_AS),
     ).not.toBeInTheDocument();
     expect(getCloudOrganizationMember).not.toHaveBeenCalled();
+  });
+});
+
+describe("AutomationDetail — service account owner", () => {
+  const orgId = "0b93b5f2-5396-49f2-8d98-61f906184270";
+  const saId = "5a1d2f60-1c1b-4b43-8a5f-0f8e8e2f7c11";
+  const serviceAutomation: Automation = {
+    ...automation,
+    user_id: saId,
+    owner_kind: "service",
+  };
+
+  beforeEach(() => {
+    permissionMocks.isOwner = false;
+    setActiveSelection({ backendId: cloudBackend.id, orgId });
+    vi.mocked(getCloudOrganizationMember).mockReset();
+    vi.mocked(listCloudServiceAccounts).mockReset();
+    vi.mocked(listCloudServiceAccounts).mockResolvedValue([
+      { id: saId, org_id: orgId, name: "ci-bot", is_disabled: false },
+      { id: "sa-2", org_id: orgId, name: "deploy-bot", is_disabled: false },
+    ]);
+    vi.mocked(AutomationService.getCapabilities).mockResolvedValue({
+      ready: true,
+      triggerKinds: [],
+      eventSources: [],
+      eventTypes: [],
+      triggers: {},
+      features: ["serviceAccountOwners"],
+    });
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue(
+      serviceAutomation,
+    );
+  });
+
+  it("shows the service account name with an SA badge instead of a member lookup", async () => {
+    // Act
+    renderDetail();
+
+    // Assert
+    expect(await screen.findByText("ci-bot")).toBeInTheDocument();
+    expect(screen.getByText(I18nKey.AUTOMATIONS$OWNED_BY)).toBeInTheDocument();
+    expect(screen.getByTestId("service-account-badge")).toBeInTheDocument();
+    expect(getCloudOrganizationMember).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the raw id when the service account list is unavailable", async () => {
+    // Arrange — e.g. the list needs a permission the caller lacks.
+    vi.mocked(listCloudServiceAccounts).mockRejectedValue(
+      new HttpError(403, "Forbidden", { detail: "Forbidden" }),
+    );
+
+    // Act
+    renderDetail();
+
+    // Assert
+    expect(await screen.findByText(saId)).toBeInTheDocument();
+    expect(screen.getByTestId("service-account-badge")).toBeInTheDocument();
+  });
+
+  it("transfers the automation to the chosen service account", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    vi.mocked(AutomationService.transferAutomation).mockResolvedValue({
+      ...automation,
+      enabled: false,
+    });
+    renderDetail();
+    await screen.findByText("ci-bot");
+
+    // Act
+    await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+    await user.click(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$TRANSFER }),
+    );
+    await user.selectOptions(
+      screen.getByTestId("transfer-automation-target"),
+      "sa-2",
+    );
+    await user.click(screen.getByTestId("transfer-automation-confirm"));
+
+    // Assert — the API is called and the detail query is refetched.
+    await waitFor(() => {
+      expect(AutomationService.transferAutomation).toHaveBeenCalledWith(
+        "auto-1",
+        { to: "service", service_account_id: "sa-2" },
+      );
+    });
+    await waitFor(() => {
+      expect(AutomationService.getAutomation).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("shows the service's reason and keeps the modal open when the transfer fails", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    vi.mocked(AutomationService.transferAutomation).mockRejectedValue(
+      new HttpError(409, "Conflict", {
+        detail: "The automation has a pending or running run",
+      }),
+    );
+    renderDetail();
+    await screen.findByText("ci-bot");
+
+    // Act
+    await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+    await user.click(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$TRANSFER }),
+    );
+    await user.click(screen.getByTestId("transfer-automation-confirm"));
+
+    // Assert
+    await waitFor(() => {
+      expect(errorToast).toHaveBeenCalledWith(
+        "The automation has a pending or running run",
+      );
+    });
+    expect(screen.getByTestId("transfer-automation-confirm")).toBeEnabled();
+  });
+
+  it("does not offer Transfer without the capability", async () => {
+    // Arrange
+    vi.mocked(AutomationService.getCapabilities).mockResolvedValue({
+      ready: true,
+      triggerKinds: [],
+      eventSources: [],
+      eventTypes: [],
+      triggers: {},
+      features: [],
+    });
+    const user = userEvent.setup();
+    renderDetail();
+    await screen.findByText(automation.name);
+
+    // Act
+    await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+
+    // Assert
+    expect(
+      screen.queryByRole("button", { name: I18nKey.AUTOMATIONS$TRANSFER }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not offer Transfer on a local backend", async () => {
+    // Arrange — default selection is the local backend.
+    setActiveSelection({ backendId: localBackend.id });
+    const user = userEvent.setup();
+    renderDetail();
+    await screen.findByText(automation.name);
+
+    // Act
+    await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+
+    // Assert
+    expect(
+      screen.queryByRole("button", { name: I18nKey.AUTOMATIONS$TRANSFER }),
+    ).not.toBeInTheDocument();
   });
 });
 

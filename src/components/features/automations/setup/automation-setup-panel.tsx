@@ -83,6 +83,10 @@ import {
 import { Divider } from "#/ui/divider";
 import { cn } from "#/utils/utils";
 import { useDeploymentCapabilities } from "#/hooks/query/use-manifest-capabilities";
+import {
+  useServiceAccountOwnersEnabled,
+  useServiceAccounts,
+} from "#/hooks/query/use-service-accounts";
 import { AUTOMATION_DETAIL_QUERY_KEY } from "#/hooks/query/use-automation-detail";
 import { AUTOMATIONS_QUERY_KEY } from "#/hooks/query/use-automations";
 import {
@@ -735,6 +739,12 @@ export function AutomationSetupPanel({
     ? (getAutomationFormSession(conversationId) ?? draft)
     : draft;
   const [form, setForm] = useState(() => buildInitialForm(initialDraft));
+  // "Create as service account": the service account that will own a new
+  // automation; empty means the caller. Not part of the form session, so a
+  // reloaded draft starts as the caller again.
+  const [ownerUserId, setOwnerUserId] = useState("");
+  const serviceAccountOwnersEnabled = useServiceAccountOwnersEnabled();
+  const serviceAccounts = useServiceAccounts().data;
   const [eventTestPayload, setEventTestPayload] = useState(() =>
     buildDefaultEventTestPayload(DEFAULT_EVENT_SOURCE, DEFAULT_EVENT_KEY),
   );
@@ -1312,6 +1322,9 @@ export function AutomationSetupPanel({
           ),
           timezone: timezone.trim() || DEFAULT_TIMEZONE,
         };
+  // Only a new automation picks its owner; an existing one is moved with Transfer.
+  const showOwnerPicker = serviceAccountOwnersEnabled && !isEditingExisting;
+  const newAutomationOwnerId = showOwnerPicker ? ownerUserId : "";
   const buildPresetBody = (): SetupRequestBody => {
     const trimmedPrompt = prompt.trim();
     const body: SetupRequestBody = {
@@ -1335,6 +1348,7 @@ export function AutomationSetupPanel({
       body.plugins = configuredPlugins;
     }
     if (model.trim()) body.model = model.trim();
+    if (newAutomationOwnerId) body.owner_user_id = newAutomationOwnerId;
     return body;
   };
   const buildCustomBody = (tarballPath: string): SetupRequestBody =>
@@ -1348,6 +1362,7 @@ export function AutomationSetupPanel({
       ...(showTimeout && timeoutSeconds.trim()
         ? { timeout: Number(timeoutSeconds) }
         : {}),
+      ...(newAutomationOwnerId ? { owner_user_id: newAutomationOwnerId } : {}),
     }) as SetupRequestBody;
   /**
    * The request body sent to a server-backed draft. Custom drafts reference a
@@ -2076,6 +2091,39 @@ export function AutomationSetupPanel({
                   className={formControlFieldClassName}
                 />
               </Field>
+
+              {showOwnerPicker ? (
+                <Field
+                  label={t(I18nKey.AUTOMATION_SETUP$CREATE_AS_SERVICE_ACCOUNT)}
+                >
+                  <div className="relative">
+                    <select
+                      data-testid="automation-setup-owner"
+                      value={ownerUserId}
+                      onChange={(event) => setOwnerUserId(event.target.value)}
+                      className={cn(
+                        formControlFieldClassName,
+                        "appearance-none pr-8",
+                      )}
+                    >
+                      <option value="">
+                        {t(I18nKey.AUTOMATIONS$OWNER_ME)}
+                      </option>
+                      {(serviceAccounts ?? [])
+                        .filter((account) => !account.is_disabled)
+                        .map((account) => (
+                          <option key={account.id} value={account.id}>
+                            {account.name}
+                          </option>
+                        ))}
+                    </select>
+                    <ChevronDown
+                      className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted"
+                      aria-hidden
+                    />
+                  </div>
+                </Field>
+              ) : null}
 
               {isHydratingServerDraft ? (
                 <p

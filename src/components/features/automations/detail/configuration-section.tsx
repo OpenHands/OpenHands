@@ -26,6 +26,12 @@ interface ConfigurationSectionProps {
    * (local backends, or while the lookup is still in flight).
    */
   runsAs?: string | null;
+  /**
+   * The service account that owns the automation: its name, or its raw id when
+   * the name could not be resolved. Shown as "Owned by" with an SA badge.
+   * Omitted for a person-owned automation, whose identity is `runsAs`.
+   */
+  serviceAccountOwner?: string | null;
 }
 
 const FILTER_TRUNCATE_LENGTH = 60;
@@ -61,6 +67,7 @@ function FilterExpression({ filter }: { filter: string }) {
 export function ConfigurationSection({
   automation,
   runsAs,
+  serviceAccountOwner,
 }: ConfigurationSectionProps) {
   const { t } = useTranslation("openhands");
   const isEvent = automation.trigger.type === "event";
@@ -144,6 +151,24 @@ export function ConfigurationSection({
             label={t(I18nKey.AUTOMATIONS$DETAIL$EVENT_FILTER)}
           >
             <FilterExpression filter={automation.trigger.filter} />
+          </ConfigField>
+        )}
+
+        {serviceAccountOwner && (
+          <ConfigField
+            icon={<UserIcon className="size-3.5" />}
+            label={t(I18nKey.AUTOMATIONS$OWNED_BY)}
+          >
+            <span className="flex flex-wrap items-center gap-2">
+              <span className="break-all">{serviceAccountOwner}</span>
+              <span
+                data-testid="service-account-badge"
+                title={t(I18nKey.AUTOMATION_SETUP$CREATE_AS_SERVICE_ACCOUNT)}
+                className="rounded-md bg-surface-raised px-1.5 py-0.5 text-xs font-medium text-muted"
+              >
+                {t(I18nKey.AUTOMATIONS$SERVICE_ACCOUNT_BADGE)}
+              </span>
+            </span>
           </ConfigField>
         )}
 
