@@ -78,3 +78,22 @@ describe("DetailHeader — enabled toggle gating", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("DetailHeader — edit gating", () => {
+  it("hides Edit when canEdit is false but keeps Delete", async () => {
+    // Arrange — a manager viewing a human-owned automation.
+    const user = userEvent.setup();
+    renderHeader({ canManage: true, canEdit: false, onEdit: vi.fn() });
+
+    // Act
+    await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+
+    // Assert
+    expect(
+      screen.queryByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$DELETE }),
+    ).toBeInTheDocument();
+  });
+});

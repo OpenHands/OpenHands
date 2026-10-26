@@ -39,10 +39,8 @@ import { BackendNotConfigured } from "#/components/features/automations/backend-
 import { DeleteConfirmationModal } from "#/components/features/automations/delete-confirmation-modal";
 import { useOpenAutomationEditor } from "#/hooks/use-open-automation-editor";
 import { useTracking } from "#/hooks/use-tracking";
-import {
-  useAutomationPermissions,
-  useIsAutomationOwner,
-} from "#/hooks/use-automation-permissions";
+import { useAutomationAccess } from "#/hooks/use-automation-access";
+import { useIsAutomationOwner } from "#/hooks/use-automation-permissions";
 import AutomationService from "#/api/automation-service/automation-service.api";
 import type { Automation } from "#/types/automation";
 import { isDraftAutomation } from "#/utils/automation-state";
@@ -124,7 +122,9 @@ export default function AutomationDetail() {
   const dispatchMutation = useDispatchAutomation();
   // Permission hooks must run before any early return (rules-of-hooks). The
   // owner check is a no-op while the automation hasn't loaded yet.
-  const { canManage: hasManagePermission } = useAutomationPermissions();
+  const { canManage, canEdit, canToggle } = useAutomationAccess(
+    automation ?? nullAutomation,
+  );
   const isOwner = useIsAutomationOwner(automation ?? nullAutomation);
   // Creator lookup for "Automation Runs As"; disabled until the automation
   // (and its user_id) has loaded, and on non-cloud backends.
@@ -225,8 +225,6 @@ export default function AutomationDetail() {
     trackAutomationExported({ backendKind: active.backend.kind });
   };
 
-  // Write actions on a specific automation: manage OR creator (escape hatch).
-  const canManage = hasManagePermission || isOwner;
   // Automations run as their creator (the service mints run credentials for
   // `automation.user_id`). Cloud only: show the creator's email once resolved,
   // fall back to the raw user id when the lookup fails (creator left the org,
@@ -238,9 +236,6 @@ export default function AutomationDetail() {
       (creatorQuery.isError ? automation.user_id : null);
   }
   const isDraft = isDraftAutomation(automation);
-  // Non-creators may turn an automation off but not back on. Draft test
-  // artifacts are finalized through the draft setup flow, not this toggle.
-  const canToggle = isDraft ? false : automation.enabled ? canManage : isOwner;
 
   return (
     <div className="min-h-full">
@@ -259,6 +254,7 @@ export default function AutomationDetail() {
             onRunNow={handleRunNow}
             isRunningNow={dispatchMutation.isPending}
             canManage={canManage}
+            canEdit={canEdit}
             canToggle={canToggle}
           />
           {/* The service lets only the creator change tags. */}
