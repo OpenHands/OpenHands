@@ -1,6 +1,10 @@
 import React, { ReactNode, useEffect, useRef } from "react";
-import { BaseModalTitle } from "#/components/shared/modals/confirmation-modals/base-modal";
+import {
+  BaseModalDescription,
+  BaseModalTitle,
+} from "#/components/shared/modals/confirmation-modals/base-modal";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
+import { ModalCloseButton } from "#/components/shared/modals/modal-close-button";
 import {
   MODAL_MAX_WIDTH_VIEWPORT,
   type ModalWidth,
@@ -11,6 +15,8 @@ import { cn } from "#/utils/utils";
 interface ApiKeyModalBaseProps {
   isOpen: boolean;
   title: string;
+  /** Optional text shown under the title. */
+  description?: ReactNode;
   width?: ModalWidth;
   children: ReactNode;
   footer: ReactNode;
@@ -18,16 +24,23 @@ interface ApiKeyModalBaseProps {
   onClose?: () => void;
   /** Ref to an element that should receive initial focus when modal opens */
   initialFocusRef?: React.RefObject<HTMLElement | null>;
+  /** Show an X close button in the top-right corner (needs `onClose`). */
+  showCloseButton?: boolean;
+  /** Disables that close button, e.g. while a save is in flight. */
+  isCloseDisabled?: boolean;
 }
 
 export function ApiKeyModalBase({
   isOpen,
   title,
+  description,
   width = "md",
   children,
   footer,
   onClose,
   initialFocusRef,
+  showCloseButton = false,
+  isCloseDisabled = false,
 }: ApiKeyModalBaseProps) {
   const modalRef = useRef<HTMLDivElement>(null);
 
@@ -86,13 +99,32 @@ export function ApiKeyModalBase({
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
+        aria-describedby={description ? "modal-description" : undefined}
         className={cn(
-          "bg-base-secondary p-6 rounded-xl flex flex-col gap-4 border border-border",
+          "relative bg-base-secondary p-6 rounded-xl flex flex-col gap-4 border border-border",
           modalWidthClassName(width),
           MODAL_MAX_WIDTH_VIEWPORT,
         )}
       >
-        <BaseModalTitle id="modal-title" title={title} />
+        {showCloseButton && onClose ? (
+          <ModalCloseButton
+            onClose={onClose}
+            disabled={isCloseDisabled}
+            testId="modal-close-button"
+          />
+        ) : null}
+        <div className="flex flex-col gap-1">
+          <BaseModalTitle
+            id="modal-title"
+            title={title}
+            className={cn(showCloseButton && "pr-6")}
+          />
+          {description ? (
+            <span id="modal-description">
+              <BaseModalDescription description={description} />
+            </span>
+          ) : null}
+        </div>
         {children}
         <div className="w-full flex justify-end gap-2 mt-2">{footer}</div>
       </div>

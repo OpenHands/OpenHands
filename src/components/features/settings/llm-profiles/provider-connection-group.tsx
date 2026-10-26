@@ -110,14 +110,18 @@ export function ProviderConnectionGroup({
           {connection ? <KeyStatusIcon isSet={connection.api_key_set} /> : null}
         </button>
         {showActions && onAddModels ? (
-          // Revealed while the card is hovered or holds focus; touch screens,
-          // which have no hover, always show it.
+          // Always shown while the card is expanded; otherwise revealed while
+          // it is hovered or holds focus. Touch screens, which have no hover,
+          // always show it.
           <BrandButton
             testId="provider-connection-group-add-models"
             type="button"
             variant="secondary"
             onClick={() => onAddModels(connection)}
-            className="shrink-0 opacity-0 group-hover/connection:opacity-100 group-focus-within/connection:opacity-100 pointer-coarse:opacity-100"
+            className={cn(
+              "shrink-0 opacity-0 group-hover/connection:opacity-100 group-focus-within/connection:opacity-100 pointer-coarse:opacity-100",
+              isOpen && "opacity-100",
+            )}
           >
             {t(I18nKey.SETTINGS$PROVIDER_CONNECTION_ADD_MODELS)}
           </BrandButton>

@@ -379,8 +379,11 @@ export function AddModelsModal({
     <ApiKeyModalBase
       isOpen
       title={t(I18nKey.SETTINGS$ADD_MODELS_TITLE)}
+      description={t(I18nKey.SETTINGS$ADD_MODELS_DESCRIPTION)}
       footer={footer}
       onClose={handleClose}
+      showCloseButton
+      isCloseDisabled={submitting}
     >
       <div data-testid="add-models-modal" className="flex flex-col gap-3">
         <label
@@ -449,6 +452,21 @@ export function AddModelsModal({
           >
             {t(I18nKey.SETTINGS$ADD_MODELS_KEYLESS_NOTE)}
           </span>
+        )}
+
+        {/* The catalog doesn't list every model a provider serves (e.g. new
+            OpenRouter routes), so point to the single-profile custom path. */}
+        {selectedProvider && !isLoadingModels && (
+          <p
+            data-testid="add-models-custom-model-hint"
+            className="text-xs text-muted"
+          >
+            {t(I18nKey.SETTINGS$ADD_MODELS_CUSTOM_MODEL_HINT, {
+              addProfile: t(I18nKey.SETTINGS$ADD_LLM_PROFILE),
+              customModel: t(I18nKey.SETTINGS$CUSTOM_MODEL),
+              advanced: t(I18nKey.SETTINGS$ADVANCED),
+            })}
+          </p>
         )}
 
         {isLoadingModels && (
