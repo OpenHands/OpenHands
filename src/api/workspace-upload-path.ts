@@ -79,15 +79,15 @@ export async function resolveConversationUploadWorkingDir(
     return currentConversation.workspace.working_dir.trim();
   }
 
-  const stored = getStoredConversationMetadata(conversationId);
-  if (stored?.selected_workspace?.trim()) {
-    return stored.selected_workspace.trim();
-  }
-
   if (UUID_PATTERN.test(conversationId)) {
     return AgentServerConversationService.resolveConversationWorkingDir(
       conversationId,
     );
+  }
+
+  const stored = getStoredConversationMetadata(conversationId);
+  if (stored?.selected_workspace?.trim()) {
+    return stored.selected_workspace.trim();
   }
 
   return getAgentServerWorkingDir();
