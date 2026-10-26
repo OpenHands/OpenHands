@@ -246,16 +246,6 @@ export async function fetchBackendExecutionRuntime(): Promise<
 }
 
 /**
- * Return the deployment mode from the runtime services info, e.g. "docker",
- * "dev:automation", etc. Returns `null` when no runtime info is supplied.
- */
-export function getDeploymentMode(
-  runtimeServicesInfo?: RuntimeServicesInfo | null,
-): string | null {
-  return runtimeServicesInfo?.mode ?? null;
-}
-
-/**
  * Render the runtime services info into a markdown block suitable for
  * appending to the system prompt via `AgentContext.system_message_suffix`.
  *

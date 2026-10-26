@@ -63,6 +63,7 @@ import { AutomationSetupPromptStack } from "#/components/features/automations/se
 import { ContextMenuListItem } from "#/components/features/context-menu/context-menu-list-item";
 import { formatTriggerSourceLabel } from "#/components/features/home/featured-automations/automation-run-health";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
+import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { useSettings } from "#/hooks/query/use-settings";
 import { usePromptTextareaResize } from "#/hooks/use-prompt-textarea-resize";
 import { useSendMessage } from "#/hooks/use-send-message";
@@ -139,7 +140,7 @@ const DEFAULT_CUSTOM_SETUP_SCRIPT = `#!/usr/bin/env bash
 :
 `;
 const addOptionButtonClassName = cn(
-  "inline-flex w-fit shrink-0 cursor-pointer items-center rounded-lg border border-[var(--oh-border)] bg-tertiary px-3 py-1.5 text-sm text-content hover:bg-interactive-hover",
+  "inline-flex w-fit shrink-0 cursor-pointer items-center rounded-lg border border-border bg-tertiary px-3 py-1.5 text-sm text-content hover:bg-interactive-hover",
   formControlTransitionClassName,
 );
 const DEFAULT_TIMEOUT_SECONDS = "600";
@@ -463,13 +464,13 @@ function DraftStatusBar({
     "max-w-full min-w-0 whitespace-normal rounded-full px-2.5 py-0.5 text-left text-xs leading-4",
     validationMessage
       ? "w-fit bg-feedback-error/5 text-feedback-error"
-      : "bg-[var(--oh-success)]/10 text-[var(--oh-success)]",
+      : "bg-semantic-success/10 text-semantic-success",
   );
 
   return (
     <section
       data-testid="automation-setup-draft-details"
-      className="flex flex-col gap-2 rounded-xl border border-[var(--oh-border)] bg-[var(--oh-surface)] px-3 py-2"
+      className="flex flex-col gap-2 rounded-xl border border-border bg-surface px-3 py-2"
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
@@ -599,12 +600,12 @@ function DraftRunsPage({
         </p>
       ))}
       {runs.length > 0 ? (
-        <div className="overflow-hidden rounded-xl border border-[var(--oh-border)]">
+        <div className="overflow-hidden rounded-xl border border-border">
           {runs.map((run, index) => (
             <div
               key={run.id}
               data-testid="automation-setup-draft-run"
-              className={cn(index > 0 && "border-t border-[var(--oh-border)]")}
+              className={cn(index > 0 && "border-t border-border")}
             >
               <ActivityLogItem run={run} />
             </div>
@@ -613,7 +614,7 @@ function DraftRunsPage({
       ) : (
         <div
           data-testid="automation-setup-draft-runs-empty"
-          className="flex flex-col items-center gap-3 rounded-xl border border-[var(--oh-border)] bg-[var(--oh-surface)] px-5 py-10 text-center"
+          className="flex flex-col items-center gap-3 rounded-xl border border-border bg-surface px-5 py-10 text-center"
         >
           <p className="text-sm text-content">
             {t(I18nKey.AUTOMATIONS$DETAIL$NO_RUNS)}
@@ -1850,7 +1851,7 @@ export function AutomationSetupPanel({
       {saveStateText ? (
         <span
           data-testid="automation-setup-save-state"
-          className="shrink-0 text-xs text-[var(--oh-muted)]"
+          className="shrink-0 text-xs text-muted"
         >
           {saveStateText}
         </span>
@@ -1941,7 +1942,7 @@ export function AutomationSetupPanel({
         className="flex h-full min-h-0 flex-col bg-canvas-base"
       >
         {showInlineHeader ? (
-          <header className="flex h-10 min-h-10 shrink-0 items-center justify-between gap-2 border-b border-[var(--oh-border)] bg-canvas-base px-3">
+          <header className="flex h-10 min-h-10 shrink-0 items-center justify-between gap-2 border-b border-border bg-canvas-base px-3">
             <div className="flex min-w-0 items-center gap-2">
               <h2 className="min-w-0 truncate text-sm font-medium text-content">
                 {name.trim() || t(I18nKey.AUTOMATION_SETUP$TITLE)}
@@ -1953,11 +1954,11 @@ export function AutomationSetupPanel({
 
         <div
           className={cn(
-            "custom-scrollbar-always min-h-0 flex-1 overflow-y-auto px-5 pt-5 [scrollbar-gutter:stable]",
+            "automation-setup-scroll-gutter custom-scrollbar-always min-h-0 flex-1 overflow-y-auto px-5 pt-5",
             reserveComposerSpace ? "pb-52" : "pb-5",
           )}
         >
-          <div className="mx-auto flex w-full min-w-0 max-w-[800px] flex-col gap-6">
+          <div className="automation-setup-content mx-auto flex w-full min-w-0 flex-col gap-6">
             {serverDraft && !isViewingDraftRuns ? (
               <DraftStatusBar
                 draft={serverDraft}
@@ -2013,7 +2014,7 @@ export function AutomationSetupPanel({
               {isHydratingServerDraft ? (
                 <p
                   data-testid="automation-setup-draft-loading"
-                  className="rounded-2xl border border-[var(--oh-border)] bg-[var(--oh-surface)] px-5 py-4 text-sm text-muted"
+                  className="rounded-2xl border border-border bg-surface px-5 py-4 text-sm text-muted"
                 >
                   {t(I18nKey.AUTOMATION_SETUP$LOADING_DRAFT)}
                 </p>
@@ -2022,7 +2023,7 @@ export function AutomationSetupPanel({
               {isTaggedDraftMissing ? (
                 <p
                   data-testid="automation-setup-draft-missing"
-                  className="rounded-2xl border border-[var(--oh-warning)]/40 bg-[var(--oh-warning)]/10 px-5 py-4 text-sm text-[var(--oh-warning)]"
+                  className="rounded-2xl border border-warning/40 bg-warning/10 px-5 py-4 text-sm text-warning"
                 >
                   {t(I18nKey.AUTOMATION_SETUP$DRAFT_MISSING)}
                 </p>
@@ -2037,7 +2038,7 @@ export function AutomationSetupPanel({
                     {agentUpdatedSuffix(
                       kind === "custom" ? "customCode" : "prompt",
                     ) ? (
-                      <span className="font-normal text-[var(--oh-muted)]">
+                      <span className="font-normal text-muted">
                         {agentUpdatedSuffix(
                           kind === "custom" ? "customCode" : "prompt",
                         )}
@@ -2237,7 +2238,7 @@ export function AutomationSetupPanel({
                 {visiblePluginEntries.length > 0 ? (
                   <div
                     data-testid="automation-setup-plugin-module"
-                    className="flex flex-col gap-3 rounded-xl border border-[var(--oh-border)] bg-base-secondary p-4"
+                    className="flex flex-col gap-3 rounded-xl border border-border bg-base-secondary p-4"
                   >
                     {visiblePluginEntries.map((entry, index) => (
                       <div
@@ -2247,7 +2248,7 @@ export function AutomationSetupPanel({
                           index === 0 ? "items-end" : "items-center",
                         )}
                       >
-                        <div className="grid min-w-0 flex-1 gap-3 md:grid-cols-[2fr_1fr]">
+                        <div className="grid min-w-0 flex-1 gap-3 md:automation-setup-details-grid">
                           <Field
                             label={t(I18nKey.AUTOMATION_SETUP$PLUGIN_SOURCE)}
                             showLabel={index === 0}
@@ -2344,7 +2345,7 @@ export function AutomationSetupPanel({
                                 : `automation-setup-plugin-remove-${index}`
                             }
                             aria-label={`${t(I18nKey.COMMON$REMOVE)} ${t(I18nKey.AUTOMATION_SETUP$TYPE_PLUGIN)}`}
-                            className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-[var(--oh-muted)] hover:bg-white/10 hover:text-white"
+                            className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted hover:bg-white/10 hover:text-white"
                             onMouseDown={(event) => event.preventDefault()}
                             onClick={() => {
                               const nextEntries = pluginEntries.filter(
@@ -2380,14 +2381,14 @@ export function AutomationSetupPanel({
                   </div>
                 ) : null}
                 {showTimeout ? (
-                  <label className="flex w-full min-w-0 flex-col gap-2.5 rounded-xl border border-[var(--oh-border)] bg-base-secondary p-4">
+                  <label className="flex w-full min-w-0 flex-col gap-2.5 rounded-xl border border-border bg-base-secondary p-4">
                     <div className="flex w-full items-center gap-2">
                       <span className="text-sm font-normal text-content">
                         {t(I18nKey.AUTOMATION_SETUP$TIMEOUT_SECONDS)}
                       </span>
                       <OptionalTag />
                       {agentUpdatedSuffix("timeoutSeconds") ? (
-                        <span className="text-xs text-[var(--oh-muted)]">
+                        <span className="text-xs text-muted">
                           {agentUpdatedSuffix("timeoutSeconds")}
                         </span>
                       ) : null}
@@ -2395,7 +2396,7 @@ export function AutomationSetupPanel({
                         type="button"
                         data-testid="automation-setup-timeout-remove"
                         aria-label={`${t(I18nKey.COMMON$REMOVE)} ${t(I18nKey.AUTOMATION_SETUP$TIMEOUT_SECONDS)}`}
-                        className="ml-auto inline-flex size-6 items-center justify-center rounded-md text-[var(--oh-muted)] hover:bg-white/10 hover:text-white"
+                        className="ml-auto inline-flex size-6 items-center justify-center rounded-md text-muted hover:bg-white/10 hover:text-white"
                         onMouseDown={(event) => event.preventDefault()}
                         onClick={() => {
                           updateField("showTimeout", false);
@@ -2518,7 +2519,7 @@ function ExistingCustomBundleSummary({ tarballPath }: { tarballPath: string }) {
   return (
     <div
       data-testid="automation-setup-existing-bundle"
-      className="rounded-[15px] border border-[var(--oh-border)] bg-[var(--oh-surface)] p-4"
+      className="automation-setup-card border border-border bg-surface p-4"
     >
       <div className="mb-2 flex items-center gap-2 text-sm text-content">
         <span>{t(I18nKey.AUTOMATION_SETUP$EXISTING_BUNDLE)}</span>
@@ -2527,7 +2528,7 @@ function ExistingCustomBundleSummary({ tarballPath }: { tarballPath: string }) {
             type="button"
             aria-label={helpText}
             data-testid="automation-setup-existing-bundle-info"
-            className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-[var(--oh-muted)]"
+            className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-muted"
             onMouseDown={(event) => event.preventDefault()}
           >
             <Info className="size-4" aria-hidden />
@@ -2537,7 +2538,7 @@ function ExistingCustomBundleSummary({ tarballPath }: { tarballPath: string }) {
       <div
         data-testid="automation-setup-existing-bundle-name"
         title={tarballPath}
-        className="truncate rounded-lg border border-[var(--oh-border)] bg-[var(--oh-surface-raised)] px-3 py-2 font-mono text-sm text-content"
+        className="truncate rounded-lg border border-border bg-surface-raised px-3 py-2 font-mono text-sm text-content"
       >
         {bundleName}
       </div>
@@ -2613,14 +2614,14 @@ function CustomCodeFields({
           streamingField === "customCode" ? "true" : undefined
         }
         className={cn(
-          "relative z-10 -mb-[15px] overflow-hidden rounded-[15px] border border-[var(--oh-border)] bg-[var(--oh-surface)]",
+          "automation-setup-joined-card relative z-10 overflow-hidden border border-border bg-surface",
           streamingHighlightClassName(streamingField === "customCode"),
         )}
       >
         <div
           ref={frameRef}
           data-testid="automation-setup-custom-code-scroll"
-          className="custom-scrollbar-always min-h-[256px] overflow-x-hidden"
+          className="automation-setup-code-scroll custom-scrollbar-always overflow-x-hidden"
         >
           <div className="px-4 pt-4 pb-4">
             <textarea
@@ -2640,7 +2641,7 @@ function CustomCodeFields({
           className="group absolute bottom-0 left-0 z-20 h-3 w-full"
         >
           <div
-            className="absolute inset-0 z-[1] cursor-ns-resize select-none"
+            className="absolute inset-0 z-1 cursor-ns-resize select-none"
             onMouseDown={handleGripMouseDown}
             onTouchStart={handleGripTouchStart}
             aria-hidden
@@ -2648,7 +2649,7 @@ function CustomCodeFields({
           <div
             ref={gripRef}
             className={cn(
-              "pointer-events-none absolute bottom-0 left-0 z-[2] h-px w-full bg-white transition-opacity duration-200",
+              "pointer-events-none absolute bottom-0 left-0 z-2 h-px w-full bg-white transition-opacity duration-200",
               isGripDragging
                 ? "opacity-100"
                 : "opacity-0 group-hover:opacity-100",
@@ -2658,7 +2659,7 @@ function CustomCodeFields({
       </div>
       <div
         data-testid="automation-setup-custom-details-drawer"
-        className="rounded-b-[15px] border-x border-b border-[var(--oh-border)] bg-[var(--oh-surface-raised)] px-4 pb-2 pt-[calc(15px+0.5rem)]"
+        className="automation-setup-joined-tray border-x border-b border-border bg-surface-raised px-4 pb-2"
       >
         <button
           type="button"
@@ -2670,7 +2671,7 @@ function CustomCodeFields({
         >
           <ChevronDown
             className={cn(
-              "size-4 shrink-0 text-[var(--oh-muted)] transition-transform duration-200 motion-reduce:transition-none",
+              "size-4 shrink-0 text-muted transition-transform duration-200 motion-reduce:transition-none",
               detailsOpen && "rotate-180",
             )}
             aria-hidden
@@ -2679,7 +2680,7 @@ function CustomCodeFields({
         </button>
         <CustomDetailsReveal open={detailsOpen} instant={reduceMotion}>
           <div className="flex flex-col gap-4 pt-3">
-            <div className="grid gap-3 md:grid-cols-[2fr_1fr]">
+            <div className="grid gap-3 md:automation-setup-details-grid">
               <Field
                 label={t(I18nKey.AUTOMATION_SETUP$ENTRYPOINT)}
                 suffix={updatedSuffixes.entrypoint}
@@ -2776,9 +2777,9 @@ function frequencyTabClassName(selected: boolean) {
       ? cn(
           formControlBorderClassName,
           formControlSurfaceClassName,
-          "border-[var(--oh-interactive-hover)] text-content",
+          "border-interactive-hover text-content",
         )
-      : "border border-transparent text-[var(--oh-muted)] hover:text-content",
+      : "border border-transparent text-muted hover:text-content",
   );
 }
 
@@ -2847,7 +2848,7 @@ function ScheduleFields({
         <span className="flex shrink-0 items-center gap-2 text-sm">
           <span>{t(I18nKey.AUTOMATION_SETUP$FREQUENCY)}</span>
           {updatedSuffixes.frequency && (
-            <span className="text-xs font-normal text-[var(--oh-muted)]">
+            <span className="text-xs font-normal text-muted">
               {updatedSuffixes.frequency}
             </span>
           )}
@@ -2858,7 +2859,7 @@ function ScheduleFields({
           className={cn(
             formControlHeightClassName,
             formControlRadiusClassName,
-            "inline-flex max-w-full min-w-0 items-center gap-0.5 overflow-x-auto bg-[var(--oh-surface-raised)] p-0.5",
+            "inline-flex max-w-full min-w-0 items-center gap-0.5 overflow-x-auto bg-surface-raised p-0.5",
             streamingHighlightClassName(streamingField === "frequency"),
           )}
         >
@@ -2879,7 +2880,7 @@ function ScheduleFields({
       </div>
       <div
         data-testid="automation-setup-at-row"
-        className="flex w-full min-w-0 items-center gap-4 overflow-x-auto"
+        className="automation-setup-schedule-row flex w-full min-w-0 items-center gap-4 overflow-x-auto"
       >
         {frequency === "custom" ? (
           <label className="flex shrink-0 items-center gap-2.5">
@@ -2890,7 +2891,10 @@ function ScheduleFields({
               data-testid="automation-setup-custom-schedule"
               value={customSchedule}
               onChange={(event) => setCustomSchedule(event.target.value)}
-              className={cn(formControlFieldClassName, "w-[14rem]")}
+              className={cn(
+                formControlFieldClassName,
+                "w-(--automation-setup-cron-width)",
+              )}
             />
           </label>
         ) : null}
@@ -2905,7 +2909,10 @@ function ScheduleFields({
               type="datetime-local"
               value={scheduleDateTime || defaultScheduleDateTimeLocal()}
               onChange={(event) => setScheduleDateTime(event.target.value)}
-              className={cn(formControlFieldClassName, "w-[15rem]")}
+              className={cn(
+                formControlFieldClassName,
+                "w-(--automation-setup-datetime-width)",
+              )}
             />
           </div>
         ) : null}
@@ -2920,7 +2927,10 @@ function ScheduleFields({
               type="time"
               value={time}
               onChange={(event) => setTime(event.target.value)}
-              className={cn(formControlFieldClassName, "w-[9.5rem]")}
+              className={cn(
+                formControlFieldClassName,
+                "w-(--automation-setup-time-width)",
+              )}
             />
           </div>
         ) : null}
@@ -2952,7 +2962,7 @@ function ScheduleFields({
                 ))}
               </select>
               <ChevronDown
-                className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-[var(--oh-muted)]"
+                className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted"
                 aria-hidden
               />
             </div>
@@ -2963,12 +2973,12 @@ function ScheduleFields({
             streamingField === "timezone" ? "true" : undefined
           }
           className={cn(
-            "relative w-[16rem] shrink-0",
+            "relative w-(--automation-setup-timezone-width) shrink-0",
             streamingHighlightClassName(streamingField === "timezone"),
           )}
         >
           <Globe2
-            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--oh-muted)]"
+            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted"
             aria-hidden
           />
           <select
@@ -2988,12 +2998,12 @@ function ScheduleFields({
             ))}
           </select>
           <ChevronDown
-            className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-[var(--oh-muted)]"
+            className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted"
             aria-hidden
           />
         </div>
         {atUpdatedSuffix && (
-          <span className="shrink-0 text-xs font-normal text-[var(--oh-muted)]">
+          <span className="shrink-0 text-xs font-normal text-muted">
             {atUpdatedSuffix}
           </span>
         )}
@@ -3044,6 +3054,7 @@ function EventSourceControl({
     () => setIsMenuOpen(false),
     triggerRef,
   );
+  useCloseOnEscape(isMenuOpen, () => setIsMenuOpen(false), triggerRef);
 
   return (
     <div className="relative">
@@ -3066,7 +3077,7 @@ function EventSourceControl({
         aria-label={t(I18nKey.AUTOMATION_SETUP$EVENT_SOURCE)}
         aria-haspopup="menu"
         aria-expanded={isMenuOpen}
-        className="absolute top-1/2 right-2 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-[var(--oh-muted)] hover:bg-white/10 hover:text-white"
+        className="absolute top-1/2 right-2 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted hover:bg-white/10 hover:text-white"
         onMouseDown={(event) => event.preventDefault()}
         onClick={() => setIsMenuOpen((open) => !open)}
       >
@@ -3077,7 +3088,7 @@ function EventSourceControl({
           ref={menuRef}
           role="menu"
           data-testid="automation-setup-event-source-menu"
-          className="absolute top-full left-0 z-[60] mt-1 flex max-h-72 w-full flex-col overflow-hidden rounded-md border border-border-subtle bg-tertiary py-1 shadow-lg"
+          className="absolute top-full left-0 z-60 mt-1 flex max-h-72 w-full flex-col overflow-hidden rounded-md border border-border-subtle bg-tertiary py-1 shadow-lg"
         >
           <div className="min-h-0 flex-1 overflow-y-auto px-1">
             {knownSources.map((source) => (
@@ -3207,7 +3218,7 @@ function EventFields({
           <p
             role="note"
             data-testid="automation-setup-event-public-url-notice"
-            className="flex items-start gap-1.5 text-xs leading-4 text-[var(--oh-muted)]"
+            className="flex items-start gap-1.5 text-xs leading-4 text-muted"
           >
             <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
             {t(I18nKey.AUTOMATION_SETUP$EVENT_PUBLIC_URL_NOTICE)}
@@ -3226,7 +3237,7 @@ function EventFields({
             >
               {t(I18nKey.AUTOMATION_SETUP$EVENT_KEY)}
               {updatedSuffixes.eventKey ? (
-                <span className="font-normal text-[var(--oh-muted)]">
+                <span className="font-normal text-muted">
                   {updatedSuffixes.eventKey}
                 </span>
               ) : null}
@@ -3261,7 +3272,7 @@ function EventFields({
                   type="button"
                   data-testid="automation-setup-add-event-filter"
                   onClick={() => setIsEventFilterOpen(true)}
-                  className="inline-flex shrink-0 items-center border-l border-[var(--oh-border)] bg-tertiary px-3 text-sm text-content hover:bg-interactive-hover"
+                  className="inline-flex shrink-0 items-center border-l border-border bg-tertiary px-3 text-sm text-content hover:bg-interactive-hover"
                 >
                   {t(I18nKey.AUTOMATION_SETUP$ADD_FILTER)}
                 </button>
@@ -3293,7 +3304,7 @@ function EventFields({
                 type="button"
                 data-testid="automation-setup-event-filter-remove"
                 aria-label={`${t(I18nKey.COMMON$REMOVE)} ${t(I18nKey.AUTOMATION_SETUP$EVENT_FILTER)}`}
-                className="absolute right-0 top-0 inline-flex size-6 items-center justify-center rounded-md text-[var(--oh-muted)] hover:bg-white/10 hover:text-white"
+                className="absolute right-0 top-0 inline-flex size-6 items-center justify-center rounded-md text-muted hover:bg-white/10 hover:text-white"
                 onClick={() => {
                   setIsEventFilterOpen(false);
                   setEventFilter("");
@@ -3325,7 +3336,7 @@ function EventFields({
             : FALLBACK_EVENT_SOURCES
         ).includes(eventSource.trim()) ? (
           <div className="@min-[640px]:col-span-2">
-            <section className="rounded-xl border border-[var(--oh-border)] p-3">
+            <section className="rounded-xl border border-border p-3">
               <div className="flex items-start gap-3 text-sm">
                 <input
                   id="automation-setup-custom-webhook-enabled"
@@ -3344,7 +3355,7 @@ function EventFields({
                   <span>
                     {t(I18nKey.AUTOMATION_SETUP$CUSTOM_WEBHOOK_TITLE)}
                   </span>
-                  <span className="text-xs font-normal leading-5 text-[var(--oh-muted)]">
+                  <span className="text-xs font-normal leading-5 text-muted">
                     {t(I18nKey.AUTOMATION_SETUP$CUSTOM_WEBHOOK_DESCRIPTION)}
                   </span>
                 </label>
@@ -3454,14 +3465,14 @@ function EventFields({
                         )}
                       />
                     </Field>
-                    <p className="mt-2 text-xs leading-5 text-[var(--oh-muted)]">
+                    <p className="mt-2 text-xs leading-5 text-muted">
                       {t(I18nKey.AUTOMATION_SETUP$CUSTOM_WEBHOOK_SECRET_HELP)}
                     </p>
                   </div>
                   {customWebhookRegistration && (
                     <div
                       data-testid="automation-setup-custom-webhook-result"
-                      className="md:col-span-2 rounded-lg border border-[var(--oh-success)]/40 bg-[var(--oh-success)]/10 p-3 text-xs leading-5 text-white"
+                      className="md:col-span-2 rounded-lg border border-semantic-success/40 bg-semantic-success/10 p-3 text-xs leading-5 text-white"
                     >
                       <p className="font-medium">
                         {t(I18nKey.AUTOMATION_SETUP$CUSTOM_WEBHOOK_CREATED)}
@@ -3493,7 +3504,7 @@ function EventFields({
             <p
               role="note"
               data-testid="automation-setup-existing-test-payload-note"
-              className="flex items-start gap-1.5 rounded-lg border border-[var(--oh-border)] bg-[var(--oh-surface)] p-3 text-xs leading-5 text-[var(--oh-muted)]"
+              className="flex items-start gap-1.5 rounded-lg border border-border bg-surface p-3 text-xs leading-5 text-muted"
             >
               <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
               {t(I18nKey.AUTOMATION_SETUP$EXISTING_TEST_PAYLOAD_NOTICE)}
@@ -3510,7 +3521,7 @@ function EventFields({
               >
                 <ChevronDown
                   className={cn(
-                    "size-4 shrink-0 text-[var(--oh-muted)] transition-transform duration-200 motion-reduce:transition-none",
+                    "size-4 shrink-0 text-muted transition-transform duration-200 motion-reduce:transition-none",
                     isTestPayloadOpen && "rotate-180",
                   )}
                   aria-hidden
@@ -3536,7 +3547,7 @@ function EventFields({
                       I18nKey.AUTOMATION_SETUP$TEST_EVENT_PAYLOAD_PLACEHOLDER,
                     )}
                   />
-                  <p className="text-xs leading-5 text-[var(--oh-muted)]">
+                  <p className="text-xs leading-5 text-muted">
                     {t(I18nKey.AUTOMATION_SETUP$TEST_EVENT_PAYLOAD_DESCRIPTION)}
                   </p>
                 </div>
@@ -3585,17 +3596,12 @@ function Field({
           )}
         >
           <span>{label}</span>
-          {suffix && (
-            <span className="font-normal text-[var(--oh-muted)]">{suffix}</span>
-          )}
+          {suffix && <span className="font-normal text-muted">{suffix}</span>}
         </span>
       ) : null}
       <div className="min-w-0 flex-1">{children}</div>
       {errorText ? (
-        <span
-          role="alert"
-          className="text-xs leading-5 text-[var(--oh-warning)]"
-        >
+        <span role="alert" className="text-xs leading-5 text-warning">
           {errorText}
         </span>
       ) : null}
@@ -3626,15 +3632,15 @@ function TriggerCard({
         "rounded-lg border px-3 py-2.5 text-left",
         formControlTransitionClassName,
         selected
-          ? "border-[var(--oh-interactive-hover)] bg-surface-raised text-content"
-          : "border-[var(--oh-border)] bg-transparent text-content hover:border-[var(--oh-interactive-hover)] hover:bg-surface-raised",
+          ? "border-interactive-hover bg-surface-raised text-content"
+          : "border-border bg-transparent text-content hover:border-interactive-hover hover:bg-surface-raised",
       )}
     >
       <span className="flex items-start gap-2">
         <span className="mt-0.5 text-muted">{icon}</span>
         <span className="min-w-0">
           <span className="block text-sm font-medium">{title}</span>
-          <span className="mt-1 block text-xs text-[var(--oh-text-tertiary)]">
+          <span className="mt-1 block text-xs text-text-tertiary">
             {description}
           </span>
         </span>
