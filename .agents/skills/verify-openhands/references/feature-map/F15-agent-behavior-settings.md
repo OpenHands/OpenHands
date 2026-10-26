@@ -19,7 +19,7 @@ The **Runtime** page renders the conversation schema's `runtime` section the
 same way: a default runtime (Local, Worktree, Docker) followed by
 only that runtime's options.
 
-Source: `src/routes/condenser-settings.tsx`, `src/routes/agent-context-settings.tsx`, `src/routes/verification-settings.tsx`, `src/routes/runtime-settings.tsx`, `src/components/features/settings/sdk-settings/`, `src/utils/sdk-settings-schema.ts`, `src/components/features/settings/agent-profiles/profile-behavior-form.ts`.
+Source: `src/routes/condenser-settings.tsx`, `src/routes/agent-context-settings.tsx`, `src/routes/verification-settings.tsx`, `src/components/features/settings/sdk-settings/`, `src/utils/sdk-settings-schema.ts`, `src/components/features/settings/agent-profiles/profile-behavior-form.ts`.
 
 ## Sub-features
 
