@@ -21,7 +21,7 @@ interface DetailHeaderProps {
    */
   onToggleKeepAlive?: () => void;
   isKeepAlivePending?: boolean;
-  /** When provided (and the user can manage), the kebab menu shows an Edit entry. */
+  /** When provided (and the user can edit), the kebab menu shows an Edit entry. */
   onEdit?: () => void;
   onDelete: () => void;
   onExport: () => void;
@@ -30,10 +30,11 @@ interface DetailHeaderProps {
   isRunningNow?: boolean;
   /** Whether the caller may mutate this automation (manage perm or owner). */
   canManage?: boolean;
+  /** Whether the caller may edit this automation. Defaults to `canManage`. */
+  canEdit?: boolean;
   /**
    * Whether the caller may flip the enabled switch. Defaults to `canManage`;
-   * pass `false` for a disabled automation the caller did not create, since
-   * non-creators may only turn automations off.
+   * pass `false` when the caller may only turn the automation off or not at all.
    */
   canToggle?: boolean;
 }
@@ -50,6 +51,7 @@ export function DetailHeader({
   onRunNow,
   isRunningNow = false,
   canManage = true,
+  canEdit = canManage,
   canToggle = canManage,
 }: DetailHeaderProps) {
   const { t } = useTranslation("openhands");
@@ -67,7 +69,7 @@ export function DetailHeader({
       onClick: onDownloadTarball,
     },
     // Write items — only when the user may mutate this automation.
-    ...(canManage && onEdit
+    ...(canEdit && onEdit
       ? [
           {
             label: t(I18nKey.AUTOMATIONS$EDIT),

@@ -34,6 +34,7 @@ describe("buildHomeAutomationMenuItems", () => {
       automation: makeAutomation(),
       t: (key) => key,
       canManage: true,
+      canEdit: true,
       isRunPending: false,
       isCancelPending: false,
       canCancel: false,
@@ -69,6 +70,7 @@ describe("buildHomeAutomationMenuItems", () => {
       automation: makeAutomation(),
       t: (key) => key,
       canManage: true,
+      canEdit: true,
       isRunPending: false,
       isCancelPending: false,
       canCancel: true,
@@ -94,6 +96,7 @@ describe("buildHomeAutomationMenuItems", () => {
       automation: makeAutomation(),
       t: (key) => key,
       canManage: false,
+      canEdit: false,
       isRunPending: false,
       isCancelPending: false,
       canCancel: false,
@@ -109,5 +112,28 @@ describe("buildHomeAutomationMenuItems", () => {
     });
 
     expect(itemKeys(entries)).toEqual(["view", "pin"]);
+  });
+
+  it("omits edit but keeps turn off when the user can manage but not edit", () => {
+    const entries = buildHomeAutomationMenuItems({
+      automation: makeAutomation(),
+      t: (key) => key,
+      canManage: true,
+      canEdit: false,
+      isRunPending: false,
+      isCancelPending: false,
+      canCancel: false,
+      testIdPrefix: "running-automation",
+      pinTestId: "running-automation-pin-auto-1",
+      isPinned: false,
+      onRunNow: vi.fn(),
+      onCancelRun: vi.fn(),
+      onView: vi.fn(),
+      onEdit: vi.fn(),
+      onTurnOff: vi.fn(),
+      onTogglePin: vi.fn(),
+    });
+
+    expect(itemKeys(entries)).toEqual(["run-now", "view", "turn-off", "pin"]);
   });
 });
