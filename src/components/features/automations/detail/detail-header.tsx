@@ -9,6 +9,7 @@ import DownloadIcon from "#/icons/download.svg?react";
 import TrashIcon from "#/icons/trash.svg?react";
 import EditIcon from "#/icons/u-edit.svg?react";
 import PlayIcon from "#/icons/play.svg?react";
+import { ArrowRightLeft } from "lucide-react";
 import { ActiveStatusBadge } from "./active-status-badge";
 
 interface DetailHeaderProps {
@@ -24,6 +25,8 @@ interface DetailHeaderProps {
   /** When provided (and the user can edit), the kebab menu shows an Edit entry. */
   onEdit?: () => void;
   onDelete: () => void;
+  /** When provided, the kebab menu shows a Transfer entry. */
+  onTransfer?: () => void;
   onExport: () => void;
   onDownloadTarball: () => void;
   onRunNow?: () => void;
@@ -46,6 +49,7 @@ export function DetailHeader({
   isKeepAlivePending = false,
   onEdit,
   onDelete,
+  onTransfer,
   onExport,
   onDownloadTarball,
   onRunNow,
@@ -99,6 +103,15 @@ export function DetailHeader({
             icon: <Server className="size-4" aria-hidden />,
             onClick: onToggleKeepAlive,
             disabled: isKeepAlivePending,
+          },
+        ]
+      : []),
+    ...(onTransfer
+      ? [
+          {
+            label: t(I18nKey.AUTOMATIONS$TRANSFER),
+            icon: <ArrowRightLeft className="size-4" aria-hidden />,
+            onClick: onTransfer,
           },
         ]
       : []),

@@ -198,4 +198,17 @@ describe("ConfigurationSection", () => {
       screen.queryByText("AUTOMATIONS$DETAIL$RUNS_AS"),
     ).not.toBeInTheDocument();
   });
+
+  it("renders the service account owner with an SA badge", () => {
+    render(
+      <ConfigurationSection
+        automation={cronAutomation}
+        serviceAccountOwner="ci-bot"
+      />,
+    );
+
+    expect(screen.getByText("AUTOMATIONS$OWNED_BY")).toBeInTheDocument();
+    expect(screen.getByText("ci-bot")).toBeInTheDocument();
+    expect(screen.getByTestId("service-account-badge")).toBeInTheDocument();
+  });
 });

@@ -369,6 +369,29 @@ describe("AutomationService", () => {
     });
   });
 
+  describe("transferAutomation", () => {
+    it("posts the target owner to the transfer endpoint for cloud backends", async () => {
+      mockGetActive.mockReturnValue({ backend: cloudBackend, orgId: "org-1" });
+      mockCallCloudProxy.mockResolvedValue({
+        ...mockAutomation,
+        enabled: false,
+      });
+
+      await AutomationService.transferAutomation("1", {
+        to: "service",
+        service_account_id: "sa-1",
+      });
+
+      expect(mockCallCloudProxy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          method: "POST",
+          path: "/api/automation/v1/1/transfer",
+          body: { to: "service", service_account_id: "sa-1" },
+        }),
+      );
+    });
+  });
+
   describe("deleteAutomation", () => {
     it("deletes an automation by id", async () => {
       mockDelete.mockResolvedValue({});
