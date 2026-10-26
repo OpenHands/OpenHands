@@ -27,8 +27,7 @@ export type SuperAdminSetupStepId =
  * "optional" for a link that never counts toward progress.
  */
 export type SuperAdminSetupStepCompletion =
-  | keyof CloudSetupGuideSteps
-  | "optional";
+  keyof CloudSetupGuideSteps | "optional";
 
 /**
  * Where a step opens: a page on the cloud host (`withOrg` adds the guide's

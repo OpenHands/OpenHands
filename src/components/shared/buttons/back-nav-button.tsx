@@ -21,8 +21,7 @@ type BackNavButtonAsLinkProps = BackNavButtonBaseProps & {
 };
 
 export type BackNavButtonProps =
-  | BackNavButtonAsButtonProps
-  | BackNavButtonAsLinkProps;
+  BackNavButtonAsButtonProps | BackNavButtonAsLinkProps;
 
 export function BackNavButton(
   props: BackNavButtonAsLinkProps,

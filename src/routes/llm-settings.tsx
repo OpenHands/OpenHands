@@ -168,8 +168,7 @@ export function LlmSettingsScreen({
     settings?.agent_settings_schema,
   );
   const persistedLlmSettings = settings?.agent_settings?.llm as
-    | Record<string, unknown>
-    | undefined;
+    Record<string, unknown> | undefined;
   const initialAuthType = resolveLlmAuthType(
     initialValueOverrides?.[LLM_AUTH_TYPE_KEY] ??
       persistedLlmSettings?.auth_type,

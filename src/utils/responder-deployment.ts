@@ -28,14 +28,11 @@ export function isResponderAutomation(
  * `user-cloud` is reserved for a future remote-deployment target.
  */
 export type ResponderDeploymentTarget =
-  | "local"
-  | "user-cloud"
-  | "openhands-cloud";
+  "local" | "user-cloud" | "openhands-cloud";
 
 /** What the launcher should do when an option's primary action fires. */
 export type ResponderDeploymentAction =
-  | { kind: "launch-local" }
-  | { kind: "open-url"; url: string };
+  { kind: "launch-local" } | { kind: "open-url"; url: string };
 
 /** Presentational + behavioral descriptor for one deployment option. */
 export interface ResponderDeploymentOption {

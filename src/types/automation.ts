@@ -170,11 +170,7 @@ export enum AutomationRunStatus {
 }
 
 export type AutomationTaskOutcomeStatus =
-  | "success"
-  | "partial_success"
-  | "blocked"
-  | "failed"
-  | "unknown";
+  "success" | "partial_success" | "blocked" | "failed" | "unknown";
 
 export interface AutomationFinishToolResponse {
   status?: AutomationTaskOutcomeStatus | string;

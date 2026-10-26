@@ -690,8 +690,7 @@ class AgentServerConversationService {
       agent_server_url: localBackend.host,
       request: {
         initial_message: payload.initial_message as
-          | AppConversationStartRequest["initial_message"]
-          | undefined,
+          AppConversationStartRequest["initial_message"] | undefined,
         plugins: plugins ?? null,
       },
       created_at: data.created_at,

@@ -265,11 +265,7 @@ const TERMINAL_SESSION_STATUSES = new Set([
 ]);
 
 export type MarsSessionPhase =
-  | "ready"
-  | "paused"
-  | "starting"
-  | "ended"
-  | "failed";
+  "ready" | "paused" | "starting" | "ended" | "failed";
 
 /**
  * Collapse `SESSION_STATUS_*` into the few states the UI treats differently.

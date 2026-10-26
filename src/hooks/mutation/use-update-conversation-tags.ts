@@ -49,8 +49,7 @@ export const useUpdateConversationTags = () => {
         ["user", "conversations"],
         (
           old:
-            | { id: string; tags?: Record<string, string> | null }[]
-            | undefined,
+            { id: string; tags?: Record<string, string> | null }[] | undefined,
         ) =>
           old?.map((conv) =>
             conv.id === variables.conversationId

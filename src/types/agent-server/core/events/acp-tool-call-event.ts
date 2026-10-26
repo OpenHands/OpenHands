@@ -25,10 +25,7 @@ export type ACPToolKind =
  * "running"; see ``getACPToolCallResult``.
  */
 export type ACPToolCallStatus =
-  | "pending"
-  | "in_progress"
-  | "completed"
-  | "failed";
+  "pending" | "in_progress" | "completed" | "failed";
 
 /**
  * An ACP tool call content block as surfaced on ``ACPToolCallEvent.content``:

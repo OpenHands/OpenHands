@@ -79,5 +79,4 @@ export function formatEventOn(on: string | string[] | undefined): string {
 }
 
 export type CronScheduleValidation =
-  | { schedule: string }
-  | { errorKey: I18nKey };
+  { schedule: string } | { errorKey: I18nKey };

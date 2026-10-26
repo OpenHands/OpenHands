@@ -32,8 +32,7 @@ const saveSettingsMutationFn = async (settings: SettingsUpdate) => {
   delete settingsToSave.conversation_settings;
 
   const agentSettings = settingsToSave.agent_settings_diff as
-    | Record<string, unknown>
-    | undefined;
+    Record<string, unknown> | undefined;
   const llmSettings = agentSettings?.llm as Record<string, unknown> | undefined;
   if (llmSettings && typeof llmSettings.api_key === "string") {
     const apiKey = llmSettings.api_key.trim();
@@ -72,8 +71,7 @@ export const useSaveSettings = (
     mutationFn: async (settings: SettingsUpdate) => {
       const nextMcpConfig = settings.mcp_config as MCPConfig | undefined;
       const currentMcpConfig = currentSettings?.mcp_config as
-        | MCPConfig
-        | undefined;
+        MCPConfig | undefined;
 
       if (nextMcpConfig && currentMcpConfig !== nextMcpConfig) {
         const servers = Object.values(nextMcpConfig);
