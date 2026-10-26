@@ -1,4 +1,9 @@
-import { useRef, useState, type ReactNode } from "react";
+import {
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from "react";
 import { Info, Plus, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { getActiveBackend } from "#/api/backend-registry/active-store";
@@ -13,6 +18,7 @@ import { useGitRepositories } from "#/hooks/query/use-git-repositories";
 import { useSearchRepositories } from "#/hooks/query/use-search-repositories";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
+import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { useDebounce } from "#/hooks/use-debounce";
 import { useUserProviders } from "#/hooks/use-user-providers";
 import { useDeploymentCapabilities } from "#/hooks/query/use-manifest-capabilities";
@@ -57,6 +63,12 @@ function parseRepositories(value: string): string[] {
     });
 }
 
+// Typing in the repository menu stays inside it, except Escape, which closes
+// the menu through `useCloseOnEscape`.
+function stopMenuKeyPropagation(event: ReactKeyboardEvent) {
+  if (event.key !== "Escape") event.stopPropagation();
+}
+
 export function SetupModelPill({
   value,
   onChange,
@@ -74,6 +86,7 @@ export function SetupModelPill({
     () => setIsOpen(false),
     triggerRef,
   );
+  useCloseOnEscape(isOpen, () => setIsOpen(false), triggerRef);
   const pinnedProfileName = value.trim() || null;
   const displayName = pinnedProfileName ?? activeProfileName;
   const pillLabel =
@@ -128,7 +141,7 @@ export function SetupModelPill({
             }}
             className={cn(
               "flex items-center justify-between gap-2",
-              !pinnedProfileName && "bg-[var(--oh-interactive-hover)]",
+              !pinnedProfileName && "bg-interactive-hover",
             )}
           >
             <span className="truncate">{t(I18nKey.COMMON$ACTIVE_PROFILE)}</span>
@@ -151,7 +164,7 @@ export function SetupModelPill({
                 }}
                 className={cn(
                   "flex flex-col items-stretch gap-0.5",
-                  isSelected && "bg-[var(--oh-interactive-hover)]",
+                  isSelected && "bg-interactive-hover",
                 )}
               >
                 <div className="flex min-w-0 items-center justify-between gap-2">
@@ -161,7 +174,7 @@ export function SetupModelPill({
                   ) : null}
                 </div>
                 {displayModel ? (
-                  <span className="truncate text-xs leading-4 text-[var(--oh-muted)]">
+                  <span className="truncate text-xs leading-4 text-muted">
                     {displayModel}
                   </span>
                 ) : null}
@@ -202,7 +215,7 @@ function AddRepositoryModal({
           onClose();
         }}
         data-testid="automation-setup-add-repository-modal"
-        className="relative flex w-[520px] max-w-[90vw] max-h-[85vh] flex-col rounded-xl border border-[var(--oh-border)] bg-base-secondary"
+        className="relative flex w-[520px] max-w-[90vw] max-h-[85vh] flex-col rounded-xl border border-border bg-base-secondary"
       >
         <ModalCloseButton
           onClose={onClose}
@@ -286,6 +299,11 @@ export function AutomationSetupPromptStack({
   const [repositorySearch, setRepositorySearch] = useState("");
   const repositoryAddRef = useRef<HTMLButtonElement>(null);
   const repositoryMenuRef = useClickOutsideElement<HTMLDivElement>(
+    () => setIsRepositoryMenuOpen(false),
+    repositoryAddRef,
+  );
+  useCloseOnEscape(
+    isRepositoryMenuOpen,
     () => setIsRepositoryMenuOpen(false),
     repositoryAddRef,
   );
@@ -398,9 +416,7 @@ export function AutomationSetupPromptStack({
           <span className="flex items-center gap-2 text-sm">
             {t(I18nKey.AUTOMATIONS$PROMPT)}
             {updatedSuffix ? (
-              <span className="font-normal text-[var(--oh-muted)]">
-                {updatedSuffix}
-              </span>
+              <span className="font-normal text-muted">{updatedSuffix}</span>
             ) : null}
           </span>
           {titleAction ? (
@@ -418,7 +434,7 @@ export function AutomationSetupPromptStack({
         >
           <div
             data-testid="automation-setup-prompt-container"
-            className="relative z-10 -mb-[15px] flex flex-col rounded-[15px] border border-[var(--oh-border)] bg-[var(--oh-surface)] p-4"
+            className="relative z-10 -mb-[15px] flex flex-col rounded-[15px] border border-border bg-surface p-4"
           >
             <textarea
               ref={textareaRef}
@@ -456,7 +472,7 @@ export function AutomationSetupPromptStack({
           </div>
           <div
             data-testid="automation-setup-prompt-drawer"
-            className="flex min-h-9 items-center rounded-b-[15px] border-x border-b border-[var(--oh-border)] bg-[var(--oh-surface-raised)] px-4 pb-2 pt-[calc(15px+0.5rem)]"
+            className="flex min-h-9 items-center rounded-b-[15px] border-x border-b border-border bg-surface-raised px-4 pb-2 pt-[calc(15px+0.5rem)]"
           >
             <div
               data-testid="automation-setup-repository"
@@ -467,9 +483,7 @@ export function AutomationSetupPromptStack({
                   {t(I18nKey.AUTOMATIONS$DETAIL$REPOSITORIES)}
                 </span>
                 {repositorySuffix ? (
-                  <span className="text-xs text-[var(--oh-muted)]">
-                    {repositorySuffix}
-                  </span>
+                  <span className="text-xs text-muted">{repositorySuffix}</span>
                 ) : null}
                 {repositoryReadOnly ? (
                   <span
@@ -486,7 +500,7 @@ export function AutomationSetupPromptStack({
                     aria-label={addLabel}
                     aria-haspopup="menu"
                     aria-expanded={isRepositoryMenuOpen}
-                    className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-[var(--oh-muted)] hover:bg-white/10 hover:text-white"
+                    className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted hover:bg-white/10 hover:text-white"
                     onMouseDown={(event) => event.preventDefault()}
                     onClick={() => {
                       setRepositorySearch("");
@@ -509,7 +523,7 @@ export function AutomationSetupPromptStack({
                         I18nKey.AUTOMATION_SETUP$GITHUB_TOKEN_REQUIRED_TOOLTIP,
                       )}
                       data-testid="automation-setup-repository-token-tooltip"
-                      className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-[var(--oh-muted)]"
+                      className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-muted"
                       onMouseDown={(event) => event.preventDefault()}
                     >
                       <Info className="size-4" aria-hidden />
@@ -538,7 +552,7 @@ export function AutomationSetupPromptStack({
                           onChange={(event) =>
                             setRepositorySearch(event.target.value)
                           }
-                          onKeyDown={(event) => event.stopPropagation()}
+                          onKeyDown={stopMenuKeyPropagation}
                           placeholder={t(I18nKey.COMMON$SEARCH_REPOSITORIES)}
                           aria-label={t(I18nKey.COMMON$SEARCH_REPOSITORIES)}
                           className="w-full border-0 bg-transparent py-1.5 pr-0 pl-6 text-sm text-contrast outline-none placeholder:text-muted focus:ring-0 focus:outline-none"
@@ -555,7 +569,7 @@ export function AutomationSetupPromptStack({
                             setSelectedProvider(event.target.value as Provider);
                             setRepositorySearch("");
                           }}
-                          onKeyDown={(event) => event.stopPropagation()}
+                          onKeyDown={stopMenuKeyPropagation}
                           className="w-full rounded-md border border-border-subtle bg-tertiary px-2 py-1 text-sm text-content outline-none"
                         >
                           {connectedCloneProviders.map((provider) => (
@@ -593,7 +607,7 @@ export function AutomationSetupPromptStack({
                       {isRepositoryListError ? (
                         <p
                           data-testid="automation-setup-repository-error"
-                          className="px-2 py-2 text-sm text-[var(--oh-warning)]"
+                          className="px-2 py-2 text-sm text-warning"
                         >
                           {t(I18nKey.HOME$FAILED_TO_LOAD_REPOSITORIES)}
                         </p>
@@ -703,10 +717,7 @@ export function AutomationSetupPromptStack({
           </div>
         </div>
         {errorText ? (
-          <span
-            role="alert"
-            className="text-xs leading-5 text-[var(--oh-warning)]"
-          >
+          <span role="alert" className="text-xs leading-5 text-warning">
             {errorText}
           </span>
         ) : null}
