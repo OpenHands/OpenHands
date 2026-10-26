@@ -2304,6 +2304,144 @@ describe("AutomationSetupPanel", () => {
       ).not.toHaveBeenCalled();
     });
 
+    describe("service account owner", () => {
+      beforeEach(() => {
+        serviceAccountMocks.enabled = true;
+        mockSavedDraftEcho({ validationErrors: null });
+      });
+
+      const ownerOf = (call: unknown[] | undefined) =>
+        (call?.[0] as { draft: { owner_user_id?: string } }).draft
+          .owner_user_id;
+
+      it("keeps the owner through save draft, reopen, save and create", async () => {
+        const user = userEvent.setup();
+        const first = renderPanel();
+        await user.selectOptions(
+          screen.getByTestId("automation-setup-owner"),
+          "sa-1",
+        );
+        await user.click(screen.getByTestId("automation-setup-save-draft"));
+        await waitFor(() =>
+          expect(AutomationService.createServerDraft).toHaveBeenCalled(),
+        );
+        const savedBody = vi.mocked(AutomationService.createServerDraft).mock
+          .calls[0][0];
+        expect(ownerOf([savedBody])).toBe("sa-1");
+        first.unmount();
+
+        // Reopen: the server returns the saved draft.
+        vi.mocked(AutomationService.getServerDraft).mockResolvedValue(
+          echoSavedDraft(savedBody),
+        );
+        renderPanel({ prompt: "", kind: "prompt" }, "conv-1", {
+          automationdraftid: "draft-1",
+        });
+
+        await waitFor(() =>
+          expect(screen.getByTestId("automation-setup-owner")).toHaveValue(
+            "sa-1",
+          ),
+        );
+        await user.type(screen.getByTestId("automation-setup-name"), " v2");
+        await user.click(screen.getByTestId("automation-setup-save-draft"));
+        await waitFor(() =>
+          expect(AutomationService.updateServerDraft).toHaveBeenCalled(),
+        );
+        expect(
+          ownerOf(
+            vi
+              .mocked(AutomationService.updateServerDraft)
+              .mock.calls[0].slice(1),
+          ),
+        ).toBe("sa-1");
+
+        vi.mocked(AutomationService.createAutomationDraft).mockResolvedValue({
+          id: "automation-1",
+        });
+        await user.click(screen.getByTestId("automation-setup-create"));
+        await waitFor(() =>
+          expect(AutomationService.createAutomationDraft).toHaveBeenCalledWith(
+            expect.objectContaining({ owner_user_id: "sa-1" }),
+            expect.anything(),
+          ),
+        );
+      });
+
+      it("marks the draft unsaved after an owner-only change", async () => {
+        const user = userEvent.setup();
+        renderPanel();
+        await user.click(screen.getByTestId("automation-setup-save-draft"));
+        await waitFor(() =>
+          expect(
+            screen.getByTestId("automation-setup-save-state"),
+          ).toHaveTextContent("AUTOMATION_SETUP$SAVED_JUST_NOW"),
+        );
+
+        await user.selectOptions(
+          screen.getByTestId("automation-setup-owner"),
+          "sa-1",
+        );
+
+        expect(
+          screen.getByTestId("automation-setup-save-state"),
+        ).toHaveTextContent("AUTOMATION_SETUP$UNSAVED_CHANGES");
+      });
+
+      it("shows a resumed draft with a service account owner as saved", async () => {
+        vi.mocked(AutomationService.getServerDraft).mockResolvedValue({
+          ...dispatchableDraft,
+          name: "Saved Tagged Draft",
+          draft: {
+            prompt: "Use the persisted draft body",
+            owner_user_id: "sa-1",
+          } as never,
+        });
+
+        renderPanel({ prompt: "", kind: "prompt" }, "conv-1", {
+          automationdraftid: "draft-1",
+        });
+
+        await waitFor(() =>
+          expect(screen.getByTestId("automation-setup-owner")).toHaveValue(
+            "sa-1",
+          ),
+        );
+        await waitFor(() =>
+          expect(
+            screen.getByTestId("automation-setup-save-state"),
+          ).toHaveTextContent("AUTOMATION_SETUP$SAVED_JUST_NOW"),
+        );
+      });
+
+      it("keeps a resumed owner that is no longer listed, shown by its id", async () => {
+        vi.mocked(AutomationService.getServerDraft).mockResolvedValue({
+          ...dispatchableDraft,
+          name: "Saved Tagged Draft",
+          draft: {
+            prompt: "Use the persisted draft body",
+            owner_user_id: "sa-gone",
+          } as never,
+        });
+
+        renderPanel({ prompt: "", kind: "prompt" }, "conv-1", {
+          automationdraftid: "draft-1",
+        });
+
+        await waitFor(() =>
+          expect(screen.getByTestId("automation-setup-owner")).toHaveValue(
+            "sa-gone",
+          ),
+        );
+        expect(
+          within(screen.getByTestId("automation-setup-owner")).getByRole(
+            "option",
+            { name: "sa-gone" },
+          ),
+        ).toBeInTheDocument();
+      });
+    });
+
     it("hydrates a tagged server draft when the panel opens", async () => {
       vi.mocked(AutomationService.getServerDraft).mockResolvedValue({
         ...dispatchableDraft,

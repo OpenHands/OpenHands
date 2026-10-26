@@ -17,13 +17,19 @@ export interface SetupCapabilitiesResult {
   isLoading: boolean;
 }
 
-/** Fetch the deployment-owned automation limits and feature set. */
-export function useDeploymentCapabilities() {
+/**
+ * Fetch the deployment-owned automation limits and feature set. Pass
+ * `enabled: false` to skip the request when the caller discards the answer.
+ */
+export function useDeploymentCapabilities({
+  enabled = true,
+}: { enabled?: boolean } = {}) {
   const { backend, orgId } = useActiveBackend();
 
   return useQuery({
     queryKey: [...SETUP_QUERY_KEYS.capabilities(), backend.id, orgId],
     queryFn: () => AutomationService.getCapabilities(),
+    enabled,
     retry: false,
     staleTime: 1000 * 60 * 5,
     // An older deployment without discovery is an expected compatibility state.

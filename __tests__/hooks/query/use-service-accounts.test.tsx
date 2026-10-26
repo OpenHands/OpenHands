@@ -86,6 +86,30 @@ afterEach(() => {
 });
 
 describe("useServiceAccountOwnersEnabled", () => {
+  it.each([
+    [
+      "a local backend",
+      () => setActiveSelection({ backendId: localBackend.id }),
+    ],
+    [
+      "a personal workspace",
+      () => setActiveSelection({ backendId: cloudBackend.id, orgId: "user-1" }),
+    ],
+  ])("requests no capabilities on %s", async (_label, arrange) => {
+    arrange();
+    const queryClient = new QueryClient();
+    const { result } = renderHook(() => useServiceAccountOwnersEnabled(), {
+      wrapper: ({ children }: { children: React.ReactNode }) => (
+        <QueryClientProvider client={queryClient}>
+          <ActiveBackendProvider>{children}</ActiveBackendProvider>
+        </QueryClientProvider>
+      ),
+    });
+
+    await waitFor(() => expect(result.current).toBe(false));
+    expect(AutomationService.getCapabilities).not.toHaveBeenCalled();
+  });
+
   it("is on for a manager of a cloud team workspace with the capability", async () => {
     const { result } = renderEnabled();
 
