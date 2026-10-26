@@ -3974,6 +3974,12 @@ async function cmdBug({ positional, flags }) {
         "bug proof needs a sub-feature ID, --baseline RUN_DIR and --fix RUN_DIR",
         "control-openhands bug proof F05.prefill-send --baseline $BASE_RUN --fix $FIX_RUN",
       );
+    const vary = flags.vary === undefined ? "revision" : String(flags.vary);
+    if (vary !== "revision" && vary !== "backend")
+      usage(
+        "bug proof --vary takes revision or backend",
+        "control-openhands bug proof F08.diff-view-modes --vary backend --baseline $OLD_SDK_RUN --fix $RUN",
+      );
     const blocks = selectBlocks(id, flags);
     const read = (dir) => {
       const path = attemptsFile(resolve(String(dir)));
@@ -3998,6 +4004,7 @@ async function cmdBug({ positional, flags }) {
         fix: fix.filter((r) => r.name === block.name),
         sha: block.sha,
         min: intFlag(flags.min, 2),
+        vary,
       }),
     }));
     const verified = verdicts.every((v) => v.verdict === "verified");
@@ -5056,7 +5063,7 @@ spaces. The result lists each clause under bugChecks.
 `,
   bug: `control-openhands bug list [--file PATH]
 control-openhands bug run ID [--name N] [--attempts N] [--label L] [--timeout SEC] [--no-doctor] [--file PATH]
-control-openhands bug proof ID --baseline RUN_DIR --fix RUN_DIR [--baseline-label L] [--fix-label L] [--min 2]
+control-openhands bug proof ID --baseline RUN_DIR --fix RUN_DIR [--baseline-label L] [--fix-label L] [--min 2] [--vary revision|backend]
 
 A known bug in the map can carry a fenced block, opened with
 "\`\`\`sh known-bug <ID> [name]", whose commands assert the correct behavior. Its one
@@ -5084,10 +5091,15 @@ marked command's observation.
 run: verified only when the baseline has at least two attempts, all xfail, the
 fix at least two, all xpass, on different revisions with the same viewport and
 backend. A fix that still reproduces is not-fixed; anything else is inconclusive.
+--vary backend proves an Agent Server or automation fix instead: both runs serve
+the same revision at the same viewport, and each side has its own backend
+versions (the baseline launched with --sdk-version or --automation-version set
+to a release before the fix).
 
   control-openhands bug run F25.selector-dropdown --attempts 2 --label baseline --run $BASE_RUN
   control-openhands bug run F25.selector-dropdown --attempts 2 --label fix --run $FIX_RUN
   control-openhands bug proof F25.selector-dropdown --baseline $BASE_RUN --baseline-label baseline --fix $FIX_RUN --fix-label fix
+  control-openhands bug proof F08.diff-view-modes --vary backend --baseline $OLD_SDK_RUN --baseline-label baseline --fix $RUN --fix-label fix
 `,
   map: `control-openhands map check [--file Fnn-name.md]   lint the map (or one entry, skipping index links): four H2s, unique IDs, links, known commands, index counts
 control-openhands map check --fix-counts   rewrite the index's sub-feature counts and total from the files, then lint

@@ -1,5 +1,8 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { readFileSync } from "node:fs";
+import { resolve as resolvePath } from "node:path";
+import { compile } from "@tailwindcss/node";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import toast from "react-hot-toast";
@@ -13,6 +16,8 @@ import SettingsService from "#/api/settings-service/settings-service.api";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
 import { useModelStore } from "#/stores/model-store";
+import { AGENT_SERVER_UI_DEFAULT_CSS_VARIABLES } from "#/styles/agent-server-ui-style-scope";
+import { COLOR_THEMES } from "#/themes/color-themes";
 import {
   LAST_LOCAL_WORKSPACE_MODE_STORAGE_KEY,
   writeStoredLocalWorkspaceMode,
@@ -402,6 +407,85 @@ describe("HomeChatLauncher", () => {
     toast.remove();
     window.localStorage.removeItem(LAST_LOCAL_WORKSPACE_MODE_STORAGE_KEY);
     useModelStore.setState({ homeLlmProfile: null });
+  });
+
+  it("compiles the rendered launcher colors for every theme, including the mocked isolated-workspace notice", async () => {
+    // Reuse the isolated-backend fixture; this is a consumer/compiler contract,
+    // not evidence of a running isolated runtime. Test mode uses the static pill.
+    mockIsolated = true;
+    const { container } = renderLauncher();
+    const activeOption = screen.getByRole("radio", { checked: true });
+    const roles = [
+      [screen.getByRole("heading", { level: 1 }), "color", "--oh-contrast"],
+      [
+        screen.getByTestId("home-header-subtitle"),
+        "color",
+        "--oh-text-tertiary",
+      ],
+      [activeOption, "color", "--oh-contrast"],
+      [screen.getByRole("radio", { checked: false }), "color", "--oh-muted"],
+      [
+        screen.getByRole("radiogroup"),
+        "background-color",
+        "--oh-surface-raised",
+      ],
+      [activeOption, "background-color", "--oh-interactive-hover"],
+      [screen.getByRole("status"), "color", "--oh-text-secondary"],
+    ] as const;
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "HOME$ISOLATED_WORKSPACE_NEW",
+    );
+
+    const compiler = await compile(
+      readFileSync(resolvePath("src/tailwind.css"), "utf8"),
+      { base: resolvePath("src"), onDependency: () => {} },
+    );
+    const css = compiler.build(
+      [...container.querySelectorAll("[class]")].flatMap((element) => [
+        ...element.classList,
+      ]),
+    );
+    const declaration = (element: Element, property: string) => {
+      for (const candidate of element.classList) {
+        const selector = `.${candidate.replace(/[^\w-]/g, "\\$&")} {`;
+        const start = css.indexOf(selector);
+        if (start < 0) continue;
+        const rule = css.slice(
+          start + selector.length,
+          css.indexOf("}", start),
+        );
+        const value = rule.match(
+          new RegExp(`(?:^|[;{])\\s*${property}:\\s*([^;]+);`),
+        )?.[1];
+        if (value) return value;
+      }
+      return undefined;
+    };
+    const colors = roles.map(([element, property, token]) => ({
+      value: declaration(element, property),
+      token,
+      property,
+    }));
+
+    for (const [key, theme] of Object.entries(COLOR_THEMES)) {
+      const variables: Record<string, string> = {
+        ...AGENT_SERVER_UI_DEFAULT_CSS_VARIABLES,
+        ...theme.scale,
+        ...theme.tokens,
+      };
+      const resolveColor = (value: string): string => {
+        const reference = /^var\((--[\w-]+)\)$/.exec(value);
+        if (!reference) return value;
+        const resolved = variables[reference[1]];
+        expect(resolved, `${key} ${reference[1]}`).toBeDefined();
+        return resolveColor(resolved);
+      };
+      for (const { value, token, property } of colors) {
+        expect(resolveColor(value ?? ""), `${key} ${token} ${property}`).toBe(
+          resolveColor(`var(${token})`),
+        );
+      }
+    }
   });
 
   it("defaults to Code mode and switches to Automate mode", async () => {
