@@ -312,6 +312,48 @@ describe("AgentServerConversationService", () => {
       expect(result.tags).toEqual(tags);
     });
 
+    it("merges a tag patch into the current map, dropping null keys", async () => {
+      // PATCH is replace-all, so a single-key change must read the current
+      // map first or every other tag on the conversation is wiped.
+      mockUpdateConversation.mockResolvedValue(undefined);
+      mockHttpGet
+        .mockResolvedValueOnce({
+          data: [
+            makeDirectConversation({
+              tags: { owner: "alice", pinned: "2026-10-01T00:00:00.000Z" },
+            }),
+          ],
+        })
+        .mockResolvedValueOnce({
+          data: [
+            makeDirectConversation({
+              tags: { owner: "alice", archived: "2026-10-02T00:00:00.000Z" },
+            }),
+          ],
+        });
+      const result = await AgentServerConversationService.mergeConversationTags(
+        "conv-1",
+        { archived: "2026-10-02T00:00:00.000Z", pinned: null },
+      );
+      expect(mockUpdateConversation).toHaveBeenCalledWith("conv-1", {
+        tags: { owner: "alice", archived: "2026-10-02T00:00:00.000Z" },
+      });
+      expect(result.tags).toEqual({
+        owner: "alice",
+        archived: "2026-10-02T00:00:00.000Z",
+      });
+    });
+
+    it("rejects a tag merge when the conversation cannot be read first", async () => {
+      mockHttpGet.mockResolvedValue({ data: [] });
+      await expect(
+        AgentServerConversationService.mergeConversationTags("gone", {
+          archived: "now",
+        }),
+      ).rejects.toThrow("gone");
+      expect(mockUpdateConversation).not.toHaveBeenCalled();
+    });
+
     it("rejects tag updates when the refreshed conversation is missing", async () => {
       mockUpdateConversation.mockResolvedValue(undefined);
       mockHttpGet.mockResolvedValue({ data: [] });

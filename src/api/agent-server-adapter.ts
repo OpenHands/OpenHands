@@ -567,6 +567,13 @@ export function buildWorkspaceTags(
   return workspace ? { [WORKSPACE_TAG_KEY]: workspace } : {};
 }
 
+/**
+ * Sidebar archive marker; the value is the ISO-8601 instant the user archived
+ * the conversation. Lives on the server so archives follow the user across
+ * browsers and devices.
+ */
+export const ARCHIVED_TAG_KEY = "archived";
+
 export const AUTOMATION_TRIGGER_TAG_KEY = "automationtrigger";
 export const AUTOMATION_ID_TAG_KEY = "automationid";
 export const AUTOMATION_NAME_TAG_KEY = "automationname";
@@ -607,6 +614,7 @@ export const AUTOMATION_TAG_KEYS: readonly string[] = [
  *   routing for resuming server-backed automation setup drafts (the last one
  *   links a resumed conversation to the automation materialized from its draft)
  * - ``automationeditid`` → the saved automation this setup page is editing
+ * - ``archived`` → drives the sidebar's archive filter, not a user-authored tag
  */
 export const RESERVED_CONVERSATION_TAG_KEYS: ReadonlySet<string> = new Set([
   ACP_SERVER_TAG_KEY,
@@ -626,6 +634,7 @@ export const RESERVED_CONVERSATION_TAG_KEYS: ReadonlySet<string> = new Set([
   "selected_branch",
   "branch",
   "archiveworkspacepath",
+  ARCHIVED_TAG_KEY,
   "workspace",
   "working_dir",
   LOCAL_PLANNER_PARENT_TAG_KEY,
