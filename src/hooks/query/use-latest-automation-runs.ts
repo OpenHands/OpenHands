@@ -29,6 +29,8 @@ export interface LatestAutomationRunState {
   recentRuns: AutomationRun[];
   /** Lifetime run count from the runs response, when known. */
   total?: number;
+  /** Lifetime queued (PENDING) run count from the runs response, when known. */
+  pendingTotal?: number | null;
   isLoading: boolean;
   isError: boolean;
 }

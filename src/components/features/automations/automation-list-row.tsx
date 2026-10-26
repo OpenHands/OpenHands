@@ -106,6 +106,7 @@ export function AutomationListRow({
     automation,
     insights?.state?.summary?.completedTotal ?? null,
   );
+  const pendingTotal = runState.pendingTotal ?? null;
   const latestRun = runState.latestRun;
   const display = latestRun ? getAutomationRunDisplay(latestRun) : null;
   const lastRunAt = latestRun
@@ -156,6 +157,22 @@ export function AutomationListRow({
               </span>
               {showDraftBadge ? (
                 <ActiveStatusBadge automation={automation} compact />
+              ) : null}
+              {pendingTotal !== null && pendingTotal > 0 ? (
+                <span
+                  data-testid={`automation-pending-runs-${automation.id}`}
+                  aria-label={t(
+                    I18nKey.AUTOMATIONS$DASHBOARD$PENDING_RUNS_COUNT,
+                    {
+                      count: pendingTotal,
+                    },
+                  )}
+                  className="inline-flex shrink-0 items-center rounded-full bg-surface-raised px-2 py-0.5 text-[10px] font-medium text-muted"
+                >
+                  {t(I18nKey.AUTOMATIONS$DASHBOARD$PENDING_RUNS_COUNT, {
+                    count: pendingTotal,
+                  })}
+                </span>
               ) : null}
             </span>
             {hasMeta ? (

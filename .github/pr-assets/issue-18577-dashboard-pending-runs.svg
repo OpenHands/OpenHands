@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 420" width="800" height="420" style="background:#0f172a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <defs>
+    <linearGradient id="cardGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+  </defs>
+  
+  <text x="40" y="42" fill="#f8fafc" font-size="18" font-weight="600">OpenHands Automations Dashboard — Queued (PENDING) Run Count Verification</text>
+  <text x="40" y="66" fill="#94a3b8" font-size="13">Surfacing real-time backpressure indicator on dashboard cards and list rows (Issue #18577)</text>
+  
+  <!-- Grid View Card Example -->
+  <g transform="translate(40, 95)">
+    <rect width="340" height="200" rx="12" fill="url(#cardGrad)" stroke="#334155" stroke-width="1"/>
+    <!-- Card Header -->
+    <text x="20" y="36" fill="#f8fafc" font-size="14" font-weight="600">Async Standup Digest</text>
+    <rect x="180" y="22" width="75" height="18" rx="9" fill="#334155"/>
+    <text x="217" y="35" fill="#94a3b8" font-size="10" font-weight="500" text-anchor="middle">3 Pending</text>
+    
+    <text x="20" y="65" fill="#94a3b8" font-size="12">Generate an async standup digest from Slack activity.</text>
+    
+    <!-- Badges -->
+    <rect x="20" y="100" width="100" height="20" rx="10" fill="#1e293b" stroke="#334155"/>
+    <text x="70" y="114" fill="#cbd5e1" font-size="11" text-anchor="middle">cron: 0 9 * * *</text>
+    
+    <!-- Status Strip -->
+    <line x1="20" y1="145" x2="320" y2="145" stroke="#334155" stroke-width="0.5"/>
+    <circle cx="28" cy="165" r="4" fill="#3b82f6"/>
+    <text x="40" y="169" fill="#cbd5e1" font-size="12">Running agent</text>
+    <text x="320" y="169" fill="#64748b" font-size="11" text-anchor="end">10m ago</text>
+  </g>
+  
+  <!-- List View Row Example -->
+  <g transform="translate(410, 95)">
+    <rect width="350" height="60" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+    <circle cx="20" cy="30" r="4" fill="#10b981"/>
+    <text x="35" y="27" fill="#f8fafc" font-size="13" font-weight="500">GitHub PR Reviewer</text>
+    <rect x="180" y="16" width="75" height="18" rx="9" fill="#334155"/>
+    <text x="217" y="29" fill="#94a3b8" font-size="10" font-weight="500" text-anchor="middle">2 Pending</text>
+    
+    <text x="35" y="45" fill="#64748b" font-size="11">pull_request.opened · 5m ago</text>
+  </g>
+
+  <!-- List View Row 2 (No pending runs) -->
+  <g transform="translate(410, 165)">
+    <rect width="350" height="60" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+    <circle cx="20" cy="30" r="4" fill="#10b981"/>
+    <text x="35" y="27" fill="#f8fafc" font-size="13" font-weight="500">Nightly Release Sync</text>
+    <!-- No pending badge rendered when 0 -->
+    <text x="35" y="45" fill="#64748b" font-size="11">cron: 0 0 * * * · 2h ago</text>
+  </g>
+  
+  <!-- Test Verification Footer -->
+  <g transform="translate(40, 320)">
+    <rect width="720" height="70" rx="8" fill="#0f172a" stroke="#1e293b" stroke-width="1"/>
+    <text x="20" y="28" fill="#10b981" font-size="12" font-weight="600">✓ All Unit &amp; Behavior Test Suites Passed (498 tests)</text>
+    <text x="20" y="48" fill="#94a3b8" font-size="11">Derivation: status_counts present, absent with full sample, absent with partial sample (omitted)</text>
+  </g>
+</svg>

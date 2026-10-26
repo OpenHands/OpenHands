@@ -47,6 +47,13 @@ export interface AutomationRunSummary {
    * and the count is null — unknowable, never guessed — otherwise.
    */
   completedTotal: number | null;
+  /**
+   * Lifetime PENDING-run count. From the response's `status_counts` when
+   * the service reports it; an older service leaves that out, so the sample
+   * stands in exactly when it holds the whole history (`total` ≤ its length)
+   * and the count is null — unknowable, never guessed — otherwise.
+   */
+  pendingTotal: number | null;
   latestRun: AutomationRun | null;
   /** Newest-first sample used by the list sparkline (same page as the summary). */
   recentRuns: AutomationRun[];
@@ -103,6 +110,19 @@ export function summarizeAutomationRuns(
     completedTotal = null;
   }
 
+  const pending = response.runs.filter(
+    (run) => run.status === AutomationRunStatus.PENDING,
+  ).length;
+
+  let pendingTotal: number | null;
+  if (response.status_counts) {
+    pendingTotal = response.status_counts[AutomationRunStatus.PENDING] ?? 0;
+  } else if (response.total <= response.runs.length) {
+    pendingTotal = pending;
+  } else {
+    pendingTotal = null;
+  }
+
   const durations = terminal.flatMap((run) => {
     if (!run.completed_at) return [];
     const ms =
@@ -113,6 +133,7 @@ export function summarizeAutomationRuns(
   return {
     total: response.total,
     completedTotal,
+    pendingTotal,
     latestRun: response.runs[0] ?? null,
     recentRuns: response.runs,
     recentSuccessRate:
