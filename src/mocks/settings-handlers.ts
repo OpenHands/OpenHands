@@ -927,6 +927,16 @@ export const SETTINGS_HANDLERS = [
     return HttpResponse.json(config);
   }),
 
+  // Built-in integration connection lookups of a cloud instance; the default
+  // user has linked neither Slack nor a Jira Cloud workspace (Jira answers
+  // 404 for "no link").
+  http.get("*/slack/status", () => HttpResponse.json({ connected: false })),
+
+  http.get(
+    "*/integration/jira/workspaces/link",
+    () => new HttpResponse(null, { status: 404 }),
+  ),
+
   http.get("*/api/settings/conversation-schema", async () => {
     await delay();
     return HttpResponse.json(MOCK_CONVERSATION_SETTINGS_SCHEMA);

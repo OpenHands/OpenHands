@@ -281,6 +281,15 @@ describe("matchesAutomationSearch", () => {
   it("rejects an automation matching no field", () => {
     expect(matchesAutomationSearch(createAutomation(), "gadget")).toBe(false);
   });
+
+  it("matches the repositories the service returns", () => {
+    const automation = createAutomation({
+      repository: undefined,
+      repositories: [{ url: "fabrikam/Fabrikam Fiber/fabrikam-web" }],
+    });
+
+    expect(matchesAutomationSearch(automation, "fabrikam-web")).toBe(true);
+  });
 });
 
 describe("applyDashboardView", () => {

@@ -227,6 +227,47 @@ describe("constructRepositoryUrl", () => {
     ).toBe("https://bitbucket.example.com/projects/PROJECT/repos/repo");
   });
 
+  it("uses the _git layout for Azure DevOps", () => {
+    expect(constructRepositoryUrl("azure_devops", "org/project/repo")).toBe(
+      "https://dev.azure.com/org/project/_git/repo",
+    );
+  });
+
+  it("percent-encodes Azure DevOps path segments such as a project with a space", () => {
+    expect(constructRepositoryUrl("azure_devops", "org/Web Apps/repo")).toBe(
+      "https://dev.azure.com/org/Web%20Apps/_git/repo",
+    );
+  });
+
+  it("does not encode an already-encoded Azure DevOps name twice", () => {
+    // Names parsed from a git remote URL keep its percent-encoding.
+    expect(constructRepositoryUrl("azure_devops", "org/Web%20Apps/repo")).toBe(
+      "https://dev.azure.com/org/Web%20Apps/_git/repo",
+    );
+  });
+
+  it("encodes a stray % in an Azure DevOps name", () => {
+    expect(constructRepositoryUrl("azure_devops", "org/100%/repo")).toBe(
+      "https://dev.azure.com/org/100%25/_git/repo",
+    );
+  });
+
+  it("uses a custom host for Azure DevOps", () => {
+    expect(
+      constructRepositoryUrl(
+        "azure_devops",
+        "org/project/repo",
+        "ado.example.com",
+      ),
+    ).toBe("https://ado.example.com/org/project/_git/repo");
+  });
+
+  it("keeps the plain path for an Azure DevOps name without three parts", () => {
+    expect(constructRepositoryUrl("azure_devops", "org/repo")).toBe(
+      "https://dev.azure.com/org/repo",
+    );
+  });
+
   it("leaves the repo segment undefined for a single-part Bitbucket Data Center name", () => {
     expect(
       constructRepositoryUrl(

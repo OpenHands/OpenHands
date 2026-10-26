@@ -9,6 +9,7 @@ import type { Automation } from "#/types/automation";
 import { cn } from "#/utils/utils";
 import { extensionModuleCardPillClassName } from "#/utils/extension-module-card-classes";
 import { getMarketplaceEntryById } from "#/utils/mcp-marketplace-utils";
+import { parseGitRemoteUrl } from "#/utils/parse-git-remote-url";
 import {
   formatTriggerSourceLabel,
   getTriggerEventLabel,
@@ -22,17 +23,27 @@ export function buildAutomationMetadataPills(
 ): SkillCardPill[] {
   const pills: SkillCardPill[] = [];
 
-  if (automation.repository) {
+  // The service returns repositories, lifted from preset metadata; only an
+  // imported file shape carries the single `repository`.
+  const repositoryUrls = automation.repositories?.map(({ url }) => url) ?? [];
+  if (repositoryUrls.length === 0 && automation.repository) {
+    repositoryUrls.push(automation.repository);
+  }
+  repositoryUrls.forEach((url, index) => {
+    const name = parseGitRemoteUrl(url)?.repository ?? url;
     pills.push({
-      id: "repository",
+      id: index === 0 ? "repository" : `repository-${index}`,
       node: (
-        <span className={cn(extensionModuleCardPillClassName, "gap-1")}>
+        <span
+          className={cn(extensionModuleCardPillClassName, "gap-1")}
+          title={url}
+        >
           <FolderIcon className="size-3 shrink-0" />
-          {automation.repository}
+          {name}
         </span>
       ),
     });
-  }
+  });
 
   if (automation.trigger.type === "event") {
     const eventLabel = getTriggerEventLabel(automation);

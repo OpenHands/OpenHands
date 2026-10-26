@@ -40,12 +40,28 @@
  *   as OPENHANDS_AUTOMATION_API_KEY, making it available to agents in conversations.
  *   Both the agent-server and automation backend use the same key value
  *   and the same `X-Session-API-Key` header for authentication.
- *   AUTOMATION_KV_SECRET is derived from the session key if not set explicitly,
- *   enabling the KV store out of the box for local development.
+ *   AUTOMATION_KV_SECRET, if not set explicitly, is pinned in
+ *   <state dir>/automation-kv-secret.txt the first time, seeded with the
+ *   session key, so rotating the session key later does not change it.
  */
 
 import { spawn, spawnSync } from "node:child_process";
-import { mkdirSync, existsSync, readFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import {
+  closeSync,
+  constants as fsConstants,
+  existsSync,
+  fchmodSync,
+  fstatSync,
+  linkSync,
+  lstatSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { join, resolve, dirname, isAbsolute } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { homedir } from "node:os";
@@ -57,6 +73,9 @@ import {
   buildAgentServerCommand,
   buildSafeDevConfig,
   buildAgentServerEnv,
+  buildBackendLogEnv,
+  backendLogLevel,
+  uvicornLogLevel,
   buildNpmScriptCommand,
   buildRuntimeServicesInfo,
   buildUvxPythonArgs,
@@ -260,7 +279,7 @@ OPTIONS:
   --dynamic                   Force Vite dev server when a wrapper defaults static
   --frontend-only             Start only the frontend behind ingress
   --backend-only              Start only agent-server + automation behind ingress
-  -v, --verbose               Show detailed output
+  -v, --verbose               Set backend log level to DEBUG (default: WARNING)
   -h, --help                  Show this help
 
 ENVIRONMENT VARIABLES:
@@ -273,13 +292,20 @@ ENVIRONMENT VARIABLES:
   OH_AGENT_SERVER_GIT_REF     Git ref for agent-server SDK (overrides default version)
   OH_AGENT_SERVER_VERSION     Specific PyPI version for agent-server
   OH_SECRET_KEY               Secret key for sessions
+  LOG_LEVEL                   Log level for both backends (default: WARNING)
+                              Python names and aliases both work; aliases and
+                              numbers are mapped onto Uvicorn's own set.
+  AUTOMATION_LOG_LEVEL        Log level for the automation service only
+                              (default: LOG_LEVEL)
 
 SECRETS:
   The session API key is automatically seeded into agent-server secrets
   as OPENHANDS_AUTOMATION_API_KEY, making it available to agents in conversations.
   Both backends (agent-server and automation) share the same key value.
-  AUTOMATION_KV_SECRET defaults to the session key so the KV store works
-  out of the box; override with an explicit value for stronger isolation.
+  AUTOMATION_KV_SECRET encrypts automation KV state. Unless set explicitly,
+  it is pinned in <state dir>/automation-kv-secret.txt on first launch (seeded
+  with the session key) and kept from then on, so rotating the session key does
+  not change it. Deleting that file makes existing KV state unreadable.
 
 ACCESS POINTS:
   Main UI:      http://localhost:PORT/
@@ -539,6 +565,9 @@ async function buildConfig(args, env = process.env) {
 
     // Auth — single key for both backends
     sessionApiKey,
+    // Settings encryption key; the MARS web bridge also encrypts saved
+    // DigitalOcean sign-ins with it where the host has no keychain.
+    secretKey: safeConfig.secretKey,
 
     // Public mode — the session key should NOT be baked into the frontend
     isPublic,
@@ -942,6 +971,155 @@ function buildAutomationTelemetryEnv(env = process.env) {
   };
 }
 
+// AUTOMATION_KV_SECRET encrypts the automation backend's KV state (and is its
+// fallback key for stored git-sync credentials), so it must not change under
+// existing data. Launchers used to pass the session API key on every start,
+// so rotating that key silently changed the encryption key too (#18299). The
+// first launch without this file pins the session key it runs with -- the
+// value earlier versions used -- and later launches keep it.
+// docker/entrypoint.sh pins to the same file.
+const AUTOMATION_KV_SECRET_FILE = "automation-kv-secret.txt";
+
+// The pin follows one contract in both launchers (docker/entrypoint.sh has
+// the shell version): it must be a regular file, not a symbolic link; an
+// existing pin is made private (0600) before it is used; it is created
+// without replacing anything, so concurrent first launches all end up with
+// the one value that won; a blank pin is replaced by one launcher holding
+// automation-kv-secret.txt.lock, while the others wait for its value; and any
+// failure stops the launch.
+function readPinnedKvSecret(filePath) {
+  let stat;
+  try {
+    stat = lstatSync(filePath);
+  } catch (error) {
+    if (error?.code === "ENOENT") return null;
+    throw error;
+  }
+  if (stat.isSymbolicLink()) {
+    throw new Error(`${filePath} is a symbolic link; refusing to use it`);
+  }
+  // Opening a FIFO would block until something writes to it, so reject
+  // anything that is not a regular file before opening it.
+  if (!stat.isFile()) {
+    throw new Error(`${filePath} is not a regular file`);
+  }
+  // O_NOFOLLOW and O_NONBLOCK close the gap between the lstat above and the
+  // open, where the platform has them (not on Windows): a path swapped for a
+  // symbolic link fails to open, and one swapped for a FIFO does not block.
+  const fd = openSync(
+    filePath,
+    fsConstants.O_RDONLY |
+      (fsConstants.O_NOFOLLOW ?? 0) |
+      (fsConstants.O_NONBLOCK ?? 0),
+  );
+  try {
+    const opened = fstatSync(fd);
+    if (!opened.isFile()) {
+      throw new Error(`${filePath} is not a regular file`);
+    }
+    if (process.platform !== "win32" && opened.mode & 0o077) {
+      fchmodSync(fd, 0o600);
+    }
+    // Read the same way as docker/entrypoint.sh: trailing line breaks are not
+    // part of the key, and a blank file counts as not pinned yet.
+    return readFileSync(fd, "utf8").replace(/[\r\n]+$/, "");
+  } finally {
+    closeSync(fd);
+  }
+}
+
+// Writes the key to a private temporary file, then links it into place. A
+// link never replaces an existing file, so only one concurrent launcher wins,
+// and the others read a pin that is already complete. Returns false if
+// another launcher pinned first.
+function createPinnedKvSecret(filePath, key) {
+  const tmpPath = `${filePath}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
+  writeFileSync(tmpPath, `${key}\n`, { mode: 0o600, flag: "wx" });
+  try {
+    linkSync(tmpPath, filePath);
+    return true;
+  } catch (error) {
+    if (error?.code === "EEXIST") return false;
+    throw error;
+  } finally {
+    rmSync(tmpPath, { force: true });
+  }
+}
+
+// Renames a fully written private file over a blank pin, so the pin never
+// goes missing for launchers that are waiting on it. Only the holder of the
+// pin lock calls this.
+function replaceBlankPinnedKvSecret(filePath, key) {
+  const tmpPath = `${filePath}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
+  writeFileSync(tmpPath, `${key}\n`, { mode: 0o600, flag: "wx" });
+  try {
+    renameSync(tmpPath, filePath);
+  } catch (error) {
+    rmSync(tmpPath, { force: true });
+    throw error;
+  }
+}
+
+function tryLockKvSecretPin(lockPath) {
+  try {
+    mkdirSync(lockPath);
+    return true;
+  } catch (error) {
+    if (error?.code === "EEXIST") return false;
+    throw error;
+  }
+}
+
+function sleepSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function resolveAutomationKvSecret(config, env = process.env) {
+  if (env.AUTOMATION_KV_SECRET) return env.AUTOMATION_KV_SECRET;
+
+  const filePath = join(config.stateDir, AUTOMATION_KV_SECRET_FILE);
+  const lockPath = `${filePath}.lock`;
+  mkdirSync(config.stateDir, { recursive: true });
+  const pinned = (key) => {
+    logService(
+      "automation",
+      `Pinned AUTOMATION_KV_SECRET in ${filePath}`,
+      c.dim,
+    );
+    return key;
+  };
+  // An unreadable pin throws instead of falling back to the session key, which
+  // could encrypt new state with the wrong key. The attempts allow about 5
+  // seconds of waiting on a concurrent launcher that is replacing a blank pin.
+  let locked = false;
+  try {
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      const current = readPinnedKvSecret(filePath);
+      if (current?.trim()) return current;
+      if (current === null) {
+        if (createPinnedKvSecret(filePath, config.sessionApiKey)) {
+          return pinned(config.sessionApiKey);
+        }
+        continue;
+      }
+      // A blank pin counts as not pinned yet. One launcher takes the lock and
+      // reads the pin again under it; the others wait for the new value.
+      if (!locked) {
+        locked = tryLockKvSecretPin(lockPath);
+        if (!locked) sleepSync(100);
+        continue;
+      }
+      replaceBlankPinnedKvSecret(filePath, config.sessionApiKey);
+      return pinned(config.sessionApiKey);
+    }
+  } finally {
+    if (locked) rmSync(lockPath, { recursive: true, force: true });
+  }
+  throw new Error(
+    `Could not pin AUTOMATION_KV_SECRET in ${filePath} (if no other launch is running, remove ${lockPath})`,
+  );
+}
+
 function startAgentServer(config) {
   logService(
     "agent-server",
@@ -967,6 +1145,7 @@ function startAgentServer(config) {
     // advertises resolves to the editor port on the canvas origin.
     ...buildAgentServerEnv(safeConfig, {
       vscodeBasePath: config.vscodeBasePath,
+      verbose: config.verbose,
     }),
     ...buildAgentServerAutomationEnv(config),
     OPENHANDS_REMOTE_WS_READY_REQUIRED:
@@ -1000,6 +1179,32 @@ function startAgentServer(config) {
   );
 }
 
+/**
+ * Extra CLI arguments for the automation service, on top of the uvicorn
+ * invocation the command builder already produced.
+ *
+ * `--log-level` is Uvicorn's own level, separate from the app's `LOG_LEVEL`: it
+ * governs the startup banner and per-request access lines. Keeping it in step
+ * with the service level means a default launch is quiet while `--verbose`
+ * still shows request traffic. The value is narrowed by
+ * {@link uvicornLogLevel}, since Uvicorn rejects the Python aliases and numeric
+ * levels the app itself accepts.
+ *
+ * @param {{autoBackendPort: number, verbose?: boolean}} config
+ * @param {Record<string, string | undefined>} [env]
+ * @returns {string[]}
+ */
+export function buildAutomationLogArgs(config, env = process.env) {
+  return [
+    "--host",
+    "127.0.0.1",
+    "--port",
+    config.autoBackendPort.toString(),
+    "--log-level",
+    uvicornLogLevel(backendLogLevel({ verbose: config.verbose, env })),
+  ];
+}
+
 function startAutomationBackend(config) {
   logService(
     "automation",
@@ -1010,22 +1215,23 @@ function startAutomationBackend(config) {
   const automationCmd = buildAutomationCommand(process.env);
   logService("automation", `Using ${automationCmd.source}`, c.dim);
 
+  // Quiet the automation service by default; see buildBackendLogEnv.
+  const logEnv = buildBackendLogEnv({
+    verbose: config.verbose,
+    automation: true,
+  });
+
   return spawnService(
     "automation",
     automationCmd.command,
-    [
-      ...automationCmd.args,
-      "--host",
-      "127.0.0.1",
-      "--port",
-      config.autoBackendPort.toString(),
-    ],
+    [...automationCmd.args, ...buildAutomationLogArgs(config)],
     {
       cwd: config.stateDir,
       env: {
         // Force UTF-8 for all Python file I/O (same reason as agent-server;
         // see buildAgentServerEnv in dev-safe.mjs).
         PYTHONUTF8: "1",
+        ...logEnv,
         OPENHANDS_REMOTE_WS_READY_REQUIRED:
           process.env.OPENHANDS_REMOTE_WS_READY_REQUIRED || "false",
         // The URL the automation backend itself uses to call the
@@ -1082,12 +1288,9 @@ function startAutomationBackend(config) {
         ...buildAutomationTelemetryEnv(),
         // KV store secret — required for automations to use the built-in
         // key-value store for state persistence between runs. Used for JWT
-        // signing and value encryption.
-        // Priority:
-        //   1. AUTOMATION_KV_SECRET explicitly set in the user's env
-        //   2. sessionApiKey — convenient zero-config default for local dev
-        AUTOMATION_KV_SECRET:
-          process.env.AUTOMATION_KV_SECRET || config.sessionApiKey,
+        // signing and value encryption. Resolved in main() before any service
+        // starts; see resolveAutomationKvSecret.
+        AUTOMATION_KV_SECRET: config.automationKvSecret,
         // CORS: allow localhost origins for dev, unless explicitly overridden.
         AUTOMATION_CORS_ORIGINS:
           process.env.AUTOMATION_CORS_ORIGINS ||
@@ -1181,13 +1384,19 @@ process.on("SIGHUP", shutdown);
  * destroySession and savePat from any local process, the agent's shell
  * included, so a stack with no session key mounts nothing. Electron turns it
  * off altogether (`config.marsWebBridge`), its preload provides the bridge.
+ * The bridge keeps sign-ins under the stack's state directory, encrypted with
+ * its secret key where the host has no keychain.
  */
 export function buildMarsWebEnv(role, config) {
   if (role === "static" || config.marsWebBridge === false) {
     return { MARS_WEB: "0" };
   }
   return config.sessionApiKey
-    ? { MARS_WEB_KEY: config.sessionApiKey }
+    ? {
+        MARS_WEB_KEY: config.sessionApiKey,
+        ...(config.stateDir ? { MARS_STATE_DIR: config.stateDir } : {}),
+        ...(config.secretKey ? { OH_SECRET_KEY: config.secretKey } : {}),
+      }
     : { MARS_WEB: "0" };
 }
 
@@ -1655,6 +1864,11 @@ async function main(options = {}) {
   if (typeof extraPrereqs === "function") {
     extraPrereqs(config);
   }
+  // Before any service starts, so a problem with the pinned secret stops the
+  // launch instead of leaving the agent-server running without automation.
+  if (config.launchAutomation) {
+    config.automationKvSecret = resolveAutomationKvSecret(config);
+  }
 
   if (
     config.launchFrontend &&
@@ -1763,6 +1977,13 @@ function startStaticFrontend(config, staticDir) {
     : null;
 
   const staticServerScript = join(projectRoot, "scripts", "static-server.mjs");
+  const keyPolicy = applySessionKeyPolicy({
+    host: config.bindHost,
+    sessionApiKey:
+      config.launchAgentServer && !config.isPublic ? config.sessionApiKey : null,
+    authRequired: Boolean(config.launchAgentServer && config.isPublic),
+    warn: (msg) => logService("static", msg, c.yellow),
+  });
   spawnService(
     "static",
     "node",
@@ -1776,28 +1997,8 @@ function startStaticFrontend(config, staticDir) {
       ...(process.env.VITE_BASE_PATH
         ? ["--base-path", process.env.VITE_BASE_PATH]
         : []),
-      // In local mode on loopback, inject the API key so the pre-built
-      // frontend can authenticate transparently. Off-loopback binds (and
-      // public mode) use the API key entry screen instead.
-      ...(() => {
-        const policy = applySessionKeyPolicy({
-          host: config.bindHost,
-          sessionApiKey:
-            config.launchAgentServer && !config.isPublic
-              ? config.sessionApiKey
-              : null,
-          authRequired: Boolean(config.launchAgentServer && config.isPublic),
-          warn: (msg) => logService("static", msg, c.yellow),
-        });
-        const flags = [];
-        if (policy.sessionApiKey) {
-          flags.push("--session-api-key", policy.sessionApiKey);
-        }
-        if (policy.authRequired) {
-          flags.push("--auth-required");
-        }
-        return flags;
-      })(),
+      // Off-loopback binds and public mode show the API key entry screen.
+      ...(keyPolicy.authRequired ? ["--auth-required"] : []),
       // Inject runtime-services info so the agent knows what's reachable.
       ...(runtimeServicesInfo
         ? ["--runtime-services-info", runtimeServicesInfo]
@@ -1817,7 +2018,11 @@ function startStaticFrontend(config, staticDir) {
     {
       cwd: config.canvasPath,
       color: c.magenta,
-      env: buildMarsWebEnv("static", config),
+      // Clear an inherited key in public or frontend-only mode.
+      env: {
+        ...buildMarsWebEnv("static", config),
+        SESSION_API_KEY: keyPolicy.sessionApiKey || "",
+      },
     },
   );
 }
@@ -1832,6 +2037,7 @@ export {
   buildAutomationTelemetryEnv,
   buildConfig,
   buildRouteArgs,
+  resolveAutomationKvSecret,
   buildViteBackendEnv,
   buildViteFrontendEnv,
   getAgentServerBaseUrl,

@@ -98,6 +98,14 @@ control-openhands stop                         # stops only this run; evidence s
   agent-server has no editor binary and nothing listens there). Where that is opt-in (#17660), `--vscode`
   turns it on; where the editor is bundled (before #17660, or since #18048), it
   is always included and `--vscode` changes nothing.
+- **Launch variants** that a launcher flag or a deployment sets, not the
+  operator's shell: `--mars-web` starts the launcher with `MARS_WEB=1` (the
+  ingress hosts the Managed Agents bridge, `/mars/*`, and Add Backend offers
+  Providers; doctor checks `/mars/health`). `--lock-to-cloud <url>` also serves
+  the build locked to that Cloud host on `ports.lockedCloud` (P+4), because
+  only `scripts/static-server.mjs` takes `--lock-to-cloud`; `browser goto
+  <lockedCloud.url>/` opens it as a run page, and `stop` ends it with the run.
+  Never hand-start these processes on fixed ports: `stop` cannot see them.
 - **Doctor** checks the launcher's process group, ports, served build revision,
   unauthenticated rejection, authenticated settings, Agent Server pin and the
   UI's minimum Agent Server version, automation health and a throwaway-tab UI
@@ -116,6 +124,11 @@ control-openhands stop                         # stops only this run; evidence s
   preconditions (a configured profile, a git repo, a dummy secret). They never
   count as proof that the UI path works; the map says which steps are UI proof.
   Never intercept routes or add mock LLM responses to make a live check pass.
+  An outside service a run cannot use is stood in by a server in
+  `scripts/fixtures/`, which Canvas reaches the way it reaches the real one:
+  `digitalocean-standin.mjs` for DigitalOcean's Managed Agents
+  ([F25](references/feature-map/F25-backends-and-cloud.md)). Evidence from a
+  stand-in says so.
 - **Essential pathways** are single commands so recipes can start from a known
   state: `onboard`, `llm preset|set`, `conversation start --prompt ... --wait`
   (add `--workspace qa-repo` to run it in a `fixture git-repo`),
@@ -151,7 +164,9 @@ control-openhands stop                         # stops only this run; evidence s
   projection is bounded to 16384 UTF-8 bytes; an oversized projection is omitted
   with `bodyFieldsOmitted.plugins` explaining why. No projection of other
   top-level fields is made, and neither body fields nor omission metadata appear
-  without `--bodies`),
+  without `--bodies`; every row also times its response: `responseMs`,
+  `durationMs`, `completedTs`, `outcome` and `completedSeq`, and `--order
+  completion` lists rows in the order they completed, for response races),
   `browser toasts` and `browser media` observe requests by origin, toasts and
   sound without changing anything; `click --observe SEL` and `scroll
   --observe SEL` record the transient states SEL shows while the action's
@@ -217,14 +232,19 @@ prerequisite; never substitute a mock and call it a pass.
   [the report contract](references/report.md).
 - **Verify a fix for a known bug** (an open PR or a merged commit that claims
   to fix a bug the map records): launch the baseline and the fix as two runs
-  (`launch --new` from each worktree, same backend pins), then run the note's
+  (`launch --new` with each worktree's own `control-openhands`: the CLI
+  launches the checkout it lives in, whatever the current directory; same
+  backend pins), then run the note's
   known-bug block twice on each with this checkout's CLI:
   `control-openhands bug run <ID> --attempts 2 --label baseline --run $BASE_RUN`
   must report `xfail` both times, and `--label fix --run $FIX_RUN` `xpass` both
   times. `control-openhands bug proof <ID> --baseline $BASE_RUN --baseline-label
   baseline --fix $FIX_RUN --fix-label fix` gives the verdict: `verified`,
   `not-fixed`, or `inconclusive`. A baseline that does not reproduce twice is
-  inconclusive, never "fixed". When the note has no block yet, write one first
+  inconclusive, never "fixed". For a fix in the Agent Server or automation,
+  launch both runs from this checkout, the baseline with `--sdk-version` (or
+  `--automation-version`) before the fix, and add `--vary backend` to
+  `bug proof`. When the note has no block yet, write one first
   ([mapping.md](references/mapping.md)) and prove it reproduces on the
   baseline. Every attempt runs the same recipe, viewport and fixtures, and
   screenshots or recordings stay part of the proof.

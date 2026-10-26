@@ -1,5 +1,6 @@
 import {
   AUTOMATION_CATALOG,
+  type AutomationTriggerKind,
   type RecommendedAutomation,
 } from "@openhands/extensions/automations";
 import {
@@ -62,6 +63,57 @@ export function getRequiredIntegrationIds(
   return Object.entries(automation.requires.integrations)
     .filter(([, requirement]) => requirement.required !== false)
     .map(([id]) => id);
+}
+
+/**
+ * Every integration a template is about, for filtering: the ones it declares
+ * plus the git provider of any repository picker in its setup form. Several
+ * GitHub templates declare no integration (their worker uses the connected
+ * account's token) and are GitHub only by that picker.
+ */
+export function getTemplateIntegrationIds(
+  automation: RecommendedAutomation,
+): string[] {
+  const ids = getIntegrationIds(automation);
+  for (const field of Object.values(automation.setup?.form.args ?? {})) {
+    if (
+      field.type === "repo-picker" &&
+      field.provider &&
+      !ids.includes(field.provider)
+    ) {
+      ids.push(field.provider);
+    }
+  }
+  return ids;
+}
+
+export type TemplateTriggerKind = AutomationTriggerKind;
+
+const TEMPLATE_TRIGGER_KINDS: readonly TemplateTriggerKind[] = [
+  "cron",
+  "event",
+];
+
+function isTemplateTriggerKind(value: unknown): value is TemplateTriggerKind {
+  return TEMPLATE_TRIGGER_KINDS.includes(value as TemplateTriggerKind);
+}
+
+/**
+ * How a template runs once created. A setup form states it as the keys of
+ * `setup.form.triggers`; an entry without one may state it as a top-level
+ * `triggers` list, read off the raw entry because the pinned package may
+ * predate the field. Empty when the catalog says nothing, so the card shows
+ * no badge and only a trigger filter leaves it out.
+ */
+export function getTemplateTriggerKinds(
+  automation: RecommendedAutomation,
+): TemplateTriggerKind[] {
+  const formTriggers = automation.setup?.form.triggers;
+  if (formTriggers) {
+    return Object.keys(formTriggers).filter(isTemplateTriggerKind);
+  }
+  const { triggers } = automation as unknown as Record<string, unknown>;
+  return Array.isArray(triggers) ? triggers.filter(isTemplateTriggerKind) : [];
 }
 
 /**

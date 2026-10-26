@@ -166,6 +166,9 @@ export function matchesAutomationSearch(
   return (
     automation.name.toLowerCase().includes(q) ||
     (automation.prompt ?? "").toLowerCase().includes(q) ||
+    (automation.repositories ?? []).some(({ url }) =>
+      url.toLowerCase().includes(q),
+    ) ||
     automation.repository?.toLowerCase().includes(q) === true ||
     automation.model?.toLowerCase().includes(q) === true
   );

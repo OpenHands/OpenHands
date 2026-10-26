@@ -10,6 +10,7 @@ import type {
 } from "#/manifests/types";
 import type {
   Automation,
+  AutomationRepository,
   AutomationsResponse,
   AutomationRun,
   AutomationRunsResponse,
@@ -29,7 +30,10 @@ const CAPABILITIES: DeploymentCapabilities = {
   features: [
     ...(capabilitiesFixture.responses.supported.body.features ?? []),
     "automationDrafts",
+    // Changing a preset's repositories with PATCH is newer than the fixture too.
+    "repoUpdate",
   ],
+  repoProviders: ["bitbucket", "github", "gitlab"],
 };
 
 interface DraftTrigger {
@@ -436,11 +440,13 @@ export const AUTOMATION_HANDLERS = [
       prompt: string;
       model?: string;
       trigger: Automation["trigger"];
-      repos?: { url: string; ref?: string }[];
+      repos?: AutomationRepository[];
       plugins?: { source: string }[];
       timeout?: number;
     };
     const now = new Date().toISOString();
+    // Like the service: repositories live only in preset metadata, which the
+    // client lifts onto `repositories` when it reads the automation.
     const automation: Automation = {
       id: crypto.randomUUID(),
       name: body.name,
@@ -451,10 +457,11 @@ export const AUTOMATION_HANDLERS = [
       created_at: now,
       updated_at: now,
       last_triggered_at: null,
-      ...(body.repos?.[0] && {
-        repository: body.repos[0].url,
-        branch: body.repos[0].ref,
-      }),
+      preset_metadata: {
+        preset_type: params.kind,
+        prompt: body.prompt,
+        ...(body.repos?.length && { repos: body.repos }),
+      },
       ...(body.plugins && {
         plugins: body.plugins.map((plugin) => plugin.source),
       }),
@@ -528,7 +535,9 @@ export const AUTOMATION_HANDLERS = [
     const id = params.id as string;
     // Clone the request before reading the body to avoid "Body has already been read" errors
     // when MSW internally consumes the body during handler resolution.
-    const body = (await request.clone().json()) as Partial<Automation>;
+    const { repos, ...body } = (await request.clone().json()) as Partial<
+      Automation & { repos: AutomationRepository[] | null }
+    >;
     const automation = automations.get(id);
     if (!automation) {
       return HttpResponse.json(
@@ -537,9 +546,16 @@ export const AUTOMATION_HANDLERS = [
       );
     }
 
+    // Repositories replace the preset's whole list, as the service applies them.
+    let presetMetadata = automation.preset_metadata;
+    if (repos !== undefined) {
+      const { repos: _previous, ...rest } = presetMetadata ?? {};
+      presetMetadata = { ...rest, ...(repos?.length && { repos }) };
+    }
     const updated: Automation = {
       ...automation,
       ...body,
+      preset_metadata: presetMetadata,
       updated_at: new Date().toISOString(),
     };
     automations.set(id, updated);
@@ -566,11 +582,9 @@ export const AUTOMATION_HANDLERS = [
       conversation_id: null,
       bash_command_id: null,
       error_detail: null,
-      // A freshly dispatched run has not reported a phase yet — the service
-      // sends the fields as null rather than omitting them.
-      phase_code: null,
-      phase_label: null,
-      phase_updated_at: null,
+      // A freshly dispatched run has not reported a phase yet — the 1.9.0+
+      // service sends `current_phase: null`.
+      current_phase: null,
       started_at: new Date().toISOString(),
       completed_at: null,
     };

@@ -1,6 +1,10 @@
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { compile } from "@tailwindcss/node";
+import type { MarsSandboxSize } from "#/api/mars/mars-tunnel-backend";
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MockInstance } from "vitest";
@@ -143,6 +147,119 @@ describe("AddBackendModal – connection chooser", () => {
     expect(
       screen.getByTestId("add-backend-deployment-options-link"),
     ).toHaveTextContent("CTA$LEARN_MORE");
+  });
+
+  it("keeps each nested panel's measured height and automatic fallback in compiled CSS", async () => {
+    const compiler = await compile(
+      await readFile(resolve("src/tailwind.css"), "utf8"),
+      { base: resolve("src"), onDependency: () => {} },
+    );
+    const heights = new Map<Element, number>();
+    const observers = new Map<
+      Element,
+      { notify: () => void; disconnect: ReturnType<typeof vi.fn> }
+    >();
+    const originalRect = HTMLElement.prototype.getBoundingClientRect;
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockImplementation(function (this: HTMLElement) {
+        if (this.parentElement?.dataset.testid !== "add-backend-panel-height") {
+          return originalRect.call(this);
+        }
+        const height =
+          heights.get(this) ??
+          (this.firstElementChild?.getAttribute("data-testid") ===
+          "add-backend-slide-rail"
+            ? 440
+            : 0);
+        return new DOMRect(0, 0, 640, height);
+      });
+    const originalObserver = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = class {
+      disconnect = vi.fn();
+      constructor(private callback: ResizeObserverCallback) {}
+      observe = (target: Element) => {
+        observers.set(target, {
+          notify: () => this.callback([], this as unknown as ResizeObserver),
+          disconnect: this.disconnect,
+        });
+      };
+      unobserve = vi.fn();
+    } as unknown as typeof ResizeObserver;
+    const style = document.createElement("style");
+
+    try {
+      const { unmount } = renderWithProviders(
+        <AddBackendModal onClose={vi.fn()} />,
+      );
+      const [outer, inner] = screen.getAllByTestId("add-backend-panel-height");
+      expect(outer).toContainElement(inner);
+      const css = compiler.build([...inner.classList]);
+      const rules = [
+        ...css.matchAll(/\.((?:\\.|[\w-])+)\s*\{([^}]+)\}/g),
+      ].filter(([, selector]) =>
+        inner.classList.contains(selector.replace(/\\(.)/g, "$1")),
+      );
+      const heightRule = rules.find(([, , body]) =>
+        /(?:^|\n)\s*height:\s*var\((--[\w-]+)\);/.test(body),
+      );
+      expect(heightRule).toBeDefined();
+      const property = /height:\s*var\((--[\w-]+)\);/.exec(heightRule![2])![1];
+      // Apply the actual compiled rule: its local default must beat the
+      // measured ancestor's inherited variable before this panel is measured.
+      style.textContent = heightRule![0];
+      document.head.appendChild(style);
+      const renderedHeight = (panel: HTMLElement) => {
+        expect(panel.style.height).toBe("");
+        return getComputedStyle(panel).getPropertyValue(property);
+      };
+      expect(renderedHeight(outer)).toBe("440px");
+      expect(renderedHeight(inner)).toBe("auto");
+
+      const declarations = rules.map(([, , body]) => body).join("\n");
+      expect(heightRule![2]).toMatch(/transition-property:\s*height;/);
+      expect(declarations).toMatch(/transition-duration:\s*300ms;/);
+      const easing = /transition-timing-function:\s*var\((--[\w-]+)\);/.exec(
+        declarations,
+      );
+      expect(easing).not.toBeNull();
+      expect(css).toMatch(
+        new RegExp(
+          `${easing![1]}:\\s*cubic-bezier\\(0\\.4,\\s*0,\\s*0\\.2,\\s*1\\)`,
+        ),
+      );
+      const reducedMotion =
+        /@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{\s*\.((?:\\.|[\w-])+)\s*\{\s*transition-property:\s*none;/.exec(
+          css,
+        );
+      expect(reducedMotion).not.toBeNull();
+      expect(
+        inner.classList.contains(reducedMotion![1].replace(/\\(.)/g, "$1")),
+      ).toBe(true);
+
+      const resize = (panel: HTMLElement, height: number) => {
+        const content = panel.firstElementChild!;
+        heights.set(content, height);
+        act(() => observers.get(content)!.notify());
+      };
+      await selectAgentServer();
+      resize(inner, 380);
+      resize(outer, 520);
+      expect(renderedHeight(inner)).toBe("380px");
+      expect(renderedHeight(outer)).toBe("520px");
+      resize(inner, 0);
+      expect(renderedHeight(inner)).toBe("auto");
+      resize(inner, 240);
+      expect(renderedHeight(inner)).toBe("240px");
+      unmount();
+      for (const observer of observers.values()) {
+        expect(observer.disconnect).toHaveBeenCalledOnce();
+      }
+    } finally {
+      style.remove();
+      rectSpy.mockRestore();
+      globalThis.ResizeObserver = originalObserver;
+    }
   });
 
   it("hides the Advanced host disclosure while authorization is pending", async () => {
@@ -614,7 +731,7 @@ describe("AddBackendModal – DigitalOcean", () => {
         sessions: configSessions.filter((s) => s.config_id === configId),
         nextPageToken: null,
       })),
-      listSandboxSizes: vi.fn(async () => []),
+      listSandboxSizes: vi.fn(async (): Promise<MarsSandboxSize[]> => []),
       createOpenHandsAgent: vi.fn(async ({ name }: { name: string }) => {
         const config = { id: "cfg_new", name, agent: "openhands" };
         configs.push(config);
@@ -744,6 +861,10 @@ describe("AddBackendModal – DigitalOcean", () => {
   it("New Agent creates an OpenHands agent and launches its first session", async () => {
     // Arrange
     const bridge = fakeMarsBridge({ signedIn: true });
+    bridge.listSandboxSizes.mockResolvedValue([
+      { slug: "mars-2vcpu-4gb", vcpus: 2, memory_mb: 4096 },
+      { slug: "mars-1vcpu-1gb", vcpus: 1, memory_mb: 1024 },
+    ]);
     const onClose = vi.fn();
     const user = userEvent.setup();
     renderWithProviders(<AddBackendModal onClose={onClose} />);
@@ -761,7 +882,7 @@ describe("AddBackendModal – DigitalOcean", () => {
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(bridge.createOpenHandsAgent).toHaveBeenCalledWith({
       name: "team-agent",
-      size: undefined,
+      size: "mars-1vcpu-1gb",
     });
     expect(bridge.createSession).toHaveBeenCalledWith(
       "cfg_new",
