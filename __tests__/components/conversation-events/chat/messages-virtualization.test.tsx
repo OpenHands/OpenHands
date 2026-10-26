@@ -324,6 +324,142 @@ describe("Messages virtualization", () => {
     expect(list.style.height).toBe(`${400 * 108}px`);
   });
 
+  it("seeds the shell from each row's occupied height, margins included", () => {
+    // A user bubble carries `mt-6`, so a plain row occupies its border box plus
+    // that margin, and a virtual row's own box contains it too (block layout).
+    // A bounding rectangle is the border box, so seeding from rectangles alone
+    // would make the shell shorter than the plain list it replaced — letting
+    // the browser clamp the reader's scroll offset. The rows that mount would
+    // then measure taller than their seed and the shell would still come up
+    // short, which is what the total height below catches.
+    const MARGIN_TOP = 24;
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: Element) {
+        const isVirtualRow =
+          this.getAttribute("data-testid") === "virtualized-message-row";
+        const height = isVirtualRow ? 100 + MARGIN_TOP : 100;
+        return {
+          width: 800,
+          height,
+          top: 0,
+          left: 0,
+          right: 800,
+          bottom: height,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+        } as DOMRect;
+      },
+    );
+    vi.spyOn(window, "getComputedStyle").mockReturnValue({
+      marginTop: `${MARGIN_TOP}px`,
+      marginBottom: "0px",
+    } as CSSStyleDeclaration);
+
+    // The same 150 rows before and after, so every row is measured while plain
+    // and the seed is not diluted by the fallback for an unmeasured row.
+    const { rerender } = renderMessages(buildEvents(150), false);
+    expect(screen.queryByTestId("virtualized-message-list")).toBeNull();
+
+    rerender(<Harness events={buildEvents(150)} withScrollParent />);
+
+    const list = screen.getByTestId("virtualized-message-list");
+    // (100px box + 24px top margin + 8px row gap) per row.
+    expect(list.style.height).toBe(`${150 * 132}px`);
+  });
+
+  it("re-measures a row that grows without a re-render before crossing the threshold", () => {
+    // A row can grow with no React update at all — async content (an image, a
+    // code block) settling inside an already-mounted row. If the row is below
+    // the viewport it never mounts in the shell, so only its seed carries its
+    // height: a stale, shorter seed would leave the shell shorter than the plain
+    // list it replaced and let the browser clamp the reader's position. Only a
+    // resize observer can see that growth; the row set does not change.
+    const MARGIN_TOP = 24;
+    const INITIAL = 100;
+    const GROWN = 500;
+    const GROWN_ROW = 100;
+    let grownHeight = INITIAL;
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: Element) {
+        const isVirtualRow =
+          this.getAttribute("data-testid") === "virtualized-message-row";
+        const rowKey = isVirtualRow
+          ? `single-message-${this.getAttribute("data-index")}`
+          : this.closest("[data-row-key]")?.getAttribute("data-row-key");
+        const base =
+          rowKey === `single-message-${GROWN_ROW}` ? grownHeight : INITIAL;
+        // A virtual row's box contains its children's margins.
+        const height = isVirtualRow ? base + MARGIN_TOP : base;
+        return {
+          width: 800,
+          height,
+          top: 0,
+          left: 0,
+          right: 800,
+          bottom: height,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+        } as DOMRect;
+      },
+    );
+    vi.spyOn(window, "getComputedStyle").mockReturnValue({
+      marginTop: `${MARGIN_TOP}px`,
+      marginBottom: "0px",
+    } as CSSStyleDeclaration);
+
+    const observers: {
+      callback: ResizeObserverCallback;
+      observed: Element[];
+    }[] = [];
+    class TrackedResizeObserver {
+      readonly observed: Element[] = [];
+
+      constructor(readonly callback: ResizeObserverCallback) {
+        observers.push(this);
+      }
+
+      observe = (target: Element) => {
+        this.observed.push(target);
+      };
+
+      unobserve = vi.fn();
+
+      disconnect = vi.fn();
+    }
+    vi.stubGlobal("ResizeObserver", TrackedResizeObserver);
+
+    // The row set is the same array before and after, so no re-render changes
+    // it: only the resize can refresh the cache.
+    const events = buildEvents(150);
+    const { rerender } = renderMessages(events, false);
+    const grownRow = document.querySelector(
+      `[data-row-key="single-message-${GROWN_ROW}"]`,
+    ) as HTMLElement;
+
+    // The row grows in place. Deliver the resize the browser would report for
+    // it, as a real ResizeObserver does after layout.
+    grownHeight = GROWN;
+    const watcher = observers.find((observer) =>
+      observer.observed.includes(grownRow.firstElementChild as Element),
+    );
+    expect(watcher).toBeDefined();
+    act(() => {
+      watcher?.callback(
+        [{ target: grownRow.firstElementChild }] as ResizeObserverEntry[],
+        watcher as unknown as ResizeObserver,
+      );
+    });
+
+    rerender(<Harness events={events} withScrollParent />);
+
+    // The grown row seeds from its new height; the rest from their own.
+    const list = screen.getByTestId("virtualized-message-list");
+    const grownSize = GROWN + MARGIN_TOP + 8;
+    expect(list.style.height).toBe(`${grownSize + 149 * 132}px`);
+  });
+
   it("lays out each virtualized row as a flex column, like the scroll container", () => {
     // The user bubble right-aligns with `self-end`; that only works if the
     // absolutely positioned row re-establishes the column flex context.

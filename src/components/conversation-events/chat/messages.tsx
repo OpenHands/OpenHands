@@ -23,6 +23,7 @@ import {
 import { useMessageExpansionStore } from "#/stores/message-expansion-store";
 import {
   buildInitialMeasurements,
+  measurePlainRow,
   shouldAdjustScrollOnSizeChange,
 } from "./scroll-anchoring";
 import type { SecretRequest } from "#/stores/secret-request-store";
@@ -304,28 +305,57 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     const plainListRef = React.useRef<HTMLDivElement | null>(null);
     const plainItemHeights = React.useRef<Map<string, number>>(new Map());
 
-    // Measure after each change to the row set, while the plain list is
-    // mounted. The rows carry `data-row-key`, so one ref on their parent is
-    // enough. Re-measuring on every render would force a layout on each stream
-    // tick; keyed on the row set it runs once per append, which is when heights
-    // actually change shape.
-    React.useLayoutEffect(() => {
+    // Measure every row of the plain list, keyed by row key. The rows carry
+    // `data-row-key`, so one ref on their parent is enough.
+    const measurePlainRows = React.useCallback(() => {
       const list = plainListRef.current;
-      if (!list || shouldVirtualize) return;
+      if (!list) return;
       const next = new Map<string, number>();
       for (const child of Array.from(list.children)) {
-        const rowKey = (child as HTMLElement).dataset.rowKey;
-        const first = child.firstElementChild;
-        const last = child.lastElementChild;
-        if (!rowKey || !first || !last) continue;
-        next.set(
-          rowKey,
-          last.getBoundingClientRect().bottom -
-            first.getBoundingClientRect().top,
-        );
+        const measured = measurePlainRow(child);
+        if (measured) next.set(measured[0], measured[1]);
       }
       plainItemHeights.current = next;
-    }, [shouldVirtualize, rowKeys]);
+    }, []);
+
+    // Re-measure one row in place. The observer below calls this for a row that
+    // resizes, and leaving the other rows' cached heights untouched keeps the
+    // work proportional to the row that changed instead of the whole list.
+    const measurePlainRowInPlace = React.useCallback((row: Element) => {
+      const measured = measurePlainRow(row.parentElement ?? row);
+      if (measured) plainItemHeights.current.set(measured[0], measured[1]);
+    }, []);
+
+    // Keep the cache current while the plain list is mounted: it seeds the
+    // shell's geometry when the list later virtualizes. The row set is measured
+    // once per append (the common case), and a ResizeObserver re-measures a row
+    // that changes height *without* the row set changing — the reader expands a
+    // group, or async content settles. Without that, a resize followed by an
+    // append that crosses the threshold would seed a shell shorter than the
+    // plain list it replaced, and the browser would clamp the reader's scroll
+    // offset.
+    React.useLayoutEffect(() => {
+      if (shouldVirtualize) return undefined;
+      measurePlainRows();
+      // jsdom has no ResizeObserver; the measurement above still runs there.
+      if (typeof ResizeObserver === "undefined" || !plainListRef.current) {
+        return undefined;
+      }
+      // Observe each row's boxes, not the wrapper: the wrapper is
+      // `display: contents` and has no box of its own. The effect re-runs on
+      // each append, so the observed set tracks the mounted rows.
+      const observer = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          measurePlainRowInPlace(entry.target);
+        }
+      });
+      for (const child of Array.from(plainListRef.current.children)) {
+        for (const row of Array.from(child.children)) {
+          observer.observe(row);
+        }
+      }
+      return () => observer.disconnect();
+    }, [shouldVirtualize, rowKeys, measurePlainRows, measurePlainRowInPlace]);
 
     // Seed the virtualizer once, the first time this list virtualizes, from the
     // heights the plain list just had. `undefined` (the plain list) means "no

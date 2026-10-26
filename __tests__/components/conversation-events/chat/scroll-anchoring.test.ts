@@ -1,9 +1,24 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   BOTTOM_THRESHOLD_PX,
   buildInitialMeasurements,
+  measurePlainRow,
+  occupiedRowHeight,
   shouldAdjustScrollOnSizeChange,
 } from "#/components/conversation-events/chat/scroll-anchoring";
+
+const rectAt = (top: number, bottom: number): DOMRect =>
+  ({
+    width: 800,
+    height: bottom - top,
+    top,
+    left: 0,
+    right: 800,
+    bottom,
+    x: 0,
+    y: top,
+    toJSON: () => ({}),
+  }) as DOMRect;
 
 describe("buildInitialMeasurements", () => {
   it("sizes each row from its measured height plus the inter-row gap", () => {
@@ -26,6 +41,47 @@ describe("buildInitialMeasurements", () => {
   it("returns no seed when nothing was measured, leaving the estimate in place", () => {
     expect(buildInitialMeasurements(["a", "b"], [0, 0], 8)).toEqual([]);
     expect(buildInitialMeasurements([], [100], 8)).toEqual([]);
+  });
+});
+
+describe("occupiedRowHeight", () => {
+  const wrapper = (firstTop: number, lastBottom: number) => {
+    const wrapperElement = document.createElement("div");
+    const first = document.createElement("article");
+    const last = document.createElement("div");
+    first.getBoundingClientRect = () => rectAt(firstTop, firstTop + 100);
+    last.getBoundingClientRect = () => rectAt(firstTop, lastBottom);
+    wrapperElement.append(first, last);
+    return { wrapperElement, first, last };
+  };
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("includes the outer margins a virtual row's box contains", () => {
+    // A user bubble carries `mt-6`; a bounding rectangle is the border box and
+    // leaves that margin out. Seeding the shell from the rectangles alone would
+    // under-state every margined row and let the browser clamp `scrollTop`.
+    const { first, last } = wrapper(100, 200);
+    vi.spyOn(window, "getComputedStyle").mockReturnValue({
+      marginTop: "24px",
+      marginBottom: "16px",
+    } as CSSStyleDeclaration);
+
+    expect(occupiedRowHeight(first, last)).toBe(100 + 24 + 16);
+  });
+
+  it("measures a plain row wrapper by its key", () => {
+    const { wrapperElement } = wrapper(0, 120);
+    wrapperElement.dataset.rowKey = "single-evt-1";
+    vi.spyOn(window, "getComputedStyle").mockReturnValue({
+      marginTop: "0px",
+      marginBottom: "0px",
+    } as CSSStyleDeclaration);
+
+    expect(measurePlainRow(wrapperElement)).toEqual(["single-evt-1", 120]);
+    expect(measurePlainRow(document.createElement("div"))).toBeNull();
   });
 });
 

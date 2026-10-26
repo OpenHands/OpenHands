@@ -49,6 +49,50 @@ export const buildInitialMeasurements = (
   });
 };
 
+/** Vertical margins of an element, in px (0 when there is no CSSOM). */
+const verticalMargins = (element: Element): { top: number; bottom: number } => {
+  if (typeof getComputedStyle !== "function") return { top: 0, bottom: 0 };
+  const style = getComputedStyle(element);
+  return {
+    top: Number.parseFloat(style.marginTop) || 0,
+    bottom: Number.parseFloat(style.marginBottom) || 0,
+  };
+};
+
+/**
+ * Height a plain row occupies in the scroll column, in the same terms the
+ * virtualizer's `measureElement` reports for a virtual row.
+ *
+ * The plain row's wrapper is `display: contents`, so it has no box of its own
+ * and the row's extent is the span of its children. A bounding rectangle is the
+ * *border* box, which leaves out those children's vertical margins — a user
+ * bubble carries `mt-6`, the last child carries `mb-4` — while the virtual row's
+ * box contains them. Seeding the shell from the rectangles alone therefore
+ * under-states every row with a margin, the shell comes up shorter than the
+ * plain list it replaced, and the browser clamps `scrollTop` toward the bottom,
+ * moving a reader who was part-way up the history. Include the margins so the
+ * seed matches what the virtual rows report.
+ */
+export const occupiedRowHeight = (first: Element, last: Element): number => {
+  const top = first.getBoundingClientRect().top - verticalMargins(first).top;
+  const bottom =
+    last.getBoundingClientRect().bottom + verticalMargins(last).bottom;
+  return bottom - top;
+};
+
+/**
+ * Measures one plain row (a `data-row-key` wrapper whose children are the row's
+ * boxes) and returns its key with the height it occupies. Returns `null` for a
+ * wrapper that has no key or no children yet.
+ */
+export const measurePlainRow = (wrapper: Element): [string, number] | null => {
+  const rowKey = (wrapper as HTMLElement).dataset.rowKey;
+  const first = wrapper.firstElementChild;
+  const last = wrapper.lastElementChild;
+  if (!rowKey || !first || !last) return null;
+  return [rowKey, occupiedRowHeight(first, last)];
+};
+
 interface SizeChangeInstance {
   scrollOffset: number | null;
   scrollElement: Element | null;
