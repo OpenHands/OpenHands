@@ -11,7 +11,6 @@ import {
 import { clearCachedAgentServerInfo } from "#/api/agent-server-compatibility";
 import { clearAgentServerHomeDirCache } from "#/api/agent-server-home";
 import { resolveNewConversationWorkspace } from "#/api/conversation-workspace";
-import GitService from "#/api/git-service/git-service.api";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import AgentServerRuntimeService from "#/api/runtime-service/agent-server-runtime-service";
 
@@ -182,18 +181,6 @@ describe("conversation runtime boundaries", () => {
     });
   });
 
-  it("routes legacy git service changes and diff to the conversation", async () => {
-    expect(await GitService.getGitChanges(cid)).toHaveLength(1);
-    expect(await GitService.getGitChangeDiff(cid, "file.txt")).toEqual({
-      original: "before",
-      modified: "after",
-    });
-    expect(paths).toContain(
-      `/api/conversations/${cid}/git/changes?path=%2Fworkspace`,
-    );
-    expect(paths).toContain(`/api/conversations/${cid}/git/diff?path=file.txt`);
-  });
-
   it("routes plan downloads and runtime bash to the same conversation", async () => {
     expect(await AgentServerConversationService.readConversationFile(cid)).toBe(
       "plan contents",
@@ -216,7 +203,7 @@ describe("conversation runtime boundaries", () => {
 
   it("retains cid for legacy servers without canonical capability", async () => {
     capabilities = false;
-    await GitService.getGitChangeDiff(cid, "file.txt");
+    await AgentServerGitService.getGitChangeDiff(cid, null, null, "file.txt");
     expect(paths).toContain(`/api/git/diff?path=file.txt&cid=${cid}`);
   });
 });
