@@ -69,7 +69,7 @@ function stopMenuKeyPropagation(event: ReactKeyboardEvent) {
   if (event.key !== "Escape") event.stopPropagation();
 }
 
-function SetupModelPill({
+export function SetupModelPill({
   value,
   onChange,
 }: {

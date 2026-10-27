@@ -4,7 +4,7 @@ import { RefreshCw } from "lucide-react";
 import type { GitSyncStatus } from "#/types/git-sync";
 import { formatTimeDelta } from "#/utils/format-time-delta";
 import { parseGitRemoteUrl } from "#/utils/parse-git-remote-url";
-import { cn } from "#/utils/utils";
+import { cn, encodePathSegment } from "#/utils/utils";
 import GitBranchIcon from "#/icons/git-branch.svg?react";
 import GlobeIcon from "#/icons/globe.svg?react";
 import FolderIcon from "#/icons/folder.svg?react";
@@ -41,7 +41,13 @@ function browseUrlFor(repoUrl: string): string | null {
     return url.toString();
   }
 
-  return `https://${parsed.host}/${parsed.repository}`;
+  // `parsed.repository` is decoded for display, so re-encode each segment
+  // before it goes back into a URL.
+  const repositoryPath = parsed.repository
+    .split("/")
+    .map(encodePathSegment)
+    .join("/");
+  return `https://${parsed.host}/${repositoryPath}`;
 }
 
 // `scheme://userinfo@`; the greedy userinfo stops at the authority's last `@`,

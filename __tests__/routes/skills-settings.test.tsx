@@ -472,6 +472,67 @@ Full skill body.`,
     expect(screen.queryByTestId("skill-detail-modal")).not.toBeInTheDocument();
   });
 
+  it("keeps same-name local and bundled skills distinct while search and facets change", async () => {
+    const user = userEvent.setup();
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    vi.spyOn(SkillsService, "getSkills").mockResolvedValue([
+      buildSkill({
+        name: "skill-creator",
+        type: "knowledge",
+        source: "/Users/test/.openhands/skills/skill-creator/SKILL.md",
+      }),
+      buildSkill({
+        name: "skill-creator",
+        type: "repo",
+        triggers: [],
+        source: "public",
+      }),
+      buildSkill({
+        name: "deno",
+        source: "/skills/deno/SKILL.md",
+      }),
+    ]);
+
+    renderSkillsSettingsScreen();
+    await waitFor(() =>
+      expect(screen.getAllByTestId("skill-card-skill-creator")).toHaveLength(2),
+    );
+
+    const search = screen.getByTestId("skills-search-input");
+    for (let round = 0; round < 3; round += 1) {
+      fireEvent.change(search, { target: { value: "creator" } });
+      await waitFor(() =>
+        expect(screen.queryByTestId("skill-card-deno")).not.toBeInTheDocument(),
+      );
+      expect(screen.getAllByTestId("skill-card-skill-creator")).toHaveLength(2);
+
+      await user.click(screen.getByTestId("skill-facet-type-repo"));
+      await waitFor(() =>
+        expect(screen.getAllByTestId("skill-card-skill-creator")).toHaveLength(
+          1,
+        ),
+      );
+
+      await user.click(screen.getByTestId("skill-facet-type-repo"));
+      await waitFor(() =>
+        expect(screen.getAllByTestId("skill-card-skill-creator")).toHaveLength(
+          2,
+        ),
+      );
+
+      fireEvent.change(search, { target: { value: "" } });
+      await screen.findByTestId("skill-card-deno");
+      expect(screen.getAllByTestId("skill-card-skill-creator")).toHaveLength(2);
+    }
+
+    const duplicateKeyWarnings = consoleError.mock.calls.filter((call) =>
+      call.some((arg) => typeof arg === "string" && arg.includes("same key")),
+    );
+    expect(duplicateKeyWarnings).toHaveLength(0);
+  });
+
   it("shows an empty-state message when no skills match the current filters", async () => {
     const skill = buildSkill();
     mockSkillList([skill]);

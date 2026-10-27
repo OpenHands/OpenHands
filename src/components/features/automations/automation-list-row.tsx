@@ -158,13 +158,23 @@ export function AutomationListRow({
               {showDraftBadge ? (
                 <ActiveStatusBadge automation={automation} compact />
               ) : null}
-              {automation.tags?.map((tag) => (
-                <AutomationTagPill
-                  key={tag}
-                  tag={tag}
-                  className="px-1.5 py-0 text-text-secondary"
-                />
-              ))}
+              {automation.tags?.length ? (
+                // Tags take only the room the name leaves (zero flex basis)
+                // and clip whole pills, so they never squeeze the name or run
+                // under the row's actions.
+                <span
+                  data-testid={`automation-list-row-tags-${automation.id}`}
+                  className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden"
+                >
+                  {automation.tags.map((tag) => (
+                    <AutomationTagPill
+                      key={tag}
+                      tag={tag}
+                      className="px-1.5 py-0 text-text-secondary"
+                    />
+                  ))}
+                </span>
+              ) : null}
             </span>
             {hasMeta ? (
               <span className="col-start-2 mt-0.5 flex min-w-0 items-center gap-1.5 text-xs leading-4 text-text-secondary">
