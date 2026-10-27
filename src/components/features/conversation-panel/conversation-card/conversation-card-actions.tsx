@@ -4,7 +4,9 @@ import { useTranslation } from "react-i18next";
 import { cn } from "#/utils/utils";
 import { I18nKey } from "#/i18n/declaration";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
+import type { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { isExecutionActive, isExecutionPaused } from "#/utils/status";
+import { isRuntimeUnavailableSandboxStatus } from "#/utils/conversation-archive-status";
 import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { ConversationCardContextMenu } from "./conversation-card-context-menu";
 import { EllipsisButton } from "../ellipsis-button";
@@ -21,6 +23,7 @@ interface ConversationCardActionsProps {
   onDownloadViaVSCode?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDownloadConversation?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   executionStatus?: ExecutionStatus | null;
+  sandboxStatus?: SandboxStatus | null;
   conversationId?: string;
   showOptions?: boolean;
 }
@@ -37,12 +40,14 @@ export function ConversationCardActions({
   onDownloadViaVSCode,
   onDownloadConversation,
   executionStatus,
+  sandboxStatus,
   conversationId,
   showOptions,
 }: ConversationCardActionsProps) {
   const { t } = useTranslation("openhands");
+  const runtimeUnavailable = isRuntimeUnavailableSandboxStatus(sandboxStatus);
   const isPaused = isExecutionPaused(executionStatus);
-  const isActive = isExecutionActive(executionStatus);
+  const isActive = !runtimeUnavailable && isExecutionActive(executionStatus);
   const anchorRef = useRef<HTMLButtonElement>(null);
   const [, bumpPosition] = useReducer((i: number) => i + 1, 0);
   useCloseOnEscape(

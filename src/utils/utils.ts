@@ -4,7 +4,11 @@ import { Provider } from "#/types/settings";
 import { AgentState } from "#/types/agent-state";
 import { I18nKey } from "#/i18n/declaration";
 import { getTaskStatusI18nKey } from "#/utils/status";
-import type { AppConversationStartTaskStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
+import type {
+  AppConversationStartTaskStatus,
+  SandboxStatus,
+} from "#/api/conversation-service/agent-server-conversation-service.types";
+import { isMissingSandboxStatus } from "#/utils/conversation-archive-status";
 import {
   OH_STATUS_ERROR_COLOR,
   OH_STATUS_SUCCESS_COLOR,
@@ -452,6 +456,7 @@ export const getStatusColor = (options: {
   isStartingStatus: boolean;
   isStopStatus: boolean;
   curAgentState: AgentState;
+  sandboxStatus?: SandboxStatus | null;
 }): string => {
   const {
     isPausing,
@@ -460,6 +465,7 @@ export const getStatusColor = (options: {
     isStartingStatus,
     isStopStatus,
     curAgentState,
+    sandboxStatus,
   } = options;
 
   // Show pausing status
@@ -473,6 +479,14 @@ export const getStatusColor = (options: {
       return OH_STATUS_ERROR_COLOR;
     }
     return "#FFD600";
+  }
+
+  if (isMissingSandboxStatus(sandboxStatus)) {
+    return "#ffffff";
+  }
+
+  if (sandboxStatus === "ERROR") {
+    return OH_STATUS_ERROR_COLOR;
   }
 
   if (isStartingStatus) {
@@ -496,6 +510,7 @@ interface GetStatusTextArgs {
   isStopStatus: boolean;
   curAgentState: AgentState;
   errorMessage?: string | null;
+  sandboxStatus?: SandboxStatus | null;
   t: (t: string) => string;
 }
 
@@ -511,6 +526,7 @@ interface GetStatusTextArgs {
  * @param options.isStopStatus Whether the conversation is STOPPED
  * @param options.curAgentState The current agent state
  * @param options.errorMessage Optional agent error message
+ * @param options.sandboxStatus Optional sandbox lifecycle status
  * @returns Localized human-readable status text
  *
  * @example
@@ -533,6 +549,7 @@ export function getStatusText({
   isStopStatus,
   curAgentState,
   errorMessage,
+  sandboxStatus,
   t,
 }: GetStatusTextArgs): string {
   // Show pausing status
@@ -551,6 +568,14 @@ export function getStatusText({
     }
 
     return taskDetail || t(getTaskStatusI18nKey(taskStatus));
+  }
+
+  if (isMissingSandboxStatus(sandboxStatus)) {
+    return t(I18nKey.COMMON$ARCHIVED);
+  }
+
+  if (sandboxStatus === "ERROR") {
+    return errorMessage || t(I18nKey.COMMON$ERROR);
   }
 
   if (isStartingStatus) {

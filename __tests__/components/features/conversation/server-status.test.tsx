@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderWithProviders } from "test-utils";
 import { ServerStatus } from "#/components/features/controls/server-status";
 import { ServerStatusContextMenu } from "#/components/features/controls/server-status-context-menu";
+import { OH_STATUS_ERROR_COLOR } from "#/constants/status-colors";
 import { ConversationStatus } from "#/types/conversation-status";
 import { AgentState } from "#/types/agent-state";
 import { useAgentState } from "#/hooks/use-agent-state";
@@ -35,6 +36,7 @@ vi.mock("react-i18next", async () => {
     useTranslation: () => ({
       t: (key: string) => {
         const translations: Record<string, string> = {
+          COMMON$ARCHIVED: "Archived",
           COMMON$RUNNING: "Running",
           COMMON$SERVER_STOPPED: "Server Stopped",
           COMMON$ERROR: "Error",
@@ -70,7 +72,9 @@ describe("ServerStatus", () => {
   it("should render server status with RUNNING conversation status", () => {
     mockAgentStore(AgentState.RUNNING);
 
-    renderWithProviders(<ServerStatus executionStatus={ExecutionStatus.RUNNING} />);
+    renderWithProviders(
+      <ServerStatus executionStatus={ExecutionStatus.RUNNING} />,
+    );
 
     expect(screen.getByTestId("server-status")).toBeInTheDocument();
     expect(screen.getByText("Running")).toBeInTheDocument();
@@ -79,7 +83,9 @@ describe("ServerStatus", () => {
   it("should render server status with STOPPED conversation status", () => {
     mockAgentStore(AgentState.RUNNING);
 
-    renderWithProviders(<ServerStatus executionStatus={ExecutionStatus.PAUSED} />);
+    renderWithProviders(
+      <ServerStatus executionStatus={ExecutionStatus.PAUSED} />,
+    );
 
     expect(screen.getByTestId("server-status")).toBeInTheDocument();
     expect(screen.getByText("Server Stopped")).toBeInTheDocument();
@@ -88,7 +94,9 @@ describe("ServerStatus", () => {
   it("should render STARTING status when agent state is LOADING", () => {
     mockAgentStore(AgentState.LOADING);
 
-    renderWithProviders(<ServerStatus executionStatus={ExecutionStatus.IDLE} />);
+    renderWithProviders(
+      <ServerStatus executionStatus={ExecutionStatus.IDLE} />,
+    );
 
     expect(screen.getByTestId("server-status")).toBeInTheDocument();
     expect(screen.getByText("Starting")).toBeInTheDocument();
@@ -97,7 +105,9 @@ describe("ServerStatus", () => {
   it("should render STARTING status when agent state is INIT", () => {
     mockAgentStore(AgentState.INIT);
 
-    renderWithProviders(<ServerStatus executionStatus={ExecutionStatus.IDLE} />);
+    renderWithProviders(
+      <ServerStatus executionStatus={ExecutionStatus.IDLE} />,
+    );
 
     expect(screen.getByTestId("server-status")).toBeInTheDocument();
     expect(screen.getByText("Starting")).toBeInTheDocument();
@@ -106,7 +116,9 @@ describe("ServerStatus", () => {
   it("should render ERROR status when agent state is ERROR", () => {
     mockAgentStore(AgentState.ERROR);
 
-    renderWithProviders(<ServerStatus executionStatus={ExecutionStatus.RUNNING} />);
+    renderWithProviders(
+      <ServerStatus executionStatus={ExecutionStatus.RUNNING} />,
+    );
 
     expect(screen.getByTestId("server-status")).toBeInTheDocument();
     expect(screen.getByText("Error")).toBeInTheDocument();
@@ -116,7 +128,10 @@ describe("ServerStatus", () => {
     mockAgentStore(AgentState.RUNNING);
 
     renderWithProviders(
-      <ServerStatus executionStatus={ExecutionStatus.RUNNING} isPausing={true} />,
+      <ServerStatus
+        executionStatus={ExecutionStatus.RUNNING}
+        isPausing={true}
+      />,
     );
 
     expect(screen.getByTestId("server-status")).toBeInTheDocument();
@@ -136,11 +151,53 @@ describe("ServerStatus", () => {
     mockAgentStore(AgentState.RUNNING);
 
     renderWithProviders(
-      <ServerStatus executionStatus={ExecutionStatus.RUNNING} className="custom-class" />,
+      <ServerStatus
+        executionStatus={ExecutionStatus.RUNNING}
+        className="custom-class"
+      />,
     );
 
     const container = screen.getByTestId("server-status");
     expect(container).toHaveClass("custom-class");
+  });
+
+  it("renders the archived indicator and Archived label when sandboxStatus is MISSING", () => {
+    mockAgentStore(AgentState.AWAITING_USER_INPUT);
+
+    renderWithProviders(
+      <ServerStatus
+        executionStatus={ExecutionStatus.IDLE}
+        sandboxStatus="MISSING"
+      />,
+    );
+
+    expect(screen.getByTestId("server-status")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("conversation-status-archived"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Archived")).toBeInTheDocument();
+    expect(screen.queryByText("Running")).not.toBeInTheDocument();
+  });
+
+  it("renders Error label and error color when sandboxStatus is ERROR", () => {
+    mockAgentStore(AgentState.AWAITING_USER_INPUT);
+
+    renderWithProviders(
+      <ServerStatus
+        executionStatus={ExecutionStatus.IDLE}
+        sandboxStatus="ERROR"
+      />,
+    );
+
+    expect(screen.getByTestId("server-status")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("conversation-status-archived"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("server-status").querySelector("svg"),
+    ).toHaveAttribute("color", OH_STATUS_ERROR_COLOR);
+    expect(screen.getByText("Error")).toBeInTheDocument();
+    expect(screen.queryByText("Running")).not.toBeInTheDocument();
   });
 });
 
@@ -320,6 +377,48 @@ describe("ServerStatusContextMenu", () => {
     );
 
     expect(screen.getByTestId("server-status")).toBeInTheDocument();
+    expect(screen.queryByTestId("stop-server-button")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("start-server-button")).not.toBeInTheDocument();
+  });
+
+  it("renders Archived without Stop or Start buttons when sandboxStatus is MISSING", () => {
+    mockAgentStore(AgentState.AWAITING_USER_INPUT);
+
+    renderWithProviders(
+      <ServerStatusContextMenu
+        {...defaultProps}
+        executionStatus={ExecutionStatus.IDLE}
+        sandboxStatus="MISSING"
+        onStopServer={vi.fn()}
+        onStartServer={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("server-status")).toHaveTextContent("Archived");
+    expect(
+      screen.getByTestId("conversation-status-archived"),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("stop-server-button")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("start-server-button")).not.toBeInTheDocument();
+  });
+
+  it("renders Error without Stop or Start buttons when sandboxStatus is ERROR", () => {
+    mockAgentStore(AgentState.AWAITING_USER_INPUT);
+
+    renderWithProviders(
+      <ServerStatusContextMenu
+        {...defaultProps}
+        executionStatus={ExecutionStatus.IDLE}
+        sandboxStatus="ERROR"
+        onStopServer={vi.fn()}
+        onStartServer={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("server-status")).toHaveTextContent("Error");
+    expect(
+      screen.queryByTestId("conversation-status-archived"),
+    ).not.toBeInTheDocument();
     expect(screen.queryByTestId("stop-server-button")).not.toBeInTheDocument();
     expect(screen.queryByTestId("start-server-button")).not.toBeInTheDocument();
   });

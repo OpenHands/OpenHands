@@ -6,17 +6,22 @@ import { useTaskPolling } from "#/hooks/query/use-task-polling";
 import { getStatusColor, getStatusText } from "#/utils/utils";
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
+import type { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { isExecutionErrored, isExecutionPaused } from "#/utils/status";
+import { isMissingSandboxStatus } from "#/utils/conversation-archive-status";
+import { ConversationStatusDot } from "../conversation-panel/conversation-status-dot";
 
 export interface ServerStatusProps {
   className?: string;
   executionStatus: ExecutionStatus | null;
+  sandboxStatus?: SandboxStatus | null;
   isPausing?: boolean;
 }
 
 export function ServerStatus({
   className = "",
   executionStatus,
+  sandboxStatus,
   isPausing = false,
 }: ServerStatusProps) {
   const { curAgentState } = useAgentState();
@@ -24,6 +29,7 @@ export function ServerStatus({
   const { t } = useTranslation("openhands");
   const { errorMessage } = useErrorMessageStore();
 
+  const runtimeMissing = isMissingSandboxStatus(sandboxStatus);
   const isStartingStatus =
     curAgentState === AgentState.LOADING || curAgentState === AgentState.INIT;
   const isStopStatus =
@@ -36,6 +42,7 @@ export function ServerStatus({
     isStartingStatus,
     isStopStatus,
     curAgentState,
+    sandboxStatus,
   });
 
   const statusText = getStatusText({
@@ -47,13 +54,27 @@ export function ServerStatus({
     isStopStatus,
     curAgentState,
     errorMessage,
+    sandboxStatus,
     t,
   });
 
   return (
     <div className={className} data-testid="server-status">
       <div className="flex items-center">
-        <DebugStackframeDot className="w-6 h-6 shrink-0" color={statusColor} />
+        {runtimeMissing ? (
+          <span className="w-6 h-6 flex items-center justify-center shrink-0">
+            <ConversationStatusDot
+              executionStatus={executionStatus}
+              sandboxStatus={sandboxStatus}
+              showTooltip={false}
+            />
+          </span>
+        ) : (
+          <DebugStackframeDot
+            className="w-6 h-6 shrink-0"
+            color={statusColor}
+          />
+        )}
         <span className="text-[13px] text-contrast font-normal">
           {statusText}
         </span>

@@ -1,0 +1,85 @@
+http://127.0.0.1:18800/conversations/8368dce0-c10a-4c4f-97e4-8ce970f49054
+- complementary "Sidebar navigation":
+  - link "OpenHands Logo":
+    - /url: /conversations
+    - img
+  - button "Collapse sidebar"
+  - navigation:
+    - button "Search commands": Search commands ⌘K
+    - link "New Chat":
+      - /url: /conversations
+    - link "Customize":
+      - /url: /customize
+    - link "Automate":
+      - /url: /automations
+      - img
+      - text: Automate
+  - text: Conversations
+  - button "Create thread folder — choose workspace or repository"
+  - button "View"
+  - paragraph: No conversations found
+  - button "Minimize checklist" [expanded]
+  - text: Getting started 1 complete
+  - list:
+    - listitem:
+      - link "Add LLM API key":
+        - /url: /settings/llm
+    - listitem:
+      - link "Start your first chat":
+        - /url: /conversations
+    - listitem:
+      - link "Schedule a task":
+        - /url: /automations
+    - listitem:
+      - link "Customize your agent":
+        - /url: /settings/agents
+    - listitem:
+      - link "Connect an MCP integration":
+        - /url: /mcp
+    - listitem:
+      - link "Join the OpenHands Slack":
+        - /url: https://openhands.dev/joinslack
+  - button "Open Agent Canvas version details": New Version Available Version 1.32.0
+  - status "Connected"
+  - combobox "Local"
+  - button
+  - link "Settings":
+    - /url: /settings
+- button "Server Status" [expanded]
+- list:
+  - img
+  - text: Running
+  - separator
+  - button "Stop Runtime"
+- text: Conversation 8368d
+- button "More options":
+  - img
+- button "Git actions" [disabled]
+- button "Unavailable for Archives" [disabled]
+- button "Unavailable for Archives" [disabled]:
+  - img
+- paragraph: Sandbox no longer available
+- paragraph: This conversation's sandbox has been removed. The history above is read-only.
+- tablist "Conversation panels":
+  - tab "Files" [selected]:
+    - img
+  - tab "Commits":
+    - img
+  - tab "Planner"
+  - tab "Terminal"
+  - tab "Browser"
+  - tab "Usage"
+- button "Customize tabs":
+  - img
+- button "Open in VS Code" [disabled]: VSCode
+- tabpanel "Files":
+  - main:
+    - text: "Workspace: /private/tmp/pr18738-runtime-runs/before/workspace"
+    - button "Copy to clipboard":
+      - img
+    - button "Hide file tree" [pressed]
+    - button "File discovery"
+    - button "Refresh files":
+      - img
+    - complementary: No files in workspace
+    - paragraph: Select a file to view its contents

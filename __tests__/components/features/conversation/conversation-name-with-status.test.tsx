@@ -9,12 +9,18 @@ import {
 import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { AgentState } from "#/types/agent-state";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
+import type { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
 
 const mocks = vi.hoisted(() => ({
   conversationId: "conversation-1" as string | undefined,
   conversation: {
     execution_status: "running",
-  } as { execution_status?: ExecutionStatus | null } | undefined,
+  } as
+    | {
+        execution_status?: ExecutionStatus | null;
+        sandbox_status?: SandboxStatus | null;
+      }
+    | undefined,
   curAgentState: "running" as AgentState,
   isTask: false,
   taskStatus: null as string | null,
@@ -68,6 +74,7 @@ vi.mock("#/icons/debug-stackframe-dot.svg?react", () => ({
 vi.mock("#/components/features/controls/server-status-context-menu", () => ({
   ServerStatusContextMenu: ({
     executionStatus,
+    sandboxStatus,
     isPausing,
     onClose,
     onStartServer,
@@ -75,6 +82,7 @@ vi.mock("#/components/features/controls/server-status-context-menu", () => ({
     position,
   }: {
     executionStatus: ExecutionStatus | null;
+    sandboxStatus?: SandboxStatus | null;
     isPausing: boolean;
     onClose: () => void;
     onStartServer?: MouseEventHandler<HTMLButtonElement>;
@@ -84,6 +92,7 @@ vi.mock("#/components/features/controls/server-status-context-menu", () => ({
     <div
       data-testid="server-status-context-menu"
       data-execution-status={executionStatus ?? "null"}
+      data-sandbox-status={sandboxStatus ?? "null"}
       data-is-pausing={String(isPausing)}
       data-position={position}
     >
@@ -435,6 +444,85 @@ describe("conversation name status controls", () => {
         "data-color",
         expectedColor,
       );
+    },
+  );
+
+  it("shows the archived status indicator and offers neither Stop nor Start when sandbox_status is MISSING", () => {
+    mocks.conversation = {
+      execution_status: ExecutionStatus.IDLE,
+      sandbox_status: "MISSING",
+    };
+    mocks.curAgentState = AgentState.AWAITING_USER_INPUT;
+    renderSubject();
+
+    expect(
+      screen.getByTestId("conversation-status-archived"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("conversation-status-dot"),
+    ).not.toBeInTheDocument();
+
+    openStatusMenu();
+
+    expect(screen.getByTestId("server-status-context-menu")).toMatchObject({
+      dataset: {
+        executionStatus: ExecutionStatus.IDLE,
+        sandboxStatus: "MISSING",
+      },
+    });
+    expect(screen.queryByTestId("stop-server-button")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("start-server-button")).not.toBeInTheDocument();
+    expect(mocks.pauseConversation).not.toHaveBeenCalled();
+    expect(mocks.resumeConversation).not.toHaveBeenCalled();
+  });
+
+  it("keeps the red error dot and offers neither Stop nor Start when sandbox_status is ERROR", () => {
+    mocks.conversation = {
+      execution_status: ExecutionStatus.IDLE,
+      sandbox_status: "ERROR",
+    };
+    mocks.curAgentState = AgentState.AWAITING_USER_INPUT;
+    renderSubject();
+
+    expect(
+      screen.queryByTestId("conversation-status-archived"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("conversation-status-dot")).toHaveAttribute(
+      "data-color",
+      OH_STATUS_ERROR_COLOR,
+    );
+
+    openStatusMenu();
+
+    expect(screen.getByTestId("server-status-context-menu")).toMatchObject({
+      dataset: {
+        executionStatus: ExecutionStatus.IDLE,
+        sandboxStatus: "ERROR",
+      },
+    });
+    expect(screen.queryByTestId("stop-server-button")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("start-server-button")).not.toBeInTheDocument();
+  });
+
+  it.each(["RUNNING", "PAUSED", null] as const)(
+    "preserves the baseline header color and Start Runtime for paused execution with sandbox_status %s",
+    (sandboxStatus) => {
+      mocks.conversation = {
+        execution_status: ExecutionStatus.PAUSED,
+        sandbox_status: sandboxStatus,
+      };
+      mocks.curAgentState = AgentState.PAUSED;
+      renderSubject();
+
+      expect(screen.getByTestId("conversation-status-dot")).toHaveAttribute(
+        "data-color",
+        OH_STATUS_SUCCESS_COLOR,
+      );
+
+      openStatusMenu();
+
+      expect(screen.getByTestId("start-server-button")).toBeInTheDocument();
+      expect(screen.queryByTestId("stop-server-button")).not.toBeInTheDocument();
     },
   );
 });

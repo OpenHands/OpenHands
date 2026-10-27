@@ -1,0 +1,27 @@
+{
+  "ok": true,
+  "total": 2,
+  "byOrigin": {
+    "http://127.0.0.1:18800": 2
+  },
+  "recent": [
+    {
+      "ts": "2026-10-23T14:24:21.400Z",
+      "origin": "http://127.0.0.1:18800",
+      "path": "/api/conversations/b5798bf1-8a9f-447c-9234-ad0390ed4eac/interrupt",
+      "method": "POST",
+      "type": "fetch",
+      "app": true,
+      "status": 200
+    },
+    {
+      "ts": "2026-10-23T14:29:19.706Z",
+      "origin": "http://127.0.0.1:18800",
+      "path": "/api/conversations/8368dce0-c10a-4c4f-97e4-8ce970f49054/interrupt",
+      "method": "POST",
+      "type": "fetch",
+      "app": true,
+      "status": 404
+    }
+  ]
+}

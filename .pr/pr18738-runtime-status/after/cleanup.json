@@ -1,0 +1,17 @@
+{
+  "run": "/private/tmp/pr18738-runtime-runs/after-verified",
+  "browser": {
+    "stopped": true,
+    "pid": 70645
+  },
+  "launcherStopped": true,
+  "ports": {
+    "ingress": "closed",
+    "agentServer": "closed",
+    "automation": "closed",
+    "frontend": "closed",
+    "vscode": "closed"
+  },
+  "evidenceFiles": 16,
+  "ok": true
+}

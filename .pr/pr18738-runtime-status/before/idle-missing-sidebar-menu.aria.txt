@@ -1,0 +1,9 @@
+http://127.0.0.1:18800/conversations/8368dce0-c10a-4c4f-97e4-8ce970f49054
+- list:
+  - button "Rename"
+  - button "Edit tags"
+  - separator
+  - button "Stop Conversation"
+  - button "Download conversation data"
+  - separator
+  - button "Delete Conversation"

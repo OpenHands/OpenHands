@@ -312,6 +312,38 @@ describe("getStatusText", () => {
 
     expect(result).toBe(t(I18nKey.COMMON$RUNNING));
   });
+
+  it("returns ARCHIVED when sandboxStatus is MISSING", () => {
+    const result = getStatusText({
+      isPausing: false,
+      isTask: false,
+      taskStatus: null,
+      taskDetail: null,
+      isStartingStatus: false,
+      isStopStatus: false,
+      curAgentState: AgentState.AWAITING_USER_INPUT,
+      sandboxStatus: "MISSING",
+      t,
+    });
+
+    expect(result).toBe(t(I18nKey.COMMON$ARCHIVED));
+  });
+
+  it("returns ERROR when sandboxStatus is ERROR", () => {
+    const result = getStatusText({
+      isPausing: false,
+      isTask: false,
+      taskStatus: null,
+      taskDetail: null,
+      isStartingStatus: false,
+      isStopStatus: true,
+      curAgentState: AgentState.AWAITING_USER_INPUT,
+      sandboxStatus: "ERROR",
+      t,
+    });
+
+    expect(result).toBe(t(I18nKey.COMMON$ERROR));
+  });
 });
 
 describe("constructBranchUrl", () => {

@@ -1,0 +1,18 @@
+{
+  "ok": true,
+  "total": 1,
+  "byOrigin": {
+    "http://127.0.0.1:18800": 1
+  },
+  "recent": [
+    {
+      "ts": "2026-10-23T14:32:56.776Z",
+      "origin": "http://127.0.0.1:18800",
+      "path": "/api/conversations/6a4a818a-cf80-4e0a-993d-fdff2098ec12/interrupt",
+      "method": "POST",
+      "type": "fetch",
+      "app": true,
+      "status": 200
+    }
+  ]
+}

@@ -64,6 +64,7 @@ import { uniqueById } from "#/utils/unique-by-id";
 import {
   isEffectivelyArchivedConversation,
   isMissingSandboxStatus,
+  isRuntimeUnavailableSandboxStatus,
 } from "#/utils/conversation-archive-status";
 import type { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
 
@@ -890,6 +891,9 @@ export function ConversationPanel({
       const runtimeMissing = isMissingSandboxStatus(
         conversation.sandbox_status,
       );
+      const runtimeUnavailable = isRuntimeUnavailableSandboxStatus(
+        conversation.sandbox_status,
+      );
       if (compact) {
         return (
           <CompactConversationRow
@@ -990,7 +994,11 @@ export function ConversationPanel({
                   ? () => handleUnarchiveProject(conversation.id)
                   : undefined
               }
-              onStop={() => handleStopConversation(conversation.id)}
+              onStop={
+                runtimeUnavailable
+                  ? undefined
+                  : () => handleStopConversation(conversation.id)
+              }
               onEditTags={
                 activeBackend.kind === "local"
                   ? () => handleEditTags(conversation.id)

@@ -1,0 +1,26 @@
+{
+  "ok": true,
+  "run": "/private/tmp/pr18738-runtime-runs/before",
+  "baseUrl": "http://127.0.0.1:18800",
+  "failed": [],
+  "warnings": [
+    "LLM configured: model=gpt-5.6 without an API key: `control-openhands llm preset deepseek`"
+  ],
+  "passed": [
+    "launcher process group alive: /usr/local/bin/node /private/tmp/openhands-pr18738-before/bin/agent-canvas.mjs --port 18800",
+    "launcher is this run's agent-canvas: /usr/local/bin/node /private/tmp/openhands-pr18738-before/bin/agent-canvas.mjs --port 18800",
+    "port ingress:18800 listening: open",
+    "port agentServer:18801 listening: open",
+    "port automation:18802 listening: open",
+    "port frontend:18803 listening: open",
+    "served build matches this checkout's build inputs: served=b57678d84985c93e run=b57678d84985c93e revision=9057a57f4a7b",
+    "checkout build inputs unchanged since launch: launch=b57678d84985c93e now=b57678d84985c93e",
+    "unauthenticated API rejected: status=401",
+    "authenticated settings readable: status=200",
+    "agent-server reachable: version=1.56.0",
+    "agent-server matches pin: server=1.56.0, chosen by OH_AGENT_SERVER_VERSION (default pin 1.56.0)",
+    "agent-server meets the UI minimum: server=1.56.0 minimum=1.55.0",
+    "automation healthy: status=200",
+    "UI loads without page errors: markers=home-chat-launcher pageErrors=0 testidsInDom=84 (hidden included)"
+  ]
+}

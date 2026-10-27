@@ -22,7 +22,10 @@ import { ConversationCardHeader } from "./conversation-card-header";
 import { ConversationCardActions } from "./conversation-card-actions";
 import { ConversationCardFooter } from "./conversation-card-footer";
 import { ConversationStatusBadges } from "./conversation-status-badges";
-import { isMissingSandboxStatus } from "#/utils/conversation-archive-status";
+import {
+  isMissingSandboxStatus,
+  isRuntimeUnavailableSandboxStatus,
+} from "#/utils/conversation-archive-status";
 import { useDownloadConversation } from "#/hooks/use-download-conversation";
 
 interface ConversationCardProps {
@@ -123,6 +126,7 @@ export function ConversationCard({
   // archive plus the missing-runtime inference), or the missing-runtime
   // fallback for standalone callers that only pass `sandboxStatus`.
   const effectiveArchived = isArchived ?? isMissingSandboxStatus(sandboxStatus);
+  const runtimeUnavailable = isRuntimeUnavailableSandboxStatus(sandboxStatus);
 
   const onTitleSave = (newTitle: string) => {
     if (newTitle !== "" && newTitle !== title) {
@@ -340,12 +344,15 @@ export function ConversationCard({
                       onDelete={onDelete && handleDelete}
                       onArchive={onArchive && handleArchive}
                       onUnarchive={onUnarchive && handleUnarchive}
-                      onStop={onStop && handleStop}
+                      onStop={
+                        !runtimeUnavailable && onStop ? handleStop : undefined
+                      }
                       onEdit={onChangeTitle && handleEdit}
                       onEditTags={onEditTags && handleEditTags}
                       onDownloadViaVSCode={handleDownloadViaVSCode}
                       onDownloadConversation={handleDownloadConversation}
                       executionStatus={executionStatus}
+                      sandboxStatus={sandboxStatus}
                       conversationId={conversationId}
                       showOptions={showOptions}
                     />
@@ -368,12 +375,15 @@ export function ConversationCard({
                   onDelete={onDelete && handleDelete}
                   onArchive={onArchive && handleArchive}
                   onUnarchive={onUnarchive && handleUnarchive}
-                  onStop={onStop && handleStop}
+                  onStop={
+                    !runtimeUnavailable && onStop ? handleStop : undefined
+                  }
                   onEdit={onChangeTitle && handleEdit}
                   onEditTags={onEditTags && handleEditTags}
                   onDownloadViaVSCode={handleDownloadViaVSCode}
                   onDownloadConversation={handleDownloadConversation}
                   executionStatus={executionStatus}
+                  sandboxStatus={sandboxStatus}
                   conversationId={conversationId}
                   showOptions={showOptions}
                 />

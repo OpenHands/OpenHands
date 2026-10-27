@@ -218,12 +218,13 @@ describe("ConversationPanel conversation actions", () => {
       within(goneCard).getByTestId("conversation-card-archived-chip"),
     ).toBeInTheDocument();
 
-    // Neither direction is offered.
+    // Neither direction is offered, nor is Stop Conversation offered.
     await userEvent
       .setup()
       .click(within(goneCard).getByTestId("ellipsis-button"));
     expect(screen.queryByTestId("unarchive-button")).not.toBeInTheDocument();
     expect(screen.queryByTestId("archive-button")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("stop-button")).not.toBeInTheDocument();
   });
 
   it("keeps a missing-runtime row presented as archived and offers no action", async () => {

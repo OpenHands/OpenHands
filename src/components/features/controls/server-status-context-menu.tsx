@@ -10,13 +10,16 @@ import { ServerStatus } from "./server-status";
 import { Divider } from "#/ui/divider";
 import { cn } from "#/utils/utils";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
+import type { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { isExecutionActive, isExecutionPaused } from "#/utils/status";
+import { isRuntimeUnavailableSandboxStatus } from "#/utils/conversation-archive-status";
 
 interface ServerStatusContextMenuProps {
   onClose: () => void;
   onStopServer?: (event: MouseEvent<HTMLButtonElement>) => void;
   onStartServer?: (event: MouseEvent<HTMLButtonElement>) => void;
   executionStatus: ExecutionStatus | null;
+  sandboxStatus?: SandboxStatus | null;
   position?: "top" | "bottom";
   className?: string;
   isPausing?: boolean;
@@ -28,6 +31,7 @@ export function ServerStatusContextMenu({
   onStopServer,
   onStartServer,
   executionStatus,
+  sandboxStatus,
   position = "top",
   className = "",
   isPausing = false,
@@ -39,9 +43,11 @@ export function ServerStatusContextMenu({
     ignoreOutsideClickRef,
   );
 
-  const isActive = isExecutionActive(executionStatus);
-  const isPaused = isExecutionPaused(executionStatus);
-  const shouldActionShown = isActive || isPaused;
+  const runtimeUnavailable = isRuntimeUnavailableSandboxStatus(sandboxStatus);
+  const isActive = !runtimeUnavailable && isExecutionActive(executionStatus);
+  const isPaused = !runtimeUnavailable && isExecutionPaused(executionStatus);
+  const shouldActionShown =
+    (isActive && Boolean(onStopServer)) || (isPaused && Boolean(onStartServer));
 
   return (
     <ContextMenu
@@ -54,6 +60,7 @@ export function ServerStatusContextMenu({
     >
       <ServerStatus
         executionStatus={executionStatus}
+        sandboxStatus={sandboxStatus}
         isPausing={isPausing}
         className="pl-0 pr-2 py-1"
       />

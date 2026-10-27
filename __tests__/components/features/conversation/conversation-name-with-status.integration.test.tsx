@@ -5,7 +5,17 @@ import { renderWithProviders } from "test-utils";
 import { ConversationNameWithStatus } from "#/components/features/conversation/conversation-name-with-status";
 import { AgentState } from "#/types/agent-state";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
+import type { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { useAgentState } from "#/hooks/use-agent-state";
+
+const activeConversationMock = vi.hoisted(() => ({
+  data: {
+    id: "test-conversation-id",
+    title: "Test conversation",
+    execution_status: "running" as ExecutionStatus | null,
+    sandbox_status: null as SandboxStatus | null,
+  },
+}));
 
 vi.mock("#/hooks/use-agent-state", () => ({
   useAgentState: vi.fn(),
@@ -19,13 +29,7 @@ vi.mock("#/hooks/query/use-task-polling", () => ({
 }));
 
 vi.mock("#/hooks/query/use-active-conversation", () => ({
-  useActiveConversation: () => ({
-    data: {
-      id: "test-conversation-id",
-      title: "Test conversation",
-      execution_status: ExecutionStatus.RUNNING,
-    },
-  }),
+  useActiveConversation: () => activeConversationMock,
 }));
 
 vi.mock("#/hooks/use-conversation-id", () => ({
@@ -68,6 +72,12 @@ vi.mock("react-i18next", async () => {
 
 describe("ConversationNameWithStatus", () => {
   beforeEach(() => {
+    activeConversationMock.data = {
+      id: "test-conversation-id",
+      title: "Test conversation",
+      execution_status: ExecutionStatus.RUNNING,
+      sandbox_status: null,
+    };
     vi.mocked(useAgentState).mockReturnValue({
       curAgentState: AgentState.RUNNING,
     });
@@ -152,5 +162,59 @@ describe("ConversationNameWithStatus", () => {
     expect(
       screen.getByTestId("server-status-context-menu"),
     ).toBeInTheDocument();
+  });
+
+  it("renders the archived indicator and label without Stop/Start actions when sandbox_status is MISSING", () => {
+    activeConversationMock.data = {
+      id: "test-conversation-id",
+      title: "Test conversation",
+      execution_status: ExecutionStatus.IDLE,
+      sandbox_status: "MISSING",
+    };
+    vi.mocked(useAgentState).mockReturnValue({
+      curAgentState: AgentState.AWAITING_USER_INPUT,
+    });
+
+    renderWithProviders(<ConversationNameWithStatus />);
+
+    const trigger = screen.getByTestId("server-status-menu-trigger");
+    expect(trigger).toContainElement(
+      screen.getByTestId("conversation-status-archived"),
+    );
+
+    fireEvent.click(trigger);
+
+    const menu = screen.getByTestId("server-status-context-menu");
+    expect(menu).toHaveTextContent("COMMON$ARCHIVED");
+    expect(menu).not.toHaveTextContent("COMMON$RUNNING");
+    expect(screen.queryByTestId("stop-server-button")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("start-server-button")).not.toBeInTheDocument();
+  });
+
+  it("renders the error label without Stop/Start actions when sandbox_status is ERROR", () => {
+    activeConversationMock.data = {
+      id: "test-conversation-id",
+      title: "Test conversation",
+      execution_status: ExecutionStatus.IDLE,
+      sandbox_status: "ERROR",
+    };
+    vi.mocked(useAgentState).mockReturnValue({
+      curAgentState: AgentState.AWAITING_USER_INPUT,
+    });
+
+    renderWithProviders(<ConversationNameWithStatus />);
+
+    const trigger = screen.getByTestId("server-status-menu-trigger");
+    expect(
+      screen.queryByTestId("conversation-status-archived"),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(trigger);
+
+    const menu = screen.getByTestId("server-status-context-menu");
+    expect(menu).toHaveTextContent("COMMON$ERROR");
+    expect(menu).not.toHaveTextContent("COMMON$RUNNING");
+    expect(screen.queryByTestId("stop-server-button")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("start-server-button")).not.toBeInTheDocument();
   });
 });

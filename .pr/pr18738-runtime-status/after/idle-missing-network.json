@@ -1,0 +1,194 @@
+{
+  "ok": true,
+  "total": 20,
+  "byOrigin": {
+    "http://127.0.0.1:18800": 20
+  },
+  "recent": [
+    {
+      "ts": "2026-10-23T14:33:13.530Z",
+      "origin": "http://127.0.0.1:18800",
+      "path": "/conversations/5c483caa-d180-4787-a6da-724965bd22cd",
+      "method": "GET",
+      "type": "document",
+      "app": true,
+      "status": 200
+    },
+    {
+      "ts": "2026-10-23T14:33:13.713Z",
+      "origin": "http://127.0.0.1:18800",
+      "path": "/api/conversations",
+      "query": "?ids=5c483caa-d180-4787-a6da-724965bd22cd",
+      "method": "GET",
+      "type": "fetch",
+      "app": true,
+      "status": 200
+    },
+    {
+      "ts": "2026-10-23T14:33:13.742Z",
+      "origin": "http://127.0.0.1:18800",
+      "path": "/api/conversations/5c483caa-d180-4787-a6da-724965bd22cd",
+      "method": "GET",
+      "type": "fetch",
+      "app": true,
+      "status": 200
+    },
+    {
+      "ts": "2026-10-23T14:33:13.749Z",
+      "origin": "http://127.0.0.1:18800",
+      "path": "/api/conversations/5c483caa-d180-4787-a6da-724965bd22cd/events/count",
+      "method": "GET",
+      "type": "fetch",
+      "app": true,
+      "status": 200
+    },
+    {
+      "ts": "2026-10-23T14:33:13.787Z",
+      "origin": "http://127.0.0.1:18800",
+      "path": "/api/conversations/5c483caa-d180-4787-a6da-724965bd22cd/bash/execute_bash_command",
+      "method": "POST",
+      "type": "fetch",
+      "app": true,
+      "status": 200
+    },
+    {
+      "ts": "2026-10-23T14:33:13.787Z",
+      "origin": "http://127.0.0.1:18800",
+      "path": "/api/conversations/5c483caa-d180-4787-a6da-724965bd22cd/bash/execute_bash_command",
+      "method": "POST",
+      "type": "fetch",
+      "app": true,
+      "status": 200
+    },
+    {
+      "ts": "2026-10-23T14:33:13.790Z",
+      "origin": "http://127.0.0.1:18800",
+      "path": "/api/conversations/5c483caa-d180-4787-a6da-724965bd22cd/events/search",
+      "query": "?limit=50&sort_order=TIMESTAMP_DESC",
+      "method": "GET",
+      "type": "fetch",
+      "app": true,
+      "status": 200
+    },
+    {
+      "ts": "2026-10-23T14:33:13.790Z",
+      "origin": "http://127.0.0.1:18800",
+      "path": "/api/conversations/5c483caa-d180-4787-a6da-724965bd22cd/vscode/status",
+      "method": "GET",
+      "type": "fetch",
+      "app": true,
+      "status": 200
+    },
+    {
+      "ts": "2026-10-23T14:33:33.858Z",
+      "origin": "http://127.0.0.1:18800",
+      "path": "/api/conversations/5c483caa-d180-4787-a6da-724965bd22cd/bash/execute_bash_command",
+      "method": "POST",
+      "type": "fetch",
+      "app": true,
+      "status": 404
+    },
+    {
+      "ts": "2026-10-23T14:33:43.736Z",
+      "origin": "http://127.0.0.1:18800",
+      "path": "/api/conversations",
+      "query": "?ids=5c483caa-d180-4787-a6da-724965bd22cd",
+      "method": "GET",
+      "type": "fetch",
+      "app": true,
+      "status": 200
+    },
+    {
+      "ts": "2026-10-23T14:33:52.221Z",
+      "origin": "http://127.0.0.1:18800",
+      "path": "/conversations/5c483caa-d180-4787-a6da-724965bd22cd",
+      "method": "GET",
+      "type": "document",
+      "app": true,
+      "status": 200
+    },
+    {
+      "ts": "2026-10-23T14:33:52.361Z",
+      "origin": "http://127.0.0.1:18800",
+      "path": "/api/conversations",
+      "query": "?ids=5c483caa-d180-4787-a6da-724965bd22cd",
+      "method": "GET",
+      "type": "fetch",
+      "app": true,
+      "status": 200
+    },
+    {
+      "ts": "2026-10-23T14:33:52.394Z",
+      "origin": "http://127.0.0.1:18800",
+      "path": "/api/conversations/5c483caa-d180-4787-a6da-724965bd22cd/events/count",
+      "method": "GET",
+      "type": "fetch",
+      "app": true,
+      "status": 200
+    },
+    {
+      "ts": "2026-10-23T14:33:52.416Z",
+      "origin": "http://127.0.0.1:18800",
+      "path": "/api/conversations/5c483caa-d180-4787-a6da-724965bd22cd/bash/execute_bash_command",
+      "method": "POST",
+      "type": "fetch",
+      "app": true,
+      "status": 404
+    },
+    {
+      "ts": "2026-10-23T14:33:52.416Z",
+      "origin": "http://127.0.0.1:18800",
+      "path": "/api/conversations/5c483caa-d180-4787-a6da-724965bd22cd/events/search",
+      "query": "?limit=50&sort_order=TIMESTAMP_DESC",
+      "method": "GET",
+      "type": "fetch",
+      "app": true,
+      "status": 200
+    },
+    {
+      "ts": "2026-10-23T14:33:52.416Z",
+      "origin": "http://127.0.0.1:18800",
+      "path": "/api/conversations/5c483caa-d180-4787-a6da-724965bd22cd/vscode/status",
+      "method": "GET",
+      "type": "fetch",
+      "app": true,
+      "status": 404
+    },
+    {
+      "ts": "2026-10-23T14:33:52.438Z",
+      "origin": "http://127.0.0.1:18800",
+      "path": "/api/conversations/5c483caa-d180-4787-a6da-724965bd22cd/bash/execute_bash_command",
+      "method": "POST",
+      "type": "fetch",
+      "app": true,
+      "status": 404
+    },
+    {
+      "ts": "2026-10-23T14:33:53.283Z",
+      "origin": "http://127.0.0.1:18800",
+      "path": "/api/conversations/5c483caa-d180-4787-a6da-724965bd22cd/vscode/status",
+      "method": "GET",
+      "type": "fetch",
+      "app": true,
+      "status": 404
+    },
+    {
+      "ts": "2026-10-23T14:33:54.351Z",
+      "origin": "http://127.0.0.1:18800",
+      "path": "/api/conversations/5c483caa-d180-4787-a6da-724965bd22cd/vscode/status",
+      "method": "GET",
+      "type": "fetch",
+      "app": true,
+      "status": 404
+    },
+    {
+      "ts": "2026-10-23T14:33:57.392Z",
+      "origin": "http://127.0.0.1:18800",
+      "path": "/api/conversations/5c483caa-d180-4787-a6da-724965bd22cd/vscode/status",
+      "method": "GET",
+      "type": "fetch",
+      "app": true,
+      "status": 404
+    }
+  ]
+}

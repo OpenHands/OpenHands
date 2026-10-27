@@ -762,6 +762,42 @@ describe("ConversationCard", () => {
     },
   );
 
+  it.each(["MISSING", "ERROR"] as const)(
+    "hides the stop button in ConversationCardActions when sandboxStatus is %s even if executionStatus is active",
+    (sandboxStatus) => {
+      renderWithProviders(
+        <ConversationCardActions
+          contextMenuOpen={true}
+          onContextMenuToggle={vi.fn()}
+          onStop={vi.fn()}
+          executionStatus={ExecutionStatus.IDLE}
+          sandboxStatus={sandboxStatus}
+        />,
+      );
+
+      expect(screen.queryByTestId("stop-button")).not.toBeInTheDocument();
+    },
+  );
+
+  it("does not render stop-button in ConversationCard context menu when sandboxStatus is MISSING", () => {
+    renderWithProviders(
+      <ConversationCard
+        title="Conversation 1"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        executionStatus={ExecutionStatus.IDLE}
+        sandboxStatus="MISSING"
+        onDelete={onDelete}
+        onStop={vi.fn()}
+        contextMenuOpen={true}
+        onContextMenuToggle={vi.fn()}
+      />,
+    );
+
+    const menu = screen.getByTestId("context-menu");
+    expect(within(menu).queryByTestId("stop-button")).not.toBeInTheDocument();
+  });
+
   describe("stop button label by active backend", () => {
     const cloudBackend: Backend = {
       id: "prod",

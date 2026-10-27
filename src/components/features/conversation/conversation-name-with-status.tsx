@@ -21,6 +21,11 @@ import {
   isExecutionErrored,
   isExecutionPaused,
 } from "#/utils/status";
+import {
+  isMissingSandboxStatus,
+  isRuntimeUnavailableSandboxStatus,
+} from "#/utils/conversation-archive-status";
+import { ConversationStatusDot } from "../conversation-panel/conversation-status-dot";
 import { I18nKey } from "#/i18n/declaration";
 
 export function ConversationNameWithStatus() {
@@ -37,6 +42,9 @@ export function ConversationNameWithStatus() {
   const triggerRef = React.useRef<HTMLButtonElement>(null);
 
   const executionStatus = conversation?.execution_status ?? null;
+  const sandboxStatus = conversation?.sandbox_status ?? null;
+  const runtimeMissing = isMissingSandboxStatus(sandboxStatus);
+  const runtimeUnavailable = isRuntimeUnavailableSandboxStatus(sandboxStatus);
   const isStartingStatus =
     curAgentState === AgentState.LOADING || curAgentState === AgentState.INIT;
   const isStopStatus = isExecutionErrored(executionStatus);
@@ -48,6 +56,7 @@ export function ConversationNameWithStatus() {
     isStartingStatus,
     isStopStatus,
     curAgentState,
+    sandboxStatus,
   });
 
   const isMenuVisible = menuOpen || hoveredOpen;
@@ -64,7 +73,7 @@ export function ConversationNameWithStatus() {
   const handleStopServer = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
     event.stopPropagation();
-    if (conversationId) {
+    if (conversationId && !runtimeUnavailable) {
       pauseConversation({ conversationId });
     }
     closeMenu();
@@ -73,7 +82,7 @@ export function ConversationNameWithStatus() {
   const handleStartServer = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
     event.stopPropagation();
-    if (conversationId) {
+    if (conversationId && !runtimeUnavailable) {
       resumeConversation({ conversationId, providers });
     }
     closeMenu();
@@ -122,27 +131,38 @@ export function ConversationNameWithStatus() {
               "text-muted hover:bg-contrast/10",
             )}
           >
-            <DebugStackframeDot
-              className="ml-[3.5px] w-6 h-6 cursor-pointer"
-              color={statusColor}
-              aria-hidden
-            />
+            {runtimeMissing ? (
+              <span className="w-6 h-6 flex items-center justify-center cursor-pointer">
+                <ConversationStatusDot
+                  executionStatus={executionStatus}
+                  sandboxStatus={sandboxStatus}
+                  showTooltip={false}
+                />
+              </span>
+            ) : (
+              <DebugStackframeDot
+                className="ml-[3.5px] w-6 h-6 cursor-pointer"
+                color={statusColor}
+                aria-hidden
+              />
+            )}
           </button>
           {isMenuVisible ? (
             <ServerStatusContextMenu
               onClose={closeMenu}
               ignoreOutsideClickRef={triggerRef}
               onStopServer={
-                isExecutionActive(executionStatus)
+                !runtimeUnavailable && isExecutionActive(executionStatus)
                   ? handleStopServer
                   : undefined
               }
               onStartServer={
-                isExecutionPaused(executionStatus)
+                !runtimeUnavailable && isExecutionPaused(executionStatus)
                   ? handleStartServer
                   : undefined
               }
               executionStatus={executionStatus}
+              sandboxStatus={sandboxStatus}
               position="bottom"
               className="bottom-full left-0 mt-0 min-h-fit"
               isPausing={false}

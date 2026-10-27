@@ -499,4 +499,23 @@ describe("getStatusColor", () => {
   it("shows the success color by default", () => {
     expect(getStatusColor(baseOptions)).toBe(OH_STATUS_SUCCESS_COLOR);
   });
+
+  it("returns the stopped color when sandboxStatus is MISSING", () => {
+    expect(
+      getStatusColor({
+        ...baseOptions,
+        sandboxStatus: "MISSING",
+      }),
+    ).toBe(STOPPED_COLOR);
+  });
+
+  it("returns the error color when sandboxStatus is ERROR", () => {
+    expect(
+      getStatusColor({
+        ...baseOptions,
+        isStopStatus: true,
+        sandboxStatus: "ERROR",
+      }),
+    ).toBe(OH_STATUS_ERROR_COLOR);
+  });
 });
