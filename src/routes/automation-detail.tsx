@@ -46,7 +46,10 @@ import { TransferAutomationModal } from "#/components/features/automations/trans
 import { useOpenAutomationEditor } from "#/hooks/use-open-automation-editor";
 import { useTracking } from "#/hooks/use-tracking";
 import { useAutomationAccess } from "#/hooks/use-automation-access";
-import { useIsAutomationOwner } from "#/hooks/use-automation-permissions";
+import {
+  useAutomationPermissions,
+  useIsAutomationOwner,
+} from "#/hooks/use-automation-permissions";
 import AutomationService from "#/api/automation-service/automation-service.api";
 import type { Automation, TransferAutomationRequest } from "#/types/automation";
 import { isDraftAutomation } from "#/utils/automation-state";
@@ -138,6 +141,7 @@ export default function AutomationDetail() {
     automation ?? nullAutomation,
   );
   const isOwner = useIsAutomationOwner(automation ?? nullAutomation);
+  const { canManage: hasManagePermission } = useAutomationPermissions();
   // Creator lookup for "Automation Runs As"; disabled until the automation
   // (and its user_id) has loaded, and on non-cloud backends.
   // A service account is not an org member, so it has no member lookup.
@@ -274,11 +278,15 @@ export default function AutomationDetail() {
   }
   const isDraft = isDraftAutomation(automation);
   // A service-owned automation shows the account's name from the enterprise
-  // service account list (managers only); anyone else sees the raw id.
+  // service account list (managers only). A manager falls back to the raw id
+  // when the list is unavailable. A member sees a generic label, never the id.
   const serviceAccountOwner = isServiceOwned
     ? (serviceAccountsQuery.data?.find(
         (account) => account.id === automation.user_id,
-      )?.name ?? automation.user_id)
+      )?.name ??
+      (hasManagePermission
+        ? automation.user_id
+        : t(I18nKey.AUTOMATIONS$SERVICE_ACCOUNT_LABEL)))
     : null;
   const canTransfer = serviceAccountOwnersEnabled && !isDraft;
 

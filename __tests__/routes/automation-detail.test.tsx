@@ -49,11 +49,11 @@ vi.mock("#/api/profiles-service/profiles-service.api", () => ({
 }));
 
 // Mock permission hooks so cloud-backend tests don't need a real /me endpoint.
-const permissionMocks = vi.hoisted(() => ({ isOwner: true }));
+const permissionMocks = vi.hoisted(() => ({ isOwner: true, canManage: true }));
 vi.mock("#/hooks/use-automation-permissions", () => ({
   useAutomationPermissions: () => ({
     canView: true,
-    canManage: true,
+    canManage: permissionMocks.canManage,
     userId: "admin-user",
     isLoading: false,
   }),
@@ -147,6 +147,7 @@ beforeEach(() => {
     .spyOn(ToastHandlers, "displayErrorToast")
     .mockImplementation(() => "toast-id");
   permissionMocks.isOwner = true;
+  permissionMocks.canManage = true;
   vi.mocked(AutomationService.getCapabilities).mockReset();
   vi.mocked(AutomationService.getCapabilities).mockResolvedValue({
     ready: true,
@@ -511,6 +512,23 @@ describe("AutomationDetail — service account owner", () => {
     // Assert
     expect(await screen.findByText(saId)).toBeInTheDocument();
     expect(screen.getByTestId("service-account-badge")).toBeInTheDocument();
+  });
+
+  it("shows a member the generic label and never the owner id", async () => {
+    // Arrange — a member cannot read the service account list.
+    permissionMocks.canManage = false;
+    const { container } = renderDetail();
+
+    // Act
+    await screen.findByTestId("service-account-badge");
+
+    // Assert
+    expect(screen.getByText(I18nKey.AUTOMATIONS$OWNED_BY)).toBeInTheDocument();
+    expect(
+      screen.getAllByText(I18nKey.AUTOMATIONS$SERVICE_ACCOUNT_LABEL).length,
+    ).toBeGreaterThan(0);
+    expect(container.innerHTML).not.toContain(saId);
+    expect(listCloudServiceAccounts).not.toHaveBeenCalled();
   });
 
   it("transfers the automation to the chosen service account", async () => {
