@@ -817,6 +817,27 @@ describe("AutomationSetupPanel", () => {
     expect(repositoryTrigger).toHaveFocus();
   });
 
+  it("closes the event source menu on Escape and returns focus to its toggle", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(screen.getByText("AUTOMATIONS$DETAIL$TRIGGER_EVENT"));
+    const sourceToggle = screen.getByTestId(
+      "automation-setup-event-source-toggle",
+    );
+    await user.click(sourceToggle);
+    expect(
+      screen.getByTestId("automation-setup-event-source-menu"),
+    ).toBeInTheDocument();
+    expect(sourceToggle).toHaveAttribute("aria-expanded", "true");
+    await user.keyboard("{Escape}");
+    expect(
+      screen.queryByTestId("automation-setup-event-source-menu"),
+    ).not.toBeInTheDocument();
+    expect(sourceToggle).toHaveAttribute("aria-expanded", "false");
+    expect(sourceToggle).toHaveFocus();
+  });
+
   it("sends each comma-separated repository to the automation service", async () => {
     vi.mocked(AutomationService.createServerDraft).mockRejectedValue({
       response: { status: 404 },

@@ -46,11 +46,9 @@ import { useStreamedText } from "#/hooks/use-streamed-text";
 
 interface EventMessageProps {
   event: OpenHandsEvent & { isFromPlanningAgent?: boolean };
-  /** @deprecated Prefer the stable correspondingAction prop. */
-  messages?: OpenHandsEvent[];
   /**
    * The action paired with an observation. null means the caller performed
-   * the lookup and found no action; undefined keeps legacy messages lookup.
+   * the lookup and found no action.
    */
   correspondingAction?: ActionEvent | null;
   isLastMessage: boolean;
@@ -179,7 +177,6 @@ function PlanningObservationPreview({
 
 function EventMessageComponent({
   event,
-  messages,
   correspondingAction: suppliedCorrespondingAction,
   isLastMessage,
   isInLast10Actions,
@@ -348,13 +345,8 @@ function EventMessageComponent({
       return null;
     }
 
-    // Find the action that this observation is responding to
-    const correspondingAction =
-      suppliedCorrespondingAction === undefined
-        ? messages?.find(
-            (msg) => isActionEvent(msg) && msg.id === event.action_id,
-          )
-        : (suppliedCorrespondingAction ?? undefined);
+    // The action that this observation is responding to
+    const correspondingAction = suppliedCorrespondingAction ?? undefined;
 
     // Skip ThoughtEventMessage for ThinkAction (thought IS the action)
     const shouldShowThought =
