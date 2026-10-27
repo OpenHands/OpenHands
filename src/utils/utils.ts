@@ -203,6 +203,31 @@ export const getPR = (isGitLab: boolean) =>
 export const getPRShort = (isGitLab: boolean) => (isGitLab ? "MR" : "PR");
 
 /**
+ * Percent-encode one URL path segment. Repository names are display text
+ * (`org/Web Apps/repo`), as provider APIs and `parseGitRemoteUrl` report them,
+ * so this is where they are encoded for links. A name that still arrives
+ * encoded (`Web%20Apps`) is decoded first so it is not encoded twice.
+ */
+const encodePathSegment = (segment: string): string => {
+  try {
+    return encodeURIComponent(decodeURIComponent(segment));
+  } catch {
+    return encodeURIComponent(segment);
+  }
+};
+
+/** Split a repository name into its URL-encoded path segments. */
+const encodeRepositorySegments = (repositoryName: string): string[] =>
+  repositoryName.split("/").map(encodePathSegment);
+
+/**
+ * Encode a repository name (`owner/repo`, `group/sub/repo`) for a URL path,
+ * one `/`-separated segment at a time.
+ */
+export const encodeRepositoryPath = (repositoryName: string): string =>
+  encodeRepositorySegments(repositoryName).join("/");
+
+/**
  * Construct the pull request (merge request) URL for different providers
  * @param prNumber The pull request number
  * @param provider The git provider
@@ -222,23 +247,24 @@ export const constructPullRequestUrl = (
   host?: string | null,
 ): string => {
   const baseUrl = getGitProviderBaseUrl(provider, host);
+  const repositoryPath = encodeRepositoryPath(repositoryName);
 
   switch (provider) {
     case "github":
-      return `${baseUrl}/${repositoryName}/pull/${prNumber}`;
+      return `${baseUrl}/${repositoryPath}/pull/${prNumber}`;
     case "forgejo":
-      return `${baseUrl}/${repositoryName}/pull/${prNumber}`;
+      return `${baseUrl}/${repositoryPath}/pull/${prNumber}`;
     case "gitlab":
-      return `${baseUrl}/${repositoryName}/-/merge_requests/${prNumber}`;
+      return `${baseUrl}/${repositoryPath}/-/merge_requests/${prNumber}`;
     case "bitbucket":
-      return `${baseUrl}/${repositoryName}/pull-requests/${prNumber}`;
+      return `${baseUrl}/${repositoryPath}/pull-requests/${prNumber}`;
     case "bitbucket_data_center": {
-      const [project, repo] = repositoryName.split("/");
+      const [project, repo] = encodeRepositorySegments(repositoryName);
       return `${baseUrl}/projects/${project}/repos/${repo}/pull-requests/${prNumber}`;
     }
     case "azure_devops": {
       // Azure DevOps format: org/project/repo
-      const parts = repositoryName.split("/");
+      const parts = encodeRepositorySegments(repositoryName);
       if (parts.length === 3) {
         const [org, project, repo] = parts;
         return `${baseUrl}/${org}/${project}/_git/${repo}/pullrequest/${prNumber}`;
@@ -247,19 +273,6 @@ export const constructPullRequestUrl = (
     }
     default:
       return "";
-  }
-};
-
-/**
- * Percent-encode one URL path segment. Names parsed from a remote URL arrive
- * encoded (`Web%20Apps`) while provider APIs return them raw (`Web Apps`), so
- * decode first to avoid encoding twice.
- */
-const encodePathSegment = (segment: string): string => {
-  try {
-    return encodeURIComponent(decodeURIComponent(segment));
-  } catch {
-    return encodeURIComponent(segment);
   }
 };
 
@@ -281,19 +294,17 @@ export const constructRepositoryUrl = (
   host?: string | null,
 ): string => {
   const baseUrl = getGitProviderBaseUrl(provider, host);
+  const parts = encodeRepositorySegments(repositoryName);
   if (provider === "bitbucket_data_center") {
-    const [project, repo] = repositoryName.split("/");
+    const [project, repo] = parts;
     return `${baseUrl}/projects/${project}/repos/${repo}`;
   }
-  if (provider === "azure_devops") {
-    // Azure DevOps format: org/project/repo
-    const parts = repositoryName.split("/");
-    if (parts.length === 3) {
-      const [org, project, repo] = parts.map(encodePathSegment);
-      return `${baseUrl}/${org}/${project}/_git/${repo}`;
-    }
+  // Azure DevOps format: org/project/repo
+  if (provider === "azure_devops" && parts.length === 3) {
+    const [org, project, repo] = parts;
+    return `${baseUrl}/${org}/${project}/_git/${repo}`;
   }
-  return `${baseUrl}/${repositoryName}`;
+  return `${baseUrl}/${parts.join("/")}`;
 };
 
 /**
@@ -325,19 +336,20 @@ export const constructBranchUrl = (
   host?: string | null,
 ): string => {
   const baseUrl = getGitProviderBaseUrl(provider, host);
+  const parts = encodeRepositorySegments(repositoryName);
+  const repositoryPath = parts.join("/");
 
   switch (provider) {
     case "github":
-      return `${baseUrl}/${repositoryName}/tree/${encodeBranchPath(branchName)}`;
+      return `${baseUrl}/${repositoryPath}/tree/${encodeBranchPath(branchName)}`;
     case "forgejo":
-      return `${baseUrl}/${repositoryName}/src/branch/${encodeBranchPath(branchName)}`;
+      return `${baseUrl}/${repositoryPath}/src/branch/${encodeBranchPath(branchName)}`;
     case "gitlab":
-      return `${baseUrl}/${repositoryName}/-/tree/${encodeBranchPath(branchName)}`;
+      return `${baseUrl}/${repositoryPath}/-/tree/${encodeBranchPath(branchName)}`;
     case "bitbucket":
-      return `${baseUrl}/${repositoryName}/src/${encodeBranchPath(branchName)}`;
+      return `${baseUrl}/${repositoryPath}/src/${encodeBranchPath(branchName)}`;
     case "bitbucket_data_center": {
       // Bitbucket Server format: /projects/{PROJECT}/repos/{repo}/browse?at=refs/heads/{branch}
-      const parts = repositoryName.split("/");
       if (parts.length >= 2) {
         const [project, repo] = parts;
         // The branch is one query value here, so encode it whole: an
@@ -348,7 +360,6 @@ export const constructBranchUrl = (
     }
     case "azure_devops": {
       // Azure DevOps format: org/project/repo
-      const parts = repositoryName.split("/");
       if (parts.length === 3) {
         const [org, project, repo] = parts;
         // The branch is one query value here, so encode it whole: an

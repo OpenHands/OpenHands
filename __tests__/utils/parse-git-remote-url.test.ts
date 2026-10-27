@@ -171,6 +171,43 @@ describe("parseGitRemoteUrl", () => {
     expect(parseGitRemoteUrl("not a url")).toBeNull();
   });
 
+  // Labels print `repository` as is, so it carries the decoded name; the link
+  // builders own encoding it back for URLs.
+  it.each([
+    {
+      remote: "https://dev.azure.com/qa-org/Web%20Apps/_git/qa-azure-repo",
+      repository: "qa-org/Web Apps/qa-azure-repo",
+    },
+    {
+      remote: "git@ssh.dev.azure.com:v3/qa-org/Web%20Apps/qa-azure-repo",
+      repository: "qa-org/Web Apps/qa-azure-repo",
+    },
+    {
+      remote: "https://github.com/qa-example/qa%2Df07%20repo.git",
+      repository: "qa-example/qa-f07 repo",
+    },
+    {
+      remote: "git@gitlab.com:qa-group/Web%20Apps/qa-f07-repo.git",
+      repository: "qa-group/Web Apps/qa-f07-repo",
+    },
+  ])("decodes the repository name of $remote", ({ remote, repository }) => {
+    expect(parseGitRemoteUrl(remote)?.repository).toBe(repository);
+  });
+
+  it("keeps a segment with a malformed escape as written", () => {
+    expect(
+      parseGitRemoteUrl("https://dev.azure.com/qa-org/%E0%A4%A/_git/Web%20Apps")
+        ?.repository,
+    ).toBe("qa-org/%E0%A4%A/Web Apps");
+  });
+
+  it("keeps an encoded slash so the name keeps its segments", () => {
+    expect(
+      parseGitRemoteUrl("https://gitlab.com/qa-group/a%2Fb%20c/repo")
+        ?.repository,
+    ).toBe("qa-group/a%2Fb%20c/repo");
+  });
+
   it("treats a host named after an Object.prototype member as a plain host", () => {
     const result = parseGitRemoteUrl("http://constructor/owner/repo.git");
     expect(result?.host).toBe("constructor");

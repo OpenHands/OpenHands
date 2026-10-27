@@ -240,7 +240,7 @@ describe("constructRepositoryUrl", () => {
   });
 
   it("does not encode an already-encoded Azure DevOps name twice", () => {
-    // Names parsed from a git remote URL keep its percent-encoding.
+    // A name may still arrive encoded, e.g. from metadata saved earlier.
     expect(constructRepositoryUrl("azure_devops", "org/Web%20Apps/repo")).toBe(
       "https://dev.azure.com/org/Web%20Apps/_git/repo",
     );

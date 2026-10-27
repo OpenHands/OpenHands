@@ -9,7 +9,12 @@ export interface ParsedGitRemoteUrl {
    * can build links from this directly. `url` keeps the original remote.
    */
   host: string | null;
-  /** Path-style identifier, normalized to `owner/repo` (no leading slash, no `.git` suffix). */
+  /**
+   * Path-style identifier, normalized to `owner/repo` (no leading slash, no
+   * `.git` suffix) and percent-decoded (`org/Web Apps/repo`), the same form
+   * provider APIs report. It is display text: link builders in
+   * `#/utils/utils` encode it for URLs.
+   */
   repository: string | null;
   /** Best-effort provider detection from the host. `null` for unrecognized/self-hosted hosts. */
   provider: Provider | null;
@@ -64,6 +69,22 @@ function normalizeAzureDevOpsPath(path: string): string {
   );
 }
 
+// Remote URLs carry percent-encoded paths (`Web%20Apps`). Decode each segment
+// on its own; a malformed escape, or one that decodes to `/` and would change
+// the segment count, stays as written.
+function decodePathSegment(segment: string): string {
+  try {
+    const decoded = decodeURIComponent(segment);
+    return decoded.includes("/") ? segment : decoded;
+  } catch {
+    return segment;
+  }
+}
+
+function decodeRepositoryPath(path: string): string {
+  return path.split("/").map(decodePathSegment).join("/");
+}
+
 function buildParsedGitRemoteUrl(
   url: string,
   rawHost: string | null,
@@ -72,8 +93,9 @@ function buildParsedGitRemoteUrl(
   const host = rawHost ? toWebHost(rawHost) : rawHost;
   const path = stripGitSuffix(rawPath.replace(/^\/+|\/+$/g, ""));
   const provider = detectProvider(host);
-  const repository =
-    provider === "azure_devops" ? normalizeAzureDevOpsPath(path) : path;
+  const repository = decodeRepositoryPath(
+    provider === "azure_devops" ? normalizeAzureDevOpsPath(path) : path,
+  );
 
   return {
     url,

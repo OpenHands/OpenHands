@@ -4,7 +4,7 @@ import { RefreshCw } from "lucide-react";
 import type { GitSyncStatus } from "#/types/git-sync";
 import { formatTimeDelta } from "#/utils/format-time-delta";
 import { parseGitRemoteUrl } from "#/utils/parse-git-remote-url";
-import { cn } from "#/utils/utils";
+import { cn, encodeRepositoryPath } from "#/utils/utils";
 import GitBranchIcon from "#/icons/git-branch.svg?react";
 import GlobeIcon from "#/icons/globe.svg?react";
 import FolderIcon from "#/icons/folder.svg?react";
@@ -41,7 +41,7 @@ function browseUrlFor(repoUrl: string): string | null {
     return url.toString();
   }
 
-  return `https://${parsed.host}/${parsed.repository}`;
+  return `https://${parsed.host}/${encodeRepositoryPath(parsed.repository)}`;
 }
 
 // `scheme://userinfo@`; the greedy userinfo stops at the authority's last `@`,

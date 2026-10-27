@@ -3,7 +3,11 @@ import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
 import { SecretsService } from "#/api/secrets-service";
 import { getActiveBackend } from "#/api/backend-registry/active-store";
 import type { Provider } from "#/types/settings";
-import { constructPullRequestUrl, getGitProviderBaseUrl } from "#/utils/utils";
+import {
+  constructPullRequestUrl,
+  encodeRepositoryPath,
+  getGitProviderBaseUrl,
+} from "#/utils/utils";
 
 export interface GitProviderItem {
   id: number;
@@ -59,16 +63,17 @@ function constructIssueUrl(
   repositoryName: string,
 ): string {
   const baseUrl = getGitProviderBaseUrl(provider);
+  const repositoryPath = encodeRepositoryPath(repositoryName);
   switch (provider) {
     case "gitlab":
-      return `${baseUrl}/${repositoryName}/-/issues/${issueNumber}`;
+      return `${baseUrl}/${repositoryPath}/-/issues/${issueNumber}`;
     case "bitbucket":
-      return `${baseUrl}/${repositoryName}/issues/${issueNumber}`;
+      return `${baseUrl}/${repositoryPath}/issues/${issueNumber}`;
     case "forgejo":
-      return `${baseUrl}/${repositoryName}/issues/${issueNumber}`;
+      return `${baseUrl}/${repositoryPath}/issues/${issueNumber}`;
     case "github":
     default:
-      return `${baseUrl}/${repositoryName}/issues/${issueNumber}`;
+      return `${baseUrl}/${repositoryPath}/issues/${issueNumber}`;
   }
 }
 
@@ -77,16 +82,17 @@ function constructIssuesListUrl(
   repositoryName: string,
 ): string {
   const baseUrl = getGitProviderBaseUrl(provider);
+  const repositoryPath = encodeRepositoryPath(repositoryName);
   switch (provider) {
     case "gitlab":
-      return `${baseUrl}/${repositoryName}/-/issues`;
+      return `${baseUrl}/${repositoryPath}/-/issues`;
     case "bitbucket":
-      return `${baseUrl}/${repositoryName}/issues`;
+      return `${baseUrl}/${repositoryPath}/issues`;
     case "forgejo":
-      return `${baseUrl}/${repositoryName}/issues`;
+      return `${baseUrl}/${repositoryPath}/issues`;
     case "github":
     default:
-      return `${baseUrl}/${repositoryName}/issues`;
+      return `${baseUrl}/${repositoryPath}/issues`;
   }
 }
 
@@ -95,16 +101,17 @@ function constructPullRequestsListUrl(
   repositoryName: string,
 ): string {
   const baseUrl = getGitProviderBaseUrl(provider);
+  const repositoryPath = encodeRepositoryPath(repositoryName);
   switch (provider) {
     case "gitlab":
-      return `${baseUrl}/${repositoryName}/-/merge_requests`;
+      return `${baseUrl}/${repositoryPath}/-/merge_requests`;
     case "bitbucket":
-      return `${baseUrl}/${repositoryName}/pull-requests`;
+      return `${baseUrl}/${repositoryPath}/pull-requests`;
     case "forgejo":
-      return `${baseUrl}/${repositoryName}/pulls`;
+      return `${baseUrl}/${repositoryPath}/pulls`;
     case "github":
     default:
-      return `${baseUrl}/${repositoryName}/pulls`;
+      return `${baseUrl}/${repositoryPath}/pulls`;
   }
 }
 
