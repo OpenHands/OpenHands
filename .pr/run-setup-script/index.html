@@ -274,8 +274,75 @@
   (<code>control-openhands launch --sdk-path &lt;sdk #6099&gt;</code>) whose agent-server is
   the PR-branch build, advertising <code>direct_tool_execution_v1</code>, with the pinned
   TypeScript client patched to the same branch's build (which adds
-  <code>executeTool()</code>). The LLM is the repository's own credential-free mock-LLM
-  server, so the run is reproducible without any provider key.
+  <code>executeTool()</code>).
+</p>
+
+<h3 id="evidence-live">4.1 · Live-model run (production integration path)</h3>
+<p>
+  The behavior is model-dependent — the bootstrap must finish <em>before</em> the agent's
+  first turn — so the capture below uses a <strong>live LLM</strong>, not a mock. Backend:
+  the run's own Agent Server <code>1.58.2</code> (SDK branch build). Model:
+  <code>deepseek-v4.1-flash</code> through <code>https://llm-proxy.app.all-hands.dev</code>
+  (profile <code>live-doc</code>). The video is one continuous take of the real Canvas.
+</p>
+<figure>
+  <video src="live/setup-before-first-turn.mp4" controls muted playsinline
+         style="max-width:100%"></video>
+  <figcaption>
+    Live-model ordering: <code>Creating conversation…</code> →
+    <strong><code>Setting up workspace…</code></strong> (the
+    <code>onSetupScriptProgress</code> relabel while <code>.openhands/setup.sh</code> runs) →
+    the composer's first turn → the agent's terminal answering
+    <code>TOKEN_IS=live-setup-ok</code>. The setup script <code>export</code>s
+    <code>LIVE_SETUP_TOKEN</code>, so the value in the first turn proves the script ran
+    before it. GIF fallback: <a href="live/setup-before-first-turn.gif">live/setup-before-first-turn.gif</a>.
+  </figcaption>
+</figure>
+<p>
+  The same ordering holds at the wire level. In the browser's own request log the setup
+  call completes <em>before</em> the first message is sent:
+</p>
+<pre><code># live run, one conversation (7e9fdee3-4bd2-43f4-83ad-22c1a9d28077)
+03:11:05.279Z  seq 2057  POST 200  /api/conversations/7e9fdee3…/execute_tool   ← setup.sh
+03:11:12.417Z  seq 2058  POST 200  /api/conversations/7e9fdee3…/events         ← first turn
+
+# event stream, same conversation
+03:11:05.494  SystemPromptEvent
+03:11:12.419  MessageEvent   user   Run exactly: echo TOKEN_IS=$LIVE_SETUP_TOKEN; cat …
+03:11:13.943  ObservationEvent  env  TOKEN_IS=live-setup-ok
+                                     live setup finished at Tue Oct 27 03:11:11 UTC 2026
+</code></pre>
+<figure>
+  <img src="live/frame-01-setting-up-workspace.png" alt="Canvas showing the toast 'Setting up workspace...' while the create request is in flight" />
+  <figcaption>Frame at 0:06 — the <code>Setting up workspace…</code> toast, captured from the video above.</figcaption>
+</figure>
+<figure>
+  <img src="live/frame-02-first-turn-result.png" alt="Canvas showing the first turn's answer TOKEN_IS=live-setup-ok" />
+  <figcaption>Frame at 0:18 — the first turn after setup, resolving the exported token.</figcaption>
+</figure>
+<details>
+  <summary>Reproduction commands (live model)</summary>
+<pre><code># workspace fixture: .openhands/setup.sh
+#   echo "LIVE_SETUP_STARTED"; sleep 6
+#   export LIVE_SETUP_TOKEN=live-setup-ok
+#   echo "live setup finished at $(date)" &gt; .live-setup-marker.txt
+
+control-openhands launch --new --sdk-path /tmp/sdk6099 --build auto
+control-openhands llm set --profile live-doc --model openai/deepseek-v4.1-flash \
+    --base-url https://llm-proxy.app.all-hands.dev --api-key-file &lt;key&gt;
+control-openhands browser record start --feature F03.setup-script \
+    --name live-setup-before-first-turn-video --fps 12
+control-openhands conversation start --workspace /tmp/ohlive2/repo \
+    --prompt "Run exactly: echo TOKEN_IS=\$LIVE_SETUP_TOKEN; cat .live-setup-marker.txt" --wait
+control-openhands browser record stop --gif
+</code></pre>
+</details>
+
+<h3 id="evidence-mock">4.2 · Mock-LLM regression run</h3>
+<p>
+  A second, credential-free run with the repository's mock-LLM server covers the
+  non-model-dependent paths (client gating, environment persistence) as E2E regression
+  coverage.
 </p>
 <figure>
   <img src="01-setup-export-persists.png" alt="Conversation showing the terminal command echo SETUP_RAN_IS=$SETUP_RAN and its observation SETUP_RAN_IS=1" />
