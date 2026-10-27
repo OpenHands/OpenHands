@@ -514,6 +514,22 @@ describe("AutomationDetail — service account owner", () => {
     expect(screen.getByTestId("service-account-badge")).toBeInTheDocument();
   });
 
+  it("lets a manager edit the tags of a service-owned automation", async () => {
+    // Arrange — the manager is not the owner; the service account is. A
+    // service with tag support sends `tags`.
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+      ...serviceAutomation,
+      tags: [],
+    });
+    renderDetail();
+
+    // Act
+    await screen.findByTestId("service-account-badge");
+
+    // Assert — tags follow the same edit rule as the rest of the page.
+    expect(screen.getByTestId("automation-tags-edit")).toBeInTheDocument();
+  });
+
   it("shows a member the generic label and never the owner id", async () => {
     // Arrange — a member cannot read the service account list.
     permissionMocks.canManage = false;

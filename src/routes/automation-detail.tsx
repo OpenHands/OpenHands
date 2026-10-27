@@ -313,10 +313,11 @@ export default function AutomationDetail() {
             canEdit={canEdit}
             canToggle={canToggle}
           />
-          {/* The service lets only the creator change tags. */}
+          {/* Tags follow the edit rule: the creator, or a manager of a
+              service-owned automation. */}
           <AutomationTagsEditor
             automation={automation}
-            canEdit={isOwner && !isDraft}
+            canEdit={canEdit && !isDraft}
           />
           <DisabledReasonBanner automation={automation} />
           {automation.prompt ? (
