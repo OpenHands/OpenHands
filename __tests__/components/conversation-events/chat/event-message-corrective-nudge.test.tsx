@@ -43,7 +43,6 @@ const renderEvent = (event: MessageEvent) =>
   renderWithProviders(
     <EventMessage
       event={event}
-      messages={[event]}
       isLastMessage={false}
       isInLast10Actions={false}
     />,

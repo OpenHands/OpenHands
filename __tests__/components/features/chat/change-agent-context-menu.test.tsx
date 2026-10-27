@@ -519,6 +519,7 @@ describe("WorkspaceModeSelector", () => {
     render(
       <WorkspaceModeSelector
         value="local_repo"
+        options={["local_repo", "new_worktree"]}
         backendKind="local"
         onChange={onChange}
       />,
