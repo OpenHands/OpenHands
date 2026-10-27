@@ -39942,7 +39942,7 @@
     "ca": "No s'ha pogut transferir l'automatització.",
     "id": "Tidak dapat mentransfer otomatisasi."
   },
-  "AUTOMATION_SETUP$CREATE_AS_SERVICE_ACCOUNT": {
+  "AUTOMATION_SETUP$OWNER": {
     "en": "Owner",
     "ja": "所有者",
     "zh-CN": "所有者",

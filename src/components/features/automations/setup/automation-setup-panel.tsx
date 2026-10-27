@@ -2101,9 +2101,7 @@ export function AutomationSetupPanel({
               </Field>
 
               {showOwnerPicker ? (
-                <Field
-                  label={t(I18nKey.AUTOMATION_SETUP$CREATE_AS_SERVICE_ACCOUNT)}
-                >
+                <Field label={t(I18nKey.AUTOMATION_SETUP$OWNER)}>
                   <div className="relative">
                     <select
                       data-testid="automation-setup-owner"
