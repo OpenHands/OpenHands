@@ -1169,7 +1169,7 @@ describe("static-server.mjs MARS web bridge (Docker arguments)", () => {
   // The public-mode instance binds `::` with no key, so a container-wide
   // MARS_WEB=1 would make it warn on every start, or, with MARS_WEB_KEY set
   // too, host a second bridge with its own sign-in state.
-  it("pins the entrypoint's public-mode instance to MARS_WEB=0", () => {
+  it("pins the entrypoint's public-mode instance to MARS_WEB=0 and MARITIME_WEB=0", () => {
     const entrypoint = readFileSync(
       path.resolve(import.meta.dirname, "../../docker/entrypoint.sh"),
       "utf-8",
@@ -1178,8 +1178,27 @@ describe("static-server.mjs MARS web bridge (Docker arguments)", () => {
       entrypoint.match(/^.*node \/opt\/agent-canvas\/static-server\.mjs/gm),
     ).toEqual([
       'SESSION_API_KEY="$EFFECTIVE_SESSION_KEY" node /opt/agent-canvas/static-server.mjs',
-      "  MARS_WEB=0 node /opt/agent-canvas/static-server.mjs",
+      "  MARS_WEB=0 MARITIME_WEB=0 node /opt/agent-canvas/static-server.mjs",
     ]);
+  });
+
+  it("hosts the Maritime bridge only with MARITIME_WEB=1, behind the same key", async () => {
+    const off = await start({ host: "127.0.0.1", sessionApiKey: "k" });
+    expect(
+      (await fetch(`${off}/maritime/health`)).headers.get("content-type"),
+    ).toMatch(/text\/html/);
+
+    vi.stubEnv("MARITIME_WEB", "1");
+    vi.stubEnv("OH_CANVAS_SECRET_STORE", "memory");
+    const on = await start({ host: "::", sessionApiKey: "docker-key" });
+    expect(await (await fetch(`${on}/maritime/health`)).json()).toEqual({
+      ok: true,
+      authRequired: true,
+    });
+    const refused = await fetch(`${on}/maritime/rpc/getAuthState`, {
+      method: "POST",
+    });
+    expect(refused.status).toBe(401);
   });
 
   it.each([undefined, "0"])(

@@ -229,12 +229,14 @@ export function useBackendsHealth(
     queries: backends.map((b) => {
       const entry = healthMap[b.id];
       const hasMissingCloudApiKey = hasMissingBackendApiKey(b);
-      // Every probe of a MARS session travels its tunnel into the sandbox;
-      // polling sessions the user is not on would keep them from ever
-      // idle-pausing (and billing), so those are probed once on mount and
-      // only the active one is watched.
-      const isIdleMarsSession =
-        Boolean(b.marsSessionId) && b.id !== activeBackendId;
+      // Every probe of a MARS session travels its tunnel into the sandbox,
+      // and every probe of a Maritime agent is HTTP traffic that wakes it and
+      // resets its idle timer. Polling ones the user is not on would keep
+      // them from ever sleeping (and billing), so those are probed once on
+      // mount and only the active one is watched.
+      const isIdleProviderSandbox =
+        (Boolean(b.marsSessionId) || Boolean(b.maritimeAgentId)) &&
+        b.id !== activeBackendId;
       const isDisabled = entry?.disabled === true;
       const refreshInterval =
         b.kind === "cloud" ? CLOUD_REFRESH_INTERVAL_MS : REFRESH_INTERVAL_MS;
@@ -267,7 +269,7 @@ export function useBackendsHealth(
         },
         enabled: shouldProbe,
         refetchInterval:
-          isDisabled || hasMissingCloudApiKey || isIdleMarsSession
+          isDisabled || hasMissingCloudApiKey || isIdleProviderSandbox
             ? (false as const)
             : refreshInterval,
         refetchIntervalInBackground: false,
@@ -276,12 +278,12 @@ export function useBackendsHealth(
           b.kind !== "cloud" &&
           !isDisabled &&
           !hasMissingCloudApiKey &&
-          !isIdleMarsSession,
+          !isIdleProviderSandbox,
         refetchOnWindowFocus:
           b.kind !== "cloud" &&
           !isDisabled &&
           !hasMissingCloudApiKey &&
-          !isIdleMarsSession,
+          !isIdleProviderSandbox,
         retry: false,
         // Keep the previous verdict visible while the next probe is in
         // flight so the indicator doesn't flicker on routine polling.

@@ -128,6 +128,13 @@ export const MARS_QUERY_KEYS = {
   sandboxSizes: ["mars", "sandbox-sizes"] as const,
 } as const;
 
+export const MARITIME_QUERY_KEYS = {
+  all: ["maritime"] as const,
+  authState: ["maritime", "auth-state"] as const,
+  account: ["maritime", "account"] as const,
+  agents: ["maritime", "agents"] as const,
+} as const;
+
 export const APP_UPDATE_QUERY_KEYS = {
   /** Latest published @openhands/agent-canvas version (npm `latest` dist-tag). */
   latestVersion: ["agent-canvas-latest-version"] as const,

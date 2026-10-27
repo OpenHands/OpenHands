@@ -5,6 +5,7 @@ import {
   buildLocalServiceRouteArgs,
   parseArgs,
   buildMarsWebEnv,
+  buildMaritimeWebEnv,
 } from "../../scripts/dev-static.mjs";
 import { buildFrontendEnv } from "../../scripts/static-build.mjs";
 
@@ -88,5 +89,26 @@ describe("dev-static MARS web bridge env", () => {
 
   it("mounts nothing when the stack has no session key", () => {
     expect(buildMarsWebEnv("ingress", {} as never)).toEqual({ MARS_WEB: "0" });
+  });
+});
+
+describe("dev-static Maritime web bridge env", () => {
+  it("places the Maritime bridge like the MARS one without opting in", () => {
+    const config = {
+      sessionApiKey: "stack-key",
+      stateDir: "/state",
+      secretKey: "settings-key",
+    } as never;
+    expect(buildMaritimeWebEnv("ingress", config)).toEqual({
+      MARITIME_WEB_KEY: "stack-key",
+      MARITIME_STATE_DIR: "/state",
+      OH_SECRET_KEY: "settings-key",
+    });
+    expect(buildMaritimeWebEnv("static", config)).toEqual({
+      MARITIME_WEB: "0",
+    });
+    expect(buildMaritimeWebEnv("ingress", {} as never)).toEqual({
+      MARITIME_WEB: "0",
+    });
   });
 });

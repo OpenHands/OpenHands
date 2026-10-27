@@ -39,6 +39,13 @@
 #                          the session API key)
 #   MARS_TOKEN           – DigitalOcean personal access token to sign the bridge
 #                          in with at start (needs MARS_WEB=1)
+#   MARITIME_WEB         - Set to exactly 1 to opt in to the Maritime provider
+#                          bridge on $PORT (off by default). The public-mode
+#                          server never hosts it.
+#   MARITIME_WEB_KEY     - Key the bridge's /maritime/* routes require (defaults
+#                          to the session API key)
+#   MARITIME_API_KEY     - Maritime API key to sign the bridge in with at start
+#                          (needs MARITIME_WEB=1)
 #   AGENT_CANVAS_ALLOW_LAN_SESSION_KEY – Set to true only when the published
 #                          host port is restricted to loopback and you accept
 #                          embedding the session key in the served HTML
@@ -635,13 +642,14 @@ PIDS+=("$STATIC_PID")
 # OpenHands/software-agent-sdk#4317; if the editor gets a credential of its own,
 # this exclusion and the --no-referrer-prefix below can both be revisited.
 #
-# MARS_WEB=0 keeps the DigitalOcean bridge on the main instance only. This one
+# MARS_WEB=0 and MARITIME_WEB=0 keep the provider bridges on the main
+# instance only. This one
 # binds every interface with no key, so an opted-in container would otherwise
 # warn on every start, or, with MARS_WEB_KEY set, host a second bridge with its
 # own sign-in state.
 if [ -n "${PUBLIC_MODE_PORT:-}" ]; then
   log "Starting public-mode frontend on port $PUBLIC_MODE_PORT (--auth-required)..."
-  MARS_WEB=0 node /opt/agent-canvas/static-server.mjs \
+  MARS_WEB=0 MARITIME_WEB=0 node /opt/agent-canvas/static-server.mjs \
     --port "$PUBLIC_MODE_PORT" \
     --host "$STATIC_SERVER_BIND_HOST" \
     --dir /opt/agent-canvas/frontend \

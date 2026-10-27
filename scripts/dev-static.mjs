@@ -443,6 +443,23 @@ export function buildMarsWebEnv(role, config) {
     : { MARS_WEB: "0" };
 }
 
+/**
+ * The Maritime provider's web bridge follows the same placement as the MARS
+ * one: on the ingress behind the stack's session key, off on the static child,
+ * and off when the stack has no key. It stays opt-in: nothing here sets
+ * `MARITIME_WEB=1`.
+ */
+export function buildMaritimeWebEnv(role, config) {
+  if (role === "static") return { MARITIME_WEB: "0" };
+  return config.sessionApiKey
+    ? {
+        MARITIME_WEB_KEY: config.sessionApiKey,
+        ...(config.stateDir ? { MARITIME_STATE_DIR: config.stateDir } : {}),
+        ...(config.secretKey ? { OH_SECRET_KEY: config.secretKey } : {}),
+      }
+    : { MARITIME_WEB: "0" };
+}
+
 function startStaticServer(config) {
   // Reuse `vitePort` as the upstream port name so the ingress route table
   // below stays identical to dev-with-automation.mjs.
@@ -493,6 +510,7 @@ function startStaticServer(config) {
       // Clear an inherited key if policy forbids injecting it.
       env: {
         ...buildMarsWebEnv("static", config),
+        ...buildMaritimeWebEnv("static", config),
         SESSION_API_KEY: keyPolicy.sessionApiKey || "",
       },
     },
@@ -528,7 +546,10 @@ function startIngress(config) {
     {
       cwd: projectRoot,
       color: c.yellow,
-      env: buildMarsWebEnv("ingress", config),
+      env: {
+        ...buildMarsWebEnv("ingress", config),
+        ...buildMaritimeWebEnv("ingress", config),
+      },
     },
   );
 }

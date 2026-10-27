@@ -35,6 +35,7 @@ import { pathToFileURL } from "node:url";
 import sirv from "sirv";
 
 import { applySessionKeyPolicy, DEFAULT_BIND_HOST } from "./bind-host.mjs";
+import { mountMaritimeWebBridge } from "./maritime-web-bridge.mjs";
 import { mountMarsWebBridge } from "./mars-web-bridge.mjs";
 import {
   createProxyHandlers,
@@ -702,10 +703,16 @@ export function startStaticServer(config) {
     host: config.host,
     sessionApiKey: config.sessionApiKey || null,
   });
+  // The Maritime provider for the browser (MARITIME_WEB=1), same key rules.
+  const maritimeWeb = mountMaritimeWebBridge({
+    host: config.host,
+    sessionApiKey: config.sessionApiKey || null,
+  });
 
   const server = createServer((req, res) => {
     const url = req.url ?? "/";
     if (marsWeb?.handleHttp(req, res)) return;
+    if (maritimeWeb?.handleHttp(req, res)) return;
     const backend = route(url);
     if (backend) {
       // The editor is advertised as `<origin><prefix>/?tkn=<token>`, and that

@@ -1,0 +1,157 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maritime provider for Agent Canvas</title>
+<style>
+  :root{
+    --fg:#1a1a1a; --muted:#5a5a5a; --subtle:#8a8a82;
+    --bg:#fdfdfb; --card:#ffffff; --elevated:#f7f6f1;
+    --accent:#2b4eaa; --accent-soft:#e6ecfa; --chg:#c2580a; --chg-soft:#fdf0e4;
+    --rule:#e2e2dc; --rule-strong:#bdbcb4;
+    --code-bg:#f3f1ec; --warn:#b25b0e; --ok:#2f7a3a;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box} html,body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans)}
+  body{line-height:1.6;font-size:16px}
+  .wrap{display:grid;grid-template-columns:230px minmax(0,1fr);gap:48px;max-width:1180px;margin:0 auto;padding:32px 28px 96px}
+  nav.toc{position:sticky;top:24px;align-self:start;font-size:13px}
+  nav.toc h2{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+  nav.toc ol{padding-left:18px;margin:0} nav.toc a{color:var(--fg);text-decoration:none} nav.toc a:hover{color:var(--accent)}
+  nav.toc .files{margin-top:18px;font-family:var(--mono);font-size:11.5px;color:var(--muted);line-height:1.7}
+  header.title{border-bottom:1px solid var(--rule);padding-bottom:22px;margin-bottom:28px}
+  .eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700}
+  h1{font-size:32px;margin:6px 0 4px} .sub{color:var(--muted);max-width:760px}
+  h2{font-size:22px;margin:44px 0 10px} h3{font-size:16px;margin:22px 0 8px}
+  code{font-family:var(--mono);font-size:.88em;background:var(--code-bg);padding:1px 5px;border-radius:3px}
+  pre{font-family:var(--mono);font-size:12.5px;background:var(--code-bg);padding:14px 16px;border-radius:6px;overflow-x:auto;border:1px solid var(--rule)}
+  pre code{background:transparent;padding:0}
+  table{border-collapse:collapse;width:100%;font-size:14px;margin:12px 0}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--rule);vertical-align:top}
+  th{font-weight:600;background:var(--code-bg)}
+  .callout{border-left:3px solid var(--accent);background:var(--accent-soft);padding:10px 14px;margin:14px 0;border-radius:0 4px 4px 0;font-size:14.5px}
+  .callout.warn{border-color:var(--warn);background:#fbf1e6}
+  .fig{margin:18px 0 22px} .fig svg{display:block;max-width:100%;height:auto;background:#fff;border:1px solid var(--rule);border-radius:6px}
+  .fig figcaption{font-size:13px;color:var(--muted);margin-top:6px;text-align:center}
+  .ba{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+  .tag{font-family:var(--mono);font-size:11px;padding:1px 6px;border-radius:3px;background:var(--elevated);border:1px solid var(--rule)}
+  @media(max-width:760px){.wrap{grid-template-columns:1fr}.ba{grid-template-columns:1fr}}
+</style></head><body>
+<div class="wrap">
+<nav class="toc">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#what">What changed</a></li>
+    <li><a href="#flow">Before and after</a></li>
+    <li><a href="#contract">Bridge contract</a></li>
+    <li><a href="#create">Creating an agent</a></li>
+    <li><a href="#keys">Keys and trust</a></li>
+    <li><a href="#cost">Cost and lifecycle</a></li>
+    <li><a href="#files">Files</a></li>
+    <li><a href="#risk">Risk and what a live test must confirm</a></li>
+  </ol>
+  <div class="files">
+    scripts/maritime-api.mjs<br>scripts/maritime-bridge.mjs<br>scripts/maritime-credentials.mjs<br>scripts/maritime-web-bridge.mjs<br>scripts/web-bridge-guards.mjs<br>src/api/maritime/*<br>src/components/features/backends/maritime/*<br>src/hooks/use-maritime-agent-actions.ts<br>src/hooks/query/use-maritime.ts
+  </div>
+</nav>
+<main>
+<header class="title">
+  <div class="eyebrow">Agent Canvas · Add Backend → Providers</div>
+  <h1>Maritime as a sandbox provider</h1>
+  <p class="sub">A second entry in the Providers tab. Each OpenHands agent runs in its own Maritime micro-VM, reached directly at its public HTTPS hostname, so the integration is the DigitalOcean one minus the tunnel and the proxy.</p>
+</header>
+
+<h2 id="what">1. What changed</h2>
+<p>Add Backend → Providers lists <b>Maritime</b> under DigitalOcean when a Maritime bridge is present (always in the desktop app; in the web build when the server opts in with <code>MARITIME_WEB=1</code>). Signing in with a Maritime API key shows the account's plan and the OpenHands agents Canvas created on it. Creating or opening one registers that agent's agent-server as an ordinary <code>kind: "local"</code> backend and lands the user in it.</p>
+<div class="callout">★ <b>Additive.</b> No existing behavior changes. The only edits to shared code are: <code>Backend.maritimeAgentId?</code> (optional field), the Providers tab rendering a list of available providers instead of one hard-coded button, a non-active Maritime backend getting the same "probe once" treatment as a non-active MARS session in <code>useBackendsHealth</code>, and the DigitalOcean web bridge's request guards moving into <code>scripts/web-bridge-guards.mjs</code> unchanged.</div>
+
+<h2 id="flow">2. Before and after</h2>
+<div class="fig"><svg viewBox="0 0 980 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="13">
+  <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="#5a5a5a"/></marker></defs>
+  <text x="20" y="28" font-weight="700" fill="#5a5a5a">DigitalOcean (unchanged)</text>
+  <rect x="20" y="44" width="150" height="54" rx="6" fill="#fff" stroke="#bdbcb4"/><text x="95" y="66" text-anchor="middle">Renderer</text><text x="95" y="84" text-anchor="middle" font-size="11" fill="#5a5a5a">window.marsBridge</text>
+  <rect x="220" y="44" width="190" height="54" rx="6" fill="#fff" stroke="#bdbcb4"/><text x="315" y="66" text-anchor="middle">main / Canvas server</text><text x="315" y="84" text-anchor="middle" font-size="11" fill="#5a5a5a">token + tunnel listener</text>
+  <rect x="460" y="44" width="170" height="54" rx="6" fill="#fff" stroke="#bdbcb4"/><text x="545" y="66" text-anchor="middle">harness-api</text><text x="545" y="84" text-anchor="middle" font-size="11" fill="#5a5a5a">port-forward WS</text>
+  <rect x="680" y="44" width="170" height="54" rx="6" fill="#fff" stroke="#bdbcb4"/><text x="765" y="66" text-anchor="middle">agent-server :8000</text><text x="765" y="84" text-anchor="middle" font-size="11" fill="#5a5a5a">in DO microVM</text>
+  <line x1="170" y1="71" x2="218" y2="71" stroke="#5a5a5a" marker-end="url(#a)"/><line x1="410" y1="71" x2="458" y2="71" stroke="#5a5a5a" marker-end="url(#a)"/><line x1="630" y1="71" x2="678" y2="71" stroke="#5a5a5a" marker-end="url(#a)"/>
+  <text x="20" y="160" font-weight="700" fill="#c2580a">Maritime (new)</text>
+  <rect x="20" y="176" width="150" height="54" rx="6" fill="#fdf0e4" stroke="#c2580a"/><text x="95" y="198" text-anchor="middle">Renderer</text><text x="95" y="216" text-anchor="middle" font-size="11" fill="#5a5a5a">window.maritimeBridge</text>
+  <rect x="220" y="176" width="190" height="54" rx="6" fill="#fdf0e4" stroke="#c2580a"/><text x="315" y="198" text-anchor="middle">main / Canvas server</text><text x="315" y="216" text-anchor="middle" font-size="11" fill="#5a5a5a">Maritime API key only</text>
+  <rect x="460" y="176" width="170" height="54" rx="6" fill="#fff" stroke="#bdbcb4"/><text x="545" y="198" text-anchor="middle">api.maritime.sh</text><text x="545" y="216" text-anchor="middle" font-size="11" fill="#5a5a5a">create, wake, sleep, delete</text>
+  <rect x="680" y="176" width="270" height="54" rx="6" fill="#fff" stroke="#bdbcb4"/><text x="815" y="198" text-anchor="middle">agent-server on $PORT</text><text x="815" y="216" text-anchor="middle" font-size="11" fill="#5a5a5a">https://&lt;agent-id&gt;.mtm.sh, own VM + /data</text>
+  <line x1="170" y1="203" x2="218" y2="203" stroke="#5a5a5a" marker-end="url(#a)"/><line x1="410" y1="203" x2="458" y2="203" stroke="#5a5a5a" marker-end="url(#a)"/>
+  <path d="M95,230 C95,280 815,280 815,232" fill="none" stroke="#c2580a" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#a)"/>
+  <text x="455" y="292" text-anchor="middle" font-size="12" fill="#c2580a">REST + WebSocket straight to the agent's hostname with its session key (typed client, like any remote backend)</text>
+</svg><figcaption>Control plane through the trusted process in both; the data plane needs no tunnel on Maritime.</figcaption></div>
+
+<h2 id="contract">3. Bridge contract</h2>
+<p><code>MaritimeBridge</code> in <code>src/api/maritime/maritime-bridge.ts</code>, served by <code>createMaritimeBridge</code> in <code>scripts/maritime-bridge.mjs</code> (IPC channels <code>MARITIME_IPC</code>; web RPC allow-list is exactly the same set).</p>
+<pre><code>getAuthState()            -> {isSignedIn, isSaved, storage}        no network, never the key
+saveApiKey({apiKey})      -> verified with GET /api/v1/account/limits, then kept
+signOut()                 -> drops the API key (agents' session keys stay)
+getAccount()              -> {plan, machines, awakeMachines, maxAwakeMachines, minMemMb, maxMemMb}
+listAgents()              -> MaritimeAgent[]  (externalId = openhands-agent-canvas; hasAccessKey per agent)
+createAgent({name, memMb, origin}) -> {agentId, name, host, sessionApiKey} once Maritime says active
+openAgent(id)             -> same, after waking a sleeping/stopped agent
+resetAccessKey(id)        -> new OH_SESSION_API_KEYS_0 + restart, same return
+sleepAgent(id), deleteAgent(id)</code></pre>
+
+<h2 id="create">4. Creating an agent</h2>
+<pre><code>POST https://api.maritime.sh/api/agents
+{ "name": "...", "externalId": "openhands-agent-canvas", "framework": "custom",
+  "imageName": "ghcr.io/maritime-sh/openhands-agent-server:&lt;versions.agentServer&gt;",
+  "exposedPort": 8080, "publicWeb": true, "hasWebUi": false, "healthCheckPath": "/health",
+  "memMb": 4096, "vcpus": 2, "idleTtlSeconds": 1800,
+  "initialEnvVars": [
+    {"key": "OH_SESSION_API_KEYS_0", "value": "&lt;random 256-bit&gt;", "isSecret": true},
+    {"key": "OH_SECRET_KEY",         "value": "&lt;random 256-bit&gt;", "isSecret": true},
+    {"key": "OH_ALLOW_CORS_ORIGINS_0", "value": "&lt;Canvas origin, only if not loopback&gt;"} ] }</code></pre>
+<ul>
+  <li><b>Image.</b> The published <code>ghcr.io/openhands/agent-server:&lt;v&gt;-python</code> plus a launcher that binds <code>$PORT</code>: Maritime routes the agent's hostname (HTTP and WebSocket) to <code>$PORT</code>, 18789 today, and the stock image binds 8000. Built per agent-server release, after a smoke test, by <a href="https://github.com/maritime-sh/openhands-agent-server">maritime-sh/openhands-agent-server</a>. The tag follows <code>config/defaults.json</code> <code>versions.agentServer</code>, so Canvas creates the version it pins.</li>
+  <li><b>publicWeb.</b> A private Maritime URL needs a Maritime link cookie, which a CORS preflight never carries. The agent-server's session key is the guard, as for every remote backend.</li>
+  <li><b>Readiness.</b> The bridge polls Maritime until <code>active</code>; the renderer then runs <code>validateLocalBackend</code> (settings + server info through the typed client) until it answers, before registering the backend.</li>
+</ul>
+
+<h2 id="keys">5. Keys and trust</h2>
+<table>
+<tr><th>Secret</th><th>Where it lives</th><th>Reaches the renderer?</th></tr>
+<tr><td>Maritime API key</td><td>Desktop: <code>safeStorage</code>-encrypted <code>maritime-credentials.json</code>. Web: the DigitalOcean bridge's <code>SecretStore</code> (keychain / file encrypted with <code>OH_SECRET_KEY</code> / memory) under <code>&lt;state&gt;/maritime</code>.</td><td>No</td></tr>
+<tr><td>Agent session key</td><td>Same store, per agent id; and the backend record, like any remote backend's key.</td><td>Yes, by design: the browser calls the agent-server directly.</td></tr>
+<tr><td><code>OH_SECRET_KEY</code></td><td>Only on Maritime (secret env var).</td><td>No</td></tr>
+</table>
+<p>Maritime shows secret env vars masked, so a session key cannot be read back from Maritime. An agent without one on this machine offers <b>Set new access key</b> (confirmed): new <code>OH_SESSION_API_KEYS_0</code> via <code>POST /api/agents/{id}/env</code>, then <code>POST /restart</code>. Conversations and settings survive on <code>/data</code>.</p>
+<p>The web bridge reuses the DigitalOcean bridge's guards verbatim (<code>scripts/web-bridge-guards.mjs</code>): session key required on every RPC, loopback only without a key, cross-origin and foreign <code>Host</code> refused. A new agent's CORS origin comes from the request in the web build, not from the page.</p>
+
+<h2 id="cost">6. Cost and lifecycle</h2>
+<ul>
+  <li>Every HTTP request to an agent's hostname wakes it and resets Maritime's idle timer, so a non-active Maritime backend is probed once and never polled (<code>useBackendsHealth</code>, same rule as MARS).</li>
+  <li>Maritime sleeps an agent after <code>idleTtlSeconds</code> (1800) without HTTP traffic; a busy CPU keeps it awake, open WebSocket frames alone do not. Sleep keeps memory; the next request wakes it in about a second.</li>
+  <li>Delete removes the VM and its disk on Maritime first, then the agent's backends in Canvas, so a refused delete leaves a working backend.</li>
+</ul>
+
+<h2 id="files">7. Files</h2>
+<table>
+<tr><th>Path</th><th></th><th>Role</th></tr>
+<tr><td><code>scripts/maritime-api.mjs</code></td><td><span class="tag">added</span></td><td>REST client, create body, status → message mapping (messages must survive Electron IPC).</td></tr>
+<tr><td><code>scripts/maritime-bridge.mjs</code></td><td><span class="tag">added</span></td><td>Trusted-process service, IPC, waits, key handling.</td></tr>
+<tr><td><code>scripts/maritime-credentials.mjs</code></td><td><span class="tag">added</span></td><td>API key + per-agent session keys.</td></tr>
+<tr><td><code>scripts/maritime-web-bridge.mjs</code></td><td><span class="tag">added</span></td><td>Same-origin RPC for the web build, opt-in.</td></tr>
+<tr><td><code>scripts/web-bridge-guards.mjs</code></td><td><span class="tag">moved</span></td><td>Guards extracted from <code>mars-web-bridge.mjs</code>, unchanged.</td></tr>
+<tr><td><code>scripts/ingress.mjs</code>, <code>static-server.mjs</code>, <code>dev-static.mjs</code>, <code>dev-with-automation.mjs</code>, <code>docker/*</code></td><td><span class="tag">mechanical</span></td><td>Mount and place the web bridge exactly like MARS; Docker copies the scripts and keeps it off on the public-mode instance.</td></tr>
+<tr><td><code>electron/preload-main.cjs</code>, <code>electron/main.mjs</code></td><td><span class="tag">mechanical</span></td><td>Expose <code>window.maritimeBridge</code>, register IPC.</td></tr>
+<tr><td><code>src/api/maritime/*</code></td><td><span class="tag">added</span></td><td>Bridge types, phases, memory options, readiness wait, backend record; fetch-backed web bridge.</td></tr>
+<tr><td><code>src/components/features/backends/maritime/*</code></td><td><span class="tag">added</span></td><td>Panel, sign-in, new agent form, logo.</td></tr>
+<tr><td><code>backend-form-modal.tsx</code></td><td><span class="tag">changed</span></td><td>Providers list built from available bridges; provider panel switches on the chosen one.</td></tr>
+<tr><td><code>use-backends-health.ts</code>, <code>backend-registry/types.ts</code></td><td><span class="tag">changed</span></td><td>Optional <code>maritimeAgentId</code>; probe-once rule.</td></tr>
+<tr><td><code>config/defaults.json</code>, <code>translation.json</code></td><td><span class="tag">mechanical</span></td><td><code>maritime</code> block; 43 keys in all 16 locales.</td></tr>
+</table>
+
+<h2 id="risk">8. Risk and what a live test must confirm</h2>
+<div class="callout warn">The captures in this PR are mock mode. These need a real Maritime account before the PR leaves draft:</div>
+<ul>
+  <li>The image boots on Maritime and the agent-server answers at <code>webUrl</code>, REST and the event WebSocket included.</li>
+  <li>CORS: the agent-server accepts the desktop origin (<code>http://localhost:8000</code>) through Maritime's proxy, preflights included.</li>
+  <li>Sleep and wake keep a conversation and its terminal intact.</li>
+  <li><code>/data</code> is writable by the image's non-root user (the launcher falls back to the image's home and says so if not).</li>
+  <li>Known gap: VS Code and the worker ports are not reachable (Maritime publishes one port per agent), so Canvas features that open those show nothing on a Maritime backend.</li>
+</ul>
+</main></div></body></html>

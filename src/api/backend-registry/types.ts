@@ -19,6 +19,12 @@ export interface Backend {
   marsSessionId?: string;
   /** The MARS agent config the session was launched from, when known. */
   marsConfigId?: string;
+  /**
+   * Set when `host` is a Maritime agent's hostname. The far end is an
+   * ordinary agent-server, so the backend stays `kind: "local"`; this lets
+   * the Maritime screen find it and keeps health probes from waking it.
+   */
+  maritimeAgentId?: string;
 }
 
 export interface BackendSelection {

@@ -13,6 +13,10 @@
  * MARS_TUNNEL_IPC there, duplicated as literals because this preload cannot
  * import that ESM module.
  *
+ * The Maritime bridge (`window.maritimeBridge`) works the same way: the
+ * Maritime API key stays in the main process (scripts/maritime-bridge.mjs),
+ * and its channel names mirror MARITIME_IPC there.
+ *
  * CommonJS on purpose: sandboxed preload scripts cannot use ESM.
  */
 const { contextBridge, ipcRenderer } = require("electron");
@@ -89,4 +93,26 @@ contextBridge.exposeInMainWorld("marsBridge", {
   closeTunnel: (sessionId) => ipcRenderer.invoke("mars:closeTunnel", sessionId),
   /** Reads a session's current connection status without changing it. */
   getTunnel: (sessionId) => ipcRenderer.invoke("mars:getTunnel", sessionId),
+});
+
+contextBridge.exposeInMainWorld("maritimeBridge", {
+  /** `{isSignedIn, isSaved, storage}`; never the key itself. */
+  getAuthState: () => ipcRenderer.invoke("maritime:getAuthState"),
+  /** `{apiKey}`; kept only once Maritime accepts it. */
+  saveApiKey: (payload) => ipcRenderer.invoke("maritime:saveApiKey", payload),
+  signOut: () => ipcRenderer.invoke("maritime:signOut"),
+  /** Plan, machine counts and the memory range a new agent may use. */
+  getAccount: () => ipcRenderer.invoke("maritime:getAccount"),
+  /** The OpenHands agents Canvas created on this Maritime account. */
+  listAgents: () => ipcRenderer.invoke("maritime:listAgents"),
+  /** `{name, memMb, origin}`; the main process owns the rest of the request. */
+  createAgent: (payload) => ipcRenderer.invoke("maritime:createAgent", payload),
+  /** Wakes the agent; resolves `{agentId, name, host, sessionApiKey}`. */
+  openAgent: (agentId) => ipcRenderer.invoke("maritime:openAgent", agentId),
+  /** Sets a new session key and restarts the agent-server. */
+  resetAccessKey: (agentId) =>
+    ipcRenderer.invoke("maritime:resetAccessKey", agentId),
+  sleepAgent: (agentId) => ipcRenderer.invoke("maritime:sleepAgent", agentId),
+  /** Deletes the agent and its disk on Maritime. */
+  deleteAgent: (agentId) => ipcRenderer.invoke("maritime:deleteAgent", agentId),
 });

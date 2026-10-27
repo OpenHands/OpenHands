@@ -26,6 +26,7 @@ import process from "node:process";
 import { pathToFileURL } from "node:url";
 
 import { DEFAULT_BIND_HOST, resolveBindHost } from "./bind-host.mjs";
+import { mountMaritimeWebBridge } from "./maritime-web-bridge.mjs";
 import { mountMarsWebBridge } from "./mars-web-bridge.mjs";
 import {
   createProxyHandlers,
@@ -179,12 +180,17 @@ export function startIngress(config) {
   // bridge and proxies to sessions' tunnel listeners, behind the session key
   // (MARS_WEB_KEY; dev-with-automation passes the stack's key).
   const marsWeb = mountMarsWebBridge({ host: config.host });
+  // The Maritime provider for the browser: with MARITIME_WEB=1, host its
+  // bridge behind the same key (MARITIME_WEB_KEY). No proxy: Maritime agents
+  // have public hostnames the page reaches directly.
+  const maritimeWeb = mountMaritimeWebBridge({ host: config.host });
 
   const noReferrerPrefixes = config.noReferrerPrefixes ?? [];
 
   const server = createServer((req, res) => {
     const url = req.url ?? "/";
     if (marsWeb?.handleHttp(req, res)) return;
+    if (maritimeWeb?.handleHttp(req, res)) return;
     const backend = route(url);
 
     if (!backend) {

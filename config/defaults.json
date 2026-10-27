@@ -43,6 +43,11 @@
     "apiBaseUrl": "https://api.digitalocean.com",
     "oauthClientId": ""
   },
+  "maritime": {
+    "_comment": "Maritime provider (Add Backend, Providers, Maritime): the Electron desktop app and the web build (its server hosts the bridge only with MARITIME_WEB=1). apiBaseUrl is the Maritime API. imageRepository is the agent-server image built for Maritime micro-VMs; Canvas asks for the tag versions.agentServer, so the agent-server it creates matches the one it pins. Overridden at runtime by MARITIME_API_BASE_URL / MARITIME_IMAGE_REPOSITORY / MARITIME_IMAGE_TAG. Read by scripts/maritime-bridge.mjs.",
+    "apiBaseUrl": "https://api.maritime.sh",
+    "imageRepository": "ghcr.io/maritime-sh/openhands-agent-server"
+  },
   "telemetry": {
     "posthogApiKey": "phc_kBtz5nKmxVRRQ7HtPwr2QX9eMC5j65zE86QKocVNwb4U",
     "posthogHost": "https://us.i.posthog.com"

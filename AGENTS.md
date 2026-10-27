@@ -94,6 +94,10 @@ Use the `e2e-testing` skill for suite selection and E2E-specific requirements.
 
 Before changing `scripts/mars-*` / `scripts/tunnel-*`, `src/api/mars/`, the Managed Agents UI (`src/components/features/backends/managed-agents/`) or the MARS hooks, read `src/api/mars/AGENTS.md`.
 
+## Maritime provider
+
+Before changing `scripts/maritime-*`, `scripts/web-bridge-guards.mjs`, `src/api/maritime/`, the Maritime UI (`src/components/features/backends/maritime/`) or the Maritime hooks, read `src/api/maritime/AGENTS.md`.
+
 ## Dependency release-age policy
 
 - Wait at least seven days after publication before adding or updating a

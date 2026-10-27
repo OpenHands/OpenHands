@@ -49,18 +49,24 @@
  * startup.
  */
 
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
 import { homedir } from "node:os";
 import path from "node:path";
 
 import { DEFAULT_BIND_HOST, isLoopbackBind } from "./bind-host.mjs";
-import { readRequestBody } from "./http-body.mjs";
 import {
   buildTunnelHost,
   createMarsTunnelBridge,
 } from "./mars-tunnel-bridge.mjs";
 import { openSecretStore } from "./mars-secret-store.mjs";
 import { createProxyHandlers, rewriteJsonResponse } from "./proxy-utils.mjs";
+import {
+  isCrossOrigin,
+  isForeignHost,
+  readJsonBody,
+  safeEqual,
+  writeJson,
+} from "./web-bridge-guards.mjs";
 
 export const MARS_WEB_PREFIX = "/mars";
 const HEALTH_PATH = `${MARS_WEB_PREFIX}/health`;
@@ -219,12 +225,6 @@ function marsWebOffWarning(env) {
   return null;
 }
 
-function safeEqual(a, b) {
-  const x = Buffer.from(a);
-  const y = Buffer.from(b);
-  return x.length === y.length && timingSafeEqual(x, y);
-}
-
 function readCookie(req, name) {
   const header = req.headers.cookie;
   if (!header) return null;
@@ -236,16 +236,6 @@ function readCookie(req, name) {
   return null;
 }
 
-/** Hostname of the request's `Host` header, without port or brackets. */
-function requestHostname(req) {
-  const host = req.headers.host ?? "";
-  try {
-    return new URL(`http://${host}`).hostname.replace(/^\[|\]$/g, "");
-  } catch {
-    return "";
-  }
-}
-
 /** `http://host[:port]` of the request as the browser sees it. */
 function requestOrigin(req) {
   const proto =
@@ -255,52 +245,6 @@ function requestOrigin(req) {
 
 function sessionProxyBase(req, sessionId) {
   return `${requestOrigin(req)}${SESSIONS_PREFIX}${encodeURIComponent(sessionId)}`;
-}
-
-/**
- * A page on another origin cannot be allowed to drive the bridge or read
- * through the proxy. Same-origin requests either carry a matching Origin or
- * none at all (plain navigations, same-origin GETs).
- */
-function isCrossOrigin(req) {
-  const origin = req.headers.origin;
-  if (!origin) return false;
-  try {
-    return new URL(origin).host !== req.headers.host;
-  } catch {
-    return true;
-  }
-}
-
-/**
- * On a loopback bind the only legitimate `Host` values are loopback names;
- * a DNS-rebound page arrives with its own hostname in both `Host` and
- * `Origin`, so the origin check alone would pass it.
- */
-function isForeignHost(req, bindHost) {
-  if (!isLoopbackBind(bindHost)) return false;
-  const hostname = requestHostname(req);
-  return !(isLoopbackBind(hostname) || hostname.endsWith(".localhost"));
-}
-
-function writeJson(res, status, body) {
-  const payload = JSON.stringify(body);
-  res.writeHead(status, {
-    "Content-Type": "application/json",
-    "Content-Length": Buffer.byteLength(payload),
-    "Cache-Control": "no-store",
-  });
-  res.end(payload);
-}
-
-async function readJsonBody(req, limit) {
-  const body = await readRequestBody(req, limit);
-  if (body.length === 0) return {};
-  try {
-    return JSON.parse(body.toString("utf8"));
-  } catch {
-    throw new Error("request body is not valid JSON");
-  }
 }
 
 const CONVERSATION_URL_RE =

@@ -1403,6 +1403,25 @@ export function buildMarsWebEnv(role, config) {
     : { MARS_WEB: "0" };
 }
 
+/**
+ * The Maritime provider's web bridge follows the same placement as the MARS
+ * one: on the ingress behind the stack's session key, off on the static child
+ * (and under Electron, whose preload provides the bridge), and off when the
+ * stack has no key. It stays opt-in: nothing here sets `MARITIME_WEB=1`.
+ */
+export function buildMaritimeWebEnv(role, config) {
+  if (role === "static" || config.marsWebBridge === false) {
+    return { MARITIME_WEB: "0" };
+  }
+  return config.sessionApiKey
+    ? {
+        MARITIME_WEB_KEY: config.sessionApiKey,
+        ...(config.stateDir ? { MARITIME_STATE_DIR: config.stateDir } : {}),
+        ...(config.secretKey ? { OH_SECRET_KEY: config.secretKey } : {}),
+      }
+    : { MARITIME_WEB: "0" };
+}
+
 function startIngress(config) {
   logService("ingress", `Starting on port ${config.ingressPort}...`, c.yellow);
 
@@ -1430,7 +1449,10 @@ function startIngress(config) {
     {
       cwd: projectRoot,
       color: c.yellow,
-      env: buildMarsWebEnv("ingress", config),
+      env: {
+        ...buildMarsWebEnv("ingress", config),
+        ...buildMaritimeWebEnv("ingress", config),
+      },
     },
   );
 }
@@ -1505,9 +1527,7 @@ function buildViteFrontendEnv(config) {
   const policy = applySessionKeyPolicy({
     host: config.bindHost,
     sessionApiKey:
-      config.launchAgentServer && !config.isPublic
-        ? config.sessionApiKey
-        : null,
+      config.launchAgentServer && !config.isPublic ? config.sessionApiKey : null,
     authRequired: Boolean(config.launchAgentServer && config.isPublic),
     warn: (msg) => logService("vite", msg, c.yellow),
   });
@@ -2024,6 +2044,7 @@ function startStaticFrontend(config, staticDir) {
       // Clear an inherited key in public or frontend-only mode.
       env: {
         ...buildMarsWebEnv("static", config),
+        ...buildMaritimeWebEnv("static", config),
         SESSION_API_KEY: keyPolicy.sessionApiKey || "",
       },
     },

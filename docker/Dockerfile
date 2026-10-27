@@ -144,8 +144,14 @@ COPY --from=frontend-build /build/build /opt/agent-canvas/frontend
 COPY scripts/static-server.mjs /opt/agent-canvas/static-server.mjs
 COPY scripts/bind-host.mjs /opt/agent-canvas/bind-host.mjs
 COPY scripts/proxy-utils.mjs /opt/agent-canvas/proxy-utils.mjs
-# static-server.mjs mounts the MARS web bridge, which pulls in these modules.
+# static-server.mjs mounts the MARS and Maritime web bridges, which pull in
+# these modules.
 COPY scripts/http-body.mjs /opt/agent-canvas/http-body.mjs
+COPY scripts/web-bridge-guards.mjs /opt/agent-canvas/web-bridge-guards.mjs
+COPY scripts/maritime-web-bridge.mjs /opt/agent-canvas/maritime-web-bridge.mjs
+COPY scripts/maritime-bridge.mjs /opt/agent-canvas/maritime-bridge.mjs
+COPY scripts/maritime-api.mjs /opt/agent-canvas/maritime-api.mjs
+COPY scripts/maritime-credentials.mjs /opt/agent-canvas/maritime-credentials.mjs
 COPY scripts/mars-web-bridge.mjs /opt/agent-canvas/mars-web-bridge.mjs
 COPY scripts/mars-tunnel-bridge.mjs /opt/agent-canvas/mars-tunnel-bridge.mjs
 COPY scripts/mars-api.mjs /opt/agent-canvas/mars-api.mjs

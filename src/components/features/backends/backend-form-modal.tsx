@@ -14,6 +14,9 @@ import OpenHandsLogoWhite from "#/assets/branding/openhands-logo-white.svg?react
 import DigitalOceanLogo from "#/assets/branding/digitalocean-logo.svg?react";
 import { getMarsBridge } from "#/api/mars/mars-tunnel-backend";
 import { DigitalOceanConnectPanel } from "./managed-agents/digitalocean-connect-panel";
+import { getMaritimeBridge } from "#/api/maritime/maritime-bridge";
+import { MaritimeConnectPanel } from "./maritime/maritime-connect-panel";
+import { MaritimeLogo } from "./maritime/maritime-logo";
 import { BackNavButton } from "#/components/shared/buttons/back-nav-button";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import {
@@ -167,6 +170,7 @@ export type BackendConnectionMethod = "manual" | "cloud_login";
 
 export type BackendAddedSource = CloudConnectionSource;
 type AddBackendOption = "cloud" | "agent-server" | "providers";
+type BackendProvider = "digitalocean" | "maritime";
 type AgentServerLocation = "local" | "remote";
 
 function getConnectionTestFailedTitle(
@@ -1343,6 +1347,46 @@ function AgentServerGuidance({ location }: { location: AgentServerLocation }) {
   );
 }
 
+/** One provider in the Providers tab: logo, name, one line, and a chevron. */
+function ProviderOptionButton({
+  testId,
+  logo,
+  title,
+  description,
+  onClick,
+}: {
+  testId: string;
+  logo: React.ReactNode;
+  title: string;
+  description: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      data-testid={testId}
+      onClick={onClick}
+      className="flex w-full cursor-pointer items-center gap-3 rounded-xl border border-border bg-base-secondary px-4 py-3 text-left transition-colors hover:bg-surface-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+    >
+      <span
+        className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-surface-raised"
+        aria-hidden
+      >
+        {logo}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium text-contrast">
+          {title}
+        </span>
+        <span className="mt-0.5 block text-xs leading-tight text-muted">
+          {description}
+        </span>
+      </span>
+      <ChevronRight className="size-4 shrink-0 text-muted" aria-hidden />
+    </button>
+  );
+}
+
 function AddBackendChooser({
   onConnected,
   onSelectProvider,
@@ -1353,7 +1397,7 @@ function AddBackendChooser({
     connectionMethod: BackendConnectionMethod,
     metadata?: BackendConnectionTestMetadata,
   ) => void;
-  onSelectProvider: () => void;
+  onSelectProvider: (provider: BackendProvider) => void;
   source: BackendAddedSource;
 }) {
   const { t } = useTranslation("openhands");
@@ -1365,6 +1409,8 @@ function AddBackendChooser({
   const selectedTabId = `add-backend-option-${selectedOption}-tab`;
   const isCloudSelected = selectedOption === "cloud";
   const canUseDigitalOcean = getMarsBridge() !== null;
+  const canUseMaritime = getMaritimeBridge() !== null;
+  const hasProviders = canUseDigitalOcean || canUseMaritime;
 
   let panel: React.ReactNode;
   if (selectedOption === "providers") {
@@ -1373,28 +1419,24 @@ function AddBackendChooser({
         data-testid="add-backend-providers-panel"
         className="flex flex-col gap-4"
       >
-        <button
-          type="button"
-          data-testid="add-backend-provider-digitalocean"
-          onClick={onSelectProvider}
-          className="flex w-full cursor-pointer items-center gap-3 rounded-xl border border-border bg-base-secondary px-4 py-3 text-left transition-colors hover:bg-surface-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-        >
-          <span
-            className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-surface-raised"
-            aria-hidden
-          >
-            <DigitalOceanLogo width={32} height={32} />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-medium text-contrast">
-              {t(I18nKey.DO_AGENTS$BADGE)}
-            </span>
-            <span className="mt-0.5 block text-xs leading-tight text-muted">
-              {t(I18nKey.DO_AGENTS$TAB_DESCRIPTION)}
-            </span>
-          </span>
-          <ChevronRight className="size-4 shrink-0 text-muted" aria-hidden />
-        </button>
+        {canUseDigitalOcean ? (
+          <ProviderOptionButton
+            testId="add-backend-provider-digitalocean"
+            logo={<DigitalOceanLogo width={32} height={32} />}
+            title={t(I18nKey.DO_AGENTS$BADGE)}
+            description={t(I18nKey.DO_AGENTS$TAB_DESCRIPTION)}
+            onClick={() => onSelectProvider("digitalocean")}
+          />
+        ) : null}
+        {canUseMaritime ? (
+          <ProviderOptionButton
+            testId="add-backend-provider-maritime"
+            logo={<MaritimeLogo />}
+            title={t(I18nKey.MARITIME$BADGE)}
+            description={t(I18nKey.MARITIME$TAB_DESCRIPTION)}
+            onClick={() => onSelectProvider("maritime")}
+          />
+        ) : null}
         <p className="text-xs text-muted">
           {t(I18nKey.BACKEND$PROVIDERS_COMING_SOON)}
         </p>
@@ -1480,7 +1522,7 @@ function AddBackendChooser({
         aria-label={t(I18nKey.BACKEND$CHOOSER_TITLE)}
         className={cn(
           "grid overflow-hidden rounded-lg border border-border",
-          canUseDigitalOcean ? "grid-cols-3" : "grid-cols-2",
+          hasProviders ? "grid-cols-3" : "grid-cols-2",
         )}
       >
         <BackendOptionTab
@@ -1510,7 +1552,7 @@ function AddBackendChooser({
           panelId={panelId}
           testId="add-backend-option-agent-server"
         />
-        {canUseDigitalOcean ? (
+        {hasProviders ? (
           <BackendOptionTab
             value="providers"
             selectedValue={selectedOption}
@@ -1547,7 +1589,7 @@ function AddBackendConnectionOptions({
 }: {
   onClose: () => void;
   source: BackendAddedSource;
-  onSelectProvider: () => void;
+  onSelectProvider: (provider: BackendProvider) => void;
 }) {
   const { addBackend } = useActiveBackendContext();
   // @spec BM-002 — Adding a backend auto-switches the active selection to it
@@ -1606,19 +1648,28 @@ function AddBackendAddModeBody({
   source: BackendAddedSource;
 }) {
   const { t } = useTranslation("openhands");
-  const [providerOpen, setProviderOpen] = React.useState(false);
+  const [openProvider, setOpenProvider] =
+    React.useState<BackendProvider | null>(null);
+  // The provider last opened, so Back returns focus to its own row.
+  const [lastProvider, setLastProvider] =
+    React.useState<BackendProvider>("digitalocean");
+  const providerOpen = openProvider !== null;
   const railRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
     const focusTarget = providerOpen
       ? "add-backend-providers-back"
-      : "add-backend-provider-digitalocean";
+      : `add-backend-provider-${lastProvider}`;
     railRef.current
       ?.querySelector<HTMLButtonElement>(`[data-testid="${focusTarget}"]`)
       ?.focus();
-  }, [providerOpen]);
+  }, [providerOpen, lastProvider]);
 
-  const goBack = () => setProviderOpen(false);
+  const selectProvider = (provider: BackendProvider) => {
+    setLastProvider(provider);
+    setOpenProvider(provider);
+  };
+  const goBack = () => setOpenProvider(null);
 
   return (
     <AnimatedPanelHeight>
@@ -1668,7 +1719,7 @@ function AddBackendAddModeBody({
             <AddBackendConnectionOptions
               onClose={onClose}
               source={source}
-              onSelectProvider={() => setProviderOpen(true)}
+              onSelectProvider={selectProvider}
             />
           </div>
         </div>
@@ -1694,13 +1745,23 @@ function AddBackendAddModeBody({
                   className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-surface-raised"
                   aria-hidden
                 >
-                  <DigitalOceanLogo width={32} height={32} />
+                  {openProvider === "maritime" ? (
+                    <MaritimeLogo />
+                  ) : (
+                    <DigitalOceanLogo width={32} height={32} />
+                  )}
                 </span>
                 <h2 className={modalTitleLgMediumClassName}>
-                  {t(I18nKey.DO_AGENTS$BADGE)}
+                  {openProvider === "maritime"
+                    ? t(I18nKey.MARITIME$BADGE)
+                    : t(I18nKey.DO_AGENTS$BADGE)}
                 </h2>
               </div>
-              <DigitalOceanConnectPanel onConnected={onClose} />
+              {openProvider === "maritime" ? (
+                <MaritimeConnectPanel onConnected={onClose} />
+              ) : (
+                <DigitalOceanConnectPanel onConnected={onClose} />
+              )}
             </div>
           ) : null}
         </div>

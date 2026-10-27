@@ -399,7 +399,7 @@ function createMainWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      // Desktop-shell state and the MARS tunnel bridge (see preload-main.cjs).
+      // Desktop-shell state and the MARS and Maritime bridges (see preload-main.cjs).
       preload: join(__dirname, "preload-main.cjs"),
     },
   });
@@ -776,6 +776,16 @@ app.whenReady().then(async () => {
     openExternal: (url) => shell.openExternal(url),
   });
   marsTunnelBridge.registerIpc(ipcMain);
+
+  // The Maritime provider: holds the Maritime API key for the renderer, which
+  // reaches it as window.maritimeBridge (see preload-main.cjs).
+  const { createMaritimeBridge } = await import(
+    pathToFileURL(join(scriptsDir, "maritime-bridge.mjs")).href
+  );
+  createMaritimeBridge({
+    userDataPath: app.getPath("userData"),
+    safeStorage,
+  }).registerIpc(ipcMain);
 
   if (!uvxAvailable()) {
     dialog.showErrorBox(

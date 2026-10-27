@@ -932,3 +932,261 @@ describe("AddBackendModal – DigitalOcean", () => {
     );
   });
 });
+
+describe("AddBackendModal – Maritime", () => {
+  const AGENTS = [
+    {
+      id: "agent_run",
+      name: "openhands-running",
+      status: "active",
+      webUrl: "https://agent_run.mtm.sh/",
+      memMb: 4096,
+      vcpus: 2,
+      createdAt: null,
+      lastActiveAt: null,
+      hasAccessKey: true,
+    },
+    {
+      id: "agent_far",
+      name: "made-elsewhere",
+      status: "sleeping",
+      webUrl: "https://agent_far.mtm.sh/",
+      memMb: 2048,
+      vcpus: 1,
+      createdAt: null,
+      lastActiveAt: null,
+      hasAccessKey: false,
+    },
+  ];
+
+  function connectionFor(agentId: string, name: string) {
+    return {
+      agentId,
+      name,
+      host: `https://${agentId}.mtm.sh`,
+      sessionApiKey: `session-${agentId}`,
+    };
+  }
+
+  function fakeMaritimeBridge({ signedIn }: { signedIn: boolean }) {
+    let isSignedIn = signedIn;
+    const authState = () => ({
+      isSignedIn,
+      isSaved: true,
+      storage: { kind: "keychain", label: "macOS Keychain", host: "laptop" },
+    });
+    const bridge = {
+      getAuthState: vi.fn(async () => authState()),
+      saveApiKey: vi.fn(async () => {
+        isSignedIn = true;
+        return authState();
+      }),
+      signOut: vi.fn(async () => {
+        isSignedIn = false;
+        return authState();
+      }),
+      getAccount: vi.fn(async () => ({
+        plan: "starter",
+        machines: 2,
+        includedMachines: 20,
+        awakeMachines: 1,
+        maxAwakeMachines: 5,
+        minMemMb: 512,
+        maxMemMb: 8192,
+      })),
+      listAgents: vi.fn(async () => [...AGENTS]),
+      createAgent: vi.fn(async ({ name }: { name: string }) =>
+        connectionFor("agent_new", name),
+      ),
+      openAgent: vi.fn(async (agentId: string) =>
+        connectionFor(agentId, "openhands-running"),
+      ),
+      resetAccessKey: vi.fn(async (agentId: string) =>
+        connectionFor(agentId, "made-elsewhere"),
+      ),
+      sleepAgent: vi.fn(async () => AGENTS[0]),
+      deleteAgent: vi.fn(async () => {}),
+    };
+    window.maritimeBridge = bridge as unknown as NonNullable<
+      typeof window.maritimeBridge
+    >;
+    return bridge;
+  }
+
+  async function openMaritime(user = userEvent.setup()) {
+    await user.click(screen.getByTestId("add-backend-option-providers"));
+    await user.click(screen.getByTestId("add-backend-provider-maritime"));
+    return user;
+  }
+
+  afterEach(() => {
+    delete window.maritimeBridge;
+  });
+
+  it("offers Maritime under Providers even when DigitalOcean is unavailable", async () => {
+    // Arrange
+    fakeMaritimeBridge({ signedIn: false });
+    const user = userEvent.setup();
+    renderWithProviders(<AddBackendModal onClose={vi.fn()} />);
+
+    // Act
+    await user.click(screen.getByTestId("add-backend-option-providers"));
+
+    // Assert
+    expect(screen.getByTestId("add-backend-provider-maritime")).toBeVisible();
+    expect(
+      screen.queryByTestId("add-backend-provider-digitalocean"),
+    ).toBeNull();
+  });
+
+  it("signs in with an API key and lists the account's OpenHands agents with their state", async () => {
+    // Arrange
+    const bridge = fakeMaritimeBridge({ signedIn: false });
+    renderWithProviders(<AddBackendModal onClose={vi.fn()} />);
+    const user = await openMaritime();
+
+    // Act
+    await user.type(
+      await screen.findByTestId("maritime-api-key"),
+      `mk_${"a".repeat(43)}`,
+    );
+    await user.click(screen.getByTestId("maritime-api-key-submit"));
+
+    // Assert
+    expect(bridge.saveApiKey).toHaveBeenCalledWith({
+      apiKey: `mk_${"a".repeat(43)}`,
+    });
+    const running = await screen.findByTestId("maritime-agent-agent_run");
+    expect(
+      within(running).getByText(/MARITIME\$STATUS_RUNNING/),
+    ).toBeInTheDocument();
+    const sleeping = screen.getByTestId("maritime-agent-agent_far");
+    expect(
+      within(sleeping).getByText(/MARITIME\$STATUS_SLEEPING/),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(bridge.getAccount).toHaveBeenCalled());
+  });
+
+  it("opening an agent registers its hostname with its session key, lands in it and closes the modal", async () => {
+    // Arrange
+    const bridge = fakeMaritimeBridge({ signedIn: true });
+    const onClose = vi.fn();
+    const navigate = vi.fn();
+    renderWithProviders(<AddBackendModal onClose={onClose} />, {
+      currentPath: "/",
+      conversationId: null,
+      isNavigating: false,
+      navigate,
+    });
+    const user = await openMaritime();
+
+    // Act
+    await user.click(
+      await screen.findByTestId("maritime-agent-open-agent_run"),
+    );
+
+    // Assert
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(bridge.openAgent).toHaveBeenCalledWith("agent_run");
+    const registered = JSON.parse(
+      window.localStorage.getItem("openhands-backends") ?? "[]",
+    ) as { host: string; apiKey: string; maritimeAgentId?: string }[];
+    expect(registered).toContainEqual(
+      expect.objectContaining({
+        host: "https://agent_run.mtm.sh",
+        apiKey: "session-agent_run",
+        maritimeAgentId: "agent_run",
+      }),
+    );
+    expect(navigate).toHaveBeenCalledWith(
+      expect.stringContaining("/conversations"),
+    );
+  });
+
+  it("New agent creates one with the chosen name and default memory, then opens it", async () => {
+    // Arrange
+    const bridge = fakeMaritimeBridge({ signedIn: true });
+    const onClose = vi.fn();
+    renderWithProviders(<AddBackendModal onClose={onClose} />);
+    const user = await openMaritime();
+
+    // Act
+    await user.click(await screen.findByTestId("maritime-new-agent"));
+    const nameInput = screen.getByTestId("maritime-new-agent-name");
+    await user.clear(nameInput);
+    await user.type(nameInput, "team-agent");
+    await user.click(screen.getByTestId("maritime-new-agent-submit"));
+
+    // Assert
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(bridge.createAgent).toHaveBeenCalledWith({
+      name: "team-agent",
+      memMb: 4096,
+      origin: window.location.origin,
+    });
+  });
+
+  it("deletes an agent only after confirmation", async () => {
+    // Arrange
+    const bridge = fakeMaritimeBridge({ signedIn: true });
+    renderWithProviders(<AddBackendModal onClose={vi.fn()} />);
+    const user = await openMaritime();
+
+    // Act
+    await user.click(
+      await screen.findByTestId("maritime-agent-delete-agent_run"),
+    );
+    const modal = screen.getByTestId("confirmation-modal");
+    expect(modal).toHaveTextContent("MARITIME$DELETE_CONFIRM");
+    expect(bridge.deleteAgent).not.toHaveBeenCalled();
+    await user.click(within(modal).getByTestId("confirm-button"));
+
+    // Assert
+    await waitFor(() =>
+      expect(bridge.deleteAgent).toHaveBeenCalledWith("agent_run"),
+    );
+  });
+
+  it("asks before giving an agent from another machine a new access key", async () => {
+    // Arrange
+    const bridge = fakeMaritimeBridge({ signedIn: true });
+    const onClose = vi.fn();
+    renderWithProviders(<AddBackendModal onClose={onClose} />);
+    const user = await openMaritime();
+
+    // Act
+    await user.click(
+      await screen.findByTestId("maritime-agent-open-agent_far"),
+    );
+    const modal = screen.getByTestId("confirmation-modal");
+    expect(bridge.openAgent).not.toHaveBeenCalled();
+    await user.click(within(modal).getByTestId("confirm-button"));
+
+    // Assert
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(bridge.resetAccessKey).toHaveBeenCalledWith("agent_far");
+    expect(bridge.openAgent).not.toHaveBeenCalled();
+  });
+
+  it("shows Maritime's own explanation when an action fails", async () => {
+    // Arrange
+    const bridge = fakeMaritimeBridge({ signedIn: true });
+    bridge.openAgent.mockRejectedValue(
+      new Error(
+        "Error invoking remote method 'maritime:openAgent': MaritimeApiError: Maritime limit reached: 5 awake at most",
+      ),
+    );
+    renderWithProviders(<AddBackendModal onClose={vi.fn()} />);
+    const user = await openMaritime();
+
+    // Act
+    await user.click(
+      await screen.findByTestId("maritime-agent-open-agent_run"),
+    );
+
+    // Assert
+    expect(await screen.findByTestId("maritime-error")).toHaveTextContent(
+      /^Maritime limit reached: 5 awake at most$/,
+    );
+  });
+});
