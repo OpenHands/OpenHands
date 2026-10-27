@@ -38,7 +38,7 @@ npm run build && npm run build:lib
 
 Live, against a Maritime account (desktop):
 
-1. Create a Maritime API key at https://maritime.sh/settings/api-keys with the provision, deploy and secrets scopes.
+1. Create a Maritime API key at https://maritime.sh/settings/api-keys with the provision, deploy, secrets and manage scopes (manage is what deletes an agent).
 2. `npm run desktop`, then Add Backend → Providers → Maritime, paste the key.
 3. New agent → name it, keep 4 GB → Create and open. The first start pulls the image (a few minutes). Canvas lands in a new chat on the agent; configure an LLM in Settings and run a task.
 4. Back in Providers → Maritime: Sleep the agent, then Open it again (wakes in about a second, same conversations). Delete it.

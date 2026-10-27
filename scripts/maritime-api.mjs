@@ -209,7 +209,7 @@ export function describeMaritimeFailure(status, detail) {
     case 401:
       return "Maritime did not accept this API key. Check that it is current, or create a new one.";
     case 403:
-      return "This Maritime API key is missing a permission. Create a key with the provision, deploy and secrets scopes.";
+      return "This Maritime API key is missing a permission. Create a key with the provision, deploy, secrets and manage scopes.";
     case 402:
       return detail ?? "Your Maritime plan has no room for another agent.";
     case 429:

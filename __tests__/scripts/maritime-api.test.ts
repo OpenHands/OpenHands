@@ -126,7 +126,7 @@ describe("createMaritimeApiClient", () => {
   it("turns Maritime's status codes into messages that survive Electron IPC", async () => {
     const cases: [number, unknown, RegExp][] = [
       [401, { detail: "Invalid token" }, /did not accept this API key/],
-      [403, { detail: "Missing scope" }, /provision, deploy and secrets/],
+      [403, { detail: "Missing scope" }, /provision, deploy, secrets and manage/],
       [
         402,
         { detail: "Free plan holds 3 machines", code: "seat_limit" },
