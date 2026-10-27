@@ -5,11 +5,12 @@ import { I18nKey } from "#/i18n/declaration";
 import { EnumFilterDropdown } from "#/components/shared/filters/enum-filter-dropdown";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
 import type { DashboardSpec } from "#/manifests/automation-interface";
-import type {
-  DashboardCreatedByValue,
-  DashboardSortValue,
-  DashboardStatusValue,
-  DashboardTriggerValue,
+import {
+  DASHBOARD_TAG_FILTER_ID,
+  type DashboardCreatedByValue,
+  type DashboardSortValue,
+  type DashboardStatusValue,
+  type DashboardTriggerValue,
 } from "#/manifests/types";
 import { dropdownFilterTriggerClassName } from "#/utils/dropdown-classes";
 import { cn } from "#/utils/utils";
@@ -43,18 +44,27 @@ interface AutomationsDashboardControlsProps {
   trigger: DashboardTriggerValue;
   createdBy: DashboardCreatedByValue;
   canFilterByCreator: boolean;
+  /** The selected tag, or null for any. */
+  tag: string | null;
+  /** The org's tags; the tag filter is hidden while this is empty. */
+  tagOptions: readonly string[];
   sort: DashboardSortValue;
   onStatusChange: (value: DashboardStatusValue) => void;
   onTriggerChange: (value: DashboardTriggerValue) => void;
   onCreatedByChange: (value: DashboardCreatedByValue) => void;
+  onTagChange: (value: string | null) => void;
   onSortChange: (value: DashboardSortValue) => void;
 }
 
+// No tag is empty, so the neutral option can stand for "any tag" in the
+// dropdown's string values.
+const ANY_TAG_VALUE = "";
+
 /**
  * One Filters trigger that nests the manifest-declared status, trigger,
- * created-by, and sort dropdowns. Which filters exist, their options, and
- * every caption stay the manifest's; the predicates and comparators behind
- * the values stay the host's.
+ * created-by, tag, and sort dropdowns. Which filters exist, their options, and
+ * every caption stay the manifest's (the tag filter's options are the org's
+ * tags); the predicates and comparators behind the values stay the host's.
  */
 export function AutomationsDashboardControls({
   spec,
@@ -62,10 +72,13 @@ export function AutomationsDashboardControls({
   trigger,
   createdBy,
   canFilterByCreator,
+  tag,
+  tagOptions,
   sort,
   onStatusChange,
   onTriggerChange,
   onCreatedByChange,
+  onTagChange,
   onSortChange,
 }: AutomationsDashboardControlsProps) {
   const { t } = useTranslation("openhands");
@@ -79,10 +92,22 @@ export function AutomationsDashboardControls({
   const createdByFilter = canFilterByCreator
     ? spec.filters.find((filter) => filter.id === "created_by")
     : undefined;
+  const tagFilter =
+    tagOptions.length > 0
+      ? spec.filters.find((filter) => filter.id === DASHBOARD_TAG_FILTER_ID)
+      : undefined;
+  // A selected tag stays listed after its last automation drops it, so the
+  // selection is always visible and can be cleared.
+  const tagValues = [
+    ANY_TAG_VALUE,
+    ...tagOptions,
+    ...(tag !== null && !tagOptions.includes(tag) ? [tag] : []),
+  ];
   const activeCount = [
     statusFilter && status !== statusFilter.options[0]?.value,
     triggerFilter && trigger !== triggerFilter.options[0]?.value,
     createdByFilter && createdBy !== createdByFilter.options[0]?.value,
+    tagFilter && tag !== null,
     sort !== spec.sort.default,
   ].filter(Boolean).length;
   const filtersLabel = t(I18nKey.AUTOMATIONS$FILTERS);
@@ -94,6 +119,7 @@ export function AutomationsDashboardControls({
     if (defaultStatus) onStatusChange(defaultStatus);
     if (defaultTrigger) onTriggerChange(defaultTrigger);
     if (defaultCreatedBy) onCreatedByChange(defaultCreatedBy);
+    if (tagFilter) onTagChange(null);
     onSortChange(spec.sort.default);
   };
 
@@ -174,6 +200,22 @@ export function AutomationsDashboardControls({
                 options={createdByFilter.options.map((option) => option.value)}
                 labelByValue={toLabelMap(createdByFilter.options)}
                 ariaLabel={createdByFilter.label}
+                fullWidth
+              />
+            </FilterField>
+          ) : null}
+          {tagFilter ? (
+            <FilterField label={tagFilter.label}>
+              <EnumFilterDropdown
+                testId="automations-filter-tag"
+                value={tag ?? ANY_TAG_VALUE}
+                onChange={(value) =>
+                  onTagChange(value === ANY_TAG_VALUE ? null : value)
+                }
+                options={tagValues}
+                // Tags label themselves; only the neutral option has a caption.
+                labelByValue={{ [ANY_TAG_VALUE]: tagFilter.allLabel }}
+                ariaLabel={tagFilter.label}
                 fullWidth
               />
             </FilterField>
