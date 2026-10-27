@@ -65,9 +65,6 @@ const TRIGGER_SOURCE_LABELS: Record<string, string> = {
   slack: "Slack",
   linear: "Linear",
   jira: "Jira",
-  jira_dc: "Jira Data Center",
-  bitbucket_data_center: "Bitbucket Data Center",
-  azure_devops: "Azure DevOps",
 };
 
 export function formatTriggerSourceLabel(source: string): string {

@@ -1391,6 +1391,76 @@ describe("AutomationSetupPanel", () => {
     );
   });
 
+  it("offers Bitbucket Data Center repositories when the service clones them", async () => {
+    vi.mocked(useDeploymentCapabilities).mockReturnValue({
+      data: {
+        ready: true,
+        features: [],
+        triggerKinds: ["cron"],
+        eventSources: [],
+        eventTypes: [],
+        triggers: {},
+        repoProviders: ["bitbucket_data_center", "github"],
+      },
+      isLoading: false,
+    } as never);
+    vi.mocked(AutomationService.createServerDraft).mockRejectedValue({
+      response: { status: 404 },
+    });
+    vi.mocked(AutomationService.validateDraft).mockResolvedValue({
+      valid: true,
+      errors: [],
+    });
+    mockUseUserProviders.mockReturnValue({
+      providers: ["bitbucket_data_center"],
+      isLoadingSettings: false,
+    });
+    mockUseSettings.mockReturnValue({
+      data: {
+        provider_tokens_set: {
+          bitbucket_data_center: "bitbucket.example.com",
+        },
+      },
+    });
+    mockUseGitRepositories.mockReturnValue(
+      createProviderRepositoriesQueryResult(
+        "bitbucket_data_center",
+        "DEM/demo-app",
+      ),
+    );
+
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(screen.getByTestId("automation-setup-repository-add"));
+    const option = screen.getByTestId(
+      "automation-setup-repository-option-DEM/demo-app",
+    );
+    expect(option).not.toBeDisabled();
+    await user.click(option);
+
+    expect(
+      screen.getByTestId("automation-setup-repository-value"),
+    ).toHaveTextContent("https://bitbucket.example.com/scm/DEM/demo-app.git");
+
+    await user.click(screen.getByTestId("automation-setup-test"));
+
+    await waitFor(() =>
+      expect(AutomationService.validateDraft).toHaveBeenCalledWith(
+        expect.objectContaining({
+          draft: expect.objectContaining({
+            repos: [
+              {
+                url: "https://bitbucket.example.com/scm/DEM/demo-app.git",
+                provider: "bitbucket_data_center",
+              },
+            ],
+          }),
+        }),
+      ),
+    );
+  });
+
   it("streams agent form updates field by field without overwriting user edits", async () => {
     vi.useFakeTimers();
     const conversationId = "conv-agent-updates";
@@ -2585,101 +2655,6 @@ describe("AutomationSetupPanel", () => {
             trigger: expect.objectContaining({
               type: "event",
               source: "incident-alerts",
-            }),
-          }),
-        }),
-      );
-    });
-
-    it("offers each Data Center source's own event types and saves the picked one", async () => {
-      vi.mocked(useDeploymentCapabilities).mockReturnValue({
-        data: {
-          ready: true,
-          features: ["automationDrafts", "webhookDelivery"],
-          triggerKinds: ["cron", "event"],
-          eventSources: ["github", "jira_dc", "bitbucket_data_center"],
-          eventTypes: ["issues.*", "issue_comment.*"],
-          eventTypesBySource: {
-            github: ["issues.*", "issue_comment.*"],
-            jira_dc: ["comment_created", "jira:issue_created"],
-            bitbucket_data_center: ["pr:comment:added", "pr:opened"],
-          },
-          triggers: {},
-        },
-        isLoading: false,
-      } as never);
-      mockSavedDraftEcho();
-      const eventTypeOptions = () =>
-        Array.from(
-          document.querySelectorAll(
-            "#automation-setup-event-key-options option",
-          ),
-        ).map((option) => option.getAttribute("value"));
-      const pickSource = async (
-        user: ReturnType<typeof userEvent.setup>,
-        source: string,
-      ) => {
-        await user.click(
-          screen.getByTestId("automation-setup-event-source-toggle"),
-        );
-        await user.click(
-          screen.getByTestId(`automation-setup-event-source-option-${source}`),
-        );
-      };
-
-      const user = userEvent.setup();
-      renderPanel();
-      await user.click(screen.getByText("AUTOMATIONS$DETAIL$TRIGGER_EVENT"));
-      expect(eventTypeOptions()).toEqual(["issues.*", "issue_comment.*"]);
-      // GitHub's default key still matches a GitHub pattern.
-      expect(screen.getByTestId("automation-setup-event-key")).toHaveValue(
-        "issue_comment.created",
-      );
-
-      await pickSource(user, "jira_dc");
-      expect(eventTypeOptions()).toEqual([
-        "comment_created",
-        "jira:issue_created",
-      ]);
-      expect(screen.getByTestId("automation-setup-event-key")).toHaveValue(
-        "comment_created",
-      );
-      await user.click(
-        screen.getByTestId("automation-setup-event-test-payload-toggle"),
-      );
-      expect(
-        JSON.parse(
-          (
-            screen.getByTestId(
-              "automation-setup-event-test-payload",
-            ) as HTMLTextAreaElement
-          ).value,
-        ),
-      ).toMatchObject({ webhookEvent: "comment_created" });
-
-      await pickSource(user, "bitbucket_data_center");
-      expect(eventTypeOptions()).toEqual(["pr:comment:added", "pr:opened"]);
-      fireEvent.change(screen.getByTestId("automation-setup-event-key"), {
-        target: { value: "pr:opened" },
-      });
-      expect(
-        JSON.parse(
-          (
-            screen.getByTestId(
-              "automation-setup-event-test-payload",
-            ) as HTMLTextAreaElement
-          ).value,
-        ),
-      ).toMatchObject({ eventKey: "pr:opened" });
-      await saveDraftAndWaitForTest(user);
-
-      expect(AutomationService.createServerDraft).toHaveBeenCalledWith(
-        expect.objectContaining({
-          draft: expect.objectContaining({
-            trigger: expect.objectContaining({
-              type: "event",
-              source: "bitbucket_data_center",
-              on: "pr:opened",
             }),
           }),
         }),

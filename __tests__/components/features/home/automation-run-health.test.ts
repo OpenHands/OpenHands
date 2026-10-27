@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  deriveRunHealth,
-  formatTriggerSourceLabel,
-} from "#/components/features/home/featured-automations/automation-run-health";
+import { deriveRunHealth } from "#/components/features/home/featured-automations/automation-run-health";
 import type { LatestAutomationRunState } from "#/hooks/query/use-latest-automation-runs";
 import {
   AutomationRunStatus,
@@ -49,15 +46,4 @@ describe("deriveRunHealth", () => {
       expect(deriveRunHealth(makeState(makeRun({ status })))).toBe("warning");
     },
   );
-});
-
-describe("formatTriggerSourceLabel", () => {
-  it("names the Data Center and Azure DevOps sources", () => {
-    expect(formatTriggerSourceLabel("jira_dc")).toBe("Jira Data Center");
-    expect(formatTriggerSourceLabel("bitbucket_data_center")).toBe(
-      "Bitbucket Data Center",
-    );
-    expect(formatTriggerSourceLabel("azure_devops")).toBe("Azure DevOps");
-    expect(formatTriggerSourceLabel("incident-alerts")).toBe("Incident-Alerts");
-  });
 });
