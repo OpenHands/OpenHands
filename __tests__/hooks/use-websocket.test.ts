@@ -451,8 +451,13 @@ describe("useWebSocket reconnection", () => {
     expect(result.current.attemptCount).toBe(0);
   });
 
-  it("a late close from a replaced socket does not set isConnected=false or error (#16842 regression)", () => {
-    const { result } = renderWebSocket("ws://acme.test/events");
+  it("ignores a late close from a socket replaced by reconnect", () => {
+    const onClose = vi.fn();
+    const onError = vi.fn();
+    const { result } = renderWebSocket("ws://acme.test/events", {
+      onClose,
+      onError,
+    });
     const firstSocket = getSocket();
 
     act(() => firstSocket.open());
@@ -474,11 +479,14 @@ describe("useWebSocket reconnection", () => {
     act(() => firstSocket.emitClose(1006, "Abnormal closure"));
     expect(result.current.isConnected).toBe(true);
     expect(result.current.error).toBe(null);
+    expect(onClose).not.toHaveBeenCalled();
+    expect(onError).not.toHaveBeenCalled();
 
-    // Closing the live socket still updates state.
+    // Closing the live socket still updates state and notifies.
     act(() => newSocket.emitClose(1000, "Normal closure"));
     expect(result.current.isConnected).toBe(false);
     expect(result.current.error).toBe(null);
+    expect(onClose).toHaveBeenCalledOnce();
   });
 
   it("manual reconnect supersedes a pending retry without creating a duplicate", () => {
