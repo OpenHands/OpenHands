@@ -20015,6 +20015,24 @@
     "ca": "Comparteix públicament",
     "id": "Bagikan Publik"
   },
+  "CONVERSATION$SHARE_WITH_ORG_USERS": {
+    "en": "Share with Org users",
+    "ja": "組織のユーザーと共有",
+    "zh-CN": "与组织用户共享",
+    "zh-TW": "與組織使用者共享",
+    "ko-KR": "조직 사용자와 공유",
+    "no": "Del med organisasjonsbrukere",
+    "it": "Condividi con gli utenti dell'organizzazione",
+    "pt": "Compartilhar com usuários da organização",
+    "es": "Compartir con usuarios de la organización",
+    "ar": "المشاركة مع مستخدمي المؤسسة",
+    "fr": "Partager avec les utilisateurs de l'organisation",
+    "tr": "Kuruluş kullanıcılarıyla paylaş",
+    "de": "Mit Organisationsbenutzern teilen",
+    "uk": "Поділитися з користувачами організації",
+    "ca": "Comparteix amb els usuaris de l'organització",
+    "id": "Bagikan dengan pengguna organisasi"
+  },
   "CONVERSATION$FAILED_TO_UPDATE_PUBLIC_SHARING": {
     "en": "Failed to update public sharing",
     "ja": "公開共有の更新に失敗しました",

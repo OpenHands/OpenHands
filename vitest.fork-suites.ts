@@ -4,6 +4,7 @@ export const FORK_TEST_SUITES = [
   "__tests__/components/features/files-tab/file-tree-view.test.tsx",
   "__tests__/api/cloud/settings-service.test.ts",
   "__tests__/routes/automation-routes-without-interface.test.ts",
+  "__tests__/routes/files-tab.test.tsx",
   "__tests__/services/telemetry-delivery.test.ts",
   ".agents/skills/verify-openhands/scripts/control-openhands.test.mjs",
   "__tests__/api/acp-service/acp-service.api.test.ts",
