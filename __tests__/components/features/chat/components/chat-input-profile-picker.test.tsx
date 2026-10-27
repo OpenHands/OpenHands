@@ -244,6 +244,36 @@ describe("ChatInputAgentProfilePicker", () => {
     expect(activateProfileMutate).toHaveBeenCalledWith("id-codex");
   });
 
+  it.each(["pill", "option"])(
+    "closes on Escape with focus on the %s and returns focus to the pill",
+    async (focusTarget) => {
+      useAgentProfilesMock.mockReturnValue({
+        data: { profiles: PROFILES, active_agent_profile_id: "id-default" },
+        isLoading: false,
+      });
+      renderWithProviders(<ChatInputAgentProfilePicker />, {
+        navigation: { conversationId: null },
+      });
+
+      const pill = screen.getByTestId("chat-input-agent-profile");
+      pill.focus();
+      fireEvent.click(pill);
+      const option = await screen.findByTestId(
+        "chat-input-agent-profile-option-Codex",
+      );
+      const focused = focusTarget === "option" ? option : pill;
+      focused.focus();
+      fireEvent.keyDown(focused, { key: "Escape" });
+
+      expect(
+        screen.queryByTestId("chat-input-agent-profile-popover"),
+      ).not.toBeInTheDocument();
+      expect(pill).toHaveAttribute("aria-expanded", "false");
+      expect(pill).toHaveFocus();
+      expect(activateProfileMutate).not.toHaveBeenCalled();
+    },
+  );
+
   it("stays hidden without an active profile", () => {
     useAgentProfilesMock.mockReturnValue({
       data: { profiles: PROFILES, active_agent_profile_id: null },

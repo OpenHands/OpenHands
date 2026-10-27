@@ -91,6 +91,27 @@ describe("ChatInputLlmProfilePicker", () => {
     expect(selectProfile).toHaveBeenCalledWith("Smart");
   });
 
+  it.each(["pill", "option"])(
+    "closes on Escape with focus on the %s and returns focus to the pill",
+    (focusTarget) => {
+      renderWithProviders(<ChatInputLlmProfilePicker />);
+      const pill = screen.getByTestId("chat-input-llm-profile");
+      pill.focus();
+      fireEvent.click(pill);
+      const option = screen.getByTestId("chat-input-llm-profile-option-Smart");
+      const focused = focusTarget === "option" ? option : pill;
+      focused.focus();
+      fireEvent.keyDown(focused, { key: "Escape" });
+
+      expect(
+        screen.queryByTestId("chat-input-llm-profile-popover"),
+      ).not.toBeInTheDocument();
+      expect(pill).toHaveAttribute("aria-expanded", "false");
+      expect(pill).toHaveFocus();
+      expect(selectProfile).not.toHaveBeenCalled();
+    },
+  );
+
   it("does not switch when the current profile is re-selected", () => {
     renderWithProviders(<ChatInputLlmProfilePicker />);
     fireEvent.click(screen.getByTestId("chat-input-llm-profile"));
