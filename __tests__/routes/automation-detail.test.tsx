@@ -521,13 +521,47 @@ describe("AutomationDetail — service account owner", () => {
       ...serviceAutomation,
       tags: [],
     });
-    renderDetail();
 
     // Act
+    renderDetail();
     await screen.findByTestId("service-account-badge");
 
     // Assert — tags follow the same edit rule as the rest of the page.
     expect(screen.getByTestId("automation-tags-edit")).toBeInTheDocument();
+  });
+
+  it("does not let a manager edit the tags of a service-owned draft", async () => {
+    // Arrange — drafts are finished through the setup flow.
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+      ...serviceAutomation,
+      tags: [],
+      state: "DRAFT",
+    });
+
+    // Act
+    renderDetail();
+    await screen.findByTestId("service-account-badge");
+
+    // Assert
+    expect(screen.queryByTestId("automation-tags-edit")).not.toBeInTheDocument();
+  });
+
+  it("does not let an admin edit the tags of another member's automation", async () => {
+    // Arrange — human-owned, and the caller is a manager but not the creator.
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+      ...automation,
+      user_id: "another-member",
+      owner_kind: "user",
+      // A saved tag, so the read-only tags render and the button can be absent.
+      tags: ["nightly"],
+    });
+
+    // Act
+    renderDetail();
+    await screen.findByTestId("automation-tags");
+
+    // Assert — only the creator edits a human-owned automation.
+    expect(screen.queryByTestId("automation-tags-edit")).not.toBeInTheDocument();
   });
 
   it("shows a member the generic label and never the owner id", async () => {
