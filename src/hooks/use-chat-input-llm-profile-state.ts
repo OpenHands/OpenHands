@@ -144,8 +144,8 @@ export function useChatInputLlmProfileState(): ChatInputLlmProfileState {
           setHomeLlmProfile(profileName);
           return;
         }
-        setHomeLlmProfile(null);
         if (ownsHomeLlm && activeAgentProfile) {
+          setHomeLlmProfile(null);
           updateAgentProfile(
             queryClient,
             activeAgentProfile.name,
@@ -153,6 +153,11 @@ export function useChatInputLlmProfileState(): ChatInputLlmProfileState {
           );
           return;
         }
+        // Local `default` profile: the pick is a global activation (below),
+        // but hold it as homeLlmProfile so the home launch threads it as
+        // llmProfile and suppresses the router's first-message routing
+        // (#18773). Cleared after the launch resolves.
+        setHomeLlmProfile(profileName);
       }
       switchAndLog(conversationId, profileName);
     },

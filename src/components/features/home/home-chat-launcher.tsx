@@ -107,6 +107,7 @@ export function HomeChatLauncher() {
   } = useConversationStore();
   const { handleUpload } = useChatAttachmentUpload();
   const homeLlmProfile = useModelStore((s) => s.homeLlmProfile);
+  const setHomeLlmProfile = useModelStore((s) => s.setHomeLlmProfile);
   const { data: llmProfiles } = useLlmProfiles();
   const { error: workspacesError } = useLocalWorkspaces({ enabled: isLocal });
   const { isolated, unsupportedMessage: runtimeWorkspaceMessage } =
@@ -206,6 +207,11 @@ export function HomeChatLauncher() {
         const data = await createConversation(variables);
         isCreated = true;
         toast.dismiss(toastId);
+        // A local default-profile pick is held as homeLlmProfile only to
+        // suppress the router on this launch (#18773); the activation already
+        // set the global active_profile, so clear it so the next conversation
+        // isn't falsely suppressed. Cloud members' picks are sticky.
+        if (isLocal) setHomeLlmProfile(null);
         try {
           sessionStorage.removeItem(HOME_PROMPT_DRAFT_KEY);
         } catch {
