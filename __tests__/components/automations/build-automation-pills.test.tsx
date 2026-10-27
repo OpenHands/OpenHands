@@ -96,7 +96,7 @@ describe("buildAutomationMetadataPills", () => {
     expect(
       screen.getByTitle("https://github.com/acme/docs"),
     ).toBeInTheDocument();
-    expect(screen.getByTestId("pill-repository-2")).toHaveTextContent(
+    expect(screen.getByTestId("pill-repository-2").textContent).toBe(
       "DEM/demo-app",
     );
   });
