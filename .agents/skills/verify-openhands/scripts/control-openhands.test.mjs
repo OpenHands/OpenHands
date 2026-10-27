@@ -2535,6 +2535,42 @@ test("a fix is verified only by two reproductions and two passes under the same 
     ).reasons.join(),
     /same revision/,
   );
+  // A backend fix: same revision, a different backend on each side.
+  const vb = (baseline, fix) =>
+    proofVerdict({ baseline, fix, sha: "s1", vary: "backend" });
+  const newBackend = { backend: "local agent-server 1.58.1 automation 1.25.1" };
+  assert.equal(
+    vb(
+      [row("xfail"), row("xfail")],
+      [row("xpass", newBackend), row("xpass", newBackend)],
+    ).verdict,
+    "verified",
+  );
+  assert.match(
+    vb([row("xfail"), row("xfail")], [row("xpass"), row("xpass")]).reasons.join(),
+    /same backend versions/,
+  );
+  assert.match(
+    vb(
+      [row("xfail"), row("xfail")],
+      [fixRow("xpass", newBackend), fixRow("xpass", newBackend)],
+    ).reasons.join(),
+    /different revisions/,
+  );
+  assert.match(
+    vb(
+      [row("xfail"), row("xfail")],
+      [row("xpass", newBackend), row("xpass")],
+    ).reasons.join(),
+    /one side ran different backend/,
+  );
+  assert.equal(
+    vb(
+      [row("xfail"), row("xfail")],
+      [row("xpass", newBackend), row("xfail", newBackend)],
+    ).verdict,
+    "not-fixed",
+  );
   // Attempts of an older recipe do not count.
   const old = v(
     [row("xpass", { sha: "s0" }), row("xfail"), row("xfail")],
