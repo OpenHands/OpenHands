@@ -195,6 +195,7 @@
     <tr><td>✏️ logic</td><td><a href="#f-service">…/agent-server-conversation-service.api.ts</a></td><td>+144 / −?</td></tr>
     <tr><td>✏️ logic</td><td><a href="#f-hooks">src/hooks/mutation/use-create-conversation.ts</a></td><td>+307</td></tr>
     <tr><td>✏️ logic</td><td><a href="#f-hooks">src/hooks/mutation/resolve-conversation-launch.ts</a></td><td>+54</td></tr>
+    <tr><td>✏️ logic</td><td><a href="#f-child">src/services/child-conversation-launch.ts</a></td><td>+38</td></tr>
     <tr><td>✏️ ui</td><td><a href="#f-ui">src/components/features/home/home-chat-launcher.tsx</a></td><td>+21</td></tr>
     <tr><td>⚙️ tests</td><td>__tests__/api/…, __tests__/hooks/mutation/…, __tests__/components/features/home/…</td><td>+986</td></tr>
   </tbody>
@@ -257,6 +258,23 @@
   best-effort re-stamps the launch profile and plugin snapshot, and classifies a 4xx
   (refused, safe to retry) vs an ambiguous failure (bubble stays <code>sending</code> until
   the server echo or the pending-message watchdog resolves it).
+</p>
+
+<figure id="f-child">
+  <figcaption><strong>child-conversation-launch.ts</strong> — the delegated-launch consumer.</figcaption>
+</figure>
+<p>
+  <span class="tag b">before</span> the local worktree fallback treated <em>any</em>
+  <code>createChild</code> error as "the worktree could not be created" and retried with
+  <code>shared</code> isolation.
+  &nbsp;→&nbsp;
+  <span class="tag a">after</span> a <code>ConversationFirstMessageError</code> is
+  recovered onto the created child instead
+  (<code>recoveredFirstMessageLaunch</code>, <code>:277</code>): the worktree was cut fine,
+  so retrying would create a <em>second</em> conversation, strand the first idle, and
+  silently downgrade the isolation the caller asked for. The result carries a
+  <code>first_message_note</code> so the delegating agent learns the child's task never
+  started. A non-recoverable error still falls back to <code>shared</code> as before.
 </p>
 
 <figure id="f-ui">

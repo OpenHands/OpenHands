@@ -17,6 +17,7 @@ import {
   handleLaunchChildConversationAction,
   type LaunchChildConversationResult,
 } from "#/services/child-conversation-launch";
+import { ConversationFirstMessageError } from "#/api/conversation-service/agent-server-conversation-service.api";
 
 const {
   mockCreateConversation,
@@ -539,6 +540,73 @@ describe("handleLaunchChildConversationAction", () => {
       expect(reportedResult()).toMatchObject({
         status: "error",
         error: "boom",
+      });
+    });
+
+    // The withheld-first-message failure means the conversation exists and only
+    // its first turn did not start. The worktree fallback must not treat it as
+    // a worktree failure: retrying with `shared` would create a second
+    // conversation and downgrade the isolation the caller asked for.
+    it("recovers onto the created child when the first message fails, without downgrading isolation", async () => {
+      seedWorktreeCapableParent();
+      mockCreateConversation.mockRejectedValueOnce(
+        new ConversationFirstMessageError(
+          "child-id",
+          [{ type: "text", text: "Add a regression test for the parser" }],
+          new Error("network timeout"),
+        ),
+      );
+
+      await handleLaunchChildConversationAction(
+        action({}),
+        PARENT_ID,
+        nextToolCallId(),
+      );
+
+      // One attempt only — no second conversation, no `shared` retry.
+      expect(mockCreateConversation).toHaveBeenCalledTimes(1);
+      expect(mockCreateConversation).toHaveBeenCalledWith(
+        expect.objectContaining({ workspaceMode: "new_worktree" }),
+      );
+
+      const result = reportedResult();
+      expect(result).toMatchObject({
+        status: "launched",
+        conversation_id: "child-id",
+        isolation: "worktree",
+      });
+      // The isolation was not downgraded, so no fallback note is attached.
+      expect(
+        result.status === "launched" && result.isolation_note,
+      ).toBeUndefined();
+      // The delegating agent must learn the child's task never started.
+      expect(
+        result.status === "launched" && result.first_message_note,
+      ).toContain("network timeout");
+    });
+
+    // The same recovery applies when no worktree was involved: a shared child
+    // whose first message failed is recovered, not reported as a failed launch.
+    it("recovers a shared child whose first message failed", async () => {
+      mockCreateConversation.mockRejectedValueOnce(
+        new ConversationFirstMessageError(
+          "child-id",
+          [{ type: "text", text: "Add a regression test for the parser" }],
+          new Error("network timeout"),
+        ),
+      );
+
+      await handleLaunchChildConversationAction(
+        action({ isolation: "shared" }),
+        PARENT_ID,
+        nextToolCallId(),
+      );
+
+      expect(mockCreateConversation).toHaveBeenCalledTimes(1);
+      expect(reportedResult()).toMatchObject({
+        status: "launched",
+        conversation_id: "child-id",
+        isolation: "shared",
       });
     });
   });

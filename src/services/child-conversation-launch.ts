@@ -14,7 +14,9 @@ import {
   getStoredConversationMetadata,
   type ConversationMetadata,
 } from "#/api/conversation-metadata-store";
-import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import AgentServerConversationService, {
+  ConversationFirstMessageError,
+} from "#/api/conversation-service/agent-server-conversation-service.api";
 import type { AppConversationStartTask } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { buildRouterAtStartSystemSuffix } from "#/api/agent-server-adapter";
 import { getActiveBackend } from "#/api/backend-registry/active-store";
@@ -73,6 +75,12 @@ interface LaunchSuccess {
   parent_link: boolean;
   /** Present when `parent_link` is false, explaining why. */
   parent_link_note?: string;
+  /**
+   * Present when the child conversation exists but its first turn never
+   * started (the withheld first message could not be sent). The child is idle
+   * and waiting for the task to be sent again.
+   */
+  first_message_note?: string;
 }
 
 interface LaunchFailure {
@@ -262,6 +270,39 @@ async function parentProfileLaunch(parentConversationId: string) {
   };
 }
 
+/**
+ * Recover a local child whose conversation was created but whose withheld first
+ * message could not be sent.
+ *
+ * Mirrors the parent launch path (`recoverConversationFirstMessage`): the
+ * conversation exists and stays idle, so the child is reported as launched and
+ * the caller opens it, rather than the worktree fallback creating a second
+ * conversation and downgrading the isolation. The message is not re-sent here —
+ * the server may have accepted the event before the response was lost.
+ */
+function recoveredFirstMessageLaunch(
+  error: ConversationFirstMessageError,
+  isolation: ChildConversationIsolation,
+  workspace: string,
+): LaunchChildConversationResult {
+  const parentLinkNote = localParentLinkNote();
+  const cause =
+    error.cause instanceof Error ? error.cause.message : String(error.cause);
+  return {
+    status: "launched",
+    target: "local",
+    conversation_id: error.conversationId,
+    url: absoluteCanvasUrl(`/conversations/${error.conversationId}`),
+    initial_status: "READY",
+    title: null,
+    workspace,
+    isolation,
+    parent_link: !parentLinkNote,
+    ...(parentLinkNote ? { parent_link_note: parentLinkNote } : {}),
+    first_message_note: `The child conversation was created but its first message could not be sent (${cause}). It is idle and waiting for the task. Open it and send the task again, or re-run the delegation.`,
+  };
+}
+
 async function launchLocalChild(
   params: ValidatedParams,
   parentConversationId: string,
@@ -302,18 +343,27 @@ async function launchLocalChild(
   let startTask;
   try {
     startTask = await createChild(isolation);
-  } catch (worktreeError) {
-    if (isolation !== "worktree") throw worktreeError;
+  } catch (firstError) {
+    // A withheld-first-message send failure means the conversation *was*
+    // created and only its first turn did not start (see
+    // `ConversationFirstMessageError`). The worktree was cut fine, so this is
+    // not the worktree failure the fallback below exists for: retrying with
+    // `shared` would create a second conversation and silently downgrade the
+    // isolation the caller asked for. Recover onto the created child instead.
+    if (firstError instanceof ConversationFirstMessageError) {
+      return recoveredFirstMessageLaunch(firstError, isolation, workspace);
+    }
+    if (isolation !== "worktree") throw firstError;
     // Creating the worktree is the one part of a local launch that can fail on
     // an otherwise healthy workspace, so retry without it rather than losing
     // the launch. Anything else fails both attempts and is reported as-is.
     try {
       startTask = await createChild("shared");
     } catch {
-      throw worktreeError;
+      throw firstError;
     }
     isolation = "shared";
-    isolationNote = `Creating a git worktree in this conversation's workspace failed (${worktreeError instanceof Error ? worktreeError.message : String(worktreeError)}). ${SHARED_FALLBACK_CONSEQUENCE}`;
+    isolationNote = `Creating a git worktree in this conversation's workspace failed (${firstError instanceof Error ? firstError.message : String(firstError)}). ${SHARED_FALLBACK_CONSEQUENCE}`;
   }
 
   const conversationId = startTask.app_conversation_id ?? startTask.id;
