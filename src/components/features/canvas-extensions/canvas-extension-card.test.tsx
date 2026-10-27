@@ -1,7 +1,9 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import CanvasExtensionsService from "#/api/canvas-extensions-service";
+import CanvasExtensionsService, {
+  type CanvasAppBackendStatus,
+} from "#/api/canvas-extensions-service";
 import { I18nKey } from "#/i18n/declaration";
 import type { InstalledCanvasExtensionInfo } from "#/types/canvas-extension";
 import { CanvasExtensionCard } from "./canvas-extension-card";
@@ -21,7 +23,7 @@ const extension: InstalledCanvasExtensionInfo = {
     backend: { secret_refs: ["DEMO_API_KEY"] },
   },
 };
-const stopped = {
+const stopped: CanvasAppBackendStatus = {
   name: "demo",
   state: "stopped",
   revision: "rev",
