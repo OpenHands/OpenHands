@@ -1,6 +1,6 @@
 {
   "name": "@openhands/agent-canvas",
-  "version": "1.33.0",
+  "version": "1.34.0",
   "description": "Agent Canvas UI for OpenHands - run AI coding agents with a visual interface",
   "license": "MIT",
   "private": false,
@@ -23,10 +23,9 @@
     "@heroui/react": "2.8.10",
     "@microlink/react-json-view": "1.31.25",
     "@monaco-editor/react": "4.7.0",
-    "@openhands/extensions": "0.35.0",
+    "@openhands/extensions": "0.36.0",
     "@openhands/typescript-client": "1.58.1",
     "@react-router/node": "7.18.2",
-    "@react-router/serve": "7.18.2",
     "@tailwindcss/vite": "4.3.3",
     "@tanstack/react-query": "5.103.1",
     "@types/shell-quote": "1.7.5",
@@ -60,7 +59,7 @@
     "rehype-sanitize": "6.0.0",
     "remark-breaks": "4.0.0",
     "remark-gfm": "4.0.1",
-    "shell-quote": "1.9.0",
+    "shell-quote": "1.12.0",
     "sirv": "3.0.2",
     "sirv-cli": "3.0.1",
     "tailwind-merge": "3.7.0",
@@ -193,7 +192,7 @@
     "@vercel/static-config": {
       "ajv": "8.20.0"
     },
-    "dompurify": "3.4.14",
+    "dompurify": "3.4.17",
     "typed-rest-client": {
       "qs": "6.15.3"
     }

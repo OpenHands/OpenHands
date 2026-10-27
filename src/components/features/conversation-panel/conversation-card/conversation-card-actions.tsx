@@ -16,6 +16,9 @@ interface ConversationCardActionsProps {
   onArchive?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onUnarchive?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onStop?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onNewConversationInSandbox?: (
+    event: React.MouseEvent<HTMLButtonElement>,
+  ) => void;
   onEdit?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onEditTags?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDownloadViaVSCode?: (event: React.MouseEvent<HTMLButtonElement>) => void;
@@ -32,6 +35,7 @@ export function ConversationCardActions({
   onArchive,
   onUnarchive,
   onStop,
+  onNewConversationInSandbox,
   onEdit,
   onEditTags,
   onDownloadViaVSCode,
@@ -125,6 +129,7 @@ export function ConversationCardActions({
               onArchive={onArchive}
               onUnarchive={onUnarchive}
               onStop={isActive ? onStop : undefined}
+              onNewConversationInSandbox={onNewConversationInSandbox}
               onEdit={onEdit}
               onEditTags={onEditTags}
               onDownloadViaVSCode={

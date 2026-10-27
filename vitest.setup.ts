@@ -182,14 +182,6 @@ vi.mock("react-i18next", async (importOriginal) => ({
   }),
 }));
 
-vi.mock("#/hooks/use-is-on-tos-page", () => ({
-  useIsOnTosPage: () => false,
-}));
-
-vi.mock("#/hooks/use-is-on-intermediate-page", () => ({
-  useIsOnIntermediatePage: () => false,
-}));
-
 // Mock useRevalidator from react-router to allow direct store manipulation in tests
 vi.mock("react-router", async (importOriginal) => ({
   ...(await importOriginal<typeof import("react-router")>()),

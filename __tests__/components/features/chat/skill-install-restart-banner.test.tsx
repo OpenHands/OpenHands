@@ -6,6 +6,10 @@ import { SkillInstallRestartBanner } from "#/components/features/chat/skill-inst
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { useEventStore } from "#/stores/use-event-store";
 import {
+  mergeStoredConversationMetadata,
+  removeStoredConversationMetadata,
+} from "#/api/conversation-metadata-store";
+import {
   __resetActiveStoreForTests,
   setActiveSelection,
   setRegisteredBackends,
@@ -152,6 +156,23 @@ describe("SkillInstallRestartBanner", () => {
     expect(
       await screen.findByTestId("skill-install-restart-banner"),
     ).toBeInTheDocument();
+  });
+
+  it("renders nothing for a docker conversation without a host folder", async () => {
+    // Its skill lives in a private workspace a new conversation would not get.
+    mergeStoredConversationMetadata(CONVERSATION_ID, {
+      workspace_mode: "docker_container",
+    });
+    renderBanner();
+    addInstallEvent("evt-1");
+
+    await waitFor(() =>
+      expect(useEventStore.getState().events.length).toBeGreaterThan(0),
+    );
+    expect(
+      screen.queryByTestId("skill-install-restart-banner"),
+    ).not.toBeInTheDocument();
+    removeStoredConversationMetadata(CONVERSATION_ID);
   });
 
   it("renders nothing on a cloud backend", () => {

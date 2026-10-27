@@ -2096,7 +2096,7 @@ async function openWorkspace(run, name, { stay, mode } = {}) {
     selector: "testid=workspace-launch-button",
     timeout: 30_000,
   });
-  // The mode selector (Local Repo / New Worktree) sits in the preview bar
+  // The mode selector (Local / Worktree) sits in the preview bar
   // the launch click leaves behind.
   let preview;
   if (mode !== undefined) {
@@ -3974,6 +3974,12 @@ async function cmdBug({ positional, flags }) {
         "bug proof needs a sub-feature ID, --baseline RUN_DIR and --fix RUN_DIR",
         "control-openhands bug proof F05.prefill-send --baseline $BASE_RUN --fix $FIX_RUN",
       );
+    const vary = flags.vary === undefined ? "revision" : String(flags.vary);
+    if (vary !== "revision" && vary !== "backend")
+      usage(
+        "bug proof --vary takes revision or backend",
+        "control-openhands bug proof F08.diff-view-modes --vary backend --baseline $OLD_SDK_RUN --fix $RUN",
+      );
     const blocks = selectBlocks(id, flags);
     const read = (dir) => {
       const path = attemptsFile(resolve(String(dir)));
@@ -3998,6 +4004,7 @@ async function cmdBug({ positional, flags }) {
         fix: fix.filter((r) => r.name === block.name),
         sha: block.sha,
         min: intFlag(flags.min, 2),
+        vary,
       }),
     }));
     const verified = verdicts.every((v) => v.verdict === "verified");
@@ -4899,7 +4906,7 @@ control-openhands conversation events ID [--last N] [--kinds MessageEvent,Action
 testid=submit-button and returns the new /conversations/<id>. --stay uses the
 current page's composer instead of navigating home first. --workspace PATH
 first picks that folder through Open Workspace (see 'workspace open'), so the
-conversation runs in it; --mode picks Local Repo or New Worktree there. 'wait' polls the
+conversation runs in it; --mode picks Local or Worktree there. 'wait' polls the
 conversation's execution_status until one of --until (default: any terminal).
 
 Examples:
@@ -4917,7 +4924,7 @@ control-openhands fixture file [--name qa-note.txt] [--content TEXT]
 control-openhands fixture tarball [--name qa-tarball]   # evidence/_fixtures/qa-tarball.tar.gz (main.py prints pong)
 control-openhands fixture skill [--name qa-hello] [--repo qa-repo] [--trigger qa-ping] [--body TEXT] [--commit]
         # SKILL.md in the run's private ~/.agents/skills, or in a fixture repo's .agents/skills;
-        # --commit records it in the repo (a New Worktree conversation checks out commits only)
+        # --commit records it in the repo (a Worktree conversation checks out commits only)
 `,
   workspace: `control-openhands workspace open PATH|NAME [--stay] [--mode local_repo|new_worktree]
 
@@ -4925,7 +4932,7 @@ NAME (no slash) resolves inside <run>/workspace, where 'fixture' creates repos.
 
 Drives Home > Open Workspace > workspace dropdown > + Add Workspace, walks the
 folder browser (folder-browser-up / folder-browser-entry-<name>) to PATH,
-clicks Use and Launch, then with --mode picks Local Repo or New Worktree in the
+clicks Use and Launch, then with --mode picks Local or Worktree in the
 preview bar's mode selector (printed back as mode and preview). The composer then
 carries the workspace chip; follow
 with 'conversation start --stay', or use 'conversation start --workspace PATH'.
@@ -5056,7 +5063,7 @@ spaces. The result lists each clause under bugChecks.
 `,
   bug: `control-openhands bug list [--file PATH]
 control-openhands bug run ID [--name N] [--attempts N] [--label L] [--timeout SEC] [--no-doctor] [--file PATH]
-control-openhands bug proof ID --baseline RUN_DIR --fix RUN_DIR [--baseline-label L] [--fix-label L] [--min 2]
+control-openhands bug proof ID --baseline RUN_DIR --fix RUN_DIR [--baseline-label L] [--fix-label L] [--min 2] [--vary revision|backend]
 
 A known bug in the map can carry a fenced block, opened with
 "\`\`\`sh known-bug <ID> [name]", whose commands assert the correct behavior. Its one
@@ -5084,10 +5091,15 @@ marked command's observation.
 run: verified only when the baseline has at least two attempts, all xfail, the
 fix at least two, all xpass, on different revisions with the same viewport and
 backend. A fix that still reproduces is not-fixed; anything else is inconclusive.
+--vary backend proves an Agent Server or automation fix instead: both runs serve
+the same revision at the same viewport, and each side has its own backend
+versions (the baseline launched with --sdk-version or --automation-version set
+to a release before the fix).
 
   control-openhands bug run F25.selector-dropdown --attempts 2 --label baseline --run $BASE_RUN
   control-openhands bug run F25.selector-dropdown --attempts 2 --label fix --run $FIX_RUN
   control-openhands bug proof F25.selector-dropdown --baseline $BASE_RUN --baseline-label baseline --fix $FIX_RUN --fix-label fix
+  control-openhands bug proof F08.diff-view-modes --vary backend --baseline $OLD_SDK_RUN --baseline-label baseline --fix $RUN --fix-label fix
 `,
   map: `control-openhands map check [--file Fnn-name.md]   lint the map (or one entry, skipping index links): four H2s, unique IDs, links, known commands, index counts
 control-openhands map check --fix-counts   rewrite the index's sub-feature counts and total from the files, then lint

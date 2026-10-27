@@ -287,10 +287,7 @@ export function MetaLlmSettingsView() {
 
   if (isUnsupportedBackend) {
     return (
-      <p
-        data-testid="meta-profile-unsupported"
-        className="text-sm text-[var(--oh-muted)]"
-      >
+      <p data-testid="meta-profile-unsupported" className="text-sm text-muted">
         {t(I18nKey.SETTINGS$META_PROFILE_UNSUPPORTED)}
       </p>
     );
@@ -324,7 +321,7 @@ export function MetaLlmSettingsView() {
         {availableProfiles.length === 0 ? (
           <p
             data-testid="meta-profile-no-llm-profiles"
-            className="text-sm text-[var(--oh-muted)]"
+            className="text-sm text-muted"
           >
             {t(I18nKey.SETTINGS$META_PROFILE_NO_LLM_PROFILES)}
           </p>
@@ -360,10 +357,7 @@ export function MetaLlmSettingsView() {
         ) : null}
 
         {!isLoading && !error && metaProfiles.length === 0 ? (
-          <p
-            data-testid="meta-profile-empty"
-            className="text-sm text-[var(--oh-muted)]"
-          >
+          <p data-testid="meta-profile-empty" className="text-sm text-muted">
             {t(I18nKey.SETTINGS$META_PROFILE_NO_PROFILES)}
           </p>
         ) : null}
