@@ -450,14 +450,11 @@ describe("PluginLaunchModal", () => {
       expect(screen.queryByText("All-Hands-AI/plugin")).not.toBeInTheDocument();
     });
 
-    it("shortens a real github.com URL to its repo coordinate", () => {
-      renderModal([
-        { source: "https://github.com/All-Hands-AI/openhands-plugin.git" },
-      ]);
+    it("shows a github.com URL whole, host included", () => {
+      const source = "https://github.com/All-Hands-AI/openhands-plugin.git";
+      renderModal([{ source }]);
 
-      expect(
-        screen.getByText("All-Hands-AI/openhands-plugin"),
-      ).toBeInTheDocument();
+      expect(screen.getByText(source)).toBeInTheDocument();
     });
 
     it("shortens a github: coordinate", () => {

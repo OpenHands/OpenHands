@@ -12,6 +12,7 @@ import { PluginSpec } from "#/api/conversation-service/agent-server-conversation
 import { Typography } from "#/ui/typography";
 import { cn } from "#/utils/utils";
 import { hasPluginParameters } from "#/utils/plugin-parameters";
+import { getPluginSourceLabel } from "#/utils/plugin-display";
 import { PluginLaunchPluginSection } from "./plugin-launch-plugin-section";
 
 interface PluginLaunchModalProps {
@@ -26,11 +27,6 @@ interface PluginLaunchModalProps {
 interface ExpandedState {
   [key: number]: boolean;
 }
-
-// Hosts whose URLs may be displayed as a bare `owner/repo` coordinate. Any
-// other host must stay visible: the modal's trust line names the source as the
-// thing the user is handing their agent secrets to.
-const GITHUB_HOSTS = new Set(["github.com", "www.github.com"]);
 
 export function PluginLaunchModal({
   plugins,
@@ -109,30 +105,10 @@ export function PluginLaunchModal({
     return source;
   };
 
-  const getPluginSourceInfo = (plugin: PluginSpec): string => {
-    const { source } = plugin;
-    // `github:owner/repo` names GitHub in the scheme, so the prefix is the
-    // only thing worth trimming.
-    if (source.startsWith("github:")) {
-      return source.replace("github:", "");
-    }
-    // Anything else is shortened only when the URL's *host* really is GitHub.
-    // A substring test (`source.includes("github.com/")`) matches
-    // "https://evil.example/github.com/All-Hands-AI/plugin" and would show it
-    // as "All-Hands-AI/plugin" — hiding the host the skill is actually fetched
-    // from, in the same sentence that asks the user to trust it with their
-    // agent secrets.
-    try {
-      const url = new URL(source);
-      if (GITHUB_HOSTS.has(url.hostname.toLowerCase())) {
-        return url.pathname.replace(/^\/+/, "").replace(/\.git$/, "") || source;
-      }
-    } catch {
-      // Not a parseable URL (a bare path, `git@host:owner/repo`, …). Show it
-      // whole rather than guessing which part is the host.
-    }
-    return source;
-  };
+  // The trust line names these sources, so a URL is shown whole, host included.
+  // The ref is rendered separately below.
+  const getPluginSourceInfo = (plugin: PluginSpec): string =>
+    getPluginSourceLabel({ ...plugin, ref: undefined });
 
   const getUniqueSources = (): string[] => {
     const sources = pluginConfigs.map((plugin) => getPluginSourceInfo(plugin));
