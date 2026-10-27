@@ -820,3 +820,41 @@ code .token {
 @utility automation-setup-repository-menu {
   width: min(28rem, calc(100vw - 3rem));
 }
+
+/* Command palette geometry and effects keep their viewport and filter composition. */
+@utility command-menu-overlay {
+  padding-top: 10vh;
+}
+
+@utility command-menu-backdrop {
+  @apply backdrop-blur-[2px];
+}
+
+@utility command-menu-panel {
+  max-height: min(720px, 78vh);
+  @apply shadow-[0_24px_90px_rgba(0,0,0,0.52),0_0_0_1px_rgba(255,255,255,0.03)_inset];
+}
+
+@utility command-menu-active-option {
+  @apply shadow-[0_0_0_1px_color-mix(in_srgb,var(--oh-contrast)_8%,transparent)_inset];
+}
+
+/* Fixed hint sizes inherit line height; tracking still composes through Tailwind. */
+@utility command-menu-label {
+  font-size: 11px;
+  @apply tracking-[0.18em];
+}
+
+@utility command-menu-result-hint {
+  font-size: 10px;
+  @apply tracking-[0.14em];
+}
+
+@utility command-menu-footer {
+  font-size: 11px;
+}
+
+@utility command-menu-trigger-hint {
+  font-size: 10px;
+  @apply tracking-[0.12em];
+}
