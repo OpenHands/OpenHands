@@ -2798,22 +2798,21 @@ smmap = ">=3.0.1,<6"
 
 [[package]]
 name = "gitpython"
-version = "3.1.60"
+version = "3.2.1"
 description = "GitPython is a Python library used to interact with Git repositories"
 optional = false
-python-versions = ">=3.7"
+python-versions = ">=3.8"
 groups = ["main"]
 files = [
-    {file = "gitpython-3.1.60-py3-none-any.whl", hash = "sha256:39548bffb8fa0f3a548133348868bb4838e79d73283052207dc97781a569b6b4"},
-    {file = "gitpython-3.1.60.tar.gz", hash = "sha256:e936431879fa85581b4311fa63492ea52251909e2d655b6529c704c904ddcc24"},
+    {file = "gitpython-3.2.1-py3-none-any.whl", hash = "sha256:d66b0832aa8755c1a84892937282df0befb16c97e5a64aeebd68be9c5e323f53"},
+    {file = "gitpython-3.2.1.tar.gz", hash = "sha256:0f1229ec5c057bdabdeeda8bda4f17bda679ab33dbccc00f24e6a480553c8613"},
 ]
 
 [package.dependencies]
 gitdb = ">=4.0.1,<5"
 
 [package.extras]
-doc = ["sphinx (>=7.4.7,<8)", "sphinx-autodoc-typehints", "sphinx_rtd_theme"]
-test = ["basedpyright (==1.39.9) ; python_version >= \"3.9\" and sys_platform != \"cygwin\"", "coverage[toml]", "ddt (>=1.1.1,!=1.4.3)", "mock ; python_version < \"3.8\"", "mypy (==1.18.2) ; python_version >= \"3.9\"", "pre-commit", "pytest (>=7.3.1)", "pytest-cov", "pytest-instafail", "pytest-mock", "pytest-sugar", "typing-extensions ; python_version < \"3.11\""]
+test = ["basedpyright (==1.39.9) ; python_version >= \"3.9\" and sys_platform != \"cygwin\"", "coverage[toml]", "ddt (>=1.1.1,!=1.4.3)", "mock", "mypy (==1.18.2) ; python_version >= \"3.9\"", "pre-commit", "pytest (>=7.3.1)", "pytest-cov", "pytest-instafail", "pytest-mock", "pytest-sugar", "typing-extensions ; python_version < \"3.11\""]
 
 [[package]]
 name = "google-api-core"
