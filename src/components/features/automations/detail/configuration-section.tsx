@@ -27,8 +27,9 @@ interface ConfigurationSectionProps {
    */
   runsAs?: string | null;
   /**
-   * The service account that owns the automation: its name, or its raw id when
-   * the name could not be resolved. Shown as "Owned by" with an SA badge.
+   * The service account that owns the automation: its name, its raw id when a
+   * manager's lookup failed, or a generic label for a member. Shown as
+   * "Owned by" with an SA badge.
    * Omitted for a person-owned automation, whose identity is `runsAs`.
    */
   serviceAccountOwner?: string | null;
