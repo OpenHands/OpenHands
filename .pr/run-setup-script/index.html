@@ -270,11 +270,14 @@
   &nbsp;→&nbsp;
   <span class="tag a">after</span> a <code>ConversationFirstMessageError</code> is
   recovered onto the created child instead
-  (<code>recoveredFirstMessageLaunch</code>, <code>:277</code>): the worktree was cut fine,
+  (<code>recoveredFirstMessageLaunch</code>, <code>:286</code>): the worktree was cut fine,
   so retrying would create a <em>second</em> conversation, strand the first idle, and
-  silently downgrade the isolation the caller asked for. The result carries a
-  <code>first_message_note</code> so the delegating agent learns the child's task never
-  started. A non-recoverable error still falls back to <code>shared</code> as before.
+  silently downgrade the isolation the caller asked for. Recovery keeps the requested title
+  (best-effort rename) and any pre-computed <code>isolation_note</code>, and adds a
+  <code>first_message_note</code> that distinguishes a <em>definitive</em> 4xx rejection
+  (child genuinely idle — resend) from an <em>ambiguous</em> failure (transport/timeout/5xx,
+  child may already be running — inspect first, never re-run the delegation). A
+  non-recoverable error still falls back to <code>shared</code> as before.
 </p>
 
 <figure id="f-ui">

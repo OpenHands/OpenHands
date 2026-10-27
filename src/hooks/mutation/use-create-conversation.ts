@@ -17,8 +17,10 @@ import PluginsManagementService, {
 } from "#/api/plugins-management-service";
 import { PLUGINS_QUERY_KEYS } from "#/hooks/query/query-keys";
 import { launchConversation } from "#/hooks/mutation/resolve-conversation-launch";
-import { ConversationFirstMessageError } from "#/api/conversation-service/agent-server-conversation-service.api";
-import { isSdkHttpError } from "#/utils/sdk-http-error";
+import {
+  ConversationFirstMessageError,
+  isDefinitiveSendRejection,
+} from "#/api/conversation-service/agent-server-conversation-service.api";
 import type { SetupScriptStatusUpdate } from "#/api/setup-script-service";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { pluginReferenceKey } from "#/utils/plugin-display";
@@ -81,22 +83,6 @@ function messageContentText(content: MessageContent[]): string {
     })
     .map((part) => part.text)
     .join("");
-}
-
-/**
- * Whether the send was *definitively* rejected, as opposed to failing
- * ambiguously after the server may already have accepted the event.
- *
- * Only a 4xx counts: the server validated and refused the request, so the event
- * was not appended and resending cannot duplicate it. Everything else is
- * ambiguous — a transport failure (socket closed, timeout, connection reset)
- * never reached a verdict, and a 5xx can fault *after* the event was persisted.
- * Offering retry there invites a duplicate first message.
- */
-function isDefinitiveSendRejection(error: unknown): boolean {
-  // `isSdkHttpError` matches on shape, not a type predicate, so narrow the
-  // status here rather than widening the shared helper's contract.
-  return isSdkHttpError(error) && (error as { status: number }).status < 500;
 }
 
 /**

@@ -71,6 +71,7 @@ import {
   type WorkspaceMode,
 } from "../conversation-metadata-store";
 import { resolveTitleLlmProfile } from "#/utils/title-llm-profile";
+import { isSdkHttpError } from "#/utils/sdk-http-error";
 import { toAcpModelOptions } from "#/constants/acp-providers";
 import { isPlannerConversationOf } from "#/utils/plan-file";
 import { buildAutomationSetupModeTags } from "#/utils/automation-draft-tags";
@@ -137,6 +138,22 @@ export class ConversationFirstMessageError extends Error {
     this.content = content;
     this.cause = cause;
   }
+}
+
+/**
+ * Whether a first-message send was *definitively* rejected, as opposed to
+ * failing ambiguously after the server may already have accepted the event.
+ *
+ * Only a 4xx counts: the server validated and refused the request, so the event
+ * was not appended and resending cannot duplicate it. Everything else is
+ * ambiguous — a transport failure (socket closed, timeout, connection reset)
+ * never reached a verdict, and a 5xx can fault *after* the event was persisted.
+ * Offering retry there invites a duplicate first message, so a caller that
+ * recovers from `ConversationFirstMessageError` must not assume the child is
+ * idle.
+ */
+export function isDefinitiveSendRejection(error: unknown): boolean {
+  return isSdkHttpError(error) && (error as { status: number }).status < 500;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

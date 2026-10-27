@@ -16,6 +16,7 @@ import {
 } from "#/api/conversation-metadata-store";
 import AgentServerConversationService, {
   ConversationFirstMessageError,
+  isDefinitiveSendRejection,
 } from "#/api/conversation-service/agent-server-conversation-service.api";
 import type { AppConversationStartTask } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { buildRouterAtStartSystemSuffix } from "#/api/agent-server-adapter";
@@ -275,31 +276,43 @@ async function parentProfileLaunch(parentConversationId: string) {
  * message could not be sent.
  *
  * Mirrors the parent launch path (`recoverConversationFirstMessage`): the
- * conversation exists and stays idle, so the child is reported as launched and
- * the caller opens it, rather than the worktree fallback creating a second
- * conversation and downgrading the isolation. The message is not re-sent here —
- * the server may have accepted the event before the response was lost.
+ * conversation exists and stays idle (or is already running the task — see the
+ * note), so the child is reported as launched and the caller opens it, rather
+ * than the worktree fallback creating a second conversation and downgrading the
+ * isolation. The message is not re-sent here — the server may have accepted the
+ * event before the response was lost. The requested title and any computed
+ * isolation note are carried over so the recovery does not silently drop them.
  */
-function recoveredFirstMessageLaunch(
+async function recoveredFirstMessageLaunch(
   error: ConversationFirstMessageError,
   isolation: ChildConversationIsolation,
   workspace: string,
-): LaunchChildConversationResult {
+  title: string | null,
+  isolationNote: string | null,
+): Promise<LaunchChildConversationResult> {
+  if (title) {
+    // Same best-effort rename as the success path: the conversation exists, so
+    // the caller's title must not be lost just because the first send failed.
+    await AgentServerConversationService.updateConversationTitle(
+      error.conversationId,
+      title,
+    ).catch(() => undefined);
+  }
+
   const parentLinkNote = localParentLinkNote();
-  const cause =
-    error.cause instanceof Error ? error.cause.message : String(error.cause);
   return {
     status: "launched",
     target: "local",
     conversation_id: error.conversationId,
     url: absoluteCanvasUrl(`/conversations/${error.conversationId}`),
     initial_status: "READY",
-    title: null,
+    title,
     workspace,
     isolation,
+    ...(isolationNote ? { isolation_note: isolationNote } : {}),
     parent_link: !parentLinkNote,
     ...(parentLinkNote ? { parent_link_note: parentLinkNote } : {}),
-    first_message_note: `The child conversation was created but its first message could not be sent (${cause}). It is idle and waiting for the task. Open it and send the task again, or re-run the delegation.`,
+    first_message_note: firstMessageRecoveryNote(error),
   };
 }
 
@@ -351,7 +364,13 @@ async function launchLocalChild(
     // `shared` would create a second conversation and silently downgrade the
     // isolation the caller asked for. Recover onto the created child instead.
     if (firstError instanceof ConversationFirstMessageError) {
-      return recoveredFirstMessageLaunch(firstError, isolation, workspace);
+      return recoveredFirstMessageLaunch(
+        firstError,
+        isolation,
+        workspace,
+        params.title,
+        isolationNote,
+      );
     }
     if (isolation !== "worktree") throw firstError;
     // Creating the worktree is the one part of a local launch that can fail on
@@ -391,6 +410,28 @@ async function launchLocalChild(
     parent_link: !parentLinkNote,
     ...(parentLinkNote ? { parent_link_note: parentLinkNote } : {}),
   };
+}
+
+/**
+ * What the delegating agent should do when the child conversation exists but
+ * its first message never sent.
+ *
+ * A 4xx is *definitive*: the server refused the send, so the event was not
+ * appended and the child is genuinely idle — sending the task again cannot
+ * duplicate it. Anything else (transport failure, timeout, 5xx) is ambiguous:
+ * the server may already have accepted the event before the response was lost,
+ * so re-sending the task, or re-running the delegation, could start the same
+ * work twice. The agent must inspect the child before acting.
+ */
+function firstMessageRecoveryNote(
+  error: ConversationFirstMessageError,
+): string {
+  const cause =
+    error.cause instanceof Error ? error.cause.message : String(error.cause);
+  if (isDefinitiveSendRejection(error.cause)) {
+    return `The child conversation was created but its first message was refused (${cause}). It is idle — open it and send the task again.`;
+  }
+  return `The child conversation was created but its first message may not have been delivered (${cause}). It may already be running the task — open it and check its events before sending the task again. Do not re-run the delegation.`;
 }
 
 const delay = (ms: number) =>

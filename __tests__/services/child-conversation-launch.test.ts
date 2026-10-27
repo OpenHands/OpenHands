@@ -579,10 +579,76 @@ describe("handleLaunchChildConversationAction", () => {
       expect(
         result.status === "launched" && result.isolation_note,
       ).toBeUndefined();
-      // The delegating agent must learn the child's task never started.
-      expect(
-        result.status === "launched" && result.first_message_note,
-      ).toContain("network timeout");
+      // An ambiguous failure (transport error) may already have been accepted,
+      // so the note must not tell the agent the child is idle.
+      const note =
+        result.status === "launched" ? result.first_message_note : undefined;
+      expect(note).toContain("network timeout");
+      expect(note).toContain("check its events");
+      expect(note).toContain("Do not re-run the delegation");
+    });
+
+    // A 4xx is definitive: the send was refused, so the child is genuinely idle
+    // and re-sending cannot duplicate it.
+    it("tells the agent a definitively rejected child is idle", async () => {
+      seedWorktreeCapableParent();
+      const rejection = new Error("unprocessable") as Error & {
+        name: string;
+        status: number;
+      };
+      rejection.name = "HttpError";
+      rejection.status = 422;
+      mockCreateConversation.mockRejectedValueOnce(
+        new ConversationFirstMessageError(
+          "child-id",
+          [{ type: "text", text: "Add a regression test for the parser" }],
+          rejection,
+        ),
+      );
+
+      await handleLaunchChildConversationAction(
+        action({}),
+        PARENT_ID,
+        nextToolCallId(),
+      );
+
+      const result = reportedResult();
+      const note =
+        result.status === "launched" ? result.first_message_note : undefined;
+      expect(note).toContain("was refused");
+      expect(note).toContain("It is idle");
+    });
+
+    // The recovery must not silently drop the caller's title or a computed
+    // isolation note (a scratch workspace falls back to `shared` before the
+    // send, and that downgrade has to be reported).
+    it("keeps the requested title and the pre-computed isolation note on recovery", async () => {
+      // No stored metadata → scratch workspace → shared fallback note exists.
+      mockCreateConversation.mockRejectedValueOnce(
+        new ConversationFirstMessageError(
+          "child-id",
+          [{ type: "text", text: "Add a regression test for the parser" }],
+          new Error("network timeout"),
+        ),
+      );
+
+      await handleLaunchChildConversationAction(
+        action({ title: "Parser tests" }),
+        PARENT_ID,
+        nextToolCallId(),
+      );
+
+      expect(mockUpdateTitle).toHaveBeenCalledWith("child-id", "Parser tests");
+      const result = reportedResult();
+      expect(result).toMatchObject({
+        status: "launched",
+        conversation_id: "child-id",
+        title: "Parser tests",
+        isolation: "shared",
+      });
+      expect(result.status === "launched" && result.isolation_note).toContain(
+        "no commits",
+      );
     });
 
     // The same recovery applies when no worktree was involved: a shared child
