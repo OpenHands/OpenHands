@@ -55,10 +55,10 @@ Source: `src/routes/automations-list.tsx`, `src/components/features/automations/
 ## How to get to it (user POV)
 
 - Sidebar **Automate** (`sidebar-automations-link`); hovering it reveals the pin (`sidebar-pin-home-toggle-automations`).
-- Direct URL `/automations`; the Templates sub-page is `/automations/templates` (F22).
+- Direct URL `/automations`; the Events source page is `/automations/events` and the Templates sub-page is `/automations/templates` (F22).
 - Command menu (`Control+k`/`Meta+k` or `command-menu-trigger`): type `Automations` or a keyword such as `cron`, press Enter.
 - With Automate pinned, `/` (logo, a bare visit) lands on `/automations`.
-- Sub-page navigation: `automations-navbar-desktop` (aside) or `automations-navbar-mobile` (phone strip), links `automations-navigation-list` and `automations-navigation-templates`.
+- Sub-page navigation: `automations-navbar-desktop` (aside) or `automations-navbar-mobile` (phone strip), links `automations-navigation-list`, `automations-navigation-events` and `automations-navigation-templates`.
 - Header **Add Automation** (`automations-add-automation`) → **Create Automation** (`automations-add-automation-create`, `/automations/setup`, F22) or **Import automation** (`automations-import-automation`, F22); on the empty dashboard, the Recommended automations rail cards (`recommended-automation-rail-card-<id>`).
 - Getting-started checklist item **Schedule a task** links to `/automations` (onboarding checklist family).
 - Saved drafts: the **Drafts** group rows (`automation-setup-draft-resume-<draft-id>`, `-edit-`, `-test-`, `-delete-`).
