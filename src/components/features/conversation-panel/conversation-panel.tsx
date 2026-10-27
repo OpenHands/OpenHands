@@ -206,8 +206,10 @@ export function ConversationPanel({
   const removeArchivedConversation = useArchivedConversationsStore(
     (state) => state.removeArchivedConversation,
   );
-  const { mutate: updateConversationTagFlags } =
-    useUpdateConversationTagFlags();
+  const {
+    mutate: updateConversationTagFlags,
+    mutateAsync: migrateConversationTagFlags,
+  } = useUpdateConversationTagFlags();
 
   // The one predicate every archived presentation reads: a row is effectively
   // archived when the user archived it, or when its runtime is missing and
@@ -451,62 +453,63 @@ export function ConversationPanel({
     [conversations, pinnedIds],
   );
 
-  // One-time migration of pre-tag localStorage state: replay legacy pins /
-  // archives into conversation tags, then drain the legacy entries so the
-  // migration never replays twice. Pins for conversations outside the
-  // loaded pages are pruned (matching the previous prune behavior — the
-  // pinned section only ever resolved loaded rows); legacy archives are
-  // kept until their conversation loads, so pagination cannot lose them.
+  const attemptedLegacyMigrations = React.useRef(new Set<string>());
+
   React.useEffect(() => {
     if (!isFetched) {
       return;
     }
+    const backendId = activeBackend.id;
     const loadedById = new Map(
       allLoadedConversations.map((conversation) => [
         conversation.id,
         conversation,
       ]),
     );
-    for (const conversationId of legacyPinnedIds) {
+    for (const conversationId of new Set([
+      ...legacyPinnedIds,
+      ...legacyArchivedIds,
+    ])) {
       const conversation = loadedById.get(conversationId);
+      const migrationKey = JSON.stringify([backendId, conversationId]);
       if (
-        conversation &&
-        !hasConversationTagFlag(conversation.tags, PINNED_CONVERSATION_TAG_KEY)
+        !conversation ||
+        attemptedLegacyMigrations.current.has(migrationKey)
       ) {
-        updateConversationTagFlags({
-          conversationId,
-          currentTags: conversation.tags,
-          changes: { [PINNED_CONVERSATION_TAG_KEY]: true },
+        continue;
+      }
+      // Optimistic tag updates rerun this effect before persistence succeeds.
+      // Attempt once per mount; failed entries remain available for the next load.
+      attemptedLegacyMigrations.current.add(migrationKey);
+      const changes: Record<string, boolean> = {};
+      if (legacyPinnedIds.includes(conversationId)) {
+        changes[PINNED_CONVERSATION_TAG_KEY] = true;
+      }
+      if (legacyArchivedIds.includes(conversationId)) {
+        changes[ARCHIVED_CONVERSATION_TAG_KEY] = true;
+      }
+      void migrateConversationTagFlags({
+        conversationId,
+        currentTags: conversation.tags,
+        changes,
+      })
+        .then(() => {
+          if (changes[PINNED_CONVERSATION_TAG_KEY]) {
+            unpinConversation(backendId, conversationId);
+          }
+          if (changes[ARCHIVED_CONVERSATION_TAG_KEY]) {
+            removeArchivedConversation(backendId, conversationId);
+          }
+        })
+        .catch(() => {
+          // Keep legacy entries intact when persistence fails.
         });
-      }
-      if (conversation) {
-        unpinConversation(activeBackend.id, conversationId);
-      }
     }
     if (legacyPinnedIds.length > 0) {
       pruneMissingPinnedConversations(
-        activeBackend.id,
+        backendId,
         allLoadedConversations.map((conversation) => conversation.id),
       );
-    }
-    for (const conversationId of legacyArchivedIds) {
-      const conversation = loadedById.get(conversationId);
-      if (!conversation) {
-        continue;
-      }
-      if (
-        !hasConversationTagFlag(
-          conversation.tags,
-          ARCHIVED_CONVERSATION_TAG_KEY,
-        )
-      ) {
-        updateConversationTagFlags({
-          conversationId,
-          currentTags: conversation.tags,
-          changes: { [ARCHIVED_CONVERSATION_TAG_KEY]: true },
-        });
-      }
-      removeArchivedConversation(activeBackend.id, conversationId);
     }
   }, [
     activeBackend.id,
@@ -514,10 +517,10 @@ export function ConversationPanel({
     isFetched,
     legacyArchivedIds,
     legacyPinnedIds,
+    migrateConversationTagFlags,
     pruneMissingPinnedConversations,
     removeArchivedConversation,
     unpinConversation,
-    updateConversationTagFlags,
   ]);
 
   React.useEffect(() => {

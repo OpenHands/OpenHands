@@ -229,6 +229,126 @@ describe("ConversationPanel conversation actions", () => {
     });
   });
 
+  it("migrates both legacy flags in one write and drains only after success", async () => {
+    usePinnedConversationsStore
+      .getState()
+      .pinConversation("default-local", "1");
+    useArchivedConversationsStore
+      .getState()
+      .archiveConversation("default-local", "1");
+    const conversation = createMockConversation({
+      id: "1",
+      tags: { origin: "automation" },
+    });
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({ items: [conversation], next_page_id: null });
+    let finishWrite!: () => void;
+    const write = vi
+      .spyOn(AgentServerConversationService, "updateConversationTagFlags")
+      .mockImplementation(
+        (_id, currentTags, changes) =>
+          new Promise((resolve) => {
+            finishWrite = () => {
+              conversation.tags = withConversationTagFlags(
+                currentTags,
+                changes,
+              );
+              resolve(conversation);
+            };
+          }),
+      );
+
+    renderConversationPanel();
+
+    await waitFor(() => expect(write).toHaveBeenCalledTimes(1));
+    expect(write).toHaveBeenCalledWith(
+      "1",
+      { origin: "automation" },
+      {
+        pinned: true,
+        archived: true,
+      },
+    );
+    expect(
+      usePinnedConversationsStore.getState().pinsByBackendId["default-local"],
+    ).toContain("1");
+    expect(
+      useArchivedConversationsStore.getState().archivesByBackendId[
+        "default-local"
+      ],
+    ).toContain("1");
+
+    await act(async () => finishWrite());
+
+    await waitFor(() => {
+      expect(
+        usePinnedConversationsStore.getState().pinsByBackendId[
+          "default-local"
+        ] ?? [],
+      ).not.toContain("1");
+      expect(
+        useArchivedConversationsStore.getState().archivesByBackendId[
+          "default-local"
+        ] ?? [],
+      ).not.toContain("1");
+    });
+    expect(conversation.tags).toEqual({
+      origin: "automation",
+      pinned: "true",
+      archived: "true",
+    });
+    expect(write).toHaveBeenCalledTimes(1);
+  });
+
+  it("retains legacy flags after a failed migration and retries on remount", async () => {
+    usePinnedConversationsStore
+      .getState()
+      .pinConversation("default-local", "1");
+    useArchivedConversationsStore
+      .getState()
+      .archiveConversation("default-local", "1");
+    let failWrite!: () => void;
+    const write = vi
+      .spyOn(AgentServerConversationService, "updateConversationTagFlags")
+      .mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            failWrite = () => reject(new Error("Network unavailable"));
+          }),
+      );
+
+    const { unmount } = renderConversationPanel();
+    await waitFor(() => expect(write).toHaveBeenCalledTimes(1));
+    await act(async () => failWrite());
+
+    expect(
+      usePinnedConversationsStore.getState().pinsByBackendId["default-local"],
+    ).toContain("1");
+    expect(
+      useArchivedConversationsStore.getState().archivesByBackendId[
+        "default-local"
+      ],
+    ).toContain("1");
+    expect(write).toHaveBeenCalledTimes(1);
+    unmount();
+    renderConversationPanel();
+    await waitFor(() => {
+      expect(
+        usePinnedConversationsStore.getState().pinsByBackendId[
+          "default-local"
+        ] ?? [],
+      ).not.toContain("1");
+      expect(
+        useArchivedConversationsStore.getState().archivesByBackendId[
+          "default-local"
+        ] ?? [],
+      ).not.toContain("1");
+    });
+    expect(write).toHaveBeenCalledTimes(2);
+  });
+
   it("shows archived conversations when the preference is on and restores them", async () => {
     // Archiving must stay reversible — that is the whole distinction from
     // deleting, which removes the conversation from the agent server.
