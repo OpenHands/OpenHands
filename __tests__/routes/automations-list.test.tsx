@@ -7,6 +7,7 @@ import { MemoryRouter } from "react-router";
 import { HttpError } from "@openhands/typescript-client";
 import { I18nKey } from "#/i18n/declaration";
 import type { AutomationDraftListResponse } from "#/manifests/types";
+import { getAutomationsDocsUrl } from "#/manifests/automation-interface";
 
 import AutomationService from "#/api/automation-service/automation-service.api";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
@@ -665,6 +666,35 @@ describe("AutomationsList — Git Sync entry point follows manage_automations", 
 
     expect(
       screen.queryByTestId("automations-git-sync"),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("AutomationsList — docs link", () => {
+  it("shows the manifest docs link in the header to a member without manage permission", async () => {
+    vi.mocked(getCloudOrganizationMe).mockResolvedValue(orgMember);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
+    renderList();
+    await screen.findByText(automation.name);
+
+    const link = screen.getByTestId("automations-docs-link");
+    expect(link).toHaveAttribute("href", getAutomationsDocsUrl());
+    expect(link).toHaveAttribute("target", "_blank");
+  });
+
+  it("leaves the docs link to the empty state when the user has no automations", async () => {
+    vi.mocked(AutomationService.getAutomations).mockResolvedValue({
+      automations: [],
+      total: 0,
+    });
+    renderList();
+    await waitFor(() => {
+      expect(AutomationService.getAutomations).toHaveBeenCalledTimes(1);
+    });
+    await screen.findByTestId("automations-create-automation");
+
+    expect(
+      screen.queryByTestId("automations-docs-link"),
     ).not.toBeInTheDocument();
   });
 });

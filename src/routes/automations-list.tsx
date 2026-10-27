@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, type ReactNode } from "react";
-import { Pencil, RefreshCw, Trash2 } from "lucide-react";
+import { ExternalLink, Pencil, RefreshCw, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { I18nKey } from "#/i18n/declaration";
@@ -63,6 +63,7 @@ import {
 } from "#/utils/automation-export";
 import {
   automationDetailPath,
+  getAutomationsDocsUrl,
   getDashboardSpec,
   getInterfaceCopy,
   hasAutomationInterface,
@@ -729,6 +730,19 @@ export default function AutomationsList() {
           <p className="mt-1 text-sm text-muted">
             {interfaceCopy.listSubtitle}
           </p>
+          {/* The empty state carries its own docs link. */}
+          {!hasNoAutomations && (
+            <a
+              href={getAutomationsDocsUrl()}
+              target="_blank"
+              rel="noopener noreferrer"
+              data-testid="automations-docs-link"
+              className="mt-1 inline-flex items-center gap-1 text-sm text-primary hover:underline"
+            >
+              {t(I18nKey.AUTOMATIONS$DOCS_LINK)}
+              <ExternalLink className="size-3.5" aria-hidden />
+            </a>
+          )}
         </div>
         <div className="flex shrink-0 flex-wrap justify-end gap-2">
           {/* Git sync is org-level config, so it follows manage_automations
