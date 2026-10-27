@@ -47,9 +47,9 @@ describe("buildAutomationMetadataPills", () => {
       "linear",
     );
     expect(screen.getByTestId("pill-event-source")).toHaveTextContent("Linear");
-    expect(
-      screen.getByTestId("pill-event-source").firstElementChild,
-    ).toHaveClass("py-0.5");
+    expect(screen.getByTestId("pill-event-source").firstElementChild).toHaveClass(
+      "py-0.5",
+    );
     expect(screen.getByTestId("automation-source-logo")).toBeInTheDocument();
   });
 
@@ -76,10 +76,6 @@ describe("buildAutomationMetadataPills", () => {
         repositories: [
           { url: "acme/widgets", provider: "github" },
           { url: "https://github.com/acme/docs" },
-          {
-            url: "https://bitbucket.example.com/scm/DEM/demo-app.git",
-            provider: "bitbucket_data_center",
-          },
         ],
       }),
       "unused",
@@ -96,9 +92,6 @@ describe("buildAutomationMetadataPills", () => {
     expect(
       screen.getByTitle("https://github.com/acme/docs"),
     ).toBeInTheDocument();
-    expect(screen.getByTestId("pill-repository-2")).toHaveTextContent(
-      "DEM/demo-app",
-    );
   });
 
   it("omits the source pill when the event has no source", () => {

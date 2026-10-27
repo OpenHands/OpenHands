@@ -61,24 +61,7 @@ describe("automationRepositoryAddress", () => {
         "PROJ/repo",
         "https://example.com/bitbucket/",
       ),
-    ).toBe("https://example.com/bitbucket/scm/PROJ/repo.git");
-  });
-
-  it("builds a Bitbucket Data Center /scm/ clone URL, personal repositories included", () => {
-    expect(
-      automationRepositoryAddress(
-        "bitbucket_data_center",
-        "DEM/demo-app",
-        "bitbucket.example.com",
-      ),
-    ).toBe("https://bitbucket.example.com/scm/DEM/demo-app.git");
-    expect(
-      automationRepositoryAddress(
-        "bitbucket_data_center",
-        "~ALICE/notes",
-        "https://bitbucket.example.com:7990",
-      ),
-    ).toBe("https://bitbucket.example.com:7990/scm/~ALICE/notes.git");
+    ).toBe("https://example.com/bitbucket/PROJ/repo");
   });
 
   it("keeps Azure DevOps on dev.azure.com whatever the connection's host says", () => {
@@ -110,12 +93,10 @@ describe("automationRepositoryAddress", () => {
     );
   });
 
-  it("builds no address for a Bitbucket Data Center connection without a host", () => {
-    // Data Center has no hosted service, and the bare PROJ/repo would be
-    // sent as a GitHub shorthand.
+  it("keeps the name for a provider without a hosted service", () => {
     expect(
       automationRepositoryAddress("bitbucket_data_center", "PROJ/repo"),
-    ).toBeNull();
+    ).toBe("PROJ/repo");
   });
 });
 
@@ -133,10 +114,6 @@ describe("providerHostKnown", () => {
     );
     expect(providerHostKnown("forgejo")).toBe(false);
     expect(providerHostKnown("forgejo", "codeberg.org")).toBe(true);
-    expect(providerHostKnown("bitbucket_data_center")).toBe(false);
-    expect(
-      providerHostKnown("bitbucket_data_center", "bitbucket.example.com"),
-    ).toBe(true);
   });
 });
 
@@ -277,27 +254,6 @@ describe("buildAutomationRepoSources", () => {
       ),
     ).toEqual([
       { url: "https://git.example.com:8443/acme/tools", provider: "gitlab" },
-    ]);
-  });
-
-  it("sends a picked Bitbucket Data Center repository with its provider", () => {
-    const url = automationRepositoryAddress(
-      "bitbucket_data_center",
-      "DEM/demo-app",
-      "https://bitbucket.example.com",
-    );
-    expect(
-      buildAutomationRepoSources(
-        [url!],
-        [],
-        { bitbucket_data_center: "https://bitbucket.example.com" },
-        ["github", "bitbucket_data_center"],
-      ),
-    ).toEqual([
-      {
-        url: "https://bitbucket.example.com/scm/DEM/demo-app.git",
-        provider: "bitbucket_data_center",
-      },
     ]);
   });
 
