@@ -59,7 +59,10 @@ import { BrandButton } from "#/components/features/settings/brand-button";
 import { BackNavButton } from "#/components/shared/buttons/back-nav-button";
 import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import { OptionalTag } from "#/components/features/settings/optional-tag";
-import { AutomationSetupPromptStack } from "#/components/features/automations/setup/automation-setup-prompt-stack";
+import {
+  AutomationSetupPromptStack,
+  SetupModelPill,
+} from "#/components/features/automations/setup/automation-setup-prompt-stack";
 import { ContextMenuListItem } from "#/components/features/context-menu/context-menu-list-item";
 import { formatTriggerSourceLabel } from "#/components/features/home/featured-automations/automation-run-health";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
@@ -1279,6 +1282,7 @@ export function AutomationSetupPanel({
       tarball_path: tarballPath,
       entrypoint: entrypoint.trim(),
       setup_script_path: setupScriptPath.trim(),
+      ...(model.trim() ? { model: model.trim() } : {}),
       ...(showTimeout && timeoutSeconds.trim()
         ? { timeout: Number(timeoutSeconds) }
         : {}),
@@ -2124,6 +2128,12 @@ export function AutomationSetupPanel({
                     />
                   )}
                 </SetupKindCrossfade>
+                {kind === "custom" ? (
+                  <SetupModelPill
+                    value={model}
+                    onChange={(value) => updateField("model", value)}
+                  />
+                ) : null}
               </div>
 
               <section className="flex flex-col gap-2.5">
