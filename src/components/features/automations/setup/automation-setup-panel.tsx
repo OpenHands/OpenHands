@@ -745,7 +745,7 @@ export function AutomationSetupPanel({
     ? (getAutomationFormSession(conversationId) ?? draft)
     : draft;
   const [form, setForm] = useState(() => buildInitialForm(initialDraft));
-  // "Create as service account": the service account that will own a new
+  // The "Owner" field: the service account that will own a new
   // automation; empty means the caller. It is saved in the server draft body
   // (`owner_user_id`) and restored from there when a saved draft is reopened.
   const [ownerUserId, setOwnerUserId] = useState("");
