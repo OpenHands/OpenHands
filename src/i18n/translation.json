@@ -39943,21 +39943,21 @@
     "id": "Tidak dapat mentransfer otomatisasi."
   },
   "AUTOMATION_SETUP$CREATE_AS_SERVICE_ACCOUNT": {
-    "en": "Create as service account",
-    "ja": "サービスアカウントとして作成",
-    "zh-CN": "以服务账户身份创建",
-    "zh-TW": "以服務帳戶身分建立",
-    "ko-KR": "서비스 계정으로 생성",
-    "no": "Opprett som tjenestekonto",
-    "it": "Crea come account di servizio",
-    "pt": "Criar como conta de serviço",
-    "es": "Crear como cuenta de servicio",
-    "ar": "إنشاء كحساب خدمة",
-    "fr": "Créer en tant que compte de service",
-    "tr": "Hizmet hesabı olarak oluştur",
-    "de": "Als Dienstkonto erstellen",
-    "uk": "Створити як службовий обліковий запис",
-    "ca": "Crea com a compte de servei",
-    "id": "Buat sebagai akun layanan"
+    "en": "Owner",
+    "ja": "所有者",
+    "zh-CN": "所有者",
+    "zh-TW": "擁有者",
+    "ko-KR": "소유자",
+    "no": "Eier",
+    "it": "Proprietario",
+    "pt": "Proprietário",
+    "es": "Propietario",
+    "ar": "المالك",
+    "fr": "Propriétaire",
+    "tr": "Sahip",
+    "de": "Besitzer",
+    "uk": "Власник",
+    "ca": "Propietari",
+    "id": "Pemilik"
   }
 }
