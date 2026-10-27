@@ -5,11 +5,20 @@ import {
   setupConversationPanelTest,
   createMockConversation,
   renderConversationPanel,
+  cloudBackend,
+  RouterStub,
 } from "./conversation-panel-test-utils";
+import { ActiveBackendProvider } from "#/contexts/active-backend-context";
+import { renderWithProviders } from "test-utils";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { ExecutionStatus } from "#/types/agent-server/core";
 import { useArchivedConversationsStore } from "#/stores/archived-conversations-store";
 import { useConversationPanelPreferencesStore } from "#/stores/conversation-panel-preferences-store";
+import {
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
+import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 
 const mockStopConversationMutate = vi.fn();
 vi.mock("#/hooks/mutation/use-unified-stop-conversation", () => ({
@@ -20,6 +29,44 @@ vi.mock("#/utils/custom-toast-handlers", () => ({
   displayErrorToast: vi.fn(),
   TOAST_OPTIONS: {},
 }));
+
+// Stands in for the agent-server: list results carry each conversation's
+// current tags, and tag writes merge into them the way the real PATCH does.
+const mockTaggedServer = (
+  conversations: AppConversation[],
+  initialTags: Record<string, Record<string, string>> = {},
+) => {
+  const tagsById = new Map(Object.entries(initialTags));
+  vi.spyOn(
+    AgentServerConversationService,
+    "searchConversations",
+  ).mockImplementation(async () => ({
+    items: conversations.map((conversation) => ({
+      ...conversation,
+      tags: tagsById.get(conversation.id) ?? null,
+    })),
+    next_page_id: null,
+  }));
+  const mergeSpy = vi
+    .spyOn(AgentServerConversationService, "mergeConversationTags")
+    .mockImplementation(async (conversationId, patch) => {
+      const merged = { ...(tagsById.get(conversationId) ?? {}) };
+      Object.entries(patch).forEach(([key, value]) => {
+        if (value === null) delete merged[key];
+        else merged[key] = value;
+      });
+      tagsById.set(conversationId, merged);
+      const conversation = conversations.find((c) => c.id === conversationId)!;
+      return { ...conversation, tags: merged };
+    });
+  return { tagsById, mergeSpy };
+};
+
+const threeConversations = () => [
+  createMockConversation({ id: "1", title: "Conversation 1" }),
+  createMockConversation({ id: "2", title: "Conversation 2" }),
+  createMockConversation({ id: "3", title: "Conversation 3" }),
+];
 
 describe("ConversationPanel conversation actions", () => {
   setupConversationPanelTest();
@@ -105,11 +152,12 @@ describe("ConversationPanel conversation actions", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("should archive a conversation and remove it from the list", async () => {
+  it("archives a conversation as a server-side tag and hides it from the list", async () => {
     const user = userEvent.setup();
+    const { tagsById, mergeSpy } = mockTaggedServer(threeConversations());
     renderConversationPanel();
 
-    let cards = await screen.findAllByTestId("conversation-card");
+    const cards = await screen.findAllByTestId("conversation-card");
     expect(cards).toHaveLength(3);
 
     const firstCardTitle = within(cards[0]).getByText("Conversation 1");
@@ -131,18 +179,28 @@ describe("ConversationPanel conversation actions", () => {
       ).not.toBeInTheDocument();
     });
 
-    cards = await screen.findAllByTestId("conversation-card");
-    expect(cards).toHaveLength(2);
+    await waitFor(() => {
+      expect(screen.getAllByTestId("conversation-card")).toHaveLength(2);
+    });
     expect(screen.queryByText("Conversation 1")).not.toBeInTheDocument();
+    expect(mergeSpy).toHaveBeenCalledWith("1", {
+      archived: expect.any(String),
+    });
+    // The archive lives on the server, not in this browser.
+    expect(tagsById.get("1")?.archived).toBeTruthy();
+    expect(
+      useArchivedConversationsStore.getState().archivesByBackendId,
+    ).toEqual({});
   });
 
-  it("shows archived conversations when the preference is on and restores them", async () => {
+  it("shows server-archived conversations when the preference is on and restores them", async () => {
     // Archiving must stay reversible — that is the whole distinction from
-    // deleting, which removes the conversation from the agent server.
+    // deleting, which removes the conversation from the agent server. A tag
+    // archived on another device must show up here too.
     const user = userEvent.setup();
-    useArchivedConversationsStore
-      .getState()
-      .archiveConversation("default-local", "1");
+    const { tagsById, mergeSpy } = mockTaggedServer(threeConversations(), {
+      "1": { archived: "2026-10-01T00:00:00.000Z", owner: "alice" },
+    });
     useConversationPanelPreferencesStore.setState({
       showArchivedConversations: true,
     });
@@ -163,14 +221,82 @@ describe("ConversationPanel conversation actions", () => {
 
     await waitFor(() => {
       expect(
+        screen.queryByTestId("conversation-card-archived-chip"),
+      ).not.toBeInTheDocument();
+    });
+    expect(mergeSpy).toHaveBeenCalledWith("1", { archived: null });
+    // Unrelated tags survive the read-merge-write.
+    expect(tagsById.get("1")).toEqual({ owner: "alice" });
+  });
+
+  it("migrates a browser-local archive to the server tag and clears the local entry", async () => {
+    const { tagsById } = mockTaggedServer(threeConversations());
+    useArchivedConversationsStore
+      .getState()
+      .archiveConversation("default-local", "1");
+
+    renderConversationPanel();
+
+    await screen.findAllByTestId("conversation-card");
+    expect(screen.queryByText("Conversation 1")).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(
         useArchivedConversationsStore
           .getState()
           .isArchived("default-local", "1"),
       ).toBe(false);
     });
+    expect(tagsById.get("1")?.archived).toBeTruthy();
+    // Still hidden once the server copy is the only one.
+    expect(screen.queryByText("Conversation 1")).not.toBeInTheDocument();
+  });
+
+  it("keeps a browser-local archive hidden and stored when its migration write fails", async () => {
+    const { mergeSpy } = mockTaggedServer(threeConversations());
+    mergeSpy.mockRejectedValue(new Error("agent-server unavailable"));
+    useArchivedConversationsStore
+      .getState()
+      .archiveConversation("default-local", "1");
+
+    renderConversationPanel();
+
+    await screen.findAllByTestId("conversation-card");
+    await waitFor(() => {
+      expect(mergeSpy).toHaveBeenCalledWith("1", {
+        archived: expect.any(String),
+      });
+    });
+    expect(screen.getAllByTestId("conversation-card")).toHaveLength(2);
+    expect(screen.queryByText("Conversation 1")).not.toBeInTheDocument();
     expect(
-      screen.queryByTestId("conversation-card-archived-chip"),
-    ).not.toBeInTheDocument();
+      useArchivedConversationsStore.getState().isArchived("default-local", "1"),
+    ).toBe(true);
+  });
+
+  it("keeps archiving in browser storage on a Cloud backend, which has no tags", async () => {
+    const user = userEvent.setup();
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
+    const { mergeSpy } = mockTaggedServer(threeConversations());
+
+    renderWithProviders(
+      <ActiveBackendProvider>
+        <RouterStub />
+      </ActiveBackendProvider>,
+    );
+
+    const cards = await screen.findAllByTestId("conversation-card");
+    await user.click(within(cards[0]).getByTestId("ellipsis-button"));
+    await user.click(screen.getByTestId("archive-button"));
+    await user.click(screen.getByRole("button", { name: /archive/i }));
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId("conversation-card")).toHaveLength(2);
+    });
+    expect(
+      useArchivedConversationsStore.getState().isArchived(cloudBackend.id, "1"),
+    ).toBe(true);
+    expect(mergeSpy).not.toHaveBeenCalled();
   });
 
   it("hides a missing-runtime conversation from the default list, reveals it with the Archived chip, and offers neither action", async () => {
@@ -277,9 +403,9 @@ describe("ConversationPanel conversation actions", () => {
     // An explicit archive whose sandbox is not missing is restorable, so its
     // ⋮ menu offers Unarchive and removing it returns the row to the default
     // list.
-    useArchivedConversationsStore
-      .getState()
-      .archiveConversation("default-local", "1");
+    mockTaggedServer(threeConversations(), {
+      "1": { archived: "2026-10-01T00:00:00.000Z" },
+    });
     useConversationPanelPreferencesStore.setState({
       showArchivedConversations: true,
     });

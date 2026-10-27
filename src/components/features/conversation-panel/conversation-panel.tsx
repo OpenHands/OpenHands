@@ -58,7 +58,7 @@ import {
   sortConversationsByField,
   type ConversationGroupLaunch,
 } from "./conversation-panel-list-helpers";
-import { useArchivedConversationsStore } from "#/stores/archived-conversations-store";
+import { useArchivedConversations } from "#/hooks/use-archived-conversations";
 import { usePinnedConversationsStore } from "#/stores/pinned-conversations-store";
 import { uniqueById } from "#/utils/unique-by-id";
 import {
@@ -187,36 +187,6 @@ export function ConversationPanel({
   const pruneMissingPinnedConversations = usePinnedConversationsStore(
     (state) => state.pruneMissingConversations,
   );
-  const archivedIds = useArchivedConversationsStore(
-    (state) =>
-      state.archivesByBackendId[activeBackend.id] ??
-      EMPTY_PINNED_CONVERSATION_IDS,
-  );
-  const archiveConversation = useArchivedConversationsStore(
-    (state) => state.archiveConversation,
-  );
-  const archivedIdSet = React.useMemo(
-    () => new Set(archivedIds),
-    [archivedIds],
-  );
-  const removeArchivedConversation = useArchivedConversationsStore(
-    (state) => state.removeArchivedConversation,
-  );
-
-  // The one predicate every archived presentation reads: a row is effectively
-  // archived when the user archived it, or when its runtime is missing and
-  // non-resumable. List visibility, the "Archived" chip, the dimmed title, and
-  // the status dot all derive from this so they cannot disagree.
-  // (`sandbox_status: "ERROR"` is intentionally not archived.) Menu availability
-  // is a separate concern and does not read this predicate alone.
-  const isRowArchived = React.useCallback(
-    (conversation: { id: string; sandbox_status?: SandboxStatus | null }) =>
-      isEffectivelyArchivedConversation(
-        conversation.sandbox_status,
-        archivedIdSet.has(conversation.id),
-      ),
-    [archivedIdSet],
-  );
 
   const toggleGroupCollapsed = React.useCallback((groupId: string) => {
     setCollapsedGroupIds((prev) => {
@@ -286,6 +256,30 @@ export function ConversationPanel({
     // so the rendered count reflects real growth and React keys stay unique.
     return uniqueById(all);
   }, [data]);
+
+  // Reads the `archived` tag off the unfiltered loaded pages, so a row hidden
+  // as archived still reports its own state.
+  const {
+    archivedIdSet,
+    archiveConversation,
+    unarchiveConversation,
+    forgetConversation,
+  } = useArchivedConversations(allLoadedConversations);
+
+  // The one predicate every archived presentation reads: a row is effectively
+  // archived when the user archived it, or when its runtime is missing and
+  // non-resumable. List visibility, the "Archived" chip, the dimmed title, and
+  // the status dot all derive from this so they cannot disagree.
+  // (`sandbox_status: "ERROR"` is intentionally not archived.) Menu availability
+  // is a separate concern and does not read this predicate alone.
+  const isRowArchived = React.useCallback(
+    (conversation: { id: string; sandbox_status?: SandboxStatus | null }) =>
+      isEffectivelyArchivedConversation(
+        conversation.sandbox_status,
+        archivedIdSet.has(conversation.id),
+      ),
+    [archivedIdSet],
+  );
 
   // Grouped pagination is folder-oriented. Record the first backend page for
   // every conversation so later pages can introduce new folders without
@@ -776,9 +770,9 @@ export function ConversationPanel({
   // again in one click, and nothing about the conversation itself changes.
   const handleUnarchiveProject = React.useCallback(
     (conversationId: string) => {
-      removeArchivedConversation(activeBackend.id, conversationId);
+      unarchiveConversation(conversationId);
     },
-    [activeBackend.id, removeArchivedConversation],
+    [unarchiveConversation],
   );
 
   const handleStopConversation = React.useCallback((conversationId: string) => {
@@ -807,7 +801,7 @@ export function ConversationPanel({
         { conversationId },
         {
           onSuccess: () => {
-            removeArchivedConversation(activeBackend.id, conversationId);
+            forgetConversation(conversationId);
             if (conversationId === currentConversationId) {
               navigate("/conversations");
             }
@@ -821,7 +815,7 @@ export function ConversationPanel({
     if (!selectedConversationId) {
       return;
     }
-    archiveConversation(activeBackend.id, selectedConversationId);
+    archiveConversation(selectedConversationId);
     unpinConversation(activeBackend.id, selectedConversationId);
     if (selectedConversationId === currentConversationId) {
       navigate("/conversations");
@@ -853,7 +847,7 @@ export function ConversationPanel({
     const failedCount = results.length - deletedIds.length;
 
     for (const conversationId of deletedIds) {
-      removeArchivedConversation(activeBackend.id, conversationId);
+      forgetConversation(conversationId);
     }
 
     if (
@@ -881,7 +875,7 @@ export function ConversationPanel({
       // visibility, the chip, the dot, and the dimmed title.
       const isArchived = isRowArchived(conversation);
       // Action availability is separate from presentation. "Unarchive" is only
-      // meaningful when clearing the browser-local flag actually returns the row
+      // meaningful when clearing the archive flag actually returns the row
       // to the unarchived state, so it is offered solely for an explicitly
       // archived row whose runtime is not missing. A missing, non-resumable
       // runtime cannot be restored from this menu, so such a row offers neither
