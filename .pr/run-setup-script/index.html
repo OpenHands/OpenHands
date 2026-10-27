@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PR design doc · auto-run .openhands/setup.sh at conversation start</title>
+<style>
+  :root {
+    --ink: #14161a;
+    --muted: #5b6472;
+    --line: #dfe3e8;
+    --bg: #fbfbfa;
+    --card: #ffffff;
+    --before: #b23c3c;
+    --after: #1f7a4d;
+    --accent: #c2410c;
+    --code-bg: #f4f5f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.62 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 48px 28px 96px; }
+  header.top { border-bottom: 3px solid var(--ink); padding-bottom: 18px; margin-bottom: 34px; }
+  .kicker { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+  h1 { font-size: 30px; line-height: 1.22; margin: 10px 0 8px; letter-spacing: -0.01em; }
+  h2 { font-size: 21px; margin: 44px 0 14px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  h3 { font-size: 16px; margin: 26px 0 8px; }
+  p { margin: 10px 0; }
+  code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+  pre { background: #10131a; color: #e7e9ee; padding: 14px 16px; border-radius: 8px; overflow-x: auto; font-size: 12.5px; line-height: 1.55; }
+  pre code { background: none; padding: 0; color: inherit; }
+  .lede { font-size: 17.5px; }
+  .star {
+    background: #fff7ed; border: 1px solid #fdba74; border-left: 5px solid var(--accent);
+    border-radius: 8px; padding: 14px 18px; margin: 20px 0;
+  }
+  .star strong { color: var(--accent); }
+  .meta { color: var(--muted); font-size: 13.5px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 18px 0; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
+  .card h3 { margin-top: 0; }
+  .card.before { border-top: 4px solid var(--before); }
+  .card.after { border-top: 4px solid var(--after); }
+  .tag { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 2px 7px; border-radius: 999px; vertical-align: middle; }
+  .tag.b { background: #fdeaea; color: var(--before); }
+  .tag.a { background: #e7f5ee; color: var(--after); }
+  .tag.mech { background: #eef0f3; color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+  ul { padding-left: 22px; }
+  li { margin: 5px 0; }
+  figure { margin: 22px 0; }
+  figure img { width: 100%; border: 1px solid var(--line); border-radius: 8px; display: block; }
+  figcaption { font-size: 13px; color: var(--muted); margin-top: 8px; }
+  .fileindex a { text-decoration: none; color: var(--ink); border-bottom: 1px dotted var(--muted); }
+  details { margin: 12px 0; }
+  summary { cursor: pointer; font-size: 13.5px; color: var(--muted); }
+  .flow { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 8px; }
+  svg text { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .verdict { font-weight: 700; }
+  .verdict.add { color: var(--after); }
+  footer { margin-top: 56px; border-top: 1px solid var(--line); padding-top: 16px; color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <div class="kicker">PR design doc · OpenHands Agent Canvas</div>
+  <h1>Auto-run <code>.openhands/setup.sh</code> at conversation start</h1>
+  <p class="meta">
+    Branch <code>feat/run-setup-script-at-conversation-start</code> ·
+    head <code>10937a0a</code> · merge-base <code>311dc1be</code> ·
+    10 files · +1722 / −99
+  </p>
+</header>
+
+<h2 id="what">1 · What changed</h2>
+<p class="lede">
+  On a local backend, starting a conversation now detects
+  <code>&lt;workspace&gt;/.openhands/setup.sh</code>, runs it through the conversation's
+  <em>own</em> terminal before the first user turn, and then sends the withheld first
+  message. Because the script is sourced in the agent's terminal session, the environment it
+  sets (<code>export</code>, <code>cd</code>) is still there when the agent runs its later
+  commands — which a one-shot <code>bash setup.sh</code> could never achieve.
+</p>
+
+<div class="star">
+  <p style="margin-top:0">
+    <strong>★ Compatibility &amp; risk.</strong> Canvas adds <em>no</em> new server route.
+    It consumes <code>POST /api/conversations/{id}/execute_tool</code> from
+    <code>OpenHands/software-agent-sdk#6099</code>, gated at runtime on the
+    <code>direct_tool_execution_v1</code> capability
+    (<code>src/api/setup-script-service.ts:24</code>).
+  </p>
+  <p style="margin-bottom:0">
+    The feature is <span class="verdict add">purely additive</span>: cloud backends, servers
+    without the capability, a pinned client without <code>executeTool()</code>, and
+    workspaces with no script all take the <em>unchanged</em> existing path. Nothing is
+    required of a deployment that does not want setup scripts.
+  </p>
+</div>
+
+<h3 id="overview">Overview: <code>createConversation</code> before → after</h3>
+<figure class="flow">
+<svg viewBox="0 0 920 430" role="img" aria-label="Before and after createConversation flow">
+  <defs>
+    <marker id="ah" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 z" fill="#5b6472"/>
+    </marker>
+    <marker id="ahg" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 z" fill="#1f7a4d"/>
+    </marker>
+  </defs>
+
+  <!-- BEFORE -->
+  <text x="24" y="30" font-size="14" font-weight="700" fill="#b23c3c">BEFORE</text>
+  <rect x="24" y="46" width="380" height="150" rx="10" fill="#fff" stroke="#dfe3e8"/>
+  <text x="44" y="76" font-size="12.5" fill="#14161a">1. POST /api/conversations</text>
+  <text x="60" y="96" font-size="11.5" fill="#5b6472">{ initial_message: "…" }</text>
+  <rect x="44" y="110" width="330" height="30" rx="6" fill="#fdeaea" stroke="#b23c3c" stroke-dasharray="4 3"/>
+  <text x="58" y="130" font-size="11.5" fill="#b23c3c">run starts server-side, immediately</text>
+  <text x="44" y="166" font-size="12.5" fill="#14161a">2. agent's first turn</text>
+  <text x="60" y="186" font-size="11.5" fill="#b23c3c">setup.sh never ran → agent told to run it by hand</text>
+
+  <!-- AFTER -->
+  <text x="516" y="30" font-size="14" font-weight="700" fill="#1f7a4d">AFTER</text>
+  <rect x="516" y="46" width="380" height="368" rx="10" fill="#fff" stroke="#dfe3e8"/>
+  <text x="536" y="76" font-size="12.5" fill="#14161a">0. detect .openhands/setup.sh</text>
+  <text x="552" y="96" font-size="11.5" fill="#5b6472">FileClient.downloadTextFile · gated on capability</text>
+  <path d="M636,102 L636,118" stroke="#5b6472" stroke-width="1.4" marker-end="url(#ah)"/>
+  <rect x="536" y="120" width="330" height="30" rx="6" fill="#e7f5ee" stroke="#1f7a4d"/>
+  <text x="550" y="140" font-size="11.5" fill="#1f7a4d">1. POST /api/conversations  (initial_message withheld)</text>
+  <path d="M701,150 L701,168" stroke="#5b6472" stroke-width="1.4" marker-end="url(#ah)"/>
+  <rect x="536" y="170" width="330" height="30" rx="6" fill="#e7f5ee" stroke="#1f7a4d"/>
+  <text x="550" y="190" font-size="11.5" fill="#1f7a4d">2. POST /{id}/execute_tool  terminal</text>
+  <text x="552" y="216" font-size="11.5" fill="#5b6472">chmod +x '…' &amp;&amp; . '…'   (POSIX <tspan font-style="italic">.</tspan>, dash-safe)</text>
+  <path d="M701,222 L701,240" stroke="#1f7a4d" stroke-width="1.4" marker-end="url(#ahg)"/>
+  <rect x="536" y="242" width="330" height="30" rx="6" fill="#e7f5ee" stroke="#1f7a4d"/>
+  <text x="550" y="262" font-size="11.5" fill="#1f7a4d">3. POST /{id}/events  first message, run: true</text>
+  <path d="M701,272 L701,290" stroke="#5b6472" stroke-width="1.4" marker-end="url(#ah)"/>
+  <text x="536" y="310" font-size="12.5" fill="#14161a">4. agent's first turn</text>
+  <text x="552" y="330" font-size="11.5" fill="#1f7a4d">export/cd from setup.sh already live in its terminal</text>
+  <rect x="536" y="346" width="330" height="52" rx="6" fill="#f7f8f9" stroke="#dfe3e8"/>
+  <text x="550" y="366" font-size="11.5" fill="#5b6472">any failure → send the withheld message anyway,</text>
+  <text x="550" y="384" font-size="11.5" fill="#5b6472">so a launch is never stranded idle</text>
+</svg>
+<figcaption>
+  Both sides keep the same request shape to the agent-server. The only new call is
+  <code>execute_tool</code>, and the only structural change is that the first message is sent
+  <em>after</em> setup instead of inside the create payload.
+</figcaption>
+</figure>
+
+<h2 id="api">2 · Interface change</h2>
+<p>
+  No Canvas HTTP API changes. The new server contract is owned by the SDK
+  (<code>software-agent-sdk#6099</code>) and consumed here:
+</p>
+<div class="grid">
+  <div class="card before">
+    <h3><span class="tag b">before</span> no setup on local</h3>
+    <p class="meta" style="margin:0">Canvas has no equivalent of the app-server's
+    <code>HooksService.loadWorkspaceHooks</code>. <code>.openhands/setup.sh</code> runs only
+    on Cloud / self-hosted app-server deployments.</p>
+  </div>
+  <div class="card after">
+    <h3><span class="tag a">after</span> capability-gated call</h3>
+<pre style="margin:0"><code>POST /api/conversations/{id}/execute_tool
+{ "tool_name": "terminal",
+  "action": { "kind": "TerminalAction",
+              "command": "chmod +x '…' &amp;&amp; . '…'" } }
+→ { "observation": { exit_code, content } }</code></pre>
+  </div>
+</div>
+<p class="meta">
+  Compatibility: <span class="verdict add">additive</span>. Gated on the
+  <code>direct_tool_execution_v1</code> server capability <em>and</em> a client that exposes
+  <code>executeTool()</code>; otherwise the service reports <code>skipped</code>.
+  <code>compatibility.minimumAgentServer</code> is deliberately <em>not</em> raised — the
+  route ships in the same package version as servers that predate it, so a version floor
+  would reject whole backends instead of just skipping setup.
+</p>
+
+<h2 id="files">3 · Changed files</h2>
+<table class="fileindex">
+  <thead><tr><th>Area</th><th>File</th><th>+/−</th></tr></thead>
+  <tbody>
+    <tr><td>🟢 new</td><td><a href="#f-setup">src/api/setup-script-service.ts</a></td><td>+309</td></tr>
+    <tr><td>✏️ logic</td><td><a href="#f-service">…/agent-server-conversation-service.api.ts</a></td><td>+144 / −?</td></tr>
+    <tr><td>✏️ logic</td><td><a href="#f-hooks">src/hooks/mutation/use-create-conversation.ts</a></td><td>+307</td></tr>
+    <tr><td>✏️ logic</td><td><a href="#f-hooks">src/hooks/mutation/resolve-conversation-launch.ts</a></td><td>+54</td></tr>
+    <tr><td>✏️ logic</td><td><a href="#f-child">src/services/child-conversation-launch.ts</a></td><td>+38</td></tr>
+    <tr><td>✏️ ui</td><td><a href="#f-ui">src/components/features/home/home-chat-launcher.tsx</a></td><td>+21</td></tr>
+    <tr><td>⚙️ tests</td><td>__tests__/api/…, __tests__/hooks/mutation/…, __tests__/components/features/home/…</td><td>+986</td></tr>
+  </tbody>
+</table>
+
+<figure id="f-setup">
+  <figcaption><strong>src/api/setup-script-service.ts</strong> — the whole feature in one module.</figcaption>
+</figure>
+<ul>
+  <li><code>isSupported()</code> (<code>:200</code>) — three gates: effective backend is local,
+      server advertises <code>direct_tool_execution_v1</code>
+      (<code>resolveDirectToolExecutionSupport</code>, <code>:163</code>), and the pinned
+      client exposes <code>executeTool</code> (<code>clientSupportsExecuteTool</code>, <code>:188</code>).</li>
+  <li><code>prepare(workingDir)</code> (<code>:242</code>) — probes
+      <code>&lt;workingDir&gt;/.openhands/setup.sh</code> via
+      <code>FileClient.downloadTextFile</code>; returns a plan or <code>null</code>.</li>
+  <li><code>run(plan, id, onProgress)</code> (<code>:262</code>) — calls
+      <code>executeTool</code>, retries on <code>409</code> (conversation busy), and
+      <em>never throws</em>: a failed script or missing route resolves to a result the
+      caller reports while the agent still starts.</li>
+  <li><code>buildSetupCommand</code> (<code>:109</code>) — <code>chmod +x</code> then POSIX
+      <code>.</code> (not <code>source</code>, which dash lacks); the path is single-quoted
+      (<code>quoteForShell</code>) because double quotes would let <code>$(…)</code> in a
+      directory name execute.</li>
+</ul>
+
+<figure id="f-service">
+  <figcaption><strong>…/agent-server-conversation-service.api.ts</strong> — the create path.</figcaption>
+</figure>
+<p>
+  <span class="tag b">before</span> <code>createConversation</code> posted the payload
+  including <code>initial_message</code>, which is what starts the run server-side.
+  &nbsp;→&nbsp;
+  <span class="tag a">after</span> it withholds <code>initial_message</code> when a plan
+  exists (<code>:729</code>), creates the conversation, re-probes the
+  <em>assigned</em> <code>data.workspace.working_dir</code> (<code>:761</code>), runs setup
+  (<code>:765</code>), then sends the withheld message with <code>run: true</code>
+  (<code>:832</code>).
+</p>
+<div class="star" style="background:#f7f8f9;border-color:#dfe3e8;border-left-color:#5b6472">
+  <p style="margin:0">
+    <strong style="color:#14161a">Why re-probe?</strong> A <code>new_worktree</code> launch
+    returns a <em>different</em> directory
+    (<code>/tmp/conversation-worktrees/&lt;id&gt;/&lt;repo&gt;</code>). The pre-create probe
+    only decides <em>whether</em> to withhold; setup must run against the directory the
+    agent will actually use, or the user's own checkout would be polluted while the worktree
+    stayed unprovisioned.
+  </p>
+</div>
+
+<figure id="f-hooks">
+  <figcaption><strong>use-create-conversation.ts · resolve-conversation-launch.ts</strong> — first-message recovery.</figcaption>
+</figure>
+<p>
+  Withholding the first message makes it a separate send that can fail after the conversation
+  exists. The mutation now recovers that case: on
+  <code>ConversationFirstMessageError</code> it reports the conversation that <em>does</em>
+  exist as success and leaves the user's message as an errored pending bubble on it, so
+  retry resends to the same conversation instead of creating a second one. Recovery also
+  best-effort re-stamps the launch profile and plugin snapshot, and classifies a 4xx
+  (refused, safe to retry) vs an ambiguous failure (bubble stays <code>sending</code> until
+  the server echo or the pending-message watchdog resolves it).
+</p>
+
+<figure id="f-child">
+  <figcaption><strong>child-conversation-launch.ts</strong> — the delegated-launch consumer.</figcaption>
+</figure>
+<p>
+  <span class="tag b">before</span> the local worktree fallback treated <em>any</em>
+  <code>createChild</code> error as "the worktree could not be created" and retried with
+  <code>shared</code> isolation.
+  &nbsp;→&nbsp;
+  <span class="tag a">after</span> a <code>ConversationFirstMessageError</code> is
+  recovered onto the created child instead
+  (<code>recoveredFirstMessageLaunch</code>, <code>:286</code>): the worktree was cut fine,
+  so retrying would create a <em>second</em> conversation, strand the first idle, and
+  silently downgrade the isolation the caller asked for. Recovery keeps the requested title
+  (best-effort rename) and any pre-computed <code>isolation_note</code>, and adds a
+  <code>first_message_note</code> that distinguishes a <em>definitive</em> 4xx rejection
+  (child genuinely idle — resend) from an <em>ambiguous</em> failure (transport/timeout/5xx,
+  child may already be running — inspect first, never re-run the delegation). A
+  non-recoverable error still falls back to <code>shared</code> as before.
+</p>
+
+<figure id="f-ui">
+  <figcaption><strong>home-chat-launcher.tsx</strong> — progress affordance.</figcaption>
+</figure>
+<p>
+  <code>onSetupScriptProgress</code> (<code>:240</code>) relabels the create toast to
+  <code>STATUS$SETTING_UP_WORKSPACE</code> (already present in all 16 locale catalogs) while
+  the bootstrap runs.
+</p>
+
+<h2 id="evidence">4 · End-to-end evidence</h2>
+<p>
+  Verified on a real stack, not by reading code: an isolated Canvas
+  (<code>control-openhands launch --sdk-path &lt;sdk #6099&gt;</code>) whose agent-server is
+  the PR-branch build, advertising <code>direct_tool_execution_v1</code>, with the pinned
+  TypeScript client patched to the same branch's build (which adds
+  <code>executeTool()</code>).
+</p>
+
+<h3 id="evidence-live">4.1 · Live-model run (production integration path)</h3>
+<p>
+  The behavior is model-dependent — the bootstrap must finish <em>before</em> the agent's
+  first turn — so the capture below uses a <strong>live LLM</strong>, not a mock. Backend:
+  the run's own Agent Server <code>1.58.2</code> (SDK branch build). Model:
+  <code>deepseek-v4.1-flash</code> through <code>https://llm-proxy.app.all-hands.dev</code>
+  (profile <code>live-doc</code>). The video is one continuous take of the real Canvas.
+</p>
+<figure>
+  <video src="live/setup-before-first-turn.mp4" controls muted playsinline
+         style="max-width:100%"></video>
+  <figcaption>
+    Live-model ordering: <code>Creating conversation…</code> →
+    <strong><code>Setting up workspace…</code></strong> (the
+    <code>onSetupScriptProgress</code> relabel while <code>.openhands/setup.sh</code> runs) →
+    the composer's first turn → the agent's terminal answering
+    <code>TOKEN_IS=live-setup-ok</code>. The setup script <code>export</code>s
+    <code>LIVE_SETUP_TOKEN</code>, so the value in the first turn proves the script ran
+    before it. GIF fallback: <a href="live/setup-before-first-turn.gif">live/setup-before-first-turn.gif</a>.
+  </figcaption>
+</figure>
+<p>
+  The same ordering holds at the wire level. In the browser's own request log the setup
+  call completes <em>before</em> the first message is sent:
+</p>
+<pre><code># live run, one conversation (7e9fdee3-4bd2-43f4-83ad-22c1a9d28077)
+03:11:05.279Z  seq 2057  POST 200  /api/conversations/7e9fdee3…/execute_tool   ← setup.sh
+03:11:12.417Z  seq 2058  POST 200  /api/conversations/7e9fdee3…/events         ← first turn
+
+# event stream, same conversation
+03:11:05.494  SystemPromptEvent
+03:11:12.419  MessageEvent   user   Run exactly: echo TOKEN_IS=$LIVE_SETUP_TOKEN; cat …
+03:11:13.943  ObservationEvent  env  TOKEN_IS=live-setup-ok
+                                     live setup finished at Tue Oct 27 03:11:11 UTC 2026
+</code></pre>
+<figure>
+  <img src="live/frame-01-setting-up-workspace.png" alt="Canvas showing the toast 'Setting up workspace...' while the create request is in flight" />
+  <figcaption>Frame at 0:06 — the <code>Setting up workspace…</code> toast, captured from the video above.</figcaption>
+</figure>
+<figure>
+  <img src="live/frame-02-first-turn-result.png" alt="Canvas showing the first turn's answer TOKEN_IS=live-setup-ok" />
+  <figcaption>Frame at 0:18 — the first turn after setup, resolving the exported token.</figcaption>
+</figure>
+<details>
+  <summary>Reproduction commands (live model)</summary>
+<pre><code># workspace fixture: .openhands/setup.sh
+#   echo "LIVE_SETUP_STARTED"; sleep 6
+#   export LIVE_SETUP_TOKEN=live-setup-ok
+#   echo "live setup finished at $(date)" &gt; .live-setup-marker.txt
+
+control-openhands launch --new --sdk-path /tmp/sdk6099 --build auto
+control-openhands llm set --profile live-doc --model openai/deepseek-v4.1-flash \
+    --base-url https://llm-proxy.app.all-hands.dev --api-key-file &lt;key&gt;
+control-openhands browser record start --feature F03.setup-script \
+    --name live-setup-before-first-turn-video --fps 12
+control-openhands conversation start --workspace /tmp/ohlive2/repo \
+    --prompt "Run exactly: echo TOKEN_IS=\$LIVE_SETUP_TOKEN; cat .live-setup-marker.txt" --wait
+control-openhands browser record stop --gif
+</code></pre>
+</details>
+
+<h3 id="evidence-mock">4.2 · Mock-LLM regression run</h3>
+<p>
+  A second, credential-free run with the repository's mock-LLM server covers the
+  non-model-dependent paths (client gating, environment persistence) as E2E regression
+  coverage.
+</p>
+<figure>
+  <img src="01-setup-export-persists.png" alt="Conversation showing the terminal command echo SETUP_RAN_IS=$SETUP_RAN and its observation SETUP_RAN_IS=1" />
+  <figcaption>
+    The workspace's <code>.openhands/setup.sh</code> does <code>export SETUP_RAN=1</code>.
+    A later turn in the <em>same</em> conversation runs
+    <code>echo SETUP_RAN_IS=$SETUP_RAN</code> and the agent's own terminal answers
+    <code>SETUP_RAN_IS=1</code> — the sourced environment survived into the agent session.
+    <code>.setup-ran-marker.txt</code> (written by the script) is visible in the file tree.
+  </figcaption>
+</figure>
+<details>
+  <summary>Reproduction commands and raw event sequence</summary>
+<pre><code># workspace fixture: .openhands/setup.sh contains
+#   echo "SETUP_RAN_MARKER"
+#   export SETUP_RAN=1
+#   echo "setup ran at $(date)" &gt; .setup-ran-marker.txt
+
+control-openhands launch --new --sdk-path /tmp/sdk6099 --build always
+control-openhands llm set --profile mock --model openai/mock-test-model \
+    --base-url http://127.0.0.1:9999 --api-key-file /tmp/mockllm-key.txt --no-validate
+control-openhands workspace open /tmp/ohws/repo
+control-openhands conversation start --workspace /tmp/ohws/repo \
+    --prompt "Echo the SETUP_RAN variable" --wait
+
+# events (conversation d52ea806):
+ActionEvent       terminal  echo SETUP_RAN_IS=$SETUP_RAN; ls -a /tmp/ohws/repo
+ObservationEvent  terminal  SETUP_RAN_IS=1 . .. .git .openhands .setup-ran-marker.txt
+MessageEvent      agent     PERSIST_PROOF_DONE
+
+# ordering proof (conversation 1d637597): the marker file is written at
+# 02:29:03.35, before the first user MessageEvent at 02:29:03.81
+$ cat /tmp/ohws/repo/.setup-ran-marker.txt
+setup ran at Tue Oct 27 02:29:03 UTC 2026
+</code></pre>
+</details>
+<p class="meta">
+  Also green: <code>npm run typecheck</code>, <code>npm run lint</code>,
+  <code>npm run build</code>, and the full vitest suite (851 files / 9390 passed).
+</p>
+
+<h2 id="followups">5 · Follow-ups (out of scope here)</h2>
+<ul>
+  <li>Merge <code>software-agent-sdk#6099</code> and bump the pinned
+      <code>@openhands/typescript-client</code>; then delete the local
+      <code>DirectToolClient</code> narrowing and call <code>executeTool()</code> directly.</li>
+  <li>Server-side idempotency key for <code>sendEvent</code> would let the ambiguous-send
+      window be closed fully; that contract belongs in the SDK, not Canvas.</li>
+</ul>
+
+<footer>
+  Generated by an AI agent (OpenHands) on behalf of the contributor. Temporary review aid
+  under <code>.pr/</code>; removed automatically after merge by
+  <code>.github/workflows/pr-artifacts.yml</code>.
+</footer>
+
+</div>
+</body>
+</html>

@@ -17,6 +17,7 @@ import {
   handleLaunchChildConversationAction,
   type LaunchChildConversationResult,
 } from "#/services/child-conversation-launch";
+import { ConversationFirstMessageError } from "#/api/conversation-service/agent-server-conversation-service.api";
 
 const {
   mockCreateConversation,
@@ -62,7 +63,13 @@ vi.mock(
 
 vi.mock(
   "#/api/conversation-service/agent-server-conversation-service.api",
-  () => ({
+  async (importOriginal) => ({
+    // Keep the real named exports (e.g. `ConversationFirstMessageError`, which
+    // `resolve-conversation-launch` imports as a value for `instanceof`) and
+    // override only the default service object the tests stub.
+    ...(await importOriginal<
+      typeof import("#/api/conversation-service/agent-server-conversation-service.api")
+    >()),
     default: {
       createConversation: mockCreateConversation,
       resolveConversationWorkingDir: mockResolveWorkingDir,
@@ -533,6 +540,139 @@ describe("handleLaunchChildConversationAction", () => {
       expect(reportedResult()).toMatchObject({
         status: "error",
         error: "boom",
+      });
+    });
+
+    // The withheld-first-message failure means the conversation exists and only
+    // its first turn did not start. The worktree fallback must not treat it as
+    // a worktree failure: retrying with `shared` would create a second
+    // conversation and downgrade the isolation the caller asked for.
+    it("recovers onto the created child when the first message fails, without downgrading isolation", async () => {
+      seedWorktreeCapableParent();
+      mockCreateConversation.mockRejectedValueOnce(
+        new ConversationFirstMessageError(
+          "child-id",
+          [{ type: "text", text: "Add a regression test for the parser" }],
+          new Error("network timeout"),
+        ),
+      );
+
+      await handleLaunchChildConversationAction(
+        action({}),
+        PARENT_ID,
+        nextToolCallId(),
+      );
+
+      // One attempt only — no second conversation, no `shared` retry.
+      expect(mockCreateConversation).toHaveBeenCalledTimes(1);
+      expect(mockCreateConversation).toHaveBeenCalledWith(
+        expect.objectContaining({ workspaceMode: "new_worktree" }),
+      );
+
+      const result = reportedResult();
+      expect(result).toMatchObject({
+        status: "launched",
+        conversation_id: "child-id",
+        isolation: "worktree",
+      });
+      // The isolation was not downgraded, so no fallback note is attached.
+      expect(
+        result.status === "launched" && result.isolation_note,
+      ).toBeUndefined();
+      // An ambiguous failure (transport error) may already have been accepted,
+      // so the note must not tell the agent the child is idle.
+      const note =
+        result.status === "launched" ? result.first_message_note : undefined;
+      expect(note).toContain("network timeout");
+      expect(note).toContain("check its events");
+      expect(note).toContain("Do not re-run the delegation");
+    });
+
+    // A 4xx is definitive: the send was refused, so the child is genuinely idle
+    // and re-sending cannot duplicate it.
+    it("tells the agent a definitively rejected child is idle", async () => {
+      seedWorktreeCapableParent();
+      const rejection = new Error("unprocessable") as Error & {
+        name: string;
+        status: number;
+      };
+      rejection.name = "HttpError";
+      rejection.status = 422;
+      mockCreateConversation.mockRejectedValueOnce(
+        new ConversationFirstMessageError(
+          "child-id",
+          [{ type: "text", text: "Add a regression test for the parser" }],
+          rejection,
+        ),
+      );
+
+      await handleLaunchChildConversationAction(
+        action({}),
+        PARENT_ID,
+        nextToolCallId(),
+      );
+
+      const result = reportedResult();
+      const note =
+        result.status === "launched" ? result.first_message_note : undefined;
+      expect(note).toContain("was refused");
+      expect(note).toContain("It is idle");
+    });
+
+    // The recovery must not silently drop the caller's title or a computed
+    // isolation note (a scratch workspace falls back to `shared` before the
+    // send, and that downgrade has to be reported).
+    it("keeps the requested title and the pre-computed isolation note on recovery", async () => {
+      // No stored metadata → scratch workspace → shared fallback note exists.
+      mockCreateConversation.mockRejectedValueOnce(
+        new ConversationFirstMessageError(
+          "child-id",
+          [{ type: "text", text: "Add a regression test for the parser" }],
+          new Error("network timeout"),
+        ),
+      );
+
+      await handleLaunchChildConversationAction(
+        action({ title: "Parser tests" }),
+        PARENT_ID,
+        nextToolCallId(),
+      );
+
+      expect(mockUpdateTitle).toHaveBeenCalledWith("child-id", "Parser tests");
+      const result = reportedResult();
+      expect(result).toMatchObject({
+        status: "launched",
+        conversation_id: "child-id",
+        title: "Parser tests",
+        isolation: "shared",
+      });
+      expect(result.status === "launched" && result.isolation_note).toContain(
+        "no commits",
+      );
+    });
+
+    // The same recovery applies when no worktree was involved: a shared child
+    // whose first message failed is recovered, not reported as a failed launch.
+    it("recovers a shared child whose first message failed", async () => {
+      mockCreateConversation.mockRejectedValueOnce(
+        new ConversationFirstMessageError(
+          "child-id",
+          [{ type: "text", text: "Add a regression test for the parser" }],
+          new Error("network timeout"),
+        ),
+      );
+
+      await handleLaunchChildConversationAction(
+        action({ isolation: "shared" }),
+        PARENT_ID,
+        nextToolCallId(),
+      );
+
+      expect(mockCreateConversation).toHaveBeenCalledTimes(1);
+      expect(reportedResult()).toMatchObject({
+        status: "launched",
+        conversation_id: "child-id",
+        isolation: "shared",
       });
     });
   });

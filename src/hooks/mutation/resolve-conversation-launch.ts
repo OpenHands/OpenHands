@@ -9,6 +9,7 @@ import { profileHasRouter } from "#/api/agent-profiles-service/profile-behavior"
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
 import { assertSubscriptionAuthReady } from "#/api/agent-server-adapter";
 import AgentServerConversationService, {
+  ConversationFirstMessageError,
   type CreateConversationOptions,
 } from "#/api/conversation-service/agent-server-conversation-service.api";
 import type { AppConversationStartTask } from "#/api/conversation-service/agent-server-conversation-service.types";
@@ -217,18 +218,53 @@ export async function launchConversation(
   if (!context.isCloud && launch.llmProfile) {
     await assertLaunchLlmReady(launch.llmProfile);
   }
-  const task = await AgentServerConversationService.createConversation({
-    ...options,
-    ...launchProfileOptions(launch),
-  });
-  // The chat LLM picker names this profile even when several share a model
-  // (#1082). Cloud conversations don't use local LLM profiles.
-  if (!context.isCloud && task.app_conversation_id && launch.llmProfile) {
-    mergeStoredConversationMetadata(task.app_conversation_id, {
+  let task: AppConversationStartTask;
+  try {
+    task = await AgentServerConversationService.createConversation({
+      ...options,
+      ...launchProfileOptions(launch),
+    });
+  } catch (error) {
+    // The workspace bootstrap can create the conversation and then fail to
+    // send its withheld first message (ConversationFirstMessageError). The
+    // conversation still exists and the caller recovers onto it, so stamp the
+    // LLM profile now — otherwise the recovered conversation loses its
+    // launch-profile label, which the success path below would have set.
+    // Best-effort: a storage write that fails (e.g. quota) must not replace the
+    // recoverable error and strand the created conversation.
+    if (error instanceof ConversationFirstMessageError) {
+      try {
+        stampLlmProfile(error.conversationId, launch, context.isCloud);
+      } catch (stampError) {
+        console.warn(
+          `Could not stamp the launch LLM profile on conversation ${error.conversationId}:`,
+          stampError,
+        );
+      }
+    }
+    throw error;
+  }
+  if (task.app_conversation_id) {
+    stampLlmProfile(task.app_conversation_id, launch, context.isCloud);
+  }
+  return task;
+}
+
+/**
+ * Record the LLM profile the conversation runs. The chat LLM picker names
+ * this profile even when several share a model (#1082); cloud conversations
+ * don't use local LLM profiles.
+ */
+function stampLlmProfile(
+  conversationId: string,
+  launch: ConversationLaunch,
+  isCloud: boolean,
+): void {
+  if (!isCloud && launch.llmProfile) {
+    mergeStoredConversationMetadata(conversationId, {
       active_profile: launch.llmProfile,
     });
   }
-  return task;
 }
 
 function launchProfileOptions(

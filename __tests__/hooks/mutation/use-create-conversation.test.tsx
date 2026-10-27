@@ -1,8 +1,11 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import AgentServerConversationService, {
+  ConversationFirstMessageError,
+} from "#/api/conversation-service/agent-server-conversation-service.api";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
+import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { SuggestedTask } from "#/utils/types";
 import {
   getStoredConversationMetadata,
@@ -301,6 +304,353 @@ describe("useCreateConversation", () => {
       profileError,
     );
     expect(createConversationSpy).not.toHaveBeenCalled();
+  });
+
+  it("recovers on the created conversation when its first message fails to send", async () => {
+    vi.spyOn(
+      AgentServerConversationService,
+      "createConversation",
+    ).mockRejectedValue(
+      new ConversationFirstMessageError(
+        "conv-bootstrapped",
+        [{ type: "text", text: "Add a dark mode toggle" }],
+        new Error("socket closed"),
+      ),
+    );
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
+
+    const { result } = renderHook(() => useCreateConversation(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={new QueryClient()}>
+          {children}
+        </QueryClientProvider>
+      ),
+    });
+
+    // Not a rejected create: the conversation exists, so the caller must land
+    // on it rather than start a second one.
+    const data = await result.current.mutateAsync({
+      query: "Add a dark mode toggle",
+    });
+    expect(data.conversation_id).toBe("conv-bootstrapped");
+
+    const pending = useOptimisticUserMessageStore.getState().pendingMessages;
+    expect(pending).toHaveLength(1);
+    // Ambiguous failure (transport, not an HTTP status): the server may have
+    // accepted the event, so the bubble stays "sending" and the echo/watchdog
+    // reconciles it instead of offering a retry that could duplicate it.
+    expect(pending[0]).toMatchObject({
+      conversationId: "conv-bootstrapped",
+      text: "Add a dark mode toggle",
+      status: "sending",
+    });
+
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
+  });
+
+  it("offers retry when the send was definitively rejected with a 4xx status", async () => {
+    // A 4xx means the server validated and refused the request, so the event
+    // was not appended and resending cannot duplicate it — the bubble becomes
+    // an errored one with a retry affordance.
+    const httpError = Object.assign(new Error("HTTP 422"), {
+      name: "HttpError",
+      status: 422,
+    });
+    vi.spyOn(
+      AgentServerConversationService,
+      "createConversation",
+    ).mockRejectedValue(
+      new ConversationFirstMessageError(
+        "conv-rejected",
+        [{ type: "text", text: "hi" }],
+        httpError,
+      ),
+    );
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
+
+    const { result } = renderHook(() => useCreateConversation(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={new QueryClient()}>
+          {children}
+        </QueryClientProvider>
+      ),
+    });
+
+    const data = await result.current.mutateAsync({ query: "hi" });
+    expect(data.conversation_id).toBe("conv-rejected");
+
+    const pending = useOptimisticUserMessageStore.getState().pendingMessages;
+    expect(pending).toHaveLength(1);
+    expect(pending[0]).toMatchObject({
+      conversationId: "conv-rejected",
+      text: "hi",
+      status: "error",
+    });
+
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
+  });
+
+  it("keeps the bubble sending when the server faulted with a 5xx", async () => {
+    // A 5xx can fault after the event was persisted, so it stays ambiguous: the
+    // bubble must not offer retry until the echo/watchdog settles it.
+    const httpError = Object.assign(new Error("HTTP 500"), {
+      name: "HttpError",
+      status: 500,
+    });
+    vi.spyOn(
+      AgentServerConversationService,
+      "createConversation",
+    ).mockRejectedValue(
+      new ConversationFirstMessageError(
+        "conv-server-fault",
+        [{ type: "text", text: "hi" }],
+        httpError,
+      ),
+    );
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
+
+    const { result } = renderHook(() => useCreateConversation(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={new QueryClient()}>
+          {children}
+        </QueryClientProvider>
+      ),
+    });
+
+    await result.current.mutateAsync({ query: "hi" });
+
+    const pending = useOptimisticUserMessageStore.getState().pendingMessages;
+    expect(pending).toHaveLength(1);
+    expect(pending[0]).toMatchObject({
+      conversationId: "conv-server-fault",
+      status: "sending",
+    });
+
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
+  });
+
+  it("rebuilds the recovered pending bubble from the withheld content, keeping instructions", async () => {
+    // The local path folds `conversationInstructions` into the sent body; the
+    // error carries that exact content, so the retry bubble must not fall back
+    // to the bare `query` (which would drop the instructions).
+    vi.spyOn(
+      AgentServerConversationService,
+      "createConversation",
+    ).mockRejectedValue(
+      new ConversationFirstMessageError(
+        "conv-bootstrapped",
+        [
+          {
+            type: "text",
+            text: "Add a dark mode toggle\n\nFocus on review comments",
+          },
+        ],
+        new Error("socket closed"),
+      ),
+    );
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
+
+    const { result } = renderHook(() => useCreateConversation(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={new QueryClient()}>
+          {children}
+        </QueryClientProvider>
+      ),
+    });
+
+    await result.current.mutateAsync({
+      query: "Add a dark mode toggle",
+      conversationInstructions: "Focus on review comments",
+    });
+
+    const pending = useOptimisticUserMessageStore.getState().pendingMessages;
+    expect(pending).toHaveLength(1);
+    expect(pending[0]).toMatchObject({
+      conversationId: "conv-bootstrapped",
+      text: "Add a dark mode toggle\n\nFocus on review comments",
+      status: "sending",
+    });
+
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
+  });
+
+  it("snapshots attached plugins on the recovered conversation", async () => {
+    vi.spyOn(
+      AgentServerConversationService,
+      "createConversation",
+    ).mockRejectedValue(
+      new ConversationFirstMessageError(
+        "conv-recovered-plugins",
+        [{ type: "text", text: "hi" }],
+        new Error("socket closed"),
+      ),
+    );
+    removeStoredConversationMetadata("conv-recovered-plugins");
+
+    const { result } = renderHook(() => useCreateConversation(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={new QueryClient()}>
+          {children}
+        </QueryClientProvider>
+      ),
+    });
+
+    await result.current.mutateAsync({
+      query: "hi",
+      plugins: [
+        {
+          source: "github:o/a",
+          ref: null,
+          repo_path: "plugins/a",
+          parameters: { token: "secret" },
+        },
+      ],
+    });
+
+    // The plugin snapshot normally runs after createConversation resolves —
+    // past the point the send fails. The recovery path must still record it.
+    await waitFor(() =>
+      expect(
+        getStoredConversationMetadata("conv-recovered-plugins")?.plugins,
+      ).toEqual([{ source: "github:o/a", ref: null, repo_path: "plugins/a" }]),
+    );
+
+    removeStoredConversationMetadata("conv-recovered-plugins");
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
+  });
+
+  it("still recovers on the created conversation when the plugin snapshot's storage write fails", async () => {
+    // The plugin snapshot also runs on the recovery path. Like the profile
+    // stamp, a failing storage write must not replace the recoverable error.
+    vi.spyOn(
+      AgentServerConversationService,
+      "createConversation",
+    ).mockRejectedValue(
+      new ConversationFirstMessageError(
+        "conv-snapshot-throws",
+        [{ type: "text", text: "hi" }],
+        new Error("socket closed"),
+      ),
+    );
+    removeStoredConversationMetadata("conv-snapshot-throws");
+    const setItemSpy = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(() => {
+        throw new DOMException("QuotaExceededError");
+      });
+
+    try {
+      const { result } = renderHook(() => useCreateConversation(), {
+        wrapper: ({ children }) => (
+          <QueryClientProvider client={new QueryClient()}>
+            {children}
+          </QueryClientProvider>
+        ),
+      });
+
+      const created = await result.current.mutateAsync({
+        query: "hi",
+        plugins: [
+          { source: "github:o/a", ref: null, repo_path: "plugins/a" },
+        ],
+      });
+      expect(created.conversation_id).toBe("conv-snapshot-throws");
+    } finally {
+      setItemSpy.mockRestore();
+      removeStoredConversationMetadata("conv-snapshot-throws");
+      useOptimisticUserMessageStore.getState().clearPendingMessages();
+    }
+  });
+
+  it("stamps the launch LLM profile on the recovered conversation", async () => {
+    mockUseActiveBackend.mockReturnValue({
+      backend: { id: "local-1", kind: "local" as const },
+      orgId: null,
+    });
+    listLlmProfilesMock.mockResolvedValue({
+      profiles: [{ name: "gpt" }],
+      active_profile: "gpt",
+    });
+    vi.spyOn(
+      AgentServerConversationService,
+      "createConversation",
+    ).mockRejectedValue(
+      new ConversationFirstMessageError(
+        "conv-recovered-profile",
+        [{ type: "text", text: "hi" }],
+        new Error("socket closed"),
+      ),
+    );
+    removeStoredConversationMetadata("conv-recovered-profile");
+
+    const { result } = renderHook(() => useCreateConversation(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={new QueryClient()}>
+          {children}
+        </QueryClientProvider>
+      ),
+    });
+
+    await result.current.mutateAsync({ query: "hi" });
+
+    // `launchConversation` stamps the profile only after createConversation
+    // resolves; the recovery path must not lose it.
+    await waitFor(() =>
+      expect(
+        getStoredConversationMetadata("conv-recovered-profile")?.active_profile,
+      ).toBe("gpt"),
+    );
+
+    removeStoredConversationMetadata("conv-recovered-profile");
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
+  });
+
+  it("still recovers on the created conversation when the profile stamp's storage write fails", async () => {
+    // The launch's profile stamp runs on the recovery path. A storage write
+    // that throws (e.g. quota) must not replace the recoverable
+    // ConversationFirstMessageError — the caller would then retry into a
+    // duplicate conversation instead of opening the one that exists.
+    mockUseActiveBackend.mockReturnValue({
+      backend: { id: "local-1", kind: "local" as const },
+      orgId: null,
+    });
+    listLlmProfilesMock.mockResolvedValue({
+      profiles: [{ name: "gpt" }],
+      active_profile: "gpt",
+    });
+    vi.spyOn(
+      AgentServerConversationService,
+      "createConversation",
+    ).mockRejectedValue(
+      new ConversationFirstMessageError(
+        "conv-stamp-throws",
+        [{ type: "text", text: "hi" }],
+        new Error("socket closed"),
+      ),
+    );
+    removeStoredConversationMetadata("conv-stamp-throws");
+    const setItemSpy = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(() => {
+        throw new DOMException("QuotaExceededError");
+      });
+
+    try {
+      const { result } = renderHook(() => useCreateConversation(), {
+        wrapper: ({ children }) => (
+          <QueryClientProvider client={new QueryClient()}>
+            {children}
+          </QueryClientProvider>
+        ),
+      });
+
+      const created = await result.current.mutateAsync({ query: "hi" });
+      expect(created.conversation_id).toBe("conv-stamp-throws");
+    } finally {
+      setItemSpy.mockRestore();
+      removeStoredConversationMetadata("conv-stamp-throws");
+      useOptimisticUserMessageStore.getState().clearPendingMessages();
+    }
   });
 
   it("invalidates the conversation list and start-tasks queries on success", async () => {

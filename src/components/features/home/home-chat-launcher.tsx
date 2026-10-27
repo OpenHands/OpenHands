@@ -231,6 +231,27 @@ export function HomeChatLauncher() {
       TOAST_OPTIONS,
     );
 
+    // The workspace bootstrap can be long (dependency installs), and it runs
+    // between creating the conversation and starting its first turn. Keep the
+    // same toast but relabel it so the wait reads as deliberate setup rather
+    // than a stalled create.
+    variables = {
+      ...variables,
+      onSetupScriptProgress: (update) => {
+        if (update.phase === "running") {
+          toast.loading(t(I18nKey.STATUS$SETTING_UP_WORKSPACE), {
+            ...TOAST_OPTIONS,
+            id: toastId,
+          });
+        } else {
+          toast.loading(t(I18nKey.HOME$CREATING_CONVERSATION), {
+            ...TOAST_OPTIONS,
+            id: toastId,
+          });
+        }
+      },
+    };
+
     void (async () => {
       let isCreated = false;
       try {

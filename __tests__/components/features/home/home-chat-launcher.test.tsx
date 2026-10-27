@@ -996,6 +996,37 @@ describe("HomeChatLauncher", () => {
     );
   });
 
+  it("relabels the create toast while the workspace bootstrap runs", async () => {
+    const createSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue(makeConversationResponse({ id: "conv-abc" }));
+    const loadingSpy = vi.spyOn(toast, "loading");
+
+    renderLauncher();
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("stub-chat-submit"));
+    await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
+
+    const onProgress = createSpy.mock.lastCall?.[0]?.onSetupScriptProgress;
+    expect(onProgress).toBeTypeOf("function");
+    onProgress?.({ phase: "running" });
+    expect(loadingSpy).toHaveBeenCalledWith(
+      "STATUS$SETTING_UP_WORKSPACE",
+      expect.anything(),
+    );
+    onProgress?.({ phase: "succeeded" });
+    expect(loadingSpy).toHaveBeenCalledWith(
+      "HOME$CREATING_CONVERSATION",
+      expect.anything(),
+    );
+    loadingSpy.mockRestore();
+    // Let the launcher finish navigating so its async tail can't leak into
+    // the next test after that test clears the shared mocks.
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith("/conversations/conv-abc"),
+    );
+  });
+
   it("surfaces a toast and skips navigation when conversation creation fails", async () => {
     vi.spyOn(
       AgentServerConversationService,
