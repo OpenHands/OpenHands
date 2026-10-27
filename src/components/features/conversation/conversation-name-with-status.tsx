@@ -22,6 +22,10 @@ import {
   isExecutionPaused,
 } from "#/utils/status";
 import { I18nKey } from "#/i18n/declaration";
+import { isMissingSandboxStatus } from "#/utils/conversation-archive-status";
+import { ConversationStatusDot } from "../conversation-panel/conversation-status-dot";
+
+const STATUS_ICON_CLASS_NAME = "ml-[3.5px] w-6 h-6 cursor-pointer";
 
 export function ConversationNameWithStatus() {
   const { t } = useTranslation("openhands");
@@ -37,6 +41,10 @@ export function ConversationNameWithStatus() {
   const triggerRef = React.useRef<HTMLButtonElement>(null);
 
   const executionStatus = conversation?.execution_status ?? null;
+  // A missing, non-resumable runtime reads as archived, like the sidebar row
+  // and the read-only banner. Its execution status is stale (often `idle`),
+  // so it must not drive a "Running" dot or a Stop/Start request that 404s.
+  const isRuntimeMissing = isMissingSandboxStatus(conversation?.sandbox_status);
   const isStartingStatus =
     curAgentState === AgentState.LOADING || curAgentState === AgentState.INIT;
   const isStopStatus = isExecutionErrored(executionStatus);
@@ -122,11 +130,26 @@ export function ConversationNameWithStatus() {
               "text-muted hover:bg-contrast/10",
             )}
           >
-            <DebugStackframeDot
-              className="ml-[3.5px] w-6 h-6 cursor-pointer"
-              color={statusColor}
-              aria-hidden
-            />
+            {isRuntimeMissing ? (
+              <span
+                className={cn(
+                  STATUS_ICON_CLASS_NAME,
+                  "flex items-center justify-center",
+                )}
+              >
+                <ConversationStatusDot
+                  executionStatus={executionStatus}
+                  isArchived
+                  showTooltip={false}
+                />
+              </span>
+            ) : (
+              <DebugStackframeDot
+                className={STATUS_ICON_CLASS_NAME}
+                color={statusColor}
+                aria-hidden
+              />
+            )}
           </button>
           {isMenuVisible ? (
             <ServerStatusContextMenu
@@ -143,6 +166,7 @@ export function ConversationNameWithStatus() {
                   : undefined
               }
               executionStatus={executionStatus}
+              isArchived={isRuntimeMissing}
               position="bottom"
               className="bottom-full left-0 mt-0 min-h-fit"
               isPausing={false}

@@ -1353,4 +1353,35 @@ describe("ConversationCard", () => {
       within(card).getByTestId("conversation-card-archived-chip"),
     ).toBeInTheDocument();
   });
+
+  it.each([
+    { sandboxStatus: "MISSING" as const, shouldShow: false },
+    { sandboxStatus: "RUNNING" as const, shouldShow: true },
+  ])(
+    "offers Stop Conversation for an active row only when its runtime is not missing ($sandboxStatus)",
+    ({ sandboxStatus, shouldShow }) => {
+      renderWithProviders(
+        <ConversationCard
+          onDelete={onDelete}
+          onStop={vi.fn()}
+          title="Conversation 1"
+          selectedRepository={null}
+          lastUpdatedAt="2021-10-01T12:00:00Z"
+          executionStatus={ExecutionStatus.IDLE}
+          sandboxStatus={sandboxStatus}
+          contextMenuOpen
+          onContextMenuToggle={vi.fn()}
+        />,
+      );
+
+      const menu = screen.getByTestId("context-menu");
+      if (shouldShow) {
+        expect(within(menu).getByTestId("stop-button")).toBeInTheDocument();
+      } else {
+        expect(
+          within(menu).queryByTestId("stop-button"),
+        ).not.toBeInTheDocument();
+      }
+    },
+  );
 });

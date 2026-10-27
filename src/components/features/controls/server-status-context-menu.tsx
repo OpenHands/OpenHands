@@ -20,6 +20,8 @@ interface ServerStatusContextMenuProps {
   position?: "top" | "bottom";
   className?: string;
   isPausing?: boolean;
+  /** The runtime is missing and cannot be resumed: no Stop or Start. */
+  isArchived?: boolean;
   ignoreOutsideClickRef?: RefObject<HTMLElement | null>;
 }
 
@@ -31,6 +33,7 @@ export function ServerStatusContextMenu({
   position = "top",
   className = "",
   isPausing = false,
+  isArchived = false,
   ignoreOutsideClickRef,
 }: ServerStatusContextMenuProps) {
   const { t } = useTranslation("openhands");
@@ -39,8 +42,8 @@ export function ServerStatusContextMenu({
     ignoreOutsideClickRef,
   );
 
-  const isActive = isExecutionActive(executionStatus);
-  const isPaused = isExecutionPaused(executionStatus);
+  const isActive = !isArchived && isExecutionActive(executionStatus);
+  const isPaused = !isArchived && isExecutionPaused(executionStatus);
   const shouldActionShown = isActive || isPaused;
 
   return (
@@ -55,6 +58,7 @@ export function ServerStatusContextMenu({
       <ServerStatus
         executionStatus={executionStatus}
         isPausing={isPausing}
+        isArchived={isArchived}
         className="pl-0 pr-2 py-1"
       />
 

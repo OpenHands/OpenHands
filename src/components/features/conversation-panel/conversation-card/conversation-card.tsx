@@ -123,6 +123,9 @@ export function ConversationCard({
   // archive plus the missing-runtime inference), or the missing-runtime
   // fallback for standalone callers that only pass `sandboxStatus`.
   const effectiveArchived = isArchived ?? isMissingSandboxStatus(sandboxStatus);
+  // A missing, non-resumable runtime has nothing left to stop, so the menu
+  // offers no Stop for it (the request could only 404).
+  const canStop = !!onStop && !isMissingSandboxStatus(sandboxStatus);
 
   const onTitleSave = (newTitle: string) => {
     if (newTitle !== "" && newTitle !== title) {
@@ -340,7 +343,7 @@ export function ConversationCard({
                       onDelete={onDelete && handleDelete}
                       onArchive={onArchive && handleArchive}
                       onUnarchive={onUnarchive && handleUnarchive}
-                      onStop={onStop && handleStop}
+                      onStop={canStop ? handleStop : undefined}
                       onEdit={onChangeTitle && handleEdit}
                       onEditTags={onEditTags && handleEditTags}
                       onDownloadViaVSCode={handleDownloadViaVSCode}
@@ -368,7 +371,7 @@ export function ConversationCard({
                   onDelete={onDelete && handleDelete}
                   onArchive={onArchive && handleArchive}
                   onUnarchive={onUnarchive && handleUnarchive}
-                  onStop={onStop && handleStop}
+                  onStop={canStop ? handleStop : undefined}
                   onEdit={onChangeTitle && handleEdit}
                   onEditTags={onEditTags && handleEditTags}
                   onDownloadViaVSCode={handleDownloadViaVSCode}
