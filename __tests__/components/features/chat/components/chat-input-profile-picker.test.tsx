@@ -257,36 +257,36 @@ describe("ChatInputAgentProfilePicker", () => {
       screen.queryByTestId("chat-input-agent-profile"),
     ).not.toBeInTheDocument();
   });
-});
 
-describe("ChatInputAgentProfilePicker", () => {
-  beforeEach(() => {
-    // The real state hook derives currentProfileName from the mocked
-    // agent-profiles query: an active profile id makes the pill render.
-    useAgentProfilesMock.mockReturnValue({
-      data: { profiles: PROFILES, active_agent_profile_id: "id-default" },
-      isLoading: false,
+  describe("ChatInputAgentProfilePicker", () => {
+    beforeEach(() => {
+      // The real state hook derives currentProfileName from the mocked
+      // agent-profiles query: an active profile id makes the pill render.
+      useAgentProfilesMock.mockReturnValue({
+        data: { profiles: PROFILES, active_agent_profile_id: "id-default" },
+        isLoading: false,
+      });
+      useActiveConversationMock.mockReturnValue({
+        data: undefined,
+        isLoading: false,
+      });
     });
-    useActiveConversationMock.mockReturnValue({
-      data: undefined,
-      isLoading: false,
+
+    it("closes on Escape and returns focus to the pill (#18808)", () => {
+      renderWithProviders(<ChatInputAgentProfilePicker />);
+      const pill = screen.getByTestId("chat-input-agent-profile");
+      fireEvent.click(pill);
+      expect(
+        screen.getByTestId("chat-input-agent-profile-popover"),
+      ).toBeInTheDocument();
+
+      fireEvent.keyDown(document, { key: "Escape" });
+
+      expect(
+        screen.queryByTestId("chat-input-agent-profile-popover"),
+      ).not.toBeInTheDocument();
+      expect(pill).toHaveFocus();
+      expect(pill).toHaveAttribute("aria-expanded", "false");
     });
-  });
-
-  it("closes on Escape and returns focus to the pill (#18808)", () => {
-    renderWithProviders(<ChatInputAgentProfilePicker />);
-    const pill = screen.getByTestId("chat-input-agent-profile");
-    fireEvent.click(pill);
-    expect(
-      screen.getByTestId("chat-input-agent-profile-popover"),
-    ).toBeInTheDocument();
-
-    fireEvent.keyDown(document, { key: "Escape" });
-
-    expect(
-      screen.queryByTestId("chat-input-agent-profile-popover"),
-    ).not.toBeInTheDocument();
-    expect(pill).toHaveFocus();
-    expect(pill).toHaveAttribute("aria-expanded", "false");
   });
 });
