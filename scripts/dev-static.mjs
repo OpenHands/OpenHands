@@ -47,6 +47,9 @@ import {
   buildAgentServerCommand,
   buildSafeDevConfig,
   buildAgentServerEnv,
+  backendLogLevel,
+  uvicornLogLevel,
+  buildBackendLogEnv,
   formatMissingUvxGuidance,
   isPortBusy,
   releaseStaleConversationLeases,
@@ -69,6 +72,7 @@ import {
   getNoReferrerPrefixArgs,
   getVSCodeAdvertiseArgs,
 } from "./dev-with-automation.mjs";
+import { applySessionKeyPolicy, bindHostArgs } from "./bind-host.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(__dirname, "..");
@@ -117,6 +121,7 @@ export function parseArgs(argv = process.argv.slice(2)) {
     automationRepo: null,
     skipBuild: false,
     verbose: false,
+    host: null,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -124,6 +129,10 @@ export function parseArgs(argv = process.argv.slice(2)) {
       case "-p":
       case "--port":
         config.port = parseInt(argv[++i], 10);
+        break;
+      case "-H":
+      case "--host":
+        config.host = argv[++i];
         break;
       case "--automation-ref":
         config.automationGitRef = argv[++i];
@@ -161,10 +170,11 @@ USAGE:
 
 OPTIONS:
   -p, --port <port>           Ingress port (default: 8000)
+  -H, --host <host>           Bind address for ingress/static (default: 127.0.0.1)
   --automation-ref <ref>      Git ref for automation backend (default: main)
   --automation-repo <url>     Git repo URL for automation
   --skip-build                Reuse existing build/ directory (faster restart)
-  -v, --verbose               Show detailed output
+  -v, --verbose               Set backend log level to DEBUG (default: WARNING)
   -h, --help                  Show this help
 
 ENVIRONMENT VARIABLES:
@@ -172,6 +182,11 @@ ENVIRONMENT VARIABLES:
   OH_AUTOMATION_GIT_REF       Alternative to --automation-ref
   OH_AGENT_SERVER_GIT_REF     Git ref for agent-server SDK
   OH_SECRET_KEY               Secret key for sessions
+  LOG_LEVEL                   Log level for both backends (default: WARNING)
+                              Python names and aliases both work; aliases and
+                              numbers are mapped onto Uvicorn's own set.
+  AUTOMATION_LOG_LEVEL        Log level for the automation service only
+                              (default: LOG_LEVEL)
 
 ACCESS POINTS:
   Main UI:      http://localhost:PORT/
@@ -334,6 +349,7 @@ function startAgentServer(config) {
     // same prefix against `config.vscodePort`.
     ...buildAgentServerEnv(safeConfig, {
       vscodeBasePath: config.vscodeBasePath,
+      verbose: config.verbose,
     }),
     ...buildAgentServerAutomationEnv(config),
   };
@@ -366,6 +382,8 @@ function buildAutomationBackendEnv(config, env = process.env) {
     AUTOMATION_WORKSPACE_BASE: join(config.stateDir, "workspaces"),
     AUTOMATION_LOCAL_API_KEY: config.sessionApiKey,
     ...buildAutomationTelemetryEnv(env),
+    // Quiet the automation service by default; see buildBackendLogEnv.
+    ...buildBackendLogEnv({ verbose: config.verbose, automation: true, env }),
     AUTOMATION_CORS_ORIGINS: `http://localhost:${config.ingressPort},http://127.0.0.1:${config.ingressPort},http://localhost:3001,http://127.0.0.1:3001`,
     FILE_STORE: "local",
     LOCAL_STORAGE_PATH: join(config.stateDir, "storage"),
@@ -392,6 +410,10 @@ function startAutomationBackend(config) {
       "0.0.0.0",
       "--port",
       config.autoBackendPort.toString(),
+      // Uvicorn's own level; see uvicornLogLevel. Uvicorn rejects the Python
+      // aliases and numeric levels the app itself accepts, so narrow it.
+      "--log-level",
+      uvicornLogLevel(backendLogLevel({ verbose: config.verbose })),
     ],
     {
       cwd: config.stateDir,
@@ -399,6 +421,26 @@ function startAutomationBackend(config) {
       color: c.green,
     },
   );
+}
+
+/**
+ * One MARS web bridge per stack, on the server the browser reaches: the
+ * ingress, guarded by the stack's session key (the same one the page holds).
+ * The static child behind it gets `MARS_WEB=0`: a second bridge there would
+ * answer /mars/* with its own, separate sign-in state for anyone who opens
+ * that port directly. Without the key the ingress bridge would take
+ * destroySession and savePat from any local process, the agent's shell
+ * included, so a stack with no session key mounts nothing.
+ */
+export function buildMarsWebEnv(role, config) {
+  if (role === "static") return { MARS_WEB: "0" };
+  return config.sessionApiKey
+    ? {
+        MARS_WEB_KEY: config.sessionApiKey,
+        ...(config.stateDir ? { MARS_STATE_DIR: config.stateDir } : {}),
+        ...(config.secretKey ? { OH_SECRET_KEY: config.secretKey } : {}),
+      }
+    : { MARS_WEB: "0" };
 }
 
 function startStaticServer(config) {
@@ -417,6 +459,11 @@ function startStaticServer(config) {
       frontendKind: "static",
     }),
   );
+  const keyPolicy = applySessionKeyPolicy({
+    host: config.bindHost,
+    sessionApiKey: config.sessionApiKey,
+    warn: (msg) => logService("static", msg, c.yellow),
+  });
   spawnService(
     "static",
     "node",
@@ -426,14 +473,11 @@ function startStaticServer(config) {
       join(config.canvasPath, "build"),
       "--port",
       String(config.vitePort),
+      ...bindHostArgs(config.bindHost),
       ...(process.env.VITE_BASE_PATH
         ? ["--base-path", process.env.VITE_BASE_PATH]
         : []),
-      // Inject the API key so the pre-built frontend can authenticate
-      // to the agent-server without a baked-in VITE_SESSION_API_KEY.
-      ...(config.sessionApiKey
-        ? ["--session-api-key", config.sessionApiKey]
-        : []),
+      ...(keyPolicy.authRequired ? ["--auth-required"] : []),
       "--runtime-services-info",
       runtimeServicesInfo,
       ...buildLocalServiceRouteArgs(config),
@@ -446,6 +490,11 @@ function startStaticServer(config) {
     {
       cwd: config.canvasPath,
       color: c.magenta,
+      // Clear an inherited key if policy forbids injecting it.
+      env: {
+        ...buildMarsWebEnv("static", config),
+        SESSION_API_KEY: keyPolicy.sessionApiKey || "",
+      },
     },
   );
 }
@@ -468,6 +517,7 @@ function startIngress(config) {
       ingressScript,
       "--port",
       config.ingressPort.toString(),
+      ...bindHostArgs(config.bindHost),
       "--runtime-services-info",
       runtimeServicesInfo,
       ...buildLocalServiceRouteArgs(config),
@@ -478,6 +528,7 @@ function startIngress(config) {
     {
       cwd: projectRoot,
       color: c.yellow,
+      env: buildMarsWebEnv("ingress", config),
     },
   );
 }
@@ -579,6 +630,7 @@ async function main() {
     join(config.stateDir, "workspaces"),
     join(config.stateDir, "bash_events"),
     join(config.stateDir, "storage"),
+    config.tmuxTmpDir,
   ]) {
     mkdirSync(dir, { recursive: true });
   }

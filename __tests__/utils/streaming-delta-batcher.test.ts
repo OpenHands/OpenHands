@@ -4,21 +4,24 @@ import {
   DeltaFlushScheduler,
 } from "#/utils/streaming-delta-batcher";
 import { useEventStore } from "#/stores/use-event-store";
-import { StreamingDeltaEvent } from "#/types/agent-server/core/events/streaming-delta-event";
+import type { DeltaFrame } from "#/types/agent-server/session-frames";
 import { MessageEvent } from "#/types/agent-server/core";
 import { isStreamingDeltaEvent } from "#/types/agent-server/type-guards";
 
+const ITEM_ID = "agent-1";
+
 const makeDelta = (
-  id: string,
-  content: string | null,
-  reasoning: string | null = null,
-): StreamingDeltaEvent => ({
-  id,
-  timestamp: "2024-03-01T00:00:00Z",
-  source: "agent",
-  kind: "StreamingDeltaEvent",
+  order: number,
+  content: string,
+  kind: DeltaFrame["kind"] = "text",
+  itemId = ITEM_ID,
+): DeltaFrame => ({
+  type: "delta",
+  item_id: itemId,
+  attempt: 1,
+  order,
+  kind,
   content,
-  reasoning_content: reasoning,
 });
 
 /**
@@ -52,89 +55,75 @@ function manualScheduler() {
 
 describe("createStreamingDeltaBatcher", () => {
   it("coalesces adjacent deltas into a single commit per frame", () => {
-    const commits: StreamingDeltaEvent[] = [];
+    const commits: DeltaFrame[][] = [];
     const clock = manualScheduler();
     const batcher = createStreamingDeltaBatcher(
-      (delta) => commits.push(delta),
+      (frames) => commits.push(frames),
       clock.scheduler,
     );
 
-    batcher.enqueue(makeDelta("d1", "Hello"));
-    batcher.enqueue(makeDelta("d2", ", "));
-    batcher.enqueue(makeDelta("d3", "world"));
-
-    // Nothing commits until the frame fires, and three enqueues schedule only
-    // ONE frame (not one per delta).
+    batcher.enqueue(makeDelta(0, "Hello"));
+    batcher.enqueue(makeDelta(1, ", "));
+    batcher.enqueue(makeDelta(2, "world"));
     expect(commits).toHaveLength(0);
     expect(clock.pendingFrames()).toBe(1);
 
     clock.tick();
-
     expect(commits).toHaveLength(1);
-    expect(commits[0].content).toBe("Hello, world");
-    // The coalesced event keeps the first delta's identity.
-    expect(commits[0].id).toBe("d1");
+    expect(commits[0].map((frame) => frame.content).join("")).toBe(
+      "Hello, world",
+    );
   });
 
-  it("merges content and reasoning_content independently, in order", () => {
-    const commits: StreamingDeltaEvent[] = [];
+  it("keeps each frame's kind and order intact for the store to apply", () => {
+    const commits: DeltaFrame[][] = [];
     const clock = manualScheduler();
     const batcher = createStreamingDeltaBatcher(
-      (delta) => commits.push(delta),
+      (frames) => commits.push(frames),
       clock.scheduler,
     );
 
-    batcher.enqueue(makeDelta("d1", "ans", "think-"));
-    batcher.enqueue(makeDelta("d2", "wer", null));
-    batcher.enqueue(makeDelta("d3", null, "more"));
+    batcher.enqueue(makeDelta(0, "think-", "reasoning"));
+    batcher.enqueue(makeDelta(1, "ans"));
+    batcher.enqueue(makeDelta(2, "more", "reasoning"));
     clock.tick();
 
-    expect(commits).toHaveLength(1);
-    expect(commits[0].content).toBe("answer");
-    expect(commits[0].reasoning_content).toBe("think-more");
+    expect(commits[0].map((frame) => [frame.kind, frame.content])).toEqual([
+      ["reasoning", "think-"],
+      ["text", "ans"],
+      ["reasoning", "more"],
+    ]);
   });
 
   it("flush() commits synchronously and cancels the scheduled frame", () => {
-    const commits: StreamingDeltaEvent[] = [];
+    const commits: DeltaFrame[][] = [];
     const clock = manualScheduler();
     const batcher = createStreamingDeltaBatcher(
-      (delta) => commits.push(delta),
+      (frames) => commits.push(frames),
       clock.scheduler,
     );
 
-    batcher.enqueue(makeDelta("d1", "a"));
-    batcher.enqueue(makeDelta("d2", "b"));
+    batcher.enqueue(makeDelta(0, "a"));
+    batcher.enqueue(makeDelta(1, "b"));
     batcher.flush();
 
     expect(commits).toHaveLength(1);
-    expect(commits[0].content).toBe("ab");
-    // The pending frame was cancelled, so ticking must not double-commit.
     expect(clock.pendingFrames()).toBe(0);
-    clock.tick();
+
+    // Nothing buffered: a second flush is a no-op.
+    batcher.flush();
     expect(commits).toHaveLength(1);
   });
 
-  it("flush() is a no-op when nothing is buffered", () => {
-    const commits: StreamingDeltaEvent[] = [];
+  it("reset() drops buffered deltas without committing them", () => {
+    const commits: DeltaFrame[][] = [];
     const clock = manualScheduler();
     const batcher = createStreamingDeltaBatcher(
-      (delta) => commits.push(delta),
+      (frames) => commits.push(frames),
       clock.scheduler,
     );
 
-    batcher.flush();
-    expect(commits).toHaveLength(0);
-  });
-
-  it("reset() drops buffered deltas without committing", () => {
-    const commits: StreamingDeltaEvent[] = [];
-    const clock = manualScheduler();
-    const batcher = createStreamingDeltaBatcher(
-      (delta) => commits.push(delta),
-      clock.scheduler,
-    );
-
-    batcher.enqueue(makeDelta("d1", "lost"));
+    batcher.enqueue(makeDelta(0, "lost"));
     batcher.reset();
     clock.tick();
 
@@ -143,10 +132,10 @@ describe("createStreamingDeltaBatcher", () => {
   });
 
   it("preserves text byte-for-byte and order across thousands of 1-char deltas faster than 60Hz", () => {
-    const commits: StreamingDeltaEvent[] = [];
+    const commits: DeltaFrame[][] = [];
     const clock = manualScheduler();
     const batcher = createStreamingDeltaBatcher(
-      (delta) => commits.push(delta),
+      (frames) => commits.push(frames),
       clock.scheduler,
     );
 
@@ -155,20 +144,23 @@ describe("createStreamingDeltaBatcher", () => {
     for (let i = 0; i < total; i += 1) {
       const char = String.fromCharCode(97 + (i % 26));
       expected += char;
-      batcher.enqueue(makeDelta(`d${i}`, char));
+      batcher.enqueue(makeDelta(i, char));
       // A frame only every 100 deltas => deltas arrive far faster than frames.
       if (i % 100 === 99) {
         clock.tick();
       }
     }
-    batcher.flush(); // boundary flush, as a non-delta event would trigger
+    batcher.flush(); // boundary flush, as any non-delta frame would trigger
 
     // Commits are bounded by frames, not by provider chunk count.
     expect(commits.length).toBeLessThan(total);
     expect(commits.length).toBeLessThanOrEqual(total / 100 + 1);
-    // Concatenating the per-frame batches reproduces the stream exactly (the
-    // store folds these into one accumulating event by position).
-    expect(commits.map((delta) => delta.content).join("")).toBe(expected);
+    expect(
+      commits
+        .flat()
+        .map((frame) => frame.content)
+        .join(""),
+    ).toBe(expected);
   });
 });
 
@@ -182,33 +174,39 @@ describe("createStreamingDeltaBatcher wired into the event store", () => {
     extended_content: [],
   };
 
-  it("coalesces deltas across frames, then reconciles into one bubble when the final message arrives", () => {
+  it("coalesces deltas across frames, then retires the slot when the durable message arrives", () => {
     useEventStore.getState().clearEvents();
     const clock = manualScheduler();
     // Commit into the real store exactly as ConversationWebSocketProvider does.
     const batcher = createStreamingDeltaBatcher(
-      (delta) => useEventStore.getState().addEvent(delta),
+      (frames) => useEventStore.getState().appendStreamingDeltas(frames),
       clock.scheduler,
     );
 
     useEventStore.getState().addEvent(userMessage);
+    useEventStore
+      .getState()
+      .openStreamingSlot({ type: "item_started", item_id: ITEM_ID });
 
     // Stream one char per delta, flushing a frame only every 5 chars, so deltas
     // arrive faster than frames — the case where the UI used to fall behind.
     const streamed = "I'll start working on that.";
     [...streamed].forEach((char, i) => {
-      batcher.enqueue(makeDelta(`d${i}`, char));
+      batcher.enqueue(makeDelta(i, char));
       if (i % 5 === 4) {
         clock.tick();
       }
     });
-
-    // A non-delta event (the final agent message) arrives. The provider flushes
-    // buffered deltas first, so the durable message can never overtake its own
-    // streamed text.
     batcher.flush();
+
+    const slot = useEventStore
+      .getState()
+      .uiEvents.find((event) => isStreamingDeltaEvent(event));
+    expect(slot?.content).toBe(streamed);
+
+    // The durable message carries the slot's id, so it retires it outright.
     const finalMessage: MessageEvent = {
-      id: "agent-1",
+      id: ITEM_ID,
       timestamp: "2024-04-01T00:00:00Z",
       source: "agent",
       llm_message: {
@@ -221,15 +219,13 @@ describe("createStreamingDeltaBatcher wired into the event store", () => {
     useEventStore.getState().addEvent(finalMessage);
 
     const state = useEventStore.getState();
-    // The user message plus a single reconciled agent bubble — the canonical
-    // final message supersedes the streamed deltas rather than duplicating them.
     expect(state.uiEvents).toHaveLength(2);
     const bubble = state.uiEvents[1] as MessageEvent;
-    expect(bubble.id).toBe("agent-1");
+    expect(bubble.id).toBe(ITEM_ID);
     expect(bubble.llm_message.content).toEqual([
       { type: "text", text: "I'll start working on that. Done." },
     ]);
-    // No provisional delta survives, so the streamed text renders exactly once.
+    // No provisional slot survives, so the streamed text renders exactly once.
     expect(state.uiEvents.some((event) => isStreamingDeltaEvent(event))).toBe(
       false,
     );

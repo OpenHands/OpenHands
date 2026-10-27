@@ -1,6 +1,7 @@
 import React from "react";
 import { Tooltip } from "@heroui/react";
 import { useTranslation } from "react-i18next";
+import type { ACPModelOption } from "#/constants/acp-providers";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
@@ -10,6 +11,7 @@ import { ConversationStatusDot } from "./conversation-status-dot";
 import { ConversationCardFooter } from "./conversation-card/conversation-card-footer";
 import { I18nKey } from "#/i18n/declaration";
 import { useBackendScopedPath } from "#/hooks/use-backend-scoped-path";
+import { isMissingSandboxStatus } from "#/utils/conversation-archive-status";
 
 interface CompactConversationRowProps {
   conversationId: string;
@@ -27,8 +29,15 @@ interface CompactConversationRowProps {
   showLlmProfiles?: boolean;
   agentKind?: "openhands" | "acp" | null;
   acpServer?: string | null;
+  acpModels?: readonly ACPModelOption[] | null;
   tags?: Record<string, string> | null;
   showTags?: boolean;
+  /**
+   * The row's effective archived state. Leave undefined to infer it from
+   * `sandboxStatus` (a missing, non-resumable runtime); the panel passes the
+   * explicit value so the chip and dot agree with the full card.
+   */
+  isArchived?: boolean;
 }
 
 /**
@@ -52,12 +61,15 @@ export function CompactConversationRow({
   showLlmProfiles = false,
   agentKind = null,
   acpServer = null,
+  acpModels = null,
   tags = null,
   showTags = false,
+  isArchived,
 }: CompactConversationRowProps) {
   const { t } = useTranslation("openhands");
   const backendScopedPath = useBackendScopedPath();
   const disableAnimation = import.meta.env.MODE === "test";
+  const effectiveArchived = isArchived ?? isMissingSandboxStatus(sandboxStatus);
 
   const preview = (
     <div className="w-65 p-3">
@@ -65,6 +77,7 @@ export function CompactConversationRow({
         <ConversationStatusDot
           executionStatus={executionStatus}
           sandboxStatus={sandboxStatus}
+          isArchived={effectiveArchived}
           showTooltip={false}
         />
         <span
@@ -85,8 +98,10 @@ export function CompactConversationRow({
         showAgentChip={showLlmProfiles}
         agentKind={agentKind}
         acpServer={acpServer}
+        acpModels={acpModels}
         tags={tags}
         showTags={showTags}
+        isArchived={effectiveArchived}
       />
     </div>
   );
@@ -116,6 +131,7 @@ export function CompactConversationRow({
         <ConversationStatusDot
           executionStatus={executionStatus}
           sandboxStatus={sandboxStatus}
+          isArchived={effectiveArchived}
           showTooltip={false}
         />
       </NavigationLink>

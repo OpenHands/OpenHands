@@ -92,6 +92,19 @@ describe("ProfilesBody", () => {
     expect(onConfigureOracle).toHaveBeenCalledTimes(1);
   });
 
+  it("restores the Oracle entry when its profile is removed", () => {
+    const oracle = { ...mockProfiles[0], name: "oracle" };
+    const { rerender } = render(
+      <ProfilesBody {...defaultProps} profiles={[...mockProfiles, oracle]} />,
+    );
+
+    expect(screen.queryByTestId("configure-oracle-profile")).toBeNull();
+
+    rerender(<ProfilesBody {...defaultProps} profiles={mockProfiles} />);
+
+    expect(screen.getByTestId("configure-oracle-profile")).toBeInTheDocument();
+  });
+
   it("renders a list of profiles", () => {
     render(<ProfilesBody {...defaultProps} />);
 

@@ -1,4 +1,8 @@
 import { create } from "zustand";
+import { useEventStore } from "#/stores/use-event-store";
+import { parseDateAsUTC } from "#/utils/format-time-delta";
+import { matchesPendingConversationId } from "#/utils/pending-task-message-link";
+import type { BaseEvent } from "#/types/agent-server/core/base/event";
 
 export type PendingUserMessageStatus = "sending" | "error";
 
@@ -33,11 +37,13 @@ export interface PendingUserMessage {
   imageUrls: string[];
   fileUrls: string[];
   timestamp: string;
+  afterTimestamp?: number;
   errorMessage?: string;
 }
 
 interface OptimisticUserMessageState {
   pendingMessages: PendingUserMessage[];
+  confirmedEventIds: Set<string>;
 }
 
 export interface EnqueuePendingMessagePayload {
@@ -68,21 +74,12 @@ interface OptimisticUserMessageActions {
   markPendingMessageSending: (id: string) => void;
   /** Drop a pending message from the queue (e.g., after success/cancellation). */
   removePendingMessage: (id: string) => void;
-  /**
-   * Remove the pending message that matches the given echoed `content` in
-   * the given conversation. Matching is done by exact content equality on
-   * messages in either state: an echo with identical text proves the message
-   * was delivered, so it also clears an entry the watchdog already flipped to
-   * "error". If no exact match exists we fall back to removing the oldest
-   * "sending" entry in that conversation so that an echo with a slightly
-   * munged body (e.g. trailing-whitespace stripped by the server) still
-   * clears its bubble; the fallback never touches "error" entries. Scoping by
-   * `conversationId` ensures a stale ack for one conversation never pops a
-   * pending entry belonging to another.
-   */
+  /** Match conversation (including task links), server history and content once per event.
+   * Prefer a sending attempt; an errored attempt may still receive a late echo. */
   consumeMatchingPendingMessage: (
     conversationId: string,
     content: string,
+    event: Pick<BaseEvent, "id" | "timestamp">,
   ) => PendingUserMessage | null;
   /** Wipe all queued messages (e.g., when changing conversations). */
   clearPendingMessages: () => void;
@@ -101,6 +98,7 @@ type OptimisticUserMessageStore = OptimisticUserMessageState &
 
 const initialState: OptimisticUserMessageState = {
   pendingMessages: [],
+  confirmedEventIds: new Set(),
 };
 
 // Use a timestamp + random suffix instead of a module-level counter so ids
@@ -109,6 +107,28 @@ const initialState: OptimisticUserMessageState = {
 // environments, so a base36 random suffix is a safe lowest-common-denominator.
 const generatePendingId = (): string =>
   `pending-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+const latestServerTimestamp = (conversationId: string): number | undefined => {
+  const { events, loadedConversationId } = useEventStore.getState();
+  if (
+    !loadedConversationId ||
+    !matchesPendingConversationId(loadedConversationId, conversationId)
+  )
+    return undefined;
+
+  let latest: number | undefined;
+  for (const event of events) {
+    if (!("timestamp" in event) || !event.timestamp) continue;
+    const timestamp = parseDateAsUTC(event.timestamp).getTime();
+    if (
+      Number.isFinite(timestamp) &&
+      (latest === undefined || timestamp > latest)
+    ) {
+      latest = timestamp;
+    }
+  }
+  return latest;
+};
 
 export const useOptimisticUserMessageStore = create<OptimisticUserMessageStore>(
   (set, get) => ({
@@ -125,6 +145,7 @@ export const useOptimisticUserMessageStore = create<OptimisticUserMessageStore>(
         imageUrls: payload.imageUrls ?? [],
         fileUrls: payload.fileUrls ?? [],
         timestamp: payload.timestamp ?? new Date().toISOString(),
+        afterTimestamp: latestServerTimestamp(payload.conversationId),
       };
       set((state) => ({
         pendingMessages: [...state.pendingMessages, message],
@@ -156,7 +177,12 @@ export const useOptimisticUserMessageStore = create<OptimisticUserMessageStore>(
       set((state) => ({
         pendingMessages: state.pendingMessages.map((message) =>
           message.id === id
-            ? { ...message, status: "sending", errorMessage: undefined }
+            ? {
+                ...message,
+                status: "sending",
+                errorMessage: undefined,
+                afterTimestamp: latestServerTimestamp(message.conversationId),
+              }
             : message,
         ),
       })),
@@ -168,41 +194,42 @@ export const useOptimisticUserMessageStore = create<OptimisticUserMessageStore>(
         ),
       })),
 
-    consumeMatchingPendingMessage: (conversationId, content) => {
-      // Single atomic `set` so the find + filter can't observe an interleaved
-      // mutation from another action. We prefer an exact content match (this
-      // is what makes out-of-order echoes safe: an echo of "world" will pop
-      // the "world" bubble, not the older "hello" one). The exact match may
-      // hit an entry already in "error" state: the watchdog flips a bubble to
-      // "error" on a timer, so a late echo (reconnect replay, slow server-side
-      // accept, returning from another conversation) proves the message was
-      // delivered after all and must clear the stale failure. If no exact
-      // match exists — e.g. the server slightly munged the body — fall back
-      // to the oldest "sending" entry in this conversation so the user doesn't
-      // end up with a permanently-stuck bubble in the happy-path
-      // single-message case. The fallback deliberately skips "error" entries
-      // so an unrelated echo can never wipe a genuinely failed bubble.
+    consumeMatchingPendingMessage: (conversationId, content, event) => {
       let consumed: PendingUserMessage | null = null;
+      const confirmationId = `${conversationId}:${event.id}`;
+      const confirmedAt = parseDateAsUTC(event.timestamp).getTime();
       set((state) => {
-        const inConversation = state.pendingMessages
-          .map((m, i) => ({ m, i }))
-          .filter(({ m }) => m.conversationId === conversationId);
-        const exact = inConversation.find(({ m }) => m.content === content);
-        const target =
-          exact ?? inConversation.find(({ m }) => m.status === "sending");
-        if (!target) return state;
-        consumed = target.m;
+        if (state.confirmedEventIds.has(confirmationId)) return state;
+        // Browser clocks cannot establish ordering against server event history.
+        const matches = (message: PendingUserMessage) =>
+          matchesPendingConversationId(
+            conversationId,
+            message.conversationId,
+          ) &&
+          (message.afterTimestamp === undefined ||
+            confirmedAt > message.afterTimestamp) &&
+          message.content.trim() === content.trim();
+        let target = state.pendingMessages.findIndex(
+          (message) => message.status === "sending" && matches(message),
+        );
+        if (target === -1) target = state.pendingMessages.findIndex(matches);
+        if (target === -1) return state;
+        consumed = state.pendingMessages[target];
         return {
-          pendingMessages: [
-            ...state.pendingMessages.slice(0, target.i),
-            ...state.pendingMessages.slice(target.i + 1),
-          ],
+          pendingMessages: state.pendingMessages.filter(
+            (_, index) => index !== target,
+          ),
+          confirmedEventIds: new Set([
+            ...state.confirmedEventIds,
+            confirmationId,
+          ]),
         };
       });
       return consumed;
     },
 
-    clearPendingMessages: () => set(() => ({ ...initialState })),
+    clearPendingMessages: () =>
+      set(() => ({ pendingMessages: [], confirmedEventIds: new Set() })),
 
     reassignPendingMessages: (fromConversationId, toConversationId) =>
       set((state) => ({

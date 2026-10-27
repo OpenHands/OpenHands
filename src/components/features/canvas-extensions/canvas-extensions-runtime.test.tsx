@@ -74,7 +74,7 @@ function renderRuntime(
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return render(
+  const rendered = render(
     <QueryClientProvider client={queryClient}>
       <ActiveBackendProvider>
         <MemoryRouter>
@@ -85,6 +85,7 @@ function renderRuntime(
       </ActiveBackendProvider>
     </QueryClientProvider>,
   );
+  return { ...rendered, queryClient };
 }
 
 describe("CanvasExtensionsRuntimeProvider", () => {
@@ -97,6 +98,10 @@ describe("CanvasExtensionsRuntimeProvider", () => {
     vi.spyOn(CanvasExtensionsService, "fetchBundle").mockResolvedValue(
       "fixture source",
     );
+    vi.spyOn(
+      CanvasExtensionsService,
+      "createAppBackendViewClient",
+    ).mockResolvedValue(null);
   });
 
   afterEach(() => {
@@ -128,6 +133,24 @@ describe("CanvasExtensionsRuntimeProvider", () => {
     );
 
     rendered.unmount();
+    expect(disposeActivation).toHaveBeenCalledTimes(1);
+  });
+
+  it("re-activates an extension refreshed without a version change", async () => {
+    const disposeActivation = vi.fn();
+    const moduleLoader = vi.fn().mockResolvedValue({
+      activate: () => disposeActivation,
+    });
+
+    const { queryClient } = renderRuntime(moduleLoader);
+    await waitFor(() => expect(moduleLoader).toHaveBeenCalledTimes(1));
+
+    vi.mocked(CanvasExtensionsService.listInstalled).mockResolvedValue([
+      { ...extension, installed_at: "2026-08-02T00:00:00Z" },
+    ]);
+    await queryClient.invalidateQueries();
+
+    await waitFor(() => expect(moduleLoader).toHaveBeenCalledTimes(2));
     expect(disposeActivation).toHaveBeenCalledTimes(1);
   });
 
@@ -166,5 +189,85 @@ describe("CanvasExtensionsRuntimeProvider", () => {
       ),
     );
     expect(screen.getByTestId("page-count")).toHaveTextContent("0");
+  });
+
+  it("revokes mounted app views when the selected backend changes", async () => {
+    const secondBackend: Backend = {
+      ...backend,
+      id: "second-extension-backend",
+      name: "Second extension backend",
+      host: "http://127.0.0.1:8001",
+    };
+    setRegisteredBackends([backend, secondBackend]);
+    const createSession = vi.fn().mockResolvedValue({
+      url: "https://apps.example.test/app-backends/demo-extension/",
+      expiresAt: "2026-09-23T16:00:00Z",
+      iframeSandbox:
+        "allow-forms allow-modals allow-popups allow-same-origin allow-scripts",
+    });
+    const revokeSession = vi.fn().mockResolvedValue(undefined);
+    const disposeClient = vi.fn();
+    vi.mocked(
+      CanvasExtensionsService.createAppBackendViewClient,
+    ).mockResolvedValue({
+      createSession,
+      revokeSession,
+      dispose: disposeClient,
+    });
+    const viewContainer = document.createElement("div");
+    const moduleLoader = vi.fn().mockResolvedValue({
+      activate: (host: CanvasExtensionHost) => {
+        host.appBackendView?.mount({ container: viewContainer });
+        host.registerPage("dashboard", () => undefined);
+      },
+    });
+
+    const rendered = renderRuntime(moduleLoader);
+
+    await waitFor(() => expect(createSession).toHaveBeenCalledTimes(1));
+    expect(viewContainer.querySelector("iframe")).not.toBeNull();
+
+    setActiveSelection({ backendId: secondBackend.id });
+
+    await waitFor(() => expect(revokeSession).toHaveBeenCalledTimes(1));
+    expect(disposeClient).toHaveBeenCalledTimes(1);
+    rendered.unmount();
+  });
+
+  it("disposes registrations from the previous backend before activating the next", async () => {
+    const secondBackend: Backend = {
+      ...backend,
+      id: "second-extension-backend",
+      name: "Second extension backend",
+      host: "http://127.0.0.1:8001",
+    };
+    setRegisteredBackends([backend, secondBackend]);
+    const disposeFirst = vi.fn();
+    const disposeSecond = vi.fn();
+    const moduleLoader = vi.fn().mockResolvedValue({
+      activate: (host: CanvasExtensionHost) => {
+        host.registerPage("dashboard", () => undefined);
+        return host.backend.id === backend.id ? disposeFirst : disposeSecond;
+      },
+    });
+
+    const rendered = renderRuntime(moduleLoader);
+    await waitFor(() =>
+      expect(screen.getByTestId("page-count")).toHaveTextContent("1"),
+    );
+
+    setActiveSelection({ backendId: secondBackend.id });
+
+    await waitFor(() => expect(disposeFirst).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(CanvasExtensionsService.fetchBundle).toHaveBeenLastCalledWith(
+        extension.name,
+        expect.objectContaining({ id: secondBackend.id }),
+      ),
+    );
+    expect(disposeSecond).not.toHaveBeenCalled();
+
+    rendered.unmount();
+    expect(disposeSecond).toHaveBeenCalledTimes(1);
   });
 });

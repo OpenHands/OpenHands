@@ -820,6 +820,24 @@ describe("observation titles", () => {
       values: { name: "accurate" },
     },
     {
+      name: "failed router switch",
+      observation: observationOf("ClassifyAndSwitchLLMObservation", {
+        is_error: true,
+        model: "fast",
+      }),
+      key: "MODEL$SWITCH_FAILED",
+      values: { name: "fast" },
+    },
+    {
+      name: "successful router switch",
+      observation: observationOf("ClassifyAndSwitchLLMObservation", {
+        is_error: false,
+        model: "accurate",
+      }),
+      key: "MODEL$SWITCHED_TO_PROFILE",
+      values: { name: "accurate" },
+    },
+    {
       name: "browser",
       observation: observationOf("BrowserObservation", {}),
       key: "OBSERVATION_MESSAGE$BROWSE",

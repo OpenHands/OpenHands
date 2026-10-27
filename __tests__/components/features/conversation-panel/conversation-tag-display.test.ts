@@ -103,8 +103,13 @@ describe("getDisplayConversationTags", () => {
         automationid: "3f2b6c1e-1111-4222-8333-abcdefabcdef",
         automationname: "Nightly Audit",
         automationrunid: "run-0001",
+        automationsetup: "draft",
+        automationdraftid: "draft-1",
+        automationmaterializeddraftid: "auto-draft-1",
+        automationeditid: "auto-1",
       }),
     ).toEqual([
+      ["automationsetup", "draft"],
       ["origin", "slack"],
       ["env", "prod"],
       ["owner", "alice"],
@@ -113,14 +118,16 @@ describe("getDisplayConversationTags", () => {
 
   it("ranks priority keys by their normalized name", () => {
     // The reserved-key filter normalizes the key, so the priority lookup must
-    // too — otherwise a cloud-stamped `Origin` sorts alphabetically instead of
-    // leading the row.
+    // too — otherwise cloud-stamped priority tags sort alphabetically instead
+    // of leading the row.
     expect(
       getDisplayConversationTags({
         env: "prod",
         Origin: "slack",
+        " AutomationSetup ": "draft",
       }),
     ).toEqual([
+      [" AutomationSetup ", "draft"],
       ["Origin", "slack"],
       ["env", "prod"],
     ]);
@@ -158,6 +165,7 @@ describe("getConversationTagLabelKind", () => {
     ["repo_name", "repo"],
     ["selected_branch", "branch"],
     ["archiveworkspacepath", "workspace"],
+    ["automationsetup", "automation_setup"],
     ["Appmode", "app_mode"],
     ["worktools", "work_tools"],
     ["Workwsid", "work_wsid"],
@@ -178,6 +186,10 @@ describe("getConversationTagLabel", () => {
         return "Branch";
       case I18nKey.CONVERSATION_PANEL$PREVIEW_WORKSPACE:
         return "Workspace";
+      case I18nKey.AUTOMATION_SETUP$TITLE:
+        return "Automation setup";
+      case I18nKey.AUTOMATIONS$DETAIL$DRAFT:
+        return "Draft";
       case I18nKey.CONVERSATION_PANEL$PREVIEW_APP_MODE:
         return "App mode";
       case I18nKey.CONVERSATION_PANEL$PREVIEW_WORK_TOOLS:
@@ -194,6 +206,12 @@ describe("getConversationTagLabel", () => {
     expect(getConversationTagLabel("repo_name", t)).toBe("Repo");
     expect(getConversationTagLabel("archiveworkspacepath", t)).toBe(
       "Workspace",
+    );
+    expect(getConversationTagLabel("automationsetup", t)).toBe(
+      "Automation setup",
+    );
+    expect(formatConversationTagTooltip("automationsetup", "draft", t)).toBe(
+      "Automation setup: Draft",
     );
     expect(getConversationTagLabel("Appmode", t)).toBe("App mode");
     expect(getConversationTagLabel("worktools", t)).toBe("Work tools");

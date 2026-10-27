@@ -29,7 +29,10 @@ vi.mock("#/hooks/mutation/use-activate-agent-profile", () => ({
   ACTIVATE_AGENT_PROFILE_MUTATION_KEY: ["activate-agent-profile"],
 }));
 
-import { ChatInputProfileMenuContent } from "#/components/features/chat/components/chat-input-profile-picker";
+import {
+  ChatInputAgentProfilePicker,
+  ChatInputProfileMenuContent,
+} from "#/components/features/chat/components/chat-input-profile-picker";
 
 const PROFILES = [
   { id: "id-default", name: "Default", agent_kind: "openhands" },
@@ -211,5 +214,47 @@ describe("ChatInputProfileMenuContent", () => {
         ],
       }),
     );
+  });
+});
+
+describe("ChatInputAgentProfilePicker", () => {
+  beforeEach(() => {
+    useAgentProfilesMock.mockReset();
+    useActiveConversationMock.mockReset();
+    useActiveConversationMock.mockReturnValue({ data: undefined });
+    activateProfileMutate.mockReset();
+  });
+
+  it("names the active profile and switches it from its menu", async () => {
+    useAgentProfilesMock.mockReturnValue({
+      data: { profiles: PROFILES, active_agent_profile_id: "id-default" },
+      isLoading: false,
+    });
+    renderWithProviders(<ChatInputAgentProfilePicker />, {
+      navigation: { conversationId: null },
+    });
+
+    const pill = screen.getByTestId("chat-input-agent-profile");
+    expect(pill).toHaveTextContent("Default");
+    fireEvent.click(pill);
+    fireEvent.click(
+      await screen.findByTestId("chat-input-agent-profile-option-Codex"),
+    );
+
+    expect(activateProfileMutate).toHaveBeenCalledWith("id-codex");
+  });
+
+  it("stays hidden without an active profile", () => {
+    useAgentProfilesMock.mockReturnValue({
+      data: { profiles: PROFILES, active_agent_profile_id: null },
+      isLoading: false,
+    });
+    renderWithProviders(<ChatInputAgentProfilePicker />, {
+      navigation: { conversationId: null },
+    });
+
+    expect(
+      screen.queryByTestId("chat-input-agent-profile"),
+    ).not.toBeInTheDocument();
   });
 });

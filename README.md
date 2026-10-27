@@ -7,11 +7,10 @@
     <strong>The self-hosted developer control center for coding agents and automations.</strong>
   </p>
   <p align="center">
-    Run OpenHands, Claude Code, Codex, Gemini, or any ACP-compatible agent across local, remote, and cloud backends.
+    Run OpenHands, Claude Code, Codex, Gemini, Pi, OpenCode, or any ACP-compatible agent across local, remote, and cloud backends.
   </p>
 </div>
 <div align="center">
-  <a href="https://github.com/OpenHands/incubator-program"><img src="https://img.shields.io/badge/status-beta-blue?style=for-the-badge" alt="Project status beta"></a>
   <a href="https://github.com/OpenHands/OpenHands/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/OpenHands/OpenHands/ci.yml?branch=main&style=for-the-badge" alt="CI status"></a>
   <a href="https://www.npmjs.com/package/@openhands/agent-canvas"><img src="https://img.shields.io/npm/v/%40openhands%2Fagent-canvas?style=for-the-badge&logo=npm" alt="npm version"></a>
   <a href="https://docs.openhands.dev/openhands/usage/agent-canvas/backends"><img src="https://img.shields.io/badge/Documentation-000?logo=googledocs&logoColor=FFE165&style=for-the-badge" alt="Documentation"></a>
@@ -34,7 +33,7 @@ OpenHands Agent Canvas turns your coding agents into a self-hosted, always-on en
 
 It runs locally on your machine by default, but can connect to multiple “agent backends”, e.g. running agents in Docker containers, on VMs, or within your company infrastructure. You can optionally choose to run agents on OpenHands Cloud or OpenHands Enterprise infrastructure.
 
-Agent Canvas runs the open source OpenHands agent out-of-the-box, but can use any third-party agent like Claude Code and Codex.
+Agent Canvas runs the open source OpenHands agent out-of-the-box, but can use third-party agents such as Claude Code, Codex, Gemini CLI, Pi, and OpenCode.
 
 |                                                                                                                      |                                                                                                                                          |
 | -------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
@@ -43,7 +42,7 @@ Agent Canvas runs the open source OpenHands agent out-of-the-box, but can use an
 | [**Create automations**](https://docs.openhands.dev/openhands/usage/agent-canvas/prebuilt-automations)               | Create automations and workflows that integrate with Slack, GitHub, Linear, and more. Run on a schedule or in response to webhook events |
 | [**Integrate with the tools you use**](https://docs.openhands.dev/openhands/usage/agent-canvas/prebuilt-automations) | Connect your automations with third-party services like Slack, GitHub, Notion, and more to automate workflows                            |
 | [**Bring your own model**](https://docs.openhands.dev/openhands/usage/settings/llm-settings#llm-profiles)            | Use with any LLM                                                                                                                         |
-| [**Use with any agent**](https://docs.openhands.dev/openhands/usage/agent-canvas/acp-agents)                         | Use with OpenHands, Claude Code, Codex, Gemini, or any agent with Agent-Client Protocol (ACP).                                           |
+| [**Use with any agent**](https://docs.openhands.dev/openhands/usage/agent-canvas/acp-agents)                         | Use with OpenHands, Claude Code, Codex, Gemini, Pi, OpenCode, or any agent with Agent-Client Protocol (ACP).                             |
 
 If you have questions or feedback, please open a GitHub issue or join the [#proj-agent-canvas channel in Slack](https://openhands.dev/joinslack).
 
@@ -93,33 +92,61 @@ export PROJECTS_PATH="$HOME/projects"  # directory containing your project folde
 mkdir -p "$PROJECTS_PATH" "$HOME/.openhands"
 
 docker run -it --rm \
-  -p 8000:8000 \
+  -p 127.0.0.1:8000:8000 \
+  -e AGENT_CANVAS_ALLOW_LAN_SESSION_KEY=true \
   -v "$HOME/.openhands:/home/openhands/.openhands" \
   -v "${PROJECTS_PATH}:/projects" \
-  ghcr.io/openhands/agent-canvas:1.23.0 # x-release-please-version
+  ghcr.io/openhands/agent-canvas:1.33.0 # x-release-please-version
 ```
 
 **Windows (PowerShell / Windows Terminal):** See [README.windows.md](./README.windows.md) for the equivalent commands.
 
 The agent will be able to access any project under `PROJECTS_PATH`.
 
-### Option 3: From Source
+### Option 3: With Multiple Docker Sandboxes
+
+Run each new conversation in its own Docker container, with its own Agent Server and tools. This is useful for running several agents concurrently. Canvas and the outer Agent Server run on your host and route conversation requests to the containers.
+
+**Prerequisites**: Node.js 24 or later, `uv`, and a running Docker Desktop (macOS) or Docker Engine/Desktop (Linux). The user starting Canvas must be able to run `docker` commands.
+
+**macOS / Linux:**
+
+```sh
+npm install -g @openhands/agent-canvas
+OH_CONVERSATION_RUNTIME=docker agent-canvas
+```
+
+Open [http://localhost:8000](http://localhost:8000) and start a new conversation. Existing local conversations are not converted. Each container mounts its conversation's workspace and persisted state, so workspace files and conversation history survive container replacement. Conversations using the same host workspace still share those files; choose separate directories or worktrees to avoid conflicting edits.
+
+This setting isolates conversation execution; it does not move the entire Canvas or automation service into a sandbox. For Windows, see [README.windows.md](./README.windows.md#option-3-with-multiple-docker-sandboxes-wsl-2).
+
+### Option 4: From Source
 
 > [!WARNING]
 > This runs the agent-server directly on the machine you're installing on — the agent will have full access to your filesystem!
 
-**Prerequisites**: [Node.js](https://nodejs.org/) 24 or later, `npm`, `uv` (for running the agent server via `uvx`)
+**Prerequisites**: [Node.js](https://nodejs.org/) 24 or later, npm 11.12.1 (the repository pin), `uv` (for running the agent server via `uvx`)
+
+Check `npm --version` before resolving dependencies. The seven-day release-age
+filter (`npm install --min-release-age=7`) requires npm >=11.10; older versions
+do not enforce it. Use `npm ci` to replay the committed lockfile. This npm
+requirement is for contributor dependency resolution, not for installing the
+published Canvas package.
 
 ```sh
 git clone https://github.com/OpenHands/OpenHands.git
 cd OpenHands
-npm install
+npm ci
 npm run dev
 ```
 
 ---
 
 Access the UI at [http://localhost:8000](http://localhost:8000) for the npm/source launchers, or [http://localhost:8000/canvas](http://localhost:8000/canvas) for the Docker image. You can add additional backends directly from the UI.
+
+Local (`npx` / `npm run dev`) listeners bind **loopback only** (`127.0.0.1`) so the auto-injected session key is not reachable from other machines on the network. To listen on all interfaces, pass `--host 0.0.0.0` (or set `OH_BIND_HOST`); the session key is then **not** injected and the UI uses the same API-key entry screen as `--public`.
+
+Docker listens on all container interfaces so port publishing works, but does not inject its session key into HTML by default. The quickstart above explicitly enables injection while publishing the host port on `127.0.0.1` only. If you publish Docker on a LAN or public interface, omit `AGENT_CANVAS_ALLOW_LAN_SESSION_KEY` and enter the API key in the UI. Set `LOCAL_BACKEND_API_KEY` to a strong value, or retrieve the generated value with `docker exec <container> sh -c 'cat "$STATE_DIR/api-key.txt"'`. For internet-facing installs, follow [self-hosting](./docs/SELF_HOSTING.md).
 
 # Architecture
 
@@ -140,19 +167,18 @@ The Agent Server is often paired with an [Automation Server](https://github.com/
 
 Agent Canvas is part of a multi-repository OpenHands system. Changes should go to the repository that owns the behavior:
 
-| Repository | Responsibility |
-|---|---|
-| [`OpenHands/OpenHands`](https://github.com/OpenHands/OpenHands) | Agent Canvas frontend, user-facing control center, backend selection, and local-stack orchestration. |
+| Repository                                                                        | Responsibility                                                                                            |
+| --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| [`OpenHands/OpenHands`](https://github.com/OpenHands/OpenHands)                   | Agent Canvas frontend, user-facing control center, backend selection, and local-stack orchestration.      |
 | [`OpenHands/software-agent-sdk`](https://github.com/OpenHands/software-agent-sdk) | Python SDK, Agent Server, agents, tools, conversations, workspaces, events, and the canonical server API. |
-| [`OpenHands/typescript-client`](https://github.com/OpenHands/typescript-client) | Browser-compatible TypeScript client for the Agent Server API. |
-| [`OpenHands/automation`](https://github.com/OpenHands/automation) | Automation definitions, scheduling, webhooks, run history, and dispatching. |
+| [`OpenHands/typescript-client`](https://github.com/OpenHands/typescript-client)   | Browser-compatible TypeScript client for the Agent Server API.                                            |
+| [`OpenHands/automation`](https://github.com/OpenHands/automation)                 | Automation definitions, scheduling, webhooks, run history, and dispatching.                               |
 
 The Agent Server API is implemented by the SDK and consumed through the TypeScript client by Agent Canvas. The automation service decides when work runs and dispatches conversations to the Agent Server/SDK, which decides what runs. See [`AGENTS.md`](./AGENTS.md) for contributor-specific boundaries and the required custom code-review guide.
-
 
 ## More documentation
 
 - [Documentation index](./docs/README.md)
 - [Architecture overview](./docs/architecture.md)
-- [Development guide](./docs/DEVELOPMENT.md)
+- [Development guide](./docs/DEVELOPMENT.md), including [embedding Canvas components in a host app](./docs/DEVELOPMENT.md#css-isolation-and-host-app-customization) (load `@openhands/agent-canvas/styles.css` once next to the component imports)
 - [Self-hosting guide](./docs/SELF_HOSTING.md)

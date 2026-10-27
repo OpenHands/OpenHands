@@ -3,6 +3,7 @@ import { ThinkingBlock } from "#/types/agent-server/core/base/event";
 import {
   isActionEvent,
   isObservationEvent,
+  isUserRejectObservation,
 } from "#/types/agent-server/type-guards";
 
 /**
@@ -25,7 +26,9 @@ export const getActionThoughtText = (action: ActionEvent): string =>
  * models). Falls back to the text from `thinking_blocks` (Anthropic
  * extended thinking). Returns an empty string when neither is available.
  */
-export const getReasoningContent = (action: ActionEvent): string => {
+export const getReasoningContent = (
+  action: Partial<Pick<ActionEvent, "reasoning_content" | "thinking_blocks">>,
+): string => {
   if (action.reasoning_content) {
     return action.reasoning_content;
   }
@@ -85,7 +88,8 @@ export const splitInlineThink = (
 /**
  * Find the `ActionEvent` whose thought should be rendered alongside the
  * given UI event. For an `ActionEvent` the thought belongs to itself; for
- * an `ObservationEvent` we look up the matching action in `allEvents`.
+ * an `ObservationEvent` (or the `UserRejectObservation` of a rejected
+ * action) we look up the matching action in `allEvents`.
  *
  * `ThinkAction` is intentionally excluded because its thought IS the
  * action body and is rendered through a separate codepath.
@@ -99,7 +103,7 @@ export const getThoughtSourceAction = (
     return hasNonEmptyThought(event) ? event : null;
   }
 
-  if (isObservationEvent(event)) {
+  if (isObservationEvent(event) || isUserRejectObservation(event)) {
     const action = allEvents.find(
       (e): e is ActionEvent => isActionEvent(e) && e.id === event.action_id,
     );

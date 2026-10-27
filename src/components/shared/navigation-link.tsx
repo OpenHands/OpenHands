@@ -62,6 +62,7 @@ export const NavigationLink = React.forwardRef<
       children,
       target,
       rel,
+      "aria-current": ariaCurrent,
       ...props
     },
     ref,
@@ -97,7 +98,9 @@ export const NavigationLink = React.forwardRef<
         rel={rel}
         onClick={handleClick}
         className={resolvedClassName}
-        aria-current={isActive ? "page" : undefined}
+        // A caller that knows the link stands for a whole section (e.g. the
+        // sidebar Customize row on /mcp) can mark it current explicitly.
+        aria-current={ariaCurrent ?? (isActive ? "page" : undefined)}
       >
         {children}
       </a>

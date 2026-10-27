@@ -9,10 +9,8 @@ import { useTranslation } from "react-i18next";
 import { LlmProfilesManager } from "./llm-profiles-manager";
 import { ProfileNameInput } from "./profile-name-input";
 import { BrandButton } from "#/components/features/settings/brand-button";
-import {
-  LlmSettingsScreen,
-  LLM_PROVIDER_CONNECTION_KEY,
-} from "#/routes/llm-settings";
+import { LlmSettingsScreen } from "#/routes/llm-settings";
+import { LLM_PROVIDER_CONNECTION_KEY } from "#/constants/llm-provider-connection";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useSaveLlmProfile } from "#/hooks/mutation/use-save-llm-profile";
 import { useActivateLlmProfile } from "#/hooks/mutation/use-activate-llm-profile";
@@ -34,22 +32,25 @@ import {
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
+import { getApiErrorMessage } from "#/utils/api-error-message";
 import {
   deriveProfileNameFromModel,
   isProfileNameValid,
 } from "#/utils/derive-profile-name";
-import { isOpenHandsProviderModel } from "#/utils/format-model-name";
 import { SdkSectionSaveControl } from "../sdk-settings/sdk-section-page";
+import {
+  buildProfileLlmConfig,
+  profileConfigToFormValues,
+} from "./llm-profile-form";
 import {
   LLM_AUTH_TYPE_API_KEY,
   LLM_AUTH_TYPE_KEY,
-  LLM_AUTH_TYPE_SUBSCRIPTION,
   LLM_SUBSCRIPTION_VENDOR_KEY,
   OPENAI_SUBSCRIPTION_VENDOR,
-  resolveLlmAuthType,
 } from "#/constants/llm-subscription";
 import {
-  normalizeFieldValue,
+  buildSdkSettingsPayload,
+  getAgentSettingValue,
   SettingsFormValues,
 } from "#/utils/sdk-settings-schema";
 import { BackNavButton } from "#/components/shared/buttons/back-nav-button";
@@ -117,6 +118,26 @@ export function LlmSettingsLocalView() {
   // embedded form hydrates, so the eventual DB default never replaces it and
   // the user can save the wrong model.
   const isDefaultModelReady = useDefaultModelReady();
+  // @spec LLP-001 — A fresh profile never inherits schema-declared credentials.
+  const createProfileInitialValues = useMemo(
+    () => ({
+      // A fresh profile may inherit options, but no existing credentials.
+      ...Object.fromEntries(
+        (agentSchema?.sections ?? []).flatMap((section) =>
+          section.fields
+            .filter((field) => field.secret)
+            .map((field) => [field.key, ""]),
+        ),
+      ),
+      "llm.model": createProfileDefaultModel,
+      "llm.api_key": "",
+      "llm.base_url": "",
+      [LLM_PROVIDER_CONNECTION_KEY]: "",
+      [LLM_AUTH_TYPE_KEY]: LLM_AUTH_TYPE_API_KEY,
+      [LLM_SUBSCRIPTION_VENDOR_KEY]: OPENAI_SUBSCRIPTION_VENDOR,
+    }),
+    [agentSchema, createProfileDefaultModel],
+  );
 
   // Always hold the freshest schema. `handleEditProfile` awaits a network
   // round-trip before seeding the form, so reading the schema from a ref
@@ -126,6 +147,8 @@ export function LlmSettingsLocalView() {
   // and would otherwise seed only the three hard-coded keys.
   const agentSchemaRef = useRef(agentSchema);
   agentSchemaRef.current = agentSchema;
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
 
   // Provider connections are available on the local agent-server and on cloud
   // when an org is bound (the org-scoped CRUD routes). A cloud backend without
@@ -137,12 +160,16 @@ export function LlmSettingsLocalView() {
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [profileName, setProfileName] = useState("");
   const [isOracleProfileCreation, setIsOracleProfileCreation] = useState(false);
+  // Whether the user typed the current create-mode name. Until they do (or
+  // after they clear it), the name is auto-derived from the selected model.
+  const [isProfileNameUserEdited, setIsProfileNameUserEdited] = useState(false);
   const [editingProfile, setEditingProfile] = useState<EditingProfile | null>(
     null,
   );
   const [saveControl, setSaveControl] = useState<SdkSectionSaveControl | null>(
     null,
   );
+  const automaticCreateBooleanKeys = useRef<Set<string> | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
 
@@ -162,37 +189,34 @@ export function LlmSettingsLocalView() {
     isOracleProfileName(editingProfile?.profile.name ?? "");
 
   // Validate profile name. The shared validator rejects any whitespace, so
-  // duplicate checks below compare the raw value directly.
-  const isNameValid = useMemo(() => {
-    if (!isProfileNameValid(profileName, { isRequired: true })) return false;
-    if (
-      (isOracleProfileFlow && !isOracleProfileName(profileName)) ||
-      (!isOracleProfileFlow && isOracleProfileName(profileName))
-    ) {
-      return false;
-    }
-    // In create mode, check for duplicates
-    if (viewMode === "create" && existingNames.has(profileName)) return false;
-    // In edit mode, name can match current profile name
-    if (
-      viewMode === "edit" &&
-      profileName !== editingProfile?.profile.name &&
-      existingNames.has(profileName)
-    ) {
-      return false;
-    }
-    return true;
-  }, [
-    profileName,
-    viewMode,
-    existingNames,
-    editingProfile?.profile.name,
-    isOracleProfileFlow,
-  ]);
+  // the duplicate check below compares the raw value directly.
+  const isNameFormatValid = isProfileNameValid(profileName, {
+    isRequired: true,
+  });
+  // In edit mode, name can match current profile name
+  const isDuplicateName =
+    isNameFormatValid &&
+    existingNames.has(profileName) &&
+    (viewMode === "create" ||
+      (viewMode === "edit" && profileName !== editingProfile?.profile.name));
+  const isReservedName =
+    isOracleProfileName(profileName) && !isOracleProfileFlow;
+  const isNameValid =
+    isNameFormatValid &&
+    !isDuplicateName &&
+    !isReservedName &&
+    (!isOracleProfileFlow || isOracleProfileName(profileName));
+
+  const handleProfileNameChange = useCallback((value: string) => {
+    setProfileName(value);
+    setIsProfileNameUserEdited(value !== "");
+  }, []);
 
   const handleAddProfile = useCallback((initialName = "") => {
+    automaticCreateBooleanKeys.current = null;
     setProfileName(initialName);
     setIsOracleProfileCreation(isOracleProfileName(initialName));
+    setIsProfileNameUserEdited(false);
     setEditingProfile(null);
     setViewMode("create");
   }, []);
@@ -216,41 +240,10 @@ export function LlmSettingsLocalView() {
         // active settings. Fields absent from the schema are still preserved
         // on save via `baseConfig`. Read the schema from the ref so a schema
         // that loaded during the `getProfile` await above is used.
-        const schema = agentSchemaRef.current;
-        const llmFields =
-          schema?.sections.find((section) => section.key === "llm")?.fields ??
-          [];
-        const initialValues: SettingsFormValues = {};
-        for (const field of llmFields) {
-          const flatKey = field.key.startsWith("llm.")
-            ? field.key.slice("llm.".length)
-            : field.key;
-          initialValues[field.key] = normalizeFieldValue(
-            field,
-            config[flatKey],
-          );
-        }
-
-        // Safety net for the specially-rendered keys when the schema is
-        // unavailable, so editing still works without it.
-        if (llmFields.length === 0) {
-          initialValues["llm.model"] = (config.model as string) ?? "";
-          initialValues["llm.api_key"] = (config.api_key as string) ?? "";
-          initialValues["llm.base_url"] = (config.base_url as string) ?? "";
-          initialValues[LLM_AUTH_TYPE_KEY] = resolveLlmAuthType(
-            config.auth_type,
-          );
-          initialValues[LLM_SUBSCRIPTION_VENDOR_KEY] =
-            (config.subscription_vendor as string) ??
-            OPENAI_SUBSCRIPTION_VENDOR;
-        }
-
-        // Seed the provider-connection link explicitly (it is excluded from the
-        // schema-driven inputs), so an unchanged profile keeps its connection.
-        initialValues[LLM_PROVIDER_CONNECTION_KEY] =
-          typeof config.provider_connection_id === "string"
-            ? config.provider_connection_id
-            : "";
+        const initialValues = profileConfigToFormValues(
+          agentSchemaRef.current,
+          config,
+        );
 
         setEditingProfile({ profile, initialValues, baseConfig: config });
         setProfileName(profile.name);
@@ -265,6 +258,7 @@ export function LlmSettingsLocalView() {
   );
 
   const handleBackToList = useCallback(() => {
+    automaticCreateBooleanKeys.current = null;
     setViewMode("list");
     setEditingProfile(null);
     setProfileName("");
@@ -275,27 +269,58 @@ export function LlmSettingsLocalView() {
   const handleSaveControlChange = useCallback(
     (control: SdkSectionSaveControl) => {
       setSaveControl(control);
+      const currentSettings = settingsRef.current;
+      const currentSchema = agentSchemaRef.current;
+      // Capture the draft's raw origin once it hydrates. Null-default booleans
+      // render unchecked, but null preserves provider auto-detection. A later
+      // settings refresh must not change that meaning for this open draft.
+      if (
+        viewMode === "create" &&
+        automaticCreateBooleanKeys.current === null &&
+        currentSettings &&
+        currentSchema &&
+        "llm.model" in control.values
+      ) {
+        automaticCreateBooleanKeys.current = new Set(
+          currentSchema.sections.flatMap((section) =>
+            section.fields
+              .filter(
+                (field) =>
+                  field.value_type === "boolean" &&
+                  field.default === null &&
+                  getAgentSettingValue(currentSettings, field.key) === null,
+              )
+              .map((field) => field.key),
+          ),
+        );
+      }
 
-      // Auto-derive profile name from model in create mode.
+      // Auto-derive profile name from model in create mode, and keep it
+      // following later model changes until the user types their own name.
       // Note: The uniqueness check uses existingNames from state, which is derived
       // from profilesData at component render time. If another client creates a
       // profile with the same derived name while this form is open, the client-side
       // check would pass but the server save would fail with a conflict error.
       // This is acceptable for the current use case; the server error is handled
       // gracefully in handleSave.
-      if (viewMode === "create" && !profileName) {
+      if (
+        viewMode === "create" &&
+        !isProfileNameUserEdited &&
+        !isOracleProfileFlow
+      ) {
         const modelValue = control.values["llm.model"];
         if (typeof modelValue === "string" && modelValue) {
           const derived = deriveProfileNameFromModel(modelValue);
-          if (!existingNames.has(derived)) {
-            setProfileName(derived);
-          }
+          // Never auto-fill an existing profile's name; clear the previous
+          // model's name instead so it cannot be saved under the new model.
+          setProfileName(existingNames.has(derived) ? "" : derived);
         }
       }
     },
-    [viewMode, profileName, existingNames],
+    [viewMode, isProfileNameUserEdited, isOracleProfileFlow, existingNames],
   );
 
+  // @spec LLP-001 — New profiles preserve options and credential boundaries.
   const handleSave = useCallback(async () => {
     if (!saveControl || !isNameValid) return;
 
@@ -306,10 +331,34 @@ export function LlmSettingsLocalView() {
     // otherwise reset everything else to defaults.
     let dirtyLlm: Record<string, unknown>;
     try {
-      dirtyLlm = (saveControl.getDirtyPayload().llm ?? {}) as Record<
-        string,
-        unknown
-      >;
+      // A new profile has no saved config to merge over, so persist every
+      // non-secret value its form displays, using the same coercion as edits.
+      // Explicit credential edits are included by the dirty payload below.
+      const initialPayload =
+        viewMode === "create" && agentSchema
+          ? buildSdkSettingsPayload(
+              agentSchema,
+              saveControl.values,
+              Object.fromEntries(
+                agentSchema.sections.flatMap((section) =>
+                  section.fields
+                    .filter((field) => field.key in saveControl.values)
+                    .map((field) => [
+                      field.key,
+                      !field.secret &&
+                        !automaticCreateBooleanKeys.current?.has(field.key),
+                    ]),
+                ),
+              ),
+            )
+          : {};
+      dirtyLlm = {
+        ...((initialPayload.llm ?? {}) as Record<string, unknown>),
+        ...((saveControl.getDirtyPayload().llm ?? {}) as Record<
+          string,
+          unknown
+        >),
+      };
     } catch (error) {
       displayErrorToast(
         error instanceof Error ? error.message : t(I18nKey.ERROR$GENERIC),
@@ -317,80 +366,17 @@ export function LlmSettingsLocalView() {
       return;
     }
 
-    const baseConfig =
-      viewMode === "edit" && editingProfile?.baseConfig
-        ? { ...editingProfile.baseConfig }
-        : {};
-    const didChangeModelInBasic =
-      saveControl.view === "basic" &&
-      Object.prototype.hasOwnProperty.call(dirtyLlm, "model") &&
-      dirtyLlm.model !== baseConfig.model;
-    const llmConfig: Record<string, unknown> = { ...baseConfig, ...dirtyLlm };
-    const authType = resolveLlmAuthType(llmConfig.auth_type);
-
-    // A profile linked to a provider connection sources its credential from the
-    // connection, so it never carries an inline api_key / base_url. The form
-    // value is the source of truth: empty (or absent) means "not linked".
-    const connectionId = supportsConnections
-      ? String(saveControl.values[LLM_PROVIDER_CONNECTION_KEY] ?? "").trim()
-      : "";
-
-    if (authType === LLM_AUTH_TYPE_SUBSCRIPTION) {
-      llmConfig.auth_type = LLM_AUTH_TYPE_SUBSCRIPTION;
-      llmConfig.subscription_vendor = OPENAI_SUBSCRIPTION_VENDOR;
-      llmConfig.provider_connection_id = null;
-      delete llmConfig.api_key;
-      delete llmConfig.base_url;
-    } else if (connectionId) {
-      llmConfig.auth_type = LLM_AUTH_TYPE_API_KEY;
-      llmConfig.subscription_vendor = null;
-      llmConfig.provider_connection_id = connectionId;
-      delete llmConfig.api_key;
-      delete llmConfig.base_url;
-    } else {
-      llmConfig.auth_type = LLM_AUTH_TYPE_API_KEY;
-      llmConfig.subscription_vendor = null;
-      // Clear any prior link so unlinking sticks. Only relevant where provider
-      // connections exist; otherwise the field stays untouched below.
-      if (supportsConnections) llmConfig.provider_connection_id = null;
-
-      // On cloud the OpenHands provider is backed by a server-minted LLM key,
-      // so the profile must not carry an inline api_key / base_url — let the
-      // backend attach its own credential when the profile is saved.
-      const isCloudOpenHandsProvider =
-        backend.kind === "cloud" &&
-        isOpenHandsProviderModel(
-          typeof llmConfig.model === "string" ? llmConfig.model : "",
-        );
-      if (isCloudOpenHandsProvider) {
-        delete llmConfig.api_key;
-        delete llmConfig.base_url;
-      } else {
-        // The Basic tab has no base_url field. Preserve an existing hidden value
-        // when the model did not actually change; if the user chooses a new model,
-        // drop the old base URL so provider defaults can apply to that model.
-        if (didChangeModelInBasic) {
-          delete llmConfig.base_url;
-        }
-
-        // API key handling: an empty value means "no change" (the UX doesn't
-        // support clearing a key). In edit mode preserve the existing encrypted
-        // key from the profile; in create mode omit api_key entirely. A newly
-        // typed key arrives in `dirtyLlm` and wins.
-        if (
-          typeof llmConfig.api_key !== "string" ||
-          llmConfig.api_key.trim() === ""
-        ) {
-          const existingKey =
-            typeof baseConfig.api_key === "string" ? baseConfig.api_key : "";
-          if (existingKey) {
-            llmConfig.api_key = existingKey;
-          } else {
-            delete llmConfig.api_key;
-          }
-        }
-      }
-    }
+    const { llmConfig, connectionId } = buildProfileLlmConfig({
+      baseConfig:
+        viewMode === "edit" && editingProfile?.baseConfig
+          ? editingProfile.baseConfig
+          : {},
+      dirtyLlm,
+      values: saveControl.values,
+      view: saveControl.view,
+      supportsConnections,
+      isCloud: backend.kind === "cloud",
+    });
 
     const model = typeof llmConfig.model === "string" ? llmConfig.model : "";
     if (!model) {
@@ -449,9 +435,9 @@ export function LlmSettingsLocalView() {
         },
       });
 
-      // Conversation start uses agent_settings.llm, not the profile row
-      // directly. Re-applying an active profile keeps those settings in sync
-      // after editing or recreating a profile with the active profile name.
+      // Activation copies the profile into agent_settings.llm, which the
+      // planner falls back to. Re-applying an active profile keeps that copy
+      // in sync after editing or recreating a profile with its name.
       if (shouldReapplyActiveProfile) {
         await activateProfile.mutateAsync(trimmedName);
       }
@@ -464,13 +450,14 @@ export function LlmSettingsLocalView() {
       handleBackToList();
     } catch (error) {
       console.error("Failed to save profile:", error);
-      displayErrorToast(t(I18nKey.ERROR$GENERIC));
+      displayErrorToast(getApiErrorMessage(error, t(I18nKey.ERROR$GENERIC)));
     } finally {
       setIsValidating(false);
       setIsSaving(false);
     }
   }, [
     saveControl,
+    agentSchema,
     isNameValid,
     supportsConnections,
     profileName,
@@ -531,11 +518,14 @@ export function LlmSettingsLocalView() {
       <ProfileNameInput
         testId="profile-name-input"
         value={profileName}
-        onChange={setProfileName}
+        onChange={handleProfileNameChange}
         isRequired
         isDisabled={isOracleProfileFlow}
-        isReservedName={
-          isOracleProfileName(profileName) && !isOracleProfileFlow
+        isReservedName={isReservedName}
+        error={
+          isDuplicateName
+            ? t(I18nKey.SETTINGS$LLM_PROFILE_NAME_TAKEN)
+            : undefined
         }
       />
       {isOracleProfileFlow ? (
@@ -568,16 +558,7 @@ export function LlmSettingsLocalView() {
             viewMode === "edit" && editingProfile?.initialValues
               ? // Edit mode: use the existing profile values
                 editingProfile.initialValues
-              : // Create mode: prefill with the backend-selected default model,
-                // while keeping secret/base URL fields blank for a fresh profile.
-                {
-                  "llm.model": createProfileDefaultModel,
-                  "llm.api_key": "",
-                  "llm.base_url": "",
-                  [LLM_PROVIDER_CONNECTION_KEY]: "",
-                  [LLM_AUTH_TYPE_KEY]: LLM_AUTH_TYPE_API_KEY,
-                  [LLM_SUBSCRIPTION_VENDOR_KEY]: OPENAI_SUBSCRIPTION_VENDOR,
-                }
+              : createProfileInitialValues
           }
           showProviderConnection={supportsConnections}
           onSaveControlChange={handleSaveControlChange}

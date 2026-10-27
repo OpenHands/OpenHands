@@ -21,11 +21,28 @@ export interface AutomationTrigger {
   filter?: string;
 }
 
+/**
+ * A repository an automation clones before it runs, as the preset API stores
+ * it in `preset_metadata.repos[]` (the SDK's `RepoSource`).
+ */
+export interface AutomationRepository {
+  /** Full git URL, or the `owner/repo` shorthand. */
+  url: string;
+  /** Branch, tag or commit to check out; absent uses the default branch. */
+  ref?: string;
+  /** Git provider that authenticates the clone; required for the shorthand. */
+  provider?: string;
+}
+
+export type AutomationState = "ACTIVE" | "INACTIVE" | "DRAFT";
+
 export interface Automation {
   id: string;
   name: string;
   trigger: AutomationTrigger;
   enabled: boolean;
+  /** Backend automation lifecycle state. Prefer this over deprecated `enabled` when present. */
+  state?: AutomationState | string | null;
   /**
    * Human-readable reason the automation was last disabled (the latest
    * disablement event overwrites this). Mirrors the automation service's
@@ -55,6 +72,11 @@ export interface Automation {
    * automations even without `manage_automations`.
    */
   user_id?: string;
+  /**
+   * Single repository in the import/export file's shape. The automation
+   * service does not return it; read `repositories` for what an automation
+   * clones.
+   */
   repository?: string;
   /** Saved agent profile controlling model, tools, and selected secrets. */
   agent_profile_id?: string | null;
@@ -75,18 +97,45 @@ export interface Automation {
    * detail page uses it to point out which bundle file is the script.
    */
   entrypoint?: string;
+  /** Service-owned upload identifier/path for custom automation bundles. */
+  tarball_path?: string | null;
+  /** Optional setup script path inside the custom automation bundle. */
+  setup_script_path?: string | null;
   branch?: string;
+  /**
+   * Every repository the automation clones. The service layer derives it on
+   * read from `preset_metadata.repos` (or the top-level `repository`/`branch`
+   * when there is no metadata); the service has no top-level field for it.
+   */
+  repositories?: AutomationRepository[];
+  /**
+   * Plugin sources (e.g. `github:owner/repo`). The service layer fills it on
+   * read from `preset_metadata.plugins[].source`; a record without that
+   * metadata keeps its own list.
+   */
   plugins?: string[];
   notification?: string;
   timezone?: string;
   last_triggered_at?: string | null;
   /**
-   * Service-owned preset state, returned verbatim. The GUI reads only the
+   * Service-owned preset state, returned verbatim. The GUI reads the
    * `template` provenance block inside it ({id, version, config}, written at
-   * setup time), and only through the guarded helper in
-   * `#/utils/automation-catalog`.
+   * setup time) only through the guarded helper in
+   * `#/utils/automation-catalog`, and `repos`/`plugins` only through
+   * `#/utils/automation-preset-sources`.
    */
   preset_metadata?: Record<string, unknown> | null;
+  /**
+   * Labels the creator groups automations by, normalized by the automation
+   * service. Absent from an automation service older than tag support.
+   */
+  tags?: string[];
+}
+
+/** One of the org's tags and how many live automations carry it. */
+export interface AutomationTagCount {
+  tag: string;
+  count: number;
 }
 
 export type AutomationSpec = Omit<
@@ -96,6 +145,7 @@ export type AutomationSpec = Omit<
   | "updated_at"
   | "last_triggered_at"
   | "preset_metadata"
+  | "repositories"
   | "entrypoint"
   | "disabled_reason"
   | "disabled_detail"
@@ -113,6 +163,12 @@ export interface AutomationsResponse {
   automations: Automation[];
   total: number;
 }
+
+/**
+ * Mirrors the list endpoint's `created_by` query param: the caller's
+ * automations (`me`) or the rest of the org's (`others`).
+ */
+export type AutomationCreatedByFilter = "me" | "others";
 
 /** Mirrors `RunStatus` in the automation service's OpenAPI schema. */
 export enum AutomationRunStatus {
@@ -187,20 +243,12 @@ export interface AutomationRun {
    */
   cost?: number | null;
   /**
-   * Machine-readable code for the run's current or last-known phase (e.g.
-   * "sandbox_provisioning"). `null` means nothing has reported one; absent
-   * entirely against an automation service that predates phase reporting.
-   * Code and label are one value, always written together.
+   * User-facing live phase from automation ≥1.9.0. Free-form text the
+   * service already sanitised for the dashboard — not a translation key.
+   * `null` means nothing has been reported; absent entirely against a
+   * service older than phase reporting.
    */
-  phase_code?: string | null;
-  /**
-   * Author-supplied description of the phase (at most 200 characters, no
-   * control or separator characters, emoji and non-Latin text allowed).
-   * Data, not translatable interface copy.
-   */
-  phase_label?: string | null;
-  /** UTC datetime the phase was last written. Same nullability as `phase_code`. */
-  phase_updated_at?: string | null;
+  current_phase?: string | null;
   started_at: string;
   completed_at: string | null;
 }
@@ -239,8 +287,7 @@ export interface AutomationRunExportRow {
    */
   cost: number | null;
   /**
-   * The raw `phase_code`, like `status`, falling back to `phase_label` for a
-   * phase reported without a code. Null only when the run has no phase.
+   * The run's `current_phase` as stored. Null only when the run has no phase.
    */
   phase: string | null;
 }

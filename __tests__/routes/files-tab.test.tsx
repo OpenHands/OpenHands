@@ -1,4 +1,7 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { compile } from "@tailwindcss/node";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -6,7 +9,9 @@ import { MemoryRouter } from "react-router";
 
 import FilesTab from "#/routes/files-tab";
 import { useFilesTabStore } from "#/stores/files-tab-store";
+import { useWorkspaceMutationCounter } from "#/stores/use-workspace-mutation-counter";
 import { NavigationProvider } from "#/context/navigation-context";
+import { FILES_TAB_TREE_WIDTH_STORAGE_KEY } from "#/components/features/files-tab/files-tab-tree.constants";
 import {
   LOCAL_STORAGE_KEYS,
   setConversationState,
@@ -56,6 +61,25 @@ function openFile(path: string, conversationId: string | null = null) {
   useFilesTabStore.getState().setSelectedPath(path, conversationId);
 }
 
+// Follow the rendered classes into production Tailwind CSS instead of assuming
+// the utility name or custom property that connects the reader to the writer.
+async function getTreeWidthProperty(tree: HTMLElement) {
+  const compiler = await compile(
+    await readFile(resolve("src/tailwind.css"), "utf8"),
+    { base: resolve("src"), onDependency: () => {} },
+  );
+  const css = compiler.build([...tree.classList]);
+  const declarations = [...css.matchAll(/\.((?:\\.|[\w-])+)\s*\{([^}]+)\}/g)]
+    .filter(([, selector]) =>
+      tree.classList.contains(selector.replace(/\\(.)/g, "$1")),
+    )
+    .map(([, , body]) => body)
+    .join("\n");
+  const width = /(?:^|\n)\s*width:\s*var\((--[\w-]+)\);/.exec(declarations);
+  expect(width).not.toBeNull();
+  return width![1];
+}
+
 describe("FilesTab", () => {
   beforeEach(() => {
     useFilesTabStore.setState({
@@ -63,6 +87,7 @@ describe("FilesTab", () => {
       selectedConversationId: null,
       openPaths: [],
     });
+    useWorkspaceMutationCounter.setState({ count: 0 });
     localStorage.clear();
 
     useWorkspaceFilesMock.mockReset();
@@ -102,6 +127,19 @@ describe("FilesTab", () => {
     expect(
       screen.queryByTestId("files-tab-diff-toggle"),
     ).not.toBeInTheDocument();
+  });
+
+  // @spec WFD-001 — Configurable local workspace discovery
+  it("shows an incomplete-tree message when discovery is truncated", () => {
+    useWorkspaceFilesMock.mockReturnValue({
+      data: ["a.txt", "b.txt"],
+      isLoading: false,
+      isTruncated: true,
+    });
+    renderTab();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "FILES$DISCOVERY_TRUNCATED",
+    );
   });
 
   it("does not open file tabs until a file is selected", () => {
@@ -202,31 +240,74 @@ describe("FilesTab", () => {
     expect(tab).toHaveAttribute("role", "tab");
   });
 
-  it("shows the file tree by default and collapses it via the caret", async () => {
+  it("retains resized pixel widths through clamps, collapse and remount", async () => {
+    // Arrange: the real resize hook measures the layout's left edge.
     const user = userEvent.setup();
+    openFile("README.md");
+    const view = renderTab();
+    const tree = screen.getByTestId("files-tab-tree");
+    const widthProperty = await getTreeWidthProperty(tree);
+    vi.spyOn(tree.parentElement!, "getBoundingClientRect").mockReturnValue(
+      DOMRect.fromRect({ x: 100, y: 0, width: 1000, height: 600 }),
+    );
+    const handle = screen.getByTestId("files-tab-tree-resize-handle");
 
-    renderTab();
+    // Act + Assert: pointer coordinates update pixel width and both clamps.
+    fireEvent.mouseDown(handle.firstElementChild!);
+    expect(document.querySelector("[data-panel-drag-shield]")).not.toBeNull();
+    for (const [clientX, expectedWidth] of [
+      [424, 324],
+      [1000, 480],
+      [100, 160],
+      [424, 324],
+    ]) {
+      fireEvent.mouseMove(document, { clientX });
+      expect(tree.style.getPropertyValue(widthProperty)).toBe(
+        `${expectedWidth}px`,
+      );
+    }
+    fireEvent.mouseUp(document);
+    expect(document.querySelector("[data-panel-drag-shield]")).toBeNull();
+    expect(
+      JSON.parse(localStorage.getItem(FILES_TAB_TREE_WIDTH_STORAGE_KEY)!),
+    ).toBe(324);
 
-    expect(screen.getByTestId("files-tab-tree")).toBeInTheDocument();
-
+    // Collapse/restore and a new mount retain width and the selected file.
     await user.click(screen.getByTestId("file-quick-row-tree-toggle"));
     expect(screen.queryByTestId("files-tab-tree")).not.toBeInTheDocument();
-
+    expect(
+      screen.queryByTestId("files-tab-tree-resize-handle"),
+    ).not.toBeInTheDocument();
     await user.click(screen.getByTestId("file-quick-row-tree-toggle"));
-    expect(screen.getByTestId("files-tab-tree")).toBeInTheDocument();
+    expect(
+      screen
+        .getByTestId("files-tab-tree")
+        .style.getPropertyValue(widthProperty),
+    ).toBe("324px");
+    view.unmount();
+    renderTab();
+    expect(
+      screen
+        .getByTestId("files-tab-tree")
+        .style.getPropertyValue(widthProperty),
+    ).toBe("324px");
+    expect(screen.getByRole("tab", { selected: true })).toHaveTextContent(
+      "README.md",
+    );
   });
 
-  it("exposes a grippable resize handle on the tree's right edge when expanded", () => {
-    window.localStorage.clear();
-
+  it("applies the default tree width through a compiled CSS reader", async () => {
+    // Arrange + Act
     renderTab();
+    const tree = screen.getByTestId("files-tab-tree");
+    const widthProperty = await getTreeWidthProperty(tree);
 
+    // Assert: native CSS consumes a px value without host spacing/font tokens.
+    expect(tree.style.width).toBe("");
+    expect(tree.style.getPropertyValue(widthProperty)).toBe("224px");
     expect(
       screen.getByTestId("files-tab-tree-resize-handle"),
     ).toBeInTheDocument();
-    expect(screen.getByTestId("files-tab-tree")).toHaveStyle({
-      width: "224px",
-    });
   });
 
   it("opens a tab from the file tree when a file is clicked", async () => {
@@ -334,6 +415,47 @@ describe("FilesTab", () => {
     const iframe = await screen.findByTestId("file-content-viewer-iframe");
     expect(iframe).toHaveAttribute("src", `${staticUrl}?v=0`);
     expect(iframe).toHaveAttribute("sandbox", "allow-same-origin");
+  });
+
+  it("re-requests the rich preview and the new-window link on Refresh", async () => {
+    useWorkspaceFilesMock.mockReturnValue({
+      data: ["index.html"],
+      isLoading: false,
+    });
+    const staticUrl =
+      "https://agent.example.com/api/conversations/conv-1/workspace/index.html";
+    useWorkspaceFileContentMock.mockReturnValue({
+      data: {
+        path: "index.html",
+        kind: "text",
+        text: "<!doctype html><body>hi</body>",
+        staticUrl,
+        mimeType: "text/html",
+      },
+      isLoading: false,
+      isError: false,
+    });
+    const user = userEvent.setup();
+
+    openFile("index.html");
+    renderTab();
+    const iframe = await screen.findByTestId("file-content-viewer-iframe");
+    const srcBefore = iframe.getAttribute("src");
+
+    await user.click(screen.getByTestId("files-tab-refresh"));
+
+    // A new URL is the only way to make an <iframe>/<img> skip a cached
+    // response, so Refresh must change it (#17921).
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("file-content-viewer-iframe").getAttribute("src"),
+      ).not.toBe(srcBefore);
+    });
+    expect(
+      screen.getByTestId("files-tab-open-in-new-window").getAttribute("href"),
+    ).toBe(
+      screen.getByTestId("file-content-viewer-iframe").getAttribute("src"),
+    );
   });
 
   it("switches between rich and plain content modes", async () => {

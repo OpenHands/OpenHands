@@ -19,6 +19,11 @@ interface ProfileNameInputProps {
   isRequired?: boolean;
   /** When true, the name is reserved by a built-in capability. */
   isReservedName?: boolean;
+  /**
+   * A caller-side validation message, such as a name that is already taken.
+   * Marks the input invalid and becomes its accessible description.
+   */
+  error?: string;
 }
 
 export const ProfileNameInput = forwardRef<
@@ -36,6 +41,7 @@ export const ProfileNameInput = forwardRef<
     isOptional,
     isRequired = false,
     isReservedName = false,
+    error,
   },
   ref,
 ) {
@@ -67,11 +73,12 @@ export const ProfileNameInput = forwardRef<
         isDisabled={isDisabled}
         ariaDescribedBy={describedById}
         ariaInvalid={!inputIsValid}
+        error={error}
       />
       <p
         id={describedById}
         data-testid={ruleTestId}
-        className={cn("text-xs", inputIsValid ? "text-muted" : "text-red-400")}
+        className={cn("text-xs", inputIsValid ? "text-muted" : "text-danger")}
       >
         {isReservedName
           ? t(I18nKey.SETTINGS$PROFILE_RESERVED_NAME)

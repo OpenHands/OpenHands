@@ -60,6 +60,12 @@ import {
 } from "./conversation-panel-list-helpers";
 import { useArchivedConversationsStore } from "#/stores/archived-conversations-store";
 import { usePinnedConversationsStore } from "#/stores/pinned-conversations-store";
+import { uniqueById } from "#/utils/unique-by-id";
+import {
+  isEffectivelyArchivedConversation,
+  isMissingSandboxStatus,
+} from "#/utils/conversation-archive-status";
+import type { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
 
 interface ConversationPanelProps {
   onClose?: () => void;
@@ -197,6 +203,21 @@ export function ConversationPanel({
     (state) => state.removeArchivedConversation,
   );
 
+  // The one predicate every archived presentation reads: a row is effectively
+  // archived when the user archived it, or when its runtime is missing and
+  // non-resumable. List visibility, the "Archived" chip, the dimmed title, and
+  // the status dot all derive from this so they cannot disagree.
+  // (`sandbox_status: "ERROR"` is intentionally not archived.) Menu availability
+  // is a separate concern and does not read this predicate alone.
+  const isRowArchived = React.useCallback(
+    (conversation: { id: string; sandbox_status?: SandboxStatus | null }) =>
+      isEffectivelyArchivedConversation(
+        conversation.sandbox_status,
+        archivedIdSet.has(conversation.id),
+      ),
+    [archivedIdSet],
+  );
+
   const toggleGroupCollapsed = React.useCallback((groupId: string) => {
     setCollapsedGroupIds((prev) => {
       const next = new Set(prev);
@@ -263,14 +284,7 @@ export function ConversationPanel({
     // page fetches, a later page can overlap an earlier one and surface the
     // same conversation twice. Dedupe by id (keeping the first/freshest copy)
     // so the rendered count reflects real growth and React keys stay unique.
-    const seen = new Set<string>();
-    return all.filter((conversation) => {
-      if (seen.has(conversation.id)) {
-        return false;
-      }
-      seen.add(conversation.id);
-      return true;
-    });
+    return uniqueById(all);
   }, [data]);
 
   // Grouped pagination is folder-oriented. Record the first backend page for
@@ -295,16 +309,17 @@ export function ConversationPanel({
     return pageById;
   }, [data]);
 
-  // Display collection: same loaded pages, with archived rows filtered out
-  // unless the user has opted into "Show archived".
+  // Display collection: same loaded pages, with effectively-archived rows
+  // (explicitly archived or missing-runtime) filtered out unless the user has
+  // opted into "Show archived".
   const conversations = React.useMemo(() => {
     if (showArchivedConversations) {
       return allLoadedConversations;
     }
     return allLoadedConversations.filter(
-      (conversation) => !archivedIdSet.has(conversation.id),
+      (conversation) => !isRowArchived(conversation),
     );
-  }, [allLoadedConversations, archivedIdSet, showArchivedConversations]);
+  }, [allLoadedConversations, isRowArchived, showArchivedConversations]);
 
   // Facets derive from the unfiltered list so the automation-name rows in the
   // advanced-options modal don't vanish while a narrowing selection is active.
@@ -861,7 +876,20 @@ export function ConversationPanel({
       options?: { inPinnedSection?: boolean },
     ) => {
       const isPinned = pinnedIds.includes(conversation.id);
-      const isArchived = archivedIdSet.has(conversation.id);
+      // Presentation: a row looks archived when the user archived it or its
+      // runtime is missing and non-resumable. This single predicate drives list
+      // visibility, the chip, the dot, and the dimmed title.
+      const isArchived = isRowArchived(conversation);
+      // Action availability is separate from presentation. "Unarchive" is only
+      // meaningful when clearing the browser-local flag actually returns the row
+      // to the unarchived state, so it is offered solely for an explicitly
+      // archived row whose runtime is not missing. A missing, non-resumable
+      // runtime cannot be restored from this menu, so such a row offers neither
+      // "Archive" nor "Unarchive", even when a stored archive flag is set.
+      const explicitlyArchived = archivedIdSet.has(conversation.id);
+      const runtimeMissing = isMissingSandboxStatus(
+        conversation.sandbox_status,
+      );
       if (compact) {
         return (
           <CompactConversationRow
@@ -888,8 +916,10 @@ export function ConversationPanel({
             showLlmProfiles={showLlmProfiles}
             agentKind={conversation.agent_kind}
             acpServer={conversation.acp_server}
+            acpModels={conversation.acp_available_models}
             tags={conversation.tags}
             showTags={showTagsMetadata}
+            isArchived={isArchived}
           />
         );
       }
@@ -923,6 +953,7 @@ export function ConversationPanel({
               acpServer={conversation.acp_server}
               createdAt={conversation.created_at}
               tags={conversation.tags}
+              isArchived={isArchived}
             />
           }
         >
@@ -941,8 +972,10 @@ export function ConversationPanel({
               onDelete={() =>
                 handleDeleteProject(conversation.id, conversation.title ?? "")
               }
-              // Exactly one direction is offered per row, so the menu always
-              // reflects the conversation's current archived state.
+              // Archive is offered until the row is effectively archived; the
+              // reverse direction, "Unarchive", is offered only when the row is
+              // explicitly archived and its runtime is not missing. A
+              // missing-runtime row offers neither.
               onArchive={
                 isArchived
                   ? undefined
@@ -953,7 +986,7 @@ export function ConversationPanel({
                       )
               }
               onUnarchive={
-                isArchived
+                explicitlyArchived && !runtimeMissing
                   ? () => handleUnarchiveProject(conversation.id)
                   : undefined
               }
@@ -991,6 +1024,7 @@ export function ConversationPanel({
               showLlmProfiles={showLlmProfiles}
               agentKind={conversation.agent_kind}
               acpServer={conversation.acp_server}
+              acpModels={conversation.acp_available_models}
               tags={conversation.tags}
               showTags={showTagsMetadata}
               isArchived={isArchived}
@@ -1014,6 +1048,7 @@ export function ConversationPanel({
       handleEditTags,
       handleStopConversation,
       handleUnarchiveProject,
+      isRowArchived,
       onClose,
       openContextMenuId,
       pinnedIds,
@@ -1049,6 +1084,32 @@ export function ConversationPanel({
     !startTasks?.length &&
     !hasVisibleGroups;
 
+  // The Conversations header doubles as a bulk control for the grouped view:
+  // collapse every visible folder while any is expanded, expand them all once
+  // none is. Folders outside the current view keep their own state.
+  const allGroupsCollapsed =
+    hasVisibleGroups &&
+    (orderedConversationGroups ?? []).every((group) =>
+      collapsedGroupIds.has(group.id),
+    );
+
+  const toggleAllGroupsCollapsed = React.useCallback(() => {
+    setCollapsedGroupIds((prev) => {
+      const groupIds =
+        orderedConversationGroups?.map((group) => group.id) ?? [];
+      if (groupIds.length === 0) {
+        return prev;
+      }
+      const next = new Set(prev);
+      if (groupIds.every((groupId) => prev.has(groupId))) {
+        groupIds.forEach((groupId) => next.delete(groupId));
+      } else {
+        groupIds.forEach((groupId) => next.add(groupId));
+      }
+      return next;
+    });
+  }, [orderedConversationGroups]);
+
   const showConversationHeader = !compact;
 
   return (
@@ -1070,9 +1131,25 @@ export function ConversationPanel({
             data-testid="older-conversations-summary"
             className="flex min-w-0 flex-nowrap items-center gap-x-2 py-2 pl-4 pr-2.5 text-muted"
           >
-            <span className="min-w-0 truncate text-sm font-medium text-muted">
-              {t(I18nKey.SIDEBAR$CONVERSATIONS)}
-            </span>
+            {hasVisibleGroups ? (
+              <button
+                type="button"
+                data-testid="conversations-header-toggle"
+                aria-expanded={!allGroupsCollapsed}
+                onClick={toggleAllGroupsCollapsed}
+                className={cn(
+                  "min-w-0 cursor-pointer truncate text-left text-sm font-medium",
+                  "text-muted transition-colors hover:text-white",
+                  "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border",
+                )}
+              >
+                {t(I18nKey.SIDEBAR$CONVERSATIONS)}
+              </button>
+            ) : (
+              <span className="min-w-0 truncate text-sm font-medium text-muted">
+                {t(I18nKey.SIDEBAR$CONVERSATIONS)}
+              </span>
+            )}
             <div className="ml-auto flex shrink-0 items-center gap-0.5">
               <ConversationPanelNewThreadPicker
                 backendKind={activeBackend.kind}

@@ -1,3 +1,6 @@
+import { http, HttpResponse } from "msw";
+import { server } from "#/mocks/node";
+import { clearCachedAgentServerInfo } from "#/api/agent-server-compatibility";
 import {
   fireEvent,
   render,
@@ -424,6 +427,40 @@ describe("WorkspaceSelectionForm (server-backed workspaces)", () => {
     });
   });
 
+  it("keeps folder names readable in the Add Workspace browser below the md breakpoint", async () => {
+    // Arrange
+    mockSearchSubdirectories.mockImplementation(async (path: string) =>
+      path === "/Users/me"
+        ? {
+            items: [{ name: "dev", path: "/Users/me/dev" }],
+            next_page_id: null,
+          }
+        : { items: [], next_page_id: null },
+    );
+    renderForm();
+    const user = userEvent.setup();
+
+    // Act
+    await user.click(await screen.findByTestId("workspace-dropdown"));
+    await user.click(await screen.findByTestId("add-workspaces-button"));
+    const entry = await screen.findByTestId("folder-browser-entry-dev");
+
+    // Assert: at phone width the sidebar narrows and the Kind column shrinks,
+    // so a fixed 180px sidebar plus 120px Kind track can no longer squeeze the
+    // name track to 0px; desktop (md and up) keeps the original layout.
+    expect(screen.getByTestId("folder-browser-sidebar")).toHaveClass(
+      "w-28",
+      "md:w-45",
+    );
+    const header = screen.getByTestId("folder-browser-column-headers");
+    for (const row of [header, entry]) {
+      expect(row).toHaveClass(
+        "grid-cols-[minmax(0,1fr)_4rem]",
+        "md:grid-cols-[1fr_120px]",
+      );
+    }
+  });
+
   it("handles Windows paths when browsing and adding a workspace", async () => {
     const homePath = String.raw`C:\Users\me`;
     const devPath = String.raw`C:\Users\me\dev`;
@@ -650,5 +687,44 @@ describe("WorkspaceSelectionForm (server-backed workspaces)", () => {
     expect(addParentsSpy).toHaveBeenCalledWith([
       { id: "/Users/me/dev", name: "dev", path: "/Users/me/dev" },
     ]);
+  });
+});
+
+describe("isolated workspace selection", () => {
+  it("preserves saved selection but disables confirmation of host folders", async () => {
+    clearCachedAgentServerInfo();
+    sessionStorage.setItem(
+      HOME_SELECTED_WORKSPACE_PATH_KEY,
+      "/home/user/project",
+    );
+    server.use(
+      http.get("*/server_info", () =>
+        HttpResponse.json({
+          version: "1.45.0",
+          uptime: 0,
+          idle_time: 0,
+          conversation_runtime: "docker",
+        }),
+      ),
+    );
+    renderForm({
+      workspaces: [
+        {
+          id: "host-project",
+          name: "Host project",
+          path: "/home/user/project",
+        },
+      ],
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("workspace-status-message")).toHaveTextContent(
+        "HOME$ISOLATED_WORKSPACE_NOTICE",
+      ),
+    );
+    expect(screen.getByTestId("workspace-dropdown")).toBeDisabled();
+    expect(screen.getByTestId("workspace-launch-button")).toBeDisabled();
+    expect(sessionStorage.getItem(HOME_SELECTED_WORKSPACE_PATH_KEY)).toBe(
+      "/home/user/project",
+    );
   });
 });

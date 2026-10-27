@@ -45,7 +45,8 @@ function parseBackendUrl(backendUrl) {
   }
   return {
     hostname: url.hostname,
-    port: Number.parseInt(url.port, 10) || (url.protocol === "https:" ? 443 : 80),
+    port:
+      Number.parseInt(url.port, 10) || (url.protocol === "https:" ? 443 : 80),
     protocol: url.protocol,
   };
 }
@@ -184,6 +185,66 @@ export function proxyServerInfoRequest(
   req.pipe(proxyReq, { end: true });
 }
 
+/**
+ * An `onResponse` for createProxyHandlers' proxyHttp that rewrites a JSON
+ * body through `transform` — buffered, re-serialized, and sent with a fixed
+ * Content-Length, as proxyServerInfoRequest does. Any other response, an
+ * encoded one, and a JSON body past `limit` bytes stream through untouched
+ * (what was buffered first, then the rest), never truncated into broken
+ * JSON.
+ *
+ * @param {(body: unknown) => unknown} transform
+ * @param {{ limit: number }} options
+ */
+export function rewriteJsonResponse(transform, { limit }) {
+  return (proxyRes, req, res) => {
+    const status = proxyRes.statusCode ?? 502;
+    const headers = { ...proxyRes.headers };
+    const encoding = headers["content-encoding"];
+    const isJson = /\bapplication\/json\b/i.test(headers["content-type"] ?? "");
+    if (
+      !isJson ||
+      req.method === "HEAD" ||
+      (encoding && encoding !== "identity")
+    ) {
+      res.writeHead(status, headers);
+      proxyRes.pipe(res);
+      return;
+    }
+    const chunks = [];
+    let size = 0;
+    let streaming = false;
+    proxyRes.on("data", (chunk) => {
+      if (streaming) return;
+      size += chunk.length;
+      if (size <= limit) {
+        chunks.push(chunk);
+        return;
+      }
+      streaming = true;
+      res.writeHead(status, headers);
+      for (const buffered of chunks.splice(0)) res.write(buffered);
+      res.write(chunk);
+      proxyRes.pipe(res);
+    });
+    proxyRes.on("end", () => {
+      if (streaming) return;
+      let body = Buffer.concat(chunks);
+      try {
+        body = Buffer.from(
+          JSON.stringify(transform(JSON.parse(body.toString("utf8")))),
+        );
+      } catch {
+        // Not JSON after all; pass it through as received.
+      }
+      delete headers["transfer-encoding"];
+      headers["content-length"] = String(body.length);
+      res.writeHead(status, headers);
+      res.end(body);
+    });
+  };
+}
+
 function once(fn) {
   let called = false;
   return (...args) => {
@@ -193,28 +254,51 @@ function once(fn) {
   };
 }
 
-function writeProxyError(res, message) {
+function textErrorBody(message) {
+  return {
+    contentType: "text/plain; charset=utf-8",
+    body: `Bad Gateway: ${message}`,
+  };
+}
+
+function writeProxyError(res, message, errorBody) {
   if (res.destroyed) return;
   if (!res.headersSent) {
-    res.writeHead(502, { "Content-Type": "text/plain; charset=utf-8" });
-    res.end(`Bad Gateway: ${message}`);
+    const { contentType, body } = errorBody(message);
+    res.writeHead(502, { "Content-Type": contentType });
+    res.end(body);
     return;
   }
   res.destroy();
 }
 
+/**
+ * @param {object} [options]
+ * @param {string} [options.label] Prefix for log lines and metrics
+ * @param {number} [options.timeout] Client socket idle timeout in ms; 0 = none
+ * @param {number} [options.proxyTimeout] Upstream response timeout in ms; 0 = none
+ * @param {boolean} [options.xfwd] Add X-Forwarded-* headers upstream
+ * @param {(message: string) => { contentType: string, body: string }} [options.errorBody]
+ *   The 502 written when the upstream fails before a response started
+ * @param {(proxySocket: import("node:net").Socket) => void} [options.onProxySocket]
+ *   Called with each upstream socket of an established WebSocket proxy
+ */
 export function createProxyHandlers({
   label = "proxy",
   timeout = DEFAULT_PROXY_TIMEOUT_MS,
   proxyTimeout = DEFAULT_PROXY_TIMEOUT_MS,
+  xfwd = true,
+  errorBody = textErrorBody,
+  onProxySocket,
 } = {}) {
   const proxy = createProxyServer({
     ws: true,
     changeOrigin: true,
-    xfwd: true,
+    xfwd,
     timeout,
     proxyTimeout,
   });
+  if (onProxySocket) proxy.on("proxySocket", onProxySocket);
   const metrics = {
     activeHttpRequests: 0,
     activeWebSockets: 0,
@@ -223,6 +307,12 @@ export function createProxyHandlers({
     totalErrors: 0,
   };
 
+  /** Per-request `onResponse` handlers; see proxyHttp. */
+  const responseHandlers = new WeakMap();
+  proxy.on("proxyRes", (proxyRes, req, res) => {
+    responseHandlers.get(req)?.(proxyRes, req, res);
+  });
+
   proxy.on("error", (err, _req, resOrSocket, target) => {
     metrics.totalErrors += 1;
     const targetText = target ? ` -> ${target}` : "";
@@ -230,13 +320,23 @@ export function createProxyHandlers({
       console.error(`[${label}] Proxy error${targetText}: ${err.message}`);
     }
     if (resOrSocket && typeof resOrSocket.writeHead === "function") {
-      writeProxyError(resOrSocket, err.message);
+      writeProxyError(resOrSocket, err.message, errorBody);
     } else if (resOrSocket && typeof resOrSocket.destroy === "function") {
       resOrSocket.destroy();
     }
   });
 
-  function proxyHttp(req, res, target) {
+  /**
+   * @param {import("node:http").IncomingMessage} req
+   * @param {import("node:http").ServerResponse} res
+   * @param {string} target
+   * @param {object} [options]
+   * @param {Record<string, string>} [options.headers] Set on the upstream request
+   * @param {(proxyRes: import("node:http").IncomingMessage, req: import("node:http").IncomingMessage, res: import("node:http").ServerResponse) => void} [options.onResponse]
+   *   Writes the response itself instead of it being piped through (e.g.
+   *   rewriteJsonResponse).
+   */
+  function proxyHttp(req, res, target, { headers, onResponse } = {}) {
     metrics.activeHttpRequests += 1;
     metrics.totalHttpRequests += 1;
     const finish = once(() => {
@@ -254,12 +354,21 @@ export function createProxyHandlers({
           err,
         );
       }
-      writeProxyError(res, err instanceof Error ? err.message : String(err));
+      writeProxyError(
+        res,
+        err instanceof Error ? err.message : String(err),
+        errorBody,
+      );
       finish();
     };
 
+    const options = { target, headers };
+    if (onResponse) {
+      responseHandlers.set(req, onResponse);
+      options.selfHandleResponse = true;
+    }
     try {
-      proxy.web(req, res, { target }).catch(handleProxyError);
+      proxy.web(req, res, options).catch(handleProxyError);
     } catch (err) {
       handleProxyError(err);
     }

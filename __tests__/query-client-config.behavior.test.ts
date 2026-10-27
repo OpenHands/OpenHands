@@ -1,6 +1,9 @@
 import { QueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
+import { HttpError } from "@openhands/typescript-client";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import i18n from "#/i18n";
+import { I18nKey } from "#/i18n/declaration";
 import { createAgentServerQueryClient } from "#/query-client-config";
 import { __resetActiveStoreForTests } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
@@ -451,6 +454,62 @@ describe("query client behavior", () => {
     await expect(executeFailingMutation(client, error)).rejects.toBe(error);
 
     expect(toast).toHaveBeenCalledWith(expect.any(String));
+  });
+
+  // The shared TypeScript client throws an HttpError whose message is the raw
+  // `HTTP request failed (status): {json}` text; the body is on `response`.
+  it.each([
+    {
+      path: "query",
+      execute: executeFailingQuery,
+      detail: "Shared conversation not found",
+    },
+    {
+      path: "mutation",
+      execute: executeFailingMutation,
+      detail: "MCP server 'qa_stale' was not found",
+    },
+  ])(
+    "toasts the server's detail for an SDK HttpError from a failed $path",
+    async ({ execute, detail }) => {
+      // Arrange
+      const toast = vi.spyOn(ToastHandlers, "displayErrorToast");
+      const client = createAgentServerQueryClient();
+      const error = new HttpError(
+        404,
+        "Not Found",
+        { detail },
+        `HTTP request failed (404 Not Found): ${JSON.stringify({ detail })}`,
+      );
+
+      // Act
+      await expect(execute(client, error)).rejects.toBe(error);
+
+      // Assert
+      expect(toast).toHaveBeenCalledExactlyOnceWith(detail);
+    },
+  );
+
+  it("toasts the translated generic error, not the raw text, for an SDK HttpError without a usable body", async () => {
+    // Arrange — the local ingress answers a stopped Agent Server with a
+    // plain-text 502.
+    const toast = vi.spyOn(ToastHandlers, "displayErrorToast");
+    const client = createAgentServerQueryClient();
+    const body = "Bad Gateway: connect ECONNREFUSED 127.0.0.1:8001";
+    const error = new HttpError(
+      502,
+      "Bad Gateway",
+      body,
+      `HTTP request failed (502 Bad Gateway): ${JSON.stringify(body)}`,
+    );
+
+    // Act
+    await expect(executeFailingMutation(client, error)).rejects.toBe(error);
+
+    // Assert
+    expect(toast).toHaveBeenCalledExactlyOnceWith(
+      i18n.t(I18nKey.ERROR$GENERIC),
+    );
   });
 });
 

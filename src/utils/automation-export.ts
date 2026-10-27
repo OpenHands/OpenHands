@@ -153,15 +153,19 @@ function validateTrigger(
 
 export function serializeAutomation(a: Automation): AutomationExportFile {
   const timezone = a.timezone ?? a.trigger.timezone;
+  // The file carries a single repository: the first one the automation clones.
+  const [primaryRepository] = a.repositories ?? [];
+  const repository = primaryRepository?.url ?? a.repository;
+  const branch = primaryRepository ? primaryRepository.ref : a.branch;
   const spec: AutomationSpec = {
     name: a.name,
     trigger: { ...a.trigger },
     enabled: a.enabled,
     prompt: a.prompt,
-    ...(a.repository !== undefined && { repository: a.repository }),
+    ...(repository !== undefined && { repository }),
     ...(a.model !== undefined && { model: a.model }),
     ...(a.timeout != null && { timeout: a.timeout }),
-    ...(a.branch !== undefined && { branch: a.branch }),
+    ...(branch !== undefined && { branch }),
     ...(a.plugins !== undefined && { plugins: [...a.plugins] }),
     ...(a.notification !== undefined && { notification: a.notification }),
     ...(timezone !== undefined && { timezone }),

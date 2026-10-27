@@ -100,3 +100,19 @@ export function useIsAutomationOwner(automation: Automation): boolean {
   if (!entry || entry.isLoading || !entry.userId) return false;
   return automation.user_id === entry.userId;
 }
+
+/**
+ * The caller's user id when splitting automations by creator is meaningful:
+ * a cloud team workspace whose `/me` has resolved. `null` on local backends
+ * (no per-user creators) and personal workspaces (every automation is the
+ * caller's), where the "Created by" filter is hidden.
+ */
+export function useAutomationCreatorFilterUserId(): string | null {
+  const active = useActiveBackend();
+  const userIds = useCloudCurrentUserId();
+
+  if (active.backend.kind !== "cloud") return null;
+  const userId = userIds[active.backend.id]?.userId ?? null;
+  if (!userId || active.orgId === userId) return null;
+  return userId;
+}

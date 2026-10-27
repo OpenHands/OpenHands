@@ -26,7 +26,7 @@ export function ConversationName() {
   const [transcriptExportModalVisible, setTranscriptExportModalVisible] =
     React.useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
-  const ellipsisAnchorRef = React.useRef<HTMLDivElement>(null);
+  const ellipsisAnchorRef = React.useRef<HTMLButtonElement>(null);
 
   // Use the custom hook for context menu handlers
   const {
@@ -169,11 +169,9 @@ export function ConversationName() {
         )}
 
         {titleMode !== "edit" && (
-          <div
-            ref={ellipsisAnchorRef}
-            className="relative flex items-center shrink-0"
-          >
+          <div className="relative flex items-center shrink-0">
             <EllipsisButton
+              ref={ellipsisAnchorRef}
               onClick={handleEllipsisClick}
               ariaLabel={t(I18nKey.COMMON$MORE_OPTIONS)}
             />

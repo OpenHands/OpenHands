@@ -155,11 +155,6 @@ export interface SetupActions {
   upload?: SetupUploadAction;
 }
 
-export type SetupAction =
-  | SetupPromptAction
-  | SetupPluginAction
-  | SetupUploadAction;
-
 export interface SetupBlock {
   version: typeof SETUP_VERSION;
   mode: SetupMode;
@@ -250,6 +245,8 @@ export interface DeploymentCapabilities {
     event?: { filterLanguage: string; filterFunctions: string[] };
   };
   features: string[];
+  /** Providers whose repositories a run clones with the user's token; older services omit it. */
+  repoProviders?: string[];
 }
 
 /** A single problem with a draft, addressed to the field that caused it. */
@@ -265,6 +262,62 @@ export interface ValidateDraftResponse {
   valid: boolean;
   errors: DraftValidationError[];
   sampleEventMatched?: boolean | null;
+}
+
+/**
+ * The creation endpoint a server-backed draft is validated and materialized
+ * against. Mirrors the service's `DraftEndpoint` literal. `"/v1"` is the raw
+ * path an entry shipping its own tarball uses; the other two are presets.
+ */
+export type AutomationDraftEndpoint =
+  | "/v1"
+  | "/v1/preset/prompt"
+  | "/v1/preset/plugin";
+
+/** `POST /v1/drafts` — create a server-backed automation setup draft. */
+export interface CreateAutomationDraftApiRequest {
+  endpoint: AutomationDraftEndpoint;
+  /** The request body that would be sent to that endpoint. */
+  draft: SetupRequestBody;
+  name?: string;
+  /** Catalog entry or automation the draft was derived from (logged only). */
+  sourceAutomationId?: string;
+}
+
+/** `PATCH /v1/drafts/{id}` — partially update a server-backed draft. */
+export interface UpdateAutomationDraftApiRequest {
+  endpoint?: AutomationDraftEndpoint;
+  draft?: SetupRequestBody;
+  name?: string;
+}
+
+/**
+ * `GET/PATCH/POST /v1/drafts[/{id}]` — a persisted draft record.
+ *
+ * The draft row is the source of truth while editing. `dispatchable` and
+ * `validationErrors` are refreshed by the service on every create/update, so
+ * the form can show live validity without a separate validate call.
+ */
+export interface AutomationDraftApiResponse {
+  id: string;
+  endpoint: AutomationDraftEndpoint;
+  name: string | null;
+  /** The request body that would be sent to the draft's endpoint. */
+  draft: SetupRequestBody;
+  validationErrors: DraftValidationError[] | null;
+  dispatchable: boolean;
+  sourceAutomationId: string | null;
+  /** Materialized automation row used for test dispatch, if any. */
+  materializedAutomationId: string | null;
+  lastTestRunId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** `GET /v1/drafts` — paginated list of persisted drafts. */
+export interface AutomationDraftListResponse {
+  drafts: AutomationDraftApiResponse[];
+  total: number;
 }
 
 /**
@@ -336,6 +389,8 @@ export interface InterfaceEndpoints {
    */
   createBundle?: string;
   uploads?: string;
+  /** The org's tags with counts. Optional: added after the block shipped. */
+  tags?: string;
 }
 
 export type InterfaceEndpointName = keyof InterfaceEndpoints;
@@ -430,6 +485,7 @@ export interface InterfaceOverview {
 export const DASHBOARD_FILTER_VALUES = {
   status: ["all", "active", "failing", "disabled"],
   trigger: ["all", "schedule", "event"],
+  created_by: ["all", "me", "others"],
 } as const;
 
 export type DashboardFilterId = keyof typeof DASHBOARD_FILTER_VALUES;
@@ -443,6 +499,9 @@ export type DashboardStatusValue =
 
 export type DashboardTriggerValue =
   (typeof DASHBOARD_FILTER_VALUES.trigger)[number];
+
+export type DashboardCreatedByValue =
+  (typeof DASHBOARD_FILTER_VALUES.created_by)[number];
 
 export interface InterfaceStatusFilter {
   id: "status";
@@ -458,9 +517,32 @@ export interface InterfaceTriggerFilter {
   options: { value: DashboardTriggerValue; label: string }[];
 }
 
+export interface InterfaceCreatedByFilter {
+  id: "created_by";
+  /** The control's accessible name. */
+  label: string;
+  options: { value: DashboardCreatedByValue; label: string }[];
+}
+
+/**
+ * The tag filter's values are the org's tags, read from the service, so the
+ * manifest captions the control and its neutral option but declares no values.
+ */
+export const DASHBOARD_TAG_FILTER_ID = "tag";
+
+export interface InterfaceTagFilter {
+  id: typeof DASHBOARD_TAG_FILTER_ID;
+  /** The control's accessible name. */
+  label: string;
+  /** The neutral option, which shows automations with any tags or none. */
+  allLabel: string;
+}
+
 export type InterfaceDashboardFilter =
   | InterfaceStatusFilter
-  | InterfaceTriggerFilter;
+  | InterfaceTriggerFilter
+  | InterfaceCreatedByFilter
+  | InterfaceTagFilter;
 
 /** Sort values name comparators this host implements. */
 export const DASHBOARD_SORT_VALUES = ["last-run", "runs", "name"] as const;

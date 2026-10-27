@@ -115,6 +115,17 @@ describe('translation.json', () => {
     });
   });
 
+  it('stores line breaks as newlines, not a literal backslash-n', () => {
+    const escapedNewlines = Object.entries(translationJson).flatMap(
+      ([key, translations]) =>
+        Object.entries(translations)
+          .filter(([, value]) => value.includes('\\n'))
+          .map(([lang]) => `${key} (${lang})`),
+    );
+
+    expect(escapedNewlines).toEqual([]);
+  });
+
   it('preserves interpolation placeholders in every translation', () => {
     const mismatches: string[] = [];
 

@@ -10,6 +10,7 @@ import {
   displayErrorToast,
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
+import { getApiErrorMessage } from "#/utils/api-error-message";
 import { I18nKey } from "#/i18n/declaration";
 import { isProfileNameValid } from "#/utils/derive-profile-name";
 import { isOracleProfileName } from "#/utils/oracle-profile";
@@ -61,9 +62,9 @@ export function RenameProfileModal({
       );
       onClose();
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : t(I18nKey.ERROR$GENERIC);
-      displayErrorToast(message);
+      // The agent-server refuses a duplicate name with a 409 whose `detail`
+      // names the conflict; show that instead of the raw transport text.
+      displayErrorToast(getApiErrorMessage(error, t(I18nKey.ERROR$GENERIC)));
     }
   };
 

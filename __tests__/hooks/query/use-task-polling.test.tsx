@@ -73,13 +73,15 @@ describe("useTaskPolling", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    sessionStorage.clear();
     resetPendingTaskMessageLinkState();
-    useOptimisticUserMessageStore.setState({ pendingMessages: [] });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
   });
 
   afterEach(() => {
     queryClient?.clear();
     localStorage.clear();
+    sessionStorage.clear();
   });
 
   it("moves pending task drafts onto the real conversation before redirecting", async () => {
@@ -208,6 +210,33 @@ describe("useTaskPolling", () => {
       expect(pending[0].conversationId).toBe("conversation-1");
       expect(pending[0].text).toBe("hello from home");
     });
+  });
+
+  it("marks the sidebar conversation list stale once the task is ready", async () => {
+    vi.mocked(AgentServerConversationService.getStartTask).mockResolvedValue(
+      readyTask,
+    );
+    const wrapper = createWrapper();
+    // Same key shapes `usePaginatedConversations` and `useStartTasks` read.
+    const conversationsKey = [
+      "user",
+      "conversations",
+      "paginated",
+      20,
+      "default-local",
+      null,
+    ];
+    const startTasksKey = ["start-tasks", "search", 10];
+    queryClient.setQueryData(conversationsKey, { pages: [], pageParams: [] });
+    queryClient.setQueryData(startTasksKey, []);
+
+    renderHook(() => useTaskPollingController(), { wrapper });
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledOnce());
+    expect(queryClient.getQueryState(conversationsKey)?.isInvalidated).toBe(
+      true,
+    );
+    expect(queryClient.getQueryState(startTasksKey)?.isInvalidated).toBe(true);
   });
 
   it("handles a ready task once when multiple components consume polling state", async () => {

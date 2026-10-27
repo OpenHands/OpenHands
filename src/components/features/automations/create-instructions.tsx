@@ -5,9 +5,7 @@ import ChevronDownIcon from "#/icons/chevron-down.svg?react";
 import MessageSquareShareIcon from "#/icons/message-square-share.svg?react";
 import { cn } from "#/utils/utils";
 import { BrandButton } from "#/components/features/settings/brand-button";
-import { useLaunchSkillInChat } from "#/hooks/use-launch-skill-in-chat";
-import { useActiveBackend } from "#/contexts/active-backend-context";
-import { useTracking } from "#/hooks/use-tracking";
+import { useStartAutomationSetup } from "#/hooks/use-start-automation-setup";
 import { getAutomationsDocsUrl } from "#/manifests/automation-interface";
 
 function InlineExampleWrap({ children }: { children?: ReactNode }) {
@@ -43,22 +41,9 @@ interface CreateInstructionsProps {
   collapsible?: boolean;
 }
 
-interface CreateInstructionsContentProps {
-  onLaunch?: () => void;
-}
-
-export function CreateInstructionsContent({
-  onLaunch,
-}: CreateInstructionsContentProps = {}) {
+export function CreateInstructionsContent() {
   const { t } = useTranslation("openhands");
-  const launchInChat = useLaunchSkillInChat();
-  const active = useActiveBackend();
-  const { trackAutomationCreatedButton } = useTracking();
-
-  const handleCreateAutomation = () => {
-    trackAutomationCreatedButton({ backendKind: active.backend.kind });
-    launchInChat(t(I18nKey.AUTOMATIONS$CREATE_AUTOMATION_PROMPT), onLaunch);
-  };
+  const { startSetup, isPending } = useStartAutomationSetup();
 
   return (
     <div className="flex flex-col gap-5">
@@ -84,7 +69,8 @@ export function CreateInstructionsContent({
           type="button"
           variant="primary"
           testId="automations-create-automation"
-          onClick={handleCreateAutomation}
+          isDisabled={isPending}
+          onClick={startSetup}
           startContent={
             <MessageSquareShareIcon className="size-4" aria-hidden />
           }

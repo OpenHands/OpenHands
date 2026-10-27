@@ -5,6 +5,7 @@ import { useNavigation } from "#/context/navigation-context";
 import { useLlmConfigured } from "#/hooks/use-llm-configured";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { Typography } from "#/ui/typography";
+import { getLockedCloudHost } from "#/api/agent-server-config";
 
 /**
  * Warns the user on the home screen when the active agent has no usable LLM —
@@ -16,6 +17,7 @@ import { Typography } from "#/ui/typography";
  * configured; the settings query refetches after a key is saved, so the banner
  * unmounts on its own.
  */
+// @spec WN-001 — Home no-LLM warning icon uses theme-aware warning feedback
 export function LlmNotConfiguredBanner() {
   const { t } = useTranslation("openhands");
   const { navigate } = useNavigation();
@@ -33,22 +35,25 @@ export function LlmNotConfiguredBanner() {
     >
       <div className="flex min-w-0 items-start sm:items-center">
         <div className="flex-shrink-0">
-          <FaTriangleExclamation className="align-middle text-yellow-400" />
+          <FaTriangleExclamation className="align-middle text-feedback-warning" />
         </div>
         <Typography.Text className="ml-3 text-sm font-medium">
           {t(I18nKey.HOME$LLM_NOT_CONFIGURED_MESSAGE)}
         </Typography.Text>
       </div>
 
-      <BrandButton
-        testId="home-llm-not-configured-action"
-        type="button"
-        variant="primary"
-        className="w-fit shrink-0 self-start whitespace-nowrap sm:self-auto"
-        onClick={() => navigate("/settings/llm")}
-      >
-        {t(I18nKey.HOME$LLM_NOT_CONFIGURED_ACTION)}
-      </BrandButton>
+      {/* Locked-to-Cloud blocks the Canvas LLM page (OHE-3457). */}
+      {getLockedCloudHost() === null && (
+        <BrandButton
+          testId="home-llm-not-configured-action"
+          type="button"
+          variant="primary"
+          className="w-fit shrink-0 self-start whitespace-nowrap sm:self-auto"
+          onClick={() => navigate("/settings/llm")}
+        >
+          {t(I18nKey.HOME$LLM_NOT_CONFIGURED_ACTION)}
+        </BrandButton>
+      )}
     </div>
   );
 }

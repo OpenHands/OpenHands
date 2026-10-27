@@ -17,6 +17,7 @@ const agentStatusMocks = vi.hoisted(() => ({
   useSubConversationTaskPolling: vi.fn(),
   useTaskPolling: vi.fn(),
   useUnifiedWebSocketStatus: vi.fn(),
+  useHasConnectedOnceWebSocket: vi.fn(),
 }));
 
 vi.mock("react-i18next", () => ({
@@ -52,6 +53,7 @@ vi.mock("#/hooks/query/use-task-polling", () => ({
 
 vi.mock("#/hooks/use-unified-websocket-status", () => ({
   useUnifiedWebSocketStatus: agentStatusMocks.useUnifiedWebSocketStatus,
+  useHasConnectedOnceWebSocket: agentStatusMocks.useHasConnectedOnceWebSocket,
 }));
 
 vi.mock("#/icons/u-clock-three.svg?react", () => ({
@@ -71,6 +73,7 @@ interface AgentStatusScenario {
   subConversationTaskStatus?: AppConversationStartTaskStatus;
   taskStatus?: AppConversationStartTaskStatus;
   webSocketStatus?: WebSocketConnectionState;
+  hasConnectedOnce?: boolean;
 }
 
 function renderAgentStatus({
@@ -84,6 +87,7 @@ function renderAgentStatus({
   subConversationTaskStatus,
   taskStatus,
   webSocketStatus = "OPEN",
+  hasConnectedOnce = false,
 }: AgentStatusScenario = {}) {
   const handleResumeAgent = vi.fn();
   const handleStop = vi.fn();
@@ -105,6 +109,9 @@ function renderAgentStatus({
   });
   agentStatusMocks.useTaskPolling.mockReturnValue({ taskStatus });
   agentStatusMocks.useUnifiedWebSocketStatus.mockReturnValue(webSocketStatus);
+  agentStatusMocks.useHasConnectedOnceWebSocket.mockReturnValue(
+    hasConnectedOnce,
+  );
 
   const view = render(
     <AgentStatus
@@ -168,6 +175,34 @@ describe("AgentStatus", () => {
     expect(setShouldShownAgentLoading).toHaveBeenCalledWith(true);
   });
 
+  it("labels a first-ever connect as Connecting", () => {
+    renderAgentStatus({
+      webSocketStatus: "CONNECTING",
+      hasConnectedOnce: false,
+    });
+
+    expect(
+      screen.getByText(I18nKey.CHAT_INTERFACE$CONNECTING),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(I18nKey.CHAT_INTERFACE$RECONNECTING),
+    ).not.toBeInTheDocument();
+  });
+
+  it("labels a reconnect after a prior successful connection as Reconnecting", () => {
+    renderAgentStatus({
+      webSocketStatus: "CONNECTING",
+      hasConnectedOnce: true,
+    });
+
+    expect(
+      screen.getByText(I18nKey.CHAT_INTERFACE$RECONNECTING),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(I18nKey.CHAT_INTERFACE$CONNECTING),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows local pause progress without reporting the agent as loading", () => {
     const { setShouldShownAgentLoading } = renderAgentStatus({
       isPausing: true,
@@ -199,6 +234,18 @@ describe("AgentStatus", () => {
     );
 
     expect(setShouldShownAgentLoading).toHaveBeenCalledWith(true);
+  });
+
+  it("clears its loading report when it unmounts so the phone panel page does not keep a stale loading overlay", () => {
+    const { setShouldShownAgentLoading, unmount } = renderAgentStatus({
+      agentState: AgentState.LOADING,
+      executionStatus: null,
+    });
+    expect(setShouldShownAgentLoading).toHaveBeenLastCalledWith(true);
+
+    unmount();
+
+    expect(setShouldShownAgentLoading).toHaveBeenLastCalledWith(false);
   });
 
   it("forwards the active conversation to sub-conversation polling", () => {
@@ -233,6 +280,7 @@ describe("AgentStatus", () => {
 
     const label = screen.getByText(I18nKey.AGENT_STATUS$RUNNING_TASK);
     const stopButton = screen.getByTestId("stop-button");
+    expect(stopButton).toHaveAccessibleName(I18nKey.BUTTON$STOP);
     expect(label).toHaveAttribute("title", I18nKey.AGENT_STATUS$RUNNING_TASK);
     expect(label.parentElement).toHaveClass("custom-status-class");
     expect(stopButton.parentElement).toHaveClass("cursor-pointer");
@@ -255,6 +303,7 @@ describe("AgentStatus", () => {
     });
 
     const playButton = screen.getByTestId("play-button");
+    expect(playButton).toHaveAccessibleName(I18nKey.AGENT$RESUME_TASK);
     expect(playButton).toBeEnabled();
     expect(playButton.parentElement).toHaveClass("cursor-pointer");
 

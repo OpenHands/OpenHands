@@ -1,7 +1,6 @@
 import React from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { Check, CircleAlert, CircleX, Copy, X } from "lucide-react";
-import { OH_STATUS_ERROR_COLOR } from "#/constants/status-colors";
 import { I18nKey } from "#/i18n/declaration";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { getAcpErrorHeaderKey } from "#/utils/acp-error-codes";
@@ -112,9 +111,8 @@ export function ErrorMessageBanner({
       ) : (
         <CircleX
           aria-hidden
-          className="h-4 w-4 shrink-0"
+          className="h-4 w-4 shrink-0 text-status-error"
           strokeWidth={2}
-          style={{ color: OH_STATUS_ERROR_COLOR }}
           data-testid="error-message-banner-icon"
         />
       )}

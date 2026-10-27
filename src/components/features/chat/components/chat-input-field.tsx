@@ -8,6 +8,12 @@ import { cn } from "#/utils/utils";
 interface ChatInputFieldProps {
   chatInputRef: React.RefObject<HTMLDivElement | null>;
   disabled?: boolean;
+  /**
+   * Overrides the default "what to build" placeholder. Surfaces that launch a
+   * new conversation (the home splash) ask for an engineering task instead.
+   * Plan mode still wins so the plan hint is never hidden.
+   */
+  placeholder?: string;
   onInput: () => void;
   onPaste: (e: React.ClipboardEvent) => void;
   onKeyDown: (e: React.KeyboardEvent) => void;
@@ -18,6 +24,7 @@ interface ChatInputFieldProps {
 export function ChatInputField({
   chatInputRef,
   disabled = false,
+  placeholder,
   onInput,
   onPaste,
   onKeyDown,
@@ -45,7 +52,7 @@ export function ChatInputField({
       className="box-border content-stretch flex flex-row items-center justify-start min-h-6 p-0 relative shrink-0 flex-1"
       data-name="Text & caret"
     >
-      {/* `text-base` is a color utility in this theme (--color-base), not 16px. */}
+      {/* Keep a fixed 16px input size; text-base scales with the host root font size. */}
       {/* eslint-disable-next-line shadcn/no-arbitrary-values */}
       <div className="basis-0 flex flex-col font-normal grow justify-center leading-[0] min-h-px min-w-px overflow-ellipsis overflow-hidden relative shrink-0 text-text-tertiary text-[16px] text-left">
         <div
@@ -59,7 +66,7 @@ export function ChatInputField({
           data-placeholder={
             isPlanMode
               ? t(I18nKey.COMMON$LET_S_WORK_ON_A_PLAN)
-              : t(I18nKey.SUGGESTIONS$WHAT_TO_BUILD)
+              : (placeholder ?? t(I18nKey.SUGGESTIONS$WHAT_TO_BUILD))
           }
           data-testid="chat-input"
           onInput={onInput}

@@ -27,7 +27,6 @@ vi.mock("../cloud/mcp-service.api", () => ({
 const testServer = vi.fn();
 const startOAuth = vi.fn();
 const getOAuthStatus = vi.fn();
-const submitOAuthCallback = vi.fn();
 const close = vi.fn();
 
 const encryptedAuth = "gAAAAAencrypted-auth";
@@ -69,7 +68,6 @@ describe("McpService.testServer", () => {
         testServer,
         startOAuth,
         getOAuthStatus,
-        submitOAuthCallback,
         close,
       } as unknown as MCPClient;
     } as unknown as typeof MCPClient);
@@ -80,12 +78,6 @@ describe("McpService.testServer", () => {
       authorization_url: "https://auth.example/authorize",
     });
     getOAuthStatus.mockResolvedValue({
-      ok: true,
-      status: "succeeded",
-      job_id: "job-1",
-      tools: ["search_mail"],
-    });
-    submitOAuthCallback.mockResolvedValue({
       ok: true,
       status: "succeeded",
       job_id: "job-1",
@@ -411,7 +403,9 @@ describe("McpService.testServer", () => {
   });
 
   it("starts OAuth through the TypeScript MCP client", async () => {
-    const result = await McpService.startOAuth({
+    vi.spyOn(window, "open").mockReturnValue(null);
+
+    await McpService.authorizeOAuth({
       id: "shttp-0",
       type: "shttp",
       name: "superhuman-mail",
@@ -425,7 +419,6 @@ describe("McpService.testServer", () => {
       },
     });
 
-    expect(result.job_id).toBe("job-1");
     expect(startOAuth).toHaveBeenCalledTimes(1);
     expect(startOAuth.mock.calls[0][0]).toMatchObject({
       name: "superhuman-mail",
@@ -442,25 +435,6 @@ describe("McpService.testServer", () => {
       },
       timeout: 120,
     });
-    expect(close).toHaveBeenCalledTimes(1);
-  });
-
-  it("submits OAuth callback through the TypeScript MCP client", async () => {
-    await McpService.submitOAuthCallback(
-      "job/1",
-      "http://localhost:1234/callback?code=abc",
-    );
-
-    expect(submitOAuthCallback).toHaveBeenCalledWith("job/1", {
-      callback_url: "http://localhost:1234/callback?code=abc",
-    });
-    expect(close).toHaveBeenCalledTimes(1);
-  });
-
-  it("gets OAuth status through the TypeScript MCP client", async () => {
-    await McpService.getOAuthStatus("job/1");
-
-    expect(getOAuthStatus).toHaveBeenCalledWith("job/1");
     expect(close).toHaveBeenCalledTimes(1);
   });
 
@@ -552,8 +526,9 @@ describe("McpService.testServer", () => {
       },
     ]);
     setActiveSelection({ backendId: "local", orgId: null });
+    vi.spyOn(window, "open").mockReturnValue(null);
 
-    await McpService.getOAuthStatus("job-without-key");
+    await McpService.authorizeOAuth(oauthServer());
 
     expect(MCPClient).toHaveBeenCalledWith({
       host: "http://127.0.0.1:8001",
@@ -579,8 +554,9 @@ describe("McpService.testServer", () => {
       },
     ]);
     setActiveSelection({ backendId: "active-local", orgId: null });
+    vi.spyOn(window, "open").mockReturnValue(null);
 
-    await McpService.getOAuthStatus("job-on-active-local");
+    await McpService.authorizeOAuth(oauthServer());
 
     expect(MCPClient).toHaveBeenCalledWith({
       host: "http://127.0.0.1:8002",
@@ -602,7 +578,7 @@ describe("McpService.testServer", () => {
     });
   });
 
-  it("starts OAuth through the app server, not a registered local backend, from a cloud session", async () => {
+  it("starts and polls OAuth through the app server, not a registered local backend, from a cloud session", async () => {
     setRegisteredBackends([
       {
         id: "cloud",
@@ -620,49 +596,22 @@ describe("McpService.testServer", () => {
       },
     ]);
     setActiveSelection({ backendId: "cloud", orgId: "org-1" });
+    vi.spyOn(window, "open").mockReturnValue(null);
     vi.mocked(startCloudMcpOAuth).mockResolvedValueOnce({
       ok: true,
-      job_id: "job-1",
+      job_id: "job-on-cloud",
       authorization_url: "https://auth.example/authorize",
     });
-
-    await expect(McpService.startOAuth(oauthServer())).resolves.toEqual({
-      ok: true,
-      job_id: "job-1",
-      authorization_url: "https://auth.example/authorize",
-    });
-
-    expect(startCloudMcpOAuth).toHaveBeenCalledOnce();
-    expect(MCPClient).not.toHaveBeenCalled();
-  });
-
-  it("polls OAuth status through the app server from a cloud session", async () => {
-    setRegisteredBackends([
-      {
-        id: "cloud",
-        name: "Cloud",
-        host: "https://app.all-hands.dev",
-        apiKey: "cloud-key",
-        kind: "cloud",
-      },
-      {
-        id: "local",
-        name: "Local",
-        host: "http://127.0.0.1:8001",
-        apiKey: "",
-        kind: "local",
-      },
-    ]);
-    setActiveSelection({ backendId: "cloud", orgId: "org-1" });
     vi.mocked(getCloudMcpOAuthStatus).mockResolvedValueOnce({
       ok: true,
-      status: "pending",
+      status: "succeeded",
       job_id: "job-on-cloud",
-      callback_ready: false,
+      tools: [],
     });
 
-    await McpService.getOAuthStatus("job-on-cloud");
+    await McpService.authorizeOAuth(oauthServer());
 
+    expect(startCloudMcpOAuth).toHaveBeenCalledOnce();
     expect(getCloudMcpOAuthStatus).toHaveBeenCalledWith("job-on-cloud");
     expect(MCPClient).not.toHaveBeenCalled();
   });
@@ -685,16 +634,21 @@ describe("McpService.testServer", () => {
       },
     ]);
     setActiveSelection({ backendId: "cloud", orgId: "org-1" });
+    vi.spyOn(window, "open").mockReturnValue(null);
     vi.mocked(startCloudMcpOAuth).mockResolvedValueOnce({
       ok: true,
       job_id: "job-1",
       authorization_url: "https://auth.example/authorize",
     });
-
-    await expect(McpService.startOAuth(oauthServer())).resolves.toMatchObject({
+    vi.mocked(getCloudMcpOAuthStatus).mockResolvedValueOnce({
       ok: true,
+      status: "succeeded",
       job_id: "job-1",
+      tools: [],
     });
+
+    await McpService.authorizeOAuth(oauthServer());
+
     expect(startCloudMcpOAuth).toHaveBeenCalledOnce();
     expect(MCPClient).not.toHaveBeenCalled();
   });
@@ -736,19 +690,17 @@ describe("McpService.testServer", () => {
     expect(close).toHaveBeenCalledOnce();
   });
 
-  it("rejects an OAuth start response without an authorization URL", async () => {
+  it("polls the status route when OAuth starts without an authorization URL", async () => {
     const popup = popupWindow();
     vi.spyOn(window, "open").mockReturnValue(popup as unknown as Window);
     startOAuth.mockResolvedValueOnce({ ok: true, job_id: "job-1" });
 
     const result = await McpService.authorizeOAuth(oauthServer());
 
-    expect(result).toEqual({
-      ok: false,
-      error: "Could not start OAuth authorization",
-      error_kind: "unknown",
-    });
+    expect(result).toEqual({ ok: true, tools: ["search_mail"] });
+    expect(getOAuthStatus).toHaveBeenCalledWith("job-1");
     expect(popup.close).toHaveBeenCalledOnce();
+    expect(popup.location.href).toBe("about:blank");
   });
 
   it("returns an immediately completed OAuth result with optional state", async () => {
@@ -985,11 +937,87 @@ describe("McpService.testServer", () => {
 
     expect(result).toEqual({
       ok: false,
-      error: "OAuth authorization timed out",
-      error_kind: "timeout",
+      error: "OAuth authorization was not completed",
+      error_kind: "authorization",
     });
     expect(getOAuthStatus).toHaveBeenCalledTimes(141);
     expect(close).toHaveBeenCalledOnce();
+  });
+
+  it("reports a plain timeout when no sign-in pop-up was ever shown", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(window, "open").mockReturnValue(null);
+    // No authorization URL: the app server probes the stored tokens itself.
+    startOAuth.mockResolvedValueOnce({ ok: true, job_id: "job-1" });
+    getOAuthStatus.mockResolvedValue({
+      ok: true,
+      status: "pending",
+      job_id: "job-1",
+      callback_ready: false,
+    });
+
+    const authorization = McpService.authorizeOAuth(oauthServer());
+    await vi.runAllTimersAsync();
+
+    await expect(authorization).resolves.toEqual({
+      ok: false,
+      error: "OAuth authorization timed out",
+      error_kind: "timeout",
+    });
+  });
+
+  it("treats the backend probe giving up after the sign-in started as an incomplete sign-in", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(window, "open").mockReturnValue(null);
+    getOAuthStatus
+      .mockResolvedValueOnce({
+        ok: true,
+        status: "authorizing",
+        job_id: "job-1",
+        authorization_url: "https://auth.example/authorize",
+        callback_ready: true,
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: "failed",
+        job_id: "job-1",
+        authorization_url: "https://auth.example/authorize",
+        callback_ready: true,
+        error: "MCP tool listing timed out after 120.0 seconds.",
+        error_kind: "timeout",
+      });
+
+    const authorization = McpService.authorizeOAuth(oauthServer());
+    await vi.runAllTimersAsync();
+
+    await expect(authorization).resolves.toEqual({
+      ok: false,
+      error: "MCP tool listing timed out after 120.0 seconds.",
+      error_kind: "authorization",
+    });
+  });
+
+  it("keeps a backend timeout before any sign-in started as a timeout", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(window, "open").mockReturnValue(null);
+    startOAuth.mockResolvedValueOnce({ ok: true, job_id: "job-1" });
+    getOAuthStatus.mockResolvedValueOnce({
+      ok: false,
+      status: "failed",
+      job_id: "job-1",
+      callback_ready: false,
+      error: "MCP tool listing timed out after 120.0 seconds.",
+      error_kind: "timeout",
+    });
+
+    const authorization = McpService.authorizeOAuth(oauthServer());
+    await vi.runAllTimersAsync();
+
+    await expect(authorization).resolves.toEqual({
+      ok: false,
+      error: "MCP tool listing timed out after 120.0 seconds.",
+      error_kind: "timeout",
+    });
   });
 });
 

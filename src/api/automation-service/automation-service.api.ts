@@ -8,8 +8,10 @@ import {
 } from "#/services/telemetry";
 import type {
   Automation,
+  AutomationCreatedByFilter,
   AutomationRun,
   AutomationSpec,
+  AutomationTagCount,
   AutomationTrigger,
   AutomationsResponse,
   AutomationRunsResponse,
@@ -34,7 +36,14 @@ import type {
   SetupEntry,
   SetupRequestBody,
   ValidateDraftResponse,
+  AutomationDraftEndpoint,
+  CreateAutomationDraftApiRequest,
+  UpdateAutomationDraftApiRequest,
+  AutomationDraftApiResponse,
+  AutomationDraftListResponse,
+  DraftValidationError,
 } from "#/manifests/types";
+import { withPresetSources } from "#/utils/automation-preset-sources";
 import { downloadBlob } from "#/utils/utils";
 import type { Backend, ResolvedActiveBackend } from "../backend-registry/types";
 import {
@@ -47,8 +56,53 @@ import {
   AGENT_CANVAS_CLIENT_HEADERS,
   OPENHANDS_TELEMETRY_DISTINCT_ID_HEADER,
 } from "../client-source";
+import { AUTOMATION_DRAFTS_FEATURE } from "#/constants/automation-form";
 
 const AUTOMATION_BASE_PATH = "/api/automation";
+
+type AutomationDraftCreateTarget = SetupEntry | "prompt" | "plugin" | "custom";
+
+export interface CustomWebhookCreateRequest {
+  name: string;
+  source: string;
+  event_key_expr?: string;
+  signature_header?: string;
+  signature_scheme?: string;
+  webhook_secret?: string;
+}
+
+export interface CustomWebhookCreateResponse {
+  id: string;
+  org_id: string;
+  name: string;
+  source: string;
+  webhook_url: string;
+  event_key_expr: string;
+  signature_header: string;
+  signature_scheme: string;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+  webhook_secret?: string | null;
+}
+
+function automationCreateEndpointForTarget(
+  target?: AutomationDraftCreateTarget,
+  selectedAction?: string | null,
+): string {
+  if (target === "plugin") return getAutomationEndpoint("createPlugin");
+  if (target === "custom") {
+    const endpoint = getAutomationEndpoint("createBundle");
+    if (!endpoint) {
+      throw new Error(
+        "This deployment does not support creating custom automation bundles.",
+      );
+    }
+    return endpoint;
+  }
+  if (!target || target === "prompt") return automationCreateEndpoint();
+  return automationCreateEndpoint(target, selectedAction);
+}
 
 export interface AutomationHealthResponse {
   status: "ok" | "error";
@@ -129,11 +183,113 @@ function getAutomationSdkVersionFromResponse(
   );
 }
 
-function buildPaginationQuery(limit: number, offset: number): string {
+/**
+ * The query string for a paged list request. `extra` adds params such as
+ * filters; keys whose value is undefined are left out.
+ */
+function buildListQuery(
+  limit: number,
+  offset: number,
+  extra: Record<string, string | undefined> = {},
+): string {
   const params = new URLSearchParams();
   params.set("limit", String(limit));
   params.set("offset", String(offset));
+  for (const [key, value] of Object.entries(extra)) {
+    if (value !== undefined) params.set(key, value);
+  }
   return params.toString();
+}
+
+const DRAFT_ENDPOINTS: readonly AutomationDraftEndpoint[] = [
+  "/v1",
+  "/v1/preset/prompt",
+  "/v1/preset/plugin",
+];
+
+function isDraftEndpoint(value: unknown): value is AutomationDraftEndpoint {
+  return (
+    typeof value === "string" &&
+    DRAFT_ENDPOINTS.includes(value as AutomationDraftEndpoint)
+  );
+}
+
+function normalizeValidationErrors(
+  value: unknown,
+): DraftValidationError[] | null {
+  if (!Array.isArray(value)) return null;
+  if (value.length === 0) return null;
+  const errors: DraftValidationError[] = [];
+  for (const entry of value) {
+    if (
+      typeof entry === "object" &&
+      entry !== null &&
+      !Array.isArray(entry) &&
+      typeof (entry as Record<string, unknown>).code === "string" &&
+      typeof (entry as Record<string, unknown>).message === "string"
+    ) {
+      const record = entry as Record<string, unknown>;
+      errors.push({
+        code: record.code as string,
+        message: record.message as string,
+        field:
+          typeof record.field === "string" ? (record.field as string) : null,
+      });
+    }
+  }
+  return errors.length > 0 ? errors : null;
+}
+
+/**
+ * The service returns snake_case field names; the frontend reads camelCase.
+ * Normalize defensively so a malformed payload never crashes the form.
+ */
+function normalizeDraftResponse(value: unknown): AutomationDraftApiResponse {
+  const record = (value ?? {}) as Record<string, unknown>;
+  const validationErrors = normalizeValidationErrors(
+    record.validation_errors ?? record.validationErrors,
+  );
+  return {
+    id: String(record.id ?? ""),
+    endpoint: isDraftEndpoint(record.endpoint)
+      ? (record.endpoint as AutomationDraftEndpoint)
+      : "/v1/preset/prompt",
+    name: typeof record.name === "string" && record.name ? record.name : null,
+    draft: (record.draft ?? {}) as SetupRequestBody,
+    validationErrors,
+    dispatchable: record.dispatchable === true,
+    sourceAutomationId:
+      typeof (record.source_automation_id ?? record.sourceAutomationId) ===
+      "string"
+        ? String(record.source_automation_id ?? record.sourceAutomationId)
+        : null,
+    materializedAutomationId:
+      typeof (
+        record.materialized_automation_id ?? record.materializedAutomationId
+      ) === "string"
+        ? String(
+            record.materialized_automation_id ??
+              record.materializedAutomationId,
+          )
+        : null,
+    lastTestRunId:
+      typeof (record.last_test_run_id ?? record.lastTestRunId) === "string"
+        ? String(record.last_test_run_id ?? record.lastTestRunId)
+        : null,
+    createdAt: String(record.created_at ?? record.createdAt ?? ""),
+    updatedAt: String(record.updated_at ?? record.updatedAt ?? ""),
+  };
+}
+
+function normalizeDraftListResponse(
+  value: unknown,
+): AutomationDraftListResponse {
+  const record = (value ?? {}) as Record<string, unknown>;
+  const drafts = Array.isArray(record.drafts) ? record.drafts : [];
+  return {
+    drafts: drafts.map(normalizeDraftResponse),
+    total: typeof record.total === "number" ? record.total : 0,
+  };
 }
 
 function buildImportedTrigger(spec: AutomationSpec): AutomationTrigger {
@@ -273,49 +429,91 @@ class AutomationService {
   }
 
   static async listAutomations(
-    params: { limit?: number; offset?: number } = {},
+    params: {
+      limit?: number;
+      offset?: number;
+      createdBy?: AutomationCreatedByFilter;
+      /** Only automations carrying this tag. */
+      tag?: string;
+    } = {},
   ): Promise<AutomationsResponse> {
-    const { limit = 50, offset = 0 } = params;
+    const { limit = 50, offset = 0, createdBy, tag } = params;
     const active = getActiveBackend().backend;
 
+    let response: AutomationsResponse;
     if (active.kind === "cloud") {
-      return callCloudProxy<AutomationsResponse>({
+      response = await callCloudProxy<AutomationsResponse>({
         backend: active,
         method: "GET",
-        path: `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}?${buildPaginationQuery(limit, offset)}`,
+        path: `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}?${buildListQuery(limit, offset, { created_by: createdBy, tag })}`,
         headers: await buildAutomationRequestHeaders(),
       });
+    } else {
+      const { data } = await localAutomationAxios.get<AutomationsResponse>(
+        `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}`,
+        { params: { limit, offset, created_by: createdBy, tag } },
+      );
+      response = data;
     }
 
-    const { data } = await localAutomationAxios.get<AutomationsResponse>(
-      `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}`,
-      { params: { limit, offset } },
-    );
-    return data;
+    return {
+      ...response,
+      automations: response.automations.map(withPresetSources),
+    };
   }
 
+  /**
+   * One page of the org's automations. `createdBy` narrows it on the server;
+   * an automation service that predates the param ignores it.
+   */
   static async getAutomations(
     limit = 50,
     offset = 0,
+    createdBy?: AutomationCreatedByFilter,
+    tag?: string,
   ): Promise<AutomationsResponse> {
-    return AutomationService.listAutomations({ limit, offset });
+    return AutomationService.listAutomations({ limit, offset, createdBy, tag });
+  }
+
+  /** The org's tags, each with how many live automations carry it. */
+  static async listAutomationTags(): Promise<AutomationTagCount[]> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("tags")}`;
+
+    if (active.kind === "cloud") {
+      const data = await callCloudProxy<{ tags: AutomationTagCount[] }>({
+        backend: active,
+        method: "GET",
+        path,
+        headers: await buildAutomationRequestHeaders(),
+      });
+      return data.tags;
+    }
+
+    const { data } = await localAutomationAxios.get<{
+      tags: AutomationTagCount[];
+    }>(path);
+    return data.tags;
   }
 
   static async getAutomation(id: string): Promise<Automation> {
     const active = getActiveBackend().backend;
     const path = `${AUTOMATION_BASE_PATH}${getAutomationIdEndpoint("detail", id)}`;
 
+    let automation: Automation;
     if (active.kind === "cloud") {
-      return callCloudProxy<Automation>({
+      automation = await callCloudProxy<Automation>({
         backend: active,
         method: "GET",
         path,
         headers: await buildAutomationRequestHeaders(),
       });
+    } else {
+      const { data } = await localAutomationAxios.get<Automation>(path);
+      automation = data;
     }
 
-    const { data } = await localAutomationAxios.get<Automation>(path);
-    return data;
+    return withPresetSources(automation);
   }
 
   static async createAutomation(spec: AutomationSpec): Promise<Automation> {
@@ -476,7 +674,7 @@ class AutomationService {
       return callCloudProxy<AutomationRunsResponse>({
         backend: active,
         method: "GET",
-        path: `${basePath}?${buildPaginationQuery(limit, offset)}`,
+        path: `${basePath}?${buildListQuery(limit, offset)}`,
         headers: await buildAutomationRequestHeaders(),
       });
     }
@@ -557,6 +755,39 @@ class AutomationService {
     return data;
   }
 
+  static async createCustomWebhook(
+    body: CustomWebhookCreateRequest,
+  ): Promise<CustomWebhookCreateResponse> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}/v1/webhooks`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<CustomWebhookCreateResponse>({
+        backend: active,
+        method: "POST",
+        path,
+        headers: await buildAutomationRequestHeaders(),
+        body: body as unknown as Record<string, unknown>,
+      });
+    }
+
+    const { data } =
+      await localAutomationAxios.post<CustomWebhookCreateResponse>(path, body);
+    return data;
+  }
+
+  /**
+   * Whether the active deployment advertises server-backed automation drafts
+   * (the `automationDrafts` feature from `OpenHands/automation` PR #417). The
+   * persisted-draft form flow gates on this so older deployments keep working
+   * with the client-only draft store.
+   */
+  static supportsAutomationDrafts(
+    capabilities: DeploymentCapabilities | null | undefined,
+  ): boolean {
+    return Boolean(capabilities?.features?.includes(AUTOMATION_DRAFTS_FEATURE));
+  }
+
   /**
    * Validate a draft without creating it. An invalid draft is a 200 carrying
    * field-addressed errors; only a malformed envelope is a 4xx.
@@ -592,13 +823,13 @@ class AutomationService {
    */
   static async createAutomationDraft(
     body: SetupRequestBody,
-    /** The entry and selected action decide the create endpoint. */
-    entry?: SetupEntry,
+    /** The entry/action or generic draft kind decides the create endpoint. */
+    target?: AutomationDraftCreateTarget,
     selectedAction?: string | null,
   ): Promise<Record<string, unknown>> {
     const active = getActiveBackend().backend;
-    const path = `${AUTOMATION_BASE_PATH}${automationCreateEndpoint(
-      entry,
+    const path = `${AUTOMATION_BASE_PATH}${automationCreateEndpointForTarget(
+      target,
       selectedAction,
     )}`;
 
@@ -616,6 +847,170 @@ class AutomationService {
       path,
       body,
     );
+    return data;
+  }
+
+  // --- Server-backed automation drafts (PR OpenHands/automation#417) ---
+  //
+  // Draft rows are the source of truth while the user is in the setup form. A
+  // draft is materialized into a disabled automation only when it validates and
+  // the user dispatches it for a test run. These endpoints are literal
+  // (outside the interface manifest surface) like the git-sync paths.
+
+  static async createServerDraft(
+    body: CreateAutomationDraftApiRequest,
+  ): Promise<AutomationDraftApiResponse> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}/v1/drafts`;
+    const requestBody = {
+      endpoint: body.endpoint,
+      draft: body.draft,
+      ...(body.name ? { name: body.name } : {}),
+      ...(body.sourceAutomationId
+        ? { source_automation_id: body.sourceAutomationId }
+        : {}),
+    };
+
+    if (active.kind === "cloud") {
+      const data = await callCloudProxy<AutomationDraftApiResponse>({
+        backend: active,
+        method: "POST",
+        path,
+        body: requestBody,
+        headers: await buildAutomationRequestHeaders(),
+      });
+      return normalizeDraftResponse(data);
+    }
+
+    const { data } =
+      await localAutomationAxios.post<AutomationDraftApiResponse>(
+        path,
+        requestBody,
+      );
+    return normalizeDraftResponse(data);
+  }
+
+  static async getServerDraft(
+    draftId: string,
+  ): Promise<AutomationDraftApiResponse> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}/v1/drafts/${encodeURIComponent(draftId)}`;
+
+    if (active.kind === "cloud") {
+      const data = await callCloudProxy<AutomationDraftApiResponse>({
+        backend: active,
+        method: "GET",
+        path,
+        headers: await buildAutomationRequestHeaders(),
+      });
+      return normalizeDraftResponse(data);
+    }
+
+    const { data } =
+      await localAutomationAxios.get<AutomationDraftApiResponse>(path);
+    return normalizeDraftResponse(data);
+  }
+
+  static async updateServerDraft(
+    draftId: string,
+    body: UpdateAutomationDraftApiRequest,
+  ): Promise<AutomationDraftApiResponse> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}/v1/drafts/${encodeURIComponent(draftId)}`;
+    const requestBody: Record<string, unknown> = {};
+    if (body.endpoint !== undefined) requestBody.endpoint = body.endpoint;
+    if (body.draft !== undefined) requestBody.draft = body.draft;
+    if (body.name !== undefined) requestBody.name = body.name;
+
+    if (active.kind === "cloud") {
+      const data = await callCloudProxy<AutomationDraftApiResponse>({
+        backend: active,
+        method: "PATCH",
+        path,
+        body: requestBody,
+        headers: await buildAutomationRequestHeaders(),
+      });
+      return normalizeDraftResponse(data);
+    }
+
+    const { data } =
+      await localAutomationAxios.patch<AutomationDraftApiResponse>(
+        path,
+        requestBody,
+      );
+    return normalizeDraftResponse(data);
+  }
+
+  static async deleteServerDraft(draftId: string): Promise<void> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}/v1/drafts/${encodeURIComponent(draftId)}`;
+
+    if (active.kind === "cloud") {
+      await callCloudProxy<unknown>({
+        backend: active,
+        method: "DELETE",
+        path,
+        headers: await buildAutomationRequestHeaders(),
+      });
+      return;
+    }
+
+    await localAutomationAxios.delete(path);
+  }
+
+  static async listServerDrafts(
+    params: { limit?: number; offset?: number } = {},
+  ): Promise<AutomationDraftListResponse> {
+    const { limit = 50, offset = 0 } = params;
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}/v1/drafts?${buildListQuery(limit, offset)}`;
+
+    if (active.kind === "cloud") {
+      const data = await callCloudProxy<AutomationDraftListResponse>({
+        backend: active,
+        method: "GET",
+        path,
+        headers: await buildAutomationRequestHeaders(),
+      });
+      return normalizeDraftListResponse(data);
+    }
+
+    const { data } =
+      await localAutomationAxios.get<AutomationDraftListResponse>(path);
+    return normalizeDraftListResponse(data);
+  }
+
+  /**
+   * Test-dispatch a dispatchable draft. The service materializes the draft
+   * body into a disabled automation and starts a manual run; the draft row
+   * stays in place as the source of truth. Returns the created run.
+   *
+   * An undispatchable draft answers 422 with `{ message, errors }`; callers
+   * should surface those errors rather than treating them as transport errors.
+   */
+  static async dispatchServerDraft(
+    draftId: string,
+    options: { eventPayload?: Record<string, unknown> } = {},
+  ): Promise<AutomationRun> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}/v1/drafts/${encodeURIComponent(draftId)}/dispatch`;
+    const body = options.eventPayload
+      ? { event_payload: options.eventPayload }
+      : undefined;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<AutomationRun>({
+        backend: active,
+        method: "POST",
+        path,
+        headers: await buildAutomationRequestHeaders(),
+        body,
+      });
+    }
+
+    const { data } = body
+      ? await localAutomationAxios.post<AutomationRun>(path, body)
+      : await localAutomationAxios.post<AutomationRun>(path);
     return data;
   }
 

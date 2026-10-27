@@ -4,7 +4,8 @@ import { SettingsClient } from "@openhands/typescript-client/clients";
 import { I18nKey } from "#/i18n/declaration";
 import { isSdkHttpStatusError } from "#/api/agent-server-compatibility";
 import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
-import { isNoBackend } from "#/api/backend-registry/active-store";
+import { isServedOriginHost } from "#/api/agent-server-config";
+import type { Backend } from "#/api/backend-registry/types";
 import { useActiveBackendContext } from "#/contexts/active-backend-context";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import {
@@ -19,6 +20,28 @@ import {
 } from "./backend-form-modal";
 
 /**
+ * The record holding the hosting Canvas key: the same served-origin match the
+ * MARS web bridge reads it back with (`getMarsBridgeHeaders`).
+ */
+function isCanvasRoot(backend: Backend): boolean {
+  return (
+    backend.kind === "local" &&
+    !backend.marsSessionId &&
+    isServedOriginHost(backend.host)
+  );
+}
+
+/** A DigitalOcean guest the web build proxies under `/mars/sessions/<id>`. */
+function isLiveMarsGuest(backend: Backend): boolean {
+  if (!backend.marsSessionId) return false;
+  try {
+    return new URL(backend.host).pathname.startsWith("/mars/sessions/");
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Full-screen prompt shown when the server is in public mode
  * (`VITE_AUTH_REQUIRED=true`) and no valid API key has been configured.
  *
@@ -29,9 +52,16 @@ import {
  */
 export default function ApiKeyEntryScreen() {
   const { t } = useTranslation("openhands");
-  const { active, addBackend, updateBackend } = useActiveBackendContext();
+  const { active, backends, addBackend, updateBackend, setActive } =
+    useActiveBackendContext();
 
   const host = window.location.origin;
+  // Prefer the active record when it is a root, so a duplicate earlier in the
+  // list cannot take the key while the selected one stays stale.
+  const rootBackend = isCanvasRoot(active.backend)
+    ? active.backend
+    : backends.find(isCanvasRoot);
+  const keepGuest = isLiveMarsGuest(active.backend);
 
   const [isValidating, setIsValidating] = React.useState(false);
   const [connectionStatus, setConnectionStatus] = React.useState<
@@ -56,10 +86,23 @@ export default function ApiKeyEntryScreen() {
 
         setConnectionStatus("success");
 
-        if (isNoBackend(active.backend)) {
-          addBackend(payload);
+        // This form authenticates the serving Canvas, so the key goes on the
+        // Canvas root's own record. A live DigitalOcean guest stays selected so
+        // a reload reconnects to the same session; any other backend that
+        // tripped the gate is left as it is and the root is selected, or the
+        // gate would come straight back.
+        // Validation above uses the local Agent Server protocol even when
+        // the Canvas hostname resembles an OpenHands Cloud deployment.
+        const rootPayload = { ...payload, kind: "local" as const };
+        if (rootBackend) {
+          updateBackend(rootBackend.id, rootPayload);
+          if (!keepGuest && rootBackend.id !== active.backend.id) {
+            setActive(rootBackend.id);
+          }
         } else {
-          updateBackend(active.backend.id, payload);
+          // addBackend selects the new root (BM-001).
+          addBackend(rootPayload);
+          if (keepGuest) setActive(active.backend.id, active.orgId);
         }
 
         window.location.reload();
@@ -77,13 +120,13 @@ export default function ApiKeyEntryScreen() {
         setIsValidating(false);
       }
     },
-    [active.backend, addBackend, updateBackend, t],
+    [active, rootBackend, keepGuest, addBackend, updateBackend, setActive, t],
   );
 
   return (
     <div
       data-testid="api-key-entry-screen"
-      className="flex min-h-screen items-center justify-center bg-base px-6"
+      className="flex min-h-screen items-center justify-center bg-canvas-base px-6"
     >
       <div
         className={cn(
@@ -118,8 +161,8 @@ export default function ApiKeyEntryScreen() {
                       data-testid={`${testIdRoot}-status`}
                       className={
                         connectionStatus === "error"
-                          ? "text-red-400"
-                          : "text-green-400"
+                          ? "text-feedback-error"
+                          : "text-feedback-success"
                       }
                     >
                       {connectionStatus === "error"
