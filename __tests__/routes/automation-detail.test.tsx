@@ -543,7 +543,9 @@ describe("AutomationDetail — service account owner", () => {
     await screen.findByTestId("service-account-badge");
 
     // Assert
-    expect(screen.queryByTestId("automation-tags-edit")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automation-tags-edit"),
+    ).not.toBeInTheDocument();
   });
 
   it("does not let an admin edit the tags of another member's automation", async () => {
@@ -561,7 +563,9 @@ describe("AutomationDetail — service account owner", () => {
     await screen.findByTestId("automation-tags");
 
     // Assert — only the creator edits a human-owned automation.
-    expect(screen.queryByTestId("automation-tags-edit")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automation-tags-edit"),
+    ).not.toBeInTheDocument();
   });
 
   it("shows a member the generic label and never the owner id", async () => {
