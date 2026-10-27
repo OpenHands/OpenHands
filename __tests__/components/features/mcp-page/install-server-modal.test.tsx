@@ -71,7 +71,13 @@ describe("InstallServerModal", () => {
       .mockResolvedValue(true);
 
     const onClose = vi.fn();
-    renderWith(<InstallServerModal existingServers={[]} entry={slack} onClose={onClose} />);
+    renderWith(
+      <InstallServerModal
+        existingServers={[]}
+        entry={slack}
+        onClose={onClose}
+      />,
+    );
 
     await screen.findByTestId("mcp-install-modal");
 
@@ -113,7 +119,11 @@ describe("InstallServerModal", () => {
     vi.spyOn(SettingsService, "saveSettings").mockResolvedValue(true);
 
     renderWith(
-      <InstallServerModal existingServers={[]} entry={slack} onClose={vi.fn()} />,
+      <InstallServerModal
+        existingServers={[]}
+        entry={slack}
+        onClose={vi.fn()}
+      />,
     );
     await screen.findByTestId("mcp-install-modal");
 
@@ -243,7 +253,13 @@ describe("InstallServerModal", () => {
       .mockResolvedValue(true);
 
     const onClose = vi.fn();
-    renderWith(<InstallServerModal existingServers={[]} entry={tavily} onClose={onClose} />);
+    renderWith(
+      <InstallServerModal
+        existingServers={[]}
+        entry={tavily}
+        onClose={onClose}
+      />,
+    );
 
     await screen.findByTestId("mcp-install-modal");
 
@@ -298,7 +314,13 @@ describe("InstallServerModal", () => {
       .spyOn(SettingsService, "saveSettings")
       .mockResolvedValue(true);
 
-    renderWith(<InstallServerModal existingServers={[]} entry={entry} onClose={vi.fn()} />);
+    renderWith(
+      <InstallServerModal
+        existingServers={[]}
+        entry={entry}
+        onClose={vi.fn()}
+      />,
+    );
 
     await screen.findByTestId("mcp-install-modal");
 
@@ -343,7 +365,13 @@ describe("InstallServerModal", () => {
       .spyOn(SettingsService, "saveSettings")
       .mockResolvedValue(true);
 
-    renderWith(<InstallServerModal existingServers={[]} entry={entry} onClose={vi.fn()} />);
+    renderWith(
+      <InstallServerModal
+        existingServers={[]}
+        entry={entry}
+        onClose={vi.fn()}
+      />,
+    );
 
     await screen.findByTestId("mcp-install-modal");
     // The add-mcp-server mutation bails when useSettings() hasn't
@@ -392,7 +420,13 @@ describe("InstallServerModal", () => {
       .spyOn(SettingsService, "saveSettings")
       .mockResolvedValue(true);
 
-    renderWith(<InstallServerModal existingServers={[]} entry={entry} onClose={vi.fn()} />);
+    renderWith(
+      <InstallServerModal
+        existingServers={[]}
+        entry={entry}
+        onClose={vi.fn()}
+      />,
+    );
     await screen.findByTestId("mcp-install-modal");
     await waitFor(() => expect(getSpy).toHaveBeenCalled());
     fireEvent.click(screen.getByTestId("mcp-install-submit"));
@@ -413,6 +447,245 @@ describe("InstallServerModal", () => {
           },
         },
       },
+    });
+  });
+
+  // @spec MCP-006 — Library installs never dead-end
+  it("installs an entry whose catalog OAuth names provider endpoints through the server's own OAuth", async () => {
+    // Arrange: an OHE-style cloud backend and an entry shaped like Sentry's,
+    // whose only MCP option carries the provider's own OAuth app details.
+    setRegisteredBackends([
+      {
+        id: "cloud-1",
+        name: "Cloud",
+        host: "https://app.all-hands.dev",
+        apiKey: "k",
+        kind: "cloud",
+      },
+    ]);
+    setActiveSelection({ backendId: "cloud-1" });
+    const entry: MarketplaceEntry = {
+      id: "provider-oauth",
+      name: "Provider OAuth",
+      description:
+        "Remote MCP server whose catalog option names provider OAuth.",
+      docsUrl: "https://example.com/docs",
+      iconBg: "#000000",
+      connectionOptions: [
+        {
+          id: "oauth-mcp",
+          provider: "mcp",
+          transport: { kind: "shttp", url: "https://mcp.example.com/mcp" },
+          auth: {
+            strategy: "oauth2",
+            oauth: {
+              authorizationUrl: "https://example.com/oauth/authorize",
+              tokenUrl: "https://example.com/oauth/token",
+              scopes: ["project:read"],
+              clientAuthentication: "body",
+            },
+          },
+        },
+      ],
+    };
+    const oauthSpy = vi.spyOn(McpService, "authorizeOAuth").mockResolvedValue({
+      ok: true,
+      tools: ["search_issues"],
+      oauth_state: { tokens: { access_token: "gAAAAencrypted" } },
+    });
+    const saveSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+    renderWith(
+      <InstallServerModal
+        existingServers={[]}
+        entry={entry}
+        onClose={vi.fn()}
+      />,
+    );
+    await screen.findByTestId("mcp-install-oauth-info");
+
+    // Act
+    fireEvent.click(screen.getByTestId("mcp-install-submit"));
+
+    // Assert: the server's own OAuth runs without the provider's app details,
+    // and the authorized server is saved.
+    await waitFor(() => expect(oauthSpy).toHaveBeenCalledTimes(1));
+    expect(oauthSpy.mock.calls[0][0]).toEqual({
+      id: "",
+      type: "shttp",
+      name: "provider-oauth",
+      url: "https://mcp.example.com/mcp",
+      auth: { strategy: "oauth2" },
+    });
+    await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
+    const sent = (saveSpy.mock.calls[0][0] as Record<string, unknown>)
+      .agent_settings_diff as { mcp_config: Record<string, unknown> };
+    expect(sent.mcp_config).toMatchObject({
+      "provider-oauth": {
+        url: "https://mcp.example.com/mcp",
+        auth: {
+          strategy: "oauth2",
+          state: { tokens: { access_token: "gAAAAencrypted" } },
+        },
+      },
+    });
+  });
+
+  // @spec MCP-006 — Library installs never dead-end
+  it("explains and disables Install when no option can be installed", async () => {
+    const entry = {
+      id: "stdio-oauth",
+      name: "Stdio OAuth",
+      description:
+        "An OAuth option on a transport this backend cannot authorize.",
+      docsUrl: "https://example.com/docs",
+      iconBg: "#000000",
+      connectionOptions: [
+        {
+          id: "oauth",
+          provider: "mcp",
+          transport: {
+            kind: "stdio",
+            serverName: "stdio-oauth",
+            command: "npx",
+            args: ["stdio-oauth-mcp"],
+          },
+          auth: { strategy: "oauth2" },
+        },
+      ],
+    } as MarketplaceEntry;
+    const oauthSpy = vi.spyOn(McpService, "authorizeOAuth");
+    const saveSpy = vi.spyOn(SettingsService, "saveSettings");
+    renderWith(
+      <InstallServerModal
+        existingServers={[]}
+        entry={entry}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await screen.findByTestId("mcp-install-unavailable");
+    const install = screen.getByTestId("mcp-install-submit");
+    expect(install).toBeDisabled();
+    fireEvent.click(install);
+    expect(McpService.testServer).not.toHaveBeenCalled();
+    expect(oauthSpy).not.toHaveBeenCalled();
+    expect(saveSpy).not.toHaveBeenCalled();
+  });
+
+  describe("entries with several installable options", () => {
+    const sentry = MCP_MARKETPLACE.find((e) => e.id === "sentry")!;
+
+    it("selects the preferred OAuth option and offers the token option", async () => {
+      renderWith(
+        <InstallServerModal
+          existingServers={[]}
+          entry={sentry}
+          onClose={vi.fn()}
+        />,
+      );
+
+      const tabs = await screen.findAllByRole("tab");
+      expect(tabs.map((tab) => tab.textContent)).toEqual([
+        "MCP$OPTION_OAUTH",
+        "MCP$OPTION_API_KEY",
+      ]);
+      expect(tabs[0]).toHaveAttribute("aria-selected", "true");
+      expect(screen.getByTestId("mcp-install-oauth-info")).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("mcp-install-field-SENTRY_ACCESS_TOKEN"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("installs the personal-token option as a stdio server", async () => {
+      const saveSpy = vi
+        .spyOn(SettingsService, "saveSettings")
+        .mockResolvedValue(true);
+      const oauthSpy = vi.spyOn(McpService, "authorizeOAuth");
+      const onClose = vi.fn();
+      renderWith(
+        <InstallServerModal
+          existingServers={[]}
+          entry={sentry}
+          onClose={onClose}
+        />,
+      );
+
+      fireEvent.click(await screen.findByTestId("mcp-install-option-api"));
+      expect(
+        screen.queryByTestId("mcp-install-oauth-info"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByTestId("mcp-install-field-command-readonly"),
+      ).toHaveValue("npx -y @sentry/mcp-server");
+
+      // The token is required before anything is saved.
+      fireEvent.click(screen.getByTestId("mcp-install-submit"));
+      await waitFor(() => expect(saveSpy).not.toHaveBeenCalled());
+
+      fireEvent.change(
+        screen.getByTestId("mcp-install-field-SENTRY_ACCESS_TOKEN"),
+        { target: { value: "sntryu_test" } },
+      );
+      fireEvent.change(screen.getByTestId("mcp-install-field-SENTRY_HOST"), {
+        target: { value: "sentry.example.com" },
+      });
+      fireEvent.click(screen.getByTestId("mcp-install-submit"));
+
+      await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
+      const [payload] = saveSpy.mock.calls[0];
+      const { mcp_config } = (payload as Record<string, unknown>)
+        .agent_settings_diff as { mcp_config: Record<string, unknown> };
+      expect(mcp_config).toEqual({
+        sentry: expect.objectContaining({
+          command: "npx",
+          args: ["-y", "@sentry/mcp-server"],
+          env: {
+            SENTRY_ACCESS_TOKEN: "sntryu_test",
+            SENTRY_HOST: "sentry.example.com",
+          },
+        }),
+      });
+      expect(oauthSpy).not.toHaveBeenCalled();
+      await waitFor(() => expect(onClose).toHaveBeenCalled());
+    });
+
+    it("starts the chosen option's fields empty when switching back", async () => {
+      renderWith(
+        <InstallServerModal
+          existingServers={[]}
+          entry={sentry}
+          onClose={vi.fn()}
+        />,
+      );
+
+      fireEvent.click(await screen.findByTestId("mcp-install-option-api"));
+      fireEvent.change(screen.getByTestId("mcp-install-field-SENTRY_HOST"), {
+        target: { value: "sentry.example.com" },
+      });
+      fireEvent.click(screen.getByTestId("mcp-install-option-mcp"));
+      fireEvent.click(screen.getByTestId("mcp-install-option-api"));
+
+      expect(screen.getByTestId("mcp-install-field-SENTRY_HOST")).toHaveValue(
+        "",
+      );
+    });
+
+    it("shows no option picker for an entry with one installable option", async () => {
+      const slack = MCP_MARKETPLACE.find((e) => e.id === "slack")!;
+      renderWith(
+        <InstallServerModal
+          existingServers={[]}
+          entry={slack}
+          onClose={vi.fn()}
+        />,
+      );
+
+      await screen.findByTestId("mcp-install-field-SLACK_BOT_TOKEN");
+      expect(
+        screen.queryByTestId("mcp-install-options"),
+      ).not.toBeInTheDocument();
     });
   });
 
@@ -440,7 +713,11 @@ describe("InstallServerModal", () => {
     };
 
     renderWith(
-      <InstallServerModal existingServers={[]} entry={entry} onClose={vi.fn()} />,
+      <InstallServerModal
+        existingServers={[]}
+        entry={entry}
+        onClose={vi.fn()}
+      />,
     );
 
     const box = await screen.findByTestId("mcp-install-oauth-info");
@@ -491,7 +768,13 @@ describe("InstallServerModal", () => {
       .spyOn(SettingsService, "saveSettings")
       .mockResolvedValue(true);
 
-    renderWith(<InstallServerModal existingServers={[]} entry={entry} onClose={vi.fn()} />);
+    renderWith(
+      <InstallServerModal
+        existingServers={[]}
+        entry={entry}
+        onClose={vi.fn()}
+      />,
+    );
     await screen.findByTestId("mcp-install-modal");
     await waitFor(() => expect(SettingsService.getSettings).toHaveBeenCalled());
 
@@ -570,7 +853,13 @@ describe("InstallServerModal", () => {
       .spyOn(SettingsService, "saveSettings")
       .mockResolvedValue(true);
 
-    renderWith(<InstallServerModal existingServers={[]} entry={entry} onClose={vi.fn()} />);
+    renderWith(
+      <InstallServerModal
+        existingServers={[]}
+        entry={entry}
+        onClose={vi.fn()}
+      />,
+    );
     await screen.findByTestId("mcp-install-modal");
     await waitFor(() => expect(SettingsService.getSettings).toHaveBeenCalled());
 
@@ -619,7 +908,13 @@ describe("InstallServerModal", () => {
       .spyOn(SettingsService, "saveSettings")
       .mockResolvedValue(true);
 
-    renderWith(<InstallServerModal existingServers={[]} entry={linear} onClose={vi.fn()} />);
+    renderWith(
+      <InstallServerModal
+        existingServers={[]}
+        entry={linear}
+        onClose={vi.fn()}
+      />,
+    );
     await screen.findByTestId("mcp-install-modal");
     // Wait for useSettings() so the add-mcp-server mutation doesn't bail.
     await waitFor(() => expect(getSpy).toHaveBeenCalled());
@@ -658,7 +953,13 @@ describe("InstallServerModal", () => {
   it("closes from the top-right close button", async () => {
     const onClose = vi.fn();
     const slack = MCP_MARKETPLACE.find((e) => e.id === "slack")!;
-    renderWith(<InstallServerModal existingServers={[]} entry={slack} onClose={onClose} />);
+    renderWith(
+      <InstallServerModal
+        existingServers={[]}
+        entry={slack}
+        onClose={onClose}
+      />,
+    );
     await screen.findByTestId("mcp-install-modal");
 
     fireEvent.click(screen.getByTestId("mcp-install-modal-close"));
@@ -668,7 +969,13 @@ describe("InstallServerModal", () => {
   it("places Cancel before Install in the footer so the dominant action is the last focusable button", async () => {
     // Arrange: render with any marketplace entry so the footer is mounted.
     const slack = MCP_MARKETPLACE.find((e) => e.id === "slack")!;
-    renderWith(<InstallServerModal existingServers={[]} entry={slack} onClose={vi.fn()} />);
+    renderWith(
+      <InstallServerModal
+        existingServers={[]}
+        entry={slack}
+        onClose={vi.fn()}
+      />,
+    );
     await screen.findByTestId("mcp-install-modal");
 
     // Act: locate both footer buttons.
@@ -712,7 +1019,13 @@ describe("InstallServerModal", () => {
       ],
     };
 
-    renderWith(<InstallServerModal existingServers={[]} entry={entry} onClose={onClose} />);
+    renderWith(
+      <InstallServerModal
+        existingServers={[]}
+        entry={entry}
+        onClose={onClose}
+      />,
+    );
     await screen.findByTestId("mcp-install-modal");
 
     // Wait for settings to load so the mutation isn't a no-op.
@@ -720,9 +1033,11 @@ describe("InstallServerModal", () => {
 
     fireEvent.click(screen.getByTestId("mcp-install-submit"));
 
-    // Error message must appear.
+    // The remote-server connection message must appear.
     await waitFor(() =>
-      expect(screen.getByTestId("mcp-install-modal-error")).toBeInTheDocument(),
+      expect(screen.getByTestId("mcp-install-modal-error")).toHaveTextContent(
+        "MCP$TEST_ERROR_CONNECTION",
+      ),
     );
 
     // Save must never have been called.
@@ -731,6 +1046,39 @@ describe("InstallServerModal", () => {
     // Modal must stay open.
     expect(onClose).not.toHaveBeenCalled();
     expect(screen.getByTestId("mcp-install-modal")).toBeInTheDocument();
+  });
+
+  it("explains a stdio pre-flight connection failure as a command that could not start", async () => {
+    // Arrange: a stdio catalog entry whose command the Agent Server cannot spawn.
+    vi.spyOn(McpService, "testServer").mockResolvedValue({
+      ok: false,
+      error: "Client failed to connect: [Errno 2] No such file or directory",
+      error_kind: "connection",
+    });
+    const saveSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+    const time = MCP_MARKETPLACE.find((e) => e.id === "time")!;
+    renderWith(
+      <InstallServerModal
+        existingServers={[]}
+        entry={time}
+        onClose={vi.fn()}
+      />,
+    );
+    await screen.findByTestId("mcp-install-modal");
+    await waitFor(() => expect(SettingsService.getSettings).toHaveBeenCalled());
+
+    // Act
+    fireEvent.click(screen.getByTestId("mcp-install-submit"));
+
+    // Assert: the stdio-specific message, not the URL hint, and nothing saved.
+    await waitFor(() =>
+      expect(screen.getByTestId("mcp-install-modal-error")).toHaveTextContent(
+        "MCP$TEST_ERROR_STDIO_START",
+      ),
+    );
+    expect(saveSpy).not.toHaveBeenCalled();
   });
 
   it("shows the credential-specific message when the pre-flight test reports invalid credentials", async () => {
@@ -743,7 +1091,13 @@ describe("InstallServerModal", () => {
       error_kind: "credentials",
     });
 
-    renderWith(<InstallServerModal existingServers={[]} entry={slack} onClose={vi.fn()} />);
+    renderWith(
+      <InstallServerModal
+        existingServers={[]}
+        entry={slack}
+        onClose={vi.fn()}
+      />,
+    );
     await screen.findByTestId("mcp-install-modal");
 
     // Act: fill the required fields and install.
@@ -794,7 +1148,13 @@ describe("InstallServerModal", () => {
       ],
     };
 
-    renderWith(<InstallServerModal existingServers={[]} entry={entry} onClose={onClose} />);
+    renderWith(
+      <InstallServerModal
+        existingServers={[]}
+        entry={entry}
+        onClose={onClose}
+      />,
+    );
     await screen.findByTestId("mcp-install-modal");
 
     await waitFor(() => expect(SettingsService.getSettings).toHaveBeenCalled());
@@ -834,7 +1194,13 @@ describe("InstallServerModal", () => {
       ],
     };
 
-    renderWith(<InstallServerModal existingServers={[]} entry={entry} onClose={vi.fn()} />);
+    renderWith(
+      <InstallServerModal
+        existingServers={[]}
+        entry={entry}
+        onClose={vi.fn()}
+      />,
+    );
     await screen.findByTestId("mcp-install-modal");
 
     await waitFor(() => expect(SettingsService.getSettings).toHaveBeenCalled());
@@ -932,7 +1298,13 @@ describe("InstallServerModal", () => {
     });
 
     it("pre-checks the toggle for password-type envFields", async () => {
-      renderWith(<InstallServerModal existingServers={[]} entry={STDIO_ENTRY} onClose={vi.fn()} />);
+      renderWith(
+        <InstallServerModal
+          existingServers={[]}
+          entry={STDIO_ENTRY}
+          onClose={vi.fn()}
+        />,
+      );
       await screen.findByTestId("mcp-install-modal");
 
       const toggle = screen.getByTestId("mcp-install-save-secret-API_KEY");
@@ -940,7 +1312,13 @@ describe("InstallServerModal", () => {
     });
 
     it("leaves non-password envFields unchecked by default", async () => {
-      renderWith(<InstallServerModal existingServers={[]} entry={STDIO_ENTRY} onClose={vi.fn()} />);
+      renderWith(
+        <InstallServerModal
+          existingServers={[]}
+          entry={STDIO_ENTRY}
+          onClose={vi.fn()}
+        />,
+      );
       await screen.findByTestId("mcp-install-modal");
 
       const toggle = screen.getByTestId("mcp-install-save-secret-USERNAME");
@@ -948,7 +1326,13 @@ describe("InstallServerModal", () => {
     });
 
     it("does not render a toggle for argFields", async () => {
-      renderWith(<InstallServerModal existingServers={[]} entry={STDIO_ENTRY} onClose={vi.fn()} />);
+      renderWith(
+        <InstallServerModal
+          existingServers={[]}
+          entry={STDIO_ENTRY}
+          onClose={vi.fn()}
+        />,
+      );
       await screen.findByTestId("mcp-install-modal");
 
       expect(
@@ -957,7 +1341,13 @@ describe("InstallServerModal", () => {
     });
 
     it("toggling the checkbox updates its checked state", async () => {
-      renderWith(<InstallServerModal existingServers={[]} entry={STDIO_ENTRY} onClose={vi.fn()} />);
+      renderWith(
+        <InstallServerModal
+          existingServers={[]}
+          entry={STDIO_ENTRY}
+          onClose={vi.fn()}
+        />,
+      );
       await screen.findByTestId("mcp-install-modal");
 
       // USERNAME starts unchecked; clicking it should flip to checked.
@@ -975,7 +1365,13 @@ describe("InstallServerModal", () => {
     it("setValue preserves savedAsSecret state when a field value changes", async () => {
       // Before the ...prev bug-fix in setValue, calling onChange on any field
       // would reset savedAsSecret to {}, unchecking all toggles silently.
-      renderWith(<InstallServerModal existingServers={[]} entry={STDIO_ENTRY} onClose={vi.fn()} />);
+      renderWith(
+        <InstallServerModal
+          existingServers={[]}
+          entry={STDIO_ENTRY}
+          onClose={vi.fn()}
+        />,
+      );
       await screen.findByTestId("mcp-install-modal");
 
       // API_KEY starts pre-checked. Typing a new value should leave it checked.
@@ -990,7 +1386,13 @@ describe("InstallServerModal", () => {
     it("calls createSecret for checked envFields after a successful install", async () => {
       vi.spyOn(SettingsService, "saveSettings").mockResolvedValue(true);
       const onClose = vi.fn();
-      renderWith(<InstallServerModal existingServers={[]} entry={STDIO_ENTRY} onClose={onClose} />);
+      renderWith(
+        <InstallServerModal
+          existingServers={[]}
+          entry={STDIO_ENTRY}
+          onClose={onClose}
+        />,
+      );
       await screen.findByTestId("mcp-install-modal");
       await waitFor(() =>
         expect(SettingsService.getSettings).toHaveBeenCalled(),
@@ -1021,7 +1423,13 @@ describe("InstallServerModal", () => {
     it("saves hosted MCP credentials as named secrets when configured", async () => {
       vi.spyOn(SettingsService, "saveSettings").mockResolvedValue(true);
       const onClose = vi.fn();
-      renderWith(<InstallServerModal existingServers={[]} entry={SHTTP_ENTRY} onClose={onClose} />);
+      renderWith(
+        <InstallServerModal
+          existingServers={[]}
+          entry={SHTTP_ENTRY}
+          onClose={onClose}
+        />,
+      );
       await screen.findByTestId("mcp-install-modal");
       await waitFor(() =>
         expect(SettingsService.getSettings).toHaveBeenCalled(),
@@ -1105,7 +1513,13 @@ describe("InstallServerModal", () => {
     it("does not call createSecret when all toggles are unchecked before install", async () => {
       vi.spyOn(SettingsService, "saveSettings").mockResolvedValue(true);
       const onClose = vi.fn();
-      renderWith(<InstallServerModal existingServers={[]} entry={STDIO_ENTRY} onClose={onClose} />);
+      renderWith(
+        <InstallServerModal
+          existingServers={[]}
+          entry={STDIO_ENTRY}
+          onClose={onClose}
+        />,
+      );
       await screen.findByTestId("mcp-install-modal");
       await waitFor(() =>
         expect(SettingsService.getSettings).toHaveBeenCalled(),
@@ -1134,7 +1548,13 @@ describe("InstallServerModal", () => {
         new Error("forbidden"),
       );
       const onClose = vi.fn();
-      renderWith(<InstallServerModal existingServers={[]} entry={STDIO_ENTRY} onClose={onClose} />);
+      renderWith(
+        <InstallServerModal
+          existingServers={[]}
+          entry={STDIO_ENTRY}
+          onClose={onClose}
+        />,
+      );
       await screen.findByTestId("mcp-install-modal");
       await waitFor(() =>
         expect(SettingsService.getSettings).toHaveBeenCalled(),

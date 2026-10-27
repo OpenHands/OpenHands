@@ -3,6 +3,7 @@ import ReactDOM from "react-dom";
 import { useTranslation } from "react-i18next";
 import { ContextMenu } from "#/ui/context-menu";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
+import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { clampLeftToViewport } from "#/hooks/use-popover-fixed-placement";
 import { useConversationId } from "#/hooks/use-conversation-id";
 import { useConversationLocalStorageState } from "#/utils/conversation-local-storage";
@@ -48,6 +49,7 @@ export function ConversationTabsContextMenu({
     onClose,
     ignoreOutsideClickRef,
   );
+  useCloseOnEscape(isOpen, onClose, anchorRef);
   const [portalStyle, setPortalStyle] = useState<React.CSSProperties>();
 
   useLayoutEffect(() => {

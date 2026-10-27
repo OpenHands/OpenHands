@@ -208,6 +208,14 @@ jobs:
           provenance: true
           sbom: true
 
+      # Boot the image before merge-manifests publishes the multi-arch tags
+      # (including `latest`): a missing COPY only shows up at runtime (#18342).
+      - name: Smoke test (${{ matrix.arch }})
+        env:
+          # An explicit agent_server_image override may ship another version.
+          EXPECTED_AGENT_SERVER_VERSION: ${{ inputs.agent_server_image == '' && steps.config.outputs.agent_server_version || '' }}
+        run: docker/smoke-test.sh "${IMAGE}@${{ steps.build.outputs.digest }}"
+
       - name: Summary (${{ matrix.arch }})
         env:
           TAGS: ${{ steps.prep.outputs.tags }}

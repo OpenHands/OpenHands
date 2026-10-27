@@ -2,8 +2,15 @@ import { QueryClient } from "@tanstack/react-query";
 import { ConversationClient } from "@openhands/typescript-client/clients";
 import type { StartGoalRequest } from "@openhands/typescript-client";
 import { getActiveBackend } from "#/api/backend-registry/active-store";
-import { pauseCloudSandbox } from "#/api/cloud/conversation-service.api";
+import {
+  pauseCloudSandbox,
+  resumeCloudSandbox,
+} from "#/api/cloud/conversation-service.api";
 import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
+import {
+  buildCustomSecrets,
+  type CustomSecretInput,
+} from "#/api/agent-server-adapter";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 
@@ -114,9 +121,48 @@ export const resumeGoal = async (conversationId: string): Promise<void> => {
   ).resumeGoal(conversationId);
 };
 
-export const resumeConversation = async (conversationId: string) => {
+/**
+ * Hand saved secrets to a running conversation. Conversations receive their
+ * secrets once at start, so a secret saved mid-conversation is otherwise
+ * invisible to the agent. Secrets ride as LookupSecrets, never as values.
+ * Cloud resolves secrets server-side, so this is local-only.
+ */
+export const updateConversationSecrets = async (
+  conversationId: string,
+  customSecrets: CustomSecretInput[],
+): Promise<void> => {
+  if (getActiveBackend().backend.kind === "cloud") return;
+  const secrets = buildCustomSecrets(customSecrets);
+  if (!secrets) return;
+
   const { conversationUrl, sessionApiKey } =
     await fetchConversationData(conversationId);
+  await new ConversationClient(
+    getAgentServerClientOptions({ conversationUrl, sessionApiKey }),
+  ).updateSecrets(conversationId, { secrets });
+};
+
+/**
+ * Resume a conversation.
+ * - Cloud mode with a paused/starting sandbox: the runtime has no URL until the
+ *   sandbox is RUNNING, so there is nothing to call; wake the sandbox instead
+ *   (mirrors `pauseConversation`). The status poll picks up the transition.
+ * - Otherwise: resume the agent through the conversation's runtime.
+ */
+export const resumeConversation = async (conversationId: string) => {
+  const { conversationUrl, sessionApiKey, sandboxId } =
+    await fetchConversationData(conversationId);
+
+  if (!conversationUrl && getActiveBackend().backend.kind === "cloud") {
+    if (!sandboxId) {
+      throw new Error(
+        `Cannot resume: cloud conversation ${conversationId} has no sandbox_id.`,
+      );
+    }
+    await resumeCloudSandbox(sandboxId);
+    return { success: true };
+  }
+
   return new ConversationClient(
     getAgentServerClientOptions({ conversationUrl, sessionApiKey }),
   ).runConversation(conversationId);

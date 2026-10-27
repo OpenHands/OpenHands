@@ -6,8 +6,9 @@
  *   Step 0 — Choose Agent: selects OpenHands and advances.
  *   Step 1 — Check Backend: waits for the connected banner, advances.
  *   Step 2 — Setup LLM: fills in the mock LLM model, base URL, and API
- *            key (via "All" mode), and advances. The step persists settings
- *            AND creates/activates a named profile automatically.
+ *            key (via "All" mode), and advances. The step edits the active
+ *            LLM profile: it saves the form as a profile named after the
+ *            model and activates it, without writing raw LLM settings.
  *   Step 3 — Say Hello: verifies the Skip button is hidden (PR #1095),
  *            submits the default greeting, verifies the conversation is
  *            created and the browser navigates to it.
@@ -19,6 +20,11 @@
  *   - No error banners are visible after the conversation loads.
  */
 
+import { randomUUID } from "node:crypto";
+import type {
+  AgentProfile,
+  SettingsApiResponse,
+} from "@openhands/typescript-client";
 import { test, expect } from "@playwright/test";
 import {
   SESSION_API_KEY,
@@ -30,7 +36,9 @@ import {
   registerTrajectory,
   activateTrajectory,
   resetMockLLM,
+  BACKEND_URL,
   waitForNonUserMessageText,
+  waitForAgentMessageContaining,
 } from "../utils/mock-llm-helpers";
 import {
   showOnboarding,
@@ -41,29 +49,115 @@ import {
   type OnboardingStepLayout,
 } from "../../support/onboarding-helpers";
 
-const MOCK_MODEL = "openai/mock-onboarding-model";
+const PROFILE_NAME = `mock-onboarding-${randomUUID()}`;
+const MOCK_MODEL = `openai/${PROFILE_NAME}`;
+const PREVIOUS_PROFILE_NAME = `mock-before-onboarding-${randomUUID()}`;
+// Raw settings that disagree with the active profile. Onboarding edits the
+// profile, so this endpoint must never reach the form or the new profile.
+const STALE_SETTINGS_BASE_URL = "http://127.0.0.1:9/stale-raw-settings";
 const REPLY_TOKEN = "ONBOARDING_HAPPY_PATH_REPLY_OK";
 
 test.describe.configure({ mode: "serial" });
 
 test.describe("onboarding happy path", () => {
   const conversationIds = new Set<string>();
+  const headers = { "X-Session-API-Key": SESSION_API_KEY };
+  let previousSettings: SettingsApiResponse | undefined;
+  let previousAgentProfile: AgentProfile | undefined;
 
-  test.afterEach(async ({ request }) => {
-    for (const id of Array.from(conversationIds)) {
-      try {
+  test.beforeEach(async ({ request }) => {
+    // The list endpoint seeds the default profile on a fresh stack. Preserve
+    // that profile and settings because onboarding updates both of them.
+    const profiles = await request.get(`${BACKEND_URL}/api/agent-profiles`, {
+      headers,
+    });
+    expect(profiles.ok()).toBe(true);
+    const profile = await request.get(
+      `${BACKEND_URL}/api/agent-profiles/default`,
+      { headers },
+    );
+    expect(profile.ok()).toBe(true);
+    previousAgentProfile = (await profile.json()).profile;
+    const settings = await request.get(`${BACKEND_URL}/api/settings`, {
+      headers: { ...headers, "X-Expose-Secrets": "encrypted" },
+    });
+    expect(settings.ok()).toBe(true);
+    previousSettings = await settings.json();
+
+    // Reproduce re-onboarding with an active profile that already has the
+    // endpoint and key. The form shows them, so the endpoint the test types
+    // again is an unchanged value that is absent from the form's changes.
+    const saved = await request.post(
+      `${BACKEND_URL}/api/profiles/${PREVIOUS_PROFILE_NAME}`,
+      {
+        headers,
+        data: {
+          llm: {
+            model: `openai/${PREVIOUS_PROFILE_NAME}`,
+            api_key: "mock-api-key-for-testing",
+            base_url: MOCK_LLM_AGENT_URL,
+          },
+          include_secrets: true,
+        },
+      },
+    );
+    expect(saved.ok(), "save the previous profile").toBe(true);
+    const activated = await request.post(
+      `${BACKEND_URL}/api/profiles/${PREVIOUS_PROFILE_NAME}/activate`,
+      { headers },
+    );
+    expect(activated.ok(), "activate the previous profile").toBe(true);
+    const staleSettings = await request.patch(`${BACKEND_URL}/api/settings`, {
+      headers,
+      data: {
+        agent_settings_diff: { llm: { base_url: STALE_SETTINGS_BASE_URL } },
+      },
+    });
+    expect(staleSettings.ok(), "write stale raw LLM settings").toBe(true);
+    await resetMockLLM(request);
+  });
+
+  test.afterEach(async ({ page, request }) => {
+    // Stop UI reconciliation before restoring the profiles it observes.
+    await page.close();
+    try {
+      for (const id of Array.from(conversationIds)) {
         await deleteConversation(request, id);
         conversationIds.delete(id);
-      } catch {
-        // best-effort
       }
-    }
-    // Reset the mock LLM to its default trajectory so subsequent specs
-    // start with a clean slate.
-    try {
+      if (previousAgentProfile) {
+        const restored = await request.post(
+          `${BACKEND_URL}/api/agent-profiles/default`,
+          {
+            headers,
+            data: previousAgentProfile,
+          },
+        );
+        expect
+          .soft(restored.ok(), "restore the default agent profile")
+          .toBe(true);
+      }
+      if (previousSettings) {
+        const restored = await request.patch(`${BACKEND_URL}/api/settings`, {
+          headers,
+          data: {
+            agent_settings_diff: previousSettings.agent_settings,
+            active_profile: previousSettings.active_profile ?? null,
+            active_agent_profile_id:
+              previousSettings.active_agent_profile_id ?? null,
+          },
+        });
+        expect.soft(restored.ok(), "restore the previous settings").toBe(true);
+      }
+      for (const name of [PROFILE_NAME, PREVIOUS_PROFILE_NAME]) {
+        const deleted = await request.delete(
+          `${BACKEND_URL}/api/profiles/${name}`,
+          { headers },
+        );
+        expect.soft(deleted.ok(), `delete test profile ${name}`).toBe(true);
+      }
+    } finally {
       await resetMockLLM(request);
-    } catch {
-      // best-effort
     }
   });
 
@@ -72,19 +166,6 @@ test.describe("onboarding happy path", () => {
     request,
   }) => {
     test.setTimeout(120_000);
-
-    // Register a trajectory so the mock LLM can respond once the
-    // conversation is created by the Say Hello step.
-    //
-    // Turn 0 is padding: the agent-server makes an internal LLM call
-    // (condenser/skill-analysis) before the agent's main loop starts.
-    // This consumes one trajectory response. Same pattern used by the
-    // automation and model-switch specs.
-    await registerTrajectory(request, "onboarding-hello", [
-      { text: "" }, // padding for internal condenser call
-      { text: REPLY_TOKEN },
-    ]);
-    await activateTrajectory(request, "onboarding-hello");
 
     // Show the onboarding modal (clears openhands-onboarded, seeds backend)
     await showOnboarding(page, {
@@ -143,9 +224,25 @@ test.describe("onboarding happy path", () => {
       await allToggle.dispatchEvent("click");
 
       // Wait for the advanced form
-      await expect(
-        page.getByTestId("llm-settings-form-advanced"),
-      ).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByTestId("llm-settings-form-advanced")).toBeVisible({
+        timeout: 10_000,
+      });
+
+      // The form shows the active profile's endpoint, not the raw settings.
+      await expect(page.getByTestId("base-url-input")).toHaveValue(
+        MOCK_LLM_AGENT_URL,
+      );
+
+      // The LLM step must not write raw LLM settings.
+      const settingsWrites: string[] = [];
+      page.on("request", (req) => {
+        if (
+          req.method() === "PATCH" &&
+          new URL(req.url()).pathname.endsWith("/api/settings")
+        ) {
+          settingsWrites.push(req.postData() ?? "");
+        }
+      });
 
       // Fill in model
       const modelInput = page.getByTestId("llm-custom-model-input");
@@ -164,12 +261,33 @@ test.describe("onboarding happy path", () => {
 
       // Click Next — this saves settings and creates/activates a profile
       await clickOnboardingStepButton(page, "onboarding-llm-next");
+      await waitForOnboardingStep(page, layout.helloStep);
+
+      // Catch an incomplete profile before launching a conversation with the
+      // dummy key against the provider's default endpoint.
+      const profile = await request.get(
+        `${BACKEND_URL}/api/profiles/${PROFILE_NAME}`,
+        { headers },
+      );
+      expect(profile.ok()).toBe(true);
+      expect((await profile.json()).config).toMatchObject({
+        model: MOCK_MODEL,
+        base_url: MOCK_LLM_AGENT_URL,
+      });
+      expect(settingsWrites, "settings PATCHes from the LLM step").toEqual([]);
     });
 
     // ── Step 3: Say Hello ───────────────────────────────────────────
 
     await test.step("step 3: say hello — verify skip hidden, launch conversation", async () => {
-      await waitForOnboardingStep(page, layout.helloStep);
+      // Start the conversation script after profile validation has completed.
+      // The first completion generates the title; the second is the agent's
+      // reply. Keep the title distinct from the asserted reply.
+      await registerTrajectory(request, "onboarding-hello", [
+        { text: "Onboarding test" },
+        { text: REPLY_TOKEN },
+      ]);
+      await activateTrajectory(request, "onboarding-hello");
 
       await expect(
         page.getByTestId("onboarding-step-say-hello"),
@@ -221,7 +339,10 @@ test.describe("onboarding happy path", () => {
             page.evaluate(() =>
               window.localStorage.getItem("openhands-onboarded"),
             ),
-          { message: "openhands-onboarded should be '1' after completing the flow" },
+          {
+            message:
+              "openhands-onboarded should be '1' after completing the flow",
+          },
         )
         .toBe("1");
     });
@@ -229,6 +350,11 @@ test.describe("onboarding happy path", () => {
     // ── Verify: agent responds (proves LLM settings were saved) ─────
 
     await test.step("verify agent responds with the mock LLM", async () => {
+      await waitForAgentMessageContaining(
+        request,
+        getConversationIdFromURL(page),
+        REPLY_TOKEN,
+      );
       await waitForNonUserMessageText(page, REPLY_TOKEN, 30_000);
     });
 

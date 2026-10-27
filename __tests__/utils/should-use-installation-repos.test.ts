@@ -8,12 +8,15 @@ describe("shouldUseInstallationRepos", () => {
     expect(shouldUseInstallationRepos(undefined, "local")).toBe(false);
   });
 
-  it("uses installations for github only when active backend is cloud", () => {
-    expect(shouldUseInstallationRepos("github", "cloud")).toBe(true);
-    expect(shouldUseInstallationRepos("github", "local")).toBe(false);
-    // Default (no app mode passed) preserves the old local behavior.
-    expect(shouldUseInstallationRepos("github")).toBe(false);
-  });
+  it.each(["github", "azure_devops"] as const)(
+    "uses installations for %s only when active backend is cloud",
+    (provider) => {
+      expect(shouldUseInstallationRepos(provider, "cloud")).toBe(true);
+      expect(shouldUseInstallationRepos(provider, "local")).toBe(false);
+      // Default (no app mode passed) preserves the old local behavior.
+      expect(shouldUseInstallationRepos(provider)).toBe(false);
+    },
+  );
 
   it("always uses installations for bitbucket variants", () => {
     expect(shouldUseInstallationRepos("bitbucket", "local")).toBe(true);
@@ -26,10 +29,9 @@ describe("shouldUseInstallationRepos", () => {
     );
   });
 
-  it("never uses installations for gitlab / azure / forgejo", () => {
+  it("never uses installations for gitlab / forgejo", () => {
     expect(shouldUseInstallationRepos("gitlab", "cloud")).toBe(false);
     expect(shouldUseInstallationRepos("gitlab", "local")).toBe(false);
-    expect(shouldUseInstallationRepos("azure_devops", "cloud")).toBe(false);
     expect(shouldUseInstallationRepos("forgejo", "cloud")).toBe(false);
   });
 });

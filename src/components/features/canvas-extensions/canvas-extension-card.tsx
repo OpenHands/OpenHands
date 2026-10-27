@@ -53,6 +53,7 @@ export function CanvasExtensionCard({
             extension.enabled ? I18nKey.COMMON$DISABLE : I18nKey.COMMON$ENABLE,
           )}
           onToggle={onToggle}
+          disabled={isBusy}
           className={isBusy ? "pointer-events-none opacity-50" : undefined}
         />
       </header>

@@ -431,7 +431,7 @@ export function ConversationTabs({
           </div>
         </div>
       </div>
-      {isTabActive("planner") && (
+      {isTabActive("planner") && variant !== "compact" && (
         <div
           className={cn(
             "flex h-10 min-h-10 shrink-0 items-center border-t border-border pl-2.5 pr-1",

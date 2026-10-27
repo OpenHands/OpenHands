@@ -151,7 +151,7 @@ beforeEach(() => {
   vi.mocked(ServerClient).mockReset();
   vi.mocked(ServerClient).mockImplementation(function ServerClientMock() {
     return {
-      getServerInfo: vi.fn().mockResolvedValue({ version: "1.52.0" }),
+      getServerInfo: vi.fn().mockResolvedValue({ version: "1.58.0" }),
     } as unknown as ServerClient;
   });
   vi.mocked(SettingsClient).mockReset();
@@ -375,6 +375,50 @@ describe("BackendSelector", () => {
     });
     expect(screen.getByText("OpenHands Cloud – Acme Inc")).toBeInTheDocument();
     expect(getCurrentCloudApiKey).not.toHaveBeenCalled();
+  });
+
+  it("labels org rows with only the org name when the cloud backend is the only backend", async () => {
+    // Arrange: a lone cloud backend (as in a Canvas locked to one cloud)
+    // whose org names differ only at the end.
+    const backend = {
+      ...SEED_CLOUD_PRODUCTION,
+      id: "cloud",
+      authMode: "cookie" as const,
+    };
+    setRegisteredBackends([backend]);
+    setActiveSelection({ backendId: backend.id, orgId: "org-sec" });
+    vi.mocked(getCloudOrganizations).mockResolvedValue({
+      items: [
+        { id: "org-eng", name: "Platform Business Unit - Engineering" },
+        { id: "org-sec", name: "Platform Business Unit - Security" },
+      ],
+      currentOrgId: "org-sec",
+    });
+
+    renderWithProviders(<BackendSelector />, true);
+    const getInput = () =>
+      screen
+        .getByTestId("backend-selector")
+        .querySelector("input") as HTMLInputElement;
+    await waitFor(() => {
+      expect(getInput().value).toBe("Platform Business Unit - Security");
+    });
+
+    // Act
+    await openDropdown();
+
+    // Assert: the open trigger still names the active org, and each row
+    // shows the org name without the backend name.
+    expect(getInput()).toHaveAttribute(
+      "placeholder",
+      "Platform Business Unit - Security",
+    );
+    expect(
+      screen.getByText("Platform Business Unit - Engineering"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Platform Business Unit - Security"),
+    ).toBeInTheDocument();
   });
 
   it("labels an org as 'Personal Workspace' when /me reports user_id === org.id", async () => {

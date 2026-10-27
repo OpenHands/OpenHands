@@ -28,7 +28,7 @@
  *
  * Usage:
  *   node scripts/download-node.mjs                       # host arch → resources/node/
- *   NODE_VERSION=22.10.0 node scripts/download-node.mjs
+ *   NODE_VERSION=24.21.0 node scripts/download-node.mjs
  *   ELECTRON_ARCH=universal node scripts/download-node.mjs  # macOS only
  *
  * Output (per platform):
@@ -57,22 +57,17 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { execFileSync } from "node:child_process";
-import { resolveDownloadArches, resourceDirName } from "./download-arch-utils.mjs";
+import {
+  resolveDownloadArches,
+  resourceDirName,
+} from "./download-arch-utils.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, "..");
 
-// Pinned Node version. Electron 42 ships Node 22, so we bundle a 22.x
-// LTS release to match the embedded runtime's ABI/native-module surface.
-// We intentionally use 22.12.0 — the repo's own support floor
-// (package.json engines.node >=22.12.0, volta 22.12.0) — rather than
-// Electron 42.3.2's exact embedded Node patch level: the bundled binary
-// runs this repo's launcher scripts, and native modules only need ABI
-// parity (NODE_MODULE_VERSION 127, shared by all 22.x builds).
-// Override at build time with NODE_VERSION=… (e.g. to test against a
-// newer release). Major version >=22 only; engines.node in npm 10.x
-// requires ^18.17.0 || >=20.5.0.
-const NODE_BUNDLE_VERSION = "22.12.0";
+// Keep the subprocess runtime aligned with the package.json Volta pin.
+// Override at build time with NODE_VERSION=… to test another release.
+const NODE_BUNDLE_VERSION = "24.21.0";
 
 // ── Platform detection ───────────────────────────────────────────────────────
 
@@ -104,7 +99,9 @@ export function getPlatformSpec(version, platform = PLATFORM, arch = ARCH) {
     const distArch = arch === "arm64" ? "arm64" : "x64";
     return { name: `${base}-win-${distArch}`, ext: "zip" };
   }
-  throw new Error(`Unsupported platform for Node download: ${platform}/${arch}`);
+  throw new Error(
+    `Unsupported platform for Node download: ${platform}/${arch}`,
+  );
 }
 
 // ── Version resolution ───────────────────────────────────────────────────────
@@ -393,7 +390,9 @@ async function main() {
       failOnDanglingSymlinks(outDir);
 
       const mb = Math.round(dirSizeBytes(outDir) / (1024 * 1024));
-      console.log(`[download-node] ✓ Node v${version} ready at ${outDir} (~${mb} MB)`);
+      console.log(
+        `[download-node] ✓ Node v${version} ready at ${outDir} (~${mb} MB)`,
+      );
     } finally {
       try {
         rmSync(tmpFile, { force: true });
@@ -407,7 +406,10 @@ async function main() {
 // module to exercise getPlatformSpec with zero network I/O.
 // process.argv[1] is undefined when the module is plain-imported (vitest),
 // and pathToFileURL(undefined) would throw, so guard on it first.
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
   main().catch((err) => {
     console.error("[download-node] Error:", err.message);
     process.exit(1);

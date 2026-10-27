@@ -1,6 +1,7 @@
 import type { MCPConfig } from "@openhands/typescript-client";
 export type { MCPConfig } from "@openhands/typescript-client";
 import type { SkillCategoryId } from "@openhands/extensions/skills";
+import type { WorkspaceFileDiscovery } from "#/utils/workspace-file-discovery";
 
 export const ProviderOptions = {
   github: "github",
@@ -12,11 +13,6 @@ export const ProviderOptions = {
 } as const;
 
 export type Provider = keyof typeof ProviderOptions;
-
-export type ProviderToken = {
-  token: string;
-  host: string | null;
-};
 
 export type SettingsChoiceValue = boolean | number | string;
 
@@ -71,10 +67,14 @@ export type SettingsSchema = {
 
 export type SkillType = "repo" | "knowledge" | "agentskills";
 
+/** Where a server-listed skill comes from: the public catalog or the user's own skills. */
+export type SkillOrigin = "public" | "user";
+
 export type SkillInfo = {
   name: string;
   type: SkillType;
   source: string | null;
+  origin?: SkillOrigin;
   description?: string | null;
   triggers?: string[];
   /**
@@ -110,6 +110,9 @@ export type SettingsScope = "personal";
 export type AgentKind = "openhands" | "acp";
 
 export type Settings = {
+  workspace_file_discovery?: Record<string, WorkspaceFileDiscovery | null>;
+  /** Ordered ids of automations pinned to the home dashboard (local only). */
+  home_pinned_automations?: string[];
   llm_model: string;
   llm_base_url: string;
   agent: string;
@@ -154,6 +157,8 @@ export type Settings = {
    * it is deliberately absent from `DEFAULT_SETTINGS`.
    */
   enabled_skills?: string[];
+  /** Global agent behavior has been copied into the `default` agent profile. */
+  default_profile_migrated?: boolean;
   max_budget_per_task: number | null;
   email?: string;
   email_verified?: boolean;

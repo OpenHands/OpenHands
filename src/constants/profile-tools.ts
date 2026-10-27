@@ -35,6 +35,16 @@ export function readProfileTools(value: unknown): {
   };
 }
 
+const DELEGATION_TOOLS = ["task_tool_set", "workflow_tool_set"];
+
+/** Scoped sub-agents need task_tracker on the parent (SDK#5519). */
+function withSubAgentTaskTracker(selected: string[]): string[] {
+  const delegates = selected.some((name) => DELEGATION_TOOLS.includes(name));
+  return delegates && !selected.includes("task_tracker")
+    ? [...selected, "task_tracker"]
+    : selected;
+}
+
 /** Build the `tools` value to persist: `null` for standard, else the picks. */
 export function buildProfileToolsValue({
   mode,
@@ -46,7 +56,7 @@ export function buildProfileToolsValue({
   params?: Record<string, Record<string, SettingsValue>>;
 }): ProfileToolSpec[] | null {
   if (mode === "standard") return null;
-  return selected.map((name) => ({
+  return withSubAgentTaskTracker(selected).map((name) => ({
     name,
     params: Object.hasOwn(params, name) ? params[name] : {},
   }));

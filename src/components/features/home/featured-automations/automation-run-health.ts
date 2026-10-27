@@ -131,10 +131,6 @@ export function shouldShowAutomationRunSummaryHovercard(
   return summary.trim().replace(/\s+/g, " ") !== shortSummary;
 }
 
-export const shortenAutomationErrorDetail = shortenAutomationRunSummary;
-export const shouldShowAutomationErrorHovercard =
-  shouldShowAutomationRunSummaryHovercard;
-
 /**
  * Timestamp to show as the run's "last run" moment, or null when the run
  * has no usable timestamp yet. The backend leaves started_at unset

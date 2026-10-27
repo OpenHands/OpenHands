@@ -427,6 +427,40 @@ describe("WorkspaceSelectionForm (server-backed workspaces)", () => {
     });
   });
 
+  it("keeps folder names readable in the Add Workspace browser below the md breakpoint", async () => {
+    // Arrange
+    mockSearchSubdirectories.mockImplementation(async (path: string) =>
+      path === "/Users/me"
+        ? {
+            items: [{ name: "dev", path: "/Users/me/dev" }],
+            next_page_id: null,
+          }
+        : { items: [], next_page_id: null },
+    );
+    renderForm();
+    const user = userEvent.setup();
+
+    // Act
+    await user.click(await screen.findByTestId("workspace-dropdown"));
+    await user.click(await screen.findByTestId("add-workspaces-button"));
+    const entry = await screen.findByTestId("folder-browser-entry-dev");
+
+    // Assert: at phone width the sidebar narrows and the Kind column shrinks,
+    // so a fixed 180px sidebar plus 120px Kind track can no longer squeeze the
+    // name track to 0px; desktop (md and up) keeps the original layout.
+    expect(screen.getByTestId("folder-browser-sidebar")).toHaveClass(
+      "w-28",
+      "md:w-45",
+    );
+    const header = screen.getByTestId("folder-browser-column-headers");
+    for (const row of [header, entry]) {
+      expect(row).toHaveClass(
+        "grid-cols-[minmax(0,1fr)_4rem]",
+        "md:grid-cols-[1fr_120px]",
+      );
+    }
+  });
+
   it("handles Windows paths when browsing and adding a workspace", async () => {
     const homePath = String.raw`C:\Users\me`;
     const devPath = String.raw`C:\Users\me\dev`;

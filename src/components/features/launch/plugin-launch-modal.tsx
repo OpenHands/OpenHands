@@ -11,10 +11,12 @@ import { I18nKey } from "#/i18n/declaration";
 import { PluginSpec } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { Typography } from "#/ui/typography";
 import { cn } from "#/utils/utils";
+import { hasPluginParameters } from "#/utils/plugin-parameters";
 import { PluginLaunchPluginSection } from "./plugin-launch-plugin-section";
 
 interface PluginLaunchModalProps {
   plugins: PluginSpec[];
+  parametersSupported: boolean;
   message?: string;
   isLoading?: boolean;
   onStartConversation: (plugins: PluginSpec[], initialMessage?: string) => void;
@@ -27,6 +29,7 @@ interface ExpandedState {
 
 export function PluginLaunchModal({
   plugins,
+  parametersSupported,
   message,
   isLoading = false,
   onStartConversation,
@@ -117,13 +120,19 @@ export function PluginLaunchModal({
     return [...new Set(sources)];
   };
 
+  const unsupportedParameters =
+    !parametersSupported && hasPluginParameters(pluginConfigs);
+
   const handleStartConversation = () => {
+    if (unsupportedParameters) return;
     onStartConversation(pluginConfigs, message);
   };
 
+  // The generic title already includes the verb ("Launch Plugin"), so only a
+  // single plugin's display name is prefixed with "Launch".
   const modalTitle =
     pluginConfigs.length === 1
-      ? getPluginDisplayName(pluginConfigs[0])
+      ? `${t(I18nKey.LAUNCH$MODAL_TITLE)} ${getPluginDisplayName(pluginConfigs[0])}`
       : t(I18nKey.LAUNCH$MODAL_TITLE_GENERIC);
 
   return (
@@ -137,9 +146,7 @@ export function PluginLaunchModal({
         )}
       >
         <ModalCloseButton onClose={onClose} testId="close-button" />
-        <Typography.H2 className="pr-6">
-          {t(I18nKey.LAUNCH$MODAL_TITLE)} {modalTitle}
-        </Typography.H2>
+        <Typography.H2 className="pr-6">{modalTitle}</Typography.H2>
 
         {message && <p className="text-sm text-contrast">{message}</p>}
 
@@ -192,6 +199,16 @@ export function PluginLaunchModal({
           )}
         </div>
 
+        {unsupportedParameters && (
+          <p
+            role="alert"
+            data-testid="plugin-parameters-unsupported"
+            className="text-sm text-feedback-error"
+          >
+            {t(I18nKey.LAUNCH$PARAMETERS_UNSUPPORTED_LOCAL)}
+          </p>
+        )}
+
         <div className="pt-4 border-t border-border-subtle">
           <div className="flex items-start gap-3 mb-4">
             <input
@@ -203,7 +220,7 @@ export function PluginLaunchModal({
               className="mt-1 h-4 w-4 flex-shrink-0"
             />
             <label htmlFor="trust-checkbox" className="text-sm text-contrast">
-              {t(I18nKey.LAUNCH$TRUST_SKILL_CHECKBOX, {
+              {t(I18nKey.LAUNCH$TRUST_PLUGIN_CHECKBOX, {
                 sources: getUniqueSources().join(", "),
                 interpolation: { escapeValue: false },
               })}
@@ -215,7 +232,7 @@ export function PluginLaunchModal({
               type="button"
               variant="primary"
               onClick={handleStartConversation}
-              isDisabled={isLoading || !trustConfirmed}
+              isDisabled={isLoading || !trustConfirmed || unsupportedParameters}
               className="px-4"
             >
               {isLoading

@@ -65,7 +65,7 @@ export function ConversationActiveTagFilters({
             onClick={() => onToggleFacet(facet)}
             className={chipClassName}
           >
-            <span className="truncate">{formatTagFacetLabel(facet)}</span>
+            <span className="truncate">{formatTagFacetLabel(facet, t)}</span>
             <X className="h-3 w-3 shrink-0" aria-hidden />
           </button>
         ))}

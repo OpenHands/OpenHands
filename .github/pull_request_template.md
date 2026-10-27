@@ -24,7 +24,7 @@ exactly what command you ran and include logs, screenshots, or reproduction note
 
 ## Summary
 
-<!-- 1-3 bullets describing what changed. -->
+<!-- 1-3 bullets describing what changed. For bugs, state the failure and fix. -->
 -
 
 ## Issue Number
@@ -39,17 +39,21 @@ Fixes #
 <!--
 Required. Share the steps for the reviewer to be able to test your PR. e.g. You can test by running `npm install` then `npm build dev`.
 
+For bugs, include reproduction steps and observed before/after results.
+For functional changes, logs and tests supplement the running-Canvas demonstration below.
+Nonvisual evidence alone is sufficient only for non-functional changes.
+
 If you could not test this, say why.
 -->
 
 ## Video/Screenshots
 
 <!--
-Provide a video or screenshots of testing your PR. e.g. you added a new feature to the gui, show us the video of you testing it successfully.
-
-For bug fixes: reproduction evidence is required. Show the bug reproduced (the
-error state) and then the result after your fix. A terminal screenshot or video
-is fine for non-UI bugs.
+Functional changes require screenshots/video of the running Canvas exercising
+the changed behavior, even outside frontend files. For bugs, demonstrate failure
+before and success after using the same setup. For new features, show the working
+behavior. Use video for timing or transitions. Logs/tests alone do not suffice.
+Non-functional changes may use relevant commands and results under How to Test.
 -->
 
 ## Design Doc
@@ -61,8 +65,8 @@ before/after of your change, then link it here via htmlpreview at the commit tha
 
   https://htmlpreview.github.io/?https://github.com/<your-fork>/<repo>/blob/<commit-sha>/.pr/design.html
 
-Use the commit SHA, not the branch name: `.pr/` is removed from the branch when a
-same-repository PR is approved, and a branch link stops working then.
+Use the commit SHA, not the branch name: `.pr/` is removed automatically through
+a cleanup PR after this PR merges to `main`, and branch links may stop working.
 See docs/DEVELOPMENT.md ("Design doc for non-trivial PRs") for details.
 -->
 

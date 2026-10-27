@@ -26,7 +26,11 @@ describe("SaveAsSecretToggle", () => {
 
   it("attaches data-testid to the label using fieldKey", () => {
     render(
-      <SaveAsSecretToggle fieldKey="MY_KEY" checked={false} onToggle={vi.fn()} />,
+      <SaveAsSecretToggle
+        fieldKey="MY_KEY"
+        checked={false}
+        onToggle={vi.fn()}
+      />,
     );
     expect(
       screen.getByTestId("mcp-install-save-secret-MY_KEY"),
@@ -35,7 +39,11 @@ describe("SaveAsSecretToggle", () => {
 
   it("renders the field key inside a <code> element", () => {
     render(
-      <SaveAsSecretToggle fieldKey="MY_KEY" checked={false} onToggle={vi.fn()} />,
+      <SaveAsSecretToggle
+        fieldKey="MY_KEY"
+        checked={false}
+        onToggle={vi.fn()}
+      />,
     );
     const codeEl = screen.getByText("MY_KEY");
     expect(codeEl.tagName.toLowerCase()).toBe("code");
@@ -57,16 +65,18 @@ describe("SaveAsSecretToggle", () => {
 
   // ── accessibility ──────────────────────────────────────────────────────────
 
-  it("the info button has an aria-label describing its purpose", () => {
+  // @spec MCP-005 — Help stays independent of the native checkbox
+  it("the labelled info button does not change the checkbox", () => {
+    const onToggle = vi.fn();
     render(
-      <SaveAsSecretToggle fieldKey="KEY" checked={false} onToggle={vi.fn()} />,
+      <SaveAsSecretToggle fieldKey="KEY" checked={false} onToggle={onToggle} />,
     );
     // t(key) => key in tests, so aria-label equals the raw i18n key.
     const infoBtn = screen.getByRole("button");
-    expect(infoBtn).toHaveAttribute(
-      "aria-label",
-      "MCP$SAVE_AS_SECRET_TOOLTIP",
-    );
+    expect(infoBtn).toHaveAttribute("aria-label", "MCP$SAVE_AS_SECRET_TOOLTIP");
+    fireEvent.click(infoBtn);
+    expect(onToggle).not.toHaveBeenCalled();
+    expect(screen.getByRole("checkbox")).not.toBeChecked();
   });
 
   it("the visual track is hidden from the accessibility tree (aria-hidden)", () => {

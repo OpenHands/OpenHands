@@ -93,6 +93,11 @@ function getCustomFinishToolMetadata(response: unknown): unknown | null {
   return null;
 }
 
+export function getAutomationRunTaskSummary(run: AutomationRun): string | null {
+  const response = getAutomationRunFinishToolResponse(run);
+  return isRecord(response) ? trimString(response.outcome_summary) : null;
+}
+
 export function getAutomationRunTaskOutcome(
   run: AutomationRun,
 ): AutomationRunTaskOutcome | null {
@@ -101,7 +106,7 @@ export function getAutomationRunTaskOutcome(
 
   const outcomeSummary = trimString(response.outcome_summary);
   const hasStatus = typeof response.status === "string";
-  if (!hasStatus && !outcomeSummary) return null;
+  if (!hasStatus) return null;
 
   return {
     status: isTaskOutcomeStatus(response.status) ? response.status : "unknown",
@@ -120,11 +125,15 @@ export function getAutomationRunDisplay(
   const systemSummary = trimString(run.error_detail);
 
   if (run.status === AutomationRunStatus.COMPLETED) {
+    const outcomeSummary =
+      taskOutcome?.outcomeSummary ??
+      (isRecord(finishToolResponse)
+        ? trimString(finishToolResponse.outcome_summary)
+        : null);
+
     return {
-      badgeStatus:
-        taskOutcome?.status ??
-        (finishToolResponse !== null ? "unknown" : "success"),
-      summary: taskOutcome?.outcomeSummary ?? null,
+      badgeStatus: taskOutcome?.status ?? "success",
+      summary: outcomeSummary,
       taskOutcome,
       customTaskMetadata,
       customTaskMetadataText,

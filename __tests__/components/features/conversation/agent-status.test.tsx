@@ -236,6 +236,18 @@ describe("AgentStatus", () => {
     expect(setShouldShownAgentLoading).toHaveBeenCalledWith(true);
   });
 
+  it("clears its loading report when it unmounts so the phone panel page does not keep a stale loading overlay", () => {
+    const { setShouldShownAgentLoading, unmount } = renderAgentStatus({
+      agentState: AgentState.LOADING,
+      executionStatus: null,
+    });
+    expect(setShouldShownAgentLoading).toHaveBeenLastCalledWith(true);
+
+    unmount();
+
+    expect(setShouldShownAgentLoading).toHaveBeenLastCalledWith(false);
+  });
+
   it("forwards the active conversation to sub-conversation polling", () => {
     const { handleResumeAgent, handleStop, rerender } = renderAgentStatus({
       conversationId: "conversation-42",
@@ -268,6 +280,7 @@ describe("AgentStatus", () => {
 
     const label = screen.getByText(I18nKey.AGENT_STATUS$RUNNING_TASK);
     const stopButton = screen.getByTestId("stop-button");
+    expect(stopButton).toHaveAccessibleName(I18nKey.BUTTON$STOP);
     expect(label).toHaveAttribute("title", I18nKey.AGENT_STATUS$RUNNING_TASK);
     expect(label.parentElement).toHaveClass("custom-status-class");
     expect(stopButton.parentElement).toHaveClass("cursor-pointer");
@@ -290,6 +303,7 @@ describe("AgentStatus", () => {
     });
 
     const playButton = screen.getByTestId("play-button");
+    expect(playButton).toHaveAccessibleName(I18nKey.AGENT$RESUME_TASK);
     expect(playButton).toBeEnabled();
     expect(playButton.parentElement).toHaveClass("cursor-pointer");
 

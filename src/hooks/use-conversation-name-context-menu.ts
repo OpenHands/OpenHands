@@ -106,7 +106,12 @@ export function useConversationNameContextMenu({
     event.preventDefault();
     event.stopPropagation();
     if (conversationId) {
-      await downloadConversation(conversationId);
+      try {
+        await downloadConversation(conversationId);
+      } catch {
+        // useDownloadConversation already showed the error toast; close the
+        // menu as on success instead of leaking the rejection.
+      }
     }
     onContextMenuToggle?.(false);
   };

@@ -1,13 +1,18 @@
 import React from "react";
 import { screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders } from "test-utils";
 import { ConversationNameContextMenu } from "#/components/features/conversation/conversation-name-context-menu";
 
+const { useBreakpointMock } = vi.hoisted(() => ({
+  useBreakpointMock: vi.fn(() => false),
+}));
+
 vi.mock("#/hooks/use-breakpoint", () => ({
-  useBreakpoint: () => false,
+  useBreakpoint: () => useBreakpointMock(),
 }));
 
 vi.mock("#/contexts/active-backend-context", () => ({
@@ -56,7 +61,14 @@ function createAnchor(rect: Partial<DOMRect> = {}) {
 // output of the portal positioning math (anchor rect → menu coordinates).
 // They are functional logic checks, not visual styling assertions.
 describe("ConversationNameContextMenu portal rendering", () => {
+  const originalInnerWidth = window.innerWidth;
+
   afterEach(() => {
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: originalInnerWidth,
+    });
+    useBreakpointMock.mockReturnValue(false);
     document
       .querySelectorAll('[data-test-anchor="true"]')
       .forEach((anchor) => anchor.remove());
@@ -110,6 +122,53 @@ describe("ConversationNameContextMenu portal rendering", () => {
     const wrapper = screen.getByTestId("conversation-name-context-menu")
       .parentElement as HTMLDivElement;
     expect(wrapper.style.bottom).toBe("688px");
+  });
+
+  it("keeps the menu inside a phone-width viewport when the trigger sits near the right edge", () => {
+    useBreakpointMock.mockReturnValue(true);
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 390,
+    });
+    vi.spyOn(
+      HTMLUListElement.prototype,
+      "getBoundingClientRect",
+    ).mockReturnValue({ width: 237 } as DOMRect);
+    const anchor = createAnchor({ left: 193, right: 217 });
+
+    renderWithProviders(
+      <ConversationNameContextMenu
+        onClose={vi.fn()}
+        onRename={vi.fn()}
+        anchorRef={{ current: anchor }}
+      />,
+    );
+
+    const menu = screen.getByTestId("conversation-name-context-menu");
+    const wrapper = menu.parentElement as HTMLDivElement;
+    // 390 viewport - 8 gutter - 237 menu width.
+    expect(wrapper.style.left).toBe("145px");
+    // A sideways transform would push the clamped box back past the edge.
+    expect(menu.className).not.toMatch(/translate-x/);
+  });
+
+  it("closes on Escape and returns focus to the trigger", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    const anchor = createAnchor();
+    renderWithProviders(
+      <ConversationNameContextMenu
+        onClose={onClose}
+        onRename={vi.fn()}
+        anchorRef={{ current: anchor }}
+      />,
+    );
+    screen.getByTestId("rename-button").focus();
+
+    await user.keyboard("{Escape}");
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(anchor).toHaveFocus();
   });
 
   it("repositions when the anchored element changes between renders", () => {

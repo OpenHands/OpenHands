@@ -9,20 +9,6 @@ import { ToggleButton } from "./toggle-button";
 import { DropdownMenu } from "./dropdown-menu";
 import { DropdownInput } from "./dropdown-input";
 
-// Equivalent to Tailwind's `sr-only`, inlined so we don't depend on the
-// utility class being preserved by the host project's CSS pipeline.
-const visuallyHiddenStyle: React.CSSProperties = {
-  position: "absolute",
-  width: 1,
-  height: 1,
-  padding: 0,
-  margin: -1,
-  overflow: "hidden",
-  clip: "rect(0, 0, 0, 0)",
-  whiteSpace: "nowrap",
-  border: 0,
-};
-
 interface DropdownProps {
   options: DropdownOption[];
   emptyMessage?: string;
@@ -197,6 +183,7 @@ export function Dropdown({
           ) : null}
           <DropdownInput
             placeholder={placeholder}
+            title={liveSelectedOption?.label}
             isDisabled={isDisabled}
             getInputProps={getInputPropsWithCursorFix}
             italicPlaceholder={italicPlaceholder}
@@ -217,7 +204,8 @@ export function Dropdown({
         // toggle button) to be wired up. When the trigger is hidden (e.g.
         // collapsed-sidebar popover) we still need to mount a real input
         // so it stops warning every render. Keep it visually hidden but
-        // present in the DOM for accessibility.
+        // present in the DOM for accessibility. The hiding utility ships in
+        // both the standalone and library stylesheets.
         <>
           <input
             {...getInputPropsWithCursorFix({
@@ -225,12 +213,12 @@ export function Dropdown({
               "aria-label": placeholder ?? "Filter options",
               tabIndex: -1,
             })}
-            style={visuallyHiddenStyle}
+            className="sr-only"
           />
           <button
             type="button"
             {...getToggleButtonProps({ tabIndex: -1 })}
-            style={visuallyHiddenStyle}
+            className="sr-only"
             aria-hidden
           />
         </>

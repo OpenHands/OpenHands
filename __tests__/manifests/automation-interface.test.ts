@@ -34,7 +34,6 @@ describe("the automation interface seam", () => {
       /No automation interface manifest is admitted/,
     );
     expect(() => seam.getAutomationEndpoint("createPrompt")).toThrow();
-    expect(() => seam.getAttributeSpec("timeout")).toThrow();
     expect(() => seam.getImportExportSpec()).toThrow();
     expect(() => seam.getFeaturedAutomationIds()).toThrow();
     expect({
@@ -75,15 +74,13 @@ describe("the automation interface seam", () => {
     // Arrange
     const seam = await loadSeam(createInterfaceManifest());
 
-    // Act & Assert — copy, attribute specs, the import/export envelope, and
+    // Act & Assert — copy, the import/export envelope, and
     // the id lists all come from the manifest.
     expect(seam.hasAutomationInterface()).toBe(true);
     expect({
       listTitle: seam.getInterfaceCopy().listTitle,
       sidebarLabel: seam.getInterfaceCopy().sidebarLabel,
       editTitle: seam.getInterfaceCopy().editTitle,
-      nameLabel: seam.getAttributeSpec("name").label,
-      timeoutMax: seam.getAttributeSpec("timeout").max,
       importExport: seam.getImportExportSpec(),
       docsUrl: seam.getAutomationsDocsUrl(),
       featured: [...seam.getFeaturedAutomationIds()],
@@ -92,8 +89,6 @@ describe("the automation interface seam", () => {
       listTitle: "Widget automations",
       sidebarLabel: "Automate everything",
       editTitle: "Edit the widget automation",
-      nameLabel: "Widget name",
-      timeoutMax: 900,
       importExport: {
         fileKind: "widget",
         fileVersion: 1,
@@ -107,17 +102,6 @@ describe("the automation interface seam", () => {
       featured: ["github-pr-reviewer"],
       responders: ["github"],
     });
-  });
-
-  it("hides an attribute the admitted manifest does not declare", async () => {
-    // Arrange — the factory manifest declares only `name` and `timeout`.
-    const seam = await loadSeam(createInterfaceManifest());
-
-    // Act
-    const spec = seam.getAttributeSpec("prompt");
-
-    // Assert
-    expect(spec.present).toBe(false);
   });
 
   it("leaves the sub-page surface absent when the manifest declares none", async () => {

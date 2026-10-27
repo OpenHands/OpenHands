@@ -11,6 +11,11 @@ import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useRuntimeIsReady } from "#/hooks/use-runtime-is-ready";
 import { getGitPath } from "#/utils/get-git-path";
+import { useWorkspaceFileDiscovery } from "./use-workspace-file-discovery";
+import {
+  buildWorkspaceFileListCommand,
+  parseWorkspaceFileList,
+} from "#/utils/workspace-file-discovery";
 
 // Cap the number of files we render so a giant repo doesn't freeze the UI.
 const MAX_FILES = 2000;
@@ -18,32 +23,7 @@ const MAX_FILES = 2000;
 export interface WorkspaceFilesResult {
   data: string[] | undefined;
   isLoading: boolean;
-}
-
-// Directory names that we never want to descend into when listing files.
-const EXCLUDED_DIRS = [
-  ".git",
-  "node_modules",
-  ".venv",
-  "venv",
-  "__pycache__",
-  "dist",
-  "build",
-  ".next",
-  ".cache",
-  ".pytest_cache",
-  ".mypy_cache",
-  ".turbo",
-  ".parcel-cache",
-  "target",
-];
-
-// Build a `find` invocation that lists files relative to the workspace root.
-function buildListCommand(): string {
-  const pruneExpr = EXCLUDED_DIRS.map((dir) => `-name '${dir}' -prune`).join(
-    " -o ",
-  );
-  return `find . \\( ${pruneExpr} \\) -o -type f -print 2>/dev/null | sort | head -n ${MAX_FILES}`;
+  isTruncated?: boolean;
 }
 
 function normalizePath(path: string): string {
@@ -70,20 +50,23 @@ function useLocalWorkspaceFiles(enabled: boolean): WorkspaceFilesResult {
   const conversationUrl = conversation?.conversation_url;
   const sessionApiKey = conversation?.session_api_key;
   const workingDir = conversation?.workspace?.working_dir?.trim();
+  const discovery = useWorkspaceFileDiscovery(enabled ? workingDir : undefined);
+  const { options } = discovery;
 
-  const query = useQuery<string[]>({
+  const query = useQuery({
     queryKey: [
       "workspace-files",
       conversationId,
       conversationUrl,
       sessionApiKey,
       workingDir,
+      options,
     ],
     queryFn: async () => {
       const result = await AgentServerRuntimeService.executeCommand(
         conversationUrl,
         sessionApiKey,
-        buildListCommand(),
+        buildWorkspaceFileListCommand(options),
         workingDir,
         30,
         conversationId,
@@ -95,23 +78,25 @@ function useLocalWorkspaceFiles(enabled: boolean): WorkspaceFilesResult {
         );
       }
 
-      const lines = result.stdout
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter(Boolean)
-        .map(normalizePath);
-
-      // Defensive: keep results unique and bounded.
-      return Array.from(new Set(lines)).slice(0, MAX_FILES);
+      return parseWorkspaceFileList(result.stdout, options.maxFiles);
     },
-    enabled: enabled && runtimeIsReady && !!conversationId && !!workingDir,
+    enabled:
+      enabled &&
+      runtimeIsReady &&
+      !!conversationId &&
+      !!workingDir &&
+      !discovery.isLoading,
     retry: false,
     staleTime: 1000 * 30,
     gcTime: 1000 * 60 * 5,
     meta: { disableToast: true },
   });
 
-  return { data: query.data, isLoading: query.isLoading };
+  return {
+    data: query.data?.paths,
+    isLoading: discovery.isLoading || query.isLoading,
+    isTruncated: query.data?.isTruncated ?? false,
+  };
 }
 
 /**

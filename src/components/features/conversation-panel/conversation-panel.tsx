@@ -61,6 +61,11 @@ import {
 import { useArchivedConversationsStore } from "#/stores/archived-conversations-store";
 import { usePinnedConversationsStore } from "#/stores/pinned-conversations-store";
 import { uniqueById } from "#/utils/unique-by-id";
+import {
+  isEffectivelyArchivedConversation,
+  isMissingSandboxStatus,
+} from "#/utils/conversation-archive-status";
+import type { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
 
 interface ConversationPanelProps {
   onClose?: () => void;
@@ -198,6 +203,21 @@ export function ConversationPanel({
     (state) => state.removeArchivedConversation,
   );
 
+  // The one predicate every archived presentation reads: a row is effectively
+  // archived when the user archived it, or when its runtime is missing and
+  // non-resumable. List visibility, the "Archived" chip, the dimmed title, and
+  // the status dot all derive from this so they cannot disagree.
+  // (`sandbox_status: "ERROR"` is intentionally not archived.) Menu availability
+  // is a separate concern and does not read this predicate alone.
+  const isRowArchived = React.useCallback(
+    (conversation: { id: string; sandbox_status?: SandboxStatus | null }) =>
+      isEffectivelyArchivedConversation(
+        conversation.sandbox_status,
+        archivedIdSet.has(conversation.id),
+      ),
+    [archivedIdSet],
+  );
+
   const toggleGroupCollapsed = React.useCallback((groupId: string) => {
     setCollapsedGroupIds((prev) => {
       const next = new Set(prev);
@@ -289,16 +309,17 @@ export function ConversationPanel({
     return pageById;
   }, [data]);
 
-  // Display collection: same loaded pages, with archived rows filtered out
-  // unless the user has opted into "Show archived".
+  // Display collection: same loaded pages, with effectively-archived rows
+  // (explicitly archived or missing-runtime) filtered out unless the user has
+  // opted into "Show archived".
   const conversations = React.useMemo(() => {
     if (showArchivedConversations) {
       return allLoadedConversations;
     }
     return allLoadedConversations.filter(
-      (conversation) => !archivedIdSet.has(conversation.id),
+      (conversation) => !isRowArchived(conversation),
     );
-  }, [allLoadedConversations, archivedIdSet, showArchivedConversations]);
+  }, [allLoadedConversations, isRowArchived, showArchivedConversations]);
 
   // Facets derive from the unfiltered list so the automation-name rows in the
   // advanced-options modal don't vanish while a narrowing selection is active.
@@ -855,7 +876,20 @@ export function ConversationPanel({
       options?: { inPinnedSection?: boolean },
     ) => {
       const isPinned = pinnedIds.includes(conversation.id);
-      const isArchived = archivedIdSet.has(conversation.id);
+      // Presentation: a row looks archived when the user archived it or its
+      // runtime is missing and non-resumable. This single predicate drives list
+      // visibility, the chip, the dot, and the dimmed title.
+      const isArchived = isRowArchived(conversation);
+      // Action availability is separate from presentation. "Unarchive" is only
+      // meaningful when clearing the browser-local flag actually returns the row
+      // to the unarchived state, so it is offered solely for an explicitly
+      // archived row whose runtime is not missing. A missing, non-resumable
+      // runtime cannot be restored from this menu, so such a row offers neither
+      // "Archive" nor "Unarchive", even when a stored archive flag is set.
+      const explicitlyArchived = archivedIdSet.has(conversation.id);
+      const runtimeMissing = isMissingSandboxStatus(
+        conversation.sandbox_status,
+      );
       if (compact) {
         return (
           <CompactConversationRow
@@ -882,8 +916,10 @@ export function ConversationPanel({
             showLlmProfiles={showLlmProfiles}
             agentKind={conversation.agent_kind}
             acpServer={conversation.acp_server}
+            acpModels={conversation.acp_available_models}
             tags={conversation.tags}
             showTags={showTagsMetadata}
+            isArchived={isArchived}
           />
         );
       }
@@ -917,6 +953,7 @@ export function ConversationPanel({
               acpServer={conversation.acp_server}
               createdAt={conversation.created_at}
               tags={conversation.tags}
+              isArchived={isArchived}
             />
           }
         >
@@ -935,8 +972,10 @@ export function ConversationPanel({
               onDelete={() =>
                 handleDeleteProject(conversation.id, conversation.title ?? "")
               }
-              // Exactly one direction is offered per row, so the menu always
-              // reflects the conversation's current archived state.
+              // Archive is offered until the row is effectively archived; the
+              // reverse direction, "Unarchive", is offered only when the row is
+              // explicitly archived and its runtime is not missing. A
+              // missing-runtime row offers neither.
               onArchive={
                 isArchived
                   ? undefined
@@ -947,7 +986,7 @@ export function ConversationPanel({
                       )
               }
               onUnarchive={
-                isArchived
+                explicitlyArchived && !runtimeMissing
                   ? () => handleUnarchiveProject(conversation.id)
                   : undefined
               }
@@ -985,6 +1024,7 @@ export function ConversationPanel({
               showLlmProfiles={showLlmProfiles}
               agentKind={conversation.agent_kind}
               acpServer={conversation.acp_server}
+              acpModels={conversation.acp_available_models}
               tags={conversation.tags}
               showTags={showTagsMetadata}
               isArchived={isArchived}
@@ -1008,6 +1048,7 @@ export function ConversationPanel({
       handleEditTags,
       handleStopConversation,
       handleUnarchiveProject,
+      isRowArchived,
       onClose,
       openContextMenuId,
       pinnedIds,

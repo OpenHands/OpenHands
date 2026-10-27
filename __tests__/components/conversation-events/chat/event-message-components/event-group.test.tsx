@@ -5,8 +5,10 @@ import { renderWithProviders } from "test-utils";
 import { EventGroup } from "#/components/conversation-events/chat/event-message-components/event-group";
 import {
   ActionEvent,
+  AgentErrorEvent,
   ObservationEvent,
   SecurityRisk,
+  UserRejectObservation,
 } from "#/types/agent-server/core";
 import {
   ExecuteBashAction,
@@ -64,6 +66,32 @@ const makeBashObservation = (
     timeout: false,
     metadata: {} as never,
   },
+});
+
+const makeUserRejectObservation = (
+  id: string,
+  actionId: string,
+): UserRejectObservation => ({
+  id,
+  timestamp: new Date().toISOString(),
+  source: "environment",
+  tool_name: "execute_bash",
+  tool_call_id: `call_${actionId}`,
+  action_id: actionId,
+  rejection_reason: "User rejected the action",
+});
+
+const makeAgentErrorEvent = (
+  id: string,
+  actionId: string,
+): AgentErrorEvent => ({
+  id,
+  timestamp: new Date().toISOString(),
+  kind: "AgentErrorEvent",
+  source: "agent",
+  tool_name: "execute_bash",
+  tool_call_id: `call_${actionId}`,
+  error: "boom",
 });
 
 describe("EventGroup", () => {
@@ -193,6 +221,44 @@ describe("EventGroup", () => {
     );
     expect(screen.queryByTestId("spinner-icon")).not.toBeInTheDocument();
     expect(screen.queryByTestId("status-icon")).not.toBeInTheDocument();
+  });
+
+  it("titles a settled group after its rejected action", () => {
+    const events = [
+      makeBashObservation("o1", "a1", "ls"),
+      makeUserRejectObservation("r2", "a2"),
+    ];
+    const allEvents = [makeBashAction("a2", "pwd"), ...events];
+
+    renderWithProviders(
+      <EventGroup events={events} allEvents={allEvents}>
+        <div>child</div>
+      </EventGroup>,
+    );
+
+    expect(screen.getByText(/ACTION_MESSAGE\$RUN/)).toBeInTheDocument();
+    expect(
+      screen.getByText("EVENT_GROUP$ACTIONS_COMPLETED"),
+    ).toBeInTheDocument();
+  });
+
+  it("counts an action resolved by an AgentErrorEvent as resolved instead of running", () => {
+    const events = [
+      makeBashObservation("o1", "a1", "ls"),
+      makeBashAction("a2", "pwd"),
+    ];
+    const allEvents = [...events, makeAgentErrorEvent("e2", "a2")];
+
+    renderWithProviders(
+      <EventGroup events={events} allEvents={allEvents}>
+        <div>child</div>
+      </EventGroup>,
+    );
+
+    expect(screen.queryByTestId("spinner-icon")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("EVENT_GROUP$ACTIONS_COMPLETED"),
+    ).toBeInTheDocument();
   });
 
   it("updates accessibility state while toggling the group", async () => {

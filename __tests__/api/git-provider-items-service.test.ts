@@ -28,6 +28,7 @@ beforeEach(() => {
   setRegisteredBackends([cloudBackend]);
   setActiveSelection({ backendId: cloudBackend.id });
   fetchMock.mockReset();
+  vi.restoreAllMocks();
   global.fetch = fetchMock as unknown as typeof fetch;
 });
 
@@ -35,6 +36,7 @@ afterEach(() => {
   window.localStorage.clear();
   __resetActiveStoreForTests();
   fetchMock.mockReset();
+  vi.restoreAllMocks();
   global.fetch = originalFetch;
 });
 
@@ -105,4 +107,5 @@ describe("GitProviderItemsService", () => {
     expect(items).toHaveLength(1);
     expect(items[0].title).toBe("Real issue");
   });
+
 });

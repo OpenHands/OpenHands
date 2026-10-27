@@ -122,7 +122,6 @@ const mockAutomation: Automation = {
   prompt: "A test automation",
   trigger: { type: "schedule", schedule_human: "Daily at 09:00" },
   enabled: true,
-  repository: "acme/repo",
   model: "daily-profile",
   created_at: "2026-01-01T00:00:00Z",
   updated_at: "2026-01-02T00:00:00Z",
@@ -176,6 +175,30 @@ describe("AutomationService", () => {
         params: { limit: 10, offset: 5 },
       });
       expect(result).toEqual(response);
+    });
+
+    it("exposes the preset_metadata repositories and plugins of each listed automation", async () => {
+      mockGet.mockResolvedValue({
+        data: {
+          automations: [
+            {
+              ...mockAutomation,
+              preset_metadata: {
+                repos: [{ url: "acme/repo", ref: "main" }],
+                plugins: [{ source: "github:acme/plugin" }],
+              },
+            },
+          ],
+          total: 1,
+        },
+      });
+
+      const { automations } = await AutomationService.listAutomations();
+
+      expect(automations[0].repositories).toEqual([
+        { url: "acme/repo", ref: "main" },
+      ]);
+      expect(automations[0].plugins).toEqual(["github:acme/plugin"]);
     });
 
     it("uses default params when none provided", async () => {
@@ -234,6 +257,86 @@ describe("AutomationService", () => {
       expect(mockGet).toHaveBeenCalledWith("/api/automation/v1/1");
       expect(result).toEqual(mockAutomation);
     });
+
+    it("exposes the repository with its ref and the plugin stored in preset_metadata", async () => {
+      mockGet.mockResolvedValue({
+        data: {
+          ...mockAutomation,
+          preset_metadata: {
+            preset_type: "plugin",
+            repos: [
+              { url: "https://github.com/qa-example/qa-repo", ref: "main" },
+            ],
+            plugins: [{ source: "github:qa-example/qa-plugin" }],
+          },
+        },
+      });
+
+      const result = await AutomationService.getAutomation("1");
+
+      expect(result.repositories).toEqual([
+        { url: "https://github.com/qa-example/qa-repo", ref: "main" },
+      ]);
+      expect(result.plugins).toEqual(["github:qa-example/qa-plugin"]);
+    });
+
+    it("keeps every repository and plugin entry stored in preset_metadata", async () => {
+      mockGet.mockResolvedValue({
+        data: {
+          ...mockAutomation,
+          preset_metadata: {
+            repos: [
+              { url: "https://github.com/qa-example/qa-repo", ref: "main" },
+              { url: "qa-example/docs", provider: "github" },
+            ],
+            plugins: [
+              { source: "github:qa-example/qa-plugin" },
+              { source: "github:qa-example/other-plugin", ref: "v1" },
+            ],
+          },
+        },
+      });
+
+      const result = await AutomationService.getAutomation("1");
+
+      expect(result.repositories).toEqual([
+        { url: "https://github.com/qa-example/qa-repo", ref: "main" },
+        { url: "qa-example/docs", provider: "github" },
+      ]);
+      expect(result.plugins).toEqual([
+        "github:qa-example/qa-plugin",
+        "github:qa-example/other-plugin",
+      ]);
+    });
+
+    it("adds no repositories or plugins when preset_metadata has none", async () => {
+      mockGet.mockResolvedValue({
+        data: { ...mockAutomation, preset_metadata: { preset_type: "prompt" } },
+      });
+
+      const result = await AutomationService.getAutomation("1");
+
+      expect(result).not.toHaveProperty("repositories");
+      expect(result).not.toHaveProperty("plugins");
+    });
+
+    it("falls back to a top-level repository, branch and plugins", async () => {
+      mockGet.mockResolvedValue({
+        data: {
+          ...mockAutomation,
+          repository: "acme/repo",
+          branch: "develop",
+          plugins: ["GitHub"],
+        },
+      });
+
+      const result = await AutomationService.getAutomation("1");
+
+      expect(result.repositories).toEqual([
+        { url: "acme/repo", ref: "develop" },
+      ]);
+      expect(result.plugins).toEqual(["GitHub"]);
+    });
   });
 
   describe("updateAutomation", () => {
@@ -263,17 +366,6 @@ describe("AutomationService", () => {
         model: "careful-profile",
       });
       expect(result).toEqual(updated);
-    });
-  });
-
-  describe("dispatchAutomation", () => {
-    it("posts to the dispatch endpoint", async () => {
-      mockPost.mockResolvedValue({ data: mockRun });
-
-      const result = await AutomationService.dispatchAutomation("1");
-
-      expect(mockPost).toHaveBeenCalledWith("/api/automation/v1/1/dispatch");
-      expect(result).toEqual(mockRun);
     });
   });
 
@@ -411,91 +503,72 @@ describe("AutomationService", () => {
       );
     });
 
-    it("getAutomation routes to callCloudProxy with the id in the path", async () => {
-      mockCallCloudProxy.mockResolvedValue(mockAutomation);
+    it.each([
+      {
+        name: "getAutomation",
+        arrange: () => mockAutomation,
+        act: () => AutomationService.getAutomation("abc"),
+        expectedRequest: { method: "GET", path: "/api/automation/v1/abc" },
+        localMock: mockGet,
+      },
+      {
+        name: "dispatchAutomation",
+        arrange: () => mockRun,
+        act: () => AutomationService.dispatchAutomation("abc"),
+        expectedRequest: {
+          method: "POST",
+          path: "/api/automation/v1/abc/dispatch",
+        },
+        localMock: mockPost,
+      },
+      {
+        name: "updateAutomation",
+        arrange: () => ({ ...mockAutomation, enabled: false }),
+        act: () =>
+          AutomationService.updateAutomation("abc", { enabled: false }),
+        expectedRequest: {
+          method: "PATCH",
+          path: "/api/automation/v1/abc",
+          body: { enabled: false },
+        },
+        localMock: mockPatch,
+      },
+      {
+        name: "deleteAutomation",
+        arrange: () => undefined,
+        act: () => AutomationService.deleteAutomation("abc"),
+        expectedRequest: { method: "DELETE", path: "/api/automation/v1/abc" },
+        localMock: mockDelete,
+      },
+    ])(
+      "$name routes through callCloudProxy on cloud backends",
+      async ({ arrange, act, expectedRequest, localMock }) => {
+        const response = arrange();
+        mockCallCloudProxy.mockResolvedValue(response);
+
+        const result = await act();
+
+        expect(mockCallCloudProxy).toHaveBeenCalledWith({
+          backend: cloudBackend,
+          headers: expectedAutomationTelemetryHeaders,
+          ...expectedRequest,
+        });
+        expect(localMock).not.toHaveBeenCalled();
+        expect(result).toEqual(response);
+      },
+    );
+
+    it("getAutomation exposes preset_metadata repositories from the cloud proxy response", async () => {
+      mockCallCloudProxy.mockResolvedValue({
+        ...mockAutomation,
+        preset_metadata: { repos: [{ url: "acme/repo", ref: "main" }] },
+      });
 
       const result = await AutomationService.getAutomation("abc");
 
-      expect(mockCallCloudProxy).toHaveBeenCalledWith({
-        backend: cloudBackend,
-        method: "GET",
-        path: "/api/automation/v1/abc",
-        headers: expectedAutomationTelemetryHeaders,
-      });
-      expect(result).toEqual(mockAutomation);
+      expect(result.repositories).toEqual([{ url: "acme/repo", ref: "main" }]);
     });
 
-    it("dispatchAutomation forwards method POST via callCloudProxy", async () => {
-      mockCallCloudProxy.mockResolvedValue(mockRun);
-
-      const result = await AutomationService.dispatchAutomation("abc");
-
-      expect(mockCallCloudProxy).toHaveBeenCalledWith({
-        backend: cloudBackend,
-        method: "POST",
-        path: "/api/automation/v1/abc/dispatch",
-        headers: expectedAutomationTelemetryHeaders,
-      });
-      expect(mockPost).not.toHaveBeenCalled();
-      expect(result).toEqual(mockRun);
-    });
-
-    it("updateAutomation forwards method PATCH and body via callCloudProxy", async () => {
-      const updated = { ...mockAutomation, enabled: false };
-      mockCallCloudProxy.mockResolvedValue(updated);
-
-      const result = await AutomationService.updateAutomation("abc", {
-        enabled: false,
-      });
-
-      expect(mockCallCloudProxy).toHaveBeenCalledWith({
-        backend: cloudBackend,
-        method: "PATCH",
-        path: "/api/automation/v1/abc",
-        body: { enabled: false },
-        headers: expectedAutomationTelemetryHeaders,
-      });
-      expect(mockPatch).not.toHaveBeenCalled();
-      expect(result).toEqual(updated);
-    });
-
-    it("deleteAutomation forwards method DELETE via callCloudProxy", async () => {
-      mockCallCloudProxy.mockResolvedValue(undefined);
-
-      await AutomationService.deleteAutomation("abc");
-
-      expect(mockCallCloudProxy).toHaveBeenCalledWith({
-        backend: cloudBackend,
-        method: "DELETE",
-        path: "/api/automation/v1/abc",
-        headers: expectedAutomationTelemetryHeaders,
-      });
-      expect(mockDelete).not.toHaveBeenCalled();
-    });
-
-    it("dispatchAutomation forwards method POST via callCloudProxy", async () => {
-      const run = {
-        id: "run-1",
-        status: "PENDING",
-        conversation_id: null,
-        bash_command_id: null,
-        error_detail: null,
-        started_at: "2026-01-01T00:00:00Z",
-        completed_at: null,
-      };
-      mockCallCloudProxy.mockResolvedValue(run);
-
-      const result = await AutomationService.dispatchAutomation("abc");
-
-      expect(mockCallCloudProxy).toHaveBeenCalledWith({
-        backend: cloudBackend,
-        method: "POST",
-        path: "/api/automation/v1/abc/dispatch",
-        headers: expectedAutomationTelemetryHeaders,
-      });
-      expect(mockPost).not.toHaveBeenCalled();
-      expect(result).toEqual(run);
-    });
 
     it("checkHealth calls the cloud host with a fail-fast timeout and returns the upstream status", async () => {
       mockCallCloudProxy.mockResolvedValue({ status: "ok" });
@@ -600,6 +673,271 @@ describe("AutomationService", () => {
       await interceptor(config);
 
       expect(config.baseURL).toBe("http://already-set:8000");
+    });
+  });
+
+  describe("supportsAutomationDrafts", () => {
+    it.each([
+      {
+        name: "advertised feature",
+        capabilities: {
+          ready: true,
+          features: ["automationDrafts"],
+          triggerKinds: [],
+          eventSources: [],
+          eventTypes: [],
+          triggers: {},
+        },
+        expected: true,
+      },
+      {
+        name: "missing feature",
+        capabilities: {
+          ready: true,
+          features: ["presetPrompt"],
+          triggerKinds: [],
+          eventSources: [],
+          eventTypes: [],
+          triggers: {},
+        },
+        expected: false,
+      },
+      { name: "null capabilities", capabilities: null, expected: false },
+      {
+        name: "undefined capabilities",
+        capabilities: undefined,
+        expected: false,
+      },
+    ])("returns $expected for $name", ({ capabilities, expected }) => {
+      expect(AutomationService.supportsAutomationDrafts(capabilities)).toBe(
+        expected,
+      );
+    });
+  });
+
+  describe("createServerDraft", () => {
+    it("posts the snake_case body to /v1/drafts and normalizes the response", async () => {
+      const raw = {
+        id: "draft-1",
+        endpoint: "/v1/preset/prompt",
+        name: "PR Reviewer",
+        draft: { prompt: "review prs" },
+        validation_errors: null,
+        dispatchable: true,
+        source_automation_id: null,
+        materialized_automation_id: null,
+        last_test_run_id: null,
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+      };
+      mockPost.mockResolvedValue({ data: raw });
+
+      const result = await AutomationService.createServerDraft({
+        endpoint: "/v1/preset/prompt",
+        draft: { prompt: "review prs" } as never,
+        name: "PR Reviewer",
+      });
+
+      expect(mockPost).toHaveBeenCalledWith("/api/automation/v1/drafts", {
+        endpoint: "/v1/preset/prompt",
+        draft: { prompt: "review prs" },
+        name: "PR Reviewer",
+      });
+      expect(result.id).toBe("draft-1");
+      expect(result.sourceAutomationId).toBeNull();
+      expect(result.createdAt).toBe("2026-01-01T00:00:00Z");
+      expect(result.dispatchable).toBe(true);
+    });
+
+    it("omits name and source_automation_id when not provided", async () => {
+      mockPost.mockResolvedValue({
+        data: { id: "draft-2", endpoint: "/v1/preset/prompt" },
+      });
+
+      await AutomationService.createServerDraft({
+        endpoint: "/v1/preset/prompt",
+        draft: {} as never,
+      });
+
+      const [, body] = mockPost.mock.calls[0];
+      expect(body).not.toHaveProperty("name");
+      expect(body).not.toHaveProperty("source_automation_id");
+    });
+
+    it("routes to callCloudProxy for cloud backends", async () => {
+      mockGetActive.mockReturnValue({ backend: cloudBackend, orgId: "org-1" });
+      mockCallCloudProxy.mockResolvedValue({ id: "cloud-draft" });
+
+      const result = await AutomationService.createServerDraft({
+        endpoint: "/v1/preset/prompt",
+        draft: {} as never,
+      });
+
+      expect(mockCallCloudProxy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          backend: cloudBackend,
+          method: "POST",
+          path: "/api/automation/v1/drafts",
+        }),
+      );
+      expect(result.id).toBe("cloud-draft");
+    });
+  });
+
+  describe("updateServerDraft", () => {
+    it("patches only the provided fields", async () => {
+      mockPatch.mockResolvedValue({
+        data: { id: "draft-1", endpoint: "/v1/preset/prompt" },
+      });
+
+      await AutomationService.updateServerDraft("draft-1", {
+        name: "New name",
+      });
+
+      expect(mockPatch).toHaveBeenCalledWith(
+        "/api/automation/v1/drafts/draft-1",
+        { name: "New name" },
+      );
+    });
+  });
+
+  describe("getServerDraft", () => {
+    it("fetches and normalizes a single draft", async () => {
+      mockGet.mockResolvedValue({
+        data: {
+          id: "draft-9",
+          endpoint: "/v1",
+          validation_errors: [
+            { field: "name", code: "value_error", message: "required" },
+          ],
+        },
+      });
+
+      const result = await AutomationService.getServerDraft("draft-9");
+
+      expect(mockGet).toHaveBeenCalledWith("/api/automation/v1/drafts/draft-9");
+      expect(result.id).toBe("draft-9");
+      expect(result.validationErrors?.[0].message).toBe("required");
+    });
+  });
+
+  describe("deleteServerDraft", () => {
+    it("deletes a draft by id", async () => {
+      mockDelete.mockResolvedValue({});
+
+      await AutomationService.deleteServerDraft("draft-1");
+
+      expect(mockDelete).toHaveBeenCalledWith(
+        "/api/automation/v1/drafts/draft-1",
+      );
+    });
+  });
+
+  describe("listServerDrafts", () => {
+    it("lists drafts with pagination and normalizes the response", async () => {
+      mockGet.mockResolvedValue({
+        data: {
+          drafts: [{ id: "d1", endpoint: "/v1/preset/prompt" }],
+          total: 1,
+        },
+      });
+
+      const result = await AutomationService.listServerDrafts({
+        limit: 10,
+        offset: 5,
+      });
+
+      expect(mockGet).toHaveBeenCalledWith(
+        "/api/automation/v1/drafts?limit=10&offset=5",
+      );
+      expect(result.total).toBe(1);
+      expect(result.drafts[0].id).toBe("d1");
+    });
+
+    it("routes to callCloudProxy for cloud backends", async () => {
+      mockGetActive.mockReturnValue({ backend: cloudBackend, orgId: "org-1" });
+      mockCallCloudProxy.mockResolvedValue({
+        drafts: [],
+        total: 0,
+      });
+
+      const result = await AutomationService.listServerDrafts({
+        limit: 10,
+        offset: 5,
+      });
+
+      expect(mockCallCloudProxy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          backend: cloudBackend,
+          method: "GET",
+          path: "/api/automation/v1/drafts?limit=10&offset=5",
+        }),
+      );
+      expect(result).toEqual({ drafts: [], total: 0 });
+    });
+  });
+
+  describe("createCustomWebhook", () => {
+    it("posts custom webhook configuration to the automation API", async () => {
+      const webhook = {
+        id: "webhook-1",
+        org_id: "org-1",
+        name: "Incident webhook",
+        source: "incident-alerts",
+        webhook_url:
+          "https://app.all-hands.dev/v1/events/org-1/incident-alerts",
+        event_key_expr: "event.type",
+        signature_header: "X-Incident-Signature",
+        signature_scheme: "hmac_sha256_hex",
+        enabled: true,
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+        webhook_secret: "generated-secret",
+      };
+      mockPost.mockResolvedValue({ data: webhook });
+
+      const result = await AutomationService.createCustomWebhook({
+        name: "Incident webhook",
+        source: "incident-alerts",
+        event_key_expr: "event.type",
+        signature_header: "X-Incident-Signature",
+        signature_scheme: "hmac_sha256_hex",
+      });
+
+      expect(mockPost).toHaveBeenCalledWith("/api/automation/v1/webhooks", {
+        name: "Incident webhook",
+        source: "incident-alerts",
+        event_key_expr: "event.type",
+        signature_header: "X-Incident-Signature",
+        signature_scheme: "hmac_sha256_hex",
+      });
+      expect(result).toEqual(webhook);
+    });
+  });
+
+  describe("dispatchServerDraft", () => {
+    it("posts to the dispatch endpoint and returns the run", async () => {
+      mockPost.mockResolvedValue({ data: mockRun });
+
+      const result = await AutomationService.dispatchServerDraft("draft-1");
+
+      expect(mockPost).toHaveBeenCalledWith(
+        "/api/automation/v1/drafts/draft-1/dispatch",
+      );
+      expect(result).toEqual(mockRun);
+    });
+
+    it("sends a synthetic event payload when provided", async () => {
+      mockPost.mockResolvedValue({ data: mockRun });
+
+      await AutomationService.dispatchServerDraft("draft-1", {
+        eventPayload: { type: "issue.created", action: "opened" },
+      });
+
+      expect(mockPost).toHaveBeenCalledWith(
+        "/api/automation/v1/drafts/draft-1/dispatch",
+        { event_payload: { type: "issue.created", action: "opened" } },
+      );
     });
   });
 });
