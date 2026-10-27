@@ -48,7 +48,7 @@ function MenuItem({
       disabled={disabled}
       className={cn(
         "group w-full cursor-pointer rounded px-2 py-2 text-start text-nowrap text-sm font-normal",
-        "text-[var(--oh-foreground)] hover:bg-[var(--oh-interactive-hover)]",
+        "text-foreground hover:bg-interactive-hover",
         "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent",
       )}
       role="menuitem"
@@ -176,7 +176,7 @@ export function MetaProfileActionsMenu({
     <div
       ref={menuRef}
       className={cn(
-        "absolute right-0 top-full z-10 mt-2 w-[160px] rounded-md border border-[var(--oh-border-subtle)] bg-tertiary px-1 py-1 shadow-lg",
+        "absolute right-0 top-full z-10 mt-2 w-[160px] rounded-md border border-border-subtle bg-tertiary px-1 py-1 shadow-lg",
         dropdownMenuListClassName,
         isPortaled &&
           "!static !top-auto !bottom-auto !left-auto !right-auto !mt-0",

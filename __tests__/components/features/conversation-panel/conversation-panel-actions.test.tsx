@@ -6,9 +6,23 @@ import {
   createMockConversation,
   mockConversations,
   renderConversationPanel,
+  cloudBackend,
+  RouterStub,
 } from "./conversation-panel-test-utils";
 import { withConversationTagFlags } from "#/utils/conversation-tag-flags";
+import { renderWithProviders } from "test-utils";
+import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import AgentProfilesService from "#/api/agent-profiles-service/agent-profiles-service.api";
+import type {
+  AppConversation,
+  AppConversationStartTask,
+  SandboxStatus,
+} from "#/api/conversation-service/agent-server-conversation-service.types";
+import {
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
 import { ExecutionStatus } from "#/types/agent-server/core";
 import { useArchivedConversationsStore } from "#/stores/archived-conversations-store";
 import { usePinnedConversationsStore } from "#/stores/pinned-conversations-store";
@@ -1200,5 +1214,122 @@ describe("ConversationPanel conversation actions", () => {
     expect(
       screen.queryByRole("button", { name: /confirm/i }),
     ).not.toBeInTheDocument();
+  });
+
+  describe("New Conversation in Sandbox", () => {
+    // Sandboxes exist on Cloud backends only; the local adapter never sets a
+    // sandbox id, so these rows render against the Cloud backend. The
+    // provider is needed for the panel to see that backend when it launches.
+    const openRowMenu = async (
+      conversation: AppConversation,
+      navigate = vi.fn(),
+    ) => {
+      setRegisteredBackends([cloudBackend]);
+      setActiveSelection({ backendId: cloudBackend.id, orgId: "org-2" });
+      vi.spyOn(
+        AgentServerConversationService,
+        "searchConversations",
+      ).mockResolvedValue({ items: [conversation], next_page_id: null });
+      const user = userEvent.setup();
+      renderWithProviders(
+        <ActiveBackendProvider>
+          <RouterStub />
+        </ActiveBackendProvider>,
+        { navigation: { navigate } },
+      );
+      const [card] = await screen.findAllByTestId("conversation-card");
+      await user.click(within(card).getByTestId("ellipsis-button"));
+      return user;
+    };
+
+    it("starts a new conversation in the row's sandbox and opens it", async () => {
+      // Arrange
+      const navigate = vi.fn();
+      vi.spyOn(AgentProfilesService, "listProfiles").mockResolvedValue({
+        profiles: [],
+        active_agent_profile_id: null,
+      });
+      const startTask: AppConversationStartTask = {
+        id: "9f",
+        created_by_user_id: null,
+        status: "WORKING",
+        detail: null,
+        app_conversation_id: null,
+        agent_server_url: null,
+        request: {},
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      const createSpy = vi
+        .spyOn(AgentServerConversationService, "createConversation")
+        .mockResolvedValue(startTask);
+      const user = await openRowMenu(
+        createMockConversation({
+          id: "sandboxed",
+          title: "Sandboxed Conversation",
+          sandbox_id: "oh-agent-server-abc",
+          sandbox_status: "RUNNING",
+        }),
+        navigate,
+      );
+
+      // Act
+      await user.click(
+        screen.getByTestId("new-conversation-in-sandbox-button"),
+      );
+
+      // Assert: only the sandbox is reused, so the new conversation is a
+      // top-level one (no parent) with no repository checkout of its own.
+      await waitFor(() => {
+        expect(createSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            sandboxId: "oh-agent-server-abc",
+            parentConversationId: undefined,
+            metadata: null,
+          }),
+        );
+      });
+      await waitFor(() => {
+        expect(navigate).toHaveBeenCalledWith("/conversations/task-9f");
+      });
+    });
+
+    it("offers no sandbox item for a conversation without a sandbox", async () => {
+      // Arrange + Act
+      await openRowMenu(
+        createMockConversation({ id: "no-sandbox", sandbox_id: null }),
+      );
+
+      // Assert: the menu opened, but without the sandbox item.
+      expect(screen.getByTestId("edit-button")).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("new-conversation-in-sandbox-button"),
+      ).not.toBeInTheDocument();
+    });
+
+    it.each<SandboxStatus>(["MISSING", "ERROR"])(
+      "offers no sandbox item when the sandbox is %s",
+      async (sandboxStatus) => {
+        // Arrange: a MISSING runtime is only listed with archived rows shown.
+        useConversationPanelPreferencesStore.setState({
+          showArchivedConversations: true,
+        });
+
+        // Act
+        await openRowMenu(
+          createMockConversation({
+            id: "unusable",
+            sandbox_id: "oh-agent-server-abc",
+            sandbox_status: sandboxStatus,
+          }),
+        );
+
+        // Assert
+        expect(screen.getByTestId("edit-button")).toBeInTheDocument();
+        expect(
+          screen.queryByTestId("new-conversation-in-sandbox-button"),
+        ).not.toBeInTheDocument();
+      },
+    );
   });
 });

@@ -5,6 +5,8 @@ import type {
   MarsConnection,
 } from "#/api/mars/mars-tunnel-backend";
 import { I18nKey } from "#/i18n/declaration";
+import { connectionLabel } from "./managed-agents-labels";
+import { SignInStorageNote } from "./sign-in-storage-note";
 
 interface AccountBarProps {
   authState: MarsAuthState | undefined;
@@ -54,7 +56,7 @@ export function AccountBar({
             aria-hidden
             className="size-1.5 rounded-full bg-status-success"
           />
-          {activeConnection.teamName ?? activeConnection.label}
+          {connectionLabel(activeConnection)}
         </span>
       )}
       <button
@@ -73,11 +75,7 @@ export function AccountBar({
       >
         {t(I18nKey.BACKEND$DIGITALOCEAN_SIGN_OUT)}
       </button>
-      {authState?.isPersistent === false ? (
-        <p className="w-full text-warning">
-          {t(I18nKey.BACKEND$DIGITALOCEAN_NOT_PERSISTENT)}
-        </p>
-      ) : null}
+      <SignInStorageNote authState={authState} className="w-full" />
     </div>
   );
 }

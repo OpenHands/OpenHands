@@ -110,6 +110,7 @@ function fakeApi() {
     destroySession: vi.fn(async () => {}),
     deleteAgentConfig: vi.fn(async () => {}),
     getSession: vi.fn(async () => null),
+    getAccount: vi.fn(async () => null),
   };
 }
 
@@ -252,6 +253,79 @@ describe("createMarsTunnelBridge", () => {
       ipcMain.invoke(MARS_TUNNEL_IPC.openTunnel, { sessionId: "sess_a" }),
     ).toThrow(/Sign in to DigitalOcean/);
     expect(registry.attach).not.toHaveBeenCalled();
+  });
+
+  it("verifies a token and names its team with that token, even if another tab switches teams meanwhile", async () => {
+    // DigitalOcean's answers, per token: each belongs to its own team.
+    const teamOf: Record<string, string> = {
+      [VALID_PAT]: "team-a",
+      [OTHER_PAT]: "team-b",
+    };
+    const calls: { path: string; token: string }[] = [];
+    let holdVerify = false;
+    let releaseVerify = () => {};
+    const verifyHeld = new Promise<void>((resolve) => {
+      releaseVerify = resolve;
+    });
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (url, init) => {
+        const { pathname } = new URL(String(url));
+        const headers = init?.headers as Record<string, string>;
+        const token = headers.Authorization.replace(/^Bearer /, "");
+        calls.push({ path: pathname, token });
+        if (pathname === "/v2/agents/sessions" && holdVerify) {
+          holdVerify = false;
+          await verifyHeld;
+        }
+        const team = teamOf[token];
+        const body =
+          pathname === "/v2/account"
+            ? {
+                account: {
+                  email: `${team}@example.com`,
+                  team: { uuid: team, name: team },
+                },
+              }
+            : { sessions: [] };
+        return new Response(JSON.stringify(body), {
+          headers: { "Content-Type": "application/json" },
+        });
+      });
+    try {
+      const credentials = createCredentialStore({
+        userDataPath: mkdtempSync(join(tmpdir(), "mars-bridge-")),
+      });
+      const bridge = createMarsTunnelBridge({
+        registry: fakeRegistry(),
+        credentials,
+        env: { MARS_API_BASE_URL: API_URL },
+      });
+      await bridge.savePat({ token: OTHER_PAT });
+      const teamB = credentials.getActive()!.id;
+
+      holdVerify = true;
+      const savingA = bridge.savePat({ token: VALID_PAT });
+      await vi.waitFor(() => expect(calls.at(-1)?.token).toBe(VALID_PAT));
+      bridge.setActiveConnection(teamB);
+      releaseVerify();
+      await savingA;
+
+      expect(
+        calls.filter((c) => c.path === "/v2/account").map((c) => c.token),
+      ).toEqual([OTHER_PAT, VALID_PAT]);
+      expect(credentials.getToken(teamB)).toBe(OTHER_PAT);
+      expect(credentials.getActive()?.id).toBe(teamB);
+      const teamA = credentials
+        .list()
+        .find(
+          (c: { id: string; teamName: string | null }) =>
+            c.teamName === "team-a",
+        );
+      expect(teamA && credentials.getToken(teamA.id)).toBe(VALID_PAT);
+    } finally {
+      fetchSpy.mockRestore();
+    }
   });
 
   it("savePat keeps a token only once the API accepts it", async () => {

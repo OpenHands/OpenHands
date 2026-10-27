@@ -10,6 +10,10 @@ import {
   createCredentialStore,
   isValidPatFormat,
 } from "../../scripts/mars-credentials.mjs";
+import {
+  createEncryptedFileStore,
+  createMemoryStore,
+} from "../../scripts/mars-secret-store.mjs";
 
 const STORE_FILENAME = "mars-credentials.json";
 
@@ -183,5 +187,166 @@ describe("createCredentialStore", () => {
     });
 
     expect(store.remove(second!.id)?.id).toBe(first?.id);
+  });
+});
+
+describe("createCredentialStore with a SecretStore (the Agent Canvas server)", () => {
+  const TOKEN = `dop_v1_${"d".repeat(64)}`;
+
+  function serverStore(dir = mkdtempSync(join(tmpdir(), "mars-server-"))) {
+    const secrets = createEncryptedFileStore({ dir, secretKey: "host-key" });
+    return {
+      dir,
+      secrets,
+      store: createCredentialStore({
+        userDataPath: dir,
+        secrets,
+        log: () => {},
+      }),
+    };
+  }
+
+  it("keeps a sign-in across a restart, with no token in the metadata file", () => {
+    const { dir, store } = serverStore();
+    store.save({ kind: CREDENTIAL_KIND_PAT, token: TOKEN, label: "Token" });
+
+    const restarted = serverStore(dir).store;
+
+    expect(restarted.getActiveToken()).toBe(TOKEN);
+    expect(restarted.getActive()).toMatchObject({ isExpired: false });
+    expect(restarted.storage).toMatchObject({ kind: "encrypted-file" });
+    expect(readFileSync(join(dir, STORE_FILENAME), "utf8")).not.toContain(
+      "d".repeat(64),
+    );
+  });
+
+  it("keeps one connection when the same token is entered again", () => {
+    const { store } = serverStore();
+
+    const first = store.save({
+      kind: CREDENTIAL_KIND_PAT,
+      token: TOKEN,
+      label: "A",
+    });
+    const again = store.save({
+      kind: CREDENTIAL_KIND_PAT,
+      token: TOKEN,
+      label: "A",
+    });
+
+    expect(again.id).toBe(first.id);
+    expect(again.reused).toBe(true);
+    expect(store.list()).toHaveLength(1);
+  });
+
+  it("gives a team's new sign-in the id the team already had", () => {
+    const { store } = serverStore();
+    const first = store.save({
+      kind: CREDENTIAL_KIND_PAT,
+      token: TOKEN,
+      label: "A",
+    });
+    store.setTeam(first.id, { uuid: "team-1", name: "My Team" });
+    const second = store.save({
+      kind: CREDENTIAL_KIND_OAUTH,
+      token: "oauth-access-token",
+      label: "DigitalOcean",
+    });
+
+    const merged = store.setTeam(second.id, {
+      uuid: "team-1",
+      name: "My Team",
+    });
+
+    expect(merged).toMatchObject({
+      id: first.id,
+      kind: "oauth",
+      teamName: "My Team",
+    });
+    expect(store.list()).toHaveLength(1);
+    expect(store.getActiveToken()).toBe("oauth-access-token");
+  });
+
+  it("leaves a team switch made while a new sign-in was being checked", () => {
+    const { store } = serverStore();
+    const teamOne = store.save({
+      kind: CREDENTIAL_KIND_PAT,
+      token: TOKEN,
+      label: "A",
+    });
+    store.setTeam(teamOne.id, { uuid: "team-1", name: "Team One" });
+    const teamTwo = store.save({
+      kind: CREDENTIAL_KIND_PAT,
+      token: "token-two",
+      label: "B",
+    });
+    store.setTeam(teamTwo.id, { uuid: "team-2", name: "Team Two" });
+    const again = store.save({
+      kind: CREDENTIAL_KIND_OAUTH,
+      token: "oauth-access-token",
+      label: "DigitalOcean",
+    });
+    store.setActive(teamTwo.id);
+
+    store.setTeam(again.id, { uuid: "team-1", name: "Team One" });
+
+    expect(store.getActive()?.id).toBe(teamTwo.id);
+    expect(store.getToken(teamOne.id)).toBe("oauth-access-token");
+  });
+
+  it("keeps a versioned record in the store, not a bare token", () => {
+    const { store, secrets } = serverStore();
+    const saved = store.save({
+      kind: CREDENTIAL_KIND_PAT,
+      token: TOKEN,
+      label: "A",
+    });
+
+    expect(JSON.parse(secrets.read(`digitalocean/${saved.id}`)!)).toEqual({
+      v: 1,
+      kind: "pat",
+      token: TOKEN,
+    });
+  });
+
+  it("asks for sign-in again when a saved secret can no longer be read", () => {
+    const { dir, store, secrets } = serverStore();
+    const saved = store.save({
+      kind: CREDENTIAL_KIND_PAT,
+      token: TOKEN,
+      label: "A",
+    });
+    secrets.remove(`digitalocean/${saved.id}`);
+
+    const restarted = serverStore(dir).store;
+
+    expect(restarted.getActive()).toMatchObject({
+      id: saved.id,
+      isExpired: true,
+    });
+  });
+
+  it("keeps a sign-in for this run when the store refuses it, and says it was not saved", () => {
+    const refusing = {
+      ...createMemoryStore(),
+      isPersistent: true,
+      write: () => {
+        throw new Error("macOS Keychain refused to save");
+      },
+    };
+    const store = createCredentialStore({
+      userDataPath: mkdtempSync(join(tmpdir(), "mars-refused-")),
+      secrets: refusing,
+      log: () => {},
+    });
+
+    const saved = store.save({
+      kind: CREDENTIAL_KIND_PAT,
+      token: TOKEN,
+      label: "A",
+    });
+
+    expect(saved).toMatchObject({ isSaved: false, isExpired: false });
+    expect(store.getActiveToken()).toBe(TOKEN);
   });
 });

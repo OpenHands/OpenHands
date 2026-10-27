@@ -1,3 +1,6 @@
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { compile } from "@tailwindcss/node";
 import {
   act,
   render,
@@ -81,10 +84,6 @@ vi.mock("#/components/shared/buttons/styled-tooltip", () => ({
 
 vi.mock("#/components/shared/buttons/openhands-logo-button", () => ({
   OpenHandsLogoButton: () => <div data-testid="logo-button" />,
-}));
-
-vi.mock("#/components/features/sidebar/user-actions", () => ({
-  UserActions: () => <div data-testid="user-actions" />,
 }));
 
 vi.mock("#/components/features/conversation-panel/conversation-panel", () => ({
@@ -271,6 +270,66 @@ describe("Sidebar", () => {
         screen.queryByTestId("sidebar-mobile-drawer"),
       ).not.toBeInTheDocument();
     });
+  });
+
+  it("keeps the CSS drawer and backdrop timing in step with removal", async () => {
+    // Arrange: compile the production stylesheet, then drive the real drawer.
+    const compiler = await compile(
+      await readFile(resolve("src/tailwind.css"), "utf8"),
+      { base: resolve("src"), onDependency: () => {} },
+    );
+    vi.useFakeTimers();
+    try {
+      renderSidebar("/conversations");
+      fireEvent.click(screen.getByTestId("sidebar-mobile-menu-toggle"));
+      act(() => vi.advanceTimersToNextFrame());
+      const drawer = screen.getByTestId("sidebar-mobile-drawer");
+      const backdrop = drawer.previousElementSibling as HTMLElement;
+      expect(drawer).toHaveAttribute("aria-hidden", "false");
+      expect(backdrop).toHaveAttribute("aria-hidden", "false");
+
+      // Act: use only duration classes actually emitted by each element.
+      const durations = [drawer, backdrop].map((element) => {
+        const css = compiler.build(
+          [...element.classList].filter((candidate) =>
+            candidate.startsWith("duration-"),
+          ),
+        );
+        const declarations = [
+          ...css.matchAll(/\.((?:\\.|[\w-])+)\s*\{([^}]+)\}/g),
+        ]
+          .filter(([, selector]) =>
+            element.classList.contains(selector.replace(/\\(.)/g, "$1")),
+          )
+          .map(([, , body]) => body)
+          .join("\n");
+        const property = declarations.match(
+          /transition-duration:\s*var\((--[\w-]+)\);/,
+        )?.[1];
+        expect(property).toBeDefined();
+        const value = element.style.getPropertyValue(property!);
+        expect(value).toMatch(/^\d+ms$/);
+        return Number.parseFloat(value);
+      });
+
+      // Assert: the visible CSS duration and the lifecycle timer agree.
+      const [duration] = durations;
+      expect(duration).toBeGreaterThan(0);
+      expect(durations[1]).toBe(duration);
+      fireEvent.click(
+        within(drawer).getByTestId("sidebar-mobile-drawer-close"),
+      );
+      expect(drawer).toHaveAttribute("aria-hidden", "true");
+      expect(backdrop).toHaveAttribute("aria-hidden", "true");
+      act(() => vi.advanceTimersByTime(duration - 1));
+      expect(drawer).toBeInTheDocument();
+      expect(backdrop).toBeInTheDocument();
+      act(() => vi.advanceTimersByTime(1));
+      expect(drawer).not.toBeInTheDocument();
+      expect(backdrop).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("leaves the mobile drawer open when a menu inside it already handled Escape", () => {
