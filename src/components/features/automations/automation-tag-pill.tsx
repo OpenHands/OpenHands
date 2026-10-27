@@ -22,7 +22,9 @@ export function AutomationTagPill({
       className={cn(extensionModuleCardPillClassName, "gap-1", className)}
     >
       <Tag className="size-3 shrink-0" aria-hidden="true" />
-      <span className="truncate">{tag}</span>
+      <span className="truncate" title={tag}>
+        {tag}
+      </span>
       {children}
     </span>
   );
