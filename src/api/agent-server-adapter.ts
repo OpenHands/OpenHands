@@ -246,16 +246,6 @@ export async function fetchBackendExecutionRuntime(): Promise<
 }
 
 /**
- * Return the deployment mode from the runtime services info, e.g. "docker",
- * "dev:automation", etc. Returns `null` when no runtime info is supplied.
- */
-export function getDeploymentMode(
-  runtimeServicesInfo?: RuntimeServicesInfo | null,
-): string | null {
-  return runtimeServicesInfo?.mode ?? null;
-}
-
-/**
  * Render the runtime services info into a markdown block suitable for
  * appending to the system prompt via `AgentContext.system_message_suffix`.
  *
@@ -773,6 +763,39 @@ function getConversationSecurityAnalyzer(conversationSettings: SettingsRecord) {
   }
 }
 
+/**
+ * The Settings → Runtime options a start request carries. Only non-defaults
+ * are sent, so servers without the fields see the request they always did.
+ */
+function getConversationRuntimeOptions(conversationSettings: SettingsRecord) {
+  const {
+    worktree_base: base,
+    worktree_base_ref: ref,
+    worktree_branch_prefix: branchPrefix,
+    container_memory: memory,
+    container_cpus: cpus,
+    container_browser: browser,
+  } = conversationSettings;
+  const worktreeOptions = {
+    ...(typeof base === "string" && base !== "default_branch" ? { base } : {}),
+    ...(base === "ref" && typeof ref === "string" ? { ref } : {}),
+    ...(typeof branchPrefix === "string" && branchPrefix !== "openhands/"
+      ? { branch_prefix: branchPrefix }
+      : {}),
+  };
+  const container = {
+    ...(typeof memory === "string" && memory ? { memory } : {}),
+    ...(typeof cpus === "number" ? { cpus } : {}),
+    ...(browser === false ? { browser } : {}),
+  };
+  return {
+    ...(Object.keys(worktreeOptions).length > 0
+      ? { worktree_options: worktreeOptions }
+      : {}),
+    ...(Object.keys(container).length > 0 ? { container } : {}),
+  };
+}
+
 function buildInitialMessage(
   query?: string,
   conversationInstructions?: string,
@@ -1145,6 +1168,7 @@ export function buildStartConversationRequest(
       options.executionRuntime === "docker"
         ? false
         : (options.worktree ?? true),
+    ...getConversationRuntimeOptions(conversationSettings),
   };
 
   // Stamp the client source tag so the agent-server can attribute the

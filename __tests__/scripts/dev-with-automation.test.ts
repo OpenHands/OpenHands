@@ -12,6 +12,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -34,6 +35,7 @@ import {
   getFrontendBackend,
   getLocalServiceRoutes,
   getRejectPrefixes,
+  resolveAutomationKvSecret,
   setServiceLogListener,
   spawnService,
   validateLocalAutomationPath,
@@ -312,6 +314,59 @@ describe("buildAutomationTelemetryEnv", () => {
 
   it("does not default automation telemetry when do-not-track is enabled", () => {
     expect(buildAutomationTelemetryEnv({ VITE_DO_NOT_TRACK: "1" })).toEqual({});
+  });
+});
+
+describe("resolveAutomationKvSecret", () => {
+  let stateDir = "";
+
+  afterEach(() => {
+    if (stateDir) rmSync(stateDir, { recursive: true, force: true });
+  });
+
+  function freshStateDir(): string {
+    stateDir = mkdtempSync(path.join(tmpdir(), "kv-secret-"));
+    return stateDir;
+  }
+
+  it("keeps the first session key as the KV secret after the session key rotates", () => {
+    const dir = freshStateDir();
+
+    const first = resolveAutomationKvSecret(
+      { stateDir: dir, sessionApiKey: "session-key-a" },
+      {},
+    );
+    const afterRotation = resolveAutomationKvSecret(
+      { stateDir: dir, sessionApiKey: "session-key-b" },
+      {},
+    );
+
+    expect(first).toBe("session-key-a");
+    expect(afterRotation).toBe("session-key-a");
+  });
+
+  it("prefers an explicit AUTOMATION_KV_SECRET without pinning anything", () => {
+    const dir = freshStateDir();
+
+    const secret = resolveAutomationKvSecret(
+      { stateDir: dir, sessionApiKey: "session-key-a" },
+      { AUTOMATION_KV_SECRET: "explicit-secret" },
+    );
+
+    expect(secret).toBe("explicit-secret");
+    expect(readdirSync(dir)).toEqual([]);
+  });
+
+  it("stops instead of falling back to the session key when the pin is unreadable", () => {
+    const dir = freshStateDir();
+    mkdirSync(path.join(dir, "automation-kv-secret.txt"));
+
+    expect(() =>
+      resolveAutomationKvSecret(
+        { stateDir: dir, sessionApiKey: "session-key-a" },
+        {},
+      ),
+    ).toThrow(/not a regular file/);
   });
 });
 

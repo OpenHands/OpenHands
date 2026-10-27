@@ -109,6 +109,7 @@ function createPreviewProps(
     branch: createBranch(),
     provider: "github",
     workspaceMode: "local_repo",
+    workspaceModes: ["local_repo", "new_worktree"],
     backendKind: "local",
     onRepoClick: vi.fn(),
     onWorkspaceModeChange: vi.fn(),

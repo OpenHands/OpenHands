@@ -24,7 +24,6 @@ import { WorkspaceFilesForChatProvider } from "./chat-markdown-path-code";
 import { TypingIndicator } from "./typing-indicator";
 import { ChatSuggestions } from "./chat-suggestions";
 import { ScrollProvider } from "#/context/scroll-context";
-import { useInitialQueryStore } from "#/stores/initial-query-store";
 import { useSendMessage } from "#/hooks/use-send-message";
 import { useAgentState, usePlanningAgentState } from "#/hooks/use-agent-state";
 import { useIsArchivedConversation } from "#/hooks/use-is-archived-conversation";
@@ -75,15 +74,6 @@ function isTextFieldWithText(target: EventTarget | null): boolean {
     return editable !== null && !isContentEmpty(editable);
   }
   return false;
-}
-
-function getEntryPoint(
-  hasRepository: boolean | null,
-  hasReplayJson: boolean | null,
-): string {
-  if (hasRepository) return "github";
-  if (hasReplayJson) return "replay";
-  return "direct";
 }
 
 export function ChatInterface({
@@ -227,7 +217,6 @@ export function ChatInterface({
     scrollDomToBottom,
   ]);
 
-  const { selectedRepository, replayJson } = useInitialQueryStore();
   const { conversationId } = useOptionalConversationId();
 
   // The live goal banner renders in the scroll stream but advances via store
@@ -396,12 +385,8 @@ export function ChatInterface({
     const files = [...originalFiles];
     if (totalEvents === 0) {
       trackInitialQuerySubmitted({
-        entryPoint: getEntryPoint(
-          selectedRepository !== null,
-          replayJson !== null,
-        ),
+        entryPoint: "direct",
         queryCharacterLength: content.length,
-        replayJsonSize: replayJson?.length,
       });
     } else {
       trackUserMessageSent({
