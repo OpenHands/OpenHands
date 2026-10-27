@@ -477,6 +477,35 @@ describe("HomeChatLauncher", () => {
     expect(create.mock.lastCall?.[0]?.sandboxSpecId).toBe("monorepo_large");
   });
 
+  it("omits a selected sandbox template when switching to Automate mode", async () => {
+    mockUseActiveBackend.mockReturnValue({ ...cloudBackend, orgId: "org-a" });
+    vi.spyOn(ActiveBackendStore, "getActiveBackend").mockReturnValue({
+      ...cloudBackend,
+      orgId: "org-a",
+    });
+    vi.mocked(
+      SandboxTemplateService.getSandboxSelectionOptions,
+    ).mockResolvedValue({
+      enabled: true,
+      items: [{ id: "monorepo_large", display_name: "Monorepo Large" }],
+    });
+    const create = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue(makeConversationResponse());
+    renderLauncher();
+    const user = userEvent.setup();
+    const selector = await screen.findByTestId("sandbox-selector");
+    await user.selectOptions(selector, "monorepo_large");
+
+    await user.click(screen.getByTestId("home-launcher-mode-automate"));
+    expect(selector).toBeDisabled();
+    await user.click(screen.getByTestId("stub-chat-submit"));
+
+    await waitFor(() => expect(create).toHaveBeenCalledOnce());
+    expect(create.mock.lastCall?.[0]).toMatchObject({ automationSetup: true });
+    expect(create.mock.lastCall?.[0]?.sandboxSpecId).toBeUndefined();
+  });
+
   it("resets the one-off selection and replaces the catalog on an organization switch", async () => {
     mockUseActiveBackend.mockReturnValue({ ...cloudBackend, orgId: "org-a" });
     vi.mocked(
