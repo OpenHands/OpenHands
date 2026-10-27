@@ -21,14 +21,17 @@ const TAG_ERROR_KEYS: Record<AutomationTagError, I18nKey> = {
 
 interface AutomationTagsEditorProps {
   automation: Automation;
-  /** Only the creator may change tags; everyone else sees them read-only. */
+  /**
+   * Whether the caller may change tags: the creator, or a manager of a
+   * service-owned automation. Everyone else sees them read-only.
+   */
   canEdit: boolean;
 }
 
 /**
- * The automation's tags under the detail header. The creator edits them in
- * place and saves the whole list in one PATCH, so a tag the service rejects
- * never leaves the others half-saved.
+ * The automation's tags under the detail header. A caller who may edit
+ * (`canEdit`) changes them in place and saves the whole list in one PATCH,
+ * so a tag the service rejects never leaves the others half-saved.
  */
 export function AutomationTagsEditor({
   automation,
