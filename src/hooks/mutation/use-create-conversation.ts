@@ -108,7 +108,10 @@ export const useCreateConversation = ({
 
       // The active AgentProfile is the default launch profile for new
       // conversations (#3727), on both local and cloud. sandboxId is unused
-      // here.
+      // here. Thread the combobox pick as context so resolveConversationLaunch
+      // can suppress the router's first-message routing when the user explicitly
+      // picked an LLM (#18773) — the local path gates the suffix on the
+      // resolved override, which is only set when the pick reaches it.
       const conversation = await launchConversation(
         {
           queryClient,
@@ -116,6 +119,7 @@ export const useCreateConversation = ({
           orgId,
           isCloud: backend.kind === "cloud",
           agentProfileId,
+          llmProfile,
         },
         {
           initialUserMsg: query,
