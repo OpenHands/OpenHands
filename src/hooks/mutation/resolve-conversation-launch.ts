@@ -118,6 +118,14 @@ export async function resolveConversationLaunch(
     ) {
       llmProfileOverride = preferredLlmProfile;
     }
+  } else if (profile?.agent_kind === "openhands" && llmProfile) {
+    // The active profile has no bound LLM (e.g. the migrated `default`
+    // profile, whose LLM is the global active_profile). An explicit combobox
+    // pick still outranks the router's first-message routing (#18773), so
+    // thread it as the override — this suppresses the route-on-start suffix
+    // in `buildStartConversationRequest` via `hasLlmPick`, and binds the
+    // picked LLM to the launch.
+    llmProfileOverride = llmProfile;
   }
 
   const detail = profile

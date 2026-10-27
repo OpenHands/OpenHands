@@ -8,6 +8,7 @@ import {
   ACP_SERVER_TAG_KEY,
   AGENT_CANVAS_SOURCE,
   CLIENT_SOURCE_TAG_KEY,
+  buildRouterAtStartSystemSuffix,
   buildStartConversationRequest,
   buildStartPlanningConversationRequest,
   buildStartPlanningConversationRequestWithEncryptedSettings,
@@ -607,6 +608,42 @@ describe("buildStartConversationRequest — agentProfileId path", () => {
     expect(payload.agent_launch_additions).toEqual({
       llm_profile_ref: "fast",
     });
+  });
+
+  it("emits the route-on-start suffix when run_router_at_conversation_start is on, a router is active, and no LLM is picked", () => {
+    const suffix = buildRouterAtStartSystemSuffix(true, true, true);
+    expect(suffix).toContain("<ROUTE_AT_CONVERSATION_START>");
+  });
+
+  it("suppresses the route-on-start suffix when an LLM was explicitly picked (#18773)", () => {
+    // hasLlmPick = false when the user picked a model in the combobox.
+    expect(buildRouterAtStartSystemSuffix(true, true, false)).toBeUndefined();
+  });
+
+  it("suppresses the route-on-start suffix when no router is active", () => {
+    expect(buildRouterAtStartSystemSuffix(true, false, true)).toBeUndefined();
+  });
+
+  it("suppresses the route-on-start suffix when run_router_at_conversation_start is off", () => {
+    expect(buildRouterAtStartSystemSuffix(false, true, true)).toBeUndefined();
+  });
+
+  it("does not emit the route-on-start suffix when an LLM override is threaded (#18773)", () => {
+    // The local launch path gates the suffix on `!options.llmProfileOverride`;
+    // an explicit combobox pick becomes the override and must suppress it.
+    const settings = makeSettings({ agent_kind: "openhands" });
+    (
+      settings as { run_router_at_conversation_start?: boolean }
+    ).run_router_at_conversation_start = true;
+    const payload = buildStartConversationRequest({
+      settings,
+      agentProfileId: "profile-xyz",
+      agentProfileKind: "openhands",
+      llmProfileOverride: "gpt-5.4",
+      profileHasRouter: true,
+    });
+    const suffix = payload.agent_launch_additions?.system_message_suffix_append;
+    expect(suffix).toBeUndefined();
   });
   it("stamps the launched ACP profile's server as the ACP server tag", () => {
     const tagsFor = (
