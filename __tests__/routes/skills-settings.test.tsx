@@ -477,7 +477,7 @@ Full skill body.`,
     const consoleError = vi
       .spyOn(console, "error")
       .mockImplementation(() => {});
-    vi.spyOn(SkillsService, "getSkills").mockResolvedValue([
+    mockSkillList([
       buildSkill({
         name: "skill-creator",
         type: "knowledge",
