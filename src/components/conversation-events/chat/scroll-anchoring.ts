@@ -73,7 +73,7 @@ const verticalMargins = (element: Element): { top: number; bottom: number } => {
  * moving a reader who was part-way up the history. Include the margins so the
  * seed matches what the virtual rows report.
  */
-export const occupiedRowHeight = (first: Element, last: Element): number => {
+const occupiedRowHeight = (first: Element, last: Element): number => {
   const top = first.getBoundingClientRect().top - verticalMargins(first).top;
   const bottom =
     last.getBoundingClientRect().bottom + verticalMargins(last).bottom;

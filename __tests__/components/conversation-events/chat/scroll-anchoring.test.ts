@@ -3,7 +3,6 @@ import {
   BOTTOM_THRESHOLD_PX,
   buildInitialMeasurements,
   measurePlainRow,
-  occupiedRowHeight,
   shouldAdjustScrollOnSizeChange,
 } from "#/components/conversation-events/chat/scroll-anchoring";
 
@@ -44,9 +43,10 @@ describe("buildInitialMeasurements", () => {
   });
 });
 
-describe("occupiedRowHeight", () => {
-  const wrapper = (firstTop: number, lastBottom: number) => {
+describe("measurePlainRow", () => {
+  const wrapper = (firstTop: number, lastBottom: number, rowKey?: string) => {
     const wrapperElement = document.createElement("div");
+    if (rowKey) wrapperElement.dataset.rowKey = rowKey;
     const first = document.createElement("article");
     const last = document.createElement("div");
     first.getBoundingClientRect = () => rectAt(firstTop, firstTop + 100);
@@ -63,24 +63,26 @@ describe("occupiedRowHeight", () => {
     // A user bubble carries `mt-6`; a bounding rectangle is the border box and
     // leaves that margin out. Seeding the shell from the rectangles alone would
     // under-state every margined row and let the browser clamp `scrollTop`.
-    const { first, last } = wrapper(100, 200);
+    const { wrapperElement } = wrapper(100, 200, "single-evt-1");
     vi.spyOn(window, "getComputedStyle").mockReturnValue({
       marginTop: "24px",
       marginBottom: "16px",
     } as CSSStyleDeclaration);
 
-    expect(occupiedRowHeight(first, last)).toBe(100 + 24 + 16);
+    expect(measurePlainRow(wrapperElement)).toEqual([
+      "single-evt-1",
+      100 + 24 + 16,
+    ]);
   });
 
-  it("measures a plain row wrapper by its key", () => {
-    const { wrapperElement } = wrapper(0, 120);
-    wrapperElement.dataset.rowKey = "single-evt-1";
+  it("measures a row with no margins by its children's span", () => {
+    const { wrapperElement } = wrapper(0, 120, "single-evt-2");
     vi.spyOn(window, "getComputedStyle").mockReturnValue({
       marginTop: "0px",
       marginBottom: "0px",
     } as CSSStyleDeclaration);
 
-    expect(measurePlainRow(wrapperElement)).toEqual(["single-evt-1", 120]);
+    expect(measurePlainRow(wrapperElement)).toEqual(["single-evt-2", 120]);
     expect(measurePlainRow(document.createElement("div"))).toBeNull();
   });
 });
