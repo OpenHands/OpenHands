@@ -1391,6 +1391,76 @@ describe("AutomationSetupPanel", () => {
     );
   });
 
+  it("offers Bitbucket Data Center repositories when the service clones them", async () => {
+    vi.mocked(useDeploymentCapabilities).mockReturnValue({
+      data: {
+        ready: true,
+        features: [],
+        triggerKinds: ["cron"],
+        eventSources: [],
+        eventTypes: [],
+        triggers: {},
+        repoProviders: ["bitbucket_data_center", "github"],
+      },
+      isLoading: false,
+    } as never);
+    vi.mocked(AutomationService.createServerDraft).mockRejectedValue({
+      response: { status: 404 },
+    });
+    vi.mocked(AutomationService.validateDraft).mockResolvedValue({
+      valid: true,
+      errors: [],
+    });
+    mockUseUserProviders.mockReturnValue({
+      providers: ["bitbucket_data_center"],
+      isLoadingSettings: false,
+    });
+    mockUseSettings.mockReturnValue({
+      data: {
+        provider_tokens_set: {
+          bitbucket_data_center: "bitbucket.example.com",
+        },
+      },
+    });
+    mockUseGitRepositories.mockReturnValue(
+      createProviderRepositoriesQueryResult(
+        "bitbucket_data_center",
+        "DEM/demo-app",
+      ),
+    );
+
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(screen.getByTestId("automation-setup-repository-add"));
+    const option = screen.getByTestId(
+      "automation-setup-repository-option-DEM/demo-app",
+    );
+    expect(option).not.toBeDisabled();
+    await user.click(option);
+
+    expect(
+      screen.getByTestId("automation-setup-repository-value"),
+    ).toHaveTextContent("https://bitbucket.example.com/scm/DEM/demo-app.git");
+
+    await user.click(screen.getByTestId("automation-setup-test"));
+
+    await waitFor(() =>
+      expect(AutomationService.validateDraft).toHaveBeenCalledWith(
+        expect.objectContaining({
+          draft: expect.objectContaining({
+            repos: [
+              {
+                url: "https://bitbucket.example.com/scm/DEM/demo-app.git",
+                provider: "bitbucket_data_center",
+              },
+            ],
+          }),
+        }),
+      ),
+    );
+  });
+
   it("streams agent form updates field by field without overwriting user edits", async () => {
     vi.useFakeTimers();
     const conversationId = "conv-agent-updates";
