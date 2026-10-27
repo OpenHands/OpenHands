@@ -50,7 +50,7 @@ it("only offers revocation for approved secrets, never manual lifecycle buttons"
     secret_grant_revision: "rev",
   });
   const action = vi
-    .spyOn(CanvasExtensionsService, "backendAction")
+    .spyOn(CanvasExtensionsService, "revokeBackendSecrets")
     .mockResolvedValue(stopped);
   show();
   const revoke = await screen.findByRole("button", {

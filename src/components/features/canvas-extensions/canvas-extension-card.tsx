@@ -197,7 +197,7 @@ function CanvasBackendControls({
   const refs = extension.manifest?.backend?.secret_refs ?? [];
   const approved =
     status?.secret_grant_revision === status?.revision && !!status?.revision;
-  const action = async (operation: "revoke") => {
+  const revokeSecrets = async () => {
     if (!status?.revision) return;
     acting.current = true;
     generation.current += 1;
@@ -205,17 +205,13 @@ function CanvasBackendControls({
     setBusy(true);
     setError(false);
     try {
-      const result = await CanvasExtensionsService.backendAction(
+      const result = await CanvasExtensionsService.revokeBackendSecrets(
         extension.name,
-        operation,
-        status.revision,
-        refs,
         backend,
       );
       if (mounted.current && requestGeneration === generation.current) {
         setStatus(result);
-        if (operation === "revoke")
-          window.dispatchEvent(new Event("canvas-app-revoked"));
+        window.dispatchEvent(new Event("canvas-app-revoked"));
       }
     } catch {
       if (mounted.current && requestGeneration === generation.current)
@@ -254,13 +250,9 @@ function CanvasBackendControls({
                 type="button"
                 variant="secondary"
                 isDisabled={busy}
-                onClick={() => action("revoke")}
+                onClick={revokeSecrets}
               >
-                {t(
-                  approved
-                    ? I18nKey.SETTINGS$APPS_BACKEND_REVOKE
-                    : I18nKey.SETTINGS$APPS_BACKEND_GRANT,
-                )}
+                {t(I18nKey.SETTINGS$APPS_BACKEND_REVOKE)}
               </BrandButton>
             )}
           </div>

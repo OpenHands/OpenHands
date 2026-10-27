@@ -1,6 +1,7 @@
 import {
   AgentServerClient,
   CanvasExtensionsClient,
+  type AgentServerCanvasBackendStatusResponse,
 } from "@openhands/typescript-client/clients";
 import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
 import { isSdkHttpStatusError } from "#/api/agent-server-compatibility";
@@ -217,15 +218,7 @@ function normalizeInstallRequest(
   };
 }
 
-export interface CanvasAppBackendStatus {
-  name: string;
-  state: string;
-  revision?: string | null;
-  prepared_revision?: string | null;
-  secret_refs?: string[];
-  secret_grant_revision?: string | null;
-  detail?: string | null;
-}
+export type CanvasAppBackendStatus = AgentServerCanvasBackendStatusResponse;
 
 class CanvasExtensionsService {
   static async backendStatus(
@@ -237,28 +230,15 @@ class CanvasExtensionsService {
     if (!info.capabilities?.includes("canvas_app_backend_secret_grants_v1")) {
       throw new CanvasExtensionsUnsupportedError("missing-api");
     }
-    return mapUnsupported(() =>
-      client.get<CanvasAppBackendStatus>(
-        `${installedExtensionPath(name)}/backend`,
-      ),
-    );
+    return mapUnsupported(() => client.canvasExtensions.getBackendStatus(name));
   }
 
-  static async backendAction(
+  static async revokeBackendSecrets(
     name: string,
-    action: "prepare" | "start" | "stop" | "grant" | "revoke",
-    revision: string,
-    secretRefs: string[],
     backend: Backend,
   ): Promise<CanvasAppBackendStatus> {
-    const client = getClientForBackend(backend);
-    const path = `${installedExtensionPath(name)}/backend`;
-    if (action === "revoke") {
-      return client.delete<CanvasAppBackendStatus>(`${path}/secret-grant`);
-    }
-    return client.post<CanvasAppBackendStatus>(
-      `${path}/${action === "grant" ? "secret-grant" : action}`,
-      action === "grant" ? { revision, secret_refs: secretRefs } : { revision },
+    return mapUnsupported(() =>
+      getClientForBackend(backend).canvasExtensions.revokeBackendSecrets(name),
     );
   }
 
@@ -300,10 +280,7 @@ class CanvasExtensionsService {
       }
     }
     return mapUnsupported(() =>
-      client.patch<{ name: string; enabled: boolean }>(
-        installedExtensionPath(name),
-        { enabled, ...consent },
-      ),
+      client.canvasExtensions.setEnabled(name, enabled, consent),
     );
   }
 
