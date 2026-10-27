@@ -50,38 +50,12 @@ export const MARKDOWN_SANITIZE_SCHEMA: Schema = {
   attributes: {
     ...defaultSchema.attributes,
     "*": [...(defaultSchema.attributes?.["*"] ?? []), "className", "id"],
-    // `rel` and `target` are attacker-controlled here: this schema is what
-    // stands between untrusted markdown (agent output, thinking blocks,
-    // skill bodies) and the DOM, and the `anchor` component that would
-    // otherwise normalise them is only mapped in when a call site passes
-    // `includeStandard` — several do not.
-    //
-    // `rel` cannot use a plain allow list. rehype-sanitize's
-    // "[attrName, ...allowed-values]" form compares whole values, and a
-    // hand-built HAST tree can carry `rel` as the single string
-    // "noopener noreferrer", which no token list matches — that would strip
-    // the canonical safe-link value. A regexp is checked against each token
-    // of a parsed (array-valued) `rel` and against the whole string
-    // otherwise, so it has to answer correctly for both shapes.
-    //
-    // Hence the token-boundary match rather than `^(?!opener$)`: anchored to
-    // the whole value, that only rejected a value that is exactly "opener",
-    // so the string shape "noreferrer opener" kept its `opener`. The string
-    // shape is all-or-nothing — sanitize cannot split a string, so a string
-    // carrying `opener` loses its other tokens too, which is the safe
-    // outcome. `noopener` is untouched: the `(?:^|\s)` prefix means the
-    // `opener` inside it is not a token.
-    //
-    // Everything is allowed except `opener`: `target="_blank"` implies
-    // `noopener` in current browsers, and `rel="opener"` is the documented
-    // way to opt back *in*, handing the opened page a `window.opener` it can
-    // use to navigate this tab somewhere else (reverse tabnabbing). No other
-    // `rel` keyword grants a capability.
-    //
-    // `target` is restricted to the two values a document legitimately
-    // needs. An arbitrary value names a browsing context, so untrusted
-    // markdown could aim a link at an existing frame, and `_top` /
-    // `_parent` let it replace the whole app frame.
+    // Call sites without `includeStandard` skip the `anchor` component, so
+    // this schema alone guards `rel`/`target` on untrusted markdown.
+    // `rel`: drop the `opener` token (it hands the opened page
+    // `window.opener`). A regexp, not a value list, because sanitize tests it
+    // per token on an array `rel` but against the whole value on a string.
+    // `target`: only `_blank`/`_self`, so links can't retarget the app frame.
     a: [
       "href",
       "title",

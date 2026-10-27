@@ -317,9 +317,7 @@ describe("MARKDOWN_SANITIZE_SCHEMA", () => {
   });
 
   it("preserves rel even when it carries unusual but-safe tokens like `nofollow ugc`", () => {
-    // Every `rel` keyword except `opener` is passed through untouched:
-    // none of them grants the linked page a capability. `opener` is the
-    // one exception and has its own tests below.
+    // Every `rel` keyword except `opener` passes through untouched.
     const tree = sanitize(
       makeAnchor({
         href: "https://example.com",
@@ -334,10 +332,6 @@ describe("MARKDOWN_SANITIZE_SCHEMA", () => {
     expect(rel).toBe("nofollow ugc");
   });
 
-  // `target="_blank"` implies `noopener` in current browsers, and
-  // `rel="opener"` is the documented opt-out. Left in, untrusted markdown
-  // gets a `window.opener` handle on this tab and can navigate it
-  // elsewhere while the user is looking at the page it opened.
   it("drops a bare rel=opener", () => {
     const tree = sanitize(
       makeAnchor({
@@ -369,12 +363,7 @@ describe("MARKDOWN_SANITIZE_SCHEMA", () => {
   });
 
   it("drops the whole rel when opener rides along in the string shape", () => {
-    // The array shape above is what the production rehype-raw pipeline
-    // produces today, but a hand-built HAST tree — which is exactly what the
-    // fc208bc regression above exercises — can carry `rel` as one string.
-    // sanitize applies the regexp to the whole string there and cannot split
-    // it, so the safe answer is to drop the value entirely rather than let
-    // `opener` through alongside another token.
+    // sanitize can't split a string `rel`, so the whole value goes.
     const tree = sanitize(
       makeAnchor({
         href: "https://example.com",
@@ -403,8 +392,6 @@ describe("MARKDOWN_SANITIZE_SCHEMA", () => {
   });
 
   it("keeps noopener, which merely contains the letters of opener", () => {
-    // The boundary is what separates the keyword from the word it is part
-    // of: `noopener` is the safe default and must survive in both shapes.
     for (const value of ["noopener", "noopener noreferrer", "NOOPENER"]) {
       const tree = sanitize(
         makeAnchor({ href: "https://example.com", rel: value }),
@@ -428,8 +415,6 @@ describe("MARKDOWN_SANITIZE_SCHEMA", () => {
     expect(rel ?? "").toBe("");
   });
 
-  // An arbitrary `target` names a browsing context, so untrusted markdown
-  // could aim a link at an existing frame; `_top` replaces the app frame.
   it.each(["frame-name", "_top", "_parent"])("drops target=%s", (target) => {
     const tree = sanitize(
       makeAnchor({ href: "https://example.com", target }),
@@ -449,11 +434,8 @@ describe("MARKDOWN_SANITIZE_SCHEMA", () => {
   });
 });
 
-// The schema is the only thing protecting call sites that do not pass
-// `includeStandard`, because the `anchor` component — which hard-codes
-// target/rel — is not mapped in for them. `collapsible-thinking`,
-// `generic-event-message` and `skill-item-expanded` all render untrusted
-// model output that way, so this asserts the rendered DOM, not just HAST.
+// Without `includeStandard` the `anchor` component isn't used, so the
+// schema alone decides what reaches the DOM.
 describe("MarkdownRenderer without includeStandard", () => {
   it("does not let rel=opener reach the DOM", () => {
     const { container } = render(
