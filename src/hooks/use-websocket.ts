@@ -16,6 +16,10 @@ export interface WebSocketHookOptions {
   onClose?: (event: CloseEvent) => void;
   onMessage?: (event: MessageEvent) => void;
   onError?: (event: Event) => void;
+  /** Refresh an expired session key before retrying an auth-rejected socket. */
+  refreshSessionApiKey?: (
+    rejectedSessionApiKey: string | null | undefined,
+  ) => Promise<string | null | undefined>;
   reconnect?: {
     enabled?: boolean;
     maxAttempts?: number;
@@ -39,8 +43,19 @@ export const useWebSocket = (url: string, options?: WebSocketHookOptions) => {
 
   // Store options in a ref to avoid reconnecting when callbacks change
   const optionsRef = React.useRef(options);
+  // A refreshed key is used immediately, even before React Query state has
+  // propagated back through the provider props. Keep it until props catch up.
+  const refreshedSessionApiKeyRef = React.useRef<string | undefined>(undefined);
+  const sessionApiKeyBySocketRef = React.useRef(
+    new WeakMap<WebSocket, string | null | undefined>(),
+  );
+  const previousSessionApiKeyRef = React.useRef(options?.sessionApiKey);
   React.useEffect(() => {
     optionsRef.current = options;
+    if (options?.sessionApiKey !== previousSessionApiKeyRef.current) {
+      previousSessionApiKeyRef.current = options?.sessionApiKey;
+      refreshedSessionApiKeyRef.current = undefined;
+    }
   }, [options]);
 
   const connectWebSocket = React.useCallback(() => {
@@ -73,7 +88,10 @@ export const useWebSocket = (url: string, options?: WebSocketHookOptions) => {
 
     ws.onopen = (event) => {
       cancelHandshakeWatchdog();
-      sendWebSocketAuth(ws, optionsRef.current?.sessionApiKey);
+      const sessionApiKey =
+        refreshedSessionApiKeyRef.current ?? optionsRef.current?.sessionApiKey;
+      sessionApiKeyBySocketRef.current.set(ws, sessionApiKey);
+      sendWebSocketAuth(ws, sessionApiKey);
       setIsConnected(true);
       setError(null); // Clear any previous errors
       setIsReconnecting(false);
@@ -115,18 +133,24 @@ export const useWebSocket = (url: string, options?: WebSocketHookOptions) => {
         optionsRef.current?.onClose?.(event);
       }
 
-      // Attempt reconnection if enabled and allowed
-      // IMPORTANT: Only reconnect if this specific instance is allowed to reconnect
+      // Attempt reconnection if enabled and allowed. Authentication failures
+      // on Cloud need a fresh runtime key before another socket can be opened.
       const reconnectEnabled = optionsRef.current?.reconnect?.enabled ?? false;
       const maxAttempts =
         optionsRef.current?.reconnect?.maxAttempts ?? Infinity;
 
-      if (
-        reconnectEnabled &&
-        canReconnect &&
-        shouldReconnectRef.current &&
-        attemptCountRef.current < maxAttempts
-      ) {
+      const scheduleReconnect = () => {
+        // A manual disconnect/unmount can happen while a session-key refresh
+        // is in flight, so re-check this socket's permission before scheduling.
+        if (
+          !shouldReconnectRef.current ||
+          !allowedToReconnectRef.current.has(ws) ||
+          attemptCountRef.current >= maxAttempts
+        ) {
+          setIsReconnecting(false);
+          return;
+        }
+
         setIsReconnecting(true);
         attemptCountRef.current += 1;
 
@@ -142,6 +166,59 @@ export const useWebSocket = (url: string, options?: WebSocketHookOptions) => {
         reconnectTimeoutRef.current = setTimeout(() => {
           connectWebSocket();
         }, delay);
+      };
+
+      if (
+        reconnectEnabled &&
+        canReconnect &&
+        shouldReconnectRef.current &&
+        attemptCountRef.current < maxAttempts
+      ) {
+        const refreshSessionApiKey =
+          optionsRef.current?.refreshSessionApiKey;
+
+        if (event.code === 4001 && refreshSessionApiKey) {
+          // Do not enter the normal retry loop with a key the server has just
+          // rejected. A missing, unchanged, or failed refresh is terminal for
+          // this connection attempt; onError has already surfaced the failure.
+          setIsReconnecting(true);
+          const rejectedSessionApiKey = sessionApiKeyBySocketRef.current.has(ws)
+            ? sessionApiKeyBySocketRef.current.get(ws)
+            : refreshedSessionApiKeyRef.current ??
+              optionsRef.current?.sessionApiKey;
+
+          void Promise.resolve()
+            .then(() => refreshSessionApiKey(rejectedSessionApiKey))
+            .then((refreshedSessionApiKey) => {
+              if (
+                !shouldReconnectRef.current ||
+                !allowedToReconnectRef.current.has(ws)
+              ) {
+                return;
+              }
+
+              if (
+                !refreshedSessionApiKey ||
+                refreshedSessionApiKey === rejectedSessionApiKey
+              ) {
+                setIsReconnecting(false);
+                return;
+              }
+
+              refreshedSessionApiKeyRef.current = refreshedSessionApiKey;
+              scheduleReconnect();
+            })
+            .catch(() => {
+              if (
+                shouldReconnectRef.current &&
+                allowedToReconnectRef.current.has(ws)
+              ) {
+                setIsReconnecting(false);
+              }
+            });
+        } else {
+          scheduleReconnect();
+        }
       } else {
         setIsReconnecting(false);
       }

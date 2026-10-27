@@ -308,6 +308,101 @@ describe("useWebSocket messaging", () => {
 });
 
 describe("useWebSocket reconnection", () => {
+  it("refreshes a rejected session key before reconnecting after close code 4001", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const refetchConversation = vi.fn(async () => "fresh-session-key");
+    const refreshSessionApiKey = vi.fn(
+      async (rejectedSessionApiKey: string | null | undefined) => {
+        const refreshedSessionApiKey = await refetchConversation();
+        return refreshedSessionApiKey === rejectedSessionApiKey
+          ? undefined
+          : refreshedSessionApiKey;
+      },
+    );
+    renderWebSocket("ws://acme.test/events", {
+      sessionApiKey: "stale-session-key",
+      reconnect: { enabled: true },
+      refreshSessionApiKey,
+    });
+
+    const firstSocket = getSocket();
+    act(() => firstSocket.open());
+    expect(firstSocket.send).toHaveBeenCalledWith(
+      JSON.stringify({ type: "auth", session_api_key: "stale-session-key" }),
+    );
+
+    await act(async () => {
+      firstSocket.emitClose(4001, "Authentication failed");
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
+
+    expect(refreshSessionApiKey).toHaveBeenCalledWith("stale-session-key");
+    expect(refetchConversation).toHaveBeenCalledOnce();
+    expect(BrowserWebSocketDouble.instances).toHaveLength(2);
+    const replacementSocket = getSocket();
+    act(() => replacementSocket.open());
+    expect(replacementSocket.send).toHaveBeenCalledWith(
+      JSON.stringify({ type: "auth", session_api_key: "fresh-session-key" }),
+    );
+  });
+
+  it("stops retrying when a 4001 session-key refresh returns no new key", async () => {
+    vi.useFakeTimers();
+    const refetchConversation = vi.fn(async () => "stale-session-key");
+    const refreshSessionApiKey = vi.fn(
+      async (rejectedSessionApiKey: string | null | undefined) => {
+        const refreshedSessionApiKey = await refetchConversation();
+        return refreshedSessionApiKey === rejectedSessionApiKey
+          ? undefined
+          : refreshedSessionApiKey;
+      },
+    );
+    const { result } = renderWebSocket("ws://acme.test/events", {
+      sessionApiKey: "stale-session-key",
+      reconnect: { enabled: true },
+      refreshSessionApiKey,
+    });
+    const socket = getSocket();
+    act(() => socket.open());
+
+    await act(async () => {
+      socket.emitClose(4001, "Authentication failed");
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+
+    expect(refreshSessionApiKey).toHaveBeenCalledWith("stale-session-key");
+    expect(refetchConversation).toHaveBeenCalledOnce();
+    expect(BrowserWebSocketDouble.instances).toHaveLength(1);
+    expect(result.current.isReconnecting).toBe(false);
+    expect(result.current.error?.message).toContain("4001");
+  });
+
+  it("preserves the existing retry behavior for 4001 when no refresh callback is supplied", () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const { result } = renderWebSocket("ws://acme.test/events", {
+      sessionApiKey: "local-session-key",
+      reconnect: { enabled: true },
+    });
+    const firstSocket = getSocket();
+    act(() => firstSocket.open());
+    act(() => firstSocket.emitClose(4001, "Authentication failed"));
+
+    expect(result.current.isReconnecting).toBe(true);
+    act(() => vi.advanceTimersByTime(1_000));
+    expect(BrowserWebSocketDouble.instances).toHaveLength(2);
+    const replacementSocket = getSocket();
+    act(() => replacementSocket.open());
+    expect(replacementSocket.send).toHaveBeenCalledWith(
+      JSON.stringify({ type: "auth", session_api_key: "local-session-key" }),
+    );
+  });
+
   it("adds nonzero jitter to successive retry delays", () => {
     vi.useFakeTimers();
     vi.spyOn(Math, "random").mockReturnValue(0.5);
