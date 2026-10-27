@@ -112,6 +112,14 @@ export async function resolveConversationLaunch(
       profile.name === WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME
         ? llm?.active_profile
         : null);
+    // A dangling LLM reference with no active LLM profile to fall back to —
+    // the seeded `default` profile on a never-configured account, say — is
+    // rejected by the server with a raw `unresolved_profile_references` 422
+    // naming a profile the user never created. Fail the launch here with the
+    // not-configured guidance instead.
+    if (!llmProfileExists && !preferredLlmProfile && llm) {
+      throw new Error(i18n.t(I18nKey.HOME$LLM_NOT_CONFIGURED_MESSAGE));
+    }
     if (
       preferredLlmProfile &&
       preferredLlmProfile !== profile.llm_profile_ref

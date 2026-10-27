@@ -70,13 +70,14 @@ function arrange({
   activeId = null as string | null,
   activeLlm = "slow" as string | null,
   detail = {} as Record<string, unknown>,
+  llmProfiles = [{ name: "slow" }, { name: "fast" }],
 } = {}) {
   listAgentProfiles.mockResolvedValue({
     profiles: [REVIEWER, CLAUDE, DEFAULT],
     active_agent_profile_id: activeId,
   });
   listLlmProfiles.mockResolvedValue({
-    profiles: [{ name: "slow" }, { name: "fast" }],
+    profiles: llmProfiles,
     active_profile: activeLlm,
   });
   migrate.mockResolvedValue(true);
@@ -167,6 +168,35 @@ describe("resolveConversationLaunch", () => {
     await expect(launch()).rejects.toThrow(
       "CONVERSATION$NO_ACTIVE_AGENT_PROFILE",
     );
+  });
+
+  it("fails a dangling-LLM-ref launch with the not-configured guidance", async () => {
+    // The seeded `default` profile references the LLM profile "default",
+    // which a never-configured account does not have (and has no active
+    // LLM profile to fall back to) — the exact state from #18999.
+    arrange({
+      activeId: "profile-default",
+      activeLlm: null,
+      llmProfiles: [],
+      detail: { llm_profile_ref: "default" },
+    });
+
+    await expect(
+      launch({ agentProfileId: "profile-default" }),
+    ).rejects.toThrow("HOME$LLM_NOT_CONFIGURED_MESSAGE");
+  });
+
+  it("still overrides a dangling ref when an LLM profile is requested", async () => {
+    arrange({
+      activeId: "profile-default",
+      activeLlm: null,
+      llmProfiles: [],
+      detail: { llm_profile_ref: "default" },
+    });
+
+    await expect(
+      launch({ agentProfileId: "profile-default", llmProfile: "fast" }),
+    ).resolves.toMatchObject({ llmProfileOverride: "fast" });
   });
 
   it("lets Cloud launch its own default when no profile is active", async () => {
