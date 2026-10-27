@@ -1,0 +1,11 @@
+# after: branch head a79d8b94d
+$ DEBUG_PRINT_LIMIT=0 npx vitest run __tests__/routes/skills-settings.test.tsx
+
+ RUN  v5.0.0 .
+
+
+ Test Files  1 passed (1)
+      Tests  30 passed (30)
+   Start at  12:18:39
+   Duration  5.08s (tests 30%, import 29%, transform 26%, environment 10%, setup 4%)
+
