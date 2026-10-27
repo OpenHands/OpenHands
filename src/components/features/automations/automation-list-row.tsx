@@ -38,6 +38,7 @@ import {
 } from "#/components/features/home/featured-automations/automation-run-health";
 import type { AutomationInsightsProps } from "./automation-card";
 import { toLatestRunState } from "./to-latest-run-state";
+import { AutomationTagPill } from "./automation-tag-pill";
 import { resolveAutomationImpactStatement } from "#/utils/automation-catalog";
 import { isDraftAutomation } from "#/utils/automation-state";
 
@@ -157,6 +158,13 @@ export function AutomationListRow({
               {showDraftBadge ? (
                 <ActiveStatusBadge automation={automation} compact />
               ) : null}
+              {automation.tags?.map((tag) => (
+                <AutomationTagPill
+                  key={tag}
+                  tag={tag}
+                  className="px-1.5 py-0 text-text-secondary"
+                />
+              ))}
             </span>
             {hasMeta ? (
               <span className="col-start-2 mt-0.5 flex min-w-0 items-center gap-1.5 text-xs leading-4 text-text-secondary">
