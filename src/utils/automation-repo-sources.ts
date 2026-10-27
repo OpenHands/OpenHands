@@ -1,6 +1,7 @@
 import type { AutomationRepository } from "#/types/automation";
 import type { Provider } from "#/types/settings";
 import { getGitProviderBaseUrl } from "#/utils/utils";
+import { parseGitRemoteUrl } from "#/utils/parse-git-remote-url";
 
 /** A `repos` entry in a preset create or update request. */
 export type AutomationRepoSource = {
@@ -203,6 +204,20 @@ export function buildAutomationRepoSources(
     const provider = providerForAddress(url, hosts, cloneProviders);
     return provider ? { url, provider } : { url };
   });
+}
+
+/**
+ * How the automation pages name a saved repository: its `owner/repo` path, and
+ * for Bitbucket Data Center the project and repository without the `/scm/`
+ * clone prefix (or the context path before it).
+ */
+export function automationRepositoryLabel(
+  repository: AutomationRepository,
+): string {
+  const path = parseGitRemoteUrl(repository.url)?.repository ?? repository.url;
+  return repository.provider === "bitbucket_data_center"
+    ? path.replace(/^(?:.*\/)?scm\//, "")
+    : path;
 }
 
 /** Whether the form lists other repositories than the automation clones. */
