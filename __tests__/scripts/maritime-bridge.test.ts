@@ -299,6 +299,28 @@ describe("createMaritimeBridge", () => {
     expect(credentials.getSessionKey("agent-1")).toBeNull();
   });
 
+  it("treats a sleep that races another one as done once the agent is asleep", async () => {
+    const api = fakeApi(["sleeping"]);
+    api.sleepAgent.mockRejectedValueOnce(
+      Object.assign(new Error("Internal server error"), { status: 500 }),
+    );
+    const { bridge } = signedInBridge(api);
+
+    const result = await bridge.sleepAgent("agent-1");
+
+    expect(result.status).toBe("sleeping");
+  });
+
+  it("still reports a failed sleep when the agent is not asleep", async () => {
+    const api = fakeApi(["active"]);
+    api.sleepAgent.mockRejectedValueOnce(
+      Object.assign(new Error("Internal server error"), { status: 500 }),
+    );
+    const { bridge } = signedInBridge(api);
+
+    await expect(bridge.sleepAgent("agent-1")).rejects.toThrow("Internal server error");
+  });
+
   it("signs out without dropping agents' session keys", () => {
     const { bridge, credentials } = signedInBridge();
     credentials.saveSessionKey("agent-1", "k");

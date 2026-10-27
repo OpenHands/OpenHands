@@ -24,6 +24,8 @@ import {
   DEFAULT_MARITIME_IMAGE_REPOSITORY,
   MARITIME_STATUS_ACTIVE,
   MARITIME_STATUS_ERROR,
+  MARITIME_STATUS_SLEEPING,
+  MARITIME_STATUS_STOPPED,
   MaritimeApiError,
   agentServerHost,
   buildImageName,
@@ -375,7 +377,21 @@ export function createMaritimeBridge({
 
     async sleepAgent(agentId) {
       requireSignedIn();
-      return summarize(await client.sleepAgent(agentId));
+      try {
+        return summarize(await client.sleepAgent(agentId));
+      } catch (error) {
+        // A sleep that races another one (a second click, Maritime's own idle
+        // sleep) fails at Maritime with a bare 500. The agent is asleep either
+        // way, which is what the user asked for.
+        const current = await client.getAgent(agentId).catch(() => null);
+        if (
+          current?.status === MARITIME_STATUS_SLEEPING ||
+          current?.status === MARITIME_STATUS_STOPPED
+        ) {
+          return summarize(current);
+        }
+        throw error;
+      }
     },
 
     async deleteAgent(agentId) {
