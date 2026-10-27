@@ -1,6 +1,6 @@
 # Oracle profile UI verification
 
-These screenshots were captured against the local mock profile UI at `http://127.0.0.1:3001/settings/llm`.
+These screenshots were captured against the local mock profile UI at `http://127.0.0.1:3191/settings/llm`.
 
 - [`oracle-profile-entry.png`](./oracle-profile-entry.png) shows the discoverable Oracle entry and its `Configure Oracle` action.
 - [`oracle-profile-editor.png`](./oracle-profile-editor.png) shows the Oracle editor with the reserved profile name locked and the translated helper text.
