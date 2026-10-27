@@ -52,7 +52,7 @@ Source: `src/components/features/sidebar/sidebar-conversation-list.tsx`, `src/co
 - `F04.archive`: ⋮ → Archive Conversation asks for confirmation, hides and unpins the row, and leaves the conversation if it was open.
 - `F04.show-archived-unarchive`: Show archived brings archived rows back with an `Archived` chip, a dimmed title and a grey archive icon in place of the status dot; Unarchive restores a row without confirmation. A conversation whose runtime is missing and cannot be resumed counts as archived: it is hidden by default, shown the same way under Show archived, and its ⋮ menu offers neither Archive nor Unarchive.
 - `F04.delete`: ⋮ → Delete Conversation asks for confirmation, deletes it on the server and leaves it if it was open.
-- `F04.delete-all`: View → Delete all asks for confirmation with a count and deletes every conversation. Known failure (reproduced 2026-10-17, [#17919](https://github.com/OpenHands/OpenHands/issues/17919)): only loaded pages are deleted; with 26 stored conversations and 20 loaded, six remain after confirming Delete all.
+- `F04.delete-all`: View → Delete all asks for confirmation with a count and deletes every conversation. Known failure (reproduced 2026-10-27, [#17919](https://github.com/OpenHands/OpenHands/issues/17919)): only loaded pages are deleted; with 26 stored conversations and 20 loaded, six remain after confirming Delete all.
 - `F04.collapsed-rail`: the collapsed sidebar rail shows no conversation list; expanding brings it back.
 - `F04.phone`: at 390 px the list lives in the sidebar drawer, fits the viewport, and picking a row closes the drawer.
 - `F04.cloud-picker`: on a Cloud backend the folder-plus picker shows provider tabs and a repository search; a picked repository starts a conversation.
