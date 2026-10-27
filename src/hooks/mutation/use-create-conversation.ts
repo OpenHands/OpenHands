@@ -39,6 +39,10 @@ export interface CreateConversationVariables {
   plugins?: PluginSpec[];
   workingDir?: string;
   workspaceMode?: WorkspaceMode;
+  // Cloud only: start inside this existing sandbox instead of provisioning
+  // one (the sidebar's "New Conversation in Sandbox"). Local backends have no
+  // sandboxes, and the local launch path ignores it.
+  sandboxId?: string;
   // Launch from a specific AgentProfile (local backend). When omitted, the
   // active AgentProfile (if any) is used so home-composed conversations
   // launch from the user's selected profile (#3727).
@@ -109,11 +113,11 @@ export const useCreateConversation = ({
         agentProfileId,
         sandboxSpecId,
         llmProfile,
+        sandboxId,
       } = variables;
 
       // The active AgentProfile is the default launch profile for new
-      // conversations (#3727), on both local and cloud. sandboxId is unused
-      // here.
+      // conversations (#3727), on both local and cloud.
       const conversation = await launchConversation(
         {
           queryClient,
@@ -143,6 +147,7 @@ export const useCreateConversation = ({
           parentConversationId,
           agentType,
           ...(llmProfile ? { llmProfile } : {}),
+          ...(sandboxId ? { sandboxId } : {}),
           // Cloud only; a local launch reads the toggle itself and gates it
           // on the launched profile's router. Only stamped when on, so the
           // e2e snapshot tests that assert the exact createConversation

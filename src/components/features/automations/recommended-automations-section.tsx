@@ -438,7 +438,7 @@ export function RecommendedAutomationsSection({
     return (
       <section
         data-testid="recommended-automations-section"
-        className="mt-3 flex flex-col gap-4"
+        className={cn("flex flex-col gap-4", filterChips ? "mt-0" : "mt-3")}
       >
         {filterChips}
         <AutomationsFilteredEmptyState
@@ -467,7 +467,7 @@ export function RecommendedAutomationsSection({
           scrollableGrid ? "recommended-automations-scroll-area" : undefined
         }
         className={cn(
-          "mt-3",
+          filterChips ? "mt-0" : "mt-3",
           extensionModuleCardGridContainerClassName,
           scrollableGrid &&
             "min-h-0 flex-1 overflow-y-auto custom-scrollbar-always",

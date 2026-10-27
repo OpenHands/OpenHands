@@ -73,6 +73,19 @@ describe("dev-static MARS web bridge env", () => {
     expect(buildMarsWebEnv("static", config)).toEqual({ MARS_WEB: "0" });
   });
 
+  it("tells the ingress bridge where to keep sign-ins and how to encrypt them", () => {
+    const config = {
+      sessionApiKey: "stack-key",
+      stateDir: "/state",
+      secretKey: "settings-key",
+    } as never;
+    expect(buildMarsWebEnv("ingress", config)).toEqual({
+      MARS_WEB_KEY: "stack-key",
+      MARS_STATE_DIR: "/state",
+      OH_SECRET_KEY: "settings-key",
+    });
+  });
+
   it("mounts nothing when the stack has no session key", () => {
     expect(buildMarsWebEnv("ingress", {} as never)).toEqual({ MARS_WEB: "0" });
   });

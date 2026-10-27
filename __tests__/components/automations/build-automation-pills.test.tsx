@@ -69,6 +69,31 @@ describe("buildAutomationMetadataPills", () => {
     expect(screen.getByTestId("automation-source-logo")).toBeInTheDocument();
   });
 
+  it("shows each repository the automation clones, with its full address on hover", () => {
+    const pills = buildAutomationMetadataPills(
+      buildAutomation({
+        trigger: { type: "cron", schedule: "0 9 * * *" },
+        repositories: [
+          { url: "acme/widgets", provider: "github" },
+          { url: "https://github.com/acme/docs" },
+        ],
+      }),
+      "unused",
+    );
+
+    renderPills(pills);
+
+    expect(screen.getByTestId("pill-repository")).toHaveTextContent(
+      "acme/widgets",
+    );
+    expect(screen.getByTestId("pill-repository-1")).toHaveTextContent(
+      "acme/docs",
+    );
+    expect(
+      screen.getByTitle("https://github.com/acme/docs"),
+    ).toBeInTheDocument();
+  });
+
   it("omits the source pill when the event has no source", () => {
     const pills = buildAutomationMetadataPills(
       buildAutomation({
