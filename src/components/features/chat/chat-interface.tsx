@@ -37,6 +37,8 @@ import { useErrorMessageStore } from "#/stores/error-message-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { SERVER_CONNECTION_ERROR_MESSAGE } from "#/constants/server-connection-error";
 import { ErrorMessageBanner } from "./error-message-banner";
+import { GitDriftBanner } from "./git-drift-banner";
+import { useGitResumeDrift } from "#/hooks/use-git-resume-drift";
 import { SkillInstallRestartBanner } from "./skill-install-restart-banner";
 import { LlmNotConfiguredBanner } from "#/components/features/home/llm-not-configured-banner";
 import { useLlmConfigured } from "#/hooks/use-llm-configured";
@@ -148,6 +150,23 @@ export function ChatInterface({
   const { curAgentState } = useAgentState();
   const { isPlanningAgentRunning } = usePlanningAgentState();
   const { handleBuildPlanClick } = useHandleBuildPlanClick();
+
+  const {
+    drift,
+    isChecking: isGitDriftChecking,
+    refreshBaseline: refreshGitBaseline,
+  } = useGitResumeDrift(curAgentState);
+  // Local dismissal: hide the banner until the next resume/resume cycle.
+  const [gitDriftDismissed, setGitDriftDismissed] = React.useState(false);
+  React.useEffect(() => {
+    // Reset dismissal flag whenever we *enter* a resume-ready state, so the
+    // banner comes back on the next resume after the user dismisses it once.
+    if (curAgentState === ("RUNNING" as AgentState)) {
+      setGitDriftDismissed(false);
+    }
+  }, [curAgentState]);
+  const showGitDriftBanner =
+    drift?.detected && !gitDriftDismissed && !isGitDriftChecking;
 
   // Cloud conversations whose sandbox is MISSING or ERROR are read-only:
   // the sandbox is gone and cannot be resumed, so we hide the chat input
@@ -691,6 +710,19 @@ export function ChatInterface({
                     ? () => navigate("/settings/agents")
                     : undefined
                 }
+              />
+            )}
+
+            {showGitDriftBanner && drift && (
+              <GitDriftBanner
+                summary={drift.summary ?? "Workspace has changed"}
+                previousHead={drift.previousHead}
+                currentHead={drift.currentHead}
+                onRefreshBaseline={() => {
+                  refreshGitBaseline();
+                  setGitDriftDismissed(true);
+                }}
+                onDismiss={() => setGitDriftDismissed(true)}
               />
             )}
 
