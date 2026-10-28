@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 480" width="100%" height="100%">
+  <defs>
+    <style>
+      .bg { fill: #0f172a; }
+      .card { fill: #1e293b; stroke: #334155; stroke-width: 1.5; rx: 12; }
+      .header-bg { fill: #1e293b; }
+      .title { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 18px; font-weight: 600; fill: #f8fafc; }
+      .subtitle { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 13px; fill: #94a3b8; }
+      .bubble { fill: #334155; rx: 8; }
+      .bubble-text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 14px; fill: #e2e8f0; }
+      .thinking-box { fill: #1e293b; stroke: #475569; stroke-width: 1; rx: 6; }
+      .thinking-title { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 13px; font-weight: 500; fill: #cbd5e1; }
+      .thinking-content { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 12px; fill: #94a3b8; font-style: italic; }
+      .tag { font-family: monospace; font-size: 11px; font-weight: bold; }
+      .tag-before { fill: #ef4444; }
+      .tag-after { fill: #10b981; }
+      .tag-bg-before { fill: rgba(239, 68, 68, 0.15); stroke: #ef4444; stroke-width: 1; rx: 4; }
+      .tag-bg-after { fill: rgba(16, 185, 129, 0.15); stroke: #10b981; stroke-width: 1; rx: 4; }
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect width="960" height="480" class="bg" />
+
+  <!-- Top Banner -->
+  <text x="40" y="45" class="title">OpenHands #18476: Render ACP &amp; Extended Reasoning in FinishAction</text>
+  <text x="40" y="70" class="subtitle">Comparison of terminal FinishAction event message rendering in Agent Canvas</text>
+
+  <!-- Panel Before -->
+  <g transform="translate(40, 95)">
+    <rect width="420" height="345" class="card" />
+    <rect x="20" y="20" width="80" height="24" class="tag-bg-before" />
+    <text x="60" y="36" class="tag tag-before" text-anchor="middle">BEFORE</text>
+    <text x="115" y="37" class="subtitle">reasoning_content dropped</text>
+
+    <!-- Chat Area Simulation -->
+    <g transform="translate(20, 70)">
+      <text x="0" y="20" class="subtitle">Terminal FinishAction Event:</text>
+
+      <!-- Message bubble only -->
+      <g transform="translate(0, 40)">
+        <rect width="380" height="70" class="bubble" />
+        <text x="16" y="32" class="bubble-text">Task completed successfully.</text>
+        <text x="16" y="52" class="subtitle">All tests passed and clean tree maintained.</text>
+      </g>
+
+      <g transform="translate(0, 140)">
+        <rect width="380" height="90" fill="#0f172a" stroke="#ef4444" stroke-dasharray="4" stroke-width="1.5" rx="8" />
+        <text x="190" y="42" fill="#ef4444" font-family="-apple-system, sans-serif" font-size="13px" font-weight="600" text-anchor="middle">⚠️ Reasoning Omitted</text>
+        <text x="190" y="65" fill="#94a3b8" font-family="-apple-system, sans-serif" font-size="12px" text-anchor="middle">event.reasoning_content was not extracted or rendered</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- Panel After -->
+  <g transform="translate(500, 95)">
+    <rect width="420" height="345" class="card" />
+    <rect x="20" y="20" width="80" height="24" class="tag-bg-after" />
+    <text x="60" y="36" class="tag tag-after" text-anchor="middle">AFTER</text>
+    <text x="115" y="37" class="subtitle">CollapsibleThinking rendered</text>
+
+    <!-- Chat Area Simulation -->
+    <g transform="translate(20, 70)">
+      <text x="0" y="20" class="subtitle">Terminal FinishAction Event:</text>
+
+      <!-- Collapsible Thinking Section -->
+      <g transform="translate(0, 35)">
+        <rect width="380" height="95" class="thinking-box" />
+        <g transform="translate(12, 22)">
+          <!-- Chevron down -->
+          <path d="M0 2 L5 7 L10 2" stroke="#cbd5e1" stroke-width="1.5" fill="none" />
+          <!-- Lightbulb -->
+          <circle cx="22" cy="4" r="5" stroke="#f59e0b" fill="#fef3c7" stroke-width="1" />
+          <text x="35" y="8" class="thinking-title">Thinking Process (Expanded)</text>
+        </g>
+        <!-- Expanded text -->
+        <text x="16" y="55" class="thinking-content">"Reviewed the test output and confirmed all 26 test files passed.</text>
+        <text x="16" y="75" class="thinking-content">Ready to finalize task and report completion."</text>
+      </g>
+
+      <!-- Message bubble -->
+      <g transform="translate(0, 145)">
+        <rect width="380" height="70" class="bubble" />
+        <text x="16" y="32" class="bubble-text">Task completed successfully.</text>
+        <text x="16" y="52" class="subtitle">All tests passed and clean tree maintained.</text>
+      </g>
+    </g>
+  </g>
+</svg>
