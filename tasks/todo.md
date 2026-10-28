@@ -26,7 +26,7 @@ Source: `tasks/plan.md` (implements the approved spec
 
 - [x] End-to-end: hover → Reply → card → send → envelope in fixture (e2e "reply quote rides the message" + unit fixtures)
 - [x] Retry keeps envelope (pending-user-messages.test.tsx:187-212); disable-path audit clean (gating in canReply: planning/plan; image-only → null quote; BTW/regular-bubble surfaces never render the Reply-bearing component)
-- [ ] Review with human before proceeding
+- [x] Review with human before proceeding (approved 2026-10-28)
 
 ## Phase 3: Rendering + jump
 
