@@ -34,7 +34,9 @@ import { baselineLines, parseBaseline, withBaseline } from "./lib/baseline.mjs";
 import {
   affectedFamilies,
   familyHead,
+  parseServerLine,
   parseSourceLine,
+  serverMapIds,
   specMatches,
 } from "./lib/map-sources.mjs";
 import { routePattern } from "./lib/route-pattern.mjs";
@@ -943,6 +945,85 @@ test("map affected reads a path list and classifies its paths", () => {
   assert.deepEqual(json.nonUserFacing, ["docs/README.md"]);
   // What `map affected` does with no flags depends on the index's baseline
   // line; the baseline test below covers both states.
+});
+
+test("a Server: line names Agent Server IDs, only in the file's head", () => {
+  assert.deepEqual(parseServerLine("Server: F13, F15.changes, F16."), {
+    ids: ["F13", "F15.changes", "F16"],
+    invalid: [],
+  });
+  assert.deepEqual(parseServerLine("Server: F15, `F14`, git"), {
+    ids: ["F15"],
+    invalid: ["`F14`", "git"],
+  });
+  const head = familyHead(
+    "# F08\n\nText.\n\nSource: `src/routes/files-tab.tsx`.\n\nServer: F15.\n\n## Sub-features\n\nServer: F99\n",
+  );
+  assert.deepEqual(head.server.ids, ["F15"]);
+  assert.deepEqual(familyHead("# F01\n\n## Sub-features\n").server, {
+    ids: [],
+    invalid: [],
+  });
+});
+
+test("the server map declares its families and sub-feature IDs", () => {
+  const ids = serverMapIds([
+    {
+      file: "F15-git.md",
+      text: "# Git\n\n## Sub-features\n\n- `F15.changes`: x\n- `F15.diff`: y\n\n## How to get to it (agent POV)\n\n- `F15.not-declared` in prose\n",
+    },
+    { file: "README.md", text: "- `F99.x`: index" },
+  ]);
+  assert.deepEqual([...ids].sort(), ["F15", "F15.changes", "F15.diff"]);
+});
+
+test("map check --server-map checks Server: IDs against the server map", () => {
+  const sdk = mkdtempSync(join(tmpdir(), "servermap-"));
+  const map = join(
+    sdk,
+    ".agents",
+    "skills",
+    "verify-agent-server",
+    "references",
+    "feature-map",
+  );
+  mkdirSync(map, { recursive: true });
+  // Every family a shipped Server: line names, except F16.
+  for (const n of Array.from({ length: 30 }, (_, i) => i + 1)) {
+    if (n === 16) continue;
+    const id = `F${String(n).padStart(2, "0")}`;
+    writeFileSync(
+      join(map, `${id}-x.md`),
+      `# ${id}\n\n## Sub-features\n\n- \`${id}.x\`: x\n`,
+    );
+  }
+  const res = spawnSync(
+    process.execPath,
+    [cli, "map", "check", "--server-map", sdk],
+    { encoding: "utf8" },
+  );
+  const json = JSON.parse(res.stdout);
+  assert.equal(res.status, 1, res.stdout);
+  assert.equal(json.serverMap, map);
+  assert.ok(
+    json.problems.includes(
+      "F08-workspace-files-and-changes.md: Server: F16 is not in the verify-agent-server map",
+    ),
+    res.stdout,
+  );
+  writeFileSync(join(map, "F16-x.md"), "# F16\n\n## Sub-features\n");
+  const ok = spawnSync(
+    process.execPath,
+    [cli, "map", "check", "--server-map", map],
+    { encoding: "utf8" },
+  );
+  assert.equal(ok.status, 0, ok.stdout);
+  const missing = spawnSync(
+    process.execPath,
+    [cli, "map", "check", "--server-map", join(sdk, "nope")],
+    { encoding: "utf8" },
+  );
+  assert.equal(missing.status, 2, missing.stdout + missing.stderr);
 });
 
 test("map check rejects a Source: path that is gone, and the shipped map is clean", () => {
