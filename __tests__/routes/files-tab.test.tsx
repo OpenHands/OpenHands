@@ -578,6 +578,116 @@ describe("FilesTab", () => {
     );
   });
 
+  // Cloud backends hand back the file as a `data:` URL, which browsers refuse
+  // to open as a top-level page (OHE-3735).
+  describe("open in new window on a Cloud backend", () => {
+    const createObjectURL = vi.fn();
+    const revokeObjectURL = vi.fn();
+
+    function cloudMarkdownFile(text: string) {
+      return {
+        data: {
+          path: "README.md",
+          kind: "text",
+          text,
+          staticUrl: `data:text/markdown;charset=utf-8;base64,${btoa(text)}`,
+          mimeType: "text/markdown",
+        },
+        isLoading: false,
+        isError: false,
+      };
+    }
+
+    beforeEach(() => {
+      let created = 0;
+      createObjectURL.mockReset().mockImplementation(() => {
+        created += 1;
+        return `blob:http://localhost/file-${created}`;
+      });
+      revokeObjectURL.mockReset();
+      // jsdom does not implement object URLs.
+      vi.stubGlobal(
+        "URL",
+        class extends URL {
+          static createObjectURL = createObjectURL;
+
+          static revokeObjectURL = revokeObjectURL;
+        },
+      );
+    });
+
+    it("opens the file's text as plain text", async () => {
+      // Arrange
+      useWorkspaceFileContentMock.mockReturnValue(
+        cloudMarkdownFile("# Hello\n\nSome **bold** text"),
+      );
+
+      // Act
+      openFile("README.md");
+      renderTab();
+
+      // Assert
+      const link = await screen.findByTestId("files-tab-open-in-new-window");
+      expect(link).toHaveAttribute("href", "blob:http://localhost/file-1");
+      const blob: Blob = createObjectURL.mock.calls[0][0];
+      expect(blob.type).toBe("text/plain;charset=utf-8");
+      await expect(blob.text()).resolves.toBe("# Hello\n\nSome **bold** text");
+    });
+
+    it("opens the current file body after Refresh", async () => {
+      // Arrange
+      useWorkspaceFileContentMock.mockReturnValue(cloudMarkdownFile("# Old"));
+      const user = userEvent.setup();
+      openFile("README.md");
+      renderTab();
+      await screen.findByTestId("files-tab-open-in-new-window");
+      useWorkspaceFileContentMock.mockReturnValue(cloudMarkdownFile("# New"));
+
+      // Act
+      await user.click(screen.getByTestId("files-tab-refresh"));
+
+      // Assert
+      await waitFor(() => {
+        expect(
+          screen.getByTestId("files-tab-open-in-new-window"),
+        ).toHaveAttribute("href", "blob:http://localhost/file-2");
+      });
+      await expect(createObjectURL.mock.calls[1][0].text()).resolves.toBe(
+        "# New",
+      );
+      expect(revokeObjectURL).toHaveBeenCalledWith(
+        "blob:http://localhost/file-1",
+      );
+    });
+
+    it("offers no link for a file without decoded text", () => {
+      // Arrange
+      useWorkspaceFileContentMock.mockReturnValue({
+        data: {
+          path: "logo.png",
+          kind: "image",
+          text: null,
+          staticUrl: "data:image/png;base64,iVBORw0KGgo=",
+          mimeType: "image/png",
+        },
+        isLoading: false,
+        isError: false,
+      });
+
+      // Act
+      openFile("logo.png");
+      renderTab();
+
+      // Assert
+      expect(
+        screen.getByTestId("files-tab-content-mode-toggle"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("files-tab-open-in-new-window"),
+      ).not.toBeInTheDocument();
+    });
+  });
+
   describe("conversation switching", () => {
     it("ignores a stale selection from another conversation", async () => {
       useFilesTabStore.setState({

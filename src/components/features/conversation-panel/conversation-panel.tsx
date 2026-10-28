@@ -64,6 +64,7 @@ import { uniqueById } from "#/utils/unique-by-id";
 import {
   isEffectivelyArchivedConversation,
   isMissingSandboxStatus,
+  isRuntimeUnavailableSandboxStatus,
 } from "#/utils/conversation-archive-status";
 import type { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
 
@@ -729,6 +730,27 @@ export function ConversationPanel({
     [createConversation, isCreatingConversationFlow, navigate],
   );
 
+  // Mirrors the `/new` command: the new conversation reuses the row's sandbox
+  // and nothing else. No parent id, so it shows up in this list; no
+  // repository, so the backend doesn't touch the shared working tree's branch.
+  const handleNewConversationInSandbox = React.useCallback(
+    (sandboxId: string) => {
+      if (isCreatingConversationFlow) return;
+      createConversation(
+        {
+          sandboxId,
+          entryPoint: "sidebar_new_conversation_in_sandbox",
+        },
+        {
+          onSuccess: (data) => {
+            navigate(`/conversations/${data.conversation_id}`);
+          },
+        },
+      );
+    },
+    [createConversation, isCreatingConversationFlow, navigate],
+  );
+
   const handleDeleteProject = React.useCallback(
     (conversationId: string, title: string) => {
       setConfirmDeleteModalVisible(true);
@@ -890,6 +912,11 @@ export function ConversationPanel({
       const runtimeMissing = isMissingSandboxStatus(
         conversation.sandbox_status,
       );
+      // "New Conversation in Sandbox" needs a sandbox the backend can start a
+      // conversation in: Cloud rows only (the local adapter carries no sandbox
+      // id), and not one whose runtime is MISSING or ERROR, which the start
+      // task rejects. A PAUSED sandbox is resumed by the backend.
+      const sandboxId = conversation.sandbox_id;
       if (compact) {
         return (
           <CompactConversationRow
@@ -991,6 +1018,12 @@ export function ConversationPanel({
                   : undefined
               }
               onStop={() => handleStopConversation(conversation.id)}
+              onNewConversationInSandbox={
+                sandboxId &&
+                !isRuntimeUnavailableSandboxStatus(conversation.sandbox_status)
+                  ? () => handleNewConversationInSandbox(sandboxId)
+                  : undefined
+              }
               onEditTags={
                 activeBackend.kind === "local"
                   ? () => handleEditTags(conversation.id)
@@ -1046,6 +1079,7 @@ export function ConversationPanel({
       handleConversationTitleChange,
       handleDeleteProject,
       handleEditTags,
+      handleNewConversationInSandbox,
       handleStopConversation,
       handleUnarchiveProject,
       isRowArchived,

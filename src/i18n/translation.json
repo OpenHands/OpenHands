@@ -20015,6 +20015,24 @@
     "ca": "Comparteix públicament",
     "id": "Bagikan Publik"
   },
+  "CONVERSATION$SHARE_WITH_ORG_USERS": {
+    "en": "Share with Org users",
+    "ja": "組織のユーザーと共有",
+    "zh-CN": "与组织用户共享",
+    "zh-TW": "與組織使用者共享",
+    "ko-KR": "조직 사용자와 공유",
+    "no": "Del med organisasjonsbrukere",
+    "it": "Condividi con gli utenti dell'organizzazione",
+    "pt": "Compartilhar com usuários da organização",
+    "es": "Compartir con usuarios de la organización",
+    "ar": "المشاركة مع مستخدمي المؤسسة",
+    "fr": "Partager avec les utilisateurs de l'organisation",
+    "tr": "Kuruluş kullanıcılarıyla paylaş",
+    "de": "Mit Organisationsbenutzern teilen",
+    "uk": "Поділитися з користувачами організації",
+    "ca": "Comparteix amb els usuaris de l'organització",
+    "id": "Bagikan dengan pengguna organisasi"
+  },
   "CONVERSATION$FAILED_TO_UPDATE_PUBLIC_SHARING": {
     "en": "Failed to update public sharing",
     "ja": "公開共有の更新に失敗しました",
@@ -39472,5 +39490,23 @@
     "uk": "Сервер MCP",
     "ca": "Servidor MCP",
     "id": "Server MCP"
+  },
+  "CONVERSATION$NEW_IN_SANDBOX": {
+    "en": "New Conversation in Sandbox",
+    "ja": "サンドボックスで新規会話",
+    "zh-CN": "在沙箱中新建对话",
+    "zh-TW": "在沙箱中新增對話",
+    "ko-KR": "샌드박스에서 새 대화",
+    "no": "Ny samtale i sandkassen",
+    "it": "Nuova conversazione nella sandbox",
+    "pt": "Nova conversa no sandbox",
+    "es": "Nueva conversación en el sandbox",
+    "ar": "محادثة جديدة في بيئة الاختبار",
+    "fr": "Nouvelle conversation dans le sandbox",
+    "tr": "Sandbox içinde yeni sohbet",
+    "de": "Neue Unterhaltung in der Sandbox",
+    "uk": "Нова розмова в пісочниці",
+    "ca": "Conversa nova al sandbox",
+    "id": "Percakapan baru di sandbox"
   }
 }
