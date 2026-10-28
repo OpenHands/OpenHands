@@ -1,5 +1,6 @@
 import React from "react";
 import { CopyToClipboardButton } from "./copy-to-clipboard-button";
+import { copyToClipboard } from "#/utils/copy-to-clipboard";
 
 export function CopyableContentWrapper({
   text,
@@ -12,8 +13,9 @@ export function CopyableContentWrapper({
   const [isCopied, setIsCopied] = React.useState(false);
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(text);
-    setIsCopied(true);
+    if (await copyToClipboard(text)) {
+      setIsCopied(true);
+    }
   };
 
   React.useEffect(() => {

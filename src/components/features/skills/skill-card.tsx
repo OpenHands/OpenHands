@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import type { SkillInfo } from "#/types/settings";
 import { cn } from "#/utils/utils";
+import { copyToClipboard } from "#/utils/copy-to-clipboard";
 import CopyIcon from "#/icons/copy.svg?react";
 import CheckmarkIcon from "#/icons/checkmark.svg?react";
 import { CirclePlusCheckToggle } from "#/components/shared/buttons/circle-plus-check-toggle";
@@ -44,8 +45,9 @@ export function SkillCard({
       return;
     }
 
-    await navigator.clipboard.writeText(skill.source);
-    setSourceCopied(true);
+    if (await copyToClipboard(skill.source)) {
+      setSourceCopied(true);
+    }
   };
 
   const handleKeyDown = (event: React.KeyboardEvent) => {

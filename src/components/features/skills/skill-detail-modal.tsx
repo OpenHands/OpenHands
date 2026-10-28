@@ -7,6 +7,7 @@ import { SettingsSwitch } from "#/components/features/settings/settings-switch";
 import { I18nKey } from "#/i18n/declaration";
 import type { SkillInfo } from "#/types/settings";
 import { cn } from "#/utils/utils";
+import { copyToClipboard } from "#/utils/copy-to-clipboard";
 import { modalTitleLgClassName } from "#/utils/modal-classes";
 import CopyIcon from "#/icons/copy.svg?react";
 import CheckmarkIcon from "#/icons/checkmark.svg?react";
@@ -84,8 +85,9 @@ export function SkillDetailModal({
       return;
     }
 
-    await navigator.clipboard.writeText(skill.source);
-    setSourceCopied(true);
+    if (await copyToClipboard(skill.source)) {
+      setSourceCopied(true);
+    }
   };
 
   React.useEffect(() => {

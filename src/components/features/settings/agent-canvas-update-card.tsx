@@ -28,6 +28,7 @@ import DockerIcon from "#/icons/docker.svg?react";
 import NpmIcon from "#/icons/npm.svg?react";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
+import { copyToClipboard } from "#/utils/copy-to-clipboard";
 
 const COPY_FEEDBACK_MS = 2000;
 
@@ -75,9 +76,10 @@ function UpdateCommandTabs() {
     }
   }, [selectedTab]);
 
-  const copyCommand = useCallback(() => {
-    void navigator.clipboard?.writeText(command);
-    setCopied(true);
+  const copyCommand = useCallback(async () => {
+    if (await copyToClipboard(command)) {
+      setCopied(true);
+    }
     if (copiedTimeoutRef.current !== null) {
       window.clearTimeout(copiedTimeoutRef.current);
     }

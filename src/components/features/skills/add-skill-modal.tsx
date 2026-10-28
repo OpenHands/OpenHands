@@ -9,6 +9,7 @@ import {
 } from "#/constants/skills-docs";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
+import { copyToClipboard } from "#/utils/copy-to-clipboard";
 import { modalTitleLgClassName } from "#/utils/modal-classes";
 import CheckmarkIcon from "#/icons/checkmark.svg?react";
 import CopyIcon from "#/icons/copy.svg?react";
@@ -49,8 +50,9 @@ function AddSkillExampleBlock() {
   const [copied, setCopied] = React.useState(false);
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(ADD_SKILL_EXAMPLE_COMMAND);
-    setCopied(true);
+    if (await copyToClipboard(ADD_SKILL_EXAMPLE_COMMAND)) {
+      setCopied(true);
+    }
   };
 
   React.useEffect(() => {
