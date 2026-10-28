@@ -35,6 +35,41 @@ vi.mock("#/hooks/query/use-active-conversation", () => ({
   useActiveConversation: () => useActiveConversationMock(),
 }));
 
+const { downloadFileMock, displayErrorToastMock } = vi.hoisted(() => ({
+  downloadFileMock: vi.fn(),
+  displayErrorToastMock: vi.fn(),
+}));
+
+vi.mock("#/api/runtime-service/agent-server-runtime-service", () => ({
+  default: { downloadFile: downloadFileMock },
+}));
+
+vi.mock("#/utils/custom-toast-handlers", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#/utils/custom-toast-handlers")>()),
+  displayErrorToast: displayErrorToastMock,
+}));
+
+const createObjectURL = vi.fn();
+const revokeObjectURL = vi.fn();
+
+// jsdom does not implement object URLs.
+function stubObjectUrls() {
+  let created = 0;
+  createObjectURL.mockReset().mockImplementation(() => {
+    created += 1;
+    return `blob:http://localhost/file-${created}`;
+  });
+  revokeObjectURL.mockReset();
+  vi.stubGlobal(
+    "URL",
+    class extends URL {
+      static createObjectURL = createObjectURL;
+
+      static revokeObjectURL = revokeObjectURL;
+    },
+  );
+}
+
 function renderTab(conversationId: string | null = null) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -422,8 +457,8 @@ describe("FilesTab", () => {
       data: ["index.html"],
       isLoading: false,
     });
-    const staticUrl =
-      "https://agent.example.com/api/conversations/conv-1/workspace/index.html";
+    // Same origin as Canvas, so the link opens the live workspace URL.
+    const staticUrl = `${window.location.origin}/api/conversations/conv-1/workspace/index.html`;
     useWorkspaceFileContentMock.mockReturnValue({
       data: {
         path: "index.html",
@@ -581,9 +616,6 @@ describe("FilesTab", () => {
   // Cloud backends hand back the file as a `data:` URL, which browsers refuse
   // to open as a top-level page (OHE-3735).
   describe("open in new window on a Cloud backend", () => {
-    const createObjectURL = vi.fn();
-    const revokeObjectURL = vi.fn();
-
     function cloudMarkdownFile(text: string) {
       return {
         data: {
@@ -598,23 +630,7 @@ describe("FilesTab", () => {
       };
     }
 
-    beforeEach(() => {
-      let created = 0;
-      createObjectURL.mockReset().mockImplementation(() => {
-        created += 1;
-        return `blob:http://localhost/file-${created}`;
-      });
-      revokeObjectURL.mockReset();
-      // jsdom does not implement object URLs.
-      vi.stubGlobal(
-        "URL",
-        class extends URL {
-          static createObjectURL = createObjectURL;
-
-          static revokeObjectURL = revokeObjectURL;
-        },
-      );
-    });
+    beforeEach(stubObjectUrls);
 
     it("opens the file's text as plain text", async () => {
       // Arrange
@@ -685,6 +701,224 @@ describe("FilesTab", () => {
       expect(
         screen.queryByTestId("files-tab-open-in-new-window"),
       ).not.toBeInTheDocument();
+    });
+  });
+
+  // The workspace-session cookie is partitioned to the Canvas site, so a new
+  // tab on a backend at another origin cannot use it (#19038).
+  describe("open in new window on a backend at another origin", () => {
+    const remoteBase =
+      "https://backend.example.com/api/conversations/conv-1/workspace";
+
+    function remoteFile(
+      path: string,
+      kind: string,
+      mimeType: string,
+      text: string | null = null,
+    ) {
+      return {
+        data: {
+          path,
+          kind,
+          text,
+          staticUrl: `${remoteBase}/${path}`,
+          mimeType,
+        },
+        isLoading: false,
+        isError: false,
+      };
+    }
+
+    beforeEach(() => {
+      stubObjectUrls();
+      downloadFileMock.mockReset();
+      displayErrorToastMock.mockReset();
+      useActiveConversationMock.mockReturnValue({
+        data: {
+          id: "conv-1",
+          conversation_url:
+            "https://backend.example.com/api/conversations/conv-1",
+          session_api_key: "session-key",
+          execution_status: "idle",
+          workspace: { working_dir: "/workspace/project" },
+        },
+      });
+    });
+
+    it("opens a text file's decoded source as plain text", async () => {
+      // Arrange
+      useWorkspaceFileContentMock.mockReturnValue(
+        remoteFile(
+          "index.html",
+          "text",
+          "text/html",
+          "<script>alert(1)</script>",
+        ),
+      );
+
+      // Act
+      openFile("index.html");
+      renderTab();
+
+      // Assert
+      const link = await screen.findByTestId("files-tab-open-in-new-window");
+      expect(link).toHaveAttribute("href", "blob:http://localhost/file-1");
+      const blob: Blob = createObjectURL.mock.calls[0][0];
+      expect(blob.type).toBe("text/plain;charset=utf-8");
+      await expect(blob.text()).resolves.toBe("<script>alert(1)</script>");
+      expect(downloadFileMock).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ["logo.png", "image", "image/png", "image/png"],
+      ["report.pdf", "pdf", "application/pdf", "application/pdf"],
+      [
+        "data.bin",
+        "binary",
+        "application/octet-stream",
+        "application/octet-stream",
+      ],
+      ["icon.svg", "image", "image/svg+xml", "text/plain;charset=utf-8"],
+    ])(
+      "opens %s (%s) from the header-authenticated download",
+      async (path, kind, mimeType, blobType) => {
+        // Arrange
+        const bytes = new Uint8Array([1, 2, 3]).buffer;
+        downloadFileMock.mockResolvedValue(bytes);
+        useWorkspaceFileContentMock.mockReturnValue(
+          remoteFile(path, kind, mimeType),
+        );
+
+        // Act
+        openFile(path);
+        renderTab();
+
+        // Assert
+        const link = await screen.findByTestId("files-tab-open-in-new-window");
+        expect(link).toHaveAttribute("href", "blob:http://localhost/file-1");
+        expect(downloadFileMock).toHaveBeenCalledWith(
+          "https://backend.example.com/api/conversations/conv-1",
+          "session-key",
+          `/workspace/project/${path}`,
+        );
+        const blob: Blob = createObjectURL.mock.calls[0][0];
+        expect(blob.type).toBe(blobType);
+        expect(new Uint8Array(await blob.arrayBuffer())).toEqual(
+          new Uint8Array(bytes),
+        );
+      },
+    );
+
+    it("shows an error and offers no backend link when the download fails", async () => {
+      // Arrange
+      downloadFileMock.mockRejectedValue(new Error("401"));
+      useWorkspaceFileContentMock.mockReturnValue(
+        remoteFile("logo.png", "image", "image/png"),
+      );
+
+      // Act
+      openFile("logo.png");
+      renderTab();
+
+      // Assert
+      await waitFor(() => {
+        expect(displayErrorToastMock).toHaveBeenCalledWith("FILES$LOAD_ERROR");
+      });
+      expect(
+        screen.queryByTestId("files-tab-open-in-new-window"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("shows the download error once while the same file fails again", async () => {
+      // Arrange
+      downloadFileMock.mockRejectedValue(new Error("404"));
+      useWorkspaceFileContentMock.mockReturnValue(
+        remoteFile("logo.png", "image", "image/png"),
+      );
+      const user = userEvent.setup();
+      openFile("logo.png");
+      renderTab();
+      await waitFor(() => {
+        expect(displayErrorToastMock).toHaveBeenCalled();
+      });
+
+      // Act
+      await user.click(screen.getByTestId("files-tab-refresh"));
+
+      // Assert
+      await waitFor(() => {
+        expect(downloadFileMock).toHaveBeenCalledTimes(2);
+      });
+      expect(displayErrorToastMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("shows the download error again after the user comes back to the file", async () => {
+      // Arrange
+      downloadFileMock.mockRejectedValue(new Error("404"));
+      useWorkspaceFileContentMock.mockImplementation((path: string | null) =>
+        path === "README.md"
+          ? remoteFile("README.md", "text", "text/markdown", "# Hi")
+          : remoteFile("logo.png", "image", "image/png"),
+      );
+      const user = userEvent.setup();
+      openFile("README.md");
+      openFile("logo.png");
+      renderTab();
+      await waitFor(() => {
+        expect(displayErrorToastMock).toHaveBeenCalledTimes(1);
+      });
+
+      // Act
+      await user.click(screen.getByTestId("file-quick-row-item-README.md"));
+      await user.click(screen.getByTestId("file-quick-row-item-logo.png"));
+
+      // Assert
+      await waitFor(() => {
+        expect(displayErrorToastMock).toHaveBeenCalledTimes(2);
+      });
+    });
+
+    it("does not download while the runtime is not ready", () => {
+      // Arrange
+      useActiveConversationMock.mockReturnValue({
+        data: {
+          id: "conv-1",
+          conversation_url:
+            "https://backend.example.com/api/conversations/conv-1",
+          session_api_key: "session-key",
+          execution_status: "paused",
+          workspace: { working_dir: "/workspace/project" },
+        },
+      });
+      useWorkspaceFileContentMock.mockReturnValue(
+        remoteFile("logo.png", "image", "image/png"),
+      );
+
+      // Act
+      openFile("logo.png");
+      renderTab();
+
+      // Assert
+      expect(downloadFileMock).not.toHaveBeenCalled();
+    });
+
+    it("revokes the object URL when the Files tab unmounts", async () => {
+      // Arrange
+      downloadFileMock.mockResolvedValue(new Uint8Array([1]).buffer);
+      useWorkspaceFileContentMock.mockReturnValue(
+        remoteFile("logo.png", "image", "image/png"),
+      );
+      openFile("logo.png");
+      const { unmount } = renderTab();
+      await screen.findByTestId("files-tab-open-in-new-window");
+
+      // Act
+      unmount();
+
+      // Assert
+      expect(revokeObjectURL).toHaveBeenCalledWith(
+        "blob:http://localhost/file-1",
+      );
     });
   });
 
