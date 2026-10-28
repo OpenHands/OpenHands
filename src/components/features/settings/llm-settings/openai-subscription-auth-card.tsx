@@ -26,6 +26,7 @@ const MIN_DEVICE_POLL_INTERVAL_SECONDS = 1;
 
 const STATUS_ERROR_MESSAGE_KEYS: Record<SubscriptionStatusErrorKind, I18nKey> =
   {
+    "no-backend": I18nKey.SETTINGS$SUBSCRIPTION_STATUS_NO_BACKEND,
     "missing-endpoints": I18nKey.SETTINGS$SUBSCRIPTION_STATUS_UNAVAILABLE,
     unauthorized: I18nKey.SETTINGS$SUBSCRIPTION_STATUS_UNAUTHORIZED,
     unreachable: I18nKey.SETTINGS$SUBSCRIPTION_STATUS_UNREACHABLE,
@@ -195,12 +196,14 @@ export function OpenAISubscriptionAuthCard({
             <span className="text-danger">
               {t(STATUS_ERROR_MESSAGE_KEYS[statusError.kind])}
             </span>
-            <span
-              data-testid="subscription-status-detail"
-              className="break-all text-xs text-tertiary-light"
-            >
-              {statusError.detail}
-            </span>
+            {statusError.detail ? (
+              <span
+                data-testid="subscription-status-detail"
+                className="break-all text-xs text-tertiary-light"
+              >
+                {statusError.detail}
+              </span>
+            ) : null}
           </>
         ) : connected ? (
           <>
@@ -277,7 +280,12 @@ export function OpenAISubscriptionAuthCard({
             testId="subscription-connect"
             type="button"
             variant="primary"
-            isDisabled={isDisabled || isBusy}
+            isDisabled={
+              isDisabled ||
+              isBusy ||
+              status.isLoading ||
+              statusError?.kind === "no-backend"
+            }
             onClick={handleStartLogin}
           >
             {t(I18nKey.SETTINGS$SUBSCRIPTION_CONNECT)}

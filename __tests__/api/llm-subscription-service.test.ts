@@ -1,4 +1,6 @@
-import { http, HttpResponse } from "msw";
+import { createServer } from "node:http";
+import { once } from "node:events";
+import { http, HttpResponse, passthrough } from "msw";
 import { AgentServerClient } from "@openhands/typescript-client/clients";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import LLMSubscriptionService from "#/api/llm-subscription-service";
@@ -16,6 +18,7 @@ import {
 } from "#/constants/llm-subscription";
 import { server } from "#/mocks/node";
 import { resetTestHandlersMockSettings } from "#/mocks/settings-handlers";
+import { describeSubscriptionStatusError } from "#/utils/subscription-status-error";
 
 describe("LLMSubscriptionService", () => {
   beforeEach(() => {
@@ -256,6 +259,81 @@ describe("LLMSubscriptionService", () => {
       accountEmail: null,
       expiresAt: null,
     });
+  });
+
+  it("sends the login request only when a local backend is selected", async () => {
+    const requests: string[] = [];
+    const endpoint = createServer((request, response) => {
+      requests.push(`${request.method} ${request.url}`);
+      if (request.url === OPENAI_SUBSCRIPTION_STATUS_PATH) {
+        response.writeHead(500, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({ detail: "sensitive-example-token" }));
+        return;
+      }
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(
+        JSON.stringify({
+          device_code: "device-code",
+          user_code: "USER-CODE",
+          verification_uri: "https://auth.openai.com/activate",
+        }),
+      );
+    });
+    endpoint.listen(0, "127.0.0.1");
+    await once(endpoint, "listening");
+    const address = endpoint.address();
+    if (!address || typeof address === "string") throw new Error("No port");
+    const host = `http://127.0.0.1:${address.port}`;
+    server.use(http.all(`${host}/*`, () => passthrough()));
+    const originalBackends = getRegisteredBackends();
+    const originalSelection = getActiveSelection();
+    const cloud = {
+      id: "cloud-test",
+      name: "Cloud",
+      host,
+      apiKey: "",
+      kind: "cloud" as const,
+    };
+    const local = {
+      id: "local-test",
+      name: "Local",
+      host,
+      apiKey: "",
+      kind: "local" as const,
+    };
+
+    try {
+      setRegisteredBackends([cloud, local]);
+      setActiveSelection({ backendId: cloud.id });
+      await expect(
+        LLMSubscriptionService.startOpenAIDeviceLogin(),
+      ).rejects.toThrow("No backend is configured.");
+      expect(requests).toEqual([]);
+
+      setActiveSelection({ backendId: local.id });
+      await expect(
+        LLMSubscriptionService.startOpenAIDeviceLogin(),
+      ).resolves.toMatchObject({ userCode: "USER-CODE" });
+      expect(requests).toEqual([
+        `POST ${OPENAI_SUBSCRIPTION_DEVICE_START_PATH}`,
+      ]);
+      const failure: unknown =
+        await LLMSubscriptionService.getOpenAIStatus().then(
+          () => null,
+          (error: unknown) => error,
+        );
+      expect(describeSubscriptionStatusError(failure)).toEqual({
+        kind: "failed",
+        detail: `GET ${OPENAI_SUBSCRIPTION_STATUS_PATH} → HTTP 500`,
+      });
+      expect(requests).toContain(`GET ${OPENAI_SUBSCRIPTION_STATUS_PATH}`);
+    } finally {
+      setRegisteredBackends(originalBackends);
+      setActiveSelection(originalSelection);
+      await new Promise<void>((resolve, reject) =>
+        endpoint.close((error) => (error ? reject(error) : resolve())),
+      );
+    }
   });
 
   it("normalizes device login challenge responses", async () => {

@@ -1,3 +1,6 @@
+import { createServer } from "node:http";
+import { once } from "node:events";
+import { http, passthrough } from "msw";
 import { HttpError } from "@openhands/typescript-client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
@@ -16,10 +19,22 @@ import LlmSettingsRoute, { LlmSettingsScreen } from "#/routes/llm-settings";
 import ConfigService from "#/api/config-service/config-service.api";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
+import { server } from "#/mocks/node";
+import {
+  OPENAI_SUBSCRIPTION_STATUS_PATH,
+  OPENAI_SUBSCRIPTION_DEVICE_START_PATH,
+} from "#/constants/llm-subscription";
 import { useFreeModelsStore } from "#/stores/free-models-store";
 import { Settings } from "#/types/settings";
 import * as activeBackendContext from "#/contexts/active-backend-context";
+import {
+  getActiveSelection,
+  getRegisteredBackends,
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
+import { OpenAISubscriptionAuthCard } from "#/components/features/settings/llm-settings/openai-subscription-auth-card";
 import * as useLlmProfilesHook from "#/hooks/query/use-llm-profiles";
 import LLMSubscriptionService from "#/api/llm-subscription-service";
 import ProviderConnectionsService, {
@@ -118,6 +133,109 @@ function createMockLlmProfilesReturn(
     ...overrides,
   } as ReturnType<typeof useLlmProfilesHook.useLlmProfiles>;
 }
+
+describe("subscription login on a Cloud backend", () => {
+  it("explains the unavailable backend instead of offering a broken login", async () => {
+    const originalBackends = getRegisteredBackends();
+    const originalSelection = getActiveSelection();
+    setRegisteredBackends([mockCloudBackend]);
+    setActiveSelection({ backendId: mockCloudBackend.id });
+    const view = render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <activeBackendContext.ActiveBackendProvider>
+          <OpenAISubscriptionAuthCard />
+        </activeBackendContext.ActiveBackendProvider>
+      </QueryClientProvider>,
+    );
+    try {
+      await waitFor(() =>
+        expect(screen.getByTestId("subscription-status")).toHaveTextContent(
+          "SETTINGS$SUBSCRIPTION_STATUS_NO_BACKEND",
+        ),
+      );
+      expect(screen.getByTestId("subscription-connect")).toBeDisabled();
+    } finally {
+      view.unmount();
+      setRegisteredBackends(originalBackends);
+      setActiveSelection(originalSelection);
+    }
+  });
+});
+
+describe("subscription login on a local backend", () => {
+  it("requests a device challenge on click and displays its code", async () => {
+    const requests: string[] = [];
+    const endpoint = createServer((request, response) => {
+      requests.push(`${request.method} ${request.url}`);
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(
+        JSON.stringify(
+          request.url === OPENAI_SUBSCRIPTION_STATUS_PATH
+            ? { connected: false }
+            : {
+                device_code: "device-code",
+                user_code: "USER-CODE",
+                verification_uri: "https://auth.openai.com/activate",
+                interval: 60,
+              },
+        ),
+      );
+    });
+    endpoint.listen(0, "127.0.0.1");
+    await once(endpoint, "listening");
+    const address = endpoint.address();
+    if (!address || typeof address === "string") throw new Error("No port");
+    const host = `http://127.0.0.1:${address.port}`;
+    server.use(http.all(`${host}/*`, () => passthrough()));
+    const originalBackends = getRegisteredBackends();
+    const originalSelection = getActiveSelection();
+    const backend = { ...mockLocalBackend, host };
+    setRegisteredBackends([backend]);
+    setActiveSelection({ backendId: backend.id });
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    const view = render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <activeBackendContext.ActiveBackendProvider>
+          <OpenAISubscriptionAuthCard />
+        </activeBackendContext.ActiveBackendProvider>
+      </QueryClientProvider>,
+    );
+    try {
+      await waitFor(() =>
+        expect(screen.getByTestId("subscription-connect")).toBeEnabled(),
+      );
+      await userEvent.click(screen.getByTestId("subscription-connect"));
+      expect(
+        await screen.findByTestId("subscription-user-code"),
+      ).toHaveTextContent("USER-CODE");
+      expect(open).toHaveBeenCalledWith(
+        "https://auth.openai.com/activate",
+        "_blank",
+        "noopener,noreferrer",
+      );
+      expect(requests).toEqual([
+        `GET ${OPENAI_SUBSCRIPTION_STATUS_PATH}`,
+        `POST ${OPENAI_SUBSCRIPTION_DEVICE_START_PATH}`,
+      ]);
+    } finally {
+      view.unmount();
+      open.mockRestore();
+      setRegisteredBackends(originalBackends);
+      setActiveSelection(originalSelection);
+      await new Promise<void>((resolve, reject) =>
+        endpoint.close((error) => (error ? reject(error) : resolve())),
+      );
+    }
+  });
+});
 
 describe("LlmSettingsScreen", () => {
   beforeEach(() => {
@@ -318,14 +436,14 @@ describe("LlmSettingsScreen", () => {
     expect(screen.getByTestId("subscription-status-detail")).toHaveTextContent(
       "HTTP 500",
     );
-    expect(screen.getByTestId("subscription-status-detail")).toHaveTextContent(
-      "PermissionError: chmod",
-    );
+    expect(
+      screen.getByTestId("subscription-status-detail"),
+    ).not.toHaveTextContent("PermissionError: chmod");
   });
 
   it("names an unreachable agent server for transport failures", async () => {
     vi.spyOn(LLMSubscriptionService, "getOpenAIStatus").mockRejectedValue(
-      new TypeError("fetch failed"),
+      new Error("Request failed", { cause: new TypeError("fetch failed") }),
     );
     mockSubscriptionSettings();
 
@@ -523,6 +641,9 @@ describe("LlmSettingsScreen", () => {
     renderLlmSettingsScreen();
 
     await screen.findByTestId("llm-subscription-settings");
+    await waitFor(() =>
+      expect(screen.getByTestId("subscription-connect")).toBeEnabled(),
+    );
     fireEvent.click(screen.getByTestId("subscription-connect"));
     const userCode = await screen.findByTestId("subscription-user-code");
     expect(userCode).toHaveTextContent("USER-CODE");

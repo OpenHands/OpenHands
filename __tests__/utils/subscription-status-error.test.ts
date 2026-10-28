@@ -32,50 +32,52 @@ describe("describeSubscriptionStatusError", () => {
     expect(describeSubscriptionStatusError(error).kind).toBe("unauthorized");
   });
 
-  it("classifies a server error as failed and carries the response detail", () => {
-    // Arrange — a reachable agent-server whose status check raised.
+  it("classifies a server error without exposing the response", () => {
     const error = new HttpError(500, "Internal Server Error", {
       detail: "PermissionError: chmod",
     });
-
-    // Act
     const info = describeSubscriptionStatusError(error);
 
-    // Assert
     expect(info.kind).toBe("failed");
-    expect(info.detail).toContain("HTTP 500");
-    expect(info.detail).toContain("PermissionError: chmod");
-    expect(info.detail).toContain(`GET ${OPENAI_SUBSCRIPTION_STATUS_PATH}`);
+    expect(info.detail).toBe(
+      `GET ${OPENAI_SUBSCRIPTION_STATUS_PATH} → HTTP 500`,
+    );
   });
 
-  it("classifies a transport failure as unreachable", () => {
-    // Arrange — connection refused / offline, never reached the server.
-    const error = new TypeError("fetch failed");
-
-    // Act
-    const info = describeSubscriptionStatusError(error);
-
-    // Assert
-    expect(info.kind).toBe("unreachable");
-    expect(info.detail).toContain("fetch failed");
-    expect(info.detail).toContain(`GET ${OPENAI_SUBSCRIPTION_STATUS_PATH}`);
-  });
-
-  it("classifies a missing backend as unreachable", () => {
+  it("distinguishes an unconfigured backend from a connection failure", () => {
     const info = describeSubscriptionStatusError(new NoBackendAvailableError());
-
-    expect(info.kind).toBe("unreachable");
-    expect(info.detail).toContain("No backend is configured.");
+    expect(info.kind).toBe("no-backend");
   });
 
-  it("truncates very long details", () => {
-    const error = new HttpError(500, "Internal Server Error", {
-      detail: "x".repeat(500),
+  it("does not classify arbitrary errors as network failures", () => {
+    const info = describeSubscriptionStatusError(
+      new TypeError("Cannot read properties of null"),
+    );
+    expect(info.kind).toBe("failed");
+  });
+
+  it("recognizes an SDK-wrapped fetch failure", () => {
+    const error = new Error("Request failed: network failure", {
+      cause: new TypeError("Failed to fetch"),
     });
+    expect(describeSubscriptionStatusError(error).kind).toBe("unreachable");
+  });
 
-    const info = describeSubscriptionStatusError(error);
+  it("does not mistake an SDK-wrapped non-network TypeError for a failed connection", () => {
+    const error = new Error("Request failed", {
+      cause: new TypeError("Cannot read properties of null"),
+    });
+    expect(describeSubscriptionStatusError(error).kind).toBe("failed");
+  });
 
-    expect(info.detail.length).toBeLessThanOrEqual(200);
-    expect(info.detail.endsWith("…")).toBe(true);
+  it("does not expose server-controlled status text, response or exception messages", () => {
+    const secret = "sensitive-example-token";
+    const error = new HttpError(500, secret, { detail: secret });
+    const detail = describeSubscriptionStatusError(error).detail;
+    expect(detail).toBe(`GET ${OPENAI_SUBSCRIPTION_STATUS_PATH} → HTTP 500`);
+    expect(detail).not.toContain(secret);
+    expect(
+      describeSubscriptionStatusError(new Error(secret)).detail,
+    ).not.toContain(secret);
   });
 });
