@@ -12,6 +12,7 @@ import {
 import * as useLlmProfilesHook from "#/hooks/query/use-llm-profiles";
 import * as useActivateLlmProfileHook from "#/hooks/mutation/use-activate-llm-profile";
 import * as useSaveLlmProfileHook from "#/hooks/mutation/use-save-llm-profile";
+import * as useSettingsHook from "#/hooks/query/use-settings";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
 import * as activeBackendContext from "#/contexts/active-backend-context";
 import { useFreeModelsStore } from "#/stores/free-models-store";
@@ -1283,5 +1284,42 @@ describe("LlmSettingsLocalView - OpenHands provider on cloud", () => {
     expect(request.llm.model).toBe("openhands/kimi-k3");
     expect(request.llm).not.toHaveProperty("api_key");
     expect(request.llm).not.toHaveProperty("base_url");
+  });
+
+  it("preserves displayed agent LLM options (such as temperature) in create mode when untouched by the user", async () => {
+    vi.spyOn(useSettingsHook, "useSettings").mockReturnValue({
+      data: {
+        agent_settings: {
+          llm: {
+            model: "openai/gpt-4o",
+            temperature: 0.4,
+            max_output_tokens: 4096,
+          },
+        },
+      },
+    } as unknown as ReturnType<typeof useSettingsHook.useSettings>);
+
+    const user = userEvent.setup();
+    renderWithProviders(<LlmSettingsLocalView />);
+
+    await user.click(screen.getByTestId("add-llm-profile"));
+
+    const modelInput = screen.getByTestId("mock-basic-model-input");
+    await user.clear(modelInput);
+    await user.type(modelInput, "anthropic/claude-3-5-sonnet");
+
+    const nameInput = screen.getByTestId("profile-name-input");
+    await user.clear(nameInput);
+    await user.type(nameInput, "sonnet-profile");
+
+    await user.click(screen.getByTestId("save-profile-btn"));
+
+    await waitFor(() => expect(mockSaveMutateAsync).toHaveBeenCalled());
+    const request = mockSaveMutateAsync.mock.calls[0][0].request as {
+      llm: Record<string, unknown>;
+    };
+    expect(request.llm.model).toBe("anthropic/claude-3-5-sonnet");
+    expect(request.llm.temperature).toBe(0.4);
+    expect(request.llm.max_output_tokens).toBe(4096);
   });
 });
