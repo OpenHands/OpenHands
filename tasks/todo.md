@@ -31,7 +31,7 @@ Source: `tasks/plan.md` (implements the approved spec
 ## Phase 3: Rendering + jump
 
 - [x] Task 7: Bubble extraction & truncation isolation (sent + pending)
-- [ ] Task 8: Jump to message (`data-event-id`, load-until-found, 10-page guard)
+- [x] Task 8: Jump to message (`data-event-id`, load-until-found, 10-page guard)
 
 ## Checkpoint: Complete
 

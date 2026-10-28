@@ -165,6 +165,7 @@ function UserAssistantEventMessageComponent({
         isFromPlanningAgent={isFromPlanningAgent}
         actions={actions}
         timestamp={event.timestamp}
+        eventId={event.id}
       >
         {imageUrls.length > 0 && (
           <ImageCarousel size="small" images={imageUrls} />

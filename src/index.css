@@ -11,7 +11,11 @@
   --oh-bg-editor-sidebar: var(--cool-grey-925);
   --oh-bg-editor-active: var(--cool-grey-900);
   --oh-border-editor-sidebar: var(--cool-grey-800);
-  --oh-bg-neutral-muted: color-mix(in srgb, var(--cool-grey-300) 20%, transparent);
+  --oh-bg-neutral-muted: color-mix(
+    in srgb,
+    var(--cool-grey-300) 20%,
+    transparent
+  );
   --bg-dark: var(--oh-bg-dark);
   --bg-light: var(--oh-bg-light);
   --bg-input: var(--oh-bg-input);
@@ -25,19 +29,19 @@
   background-color: var(--oh-color-base) !important;
 
   /* ── Cool Grey Scale (13 shades + 2 pure anchors: white / black) ──────── */
-  --cool-grey-50:  #F7F9FC;
-  --cool-grey-100: #EEF2F7;
-  --cool-grey-200: #DCE3EE;
-  --cool-grey-300: #C3CDDC;
-  --cool-grey-400: #A3B0C4;
-  --cool-grey-500: #7E8A9E;
-  --cool-grey-600: #626D82;
-  --cool-grey-700: #4B5468;
-  --cool-grey-800: #383F50;
-  --cool-grey-900: #2C313F;
-  --cool-grey-925: #21252F;
-  --cool-grey-950: #0B0E14; /* intentional override: preserves original app-shell depth */
-  --cool-grey-975: #05070A;
+  --cool-grey-50: #f7f9fc;
+  --cool-grey-100: #eef2f7;
+  --cool-grey-200: #dce3ee;
+  --cool-grey-300: #c3cddc;
+  --cool-grey-400: #a3b0c4;
+  --cool-grey-500: #7e8a9e;
+  --cool-grey-600: #626d82;
+  --cool-grey-700: #4b5468;
+  --cool-grey-800: #383f50;
+  --cool-grey-900: #2c313f;
+  --cool-grey-925: #21252f;
+  --cool-grey-950: #0b0e14; /* intentional override: preserves original app-shell depth */
+  --cool-grey-975: #05070a;
   /* ─────────────────────────────────────────────────────────────────────── */
 }
 
@@ -154,4 +158,29 @@ code {
 
 .environment-switch-overlay > div {
   animation: environment-switch-overlay-fade 980ms ease-in-out forwards;
+}
+
+/* Jump-to-message highlight pulse. The attribute is set by useJumpToEvent
+   when the target bubble is scrolled into view and removed after 1500ms
+   (HIGHLIGHT_MS). */
+@keyframes event-jump-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-accent) 55%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 10px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+[data-event-jump-highlight] {
+  animation: event-jump-pulse 1500ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-event-jump-highlight] {
+    animation: none;
+  }
 }

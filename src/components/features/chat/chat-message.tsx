@@ -7,8 +7,9 @@ import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import { I18nKey } from "#/i18n/declaration";
 import { TextShimmer } from "#/components/shared/text-shimmer";
 import { formatEventTimestamp } from "#/utils/format-event-timestamp";
-import { MarkdownRenderer } from "../markdown/markdown-renderer";
 import { PendingStopIcon } from "./pending-stop-icon";
+import { MarkdownRenderer } from "../markdown/markdown-renderer";
+import { useJumpToEvent } from "#/hooks/chat/use-jump-to-event";
 import {
   UserMessageBody,
   chatBubbleMarkdownComponents,
@@ -33,6 +34,12 @@ interface ChatMessageProps {
   onDismiss?: () => void;
   onStop?: () => void;
   timestamp?: string;
+  /**
+   * The source event's id, rendered as a `data-event-id` anchor so
+   * `useJumpToEvent` can scroll to this bubble. A product anchor, not a
+   * test hook.
+   */
+  eventId?: string;
   /** The message is a reply still being streamed in. */
   isStreaming?: boolean;
 }
@@ -48,6 +55,7 @@ export function ChatMessage({
   onDismiss,
   onStop,
   timestamp,
+  eventId,
   isStreaming = false,
 }: React.PropsWithChildren<ChatMessageProps>) {
   const { t, i18n } = useTranslation("openhands");
@@ -153,9 +161,14 @@ export function ChatMessage({
     </div>
   );
 
+  const jumpToEvent = useJumpToEvent();
+
   const renderedMessageContent = replyQuote ? (
     <>
-      <QuoteCard quote={replyQuote} />
+      <QuoteCard
+        quote={replyQuote}
+        onJump={() => jumpToEvent(replyQuote.sourceEventId)}
+      />
       {messageContent}
     </>
   ) : (
@@ -166,6 +179,7 @@ export function ChatMessage({
     <article
       data-testid={`${type}-message`}
       data-pending-status={pendingStatus}
+      {...(eventId ? { "data-event-id": eventId } : {})}
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}
       className={cn(

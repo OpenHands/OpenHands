@@ -13,6 +13,7 @@ import {
 } from "#/stores/reply-quote-store";
 import { cn } from "#/utils/utils";
 import { SlashCommandItem } from "#/hooks/chat/use-slash-command";
+import { useJumpToEvent } from "#/hooks/chat/use-jump-to-event";
 import { insertTextAtCaret } from "../utils/chat-input.utils";
 
 interface ChatInputContainerProps {
@@ -137,7 +138,7 @@ export function ChatInputContainer({
 function QuoteSlot() {
   const { conversationId } = useOptionalConversationId();
   const quote = usePendingReplyQuote(conversationId ?? "");
-
+  const jumpToEvent = useJumpToEvent();
   useEffect(() => {
     if (!quote) return undefined;
     const onKeyDown = (event: KeyboardEvent) => {
@@ -154,6 +155,7 @@ function QuoteSlot() {
   return (
     <QuoteCard
       quote={quote}
+      onJump={() => jumpToEvent(quote.sourceEventId)}
       onDismiss={() =>
         useReplyQuoteStore.getState().clearReplyQuote(quote.conversationId)
       }
