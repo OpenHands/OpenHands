@@ -231,6 +231,38 @@ describe("useLoadOlderEvents", () => {
     });
   });
 
+  it("anchors on the oldest main event when planner events are older", async () => {
+    // The planner socket replays its whole log into the same store, so its
+    // events can predate the main conversation's REST tail.
+    act(() => {
+      useEventStore
+        .getState()
+        .addEvents([makeEvent("evt-main-tail", "2024-06-01T00:00:00Z")]);
+      useEventStore.getState().addEvent({
+        ...makeEvent("evt-planner", "2024-05-01T00:00:00Z"),
+        isFromPlanningAgent: true,
+      });
+    });
+    const spy = vi
+      .spyOn(EventService, "searchEvents")
+      .mockResolvedValue(makePage([], null));
+
+    const { result } = renderHook(() => useLoadOlderEvents("conv-1"), {
+      wrapper,
+    });
+
+    await act(async () => {
+      await result.current.loadOlder();
+    });
+
+    expect(spy).toHaveBeenCalledWith(
+      "conv-1",
+      "https://example.com/conv-test",
+      "secret",
+      expect.objectContaining({ timestampLt: "2024-06-01T00:00:00Z" }),
+    );
+  });
+
   it("seeds inline model-switch messages for switches in a paginated older page", async () => {
     // A successful SwitchLLMObservation is hidden as a card and surfaced via an
     // inline "Switched to" message seeded from history. The initial preload only
