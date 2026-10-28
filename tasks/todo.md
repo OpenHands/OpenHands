@@ -11,8 +11,8 @@ Source: `tasks/plan.md` (implements the approved spec
 
 ## Checkpoint: Foundation
 
-- [ ] Format round-trip tests green
-- [ ] Store hydration tests green
+- [x] Format round-trip tests green (message-quote.test.ts: 25 passed, re-run 2026-10-28)
+- [x] Store hydration tests green (reply-quote-store.test.ts included above)
 - [x] i18n completeness passes; `npm run lint` clean
 - [x] Review with human before proceeding (approved 2026-10-28)
 
@@ -24,8 +24,8 @@ Source: `tasks/plan.md` (implements the approved spec
 
 ## Checkpoint: Core feature
 
-- [ ] End-to-end: hover → Reply → card → send → envelope in fixture
-- [ ] Retry keeps envelope; disable-path audit clean
+- [x] End-to-end: hover → Reply → card → send → envelope in fixture (e2e "reply quote rides the message" + unit fixtures)
+- [x] Retry keeps envelope (pending-user-messages.test.tsx:187-212); disable-path audit clean (gating in canReply: planning/plan; image-only → null quote; BTW/regular-bubble surfaces never render the Reply-bearing component)
 - [ ] Review with human before proceeding
 
 ## Phase 3: Rendering + jump
