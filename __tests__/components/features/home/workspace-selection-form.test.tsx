@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { compile } from "@tailwindcss/node";
-import { parse } from "postcss";
+import { parse, type AnyNode } from "postcss";
 import { http, HttpResponse } from "msw";
 import { server } from "#/mocks/node";
 import { clearCachedAgentServerInfo } from "#/api/agent-server-compatibility";
@@ -469,7 +469,11 @@ describe("WorkspaceSelectionForm (server-backed workspaces)", () => {
         const rule = declaration.parent;
         if (rule?.type !== "rule" || !row.matches(rule.selector)) return;
         let media: string | null = null;
-        for (let parent = rule.parent; parent; parent = parent.parent) {
+        for (
+          let parent: AnyNode | undefined = rule.parent;
+          parent;
+          parent = parent.parent
+        ) {
           if (parent.type === "atrule" && parent.name === "media") {
             media = parent.params;
           }
