@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import LLMBalanceService from "#/api/llm-balance-service";
 import { useActiveBackend } from "#/contexts/active-backend-context";
+import { LLM_BALANCE_QUERY_KEYS } from "./query-keys";
 
 /**
  * Provider credit balance for the active local agent server.
@@ -15,7 +16,11 @@ export const useLLMBalance = (conversationId: string | null | undefined) => {
   const { backend } = useActiveBackend();
 
   return useQuery({
-    queryKey: ["llm-balance", backend.id, conversationId],
+    queryKey: LLM_BALANCE_QUERY_KEYS.byConversation(
+      backend.id,
+      backend.connectionRevision ?? 0,
+      conversationId,
+    ),
     queryFn: () => LLMBalanceService.getBalance(),
     // Cloud conversations talk to the hosted app API, which has no
     // /api/llm/balance endpoint — don't probe it.
