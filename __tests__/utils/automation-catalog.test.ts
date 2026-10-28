@@ -4,8 +4,11 @@ import { Activity, Bot } from "lucide-react";
 import {
   getAutomationIcon,
   getAutomationLaunchPrompt,
+  getIntegrationIds,
+  getRequiredIntegrationIds,
   resolveAutomationImpactStatement,
 } from "#/utils/automation-catalog";
+import type { RecommendedAutomation } from "@openhands/extensions/automations";
 import type { Automation } from "#/types/automation";
 
 // Entries carrying an `impact` — valid and malformed — and one declaring none
@@ -200,5 +203,36 @@ describe("resolveAutomationImpactStatement", () => {
         ),
       ).toBeNull();
     }
+  });
+});
+
+describe("getIntegrationIds / getRequiredIntegrationIds", () => {
+  // A catalog entry whose `requires` is missing entirely, as shipped by
+  // @openhands/extensions 0.11.0 — bad data violating the type, which must
+  // not crash the Automate tab (issue #16277).
+  const entryWithRequires = (requires: unknown) =>
+    ({ id: "malformed-entry", requires }) as unknown as RecommendedAutomation;
+
+  it("degrades to no integrations when requires is missing", () => {
+    const entry = entryWithRequires(undefined);
+    expect(getIntegrationIds(entry)).toEqual([]);
+    expect(getRequiredIntegrationIds(entry)).toEqual([]);
+  });
+
+  it("degrades to no integrations when requires.integrations is missing", () => {
+    const entry = entryWithRequires({});
+    expect(getIntegrationIds(entry)).toEqual([]);
+    expect(getRequiredIntegrationIds(entry)).toEqual([]);
+  });
+
+  it("reads integrations from a well-formed entry", () => {
+    const entry = entryWithRequires({
+      integrations: {
+        slack: { required: true },
+        github: { required: false },
+      },
+    });
+    expect(getIntegrationIds(entry)).toEqual(["slack", "github"]);
+    expect(getRequiredIntegrationIds(entry)).toEqual(["slack"]);
   });
 });

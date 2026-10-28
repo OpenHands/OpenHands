@@ -49,7 +49,10 @@ export function getAutomationIcon(
 
 /** Every integration the entry declares, in declaration order. */
 export function getIntegrationIds(automation: RecommendedAutomation): string[] {
-  return Object.keys(automation.requires.integrations);
+  // The catalog is published by @openhands/extensions, so a mismatched
+  // release can ship entries without `requires` (e.g. 0.11.0). Degrade to
+  // "no integrations" instead of crashing the Automate tab.
+  return Object.keys(automation.requires?.integrations ?? {});
 }
 
 /**
@@ -60,7 +63,7 @@ export function getIntegrationIds(automation: RecommendedAutomation): string[] {
 export function getRequiredIntegrationIds(
   automation: RecommendedAutomation,
 ): string[] {
-  return Object.entries(automation.requires.integrations)
+  return Object.entries(automation.requires?.integrations ?? {})
     .filter(([, requirement]) => requirement.required !== false)
     .map(([id]) => id);
 }
