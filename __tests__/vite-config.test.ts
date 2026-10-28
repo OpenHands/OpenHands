@@ -189,8 +189,8 @@ describe("vite library build", () => {
       });
       return values;
     };
-    const recipes = (name: string) => {
-      const classSelector = `.${name.replace(/([^\w-])/g, "\\$1")}`;
+    const recipes = (name: string, pseudo = "") => {
+      const classSelector = `.${name.replace(/([^\w-])/g, "\\$1")}${pseudo}`;
       const matches: Rule[] = [];
       stylesheet.walkRules((rule) => {
         if (
@@ -231,8 +231,8 @@ describe("vite library build", () => {
       }
       return matches;
     };
-    const recipe = (name: string) => {
-      const matches = recipes(name);
+    const recipe = (name: string, pseudo = "") => {
+      const matches = recipes(name, pseudo);
       expect(matches, `Single scoped recipe: ${name}`).toHaveLength(1);
       return matches[0];
     };
@@ -405,6 +405,65 @@ describe("vite library build", () => {
         expect(typography["--tw-tracking"]).toBe(typography["letter-spacing"]);
       }
     }
+
+    // Connection chooser disclosures retain exact fractional tracks and their
+    // motion override after extraction and library selector scoping.
+    const disclosure = recipe("backend-chooser-disclosure");
+    expect(declarations(disclosure)).toMatchObject({
+      "transition-property": "grid-template-rows",
+      "transition-timing-function":
+        "var(--tw-ease,var(--default-transition-timing-function))",
+      "transition-duration":
+        "var(--tw-duration,var(--default-transition-duration))",
+    });
+    expect(
+      declarations(recipe("backend-chooser-disclosure-open")),
+    ).toMatchObject({ "grid-template-rows": "1fr" });
+    expect(
+      declarations(recipe("backend-chooser-disclosure-closed")),
+    ).toMatchObject({ "grid-template-rows": "0fr" });
+    expect(declarations(recipe("duration-200"))).toMatchObject({
+      "transition-duration": ".2s",
+    });
+    const easeOut = declarations(recipe("ease-out"));
+    expect(easeOut["transition-timing-function"]).toBe("var(--ease-out)");
+    const easingValues: string[] = [];
+    stylesheet.walkDecls("--ease-out", ({ value }) => {
+      easingValues.push(value.replace(/\s/g, ""));
+    });
+    expect(easingValues).toContain("cubic-bezier(0,0,.2,1)");
+    const reducedMotion = recipe("motion-reduce:transition-none");
+    expect(declarations(reducedMotion)["transition-property"]).toBe("none");
+    expect(reducedMotion.parent).toMatchObject({
+      type: "atrule",
+      name: "media",
+      params: "(prefers-reduced-motion:reduce)",
+    });
+    expect(reducedMotion.source?.start?.offset).toBeGreaterThan(
+      disclosure.source?.start?.offset ?? Infinity,
+    );
+
+    // Preserve relative typography/geometry and distinct Add/Edit viewport
+    // semantics, including the Cloud panel's grayscale pseudo-element halo.
+    expect(declarations(recipe("backend-chooser-cloud-panel"))).toMatchObject({
+      "min-height": "13.5rem",
+    });
+    const halo = declarations(
+      recipe("before:backend-chooser-cloud-halo", ":before"),
+    );
+    expect(halo["background-image"]).toBe(
+      "radial-gradient(75% 75%,#ffffff1a 0%,#fff0 70%)",
+    );
+    expect(halo.content).toBe("var(--tw-content)");
+    expect(
+      declarations(recipe("backend-chooser-learn-more-icon")),
+    ).toMatchObject({ "vertical-align": "-.125em" });
+    expect(declarations(recipe("backend-chooser-add-dialog"))).toMatchObject({
+      "max-height": "92vh",
+    });
+    expect(declarations(recipe("backend-chooser-edit-dialog"))).toMatchObject({
+      "max-height": "92dvh",
+    });
 
     // `package.json` routes `require` here; stripped CSS imports must not
     // leave it unparseable.
