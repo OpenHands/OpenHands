@@ -311,6 +311,45 @@ describe("recommended automations", () => {
     ).not.toBeInTheDocument();
   });
 
+  it.each([undefined, {}])(
+    "keeps a catalog card usable when requires is %s",
+    (requires) => {
+      const automation = AUTOMATION_CATALOG.find(
+        (item) => item.id === "github-pr-reviewer",
+      )!;
+      const mutable = automation as unknown as { requires: unknown };
+      const original = mutable.requires;
+      const onSelect = vi.fn();
+      mutable.requires = requires;
+
+      try {
+        render(
+          <RecommendedAutomationsSection
+            backendKind="local"
+            installedServers={[]}
+            onSelect={onSelect}
+          />,
+        );
+
+        const card = screen.getByTestId(
+          "recommended-automation-card-github-pr-reviewer",
+        );
+        expect(
+          within(card).queryByTestId(
+            "recommended-automation-pills-github-pr-reviewer",
+          ),
+        ).not.toBeInTheDocument();
+        expect(
+          screen.getByTestId("recommended-automation-card-news-digest"),
+        ).toBeInTheDocument();
+        fireEvent.click(card);
+        expect(onSelect).toHaveBeenCalledWith(automation);
+      } finally {
+        mutable.requires = original;
+      }
+    },
+  );
+
   it("sorts recommendation popularity deterministically when ranks are missing or tied", () => {
     const makeAutomation = (
       id: string,

@@ -1,9 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
-import { AUTOMATION_CATALOG } from "@openhands/extensions/automations";
+import {
+  AUTOMATION_CATALOG,
+  type RecommendedAutomation,
+} from "@openhands/extensions/automations";
 import { Activity, Bot } from "lucide-react";
 import {
   getAutomationIcon,
   getAutomationLaunchPrompt,
+  getIntegrationIds,
+  getRequiredIntegrationIds,
   resolveAutomationImpactStatement,
 } from "#/utils/automation-catalog";
 import type { Automation } from "#/types/automation";
@@ -26,7 +31,11 @@ vi.mock("@openhands/extensions/automations", async (importOriginal) => {
     },
     {
       id: "impact-unknown-basis",
-      impact: { basis: "run-counter", one: "1 widget", other: "{{count}} widgets" },
+      impact: {
+        basis: "run-counter",
+        one: "1 widget",
+        other: "{{count}} widgets",
+      },
     },
     {
       id: "impact-markup",
@@ -38,7 +47,11 @@ vi.mock("@openhands/extensions/automations", async (importOriginal) => {
     },
     {
       id: "impact-no-count",
-      impact: { basis: "completed-runs", one: "one check", other: "many checks" },
+      impact: {
+        basis: "completed-runs",
+        one: "one check",
+        other: "many checks",
+      },
     },
     {
       id: "impact-foreign-placeholder",
@@ -200,5 +213,31 @@ describe("resolveAutomationImpactStatement", () => {
         ),
       ).toBeNull();
     }
+  });
+});
+
+describe("integration id readers tolerate malformed entries", () => {
+  // A catalog entry that violates the type by omitting `requires` (e.g. an
+  // older/mismatched @openhands/extensions build) must not crash the Automate
+  // tab; it should simply contribute no integrations.
+  const withoutRequires = {
+    id: "broken-entry",
+    name: "Broken entry",
+  } as unknown as RecommendedAutomation;
+
+  const withoutIntegrations = {
+    id: "empty-requires",
+    name: "Empty requires",
+    requires: {},
+  } as unknown as RecommendedAutomation;
+
+  it("getIntegrationIds returns [] when requires/integrations are missing", () => {
+    expect(getIntegrationIds(withoutRequires)).toEqual([]);
+    expect(getIntegrationIds(withoutIntegrations)).toEqual([]);
+  });
+
+  it("getRequiredIntegrationIds returns [] when requires/integrations are missing", () => {
+    expect(getRequiredIntegrationIds(withoutRequires)).toEqual([]);
+    expect(getRequiredIntegrationIds(withoutIntegrations)).toEqual([]);
   });
 });
