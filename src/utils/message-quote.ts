@@ -1,5 +1,5 @@
+import { BUILT_IN_COMMANDS } from "#/utils/constants";
 import type { MessageEvent } from "#/types/agent-server/core";
-
 /**
  * Wire-format tokens for the reply-quote envelope. These are program
  * identifiers — named constants per spec (docs/specs/reply-message.md) — and
@@ -12,6 +12,21 @@ export const REPLY_CLOSE_TAG = "</reply-to>";
  * Soft cap on the quoted body, per spec assumption 4.
  */
 const MAX_QUOTE_BODY = 2000;
+
+/**
+ * True when the typed follow-up is itself a built-in slash command
+ * (`/new`, `/model <…>`, `/goal <…>`, …). Slash commands are intercepted
+ * downstream and never reach the agent as text, so the submission path must
+ * not wrap them in a reply-quote envelope (a composed envelope would break
+ * the exact/prefix command match and leak the envelope to the agent).
+ */
+export const isBuiltInSlashCommand = (followUp: string): boolean => {
+  const firstLine = followUp.trimStart().split("\n", 1)[0].trimEnd();
+  return BUILT_IN_COMMANDS.some(
+    (cmd) =>
+      firstLine === cmd.command || firstLine.startsWith(`${cmd.command} `),
+  );
+};
 
 export interface ReplyQuote {
   sourceEventId: string;

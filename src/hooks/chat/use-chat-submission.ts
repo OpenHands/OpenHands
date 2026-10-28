@@ -3,7 +3,7 @@ import {
   clearTextContent,
   clearFileInput,
 } from "#/components/features/chat/utils/chat-input.utils";
-import { composeReplyText } from "#/utils/message-quote";
+import { composeReplyText, isBuiltInSlashCommand } from "#/utils/message-quote";
 import { useConversationStore } from "#/stores/conversation-store";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import {
@@ -38,8 +38,15 @@ export const useChatSubmission = (
     // The armed quote composes into the outgoing text in the same
     // transaction that reads the composer, then disarms in the same
     // conversation the quote was armed for.
-    onSubmit(composeReplyText(pendingReplyQuote, message));
-    if (pendingReplyQuote) {
+    // A built-in slash command is intercepted downstream and never sent as
+    // text — composing an envelope around it would break the command match
+    // and leak envelope syntax to the agent. Submit raw and keep the quote
+    // armed for the user's next real message.
+    const isSlashCommand = isBuiltInSlashCommand(message);
+    onSubmit(
+      isSlashCommand ? message : composeReplyText(pendingReplyQuote, message),
+    );
+    if (pendingReplyQuote && !isSlashCommand) {
       useReplyQuoteStore
         .getState()
         .clearReplyQuote(pendingReplyQuote.conversationId);

@@ -116,4 +116,21 @@ describe("QuoteCard", () => {
     expect(onDismiss).toHaveBeenCalledTimes(1);
     expect(onJump).not.toHaveBeenCalled();
   });
+
+  it("renders a user-sourced quote body without raw HTML parsing", () => {
+    // The user's own bubble renders with allowHtml=false; the quote card
+    // must not grant quoted user text more HTML privilege than the bubble
+    // (e.g. no remote-image loading from quoted markup).
+    const { container } = render(
+      <QuoteCard
+        quote={makeQuote({
+          source: "user",
+          body: 'Hello <img src="https://evil.example.com/pixel">',
+        })}
+      />,
+    );
+
+    expect(container.querySelector("img")).toBeNull();
+    expect(container.textContent).toContain("Hello");
+  });
 });

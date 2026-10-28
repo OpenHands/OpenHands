@@ -18,6 +18,11 @@ interface QuoteCardProps {
  * localized source label, the quoted body (markdown-rendered, clamped),
  * a truncation label when flagged, a dismiss button, and optional
  * click-to-jump to the source message.
+ *
+ * The body always renders with raw HTML parsing off (`allowHtml={false}`):
+ * a quote is provenance context, and user-sourced bodies in particular must
+ * not gain HTML privileges the user's own bubble never grants
+ * (chat-message.tsx gates `allowHtml` off for user surfaces).
  */
 export function QuoteCard({ quote, onJump, onDismiss }: QuoteCardProps) {
   const { t } = useTranslation();
@@ -74,7 +79,7 @@ export function QuoteCard({ quote, onJump, onDismiss }: QuoteCardProps) {
         </div>
       </div>
       <div className="line-clamp-3 text-sm text-cool-grey-300">
-        <MarkdownRenderer>{quote.body}</MarkdownRenderer>
+        <MarkdownRenderer allowHtml={false}>{quote.body}</MarkdownRenderer>
       </div>
     </div>
   );

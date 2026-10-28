@@ -154,4 +154,32 @@ describe("useChatSubmission reply-quote composition", () => {
     expect(split.body).toContain("my follow-up");
     expect(split.body).toContain("report.pdf");
   });
+
+  it("submits a slash command raw, without an envelope, and keeps the quote armed", () => {
+    useReplyQuoteStore.getState().setReplyQuote(CONVO, makeQuote());
+    const onSubmit = vi.fn();
+    render(<Harness onSubmit={onSubmit} />);
+
+    const composer = screen.getByTestId("composer");
+    act(() => {
+      Object.defineProperty(composer, "innerText", {
+        configurable: true,
+        get: () => "/new",
+      });
+      composer.focus();
+    });
+
+    act(() => {
+      screen.getByTestId("send").click();
+    });
+
+    // The downstream /new interceptor matches on the exact trimmed string —
+    // an envelope-wrapped command would silently become a normal message.
+    expect(onSubmit).toHaveBeenCalledWith("/new");
+    // The store annotates the armed quote with its conversation scope;
+    // the quote fields themselves must survive the slash-command bypass.
+    const stillArmed = useReplyQuoteStore.getState().pendingReplyQuote;
+    expect(stillArmed?.sourceEventId).toBe("evt-source-1");
+    expect(stillArmed?.body).toBe("the original question");
+  });
 });

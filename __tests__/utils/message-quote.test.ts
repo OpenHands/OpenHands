@@ -5,6 +5,7 @@ import {
   REPLY_CLOSE_TAG,
   REPLY_OPEN_TAG,
   composeReplyText,
+  isBuiltInSlashCommand,
   quoteBodyForEvent,
   splitReplyFromText,
   type ReplyQuote,
@@ -180,5 +181,25 @@ describe("quoteBodyForEvent", () => {
 
     const whitespace = makeEvent({ id: "evt-6", source: "user", text: "   " });
     expect(quoteBodyForEvent(whitespace, "   ")).toBeNull();
+  });
+});
+
+describe("isBuiltInSlashCommand", () => {
+  it("matches exact built-in commands and command + argument forms", () => {
+    expect(isBuiltInSlashCommand("/new")).toBe(true);
+    expect(isBuiltInSlashCommand("/model sonnet")).toBe(true);
+    expect(isBuiltInSlashCommand("/goal ship it")).toBe(true);
+    expect(isBuiltInSlashCommand("  /plan  do the thing  ")).toBe(true);
+  });
+
+  it("rejects plain text, unknown commands, and envelope lookalikes", () => {
+    expect(isBuiltInSlashCommand("hello there")).toBe(false);
+    expect(isBuiltInSlashCommand("/unknown")).toBe(false);
+    expect(isBuiltInSlashCommand("/newly typed words")).toBe(false);
+    expect(
+      isBuiltInSlashCommand(
+        '<reply-to id="x" source="user" truncated="false">/new</reply-to>',
+      ),
+    ).toBe(false);
   });
 });
