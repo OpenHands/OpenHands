@@ -1,5 +1,7 @@
 import React from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { getCloudOrganizationMe } from "#/api/cloud/organization-service.api";
 import { ModelSelector } from "#/components/shared/modals/settings/model-selector";
 import { useAgentSettingsSchema } from "#/hooks/query/use-agent-settings-schema";
 import { useSettings } from "#/hooks/query/use-settings";
@@ -156,6 +158,23 @@ export function LlmSettingsScreen({
 
   const { backend, orgId } = useActiveBackend();
   const isCloud = backend.kind === "cloud";
+  // eslint-disable-next-line @tanstack/query/exhaustive-deps
+  const { data: membership } = useQuery({
+    queryKey: [
+      "cloud-current-user",
+      backend.id,
+      orgId,
+      backend.connectionRevision ?? 0,
+    ],
+    queryFn: () => getCloudOrganizationMe(orgId!, backend),
+    enabled: isCloud && !!orgId,
+    staleTime: 1000 * 60 * 5,
+    retry: false,
+    meta: { disableToast: true },
+  });
+  const subscriptionAvailable =
+    !isCloud ||
+    (!!orgId && membership?.orgId === orgId && membership.userId === orgId);
 
   const { data: providerConnections } = useProviderConnections();
   const connectionOptions = React.useMemo(
@@ -180,8 +199,11 @@ export function LlmSettingsScreen({
     data: subscriptionModels,
     isLoading: isSubscriptionModelsLoading,
     isFetching: isSubscriptionModelsFetching,
-  } = useOpenAISubscriptionModels({ enabled: enableSubscriptionModels });
+  } = useOpenAISubscriptionModels({
+    enabled: enableSubscriptionModels && subscriptionAvailable,
+  });
   const isWaitingForSubscriptionModels =
+    subscriptionAvailable &&
     enableSubscriptionModels &&
     !subscriptionModels &&
     (isSubscriptionModelsLoading || isSubscriptionModelsFetching);
@@ -394,12 +416,18 @@ export function LlmSettingsScreen({
               key: LLM_AUTH_TYPE_API_KEY,
               label: t(I18nKey.SETTINGS$LLM_AUTH_TYPE_API_KEY),
             },
-            {
-              key: LLM_AUTH_TYPE_SUBSCRIPTION,
-              label: t(I18nKey.SETTINGS$LLM_AUTH_TYPE_SUBSCRIPTION),
-            },
+            ...(subscriptionAvailable
+              ? [
+                  {
+                    key: LLM_AUTH_TYPE_SUBSCRIPTION,
+                    label: t(I18nKey.SETTINGS$LLM_AUTH_TYPE_SUBSCRIPTION),
+                  },
+                ]
+              : []),
           ]}
-          selectedKey={authType}
+          selectedKey={
+            isSubscriptionAuth && !subscriptionAvailable ? undefined : authType
+          }
           isClearable={false}
           required
           isDisabled={shouldDisableSubscriptionControls}
@@ -407,42 +435,45 @@ export function LlmSettingsScreen({
         />
       );
 
-      const renderSubscriptionSettings = () => (
-        <div
-          className="flex flex-col gap-6"
-          data-testid="llm-subscription-settings"
-        >
-          <SettingsDropdownInput
-            testId="llm-subscription-model-input"
-            name="llm.subscription_model"
-            label={t(I18nKey.SETTINGS$SUBSCRIPTION_MODEL)}
-            items={(subscriptionModels ?? []).map((model) => ({
-              key: model,
-              label: model,
-            }))}
-            selectedKey={subscriptionModelValue}
-            isClearable={false}
-            required
-            isDisabled={
-              shouldDisableSubscriptionControls || !subscriptionModels?.length
-            }
-            onSelectionChange={(selectedKey) => {
-              const nextModel =
-                typeof selectedKey === "string"
-                  ? selectedKey
-                  : subscriptionModels?.[0];
-              if (nextModel) {
-                onChange("llm.model", nextModel);
+      const renderSubscriptionSettings = () =>
+        subscriptionAvailable ? (
+          <div
+            className="flex flex-col gap-6"
+            data-testid="llm-subscription-settings"
+          >
+            <SettingsDropdownInput
+              testId="llm-subscription-model-input"
+              name="llm.subscription_model"
+              label={t(I18nKey.SETTINGS$SUBSCRIPTION_MODEL)}
+              items={(subscriptionModels ?? []).map((model) => ({
+                key: model,
+                label: model,
+              }))}
+              selectedKey={subscriptionModelValue}
+              isClearable={false}
+              required
+              isDisabled={
+                shouldDisableSubscriptionControls || !subscriptionModels?.length
               }
-            }}
-          />
-          <OpenAISubscriptionAuthCard
-            key={JSON.stringify([backend.id, orgId])}
-            isDisabled={isDisabled}
-            isCloud={isCloud}
-          />
-        </div>
-      );
+              onSelectionChange={(selectedKey) => {
+                const nextModel =
+                  typeof selectedKey === "string"
+                    ? selectedKey
+                    : subscriptionModels?.[0];
+                if (nextModel) {
+                  onChange("llm.model", nextModel);
+                }
+              }}
+            />
+            <OpenAISubscriptionAuthCard
+              key={JSON.stringify([backend.id, orgId])}
+              isDisabled={isDisabled}
+              isCloud={isCloud}
+            />
+          </div>
+        ) : (
+          <p>{t(I18nKey.SETTINGS$SUBSCRIPTION_STATUS_CLOUD_UNAUTHORIZED)}</p>
+        );
 
       return (
         <div className="flex flex-col gap-6">
@@ -548,6 +579,8 @@ export function LlmSettingsScreen({
       );
     },
     [
+      backend.id,
+      orgId,
       connectionOptions,
       showProviderConnection,
       defaultModel,
@@ -556,6 +589,7 @@ export function LlmSettingsScreen({
       freeModels,
       isWaitingForSubscriptionModels,
       settings?.llm_api_key_set,
+      subscriptionAvailable,
       subscriptionModels,
       t,
     ],
@@ -580,6 +614,11 @@ export function LlmSettingsScreen({
       const authType = resolveLlmAuthType(context.values[LLM_AUTH_TYPE_KEY]);
 
       if (authType === LLM_AUTH_TYPE_SUBSCRIPTION) {
+        if (!subscriptionAvailable) {
+          throw new Error(
+            t(I18nKey.SETTINGS$SUBSCRIPTION_STATUS_CLOUD_UNAUTHORIZED),
+          );
+        }
         llm.auth_type = LLM_AUTH_TYPE_SUBSCRIPTION;
         llm.subscription_vendor = OPENAI_SUBSCRIPTION_VENDOR;
         const model =
@@ -621,7 +660,7 @@ export function LlmSettingsScreen({
       agentSettings.llm = llm;
       return { agent_settings_diff: agentSettings };
     },
-    [schema, subscriptionModels, isCloud, t],
+    [schema, subscriptionAvailable, subscriptionModels, isCloud, t],
   );
 
   return (

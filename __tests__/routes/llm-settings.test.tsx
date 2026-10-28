@@ -64,18 +64,20 @@ function buildSettings(overrides: Partial<Settings> = {}): Settings {
 
 function renderLlmSettingsScreen(
   props: Parameters<typeof LlmSettingsScreen>[0] = {},
+  withBackendProvider = false,
+  client = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
 ) {
   return render(<LlmSettingsScreen {...props} />, {
     wrapper: ({ children }) => (
       <MemoryRouter>
-        <QueryClientProvider
-          client={
-            new QueryClient({
-              defaultOptions: { queries: { retry: false } },
-            })
-          }
-        >
-          {children}
+        <QueryClientProvider client={client}>
+          {withBackendProvider ? (
+            <activeBackendContext.ActiveBackendProvider>
+              {children}
+            </activeBackendContext.ActiveBackendProvider>
+          ) : (
+            children
+          )}
         </QueryClientProvider>
       </MemoryRouter>
     ),
@@ -252,6 +254,141 @@ describe("subscription login on a local backend", () => {
       await new Promise<void>((resolve, reject) =>
         endpoint.close((error) => (error ? reject(error) : resolve())),
       );
+    }
+  });
+});
+
+describe("LlmSettingsScreen Cloud workspace scope", () => {
+  it.each([
+    ["personal", "personal", true],
+    ["team", "personal", false],
+    ["unavailable", null, false],
+  ])(
+    "shows subscription only in the personal workspace (%s)",
+    async (orgId, userId, available) => {
+      const originalBackends = getRegisteredBackends();
+      const originalSelection = getActiveSelection();
+      setRegisteredBackends([mockCloudBackend]);
+      setActiveSelection({ backendId: mockCloudBackend.id, orgId });
+      let identityRequested = false;
+      server.use(
+        http.get(
+          `${mockCloudBackend.host}/api/organizations/${orgId}/me`,
+          () => {
+            identityRequested = true;
+            return userId === null
+              ? new HttpResponse(null, { status: 503 })
+              : HttpResponse.json({ org_id: orgId, user_id: userId });
+          },
+        ),
+      );
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+        buildSettings(),
+      );
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      const view = renderLlmSettingsScreen({}, true, queryClient);
+      try {
+        await screen.findByTestId("llm-settings-screen");
+        await waitFor(() => expect(identityRequested).toBe(true));
+        await waitFor(() =>
+          expect(
+            queryClient.getQueryState([
+              "cloud-current-user",
+              mockCloudBackend.id,
+              orgId,
+              0,
+            ])?.status,
+          ).toBe(userId === null ? "error" : "success"),
+        );
+        await userEvent.click(screen.getByTestId("llm-auth-type-input"));
+        if (available) {
+          expect(
+            await screen.findByText(
+              I18nKey.SETTINGS$LLM_AUTH_TYPE_SUBSCRIPTION,
+            ),
+          ).toBeInTheDocument();
+        } else {
+          await waitFor(() =>
+            expect(
+              screen.queryByText(I18nKey.SETTINGS$LLM_AUTH_TYPE_SUBSCRIPTION),
+            ).not.toBeInTheDocument(),
+          );
+        }
+      } finally {
+        view.unmount();
+        setRegisteredBackends(originalBackends);
+        setActiveSelection(originalSelection);
+      }
+    },
+  );
+
+  it("removes a connected login when switching to a team workspace", async () => {
+    const originalBackends = getRegisteredBackends();
+    const originalSelection = getActiveSelection();
+    setRegisteredBackends([mockCloudBackend]);
+    setActiveSelection({ backendId: mockCloudBackend.id, orgId: "personal" });
+    server.use(
+      http.get(
+        `${mockCloudBackend.host}/api/organizations/:orgId/me`,
+        ({ params }) =>
+          HttpResponse.json({ org_id: params.orgId, user_id: "personal" }),
+      ),
+    );
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          llm: {
+            model: "gpt-5.2-codex",
+            auth_type: "subscription",
+            subscription_vendor: "openai",
+          },
+        },
+      }),
+    );
+    vi.spyOn(LLMSubscriptionService, "getOpenAIStatus").mockResolvedValue({
+      vendor: "openai",
+      connected: true,
+      accountEmail: null,
+      expiresAt: null,
+    });
+    vi.spyOn(LLMSubscriptionService, "getOpenAIModels").mockResolvedValue([
+      "gpt-5.2-codex",
+    ]);
+    const control: { current: SdkSectionSaveControl | null } = {
+      current: null,
+    };
+    const view = renderLlmSettingsScreen(
+      {
+        onSaveControlChange: (value) => {
+          control.current = value;
+        },
+      },
+      true,
+    );
+    try {
+      await screen.findByTestId("openai-subscription-auth-card");
+      setActiveSelection({ backendId: mockCloudBackend.id, orgId: "team" });
+      await waitFor(() =>
+        expect(
+          screen.queryByTestId("openai-subscription-auth-card"),
+        ).not.toBeInTheDocument(),
+      );
+      expect(
+        await screen.findByText(
+          I18nKey.SETTINGS$SUBSCRIPTION_STATUS_CLOUD_UNAUTHORIZED,
+        ),
+      ).toBeInTheDocument();
+      await waitFor(() => expect(control.current).not.toBeNull());
+      expect(() => control.current!.getSavePayload()).toThrow(
+        I18nKey.SETTINGS$SUBSCRIPTION_STATUS_CLOUD_UNAUTHORIZED,
+      );
+    } finally {
+      view.unmount();
+      setRegisteredBackends(originalBackends);
+      setActiveSelection(originalSelection);
     }
   });
 });
@@ -687,6 +824,13 @@ describe("LlmSettingsScreen", () => {
     const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
     const backendSpy = vi.spyOn(activeBackendContext, "useActiveBackend");
     backendSpy.mockReturnValue({ backend: mockCloudBackend, orgId: "first" });
+    server.use(
+      http.get(
+        `${mockCloudBackend.host}/api/organizations/:orgId/me`,
+        ({ params }) =>
+          HttpResponse.json({ org_id: params.orgId, user_id: "first" }),
+      ),
+    );
     vi.spyOn(LLMSubscriptionService, "getOpenAIStatus").mockResolvedValue({
       vendor: "openai",
       connected: false,
