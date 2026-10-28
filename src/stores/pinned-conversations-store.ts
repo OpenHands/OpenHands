@@ -1,16 +1,33 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 
+export const PINNED_CONVERSATIONS_STORAGE_KEY = "pinned-conversations";
+
+/**
+ * Build the stable scope key for pinned conversations.
+ *
+ * For local backends (orgId is null/undefined), pins are keyed by backendId.
+ * For cloud backends, pins are attributed to the active organization
+ * (`backendId::orgId`) so pins do not leak across different workspaces or
+ * get erroneously pruned when switching between organizations.
+ */
+export function getPinnedConversationsScopeKey(
+  backendId: string,
+  orgId?: string | null,
+): string {
+  return orgId ? `${backendId}::${orgId}` : backendId;
+}
+
 interface PinnedConversationsState {
   pinsByBackendId: Record<string, string[]>;
 }
 
 interface PinnedConversationsActions {
-  pinConversation: (backendId: string, conversationId: string) => void;
-  unpinConversation: (backendId: string, conversationId: string) => void;
-  togglePin: (backendId: string, conversationId: string) => void;
+  pinConversation: (scopeKey: string, conversationId: string) => void;
+  unpinConversation: (scopeKey: string, conversationId: string) => void;
+  togglePin: (scopeKey: string, conversationId: string) => void;
   pruneMissingConversations: (
-    backendId: string,
+    scopeKey: string,
     existingIds: readonly string[],
   ) => void;
 }
@@ -22,11 +39,11 @@ const initialState: PinnedConversationsState = {
   pinsByBackendId: {},
 };
 
-function getPinsForBackend(
+function getPinsForScope(
   pinsByBackendId: Record<string, string[]>,
-  backendId: string,
+  scopeKey: string,
 ): string[] {
-  return pinsByBackendId[backendId] ?? [];
+  return pinsByBackendId[scopeKey] ?? [];
 }
 
 export const usePinnedConversationsStore = create<PinnedConversationsStore>()(
@@ -34,44 +51,44 @@ export const usePinnedConversationsStore = create<PinnedConversationsStore>()(
     (set, get) => ({
       ...initialState,
 
-      pinConversation: (backendId, conversationId) => {
-        const current = getPinsForBackend(get().pinsByBackendId, backendId);
+      pinConversation: (scopeKey, conversationId) => {
+        const current = getPinsForScope(get().pinsByBackendId, scopeKey);
         if (current.includes(conversationId)) {
           return;
         }
         set((state) => ({
           pinsByBackendId: {
             ...state.pinsByBackendId,
-            [backendId]: [conversationId, ...current],
+            [scopeKey]: [conversationId, ...current],
           },
         }));
       },
 
-      unpinConversation: (backendId, conversationId) => {
-        const current = getPinsForBackend(get().pinsByBackendId, backendId);
+      unpinConversation: (scopeKey, conversationId) => {
+        const current = getPinsForScope(get().pinsByBackendId, scopeKey);
         if (!current.includes(conversationId)) {
           return;
         }
         set((state) => ({
           pinsByBackendId: {
             ...state.pinsByBackendId,
-            [backendId]: current.filter((id) => id !== conversationId),
+            [scopeKey]: current.filter((id) => id !== conversationId),
           },
         }));
       },
 
-      togglePin: (backendId, conversationId) => {
-        const current = getPinsForBackend(get().pinsByBackendId, backendId);
+      togglePin: (scopeKey, conversationId) => {
+        const current = getPinsForScope(get().pinsByBackendId, scopeKey);
         if (current.includes(conversationId)) {
-          get().unpinConversation(backendId, conversationId);
+          get().unpinConversation(scopeKey, conversationId);
         } else {
-          get().pinConversation(backendId, conversationId);
+          get().pinConversation(scopeKey, conversationId);
         }
       },
 
-      pruneMissingConversations: (backendId, existingIds) => {
+      pruneMissingConversations: (scopeKey, existingIds) => {
         const existing = new Set(existingIds);
-        const current = getPinsForBackend(get().pinsByBackendId, backendId);
+        const current = getPinsForScope(get().pinsByBackendId, scopeKey);
         const pruned = current.filter((id) => existing.has(id));
         if (pruned.length === current.length) {
           return;
@@ -79,13 +96,13 @@ export const usePinnedConversationsStore = create<PinnedConversationsStore>()(
         set((state) => ({
           pinsByBackendId: {
             ...state.pinsByBackendId,
-            [backendId]: pruned,
+            [scopeKey]: pruned,
           },
         }));
       },
     }),
     {
-      name: "pinned-conversations",
+      name: PINNED_CONVERSATIONS_STORAGE_KEY,
       storage: createJSONStorage(() => localStorage),
       partialize: (state): PinnedConversationsState => ({
         pinsByBackendId: state.pinsByBackendId,
