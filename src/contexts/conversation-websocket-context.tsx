@@ -526,46 +526,6 @@ export function ConversationWebSocketProvider({
     );
   }, [subConversations]);
 
-  // Merged connection state - reflects combined status of both connections
-  const connectionState = useMemo<WebSocketConnectionState>(() => {
-    // If planning agent connection doesn't exist, use main connection state
-    if (!planningAgentWsUrl) {
-      return mainConnectionState;
-    }
-
-    // If either is connecting, merged state is connecting
-    if (
-      mainConnectionState === "CONNECTING" ||
-      planningConnectionState === "CONNECTING"
-    ) {
-      return "CONNECTING";
-    }
-
-    // If both are open, merged state is open
-    if (mainConnectionState === "OPEN" && planningConnectionState === "OPEN") {
-      return "OPEN";
-    }
-
-    // If both are closed, merged state is closed
-    if (
-      mainConnectionState === "CLOSED" &&
-      planningConnectionState === "CLOSED"
-    ) {
-      return "CLOSED";
-    }
-
-    // If either is closing, merged state is closing
-    if (
-      mainConnectionState === "CLOSING" ||
-      planningConnectionState === "CLOSING"
-    ) {
-      return "CLOSING";
-    }
-
-    // Default to closed if states don't match expected patterns
-    return "CLOSED";
-  }, [mainConnectionState, planningConnectionState, planningAgentWsUrl]);
-
   useEffect(() => {
     if (
       expectedEventCountPlanning !== null &&
@@ -1272,13 +1232,63 @@ export function ConversationWebSocketProvider({
     socket: mainSocket,
     reconnect: reconnectMain,
     disconnect: disconnectMain,
+    isReconnecting: isMainReconnecting,
   } = useWebSocket(websocketUrl || "", mainWebsocketOptions);
 
   const {
     socket: planningAgentSocket,
     reconnect: reconnectPlanning,
     disconnect: disconnectPlanning,
+    isReconnecting: isPlanningReconnecting,
   } = useWebSocket(planningAgentWsUrl || "", planningWebsocketOptions);
+
+  // A dropped socket that `useWebSocket` is retrying is reconnecting, not
+  // closed. The retry opens its replacement from a backoff timer without a
+  // render, so the readyState sync below never reports it as CONNECTING, and
+  // the status read "Disconnected" behind the connection-error banner for the
+  // whole outage. Without a URL (e.g. a missing, non-resumable runtime) there
+  // is nothing to reconnect to, so the raw state is kept.
+  const mainStatus: WebSocketConnectionState =
+    websocketUrl && isMainReconnecting && mainConnectionState !== "OPEN"
+      ? "CONNECTING"
+      : mainConnectionState;
+  const planningStatus: WebSocketConnectionState =
+    planningAgentWsUrl &&
+    isPlanningReconnecting &&
+    planningConnectionState !== "OPEN"
+      ? "CONNECTING"
+      : planningConnectionState;
+
+  // Merged connection state - reflects combined status of both connections
+  const connectionState = useMemo<WebSocketConnectionState>(() => {
+    // If planning agent connection doesn't exist, use main connection state
+    if (!planningAgentWsUrl) {
+      return mainStatus;
+    }
+
+    // If either is connecting, merged state is connecting
+    if (mainStatus === "CONNECTING" || planningStatus === "CONNECTING") {
+      return "CONNECTING";
+    }
+
+    // If both are open, merged state is open
+    if (mainStatus === "OPEN" && planningStatus === "OPEN") {
+      return "OPEN";
+    }
+
+    // If both are closed, merged state is closed
+    if (mainStatus === "CLOSED" && planningStatus === "CLOSED") {
+      return "CLOSED";
+    }
+
+    // If either is closing, merged state is closing
+    if (mainStatus === "CLOSING" || planningStatus === "CLOSING") {
+      return "CLOSING";
+    }
+
+    // Default to closed if states don't match expected patterns
+    return "CLOSED";
+  }, [mainStatus, planningStatus, planningAgentWsUrl]);
 
   // Messages submitted on a cloud backend while the target conversation has
   // no runtime URL (sandbox PAUSED/STARTING) have nowhere to go: the V1 agent
@@ -1573,21 +1583,14 @@ export function ConversationWebSocketProvider({
   const contextValue = useMemo(
     () => ({
       connectionState,
-      mainConnectionState,
+      mainConnectionState: mainStatus,
       sendMessage,
       isLoadingHistory,
       reconnect,
       hasConnectedOnce:
         hasConnectedRefMain.current || hasConnectedRefPlanning.current,
     }),
-    [
-      connectionState,
-      mainConnectionState,
-      planningConnectionState,
-      sendMessage,
-      isLoadingHistory,
-      reconnect,
-    ],
+    [connectionState, mainStatus, sendMessage, isLoadingHistory, reconnect],
   );
 
   return (
