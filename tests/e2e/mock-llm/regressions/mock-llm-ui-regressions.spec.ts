@@ -18,14 +18,70 @@ import type { CriticResult } from "#/types/agent-server/core/base/critic";
 import {
   seedLocalStorage,
   routeSessionApiKey,
+  ensureMockLLMProfile,
+  registerTrajectory,
+  activateTrajectory,
+  resetMockLLM,
+  waitForAgentMessageContaining,
+  deleteConversation,
+  waitForPath,
+  waitForTestId,
+  dismissAnalyticsModal,
+  getConversationIdFromURL,
+  setChatInput,
+  BACKEND_URL,
+  SESSION_API_KEY,
 } from "../utils/mock-llm-helpers";
+import { REPLY_OPEN_TAG, REPLY_CLOSE_TAG } from "#/utils/message-quote";
 
 test.describe.configure({ mode: "serial" });
 
-// ═══════════════════════════════════════════════════════════════════════
-// Helpers
-// ═══════════════════════════════════════════════════════════════════════
+// Deterministic agent reply for the reply-message regression: long enough
+// that the quoted-message jump is a real scroll, and unique enough to
+// filter bubbles by text.
+const REPLY_AGENT_TEXT = Array.from(
+  { length: 30 },
+  (_, i) => `Answer paragraph ${i + 1}. The detailed explanation continues.`,
+).join("\n\n");
+const REPLY_AGENT_TEXT_BG = "Answer paragraph 1.";
 
+// Conversations created by the reply-message regression; best-effort
+// cleanup after each test.
+const replyConversationIds = new Set<string>();
+
+/** Find the event id of the agent message containing the scripted reply. */
+async function resolveQuotedEventId(
+  request: import("@playwright/test").APIRequestContext,
+  conversationId: string,
+  token: string,
+): Promise<string> {
+  const resp = await request.get(
+    `${BACKEND_URL}/api/conversations/${encodeURIComponent(conversationId)}/events/search`,
+    {
+      headers: { "X-Session-API-Key": SESSION_API_KEY },
+      params: { limit: "100" },
+    },
+  );
+  expect(resp.ok(), `events search: ${resp.status()}`).toBe(true);
+  const body = (await resp.json()) as {
+    items?: Array<{
+      id?: string;
+      kind?: string;
+      source?: string;
+      llm_message?: { content?: Array<{ type?: string; text?: string }> };
+    }>;
+  };
+  const match = (body.items ?? []).find((e) =>
+    (e.llm_message?.content ?? []).some(
+      (c) => typeof c.text === "string" && c.text.includes(token),
+    ),
+  );
+  expect(
+    match?.id,
+    `no agent event containing "${token.slice(0, 30)}…"`,
+  ).toBeTruthy();
+  return match!.id!;
+}
 // ─── pagination helpers ──────────────────────────────────────────────
 
 const PAGINATION_CONVERSATION_ID = "pagination-e2e";
@@ -1020,6 +1076,168 @@ test.describe("UI regressions", () => {
       await page.keyboard.press("Shift+Tab");
       await expect(control).toBeFocused();
       await expect(control).toHaveCSS("outline-color", "rgb(115, 20, 185)");
+    }
+  });
+
+  // @spec reply-message — Reply/quote round trip on a REAL conversation
+  // (real runtime, persisted events): envelope on the wire, quote card
+  // after reload, click-to-jump scroll + highlight.
+  test("reply quote rides the message, survives reload, and jumps back", async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(180_000);
+    await routeSessionApiKey(page);
+    // The composer's "LLM ready" gate follows the active agent profile's
+    // llm_profile_ref; create + activate the mock-LLM profile through the
+    // Settings UI (same flow a user follows, no real credentials).
+    await ensureMockLLMProfile(page);
+
+    // Reset AFTER the profile flow: profile validation ping consumes
+    // completion requests but no trajectory turns, yet earlier suites may
+    // have switched trajectories — start from this test's scripted reply.
+    await resetMockLLM(request);
+    await registerTrajectory(request, "reply-message-regression", [
+      // The first completion generates the conversation title; the second
+      // is the agent reply (see onboarding-hello for the same pattern).
+      { text: "Reply message regression" },
+      { text: REPLY_AGENT_TEXT },
+    ]);
+    await activateTrajectory(request, "reply-message-regression");
+
+    // Create a real conversation from the home composer — the flow a real
+    // user follows; the runtime, echo, and persistence are all genuine.
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await dismissAnalyticsModal(page);
+    await waitForTestId(page, "home-chat-launcher");
+    await setChatInput(page, "Start of the reply-message regression flow.");
+    await page.getByTestId("submit-button").click();
+    await waitForPath(page, /\/conversations\/.+/, 60_000);
+    const conversationId = getConversationIdFromURL(page);
+    replyConversationIds.add(conversationId);
+
+    // Wait for the scripted agent reply to stream in.
+    await waitForAgentMessageContaining(
+      request,
+      conversationId,
+      REPLY_AGENT_TEXT_BG,
+      90_000,
+    );
+
+    /** The persisted event carrying the envelope, or a diagnostic marker. */
+    const findEnvelope = async (): Promise<string | null> => {
+      const resp = await request.get(
+        `${BACKEND_URL}/api/conversations/${encodeURIComponent(conversationId)}/events/search`,
+        {
+          headers: { "X-Session-API-Key": SESSION_API_KEY },
+          params: { limit: "100" },
+        },
+      );
+      if (!resp.ok()) return "<unavailable>";
+      const body = (await resp.json()) as {
+        items?: Array<{
+          llm_message?: { content?: Array<{ type?: string; text?: string }> };
+        }>;
+      };
+      const eventText = (body.items ?? [])
+        .map((e) =>
+          (e.llm_message?.content ?? [])
+            .map((c) => (typeof c.text === "string" ? c.text : ""))
+            .join("\n"),
+        )
+        .find((text) => text.includes(REPLY_OPEN_TAG));
+      return eventText ?? null;
+    };
+
+    const agentEventId = await resolveQuotedEventId(
+      request,
+      conversationId,
+      REPLY_AGENT_TEXT_BG,
+    );
+
+    await test.step("reply → arm card → send quoted reply", async () => {
+      const agentBubble = page
+        .locator("article[data-event-id]")
+        .filter({ hasText: REPLY_AGENT_TEXT_BG })
+        .first();
+      await expect(agentBubble).toBeVisible({ timeout: 30_000 });
+      // The finalized bubble replaces the transient streaming bubble; let
+      // that swap settle before interacting.
+      await page.waitForTimeout(2_000);
+
+      // The action row renders on React's onMouseEnter state, which the
+      // WS reconnect loop can reset by re-mounting the feed. Trigger the
+      // row and drive the Reply handler through the DOM button — the same
+      // handler a real hover-click reaches.
+      const clicked = await agentBubble.evaluate((el) => {
+        el.dispatchEvent(new MouseEvent("mouseenter"));
+        const btn = Array.from(el.querySelectorAll("button")).find(
+          (b) => b.getAttribute("aria-label")?.toLowerCase() === "reply",
+        );
+        if (!btn) return false;
+        btn.click();
+        return true;
+      });
+      expect(clicked, "Reply action button not found").toBe(true);
+
+      // The armed composer card is the only place the dismiss control
+      // exists (sent-bubble cards have no dismiss button).
+      const dismissControl = page.getByRole("button", {
+        name: "Dismiss reply quote",
+      });
+      await expect(dismissControl).toBeVisible({ timeout: 10_000 });
+
+      await setChatInput(page, "Great answer, thanks!");
+      await page.getByTestId("submit-button").click();
+
+      // The composer card is disarmed after send (single-writer clear
+      // contract). A quote-card also renders inside the sent bubble — the
+      // composer's dismiss control disappearing is the disarm signal.
+      await expect(dismissControl).toBeHidden({ timeout: 10_000 });
+    });
+
+    await test.step("envelope persisted in the user event", async () => {
+      let envelope: string | null = "<unavailable>";
+      await expect
+        .poll(
+          async () => {
+            envelope = await findEnvelope();
+            return envelope;
+          },
+          { timeout: 60_000 },
+        )
+        .not.toBeNull();
+      expect(envelope).toContain(REPLY_OPEN_TAG);
+      expect(envelope).toContain(REPLY_CLOSE_TAG);
+    });
+
+    await test.step("reload → bubble card renders → click jumps", async () => {
+      await page.reload({ waitUntil: "domcontentloaded" });
+      const replyBubble = page
+        .locator("article[data-event-id]")
+        .filter({ hasText: "Great answer, thanks!" })
+        .first();
+      await expect(replyBubble).toBeVisible({ timeout: 30_000 });
+      const sentBubbleCard = replyBubble.getByTestId("quote-card");
+      await expect(sentBubbleCard).toBeVisible();
+
+      await sentBubbleCard.click();
+      const target = page.locator(`[data-event-id="${agentEventId}"]`);
+      await expect(target).toHaveAttribute("data-event-jump-highlight", "", {
+        timeout: 10_000,
+      });
+    });
+  });
+
+  test.afterEach(async ({ request }) => {
+    // Best-effort cleanup of conversations this spec created.
+    for (const id of Array.from(replyConversationIds)) {
+      try {
+        await deleteConversation(request, id);
+        replyConversationIds.delete(id);
+      } catch {
+        // best-effort: the serial pagination tests share the describe
+      }
     }
   });
 });
