@@ -1,4 +1,10 @@
-import { render, screen, within } from "@testing-library/react";
+import {
+  render,
+  screen,
+  within,
+  fireEvent,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -59,6 +65,66 @@ describe("WorkspacePath", () => {
     expect(
       within(workspacePath).getByRole("button", { name: "BUTTON$COPIED" }),
     ).toBeDisabled();
+  });
+
+  it("copies via document.execCommand when navigator.clipboard is undefined", async () => {
+    const path = "/workspace/project";
+    const originalExecCommand = document.execCommand;
+    document.execCommand = vi.fn().mockReturnValue(true);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: undefined,
+    });
+
+    try {
+      render(<WorkspacePath path={path} />);
+
+      const workspacePath = screen.getByTestId("files-tab-workspace-path");
+      fireEvent.click(
+        within(workspacePath).getByRole("button", { name: "BUTTON$COPY" }),
+      );
+
+      await waitFor(() => {
+        expect(document.execCommand).toHaveBeenCalledWith("copy");
+        expect(
+          within(workspacePath).getByRole("button", { name: "BUTTON$COPIED" }),
+        ).toBeDisabled();
+      });
+    } finally {
+      document.execCommand = originalExecCommand;
+    }
+  });
+
+  it("does not switch to copied state when copy fails completely", async () => {
+    const path = "/workspace/project";
+    const originalExecCommand = document.execCommand;
+    document.execCommand = vi.fn().mockReturnValue(false);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: undefined,
+    });
+
+    try {
+      render(<WorkspacePath path={path} />);
+
+      const workspacePath = screen.getByTestId("files-tab-workspace-path");
+      fireEvent.click(
+        within(workspacePath).getByRole("button", { name: "BUTTON$COPY" }),
+      );
+
+      await waitFor(() => {
+        expect(
+          within(workspacePath).getByRole("button", { name: "BUTTON$COPY" }),
+        ).toBeInTheDocument();
+        expect(
+          within(workspacePath).queryByRole("button", {
+            name: "BUTTON$COPIED",
+          }),
+        ).not.toBeInTheDocument();
+      });
+    } finally {
+      document.execCommand = originalExecCommand;
+    }
   });
 
   it("does not render without a workspace path", () => {

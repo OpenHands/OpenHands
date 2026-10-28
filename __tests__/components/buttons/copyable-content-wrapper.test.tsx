@@ -1,6 +1,7 @@
-import { render, screen, waitFor } from "@testing-library/react";
+/* eslint-disable i18next/no-literal-string */
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { CopyableContentWrapper } from "#/components/shared/buttons/copyable-content-wrapper";
 
 describe("CopyableContentWrapper", () => {
@@ -56,5 +57,76 @@ describe("CopyableContentWrapper", () => {
       "aria-label",
       "BUTTON$COPIED",
     );
+  });
+
+  it("should show copied state when fallback succeeds in non-secure contexts", async () => {
+    const originalClipboard = navigator.clipboard;
+    const originalExecCommand = document.execCommand;
+    try {
+      Object.defineProperty(navigator, "clipboard", {
+        value: undefined,
+        configurable: true,
+        writable: true,
+      });
+      document.execCommand = vi.fn().mockReturnValue(true);
+
+      render(
+        <CopyableContentWrapper text="fallback text">
+          <p>content</p>
+        </CopyableContentWrapper>,
+      );
+
+      fireEvent.click(screen.getByTestId("copy-to-clipboard"));
+
+      await waitFor(() => {
+        expect(document.execCommand).toHaveBeenCalledWith("copy");
+        expect(screen.getByTestId("copy-to-clipboard")).toHaveAttribute(
+          "aria-label",
+          "BUTTON$COPIED",
+        );
+      });
+    } finally {
+      Object.defineProperty(navigator, "clipboard", {
+        value: originalClipboard,
+        configurable: true,
+        writable: true,
+      });
+      document.execCommand = originalExecCommand;
+    }
+  });
+
+  it("should display error toast and keep copy mode when copy fails", async () => {
+    const originalClipboard = navigator.clipboard;
+    const originalExecCommand = document.execCommand;
+    try {
+      Object.defineProperty(navigator, "clipboard", {
+        value: undefined,
+        configurable: true,
+        writable: true,
+      });
+      document.execCommand = vi.fn().mockReturnValue(false);
+
+      render(
+        <CopyableContentWrapper text="failing text">
+          <p>content</p>
+        </CopyableContentWrapper>,
+      );
+
+      fireEvent.click(screen.getByTestId("copy-to-clipboard"));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("copy-to-clipboard")).toHaveAttribute(
+          "aria-label",
+          "BUTTON$COPY",
+        );
+      });
+    } finally {
+      Object.defineProperty(navigator, "clipboard", {
+        value: originalClipboard,
+        configurable: true,
+        writable: true,
+      });
+      document.execCommand = originalExecCommand;
+    }
   });
 });

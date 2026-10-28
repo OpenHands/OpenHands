@@ -8,6 +8,8 @@ import {
   ADD_SKILL_EXAMPLE_COMMAND,
 } from "#/constants/skills-docs";
 import { I18nKey } from "#/i18n/declaration";
+import { copyToClipboard } from "#/utils/copy-to-clipboard";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { cn } from "#/utils/utils";
 import { modalTitleLgClassName } from "#/utils/modal-classes";
 import CheckmarkIcon from "#/icons/checkmark.svg?react";
@@ -49,8 +51,12 @@ function AddSkillExampleBlock() {
   const [copied, setCopied] = React.useState(false);
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(ADD_SKILL_EXAMPLE_COMMAND);
-    setCopied(true);
+    const success = await copyToClipboard(ADD_SKILL_EXAMPLE_COMMAND);
+    if (success) {
+      setCopied(true);
+    } else {
+      displayErrorToast(t(I18nKey.CHAT_INTERFACE$CHAT_MESSAGE_COPY_FAILED));
+    }
   };
 
   React.useEffect(() => {

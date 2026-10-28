@@ -7,7 +7,11 @@ import { useUnifiedPauseConversation } from "./mutation/use-unified-stop-convers
 import { useUpdateConversationPublicFlag } from "./mutation/use-update-conversation-public-flag";
 import { useActiveConversation } from "./query/use-active-conversation";
 import { useEventStore } from "#/stores/use-event-store";
-import { displaySuccessToast } from "#/utils/custom-toast-handlers";
+import { copyToClipboard } from "#/utils/copy-to-clipboard";
+import {
+  displayErrorToast,
+  displaySuccessToast,
+} from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
 import { getStoredConversationMetadata } from "#/api/conversation-metadata-store";
 import { buildAgentCanvasUrl } from "#/utils/base-path";
@@ -174,7 +178,9 @@ export function useConversationNameContextMenu({
     );
   }, [conversationId, backend.kind, backend.host]);
 
-  const handleCopyShareLink = (event: React.MouseEvent<HTMLButtonElement>) => {
+  const handleCopyShareLink = async (
+    event: React.MouseEvent<HTMLButtonElement>,
+  ) => {
     event.preventDefault();
     event.stopPropagation();
 
@@ -183,8 +189,12 @@ export function useConversationNameContextMenu({
       return;
     }
 
-    navigator.clipboard.writeText(shareUrl);
-    displaySuccessToast(t(I18nKey.CONVERSATION$LINK_COPIED));
+    const success = await copyToClipboard(shareUrl);
+    if (success) {
+      displaySuccessToast(t(I18nKey.CONVERSATION$LINK_COPIED));
+    } else {
+      displayErrorToast(t(I18nKey.CHAT_INTERFACE$CHAT_MESSAGE_COPY_FAILED));
+    }
   };
 
   return {

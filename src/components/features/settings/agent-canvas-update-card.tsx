@@ -27,6 +27,8 @@ import { useLatestAgentCanvasVersion } from "#/hooks/query/use-latest-agent-canv
 import DockerIcon from "#/icons/docker.svg?react";
 import NpmIcon from "#/icons/npm.svg?react";
 import { I18nKey } from "#/i18n/declaration";
+import { copyToClipboard } from "#/utils/copy-to-clipboard";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { cn } from "#/utils/utils";
 
 const COPY_FEEDBACK_MS = 2000;
@@ -75,17 +77,21 @@ function UpdateCommandTabs() {
     }
   }, [selectedTab]);
 
-  const copyCommand = useCallback(() => {
-    void navigator.clipboard?.writeText(command);
-    setCopied(true);
-    if (copiedTimeoutRef.current !== null) {
-      window.clearTimeout(copiedTimeoutRef.current);
+  const copyCommand = useCallback(async () => {
+    const success = await copyToClipboard(command);
+    if (success) {
+      setCopied(true);
+      if (copiedTimeoutRef.current !== null) {
+        window.clearTimeout(copiedTimeoutRef.current);
+      }
+      copiedTimeoutRef.current = window.setTimeout(() => {
+        setCopied(false);
+        copiedTimeoutRef.current = null;
+      }, COPY_FEEDBACK_MS);
+    } else {
+      displayErrorToast(t(I18nKey.CHAT_INTERFACE$CHAT_MESSAGE_COPY_FAILED));
     }
-    copiedTimeoutRef.current = window.setTimeout(() => {
-      setCopied(false);
-      copiedTimeoutRef.current = null;
-    }, COPY_FEEDBACK_MS);
-  }, [command]);
+  }, [command, t]);
 
   return (
     <div className="w-full">

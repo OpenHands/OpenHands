@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 380" width="100%" height="100%">
+  <defs>
+    <style>
+      .title { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 18px; font-weight: 600; fill: #1e293b; }
+      .subtitle { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 13px; fill: #64748b; }
+      .header { font-family: "Segoe UI", Tahoma, sans-serif; font-size: 12px; font-weight: 600; fill: #334155; }
+      .card-title { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 14px; font-weight: 600; }
+      .code-font { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 11px; }
+    </style>
+  </defs>
+
+  <rect width="880" height="380" fill="#f8fafc" rx="12" />
+
+  <text x="30" y="36" class="title">Issue #18582 Verification: Clipboard Fallback in Non-Secure Contexts</text>
+  <text x="30" y="58" class="subtitle">Ensuring copy buttons function reliably in HTTP self-hosted environments or older browsers</text>
+
+  <!-- Left: Before Fix -->
+  <g transform="translate(30, 80)">
+    <rect width="395" height="260" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5" />
+    <rect x="0" y="0" width="395" height="32" rx="8" fill="#fee2e2" />
+    <rect x="0" y="28" width="395" height="4" fill="#fee2e2" />
+    <text x="14" y="21" class="header" fill="#991b1b">BEFORE (Unguarded Clipboard API)</text>
+
+    <g transform="translate(15, 45)">
+      <rect width="365" height="45" rx="6" fill="#f8fafc" stroke="#e2e8f0" />
+      <text x="12" y="20" class="code-font" fill="#475569">http://192.168.1.50:3000 (Plain HTTP)</text>
+      <text x="12" y="36" class="code-font" fill="#ef4444">navigator.clipboard is undefined</text>
+
+      <rect y="55" width="365" height="60" rx="6" fill="#fef2f2" stroke="#fecaca" />
+      <text x="12" y="75" class="code-font" fill="#b91c1c">TypeError: Cannot read properties of</text>
+      <text x="12" y="92" class="code-font" fill="#b91c1c">undefined (reading 'writeText')</text>
+
+      <text x="5" y="145" class="card-title" fill="#0f172a">Failure Symptoms</text>
+      <text x="5" y="165" font-family="sans-serif" font-size="12" fill="#ef4444">❌ Silent failure on click (nothing copied)</text>
+      <text x="5" y="183" font-family="sans-serif" font-size="12" fill="#64748b">• No fallback to textarea + execCommand</text>
+      <text x="5" y="201" font-family="sans-serif" font-size="12" fill="#64748b">• False success toasts on share link copy</text>
+    </g>
+  </g>
+
+  <!-- Right: After Fix -->
+  <g transform="translate(455, 80)">
+    <rect width="395" height="260" rx="8" fill="#ffffff" stroke="#10b981" stroke-width="2" />
+    <rect x="0" y="0" width="395" height="32" rx="8" fill="#d1fae5" />
+    <rect x="0" y="28" width="395" height="4" fill="#d1fae5" />
+    <text x="14" y="21" class="header" fill="#065f46">AFTER (Universal copyToClipboard Helper)</text>
+
+    <g transform="translate(15, 45)">
+      <rect width="365" height="45" rx="6" fill="#f8fafc" stroke="#e2e8f0" />
+      <text x="12" y="20" class="code-font" fill="#475569">1. Try navigator.clipboard.writeText(text)</text>
+      <text x="12" y="36" class="code-font" fill="#059669">2. Fallback to textarea + execCommand('copy')</text>
+
+      <rect y="55" width="365" height="60" rx="6" fill="#f0fdf4" stroke="#bbf7d0" />
+      <text x="12" y="75" class="code-font" fill="#15803d">try ... finally cleanup guaranteed</text>
+      <text x="12" y="92" class="code-font" fill="#15803d">returns true / false safely</text>
+
+      <text x="5" y="145" class="card-title" fill="#0f172a">Verified Improvements</text>
+      <text x="5" y="165" font-family="sans-serif" font-size="12" fill="#10b981">✅ Works across HTTPS, HTTP and older browsers</text>
+      <text x="5" y="183" font-family="sans-serif" font-size="12" fill="#334155">• Migrated all 11 call sites across Canvas UI</text>
+      <text x="5" y="201" font-family="sans-serif" font-size="12" fill="#334155">• Honest success and failure feedback toasts</text>
+    </g>
+  </g>
+</svg>

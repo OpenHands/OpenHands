@@ -1,6 +1,8 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
+import { copyToClipboard } from "#/utils/copy-to-clipboard";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import type { SkillInfo } from "#/types/settings";
 import { cn } from "#/utils/utils";
 import CopyIcon from "#/icons/copy.svg?react";
@@ -44,8 +46,12 @@ export function SkillCard({
       return;
     }
 
-    await navigator.clipboard.writeText(skill.source);
-    setSourceCopied(true);
+    const success = await copyToClipboard(skill.source);
+    if (success) {
+      setSourceCopied(true);
+    } else {
+      displayErrorToast(t(I18nKey.CHAT_INTERFACE$CHAT_MESSAGE_COPY_FAILED));
+    }
   };
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
