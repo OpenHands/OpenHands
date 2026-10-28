@@ -10,6 +10,7 @@ import { useResolvedWorkspaces } from "#/hooks/query/use-resolved-workspaces";
 import { useStartTasks } from "#/hooks/query/use-start-tasks";
 import { useDeleteConversation } from "#/hooks/mutation/use-delete-conversation";
 import { useUnifiedPauseConversation } from "#/hooks/mutation/use-unified-stop-conversation";
+import { resumeConversation } from "#/hooks/mutation/conversation-mutation-utils";
 import { ConfirmArchiveModal } from "./confirm-archive-modal";
 import { ConfirmDeleteModal } from "./confirm-delete-modal";
 import { ConfirmStopModal } from "./confirm-stop-modal";
@@ -64,7 +65,6 @@ import { uniqueById } from "#/utils/unique-by-id";
 import {
   isEffectivelyArchivedConversation,
   isMissingSandboxStatus,
-  isRuntimeUnavailableSandboxStatus,
 } from "#/utils/conversation-archive-status";
 import type { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
 
@@ -693,6 +693,55 @@ export function ConversationPanel({
   const { mutate: updateConversation } = useUpdateConversation();
   const { mutate: updateConversationTags } = useUpdateConversationTags();
 
+  // Conversations that are resumable: the list shows them as paused (local
+  // runtime execution_status === PAUSED, or Cloud sandbox_status === PAUSED)
+  // and they are not effectively archived. The "Wake all agents" button
+  // only appears when at least one is visible.
+  const resumableConversations = React.useMemo(
+    () =>
+      allLoadedConversations.filter((c) => {
+        if (isRowArchived(c)) {
+          return false;
+        }
+        if (activeBackend.kind === "cloud") {
+          return c.sandbox_status === "PAUSED";
+        }
+        return c.execution_status === "paused";
+      }),
+    [allLoadedConversations, activeBackend.kind, isRowArchived],
+  );
+
+  const showWakeAllButton =
+    !compact && !isLoading && isFetched && resumableConversations.length > 0;
+
+  const handleWakeAllAgents = React.useCallback(async () => {
+    const toWake = resumableConversations.map((c) => c.id);
+    if (toWake.length === 0) {
+      displaySuccessToast(t(I18nKey.CONVERSATION_PANEL$WAKE_ALL_AGENTS_NONE));
+      return;
+    }
+
+    const results = await Promise.allSettled(
+      toWake.map((id) => resumeConversation(id)),
+    );
+
+    const succeeded = results.filter((r) => r.status === "fulfilled").length;
+    const failedCount = results.length - succeeded;
+
+    if (succeeded > 0) {
+      displaySuccessToast(
+        t(I18nKey.CONVERSATION_PANEL$WAKE_ALL_AGENTS_SUCCESS, {
+          count: succeeded,
+        }),
+      );
+    }
+    if (failedCount > 0) {
+      displayErrorToast(
+        `${failedCount} conversation${failedCount === 1 ? "" : "s"} failed to wake up.`,
+      );
+    }
+  }, [resumableConversations, t]);
+
   // The next page of conversations is loaded only via the explicit "Load
   // more" link rendered at the end of the list — there is no scroll-driven
   // pagination, which previously caused the panel to feel like it had stray
@@ -719,27 +768,6 @@ export function ConversationPanel({
           workingDir: launch.workingDir,
           repository: launch.repository,
           entryPoint: "sidebar_relaunch_project",
-        },
-        {
-          onSuccess: (data) => {
-            navigate(`/conversations/${data.conversation_id}`);
-          },
-        },
-      );
-    },
-    [createConversation, isCreatingConversationFlow, navigate],
-  );
-
-  // Mirrors the `/new` command: the new conversation reuses the row's sandbox
-  // and nothing else. No parent id, so it shows up in this list; no
-  // repository, so the backend doesn't touch the shared working tree's branch.
-  const handleNewConversationInSandbox = React.useCallback(
-    (sandboxId: string) => {
-      if (isCreatingConversationFlow) return;
-      createConversation(
-        {
-          sandboxId,
-          entryPoint: "sidebar_new_conversation_in_sandbox",
         },
         {
           onSuccess: (data) => {
@@ -912,11 +940,6 @@ export function ConversationPanel({
       const runtimeMissing = isMissingSandboxStatus(
         conversation.sandbox_status,
       );
-      // "New Conversation in Sandbox" needs a sandbox the backend can start a
-      // conversation in: Cloud rows only (the local adapter carries no sandbox
-      // id), and not one whose runtime is MISSING or ERROR, which the start
-      // task rejects. A PAUSED sandbox is resumed by the backend.
-      const sandboxId = conversation.sandbox_id;
       if (compact) {
         return (
           <CompactConversationRow
@@ -1018,12 +1041,6 @@ export function ConversationPanel({
                   : undefined
               }
               onStop={() => handleStopConversation(conversation.id)}
-              onNewConversationInSandbox={
-                sandboxId &&
-                !isRuntimeUnavailableSandboxStatus(conversation.sandbox_status)
-                  ? () => handleNewConversationInSandbox(sandboxId)
-                  : undefined
-              }
               onEditTags={
                 activeBackend.kind === "local"
                   ? () => handleEditTags(conversation.id)
@@ -1079,7 +1096,6 @@ export function ConversationPanel({
       handleConversationTitleChange,
       handleDeleteProject,
       handleEditTags,
-      handleNewConversationInSandbox,
       handleStopConversation,
       handleUnarchiveProject,
       isRowArchived,
@@ -1185,6 +1201,30 @@ export function ConversationPanel({
               </span>
             )}
             <div className="ml-auto flex shrink-0 items-center gap-0.5">
+              {showWakeAllButton && (
+                <button
+                  type="button"
+                  data-testid="wake-all-agents-button"
+                  onClick={() => void handleWakeAllAgents()}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1 text-xs font-medium text-contrast transition-colors hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
+                  title={t(I18nKey.CONVERSATION_PANEL$WAKE_ALL_AGENTS)}
+                >
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden
+                  >
+                    <path d="M12 5v14M5 12l7 7 7-7" />
+                  </svg>
+                  {t(I18nKey.CONVERSATION_PANEL$WAKE_ALL_AGENTS)}
+                </button>
+              )}
               <ConversationPanelNewThreadPicker
                 backendKind={activeBackend.kind}
               />
