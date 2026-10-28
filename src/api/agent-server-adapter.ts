@@ -619,6 +619,10 @@ export const RESERVED_CONVERSATION_TAG_KEYS: ReadonlySet<string> = new Set([
   "workspace",
   "working_dir",
   LOCAL_PLANNER_PARENT_TAG_KEY,
+  // The launched agent profile, which the app server stamps as tags; the
+  // hovercard names the profile instead of echoing the raw id and revision.
+  "agentprofileid",
+  "agentprofilerevision",
 ]);
 
 /**
