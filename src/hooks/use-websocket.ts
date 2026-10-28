@@ -16,6 +16,15 @@ export interface WebSocketHookOptions {
   onClose?: (event: CloseEvent) => void;
   onMessage?: (event: MessageEvent) => void;
   onError?: (event: Event) => void;
+  /**
+   * Fired when the server closes the socket with code 4001 (auth failed,
+   * typically because the session key was rotated — sandbox resume on Cloud).
+   * The consumer should refresh whatever data supplies `sessionApiKey`
+   * (e.g. re-fetch the conversation) and the hook will reconnect with the
+   * updated key once it resolves. The consumer's return value may be a
+   * Promise — the hook waits for it before reconnecting.
+   */
+  onAuthRevoked?: () => Promise<void> | void;
   reconnect?: {
     enabled?: boolean;
     maxAttempts?: number;
@@ -92,13 +101,6 @@ export const useWebSocket = (url: string, options?: WebSocketHookOptions) => {
       cancelHandshakeWatchdog();
       // Check if this specific WebSocket instance is allowed to reconnect
       const canReconnect = allowedToReconnectRef.current.has(ws);
-      // A socket replaced by reconnect() or a URL change can close after its
-      // replacement has opened; ignore it so it cannot touch the live state.
-      const wasReplaced = wsRef.current !== null && wsRef.current !== ws;
-      if (wasReplaced) {
-        return;
-      }
-
       setIsConnected(false);
       // If the connection closes with an error code, treat it as an error
       if (event.code !== 1000) {
@@ -113,13 +115,48 @@ export const useWebSocket = (url: string, options?: WebSocketHookOptions) => {
           optionsRef.current?.onError?.(event);
         }
       }
-      optionsRef.current?.onClose?.(event);
+      // Notify the consumer unless this socket was deliberately replaced by a
+      // newer one — a replaced socket's close event arrives late and must not
+      // clobber the replacement's OPEN state in the consumer. Final closes
+      // (disconnect/unmount, nothing replacing the socket) still notify.
+      const wasReplaced = wsRef.current !== null && wsRef.current !== ws;
+      if (!wasReplaced) {
+        optionsRef.current?.onClose?.(event);
+      }
 
       // Attempt reconnection if enabled and allowed
       // IMPORTANT: Only reconnect if this specific instance is allowed to reconnect
       const reconnectEnabled = optionsRef.current?.reconnect?.enabled ?? false;
       const maxAttempts =
         optionsRef.current?.reconnect?.maxAttempts ?? Infinity;
+
+      // Code 4001 = auth failed (session key rotated by sandbox resume on
+      // Cloud). Before reconnecting with the same rejected key, give the
+      // consumer a chance to refresh the key — it typically re-fetches the
+      // conversation which returns the runtime's rotated session_api_key.
+      if (event.code === 4001) {
+        const refreshAuth = optionsRef.current?.onAuthRevoked?.();
+        Promise.resolve(refreshAuth).finally(() => {
+          if (
+            reconnectEnabled &&
+            canReconnect &&
+            shouldReconnectRef.current &&
+            attemptCountRef.current < maxAttempts
+          ) {
+            // Reset attempt count — this is a fresh auth attempt, not a
+            // network retry. The server already told us the old key is dead,
+            // so an incremented backoff would just delay recovery.
+            attemptCountRef.current = 0;
+            setIsReconnecting(true);
+            reconnectTimeoutRef.current = setTimeout(() => {
+              connectWebSocket();
+            }, 500); // Short pause to let the consumer's refresh settle.
+          } else {
+            setIsReconnecting(false);
+          }
+        });
+        return; // The refresh path handles reconnect; don't fall through below.
+      }
 
       if (
         reconnectEnabled &&
