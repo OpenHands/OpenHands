@@ -1,9 +1,12 @@
 import type { TFunction } from "i18next";
+import type { SettingsFieldSchema } from "#/types/settings";
 
 export interface SettingsFieldConstraints {
   min?: number;
   max?: number;
   step?: number;
+  exclusive_min?: boolean;
+  exclusive_max?: boolean;
 }
 
 interface SettingsFieldMetadata {
@@ -73,6 +76,39 @@ const FIELD_METADATA: Record<string, SettingsFieldMetadata> = {
 
 export function getSettingsFieldConstraints(fieldKey: string) {
   return FIELD_METADATA[fieldKey]?.constraints;
+}
+
+/**
+ * Resolve numeric constraints for a schema field. SDK-supplied constraints
+ * take precedence; the per-field hardcoded metadata map (for older agent-server
+ * releases that do not expose these descriptors) acts as fallback.
+ *
+ * Returns undefined when neither source supplies a constraint, so callers can
+ * skip client-side validation entirely and let the backend's authoritative
+ * validation handle out-of-range values.
+ */
+export function resolveNumericConstraints(
+  field: Pick<SettingsFieldSchema, "key" | "constraints">,
+): SettingsFieldConstraints | undefined {
+  const schemaConstraints = field.constraints;
+  const metadataConstraints = getSettingsFieldConstraints(field.key);
+
+  const result: SettingsFieldConstraints = {
+    min: schemaConstraints?.min ?? metadataConstraints?.min,
+    max: schemaConstraints?.max ?? metadataConstraints?.max,
+    step: schemaConstraints?.step ?? metadataConstraints?.step,
+    exclusive_min: schemaConstraints?.exclusive_min,
+    exclusive_max: schemaConstraints?.exclusive_max,
+  };
+
+  const hasAny =
+    result.min !== undefined ||
+    result.max !== undefined ||
+    result.step !== undefined ||
+    result.exclusive_min !== undefined ||
+    result.exclusive_max !== undefined;
+
+  return hasAny ? result : undefined;
 }
 
 /**

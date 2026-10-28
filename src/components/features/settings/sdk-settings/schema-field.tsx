@@ -6,7 +6,7 @@ import { SettingsInput } from "#/components/features/settings/settings-input";
 import { SettingsSwitch } from "#/components/features/settings/settings-switch";
 import { SettingsFieldSchema } from "#/types/settings";
 import {
-  getSettingsFieldConstraints,
+  resolveNumericConstraints,
   resolveSchemaChoiceLabel,
   resolveSchemaFieldLabel,
 } from "#/utils/sdk-settings-field-metadata";
@@ -71,7 +71,7 @@ export function SchemaField({
 }) {
   const { t } = useTranslation("openhands");
   const label = resolveSchemaFieldLabel(t, field.key, field.label);
-  const constraints = getSettingsFieldConstraints(field.key);
+  const constraints = resolveNumericConstraints(field);
 
   if (isBooleanField(field)) {
     return (
