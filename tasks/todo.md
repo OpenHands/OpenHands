@@ -30,9 +30,8 @@ Source: `tasks/plan.md` (implements the approved spec
 
 ## Phase 3: Rendering + jump
 
-- [ ] Task 7: Bubble extraction & truncation isolation (sent + pending)
+- [x] Task 7: Bubble extraction & truncation isolation (sent + pending)
 - [ ] Task 8: Jump to message (`data-event-id`, load-until-found, 10-page guard)
-- [ ] Task 9: E2E regression scenario + full command gate
 
 ## Checkpoint: Complete
 

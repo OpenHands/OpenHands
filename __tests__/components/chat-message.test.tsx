@@ -298,3 +298,77 @@ describe("ChatMessage", () => {
     expect(container.querySelector("mark")?.textContent).toBe("world");
   });
 });
+
+describe("ChatMessage reply-quote extraction", () => {
+  const TYPED = "and what about the failing test?";
+  const ENVELOPE =
+    '<reply-to id="evt-1" source="agent" truncated="false">the original question</reply-to>';
+  const composed = `${ENVELOPE}\n${TYPED}`;
+
+  it("renders the quote card above the body and only the follow-up as message text", () => {
+    render(<ChatMessage type="user" message={composed} />);
+
+    expect(screen.getByTestId("quote-card")).toBeInTheDocument();
+    expect(screen.getByText("the original question")).toBeInTheDocument();
+    // Only the follow-up is the visible bubble text; the envelope is gone.
+    expect(screen.getByTestId("user-message")).toHaveTextContent(TYPED);
+    expect(screen.getByTestId("user-message").textContent).not.toContain(
+      "reply-to",
+    );
+  });
+
+  it("a long quote does not push the follow-up behind the five-line clamp", () => {
+    const longQuote = `${"line\n".repeat(9)}deep history context`;
+    const longComposed = `<reply-to id="evt-1" source="agent" truncated="false">${longQuote}</reply-to>\n${TYPED}`;
+    render(<ChatMessage type="user" message={longComposed} />);
+
+    // The clamped body receives the follow-up text only — 1 line — so the
+    // clamp logic must not engage for a short follow-up.
+    expect(
+      screen.queryByTestId("chat-message-truncation-gradient"),
+    ).not.toBeInTheDocument();
+    const bodyContainer = screen
+      .getByTestId("user-message")
+      .querySelector(".relative.min-w-0");
+    // Only the follow-up feeds the body — the 9-line quote never reaches the
+    // clamp logic, and the quote preview lives solely in the card above.
+    expect(bodyContainer).toHaveTextContent(TYPED);
+    expect(bodyContainer).not.toHaveTextContent("deep history context");
+    expect(screen.getByTestId("quote-card")).toHaveTextContent(
+      "deep history context",
+    );
+  });
+
+  it("extracts the quote from a sending (pending) bubble too", () => {
+    render(
+      <ChatMessage type="user" message={composed} pendingStatus="sending" />,
+    );
+
+    expect(screen.getByTestId("quote-card")).toBeInTheDocument();
+    expect(screen.getByTestId("user-message")).toHaveTextContent(TYPED);
+  });
+
+  it("shows the truncation label on the card when flagged", () => {
+    const flagged = `${ENVELOPE.replace('truncated="false"', 'truncated="true"')}\n${TYPED}`;
+    render(<ChatMessage type="user" message={flagged} />);
+
+    expect(
+      screen.getByText("CHAT_INTERFACE$REPLY_TRUNCATED"),
+    ).toBeInTheDocument();
+  });
+
+  it("never extracts from agent messages (only user bubbles carry replies)", () => {
+    render(<ChatMessage type="agent" message={composed} />);
+
+    expect(screen.queryByTestId("quote-card")).not.toBeInTheDocument();
+  });
+
+  it("renders a plain user message unchanged (no envelope, no card)", () => {
+    render(<ChatMessage type="user" message="just a normal message" />);
+
+    expect(screen.queryByTestId("quote-card")).not.toBeInTheDocument();
+    expect(screen.getByTestId("user-message")).toHaveTextContent(
+      "just a normal message",
+    );
+  });
+});

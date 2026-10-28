@@ -232,4 +232,21 @@ describe("PendingUserMessages", () => {
       expect(entry.errorMessage).toBe("still broken");
     });
   });
+
+  it("renders a pending reply as quote card plus follow-up, not the raw envelope", () => {
+    useOptimisticUserMessageStore.getState().enqueuePendingMessage({
+      conversationId: ACTIVE_CONVO,
+      text: '<reply-to id="evt-1" source="agent" truncated="false">source text</reply-to>\nmy follow-up',
+    });
+
+    renderWithProviders(<PendingUserMessages />);
+
+    expect(screen.getByTestId("quote-card")).toBeInTheDocument();
+    expect(screen.getByTestId("user-message")).toHaveTextContent(
+      "my follow-up",
+    );
+    expect(screen.getByTestId("user-message").textContent).not.toContain(
+      "reply-to",
+    );
+  });
 });

@@ -14,6 +14,8 @@ import {
   chatBubbleMarkdownComponents,
   USER_MESSAGE_LINE_HEIGHT_PX,
 } from "./user-message-body";
+import { QuoteCard } from "./quote-card";
+import { splitReplyFromText } from "#/utils/message-quote";
 
 export type ChatMessagePendingStatus = "sending" | "error";
 
@@ -120,9 +122,16 @@ export function ChatMessage({
     return () => observer.disconnect();
   }, [message, canStopPendingMessage, useTruncatedUserBody]);
 
+  // User bubbles may carry a leading reply-quote envelope; extract it so the
+  // card renders above the body and only the follow-up feeds truncation
+  // (a 6+ line quote must never swallow the follow-up behind the clamp).
+  const reply = type === "user" ? splitReplyFromText(message) : null;
+  const replyQuote = reply?.quote ?? null;
+  const bodyText = reply ? reply.body : message;
+
   const messageContent = useTruncatedUserBody ? (
     <UserMessageBody
-      message={message}
+      message={bodyText}
       isHovering={isHovering}
       isExpanded={isExpanded}
       onTruncatableChange={setIsTruncatable}
@@ -139,12 +148,19 @@ export function ChatMessage({
         components={chatBubbleMarkdownComponents}
         streaming={isStreaming}
       >
-        {message}
+        {bodyText}
       </MarkdownRenderer>
     </div>
   );
 
-  const renderedMessageContent = messageContent;
+  const renderedMessageContent = replyQuote ? (
+    <>
+      <QuoteCard quote={replyQuote} />
+      {messageContent}
+    </>
+  ) : (
+    messageContent
+  );
 
   const messageBubble = (
     <article
