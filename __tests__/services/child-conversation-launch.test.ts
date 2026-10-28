@@ -212,7 +212,10 @@ describe("handleLaunchChildConversationAction", () => {
       active_agent_profile_id: "profile-default",
     });
     mockListLlmProfiles.mockResolvedValue({
-      profiles: [],
+      // The seeded `default` agent profile references this LLM profile; keep it
+      // configured so these tests exercise the launch path rather than the
+      // never-configured-account guard in resolveConversationLaunch.
+      profiles: [{ name: "default" }],
       active_profile: null,
     });
     mockSupportsLaunchLlmOverride.mockResolvedValue(true);
