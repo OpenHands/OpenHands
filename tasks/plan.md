@@ -65,7 +65,7 @@ message-quote.ts (pure format) ──┬── reply-quote-store (+ localStorage
   **Verify:** focused store + storage tests; `npm run lint`.
   **Depends:** Task 1. **Scope:** M (3-4 files).
 
-- [ ] **Task 3: i18n keys** — add the 5 keys from the spec
+- [x] **Task 3: i18n keys** — add the 5 keys from the spec
   (`CHAT_INTERFACE$REPLY`, `$REPLY_YOU`, `$REPLY_AGENT`,
   `$REPLY_TRUNCATED`, `$REPLY_DISMISS`, `$REPLY_NOT_LOADED` — 6 total) in all
   locales; run `npm run make-i18n`; no source edits in this task.
