@@ -13,7 +13,7 @@ anyio==4.15.1
 asn1crypto==1.5.1
 asyncpg==0.31.0
 attrs==26.1.0
-Authlib==1.8.0
+Authlib==1.9.1
 backoff==2.2.1
 beartype==0.22.9
 beautifulsoup4==4.15.0
@@ -38,7 +38,7 @@ cryptography==50.0.1
 cyclopts==4.25.3
 deprecation==2.1.0
 distro==1.9.0
-dnspython==2.8.0
+dnspython==2.9.0
 docker==7.2.0
 docstring_parser==0.18.0
 email-validator==2.3.0
@@ -93,7 +93,7 @@ jsonschema-path==0.5.0
 jsonschema-specifications==2025.9.1
 keyring==25.7.0
 libtmux==0.62.0
-litellm==1.102.1
+litellm==1.102.2
 lmnr==0.7.64
 lmnr-claude-code-proxy==0.1.24
 lupa==2.8
