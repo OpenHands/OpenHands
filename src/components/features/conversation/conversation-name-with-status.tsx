@@ -16,12 +16,48 @@ import { ConversationName } from "./conversation-name";
 import { ConversationGitActionsToggle } from "./conversation-git-actions-toggle";
 import { ConversationOverviewToggle } from "./conversation-overview-toggle";
 import { RightPanelToggle } from "./right-panel-toggle";
+import { getDisplayConversationTags } from "#/api/agent-server-adapter";
+import {
+  formatConversationTagTooltip,
+  truncateTagChipValue,
+} from "../conversation-panel/conversation-card/conversation-tag-display";
+import {
+  getConversationTagIcon,
+  type ConversationTagIcon,
+} from "../conversation-panel/conversation-card/conversation-tag-icons";
+import {
+  CONVERSATION_CARD_META_CHIP_CLASSNAME,
+  CONVERSATION_CARD_META_CHIP_ICON_CLASSNAME,
+  CONVERSATION_CARD_META_CHIP_ICON_SLOT_CLASSNAME,
+} from "../conversation-panel/conversation-card/conversation-card-meta-chip";
 import {
   isExecutionActive,
   isExecutionErrored,
   isExecutionPaused,
 } from "#/utils/status";
 import { I18nKey } from "#/i18n/declaration";
+
+function ChannelOriginIconSlot({
+  icon: Icon,
+  tagKey,
+}: {
+  icon: ConversationTagIcon;
+  tagKey: string;
+}) {
+  return (
+    <span
+      className={CONVERSATION_CARD_META_CHIP_ICON_SLOT_CLASSNAME}
+      aria-hidden
+    >
+      <Icon
+        data-testid="conversation-channel-origin-icon"
+        data-tag-key={tagKey}
+        className={CONVERSATION_CARD_META_CHIP_ICON_CLASSNAME}
+        aria-hidden
+      />
+    </span>
+  );
+}
 
 export function ConversationNameWithStatus() {
   const { t } = useTranslation("openhands");
@@ -51,6 +87,17 @@ export function ConversationNameWithStatus() {
   });
 
   const isMenuVisible = menuOpen || hoveredOpen;
+
+  const displayTags = React.useMemo(
+    () => getDisplayConversationTags(conversation?.tags),
+    [conversation?.tags],
+  );
+  const channelOriginTag = React.useMemo(() => {
+    return displayTags.find(([key]) => {
+      const normalized = key.trim().toLowerCase();
+      return normalized === "origin" || normalized === "source";
+    });
+  }, [displayTags]);
 
   const closeMenu = () => {
     setMenuOpen(false);
@@ -150,6 +197,32 @@ export function ConversationNameWithStatus() {
           ) : null}
         </div>
         <ConversationName />
+        {channelOriginTag ? (
+          <span
+            data-testid="conversation-channel-origin-indicator"
+            title={formatConversationTagTooltip(
+              channelOriginTag[0],
+              channelOriginTag[1],
+              (k) => t(k),
+            )}
+            className={cn(CONVERSATION_CARD_META_CHIP_CLASSNAME, "ml-2")}
+          >
+            <ChannelOriginIconSlot
+              icon={getConversationTagIcon(
+                channelOriginTag[0],
+                channelOriginTag[1],
+              )}
+              tagKey={channelOriginTag[0]}
+            />
+            <span className="truncate">
+              {formatConversationTagTooltip(
+                channelOriginTag[0],
+                truncateTagChipValue(channelOriginTag[1]),
+                (k) => t(k),
+              )}
+            </span>
+          </span>
+        ) : null}
       </div>
       <div className="mr-2 flex shrink-0 items-center gap-1">
         <ConversationGitActionsToggle />
