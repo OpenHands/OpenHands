@@ -1,8 +1,17 @@
 import { describe, it, expect } from "vitest";
-import { getStatusCode, getTaskStatusI18nKey } from "#/utils/status";
+import {
+  getStatusCode,
+  getTaskStatusI18nKey,
+  latestExecutionStatusFromEvents,
+} from "#/utils/status";
 import { I18nKey } from "#/i18n/declaration";
 import { ExecutionStatus } from "#/types/agent-server/core";
+import type {
+  ConversationStateUpdateEvent,
+  ConversationStateUpdateEventFullState,
+} from "#/types/agent-server/core/events/conversation-state-event";
 import type { AppConversationStartTaskStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
+import type { OHEvent } from "#/stores/use-event-store";
 
 describe("getStatusCode", () => {
   it("returns RUNNING_TASK when execution status is running", () => {
@@ -72,6 +81,96 @@ describe("getStatusCode", () => {
       "FUTURE_STATUS_FROM_CLOUD" as AppConversationStartTaskStatus;
     const result = getStatusCode("OPEN", null, unknownStatus);
     expect(result).toBe(I18nKey.CONVERSATION$STARTING_CONVERSATION);
+  });
+});
+
+describe("latestExecutionStatusFromEvents", () => {
+  const makeStateUpdate = (
+    key: ConversationStateUpdateEvent["key"],
+    value: unknown,
+    isFromPlanningAgent = false,
+  ): OHEvent =>
+    ({
+      id: `evt-state-${key}-${value}`,
+      timestamp: new Date().toISOString(),
+      source: "environment",
+      kind: "ConversationStateUpdateEvent",
+      key,
+      value,
+      isFromPlanningAgent,
+    }) as OHEvent;
+
+  it("returns the newest full_state execution status", () => {
+    const events = [
+      makeStateUpdate("full_state", {
+        execution_status: ExecutionStatus.RUNNING,
+      } satisfies ConversationStateUpdateEventFullState["value"]),
+      makeStateUpdate("full_state", {
+        execution_status: ExecutionStatus.FINISHED,
+      } satisfies ConversationStateUpdateEventFullState["value"]),
+    ];
+    expect(latestExecutionStatusFromEvents(events)).toBe(
+      ExecutionStatus.FINISHED,
+    );
+  });
+
+  it("returns the newest execution_status update over a full_state", () => {
+    const events = [
+      makeStateUpdate("full_state", {
+        execution_status: ExecutionStatus.RUNNING,
+      } satisfies ConversationStateUpdateEventFullState["value"]),
+      makeStateUpdate("execution_status", ExecutionStatus.PAUSED) as OHEvent,
+    ];
+    expect(latestExecutionStatusFromEvents(events)).toBe(
+      ExecutionStatus.PAUSED,
+    );
+  });
+
+  it("ignores planning-agent updates and non-state events", () => {
+    const events = [
+      makeStateUpdate(
+        "execution_status",
+        ExecutionStatus.IDLE,
+        true /* isFromPlanningAgent */,
+      ),
+      makeStateUpdate("full_state", {
+        execution_status: ExecutionStatus.RUNNING,
+      } satisfies ConversationStateUpdateEventFullState["value"]),
+      // A non-state update in the tail (e.g. a user message) must not win.
+      {
+        id: "evt-user",
+        timestamp: new Date().toISOString(),
+        source: "user",
+      } as unknown as OHEvent,
+    ];
+    expect(latestExecutionStatusFromEvents(events)).toBe(
+      ExecutionStatus.RUNNING,
+    );
+  });
+
+  it("returns null when only planning or non-state events exist", () => {
+    expect(latestExecutionStatusFromEvents([])).toBeNull();
+    expect(
+      latestExecutionStatusFromEvents([
+        makeStateUpdate(
+          "execution_status",
+          ExecutionStatus.RUNNING,
+          true /* isFromPlanningAgent */,
+        ),
+      ]),
+    ).toBeNull();
+  });
+
+  it("treats an execution_status value as the concrete payload", () => {
+    const events = [
+      makeStateUpdate(
+        "execution_status",
+        ExecutionStatus.WAITING_FOR_CONFIRMATION,
+      ) as OHEvent,
+    ];
+    expect(latestExecutionStatusFromEvents(events)).toBe(
+      ExecutionStatus.WAITING_FOR_CONFIRMATION,
+    );
   });
 });
 
