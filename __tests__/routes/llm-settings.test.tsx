@@ -1,3 +1,4 @@
+import { HttpError } from "@openhands/typescript-client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   fireEvent,
@@ -253,6 +254,106 @@ describe("LlmSettingsScreen", () => {
     ).toBeInTheDocument();
     expect(screen.queryByTestId("llm-api-key-input")).not.toBeInTheDocument();
     expect(screen.queryByTestId("base-url-input")).not.toBeInTheDocument();
+  });
+
+  const mockSubscriptionSettings = () =>
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        llm_model: "gpt-5.2-codex",
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          llm: {
+            model: "gpt-5.2-codex",
+            auth_type: "subscription",
+            subscription_vendor: "openai",
+          },
+        },
+      }),
+    );
+
+  it("keeps the upgrade message only when subscription endpoints are missing", async () => {
+    vi.spyOn(LLMSubscriptionService, "getOpenAIStatus").mockRejectedValue(
+      new HttpError(404, "Not Found", { detail: "Not Found" }),
+    );
+    mockSubscriptionSettings();
+
+    renderLlmSettingsScreen();
+
+    await screen.findByTestId("llm-subscription-settings");
+    await waitFor(() =>
+      expect(screen.getByTestId("subscription-status")).toHaveTextContent(
+        I18nKey.SETTINGS$SUBSCRIPTION_STATUS_UNAVAILABLE,
+      ),
+    );
+    expect(screen.getByTestId("subscription-status")).not.toHaveTextContent(
+      I18nKey.SETTINGS$SUBSCRIPTION_STATUS_UNREACHABLE,
+    );
+    expect(screen.getByTestId("subscription-status")).not.toHaveTextContent(
+      I18nKey.SETTINGS$SUBSCRIPTION_STATUS_FAILED,
+    );
+    expect(screen.getByTestId("subscription-status-detail")).toHaveTextContent(
+      "HTTP 404",
+    );
+  });
+
+  it("names a server-side failure instead of blaming the version", async () => {
+    vi.spyOn(LLMSubscriptionService, "getOpenAIStatus").mockRejectedValue(
+      new HttpError(500, "Internal Server Error", {
+        detail: "PermissionError: chmod",
+      }),
+    );
+    mockSubscriptionSettings();
+
+    renderLlmSettingsScreen();
+
+    await screen.findByTestId("llm-subscription-settings");
+    await waitFor(() =>
+      expect(screen.getByTestId("subscription-status")).toHaveTextContent(
+        I18nKey.SETTINGS$SUBSCRIPTION_STATUS_FAILED,
+      ),
+    );
+    expect(screen.getByTestId("subscription-status")).not.toHaveTextContent(
+      I18nKey.SETTINGS$SUBSCRIPTION_STATUS_UNAVAILABLE,
+    );
+    expect(screen.getByTestId("subscription-status-detail")).toHaveTextContent(
+      "HTTP 500",
+    );
+    expect(screen.getByTestId("subscription-status-detail")).toHaveTextContent(
+      "PermissionError: chmod",
+    );
+  });
+
+  it("names an unreachable agent server for transport failures", async () => {
+    vi.spyOn(LLMSubscriptionService, "getOpenAIStatus").mockRejectedValue(
+      new TypeError("fetch failed"),
+    );
+    mockSubscriptionSettings();
+
+    renderLlmSettingsScreen();
+
+    await screen.findByTestId("llm-subscription-settings");
+    await waitFor(() =>
+      expect(screen.getByTestId("subscription-status")).toHaveTextContent(
+        I18nKey.SETTINGS$SUBSCRIPTION_STATUS_UNREACHABLE,
+      ),
+    );
+    expect(screen.getByTestId("subscription-status")).not.toHaveTextContent(
+      I18nKey.SETTINGS$SUBSCRIPTION_STATUS_UNAVAILABLE,
+    );
+  });
+
+  it("retries the status check when the retry button is clicked", async () => {
+    const getStatus = vi
+      .spyOn(LLMSubscriptionService, "getOpenAIStatus")
+      .mockRejectedValue(new TypeError("fetch failed"));
+    mockSubscriptionSettings();
+
+    renderLlmSettingsScreen();
+
+    await screen.findByTestId("llm-subscription-settings");
+    const retry = await screen.findByTestId("subscription-status-retry");
+    await userEvent.click(retry);
+    await waitFor(() => expect(getStatus).toHaveBeenCalledTimes(2));
   });
 
   it("exposes canonical subscription metadata through the save control", async () => {
