@@ -14,11 +14,11 @@ Source: `tasks/plan.md` (implements the approved spec
 - [ ] Format round-trip tests green
 - [ ] Store hydration tests green
 - [x] i18n completeness passes; `npm run lint` clean
-- [ ] Review with human before proceeding
+- [x] Review with human before proceeding (approved 2026-10-28)
 
 ## Phase 2: Core feature
 
-- [ ] Task 4: Composer quote card (slot, dismiss, Escape; jump stub)
+- [x] Task 4: Composer quote card (slot, dismiss, Escape; jump stub)
 - [ ] Task 5: Compose at submit + retry replays envelope
 - [ ] Task 6: Reply action on bubbles + surface gating
 

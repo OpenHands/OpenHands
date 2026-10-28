@@ -1,10 +1,16 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { DragOver } from "../drag-over";
+import { QuoteCard } from "../quote-card";
 import { UploadedFiles } from "../uploaded-files";
 import { ChatInputRow } from "./chat-input-row";
 import { ChatInputActions } from "./chat-input-actions";
 import { SlashCommandMenu } from "./slash-command-menu";
 import { useConversationStore } from "#/stores/conversation-store";
+import { useOptionalConversationId } from "#/hooks/use-conversation-id";
+import {
+  usePendingReplyQuote,
+  useReplyQuoteStore,
+} from "#/stores/reply-quote-store";
 import { cn } from "#/utils/utils";
 import { SlashCommandItem } from "#/hooks/chat/use-slash-command";
 import { insertTextAtCaret } from "../utils/chat-input.utils";
@@ -80,6 +86,8 @@ export function ChatInputContainer({
       {/* Drag Over UI */}
       {isDragOver && <DragOver />}
 
+      <QuoteSlot />
+
       <UploadedFiles />
 
       {/* Wrapper so the slash menu anchors just above the input row,
@@ -119,5 +127,36 @@ export function ChatInputContainer({
         isDictationDisabled={isNewConversationPending}
       />
     </div>
+  );
+}
+
+/**
+ * The armed reply-quote card, rendered above the input row. Escape
+ * dismisses it (keyboard parity with the card's X button).
+ */
+function QuoteSlot() {
+  const { conversationId } = useOptionalConversationId();
+  const quote = usePendingReplyQuote(conversationId ?? "");
+
+  useEffect(() => {
+    if (!quote) return undefined;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        useReplyQuoteStore.getState().clearReplyQuote(quote.conversationId);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [quote]);
+
+  if (!conversationId || !quote) return null;
+
+  return (
+    <QuoteCard
+      quote={quote}
+      onDismiss={() =>
+        useReplyQuoteStore.getState().clearReplyQuote(quote.conversationId)
+      }
+    />
   );
 }
