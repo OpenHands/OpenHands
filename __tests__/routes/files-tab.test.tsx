@@ -688,6 +688,151 @@ describe("FilesTab", () => {
     });
   });
 
+  // The workspace-session cookie is Partitioned: a plain target="_blank"
+  // navigation opens a new top-level context on the backend's site, where
+  // the browser withholds the cookie and the fileserver answers 401
+  // (#19038). The link must fetch the bytes from the embedded context
+  // (which carries the cookie) and open a same-origin blob: URL instead.
+  describe("open in new window on a partitioned-cookie backend (#19038)", () => {
+    const createObjectURL = vi.fn();
+    const revokeObjectURL = vi.fn();
+    const openMock = vi.fn();
+    const fetchMock = vi.fn();
+
+    function localFile(
+      staticUrl: string,
+      mimeType: string,
+      kind: "text" | "image" | "pdf" | "binary" = "text",
+    ) {
+      return {
+        data: {
+          path: "report.out",
+          kind,
+          text: kind === "text" ? "body" : null,
+          staticUrl,
+          mimeType,
+        },
+        isLoading: false,
+        isError: false,
+      };
+    }
+
+    beforeEach(() => {
+      createObjectURL.mockReset().mockReturnValue("blob:http://canvas/open-1");
+      revokeObjectURL.mockReset();
+      openMock.mockReset();
+      fetchMock.mockReset().mockResolvedValue({
+        ok: true,
+        status: 200,
+        arrayBuffer: async () => new TextEncoder().encode("body").buffer,
+      });
+      vi.stubGlobal(
+        "URL",
+        class extends URL {
+          static createObjectURL = createObjectURL;
+
+          static revokeObjectURL = revokeObjectURL;
+        },
+      );
+      vi.stubGlobal("fetch", fetchMock);
+      vi.stubGlobal("open", openMock);
+    });
+
+    it("fetches with credentials and opens a blob: URL, typing HTML as plain text", async () => {
+      useWorkspaceFileContentMock.mockReturnValue(
+        localFile(
+          "https://backend.example.com/api/conversations/c1/workspace/index.html",
+          "text/html",
+        ),
+      );
+      const user = userEvent.setup();
+      openFile("index.html");
+      renderTab();
+
+      const link = await screen.findByTestId("files-tab-open-in-new-window");
+      await user.click(link);
+
+      await waitFor(() => {
+        expect(openMock).toHaveBeenCalledWith(
+          "blob:http://canvas/open-1",
+          "_blank",
+          "noopener,noreferrer",
+        );
+      });
+      // The workspace mutation counter appends a cache-buster (?v=N).
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringMatching(
+          /^https:\/\/backend\.example\.com\/api\/conversations\/c1\/workspace\/index\.html\?v=\d+$/,
+        ),
+        { credentials: "include", cache: "no-cache" },
+      );
+      const blob: Blob = createObjectURL.mock.calls[0][0];
+      expect(blob.type).toBe("text/plain;charset=utf-8");
+    });
+
+    it("keeps a safe binary type (PNG) for the opened blob", async () => {
+      useWorkspaceFileContentMock.mockReturnValue(
+        localFile(
+          "https://backend.example.com/api/conversations/c1/workspace/logo.png",
+          "image/png",
+          "image",
+        ),
+      );
+      const user = userEvent.setup();
+      openFile("logo.png");
+      renderTab();
+
+      const link = await screen.findByTestId("files-tab-open-in-new-window");
+      await user.click(link);
+
+      await waitFor(() => {
+        expect(openMock).toHaveBeenCalled();
+      });
+      const blob: Blob = createObjectURL.mock.calls[0][0];
+      expect(blob.type).toBe("image/png");
+    });
+
+    it("does not intercept blob: or data: URLs", async () => {
+      useWorkspaceFileContentMock.mockReturnValue(
+        localFile("blob:http://canvas/already", "text/markdown"),
+      );
+      openFile("README.md");
+      renderTab();
+
+      const link = await screen.findByTestId("files-tab-open-in-new-window");
+      fireEvent.click(link);
+
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(openMock).not.toHaveBeenCalled();
+    });
+
+    it("surfaces a toast and opens nothing when the fetch fails", async () => {
+      fetchMock.mockResolvedValue({
+        ok: false,
+        status: 401,
+        arrayBuffer: async () => new ArrayBuffer(0),
+      });
+      useWorkspaceFileContentMock.mockReturnValue(
+        localFile(
+          "https://backend.example.com/api/conversations/c1/workspace/index.html",
+          "text/html",
+        ),
+      );
+      const user = userEvent.setup();
+      openFile("index.html");
+      renderTab();
+
+      const link = await screen.findByTestId("files-tab-open-in-new-window");
+      await user.click(link);
+
+      await waitFor(() => {
+        expect(fetchMock).toHaveBeenCalled();
+      });
+      expect(openMock).not.toHaveBeenCalled();
+      expect(createObjectURL).not.toHaveBeenCalled();
+    });
+  });
+
   describe("conversation switching", () => {
     it("ignores a stale selection from another conversation", async () => {
       useFilesTabStore.setState({

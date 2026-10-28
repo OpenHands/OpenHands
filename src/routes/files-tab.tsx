@@ -1,5 +1,6 @@
 import {
   type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -43,6 +44,22 @@ import { ResizeHandle } from "#/components/ui/resize-handle";
 import RefreshIcon from "#/icons/u-refresh.svg?react";
 import LinkExternalIcon from "#/icons/link-external.svg?react";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
+
+// MIME types safe to open as a top-level document from a same-origin blob:
+// URL. blob: URLs inherit this app's origin, so anything that could run
+// script (HTML, SVG, JS, ...) is typed text/plain and shows its source
+// instead - the same rule the cloud data: URL path follows.
+const TOP_LEVEL_SAFE_MIME_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+  "image/bmp",
+  "image/x-icon",
+  "image/avif",
+  "application/pdf",
+]);
 
 /**
  * Workspace file browser. Diff/Commits live in the sibling Commits
@@ -149,6 +166,50 @@ function FilesTab() {
         selectedFile?.staticUrl ?? null,
         mutationCounter,
       );
+
+  const [isOpeningInNewWindow, setIsOpeningInNewWindow] = useState(false);
+  // The workspace-session cookie is Partitioned: the browser attaches it
+  // only to requests made from inside this top-level site. A plain
+  // target="_blank" navigation opens a NEW top-level context on the
+  // backend's site, where the cookie is withheld and the fileserver answers
+  // 401 (#19038). Fetch the bytes here - an embedded request, which does
+  // carry the cookie - and open a same-origin blob: URL in the new tab
+  // instead. blob:/data: URLs need no such help and keep the default
+  // navigation.
+  const handleOpenInNewWindow = async (
+    event: ReactMouseEvent<HTMLAnchorElement>,
+  ) => {
+    const url = selectedFileStaticUrl;
+    if (!url || url.startsWith("blob:") || url.startsWith("data:")) return;
+    event.preventDefault();
+    if (isOpeningInNewWindow) return;
+    setIsOpeningInNewWindow(true);
+    try {
+      const response = await fetch(url, {
+        credentials: "include",
+        cache: "no-cache",
+      });
+      if (!response.ok) {
+        throw new Error(`Failed to load ${selectedPath}: ${response.status}`);
+      }
+      const bytes = await response.arrayBuffer();
+      const mimeType = selectedFile?.mimeType ?? "text/plain";
+      const blobType = TOP_LEVEL_SAFE_MIME_TYPES.has(mimeType)
+        ? mimeType
+        : "text/plain;charset=utf-8";
+      const blobUrl = URL.createObjectURL(
+        new Blob([bytes], { type: blobType }),
+      );
+      window.open(blobUrl, "_blank", "noopener,noreferrer");
+      // The new tab keeps its own reference; revoke once it has certainly
+      // loaded so the URL does not leak for this page's lifetime.
+      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+    } catch (error) {
+      displayErrorToast(error instanceof Error ? error.message : null);
+    } finally {
+      setIsOpeningInNewWindow(false);
+    }
+  };
 
   // Restore open tabs / selection from conversation-scoped localStorage on
   // mount and when switching conversations (survives a full page refresh).
@@ -278,6 +339,7 @@ function FilesTab() {
                         href={selectedFileStaticUrl}
                         target="_blank"
                         rel="noopener noreferrer"
+                        onClick={handleOpenInNewWindow}
                         aria-label={t(I18nKey.FILES$OPEN_IN_NEW_WINDOW)}
                         title={t(I18nKey.FILES$OPEN_IN_NEW_WINDOW)}
                         data-testid="files-tab-open-in-new-window"
