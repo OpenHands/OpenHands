@@ -29,6 +29,7 @@ describe("launch_child_conversation client tool", () => {
       properties: {
         target: { enum: ["local", "cloud"] },
         isolation: { enum: ["worktree", "shared"] },
+        agent_profile: { type: "string" },
       },
       required: ["target", "task"],
     });
@@ -47,5 +48,23 @@ describe("launch_child_conversation client tool", () => {
     expect(LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL.description).toContain(
       "[child-conversation]",
     );
+  });
+
+  it("documents a concrete launch and how profile selection differs from sub-agents", () => {
+    const description = LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL.description;
+
+    expect(description).toContain('target: "local"');
+    expect(description).toContain('target: "cloud"');
+    expect(description).toContain('agent_profile: "fast"');
+    expect(description).toContain('repository: "octocat/hello-world"');
+    expect(description).toContain('Omit "agent_profile"');
+    expect(description).toContain("sub-agents");
+    expect(description).toContain("secret allow-list");
+    expect(description).toContain("not confirmed");
+    expect(description).toContain("organization-only");
+    expect(LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL.parameters.required).toEqual([
+      "target",
+      "task",
+    ]);
   });
 });
