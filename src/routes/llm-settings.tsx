@@ -154,7 +154,7 @@ export function LlmSettingsScreen({
 }) {
   const { t } = useTranslation("openhands");
 
-  const { backend } = useActiveBackend();
+  const { backend, orgId } = useActiveBackend();
   const isCloud = backend.kind === "cloud";
 
   const { data: providerConnections } = useProviderConnections();
@@ -436,7 +436,11 @@ export function LlmSettingsScreen({
               }
             }}
           />
-          <OpenAISubscriptionAuthCard isDisabled={isDisabled} />
+          <OpenAISubscriptionAuthCard
+            key={JSON.stringify([backend.id, orgId])}
+            isDisabled={isDisabled}
+            isCloud={isCloud}
+          />
         </div>
       );
 
