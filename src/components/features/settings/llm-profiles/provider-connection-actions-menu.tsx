@@ -68,9 +68,12 @@ export function ProviderConnectionActionsMenu({
     };
   }, [anchorElement]);
 
+  // The anchored menu renders nothing until its position is measured, so wait
+  // for the items to exist before focusing the first item.
+  const isMenuRendered = !anchorElement || portalStyle !== undefined;
   useEffect(() => {
-    menuItemsRef.current[0]?.focus();
-  }, []);
+    if (isMenuRendered) menuItemsRef.current[0]?.focus();
+  }, [isMenuRendered]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -82,6 +85,9 @@ export function ProviderConnectionActionsMenu({
 
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        if (menuRef.current?.contains(document.activeElement)) {
+          anchorElement?.focus();
+        }
         onClose();
       }
     };
@@ -103,6 +109,7 @@ export function ProviderConnectionActionsMenu({
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent, currentIndex: number) => {
       if (e.key === "Tab") {
+        anchorElement?.focus();
         onClose();
         return;
       }
@@ -117,7 +124,7 @@ export function ProviderConnectionActionsMenu({
         menuItemsRef.current[prevIndex]?.focus();
       }
     },
-    [onClose],
+    [anchorElement, onClose],
   );
 
   const isPortaled = Boolean(anchorElement);
