@@ -197,6 +197,13 @@ export interface AppConversation {
    * or it will silently drop every other tag (including ``acpserver``).
    */
   tags?: Record<string, string> | null;
+  /**
+   * Cloud-only. When the owner pinned the conversation, or `null` when it is
+   * not pinned. Cloud servers that support pins always send the key; it is
+   * absent on older servers and on local agent-servers, which is how Canvas
+   * tells the two apart.
+   */
+  pinned_at?: string | null;
   llm_model: string | null;
   metrics: MetricsSnapshot | null;
   created_at: string;

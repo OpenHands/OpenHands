@@ -220,6 +220,53 @@ export async function updateCloudConversationPublicFlag(
 }
 
 /**
+ * Pin or unpin a cloud v1 app-conversation:
+ * `PATCH /api/v1/app-conversations/{id}` with `{ pinned }`. Servers without pin
+ * support ignore the field, so the response keeps no `pinned_at` key.
+ */
+export async function updateCloudConversationPinned(
+  conversationId: string,
+  pinned: boolean,
+): Promise<AppConversation> {
+  const backend = getActiveCloudBackend();
+  return callCloudProxy<AppConversation>({
+    backend,
+    method: "PATCH",
+    path: `/api/v1/app-conversations/${conversationId}`,
+    body: { pinned },
+  });
+}
+
+/**
+ * The pinned cloud conversations, newest pin first. Servers without pin
+ * support ignore `pinned__eq` and return every conversation, so only items that
+ * carry a `pinned_at` are kept.
+ */
+export async function searchCloudPinnedConversations(): Promise<
+  AppConversation[]
+> {
+  const backend = getActiveCloudBackend();
+  const params = new URLSearchParams({
+    pinned__eq: "true",
+    limit: "100",
+    sort_order: "UPDATED_AT_DESC",
+  });
+  const data = await callCloudProxy<{ items: AppConversation[] }>({
+    backend,
+    method: "GET",
+    path: `/api/v1/app-conversations/search?${params.toString()}`,
+  });
+  return (data?.items ?? [])
+    .filter((item) => item.pinned_at != null)
+    .map((item) => overlayStoredRepoSelection(item) as AppConversation)
+    .sort(
+      (a, b) =>
+        new Date(b.pinned_at as string).getTime() -
+        new Date(a.pinned_at as string).getTime(),
+    );
+}
+
+/**
  * Rename a cloud v1 app-conversation. The title belongs to the Cloud
  * app-conversation resource, so updating a runtime Agent Server would not
  * persist it in the Cloud conversation list.
