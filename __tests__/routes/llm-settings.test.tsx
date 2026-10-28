@@ -302,6 +302,49 @@ describe("LlmSettingsScreen", () => {
     });
   });
 
+  it("fails the save payload with the translated error when subscription models have not loaded", async () => {
+    // A ChatGPT-subscription profile is saved before the subscription model
+    // list has loaded: `buildPayload` can't pick a model, so the save payload
+    // must fail with the translated message instead of silently sending a
+    // wrong one. `SdkSectionPage.handleSave` surfaces that as the toast.
+    vi.spyOn(LLMSubscriptionService, "getOpenAIStatus").mockResolvedValue({
+      vendor: "openai",
+      connected: true,
+      accountEmail: "graham@example.com",
+      expiresAt: null,
+    });
+    vi.spyOn(LLMSubscriptionService, "getOpenAIModels").mockResolvedValue([]);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        llm_model: "gpt-5.6-luna",
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          llm: {
+            model: "gpt-5.6-luna",
+            auth_type: "subscription",
+            subscription_vendor: "openai",
+          },
+        },
+      }),
+    );
+    const saveControlRef: { current: SdkSectionSaveControl | null } = {
+      current: null,
+    };
+
+    renderLlmSettingsScreen({
+      onSaveControlChange: (control) => {
+        saveControlRef.current = control;
+      },
+    });
+
+    await screen.findByTestId("llm-subscription-settings");
+    await waitFor(() => expect(saveControlRef.current).not.toBeNull());
+
+    expect(() => saveControlRef.current?.getSavePayload()).toThrow(
+      I18nKey.SETTINGS$SUBSCRIPTION_MODELS_NOT_LOADED,
+    );
+  });
+
   it("disables subscription model controls while models are loading", async () => {
     vi.spyOn(LLMSubscriptionService, "getOpenAIStatus").mockResolvedValue({
       vendor: "openai",
