@@ -4,9 +4,9 @@ import { FaCodeBranch } from "react-icons/fa";
 import { useTranslation } from "react-i18next";
 import PrIcon from "#/icons/u-pr.svg?react";
 import { GitProviderIcon } from "#/components/shared/git-provider-icon";
-import { useRepositoryPullRequests } from "#/hooks/query/use-repository-git-items";
 import { useUnifiedGitCommits } from "#/hooks/query/use-unified-git-commits";
 import { useConversationPrimaryRepository } from "#/hooks/use-conversation-primary-repository";
+import { useActiveConversationPullRequests } from "#/hooks/use-active-conversation-pull-requests";
 import { useConversationId } from "#/hooks/use-conversation-id";
 import { useSelectConversationTab } from "#/hooks/use-select-conversation-tab";
 import { useSettings } from "#/hooks/query/use-settings";
@@ -28,6 +28,9 @@ const EXTERNAL_LINK_ICON_CLASSNAME = cn(
 // Non-localizable empty-count glyph (zero PRs).
 
 const ZERO_COUNT_LABEL = "-";
+// Non-localizable glyph for a count the provider could not supply; the
+// localized meaning is announced alongside it.
+const UNKNOWN_COUNT_LABEL = "?";
 
 /**
  * Repo / branch / commits / PR rows for the overview git block.
@@ -60,10 +63,7 @@ export function ConversationOverviewGitSection() {
     state.unpinnedOverviewGitParts ?? [],
   );
 
-  const pullRequestsQuery = useRepositoryPullRequests(
-    showPullRequests ? repository : null,
-    showPullRequests ? provider : null,
-  );
+  const pullRequestsQuery = useActiveConversationPullRequests(showPullRequests);
   // Same page the Files → Commits drawer uses; no separate total from the
   // API, so we surface the fetched count (and a trailing + when capped).
   const commitsQuery = useUnifiedGitCommits();
@@ -81,7 +81,12 @@ export function ConversationOverviewGitSection() {
   const branchUrl = branch
     ? constructBranchUrl(provider, repository, branch, providerHost)
     : null;
-  const pullRequestsCount = pullRequestsQuery.data?.length ?? null;
+  // `null` when the provider gave no answer: unknown, which is not zero.
+  const pullRequestsResult = pullRequestsQuery.data;
+  const pullRequestsCount =
+    pullRequestsResult?.status === "ok"
+      ? pullRequestsResult.pullRequests.length + pullRequestsResult.omittedCount
+      : null;
   const commitsCount = commitsQuery.isUnsupported
     ? null
     : commitsQuery.commits.length;
@@ -232,12 +237,25 @@ export function ConversationOverviewGitSection() {
                 </span>
                 {pullRequestsQuery.isLoading ? (
                   <span className="text-sm tabular-nums text-muted">…</span>
+                ) : pullRequestsCount === null ? (
+                  <span
+                    data-testid="conversation-overview-pull-requests-count"
+                    title={t(
+                      I18nKey.CONVERSATION$OVERVIEW_PULL_REQUESTS_UNKNOWN,
+                    )}
+                    className="text-sm tabular-nums text-muted"
+                  >
+                    <span aria-hidden>{UNKNOWN_COUNT_LABEL}</span>
+                    <span className="sr-only">
+                      {t(I18nKey.CONVERSATION$OVERVIEW_PULL_REQUESTS_UNKNOWN)}
+                    </span>
+                  </span>
                 ) : (
                   <span
                     data-testid="conversation-overview-pull-requests-count"
                     className="text-sm tabular-nums text-muted"
                   >
-                    {pullRequestsCount !== null && pullRequestsCount > 0
+                    {pullRequestsCount > 0
                       ? pullRequestsCount
                       : ZERO_COUNT_LABEL}
                   </span>

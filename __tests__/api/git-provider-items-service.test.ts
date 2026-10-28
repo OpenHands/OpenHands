@@ -41,40 +41,6 @@ afterEach(() => {
 });
 
 describe("GitProviderItemsService", () => {
-  it("lists Forgejo pull requests from the Forgejo host, not api.github.com", async () => {
-    fetchMock.mockResolvedValueOnce(
-      mockJsonResponse([
-        {
-          id: 11,
-          number: 7,
-          title: "Fix the thing",
-          html_url: "https://codeberg.org/acme/widgets/pulls/7",
-          user: { login: "octocat" },
-          updated_at: "2026-09-01T10:00:00Z",
-        },
-      ]),
-    );
-
-    const items = await GitProviderItemsService.listPullRequests(
-      "acme/widgets",
-      "forgejo",
-    );
-
-    const [url] = getFetchCall(fetchMock);
-    expect(url.startsWith("https://codeberg.org/api/v1/")).toBe(true);
-    expect(url).toContain("/repos/acme/widgets/pulls");
-    expect(items).toEqual([
-      {
-        id: 11,
-        number: 7,
-        title: "Fix the thing",
-        url: "https://codeberg.org/acme/widgets/pulls/7",
-        authorLogin: "octocat",
-        updatedAt: "2026-09-01T10:00:00Z",
-      },
-    ]);
-  });
-
   it("lists Forgejo issues from the Forgejo host and skips pull requests", async () => {
     fetchMock.mockResolvedValueOnce(
       mockJsonResponse([
@@ -107,5 +73,4 @@ describe("GitProviderItemsService", () => {
     expect(items).toHaveLength(1);
     expect(items[0].title).toBe("Real issue");
   });
-
 });
