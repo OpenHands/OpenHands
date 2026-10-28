@@ -395,9 +395,9 @@ export function ChatInterface({
       });
     }
 
-    // Validate file sizes before any processing
-    const allFiles = [...images, ...files];
-    const validation = validateFiles(allFiles);
+    // Validate embedded image sizes before processing; images are base64
+    // encoded into WebSocket frames capped at 4MB. Files upload over HTTP.
+    const validation = validateFiles(images);
 
     if (!validation.isValid) {
       displayErrorToast(`Error: ${validation.errorMessage}`);

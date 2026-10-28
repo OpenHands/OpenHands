@@ -42,7 +42,9 @@ export async function sendMessageWithAttachments(options: {
   );
   const filesToUpload = [...files, ...imagesAsFiles];
 
-  const validation = validateFiles([...imagesToEmbed, ...filesToUpload]);
+  // Embedded images are base64-encoded into WebSocket frames capped at 4MB,
+  // so keep the 3MB cap there. Uploaded files travel over HTTP with no cap.
+  const validation = validateFiles(imagesToEmbed);
   if (!validation.isValid) {
     throw new Error(validation.errorMessage ?? "Invalid attachments");
   }
