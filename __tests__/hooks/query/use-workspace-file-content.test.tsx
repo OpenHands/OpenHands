@@ -112,6 +112,12 @@ describe("useWorkspaceFileContent", () => {
     return new TextEncoder().encode(value).buffer as ArrayBuffer;
   }
 
+  function toBase64(bytes: Uint8Array): string {
+    let binary = "";
+    for (const byte of bytes) binary += String.fromCharCode(byte);
+    return btoa(binary);
+  }
+
   it("reads a diagnostic file while the conversation is in Error", async () => {
     const { useRuntimeIsReady } = await vi.importActual<
       typeof import("#/hooks/use-runtime-is-ready")
@@ -178,6 +184,58 @@ describe("useWorkspaceFileContent", () => {
       staticUrl: `${BASE_URL}assets/logo.png`,
       mimeType: "image/png",
     });
+  });
+
+  it("fetches an absolute-path image through the authorized download client and serves a data: URI", async () => {
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]).buffer;
+    downloadFileMock.mockResolvedValue(png);
+
+    const absPath =
+      "/home/openhands/.cache/openhands-agent-server-tmp/evidence.png";
+    const { result } = renderHook(() => useWorkspaceFileContent(absPath), {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    // An absolute path outside the workspace must go through the same
+    // authorized download channel the backend uses (never a workspace URL).
+    expect(downloadFileMock).toHaveBeenCalledWith(
+      "https://agent.example.com/api/conversations/conv-1",
+      "session-key",
+      absPath,
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result.current.data).toEqual({
+      path: absPath,
+      kind: "image",
+      text: null,
+      staticUrl: `data:image/png;base64,${toBase64(new Uint8Array(png))}`,
+      mimeType: "image/png",
+    });
+  });
+
+  it("surfaces an actionable message when an absolute-path download is denied", async () => {
+    downloadFileMock.mockRejectedValue(
+      Object.assign(new Error("HTTP request failed (404 Not Found)"), {
+        name: "HttpError",
+        status: 404,
+        response: { detail: "File not found" },
+      }),
+    );
+
+    const absPath = "/home/openhands/.cache/missing.png";
+    const { result } = renderHook(() => useWorkspaceFileContent(absPath), {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    expect(result.current.error).toEqual(
+      expect.objectContaining({
+        message: expect.stringContaining("File not found"),
+      }),
+    );
   });
 
   it("does not fetch PDF bytes — PDF staticUrl is rendered directly", async () => {

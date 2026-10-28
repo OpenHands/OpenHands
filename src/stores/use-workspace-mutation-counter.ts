@@ -59,6 +59,11 @@ export function withWorkspaceCacheBuster(
   version: number,
 ): string | null {
   if (url === null) return null;
+  // `data:` and `blob:` URLs carry their full bytes inline and have no
+  // query-string cache the browser would independently revalidate — appending
+  // `?v=` corrupts them into an undecodable URI. Only static-workspace
+  // http(s) URLs (the iframe/<img> fileserver path) need the cache-buster.
+  if (/^(data|blob):/i.test(url)) return url;
   const sep = url.includes("?") ? "&" : "?";
   return `${url}${sep}v=${version}`;
 }

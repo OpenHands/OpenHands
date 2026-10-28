@@ -32,3 +32,28 @@ describe("workspace mutation counter", () => {
     expect(useWorkspaceMutationCounter.getState().count).toBe(initial + 1);
   });
 });
+
+describe("withWorkspaceCacheBuster", () => {
+  it("appends ?v= to http(s) URLs", async () => {
+    const { withWorkspaceCacheBuster } =
+      await import("#/stores/use-workspace-mutation-counter");
+    expect(withWorkspaceCacheBuster("https://agent.example/a.png", 7)).toBe(
+      "https://agent.example/a.png?v=7",
+    );
+  });
+
+  it("leaves data: and blob: URLs untouched — appending ?v= corrupts them", async () => {
+    const { withWorkspaceCacheBuster } =
+      await import("#/stores/use-workspace-mutation-counter");
+    const dataUrl = "data:image/png;base64,iVBORw0KGgo=";
+    const blobUrl = "blob:https://agent.example/abc";
+    expect(withWorkspaceCacheBuster(dataUrl, 7)).toBe(dataUrl);
+    expect(withWorkspaceCacheBuster(blobUrl, 7)).toBe(blobUrl);
+  });
+
+  it("returns null for a null input", async () => {
+    const { withWorkspaceCacheBuster } =
+      await import("#/stores/use-workspace-mutation-counter");
+    expect(withWorkspaceCacheBuster(null, 7)).toBe(null);
+  });
+});

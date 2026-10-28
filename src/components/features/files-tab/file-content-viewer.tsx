@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { I18nKey } from "#/i18n/declaration";
@@ -58,6 +59,30 @@ function UnpreviewableFallback({ path }: { path: string }) {
       {documentLabel
         ? t(I18nKey.FILES$UNSUPPORTED_DOCUMENT, { type: documentLabel })
         : t(I18nKey.FILES$BINARY_FALLBACK)}
+    </div>
+  );
+}
+
+function ImagePreview({ path, src }: { path: string; src: string }) {
+  const { t } = useTranslation("openhands");
+  const [failed, setFailed] = useState(false);
+  return (
+    <div
+      className="flex h-full w-full items-center justify-center bg-surface p-4"
+      data-testid={
+        failed ? "file-content-viewer-image-error" : "file-content-viewer-image"
+      }
+    >
+      {failed ? (
+        t(I18nKey.FILES$IMAGE_PREVIEW_ERROR, { path })
+      ) : (
+        <img
+          src={src}
+          alt={path}
+          onError={() => setFailed(true)}
+          className="max-h-full max-w-full object-contain"
+        />
+      )}
     </div>
   );
 }
@@ -127,19 +152,21 @@ export function FileContentViewer({ path, viewMode }: FileContentViewerProps) {
     return <UnpreviewableFallback path={path} />;
   }
 
+  if (query.data.richPreviewNeedsWorkspace) {
+    return (
+      <div
+        className="flex h-full w-full items-center justify-center p-4 text-sm text-muted"
+        data-testid="file-content-viewer-relative-assets"
+      >
+        {t(I18nKey.FILES$PREVIEW_NEEDS_WORKSPACE, { path })}
+      </div>
+    );
+  }
+
   // ----- Rich mode: render HTML, markdown, images, PDFs from staticUrl. ----
   if (kind === "image") {
     return (
-      <div
-        className="flex h-full w-full items-center justify-center bg-surface p-4"
-        data-testid="file-content-viewer-image"
-      >
-        <img
-          src={bustedStaticUrl}
-          alt={path}
-          className="max-h-full max-w-full object-contain"
-        />
-      </div>
+      <ImagePreview key={bustedStaticUrl} path={path} src={bustedStaticUrl!} />
     );
   }
 
