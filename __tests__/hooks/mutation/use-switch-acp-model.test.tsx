@@ -242,20 +242,42 @@ describe("useSwitchAcpModel", () => {
     });
   });
 
-  it("marks a home-page pick so the next launch suppresses route-at-start", async () => {
-    vi.mocked(AgentProfilesService.listProfiles).mockResolvedValue({
-      profiles: [
-        { id: "id-default", name: "default", agent_kind: "openhands" },
-      ],
-      active_agent_profile_id: "id-default",
-    } as never);
+  it("marks a home-page pick synchronously so a quick send suppresses route-at-start", async () => {
+    // listProfiles is left unresolved so the flag must be set by `mutate`
+    // itself (top of mutationFn), not by onSuccess — a send fired immediately
+    // after the pick would otherwise race the persist and route anyway.
+    let resolveList: (value: unknown) => void = () => {};
+    vi.mocked(AgentProfilesService.listProfiles).mockReturnValue(
+      new Promise((resolve) => {
+        resolveList = resolve;
+      }) as never,
+    );
     vi.mocked(SettingsService.saveSettings).mockResolvedValue(true);
 
     const { result } = renderSwitchHook();
     result.current.mutate({ conversationId: null, model: "claude-sonnet" });
 
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(useModelStore.getState().homeManualModelPick).toBe(true);
+
+    resolveList({
+      profiles: [
+        { id: "id-default", name: "default", agent_kind: "openhands" },
+      ],
+      active_agent_profile_id: "id-default",
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+  });
+
+  it("clears the flag when a home-page pick fails so the next launch routes", async () => {
+    vi.mocked(AgentProfilesService.listProfiles).mockRejectedValue(
+      new Error("boom") as never,
+    );
+
+    const { result } = renderSwitchHook();
+    result.current.mutate({ conversationId: null, model: "claude-sonnet" });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(useModelStore.getState().homeManualModelPick).toBe(false);
   });
 
   it("does not mark a pick made inside an existing conversation", async () => {

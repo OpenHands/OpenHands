@@ -411,17 +411,37 @@ describe("useSwitchLlmProfile", () => {
     expect(recordModelSwitchMessage).not.toHaveBeenCalled();
   });
 
-  it("marks a home-page pick so the next launch suppresses route-at-start", async () => {
-    vi.mocked(AgentServerConversationService.switchProfile).mockResolvedValue(
-      undefined as never,
+  it("marks a home-page pick synchronously so a quick send suppresses route-at-start", async () => {
+    // switchProfile is left unresolved so the flag must be set by `mutate`
+    // itself (onMutate), not by onSuccess — a send fired immediately after
+    // the pick would otherwise race the switch and route anyway.
+    let resolveSwitch: (value: undefined) => void = () => {};
+    vi.mocked(AgentServerConversationService.switchProfile).mockReturnValue(
+      new Promise<undefined>((resolve) => {
+        resolveSwitch = resolve;
+      }) as never,
     );
     expect(useModelStore.getState().homeManualModelPick).toBe(false);
 
     const { result } = renderSwitchHook();
     result.current.mutate({ conversationId: null, profileName: "Smart" });
 
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(useModelStore.getState().homeManualModelPick).toBe(true);
+
+    resolveSwitch(undefined);
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+  });
+
+  it("clears the flag when a home-page pick fails so the next launch routes", async () => {
+    vi.mocked(AgentServerConversationService.switchProfile).mockRejectedValue(
+      new Error("boom") as never,
+    );
+
+    const { result } = renderSwitchHook();
+    result.current.mutate({ conversationId: null, profileName: "Smart" });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(useModelStore.getState().homeManualModelPick).toBe(false);
   });
 
   it("does not mark a pick made inside an existing conversation", async () => {

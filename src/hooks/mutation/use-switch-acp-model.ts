@@ -51,13 +51,19 @@ export const useSwitchAcpModel = () => {
   const { backend, orgId } = useActiveBackend();
 
   return useMutation({
-    mutationFn: async ({ conversationId, model }: SwitchAcpModelVars) => {
-      // A home-page ACP model pick (no conversation) is an explicit model
-      // choice made before the first message: mark it so the next home launch
-      // suppresses "Run on first message" routing for this conversation only.
+    // A home-page ACP model pick (no conversation) is an explicit model
+    // choice made before the first message: mark it synchronously here (not in
+    // mutationFn/onSuccess) so a quick send reads the flag before the async
+    // profile listing resolves — otherwise the launch races the pick, routes
+    // anyway, and the stale flag set by the late onSuccess leaks to the next
+    // conversation.
+    onMutate: ({ conversationId }) => {
       if (!conversationId) {
         useModelStore.getState().setHomeManualModelPick(true);
       }
+      return null;
+    },
+    mutationFn: async ({ conversationId, model }: SwitchAcpModelVars) => {
       if (conversationId) {
         if (model) {
           await AgentServerConversationService.switchAcpModel(
@@ -141,5 +147,12 @@ export const useSwitchAcpModel = () => {
     // per-action message worth tailoring here, so the global mutation error
     // toast reports a failed switch / profile or settings write rather than
     // swallowing it.
+    onError: (_error, { conversationId }) => {
+      // A failed home pick never persisted: clear the flag so the next launch
+      // routes as normal instead of inheriting a stale suppress.
+      if (!conversationId) {
+        useModelStore.getState().setHomeManualModelPick(false);
+      }
+    },
   });
 };
