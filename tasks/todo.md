@@ -20,7 +20,7 @@ Source: `tasks/plan.md` (implements the approved spec
 
 - [x] Task 4: Composer quote card (slot, dismiss, Escape; jump stub)
 - [x] Task 5: Compose at submit + retry replays envelope
-- [ ] Task 6: Reply action on bubbles + surface gating
+- [x] Task 6: Reply action on bubbles + surface gating
 
 ## Checkpoint: Core feature
 
