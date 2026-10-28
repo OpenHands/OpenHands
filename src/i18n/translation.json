@@ -15029,6 +15029,42 @@
     "uk": "Модель",
     "id": "Model"
   },
+  "CONVERSATION_PANEL$PREVIEW_AGENT_PROFILE": {
+    "en": "Agent profile",
+    "ja": "エージェントプロファイル",
+    "zh-CN": "代理配置文件",
+    "zh-TW": "代理設定檔",
+    "ko-KR": "에이전트 프로필",
+    "no": "Agentprofil",
+    "ar": "ملف تعريف الوكيل",
+    "de": "Agentenprofil",
+    "fr": "Profil d'agent",
+    "it": "Profilo agente",
+    "pt": "Perfil de agente",
+    "es": "Perfil de agente",
+    "ca": "Perfil d'agent",
+    "tr": "Ajan profili",
+    "uk": "Профіль агента",
+    "id": "Profil agen"
+  },
+  "CONVERSATION_PANEL$PREVIEW_AGENT_PROFILE_ID": {
+    "en": "Agent profile ID",
+    "ja": "エージェントプロファイル ID",
+    "zh-CN": "代理配置文件 ID",
+    "zh-TW": "代理設定檔 ID",
+    "ko-KR": "에이전트 프로필 ID",
+    "no": "Agentprofil-ID",
+    "ar": "معرّف ملف تعريف الوكيل",
+    "de": "Agentenprofil-ID",
+    "fr": "ID du profil d'agent",
+    "it": "ID profilo agente",
+    "pt": "ID do perfil de agente",
+    "es": "ID del perfil de agente",
+    "ca": "ID del perfil d'agent",
+    "tr": "Ajan profili kimliği",
+    "uk": "ID профілю агента",
+    "id": "ID profil agen"
+  },
   "CONVERSATION_PANEL$PIN_CONVERSATION": {
     "en": "Pin conversation",
     "ja": "会話をピン留め",
@@ -39490,5 +39526,23 @@
     "uk": "Сервер MCP",
     "ca": "Servidor MCP",
     "id": "Server MCP"
+  },
+  "CONVERSATION$NEW_IN_SANDBOX": {
+    "en": "New Conversation in Sandbox",
+    "ja": "サンドボックスで新規会話",
+    "zh-CN": "在沙箱中新建对话",
+    "zh-TW": "在沙箱中新增對話",
+    "ko-KR": "샌드박스에서 새 대화",
+    "no": "Ny samtale i sandkassen",
+    "it": "Nuova conversazione nella sandbox",
+    "pt": "Nova conversa no sandbox",
+    "es": "Nueva conversación en el sandbox",
+    "ar": "محادثة جديدة في بيئة الاختبار",
+    "fr": "Nouvelle conversation dans le sandbox",
+    "tr": "Sandbox içinde yeni sohbet",
+    "de": "Neue Unterhaltung in der Sandbox",
+    "uk": "Нова розмова в пісочниці",
+    "ca": "Conversa nova al sandbox",
+    "id": "Percakapan baru di sandbox"
   }
 }
