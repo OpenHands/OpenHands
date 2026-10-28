@@ -36,6 +36,7 @@ type CloudSettingsResponse = {
   enable_proactive_conversation_starters?: boolean;
   enable_solvability_analysis?: boolean;
   enable_sound_notifications?: boolean;
+  enable_os_notifications?: boolean;
   language?: string;
   email?: string;
   email_verified?: boolean;

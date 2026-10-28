@@ -54,12 +54,17 @@ export function AgentStatus({
   );
   const { setShouldShownAgentLoading } = useConversationStore();
   const { curAgentState, executionStatus } = useAgentState();
+  const { data: conversation } = useActiveConversation();
 
-  // Trigger browser tab flash and notification sound on state changes
-  useAgentNotification(curAgentState);
+  // Trigger browser tab flash and notification sound on state changes.
+  // Conversation id/title enable OS notifications to tag per-conversation
+  // and name the right conversation in the popup.
+  useAgentNotification(curAgentState, {
+    conversationId: conversation?.id,
+    conversationTitle: conversation?.title,
+  });
   const webSocketStatus = useUnifiedWebSocketStatus();
   const hasConnectedOnce = useHasConnectedOnceWebSocket();
-  const { data: conversation } = useActiveConversation();
   const { taskStatus } = useTaskPolling();
 
   const { subConversationTaskId } = useConversationStore();

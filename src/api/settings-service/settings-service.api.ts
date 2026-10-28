@@ -35,6 +35,7 @@ export const APP_PREFERENCE_FIELDS = [
   "language",
   "user_consents_to_analytics",
   "enable_sound_notifications",
+  "enable_os_notifications",
   "git_user_name",
   "git_user_email",
   "title_llm_profile",
