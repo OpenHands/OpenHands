@@ -6,6 +6,10 @@ import { useUserConversation } from "./query/use-user-conversation";
 import { useAppTitle } from "./use-app-title";
 import { useConversationStateStore } from "#/stores/conversation-state-store";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
+import {
+  useCanvasExtensionsRuntime,
+  type RegisteredCanvasExtensionPage,
+} from "#/components/features/canvas-extensions/canvas-extensions-runtime";
 
 const renderAppTitleHook = () =>
   renderHook(() => useAppTitle(), {
@@ -17,6 +21,12 @@ const renderAppTitleHook = () =>
   });
 
 vi.mock("./query/use-user-conversation");
+vi.mock(
+  "#/components/features/canvas-extensions/canvas-extensions-runtime",
+  () => ({
+    useCanvasExtensionsRuntime: vi.fn(),
+  }),
+);
 vi.mock("react-router", async () => {
   const actual = await vi.importActual("react-router");
   return {
@@ -28,11 +38,54 @@ vi.mock("react-router", async () => {
 describe("useAppTitle", () => {
   const mockUseUserConversation = vi.mocked(useUserConversation);
   const mockUseParams = vi.mocked(useParams);
+  const mockUseCanvasExtensionsRuntime = vi.mocked(useCanvasExtensionsRuntime);
+
+  const mockPages: RegisteredCanvasExtensionPage[] = [
+    {
+      extension: {
+        name: "demo-page",
+        version: "1.0.0",
+        enabled: true,
+        source: "github:demo/demo-page",
+        installed_at: "2026-01-01T00:00:00.000Z",
+        install_path: "/tmp/demo-page",
+      },
+      contribution: {
+        id: "hello",
+        path: "hello",
+        title: "Hello from an extension",
+      },
+      mount: vi.fn(),
+      href: "/extensions/demo-page/hello",
+    },
+    {
+      extension: {
+        name: "work-queue",
+        version: "1.0.0",
+        enabled: true,
+        source: "github:demo/work-queue",
+        installed_at: "2026-01-01T00:00:00.000Z",
+        install_path: "/tmp/work-queue",
+      },
+      contribution: {
+        id: "queue",
+        path: "queue",
+        title: "Work Queue",
+      },
+      mount: vi.fn(),
+      href: "/extensions/work-queue/queue",
+    },
+  ];
 
   beforeEach(() => {
     // @ts-expect-error - only returning partial config for test
     mockUseUserConversation.mockReturnValue({ data: null });
     mockUseParams.mockReturnValue({});
+    mockUseCanvasExtensionsRuntime.mockReturnValue({
+      pages: [],
+      activating: false,
+      errors: new Map(),
+    });
     useConversationStateStore.getState().reset();
   });
 
@@ -121,5 +174,134 @@ describe("useAppTitle", () => {
     await waitFor(() =>
       expect(result.current).toBe("My Conversation | OpenHands"),
     );
+  });
+
+  describe("canvas app pages", () => {
+    it("returns the app page title with the OpenHands App suffix when viewing an enabled app page", async () => {
+      mockUseParams.mockReturnValue({
+        extensionName: "demo-page",
+        "*": "hello",
+      });
+      mockUseCanvasExtensionsRuntime.mockReturnValue({
+        pages: mockPages,
+        activating: false,
+        errors: new Map(),
+      });
+
+      const { result } = renderAppTitleHook();
+
+      await waitFor(() =>
+        expect(result.current).toBe("Hello from an extension - OpenHands App"),
+      );
+    });
+
+    it("uses the registered title of the matching page contribution for other apps", async () => {
+      mockUseParams.mockReturnValue({
+        extensionName: "work-queue",
+        "*": "queue",
+      });
+      mockUseCanvasExtensionsRuntime.mockReturnValue({
+        pages: mockPages,
+        activating: false,
+        errors: new Map(),
+      });
+
+      const { result } = renderAppTitleHook();
+
+      await waitFor(() =>
+        expect(result.current).toBe("Work Queue - OpenHands App"),
+      );
+    });
+
+    it("preserves the app page title for nested sub-paths under the contribution path", async () => {
+      mockUseParams.mockReturnValue({
+        extensionName: "demo-page",
+        "*": "hello/nested/subpage",
+      });
+      mockUseCanvasExtensionsRuntime.mockReturnValue({
+        pages: mockPages,
+        activating: false,
+        errors: new Map(),
+      });
+
+      const { result } = renderAppTitleHook();
+
+      await waitFor(() =>
+        expect(result.current).toBe("Hello from an extension - OpenHands App"),
+      );
+    });
+
+    it("falls back to OpenHands for an unknown app", async () => {
+      mockUseParams.mockReturnValue({
+        extensionName: "non-existent-app",
+        "*": "hello",
+      });
+      mockUseCanvasExtensionsRuntime.mockReturnValue({
+        pages: mockPages,
+        activating: false,
+        errors: new Map(),
+      });
+
+      const { result } = renderAppTitleHook();
+
+      await waitFor(() => expect(result.current).toBe("OpenHands"));
+    });
+
+    it("falls back to OpenHands for an unknown page of a known app", async () => {
+      mockUseParams.mockReturnValue({
+        extensionName: "demo-page",
+        "*": "unknown-route",
+      });
+      mockUseCanvasExtensionsRuntime.mockReturnValue({
+        pages: mockPages,
+        activating: false,
+        errors: new Map(),
+      });
+
+      const { result } = renderAppTitleHook();
+
+      await waitFor(() => expect(result.current).toBe("OpenHands"));
+    });
+
+    it("falls back to OpenHands when the app is disabled", async () => {
+      const disabledPages: RegisteredCanvasExtensionPage[] = [
+        {
+          ...mockPages[0],
+          extension: {
+            ...mockPages[0].extension,
+            enabled: false,
+          },
+        },
+      ];
+      mockUseParams.mockReturnValue({
+        extensionName: "demo-page",
+        "*": "hello",
+      });
+      mockUseCanvasExtensionsRuntime.mockReturnValue({
+        pages: disabledPages,
+        activating: false,
+        errors: new Map(),
+      });
+
+      const { result } = renderAppTitleHook();
+
+      await waitFor(() => expect(result.current).toBe("OpenHands"));
+    });
+
+    it("falls back to OpenHands when the app is not in registered pages", async () => {
+      mockUseParams.mockReturnValue({
+        extensionName: "demo-page",
+        "*": "hello",
+      });
+      mockUseCanvasExtensionsRuntime.mockReturnValue({
+        pages: [],
+        activating: false,
+        errors: new Map(),
+      });
+
+      const { result } = renderAppTitleHook();
+
+      await waitFor(() => expect(result.current).toBe("OpenHands"));
+    });
   });
 });
