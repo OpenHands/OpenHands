@@ -34,6 +34,7 @@ Source: `src/routes/canvas-extensions.tsx`, `src/routes/canvas-extension-page.ts
 - `F20.busy-lock`: while Update, Uninstall or Enable is pending, every card control is inert, the switch included.
 - `F20.load-error`: when listing apps fails, the Installed section shows the error and a **Retry** button.
 - `F20.unsupported`: on a Cloud backend, with no backend, or on an Agent Server without the apps API, the Installed section shows **Not available** with the reason and **Add app** is disabled; Cloud hides Apps from the Customize navigation.
+- `F20.registry-smoke`: every app in the [OpenHands/extensions `apps/` catalog](https://github.com/OpenHands/extensions/tree/main/apps), installed from **Add app** with its tree URL at one recorded commit and enabled through the trust confirmation, opens each page its manifest declares from the rail and renders it with no app errors beyond the ones it logs by design; uninstalling it leaves no app behind.
 
 ## How to get to it (user POV)
 
@@ -50,7 +51,7 @@ Preconditions:
 
 - Baseline state (launched, doctored, `onboard --skip` done) on the launcher's local Agent Server. No LLM is needed.
 - No app is installed: `control-openhands api GET /api/canvas-extensions/installed` returns `"canvas_extensions": []`.
-- Run commands from the checkout root: recipes install the bundled, reviewed fixture `$PWD/src/fixtures/canvas-extensions/demo-page` (name `demo-page`, display name `Demo page`, one page `hello` at `/hello`). Never install or enable arbitrary third-party code: enabling runs it inside Canvas.
+- Run commands from the checkout root: recipes install the bundled, reviewed fixture `$PWD/src/fixtures/canvas-extensions/demo-page` (name `demo-page`, display name `Demo page`, one page `hello` at `/hello`). Never install or enable arbitrary third-party code: enabling runs it inside Canvas. The one other reviewed source is the public registry: an app listed in OpenHands/extensions `apps/catalog.json`, installed at a commit recorded before the run and enabled only when its card's **Ref** equals that commit (the catalog smoke below).
 - Git bullets (tree URL, Ref and Path, busy lock, duplicate): the Agent Server can read `https://github.com/OpenHands/OpenHands` anonymously (read-only; no account needed), and that repo's `main` holds the same reviewed fixture at `src/fixtures/canvas-extensions/demo-page`. Check both before installing, with a read-only shell step: `git clone -q --depth 1 --filter=blob:none --sparse https://github.com/OpenHands/OpenHands "$OH_VERIFY_RUN/private/qa-upstream" && git -C "$OH_VERIFY_RUN/private/qa-upstream" sparse-checkout set src/fixtures/canvas-extensions && diff -r "$OH_VERIFY_RUN/private/qa-upstream/src/fixtures/canvas-extensions/demo-page" src/fixtures/canvas-extensions/demo-page && git -C "$OH_VERIFY_RUN/private/qa-upstream" rev-parse HEAD` must print no diff and a commit. Enable a Git-installed copy only when the card's **Ref** equals that commit. If GitHub is unreachable or the diff is not empty, these bullets are blocked (a local smart-HTTP Git server would do, but `control-openhands` has no verb for one; dumb HTTP such as `python3 -m http.server` fails the Agent Server's fetch).
 - Desktop viewport unless a bullet says otherwise.
 
@@ -80,6 +81,58 @@ Preconditions:
 - **Ref and Path with the `github:` shorthand (`F20.git-ref-path`).** Needs the Git precondition. Run `control-openhands browser click 'testid=canvas-extensions-add-button'`, `control-openhands browser fill 'testid=add-canvas-extension-source-input' 'github:OpenHands/OpenHands'`, `control-openhands browser fill 'testid=add-canvas-extension-ref-input' main`, `control-openhands browser fill 'testid=add-canvas-extension-repo-path-input' src/fixtures/canvas-extensions/demo-page`, `control-openhands browser focus 'testid=add-canvas-extension-repo-path-input'`, `control-openhands browser press Enter` (Enter submits) and `control-openhands browser wait 'testid=add-canvas-extension-modal' --state detached --timeout 90000`; the toast is `App installed. …`. After `control-openhands browser reload`, `browser snapshot 'testid=canvas-extension-card-demo-page'` shows source `github:OpenHands/OpenHands`, `Ref` with the precondition's commit and `Path` `src/fixtures/canvas-extensions/demo-page`. Uninstall it as above.
 - **List error with Retry (`F20.load-error`).** On a disposable run you own, first uninstall its apps and verify `api GET /api/canvas-extensions/installed` returns `canvas_extensions: []`; never apply this arrangement to an operator's installation. Keep the SDK running. Open `/plugins`, privately save `stat.S_IMODE((RUN / "private/canvas-extensions/installed").stat().st_mode)`, then temporarily set only that owned empty installation directory's mode to `0` in a Python `try/finally`. Require `api GET /server_info` to remain `200` and the actual installed-list request to return non-404 `500` (`PermissionError`). Click `testid=sidebar-extensions-/apps`, wait for `role=button[name="Retry"]`, read the error and screenshot. In `finally`, restore the exact saved mode before any further action; doctor the same run. Click the actual Retry button and wait for `No apps are installed on this backend.`; independent installed-list read must return `200`/empty again. This is a real filesystem I/O failure, with no request interception or product changes. The tested fixture directory was `<owned-run>/private/canvas-extensions/installed`; a guessed `canvas-extensions-load-error` testid does not exist. Stopping the SDK instead exercises the app-wide Manage backends gate.
 - **Unsupported backends (`F20.unsupported`).** Blocked: needs a Cloud backend account (`Apps are not available on Cloud backends yet.`, Apps hidden from Customize), a state with no backend (`Add an Agent Server backend to use Apps.`), or an Agent Server that passes Canvas's version gate (1.47.0 or newer) but has no `/api/canvas-extensions` routes (`This Agent Server does not support Apps yet. Upgrade the backend and try again.`). In each case **Add app** should be disabled. Released servers cannot produce the last state: the routes ship from 1.44.1, and an older server such as `control-openhands launch --new --sdk-ref v1.43.1` (whose `GET /api/canvas-extensions/installed` is `404`) never reaches `/apps`, because every page shows the **Manage backends** gate with `Agent Canvas requires agent-server 1.47.0 or newer; this backend is running 1.43.1.` (`doctor` still reports `ok`).
+- **Catalog smoke (`F20.registry-smoke`).** Needs GitHub reachable from the shell and the Agent Server (read-only, no account). The block clones the catalog sparsely, records its commit, and for each app installs `https://github.com/OpenHands/extensions/tree/<commit>/apps/<id>` through **Add app** (the form splits it into source, Ref and Path), checks that `resolved_ref` is that commit before enabling, enables it through the trust confirmation, then for every page in its manifest clicks the rail entry, snapshots `main` named after the page title, screenshots it and sweeps `browser errors --app-only`. It writes one ledger row per page under `F20.registry-smoke` and uninstalls the app through its card. A page passes when its `main` renders (not **Not available**) and no app error is left after removing that app's `EXPECTED` pattern. The app list comes from the catalog at run time, so newly added apps need no map edit; only an app that logs errors by design adds an `EXPECTED` line. Read the failing rows' screenshots before filing: an app's own defect belongs in OpenHands/extensions, a host defect here. Expected on 2026-10-28 (extensions `f7b18a5`, Agent Server 1.58.1): `kanban-manager` (Kanban Manager, `Choose a workspace to open its board.`) and `vscode` (VS Code, `VS Code is unavailable because this Agent Server does not support managed App backends.`: a default launch has no app-backend ingress, see `F20.app-backend-view`) both pass, and `api GET /api/canvas-extensions/installed` ends at `[]`. App pages carry no test ids of their own; per-app primary flows, when mapped, use role and text selectors.
+  ```sh
+  control-openhands browser viewport desktop
+  REG="$OH_VERIFY_RUN/private/qa-extensions"; rm -rf "$REG"
+  git clone -q --depth 1 --filter=blob:none --sparse https://github.com/OpenHands/extensions "$REG"
+  git -C "$REG" sparse-checkout set apps
+  SHA="$(git -C "$REG" rev-parse HEAD)"; echo "extensions commit $SHA"
+  # One line per app page: <app id> <page id> <page path> <page title>
+  python3 - "$REG" > "$REG/pages.tsv" <<'PY'
+  import json, pathlib, sys
+  root = pathlib.Path(sys.argv[1])
+  for entry in json.loads((root / "apps/catalog.json").read_text()):
+      manifest = json.loads((root / entry["manifest"]).read_text())
+      for page in manifest["contributes"]["pages"]:
+          print("\t".join([manifest["name"], page["id"], page["path"].lstrip("/"), page["title"]]))
+  PY
+  # Errors an app logs by design on a fresh backend, as "<app id> <regex on the event url or message>".
+  EXPECTED='kanban-manager	vibe-manager(/|%2F)index\.json'
+  for APP in $(cut -f1 "$REG/pages.tsv" | uniq); do
+    control-openhands browser goto /apps
+    control-openhands browser click 'testid=canvas-extensions-add-button'
+    control-openhands browser fill 'testid=add-canvas-extension-source-input' "https://github.com/OpenHands/extensions/tree/$SHA/apps/$APP"
+    control-openhands browser click 'testid=add-canvas-extension-submit'
+    control-openhands browser wait 'testid=add-canvas-extension-modal' --state detached --timeout 90000
+    control-openhands assert --field value --equals "$SHA" -- api GET /api/canvas-extensions/installed/$APP --pick resolved_ref
+    control-openhands browser click "testid=canvas-extension-card-$APP >> role=switch"
+    control-openhands browser click 'testid=confirmation-modal >> testid=confirm-button'
+    grep "^$APP	" "$REG/pages.tsv" | while IFS="$(printf '\t')" read -r _ PAGE PATHPART TITLE; do
+      control-openhands browser errors --clear
+      control-openhands browser wait "testid=sidebar-canvas-extension-$APP-$PAGE" --timeout 15000
+      control-openhands browser click "testid=sidebar-canvas-extension-$APP-$PAGE" --expect-url "/extensions/$APP/$PATHPART(\\?|$)"
+      control-openhands browser eval 'new Promise(r=>setTimeout(r,3000))' >/dev/null
+      SNAP="$(control-openhands browser snapshot "role=main[name=\"$TITLE\"]")"
+      SHOT="$(control-openhands browser screenshot --feature F20.registry-smoke --name "$APP-$PAGE" | python3 -c 'import json,sys;print(json.load(sys.stdin)["path"])')"
+      ALLOW="$(printf '%s\n' "$EXPECTED" | awk -F'\t' -v a="$APP" '$1==a{print $2}')"
+      UNEXPECTED="$(control-openhands browser errors --app-only | ALLOW="$ALLOW" python3 -c '
+  import json, os, re, sys
+  allow = os.environ["ALLOW"]
+  events = json.load(sys.stdin)["events"]
+  print(len([e for e in events if not (allow and re.search(allow, (e.get("url") or "") + " " + (e.get("message") or "")))]))')"
+      if printf '%s' "$SNAP" | grep -q '"ok": true' && ! printf '%s' "$SNAP" | grep -q 'Not available' && [ "$UNEXPECTED" = 0 ]; then RESULT=pass; else RESULT=fail; fi
+      control-openhands evidence add --feature F20.registry-smoke --result "$RESULT" --entry "Apps > Add app > extensions/apps/$APP > $TITLE" \
+        --expected "page renders, no unexpected app errors" --actual "unexpected app errors: $UNEXPECTED" --artifact "$SHOT" --note "extensions $SHA"
+    done
+    control-openhands browser goto /apps
+    control-openhands browser click "testid=canvas-extension-uninstall-$APP"
+    control-openhands browser click 'testid=confirmation-modal >> testid=confirm-button'
+    control-openhands browser wait "testid=canvas-extension-card-$APP" --state detached --timeout 30000
+  done
+  control-openhands assert --field value --equals '[]' -- api GET /api/canvas-extensions/installed --pick canvas_extensions
+  control-openhands evidence list --feature F20.registry-smoke
+  ```
 
 - **Malformed tree-URL escapes (`F20.git-tree-url`, `F20.install-error`).** On `/apps`, open `canvas-extensions-add-button`, fill `add-canvas-extension-source-input` with `https://github.com/o/r/tree/main%/apps/demo`, and click `add-canvas-extension-submit`. Inspect `browser errors --app-only`, `browser toasts --history`, and the modal count. Repeat with `https://gitlab.com/group/repo/-/tree/main/apps/%E0%A4%A`. Expected: submission produces a usable install/validation outcome. Known failure, reproduced 2026-10-12 on `fa1f724` with Agent Server 1.54.0: each submit raises `URI malformed`, emits no toast, skips the install request, and leaves the modal open ([#17783](https://github.com/OpenHands/OpenHands/issues/17783)). A reviewed local demo source still installs successfully as the control; no malformed source is executed.
 - **Extension page home pin (`F20.rail-entry`).** Install and enable the reviewed local `src/fixtures/canvas-extensions/demo-page` through the form and trust confirmation. Hover `sidebar-canvas-extension-demo-page-hello`, inspect `browser testids 'role=complementary' --filter pin`, and compare with hovering `sidebar-automations-link`. Expected: the enabled extension page offers **Pin as home page** and the normal home-pin lifecycle. Known failure, reproduced 2026-10-12 on `fa1f724`: only Automate exposes `sidebar-pin-home-toggle-automations`; the extension page has no pin control ([#16995](https://github.com/OpenHands/OpenHands/issues/16995)).
@@ -98,6 +151,8 @@ Preconditions:
 - `control-openhands launch` passes the launcher only a fixed list of environment variables (path, locale, proxy) plus its own flags: `OH_AGENT_SERVER_VERSION=<old>` in the environment is ignored (the run still gets the pinned server); use `--sdk-ref v<version>`. Any server older than 1.47.0 is gated by Canvas before `/apps` renders.
 - Stopping the Agent Server makes the next full page load show the **Manage backends** gate; always `restart` and `doctor` afterwards.
 - A trailing `browser errors --app-only` sweep shows a `400` per failed install by design; count only other errors.
+- Catalog apps log some errors by design on a fresh backend. Kanban Manager reads its board index `~/.openhands/vibe-manager/index.json` before one exists, which logs a `404` on `GET /api/file/download` and the matching console error (the URL is percent-encoded, hence `vibe-manager(/|%2F)index\.json` in `EXPECTED`); the board itself renders `Choose a workspace to open its board.`
+- The catalog smoke enables code from a third-party registry inside Canvas. Install it only at a commit recorded before the run (a tree URL with a 40-character commit installs exactly that commit), and never enable a card whose **Ref** differs. App backends (for example VS Code's managed editor) are not started by the smoke; only the page is opened.
 - `App backend view unavailable` on the demo page is the expected text while `GET /server_info` lists no `canvas_app_backend_bridge_v1` capability (the pinned Agent Server with no app-backend ingress configured); it does not mean the app failed to load. Cloud backends and the no-backend state never get a backend view either.
 - Known failure (reproduced 2026-10-25, [OpenHands/software-agent-sdk#5648](https://github.com/OpenHands/software-agent-sdk/issues/5648), Agent Server 1.58.1, `F20.app-backend-view`): a genuine admitted app-backend WebSocket offers `qa.echo.v1`, but the proxy does not negotiate it and Chromium rejects the handshake. Two UI mounts reproduced; a separate direct owned backend control negotiated the protocol and echoed the fixed marker. The positive control is not a proxied UI pass. Platform-matching artifacts and configured ingress are available here; native macOS and other artifact platforms remain separate prerequisites.
 - An explicit `OH_APP_BACKEND_PUBLIC_URL_IS_NONE=1` in the launcher environment overrides a JSON `app_backend_public_url` in the default config file (`private/state/workspaces/workspace/openhands_agent_server_config.json`): `GET /server_info` reports `app_backend_ingress_url: null` and the demo page reads `App backend view unavailable` (`F20.app-backend-view`). The recipe arranges and restores both sources.
