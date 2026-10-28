@@ -45,9 +45,14 @@ export interface BrowserObservation extends ObservationBase<"BrowserObservation"
    */
   output: string;
   /**
-   * Error message if any
+   * Error message if any (legacy runtimes; the current agent-server
+   * reports failures via `is_error` instead)
    */
   error: string | null;
+  /**
+   * Whether the browser operation failed (current agent-server wire shape)
+   */
+  is_error?: boolean;
   /**
    * Base64 screenshot data if available
    */
@@ -140,9 +145,14 @@ export interface FileEditorObservation extends ObservationBase<"FileEditorObserv
    */
   new_content: string | null;
   /**
-   * Error message if any.
+   * Error message if any (legacy runtimes; the current agent-server
+   * reports failures via `is_error` instead)
    */
   error: string | null;
+  /**
+   * Whether the edit failed (current agent-server wire shape)
+   */
+  is_error?: boolean;
 }
 
 // Keep StrReplaceEditorObservation as a separate interface for backward compatibility
@@ -178,9 +188,14 @@ export interface StrReplaceEditorObservation extends ObservationBase<"StrReplace
    */
   new_content: string | null;
   /**
-   * Error message if any.
+   * Error message if any (legacy runtimes; the current agent-server
+   * reports failures via `is_error` instead)
    */
   error: string | null;
+  /**
+   * Whether the edit failed (current agent-server wire shape)
+   */
+  is_error?: boolean;
 }
 
 export interface TaskTrackerObservation extends ObservationBase<"TaskTrackerObservation"> {
