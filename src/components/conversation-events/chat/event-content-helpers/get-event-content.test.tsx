@@ -13,6 +13,7 @@ import type {
 } from "#/types/agent-server/core";
 import { SecurityRisk } from "#/types/agent-server/core";
 import type { SkillReadyEvent } from "./create-skill-ready-event";
+import type { OpenHandsTranslator } from "#/i18n/openhands-translate";
 import { getEventContent } from "./get-event-content";
 
 const mocks = vi.hoisted(() => ({
@@ -27,6 +28,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("#/i18n", () => ({
+  OPENHANDS_I18N_NAMESPACE: "openhands",
   default: {
     exists: mocks.exists,
     t: mocks.translate,
@@ -929,6 +931,29 @@ describe("unknown and incomplete events", () => {
       details: "",
     });
     expect(mocks.translate).toHaveBeenCalledWith("EVENT$UNKNOWN_EVENT");
+  });
+
+  it("uses the caller-supplied i18n instance instead of the standalone proxy", () => {
+    const event = createMessageEvent();
+    const translator = {
+      exists: vi.fn(() => true),
+      t: vi.fn(() => "Tree unknown event"),
+    };
+
+    expect(
+      getEventContent(
+        event,
+        undefined,
+        translator as unknown as OpenHandsTranslator,
+      ),
+    ).toEqual({
+      title: "Tree unknown event",
+      details: "",
+    });
+    expect(translator.t).toHaveBeenCalledWith("EVENT$UNKNOWN_EVENT", {
+      ns: "openhands",
+    });
+    expect(mocks.translate).not.toHaveBeenCalled();
   });
 
   it("does not route a non-agent action-shaped payload as an agent action", () => {

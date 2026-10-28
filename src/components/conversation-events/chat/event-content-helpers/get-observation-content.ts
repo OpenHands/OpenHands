@@ -2,8 +2,11 @@ import { CANVAS_UI_CLIENT_TOOL_NAME } from "#/constants/canvas-ui";
 import { ObservationEvent } from "#/types/agent-server/core";
 import { getObservationResult } from "./get-observation-result";
 import { getDefaultEventContent, MAX_CONTENT_LENGTH } from "./shared";
-import i18n from "#/i18n";
 import { I18nKey } from "#/i18n/declaration";
+import {
+  openhandsT,
+  type OpenHandsTranslator,
+} from "#/i18n/openhands-translate";
 import {
   MCPToolObservation,
   FinishObservation,
@@ -64,6 +67,7 @@ const getFileEditorObservationContent = (
 // Command Observations
 const getTerminalObservationContent = (
   event: ObservationEvent<ExecuteBashObservation | TerminalObservation>,
+  translator?: OpenHandsTranslator,
 ): string => {
   const { observation } = event;
 
@@ -88,7 +92,7 @@ const getTerminalObservationContent = (
   }
 
   // Display the output
-  output += `Output:\n\`\`\`sh\n${content.trim() || i18n.t(I18nKey.OBSERVATION$COMMAND_NO_OUTPUT)}\n\`\`\``;
+  output += `Output:\n\`\`\`sh\n${content.trim() || openhandsT(translator, I18nKey.OBSERVATION$COMMAND_NO_OUTPUT)}\n\`\`\``;
 
   return output;
 };
@@ -385,7 +389,10 @@ const getGrepObservationContent = (
   return content;
 };
 
-export const getObservationContent = (event: ObservationEvent): string => {
+export const getObservationContent = (
+  event: ObservationEvent,
+  translator?: OpenHandsTranslator,
+): string => {
   const observationType = event.observation.kind;
 
   switch (observationType) {
@@ -401,6 +408,7 @@ export const getObservationContent = (event: ObservationEvent): string => {
     case "TerminalObservation":
       return getTerminalObservationContent(
         event as ObservationEvent<ExecuteBashObservation | TerminalObservation>,
+        translator,
       );
 
     case "BrowserObservation":

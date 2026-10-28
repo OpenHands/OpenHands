@@ -1,6 +1,9 @@
 import { ACPToolCallEvent } from "#/types/agent-server/core/events/acp-tool-call-event";
-import i18n from "#/i18n";
 import { MAX_CONTENT_LENGTH } from "./shared";
+import {
+  openhandsT,
+  type OpenHandsTranslator,
+} from "#/i18n/openhands-translate";
 import { I18nKey } from "#/i18n/declaration";
 import { markdownFence, markdownInlineCode } from "#/utils/markdown-fence";
 
@@ -182,7 +185,10 @@ const formatDiffBlock = (
  * command line; for others we fall back to a pretty-printed JSON dump of
  * the input, unless a diff already shows what the call changed.
  */
-export const getACPToolCallContent = (event: ACPToolCallEvent): string => {
+export const getACPToolCallContent = (
+  event: ACPToolCallEvent,
+  translator?: OpenHandsTranslator,
+): string => {
   const toolKind = event.tool_kind;
   const rawInput = event.raw_input;
   const rawOutput = event.raw_output;
@@ -231,7 +237,8 @@ export const getACPToolCallContent = (event: ACPToolCallEvent): string => {
     const outputStr = truncate(stringifyPayload(rawOutput).trim());
     if (diffBlocks.length === 0) {
       const outputBody =
-        outputStr || i18n.t(I18nKey.OBSERVATION$COMMAND_NO_OUTPUT);
+        outputStr ||
+        openhandsT(translator, I18nKey.OBSERVATION$COMMAND_NO_OUTPUT);
       sections.push(`${outputLabel}\n${markdownFence(outputBody)}`);
     } else if (isError && outputStr) {
       sections.push(`${outputLabel}\n${markdownFence(outputStr)}`);

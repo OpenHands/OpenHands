@@ -65,7 +65,7 @@ export function EventGroup({
   isFinalized = false,
   children,
 }: EventGroupProps) {
-  const { t } = useTranslation("openhands");
+  const { t, i18n } = useTranslation("openhands");
   const [expanded, setExpanded] = React.useState(false);
   const contentId = React.useId();
   const buttonId = `${contentId}-toggle`;
@@ -102,7 +102,7 @@ export function EventGroup({
   let latestTitle: React.ReactNode = null;
   if (latestEvent) {
     if (isActionEvent(latestEvent)) {
-      latestTitle = getEventContent(latestEvent).title;
+      latestTitle = getEventContent(latestEvent, undefined, i18n).title;
     } else if (
       isObservationEvent(latestEvent) ||
       isUserRejectObservation(latestEvent)
@@ -111,7 +111,11 @@ export function EventGroup({
         (e): e is ActionEvent =>
           isActionEvent(e) && e.id === latestEvent.action_id,
       );
-      latestTitle = getEventContent(latestEvent, correspondingAction).title;
+      latestTitle = getEventContent(
+        latestEvent,
+        correspondingAction,
+        i18n,
+      ).title;
     }
   }
 

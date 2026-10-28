@@ -70,8 +70,8 @@ export function GenericEventMessageWrapper({
   event,
   correspondingAction,
 }: GenericEventMessageWrapperProps) {
-  const { t } = useTranslation("openhands");
-  const { title, details } = getEventContent(event, correspondingAction);
+  const { t, i18n } = useTranslation("openhands");
+  const { title, details } = getEventContent(event, correspondingAction, i18n);
 
   // TaskTrackerObservation has its own rendering
   if (

@@ -3,8 +3,11 @@ import { CircleX } from "lucide-react";
 import toast, { ToastOptions } from "react-hot-toast";
 import { calculateToastDuration } from "./toast-duration";
 import { cn } from "#/utils/utils";
-import i18n from "#/i18n";
 import { I18nKey } from "#/i18n/declaration";
+import {
+  openhandsT,
+  type OpenHandsTranslator,
+} from "#/i18n/openhands-translate";
 import {
   isBackendRequestTimeoutMessage,
   isCorsOrNetworkErrorMessage,
@@ -99,12 +102,18 @@ function showErrorToast(message: string) {
   });
 }
 
-export const displayErrorToast = (error: string | null | undefined) => {
-  let errorMessage = error || i18n.t(I18nKey.STATUS$ERROR);
+export const displayErrorToast = (
+  error: string | null | undefined,
+  translator?: OpenHandsTranslator,
+) => {
+  let errorMessage = error || openhandsT(translator, I18nKey.STATUS$ERROR);
   if (isCorsOrNetworkErrorMessage(errorMessage)) {
-    errorMessage = i18n.t(I18nKey.ERROR$CORS_OR_NETWORK);
+    errorMessage = openhandsT(translator, I18nKey.ERROR$CORS_OR_NETWORK);
   } else if (isBackendRequestTimeoutMessage(errorMessage)) {
-    errorMessage = i18n.t(I18nKey.ERROR$BACKEND_REQUEST_TIMEOUT);
+    errorMessage = openhandsT(
+      translator,
+      I18nKey.ERROR$BACKEND_REQUEST_TIMEOUT,
+    );
   }
   showErrorToast(errorMessage);
 };

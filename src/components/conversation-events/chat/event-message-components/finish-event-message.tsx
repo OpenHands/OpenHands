@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { ActionEvent } from "#/types/agent-server/core";
 import { FinishAction } from "#/types/agent-server/core/base/action";
 import { ChatMessage } from "../../../features/chat/chat-message";
@@ -13,7 +14,8 @@ export function FinishEventMessage({
   event,
   isFromPlanningAgent = false,
 }: FinishEventMessageProps) {
-  const eventContent = getEventContent(event);
+  const { i18n } = useTranslation("openhands");
+  const eventContent = getEventContent(event, undefined, i18n);
   const message =
     typeof eventContent.details === "string"
       ? eventContent.details

@@ -1,6 +1,9 @@
 import { ActionEvent } from "#/types/agent-server/core";
 import { getDefaultEventContent, MAX_CONTENT_LENGTH } from "./shared";
-import i18n from "#/i18n";
+import {
+  openhandsT,
+  type OpenHandsTranslator,
+} from "#/i18n/openhands-translate";
 import { SecurityRisk } from "#/types/agent-server/core/base/common";
 import { I18nKey } from "#/i18n/declaration";
 import {
@@ -27,17 +30,17 @@ import {
   InvokeSkillAction,
 } from "#/types/agent-server/core/base/action";
 
-const getRiskText = (risk: SecurityRisk) => {
+const getRiskText = (risk: SecurityRisk, translator?: OpenHandsTranslator) => {
   switch (risk) {
     case SecurityRisk.LOW:
-      return i18n.t(I18nKey.SECURITY$LOW_RISK);
+      return openhandsT(translator, I18nKey.SECURITY$LOW_RISK);
     case SecurityRisk.MEDIUM:
-      return i18n.t(I18nKey.SECURITY$MEDIUM_RISK);
+      return openhandsT(translator, I18nKey.SECURITY$MEDIUM_RISK);
     case SecurityRisk.HIGH:
-      return i18n.t(I18nKey.SECURITY$HIGH_RISK);
+      return openhandsT(translator, I18nKey.SECURITY$HIGH_RISK);
     case SecurityRisk.UNKNOWN:
     default:
-      return i18n.t(I18nKey.SECURITY$UNKNOWN_RISK);
+      return openhandsT(translator, I18nKey.SECURITY$UNKNOWN_RISK);
   }
 };
 
@@ -86,6 +89,7 @@ const getFileEditorActionContent = (
 // Command Actions
 const getExecuteBashActionContent = (
   event: ActionEvent<ExecuteBashAction | TerminalAction>,
+  translator?: OpenHandsTranslator,
 ): string => {
   let content = `Command:\n\`${event.action.command}\``;
 
@@ -94,7 +98,7 @@ const getExecuteBashActionContent = (
     event.security_risk === SecurityRisk.HIGH ||
     event.security_risk === SecurityRisk.MEDIUM
   ) {
-    content += `\n\n${getRiskText(event.security_risk)}`;
+    content += `\n\n${getRiskText(event.security_risk, translator)}`;
   }
 
   return content;
@@ -215,7 +219,10 @@ const getBrowserActionContent = (action: BrowserAction): string => {
   }
 };
 
-export const getActionContent = (event: ActionEvent): string => {
+export const getActionContent = (
+  event: ActionEvent,
+  translator?: OpenHandsTranslator,
+): string => {
   const { action } = event;
   const actionType = action.kind;
 
@@ -228,6 +235,7 @@ export const getActionContent = (event: ActionEvent): string => {
     case "TerminalAction":
       return getExecuteBashActionContent(
         event as ActionEvent<ExecuteBashAction | TerminalAction>,
+        translator,
       );
 
     case "MCPToolAction":

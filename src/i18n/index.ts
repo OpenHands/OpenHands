@@ -80,8 +80,10 @@ export const getDefaultI18n = () => {
   return defaultI18n;
 };
 
+/** Standalone / non-React accessor. Embedded React trees use `useTranslation()`. */
 export const getI18n = () => activeI18n ?? getDefaultI18n();
 
+/** Install a standalone default. `AgentServerUIProviders` does not call this. */
 export const setI18n = (instance?: I18nInstance | null) => {
   activeI18n = instance ?? getDefaultI18n();
   return activeI18n;

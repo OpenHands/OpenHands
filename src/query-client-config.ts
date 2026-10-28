@@ -1,7 +1,8 @@
 import { QueryCache, MutationCache, QueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
-import i18n from "#/i18n";
+import type { i18n as I18nInstance } from "i18next";
 import { I18nKey } from "./i18n/declaration";
+import { openhandsT } from "./i18n/openhands-translate";
 import { retrieveAxiosErrorMessage } from "./utils/retrieve-axios-error-message";
 import { displayErrorToast } from "./utils/custom-toast-handlers";
 import { getActiveBackend } from "#/api/backend-registry/active-store";
@@ -28,6 +29,30 @@ const isActiveCloudBackendAuthError = (error: unknown) => {
 };
 
 const shownErrors = new Set<string>();
+
+const i18nByQueryClient = new WeakMap<QueryClient, I18nInstance>();
+
+/**
+ * Associates the i18n instance for one embedded tree with that tree's query
+ * client. Query cache callbacks have no React context, so they read this map
+ * instead of the standalone singleton. Unbound clients keep `getI18n()`.
+ */
+export const bindQueryClientI18n = (
+  client: QueryClient,
+  instance: I18nInstance,
+) => {
+  i18nByQueryClient.set(client, instance);
+};
+
+const reportQueryError = (client: QueryClient, errorMessage: string) => {
+  const translator = i18nByQueryClient.get(client);
+  const message = errorMessage || openhandsT(translator, I18nKey.ERROR$GENERIC);
+  if (translator) {
+    displayErrorToast(message, translator);
+    return;
+  }
+  displayErrorToast(message);
+};
 
 export const createAgentServerQueryClient = () => {
   const client = new QueryClient({
@@ -63,7 +88,7 @@ export const createAgentServerQueryClient = () => {
           const errorMessage = retrieveAxiosErrorMessage(error);
 
           if (!shownErrors.has(errorMessage || "")) {
-            displayErrorToast(errorMessage || i18n.t(I18nKey.ERROR$GENERIC));
+            reportQueryError(client, errorMessage);
             shownErrors.add(errorMessage || "");
 
             setTimeout(() => {
@@ -82,7 +107,7 @@ export const createAgentServerQueryClient = () => {
 
         if (!disableToast && !isActiveCloudBackendAuthError(error)) {
           const message = retrieveAxiosErrorMessage(error);
-          displayErrorToast(message || i18n.t(I18nKey.ERROR$GENERIC));
+          reportQueryError(client, message);
         }
       },
     }),
@@ -107,9 +132,11 @@ export const getDefaultQueryClient = () => {
   return defaultQueryClient;
 };
 
+/** Standalone / non-React accessor. Embedded React trees use `useQueryClient()`. */
 export const getQueryClient = () =>
   activeQueryClient ?? getDefaultQueryClient();
 
+/** Install a standalone default. `AgentServerUIProviders` does not call this. */
 export const setQueryClient = (client?: QueryClient | null) => {
   activeQueryClient = client ?? getDefaultQueryClient();
   return activeQueryClient;

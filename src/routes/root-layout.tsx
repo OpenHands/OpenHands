@@ -7,7 +7,6 @@ import {
 } from "react-router";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
-import i18n from "#/i18n";
 import { useConfig } from "#/hooks/query/use-config";
 import { Sidebar } from "#/components/features/sidebar/sidebar";
 import { SidebarMobileNavProvider } from "#/components/features/sidebar/sidebar-mobile-nav-context";
@@ -129,6 +128,7 @@ function MainAppContent() {
   const config = useConfig();
   const showTitleBarBand = useShowTitleBarBand();
 
+  const { i18n } = useTranslation();
   useSyncAutomationTelemetryConsent();
 
   useSyncTelemetryConsent();
@@ -144,7 +144,7 @@ function MainAppContent() {
     if (settings?.language) {
       i18n.changeLanguage(settings.language);
     }
-  }, [settings?.language]);
+  }, [settings?.language, i18n]);
   useSyncDocumentLanguage();
 
   if (config.isLoading) {

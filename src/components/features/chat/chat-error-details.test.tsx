@@ -10,14 +10,11 @@ const useTranslationMock = vi.hoisted(() =>
   vi.fn((namespace: string) => ({
     t: (key: string) =>
       namespace === "openhands" ? `translated:${key}` : `missing:${key}`,
+    i18n: {
+      exists: i18nMocks.exists,
+    },
   })),
 );
-
-vi.mock("#/i18n", () => ({
-  default: {
-    exists: i18nMocks.exists,
-  },
-}));
 
 vi.mock("react-i18next", async (importOriginal) => ({
   ...(await importOriginal<typeof import("react-i18next")>()),
@@ -74,7 +71,9 @@ describe("chat error details", () => {
     renderChatError({ errorId: "ERROR$NEW_BACKEND_FAILURE" });
 
     expect(i18nMocks.exists).toHaveBeenCalledOnce();
-    expect(i18nMocks.exists).toHaveBeenCalledWith("ERROR$NEW_BACKEND_FAILURE");
+    expect(i18nMocks.exists).toHaveBeenCalledWith("ERROR$NEW_BACKEND_FAILURE", {
+      ns: "openhands",
+    });
     expect(
       screen.getByText("translated:CHAT_INTERFACE$AGENT_ERROR_MESSAGE"),
     ).toBeInTheDocument();
@@ -90,7 +89,9 @@ describe("chat error details", () => {
     });
 
     expect(i18nMocks.exists).toHaveBeenCalledOnce();
-    expect(i18nMocks.exists).toHaveBeenCalledWith("ERROR$RATE_LIMITED");
+    expect(i18nMocks.exists).toHaveBeenCalledWith("ERROR$RATE_LIMITED", {
+      ns: "openhands",
+    });
     expect(
       screen.getByText("translated:ERROR$RATE_LIMITED"),
     ).toBeInTheDocument();

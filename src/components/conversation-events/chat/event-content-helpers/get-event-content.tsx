@@ -28,8 +28,12 @@ import { TaskTrackingObservationContent } from "../task-tracking/task-tracking-o
 import { TaskTrackerObservation } from "#/types/agent-server/core/base/observation";
 import { SkillReadyEvent, isSkillReadyEvent } from "./create-skill-ready-event";
 import { resolveVisualizerBody } from "../../../features/chat/tool-visualizers/dispatcher";
-import i18n from "#/i18n";
 import { I18nKey } from "#/i18n/declaration";
+import {
+  openhandsExists,
+  openhandsT,
+  type OpenHandsTranslator,
+} from "#/i18n/openhands-translate";
 import {
   getActionEventTitleDescriptor,
   getActionSummaryTitle,
@@ -41,8 +45,9 @@ import {
 const createTitleFromKey = (
   key: string,
   values: Readonly<Record<string, unknown>>,
+  translator?: OpenHandsTranslator,
 ): React.ReactNode => {
-  if (!i18n.exists(key)) {
+  if (!openhandsExists(translator, key)) {
     return key;
   }
 
@@ -61,10 +66,11 @@ const createTitleFromKey = (
 
 const renderTitleDescriptor = (
   descriptor: EventTitleDescriptor,
+  translator?: OpenHandsTranslator,
 ): React.ReactNode =>
   descriptor.kind === "text"
     ? descriptor.text
-    : createTitleFromKey(descriptor.key, descriptor.values);
+    : createTitleFromKey(descriptor.key, descriptor.values, translator);
 
 const getNonEmptyString = (
   value: unknown,
@@ -130,7 +136,16 @@ const getVisionInspectObservationTitle = (
 };
 
 // Action Event Processing
-const getActionEventTitle = (event: OpenHandsEvent): React.ReactNode => {
+const contentWithTranslator = <T,>(
+  fn: (event: T, translator?: OpenHandsTranslator) => string,
+  event: T,
+  translator?: OpenHandsTranslator,
+) => (translator === undefined ? fn(event) : fn(event, translator));
+
+const getActionEventTitle = (
+  event: OpenHandsEvent,
+  translator?: OpenHandsTranslator,
+): React.ReactNode => {
   // Early return if not an action event
   if (!isActionEvent(event)) {
     return "";
@@ -141,13 +156,17 @@ const getActionEventTitle = (event: OpenHandsEvent): React.ReactNode => {
     return visionInspectTitle;
   }
 
-  return renderTitleDescriptor(getActionEventTitleDescriptor(event));
+  return renderTitleDescriptor(
+    getActionEventTitleDescriptor(event),
+    translator,
+  );
 };
 
 // Observation Event Processing
 const getObservationEventTitle = (
   event: OpenHandsEvent,
   correspondingAction?: ActionEvent,
+  translator?: OpenHandsTranslator,
 ): React.ReactNode => {
   // Early return if not an observation event
   if (!isObservationEvent(event)) {
@@ -290,7 +309,7 @@ const getObservationEventTitle = (
   }
 
   if (observationKey) {
-    return createTitleFromKey(observationKey, observationValues);
+    return createTitleFromKey(observationKey, observationValues, translator);
   }
 
   return observationType;
@@ -315,6 +334,7 @@ const getCanvasUIClientObservationContent = (
 export const getEventContent = (
   event: OpenHandsEvent | SkillReadyEvent,
   correspondingAction?: ActionEvent,
+  translator?: OpenHandsTranslator,
 ) => {
   let title: React.ReactNode = "";
   let details: string | React.ReactNode = "";
@@ -323,18 +343,20 @@ export const getEventContent = (
   if (isSkillReadyEvent(event)) {
     // Use translation key if available, otherwise use "SKILL READY"
     const skillReadyKey = "OBSERVATION_MESSAGE$SKILL_READY";
-    if (i18n.exists(skillReadyKey)) {
-      title = createTitleFromKey(skillReadyKey, {});
+    if (openhandsExists(translator, skillReadyKey)) {
+      title = createTitleFromKey(skillReadyKey, {}, translator);
     } else {
       title = "Skill Ready";
     }
     details = event._skillReadyContent;
   } else if (isActionEvent(event)) {
-    title = getActionEventTitle(event);
+    title = getActionEventTitle(event, translator);
     // Per-tool React visualizer when one is registered; markdown otherwise.
-    details = resolveVisualizerBody(event) ?? getActionContent(event);
+    details =
+      resolveVisualizerBody(event) ??
+      contentWithTranslator(getActionContent, event, translator);
   } else if (isObservationEvent(event)) {
-    title = getObservationEventTitle(event, correspondingAction);
+    title = getObservationEventTitle(event, correspondingAction, translator);
 
     // For TaskTrackerObservation, use React component instead of markdown
     if (event.observation.kind === "TaskTrackerObservation") {
@@ -347,16 +369,20 @@ export const getEventContent = (
       details =
         getCanvasUIClientObservationContent(event, correspondingAction) ??
         resolveVisualizerBody(event, correspondingAction) ??
-        getObservationContent(event);
+        contentWithTranslator(getObservationContent, event, translator);
     }
   } else if (isUserRejectObservation(event)) {
     // A rejected action never ran, so there is no result to show: keep the
     // action's own title and body, and let the card mark it as rejected.
     if (correspondingAction) {
-      title = getActionEventTitle(correspondingAction);
+      title = getActionEventTitle(correspondingAction, translator);
       details =
         resolveVisualizerBody(correspondingAction) ??
-        getActionContent(correspondingAction);
+        contentWithTranslator(
+          getActionContent,
+          correspondingAction,
+          translator,
+        );
     } else {
       title = event.tool_name;
       details = event.rejection_reason;
@@ -367,14 +393,18 @@ export const getEventContent = (
     // mirrors ACTION_MESSAGE$RUN etc.; details are markdown built from
     // raw_input + raw_output the same way getTerminalObservationContent
     // builds "Command: / Output:" blocks.
-    title = createTitleFromKey(getACPToolCallTitleKey(event), {
-      // Strip a redundant verb prefix the ACP server may have inlined
-      // (Claude Code emits ``"Read /path"`` for a read tool; combined
-      // with the ``"Reading <cmd>{{title}}</cmd>"`` template that lands
-      // as ``"Reading Read /path"``). See ``stripRedundantTitlePrefix``.
-      title: stripRedundantTitlePrefix(event),
-    });
-    details = getACPToolCallContent(event);
+    title = createTitleFromKey(
+      getACPToolCallTitleKey(event),
+      {
+        // Strip a redundant verb prefix the ACP server may have inlined
+        // (Claude Code emits ``"Read /path"`` for a read tool; combined
+        // with the ``"Reading <cmd>{{title}}</cmd>"`` template that lands
+        // as ``"Reading Read /path"``). See ``stripRedundantTitlePrefix``.
+        title: stripRedundantTitlePrefix(event),
+      },
+      translator,
+    );
+    details = contentWithTranslator(getACPToolCallContent, event, translator);
   } else if (
     // Lenient fallback for action-like events that fail the strict isActionEvent() guard
     // (e.g., missing tool_name or tool_call_id). Extract a title from the action kind
@@ -390,7 +420,7 @@ export const getEventContent = (
   }
 
   return {
-    title: title || i18n.t(I18nKey.EVENT$UNKNOWN_EVENT),
+    title: title || openhandsT(translator, I18nKey.EVENT$UNKNOWN_EVENT),
     details,
   };
 };

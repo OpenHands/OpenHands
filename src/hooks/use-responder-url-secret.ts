@@ -1,9 +1,10 @@
 import { useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { SecretsService } from "#/api/secrets-service";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { I18nKey } from "#/i18n/declaration";
-import i18n from "#/i18n";
+import { openhandsT } from "#/i18n/openhands-translate";
 import { useCreateSecret } from "#/hooks/mutation/use-create-secret";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
@@ -17,6 +18,7 @@ const OPENHANDS_URL_SECRET_NAME = "OPENHANDS_URL";
 export function useResponderUrlSecret() {
   const activeBackend = useActiveBackend();
   const queryClient = useQueryClient();
+  const { i18n } = useTranslation("openhands");
   const { mutateAsync: createSecret } = useCreateSecret();
 
   return useCallback(async (): Promise<boolean> => {
@@ -30,8 +32,14 @@ export function useResponderUrlSecret() {
         meta: { disableToast: true },
       });
     } catch (error) {
-      const message = retrieveAxiosErrorMessage(error);
-      displayErrorToast(message || i18n.t(I18nKey.ERROR$GENERIC));
+      const message =
+        retrieveAxiosErrorMessage(error) ||
+        openhandsT(i18n, I18nKey.ERROR$GENERIC);
+      if (i18n && typeof i18n.t === "function") {
+        displayErrorToast(message, i18n);
+      } else {
+        displayErrorToast(message);
+      }
       return false;
     }
 
@@ -55,6 +63,7 @@ export function useResponderUrlSecret() {
     activeBackend.backend.id,
     activeBackend.orgId,
     createSecret,
+    i18n,
     queryClient,
   ]);
 }

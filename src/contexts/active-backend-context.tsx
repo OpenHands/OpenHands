@@ -20,8 +20,9 @@ import {
   type ResolvedActiveBackend,
 } from "#/api/backend-registry/types";
 import { getMarsBridge } from "#/api/mars/mars-tunnel-backend";
+import { QueryClientContext } from "@tanstack/react-query";
+import { getQueryClient } from "#/query-client-config";
 import { QUERY_KEYS } from "#/hooks/query/query-keys";
-import { queryClient } from "#/query-client-config";
 import {
   setTelemetryCloudContext,
   setTelemetryIdentity,
@@ -80,12 +81,16 @@ export function ActiveBackendProvider({
     getSnapshot,
   );
 
+  // Isolated unit tests often mount this provider without QueryClientProvider.
+  // Prefer the React-tree client when present; otherwise use the standalone default.
+  const queryClient = React.useContext(QueryClientContext) ?? getQueryClient();
+
   const retryBootstrapProbe = React.useCallback(() => {
     clearCachedAgentServerInfo();
     void queryClient.invalidateQueries({
       queryKey: QUERY_KEYS.WEB_CLIENT_CONFIG,
     });
-  }, []);
+  }, [queryClient]);
 
   const setActive = React.useCallback(
     (backendId: string, orgId?: string | null) => {

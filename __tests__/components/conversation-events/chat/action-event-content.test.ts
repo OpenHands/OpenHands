@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getActionContent } from "#/components/conversation-events/chat/event-content-helpers/get-action-content";
+import type { OpenHandsTranslator } from "#/i18n/openhands-translate";
 import { ActionEvent, SecurityRisk } from "#/types/agent-server/core";
 import { Action } from "#/types/agent-server/core/base/action";
 
@@ -44,6 +45,26 @@ describe("action event content", () => {
       expect(getActionContent(event)).toBe(
         "Command:\n`rm -rf build`\n\nSECURITY$HIGH_RISK",
       );
+    });
+
+    it("renders risk text with the caller-supplied translator", () => {
+      const event = makeActionEvent(
+        {
+          kind: "ExecuteBashAction",
+          command: "rm -rf build",
+          is_input: false,
+          timeout: 30,
+          reset: false,
+        },
+        SecurityRisk.HIGH,
+      );
+
+      expect(
+        getActionContent(event, {
+          exists: () => true,
+          t: () => "High risk from tree",
+        } as unknown as OpenHandsTranslator),
+      ).toBe("Command:\n`rm -rf build`\n\nHigh risk from tree");
     });
 
     it("shows medium-risk context with a terminal command", () => {

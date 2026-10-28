@@ -30,6 +30,12 @@ import {
 import { SettingsSectionHeaderProvider } from "#/contexts/settings-section-header-context";
 import { getLockedCloudHost } from "#/api/agent-server-config";
 
+/**
+ * Route-level prefetch and protection for settings sub-pages.
+ * Note: React Router loaders execute outside the React component tree and
+ * resolve through the standalone `queryClient` singleton. Embedded React
+ * components read the tree-scoped client via `useQueryClient()`.
+ */
 export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
   const url = new URL(request.url);
   const { pathname } = url;
