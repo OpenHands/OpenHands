@@ -1,10 +1,61 @@
-const MAX_FILE_SIZE = 3 * 1024 * 1024; // 3MB maximum file size
-const MAX_TOTAL_SIZE = 3 * 1024 * 1024; // 3MB maximum total size for all files combined
+const MB = 1024 * 1024;
+// Defaults mirror config/defaults.json (upload.maxFileMb / maxTotalMb).
+const DEFAULT_MAX_FILE_SIZE = 3 * MB;
+const DEFAULT_MAX_TOTAL_SIZE = 3 * MB;
+
+// Runtime globals injected into index.html by the static server, which reads
+// AGENT_CANVAS_MAX_FILE_MB / AGENT_CANVAS_MAX_TOTAL_MB (docker/entrypoint.sh).
+// Same mechanism as __AGENT_CANVAS_BASE_PATH__ (see #/utils/base-path).
+const MAX_FILE_SIZE_WINDOW_KEY = "__AGENT_CANVAS_MAX_FILE_SIZE__";
+const MAX_TOTAL_SIZE_WINDOW_KEY = "__AGENT_CANVAS_MAX_TOTAL_SIZE__";
+
+function resolveMaxSizeBytes(
+  envMb: unknown,
+  windowKey: string,
+  fallbackBytes: number,
+): number {
+  // 1. Build-time env var (VITE_MAX_FILE_SIZE_MB / VITE_MAX_TOTAL_SIZE_MB).
+  const envRaw = typeof envMb === "string" ? envMb.trim() : "";
+  if (envRaw) {
+    const envBytes = Number.parseFloat(envRaw) * MB;
+    if (Number.isFinite(envBytes) && envBytes > 0) {
+      return envBytes;
+    }
+  }
+  // 2. Runtime window global injected by the static server.
+  if (typeof window !== "undefined") {
+    const injected = (window as unknown as Record<string, unknown>)[windowKey];
+    if (
+      typeof injected === "number" &&
+      Number.isFinite(injected) &&
+      injected > 0
+    ) {
+      return injected;
+    }
+  }
+  // 3. Compiled-in default (config/defaults.json).
+  return fallbackBytes;
+}
+
+export const MAX_FILE_SIZE = resolveMaxSizeBytes(
+  import.meta.env.VITE_MAX_FILE_SIZE_MB,
+  MAX_FILE_SIZE_WINDOW_KEY,
+  DEFAULT_MAX_FILE_SIZE,
+);
+export const MAX_TOTAL_SIZE = resolveMaxSizeBytes(
+  import.meta.env.VITE_MAX_TOTAL_SIZE_MB,
+  MAX_TOTAL_SIZE_WINDOW_KEY,
+  DEFAULT_MAX_TOTAL_SIZE,
+);
 
 export interface FileValidationResult {
   isValid: boolean;
   errorMessage?: string;
   oversizedFiles?: string[];
+}
+
+function formatMb(bytes: number): string {
+  return (bytes / MB).toFixed(1).replace(/\.0$/, "");
 }
 
 /**
@@ -19,7 +70,7 @@ export function validateIndividualFileSizes(
     const fileNames = oversizedFiles.map((f) => f.name);
     return {
       isValid: false,
-      errorMessage: `Files exceeding 3MB are not allowed: ${fileNames.join(", ")}`,
+      errorMessage: `Files exceeding ${formatMb(MAX_FILE_SIZE)}MB are not allowed: ${fileNames.join(", ")}`,
       oversizedFiles: fileNames,
     };
   }
@@ -42,10 +93,10 @@ export function validateTotalFileSize(
   const totalSize = currentTotalSize + newFilesSize;
 
   if (totalSize > MAX_TOTAL_SIZE) {
-    const totalSizeMB = (totalSize / (1024 * 1024)).toFixed(1);
+    const totalSizeMB = (totalSize / MB).toFixed(1);
     return {
       isValid: false,
-      errorMessage: `Total file size would be ${totalSizeMB}MB, exceeding the 3MB limit. Please select fewer or smaller files.`,
+      errorMessage: `Total file size would be ${totalSizeMB}MB, exceeding the ${formatMb(MAX_TOTAL_SIZE)}MB limit. Please select fewer or smaller files.`,
     };
   }
 
