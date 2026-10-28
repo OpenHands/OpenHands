@@ -19,6 +19,17 @@ interface ChatInputFieldProps {
   onKeyDown: (e: React.KeyboardEvent) => void;
   onFocus?: () => void;
   onBlur?: () => void;
+  /**
+   * Fired when an IME composition session (Chinese/Japanese/Korean preedit)
+   * starts. The composer's clear-empty-content guard uses this to skip the
+   * wipe while composition is active.
+   */
+  onCompositionStart?: () => void;
+  /**
+   * Fired when an IME composition session ends. Resumes the normal
+   * clear-empty-content behavior and cleans up the placeholder.
+   */
+  onCompositionEnd?: () => void;
 }
 
 export function ChatInputField({
@@ -30,6 +41,8 @@ export function ChatInputField({
   onKeyDown,
   onFocus,
   onBlur,
+  onCompositionStart,
+  onCompositionEnd,
 }: ChatInputFieldProps) {
   const { t } = useTranslation("openhands");
 
@@ -74,6 +87,8 @@ export function ChatInputField({
           onKeyDown={onKeyDown}
           onFocus={onFocus}
           onBlur={onBlur}
+          onCompositionStart={onCompositionStart}
+          onCompositionEnd={onCompositionEnd}
         />
       </div>
     </div>
