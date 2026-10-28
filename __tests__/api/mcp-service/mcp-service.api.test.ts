@@ -201,18 +201,21 @@ describe("McpService.testServer", () => {
     expect(result).toEqual(response);
   });
 
-  it("maps an errored verification call to a credentials failure", async () => {
-    mockTestServer.mockResolvedValue(
-      slackToolResult("Tool 'slack_list_channels' call timed out", true),
+  it("does not flag an errored probe call (fetch failed or timeout) as a credentials failure", async () => {
+    const fetchFailedResponse = slackToolResult("fetch failed", true);
+    mockTestServer.mockResolvedValue(fetchFailedResponse);
+
+    let result = await McpService.testServer(SLACK_SERVER);
+    expect(result).toEqual(fetchFailedResponse);
+
+    const timeoutResponse = slackToolResult(
+      "Tool 'slack_list_channels' call timed out after 15.0 seconds",
+      true,
     );
+    mockTestServer.mockResolvedValue(timeoutResponse);
 
-    const result = await McpService.testServer(SLACK_SERVER);
-
-    expect(result).toEqual({
-      ok: false,
-      error: "Tool 'slack_list_channels' call timed out",
-      error_kind: "credentials",
-    });
+    result = await McpService.testServer(SLACK_SERVER);
+    expect(result).toEqual(timeoutResponse);
   });
 
   it("returns the response unchanged when an older backend omits tool_result", async () => {
