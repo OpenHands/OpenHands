@@ -342,8 +342,8 @@ test.describe("mock-LLM automation lifecycle", () => {
       try {
         await deleteConversation(request, id);
         conversationIds.delete(id);
-      } catch {
-        // best-effort cleanup
+      } catch (err) {
+        console.warn(`Failed to cleanup conversation ${id}:`, err);
       }
     }
   });
@@ -355,8 +355,8 @@ test.describe("mock-LLM automation lifecycle", () => {
     for (const id of Array.from(automationIds)) {
       try {
         await deleteAutomation(request, id);
-      } catch {
-        // best-effort
+      } catch (err) {
+        console.warn(`Failed to cleanup automation ${id}:`, err);
       }
     }
     automationIds.clear();
@@ -364,8 +364,8 @@ test.describe("mock-LLM automation lifecycle", () => {
     // Reset mock LLM so subsequent test suites start fresh.
     try {
       await resetMockLLM(request);
-    } catch {
-      // best-effort — the mock server may have already shut down
+    } catch (err) {
+      console.warn("Reset mock LLM warning on teardown:", err);
     }
   });
 

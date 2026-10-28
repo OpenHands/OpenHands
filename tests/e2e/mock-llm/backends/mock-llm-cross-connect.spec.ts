@@ -29,7 +29,13 @@ import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  releaseHeldPorts,
+  reholdPorts,
+} from "../utils/allocate-mock-llm-ports";
 import { openModifiedClickTab } from "../utils/modified-click-tab";
+
+const CROSS_PORT_HOLDS = ["crossFe", "crossBeA", "crossBeB"];
 
 // ── Paths ──────────────────────────────────────────────────────────────
 const PROJECT_ROOT = resolve(
@@ -42,9 +48,9 @@ const BIN = join(PROJECT_ROOT, "bin/agent-canvas.mjs");
 //
 // Each instance needs a base port; createIsolatedEnv allocates +1, +2, +3
 // for sub-services.
-const CROSS_FE_PORT = "18370";
-const CROSS_BE_A_PORT = "18380";
-const CROSS_BE_B_PORT = "18390";
+const CROSS_FE_PORT = process.env.MOCK_LLM_CROSS_FE_PORT ?? "18370";
+const CROSS_BE_A_PORT = process.env.MOCK_LLM_CROSS_BE_A_PORT ?? "18380";
+const CROSS_BE_B_PORT = process.env.MOCK_LLM_CROSS_BE_B_PORT ?? "18390";
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
@@ -91,6 +97,7 @@ function createIsolatedEnv(
       OH_CANVAS_SAFE_BACKEND_PORT: String(parseInt(ingressPort) + 1),
       OH_CANVAS_SAFE_AUTOMATION_PORT: String(parseInt(ingressPort) + 2),
       OH_CANVAS_SAFE_VITE_PORT: String(parseInt(ingressPort) + 3),
+      OH_PERSISTENCE_DIR: stateDir,
       OH_SESSION_API_KEY_PATH: join(stateDir, "session-key.txt"),
       ...extra,
     },
@@ -336,6 +343,7 @@ test.describe("cross-connect: frontend-only → backend-only", () => {
     children.length = 0;
     for (const dir of stateDirs) rmSync(dir, { recursive: true, force: true });
     stateDirs.length = 0;
+    await reholdPorts(CROSS_PORT_HOLDS);
   });
 
   test("frontend-only connects to a separate backend-only instance", async ({
@@ -351,6 +359,7 @@ test.describe("cross-connect: frontend-only → backend-only", () => {
       "build/index.html missing — skipped (run `npm run build:app` or use the npm e2e config)",
     );
 
+    await releaseHeldPorts(["crossBeA", "crossFe"]);
     // ── 1. Start backend-only instance ────────────────────────────────
     const beEnv = createIsolatedEnv(CROSS_BE_A_PORT);
     stateDirs.push(beEnv.stateDir);
@@ -459,6 +468,7 @@ test.describe("cross-connect: frontend-only → multiple backends", () => {
     children.length = 0;
     for (const dir of stateDirs) rmSync(dir, { recursive: true, force: true });
     stateDirs.length = 0;
+    await reholdPorts(CROSS_PORT_HOLDS);
   });
 
   test("connects to two separate backends and switches between them", async ({
@@ -472,6 +482,7 @@ test.describe("cross-connect: frontend-only → multiple backends", () => {
       "build/index.html missing — skipped (run `npm run build:app` or use the npm e2e config)",
     );
 
+    await releaseHeldPorts(CROSS_PORT_HOLDS);
     // ── 1. Spawn all three instances concurrently ─────────────────────
     const beEnvA = createIsolatedEnv(CROSS_BE_A_PORT);
     const beEnvB = createIsolatedEnv(CROSS_BE_B_PORT);
@@ -661,6 +672,7 @@ test.describe("cross-connect: sidebar links pin their backend", () => {
     children.length = 0;
     for (const dir of stateDirs) rmSync(dir, { recursive: true, force: true });
     stateDirs.length = 0;
+    await reholdPorts(CROSS_PORT_HOLDS);
   });
 
   test("cmd-clicking a sidebar conversation opens it on the owning backend", async ({
@@ -675,6 +687,7 @@ test.describe("cross-connect: sidebar links pin their backend", () => {
       "build/index.html missing — skipped (run `npm run build:app` or use the npm e2e config)",
     );
 
+    await releaseHeldPorts(CROSS_PORT_HOLDS);
     // ── 1. Spawn both backends and the frontend ───────────────────────
     const beEnvA = createIsolatedEnv(CROSS_BE_A_PORT);
     const beEnvB = createIsolatedEnv(CROSS_BE_B_PORT);

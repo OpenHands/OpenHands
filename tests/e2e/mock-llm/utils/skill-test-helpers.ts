@@ -19,7 +19,9 @@ import { execSync } from "child_process";
 // ── Paths ────────────────────────────────────────────────────────────
 
 /** STATE_DIR matches playwright.mock-llm.config.ts */
-export const STATE_DIR = resolve(".tmp/mock-llm-state");
+export const STATE_DIR = process.env.OH_CANVAS_SAFE_STATE_DIR
+  ? resolve(process.env.OH_CANVAS_SAFE_STATE_DIR)
+  : resolve(".tmp/mock-llm-state");
 
 /**
  * Root directory for skill-test workspace git repos (HOST-side).
@@ -27,7 +29,9 @@ export const STATE_DIR = resolve(".tmp/mock-llm-state");
  * here with the skill file already committed, so the agent-server's
  * worktree machinery picks it up (worktrees only contain committed content).
  */
-export const SKILL_REPOS_DIR = resolve(".tmp/mock-llm-skill-repos");
+export const SKILL_REPOS_DIR = process.env.MOCK_LLM_SKILL_REPOS_HOST_DIR
+  ? resolve(process.env.MOCK_LLM_SKILL_REPOS_HOST_DIR)
+  : resolve(".tmp/mock-llm-skill-repos");
 
 /**
  * The path the agent-server sees for skill repos.
@@ -39,9 +43,11 @@ export const SKILL_REPOS_AGENT_DIR =
 
 /**
  * User-level skills directory on the host (for file creation/removal).
- * The npm launcher sets OH_PERSISTENCE_DIR to the parent of STATE_DIR.
- * In Docker mode, we use a local temp dir that is volume-mounted into the
- * container at the agent-server's expected `~/.openhands/skills/` path.
+ * The npm launcher sets OH_PERSISTENCE_DIR to the parent of STATE_DIR, and
+ * the agent-server loads user skills from `<OH_PERSISTENCE_DIR>/skills`.
+ * With a per-run STATE_DIR that directory stays inside the run root.
+ * Docker sets MOCK_LLM_USER_SKILLS_HOST_DIR to the host side of the mount
+ * at the container's `~/.openhands/skills` path.
  */
 export const USER_SKILLS_DIR = process.env.MOCK_LLM_USER_SKILLS_HOST_DIR
   ? resolve(process.env.MOCK_LLM_USER_SKILLS_HOST_DIR)
