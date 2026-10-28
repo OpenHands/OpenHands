@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Non-interactive task interface — PR design</title>
+<style>
+  :root {
+    --ink: #202020; --muted: #606060; --paper: #fafaf7;
+    --line: #ddd; --accent: #2854a5; --soft: #edf2fc;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--paper); color: var(--ink);
+    font: 16px/1.6 system-ui, sans-serif; }
+  .layout { display: grid; grid-template-columns: 180px minmax(0, 1fr);
+    gap: 32px; max-width: 1050px; margin: auto; padding: 32px 24px; }
+  nav { position: sticky; top: 24px; align-self: start; font-size: 14px; }
+  nav ol { padding-left: 20px; }
+  nav li { margin-bottom: 10px; }
+  a { color: var(--accent); }
+  h1 { font-size: 30px; line-height: 1.2; }
+  h2 { font-size: 21px; margin-top: 32px; }
+  .meta, .sources { color: var(--muted); font-size: 13px; }
+  .callout { padding: 12px 16px; background: var(--soft);
+    border-left: 3px solid var(--accent); }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 12px; border: 1px solid var(--line);
+    text-align: left; vertical-align: top; }
+  code, pre { font-family: ui-monospace, Consolas, monospace; }
+  pre { padding: 16px; background: white; border: 1px solid var(--line);
+    overflow-x: auto; font-size: 13px; }
+  details { margin-top: 16px; }
+  summary { cursor: pointer; color: var(--accent); }
+  @media (max-width: 700px) {
+    .layout { grid-template-columns: 1fr; }
+    nav { position: static; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+<nav aria-label="Contents">
+  <strong>Contents</strong>
+  <ol>
+    <li><a href="#readme">Task guidance</a></li>
+    <li><a href="#architecture">Canvas positioning</a></li>
+    <li><a href="#docs-index">Documentation discovery</a></li>
+    <li><a href="#validation">Validation</a></li>
+    <li><a href="#scope">Scope and follow-up</a></li>
+  </ol>
+</nav>
+
+<main>
+<header>
+  <p class="meta">
+    <a href="https://github.com/OpenHands/OpenHands/issues/18000">Issue #18000</a>
+    · Documentation change · 3 documentation files · +47 / −1 lines
+  </p>
+  <h1>Clarify the non-interactive task interface</h1>
+  <p>
+    Name the Python SDK and Agent Server API as the supported long-term
+    integration surface, distinguish legacy CLI prompt input from programmatic
+    messages, and explain the caller's result responsibilities. The docs index
+    links to the task guidance, and the architecture note explains Canvas's UI role.
+  </p>
+  <p class="callout">
+    SDK/API runs do not currently emit a standardized process exit code.
+    The caller verifies the outputs, collects events, files, logs, and workspace
+    diffs, and chooses its process exit code.
+    <a href="https://github.com/ragtag2/OpenHands/blob/8d140f04f4c6cee13d3c0764ea6aafee78e97063/README.md#L180">README.md:180</a>
+  </p>
+  <p class="sources">
+    <!-- Source links are stamped with the documentation revision before this page is committed. -->
+    Documentation revision:
+    <a href="https://github.com/ragtag2/OpenHands/commit/8d140f04f4c6cee13d3c0764ea6aafee78e97063">
+      8d140f04f4c6cee13d3c0764ea6aafee78e97063
+    </a>
+  </p>
+</header>
+
+<section id="readme">
+  <h2>README gives task users a programmatic route</h2>
+  <p class="sources">
+    Edited documentation · +40 lines ·
+    <a href="https://github.com/OpenHands/OpenHands/blob/53ad0012f366d738af3d09b3137cd57288395c9f/README.md#L146">
+      Before: README.md:146
+    </a> ·
+    <a href="https://github.com/ragtag2/OpenHands/blob/8d140f04f4c6cee13d3c0764ea6aafee78e97063/README.md#L146">
+      After: README.md:146
+    </a>
+  </p>
+
+  <table>
+    <thead><tr><th>Before</th><th>After</th></tr></thead>
+    <tbody><tr>
+      <td>
+        The setup instructions lead directly into Architecture, without
+        a dedicated explanation of non-interactive task usage.
+      </td>
+      <td>
+        A section names the SDK and Agent Server API as the supported long-term
+        surface and links the Docker guide. It explains that legacy CLI headless
+        remains available but is not the recommended stable orchestrator contract,
+        maps CLI task/file input to programmatic messages, and specifies which
+        results the caller must collect and verify.
+      </td>
+    </tr></tbody>
+  </table>
+
+  <h3>Review refinements make support and result responsibilities explicit</h3>
+  <p class="sources">
+    <a href="https://github.com/ragtag2/OpenHands/blob/114aa727050b33bb3ddf1d3589f022cf6307af17/README.md#L148">Before review refinements: README.md:148</a>
+    · <a href="https://github.com/ragtag2/OpenHands/blob/8d140f04f4c6cee13d3c0764ea6aafee78e97063/README.md#L148">After review refinements: README.md:148</a>
+  </p>
+  <table>
+    <thead><tr><th>Topic</th><th>Before review refinements</th><th>After review refinements</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Support horizon</td>
+        <td>Recommends the SDK or Agent Server API without an explicit support horizon.</td>
+        <td>Names both as the supported long-term integration surface. <a href="https://github.com/ragtag2/OpenHands/blob/8d140f04f4c6cee13d3c0764ea6aafee78e97063/README.md#L148">README.md:148</a></td>
+      </tr>
+      <tr>
+        <td>Legacy CLI and prompt input</td>
+        <td>Identifies the CLI as unmaintained, with abbreviated task/file options.</td>
+        <td>States the legacy mode's availability and recommendation status; names <code>-t/--task</code> and <code>-f/--file</code> and contrasts them with SDK/API message bodies. <a href="https://github.com/ragtag2/OpenHands/blob/8d140f04f4c6cee13d3c0764ea6aafee78e97063/README.md#L156">README.md:156</a></td>
+      </tr>
+      <tr>
+        <td>Result responsibilities</td>
+        <td>Describes collection methods and example exit codes.</td>
+        <td>States that the process exit code and collection of events, logs, artifacts, and diffs are caller-owned. <a href="https://github.com/ragtag2/OpenHands/blob/8d140f04f4c6cee13d3c0764ea6aafee78e97063/README.md#L178">README.md:178</a></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>The caller owns result collection and verification</h3>
+  <table>
+    <thead><tr><th>Result</th><th>Caller responsibility</th><th>Source</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Process exit status</td>
+        <td>Check <code>conversation.state.execution_status</code> and required outputs, then choose an exit code. SDK/API runs do not currently emit a standardized process exit code.</td>
+        <td><a href="https://github.com/ragtag2/OpenHands/blob/8d140f04f4c6cee13d3c0764ea6aafee78e97063/README.md#L180">README.md:180</a></td>
+      </tr>
+      <tr>
+        <td>Events and logs</td>
+        <td>Collect events with <code>callbacks=[events.append]</code>, serialize with <code>event.model_dump_json()</code>, and collect additional required logs from the workspace/server.</td>
+        <td><a href="https://github.com/ragtag2/OpenHands/blob/8d140f04f4c6cee13d3c0764ea6aafee78e97063/README.md#L181">README.md:181</a></td>
+      </tr>
+      <tr>
+        <td>Artifacts</td>
+        <td>Select workspace files, download with <code>workspace.file_download(source, destination)</code>, and check <code>.success</code>.</td>
+        <td><a href="https://github.com/ragtag2/OpenHands/blob/8d140f04f4c6cee13d3c0764ea6aafee78e97063/README.md#L182">README.md:182</a></td>
+      </tr>
+      <tr>
+        <td>Workspace diff</td>
+        <td>Run <code>git diff</code> through <code>workspace.execute_command()</code>, check <code>.exit_code</code>, and save <code>.stdout</code>.</td>
+        <td><a href="https://github.com/ragtag2/OpenHands/blob/8d140f04f4c6cee13d3c0764ea6aafee78e97063/README.md#L183">README.md:183</a></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>
+    The example distinguishes a waiting timeout from an iteration limit.
+    It uses 60 seconds and four iterations as illustrative values and
+    tells callers to verify outputs before choosing their exit code.
+  </p>
+  <p class="sources">
+    <a href="https://github.com/ragtag2/OpenHands/blob/8d140f04f4c6cee13d3c0764ea6aafee78e97063/README.md#L166">README.md:166</a>
+  </p>
+
+  <details>
+    <summary>Added parameter explanation — diff excerpt</summary>
+    <pre>+For a one-shot task, configure an agent and Docker workspace using the
++guide above. Send one message with `conversation.send_message()`, then
++wait with `conversation.run()`. Its `timeout` parameter limits how long
++your program waits; it does not cancel the remote run.
++`max_iteration_per_run` limits the number of agent iterations per run.</pre>
+  </details>
+</section>
+
+<section id="architecture">
+  <h2>Architecture separates Canvas from task execution</h2>
+  <p class="sources">
+    Edited documentation · +6 lines ·
+    <a href="https://github.com/OpenHands/OpenHands/blob/53ad0012f366d738af3d09b3137cd57288395c9f/docs/architecture.md#L5">
+      Before: docs/architecture.md:5
+    </a> ·
+    <a href="https://github.com/ragtag2/OpenHands/blob/8d140f04f4c6cee13d3c0764ea6aafee78e97063/docs/architecture.md#L21">
+      After: docs/architecture.md:21
+    </a>
+  </p>
+
+  <table>
+    <thead><tr><th>Before</th><th>After</th></tr></thead>
+    <tbody><tr>
+      <td>
+        System boundaries describe Canvas's responsibilities but do not
+        explicitly position one-shot tasks.
+      </td>
+      <td>
+        A paragraph identifies Canvas as the UI, directs orchestrators
+        to the SDK/API, and explains the absence of a dedicated Canvas
+        one-shot command.
+      </td>
+    </tr></tbody>
+  </table>
+
+  <details>
+    <summary>Added positioning note — diff excerpt</summary>
+    <pre>+Agent Canvas provides the user interface for running and monitoring agents.
++For non-interactive tasks, orchestrators use the
++[Python SDK or Agent Server API](https://docs.openhands.dev/sdk/guides/agent-server/overview)
++directly. Agent Canvas does not currently provide a dedicated one-shot task
++command.</pre>
+  </details>
+</section>
+
+<section id="docs-index">
+  <h2>The documentation index makes task guidance discoverable</h2>
+  <p class="sources">
+    Edited documentation · +1 / −1 lines ·
+    <a href="https://github.com/OpenHands/OpenHands/blob/53ad0012f366d738af3d09b3137cd57288395c9f/docs/README.md#L3">Before: docs/README.md:3</a>
+    · <a href="https://github.com/ragtag2/OpenHands/blob/8d140f04f4c6cee13d3c0764ea6aafee78e97063/docs/README.md#L4">After: docs/README.md:4</a>
+  </p>
+  <table>
+    <thead><tr><th>Before</th><th>After</th></tr></thead>
+    <tbody><tr>
+      <td>The docs index lists architecture, development, and self-hosting guidance without a non-interactive task link.</td>
+      <td>A link to the README's <code>Non-interactive tasks</code> section names SDK/API support, legacy CLI status, Docker setup, and caller result responsibilities.</td>
+    </tr></tbody>
+  </table>
+  <details>
+    <summary>Documentation index link — diff excerpt</summary>
+    <pre>+- [Non-interactive tasks](../README.md#non-interactive-tasks): supported SDK/API interfaces, legacy CLI status, Docker setup, and caller responsibilities for results.</pre>
+  </details>
+</section>
+
+<section id="validation">
+  <h2>Both validation cases returned the expected exit codes</h2>
+  <p>
+    Validation used Python SDK and Agent Server 1.53.0 with Docker
+    Desktop on Windows. Scripted mock replies exercised the workflow
+    without a provider API key.
+  </p>
+
+  <table>
+    <thead>
+      <tr><th>Case</th><th>Conversation status</th><th>Artifact</th><th>Caller exit code</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Success</td><td>finished</td><td>HEADLESS_OK</td><td>0</td></tr>
+      <tr><td>Incorrect output</td><td>finished</td><td>HEADLESS_BAD</td><td>1</td></tr>
+    </tbody>
+  </table>
+
+  <details>
+    <summary>Validation commands — PowerShell from the repository root</summary>
+    <pre>&amp; .\.tmp\headless-demo\.venv\Scripts\python.exe .\.tmp\headless-demo\run.py
+$LASTEXITCODE
+
+&amp; .\.tmp\headless-demo\.venv\Scripts\python.exe .\.tmp\headless-demo\run.py --bad-output
+$LASTEXITCODE</pre>
+  </details>
+
+  <p>
+    The previously reported incorrect-output case demonstrates that the caller verifies
+    artifacts before choosing its exit code, even when the conversation
+    status is <code>finished</code>. These are results of the example's caller
+    verification logic, rather than standardized SDK/API process exit codes.
+  </p>
+  <p class="meta">
+    Evidence is saved under .tmp/headless-demo/results/ and
+    .tmp/headless-demo/results-failure/: status.json, README.md,
+    result.txt, events.jsonl, mock-llm.log, and diff.patch.
+    The temporary harness and outputs are outside the committed PR.
+  </p>
+</section>
+
+<section id="scope">
+  <h2>Keep the contribution in the existing Canvas documentation</h2>
+  <p>
+    The changes to three documentation files use existing locations and link
+    canonical SDK/API setup guidance. Updating the legacy headless guide
+    in OpenHands/docs is a separate follow-up.
+  </p>
+  <p>
+    The architecture note documents current availability only. A future
+    one-shot Canvas entrypoint plan still needs maintainer confirmation.
+  </p>
+  <p class="meta">
+    This HTML page is a temporary review artifact under .pr/.
+    For this fork PR, remove it before merge and retain a commit-pinned
+    preview link in the PR description.
+  </p>
+  <p>
+  No new CLI command, Agent Canvas subcommand, or Agent Server endpoint
+  is added. Any new entrypoint requires an explicit maintainer decision.
+  </p>
+</section>
+</main>
+</div>
+</body>
+</html>
