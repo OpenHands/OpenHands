@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
+import { renderWithProviders } from "test-utils";
 import userEvent from "@testing-library/user-event";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
 import { ChatMessage } from "#/components/features/chat/chat-message";
@@ -22,7 +23,7 @@ function renderAgentMessage(
   message: string,
   files: string[] = WORKSPACE_FILES,
 ) {
-  return render(
+  return renderWithProviders(
     <WorkspaceFilesForChatContext.Provider value={files}>
       <ChatMessage type="agent" message={message} />
     </WorkspaceFilesForChatContext.Provider>,
