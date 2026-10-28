@@ -3,7 +3,7 @@
   "versions": {
     "agentServer": "1.59.0",
     "agentCanvas": "1.34.0",
-    "automation": "1.26.0"
+    "automation": "1.26.1"
   },
   "compatibility": {
     "minimumAgentServer": "1.57.0"
