@@ -19,8 +19,7 @@ import { enqueueHomeTaskPendingMessage } from "#/utils/enqueue-home-task-pending
 import { sendMessageWithAttachments } from "#/utils/send-message-with-attachments";
 import { useNavigation } from "#/context/navigation-context";
 import { useIsCreatingConversation } from "#/hooks/use-is-creating-conversation";
-import { Branch, GitRepository } from "#/types/git";
-import { Provider } from "#/types/settings";
+import { useRememberedRepositorySelection } from "#/hooks/use-remembered-repository-selection";
 import { LocalWorkspace } from "#/types/workspace";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
@@ -67,10 +66,11 @@ export function HomeChatLauncher() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [pendingWorkspace, setPendingWorkspace] =
     useState<LocalWorkspace | null>(null);
-  const [pendingRepository, setPendingRepository] =
-    useState<GitRepository | null>(null);
-  const [pendingBranch, setPendingBranch] = useState<Branch | null>(null);
-  const [pendingProvider, setPendingProvider] = useState<Provider | null>(null);
+  const {
+    selection: repositorySelection,
+    setSelection: setRepositorySelection,
+    clearSelection: clearRepositorySelection,
+  } = useRememberedRepositorySelection(backend.id, !isLocal);
   const { data: settings } = useSettings();
   const [lastUsedWorkspaceMode] = useState(readStoredLocalWorkspaceMode);
   const [pickedWorkspaceMode, setPickedWorkspaceMode] =
@@ -148,9 +148,7 @@ export function HomeChatLauncher() {
     if (isLocal) writeStoredLocalWorkspaceMode(mode);
   };
 
-  const hasSelection = isLocal
-    ? !!pendingWorkspace
-    : !!pendingRepository && !!pendingBranch;
+  const hasSelection = isLocal ? !!pendingWorkspace : !!repositorySelection;
 
   const handleSubmit = (message: string) => {
     const trimmed = message.trim();
@@ -192,13 +190,13 @@ export function HomeChatLauncher() {
     } else if (isLocal && effectiveWorkspaceMode === "docker_container") {
       // No workspace: the container gets its own, so only the runtime is sent.
       variables = { ...variables, workspaceMode: effectiveWorkspaceMode };
-    } else if (!isLocal && pendingRepository && pendingBranch) {
+    } else if (!isLocal && repositorySelection) {
       variables = {
         ...variables,
         repository: {
-          name: pendingRepository.full_name,
-          gitProvider: pendingRepository.git_provider,
-          branch: pendingBranch.name,
+          name: repositorySelection.repository.full_name,
+          gitProvider: repositorySelection.repository.git_provider,
+          branch: repositorySelection.branch.name,
         },
       };
     }
@@ -388,13 +386,18 @@ export function HomeChatLauncher() {
           {hasSelection ? (
             <HomeGitControlBarPreview
               workspace={pendingWorkspace}
-              repository={pendingRepository}
-              branch={pendingBranch}
-              provider={pendingProvider}
+              repository={repositorySelection?.repository}
+              branch={repositorySelection?.branch}
+              provider={repositorySelection?.provider}
               workspaceMode={effectiveWorkspaceMode}
               workspaceModes={workspaceModes}
               backendKind={backend.kind}
               onRepoClick={() => setIsDialogOpen(true)}
+              onClear={
+                isLocal
+                  ? () => setPendingWorkspace(null)
+                  : clearRepositorySelection
+              }
               onWorkspaceModeChange={setWorkspaceMode}
             />
           ) : (
@@ -442,22 +445,18 @@ export function HomeChatLauncher() {
         <OpenWorkspaceDialog
           isOpen={isDialogOpen}
           onClose={() => setIsDialogOpen(false)}
-          onConfirm={(workspace) => {
-            setPendingWorkspace(workspace);
-            setPendingRepository(null);
-            setPendingBranch(null);
-            setPendingProvider(null);
-          }}
+          onConfirm={setPendingWorkspace}
         />
       ) : (
         <OpenRepositoryDialog
           isOpen={isDialogOpen}
           onClose={() => setIsDialogOpen(false)}
           onConfirm={({ repository, branch, provider }) => {
-            setPendingRepository(repository);
-            setPendingBranch(branch);
-            setPendingProvider(provider ?? repository.git_provider);
-            setPendingWorkspace(null);
+            setRepositorySelection({
+              repository,
+              branch,
+              provider: provider ?? repository.git_provider,
+            });
             setPickedWorkspaceMode("local_repo");
           }}
         />
