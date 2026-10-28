@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+import { I18nKey } from "#/i18n/declaration";
 import {
   formatCompactDuration,
   type RunSummaryState,
@@ -20,6 +22,31 @@ export function averageDurationDisplay(
   state: RunSummaryState | undefined,
 ): string {
   return formatCompactDuration(state?.summary?.averageDurationMs ?? null);
+}
+
+interface AutomationPendingRunCountProps {
+  automationId: string;
+  state: RunSummaryState | undefined;
+}
+
+/** The automation's queued-run count; nothing when none or unknown. */
+export function AutomationPendingRunCount({
+  automationId,
+  state,
+}: AutomationPendingRunCountProps) {
+  const { t } = useTranslation("openhands");
+  const count = state?.summary?.pendingTotal;
+  if (!count) return null;
+  return (
+    <span
+      data-testid={`automation-pending-${automationId}`}
+      className="shrink-0 text-text-secondary"
+    >
+      {t(I18nKey.AUTOMATIONS$PENDING_RUN_COUNT, {
+        count: count.toLocaleString(),
+      })}
+    </span>
+  );
 }
 
 interface AutomationRunStatsProps {

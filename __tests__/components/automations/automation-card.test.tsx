@@ -23,7 +23,8 @@ import type { InterfaceListInsights } from "#/manifests/types";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string) => key,
+    t: (key: string, options?: { count?: number | string }) =>
+      options?.count === undefined ? key : `${key}:${options.count}`,
     i18n: { language: "en" },
   }),
 }));
@@ -204,6 +205,7 @@ describe("AutomationCard", () => {
             summary: {
               total: 4,
               completedTotal: 4,
+              pendingTotal: 0,
               latestRun,
               recentRuns: [latestRun],
               recentSuccessRate: 1,
@@ -229,6 +231,49 @@ describe("AutomationCard", () => {
     expect(screen.getByTestId("automation-run-stats")).toBeInTheDocument();
     expect(screen.getByText("4")).toBeInTheDocument();
     expect(screen.getByText("100%")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automation-pending-automation-1"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the queued run count beside the latest run status", () => {
+    // Arrange
+    const latestRun = createRun({
+      status: AutomationRunStatus.PENDING,
+      completed_at: null,
+    });
+
+    // Act
+    render(
+      <AutomationCard
+        automation={automation}
+        onToggle={vi.fn()}
+        onRunNow={vi.fn()}
+        onExport={vi.fn()}
+        onDelete={vi.fn()}
+        insights={{
+          spec: insightsSpec satisfies InterfaceListInsights,
+          state: {
+            summary: {
+              total: 7,
+              completedTotal: 4,
+              pendingTotal: 3,
+              latestRun,
+              recentRuns: [latestRun],
+              recentSuccessRate: 1,
+              averageDurationMs: 120_000,
+            },
+            isLoading: false,
+            isError: false,
+          },
+        }}
+      />,
+    );
+
+    // Assert
+    expect(
+      screen.getByTestId("automation-pending-automation-1"),
+    ).toHaveTextContent("AUTOMATIONS$PENDING_RUN_COUNT:3");
   });
 
   it("shows the value statement for its completed runs", () => {
@@ -255,6 +300,7 @@ describe("AutomationCard", () => {
             summary: {
               total: 5,
               completedTotal: 4,
+              pendingTotal: 0,
               latestRun,
               recentRuns: [latestRun],
               recentSuccessRate: 1,
