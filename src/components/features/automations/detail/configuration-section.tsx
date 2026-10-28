@@ -14,7 +14,7 @@ import CodeTagIcon from "#/icons/code-tag.svg?react";
 import PuzzleIcon from "#/icons/puzzle.svg?react";
 import LinkExternalIcon from "#/icons/link-external.svg?react";
 import { formatEventOn } from "#/utils/automation-schedule";
-import { parseGitRemoteUrl } from "#/utils/parse-git-remote-url";
+import { automationRepositoryLabel } from "#/utils/automation-repo-sources";
 import { SectionCard } from "./section-card";
 import { ConfigField } from "./config-field";
 import { BranchBadge } from "./branch-badge";
@@ -127,16 +127,16 @@ export function ConfigurationSection({
             label={t(I18nKey.AUTOMATIONS$DETAIL$REPOSITORIES)}
           >
             <ul className="flex flex-col gap-1">
-              {automation.repositories.map(({ url, ref }) => (
+              {automation.repositories.map((repository) => (
                 <li
-                  key={`${url}@${ref ?? ""}`}
+                  key={`${repository.url}@${repository.ref ?? ""}`}
                   data-testid="automation-repository"
                   className="flex flex-wrap items-center gap-1"
                 >
                   <span className="break-all">
-                    {parseGitRemoteUrl(url)?.repository ?? url}
+                    {automationRepositoryLabel(repository)}
                   </span>
-                  {ref && <BranchBadge branch={ref} />}
+                  {repository.ref && <BranchBadge branch={repository.ref} />}
                 </li>
               ))}
             </ul>

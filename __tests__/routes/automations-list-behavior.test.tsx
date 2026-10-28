@@ -114,6 +114,8 @@ vi.mock("#/hooks/query/use-automations", () => ({
     mocks.useAutomations(options);
     return { ...mocks.automationsState, hasNextPage: false };
   },
+  // No tags endpoint, as with a manifest that predates tag support.
+  useAutomationTags: () => ({ data: undefined }),
   useToggleAutomation: () => ({ mutate: mocks.toggle }),
   useDeleteAutomation: () => ({ mutate: mocks.remove }),
   useDeleteAutomationDraft: () => ({ mutate: mocks.removeDraft }),

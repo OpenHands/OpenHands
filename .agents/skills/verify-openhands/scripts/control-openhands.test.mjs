@@ -2535,6 +2535,42 @@ test("a fix is verified only by two reproductions and two passes under the same 
     ).reasons.join(),
     /same revision/,
   );
+  // A backend fix: same revision, a different backend on each side.
+  const vb = (baseline, fix) =>
+    proofVerdict({ baseline, fix, sha: "s1", vary: "backend" });
+  const newBackend = { backend: "local agent-server 1.58.1 automation 1.25.1" };
+  assert.equal(
+    vb(
+      [row("xfail"), row("xfail")],
+      [row("xpass", newBackend), row("xpass", newBackend)],
+    ).verdict,
+    "verified",
+  );
+  assert.match(
+    vb([row("xfail"), row("xfail")], [row("xpass"), row("xpass")]).reasons.join(),
+    /same backend versions/,
+  );
+  assert.match(
+    vb(
+      [row("xfail"), row("xfail")],
+      [fixRow("xpass", newBackend), fixRow("xpass", newBackend)],
+    ).reasons.join(),
+    /different revisions/,
+  );
+  assert.match(
+    vb(
+      [row("xfail"), row("xfail")],
+      [row("xpass", newBackend), row("xpass")],
+    ).reasons.join(),
+    /one side ran different backend/,
+  );
+  assert.equal(
+    vb(
+      [row("xfail"), row("xfail")],
+      [row("xpass", newBackend), row("xfail", newBackend)],
+    ).verdict,
+    "not-fixed",
+  );
   // Attempts of an older recipe do not count.
   const old = v(
     [row("xpass", { sha: "s0" }), row("xfail"), row("xfail")],
@@ -2900,6 +2936,29 @@ test("network plugin projection bounds complete UTF-8 JSON and omits non-JSON or
   assert.equal(
     redacted.bodyFields.plugins[0].api_key,
     "<redacted 20000 chars>",
+  );
+});
+
+test("network body projection keeps the start request's runtime choice past the display cap", () => {
+  const request = JSON.stringify({
+    agent_launch_additions: { system_message_suffix_append: "x".repeat(4000) },
+    llm: { api_key: "never-project-me" },
+    worktree: true,
+    worktree_options: { base: "current_head", branch_prefix: "qa/" },
+    conversation_runtime: "local",
+    container: { memory: "2g", cpus: 1 },
+  });
+  assert.deepEqual(redactBodyFields(request), {
+    bodyFields: {
+      conversation_runtime: "local",
+      worktree: true,
+      worktree_options: { base: "current_head", branch_prefix: "qa/" },
+      container: { memory: "2g", cpus: 1 },
+    },
+  });
+  assert.doesNotMatch(
+    JSON.stringify(redactBodyFields(request)),
+    /never-project-me|system_message/,
   );
 });
 

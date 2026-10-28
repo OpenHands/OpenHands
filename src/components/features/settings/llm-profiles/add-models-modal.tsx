@@ -390,7 +390,7 @@ export function AddModelsModal({
           {t(I18nKey.SETTINGS$ADD_MODELS_PROVIDER_LABEL)}
           <select
             data-testid="add-models-provider"
-            className="rounded-md border border-[var(--oh-border)] bg-[var(--oh-background)] px-3 py-2 text-sm text-contrast"
+            className="rounded-md border border-border bg-[var(--oh-background)] px-3 py-2 text-sm text-contrast"
             value={selectedProvider ?? ""}
             onChange={(e) => handleProviderChange(e.target.value)}
             disabled={submitting}
@@ -418,7 +418,7 @@ export function AddModelsModal({
             {t(I18nKey.SETTINGS$ADD_MODELS_CONNECTION_LABEL)}
             <select
               data-testid="add-models-connection"
-              className="rounded-md border border-[var(--oh-border)] bg-[var(--oh-background)] px-3 py-2 text-sm text-contrast"
+              className="rounded-md border border-border bg-[var(--oh-background)] px-3 py-2 text-sm text-contrast"
               value={selectedConnectionId ?? KEYLESS_CONNECTION_VALUE}
               onChange={(e) => setSelectedConnectionId(e.target.value || null)}
               disabled={submitting}
@@ -436,7 +436,7 @@ export function AddModelsModal({
         )}
 
         {selectedProvider && connectionId && (
-          <span className="min-w-0 max-w-full truncate text-xs text-[var(--oh-muted)]">
+          <span className="min-w-0 max-w-full truncate text-xs text-muted">
             {t(I18nKey.SETTINGS$ADD_MODELS_CONNECTION_BOUND, {
               provider: selectedProvider,
             })}
@@ -445,7 +445,7 @@ export function AddModelsModal({
         {selectedProvider && !connectionId && (
           <span
             data-testid="add-models-keyless-note"
-            className="min-w-0 max-w-full truncate text-xs text-[var(--oh-muted)]"
+            className="min-w-0 max-w-full truncate text-xs text-muted"
           >
             {t(I18nKey.SETTINGS$ADD_MODELS_KEYLESS_NOTE)}
           </span>
@@ -458,10 +458,7 @@ export function AddModelsModal({
         )}
 
         {showEmpty && (
-          <p
-            data-testid="add-models-empty"
-            className="text-sm text-[var(--oh-muted)]"
-          >
+          <p data-testid="add-models-empty" className="text-sm text-muted">
             {t(emptyMessage)}
           </p>
         )}
