@@ -106,7 +106,7 @@ mcp==1.30.0
 mdurl==0.1.2
 more-itertools==11.1.0
 multidict==6.9.1
-oauthlib==3.3.1
+oauthlib==4.0.0
 ollama==0.6.2
 openai==2.54.0
 openapi-pydantic==0.5.1
@@ -125,7 +125,7 @@ packaging==26.3
 pathable==0.6.0
 pfzy==0.3.4
 pg8000==1.31.5
-pillow==12.3.0
+pillow==13.0.0
 platformdirs==4.11.12
 portalocker==2.10.1
 posthog==7.60.0
