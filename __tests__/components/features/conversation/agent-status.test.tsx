@@ -329,13 +329,6 @@ describe("AgentStatus", () => {
 
   it.each([
     {
-      label: "agent failure",
-      scenario: {
-        agentState: AgentState.ERROR,
-        executionStatus: ExecutionStatus.ERROR,
-      },
-    },
-    {
       label: "rate limiting",
       scenario: { agentState: AgentState.RATE_LIMITED },
     },
@@ -359,6 +352,20 @@ describe("AgentStatus", () => {
     ).not.toBeInTheDocument();
     expect(screen.queryByTestId("stop-button")).not.toBeInTheDocument();
     expect(screen.queryByTestId("play-button")).not.toBeInTheDocument();
+  });
+
+  it("shows a play-button retry affordance for mid-turn AgentState.ERROR", () => {
+    renderAgentStatus({
+      agentState: AgentState.ERROR,
+      executionStatus: ExecutionStatus.ERROR,
+    });
+
+    expect(screen.queryByTestId("circle-error-icon")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("agent-loading-spinner"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("stop-button")).not.toBeInTheDocument();
+    expect(screen.getByTestId("play-button")).toBeInTheDocument();
   });
 
   it("shows a non-interactive waiting indicator for user confirmation", () => {
