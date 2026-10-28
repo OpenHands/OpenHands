@@ -10,7 +10,7 @@ import {
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useRuntimeIsReady } from "#/hooks/use-runtime-is-ready";
-import { getGitPath } from "#/utils/get-git-path";
+import { getCloudWorkspaceRoot } from "#/utils/get-git-path";
 import { useWorkspaceFileDiscovery } from "./use-workspace-file-discovery";
 import {
   buildWorkspaceFileListCommand,
@@ -124,11 +124,9 @@ function useCloudWorkspaceFiles(enabled: boolean): WorkspaceFilesResult {
   const selectedRepository = conversation?.selected_repository;
   const workingDir = conversation?.workspace?.working_dir?.trim();
 
-  // Anchor against an absolute workspace path the same way the diff view and
-  // single-file read do (`getGitPath` defaults to a relative convention; the
-  // cloud runtime needs an absolute path).
-  const gitPath = getGitPath(selectedRepository, workingDir);
-  const absolutePath = gitPath.startsWith("/") ? gitPath : `/${gitPath}`;
+  // Absolute root the listing is anchored at; the single-file read builds its
+  // paths from the same root. See `getCloudWorkspaceRoot`.
+  const absolutePath = getCloudWorkspaceRoot(selectedRepository, workingDir);
 
   const query = useQuery<string[]>({
     queryKey: ["workspace-files-cloud", conversationId, absolutePath],
