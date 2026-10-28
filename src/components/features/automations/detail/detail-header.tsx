@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import type { Automation } from "#/types/automation";
-import { ToggleSwitch } from "#/components/features/automations/toggle-switch";
+import { ToggleSwitch } from "#/ui/toggle-switch";
 import { KebabMenu } from "#/components/features/automations/kebab-menu";
 import PowerIcon from "#/icons/power.svg?react";
 import DownloadIcon from "#/icons/download.svg?react";
