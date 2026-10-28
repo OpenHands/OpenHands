@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import AgentProfilesService from "#/api/agent-profiles-service/agent-profiles-service.api";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { useSaveAgentProfile } from "#/hooks/mutation/use-save-agent-profile";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 vi.mock("#/api/agent-profiles-service/agent-profiles-service.api", () => ({
   __esModule: true,
@@ -23,11 +24,22 @@ vi.mock("#/contexts/active-backend-context", () => ({
   useActiveBackend: () => useActiveBackendMock(),
 }));
 
-const useBackend = (kind: "cloud" | "local") =>
-  useActiveBackendMock.mockReturnValue({
-    backend: { id: "bk-1", kind },
-    orgId: null,
-  });
+// The sync chain re-reads the registry before each call so a backend or org
+// switch mid-flight can abandon the write; drive it from the same values the
+// context mock reports.
+const getActiveBackendMock = vi.hoisted(() => vi.fn());
+vi.mock("#/api/backend-registry/active-store", () => ({
+  getActiveBackend: () => getActiveBackendMock(),
+}));
+vi.mock("#/utils/custom-toast-handlers", () => ({
+  displayErrorToast: vi.fn(),
+}));
+
+const useBackend = (kind: "cloud" | "local") => {
+  const active = { backend: { id: "bk-1", kind }, orgId: null };
+  useActiveBackendMock.mockReturnValue(active);
+  getActiveBackendMock.mockReturnValue(active);
+};
 
 const acpSummary = {
   id: "prof-acp",
@@ -195,5 +207,65 @@ describe("useSaveAgentProfile agent-kind sync (#18883)", () => {
     expect(AgentProfilesService.saveProfile).toHaveBeenCalledOnce();
     expect(AgentProfilesService.listProfiles).not.toHaveBeenCalled();
     expect(SettingsService.saveSettings).not.toHaveBeenCalled();
+  });
+
+  it("a failed profile lookup toasts and keeps the save successful", async () => {
+    vi.mocked(AgentProfilesService.saveProfile).mockResolvedValue({
+      name: "claude",
+      message: "saved",
+    });
+    vi.mocked(AgentProfilesService.listProfiles).mockRejectedValue(
+      new Error("list failed"),
+    );
+
+    const { result } = await save({
+      name: "claude",
+      profile: { agent_kind: "acp", acp_server: "claude-code" },
+    });
+
+    // The save stands; the lookup failure is surfaced so the stale kind is
+    // not silently left in place.
+    expect(result.current.isSuccess).toBe(true);
+    expect(SettingsService.saveSettings).not.toHaveBeenCalled();
+    expect(displayErrorToast).toHaveBeenCalledOnce();
+  });
+
+  it("abandons the write when the selection changes while the profile read is pending", async () => {
+    vi.mocked(AgentProfilesService.saveProfile).mockResolvedValue({
+      name: "claude",
+      message: "saved",
+    });
+    vi.mocked(AgentProfilesService.listProfiles).mockResolvedValue({
+      profiles: [acpSummary, openHandsSummary],
+      active_agent_profile_id: "prof-acp",
+    } as never);
+
+    let resolveDetail: (value: unknown) => void = () => {};
+    vi.mocked(AgentProfilesService.getProfile).mockReturnValue(
+      new Promise((resolve) => {
+        resolveDetail = resolve;
+      }) as never,
+    );
+
+    const { result } = renderSaveHook();
+    result.current.mutate({
+      name: "claude",
+      profile: { agent_kind: "acp", acp_server: "claude-code" },
+    });
+    await waitFor(() =>
+      expect(AgentProfilesService.getProfile).toHaveBeenCalled(),
+    );
+
+    // The user switches org within the cloud backend while the read is pending.
+    getActiveBackendMock.mockReturnValue({
+      backend: { id: "bk-1", kind: "cloud" },
+      orgId: "org-2",
+    });
+    resolveDetail(acpDetail);
+
+    await waitFor(() => expect(result.current.isPending).toBe(false));
+
+    expect(SettingsService.saveSettings).not.toHaveBeenCalled();
+    expect(displayErrorToast).not.toHaveBeenCalled();
   });
 });

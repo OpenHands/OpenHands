@@ -27,11 +27,19 @@ vi.mock("#/contexts/active-backend-context", () => ({
   useActiveBackend: () => useActiveBackendMock(),
 }));
 
-const useBackend = (kind: "cloud" | "local") =>
-  useActiveBackendMock.mockReturnValue({
-    backend: { id: "bk-1", kind },
-    orgId: null,
-  });
+// The sync chain re-reads the registry before each call so a backend or org
+// switch mid-flight can abandon the write; drive it from the same values the
+// context mock reports.
+const getActiveBackendMock = vi.hoisted(() => vi.fn());
+vi.mock("#/api/backend-registry/active-store", () => ({
+  getActiveBackend: () => getActiveBackendMock(),
+}));
+
+const useBackend = (kind: "cloud" | "local") => {
+  const active = { backend: { id: "bk-1", kind }, orgId: null };
+  useActiveBackendMock.mockReturnValue(active);
+  getActiveBackendMock.mockReturnValue(active);
+};
 
 const openHandsSummary = {
   id: "prof-oh",
@@ -207,7 +215,7 @@ describe("useActivateAgentProfile agent-kind sync (#18883)", () => {
     expect(invalidateSpy).toHaveBeenCalled();
   });
 
-  it("a failed profile lookup skips the sync and keeps the activation successful", async () => {
+  it("a failed profile lookup toasts and keeps the activation successful", async () => {
     vi.mocked(AgentProfilesService.activateProfile).mockResolvedValue(
       activateResponse,
     );
@@ -217,7 +225,46 @@ describe("useActivateAgentProfile agent-kind sync (#18883)", () => {
 
     const { result } = await activate("prof-oh");
 
+    // The activation stands; the lookup failure is surfaced so the stale kind
+    // is not silently left in place.
     expect(result.current.isSuccess).toBe(true);
+    expect(SettingsService.saveSettings).not.toHaveBeenCalled();
+    expect(displayErrorToast).toHaveBeenCalledOnce();
+  });
+
+  it("abandons the write when the selection changes while the profile read is pending", async () => {
+    vi.mocked(AgentProfilesService.activateProfile).mockResolvedValue(
+      activateResponse,
+    );
+    vi.mocked(AgentProfilesService.listProfiles).mockResolvedValue({
+      profiles: [openHandsSummary],
+      active_agent_profile_id: "prof-oh",
+    } as never);
+
+    let resolveDetail: (value: unknown) => void = () => {};
+    vi.mocked(AgentProfilesService.getProfile).mockReturnValue(
+      new Promise((resolve) => {
+        resolveDetail = resolve;
+      }) as never,
+    );
+
+    const { result } = renderActivateHook();
+    result.current.mutate("prof-oh");
+    await waitFor(() =>
+      expect(AgentProfilesService.getProfile).toHaveBeenCalled(),
+    );
+
+    // The user picks a different cloud backend/org while the read is in flight.
+    getActiveBackendMock.mockReturnValue({
+      backend: { id: "bk-2", kind: "cloud" },
+      orgId: "org-2",
+    });
+    resolveDetail(openHandsDetail);
+
+    await waitFor(() => expect(result.current.isPending).toBe(false));
+
+    // The profile read answered from the old account; mirroring it now would
+    // write that account's kind into the newly selected backend.
     expect(SettingsService.saveSettings).not.toHaveBeenCalled();
     expect(displayErrorToast).not.toHaveBeenCalled();
   });

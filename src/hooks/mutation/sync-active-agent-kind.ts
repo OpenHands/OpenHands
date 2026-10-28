@@ -1,6 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import type { BackendKind } from "#/api/backend-registry/types";
 import AgentProfilesService from "#/api/agent-profiles-service/agent-profiles-service.api";
+import { getActiveBackend } from "#/api/backend-registry/active-store";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { buildAgentSettingsDiffForProfile } from "#/constants/acp-providers";
 import { SETTINGS_QUERY_KEYS } from "#/hooks/query/query-keys";
@@ -25,6 +26,29 @@ import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message"
  * syncs the kind.
  */
 
+/**
+ * The backend and org a sync chain was started for. Every call in the chain
+ * resolves its destination from the *current* selection when it issues the
+ * request, so a chain that spans an await has to prove the selection it read
+ * the profile from is still the one it is about to write to.
+ */
+interface SelectionIdentity {
+  backendId: string;
+  orgId: string | null;
+}
+
+function captureSelectionIdentity(): SelectionIdentity {
+  const active = getActiveBackend();
+  return { backendId: active.backend.id, orgId: active.orgId };
+}
+
+function isCurrentSelection(identity: SelectionIdentity): boolean {
+  const active = getActiveBackend();
+  return (
+    active.backend.id === identity.backendId && active.orgId === identity.orgId
+  );
+}
+
 function surfaceSyncError(error: unknown): void {
   displayErrorToast(
     retrieveAxiosErrorMessage(error) || i18n.t(I18nKey.ERROR$GENERIC),
@@ -40,7 +64,10 @@ function surfaceSyncError(error: unknown): void {
 async function writeAgentSettingsKindSync(
   queryClient: QueryClient,
   name: string,
+  identity: SelectionIdentity,
 ): Promise<void> {
+  if (!isCurrentSelection(identity)) return;
+
   let diff: Record<string, unknown>;
   try {
     const detail = await AgentProfilesService.getProfile(name);
@@ -49,6 +76,12 @@ async function writeAgentSettingsKindSync(
     surfaceSyncError(error);
     return;
   }
+
+  // `getProfile` and `saveSettings` each resolve the active backend when they
+  // issue their request, so the read and the write can land on different
+  // accounts when the user switches backend or org mid-chain. Re-check before
+  // writing rather than mirroring one account's kind onto another.
+  if (!isCurrentSelection(identity)) return;
 
   try {
     await SettingsService.saveSettings({ agent_settings_diff: diff });
@@ -75,12 +108,27 @@ export async function syncAgentSettingsKindAfterProfileActivation(
 ): Promise<void> {
   if (backendKind !== "cloud") return;
 
-  const summary = await AgentProfilesService.listProfiles()
-    .then((list) => list.profiles.find((p) => p.id === profileId) ?? null)
-    .catch(() => null);
+  // The caller reads the kind from a render-time snapshot, which can already
+  // be stale by the time the activation settles.
+  const identity = captureSelectionIdentity();
+  if (!isCurrentSelection(identity)) return;
+
+  let list: Awaited<ReturnType<typeof AgentProfilesService.listProfiles>>;
+  try {
+    list = await AgentProfilesService.listProfiles();
+  } catch (error) {
+    // The lookup belongs to the sync, not to the activation: the activation
+    // has already succeeded, so report the failure and let the next
+    // activation or save correct the stored kind.
+    surfaceSyncError(error);
+    return;
+  }
+  if (!isCurrentSelection(identity)) return;
+
+  const summary = list.profiles.find((p) => p.id === profileId) ?? null;
   if (!summary?.name) return;
 
-  await writeAgentSettingsKindSync(queryClient, summary.name);
+  await writeAgentSettingsKindSync(queryClient, summary.name, identity);
 }
 
 /**
@@ -96,10 +144,21 @@ export async function syncAgentSettingsKindAfterProfileSave(
 ): Promise<void> {
   if (backendKind !== "cloud") return;
 
-  const list = await AgentProfilesService.listProfiles().catch(() => null);
-  const summary = list?.profiles.find((p) => p.name === name);
-  if (summary?.id == null) return;
-  if (summary.id !== (list?.active_agent_profile_id ?? null)) return;
+  const identity = captureSelectionIdentity();
+  if (!isCurrentSelection(identity)) return;
 
-  await writeAgentSettingsKindSync(queryClient, name);
+  let list: Awaited<ReturnType<typeof AgentProfilesService.listProfiles>>;
+  try {
+    list = await AgentProfilesService.listProfiles();
+  } catch (error) {
+    surfaceSyncError(error);
+    return;
+  }
+  if (!isCurrentSelection(identity)) return;
+
+  const summary = list.profiles.find((p) => p.name === name);
+  if (summary?.id == null) return;
+  if (summary.id !== (list.active_agent_profile_id ?? null)) return;
+
+  await writeAgentSettingsKindSync(queryClient, name, identity);
 }
