@@ -682,6 +682,23 @@ describe("AutomationsList — docs link", () => {
     expect(link).toHaveAttribute("target", "_blank");
   });
 
+  it("shows the docs link in the header when the user has only saved drafts", async () => {
+    vi.mocked(AutomationService.getAutomations).mockResolvedValue({
+      automations: [],
+      total: 0,
+    });
+    vi.mocked(AutomationService.listServerDrafts).mockResolvedValue(
+      draftListResponse,
+    );
+    renderList();
+    await screen.findByText("Saved setup draft");
+
+    expect(screen.getByTestId("automations-docs-link")).toHaveAttribute(
+      "href",
+      getAutomationsDocsUrl(),
+    );
+  });
+
   it("leaves the docs link to the empty state when the user has no automations", async () => {
     vi.mocked(AutomationService.getAutomations).mockResolvedValue({
       automations: [],
