@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import AutomationService from "#/api/automation-service/automation-service.api";
 import { useAutomationSubPageNav } from "#/components/features/automations/dashboard/use-automation-sub-page-nav";
 import { ManifestSubpageLayout } from "#/components/features/manifest/manifest-subpage-layout";
+import { BrandButton } from "#/components/features/settings/brand-button";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { AUTOMATION_WEBHOOK_QUERY_KEYS } from "#/hooks/query/query-keys";
 import { getErrorStatus } from "#/hooks/query/use-settings";
@@ -23,8 +24,12 @@ export const clientLoader = () => {
 
 function EventsContent({
   scope,
+  title,
+  description,
 }: {
   scope: readonly [string, string | null, number];
+  title: string;
+  description: string;
 }) {
   const { t } = useTranslation("openhands");
   const queryClient = useQueryClient();
@@ -59,6 +64,10 @@ function EventsContent({
     meta: { disableToast: true },
   });
   const sources = list.data?.pages.flatMap((page) => page.webhooks) ?? [];
+  const canCreate =
+    canManage &&
+    !!list.data &&
+    ![403, 404].includes(getErrorStatus(list.error) ?? 0);
 
   async function copy(value: string) {
     try {
@@ -109,6 +118,34 @@ function EventsContent({
 
   return (
     <div className="flex flex-col gap-6">
+      <div
+        data-testid="automation-events-header"
+        className="flex flex-wrap items-start justify-between gap-4"
+      >
+        <div className="min-w-0 flex-1 basis-64">
+          <h1 className="text-xl font-semibold text-content">{title}</h1>
+          <p className="mt-1 text-sm text-muted">{description}</p>
+        </div>
+        {canCreate && (
+          <BrandButton
+            type="button"
+            variant="secondary"
+            testId="automation-events-create-toggle"
+            className="shrink-0 whitespace-nowrap"
+            aria-expanded={isFormOpen}
+            onClick={() => {
+              setFormOpen((open) => !open);
+              setCreateError(null);
+            }}
+          >
+            {t(
+              isFormOpen
+                ? I18nKey.BUTTON$CANCEL
+                : I18nKey.AUTOMATIONS$EVENTS$ADD,
+            )}
+          </BrandButton>
+        )}
+      </div>
       <p
         role="note"
         className="rounded-lg border border-border p-4 text-sm text-content"
@@ -122,19 +159,24 @@ function EventsContent({
           </h2>
           <p className="text-sm">{t(I18nKey.AUTOMATIONS$EVENTS$SECRET_ONCE)}</p>
           <code className="block break-all py-2">{generatedSecret}</code>
-          <div className="flex gap-4">
-            <button type="button" onClick={() => copy(generatedSecret)}>
-              {t(I18nKey.BUTTON$COPY)}
-            </button>
-            <button
+          <div className="flex flex-wrap gap-2">
+            <BrandButton
               type="button"
+              variant="secondary"
+              onClick={() => copy(generatedSecret)}
+            >
+              {t(I18nKey.BUTTON$COPY)}
+            </BrandButton>
+            <BrandButton
+              type="button"
+              variant="secondary"
               onClick={() => {
                 setGeneratedSecret(null);
                 setCopyMessage(null);
               }}
             >
               {t(I18nKey.AUTOMATIONS$EVENTS$DONE)}
-            </button>
+            </BrandButton>
           </div>
           {copyMessage && <p role="status">{copyMessage}</p>}
         </section>
@@ -148,39 +190,31 @@ function EventsContent({
       ) : list.isError && !list.data ? (
         <div>
           <p role="alert">{t(I18nKey.AUTOMATIONS$EVENTS$FETCH_ERROR)}</p>
-          <button type="button" onClick={() => void list.refetch()}>
+          <BrandButton
+            type="button"
+            variant="secondary"
+            className="mt-2"
+            onClick={() => void list.refetch()}
+          >
             {t(I18nKey.AUTOMATIONS$ERROR_RETRY)}
-          </button>
+          </BrandButton>
         </div>
       ) : (
         <>
           {list.isError && (
             <div>
               <p role="alert">{t(I18nKey.AUTOMATIONS$EVENTS$FETCH_ERROR)}</p>
-              <button type="button" onClick={() => void list.refetch()}>
-                {t(I18nKey.AUTOMATIONS$ERROR_RETRY)}
-              </button>
-            </div>
-          )}
-          {canManage && (
-            <div>
-              <button
+              <BrandButton
                 type="button"
-                className="rounded-md bg-primary px-4 py-2 text-sm text-on-primary"
-                onClick={() => {
-                  setFormOpen((open) => !open);
-                  setCreateError(null);
-                }}
+                variant="secondary"
+                className="mt-2"
+                onClick={() => void list.refetch()}
               >
-                {t(
-                  isFormOpen
-                    ? I18nKey.BUTTON$CANCEL
-                    : I18nKey.AUTOMATIONS$EVENTS$ADD,
-                )}
-              </button>
+                {t(I18nKey.AUTOMATIONS$ERROR_RETRY)}
+              </BrandButton>
             </div>
           )}
-          {canManage && isFormOpen && (
+          {canCreate && isFormOpen && (
             <form
               onSubmit={create}
               autoComplete="off"
@@ -247,13 +281,15 @@ function EventsContent({
                   {createError}
                 </p>
               )}
-              <button
+              <BrandButton
                 type="submit"
-                disabled={isCreating}
-                className="self-start rounded-md bg-primary px-4 py-2 text-sm text-on-primary disabled:opacity-50"
+                variant="primary"
+                isDisabled={isCreating}
+                aria-busy={isCreating}
+                className="self-start"
               >
                 {t(I18nKey.AUTOMATIONS$EVENTS$ADD)}
-              </button>
+              </BrandButton>
             </form>
           )}
           {suppliedSecretNotice && (
@@ -284,26 +320,27 @@ function EventsContent({
                   <code className="block break-all py-2 text-sm">
                     {source.webhook_url}
                   </code>
-                  <button
+                  <BrandButton
                     type="button"
-                    className="text-sm underline"
+                    variant="secondary"
                     onClick={() => copy(source.webhook_url)}
                   >
                     {t(I18nKey.AUTOMATIONS$EVENTS$COPY_URL)}
-                  </button>
+                  </BrandButton>
                 </li>
               ))}
             </ul>
           )}
           {list.hasNextPage && (
-            <button
+            <BrandButton
               type="button"
-              disabled={list.isFetchingNextPage}
-              className="self-start text-sm underline"
+              variant="secondary"
+              isDisabled={list.isFetchingNextPage}
+              className="self-start"
               onClick={() => list.fetchNextPage()}
             >
               {t(I18nKey.AUTOMATIONS$EVENTS$LOAD_MORE)}
-            </button>
+            </BrandButton>
           )}
           {copyMessage && !generatedSecret && (
             <p role="status">{copyMessage}</p>
@@ -325,13 +362,11 @@ export default function AutomationEvents() {
       navTestIdBase="automations-navbar"
       items={nav.items}
     >
-      <div>
-        <h1 className="text-xl font-semibold text-content">{spec.title}</h1>
-        <p className="mt-1 text-sm text-muted">{spec.description}</p>
-      </div>
       <EventsContent
         key={`${backend.id}:${orgId}:${backend.connectionRevision ?? 0}`}
         scope={[backend.id, orgId, backend.connectionRevision ?? 0]}
+        title={spec.title}
+        description={spec.description}
       />
     </ManifestSubpageLayout>
   );

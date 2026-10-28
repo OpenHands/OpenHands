@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
@@ -123,6 +123,22 @@ describe("automation Events page", () => {
     );
     expect(await screen.findByText("Issues")).toBeInTheDocument();
     expect(screen.getByText(webhook.webhook_url)).toBeInTheDocument();
+    const header = screen.getByTestId("automation-events-header");
+    expect(
+      within(header).getByRole("heading", { name: "Event sources" }),
+    ).toBeInTheDocument();
+    const createButton = within(header).getByRole("button", {
+      name: I18nKey.AUTOMATIONS$EVENTS$ADD,
+    });
+    expect(createButton).toHaveClass("h-9", "bg-base-secondary");
+    expect(createButton).toHaveAttribute("aria-expanded", "false");
+    await userEvent.click(createButton);
+    expect(
+      within(header).getByRole("button", { name: I18nKey.BUTTON$CANCEL }),
+    ).toHaveAttribute("aria-expanded", "true");
+    await userEvent.click(
+      within(header).getByRole("button", { name: I18nKey.BUTTON$CANCEL }),
+    );
     await userEvent.click(
       screen.getByRole("button", {
         name: I18nKey.AUTOMATIONS$EVENTS$LOAD_MORE,
