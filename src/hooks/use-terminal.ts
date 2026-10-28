@@ -87,17 +87,19 @@ function resolveTerminalForeground(host: HTMLElement): string {
   return getComputedStyle(host).color;
 }
 
-// Create a persistent reference that survives component unmounts
-// This ensures terminal history is preserved when navigating away and back
-const persistentLastCommandIndex = { current: 0 };
-
 export const useTerminal = () => {
   const colorTheme = useColorTheme();
   const commands = useCommandStore((state) => state.commands);
   const terminal = React.useRef<Terminal | null>(null);
   const fitAddon = React.useRef<FitAddon | null>(null);
   const ref = React.useRef<HTMLDivElement>(null);
-  const lastCommandIndex = persistentLastCommandIndex; // Use the persistent reference
+  // Each mounted terminal tracks its own command index. A module-level
+  // singleton would let one instance advance the shared counter and starve a
+  // concurrently mounted terminal of new commands (it would see the counter
+  // already past its own commands and render nothing). The unmount cleanup
+  // resets the index to 0 anyway, so there is no cross-lifecycle benefit to
+  // sharing it — and the init effect re-renders the full history on remount.
+  const lastCommandIndex = React.useRef(0);
   const isDisposed = React.useRef(false);
 
   const createTerminal = (host: HTMLDivElement) =>
