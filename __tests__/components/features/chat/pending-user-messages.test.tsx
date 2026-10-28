@@ -249,4 +249,21 @@ describe("PendingUserMessages", () => {
       "reply-to",
     );
   });
+
+  it("offers no Reply action on a pending pre-event bubble (Success 8)", () => {
+    // The pending "sending" bubble renders before the event exists, so it
+    // must not expose a Reply action; this pins the structural gating in
+    // case actions move deeper into the bubble tree later.
+    useOptimisticUserMessageStore.getState().enqueuePendingMessage({
+      conversationId: ACTIVE_CONVO,
+      text: "watch me send",
+    });
+
+    renderWithProviders(<PendingUserMessages />);
+
+    expect(screen.getByTestId("user-message")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "CHAT_INTERFACE$REPLY" }),
+    ).not.toBeInTheDocument();
+  });
 });

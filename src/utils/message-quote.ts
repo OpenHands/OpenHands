@@ -52,14 +52,14 @@ export const composeReplyText = (
   }
 
   // Depth-1 guarantee (spec assumption 2): never store an inner envelope in
-  // the quoted body — quote only the visible follow-up text.
-  const storedBody = splitReplyFromText(quote.body).quote
-    ? splitReplyFromText(quote.body).body
-    : quote.body;
-  const truncated = quote.truncated || storedBody.length > MAX_QUOTE_BODY;
+  // the quoted body — quote only the visible follow-up text. One split pass
+  // suffices: an envelope-shaped body re-parses to quote + follow-up.
+  const parsedBody = splitReplyFromText(quote.body);
+  const bodyText = parsedBody.quote ? parsedBody.body : quote.body;
+  const truncated = quote.truncated || bodyText.length > MAX_QUOTE_BODY;
 
   const openTag = `${REPLY_OPEN_TAG} id="${quote.sourceEventId}" source="${quote.source}" truncated="${truncated}">`;
-  const envelope = `${openTag}${storedBody}${REPLY_CLOSE_TAG}`;
+  const envelope = `${openTag}${bodyText}${REPLY_CLOSE_TAG}`;
   const trimmedFollowUp = followUp.trimStart();
 
   return trimmedFollowUp ? envelope + trimmedFollowUp : envelope;
@@ -93,7 +93,12 @@ export const splitReplyFromText = (
 
   // The quoted body may itself contain a complete inner envelope, so the
   // tag that closes THIS envelope is not necessarily the first close tag.
-  // Scan forward tracking envelope depth.
+  // Scan forward tracking envelope depth. Fully model-controlled text can
+  // bury a ladder of open tags, and depth beyond one inner layer has no
+  // legitimate meaning (spec assumption 2: depth-1 format), so exceeding
+  // the cap degrades the whole envelope to plain text — bounded, the same
+  // philosophy as the jump hook's page guard.
+  const MAX_ENVELOPE_DEPTH = 2;
   let depth = 1;
   let cursor = openTagEnd + 1;
   let closeIndex = -1;
@@ -102,6 +107,9 @@ export const splitReplyFromText = (
     const nextClose = text.indexOf(REPLY_CLOSE_TAG, cursor);
     if (nextClose === -1) break;
     if (nextOpen !== -1 && nextOpen < nextClose) {
+      if (depth >= MAX_ENVELOPE_DEPTH) {
+        return { quote: null, body: text };
+      }
       depth += 1;
       cursor = nextOpen + REPLY_OPEN_TAG.length;
     } else {

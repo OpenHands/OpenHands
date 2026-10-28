@@ -90,8 +90,12 @@ function UserAssistantEventMessageComponent({
     if (!conversationId || !replyQuote) return;
     useReplyQuoteStore.getState().setReplyQuote(conversationId, replyQuote);
     // Reply replaces the draft (spec Q3a): clear unsent text, caret at the
-    // end of the now-empty composer via the one-shot prefill path.
+    // end of the now-empty composer via the one-shot prefill path. The
+    // clear must also reach the persisted draft: the prefill writes the DOM
+    // directly without an input event, so a reload before the next keystroke
+    // would otherwise resurrect the pre-reply draft from localStorage.
     setMessageToSend("");
+    setConversationState(conversationId, { draftMessage: null });
   };
   const handleBranch = () => {
     if (!conversationId || isForking || forkInFlightRef.current) return;

@@ -11,11 +11,24 @@ vi.mock("#/utils/custom-toast-handlers", async (importOriginal) => ({
 }));
 
 const mockLoadOlder = vi.fn();
+const mockHasMore = vi.fn(() => true);
+const lastConversationId: { id?: string | null } = {};
 vi.mock("#/hooks/use-load-older-events", () => ({
-  useLoadOlderEvents: () => ({
-    isLoading: false,
-    hasMore: true,
-    loadOlder: mockLoadOlder,
+  // Capture the conversation id the hook wires in: load-until-found is a
+  // no-op without it (loadOlder early-returns on a falsy id).
+  useLoadOlderEvents: (conversationId?: string | null) => {
+    lastConversationId.id = conversationId;
+    return {
+      isLoading: false,
+      hasMore: mockHasMore(),
+      loadOlder: mockLoadOlder,
+    };
+  },
+}));
+
+vi.mock("#/hooks/use-conversation-id", () => ({
+  useOptionalConversationId: () => ({
+    conversationId: "conv-1",
   }),
 }));
 
@@ -48,6 +61,7 @@ function anchorInto(container: HTMLElement, eventId: string) {
 describe("useJumpToEvent", () => {
   beforeEach(() => {
     mockLoadOlder.mockReset().mockResolvedValue(undefined);
+    mockHasMore.mockClear().mockReturnValue(true);
     mockToastError.mockReset();
     Element.prototype.scrollIntoView = vi.fn();
   });
@@ -92,17 +106,33 @@ describe("useJumpToEvent", () => {
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
   });
 
-  it("stops after the 10-page guard and surfaces the not-loaded hint", async () => {
+  it("stops early once history is exhausted and surfaces the not-loaded hint", async () => {
+    mockHasMore.mockReturnValue(false);
     renderHarness("evt-missing");
 
     await act(async () => {
       screen.getByTestId("jump").click();
     });
 
-    await waitFor(() => {
-      expect(mockLoadOlder).toHaveBeenCalledTimes(10);
+    // Exhausted history: no point burning page loads — one find pass, no
+    // loadOlder, straight to the hint.
+    expect(mockLoadOlder).not.toHaveBeenCalled();
+    expect(mockToastError).toHaveBeenCalledWith(
+      "CHAT_INTERFACE$REPLY_NOT_LOADED",
+    );
+  });
+
+  it("pages with a real conversation id and stops at the 10-page guard", async () => {
+    renderHarness("evt-missing");
+
+    await act(async () => {
+      screen.getByTestId("jump").click();
     });
-    // The "not in loaded history" hint is surfaced via the error toast.
+
+    // Regression: an undefined conversation id makes every loadOlder a
+    // guaranteed no-op, so the guard exhausts without fetching anything.
+    expect(lastConversationId.id).toBe("conv-1");
+    expect(mockLoadOlder).toHaveBeenCalledTimes(10);
     expect(mockToastError).toHaveBeenCalledWith(
       "CHAT_INTERFACE$REPLY_NOT_LOADED",
     );

@@ -9,6 +9,7 @@ import {
 } from "#/stores/conversation-store";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useDraftPersistence } from "./use-draft-persistence";
+import { useReplyQuoteStore } from "#/stores/reply-quote-store";
 
 /**
  * Hook for managing chat input content logic.
@@ -81,6 +82,14 @@ export const useChatInputLogic = ({
     clearMessageRestoreIfEmpty,
   ]);
 
+  // Re-arm the reply quote persisted in conversation localStorage for this
+  // conversation ("Called on conversation mount" — reply-quote-store). The
+  // quote card renders above the composer regardless of draft text; a
+  // different conversation (or one without a persisted quote) clears the
+  // armed state.
+  useEffect(() => {
+    useReplyQuoteStore.getState().hydrateReplyQuote(conversationId ?? "");
+  }, [conversationId]);
   // Save current input value when drawer state changes (conversation view only)
   useEffect(() => {
     if (!conversationId) return;
