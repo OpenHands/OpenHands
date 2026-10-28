@@ -53,6 +53,7 @@ import ChatStatusIndicator from "./chat-status-indicator";
 import { getStatusColor, getStatusText } from "#/utils/utils";
 import { useNewConversationCommand } from "#/hooks/mutation/use-new-conversation-command";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
+import { useReplyQuoteStore } from "#/stores/reply-quote-store";
 import { setConversationState } from "#/utils/conversation-local-storage";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { I18nKey } from "#/i18n/declaration";
@@ -442,6 +443,9 @@ export function ChatInterface({
     // autoScroll so the streamed agent reply auto-follows.
     scrollDomToBottom();
     setMessageToSend("");
+    // The armed quote rode into `content` via the composer; sending
+    // disarms it (the plan's single clear-on-submit writer contract).
+    useReplyQuoteStore.getState().clearReplyQuote(conversationId!);
 
     try {
       await send(

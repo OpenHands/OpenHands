@@ -3,7 +3,13 @@ import {
   clearTextContent,
   clearFileInput,
 } from "#/components/features/chat/utils/chat-input.utils";
+import { composeReplyText } from "#/utils/message-quote";
 import { useConversationStore } from "#/stores/conversation-store";
+import { useOptionalConversationId } from "#/hooks/use-conversation-id";
+import {
+  usePendingReplyQuote,
+  useReplyQuoteStore,
+} from "#/stores/reply-quote-store";
 
 /**
  * Hook for handling chat message submission
@@ -15,6 +21,9 @@ export const useChatSubmission = (
   onSubmit: (message: string) => void,
   resetManualResize?: () => void,
 ) => {
+  const { conversationId } = useOptionalConversationId();
+  const pendingReplyQuote = usePendingReplyQuote(conversationId ?? "");
+
   // Send button click handler
   const handleSubmit = useCallback(() => {
     const message = chatInputRef.current?.innerText || "";
@@ -26,7 +35,15 @@ export const useChatSubmission = (
       return;
     }
 
-    onSubmit(message);
+    // The armed quote composes into the outgoing text in the same
+    // transaction that reads the composer, then disarms in the same
+    // conversation the quote was armed for.
+    onSubmit(composeReplyText(pendingReplyQuote, message));
+    if (pendingReplyQuote) {
+      useReplyQuoteStore
+        .getState()
+        .clearReplyQuote(pendingReplyQuote.conversationId);
+    }
 
     // Clear the input
     clearTextContent(chatInputRef.current);
@@ -37,7 +54,14 @@ export const useChatSubmission = (
 
     // Reset manual resize state for next message
     resetManualResize?.();
-  }, [chatInputRef, fileInputRef, smartResize, onSubmit, resetManualResize]);
+  }, [
+    chatInputRef,
+    fileInputRef,
+    smartResize,
+    onSubmit,
+    resetManualResize,
+    pendingReplyQuote,
+  ]);
 
   // Handle stop button click
   const handleStop = useCallback((onStop?: () => void) => {
