@@ -10,12 +10,14 @@ import {
   AGENT_CANVAS_SOURCE,
   CLIENT_SOURCE_TAG_KEY,
   WORKSPACE_TAG_KEY,
-  buildWorkspaceTags,
-  buildRuntimeServicesSystemSuffix,
+  buildGitIdentitySessionStartHook,
   buildStartConversationRequest,
   buildStartConversationRequestWithEncryptedSettings,
+  buildWorkspaceTags,
+  buildRuntimeServicesSystemSuffix,
   fetchBackendExecutionRuntime,
   getDefaultConversationTitle,
+  mergeGitIdentityIntoHookConfig,
   parseRuntimeServicesInfo,
   toAppConversation,
   toHooksResponse,
@@ -354,6 +356,8 @@ describe("buildStartConversationRequest", () => {
       ...PROFILE,
       settings: {
         ...DEFAULT_SETTINGS,
+        git_user_name: undefined,
+        git_user_email: undefined,
         agent_settings: {
           ...DEFAULT_SETTINGS.agent_settings,
           llm: { model: "nested-model" },
@@ -391,9 +395,14 @@ describe("buildStartConversationRequest", () => {
   });
 
   it("uses workspaceHookConfig when conversation_settings.hook_config is omitted", () => {
+    // Clear git identity so this test isolates hook_config precedence.
     const payload = buildStartConversationRequest({
       ...PROFILE,
-      settings: DEFAULT_SETTINGS,
+      settings: {
+        ...DEFAULT_SETTINGS,
+        git_user_name: undefined,
+        git_user_email: undefined,
+      },
       workspaceHookConfig: WORKSPACE_HOOK_CONFIG,
     }) as Record<string, unknown>;
 
@@ -405,6 +414,8 @@ describe("buildStartConversationRequest", () => {
       ...PROFILE,
       settings: {
         ...DEFAULT_SETTINGS,
+        git_user_name: undefined,
+        git_user_email: undefined,
         conversation_settings: {
           ...DEFAULT_SETTINGS.conversation_settings,
           hook_config: EXPLICIT_HOOK_CONFIG as unknown as SettingsValue,
@@ -414,6 +425,70 @@ describe("buildStartConversationRequest", () => {
     }) as Record<string, unknown>;
 
     expect(payload.hook_config).toEqual(EXPLICIT_HOOK_CONFIG);
+  });
+
+  describe("git identity hook injection (#17899)", () => {
+    it("injects a session_start hook with configured git identity into buildStartConversationRequest", () => {
+      const payload = buildStartConversationRequest({
+        ...PROFILE,
+        settings: {
+          ...DEFAULT_SETTINGS,
+          git_user_name: "QA Tester",
+          git_user_email: "qa-tester@example.com",
+        },
+      }) as unknown as { hook_config?: HookConfig };
+
+      expect(payload.hook_config?.session_start).toBeDefined();
+      const gitHook = payload.hook_config!.session_start.find(
+        (h) =>
+          h.hooks[0]?.type === HookType.COMMAND &&
+          String(h.hooks[0]?.command ?? "").includes("git config --global"),
+      );
+      expect(gitHook).toBeDefined();
+      expect(gitHook!.hooks[0]!.command).toContain(
+        "git config --global user.name 'QA Tester' &&",
+      );
+      expect(gitHook!.hooks[0]!.command).toContain(
+        "git config --global user.email 'qa-tester@example.com'",
+      );
+    });
+
+    it("omits the git hook when git_user_name is blank", () => {
+      const payload = buildStartConversationRequest({
+        ...PROFILE,
+        settings: {
+          ...DEFAULT_SETTINGS,
+          git_user_name: "  ",
+          git_user_email: "qa@example.com",
+        },
+      }) as unknown as { hook_config?: HookConfig };
+
+      expect(
+        payload.hook_config?.session_start?.some((h) =>
+          String(h.hooks[0]?.command ?? "").includes("git config --global"),
+        ),
+      ).toBe(false);
+    });
+
+    it("preserves existing workspace hooks when git identity is also configured", () => {
+      const payload = buildStartConversationRequest({
+        ...PROFILE,
+        settings: {
+          ...DEFAULT_SETTINGS,
+          git_user_name: "QA Tester",
+          git_user_email: "qa-tester@example.com",
+        },
+        workspaceHookConfig: WORKSPACE_HOOK_CONFIG,
+      }) as unknown as { hook_config: HookConfig };
+
+      expect(payload.hook_config.session_start).toHaveLength(2);
+      expect(payload.hook_config.session_start[0].hooks[0].command).toBe(
+        "cat AGENTS.md",
+      );
+      expect(payload.hook_config.session_start[1].hooks[0].command).toContain(
+        "git config --global",
+      );
+    });
   });
 
   it("serializes custom secrets as host-relative LookupSecret entries", () => {
@@ -1337,7 +1412,11 @@ describe("buildStartConversationRequestWithEncryptedSettings", () => {
 
     const payload = await buildStartConversationRequestWithEncryptedSettings({
       ...PROFILE,
-      settings: DEFAULT_SETTINGS,
+      settings: {
+        ...DEFAULT_SETTINGS,
+        git_user_name: undefined,
+        git_user_email: undefined,
+      },
       workingDir: "/workspace/my-project/0f1e2d3c",
       hooksProjectDir: "/workspace/my-project",
     });

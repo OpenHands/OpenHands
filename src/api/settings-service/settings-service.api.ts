@@ -654,6 +654,9 @@ class SettingsService {
     conversationSettings: Record<string, SettingsValue>;
     secretsEncrypted: boolean;
     skillEnablement: SkillEnablement;
+    /** App-level git identity from misc_settings.app_preferences (#17899). */
+    gitUserName?: string | null;
+    gitUserEmail?: string | null;
   }> {
     const backend = getActiveBackend().backend;
     const connectionRevision = backend.connectionRevision ?? 0;
@@ -669,6 +672,8 @@ class SettingsService {
         conversationSettings: cached.conversation_settings,
         secretsEncrypted: true,
         skillEnablement: getSkillEnablement(cached),
+        gitUserName: cached.misc_settings?.app_preferences?.git_user_name,
+        gitUserEmail: cached.misc_settings?.app_preferences?.git_user_email,
       };
     }
 
@@ -684,6 +689,8 @@ class SettingsService {
       conversationSettings: response.conversation_settings,
       secretsEncrypted: true,
       skillEnablement: getSkillEnablement(response),
+      gitUserName: response.misc_settings?.app_preferences?.git_user_name,
+      gitUserEmail: response.misc_settings?.app_preferences?.git_user_email,
     };
   }
 
