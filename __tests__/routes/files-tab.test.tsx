@@ -457,7 +457,6 @@ describe("FilesTab", () => {
       data: ["index.html"],
       isLoading: false,
     });
-    // Same origin as Canvas, so the link opens the live workspace URL.
     const staticUrl = `${window.location.origin}/api/conversations/conv-1/workspace/index.html`;
     useWorkspaceFileContentMock.mockReturnValue({
       data: {
@@ -704,8 +703,6 @@ describe("FilesTab", () => {
     });
   });
 
-  // The workspace-session cookie is partitioned to the Canvas site, so a new
-  // tab on a backend at another origin cannot use it (#19038).
   describe("open in new window on a backend at another origin", () => {
     const remoteBase =
       "https://backend.example.com/api/conversations/conv-1/workspace";

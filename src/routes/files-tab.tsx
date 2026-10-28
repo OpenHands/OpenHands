@@ -130,10 +130,8 @@ function FilesTab() {
   // than running script in the canvas origin.
   const selectedFile = selectedFileContent.data;
   const isDataUrl = selectedFile?.staticUrl.startsWith("data:") ?? false;
-  // The workspace-session cookie is partitioned to the Canvas site, so a new
-  // tab opened straight on a backend at another origin gets a 401 (#19038).
-  // Open those files from a blob too; non-text bytes come from the
-  // header-authenticated download route.
+  // A new tab on another origin sends no workspace cookie, so the backend
+  // returns 401 (#19038). Open those files from a blob too.
   const isCrossOrigin =
     !!selectedFile &&
     !isDataUrl &&
@@ -141,14 +139,10 @@ function FilesTab() {
       window.location.origin;
   const opensFromBlob = isDataUrl || isCrossOrigin;
   const blobText = opensFromBlob ? (selectedFile?.text ?? null) : null;
-  // shortcut: fetches the bytes on selection, not on click, so a remote image
-  // or PDF downloads twice (preview + link); fetch on click if large remote
-  // files get slow.
   const selectedFileBytes = useWorkspaceFileBytes(
     isCrossOrigin && blobText === null ? selectedPath : null,
   );
   const blobBytes = blobText === null ? selectedFileBytes.data : undefined;
-  // SVG can carry script, so it opens as source like the text kinds.
   const blobType =
     blobText !== null || selectedFile?.mimeType === "image/svg+xml"
       ? "text/plain;charset=utf-8"
@@ -166,8 +160,6 @@ function FilesTab() {
       setSelectedFileBlobUrl(null);
     };
   }, [blobText, blobBytes, blobType]);
-  // Every agent edit refetches the bytes, so toast a failing file once per
-  // selection.
   const toastedErrorPathRef = useRef<string | null>(null);
   useEffect(() => {
     if (toastedErrorPathRef.current !== selectedPath) {
