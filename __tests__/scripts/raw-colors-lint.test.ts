@@ -17,6 +17,7 @@ export function Probe() {
     <div className="text-red-500" />
     <div className="text-unregistered-color" />
     <svg><path fill="#ec4899" /></svg>
+    <svg className="fill-none stroke-none" />
     <div className="text-danger bg-surface text-foreground" />
     <div className="bg-background bg-content1 text-primary-foreground text-medium" />
     <div className="bg-status-fail-bg text-status-fail-text text-content-muted text-modal-muted" />
@@ -93,8 +94,27 @@ export function Probe({ tone }: { tone: keyof typeof toneClasses }) {
         { line: 4, severity: 1 },
         { line: 5, severity: 1 },
         { line: 6, severity: 1 },
-        { line: 10, severity: 1 },
+        { line: 11, severity: 1 },
       ]);
+    },
+  );
+
+  it.each(["src/routes/paint-probe.tsx", "src/ui/paint-probe.tsx"])(
+    "accepts SVG paint-clearing classes fill-none and stroke-none without warnings in %s",
+    async (filePath) => {
+      const paintProbe = `
+export function PaintProbe() {
+  return <>
+    <svg className="fill-none stroke-none" />
+    <path className="fill-none stroke-none" />
+  </>;
+}
+`;
+      const [result] = await eslint.lintText(paintProbe, { filePath });
+      expect(result.fatalErrorCount).toBe(0);
+      expect(
+        result.messages.filter((message) => message.ruleId === "shadcn/no-raw-colors"),
+      ).toEqual([]);
     },
   );
 });
