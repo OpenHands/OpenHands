@@ -54,8 +54,15 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 
-import { isExternalBrowsableUrl, isLoopbackAppUrl } from "./lib/window-url-policy.mjs";
+import {
+  isExternalBrowsableUrl,
+  isLoopbackAppUrl,
+} from "./lib/window-url-policy.mjs";
 import { resolveBundledRuntimeDir } from "./lib/bundled-runtime-dir.mjs";
+import {
+  loadStoredAppearance,
+  persistAppearance,
+} from "./lib/desktop-appearance.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -590,6 +597,14 @@ ipcMain.on("window:full-screen:get", (event) => {
   event.returnValue = win !== null && !win.isDestroyed() && win.isFullScreen();
 });
 
+ipcMain.on("theme:appearance:set", (_event, appearance) => {
+  if (appearance !== "dark" && appearance !== "light") return;
+  persistAppearance(app.getPath("userData"), appearance);
+  if (process.platform !== "darwin") {
+    nativeTheme.themeSource = appearance;
+  }
+});
+
 // ── Backend stack ─────────────────────────────────────────────────────────────
 
 /**
@@ -750,7 +765,10 @@ function failStartup(err) {
 // ── App lifecycle ─────────────────────────────────────────────────────────────
 
 app.whenReady().then(async () => {
-  nativeTheme.themeSource = "dark";
+  nativeTheme.themeSource =
+    process.platform === "darwin"
+      ? "dark"
+      : loadStoredAppearance(app.getPath("userData"));
 
   // Set the dock icon explicitly on macOS so `npm run desktop` shows the
   // OpenHands logo instead of the default Electron logo. In a packaged
