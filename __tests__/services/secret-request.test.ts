@@ -18,17 +18,11 @@ import type { RequestSecretAction } from "#/types/agent-server/core";
 const {
   mockSendMessage,
   mockUpdateConversationSecrets,
-  mockGetSecretsOrThrow,
   mockDisplayErrorToast,
 } = vi.hoisted(() => ({
   mockSendMessage: vi.fn(),
   mockUpdateConversationSecrets: vi.fn(),
-  mockGetSecretsOrThrow: vi.fn(),
   mockDisplayErrorToast: vi.fn(),
-}));
-
-vi.mock("#/api/secrets-service", () => ({
-  SecretsService: { getSecretsOrThrow: mockGetSecretsOrThrow },
 }));
 
 vi.mock("#/utils/custom-toast-handlers", () => ({
@@ -82,7 +76,6 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockSendMessage.mockResolvedValue(undefined);
   mockUpdateConversationSecrets.mockResolvedValue(undefined);
-  mockGetSecretsOrThrow.mockResolvedValue([]);
 });
 
 describe("handleRequestSecretAction", () => {
@@ -92,22 +85,8 @@ describe("handleRequestSecretAction", () => {
     await handleRequestSecretAction(action, CONVERSATION_ID, "tool-call-1");
 
     expect(useSecretRequestStore.getState().requests).toEqual([request]);
-  });
-
-  it("attaches a secret the user already saved without asking again", async () => {
-    useSecretRequestStore.setState({ requests: [] });
-    mockGetSecretsOrThrow.mockResolvedValueOnce([
-      { name: "GITHUB_TOKEN", description: "Saved in Settings" },
-    ]);
-
-    await handleRequestSecretAction(action, CONVERSATION_ID, "tool-call-1");
-
-    expect(useSecretRequestStore.getState().requests).toEqual([]);
-    expect(mockUpdateConversationSecrets).toHaveBeenCalledExactlyOnceWith(
-      CONVERSATION_ID,
-      [{ name: "GITHUB_TOKEN", description: "Saved in Settings" }],
-    );
-    expect(reportedResult()).toEqual({ status: "saved", name: "GITHUB_TOKEN" });
+    expect(mockUpdateConversationSecrets).not.toHaveBeenCalled();
+    expect(mockSendMessage).not.toHaveBeenCalled();
   });
 });
 
