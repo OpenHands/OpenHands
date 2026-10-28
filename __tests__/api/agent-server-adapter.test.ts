@@ -32,6 +32,7 @@ import { SKILLS_CATALOG } from "@openhands/extensions/skills";
 import type { HookConfig } from "@openhands/typescript-client";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import type { SettingsValue } from "#/types/settings";
+import { useModelStore } from "#/stores/model-store";
 
 const {
   mockGetAgentServerWorkingDir,
@@ -131,6 +132,7 @@ beforeEach(() => {
     apiKey: "session-key",
     kind: "local",
   });
+  useModelStore.getState().setHomeManualModelPick(false);
 });
 
 const PROFILE = {
@@ -1260,6 +1262,21 @@ describe("profile launch additions", () => {
       }
     },
   );
+
+  it("suppresses the route-at-start suffix after a home-page model pick", () => {
+    useModelStore.getState().setHomeManualModelPick(true);
+    const payload = buildStartConversationRequest({
+      ...PROFILE,
+      settings: {
+        ...DEFAULT_SETTINGS,
+        run_router_at_conversation_start: true,
+      },
+      profileHasRouter: true,
+      query: "hello",
+    });
+    const appended = additionsOf(payload)?.system_message_suffix_append ?? "";
+    expect(appended).not.toContain("ROUTE_AT_CONVERSATION_START");
+  });
 
   it("adds a catalog skill the opening message invokes", () => {
     const [entry] = SKILLS_CATALOG;

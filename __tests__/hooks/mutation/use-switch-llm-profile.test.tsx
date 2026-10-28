@@ -20,6 +20,7 @@ import {
   BACKEND_REQUEST_TIMEOUT_MESSAGE,
   CORS_OR_NETWORK_ERROR_MESSAGE,
 } from "#/utils/user-facing-error";
+import { useModelStore } from "#/stores/model-store";
 
 vi.mock("#/utils/custom-toast-handlers");
 
@@ -81,6 +82,7 @@ describe("useSwitchLlmProfile", () => {
     vi.clearAllMocks();
     window.localStorage.clear();
     SettingsService.invalidateCache();
+    useModelStore.getState().setHomeManualModelPick(false);
   });
 
   it("invalidates the settings cache on the home-page activate path (conversationId === null)", async () => {
@@ -407,5 +409,30 @@ describe("useSwitchLlmProfile", () => {
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(getStoredConversationMetadata("conv-1")).toBeNull();
     expect(recordModelSwitchMessage).not.toHaveBeenCalled();
+  });
+
+  it("marks a home-page pick so the next launch suppresses route-at-start", async () => {
+    vi.mocked(AgentServerConversationService.switchProfile).mockResolvedValue(
+      undefined as never,
+    );
+    expect(useModelStore.getState().homeManualModelPick).toBe(false);
+
+    const { result } = renderSwitchHook();
+    result.current.mutate({ conversationId: null, profileName: "Smart" });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(useModelStore.getState().homeManualModelPick).toBe(true);
+  });
+
+  it("does not mark a pick made inside an existing conversation", async () => {
+    vi.mocked(AgentServerConversationService.switchProfile).mockResolvedValue(
+      undefined as never,
+    );
+
+    const { result } = renderSwitchHook();
+    result.current.mutate({ conversationId: "conv-1", profileName: "Smart" });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(useModelStore.getState().homeManualModelPick).toBe(false);
   });
 });

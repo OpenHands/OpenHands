@@ -12,6 +12,7 @@ import {
   SETTINGS_QUERY_KEYS,
 } from "#/hooks/query/query-keys";
 import { invalidateConversationQueries } from "./conversation-mutation-utils";
+import { useModelStore } from "#/stores/model-store";
 
 interface SwitchAcpModelVars {
   /**
@@ -51,6 +52,12 @@ export const useSwitchAcpModel = () => {
 
   return useMutation({
     mutationFn: async ({ conversationId, model }: SwitchAcpModelVars) => {
+      // A home-page ACP model pick (no conversation) is an explicit model
+      // choice made before the first message: mark it so the next home launch
+      // suppresses "Run on first message" routing for this conversation only.
+      if (!conversationId) {
+        useModelStore.getState().setHomeManualModelPick(true);
+      }
       if (conversationId) {
         if (model) {
           await AgentServerConversationService.switchAcpModel(

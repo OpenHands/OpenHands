@@ -19,6 +19,7 @@ import {
   llmProfileMirrored,
   updateDefaultAgentProfile,
 } from "./sync-agent-profiles";
+import { useModelStore } from "#/stores/model-store";
 
 interface SwitchLlmProfileVars {
   /**
@@ -90,7 +91,11 @@ export const useSwitchLlmProfile = () => {
         // Home-page activate path (same server endpoint as
         // useActivateLlmProfile): clear the SettingsService cache so the next
         // conversation-start reads the newly activated profile's LLM config
-        // instead of the stale encrypted settings.
+        // instead of the stale encrypted settings. A home-page LLM pick is
+        // also an explicit model choice made before the first message: mark
+        // it so the next home launch suppresses "Run on first message"
+        // routing for this conversation only.
+        useModelStore.getState().setHomeManualModelPick(true);
         SettingsService.invalidateCache();
         queryClient.invalidateQueries({
           queryKey: SETTINGS_QUERY_KEYS.personal(),
