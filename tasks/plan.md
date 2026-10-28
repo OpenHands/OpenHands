@@ -80,21 +80,21 @@ message-quote.ts (pure format) ──┬── reply-quote-store (+ localStorage
 
 ### Phase 2: Core feature
 
-- [ ] **Task 4: Composer quote card** — `QuoteCard` component; render slot in
+- [x] **Task 4: Composer quote card** — `QuoteCard` component; render slot in
   `ChatInputContainer` beside `<UploadedFiles />`; dismiss (X) +
   Escape-to-dismiss; click-to-jump stub wired later in Task 7 (button present,
   jump handler optional prop). Localized labels only.
   **Verify:** new `quote-card.test.tsx` + container slot test; `npm run lint`.
   **Depends:** Tasks 2, 3. **Scope:** M (3-4 files).
 
-- [ ] **Task 5: Compose at submit + retry** — `use-chat-submission` composes
+- [x] **Task 5: Compose at submit + retry** — `use-chat-submission` composes
   `composeReplyText(quote, typedText)` in the same transaction that reads and
   clears the composer, then `clearReplyQuote`; failed-send retry replays
   stored `content` verbatim (envelope included).
   **Verify:** extend submission + `pending-user-messages` tests; `npm run lint`.
   **Depends:** Tasks 1, 2, 4. **Scope:** S (2-3 files).
 
-- [ ] **Task 6: Reply action on bubbles** — extend the `actions` array in
+- [x] **Task 6: Reply action on bubbles** — extend the `actions` array in
   `user-assistant-event-message.tsx`: Reply icon for user + agent sources;
   gating = main chat tab only (not planning bubbles / plan mode / BTW /
   pending pre-event bubbles / image-only); onClick `setReplyQuote` + replace
@@ -105,14 +105,14 @@ message-quote.ts (pure format) ──┬── reply-quote-store (+ localStorage
 
 ### Checkpoint: Core feature
 
-- [ ] End-to-end in standard chat: hover → Reply → card → send → envelope
+- [x] End-to-end in standard chat: hover → Reply → card → send → envelope
   lands in MSW/websocket fixture; failed send → retry keeps envelope.
-- [ ] Disable-path audit: no Reply on planning/plan/BTW/pending/image-only.
+- [x] Disable-path audit: no Reply on planning/plan/BTW/pending/image-only.
 - [ ] Review with human before proceeding.
 
 ### Phase 3: Rendering + jump
 
-- [ ] **Task 7: Bubble extraction & truncation isolation** — apply
+- [x] **Task 7: Bubble extraction & truncation isolation** — apply
   `splitReplyFromText` in `user-assistant-event-message.tsx` and
   `pending-user-messages.tsx`; render QuoteCard above the body; only the
   follow-up feeds `UserMessageBody` truncation; card identical across
@@ -121,7 +121,7 @@ message-quote.ts (pure format) ──┬── reply-quote-store (+ localStorage
   tests; `npm run lint`.
   **Depends:** Tasks 1, 4. **Scope:** M (3-4 files).
 
-- [ ] **Task 8: Jump to message** — `ChatMessage` optional `eventId` prop →
+- [x] **Task 8: Jump to message** — `ChatMessage` optional `eventId` prop →
   `data-event-id`; `src/hooks/chat/use-jump-to-event.ts` (find anchor in
   ScrollProvider container, `scrollIntoView` center + highlight pulse,
   load-until-found via `useLoadOlderEvents` with 10-page guard, localized
@@ -129,7 +129,7 @@ message-quote.ts (pure format) ──┬── reply-quote-store (+ localStorage
   **Verify:** jump tests (found/not-found paths); `npm run lint`.
   **Depends:** Tasks 4, 7. **Scope:** M (4-5 files).
 
-- [ ] **Task 9: E2E regression + full gate** — one mock-llm regression
+- [x] **Task 9: E2E regression + full gate** — one mock-llm regression
   scenario (reply → send → reload → card → click → scroll target); run the
   full command list from the spec: `npm run lint`, `npm test`, `npm run
   build`, `npm run build:lib`, `npm run check-translation-completeness`.
@@ -138,8 +138,8 @@ message-quote.ts (pure format) ──┬── reply-quote-store (+ localStorage
 
 ### Checkpoint: Complete
 
-- [ ] All 10 spec success criteria demonstrably met.
-- [ ] Full command list green; ready for review/PR.
+- [x] All 10 spec success criteria demonstrably met.
+- [x] Full command list green; ready for review/PR.
 
 ## Risks and Mitigations
 

@@ -32,10 +32,11 @@ Source: `tasks/plan.md` (implements the approved spec
 
 - [x] Task 7: Bubble extraction & truncation isolation (sent + pending)
 - [x] Task 8: Jump to message (`data-event-id`, load-until-found, 10-page guard)
+- [x] Task 9: E2E regression scenario + full command gate
 
 ## Checkpoint: Complete
 
-- [ ] All 10 spec success criteria met
-- [ ] `npm run lint`, `npm test`, `npm run build`, `npm run build:lib`,
+- [x] All 10 spec success criteria met
+- [x] `npm run lint`, `npm test`, `npm run build`, `npm run build:lib`,
       `npm run check-translation-completeness` all green
-- [ ] Ready for review/PR
+- [x] Ready for review/PR
