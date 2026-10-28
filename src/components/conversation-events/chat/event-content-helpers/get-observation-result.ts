@@ -40,6 +40,7 @@ export const getObservationResult = (
 
       if (observation.timeout || exitCode === -1) return "timeout";
       if (exitCode === 0) return "success";
+      if (exitCode !== null) return "error";
       if (observation.is_error) return "error";
       return "success";
     }
