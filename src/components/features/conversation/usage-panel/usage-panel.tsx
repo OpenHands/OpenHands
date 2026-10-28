@@ -9,12 +9,14 @@ import { UsageSection } from "../metrics-modal/usage-section";
 import { CompactContextButton } from "./compact-context-button";
 import { ContextMeter } from "./context-meter";
 import { ProviderBalanceCard } from "./provider-balance-card";
+import { TokenUsageBreakdown } from "./token-usage-breakdown";
 import { getContextWindowUsagePercentage } from "#/utils/format-token-count";
 
 /**
  * "Usage" right-panel tab: context-fill meter with a manual "Compact
- * context" action, accumulated token/cost stats, and the provider credit
- * balance (when the agent server reports one).
+ * context" action, accumulated token/cost stats, the token usage per agent
+ * activity, and the provider credit balance (when the agent server reports
+ * one).
  *
  * Metrics come from {@link useLiveConversationMetrics}: live WebSocket
  * updates plus a 30s REST poll while the tab is mounted.
@@ -80,6 +82,10 @@ export function UsagePanel() {
           />
         </div>
       </div>
+
+      {/* ACP agents report usage per session, not per call, so no call can
+          be matched to an activity. */}
+      {!isAcp && <TokenUsageBreakdown />}
 
       <ProviderBalanceCard />
     </main>
