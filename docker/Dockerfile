@@ -187,17 +187,26 @@ RUN chmod +x /opt/agent-canvas/entrypoint.sh
 RUN mkdir -p /home/openhands/.openhands/agent-canvas/conversations \
              /home/openhands/.openhands/agent-canvas/bash_events \
              /home/openhands/.openhands/automation \
+             /home/openhands/workspace \
              /projects && \
-    chown -R openhands:openhands /home/openhands/.openhands /projects
+    chown -R openhands:openhands /home/openhands/.openhands /home/openhands/workspace /projects
 
 USER openhands
 
 # Persistence volumes:
 #   /home/openhands/.openhands — settings, secrets, conversations, automation DB
-#   /projects                  — user code the agent can read/edit
+#   /home/openhands/workspace — agent workspace (where conversations create
+#     their /workspace/project subdirectories). Must be bind-mounted so agent
+#     edits survive container restarts (#18960).
+#   /projects                  — user code the agent can read/edit (a bind
+#     mount for the user's own repositories, separate from agent-managed
+#     workspaces)
 # Bind-mount these for data to survive container restarts:
-#   docker run -v ~/.openhands:/home/openhands/.openhands -v ~/projects:/projects ...
-VOLUME ["/home/openhands/.openhands", "/projects"]
+#   docker run -v ~/.openhands:/home/openhands/.openhands \
+#              -v ~/.openhands-workspace:/home/openhands/workspace \
+#              -v ~/projects:/projects \
+#              ...
+VOLUME ["/home/openhands/.openhands", "/home/openhands/workspace", "/projects"]
 
 # The entrypoint starts all services and the ingress proxy.
 # Port 8000 is the unified entry point.
