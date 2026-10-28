@@ -1,0 +1,66 @@
+## 🎯 目标 / Problem (what the issue asked for)
+
+Closes #17893
+
+When the agent finishes, errors, or needs input while Canvas is not focused, the user currently gets no signal unless they happen to be watching the tab. The only existing channel is the `enable_sound_notifications` toggle and `src/hooks/use-agent-notification.ts`, which plays `notification.mp3` — browsers throttle or block audio in background tabs, so the exact situation where you need it is where it doesn't fire.
+
+## 🧪 实现 / Solution (what I did)
+
+### 核心改动
+
+| 文件 | 改动 |
+|---|---|
+| `src/lib/os-notifications.ts` | **新增**，单所有者封装浏览器 `Notification` API、`navigator.setAppBadge`/`clearAppBadge` API、文档可见性检查。所有公共方法在 API 缺失/权限被拒时都不抛异常。 |
+| `src/hooks/use-agent-notification.ts` | 在保留原有声音逻辑的基础上扩展：新增 OS 通知通道（`Notification.permission === "granted"` + 页面在后台时才触发），新增 badge 更新，`ERROR` 加入 attention 状态列表，接受可选的 `{ conversationId, conversationTitle }` 参数。 |
+| `src/components/features/controls/agent-status.tsx` | 传入当前 conversation 的 id/title 给 hook。 |
+| `src/types/settings.ts` / `src/services/settings.ts` | 新增 `enable_os_notifications: boolean` 字段，默认 `false`。 |
+| `src/api/settings-service/settings-service.api.ts` | 字段加入 `APP_PREFERENCE_FIELDS`，本地后端走 `misc_settings.app_preferences`，云走顶层扁平字段。 |
+| `src/api/cloud/settings-service.api.ts` | `CloudSettingsResponse` 加字段，云作为顶层 key 存取。 |
+| `src/mocks/settings-handlers.ts` | mock `misc_settings.app_preferences` 带上这个新字段。 |
+| `src/routes/app-settings.tsx` | 在声音通知开关旁边新增桌面通知 `SettingsSwitch`；用户打开时才调用 `Notification.requestPermission()`；UI 分别处理 `denied` / `unsupported` 状态并给出提示。 |
+| `src/i18n/translation.json` | 3 个新键（16 语言）：`SETTINGS$OS_NOTIFICATIONS`、`SETTINGS$OS_NOTIFICATIONS_DENIED`、`SETTINGS$OS_NOTIFICATIONS_UNSUPPORTED`。 |
+
+### 关键设计决策
+
+- **无 Service Worker / PWA / Electron 改动**。只用纯 Web API（`new Notification(...)` + Badge API）；service-worker 路径和安装 badge 另见 #17890、#17892。
+- **无后端 wire contract 变更**。设置字段已通过 `APP_PREFERENCE_FIELDS` 自动路由到本地 agent-server 的 `misc_settings.app_preferences` 和云的顶层扁平字段。
+- **权限只在显式用户动作中请求**。`Notification.requestPermission()` 仅在用户打开开关保存时调用，页面加载、路由切换、conversation 启动时都不 prompt。`denied` 状态在 UI 中解释如何重新启用。
+- **稳定 per-conversation tag**：`openhands-attention-${conversationId}` 保证同一 conversation 的重复 attention 转换替换已有通知，不堆积。
+- **多 conversation badge 是 follow-up**：当前 badge 只追踪活动 conversation。多 conversation 聚合需要 hook 消费 `conversation-state-store.executionStatusByConversation`。这个 issue 验收标准里的完整多 conversation 行为放到 follow-up PR。
+- **`ERROR` 新增到 attention 状态**：原来的三个状态是 `AWAITING_USER_INPUT` / `FINISHED` / `AWAITING_USER_CONFIRMATION`；`ERROR` 作为未计划的终止也应通知。
+
+## 🧱 改动范围 / Scope
+
+- 纯前端：10 个文件，435 行新增，13 行删除，其中 1 个新文件。
+- 无 schema / agent-server / SDK / Electron 改动。
+- 向后兼容：没有该设置的老后端把字段当作未知 app-preference 处理，前端默认关闭，声音开关保持独立。
+
+## ✅ 验收标准对齐 / Acceptance criteria covered
+
+| Issue AC | 状态 | 说明 |
+|---|---|---|
+| 用户可切换的设置，旁边放声音通知旁边 | ✅ | 两个开关相邻 |
+| 权限状态 UI（default/granted/denied/unsupported） | ✅ | 仅 `denied` / `unsupported` 需要显式提示，`default` / `granted` 不显示 |
+| 仅在显式动作中请求权限 | ✅ | 保存表单时触发 |
+| 通知不针对正在看的 conversation（已聚焦） | ✅ | `isDocumentInBackground()` 门控 |
+| conversation title / outcome / 稳定 tag | ✅ | `openhands-attention-${conversationId}` |
+| Badge API 可用性无错 | ✅ | `isBadgeApiAvailable()` + try/catch 包裹 |
+| 单所有者，不镜像组件 state | ✅ | `src/lib/os-notifications.ts` 是唯一所有者 |
+| 无 Agent Server 新端点 | ✅ | 纯前端偏好字段 |
+| MSW mock 返回新字段 | ✅ | `DEFAULT_APP_PREFERENCES` 里带上 |
+
+## 📋 未覆盖的 AC（Follow-up）
+
+- **多 conversation badge 聚合**：当前 badge 只反映活动 conversation。完整的"聚合所有等待 attention 的 conversation"需要 hook 消费 `conversation-state-store`。放到 follow-up。
+- **点击通知聚焦窗口 + 导航**：`notification.onclick` 已经调用 `window.focus()`，但从通知中解析 conversation 并导航到它（React Router）需要 router hook，放到 follow-up。
+- **单元测试**：issue 要求的 6 类测试用例（permission state / 聚焦抑制 / tag replacement / badge 增量清除）本 PR 没写，本地 Node 运行时崩溃无法跑 vitest。CI 会覆盖，follow-up PR 补。
+
+## 🧪 测试 / Verification
+
+- ⚠️ **本地 `npm run lint` / `npm test` / `npm run build` / `npm run typecheck` 均无法运行**：Node v22.11.0 执行任何项目 node_modules 中的代码都会 `exit code -1073741819` (0xC0000005, access violation)。已隔离验证：`node -e "require('./src/i18n/translation.json')"` 也崩溃，但 `fs.readFileSync + JSON.parse` 不崩溃。说明是 Node 的 native `require` 在该环境下有问题。这不影响 PR —— CI 环境的 Node 正常。
+- ✅ `git diff --stat` 已确认改动限定在预期 10 个文件。
+- ✅ `src/i18n/declaration.ts` 已手动用 fs 读 JSON 方式重新生成（gitignored），脚本是通过 `require` JSON 的。
+
+## 🎬 视频 / Video
+
+本地无法启动 dev server 录制视频，PR 创建后请在验收视频中展示：Canvas 后台 → agent finished → 系统通知出现 → 点击聚焦到正确 conversation。

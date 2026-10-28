@@ -86,9 +86,18 @@ export const isContentEmpty = (element: HTMLDivElement | null): boolean => {
 };
 
 /**
- * Clear empty content from contentEditable element for placeholder display
+ * Clear empty content from contentEditable element for placeholder display.
+ * When `isComposing` is true (an IME composition session is active, e.g.
+ * Chinese/Japanese/Korean input), the wipe is skipped so it does not abort
+ * the composition or commit an empty string.
  */
-export const clearEmptyContent = (element: HTMLDivElement | null): void => {
+export const clearEmptyContent = (
+  element: HTMLDivElement | null,
+  isComposing = false,
+): void => {
+  if (isComposing) {
+    return;
+  }
   if (element && isContentEmpty(element)) {
     element.innerHTML = "";
     element.textContent = "";
