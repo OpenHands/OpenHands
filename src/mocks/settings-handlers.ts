@@ -1082,6 +1082,7 @@ export const SETTINGS_HANDLERS = [
       language: null,
       user_consents_to_analytics: null,
       enable_sound_notifications: null,
+      enable_os_notifications: null,
       git_user_name: null,
       git_user_email: null,
       title_llm_profile: null,
