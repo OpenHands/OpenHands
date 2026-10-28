@@ -1,7 +1,11 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { ExternalLink } from "lucide-react";
-import type { LLMSubscriptionDeviceChallenge } from "#/api/llm-subscription-service";
+import {
+  getSubscriptionFailureReason,
+  type LLMSubscriptionDeviceChallenge,
+  type SubscriptionFailureReason,
+} from "#/api/llm-subscription-service";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { CopyToClipboardButton } from "#/components/shared/buttons/copy-to-clipboard-button";
 import {
@@ -27,6 +31,19 @@ interface OpenAISubscriptionAuthCardProps {
 function openVerificationUrl(challenge: LLMSubscriptionDeviceChallenge) {
   const url = challenge.verificationUriComplete ?? challenge.verificationUri;
   window.open(url, "_blank", "noopener,noreferrer");
+}
+
+function subscriptionStatusErrorKey(
+  reason: SubscriptionFailureReason,
+): I18nKey {
+  switch (reason) {
+    case "no-local-backend":
+      return I18nKey.SETTINGS$SUBSCRIPTION_STATUS_LOCAL_ONLY;
+    case "missing-endpoints":
+      return I18nKey.SETTINGS$SUBSCRIPTION_STATUS_UNAVAILABLE;
+    default:
+      return I18nKey.SETTINGS$SUBSCRIPTION_STATUS_ERROR;
+  }
 }
 
 export function OpenAISubscriptionAuthCard({
@@ -173,7 +190,11 @@ export function OpenAISubscriptionAuthCard({
           </span>
         ) : status.isError ? (
           <span className="text-danger">
-            {t(I18nKey.SETTINGS$SUBSCRIPTION_STATUS_UNAVAILABLE)}
+            {t(
+              subscriptionStatusErrorKey(
+                getSubscriptionFailureReason(status.error),
+              ),
+            )}
           </span>
         ) : connected ? (
           <>

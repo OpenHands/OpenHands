@@ -21,6 +21,8 @@ import * as activeBackendContext from "#/contexts/active-backend-context";
 import type { Backend } from "#/api/backend-registry/types";
 import * as useLlmProfilesHook from "#/hooks/query/use-llm-profiles";
 import LLMSubscriptionService from "#/api/llm-subscription-service";
+import { NoBackendAvailableError } from "#/api/agent-server-client-options";
+import { HttpError } from "@openhands/typescript-client/client/http-client";
 import ProviderConnectionsService, {
   type ProviderConnection,
 } from "#/api/provider-connections-service/provider-connections-service.api";
@@ -44,6 +46,20 @@ function buildSettings(overrides: Partial<Settings> = {}): Settings {
     agent_settings:
       overrides.agent_settings ?? MOCK_DEFAULT_USER_SETTINGS.agent_settings,
   };
+}
+
+function buildSubscriptionSettings(): Settings {
+  return buildSettings({
+    llm_model: "gpt-5.2-codex",
+    agent_settings: {
+      ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+      llm: {
+        model: "gpt-5.2-codex",
+        auth_type: "subscription",
+        subscription_vendor: "openai",
+      },
+    },
+  });
 }
 
 function renderLlmSettingsScreen(
@@ -253,6 +269,57 @@ describe("LlmSettingsScreen", () => {
     ).toBeInTheDocument();
     expect(screen.queryByTestId("llm-api-key-input")).not.toBeInTheDocument();
     expect(screen.queryByTestId("base-url-input")).not.toBeInTheDocument();
+  });
+
+  it("blames the backend selection, not the version, when no local backend is active", async () => {
+    vi.spyOn(LLMSubscriptionService, "getOpenAIStatus").mockRejectedValue(
+      new NoBackendAvailableError(),
+    );
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSubscriptionSettings(),
+    );
+
+    renderLlmSettingsScreen();
+
+    await screen.findByTestId("llm-subscription-settings");
+
+    expect(
+      await screen.findByText("SETTINGS$SUBSCRIPTION_STATUS_LOCAL_ONLY"),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the upgrade message only when the server lacks subscription endpoints", async () => {
+    vi.spyOn(LLMSubscriptionService, "getOpenAIStatus").mockRejectedValue(
+      new HttpError(404, "Not Found"),
+    );
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSubscriptionSettings(),
+    );
+
+    renderLlmSettingsScreen();
+
+    await screen.findByTestId("llm-subscription-settings");
+
+    expect(
+      await screen.findByText("SETTINGS$SUBSCRIPTION_STATUS_UNAVAILABLE"),
+    ).toBeInTheDocument();
+  });
+
+  it("shows a neutral status error for other subscription status failures", async () => {
+    vi.spyOn(LLMSubscriptionService, "getOpenAIStatus").mockRejectedValue(
+      new Error("request failed"),
+    );
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSubscriptionSettings(),
+    );
+
+    renderLlmSettingsScreen();
+
+    await screen.findByTestId("llm-subscription-settings");
+
+    expect(
+      await screen.findByText("SETTINGS$SUBSCRIPTION_STATUS_ERROR"),
+    ).toBeInTheDocument();
   });
 
   it("exposes canonical subscription metadata through the save control", async () => {

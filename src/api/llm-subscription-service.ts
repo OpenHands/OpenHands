@@ -1,5 +1,8 @@
 import { AgentServerClient } from "@openhands/typescript-client/clients";
-import { getAgentServerClientOptions } from "./agent-server-client-options";
+import {
+  getAgentServerClientOptions,
+  NoBackendAvailableError,
+} from "./agent-server-client-options";
 import {
   OPENAI_SUBSCRIPTION_DEVICE_POLL_PATH,
   OPENAI_SUBSCRIPTION_DEVICE_START_PATH,
@@ -8,6 +11,7 @@ import {
   OPENAI_SUBSCRIPTION_STATUS_PATH,
   OPENAI_SUBSCRIPTION_VENDOR,
 } from "#/constants/llm-subscription";
+import { isSdkHttpError } from "#/utils/sdk-http-error";
 
 type RawSubscriptionStatus = Record<string, unknown>;
 type RawDeviceStart = Record<string, unknown>;
@@ -92,6 +96,25 @@ async function requestSubscriptionEndpoint(
   } finally {
     client.close();
   }
+}
+
+export type SubscriptionFailureReason =
+  | "no-local-backend"
+  | "missing-endpoints"
+  | "other";
+
+/**
+ * Why a subscription request failed. Only "missing-endpoints" (the server
+ * answered 404 for the subscription routes) is something an agent-server
+ * upgrade can fix — "no-local-backend" means the active backend is not a local
+ * agent-server at all, so upgrade advice would mislead.
+ */
+export function getSubscriptionFailureReason(
+  error: unknown,
+): SubscriptionFailureReason {
+  if (error instanceof NoBackendAvailableError) return "no-local-backend";
+  if (isSdkHttpError(error) && error.status === 404) return "missing-endpoints";
+  return "other";
 }
 
 function normalizeModels(raw: unknown): string[] {

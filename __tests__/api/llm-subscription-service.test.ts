@@ -1,7 +1,11 @@
 import { http, HttpResponse } from "msw";
 import { AgentServerClient } from "@openhands/typescript-client/clients";
+import { HttpError } from "@openhands/typescript-client/client/http-client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import LLMSubscriptionService from "#/api/llm-subscription-service";
+import LLMSubscriptionService, {
+  getSubscriptionFailureReason,
+} from "#/api/llm-subscription-service";
+import { NoBackendAvailableError } from "#/api/agent-server-client-options";
 import {
   getActiveSelection,
   getRegisteredBackends,
@@ -527,6 +531,29 @@ describe("LLMSubscriptionService", () => {
 
     await expect(LLMSubscriptionService.getOpenAIStatus()).rejects.toThrowError(
       "HTTP request failed (401 Unauthorized)",
+    );
+  });
+});
+
+describe("getSubscriptionFailureReason", () => {
+  it("classifies a missing local backend", () => {
+    expect(getSubscriptionFailureReason(new NoBackendAvailableError())).toBe(
+      "no-local-backend",
+    );
+  });
+
+  it("classifies a 404 as missing subscription endpoints", () => {
+    expect(getSubscriptionFailureReason(new HttpError(404, "Not Found"))).toBe(
+      "missing-endpoints",
+    );
+  });
+
+  it("classifies every other failure as other", () => {
+    expect(
+      getSubscriptionFailureReason(new HttpError(500, "Server Error")),
+    ).toBe("other");
+    expect(getSubscriptionFailureReason(new Error("network down"))).toBe(
+      "other",
     );
   });
 });
