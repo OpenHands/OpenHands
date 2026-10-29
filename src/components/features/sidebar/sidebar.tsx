@@ -239,7 +239,7 @@ export function Sidebar() {
           "md:border-r md:border-border md:h-full",
           collapsed
             ? "md:w-15 md:min-w-15 md:px-2.5"
-            : "md:w-(--sidebar-width) md:min-w-(--sidebar-width) pb-2 md:pl-2.5 md:pr-0",
+            : "md:sidebar-expanded-width pb-2 md:pl-2.5 md:pr-0",
           currentPath === "/" && "md:pb-3",
         )}
         style={
