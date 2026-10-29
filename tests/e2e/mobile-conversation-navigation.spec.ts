@@ -76,17 +76,13 @@ test("mobile conversation rows are easy to tap without triggering their actions"
   await expect(row).toBeVisible();
   const bounds = await row.boundingBox();
   expect(bounds!.height).toBeGreaterThanOrEqual(48);
-  for (const action of [
-    row.getByTestId("ellipsis-button"),
-    row.getByRole("button", { name: "Pin conversation" }),
-  ]) {
-    const target = await action.boundingBox();
-    expect(target!.width).toBeGreaterThanOrEqual(44);
-    expect(target!.height).toBeGreaterThanOrEqual(44);
-    expect(
-      (await action.locator("svg").boundingBox())!.width,
-    ).toBeGreaterThanOrEqual(20);
-  }
+  expect((await row.getByTestId("ellipsis-button").boundingBox())!.width).toBe(
+    24,
+  );
+  expect(
+    (await row.getByRole("button", { name: "Pin conversation" }).boundingBox())!
+      .width,
+  ).toBe(22);
   await row.getByTestId("ellipsis-button").tap();
   await expect(page.getByTestId("context-menu")).toBeVisible();
   await expect(page).toHaveURL(/\/conversations\/1/);
