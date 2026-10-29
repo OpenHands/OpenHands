@@ -102,7 +102,9 @@ beforeEach(() => {
   // A configured account: the seeded `default` agent profile's LLM ref
   // resolves, so the launch path is not the never-configured guard.
   vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
-    profiles: [{ name: "default" }],
+    profiles: [
+      { name: "default", model: null, base_url: null, api_key_set: false },
+    ],
     active_profile: null,
   });
 });
