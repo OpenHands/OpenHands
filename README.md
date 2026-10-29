@@ -120,6 +120,10 @@ Open [http://localhost:8000](http://localhost:8000) and start a new conversation
 
 This setting isolates conversation execution; it does not move the entire Canvas or automation service into a sandbox. For Windows, see [README.windows.md](./README.windows.md#option-3-with-multiple-docker-sandboxes-wsl-2).
 
+### Inspect conversation resources
+
+Open the **Resources** tab in a conversation’s right panel (or the panel page on mobile) to inspect its launch profile and revision, reported model, skills, MCP servers, secret names, condenser, and verification settings. A warning identifies profiles edited since launch; unavailable or backend-specific resources are labelled explicitly. Secret values are never displayed.
+
 ### Option 4: From Source
 
 > [!WARNING]

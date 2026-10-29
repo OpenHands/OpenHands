@@ -176,6 +176,19 @@ describe("ConversationTabs localStorage behavior", () => {
   });
 
   describe("hook integration", () => {
+    it("persists the resources tab for the conversation", async () => {
+      mockConversationId = REAL_CONVERSATION_ID;
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+      await userEvent.click(screen.getByTestId("conversation-tab-resources"));
+      expect(useConversationStore.getState().selectedTab).toBe("resources");
+      const stored = JSON.parse(
+        localStorage.getItem(`conversation-state-${REAL_CONVERSATION_ID}`)!,
+      );
+      expect(stored.selectedTab).toBe("resources");
+    });
+
     it("should open panel and select tab when clicking a tab while panel is closed", async () => {
       mockConversationId = REAL_CONVERSATION_ID;
       const user = userEvent.setup();

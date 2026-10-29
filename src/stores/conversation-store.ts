@@ -12,7 +12,8 @@ export type ConversationTab =
   | "terminal"
   | "planner"
   | "tasklist"
-  | "usage";
+  | "usage"
+  | "resources";
 
 export type ConversationMode = "code" | "plan";
 

@@ -12,7 +12,13 @@ import {
   type ConversationTab,
 } from "#/stores/conversation-store";
 import { I18nKey } from "#/i18n/declaration";
-import { Gauge, Globe, ListTodo, SquareChevronRight } from "lucide-react";
+import {
+  Boxes,
+  Gauge,
+  Globe,
+  ListTodo,
+  SquareChevronRight,
+} from "lucide-react";
 import { LuFileDiff } from "react-icons/lu";
 import DocumentIcon from "#/icons/document.svg?react";
 import PillIcon from "#/icons/pill.svg?react";
@@ -127,6 +133,7 @@ export function ConversationTabsContextMenu({
       i18nKey: I18nKey.COMMON$TERMINAL,
     },
     { tab: "browser", icon: Globe, i18nKey: I18nKey.COMMON$BROWSER },
+    { tab: "resources", icon: Boxes, i18nKey: I18nKey.RESOURCES$TITLE },
     { tab: "usage", icon: Gauge, i18nKey: I18nKey.COMMON$USAGE },
   ];
 
