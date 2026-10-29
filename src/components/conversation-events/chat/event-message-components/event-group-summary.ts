@@ -1,11 +1,12 @@
 import { ActionEvent, OpenHandsEvent } from "#/types/agent-server/core";
 import {
   isActionEvent,
+  isHookExecutionEvent,
   isObservationEvent,
   isUserRejectObservation,
 } from "#/types/agent-server/type-guards";
 
-type StepKind = "command" | "read" | "edit" | "search" | "tool";
+type StepKind = "command" | "read" | "edit" | "search" | "hook" | "tool";
 
 // Base keys of `_one` / `_other` plural entries; i18next picks the form.
 const STEP_KIND_KEYS: Record<StepKind, string> = {
@@ -13,6 +14,7 @@ const STEP_KIND_KEYS: Record<StepKind, string> = {
   read: "EVENT_GROUP$READ_FILES",
   edit: "EVENT_GROUP$MADE_EDITS",
   search: "EVENT_GROUP$RAN_SEARCHES",
+  hook: "EVENT_GROUP$RAN_HOOKS",
   tool: "EVENT_GROUP$USED_TOOLS",
 };
 
@@ -42,6 +44,7 @@ const getStepKind = (
   event: OpenHandsEvent,
   lookupSource: OpenHandsEvent[],
 ): StepKind => {
+  if (isHookExecutionEvent(event)) return "hook";
   if (isActionEvent(event)) {
     return kindFromName(
       event.action.kind,

@@ -6,6 +6,7 @@ import { EventGroup } from "#/components/conversation-events/chat/event-message-
 import {
   ActionEvent,
   AgentErrorEvent,
+  HookExecutionEvent,
   ObservationEvent,
   SecurityRisk,
   UserRejectObservation,
@@ -217,6 +218,40 @@ describe("EventGroup", () => {
       screen.queryByText(/OBSERVATION_MESSAGE\$RUN/),
     ).not.toBeInTheDocument();
     expect(screen.queryByTestId("status-icon")).not.toBeInTheDocument();
+  });
+
+  it("counts hook runs in the summary", () => {
+    const hook = {
+      id: "h1",
+      timestamp: new Date().toISOString(),
+      kind: "HookExecutionEvent",
+      source: "hook",
+      hook_event_type: "PostToolUse",
+      hook_command: "lint",
+      success: true,
+      blocked: false,
+      exit_code: 0,
+      reason: null,
+      tool_name: "execute_bash",
+      action_id: "a1",
+      message_id: null,
+      stdout: null,
+      stderr: null,
+      error: null,
+      additional_context: null,
+      hook_input: null,
+    } as HookExecutionEvent;
+    const events = [makeBashObservation("o1", "a1", "ls"), hook];
+
+    renderWithProviders(
+      <EventGroup events={events} isFinalized>
+        <div>child</div>
+      </EventGroup>,
+    );
+
+    expect(
+      screen.getByText("EVENT_GROUP$RAN_COMMANDS · EVENT_GROUP$RAN_HOOKS"),
+    ).toBeInTheDocument();
   });
 
   it("shows a spinner while running and no status icon when done", () => {

@@ -56,3 +56,27 @@ export function CollapsibleThinking({ content }: CollapsibleThinkingProps) {
     </div>
   );
 }
+
+/**
+ * Reasoning shown at the top of a tool step's own details, so it is one click
+ * away on the step instead of a separate dropdown above it.
+ */
+export function StepThinking({ content }: CollapsibleThinkingProps) {
+  const { t } = useTranslation("openhands");
+
+  if (!content.trim()) {
+    return null;
+  }
+
+  return (
+    <div className="flex flex-col gap-1" data-testid="step-thinking">
+      <span className="flex items-center gap-2 font-normal text-muted">
+        <LightbulbIcon className="h-4 w-4 fill-muted flex-shrink-0" />
+        {t(I18nKey.THINKING$TITLE)}
+      </span>
+      <div className="pl-6">
+        <MarkdownRenderer>{content}</MarkdownRenderer>
+      </div>
+    </div>
+  );
+}

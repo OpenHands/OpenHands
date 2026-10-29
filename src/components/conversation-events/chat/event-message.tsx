@@ -305,7 +305,6 @@ function EventMessageComponent({
     const reasoningContent = getReasoningContent(event);
     return (
       <>
-        {reasoningContent && <CollapsibleThinking content={reasoningContent} />}
         {!suppressThought && (
           <ThoughtEventMessage
             event={event}
@@ -315,6 +314,7 @@ function EventMessageComponent({
         <GenericEventMessageWrapper
           event={event}
           isLastMessage={isLastMessage}
+          reasoning={reasoningContent}
         />
       </>
     );
@@ -362,7 +362,6 @@ function EventMessageComponent({
 
     return (
       <>
-        {reasoningContent && <CollapsibleThinking content={reasoningContent} />}
         {shouldShowThought && (
           <ThoughtEventMessage
             event={correspondingAction}
@@ -372,6 +371,7 @@ function EventMessageComponent({
         <GenericEventMessageWrapper
           event={event}
           isLastMessage={isLastMessage}
+          reasoning={reasoningContent}
           correspondingAction={
             correspondingAction && isActionEvent(correspondingAction)
               ? correspondingAction
@@ -391,7 +391,6 @@ function EventMessageComponent({
 
     return (
       <>
-        {reasoningContent && <CollapsibleThinking content={reasoningContent} />}
         {!suppressThought && correspondingAction && (
           <ThoughtEventMessage
             event={correspondingAction}
@@ -401,6 +400,7 @@ function EventMessageComponent({
         <GenericEventMessageWrapper
           event={event}
           isLastMessage={isLastMessage}
+          reasoning={reasoningContent}
           correspondingAction={correspondingAction}
         />
       </>
