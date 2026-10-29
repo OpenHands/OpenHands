@@ -920,13 +920,9 @@ describe("AutomationSetupPanel", () => {
     const option = await screen.findByTestId(
       "automation-setup-repository-option-OpenHands/OpenHands",
     );
-    // Long organization/project/repository names are truncated, so the full
-    // name is available on hover.
-    expect(within(option).getByTitle("OpenHands/OpenHands")).toBeVisible();
     await user.click(option);
     const pill = screen.getByTestId("automation-setup-repository-value");
     expect(pill).toHaveTextContent("OpenHands/OpenHands");
-    expect(within(pill).getByTitle("OpenHands/OpenHands")).toBeVisible();
 
     await user.click(screen.getByTestId("automation-setup-repository-add"));
     await user.click(screen.getByTestId("automation-setup-repository-custom"));
@@ -1388,6 +1384,55 @@ describe("AutomationSetupPanel", () => {
           }),
         }),
       ),
+    );
+  });
+
+  it("keeps the repository name whole and shows the full name on hover", async () => {
+    vi.mocked(useDeploymentCapabilities).mockReturnValue({
+      data: {
+        ready: true,
+        features: [],
+        triggerKinds: ["cron"],
+        eventSources: [],
+        eventTypes: [],
+        triggers: {},
+        repoProviders: ["azure_devops"],
+      },
+      isLoading: false,
+    } as never);
+    mockUseUserProviders.mockReturnValue({
+      providers: ["azure_devops"],
+      isLoadingSettings: false,
+    });
+    const name = "fabrikam/Customer Experience Platform Legacy/booking-service";
+    const address =
+      "https://dev.azure.com/fabrikam/Customer%20Experience%20Platform%20Legacy/_git/booking-service";
+    mockUseGitRepositories.mockReturnValue(
+      createProviderRepositoriesQueryResult("azure_devops", name),
+    );
+
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(screen.getByTestId("automation-setup-repository-add"));
+    const option = screen.getByTestId(
+      `automation-setup-repository-option-${name}`,
+    );
+    // The organization and project shorten on their own, before the
+    // repository name.
+    expect(within(option).getByText("fabrikam")).toBeInTheDocument();
+    expect(
+      within(option).getByText("/Customer Experience Platform Legacy"),
+    ).toBeInTheDocument();
+    await user.hover(within(option).getByText("/booking-service"));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(name);
+
+    await user.click(option);
+    const pill = screen.getByTestId("automation-setup-repository-value");
+    expect(pill).toHaveTextContent(address);
+    await user.hover(within(pill).getByText("/booking-service"));
+    await waitFor(() =>
+      expect(screen.getByRole("tooltip")).toHaveTextContent(address),
     );
   });
 
