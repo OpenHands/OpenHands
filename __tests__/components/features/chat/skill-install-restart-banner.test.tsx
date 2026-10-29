@@ -51,13 +51,17 @@ vi.mock("#/api/agent-profiles-service/agent-profiles-service.api", () => ({
     }),
     getProfile: vi.fn().mockRejectedValue(new Error("not needed")),
   },
+  WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME: "default",
 }));
 vi.mock("#/api/profiles-service/profiles-service.api", () => ({
   __esModule: true,
   default: {
-    listProfiles: vi
-      .fn()
-      .mockResolvedValue({ profiles: [], active_profile: null }),
+    // A configured account: the seeded `default` agent profile's LLM ref
+    // resolves, so the launch path is not the never-configured guard.
+    listProfiles: vi.fn().mockResolvedValue({
+      profiles: [{ name: "default" }],
+      active_profile: null,
+    }),
   },
 }));
 vi.mock("#/api/plugins-management-service", () => ({
@@ -219,6 +223,12 @@ describe("SkillInstallRestartBanner", () => {
 
     await waitFor(() => {
       const call = createConversationSpy.mock.lastCall;
+
+      console.log(
+        "DEBUG_CALLS",
+        createConversationSpy.mock.calls.length,
+        JSON.stringify(call),
+      );
       // The parsed install root is reused directly as the launch workspace.
       expect(call?.[0]?.workingDirOverride).toBe("/tmp/demo-ws");
       expect(call?.[0]?.workspaceMode).toBe("local_repo");

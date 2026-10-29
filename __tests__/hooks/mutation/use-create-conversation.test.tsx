@@ -1,6 +1,6 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
 import { SuggestedTask } from "#/utils/types";
@@ -8,7 +8,6 @@ import {
   getStoredConversationMetadata,
   removeStoredConversationMetadata,
 } from "#/api/conversation-metadata-store";
-import { AGENT_PROFILES_QUERY_KEYS } from "#/hooks/query/query-keys";
 
 vi.mock("#/hooks/use-tracking", () => ({
   useTracking: () => ({
@@ -102,7 +101,12 @@ vi.mock("#/api/profiles-service/profiles-service.api", () => ({
     listProfiles: (...args: unknown[]) => listLlmProfilesMock(...args),
   },
 }));
-listLlmProfilesMock.mockResolvedValue({ profiles: [], active_profile: null });
+// A configured account: the seeded `default` agent profile's LLM ref
+// resolves, so the launch path is not the never-configured guard.
+listLlmProfilesMock.mockResolvedValue({
+  profiles: [{ name: "default" }],
+  active_profile: null,
+});
 
 describe("useCreateConversation", () => {
   afterEach(() => {
@@ -124,7 +128,7 @@ describe("useCreateConversation", () => {
     });
     listLlmProfilesMock.mockReset();
     listLlmProfilesMock.mockResolvedValue({
-      profiles: [],
+      profiles: [{ name: "default" }],
       active_profile: null,
     });
     useLlmProfilesMock.mockReturnValue({ data: { active_profile: null } });
@@ -758,8 +762,10 @@ describe("useCreateConversation", () => {
         profiles: [luna],
         active_agent_profile_id: "profile-luna",
       });
+      // A named profile whose own LLM is gone, while other LLM profiles
+      // remain: the server reports the dangling ref.
       listLlmProfilesMock.mockResolvedValue({
-        profiles: [],
+        profiles: [{ name: "other-model" }],
         active_profile: null,
       });
 

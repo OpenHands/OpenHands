@@ -181,9 +181,9 @@ describe("resolveConversationLaunch", () => {
       detail: { llm_profile_ref: "default" },
     });
 
-    await expect(
-      launch({ agentProfileId: "profile-default" }),
-    ).rejects.toThrow("HOME$LLM_NOT_CONFIGURED_MESSAGE");
+    await expect(launch({ agentProfileId: "profile-default" })).rejects.toThrow(
+      "HOME$LLM_NOT_CONFIGURED_MESSAGE",
+    );
   });
 
   it("still overrides a dangling ref when an LLM profile is requested", async () => {
@@ -197,6 +197,24 @@ describe("resolveConversationLaunch", () => {
     await expect(
       launch({ agentProfileId: "profile-default", llmProfile: "fast" }),
     ).resolves.toMatchObject({ llmProfileOverride: "fast" });
+  });
+
+  it("leaves a dangling ref for the server when other LLM profiles exist", async () => {
+    // Only a server with no LLM profile at all is "not configured"; a named
+    // profile whose own LLM was deleted keeps its request so the server
+    // reports the dangling ref.
+    arrange({
+      activeId: "profile-1",
+      activeLlm: null,
+      llmProfiles: [{ name: "fast" }],
+    });
+
+    await expect(
+      launch({ agentProfileId: "profile-1" }),
+    ).resolves.toMatchObject({
+      agentProfileId: "profile-1",
+      llmProfile: "slow",
+    });
   });
 
   it("lets Cloud launch its own default when no profile is active", async () => {

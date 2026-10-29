@@ -99,8 +99,10 @@ beforeEach(() => {
   __resetActiveStoreForTests();
   setRegisteredBackends([localBackend]);
   setActiveSelection({ backendId: localBackend.id });
+  // A configured account: the seeded `default` agent profile's LLM ref
+  // resolves, so the launch path is not the never-configured guard.
   vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
-    profiles: [],
+    profiles: [{ name: "default" }],
     active_profile: null,
   });
 });

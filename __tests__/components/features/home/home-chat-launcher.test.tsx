@@ -384,6 +384,12 @@ describe("HomeChatLauncher", () => {
       timestamp: "2020-01-01T00:00:00.000Z",
     });
     window.localStorage.removeItem(LAST_LOCAL_WORKSPACE_MODE_STORAGE_KEY);
+    // A configured account: the seeded `default` agent profile's LLM ref
+    // resolves, so the launcher is not the never-configured guard.
+    vi.spyOn(ProfilesService, "listProfiles").mockResolvedValue({
+      profiles: [{ name: "default" }],
+      active_profile: null,
+    } as never);
     vi.spyOn(WorkspacesService, "listWorkspaces").mockResolvedValue({
       workspaces: [],
       workspaceParents: [],
