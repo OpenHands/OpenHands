@@ -129,22 +129,22 @@ describe("hook execution event message", () => {
   });
 
   it.each([
-    ["PreToolUse", "⏳"],
-    ["PostToolUse", "✅"],
-    ["UserPromptSubmit", "📝"],
-    ["SessionStart", "🚀"],
-    ["SessionEnd", "🏁"],
-    ["Stop", "⏹️"],
-    ["FutureHook", "🔗"],
-  ])("uses the expected icon for %s hooks", (hookType, icon) => {
+    "PreToolUse",
+    "PostToolUse",
+    "UserPromptSubmit",
+    "SessionStart",
+    "SessionEnd",
+    "Stop",
+    "FutureHook",
+  ])("titles %s hooks with the label and no emoji prefix", (hookType) => {
     renderHookEvent({
       hook_event_type: hookType as HookExecutionEvent["hook_event_type"],
     });
 
     const message = screen.getByTestId("generic-event-message");
-    expect(message).toHaveTextContent(
-      `${icon} ${I18nKey.HOOK$HOOK_LABEL}: ${hookType}`,
-    );
+    expect(
+      message.textContent?.startsWith(`${I18nKey.HOOK$HOOK_LABEL}: ${hookType}`),
+    ).toBe(true);
     expect(message).toHaveAttribute("data-success", "success");
     expect(screen.getByText("ok")).toBeInTheDocument();
   });
@@ -166,9 +166,9 @@ describe("hook execution event message", () => {
 
     const message = screen.getByTestId("generic-event-message");
     expect(message).toHaveAttribute("data-success", "none");
-    expect(message).toHaveTextContent(
-      `🚫 ${I18nKey.HOOK$HOOK_LABEL}: PostToolUse`,
-    );
+    expect(
+      message.textContent?.startsWith(`${I18nKey.HOOK$HOOK_LABEL}: PostToolUse`),
+    ).toBe(true);
     expect(screen.getByText("(terminal)")).toBeInTheDocument();
     expect(screen.getByText("blocked")).toBeInTheDocument();
     expect(message).toHaveTextContent(`${I18nKey.HOOK$COMMAND}: check-policy`);

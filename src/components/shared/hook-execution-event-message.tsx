@@ -10,29 +10,6 @@ interface HookExecutionEventMessageProps {
   event: OpenHandsEvent;
 }
 
-function getHookIcon(hookType: string, blocked: boolean): string {
-  if (blocked) {
-    return "🚫";
-  }
-
-  switch (hookType) {
-    case "PreToolUse":
-      return "⏳";
-    case "PostToolUse":
-      return "✅";
-    case "UserPromptSubmit":
-      return "📝";
-    case "SessionStart":
-      return "🚀";
-    case "SessionEnd":
-      return "🏁";
-    case "Stop":
-      return "⏹️";
-    default:
-      return "🔗";
-  }
-}
-
 function formatHookCommand(command: string): string {
   // Truncate long commands for display
   if (command.length > 80) {
@@ -62,7 +39,6 @@ export function HookExecutionEventMessage({
     return null;
   }
 
-  const icon = getHookIcon(event.hook_event_type, event.blocked);
   const statusText = getStatusText(event.blocked, event.success);
   const statusClassName = getStatusClassName(event.blocked, event.success);
 
@@ -77,7 +53,7 @@ export function HookExecutionEventMessage({
 
   const title = (
     <span>
-      {icon} {t(I18nKey.HOOK$HOOK_LABEL)}: {event.hook_event_type}
+      {t(I18nKey.HOOK$HOOK_LABEL)}: {event.hook_event_type}
       {event.tool_name && (
         <span className="text-muted ml-2">({event.tool_name})</span>
       )}
