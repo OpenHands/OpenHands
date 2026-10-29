@@ -4,7 +4,7 @@ updates:
     directory: "/"
     schedule:
       interval: cron
-      cronjob: 0 * * * *
+      cronjob: "0 * * * *"
     cooldown:
       default-days: 7
     versioning-strategy: increase
@@ -90,7 +90,7 @@ updates:
     directory: "/"
     schedule:
       interval: cron
-      cronjob: 0 * * * *
+      cronjob: "0 * * * *"
     cooldown:
       default-days: 7
     open-pull-requests-limit: 5
