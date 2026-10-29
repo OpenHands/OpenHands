@@ -105,7 +105,7 @@ describe("EventGroup", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("renders a 'completed' summary when all events are observations", () => {
+  it("summarizes a settled group by what its steps did", () => {
     const events = [
       makeBashObservation("o1", "a1", "ls"),
       makeBashObservation("o2", "a2", "pwd"),
@@ -118,9 +118,7 @@ describe("EventGroup", () => {
       </EventGroup>,
     );
 
-    expect(
-      screen.getByText("EVENT_GROUP$ACTIONS_COMPLETED"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("EVENT_GROUP$RAN_COMMANDS")).toBeInTheDocument();
     // Children should not be visible in the collapsed state.
     expect(screen.queryByTestId("child")).not.toBeInTheDocument();
   });
@@ -140,7 +138,7 @@ describe("EventGroup", () => {
     );
 
     expect(
-      screen.getByText("EVENT_GROUP$ACTIONS_PROGRESS"),
+      screen.getByText("· EVENT_GROUP$ACTIONS_PROGRESS"),
     ).toBeInTheDocument();
     // The running action's title is rendered next to the summary. Translations
     // aren't loaded in tests, so we just verify the action's translation key
@@ -148,10 +146,7 @@ describe("EventGroup", () => {
     expect(screen.getByText(/ACTION_MESSAGE\$RUN/)).toBeInTheDocument();
   });
 
-  it("keeps showing the latest completed action's title while the group is still the live tail", () => {
-    // All observations -> nothing in flight, but the group has not been
-    // "moved past" yet, so we expect the latest observation's title to keep
-    // showing as the prominent summary alongside the completed count.
+  it("drops the latest action title once nothing is running, even in the live tail", () => {
     const events = [
       makeBashObservation("o1", "a1", "ls"),
       makeBashObservation("o2", "a2", "pwd"),
@@ -164,11 +159,41 @@ describe("EventGroup", () => {
       </EventGroup>,
     );
 
-    // Latest observation's title is still in the summary line.
-    expect(screen.getByText(/OBSERVATION_MESSAGE\$RUN/)).toBeInTheDocument();
-    // ...next to the completed count.
+    expect(screen.getByText("EVENT_GROUP$RAN_COMMANDS")).toBeInTheDocument();
     expect(
-      screen.getByText("EVENT_GROUP$ACTIONS_COMPLETED"),
+      screen.queryByText(/OBSERVATION_MESSAGE\$RUN/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("lists each kind of step in order of first appearance", () => {
+    const view: ActionEvent<FileEditorAction> = {
+      ...makeBashAction("a3", "unused"),
+      action: {
+        kind: "FileEditorAction",
+        command: "view",
+        path: "README.md",
+        file_text: null,
+        old_str: null,
+        new_str: null,
+        insert_line: null,
+        view_range: null,
+      },
+      tool_name: "file_editor",
+    } as ActionEvent<FileEditorAction>;
+    const events = [
+      makeBashObservation("o1", "a1", "ls"),
+      makeBashObservation("o2", "a2", "pwd"),
+      { ...makeBashObservation("o3", "a3", ""), tool_name: "file_editor" },
+    ];
+
+    renderWithProviders(
+      <EventGroup events={events} allEvents={[view, ...events]} isFinalized>
+        <div>child</div>
+      </EventGroup>,
+    );
+
+    expect(
+      screen.getByText("EVENT_GROUP$RAN_COMMANDS · EVENT_GROUP$READ_FILES"),
     ).toBeInTheDocument();
   });
 
@@ -185,9 +210,7 @@ describe("EventGroup", () => {
       </EventGroup>,
     );
 
-    expect(
-      screen.getByText("EVENT_GROUP$ACTIONS_COMPLETED"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("EVENT_GROUP$RAN_COMMANDS")).toBeInTheDocument();
     // Once moved past, we collapse to just the count — the per-action title
     // and the success check both go away.
     expect(
@@ -223,7 +246,7 @@ describe("EventGroup", () => {
     expect(screen.queryByTestId("status-icon")).not.toBeInTheDocument();
   });
 
-  it("titles a settled group after its rejected action", () => {
+  it("counts a rejected action as the kind of step it was", () => {
     const events = [
       makeBashObservation("o1", "a1", "ls"),
       makeUserRejectObservation("r2", "a2"),
@@ -236,10 +259,7 @@ describe("EventGroup", () => {
       </EventGroup>,
     );
 
-    expect(screen.getByText(/ACTION_MESSAGE\$RUN/)).toBeInTheDocument();
-    expect(
-      screen.getByText("EVENT_GROUP$ACTIONS_COMPLETED"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("EVENT_GROUP$RAN_COMMANDS")).toBeInTheDocument();
   });
 
   it("counts an action resolved by an AgentErrorEvent as resolved instead of running", () => {
@@ -256,9 +276,7 @@ describe("EventGroup", () => {
     );
 
     expect(screen.queryByTestId("spinner-icon")).not.toBeInTheDocument();
-    expect(
-      screen.getByText("EVENT_GROUP$ACTIONS_COMPLETED"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("EVENT_GROUP$RAN_COMMANDS")).toBeInTheDocument();
   });
 
   it("updates accessibility state while toggling the group", async () => {

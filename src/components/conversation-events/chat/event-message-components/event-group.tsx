@@ -12,6 +12,7 @@ import {
 } from "#/types/agent-server/type-guards";
 import { I18nKey } from "#/i18n/declaration";
 import { getEventContent } from "../event-content-helpers/get-event-content";
+import { getEventGroupSummaryParts } from "./event-group-summary";
 import { IsInEventGroupContext } from "../../../features/chat/is-in-event-group-context";
 import { PathInteractiveContext } from "../../../features/chat/path-component";
 
@@ -28,10 +29,9 @@ interface EventGroupProps {
   allEvents?: OpenHandsEvent[];
   /**
    * `true` once an event outside this group has been emitted after it, so the
-   * group is no longer the "live" tail of the chat. While `false` (the
-   * default), the group keeps showing the most recent action's title as its
-   * prominent summary, with the count of completed actions shown subtly on
-   * the right.
+   * group is no longer the "live" tail of the chat. A group whose actions are
+   * still running shows its latest action and progress only while it is the
+   * live tail; otherwise it shows what its steps did ("Ran 3 commands").
    */
   isFinalized?: boolean;
   /** The fully-rendered event messages to show when the group is expanded. */
@@ -42,22 +42,14 @@ interface EventGroupProps {
  * Collapsible container that wraps a run of consecutive agent action/observation
  * events into a single summary card.
  *
- * Collapsed, while the group is still the live tail of the chat
- * (`isFinalized=false`):
- *   - Left (prominent): the title of the most recent action/observation in
- *     the group — i.e. either the action currently in flight, or the latest
- *     completed step.
- *   - Right (subdued):  "{completed}/{total} actions completed" while at
- *     least one action is still pending (with a spinner), otherwise
- *     "{count} actions completed" followed by a success check.
+ * Collapsed, while an action is still running in the live tail of the chat:
+ *   one line with the title of the action in flight, the
+ *   "{completed}/{total} actions completed" progress and a spinner.
  *
- * Collapsed, after the group has been "moved past" (`isFinalized=true`):
- *   - "{count} actions completed" is promoted to the prominent foreground
- *     style and the count is the only thing shown next to the chevron.
+ * Collapsed otherwise: what the steps did, e.g. "Ran 3 commands · Read 1 file".
  *
- * Expanded:
- *   - Renders the children verbatim, so each individual action/observation can
- *     still be expanded the way it was before grouping.
+ * Expanded: the children in a bordered list, so each individual
+ * action/observation can still be expanded the way it was before grouping.
  */
 export function EventGroup({
   events,
@@ -115,12 +107,15 @@ export function EventGroup({
     }
   }
 
-  const countSummary = isRunning
+  const showProgress = isRunning && !isFinalized;
+  const summary = showProgress
     ? t(I18nKey.EVENT_GROUP$ACTIONS_PROGRESS, {
         completed: completedCount,
         total: totalCount,
       })
-    : t(I18nKey.EVENT_GROUP$ACTIONS_COMPLETED, { count: totalCount });
+    : getEventGroupSummaryParts(events, lookupSource)
+        .map(({ key, count }) => t(key, { count }))
+        .join(" · ");
 
   const Chevron = expanded ? ArrowUp : ArrowDown;
 
@@ -138,34 +133,27 @@ export function EventGroup({
             : t(I18nKey.EVENT_GROUP$EXPAND)
         }
         data-testid="event-group-toggle"
-        className="w-full flex items-center justify-between gap-2 text-left cursor-pointer"
+        className="flex max-w-full items-center gap-2 text-left text-muted cursor-pointer"
       >
-        {isFinalized ? (
-          <span className="flex items-center gap-2 min-w-0 font-normal text-muted">
-            <Chevron className="h-4 w-4 fill-muted flex-shrink-0" />
-            <span className="truncate">{countSummary}</span>
+        {showProgress && latestTitle ? (
+          <span className="truncate">
+            <PathInteractiveContext.Provider value={false}>
+              {latestTitle}
+            </PathInteractiveContext.Provider>
           </span>
-        ) : (
-          <>
-            <span className="flex items-center gap-2 min-w-0 font-normal text-muted">
-              <Chevron className="h-4 w-4 fill-muted flex-shrink-0" />
-              <span className="truncate">
-                <PathInteractiveContext.Provider value={false}>
-                  {latestTitle ?? countSummary}
-                </PathInteractiveContext.Provider>
-              </span>
-            </span>
-            <span className="flex items-center flex-shrink-0 font-normal text-muted">
-              <span className="truncate">{countSummary}</span>
-              {isRunning ? (
-                <LoaderCircle
-                  data-testid="spinner-icon"
-                  className="h-4 w-4 ml-2 inline animate-spin text-muted"
-                />
-              ) : null}
-            </span>
-          </>
-        )}
+        ) : null}
+        <span
+          className={showProgress && latestTitle ? "flex-shrink-0" : "truncate"}
+        >
+          {showProgress && latestTitle ? `· ${summary}` : summary}
+        </span>
+        {showProgress ? (
+          <LoaderCircle
+            data-testid="spinner-icon"
+            className="h-4 w-4 inline flex-shrink-0 animate-spin text-muted"
+          />
+        ) : null}
+        <Chevron className="h-4 w-4 fill-muted flex-shrink-0" />
       </button>
 
       {expanded && (
@@ -173,7 +161,7 @@ export function EventGroup({
           id={contentId}
           role="region"
           aria-labelledby={buttonId}
-          className="mt-1.5 flex flex-col"
+          className="mt-1.5 flex flex-col divide-y divide-border-subtle rounded-lg border border-border-subtle [&>*]:px-3"
           data-testid="event-group-content"
         >
           <IsInEventGroupContext.Provider value>
