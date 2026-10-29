@@ -1,6 +1,6 @@
 # Task List: Reply / quote a message in the chat
 
-Source: `tasks/plan.md` (implements the approved spec
+Source: `.pr/reply-plan.md` (implements the approved spec
 `docs/specs/reply-message.md`, intent in `docs/intent/reply-message.md`).
 
 ## Phase 1: Foundation
