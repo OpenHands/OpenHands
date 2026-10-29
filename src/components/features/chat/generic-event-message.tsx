@@ -9,6 +9,8 @@ import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import { formatEventTimestamp } from "#/utils/format-event-timestamp";
 import { cn } from "#/utils/utils";
 
+const TIMESTAMP_DELAY_MS = 700;
+
 interface GenericEventMessageProps {
   title: React.ReactNode;
   details: string | React.ReactNode;
@@ -38,6 +40,22 @@ export function GenericEventMessage({
   const [isHovered, setIsHovered] = React.useState(false);
   const [hasFocusWithin, setHasFocusWithin] = React.useState(false);
   const timestampLabel = formatEventTimestamp(timestamp, i18n?.language);
+  const hoverTimer = React.useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  // The timestamp waits for a resting pointer so quick clicks on a title, or
+  // moving through a group's rows, don't pop it over the neighbouring row.
+  const startHover = () => {
+    clearTimeout(hoverTimer.current);
+    hoverTimer.current = setTimeout(
+      () => setIsHovered(true),
+      TIMESTAMP_DELAY_MS,
+    );
+  };
+  const endHover = () => {
+    clearTimeout(hoverTimer.current);
+    setIsHovered(false);
+  };
+  React.useEffect(() => () => clearTimeout(hoverTimer.current), []);
 
   const chevron = details ? (
     <button
@@ -45,7 +63,7 @@ export function GenericEventMessage({
       onClick={(event) => {
         setShowDetails((prev) => !prev);
         if (event.detail > 0) {
-          setIsHovered(false);
+          endHover();
           event.currentTarget.blur();
         }
       }}
@@ -67,6 +85,7 @@ export function GenericEventMessage({
     if (!details) return;
     if ((event.target as HTMLElement).closest("a, button, input")) return;
     if (window.getSelection()?.type === "Range") return;
+    endHover();
     setShowDetails((prev) => !prev);
   };
 
@@ -75,8 +94,8 @@ export function GenericEventMessage({
       data-testid="generic-event-message-title"
       className={cn("flex items-center", details && "cursor-pointer")}
       onClick={handleTitleClick}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      onMouseEnter={startHover}
+      onMouseLeave={endHover}
       onFocusCapture={() => setHasFocusWithin(true)}
       onBlurCapture={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) {
@@ -100,6 +119,7 @@ export function GenericEventMessage({
       content={<time dateTime={timestamp}>{timestampLabel}</time>}
       placement="top"
       isOpen={isHovered || hasFocusWithin}
+      tooltipClassName="pointer-events-none"
     >
       {titleContent}
     </StyledTooltip>
