@@ -3,6 +3,7 @@ import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { AxiosError } from "axios";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { HttpError } from "@openhands/typescript-client";
 
@@ -111,10 +112,11 @@ const automation: Automation = {
 
 const emptyRuns: AutomationRunsResponse = { runs: [], total: 0 };
 
-function renderDetail() {
-  const queryClient = new QueryClient({
+function renderDetail(
+  queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
-  });
+  }),
+) {
   return render(
     <QueryClientProvider client={queryClient}>
       <ActiveBackendProvider>
@@ -258,6 +260,56 @@ describe("AutomationDetail — not-found handling", () => {
     expect(
       await screen.findByText(I18nKey.AUTOMATIONS$DETAIL$NOT_FOUND_TITLE),
     ).toBeInTheDocument();
+  });
+
+  it("shows the not-found state after one lookup when queries retry", async () => {
+    // Arrange
+    vi.mocked(AutomationService.getAutomation).mockRejectedValue(
+      new AxiosError(
+        "Request failed with status code 404",
+        "ERR_BAD_REQUEST",
+        undefined,
+        undefined,
+        { status: 404 } as never,
+      ),
+    );
+
+    // Act
+    renderDetail(
+      new QueryClient({ defaultOptions: { queries: { retryDelay: 0 } } }),
+    );
+
+    // Assert
+    expect(
+      await screen.findByText(I18nKey.AUTOMATIONS$DETAIL$NOT_FOUND_TITLE),
+    ).toBeInTheDocument();
+    expect(AutomationService.getAutomation).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries a lookup that fails with a server error", async () => {
+    // Arrange
+    vi.mocked(AutomationService.getAutomation)
+      .mockRejectedValueOnce(
+        new AxiosError(
+          "Request failed with status code 503",
+          "ERR_BAD_RESPONSE",
+          undefined,
+          undefined,
+          { status: 503 } as never,
+        ),
+      )
+      .mockResolvedValue(automation);
+
+    // Act
+    renderDetail(
+      new QueryClient({ defaultOptions: { queries: { retryDelay: 0 } } }),
+    );
+
+    // Assert
+    expect(
+      await screen.findByRole("heading", { name: automation.name }),
+    ).toBeInTheDocument();
+    expect(AutomationService.getAutomation).toHaveBeenCalledTimes(2);
   });
 });
 
