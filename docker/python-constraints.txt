@@ -2,7 +2,7 @@ agent-client-protocol==0.12.1
 aiofile==3.12.3
 aiofiles==25.1.0
 aiohappyeyeballs==2.7.1
-aiohttp==3.14.3
+aiohttp==3.14.4
 aiosignal==1.4.0
 aiosqlite==0.22.1
 alembic==1.20.0
@@ -13,7 +13,7 @@ anyio==4.15.1
 asn1crypto==1.5.1
 asyncpg==0.31.0
 attrs==26.1.0
-Authlib==1.8.0
+Authlib==1.9.1
 backoff==2.2.1
 beartype==0.22.9
 beautifulsoup4==4.15.0
@@ -27,7 +27,7 @@ bubus==1.5.6
 cachetools==7.2.0
 caio==0.12.4
 cdp-use==1.4.5
-certifi==2026.7.22
+certifi==2026.10.19
 cffi==2.1.1
 charset-normalizer==3.5.1
 click==8.5.0
@@ -38,7 +38,7 @@ cryptography==50.0.1
 cyclopts==4.25.3
 deprecation==2.1.0
 distro==1.9.0
-dnspython==2.8.0
+dnspython==2.9.0
 docker==7.2.0
 docstring_parser==0.18.0
 email-validator==2.3.0
@@ -48,7 +48,7 @@ fastapi==0.141.1
 fastmcp==3.4.7
 fastmcp-slim==3.4.7
 fastuuid==0.14.0
-filelock==4.0.1
+filelock==4.2.1
 frozenlist==1.8.0
 fsspec==2026.9.0
 func_timeout==4.3.5
@@ -93,7 +93,7 @@ jsonschema-path==0.5.0
 jsonschema-specifications==2025.9.1
 keyring==25.7.0
 libtmux==0.62.0
-litellm==1.102.1
+litellm==1.102.2
 lmnr==0.7.64
 lmnr-claude-code-proxy==0.1.24
 lupa==2.8
@@ -106,7 +106,7 @@ mcp==1.30.0
 mdurl==0.1.2
 more-itertools==11.1.0
 multidict==6.9.1
-oauthlib==3.3.1
+oauthlib==4.0.0
 ollama==0.6.2
 openai==2.54.0
 openapi-pydantic==0.5.1
@@ -125,7 +125,7 @@ packaging==26.3
 pathable==0.6.0
 pfzy==0.3.4
 pg8000==1.31.5
-pillow==12.3.0
+pillow==13.0.0
 platformdirs==4.11.12
 portalocker==2.10.1
 posthog==7.60.0
@@ -146,7 +146,7 @@ Pygments==2.21.0
 PyJWT==2.15.0
 PyOTP==2.10.0
 pyparsing==3.3.3
-pypdf==6.19.0
+pypdf==6.21.2
 pyperclip==1.11.0
 python-dateutil==2.9.0.post0
 python-docx==1.2.0
