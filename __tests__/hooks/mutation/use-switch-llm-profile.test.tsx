@@ -411,36 +411,19 @@ describe("useSwitchLlmProfile", () => {
     expect(recordModelSwitchMessage).not.toHaveBeenCalled();
   });
 
-  it("marks a home-page pick synchronously so a quick send suppresses route-at-start", async () => {
-    // switchProfile is left unresolved so the flag must be set by `mutate`
-    // itself (onMutate), not by onSuccess — a send fired immediately after
-    // the pick would otherwise race the switch and route anyway.
-    let resolveSwitch: (value: undefined) => void = () => {};
-    vi.mocked(AgentServerConversationService.switchProfile).mockReturnValue(
-      new Promise<undefined>((resolve) => {
-        resolveSwitch = resolve;
-      }) as never,
+  it("does not set the home-pick flag (the UI handler does that, not the hook)", async () => {
+    // The flag moved to the UI pick handlers (selectProfile /
+    // handleSelectAcpModel) — the single chokepoint covering every pick path
+    // (member held pick, agent-profile-owned LLM, global activate). The hook
+    // itself no longer touches it, so a home switch leaves the flag alone.
+    vi.mocked(AgentServerConversationService.switchProfile).mockResolvedValue(
+      undefined as never,
     );
-    expect(useModelStore.getState().homeManualModelPick).toBe(false);
 
     const { result } = renderSwitchHook();
     result.current.mutate({ conversationId: null, profileName: "Smart" });
 
-    expect(useModelStore.getState().homeManualModelPick).toBe(true);
-
-    resolveSwitch(undefined);
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-  });
-
-  it("clears the flag when a home-page pick fails so the next launch routes", async () => {
-    vi.mocked(AgentServerConversationService.switchProfile).mockRejectedValue(
-      new Error("boom") as never,
-    );
-
-    const { result } = renderSwitchHook();
-    result.current.mutate({ conversationId: null, profileName: "Smart" });
-
-    await waitFor(() => expect(result.current.isError).toBe(true));
     expect(useModelStore.getState().homeManualModelPick).toBe(false);
   });
 

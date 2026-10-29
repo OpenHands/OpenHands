@@ -43,8 +43,10 @@ interface ModelState {
   /**
    * A model pick (LLM profile or ACP model) was made on the home page before
    * the first message. Suppresses "Run on first message" routing for that one
-   * launch so the explicit pick isn't overridden on turn 1; cleared by the
-   * launch so it never leaks to the next conversation.
+   * launch so the explicit pick isn't overridden on turn 1. Set at the UI pick
+   * handlers (the single chokepoint covering every pick path) and read once by
+   * `useCreateConversation`, which clears it as it consumes it — so it never
+   * leaks to child/`/new`/other launches.
    */
   homeManualModelPick: boolean;
 }

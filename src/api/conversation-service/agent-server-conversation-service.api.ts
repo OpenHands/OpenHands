@@ -464,6 +464,13 @@ export interface CreateConversationOptions {
   hasActiveMetaProfile?: boolean;
   /** Local only: the launched profile carries a Model Router. */
   profileHasRouter?: boolean;
+  /**
+   * A home-page model pick was made before the first message, so the
+   * route-at-start suffix should be suppressed for this single launch. The
+   * home launch decides this once and threads it down so the local builder
+   * needn't read UI state — child/`/new` launches omit it and route as usual.
+   */
+  suppressRouterAtStart?: boolean;
   /** Local only: the launched ACP profile's server, for the conversation tag. */
   acpServer?: string;
   // The LLM profile the launched agent profile runs. When set and no explicit
@@ -647,6 +654,7 @@ class AgentServerConversationService {
       agentProfileKind,
       llmProfileOverride: agentLlmProfileOverride,
       profileHasRouter,
+      suppressRouterAtStart: options.suppressRouterAtStart,
       acpServer,
       titleLlmProfile,
     });

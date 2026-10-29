@@ -19,7 +19,6 @@ import {
   llmProfileMirrored,
   updateDefaultAgentProfile,
 } from "./sync-agent-profiles";
-import { useModelStore } from "#/stores/model-store";
 
 interface SwitchLlmProfileVars {
   /**
@@ -63,25 +62,10 @@ export const useSwitchLlmProfile = () => {
     meta: { disableToast: true },
     // Anchor the inline message where the user issued the switch; captured
     // synchronously here because the menu unmounts before the switch resolves.
-    // A home-page LLM pick (no conversation) is an explicit model choice made
-    // before the first message: mark it synchronously here (not in onSuccess)
-    // so a quick send reads the flag before the async switchProfile resolves —
-    // otherwise the launch races the switch and routes anyway, and the stale
-    // flag set by the late onSuccess leaks to the next conversation.
-    onMutate: ({ conversationId }) => {
-      if (!conversationId) {
-        useModelStore.getState().setHomeManualModelPick(true);
-      }
-      return {
-        anchorEventId: conversationId ? getLastRenderableEventId() : null,
-      };
-    },
-    onError: (error, { conversationId, profileName }) => {
-      // A failed home pick never reached the server: clear the flag so the
-      // next launch routes as normal instead of inheriting a stale suppress.
-      if (!conversationId) {
-        useModelStore.getState().setHomeManualModelPick(false);
-      }
+    onMutate: ({ conversationId }) => ({
+      anchorEventId: conversationId ? getLastRenderableEventId() : null,
+    }),
+    onError: (error, { profileName }) => {
       const fallback = t(I18nKey.MODEL$SWITCH_FAILED, { name: profileName });
       // Server errors show their `detail`; a network failure or timeout keeps
       // the shared "Disconnected (...)" wording.
