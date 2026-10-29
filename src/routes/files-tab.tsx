@@ -8,6 +8,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
+import toast from "react-hot-toast";
 
 import { NoFileSelectedMessage } from "#/components/features/files-tab/no-file-selected-message";
 import { I18nKey } from "#/i18n/declaration";
@@ -21,10 +22,7 @@ import {
   getConversationState,
   useConversationLocalStorageState,
 } from "#/utils/conversation-local-storage";
-import {
-  useWorkspaceMutationCounter,
-  withWorkspaceCacheBuster,
-} from "#/stores/use-workspace-mutation-counter";
+import { useWorkspaceMutationCounter } from "#/stores/use-workspace-mutation-counter";
 import { FileQuickRow } from "#/components/features/files-tab/file-quick-row";
 import { FileTreeView } from "#/components/features/files-tab/file-tree-view";
 import { FileContentViewer } from "#/components/features/files-tab/file-content-viewer";
@@ -43,6 +41,8 @@ import { ResizeHandle } from "#/components/ui/resize-handle";
 import RefreshIcon from "#/icons/u-refresh.svg?react";
 import LinkExternalIcon from "#/icons/link-external.svg?react";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
+import AgentServerRuntimeService from "#/api/runtime-service/agent-server-runtime-service";
+import { getGitPath } from "#/utils/get-git-path";
 
 /**
  * Workspace file browser. Diff/Commits live in the sibling Commits
@@ -114,41 +114,91 @@ function FilesTab() {
   );
 
   // Pre-fetch the selected file's content here too so the toolbar's
-  // "open in new window" link can reach for its `staticUrl`. react-query
-  // dedupes against `FileContentViewer`'s identical call, so this costs
-  // nothing extra.
+  // "open in new window" action can build an authenticated object URL.
+  // react-query dedupes against `FileContentViewer`'s identical call, so this
+  // costs nothing extra.
   const selectedFileContent = useWorkspaceFileContent(selectedPath);
   const mutationCounter = useWorkspaceMutationCounter((state) => state.count);
   const bumpWorkspaceMutationCounter = useWorkspaceMutationCounter(
     (state) => state.bump,
   );
-  // Cloud backends return the file as a `data:` URL, which browsers refuse to
-  // open as a top-level page. Open the decoded text from a same-origin blob
-  // instead, typed `text/plain` so an HTML or SVG file shows its source rather
-  // than running script in the canvas origin.
   const selectedFile = selectedFileContent.data;
   const isDataUrl = selectedFile?.staticUrl.startsWith("data:") ?? false;
-  const blobText = isDataUrl ? (selectedFile?.text ?? null) : null;
+  const gitPath = getGitPath(
+    activeConversation?.selected_repository,
+    workspacePath,
+  );
+  const workspaceRoot = gitPath.startsWith("/") ? gitPath : `/${gitPath}`;
+  const absoluteFilePath = selectedPath
+    ? `${workspaceRoot}/${selectedPath}`
+    : null;
+  const fileLoadError = t(I18nKey.FILES$LOAD_ERROR);
   const [selectedFileBlobUrl, setSelectedFileBlobUrl] = useState<string | null>(
     null,
   );
+
+  // A local workspace URL relies on an HttpOnly session cookie. Opening that
+  // URL directly in a new top-level tab loses a Partitioned cookie's top-level
+  // site key when Canvas and the runtime are on different sites. Fetch through
+  // the typed, authenticated runtime client first and open a same-origin blob
+  // instead. Text (including HTML/SVG) stays text/plain so it cannot execute in
+  // the Canvas origin. Cloud data URLs keep their existing decoded-text path.
   useEffect(() => {
-    if (blobText === null) return undefined;
-    const url = URL.createObjectURL(
-      new Blob([blobText], { type: "text/plain;charset=utf-8" }),
-    );
-    setSelectedFileBlobUrl(url);
-    return () => {
-      URL.revokeObjectURL(url);
-      setSelectedFileBlobUrl(null);
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    setSelectedFileBlobUrl(null);
+
+    const prepareObjectUrl = async () => {
+      if (!selectedFile || !absoluteFilePath) return;
+
+      try {
+        let blob: Blob;
+        if (selectedFile.text !== null) {
+          blob = new Blob([selectedFile.text], {
+            type: "text/plain;charset=utf-8",
+          });
+        } else {
+          // Cloud binary files intentionally keep the existing no-link
+          // behavior; their data URL has no decoded body to reuse.
+          if (isDataUrl) return;
+          const bytes = await AgentServerRuntimeService.downloadFile(
+            activeConversation?.conversation_url,
+            activeConversation?.session_api_key,
+            absoluteFilePath,
+          );
+          blob = new Blob([bytes], { type: selectedFile.mimeType });
+        }
+
+        objectUrl = URL.createObjectURL(blob);
+        if (cancelled) {
+          URL.revokeObjectURL(objectUrl);
+          objectUrl = null;
+          return;
+        }
+        setSelectedFileBlobUrl(objectUrl);
+      } catch {
+        if (!cancelled) {
+          toast.error(fileLoadError);
+        }
+      }
     };
-  }, [blobText]);
-  const selectedFileStaticUrl = isDataUrl
-    ? selectedFileBlobUrl
-    : withWorkspaceCacheBuster(
-        selectedFile?.staticUrl ?? null,
-        mutationCounter,
-      );
+
+    void prepareObjectUrl();
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [
+    absoluteFilePath,
+    activeConversation?.conversation_url,
+    activeConversation?.session_api_key,
+    fileLoadError,
+    isDataUrl,
+    mutationCounter,
+    selectedFile?.mimeType,
+    selectedFile?.path,
+    selectedFile?.text,
+  ]);
 
   // Restore open tabs / selection from conversation-scoped localStorage on
   // mount and when switching conversations (survives a full page refresh).
@@ -273,9 +323,9 @@ function FilesTab() {
                       ]}
                       onChange={setFilesTabContentViewMode}
                     />
-                    {selectedFileStaticUrl ? (
+                    {selectedFileBlobUrl ? (
                       <a
-                        href={selectedFileStaticUrl}
+                        href={selectedFileBlobUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                         aria-label={t(I18nKey.FILES$OPEN_IN_NEW_WINDOW)}
