@@ -478,6 +478,68 @@ describe("Messages virtualization", () => {
     expect(list.style.height).toBe(`${seededTotal}px`);
   });
 
+  it("releases the plain rows when the list virtualizes, and re-observes on return", () => {
+    // The plain list's observer is long-lived so appends do not re-observe
+    // every row. When the virtual shell replaces the plain list, its rows are
+    // detached: the observer and its row set must not keep them alive for the
+    // rest of the conversation. The cached heights survive, so crossing back
+    // down to the plain list re-observes the freshly mounted rows.
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockReturnValue({
+      width: 800,
+      height: 600,
+      top: 0,
+      left: 0,
+      right: 800,
+      bottom: 600,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    } as DOMRect);
+    const observers: { observed: Set<Element>; disconnected: boolean }[] = [];
+    class TrackedResizeObserver {
+      readonly observed = new Set<Element>();
+      disconnected = false;
+
+      constructor(readonly callback: ResizeObserverCallback) {
+        observers.push(this);
+      }
+
+      observe = (target: Element) => {
+        this.observed.add(target);
+      };
+
+      unobserve = (target: Element) => {
+        this.observed.delete(target);
+      };
+
+      disconnect = () => {
+        this.disconnected = true;
+        this.observed.clear();
+      };
+    }
+    vi.stubGlobal("ResizeObserver", TrackedResizeObserver);
+
+    const { rerender } = renderMessages(buildEvents(149));
+    const plainObserver = observers.find((o) => o.observed.size === 149);
+    expect(plainObserver).toBeDefined();
+    expect(plainObserver?.disconnected).toBe(false);
+
+    rerender(<Harness events={buildEvents(150)} withScrollParent />);
+    expect(screen.getByTestId("virtualized-message-list")).toBeInTheDocument();
+    // The detached plain rows are released.
+    expect(plainObserver?.disconnected).toBe(true);
+    expect(plainObserver?.observed.size).toBe(0);
+
+    rerender(<Harness events={buildEvents(149)} withScrollParent />);
+    expect(screen.queryByTestId("virtualized-message-list")).toBeNull();
+    // A fresh observer tracks the rows that mounted again.
+    const revived = observers.find(
+      (o) => o !== plainObserver && o.observed.size === 149,
+    );
+    expect(revived).toBeDefined();
+    expect(revived?.disconnected).toBe(false);
+  });
+
   it("lays out each virtualized row as a flex column, like the scroll container", () => {
     // The user bubble right-aligns with `self-end`; that only works if the
     // absolutely positioned row re-establishes the column flex context.

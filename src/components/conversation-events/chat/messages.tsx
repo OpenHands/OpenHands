@@ -352,8 +352,16 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     React.useLayoutEffect(() => {
       // A list with no scroll container (shared/read-only views) can never
       // virtualize, so its cache is never read: measuring every row on every
-      // append there is pure waste.
-      if (shouldVirtualize || scrollParent === undefined) return undefined;
+      // append there is pure waste. And once the virtual shell has replaced the
+      // plain list, its rows are detached: release the observer and its row set
+      // so they do not retain that DOM for the rest of the conversation. The
+      // cached heights survive, so returning to the plain phase reseeds it.
+      if (scrollParent === undefined || shouldVirtualize) {
+        plainRowObserver.current?.disconnect();
+        plainRowObserver.current = null;
+        observedPlainRows.current.clear();
+        return undefined;
+      }
       const list = plainListRef.current;
       if (!list) return undefined;
 
