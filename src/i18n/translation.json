@@ -20375,6 +20375,24 @@
     "ca": "Inicia el connector",
     "id": "Luncurkan Plugin"
   },
+  "LAUNCH$MESSAGE_TITLE": {
+    "en": "Start Conversation",
+    "ja": "会話を開始",
+    "zh-CN": "开始对话",
+    "zh-TW": "開始對話",
+    "ko-KR": "대화 시작",
+    "no": "Start samtale",
+    "it": "Inizia conversazione",
+    "pt": "Iniciar conversa",
+    "es": "Iniciar conversación",
+    "ar": "بدء المحادثة",
+    "fr": "Démarrer la conversation",
+    "tr": "Konuşmayı başlat",
+    "de": "Unterhaltung starten",
+    "uk": "Почати розмову",
+    "ca": "Inicia la conversa",
+    "id": "Mulai Percakapan"
+  },
   "LAUNCH$ADDITIONAL_PLUGINS": {
     "en": "Additional Plugins",
     "ja": "追加プラグイン",

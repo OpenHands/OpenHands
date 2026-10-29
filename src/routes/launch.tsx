@@ -6,6 +6,15 @@ import { PluginSpec } from "#/api/conversation-service/agent-server-conversation
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
 import { I18nKey } from "#/i18n/declaration";
 import { useActiveBackend } from "#/contexts/active-backend-context";
+import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
+import {
+  MODAL_MAX_WIDTH_VIEWPORT,
+  modalWidthClassName,
+} from "#/components/shared/modals/modal-body";
+import { ModalCloseButton } from "#/components/shared/modals/modal-close-button";
+import { BrandButton } from "#/components/features/settings/brand-button";
+import { Typography } from "#/ui/typography";
+import { cn } from "#/utils/utils";
 
 type ErrorType = "no_plugins" | "invalid_format" | "creation_failed";
 
@@ -80,6 +89,14 @@ function parsePluginsFromUrl(searchParams: URLSearchParams): ParseResult {
     };
   }
 
+  // No plugins specified. A message on its own is still a valid launch
+  // target: the user gets a confirmation modal and the conversation starts
+  // with that message and no plugins loaded.
+  const message = sanitizeMessage(searchParams.get("message"));
+  if (message) {
+    return { plugins: [], message };
+  }
+
   return { plugins: [], error: "no_plugins" };
 }
 
@@ -132,6 +149,58 @@ function ErrorDisplay({
         </div>
       </div>
     </div>
+  );
+}
+
+// Confirmation modal for message-only launch links (no plugins). Mirrors the
+// layout of PluginLaunchModal minus the plugin list and trust checkbox —
+// there is nothing to trust when no extension is loaded.
+function MessageLaunchModal({
+  message,
+  isLoading,
+  onStartConversation,
+  onClose,
+}: {
+  message: string;
+  isLoading: boolean;
+  onStartConversation: (initialMessage: string) => void;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation("openhands");
+
+  return (
+    <ModalBackdrop onClose={onClose}>
+      <div
+        data-testid="message-launch-modal"
+        className={cn(
+          "relative bg-base-secondary p-6 rounded-xl flex flex-col gap-4 border border-border max-h-[80vh]",
+          modalWidthClassName("md"),
+          MODAL_MAX_WIDTH_VIEWPORT,
+        )}
+      >
+        <ModalCloseButton onClose={onClose} testId="close-button" />
+        <Typography.H2 className="pr-6">
+          {t(I18nKey.LAUNCH$MESSAGE_TITLE)}
+        </Typography.H2>
+        <p className="text-sm text-contrast whitespace-pre-wrap break-words">
+          {message}
+        </p>
+        <div className="pt-4 border-t border-border-subtle flex w-full justify-end mt-4">
+          <BrandButton
+            testId="start-conversation-button"
+            type="button"
+            variant="primary"
+            onClick={() => onStartConversation(message)}
+            isDisabled={isLoading}
+            className="px-4"
+          >
+            {isLoading
+              ? t(I18nKey.LAUNCH$STARTING)
+              : t(I18nKey.LAUNCH$START_CONVERSATION)}
+          </BrandButton>
+        </div>
+      </div>
+    </ModalBackdrop>
   );
 }
 
@@ -195,14 +264,25 @@ export default function LaunchRoute() {
 
   return (
     <div className="h-full" data-testid="launch-route">
-      <PluginLaunchModal
-        plugins={parseResult.plugins}
-        parametersSupported={backend.kind !== "local"}
-        message={parseResult.message}
-        isLoading={createConversation.isPending}
-        onStartConversation={handleStartConversation}
-        onClose={handleGoHome}
-      />
+      {parseResult.plugins.length > 0 ? (
+        <PluginLaunchModal
+          plugins={parseResult.plugins}
+          parametersSupported={backend.kind !== "local"}
+          message={parseResult.message}
+          isLoading={createConversation.isPending}
+          onStartConversation={handleStartConversation}
+          onClose={handleGoHome}
+        />
+      ) : (
+        <MessageLaunchModal
+          message={parseResult.message ?? ""}
+          isLoading={createConversation.isPending}
+          onStartConversation={(initialMessage) =>
+            handleStartConversation([], initialMessage)
+          }
+          onClose={handleGoHome}
+        />
+      )}
     </div>
   );
 }
