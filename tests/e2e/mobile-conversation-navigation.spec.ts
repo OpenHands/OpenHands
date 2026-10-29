@@ -50,7 +50,15 @@ test("mobile conversation menu has a comfortable touch target", async ({
     );
   }
   await menu.tap({ position: { x: 2, y: 2 } });
-  await expect(page.getByTestId("sidebar-mobile-drawer")).toBeVisible();
+  const drawer = page.getByTestId("sidebar-mobile-drawer");
+  await expect(drawer).toBeVisible();
+  await drawer.getByTestId("sidebar-conversations-link").tap();
+  await expect(drawer).toBeHidden();
+  const topBarMenu = page.getByTestId("sidebar-mobile-menu-toggle");
+  await expect(topBarMenu).toBeVisible();
+  const topBarBounds = await topBarMenu.boundingBox();
+  expect(topBarBounds!.width).toBeGreaterThanOrEqual(48);
+  expect(topBarBounds!.height).toBeGreaterThanOrEqual(48);
 });
 
 test("mobile conversation rows are easy to tap without triggering their actions", async ({
@@ -65,9 +73,28 @@ test("mobile conversation rows are easy to tap without triggering their actions"
   await expect(row).toBeVisible();
   const bounds = await row.boundingBox();
   expect(bounds!.height).toBeGreaterThanOrEqual(48);
+  await row.getByTestId("ellipsis-button").tap();
+  await expect(page.getByTestId("context-menu")).toBeVisible();
+  await expect(page).toHaveURL(/\/conversations\/1/);
+  await page.keyboard.press("Escape");
   await row.getByRole("button", { name: "Pin conversation" }).tap();
   await expect(page).toHaveURL(/\/conversations\/1/);
   await row.tap({ position: { x: 10, y: bounds!.height - 3 } });
   await expect(page).toHaveURL(/\/conversations\/2/);
   await expect(drawer).toBeHidden();
+});
+
+test("desktop sidebar rows retain their compact dimensions", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 844 });
+  const row = page
+    .getByTestId("conversation-card")
+    .filter({ hasText: "Repo Testing" });
+  await expect(row).toBeVisible();
+  expect((await row.boundingBox())!.height).toBe(32);
+  expect(
+    (await page.getByTestId("sidebar-conversations-link").boundingBox())!
+      .height,
+  ).toBe(36);
 });
