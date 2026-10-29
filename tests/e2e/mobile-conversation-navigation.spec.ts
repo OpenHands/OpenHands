@@ -38,6 +38,9 @@ test("mobile conversation menu has a comfortable touch target", async ({
 }) => {
   const menu = page.getByTestId("sidebar-mobile-menu-toggle");
   await expect(menu).toBeVisible();
+  expect(
+    (await menu.locator("svg").boundingBox())!.width,
+  ).toBeGreaterThanOrEqual(24);
   for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 844 });
     const bounds = await menu.boundingBox();
@@ -73,6 +76,17 @@ test("mobile conversation rows are easy to tap without triggering their actions"
   await expect(row).toBeVisible();
   const bounds = await row.boundingBox();
   expect(bounds!.height).toBeGreaterThanOrEqual(48);
+  for (const action of [
+    row.getByTestId("ellipsis-button"),
+    row.getByRole("button", { name: "Pin conversation" }),
+  ]) {
+    const target = await action.boundingBox();
+    expect(target!.width).toBeGreaterThanOrEqual(44);
+    expect(target!.height).toBeGreaterThanOrEqual(44);
+    expect(
+      (await action.locator("svg").boundingBox())!.width,
+    ).toBeGreaterThanOrEqual(20);
+  }
   await row.getByTestId("ellipsis-button").tap();
   await expect(page.getByTestId("context-menu")).toBeVisible();
   await expect(page).toHaveURL(/\/conversations\/1/);

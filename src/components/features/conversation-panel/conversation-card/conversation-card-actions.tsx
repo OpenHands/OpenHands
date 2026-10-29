@@ -117,7 +117,11 @@ export function ConversationCardActions({
           onContextMenuToggle(!contextMenuOpen);
         }}
         ariaLabel={t(I18nKey.COMMON$MORE_OPTIONS)}
-        className={cn(isPaused && "opacity-60")}
+        className={cn(
+          "max-md:size-11 max-md:bg-surface-raised max-md:p-0",
+          isPaused && "opacity-60",
+        )}
+        iconClassName="h-4 w-4 max-md:size-5"
       />
       {contextMenuOpen && floatingStyle && portalTarget
         ? createPortal(

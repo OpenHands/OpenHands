@@ -21,9 +21,15 @@ export function SidebarMobileMenuToggle() {
       aria-label={
         isOpen ? t(I18nKey.SIDEBAR$CLOSE_MENU) : t(I18nKey.SIDEBAR$OPEN_MENU)
       }
-      className={cn(mobileTopBarIconButtonClassName, "size-12 p-0")}
+      className={cn(
+        mobileTopBarIconButtonClassName,
+        "size-12 bg-surface-raised p-0 text-contrast",
+      )}
     >
-      <BlockDrawerLeftIcon className={mobileTopBarIconClassName} aria-hidden />
+      <BlockDrawerLeftIcon
+        className={cn(mobileTopBarIconClassName, "size-6")}
+        aria-hidden
+      />
     </button>
   );
 }

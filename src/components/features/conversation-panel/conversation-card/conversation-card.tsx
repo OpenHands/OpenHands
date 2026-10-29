@@ -256,10 +256,11 @@ export function ConversationCard({
       className={cn(
         "flex shrink-0 cursor-pointer items-center justify-center rounded-md p-1",
         "text-muted hover:bg-contrast/10 hover:text-contrast",
+        "max-md:size-11 max-md:bg-surface-raised max-md:p-0",
       )}
     >
       <Pin
-        className={cn("h-3.5 w-3.5", isPinned && "fill-current")}
+        className={cn("h-3.5 w-3.5 max-md:size-5", isPinned && "fill-current")}
         aria-hidden
       />
     </button>
@@ -321,6 +322,7 @@ export function ConversationCard({
             showPersistentPinIcon
               ? "min-w-[3.75rem]"
               : hasHoverActions && hoverRevealReserveClassName(contextMenuOpen),
+            hasHoverActions && "max-md:min-w-24",
           )}
         >
           {!showPersistentPinIcon && (createdAt ?? lastUpdatedAt) && (
