@@ -142,13 +142,17 @@ export function RecommendedAutomationsLauncher({
     useAutomations({ enabled: isRail && automationHealth?.status === "ok" });
   const {
     getNativeIntegration,
+    builtInIntegrations,
     isJiraEnabled,
     isLinearEnabled,
     isSlackEnabled,
     deploymentMode,
     isLoading: isNativeIntegrationsLoading,
   } = useNativeGitIntegrations();
-  const hiddenAutomationIds = getHiddenAutomationIds(deploymentMode);
+  const hiddenAutomationIds = useMemo(
+    () => getHiddenAutomationIds({ deploymentMode, builtInIntegrations }),
+    [deploymentMode, builtInIntegrations],
+  );
   const { isSlackConnected, isJiraConnected } =
     useBuiltInIntegrationConnections({
       slackEnabled: isSlackEnabled,

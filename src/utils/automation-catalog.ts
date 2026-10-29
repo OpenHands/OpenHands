@@ -131,19 +131,111 @@ const SELF_HOSTED_HIDDEN_AUTOMATION_IDS: ReadonlySet<string> = new Set([
   "custom-automation",
 ]);
 
-const NO_HIDDEN_AUTOMATION_IDS: ReadonlySet<string> = new Set();
+/** Integration ids that are also an instance's built-in git providers. */
+const GIT_PROVIDER_INTEGRATION_IDS: ReadonlySet<string> = new Set([
+  "github",
+  "gitlab",
+  "bitbucket",
+]);
 
 /**
- * The catalog entries to hide for a backend reporting `deploymentMode` (the
- * cloud web-client config's `feature_flags.deployment_mode`). Only a
- * self-hosted (Enterprise) instance hides anything.
+ * Integration ids that reach only Jira Cloud, never Jira Data Center. The
+ * `atlassian` MCP server is absent: it also serves Jira Data Center.
+ */
+const JIRA_CLOUD_INTEGRATION_IDS: ReadonlySet<string> = new Set([
+  "atlassian-rovo",
+  "jira",
+]);
+
+/** What the active backend says about the integrations built into it. */
+export interface InstanceIntegrations {
+  /** The cloud web-client config's `feature_flags.deployment_mode`. */
+  deploymentMode: string | null | undefined;
+  /**
+   * The built-in integrations the instance enables, by provider name, or null
+   * while unknown (local backends, loading, an unreadable config).
+   */
+  builtInIntegrations: ReadonlySet<string> | null | undefined;
+}
+
+/**
+ * The built-in integrations an entry cannot run without, read off the raw
+ * entry because the pinned package may predate the field.
+ */
+export function getRequiredBuiltInIntegrations(
+  automation: RecommendedAutomation,
+): string[] {
+  const { builtInIntegrations } = automation.requires as unknown as Record<
+    string,
+    unknown
+  >;
+  return Array.isArray(builtInIntegrations)
+    ? builtInIntegrations.filter(
+        (id): id is string => typeof id === "string" && id.length > 0,
+      )
+    : [];
+}
+
+/**
+ * Whether an OpenHands Enterprise instance can serve a template, judged by
+ * the integrations it builds in. Its repositories are reachable only through
+ * the git providers it configures, and an instance on Jira Data Center without
+ * Jira Cloud has no use for a template that talks to Jira Cloud.
+ */
+function isUsableOnSelfHostedInstance(
+  automation: RecommendedAutomation,
+  builtIns: ReadonlySet<string>,
+): boolean {
+  // An integration the template can start without never makes it unusable.
+  const required = getRequiredIntegrationIds(automation);
+  const ids = getTemplateIntegrationIds(automation).filter(
+    (id) =>
+      required.includes(id) || !getIntegrationIds(automation).includes(id),
+  );
+  if (
+    ids.some((id) => GIT_PROVIDER_INTEGRATION_IDS.has(id) && !builtIns.has(id))
+  ) {
+    return false;
+  }
+  const usesJiraDcOnly = builtIns.has("jira_dc") && !builtIns.has("jira");
+  return !(
+    usesJiraDcOnly && ids.some((id) => JIRA_CLOUD_INTEGRATION_IDS.has(id))
+  );
+}
+
+/**
+ * The catalog entries to hide on the active backend.
+ *
+ * An entry that needs built-in integrations is offered only where the
+ * instance is known to enable all of them, so a local backend never shows one.
+ * A self-hosted (Enterprise) instance also hides the entries it does not
+ * offer at all, and, once its built-in integrations are known, the ones that
+ * need a git provider it does not configure or Jira Cloud it does not use.
  */
 export function getHiddenAutomationIds(
-  deploymentMode: string | null | undefined,
+  { deploymentMode, builtInIntegrations }: InstanceIntegrations,
+  catalog: readonly RecommendedAutomation[] = AUTOMATION_CATALOG,
 ): ReadonlySet<string> {
-  return deploymentMode === "self_hosted"
-    ? SELF_HOSTED_HIDDEN_AUTOMATION_IDS
-    : NO_HIDDEN_AUTOMATION_IDS;
+  const isSelfHosted = deploymentMode === "self_hosted";
+  const hidden = new Set(
+    isSelfHosted ? SELF_HOSTED_HIDDEN_AUTOMATION_IDS : undefined,
+  );
+  for (const automation of catalog) {
+    const required = getRequiredBuiltInIntegrations(automation);
+    if (
+      required.length > 0 &&
+      !required.every((id) => builtInIntegrations?.has(id))
+    ) {
+      hidden.add(automation.id);
+    } else if (
+      isSelfHosted &&
+      builtInIntegrations &&
+      !isUsableOnSelfHostedInstance(automation, builtInIntegrations)
+    ) {
+      hidden.add(automation.id);
+    }
+  }
+  return hidden;
 }
 
 /**

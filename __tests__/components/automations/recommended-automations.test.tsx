@@ -165,12 +165,16 @@ function settingsWithGithubMcp() {
 async function activateCloudBackend({
   providersConfigured = [],
   jiraEnabled = false,
+  jiraDcEnabled = false,
   linearEnabled = false,
+  deploymentMode,
   settings = {},
 }: {
   providersConfigured?: string[];
   jiraEnabled?: boolean;
+  jiraDcEnabled?: boolean;
   linearEnabled?: boolean;
+  deploymentMode?: string;
   settings?: object;
 } = {}) {
   setRegisteredBackends([cloudBackend]);
@@ -181,7 +185,9 @@ async function activateCloudBackend({
         providers_configured: providersConfigured,
         feature_flags: {
           enable_jira: jiraEnabled,
+          enable_jira_dc: jiraDcEnabled,
           enable_linear: linearEnabled,
+          deployment_mode: deploymentMode,
         },
       }),
     ),
@@ -1204,6 +1210,86 @@ describe("recommended automations", () => {
       screen.queryByTestId("built-in-integration-choice-modal"),
     ).not.toBeInTheDocument();
     expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Runs `body` with the `news-digest` entry needing the given built-in
+   * integrations, so what a package release ships never decides the case. The
+   * entry is mutated in place because the section reads the catalog at import.
+   */
+  async function withBuiltInRequirement(
+    builtInIntegrations: string[],
+    body: () => Promise<void>,
+  ) {
+    const entry = AUTOMATION_CATALOG.find(({ id }) => id === "news-digest")!;
+    const requires = entry.requires as unknown as Record<string, unknown>;
+    requires.builtInIntegrations = builtInIntegrations;
+    try {
+      await body();
+    } finally {
+      delete requires.builtInIntegrations;
+    }
+  }
+
+  it("offers an Enterprise instance on Data Center only the templates its integrations can run", async () => {
+    await withBuiltInRequirement(
+      ["jira_dc", "bitbucket_data_center"],
+      async () => {
+        // Arrange
+        await activateCloudBackend({
+          deploymentMode: "self_hosted",
+          providersConfigured: ["bitbucket_data_center"],
+          jiraDcEnabled: true,
+        });
+
+        // Act
+        renderLauncher({ withBackendProvider: true });
+
+        // Assert
+        expect(
+          await screen.findByTestId("recommended-automation-card-news-digest"),
+        ).toBeInTheDocument();
+        for (const cloudOnly of [
+          "jira-issue-to-bitbucket-pr",
+          "jira-issue-to-pr",
+          "linear-issue-to-bitbucket-pr",
+          "github-pr-reviewer",
+        ]) {
+          expect(
+            screen.queryByTestId(`recommended-automation-card-${cloudOnly}`),
+          ).not.toBeInTheDocument();
+        }
+        expect(
+          screen.getByTestId(
+            "recommended-automation-card-research-brief-writer",
+          ),
+        ).toBeInTheDocument();
+      },
+    );
+  });
+
+  it("does not offer Data Center templates on OpenHands Cloud", async () => {
+    await withBuiltInRequirement(["bitbucket_data_center"], async () => {
+      // Arrange
+      await activateCloudBackend({
+        deploymentMode: "cloud",
+        providersConfigured: ["github", "gitlab", "bitbucket"],
+        jiraEnabled: true,
+      });
+
+      // Act
+      renderLauncher({ withBackendProvider: true });
+
+      // Assert
+      expect(
+        await screen.findByTestId(
+          "recommended-automation-card-jira-issue-to-pr",
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("recommended-automation-card-news-digest"),
+      ).not.toBeInTheDocument();
+    });
   });
 
   it("shows the native integration first and the MCP server on its own tab", async () => {

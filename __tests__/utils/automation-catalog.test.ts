@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { AUTOMATION_CATALOG } from "@openhands/extensions/automations";
 import { Activity, Bot } from "lucide-react";
+import type { RecommendedAutomation } from "@openhands/extensions/automations";
 import {
   getAutomationIcon,
   getAutomationLaunchPrompt,
+  getHiddenAutomationIds,
   resolveAutomationImpactStatement,
 } from "#/utils/automation-catalog";
 import type { Automation } from "#/types/automation";
@@ -200,5 +202,177 @@ describe("resolveAutomationImpactStatement", () => {
         ),
       ).toBeNull();
     }
+  });
+});
+
+/** A catalog entry with just what the hiding rule reads. */
+function template(
+  id: string,
+  requires: Record<string, unknown>,
+  setup?: Record<string, unknown>,
+): RecommendedAutomation {
+  return { id, requires, setup } as unknown as RecommendedAutomation;
+}
+
+const message = { message: "Used for the work." };
+const githubPrReviewer = template(
+  "github-reviewer",
+  { integrations: {} },
+  {
+    form: {
+      args: {
+        repositories: { type: "repo-picker", provider: "github" },
+      },
+    },
+  },
+);
+const jiraToBitbucket = template("jira-to-bitbucket", {
+  integrations: { "atlassian-rovo": message, bitbucket: message },
+});
+const jiraToGithub = template("jira-to-github", {
+  integrations: { "atlassian-rovo": message, github: message },
+});
+const optionalGitlab = template("optional-gitlab", {
+  integrations: { gitlab: { ...message, required: false } },
+});
+const newsDigest = template("news-digest", { integrations: {} });
+const dataCenterReviewer = template("bitbucket-dc-reviewer", {
+  integrations: {},
+  builtInIntegrations: ["bitbucket_data_center"],
+});
+const dataCenterIssueToPr = template("jira-dc-to-bitbucket-dc", {
+  integrations: {},
+  builtInIntegrations: ["jira_dc", "bitbucket_data_center"],
+});
+const catalog = [
+  githubPrReviewer,
+  jiraToBitbucket,
+  jiraToGithub,
+  optionalGitlab,
+  newsDigest,
+  dataCenterReviewer,
+  dataCenterIssueToPr,
+];
+
+describe("getHiddenAutomationIds", () => {
+  it("shows only Data Center templates and what its providers serve on an Enterprise instance on Data Center", () => {
+    // Arrange
+    const instance = {
+      deploymentMode: "self_hosted",
+      builtInIntegrations: new Set(["bitbucket_data_center", "jira_dc"]),
+    };
+
+    // Act
+    const hidden = getHiddenAutomationIds(instance, catalog);
+
+    // Assert
+    expect(
+      [...hidden].filter((id) => catalog.some((t) => t.id === id)),
+    ).toEqual(["github-reviewer", "jira-to-bitbucket", "jira-to-github"]);
+  });
+
+  it("hides Jira Cloud templates on an Enterprise instance using Jira Data Center alongside a git provider they need", () => {
+    // Arrange
+    const instance = {
+      deploymentMode: "self_hosted",
+      builtInIntegrations: new Set(["github", "jira_dc"]),
+    };
+
+    // Act
+    const hidden = getHiddenAutomationIds(instance, catalog);
+
+    // Assert
+    expect(hidden.has("jira-to-github")).toBe(true);
+    expect(hidden.has("github-reviewer")).toBe(false);
+  });
+
+  it("keeps Jira Cloud templates on an Enterprise instance that also enables Jira Cloud", () => {
+    // Arrange
+    const instance = {
+      deploymentMode: "self_hosted",
+      builtInIntegrations: new Set(["github", "jira", "jira_dc"]),
+    };
+
+    // Act
+    const hidden = getHiddenAutomationIds(instance, catalog);
+
+    // Assert
+    expect(hidden.has("jira-to-github")).toBe(false);
+  });
+
+  it("never lets an integration a template can start without hide it", () => {
+    // Arrange
+    const instance = {
+      deploymentMode: "self_hosted",
+      builtInIntegrations: new Set(["github"]),
+    };
+
+    // Act
+    const hidden = getHiddenAutomationIds(instance, catalog);
+
+    // Assert
+    expect(hidden.has("optional-gitlab")).toBe(false);
+    expect(hidden.has("news-digest")).toBe(false);
+  });
+
+  it("shows a Data Center template only where every built-in integration it needs is enabled", () => {
+    // Arrange
+    const instance = {
+      deploymentMode: "self_hosted",
+      builtInIntegrations: new Set(["bitbucket_data_center"]),
+    };
+
+    // Act
+    const hidden = getHiddenAutomationIds(instance, catalog);
+
+    // Assert
+    expect(hidden.has("bitbucket-dc-reviewer")).toBe(false);
+    expect(hidden.has("jira-dc-to-bitbucket-dc")).toBe(true);
+  });
+
+  it("leaves OpenHands Cloud's catalog alone apart from Data Center templates", () => {
+    // Arrange
+    const instance = {
+      deploymentMode: "cloud",
+      builtInIntegrations: new Set(["github", "gitlab", "bitbucket", "jira"]),
+    };
+
+    // Act
+    const hidden = getHiddenAutomationIds(instance, catalog);
+
+    // Assert
+    expect([...hidden]).toEqual([
+      "bitbucket-dc-reviewer",
+      "jira-dc-to-bitbucket-dc",
+    ]);
+  });
+
+  it("hides only Data Center templates while the instance's integrations are unknown", () => {
+    // Arrange — a local backend, or a cloud instance whose config is loading.
+    const instance = { deploymentMode: null, builtInIntegrations: null };
+
+    // Act
+    const hidden = getHiddenAutomationIds(instance, catalog);
+
+    // Assert
+    expect([...hidden]).toEqual([
+      "bitbucket-dc-reviewer",
+      "jira-dc-to-bitbucket-dc",
+    ]);
+  });
+
+  it("keeps hiding what an Enterprise instance never offers before its integrations are known", () => {
+    // Arrange
+    const instance = {
+      deploymentMode: "self_hosted",
+      builtInIntegrations: null,
+    };
+
+    // Act
+    const hidden = getHiddenAutomationIds(instance, catalog);
+
+    // Assert
+    expect(hidden.has("custom-automation")).toBe(true);
+    expect(hidden.has("jira-to-bitbucket")).toBe(false);
   });
 });
