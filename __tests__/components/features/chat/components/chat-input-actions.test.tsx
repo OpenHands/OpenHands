@@ -352,6 +352,21 @@ describe("ChatInputActions — Switch agent profile gate (OSS-5735)", () => {
     ).toBeInTheDocument();
   });
 
+  it("still mounts the agent profile pill when no profile is active", async () => {
+    listAgentProfilesMock.mockResolvedValue({
+      profiles: [{ id: "p1", name: "default", agent_kind: "openhands" }],
+      active_agent_profile_id: null,
+    });
+
+    renderWithProviders(<ChatInputActions disabled={false} />, {
+      navigation: { conversationId: null },
+    });
+
+    expect(
+      await screen.findByTestId("agent-profile-pill-stub"),
+    ).toBeInTheDocument();
+  });
+
   it("offers Switch agent profile in a blank (unstarted) conversation", async () => {
     useActiveConversationMock.mockReturnValue({
       data: { conversation_id: "conv-blank", llm_model: null },

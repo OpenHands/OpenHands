@@ -24,6 +24,7 @@ import {
 } from "#/manifests/automation-interface";
 import { BackLink } from "#/components/features/automations/detail/back-link";
 import { DetailHeader } from "#/components/features/automations/detail/detail-header";
+import { AutomationTagsEditor } from "#/components/features/automations/detail/automation-tags-editor";
 import { DisabledReasonBanner } from "#/components/features/automations/detail/disabled-reason-banner";
 import { PromptSection } from "#/components/features/automations/detail/prompt-section";
 import { ScriptSection } from "#/components/features/automations/detail/script-section";
@@ -259,6 +260,11 @@ export default function AutomationDetail() {
             isRunningNow={dispatchMutation.isPending}
             canManage={canManage}
             canToggle={canToggle}
+          />
+          {/* The service lets only the creator change tags. */}
+          <AutomationTagsEditor
+            automation={automation}
+            canEdit={isOwner && !isDraft}
           />
           <DisabledReasonBanner automation={automation} />
           {automation.prompt ? (

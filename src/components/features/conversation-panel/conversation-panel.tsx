@@ -6,6 +6,7 @@ import { useNavigation } from "#/context/navigation-context";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useBackendScopedPath } from "#/hooks/use-backend-scoped-path";
 import { usePaginatedConversations } from "#/hooks/query/use-paginated-conversations";
+import { useAgentProfiles } from "#/hooks/query/use-agent-profiles";
 import { useResolvedWorkspaces } from "#/hooks/query/use-resolved-workspaces";
 import { useStartTasks } from "#/hooks/query/use-start-tasks";
 import { useDeleteConversation } from "#/hooks/mutation/use-delete-conversation";
@@ -64,6 +65,7 @@ import { uniqueById } from "#/utils/unique-by-id";
 import {
   isEffectivelyArchivedConversation,
   isMissingSandboxStatus,
+  isRuntimeUnavailableSandboxStatus,
 } from "#/utils/conversation-archive-status";
 import type { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
 
@@ -273,6 +275,16 @@ export function ConversationPanel({
 
   // Fetch in-progress start tasks
   const { data: startTasks } = useStartTasks();
+  // The hovercard names the launched agent profile: one cached list lookup
+  // (shared with the chat input), never a fetch per hover.
+  const { data: agentProfilesData } = useAgentProfiles();
+  const agentProfileNames = React.useMemo(() => {
+    const names = new Map<string, string>();
+    for (const profile of agentProfilesData?.profiles ?? []) {
+      if (profile.id) names.set(profile.id, profile.name);
+    }
+    return names;
+  }, [agentProfilesData]);
 
   // Deduped, archive-unaware collection of every conversation currently loaded
   // from the backend. Bulk actions like "Delete all" must use this list so
@@ -729,6 +741,27 @@ export function ConversationPanel({
     [createConversation, isCreatingConversationFlow, navigate],
   );
 
+  // Mirrors the `/new` command: the new conversation reuses the row's sandbox
+  // and nothing else. No parent id, so it shows up in this list; no
+  // repository, so the backend doesn't touch the shared working tree's branch.
+  const handleNewConversationInSandbox = React.useCallback(
+    (sandboxId: string) => {
+      if (isCreatingConversationFlow) return;
+      createConversation(
+        {
+          sandboxId,
+          entryPoint: "sidebar_new_conversation_in_sandbox",
+        },
+        {
+          onSuccess: (data) => {
+            navigate(`/conversations/${data.conversation_id}`);
+          },
+        },
+      );
+    },
+    [createConversation, isCreatingConversationFlow, navigate],
+  );
+
   const handleDeleteProject = React.useCallback(
     (conversationId: string, title: string) => {
       setConfirmDeleteModalVisible(true);
@@ -890,6 +923,11 @@ export function ConversationPanel({
       const runtimeMissing = isMissingSandboxStatus(
         conversation.sandbox_status,
       );
+      // "New Conversation in Sandbox" needs a sandbox the backend can start a
+      // conversation in: Cloud rows only (the local adapter carries no sandbox
+      // id), and not one whose runtime is MISSING or ERROR, which the start
+      // task rejects. A PAUSED sandbox is resumed by the backend.
+      const sandboxId = conversation.sandbox_id;
       if (compact) {
         return (
           <CompactConversationRow
@@ -952,6 +990,17 @@ export function ConversationPanel({
               agentKind={conversation.agent_kind}
               acpServer={conversation.acp_server}
               createdAt={conversation.created_at}
+              agentProfileId={
+                conversation.launched_agent_profile?.agent_profile_id ?? null
+              }
+              agentProfileName={
+                agentProfilesData
+                  ? (agentProfileNames.get(
+                      conversation.launched_agent_profile?.agent_profile_id ??
+                        "",
+                    ) ?? null)
+                  : undefined
+              }
               tags={conversation.tags}
               isArchived={isArchived}
             />
@@ -991,6 +1040,12 @@ export function ConversationPanel({
                   : undefined
               }
               onStop={() => handleStopConversation(conversation.id)}
+              onNewConversationInSandbox={
+                sandboxId &&
+                !isRuntimeUnavailableSandboxStatus(conversation.sandbox_status)
+                  ? () => handleNewConversationInSandbox(sandboxId)
+                  : undefined
+              }
               onEditTags={
                 activeBackend.kind === "local"
                   ? () => handleEditTags(conversation.id)
@@ -1046,6 +1101,7 @@ export function ConversationPanel({
       handleConversationTitleChange,
       handleDeleteProject,
       handleEditTags,
+      handleNewConversationInSandbox,
       handleStopConversation,
       handleUnarchiveProject,
       isRowArchived,

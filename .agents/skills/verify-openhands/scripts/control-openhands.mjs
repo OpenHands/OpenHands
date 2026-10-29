@@ -5017,8 +5017,9 @@ Verbs
         (--bodies adds each app-origin write's body, JSON with credential values and env/header maps
          replaced by their length, URL userinfo and secret-named query values redacted in any string;
          the settings API's ********** placeholder is kept as is; body is capped at 2000 chars.
-         bodyFields.plugins projects only top-level plugins before that cap, recursively redacted,
-         at most 16384 UTF-8 bytes; oversized values are omitted with bodyFieldsOmitted.plugins.
+         bodyFields projects only the top-level plugins, conversation_runtime, worktree,
+         worktree_options and container before that cap, recursively redacted, at most 16384
+         UTF-8 bytes; oversized values are omitted with bodyFieldsOmitted.<field>.
          Body fields and omission metadata are absent without --bodies)
                                          (privacy/telemetry checks; --clear as for errors)
   toasts [--history [--clear]]          toasts on screen now (with links); --history adds every

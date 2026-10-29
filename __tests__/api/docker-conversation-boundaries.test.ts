@@ -106,6 +106,7 @@ describe("conversation runtime boundaries", () => {
       workingDir: "/workspace",
       hooksProjectDir: null,
       isolated: true,
+      runtimeSelectable: false,
     });
     expect(paths).toEqual(["/server_info"]);
   });
@@ -176,6 +177,7 @@ describe("conversation runtime boundaries", () => {
       workingDir: "/home/user/project",
       hooksProjectDir: "/home/user/project",
       isolated: false,
+      runtimeSelectable: false,
     });
   });
 
