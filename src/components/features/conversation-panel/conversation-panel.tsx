@@ -6,6 +6,7 @@ import { useNavigation } from "#/context/navigation-context";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useBackendScopedPath } from "#/hooks/use-backend-scoped-path";
 import { usePaginatedConversations } from "#/hooks/query/use-paginated-conversations";
+import { useAgentProfiles } from "#/hooks/query/use-agent-profiles";
 import { useResolvedWorkspaces } from "#/hooks/query/use-resolved-workspaces";
 import { useStartTasks } from "#/hooks/query/use-start-tasks";
 import { useDeleteConversation } from "#/hooks/mutation/use-delete-conversation";
@@ -274,6 +275,16 @@ export function ConversationPanel({
 
   // Fetch in-progress start tasks
   const { data: startTasks } = useStartTasks();
+  // The hovercard names the launched agent profile: one cached list lookup
+  // (shared with the chat input), never a fetch per hover.
+  const { data: agentProfilesData } = useAgentProfiles();
+  const agentProfileNames = React.useMemo(() => {
+    const names = new Map<string, string>();
+    for (const profile of agentProfilesData?.profiles ?? []) {
+      if (profile.id) names.set(profile.id, profile.name);
+    }
+    return names;
+  }, [agentProfilesData]);
 
   // Deduped, archive-unaware collection of every conversation currently loaded
   // from the backend. Bulk actions like "Delete all" must use this list so
@@ -979,6 +990,17 @@ export function ConversationPanel({
               agentKind={conversation.agent_kind}
               acpServer={conversation.acp_server}
               createdAt={conversation.created_at}
+              agentProfileId={
+                conversation.launched_agent_profile?.agent_profile_id ?? null
+              }
+              agentProfileName={
+                agentProfilesData
+                  ? (agentProfileNames.get(
+                      conversation.launched_agent_profile?.agent_profile_id ??
+                        "",
+                    ) ?? null)
+                  : undefined
+              }
               tags={conversation.tags}
               isArchived={isArchived}
             />
