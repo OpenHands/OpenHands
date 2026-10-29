@@ -59,11 +59,18 @@ export function CodeBlock({
       customStyle={{
         margin: 0,
         padding: "0.5rem 0.75rem",
+        // The theme sets 13px inline; match the 12px step text instead.
+        fontSize: "0.75rem",
+        lineHeight: "1.125rem",
         ...(wrapLongLines ? { whiteSpace: "pre-wrap" } : {}),
       }}
-      codeTagProps={
-        wrapLongLines ? { style: { whiteSpace: "pre-wrap" } } : undefined
-      }
+      codeTagProps={{
+        style: {
+          fontSize: "inherit",
+          lineHeight: "inherit",
+          ...(wrapLongLines ? { whiteSpace: "pre-wrap" } : {}),
+        },
+      }}
     >
       {text}
     </SyntaxHighlighter>
