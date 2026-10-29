@@ -8,8 +8,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import { formatEventTimestamp } from "#/utils/format-event-timestamp";
 import { cn } from "#/utils/utils";
-
-const TIMESTAMP_DELAY_MS = 700;
+import { useTimestampHover } from "#/hooks/use-timestamp-hover";
 
 interface GenericEventMessageProps {
   title: React.ReactNode;
@@ -37,25 +36,13 @@ export function GenericEventMessage({
 }: GenericEventMessageProps) {
   const { t, i18n } = useTranslation("openhands");
   const [showDetails, setShowDetails] = React.useState(initiallyExpanded);
-  const [isHovered, setIsHovered] = React.useState(false);
   const [hasFocusWithin, setHasFocusWithin] = React.useState(false);
   const timestampLabel = formatEventTimestamp(timestamp, i18n?.language);
-  const hoverTimer = React.useRef<ReturnType<typeof setTimeout>>(undefined);
-
-  // The timestamp waits for a resting pointer so quick clicks on a title, or
-  // moving through a group's rows, don't pop it over the neighbouring row.
-  const startHover = () => {
-    clearTimeout(hoverTimer.current);
-    hoverTimer.current = setTimeout(
-      () => setIsHovered(true),
-      TIMESTAMP_DELAY_MS,
-    );
-  };
-  const endHover = () => {
-    clearTimeout(hoverTimer.current);
-    setIsHovered(false);
-  };
-  React.useEffect(() => () => clearTimeout(hoverTimer.current), []);
+  const {
+    isVisible: isHovered,
+    show: startHover,
+    hide: endHover,
+  } = useTimestampHover();
 
   const chevron = details ? (
     <button
