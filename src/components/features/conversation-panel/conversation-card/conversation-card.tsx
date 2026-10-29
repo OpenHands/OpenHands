@@ -36,6 +36,12 @@ interface ConversationCardProps {
    */
   onUnarchive?: () => void;
   onStop?: () => void;
+  /**
+   * Starts a new conversation in this conversation's sandbox. The panel
+   * passes it only for Cloud rows whose sandbox can still be used, so the
+   * menu item disappears on Local backends and on missing/errored sandboxes.
+   */
+  onNewConversationInSandbox?: () => void;
   onChangeTitle?: (title: string) => void;
   /**
    * Opens the tag editor for this conversation. Local agent-server backends
@@ -83,6 +89,7 @@ export function ConversationCard({
   onArchive,
   onUnarchive,
   onStop,
+  onNewConversationInSandbox,
   onChangeTitle,
   onEditTags,
   showOptions,
@@ -156,6 +163,15 @@ export function ConversationCard({
     event.preventDefault();
     event.stopPropagation();
     onStop?.();
+    onContextMenuToggle?.(false);
+  };
+
+  const handleNewConversationInSandbox = (
+    event: React.MouseEvent<HTMLButtonElement>,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onNewConversationInSandbox?.();
     onContextMenuToggle?.(false);
   };
 
@@ -341,6 +357,10 @@ export function ConversationCard({
                       onArchive={onArchive && handleArchive}
                       onUnarchive={onUnarchive && handleUnarchive}
                       onStop={onStop && handleStop}
+                      onNewConversationInSandbox={
+                        onNewConversationInSandbox &&
+                        handleNewConversationInSandbox
+                      }
                       onEdit={onChangeTitle && handleEdit}
                       onEditTags={onEditTags && handleEditTags}
                       onDownloadViaVSCode={handleDownloadViaVSCode}
@@ -369,6 +389,9 @@ export function ConversationCard({
                   onArchive={onArchive && handleArchive}
                   onUnarchive={onUnarchive && handleUnarchive}
                   onStop={onStop && handleStop}
+                  onNewConversationInSandbox={
+                    onNewConversationInSandbox && handleNewConversationInSandbox
+                  }
                   onEdit={onChangeTitle && handleEdit}
                   onEditTags={onEditTags && handleEditTags}
                   onDownloadViaVSCode={handleDownloadViaVSCode}

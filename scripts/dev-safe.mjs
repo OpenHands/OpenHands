@@ -277,11 +277,13 @@ export async function assertPortsFree(portConfigs, host = "127.0.0.1") {
   const lines = busy
     .map(({ name, port }) => `   • ${name}: port ${port}`)
     .join("\n");
-  throw new Error(
+  const error = new Error(
     `Cannot start: the following ports are already in use:\n\n${lines}\n\n` +
       `Another agent-canvas instance may already be running.\n` +
-      `Stop it first, or override the port via environment variables (e.g. PORT=<other>).`,
+      `Stop it first, or override the occupied ports via environment variables (for ingress, --port <other> or PORT=<other>).`,
   );
+  error.code = "EADDRINUSE";
+  throw error;
 }
 
 /**
@@ -442,7 +444,7 @@ export function buildUvxPythonArgs(env = process.env) {
  *   edits are picked up without a manual reinstall. The agent-server itself
  *   is rebuilt from local source on each invocation (--reinstall).
  * - OH_AGENT_SERVER_GIT_REF: Git commit SHA or branch name
- * - OH_AGENT_SERVER_VERSION: Specific PyPI version (e.g., "1.56.0")
+ * - OH_AGENT_SERVER_VERSION: Specific PyPI version (e.g., "1.59.0")
  *
  * If none are set, defaults to the released version specified by
  * DEFAULT_AGENT_SERVER_VERSION. Set OH_AGENT_SERVER_GIT_REF to use a
@@ -807,6 +809,130 @@ export function buildAgentServerTelemetryEnv(env = process.env) {
 }
 
 /**
+ * Default log level for the backends Canvas launches.
+ *
+ * Both the agent-server and the automation service read `LOG_LEVEL` and default
+ * it to `INFO`. At `INFO` they emit library-internal startup chatter — most
+ * visibly SQLAlchemy's ORM model-mapping output, several hundred lines of it
+ * from the automation service alone — that buries the few lines a user needs
+ * (service URLs, readiness, real warnings). `WARNING` keeps actionable signals
+ * such as the automation workspace-retention warning while dropping the rest.
+ */
+export const DEFAULT_BACKEND_LOG_LEVEL = "WARNING";
+
+/**
+ * The log level to use for a backend Canvas spawns, before it is applied to
+ * any particular variable.
+ *
+ * Exported so the Uvicorn `--log-level` flag (which takes a lowercase name and
+ * governs the startup banner and per-request access lines, separately from the
+ * app's `LOG_LEVEL`) can be kept in step with the service level.
+ *
+ * @param {object} [options]
+ * @param {boolean} [options.verbose] - Raise to DEBUG.
+ * @param {Record<string, string | undefined>} [options.env] - Source environment.
+ * @returns {string} An uppercase logging level name
+ */
+export function backendLogLevel(options = {}) {
+  const { verbose = false, env = process.env } = options;
+  return verbose ? "DEBUG" : env.LOG_LEVEL || DEFAULT_BACKEND_LOG_LEVEL;
+}
+
+/** The only names Uvicorn's `--log-level` accepts; anything else exits 2. */
+export const UVICORN_LOG_LEVELS = [
+  "critical",
+  "error",
+  "warning",
+  "info",
+  "debug",
+  "trace",
+];
+
+// Python logging aliases that `logging.getLevelNamesMapping()` accepts but
+// Uvicorn does not.
+const UVICORN_LEVEL_ALIASES = { warn: "warning", fatal: "critical" };
+
+// Python level numbers, highest first, mapped to the Uvicorn name at or below
+// them (Uvicorn's `trace` sits below `debug`).
+const UVICORN_LEVEL_BY_NUMBER = [
+  [50, "critical"],
+  [40, "error"],
+  [30, "warning"],
+  [20, "info"],
+  [10, "debug"],
+  [5, "trace"],
+];
+
+/**
+ * Narrow a logging level to something Uvicorn's `--log-level` accepts.
+ *
+ * The app reads `LOG_LEVEL` through Python's logging module, which also
+ * understands `WARN`, `FATAL`, numeric levels and `NOTSET`; Uvicorn validates
+ * the flag with a `click.Choice` over {@link UVICORN_LOG_LEVELS} and exits 2 on
+ * anything else, taking the service — and with it the dev stack — down. So the
+ * env value keeps its raw form and only the Uvicorn argument is narrowed here.
+ *
+ * Values Uvicorn cannot represent fall back to `info`, Uvicorn's own default,
+ * which is what the launchers passed before they set the flag at all.
+ *
+ * @param {string | number | undefined} level
+ * @returns {string} A name from {@link UVICORN_LOG_LEVELS}
+ */
+export function uvicornLogLevel(level) {
+  const name = String(level ?? "")
+    .trim()
+    .toLowerCase();
+
+  if (UVICORN_LOG_LEVELS.includes(name)) return name;
+  if (UVICORN_LEVEL_ALIASES[name]) return UVICORN_LEVEL_ALIASES[name];
+
+  if (/^\d+$/.test(name)) {
+    const numeric = Number(name);
+    // Python's NOTSET is 0 and means "inherit", not "most verbose"; treat it
+    // like the `notset` name and fall back to Uvicorn's own default. Uvicorn's
+    // lowest name is `trace`, which covers everything below `debug`.
+    if (numeric === 0) return "info";
+    const match = UVICORN_LEVEL_BY_NUMBER.find(([value]) => numeric >= value);
+    return match ? match[1] : "trace";
+  }
+
+  return "info";
+}
+
+/**
+ * Logging environment for a backend Canvas spawns.
+ *
+ * Defaults to {@link DEFAULT_BACKEND_LOG_LEVEL} so a plain launch is readable,
+ * while any explicit `LOG_LEVEL` / `AUTOMATION_LOG_LEVEL` in the caller's
+ * environment still wins, so troubleshooting needs no code change. `--verbose`
+ * opts back into `DEBUG`.
+ *
+ * `AUTOMATION_LOG_LEVEL` is set only for the automation service: the
+ * agent-server does not read it, and setting it there would be misleading.
+ *
+ * @param {object} [options]
+ * @param {boolean} [options.verbose] - Raise both services to DEBUG.
+ * @param {boolean} [options.automation] - Also set AUTOMATION_LOG_LEVEL.
+ * @param {Record<string, string | undefined>} [options.env] - Source environment.
+ * @returns {Record<string, string>} Logging env vars for the backend process
+ */
+export function buildBackendLogEnv(options = {}) {
+  const { verbose = false, automation = false, env = process.env } = options;
+  const level = backendLogLevel({ verbose, env });
+
+  return {
+    LOG_LEVEL: level,
+    ...(automation
+      ? {
+          AUTOMATION_LOG_LEVEL: verbose
+            ? "DEBUG"
+            : env.AUTOMATION_LOG_LEVEL || level,
+        }
+      : {}),
+  };
+}
+
+/**
  * Build the environment variables object for spawning the agent-server process.
  *
  * This is exported so downstream consumers (e.g., automation service) can use
@@ -826,18 +952,21 @@ export function buildAgentServerTelemetryEnv(env = process.env) {
  * opts in without one.
  *
  * @param {ReturnType<typeof buildSafeDevConfig>} config - Config from buildSafeDevConfig
- * @param {{vscodeBasePath?: string | null, env?: Record<string, string | undefined>}} [options]
+ * @param {{vscodeBasePath?: string | null, env?: Record<string, string | undefined>, verbose?: boolean}} [options]
  * @param {string | null} [options.vscodeBasePath] - Opt into prefix-mode by
  *   passing the path prefix the caller also routes to `config.vscodePort`.
  * @param {Record<string, string | undefined>} [options.env] - Source
  *   environment for the telemetry mapping (defaults to `process.env`).
+ * @param {boolean} [options.verbose] - Raise the agent-server to DEBUG
+ *   logging instead of the default `WARNING` (see buildBackendLogEnv).
  * @returns {Record<string, string>} Environment variables for agent-server
  */
 export function buildAgentServerEnv(config, options = {}) {
-  const { vscodeBasePath = null, env = process.env } = options;
+  const { vscodeBasePath = null, env = process.env, verbose = false } = options;
   const conversationRuntimeEnv = Object.fromEntries(
     [
       "OH_CONVERSATION_RUNTIME",
+      "OH_CONVERSATION_RUNTIME_SELECTABLE",
       "OH_CONVERSATION_IMAGE",
       "OH_CONVERSATION_IMAGE_HAS_BROWSER",
       "OH_CONVERSATION_CONTAINER_MEMORY",
@@ -850,6 +979,7 @@ export function buildAgentServerEnv(config, options = {}) {
   );
   return {
     ...buildAgentServerTelemetryEnv(env),
+    ...buildBackendLogEnv({ verbose, env }),
     ...conversationRuntimeEnv,
     ...(env.VITE_ENABLE_BROWSER_TOOLS === "false"
       ? { OH_ENABLE_BROWSER: env.OH_ENABLE_BROWSER || "false" }

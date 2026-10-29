@@ -25,6 +25,7 @@ import { BUILD_INPUTS } from "./lib/build-inputs.mjs";
 import {
   editorOffset,
   launcherEnvFor,
+  lockedCloudOrigin,
   portsAfterRestart,
   runPorts,
 } from "./lib/launcher-env.mjs";
@@ -37,6 +38,10 @@ import {
   specMatches,
 } from "./lib/map-sources.mjs";
 import { routePattern } from "./lib/route-pattern.mjs";
+import {
+  networkTiming,
+  orderNetworkEntries,
+} from "./lib/network-timing.mjs";
 import { resolveTestids } from "./lib/testids.mjs";
 import { tmuxPathFor } from "./lib/tmux-path.mjs";
 import { browserCallLimit } from "./lib/call-limit.mjs";
@@ -73,6 +78,7 @@ import {
   knownBugBlocks,
   parseBugPredicate,
   proofVerdict,
+  viewportToRestore,
 } from "./lib/known-bug.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -690,6 +696,53 @@ test("this checkout's launcher answers the editor probe, and --vscode opts in", 
   assert.match(help.stdout, /OH_CANVAS_ENABLE_VSCODE/);
 });
 
+test("--lock-to-cloud takes P+4, keeps it across a restart, and needs an http(s) URL", () => {
+  const launcher = (offset) => ({ offset, source: "launcher" });
+  const locked = runPorts(18800, null, { lockedCloud: true });
+  assert.deepEqual(locked, {
+    ingress: 18800,
+    agentServer: 18801,
+    automation: 18802,
+    frontend: 18803,
+    lockedCloud: 18804,
+  });
+  // The locked page is not the launcher's: whatever the editor answer, a
+  // restart keeps its port.
+  assert.equal(
+    portsAfterRestart(locked, launcher(null)).ports.lockedCloud,
+    18804,
+  );
+  assert.equal(
+    portsAfterRestart(locked, launcher(1000)).ports.lockedCloud,
+    18804,
+  );
+  assert.equal(
+    portsAfterRestart(runPorts(18800, null), launcher(null)).ports.lockedCloud,
+    undefined,
+  );
+  assert.equal(
+    lockedCloudOrigin("https://app.all-hands.dev/"),
+    "https://app.all-hands.dev",
+  );
+  assert.throws(() => lockedCloudOrigin("app.all-hands.dev"), /Cloud URL/);
+  assert.throws(() => lockedCloudOrigin("ftp://example.com"), /http\(s\)/);
+  // A bad or missing URL is a usage error before anything is built or started.
+  for (const flags of [
+    ["--lock-to-cloud", "ftp://example.com"],
+    ["--lock-to-cloud"],
+  ]) {
+    const result = run(["launch", "--new", ...flags]);
+    assert.equal(result.status, 2, JSON.stringify(result.json));
+    assert.match(result.json.hint, /--lock-to-cloud https:/);
+  }
+  const help = spawnSync(process.execPath, [cli, "help", "launch"], {
+    encoding: "utf8",
+  });
+  assert.match(help.stdout, /--mars-web/);
+  assert.match(help.stdout, /MARS_WEB=1/);
+  assert.match(help.stdout, /--lock-to-cloud URL/);
+});
+
 test("a restart follows the launcher's editor answer, or keeps its ports", () => {
   const without = runPorts(18800, null);
   const withEditor = runPorts(18800, 1000);
@@ -924,6 +977,23 @@ test("cited test ids resolve through literals and dynamic prefixes", () => {
   assert.equal(result.cited, 4);
   assert.deepEqual(result.unresolved, [
     { id: "renamed-away-button", files: ["F14-secrets.md"] },
+  ]);
+  // A one-word prefix accounts for an id only when the source builds ids
+  // from it; otherwise a removed id such as automation-setup-agent-profile
+  // would resolve through the plain word "automation".
+  const words = new Set(["automation", "edit"]);
+  words.heads = new Set(["edit"]);
+  words.tails = new Set(["message"]);
+  const strict = resolveTestids(
+    new Map([
+      ["automation-setup-agent-profile", new Set(["F28.md"])],
+      ["edit-automation-save", new Set(["F23.md"])],
+      ["agent-message", new Set(["F06.md"])],
+    ]),
+    words,
+  );
+  assert.deepEqual(strict.unresolved, [
+    { id: "automation-setup-agent-profile", files: ["F28.md"] },
   ]);
   // The live map against the live source tree: zero unresolved today, and
   // --strict makes any drift a failing exit.
@@ -2465,6 +2535,42 @@ test("a fix is verified only by two reproductions and two passes under the same 
     ).reasons.join(),
     /same revision/,
   );
+  // A backend fix: same revision, a different backend on each side.
+  const vb = (baseline, fix) =>
+    proofVerdict({ baseline, fix, sha: "s1", vary: "backend" });
+  const newBackend = { backend: "local agent-server 1.58.1 automation 1.25.1" };
+  assert.equal(
+    vb(
+      [row("xfail"), row("xfail")],
+      [row("xpass", newBackend), row("xpass", newBackend)],
+    ).verdict,
+    "verified",
+  );
+  assert.match(
+    vb([row("xfail"), row("xfail")], [row("xpass"), row("xpass")]).reasons.join(),
+    /same backend versions/,
+  );
+  assert.match(
+    vb(
+      [row("xfail"), row("xfail")],
+      [fixRow("xpass", newBackend), fixRow("xpass", newBackend)],
+    ).reasons.join(),
+    /different revisions/,
+  );
+  assert.match(
+    vb(
+      [row("xfail"), row("xfail")],
+      [row("xpass", newBackend), row("xpass")],
+    ).reasons.join(),
+    /one side ran different backend/,
+  );
+  assert.equal(
+    vb(
+      [row("xfail"), row("xfail")],
+      [row("xpass", newBackend), row("xfail", newBackend)],
+    ).verdict,
+    "not-fixed",
+  );
   // Attempts of an older recipe do not count.
   const old = v(
     [row("xpass", { sha: "s0" }), row("xfail"), row("xfail")],
@@ -2833,6 +2939,29 @@ test("network plugin projection bounds complete UTF-8 JSON and omits non-JSON or
   );
 });
 
+test("network body projection keeps the start request's runtime choice past the display cap", () => {
+  const request = JSON.stringify({
+    agent_launch_additions: { system_message_suffix_append: "x".repeat(4000) },
+    llm: { api_key: "never-project-me" },
+    worktree: true,
+    worktree_options: { base: "current_head", branch_prefix: "qa/" },
+    conversation_runtime: "local",
+    container: { memory: "2g", cpus: 1 },
+  });
+  assert.deepEqual(redactBodyFields(request), {
+    bodyFields: {
+      conversation_runtime: "local",
+      worktree: true,
+      worktree_options: { base: "current_head", branch_prefix: "qa/" },
+      container: { memory: "2g", cpus: 1 },
+    },
+  });
+  assert.doesNotMatch(
+    JSON.stringify(redactBodyFields(request)),
+    /never-project-me|system_message/,
+  );
+});
+
 test("browser media validates motion before dispatch and preserves playback observation", async () => {
   const runDir = mkdtempSync(join(tmpdir(), "cov-media-motion-"));
   mkdirSync(join(runDir, "private"));
@@ -2874,4 +3003,79 @@ test("browser media validates motion before dispatch and preserves playback obse
     await new Promise((resolve) => server.close(resolve));
     rmSync(runDir, { recursive: true, force: true });
   }
+});
+
+test("browser network times responses and can list them in completion order", () => {
+  let clock = 1_000;
+  const timing = networkTiming(() => clock);
+  // Two schema requests leave together; the second one answers first.
+  const agent = { ts: "t0", path: "/api/settings/agent-schema" };
+  const conversation = { ts: "t0", path: "/api/settings/conversation-schema" };
+  const pending = { ts: "t0", path: "/sockets/events" };
+  for (const entry of [agent, conversation, pending]) timing.start(entry);
+  clock = 1_040;
+  timing.response(conversation);
+  clock = 1_050;
+  timing.complete(conversation, "finished");
+  clock = 1_120;
+  timing.response(agent);
+  timing.response(agent); // a second call does not move the first answer
+  clock = 1_130;
+  timing.complete(agent, "finished");
+  timing.complete(agent, "failed"); // nor does a late failure
+  assert.deepEqual(networkEntryForOutput(conversation, false), {
+    ts: "t0",
+    path: "/api/settings/conversation-schema",
+    responseMs: 40,
+    outcome: "finished",
+    durationMs: 50,
+    completedTs: new Date(1_050).toISOString(),
+    completedSeq: 1,
+  });
+  assert.equal(agent.responseMs, 120);
+  assert.equal(agent.outcome, "finished");
+  assert.equal(agent.completedSeq, 2);
+  const list = [agent, conversation, pending];
+  assert.deepEqual(orderNetworkEntries(list), list);
+  assert.deepEqual(
+    orderNetworkEntries(list, "completion").map((e) => e.path),
+    [
+      "/api/settings/conversation-schema",
+      "/api/settings/agent-schema",
+      "/sockets/events",
+    ],
+  );
+  assert.throws(() => orderNetworkEntries(list, "size"), /request or completion/);
+  // --last windows completed and pending rows separately: 15 open sockets
+  // must not push the two completions out of a --last 15 listing.
+  const sockets = Array.from({ length: 15 }, (_, i) => ({ path: `/ws/${i}` }));
+  const busy = orderNetworkEntries([...list, ...sockets], "completion", 15);
+  assert.deepEqual(
+    busy.slice(0, 2).map((e) => e.path),
+    ["/api/settings/conversation-schema", "/api/settings/agent-schema"],
+  );
+  assert.equal(busy.length, 17);
+  assert.deepEqual(
+    orderNetworkEntries([...list, ...sockets], "request", 2).map((e) => e.path),
+    ["/ws/13", "/ws/14"],
+  );
+  const help = spawnSync(process.execPath, [cli, "help", "browser"], {
+    encoding: "utf8",
+  });
+  assert.match(help.stdout, /--order request\|completion/);
+});
+
+test("bug run puts back the viewport a block changed", () => {
+  const desktop = { width: 1440, height: 1000 };
+  const phone = { width: 390, height: 844 };
+  // F07.overview-toggle phone-overview switches to phone: back to desktop.
+  assert.equal(viewportToRestore(desktop, phone), "1440x1000");
+  assert.equal(viewportToRestore(phone, desktop), "390x844");
+  // Unchanged, or nothing known before the block: nothing to restore.
+  assert.equal(viewportToRestore(desktop, { ...desktop }), null);
+  assert.equal(viewportToRestore(undefined, phone), null);
+  const help = spawnSync(process.execPath, [cli, "help", "bug"], {
+    encoding: "utf8",
+  });
+  assert.match(help.stdout, /viewportRestored/);
 });

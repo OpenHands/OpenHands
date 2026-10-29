@@ -2,6 +2,7 @@ import type { TFunction } from "i18next";
 
 import type {
   MarsAgentConfig,
+  MarsConnection,
   MarsSession,
   MarsSessionPhase,
 } from "#/api/mars/mars-tunnel-backend";
@@ -32,6 +33,13 @@ export const STAGE_LABEL_KEY: Record<MarsConnectStage, I18nKey> = {
   tunnel: I18nKey.DO_AGENTS$STAGE_TUNNEL,
   agent: I18nKey.DO_AGENTS$STAGE_AGENT,
 };
+
+/** "Team · email" for a signed-in connection, falling back to its label. */
+export function connectionLabel(connection: MarsConnection): string {
+  return [connection.teamName ?? connection.label, connection.email]
+    .filter(Boolean)
+    .join(" · ");
+}
 
 export function shortSessionId(session: MarsSession): string {
   return session.session_id.slice(0, SHORT_ID_LENGTH);

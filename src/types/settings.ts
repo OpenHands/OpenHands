@@ -14,6 +14,10 @@ export const ProviderOptions = {
 
 export type Provider = keyof typeof ProviderOptions;
 
+/** Narrow an untrusted value, such as a conversation tag, to a {@link Provider}. */
+export const isProvider = (value: unknown): value is Provider =>
+  typeof value === "string" && Object.hasOwn(ProviderOptions, value);
+
 export type SettingsChoiceValue = boolean | number | string;
 
 export type SettingsChoice = {
@@ -111,6 +115,8 @@ export type AgentKind = "openhands" | "acp";
 
 export type Settings = {
   workspace_file_discovery?: Record<string, WorkspaceFileDiscovery | null>;
+  /** Ordered ids of automations pinned to the home dashboard (local only). */
+  home_pinned_automations?: string[];
   llm_model: string;
   llm_base_url: string;
   agent: string;
