@@ -107,9 +107,11 @@ constraint-dependencies = [
   "litellm>=1.83.10",
   "mcp>=1.23.0",
   "pyasn1>=0.6.2",
+  "pypdf>=6.19.0",
   "python-multipart>=0.0.22",
   "starlette>=0.49.1",
   "urllib3>=2.8.0",
+  "virtualenv>=21.7.13",
 ]
 
 # UNCOMMENT TO USE EXACT COMMIT FROM AGENT-SDK
