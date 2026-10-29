@@ -858,3 +858,37 @@ code .token {
   font-size: 10px;
   @apply tracking-[0.12em];
 }
+
+/* Both chooser disclosures keep their mounted content on the same grid rail. */
+@utility backend-chooser-disclosure {
+  @apply transition-[grid-template-rows];
+}
+
+@utility backend-chooser-disclosure-open {
+  grid-template-rows: 1fr;
+}
+
+@utility backend-chooser-disclosure-closed {
+  grid-template-rows: 0fr;
+}
+
+@utility backend-chooser-cloud-panel {
+  min-height: 13.5rem;
+}
+
+@utility backend-chooser-cloud-halo {
+  @apply bg-[radial-gradient(75%_75%_at_50%_50%,rgba(255,255,255,0.1)_0%,rgba(255,255,255,0)_70%)];
+}
+
+@utility backend-chooser-learn-more-icon {
+  vertical-align: -0.125em;
+}
+
+/* Add and Edit intentionally use different viewport-height units. */
+@utility backend-chooser-add-dialog {
+  max-height: 92vh;
+}
+
+@utility backend-chooser-edit-dialog {
+  max-height: 92dvh;
+}

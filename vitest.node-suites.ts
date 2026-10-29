@@ -1,4 +1,5 @@
 export const NODE_TEST_SUITES = [
+  ".agents/skills/verify-openhands/scripts/fixtures/digitalocean-standin.test.mjs",
   "__tests__/utils/system-message-adapter.test.ts",
   "__tests__/utils/skill-install-events.test.ts",
   "__tests__/utils/custom-toast-handlers.test.ts",

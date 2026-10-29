@@ -270,6 +270,10 @@ describe("build-automation-pills", () => {
           repositories: [
             { url: "acme/widgets", provider: "github" },
             { url: "https://github.com/acme/docs" },
+            {
+              url: "https://bitbucket.example.com/scm/DEM/demo-app.git",
+              provider: "bitbucket_data_center",
+            },
           ],
         }),
         "unused",
@@ -286,6 +290,9 @@ describe("build-automation-pills", () => {
       expect(
         screen.getByTitle("https://github.com/acme/docs"),
       ).toBeInTheDocument();
+      expect(screen.getByTestId("pill-repository-2").textContent).toBe(
+        "DEM/demo-app",
+      );
     });
 
     it("omits the source pill when the event has no source", () => {

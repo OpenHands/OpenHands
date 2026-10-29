@@ -1,5 +1,14 @@
 // Native loader hooks and cross-realm identity assertions require ordinary forks.
 export const FORK_TEST_SUITES = [
+  "__tests__/components/backends/backend-form-modal.test.tsx",
+  "__tests__/components/automations/automation-setup-panel.test.tsx",
+  "__tests__/components/backends/add-backend-modal.test.tsx",
+  "__tests__/components/onboarding/onboarding-modal.test.tsx",
+  "__tests__/components/features/command-menu/command-menu.test.tsx",
+  "__tests__/components/features/conversation/conversation-overview-drawer-content.test.tsx",
+  "__tests__/components/features/home/home-chat-launcher.test.tsx",
+  ".agents/skills/verify-openhands/scripts/fixtures/digitalocean-standin.test.mjs",
+
   "__tests__/components/features/sidebar/sidebar.test.tsx",
   "__tests__/components/features/files-tab/file-tree-view.test.tsx",
   "__tests__/api/cloud/settings-service.test.ts",
