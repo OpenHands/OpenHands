@@ -96,6 +96,9 @@ const DEFAULT_CONVERSATION_TIMESTAMP = "1970-01-01T00:00:00.000Z";
 // machine or the packaged desktop app, where uvx may still be warming caches)
 // can exceed the client's 60s default timeout.
 const CREATE_CONVERSATION_TIMEOUT_MS = 5 * 60 * 1000;
+// The agent-server rejects the whole create request when any tag value is
+// longer than this (SDK `TAG_VALUE_MAX_LENGTH`).
+const TAG_VALUE_MAX_LENGTH = 256;
 const INVALID_CONVERSATION_RESPONSE_MESSAGE =
   "Unable to load conversations because the selected agent server returned " +
   "data this UI does not understand. Check the backend URL/session key and " +
@@ -667,6 +670,11 @@ class AgentServerConversationService {
     }
     if (metadata?.git_provider) {
       metadataTags[GIT_PROVIDER_TAG_KEY] = metadata.git_provider;
+    }
+    // An over-long value (a deep workspace path, a long branch) stays in
+    // localStorage only, so it cannot block the conversation from starting.
+    for (const [key, value] of Object.entries(metadataTags)) {
+      if (value.length > TAG_VALUE_MAX_LENGTH) delete metadataTags[key];
     }
     if (Object.keys(metadataTags).length > 0) {
       const existingTags =
