@@ -74,6 +74,21 @@ code {
   background-color: inherit;
 }
 
+/* Syntax highlighter tokens: ensure tokens keep inline layout and avoid
+   collisions with Tailwind layout utilities (e.g. .table, .static, .italic)
+   across all code block consumers. */
+.token.table {
+  display: inline;
+}
+
+.token.static {
+  position: static;
+}
+
+.token.italic {
+  font-style: inherit;
+}
+
 .markdown-body {
   white-space: pre-wrap; /* Handles line breaks */
 }
