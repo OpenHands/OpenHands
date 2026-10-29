@@ -7,6 +7,7 @@ import { MarkdownRenderer } from "../markdown/markdown-renderer";
 import { I18nKey } from "#/i18n/declaration";
 import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import { formatEventTimestamp } from "#/utils/format-event-timestamp";
+import { cn } from "#/utils/utils";
 
 interface GenericEventMessageProps {
   title: React.ReactNode;
@@ -60,10 +61,20 @@ export function GenericEventMessage({
     </button>
   ) : null;
 
+  // Clicking the title text toggles too; the caret stays the keyboard control.
+  // Links or buttons inside the title, and text selection, keep their own behavior.
+  const handleTitleClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!details) return;
+    if ((event.target as HTMLElement).closest("a, button, input")) return;
+    if (window.getSelection()?.type === "Range") return;
+    setShowDetails((prev) => !prev);
+  };
+
   const titleContent = (
     <div
       data-testid="generic-event-message-title"
-      className="flex items-center"
+      className={cn("flex items-center", details && "cursor-pointer")}
+      onClick={handleTitleClick}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onFocusCapture={() => setHasFocusWithin(true)}

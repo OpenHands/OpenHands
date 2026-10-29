@@ -175,7 +175,7 @@ export function EventGroup({
           id={contentId}
           role="region"
           aria-labelledby={buttonId}
-          className="mt-1.5 flex flex-col divide-y divide-border-subtle rounded-lg border border-border-subtle [&>*]:px-3"
+          className="mt-1.5 flex flex-col divide-y divide-border-subtle/50 rounded-lg border border-border-subtle/50 [&>*]:px-3"
           data-testid="event-group-content"
         >
           <IsInEventGroupContext.Provider value>
