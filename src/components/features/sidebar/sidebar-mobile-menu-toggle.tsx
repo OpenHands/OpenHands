@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import BlockDrawerLeftIcon from "#/icons/block-drawer-left.svg?react";
+import { cn } from "#/utils/utils";
 import {
   mobileTopBarIconButtonClassName,
   mobileTopBarIconClassName,
@@ -20,7 +21,7 @@ export function SidebarMobileMenuToggle() {
       aria-label={
         isOpen ? t(I18nKey.SIDEBAR$CLOSE_MENU) : t(I18nKey.SIDEBAR$OPEN_MENU)
       }
-      className={mobileTopBarIconButtonClassName}
+      className={cn(mobileTopBarIconButtonClassName, "size-12 p-0")}
     >
       <BlockDrawerLeftIcon className={mobileTopBarIconClassName} aria-hidden />
     </button>
