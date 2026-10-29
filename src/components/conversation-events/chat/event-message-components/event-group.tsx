@@ -7,6 +7,7 @@ import { OpenHandsEvent, ActionEvent } from "#/types/agent-server/core";
 import {
   isActionEvent,
   isAgentErrorEvent,
+  isHookExecutionEvent,
   isObservationEvent,
   isUserRejectObservation,
 } from "#/types/agent-server/type-guards";
@@ -82,7 +83,8 @@ export function EventGroup({
   const pendingActions = unreplacedActions.filter(
     (action) => !erroredToolCallIds?.has(action.tool_call_id),
   );
-  const totalCount = events.length;
+  // Progress counts tool steps; folded-in hook runs are not actions.
+  const totalCount = events.filter((e) => !isHookExecutionEvent(e)).length;
   const completedCount = totalCount - pendingActions.length;
   const isRunning = pendingActions.length > 0;
 

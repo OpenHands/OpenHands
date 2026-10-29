@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import i18next from "i18next";
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "test-utils";
@@ -397,4 +398,47 @@ describe("EventGroup", () => {
     ).toBeNull();
     expect(toggle.querySelectorAll("button")).toHaveLength(0);
   });
+});
+
+describe("EventGroup summary plurals", () => {
+  const groupKeys = [
+    "EVENT_GROUP$RAN_COMMANDS",
+    "EVENT_GROUP$READ_FILES",
+    "EVENT_GROUP$MADE_EDITS",
+    "EVENT_GROUP$RAN_SEARCHES",
+    "EVENT_GROUP$RAN_HOOKS",
+    "EVENT_GROUP$USED_TOOLS",
+  ];
+
+  it.each(["uk", "ar"])(
+    "renders %s summaries in that language for multi-step counts",
+    async (lng) => {
+      const translations = (await import("#/i18n/translation.json"))
+        .default as Record<string, Record<string, string>>;
+      const toResources = (language: string) =>
+        Object.fromEntries(
+          Object.entries(translations).map(([key, values]) => [
+            key,
+            values[language],
+          ]),
+        );
+      const i18n = i18next.createInstance();
+      await i18n.init({
+        lng,
+        fallbackLng: "en",
+        resources: {
+          en: { translation: toResources("en") },
+          [lng]: { translation: toResources(lng) },
+        },
+      });
+
+      for (const key of groupKeys) {
+        for (const count of [2, 5, 11]) {
+          const text = i18n.t(key, { count });
+          expect(text).toContain(String(count));
+          expect(text).not.toBe(i18n.t(key, { count, lng: "en" }));
+        }
+      }
+    },
+  );
 });
