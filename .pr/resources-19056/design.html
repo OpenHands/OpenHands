@@ -1,0 +1,1014 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Conversation resources — implementation review</title><style>
+:root{color-scheme:light;--ink:#20231f;--muted:#666d65;--rule:#d8dcd4;--accent:#b45316}*{box-sizing:border-box}body{margin:0;background:#fafbf8;color:var(--ink);font:16px/1.6 system-ui,sans-serif}.wrap{max-width:1200px;margin:auto;padding:40px;display:grid;grid-template-columns:220px 1fr;gap:40px}nav{position:sticky;top:20px;align-self:start;font-size:12px;overflow-wrap:anywhere}nav a{display:block;margin:10px 0}h1{font-size:40px;line-height:1.15;letter-spacing:-1.5px}h2{margin-top:45px;font-size:24px}h3{font-size:16px;overflow-wrap:anywhere}a{color:#264e90}header{border-bottom:1px solid var(--rule);padding-bottom:30px}.note{padding:16px;border-left:3px solid var(--accent);background:#fff2e6}svg{width:100%;height:auto;background:white;border:1px solid var(--rule)}svg text{font:13px system-ui}table{border-collapse:collapse;width:100%;font-size:14px}td,th{padding:12px;text-align:left;border-bottom:1px solid var(--rule)}pre{overflow:auto;padding:18px;background:#eef0e9;font:12px/1.6 ui-monospace,monospace;max-height:450px}details{border:1px solid var(--rule);padding:12px;margin:15px 0}summary{cursor:pointer}article{padding:12px 0;border-bottom:1px solid var(--rule)}@media(max-width:800px){.wrap{display:block;padding:24px}nav{position:static}h1{font-size:32px}}</style>
+<div class="wrap"><nav><strong>Review index</strong><a href="#change">What changes</a><a href="#flow">Data flow</a><a href="#boundaries">Data boundaries</a><a href="#checks">Verification</a><a href="#README.md">README.md</a><a href="#__tests__-components-features-conversation-conversation-resources-panel.test.tsx">__tests__/components/features/conversation/conversation-resources-panel.test.tsx</a><a href="#__tests__-components-features-conversation-conversation-tabs.test.tsx">__tests__/components/features/conversation/conversation-tabs.test.tsx</a><a href="#src-components-features-conversation-conversation-resources-panel.tsx">src/components/features/conversation/conversation-resources-panel.tsx</a><a href="#src-components-features-conversation-conversation-tabs-conversation-tab-content-conversation-tab-content.tsx">src/components/features/conversation/conversation-tabs/conversation-tab-content/conversation-tab-content.tsx</a><a href="#src-components-features-conversation-conversation-tabs-conversation-tab-ids.ts">src/components/features/conversation/conversation-tabs/conversation-tab-ids.ts</a><a href="#src-components-features-conversation-conversation-tabs-conversation-tabs-context-menu.tsx">src/components/features/conversation/conversation-tabs/conversation-tabs-context-menu.tsx</a><a href="#src-components-features-conversation-conversation-tabs-conversation-tabs.tsx">src/components/features/conversation/conversation-tabs/conversation-tabs.tsx</a><a href="#src-i18n-translation.json">src/i18n/translation.json</a><a href="#src-routes-resources-tab.tsx">src/routes/resources-tab.tsx</a><a href="#src-stores-conversation-store.ts">src/stores/conversation-store.ts</a><a href="#src-utils-conversation-local-storage.ts">src/utils/conversation-local-storage.ts</a></nav><main><header id="change"><p>OpenHands #19056 · Canvas frontend</p><h1>Inspect a conversation’s resources beside its chat.</h1><p>The Resources tab identifies the launching profile and its stamped revision, shows the model reported by the conversation, and groups the available configuration into expandable rows. Both desktop and mobile use the existing panel infrastructure. <a href="https://github.com/lnk137/OpenHands/blob/49bc7838b64b0c343c2339eccf109d19201c73c1/src/components/features/conversation/conversation-resources-panel.tsx#L83">src/components/features/conversation/conversation-resources-panel.tsx:83</a></p><p class="note">No new API endpoint, client dependency, or persistent resource snapshot. Changed profiles are flagged; their current fields are not attributed to an old conversation. Secret values, MCP credentials, and raw profile objects are never rendered. <a href="https://github.com/lnk137/OpenHands/blob/49bc7838b64b0c343c2339eccf109d19201c73c1/src/components/features/conversation/conversation-resources-panel.tsx#L106">src/components/features/conversation/conversation-resources-panel.tsx:106</a></p></header>
+<section id="flow"><h2>From a tab selection to existing services</h2><p>Before: the existing lazy tab map has no resource inspector. <a href="https://github.com/lnk137/OpenHands/blob/76ed10527eaf8ef8e106368d5fc3df94d6242497/src/components/features/conversation/conversation-tabs/conversation-tab-content/conversation-tab-content.tsx">Base ConversationTabContent</a></p><svg viewBox="0 0 850 105" role="img" aria-label="Before: ConversationTabContent chooses an existing tab from TAB_CONFIG"><rect x="22" y="22" width="265" height="60" fill="#eef0e9" stroke="#90978a"/><text x="40" y="57">ConversationTabContent</text><path d="M287 52H345" stroke="#90978a" stroke-width="2"/><rect x="345" y="22" width="480" height="60" fill="#eef0e9" stroke="#90978a"/><text x="365" y="57">TAB_CONFIG: files · commits · planner · … · usage</text></svg>
+<p>After: a lazy Resources route joins the same selector, accessible tab strip, persisted selection, and mobile panel. <a href="https://github.com/lnk137/OpenHands/blob/49bc7838b64b0c343c2339eccf109d19201c73c1/src/components/features/conversation/conversation-tabs/conversation-tab-content/conversation-tab-content.tsx#L26">src/components/features/conversation/conversation-tabs/conversation-tab-content/conversation-tab-content.tsx:26</a> · <a href="https://github.com/lnk137/OpenHands/blob/49bc7838b64b0c343c2339eccf109d19201c73c1/src/routes/resources-tab.tsx#L1">src/routes/resources-tab.tsx:1</a></p><svg viewBox="0 0 850 245" role="img" aria-label="After: ResourcesTab renders ConversationResourcesPanel which consumes existing hooks and services"><rect x="20" y="20" width="235" height="70" fill="#fff2e6" stroke="#b45316" stroke-width="2"/><text x="40" y="50">ResourcesTab</text><text x="40" y="73">Shared desktop / mobile panel</text><path d="M255 55H295" stroke="#b45316" stroke-width="2"/><rect x="295" y="20" width="295" height="70" fill="#fff2e6" stroke="#b45316" stroke-width="2"/><text x="312" y="50">ConversationResourcesPanel</text><text x="312" y="73">ResourceSection / ServerResource</text><path d="M445 90V135" stroke="#b45316" stroke-width="2"/><rect x="20" y="135" width="805" height="85" fill="#eef0e9" stroke="#90978a"/><text x="40" y="163">useActiveConversation · useAgentProfiles · useConversationSkills · useSettings</text><text x="40" y="190">AgentProfilesService · SecretsService · useMcpServerHealth</text><text x="40" y="210">Existing Local / Cloud transports and backend/org query identities</text></svg><p><a href="https://github.com/lnk137/OpenHands/blob/49bc7838b64b0c343c2339eccf109d19201c73c1/src/components/features/conversation/conversation-resources-panel.tsx#L83">src/components/features/conversation/conversation-resources-panel.tsx:83</a> owns the feature. <a href="https://github.com/lnk137/OpenHands/blob/49bc7838b64b0c343c2339eccf109d19201c73c1/src/components/features/conversation/conversation-resources-panel.tsx#L31">src/components/features/conversation/conversation-resources-panel.tsx:31</a> adds native keyboard-accessible disclosure rows; <a href="https://github.com/lnk137/OpenHands/blob/49bc7838b64b0c343c2339eccf109d19201c73c1/src/components/features/conversation/conversation-resources-panel.tsx#L54">src/components/features/conversation/conversation-resources-panel.tsx:54</a> consumes installed-server health.</p></section>
+<section id="boundaries"><h2>Make provenance explicit</h2><table><tr><th>Data</th><th>Display rule</th><th>Code</th></tr><tr><td>Profile</td><td>Find by stable launch ID; display stamped revision and warn on mismatch. Missing profile does not fall back to global defaults.</td><td><a href="https://github.com/lnk137/OpenHands/blob/49bc7838b64b0c343c2339eccf109d19201c73c1/src/components/features/conversation/conversation-resources-panel.tsx#L83">src/components/features/conversation/conversation-resources-panel.tsx:83</a></td></tr><tr><td>Skills</td><td>Reuse conversation catalog, source grouping, and profile selection. Cloud reads the conversation catalog directly; ACP hides OpenHands-only skill scope.</td><td><a href="https://github.com/lnk137/OpenHands/blob/49bc7838b64b0c343c2339eccf109d19201c73c1/src/components/features/conversation/conversation-resources-panel.tsx#L132">src/components/features/conversation/conversation-resources-panel.tsx:132</a></td></tr><tr><td>MCP</td><td>Filter enabled configured servers by profile references. Health labels describe the existing configuration probe, not a new runtime probe. Cloud stdio has no synthetic healthy verdict.</td><td><a href="https://github.com/lnk137/OpenHands/blob/49bc7838b64b0c343c2339eccf109d19201c73c1/src/components/features/conversation/conversation-resources-panel.tsx#L54">src/components/features/conversation/conversation-resources-panel.tsx:54</a></td></tr><tr><td>Secrets</td><td>Use launch-time names; unrestricted local scope uses the names-only service. Cloud’s unsupported profile secret scope is explicitly unavailable.</td><td><a href="https://github.com/lnk137/OpenHands/blob/49bc7838b64b0c343c2339eccf109d19201c73c1/src/components/features/conversation/conversation-resources-panel.tsx#L161">src/components/features/conversation/conversation-resources-panel.tsx:161</a></td></tr><tr><td>Condenser / verification</td><td>Render an explicit field allow-list; never JSON-stringify profile objects. Changed profiles are unavailable rather than presented as historical snapshots.</td><td><a href="https://github.com/lnk137/OpenHands/blob/49bc7838b64b0c343c2339eccf109d19201c73c1/src/components/features/conversation/conversation-resources-panel.tsx#L176">src/components/features/conversation/conversation-resources-panel.tsx:176</a></td></tr></table><p>Compatibility: the API contracts and minimum supported Agent Server version are unchanged. The only new durable value is the additive <code>resources</code> tab tag, handled by the existing per-conversation selection owner. Existing saved tab selections remain valid.</p></section>
+<section id="checks"><h2>Verification and limits</h2><p>Real local Agent Server 1.59.0 and production Canvas; no model completion was required or performed. Desktop, revision mismatch, and phone-panel screenshots are adjacent to this document. <a href="verification.md">Reproduction steps</a>.</p><p>Component tests mock services rather than consuming hooks and cover scoped rendering, revisions, missing/failed profiles, ACP/Cloud gating, live health-store updates and secret redaction. <a href="https://github.com/lnk137/OpenHands/blob/49bc7838b64b0c343c2339eccf109d19201c73c1/__tests__/components/features/conversation/conversation-resources-panel.test.tsx#L1">__tests__/components/features/conversation/conversation-resources-panel.test.tsx:1</a></p><p>Cloud and ACP are covered by behavioral tests; no live Cloud or ACP account was exercised. The frontend uses the existing catalog/probe semantics and does not add historical-resource reconstruction.</p></section><section><h2>Changed files and exact diffs</h2><article id="README.md"><h3>Added: <a href="https://github.com/lnk137/OpenHands/blob/49bc7838b64b0c343c2339eccf109d19201c73c1/README.md#L1">README.md:1</a></h3><p>+4 / −0</p><details><summary>Exact diff</summary><pre>diff --git a/README.md b/README.md
+index d2c59eb..3eac589 100644
+--- a/README.md
++++ b/README.md
+@@ -120,6 +120,10 @@ Open [http://localhost:8000](http://localhost:8000) and start a new conversation
+
+ This setting isolates conversation execution; it does not move the entire Canvas or automation service into a sandbox. For Windows, see [README.windows.md](./README.windows.md#option-3-with-multiple-docker-sandboxes-wsl-2).
+
++### Inspect conversation resources
++
++Open the **Resources** tab in a conversation’s right panel (or the panel page on mobile) to inspect its launch profile and revision, reported model, skills, MCP servers, secret names, condenser, and verification settings. A warning identifies profiles edited since launch; unavailable or backend-specific resources are labelled explicitly. Secret values are never displayed.
++
+ ### Option 4: From Source
+
+ &gt; [!WARNING]
+</pre></details></article><article id="__tests__-components-features-conversation-conversation-resources-panel.test.tsx"><h3>Added: <a href="https://github.com/lnk137/OpenHands/blob/49bc7838b64b0c343c2339eccf109d19201c73c1/__tests__/components/features/conversation/conversation-resources-panel.test.tsx#L1">__tests__/components/features/conversation/conversation-resources-panel.test.tsx:1</a></h3><p>+335 / −0</p><details><summary>Exact diff</summary><pre>diff --git a/__tests__/components/features/conversation/conversation-resources-panel.test.tsx b/__tests__/components/features/conversation/conversation-resources-panel.test.tsx
+new file mode 100644
+index 0000000..dbdd9cb
+--- /dev/null
++++ b/__tests__/components/features/conversation/conversation-resources-panel.test.tsx
+@@ -0,0 +1,335 @@
++import { beforeEach, describe, expect, it, vi } from "vitest";
++import { act, render, screen, waitFor, within } from "@testing-library/react";
++import userEvent from "@testing-library/user-event";
++import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
++import { MemoryRouter } from "react-router";
++import { createInstance } from "i18next";
++import { I18nextProvider, initReactI18next } from "react-i18next";
++import type { OpenHandsAgentProfile } from "@openhands/typescript-client";
++import AgentProfilesService from "#/api/agent-profiles-service/agent-profiles-service.api";
++import ConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
++import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
++import SettingsService from "#/api/settings-service/settings-service.api";
++import SkillsService from "#/api/skills-service";
++import { SecretsService } from "#/api/secrets-service";
++import { ActiveBackendProvider } from "#/contexts/active-backend-context";
++import { NavigationProvider } from "#/context/navigation-context";
++import { __resetActiveStoreForTests } from "#/api/backend-registry/active-store";
++import {
++  BACKENDS_STORAGE_KEY,
++  ACTIVE_BACKEND_STORAGE_KEY,
++} from "#/api/backend-registry/storage";
++import { ConversationResourcesPanel } from "#/components/features/conversation/conversation-resources-panel";
++import { DEFAULT_SETTINGS } from "#/services/settings";
++import {
++  setMcpServerHealth,
++  __resetMcpHealthStoreForTests,
++} from "#/api/mcp-health/mcp-health-store";
++import { getMcpServerHealthKey } from "#/utils/mcp-server-health-key";
++import translations from "#/i18n/translation.json";
++
++vi.unmock("react-i18next");
++
++const i18n = createInstance();
++await i18n.use(initReactI18next).init({
++  lng: "en",
++  resources: {
++    en: {
++      openhands: Object.fromEntries(
++        Object.entries(translations).map(([key, value]) =&gt; [key, value.en]),
++      ),
++    },
++  },
++  defaultNS: "openhands",
++  interpolation: { escapeValue: false },
++});
++let conversation: AppConversation;
++let profile: OpenHandsAgentProfile;
++
++function showPanel(kind: "local" | "cloud" = "local") {
++  localStorage.setItem(
++    BACKENDS_STORAGE_KEY,
++    JSON.stringify([
++      {
++        id: "test",
++        name: "Test",
++        kind,
++        host: "http://localhost:8000",
++        apiKey: "dummy",
++      },
++    ]),
++  );
++  localStorage.setItem(
++    ACTIVE_BACKEND_STORAGE_KEY,
++    JSON.stringify({
++      backendId: "test",
++      orgId: kind === "cloud" ? "org" : null,
++    }),
++  );
++  __resetActiveStoreForTests();
++  return render(
++    &lt;QueryClientProvider
++      client={
++        new QueryClient({ defaultOptions: { queries: { retry: false } } })
++      }
++    &gt;
++      &lt;I18nextProvider i18n={i18n}&gt;
++        &lt;ActiveBackendProvider&gt;
++          &lt;NavigationProvider
++            value={{
++              conversationId: "conversation",
++              currentPath: "/conversations/conversation",
++              isNavigating: false,
++              navigate: vi.fn(),
++            }}
++          &gt;
++            &lt;MemoryRouter&gt;
++              &lt;ConversationResourcesPanel /&gt;
++            &lt;/MemoryRouter&gt;
++          &lt;/NavigationProvider&gt;
++        &lt;/ActiveBackendProvider&gt;
++      &lt;/I18nextProvider&gt;
++    &lt;/QueryClientProvider&gt;,
++  );
++}
++
++async function expand(label: string) {
++  await userEvent.click(screen.getByText(label, { selector: "summary" }));
++  return within(
++    screen.getByText(label, { selector: "summary" }).closest("details")!,
++  );
++}
++
++beforeEach(() =&gt; {
++  vi.restoreAllMocks();
++  __resetMcpHealthStoreForTests();
++  localStorage.clear();
++  conversation = {
++    id: "conversation",
++    llm_model: "conversation-model",
++    agent_kind: "openhands",
++    sandbox_status: "RUNNING",
++    launched_agent_profile: {
++      agent_profile_id: "profile-id",
++      revision: 3,
++      secret_refs: ["ALLOWED_KEY"],
++    },
++  } as AppConversation;
++  profile = {
++    agent: "Agent",
++    system_message_suffix: null,
++    tools: null,
++    tool_concurrency_limit: 4,
++    id: "profile-id",
++    name: "Research agent",
++    revision: 3,
++    agent_kind: "openhands",
++    llm_profile_ref: "llm",
++    public_skills: [],
++    disabled_skills: ["hidden-skill"],
++    mcp_server_refs: ["allowed-server"],
++    condenser: {
++      condenser_kind: "llm_summarizing",
++      api_key: "never-render-this",
++    },
++    verification: {
++      critic_enabled: true,
++      enable_iterative_refinement: false,
++      critic_mode: "all",
++      critic_threshold: 0.5,
++      max_refinement_iterations: 3,
++      critic_server_url: null,
++      critic_model_name: null,
++    },
++  } as OpenHandsAgentProfile;
++  vi.spyOn(ConversationService, "batchGetAppConversations").mockImplementation(
++    async () =&gt; [conversation],
++  );
++  vi.spyOn(AgentProfilesService, "listProfiles").mockImplementation(
++    async () =&gt; ({
++      profiles: [profile],
++      active_agent_profile_id: "other-profile",
++    }),
++  );
++  vi.spyOn(AgentProfilesService, "getProfile").mockImplementation(async () =&gt; ({
++    name: profile.name,
++    profile,
++  }));
++  vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
++    ...DEFAULT_SETTINGS,
++    llm_model: "global-model",
++    agent_settings: {
++      ...DEFAULT_SETTINGS.agent_settings,
++      mcp_config: {
++        "allowed-server": { transport: "http", url: "https://allowed.invalid" },
++        "hidden-server": { transport: "http", url: "https://hidden.invalid" },
++      },
++    },
++  });
++  vi.spyOn(SkillsService, "getSkills").mockResolvedValue([
++    {
++      name: "project-skill",
++      type: "knowledge",
++      source: "/workspace/.agents/skills/project-skill/SKILL.md",
++    },
++    {
++      name: "hidden-skill",
++      type: "knowledge",
++      source: "/workspace/.agents/skills/hidden-skill/SKILL.md",
++    },
++  ]);
++  vi.spyOn(SkillsService, "getConversationSkills").mockResolvedValue([
++    { name: "cloud-skill", type: "knowledge", source: "public" },
++  ]);
++  vi.spyOn(SecretsService, "getSecretsOrThrow").mockResolvedValue([
++    { name: "SAVED_KEY", description: "" },
++  ]);
++});
++
++describe("conversation resources", () =&gt; {
++  it("updates the displayed MCP health from the existing store", async () =&gt; {
++    showPanel();
++    await screen.findByText("Research agent");
++    const mcp = await expand("MCP servers");
++    const server = {
++      id: "allowed-server",
++      name: "allowed-server",
++      type: "shttp" as const,
++      url: "https://allowed.invalid",
++    };
++    act(() =&gt;
++      setMcpServerHealth(getMcpServerHealthKey(server), {
++        status: "healthy",
++        verification: "connectivity-only",
++        toolCount: 2,
++        checkedAt: Date.now(),
++      }),
++    );
++    expect(
++      mcp.getByText(i18n.t("MCP$HEALTH_STATUS_CONNECTIVITY_ONLY")),
++    ).toBeInTheDocument();
++    act(() =&gt;
++      setMcpServerHealth(getMcpServerHealthKey(server), {
++        status: "failed",
++        kind: "unknown",
++        error: "private diagnostic",
++        checkedAt: Date.now(),
++      }),
++    );
++    expect(mcp.getByText(i18n.t("ERROR$GENERIC"))).toBeInTheDocument();
++    expect(mcp.queryByText("private diagnostic")).not.toBeInTheDocument();
++  });
++
++  it("reports unavailable profile resources after a failed profile lookup", async () =&gt; {
++    vi.spyOn(AgentProfilesService, "getProfile").mockRejectedValue(
++      new Error("lookup failed"),
++    );
++    showPanel();
++    await screen.findByText("Research agent");
++    await waitFor(() =&gt;
++      expect(AgentProfilesService.getProfile).toHaveBeenCalled(),
++    );
++    expect(
++      (await expand("Condenser")).getByText("Unavailable"),
++    ).toBeInTheDocument();
++  });
++
++  it("lists saved secret names for an unrestricted launch without rendering values or descriptions", async () =&gt; {
++    conversation.launched_agent_profile!.secret_refs = null;
++    const secrets = [
++      {
++        name: "SAVED_KEY",
++        description: "private description",
++        value: "private value",
++      },
++    ];
++    vi.spyOn(SecretsService, "getSecretsOrThrow").mockResolvedValue(secrets);
++    showPanel();
++    const section = await expand("Secrets");
++    expect(await section.findByText("SAVED_KEY")).toBeInTheDocument();
++    expect(section.queryByText("private value")).not.toBeInTheDocument();
++    expect(section.queryByText("private description")).not.toBeInTheDocument();
++  });
++
++  it("shows the launched profile, scoped resources and reported model without secret values", async () =&gt; {
++    showPanel();
++    await screen.findByText("Research agent");
++    expect(screen.getByText("Launch revision: 3")).toBeInTheDocument();
++    expect(
++      (await expand("Model")).getByText("conversation-model"),
++    ).toBeInTheDocument();
++    const skills = await expand("Skills");
++    expect(await skills.findByText("project-skill")).toBeInTheDocument();
++    expect(skills.queryByText("hidden-skill")).not.toBeInTheDocument();
++    const mcp = await expand("MCP servers");
++    expect(mcp.getByText("allowed-server")).toBeInTheDocument();
++    expect(mcp.queryByText("hidden-server")).not.toBeInTheDocument();
++    expect(
++      (await expand("Secrets")).getByText("ALLOWED_KEY"),
++    ).toBeInTheDocument();
++    expect(
++      (await expand("Condenser")).getByText("llm_summarizing"),
++    ).toBeInTheDocument();
++    expect(screen.queryByText("never-render-this")).not.toBeInTheDocument();
++    expect(screen.queryByText("global-model")).not.toBeInTheDocument();
++    expect(SecretsService.getSecretsOrThrow).not.toHaveBeenCalled();
++    expect(
++      (await expand("Verification")).getByText("Enabled"),
++    ).toBeInTheDocument();
++  });
++
++  it("warns when the profile changed and does not attribute its new configuration to the old conversation", async () =&gt; {
++    profile.revision = 4;
++    showPanel();
++    expect(
++      await screen.findByText(/Profile changed since launch/),
++    ).toBeInTheDocument();
++    expect(
++      (await expand("Condenser")).getByText("Unavailable"),
++    ).toBeInTheDocument();
++    expect(screen.queryByText("llm_summarizing")).not.toBeInTheDocument();
++  });
++
++  it("does not substitute global defaults when no launch profile was recorded", async () =&gt; {
++    conversation.launched_agent_profile = null;
++    showPanel();
++    await screen.findByText(/No launch profile recorded/);
++    expect(
++      (await expand("MCP servers")).getByText("Unavailable"),
++    ).toBeInTheDocument();
++    expect(AgentProfilesService.listProfiles).not.toHaveBeenCalled();
++    expect(screen.queryByText("global-model")).not.toBeInTheDocument();
++  });
++
++  it("gates OpenHands-only categories for ACP while keeping its reported model", async () =&gt; {
++    conversation.agent_kind = "acp";
++    showPanel();
++    await screen.findByText("Research agent");
++    expect(
++      (await expand("Skills")).getByText("Not available on this backend"),
++    ).toBeInTheDocument();
++    expect(
++      (await expand("Verification")).getByText("Not available on this backend"),
++    ).toBeInTheDocument();
++    expect(
++      (await expand("Model")).getByText("conversation-model"),
++    ).toBeInTheDocument();
++  });
++
++  it("uses cloud conversation skills and does not expose unsupported profile secret scope", async () =&gt; {
++    showPanel("cloud");
++    await screen.findByText("Research agent");
++    expect(
++      await (await expand("Skills")).findByText("cloud-skill"),
++    ).toBeInTheDocument();
++    expect(
++      (await expand("Secrets")).getByText("Not available on this backend"),
++    ).toBeInTheDocument();
++    expect(SecretsService.getSecretsOrThrow).not.toHaveBeenCalled();
++    await waitFor(() =&gt;
++      expect(SkillsService.getConversationSkills).toHaveBeenCalledWith(
++        "conversation",
++      ),
++    );
++  });
++});
+</pre></details></article><article id="__tests__-components-features-conversation-conversation-tabs.test.tsx"><h3>Added: <a href="https://github.com/lnk137/OpenHands/blob/49bc7838b64b0c343c2339eccf109d19201c73c1/__tests__/components/features/conversation/conversation-tabs.test.tsx#L1">__tests__/components/features/conversation/conversation-tabs.test.tsx:1</a></h3><p>+13 / −0</p><details><summary>Exact diff</summary><pre>diff --git a/__tests__/components/features/conversation/conversation-tabs.test.tsx b/__tests__/components/features/conversation/conversation-tabs.test.tsx
+index eeb13a6..3b67638 100644
+--- a/__tests__/components/features/conversation/conversation-tabs.test.tsx
++++ b/__tests__/components/features/conversation/conversation-tabs.test.tsx
+@@ -176,6 +176,19 @@ describe("ConversationTabs localStorage behavior", () =&gt; {
+   });
+
+   describe("hook integration", () =&gt; {
++    it("persists the resources tab for the conversation", async () =&gt; {
++      mockConversationId = REAL_CONVERSATION_ID;
++      render(&lt;ConversationTabs /&gt;, {
++        wrapper: createWrapper(REAL_CONVERSATION_ID),
++      });
++      await userEvent.click(screen.getByTestId("conversation-tab-resources"));
++      expect(useConversationStore.getState().selectedTab).toBe("resources");
++      const stored = JSON.parse(
++        localStorage.getItem(`conversation-state-${REAL_CONVERSATION_ID}`)!,
++      );
++      expect(stored.selectedTab).toBe("resources");
++    });
++
+     it("should open panel and select tab when clicking a tab while panel is closed", async () =&gt; {
+       mockConversationId = REAL_CONVERSATION_ID;
+       const user = userEvent.setup();
+</pre></details></article><article id="src-components-features-conversation-conversation-resources-panel.tsx"><h3>Added: <a href="https://github.com/lnk137/OpenHands/blob/49bc7838b64b0c343c2339eccf109d19201c73c1/src/components/features/conversation/conversation-resources-panel.tsx#L1">src/components/features/conversation/conversation-resources-panel.tsx:1</a></h3><p>+374 / −0</p><details><summary>Exact diff</summary><pre>diff --git a/src/components/features/conversation/conversation-resources-panel.tsx b/src/components/features/conversation/conversation-resources-panel.tsx
+new file mode 100644
+index 0000000..ebe7b0a
+--- /dev/null
++++ b/src/components/features/conversation/conversation-resources-panel.tsx
+@@ -0,0 +1,374 @@
++import { Fragment, type ReactNode } from "react";
++import { useQuery } from "@tanstack/react-query";
++import { Link } from "react-router";
++import { useTranslation } from "react-i18next";
++import AgentProfilesService from "#/api/agent-profiles-service/agent-profiles-service.api";
++import {
++  agentProfileSupportsSecretRefs,
++  agentProfileSupportsSkills,
++} from "#/api/agent-profiles-service/profile-field-support";
++import { SecretsService } from "#/api/secrets-service";
++import { useActiveBackend } from "#/contexts/active-backend-context";
++import { useActiveConversation } from "#/hooks/query/use-active-conversation";
++import { useAgentProfiles } from "#/hooks/query/use-agent-profiles";
++import {
++  AGENT_PROFILES_QUERY_KEYS,
++  CONFIG_CACHE_OPTIONS,
++  AGENT_PROFILES_RETRY_OPTIONS,
++} from "#/hooks/query/query-keys";
++import { useConversationSkills } from "#/hooks/query/use-conversation-skills";
++import { useSettings } from "#/hooks/query/use-settings";
++import { useMcpServerHealth } from "#/hooks/use-mcp-server-health";
++import { I18nKey } from "#/i18n/declaration";
++import type { MCPServerConfig } from "#/types/mcp-server";
++import { flattenMcpConfig } from "#/utils/mcp-installed-servers";
++import { groupSkillsByScope, SKILL_SCOPE_ORDER } from "#/utils/skill-scope";
++import {
++  buildSkillEnablementFilter,
++  profileSkillEnablement,
++} from "#/utils/skill-enablement";
++
++function ResourceSection({
++  title,
++  to,
++  children,
++}: {
++  title: string;
++  to: string;
++  children: ReactNode;
++}) {
++  const { t } = useTranslation("openhands");
++  return (
++    &lt;details className="border-b border-border py-3"&gt;
++      &lt;summary className="cursor-pointer text-sm font-medium"&gt;{title}&lt;/summary&gt;
++      &lt;div className="mt-3 space-y-2 text-sm break-words"&gt;
++        {children}
++        &lt;Link to={to} className="block text-muted underline"&gt;
++          {t(I18nKey.SETTINGS$TITLE)}
++        &lt;/Link&gt;
++      &lt;/div&gt;
++    &lt;/details&gt;
++  );
++}
++
++function ServerResource({ server }: { server: MCPServerConfig }) {
++  const { t } = useTranslation("openhands");
++  const { backend } = useActiveBackend();
++  const { health } = useMcpServerHealth(server);
++  const status =
++    backend.kind === "cloud" &amp;&amp; server.type === "stdio"
++      ? t(I18nKey.RESOURCES$UNAVAILABLE)
++      : health.status === "healthy"
++        ? t(
++            health.verification === "verified"
++              ? I18nKey.MCP$HEALTH_STATUS_VERIFIED
++              : I18nKey.MCP$HEALTH_STATUS_CONNECTIVITY_ONLY,
++            { count: health.toolCount },
++          )
++        : t(
++            health.status === "failed"
++              ? I18nKey.ERROR$GENERIC
++              : health.status === "checking"
++                ? I18nKey.MCP$HEALTH_STATUS_CHECKING
++                : I18nKey.MCP$HEALTH_STATUS_UNCHECKED,
++          );
++  return (
++    &lt;li&gt;
++      {server.name ?? server.id}
++      &lt;span className="block text-muted"&gt;{status}&lt;/span&gt;
++    &lt;/li&gt;
++  );
++}
++
++export function ConversationResourcesPanel() {
++  const { t } = useTranslation("openhands");
++  const { backend, orgId } = useActiveBackend();
++  const conversationQuery = useActiveConversation();
++  const conversation = conversationQuery.data;
++  const launched = conversation?.launched_agent_profile;
++  const profiles = useAgentProfiles({ enabled: !!launched });
++  const summary = profiles.data?.profiles.find(
++    (entry) =&gt; entry.id === launched?.agent_profile_id,
++  );
++  const detail = useQuery({
++    queryKey: AGENT_PROFILES_QUERY_KEYS.detail(
++      backend.id,
++      orgId,
++      summary?.name ?? "",
++    ),
++    queryFn: () =&gt; AgentProfilesService.getProfile(summary!.name),
++    enabled: !!summary,
++    ...CONFIG_CACHE_OPTIONS,
++    ...AGENT_PROFILES_RETRY_OPTIONS,
++    meta: { disableToast: true },
++  });
++  const profile = detail.data?.profile;
++  const changed = !!profile &amp;&amp; profile.revision !== launched?.revision;
++  const applicableProfile = !changed ? profile : undefined;
++  const openHandsProfile =
++    conversation?.agent_kind !== "acp" &amp;&amp;
++    applicableProfile?.agent_kind === "openhands"
++      ? applicableProfile
++      : undefined;
++  const {
++    data: settings,
++    isError: settingsError,
++    isLoading: settingsLoading,
++  } = useSettings();
++  const skills = useConversationSkills();
++  const secrets = useQuery({
++    queryKey: ["conversation-resource-secrets", backend.id, orgId],
++    queryFn: SecretsService.getSecretsOrThrow,
++    enabled:
++      !!launched &amp;&amp;
++      agentProfileSupportsSecretRefs() &amp;&amp;
++      launched.secret_refs == null,
++    ...CONFIG_CACHE_OPTIONS,
++    retry: false,
++    meta: { disableToast: true },
++  });
++  const unavailable = (
++    &lt;p className="text-muted"&gt;{t(I18nKey.RESOURCES$UNAVAILABLE)}&lt;/p&gt;
++  );
++  const pending = &lt;p role="status"&gt;{t(I18nKey.HOME$LOADING)}&lt;/p&gt;;
++  const unsupported = (
++    &lt;p className="text-muted"&gt;{t(I18nKey.RESOURCES$NOT_APPLICABLE)}&lt;/p&gt;
++  );
++  const empty = (
++    &lt;p className="text-muted"&gt;{t(I18nKey.CONVERSATION$OVERVIEW_NONE)}&lt;/p&gt;
++  );
++  const isAcp = conversation?.agent_kind === "acp";
++  const canReadSkills =
++    !isAcp &amp;&amp; (!agentProfileSupportsSkills() || !!openHandsProfile);
++  const enabledSkill = openHandsProfile
++    ? buildSkillEnablementFilter(profileSkillEnablement(openHandsProfile))
++    : () =&gt; true;
++  const grouped = groupSkillsByScope(
++    (skills.data ?? []).filter((skill) =&gt; enabledSkill(skill.name)),
++    conversation?.selected_workspace,
++  );
++  const scopeLabels = {
++    project: I18nKey.SKILLS_MODAL$SECTION_PROJECT,
++    personal: I18nKey.SKILLS_MODAL$SECTION_USER,
++    public: I18nKey.SKILLS_MODAL$SECTION_PUBLIC,
++  };
++  const servers = flattenMcpConfig(settings?.mcp_config ?? {}).filter(
++    (server) =&gt;
++      server.enabled !== false &amp;&amp;
++      (applicableProfile?.mcp_server_refs == null ||
++        applicableProfile.mcp_server_refs.includes(server.id)),
++  );
++  const secretNames =
++    launched?.secret_refs ?? secrets.data?.map((secret) =&gt; secret.name);
++  const loading =
++    conversationQuery.isLoading ||
++    (!!launched &amp;&amp; (profiles.isLoading || detail.isLoading));
++
++  const condenser = openHandsProfile?.condenser;
++  const condenserKind =
++    condenser &amp;&amp;
++    typeof condenser === "object" &amp;&amp;
++    "condenser_kind" in condenser &amp;&amp;
++    typeof condenser.condenser_kind === "string"
++      ? condenser.condenser_kind
++      : null;
++
++  const condenserFields = [
++    ["max_size", I18nKey.SCHEMA$CONDENSER$MAX_SIZE$LABEL],
++    ["max_tokens", I18nKey.SCHEMA$CONDENSER$MAX_TOKENS$LABEL],
++    ["keep_first", I18nKey.SCHEMA$CONDENSER$KEEP_FIRST$LABEL],
++    ["minimum_progress", I18nKey.SCHEMA$CONDENSER$MINIMUM_PROGRESS$LABEL],
++    [
++      "hard_context_reset_max_retries",
++      I18nKey.SCHEMA$CONDENSER$HARD_CONTEXT_RESET_MAX_RETRIES$LABEL,
++    ],
++    [
++      "hard_context_reset_context_scaling",
++      I18nKey.SCHEMA$CONDENSER$HARD_CONTEXT_RESET_CONTEXT_SCALING$LABEL,
++    ],
++  ] as const;
++
++  return (
++    &lt;div className="h-full overflow-auto p-4 custom-scrollbar"&gt;
++      &lt;h2 className="text-base font-medium"&gt;{t(I18nKey.RESOURCES$TITLE)}&lt;/h2&gt;
++      {loading ? &lt;p role="status"&gt;{t(I18nKey.HOME$LOADING)}&lt;/p&gt; : null}
++      &lt;ResourceSection
++        title={t(I18nKey.CONVERSATION_PANEL$PREVIEW_AGENT_PROFILE)}
++        to="/settings/agents"
++      &gt;
++        {launched ? (
++          &lt;&gt;
++            &lt;p&gt;{summary?.name ?? launched.agent_profile_id}&lt;/p&gt;
++            &lt;p&gt;
++              {t(I18nKey.RESOURCES$REVISION, { revision: launched.revision })}
++            &lt;/p&gt;
++            {changed ? (
++              &lt;p role="status"&gt;{t(I18nKey.RESOURCES$CHANGED)}&lt;/p&gt;
++            ) : null}
++          &lt;/&gt;
++        ) : (
++          &lt;p&gt;{t(I18nKey.RESOURCES$NO_PROFILE)}&lt;/p&gt;
++        )}
++        {profiles.isError || detail.isError ? unavailable : null}
++      &lt;/ResourceSection&gt;
++      &lt;ResourceSection
++        title={t(I18nKey.SETTINGS$AGENT_MODEL)}
++        to="/settings/llm"
++      &gt;
++        {conversation?.llm_model ? (
++          &lt;p&gt;{conversation.llm_model}&lt;/p&gt;
++        ) : (
++          unavailable
++        )}
++      &lt;/ResourceSection&gt;
++      &lt;ResourceSection title={t(I18nKey.SETTINGS$SKILLS_TITLE)} to="/skills"&gt;
++        {!canReadSkills
++          ? isAcp
++            ? unsupported
++            : unavailable
++          : skills.isError
++            ? unavailable
++            : SKILL_SCOPE_ORDER.map((scope) =&gt;
++                grouped[scope].length &gt; 0 ? (
++                  &lt;div key={scope}&gt;
++                    &lt;h3 className="text-muted"&gt;{t(scopeLabels[scope])}&lt;/h3&gt;
++                    &lt;ul&gt;
++                      {grouped[scope].map((skill) =&gt; (
++                        &lt;li key={skill.name}&gt;{skill.name}&lt;/li&gt;
++                      ))}
++                    &lt;/ul&gt;
++                  &lt;/div&gt;
++                ) : null,
++              )}
++        {canReadSkills &amp;&amp;
++        skills.isSuccess &amp;&amp;
++        Object.values(grouped).every((items) =&gt; items.length === 0)
++          ? empty
++          : null}
++      &lt;/ResourceSection&gt;
++      &lt;ResourceSection title={t(I18nKey.SETTINGS$AGENT_PROFILE_MCP)} to="/mcp"&gt;
++        {(!applicableProfile &amp;&amp; !isAcp) || settingsError ? (
++          unavailable
++        ) : settingsLoading ? (
++          pending
++        ) : servers.length ? (
++          &lt;ul className="space-y-2"&gt;
++            {servers.map((server) =&gt; (
++              &lt;ServerResource key={server.id} server={server} /&gt;
++            ))}
++          &lt;/ul&gt;
++        ) : (
++          empty
++        )}
++      &lt;/ResourceSection&gt;
++      &lt;ResourceSection
++        title={t(I18nKey.SETTINGS$NAV_SECRETS)}
++        to="/settings/secrets"
++      &gt;
++        {!agentProfileSupportsSecretRefs() ? (
++          unsupported
++        ) : launched &amp;&amp; secrets.isLoading &amp;&amp; launched.secret_refs == null ? (
++          pending
++        ) : !launched || secrets.isError || !secretNames ? (
++          unavailable
++        ) : secretNames.length ? (
++          &lt;ul&gt;
++            {secretNames.map((name) =&gt; (
++              &lt;li key={name}&gt;{name}&lt;/li&gt;
++            ))}
++          &lt;/ul&gt;
++        ) : (
++          empty
++        )}
++      &lt;/ResourceSection&gt;
++      &lt;ResourceSection
++        title={t(I18nKey.SETTINGS$NAV_CONDENSER)}
++        to={
++          backend.kind === "cloud" ? "/settings/condenser" : "/settings/agents"
++        }
++      &gt;
++        {isAcp ? (
++          unsupported
++        ) : openHandsProfile ? (
++          &lt;dl&gt;
++            {condenser &amp;&amp;
++            typeof condenser === "object" &amp;&amp;
++            "enabled" in condenser &amp;&amp;
++            typeof condenser.enabled === "boolean" ? (
++              &lt;&gt;
++                &lt;dt&gt;{t(I18nKey.SCHEMA$CONDENSER$ENABLED$LABEL)}&lt;/dt&gt;
++                &lt;dd&gt;
++                  {t(
++                    condenser.enabled
++                      ? I18nKey.SETTINGS$SKILLS_ENABLED
++                      : I18nKey.SETTINGS$SKILLS_DISABLED,
++                  )}
++                &lt;/dd&gt;
++              &lt;/&gt;
++            ) : null}
++            &lt;dt&gt;{t(I18nKey.SCHEMA$CONDENSER$CONDENSER_KIND$LABEL)}&lt;/dt&gt;
++            &lt;dd&gt;{condenserKind ?? t(I18nKey.CONVERSATION$OVERVIEW_NONE)}&lt;/dd&gt;
++            {condenserFields.map(([field, label]) =&gt; {
++              const value =
++                condenser &amp;&amp; typeof condenser === "object" &amp;&amp; field in condenser
++                  ? (condenser as Record&lt;string, unknown&gt;)[field]
++                  : undefined;
++              return typeof value === "number" ? (
++                &lt;Fragment key={field}&gt;
++                  &lt;dt&gt;{t(label)}&lt;/dt&gt;
++                  &lt;dd&gt;{value}&lt;/dd&gt;
++                &lt;/Fragment&gt;
++              ) : null;
++            })}
++          &lt;/dl&gt;
++        ) : (
++          unavailable
++        )}
++      &lt;/ResourceSection&gt;
++      &lt;ResourceSection
++        title={t(I18nKey.SETTINGS$NAV_VERIFICATION)}
++        to="/settings/verification"
++      &gt;
++        {isAcp ? (
++          unsupported
++        ) : openHandsProfile ? (
++          &lt;dl&gt;
++            &lt;dt&gt;{t(I18nKey.SCHEMA$VERIFICATION$CRITIC_MODE$LABEL)}&lt;/dt&gt;
++            &lt;dd&gt;{openHandsProfile.verification.critic_mode}&lt;/dd&gt;
++            &lt;dt&gt;{t(I18nKey.SCHEMA$VERIFICATION$CRITIC_THRESHOLD$LABEL)}&lt;/dt&gt;
++            &lt;dd&gt;{openHandsProfile.verification.critic_threshold}&lt;/dd&gt;
++            &lt;dt&gt;
++              {t(I18nKey.SCHEMA$VERIFICATION$MAX_REFINEMENT_ITERATIONS$LABEL)}
++            &lt;/dt&gt;
++            &lt;dd&gt;{openHandsProfile.verification.max_refinement_iterations}&lt;/dd&gt;
++            &lt;dt&gt;{t(I18nKey.SCHEMA$VERIFICATION$CRITIC_MODEL_NAME$LABEL)}&lt;/dt&gt;
++            &lt;dd&gt;
++              {openHandsProfile.verification.critic_model_name ??
++                t(I18nKey.CONVERSATION$OVERVIEW_NONE)}
++            &lt;/dd&gt;
++            &lt;dt&gt;{t(I18nKey.SCHEMA$VERIFICATION$CRITIC_ENABLED$LABEL)}&lt;/dt&gt;
++            &lt;dd&gt;
++              {t(
++                openHandsProfile.verification.critic_enabled
++                  ? I18nKey.SETTINGS$SKILLS_ENABLED
++                  : I18nKey.SETTINGS$SKILLS_DISABLED,
++              )}
++            &lt;/dd&gt;
++            &lt;dt&gt;
++              {t(I18nKey.SCHEMA$VERIFICATION$ENABLE_ITERATIVE_REFINEMENT$LABEL)}
++            &lt;/dt&gt;
++            &lt;dd&gt;
++              {t(
++                openHandsProfile.verification.enable_iterative_refinement
++                  ? I18nKey.SETTINGS$SKILLS_ENABLED
++                  : I18nKey.SETTINGS$SKILLS_DISABLED,
++              )}
++            &lt;/dd&gt;
++          &lt;/dl&gt;
++        ) : (
++          unavailable
++        )}
++      &lt;/ResourceSection&gt;
++    &lt;/div&gt;
++  );
++}
+</pre></details></article><article id="src-components-features-conversation-conversation-tabs-conversation-tab-content-conversation-tab-content.tsx"><h3>Added: <a href="https://github.com/lnk137/OpenHands/blob/49bc7838b64b0c343c2339eccf109d19201c73c1/src/components/features/conversation/conversation-tabs/conversation-tab-content/conversation-tab-content.tsx#L1">src/components/features/conversation/conversation-tabs/conversation-tab-content/conversation-tab-content.tsx:1</a></h3><p>+2 / −0</p><details><summary>Exact diff</summary><pre>diff --git a/src/components/features/conversation/conversation-tabs/conversation-tab-content/conversation-tab-content.tsx b/src/components/features/conversation/conversation-tabs/conversation-tab-content/conversation-tab-content.tsx
+index 8f08cb8..d984ab9 100644
+--- a/src/components/features/conversation/conversation-tabs/conversation-tab-content/conversation-tab-content.tsx
++++ b/src/components/features/conversation/conversation-tabs/conversation-tab-content/conversation-tab-content.tsx
+@@ -16,6 +16,7 @@ const CommitsTab = lazy(() =&gt; import("#/routes/commits-tab"));
+ const BrowserTab = lazy(() =&gt; import("#/routes/browser-tab"));
+ const PlannerTab = lazy(() =&gt; import("#/routes/planner-tab"));
+ const TaskListTab = lazy(() =&gt; import("#/routes/task-list-tab"));
++const ResourcesTab = lazy(() =&gt; import("#/routes/resources-tab"));
+ const UsageTab = lazy(() =&gt; import("#/routes/usage-tab"));
+ const Terminal = lazy(() =&gt; import("#/components/features/terminal/terminal"));
+
+@@ -27,6 +28,7 @@ const TAB_CONFIG = {
+   terminal: { component: Terminal },
+   planner: { component: PlannerTab },
+   usage: { component: UsageTab },
++  resources: { component: ResourcesTab },
+ };
+
+ export function ConversationTabContent() {
+</pre></details></article><article id="src-components-features-conversation-conversation-tabs-conversation-tab-ids.ts"><h3>Added: <a href="https://github.com/lnk137/OpenHands/blob/49bc7838b64b0c343c2339eccf109d19201c73c1/src/components/features/conversation/conversation-tabs/conversation-tab-ids.ts#L1">src/components/features/conversation/conversation-tabs/conversation-tab-ids.ts:1</a></h3><p>+1 / −0</p><details><summary>Exact diff</summary><pre>diff --git a/src/components/features/conversation/conversation-tabs/conversation-tab-ids.ts b/src/components/features/conversation/conversation-tabs/conversation-tab-ids.ts
+index 0dc49d1..5027d55 100644
+--- a/src/components/features/conversation/conversation-tabs/conversation-tab-ids.ts
++++ b/src/components/features/conversation/conversation-tabs/conversation-tab-ids.ts
+@@ -19,4 +19,5 @@ export const CONVERSATION_TAB_LABEL_KEYS: Record&lt;ConversationTab, I18nKey&gt; = {
+   terminal: I18nKey.COMMON$TERMINAL,
+   browser: I18nKey.COMMON$BROWSER,
+   usage: I18nKey.COMMON$USAGE,
++  resources: I18nKey.RESOURCES$TITLE,
+ };
+</pre></details></article><article id="src-components-features-conversation-conversation-tabs-conversation-tabs-context-menu.tsx"><h3>Changed: <a href="https://github.com/lnk137/OpenHands/blob/49bc7838b64b0c343c2339eccf109d19201c73c1/src/components/features/conversation/conversation-tabs/conversation-tabs-context-menu.tsx#L1">src/components/features/conversation/conversation-tabs/conversation-tabs-context-menu.tsx:1</a></h3><p>+8 / −1</p><details><summary>Exact diff</summary><pre>diff --git a/src/components/features/conversation/conversation-tabs/conversation-tabs-context-menu.tsx b/src/components/features/conversation/conversation-tabs/conversation-tabs-context-menu.tsx
+index d498553..f3781c4 100644
+--- a/src/components/features/conversation/conversation-tabs/conversation-tabs-context-menu.tsx
++++ b/src/components/features/conversation/conversation-tabs/conversation-tabs-context-menu.tsx
+@@ -12,7 +12,13 @@ import {
+   type ConversationTab,
+ } from "#/stores/conversation-store";
+ import { I18nKey } from "#/i18n/declaration";
+-import { Gauge, Globe, ListTodo, SquareChevronRight } from "lucide-react";
++import {
++  Boxes,
++  Gauge,
++  Globe,
++  ListTodo,
++  SquareChevronRight,
++} from "lucide-react";
+ import { LuFileDiff } from "react-icons/lu";
+ import DocumentIcon from "#/icons/document.svg?react";
+ import PillIcon from "#/icons/pill.svg?react";
+@@ -127,6 +133,7 @@ export function ConversationTabsContextMenu({
+       i18nKey: I18nKey.COMMON$TERMINAL,
+     },
+     { tab: "browser", icon: Globe, i18nKey: I18nKey.COMMON$BROWSER },
++    { tab: "resources", icon: Boxes, i18nKey: I18nKey.RESOURCES$TITLE },
+     { tab: "usage", icon: Gauge, i18nKey: I18nKey.COMMON$USAGE },
+   ];
+
+</pre></details></article><article id="src-components-features-conversation-conversation-tabs-conversation-tabs.tsx"><h3>Changed: <a href="https://github.com/lnk137/OpenHands/blob/49bc7838b64b0c343c2339eccf109d19201c73c1/src/components/features/conversation/conversation-tabs/conversation-tabs.tsx#L1">src/components/features/conversation/conversation-tabs/conversation-tabs.tsx:1</a></h3><p>+16 / −1</p><details><summary>Exact diff</summary><pre>diff --git a/src/components/features/conversation/conversation-tabs/conversation-tabs.tsx b/src/components/features/conversation/conversation-tabs/conversation-tabs.tsx
+index 86a2ed6..f8e473e 100644
+--- a/src/components/features/conversation/conversation-tabs/conversation-tabs.tsx
++++ b/src/components/features/conversation/conversation-tabs/conversation-tabs.tsx
+@@ -7,7 +7,13 @@ import {
+ } from "react";
+ import { useTranslation } from "react-i18next";
+ import { LayoutGroup } from "framer-motion";
+-import { Gauge, Globe, ListTodo, SquareChevronRight } from "lucide-react";
++import {
++  Boxes,
++  Gauge,
++  Globe,
++  ListTodo,
++  SquareChevronRight,
++} from "lucide-react";
+ import { LuFileDiff } from "react-icons/lu";
+ import DocumentIcon from "#/icons/document.svg?react";
+ import DoubleCheckIcon from "#/icons/double-check.svg?react";
+@@ -137,6 +143,15 @@ export function ConversationTabs({
+       tooltipAriaLabel: t(CONVERSATION_TAB_LABEL_KEYS.browser),
+       label: t(CONVERSATION_TAB_LABEL_KEYS.browser),
+     },
++    {
++      tabValue: "resources",
++      isActive: isTabActive("resources"),
++      icon: Boxes,
++      onClick: () =&gt; selectTab("resources"),
++      tooltipContent: t(CONVERSATION_TAB_LABEL_KEYS.resources),
++      tooltipAriaLabel: t(CONVERSATION_TAB_LABEL_KEYS.resources),
++      label: t(CONVERSATION_TAB_LABEL_KEYS.resources),
++    },
+     {
+       tabValue: "usage",
+       isActive: isTabActive("usage"),
+</pre></details></article><article id="src-i18n-translation.json"><h3>Added: <a href="https://github.com/lnk137/OpenHands/blob/49bc7838b64b0c343c2339eccf109d19201c73c1/src/i18n/translation.json#L1">src/i18n/translation.json:1</a></h3><p>+108 / −0</p><details><summary>Exact diff</summary><pre>diff --git a/src/i18n/translation.json b/src/i18n/translation.json
+index f4e399b..db09ffc 100644
+--- a/src/i18n/translation.json
++++ b/src/i18n/translation.json
+@@ -39670,5 +39670,113 @@
+     "uk": "Нова розмова в пісочниці",
+     "ca": "Conversa nova al sandbox",
+     "id": "Percakapan baru di sandbox"
++  },
++  "RESOURCES$TITLE": {
++    "en": "Resources",
++    "ja": "リソース",
++    "zh-CN": "资源",
++    "zh-TW": "資源",
++    "ko-KR": "리소스",
++    "no": "Ressurser",
++    "ar": "الموارد",
++    "de": "Ressourcen",
++    "fr": "Ressources",
++    "it": "Risorse",
++    "pt": "Recursos",
++    "es": "Recursos",
++    "ca": "Recursos",
++    "tr": "Kaynaklar",
++    "uk": "Ресурси",
++    "id": "Sumber daya"
++  },
++  "RESOURCES$UNAVAILABLE": {
++    "en": "Unavailable",
++    "ja": "利用不可",
++    "zh-CN": "不可用",
++    "zh-TW": "無法使用",
++    "ko-KR": "사용 불가",
++    "no": "Utilgjengelig",
++    "ar": "غير متاح",
++    "de": "Nicht verfügbar",
++    "fr": "Indisponible",
++    "it": "Non disponibile",
++    "pt": "Indisponível",
++    "es": "No disponible",
++    "ca": "No disponible",
++    "tr": "Kullanılamıyor",
++    "uk": "Недоступно",
++    "id": "Tidak tersedia"
++  },
++  "RESOURCES$NOT_APPLICABLE": {
++    "en": "Not available on this backend",
++    "ja": "このバックエンドでは利用できません",
++    "zh-CN": "此后端不支持",
++    "zh-TW": "此後端不支援",
++    "ko-KR": "이 백엔드에서는 사용할 수 없습니다",
++    "no": "Ikke tilgjengelig på denne bakenden",
++    "ar": "غير متاح على هذه الواجهة الخلفية",
++    "de": "Auf diesem Backend nicht verfügbar",
++    "fr": "Indisponible sur ce backend",
++    "it": "Non disponibile su questo backend",
++    "pt": "Indisponível neste backend",
++    "es": "No disponible en este backend",
++    "ca": "No disponible en aquest backend",
++    "tr": "Bu arka uçta kullanılamıyor",
++    "uk": "Недоступно для цього бекенду",
++    "id": "Tidak tersedia di backend ini"
++  },
++  "RESOURCES$REVISION": {
++    "en": "Launch revision: {{revision}}",
++    "ja": "起動時のリビジョン: {{revision}}",
++    "zh-CN": "启动版本：{{revision}}",
++    "zh-TW": "啟動版本：{{revision}}",
++    "ko-KR": "시작 리비전: {{revision}}",
++    "no": "Revisjon ved oppstart: {{revision}}",
++    "ar": "إصدار البدء: {{revision}}",
++    "de": "Startrevision: {{revision}}",
++    "fr": "Révision au lancement : {{revision}}",
++    "it": "Revisione di avvio: {{revision}}",
++    "pt": "Revisão inicial: {{revision}}",
++    "es": "Revisión inicial: {{revision}}",
++    "ca": "Revisió inicial: {{revision}}",
++    "tr": "Başlangıç sürümü: {{revision}}",
++    "uk": "Ревізія запуску: {{revision}}",
++    "id": "Revisi saat mulai: {{revision}}"
++  },
++  "RESOURCES$CHANGED": {
++    "en": "Profile changed since launch. Its current configuration may differ from this conversation.",
++    "ja": "起動後にプロファイルが変更されました。現在の設定はこの会話と異なる場合があります。",
++    "zh-CN": "Profile 在启动后已修改，当前配置可能与此会话不同。",
++    "zh-TW": "Profile 在啟動後已修改，目前設定可能與此會話不同。",
++    "ko-KR": "시작 이후 프로필이 변경되어 현재 구성이 이 대화와 다를 수 있습니다.",
++    "no": "Profilen er endret siden oppstart. Gjeldende oppsett kan avvike fra samtalen.",
++    "ar": "تغير الملف منذ البدء وقد تختلف إعداداته الحالية عن هذه المحادثة.",
++    "de": "Profil seit dem Start geändert. Die aktuelle Konfiguration kann von diesem Gespräch abweichen.",
++    "fr": "Le profil a changé depuis le lancement. Sa configuration actuelle peut différer de cette conversation.",
++    "it": "Il profilo è cambiato dopo l’avvio. La configurazione attuale può differire da questa conversazione.",
++    "pt": "O perfil mudou desde o início. A configuração atual pode diferir desta conversa.",
++    "es": "El perfil cambió desde el inicio. Su configuración actual puede diferir de esta conversación.",
++    "ca": "El perfil ha canviat des de l’inici. La configuració actual pot diferir d’aquesta conversa.",
++    "tr": "Profil başlangıçtan sonra değişti. Güncel yapılandırma bu konuşmadan farklı olabilir.",
++    "uk": "Профіль змінено після запуску. Поточні налаштування можуть відрізнятися від цієї розмови.",
++    "id": "Profil berubah sejak dimulai. Konfigurasi saat ini mungkin berbeda dari percakapan ini."
++  },
++  "RESOURCES$NO_PROFILE": {
++    "en": "No launch profile recorded. Profile resources are unavailable.",
++    "ja": "起動プロファイルの記録がないため、リソース情報は利用できません。",
++    "zh-CN": "未记录启动 Profile，无法提供其资源信息。",
++    "zh-TW": "未記錄啟動 Profile，無法提供其資源資訊。",
++    "ko-KR": "시작 프로필 기록이 없어 리소스 정보를 사용할 수 없습니다.",
++    "no": "Ingen oppstartsprofil registrert. Profilressurser er utilgjengelige.",
++    "ar": "لم يسجل ملف بدء. موارد الملف غير متاحة.",
++    "de": "Kein Startprofil gespeichert. Profilressourcen sind nicht verfügbar.",
++    "fr": "Aucun profil de lancement enregistré. Les ressources du profil sont indisponibles.",
++    "it": "Nessun profilo di avvio registrato. Risorse del profilo non disponibili.",
++    "pt": "Nenhum perfil inicial registrado. Recursos do perfil indisponíveis.",
++    "es": "No se registró un perfil inicial. Sus recursos no están disponibles.",
++    "ca": "No s’ha registrat cap perfil inicial. Els recursos no estan disponibles.",
++    "tr": "Başlangıç profili kaydedilmemiş. Profil kaynakları kullanılamıyor.",
++    "uk": "Профіль запуску не записано. Ресурси профілю недоступні.",
++    "id": "Profil awal tidak tercatat. Sumber daya profil tidak tersedia."
+   }
+ }
+</pre></details></article><article id="src-routes-resources-tab.tsx"><h3>Added: <a href="https://github.com/lnk137/OpenHands/blob/49bc7838b64b0c343c2339eccf109d19201c73c1/src/routes/resources-tab.tsx#L1">src/routes/resources-tab.tsx:1</a></h3><p>+5 / −0</p><details><summary>Exact diff</summary><pre>diff --git a/src/routes/resources-tab.tsx b/src/routes/resources-tab.tsx
+new file mode 100644
+index 0000000..f6945b4
+--- /dev/null
++++ b/src/routes/resources-tab.tsx
+@@ -0,0 +1,5 @@
++import { ConversationResourcesPanel } from "#/components/features/conversation/conversation-resources-panel";
++
++export default function ResourcesTab() {
++  return &lt;ConversationResourcesPanel /&gt;;
++}
+</pre></details></article><article id="src-stores-conversation-store.ts"><h3>Changed: <a href="https://github.com/lnk137/OpenHands/blob/49bc7838b64b0c343c2339eccf109d19201c73c1/src/stores/conversation-store.ts#L1">src/stores/conversation-store.ts:1</a></h3><p>+2 / −1</p><details><summary>Exact diff</summary><pre>diff --git a/src/stores/conversation-store.ts b/src/stores/conversation-store.ts
+index bf8d3bd..2c3a7c2 100644
+--- a/src/stores/conversation-store.ts
++++ b/src/stores/conversation-store.ts
+@@ -12,7 +12,8 @@ export type ConversationTab =
+   | "terminal"
+   | "planner"
+   | "tasklist"
+-  | "usage";
++  | "usage"
++  | "resources";
+
+ export type ConversationMode = "code" | "plan";
+
+</pre></details></article><article id="src-utils-conversation-local-storage.ts"><h3>Added: <a href="https://github.com/lnk137/OpenHands/blob/49bc7838b64b0c343c2339eccf109d19201c73c1/src/utils/conversation-local-storage.ts#L1">src/utils/conversation-local-storage.ts:1</a></h3><p>+1 / −0</p><details><summary>Exact diff</summary><pre>diff --git a/src/utils/conversation-local-storage.ts b/src/utils/conversation-local-storage.ts
+index 379e12c..79892e6 100644
+--- a/src/utils/conversation-local-storage.ts
++++ b/src/utils/conversation-local-storage.ts
+@@ -83,6 +83,7 @@ const VALID_CONVERSATION_TABS: ReadonlySet&lt;ConversationTab&gt; = new Set([
+   "planner",
+   "tasklist",
+   "usage",
++  "resources",
+ ]);
+
+ // Tab keys that *used to* exist and were removed during the Files tab
+</pre></details></article></section></main></div></html>
