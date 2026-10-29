@@ -140,7 +140,7 @@ describe("EventGroup", () => {
     );
 
     expect(
-      screen.getByText("· EVENT_GROUP$ACTIONS_PROGRESS"),
+      screen.getByText("EVENT_GROUP$ACTIONS_PROGRESS"),
     ).toBeInTheDocument();
     // The running action's title is rendered next to the summary. Translations
     // aren't loaded in tests, so we just verify the action's translation key

@@ -1,8 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { LoaderCircle } from "lucide-react";
-import ArrowDown from "#/icons/angle-down-solid.svg?react";
-import ArrowUp from "#/icons/angle-up-solid.svg?react";
 import { OpenHandsEvent, ActionEvent } from "#/types/agent-server/core";
 import {
   isActionEvent,
@@ -14,6 +12,7 @@ import {
 import { I18nKey } from "#/i18n/declaration";
 import { getEventContent } from "../event-content-helpers/get-event-content";
 import { getEventGroupSummaryParts } from "./event-group-summary";
+import { DisclosureCaret } from "#/components/shared/disclosure-caret";
 import { IsInEventGroupContext } from "../../../features/chat/is-in-event-group-context";
 import { PathInteractiveContext } from "../../../features/chat/path-component";
 
@@ -44,8 +43,8 @@ interface EventGroupProps {
  * events into a single summary card.
  *
  * Collapsed, while an action is still running in the live tail of the chat:
- *   one line with the title of the action in flight, the
- *   "{completed}/{total} actions completed" progress and a spinner.
+ *   the title of the action in flight on the left, with the
+ *   "{completed}/{total} actions completed" progress and a spinner on the right.
  *
  * Collapsed otherwise: what the steps did, e.g. "Ran 3 commands · Read 1 file".
  *
@@ -119,10 +118,13 @@ export function EventGroup({
         .map(({ key, count }) => t(key, { count }))
         .join(" · ");
 
-  const Chevron = expanded ? ArrowUp : ArrowDown;
-
   return (
-    <div className="my-1 w-full py-1 text-sm" data-testid="event-group">
+    // Agent text carries a large top margin for paragraph spacing; trim it
+    // when the text follows a group so the group sits evenly between them.
+    <div
+      className="mt-2 w-full py-1 text-sm [&+article]:mt-2"
+      data-testid="event-group"
+    >
       <button
         id={buttonId}
         type="button"
@@ -135,27 +137,37 @@ export function EventGroup({
             : t(I18nKey.EVENT_GROUP$EXPAND)
         }
         data-testid="event-group-toggle"
-        className="flex max-w-full items-center gap-2 text-left text-muted cursor-pointer"
+        className={
+          showProgress
+            ? "w-full flex items-center justify-between gap-2 text-left text-muted cursor-pointer"
+            : "flex max-w-full items-center gap-2 text-left text-muted cursor-pointer"
+        }
       >
-        {showProgress && latestTitle ? (
-          <span className="truncate">
-            <PathInteractiveContext.Provider value={false}>
-              {latestTitle}
-            </PathInteractiveContext.Provider>
-          </span>
-        ) : null}
-        <span
-          className={showProgress && latestTitle ? "flex-shrink-0" : "truncate"}
-        >
-          {showProgress && latestTitle ? `· ${summary}` : summary}
-        </span>
         {showProgress ? (
-          <LoaderCircle
-            data-testid="spinner-icon"
-            className="h-4 w-4 inline flex-shrink-0 animate-spin text-muted"
-          />
-        ) : null}
-        <Chevron className="h-4 w-4 fill-muted flex-shrink-0" />
+          // Live step on the left, progress and spinner pinned on the right.
+          <>
+            <span className="flex items-center gap-2 min-w-0">
+              <span className="truncate">
+                <PathInteractiveContext.Provider value={false}>
+                  {latestTitle ?? summary}
+                </PathInteractiveContext.Provider>
+              </span>
+              <DisclosureCaret open={expanded} />
+            </span>
+            <span className="flex items-center flex-shrink-0">
+              <span className="truncate">{summary}</span>
+              <LoaderCircle
+                data-testid="spinner-icon"
+                className="h-4 w-4 ml-2 inline animate-spin text-muted"
+              />
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="truncate">{summary}</span>
+            <DisclosureCaret open={expanded} />
+          </>
+        )}
       </button>
 
       {expanded && (

@@ -1,11 +1,9 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import ArrowDown from "#/icons/angle-down-solid.svg?react";
-import ArrowUp from "#/icons/angle-up-solid.svg?react";
+import { DisclosureCaret } from "#/components/shared/disclosure-caret";
 import { SuccessIndicator } from "./success-indicator";
 import { ObservationResultStatus } from "#/components/conversation-events/chat/event-content-helpers/get-observation-result";
 import { MarkdownRenderer } from "../markdown/markdown-renderer";
-import { cn } from "#/utils/utils";
 import { I18nKey } from "#/i18n/declaration";
 import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import { formatEventTimestamp } from "#/utils/format-event-timestamp";
@@ -55,21 +53,10 @@ export function GenericEventMessage({
         showDetails ? t(I18nKey.BUTTON$COLLAPSE) : t(I18nKey.BUTTON$EXPAND)
       }
     >
-      {showDetails ? (
-        <ArrowUp
-          className={cn(
-            "h-4 w-4 inline fill-muted",
-            chevronPosition === "after" ? "ml-2" : "mr-2",
-          )}
-        />
-      ) : (
-        <ArrowDown
-          className={cn(
-            "h-4 w-4 inline fill-muted",
-            chevronPosition === "after" ? "ml-2" : "mr-2",
-          )}
-        />
-      )}
+      <DisclosureCaret
+        open={showDetails}
+        className={chevronPosition === "after" ? "ml-2" : "mr-2"}
+      />
     </button>
   ) : null;
 
@@ -122,12 +109,15 @@ export function GenericEventMessage({
   return (
     <div className="flex flex-col gap-1.5 my-1 py-1 text-sm w-full">
       {titleRow}
-      {showDetails &&
-        (typeof details === "string" ? (
-          <MarkdownRenderer>{details}</MarkdownRenderer>
-        ) : (
-          details
-        ))}
+      {showDetails && (
+        <div className="ml-1 flex flex-col gap-1.5 border-l border-border-subtle pl-3">
+          {typeof details === "string" ? (
+            <MarkdownRenderer>{details}</MarkdownRenderer>
+          ) : (
+            details
+          )}
+        </div>
+      )}
     </div>
   );
 }

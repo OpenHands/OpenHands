@@ -56,7 +56,11 @@ export function CodeBlock({
       language={language}
       PreTag="div"
       wrapLongLines={wrapLongLines}
-      customStyle={wrapLongLines ? { whiteSpace: "pre-wrap" } : undefined}
+      customStyle={{
+        margin: 0,
+        padding: "0.5rem 0.75rem",
+        ...(wrapLongLines ? { whiteSpace: "pre-wrap" } : {}),
+      }}
       codeTagProps={
         wrapLongLines ? { style: { whiteSpace: "pre-wrap" } } : undefined
       }

@@ -69,12 +69,12 @@ export function StepThinking({ content }: CollapsibleThinkingProps) {
   }
 
   return (
-    <div className="flex flex-col gap-1" data-testid="step-thinking">
+    <div className="flex flex-col gap-0.5 text-xs" data-testid="step-thinking">
       <span className="flex items-center gap-2 font-normal text-muted">
         <LightbulbIcon className="h-4 w-4 fill-muted flex-shrink-0" />
         {t(I18nKey.THINKING$TITLE)}
       </span>
-      <div className="pl-6">
+      <div className="pl-6 text-muted">
         <MarkdownRenderer>{content}</MarkdownRenderer>
       </div>
     </div>
