@@ -3,10 +3,8 @@ updates:
   - package-ecosystem: npm
     directory: "/"
     schedule:
-      interval: weekly
-      day: monday
-      time: "09:00"
-      timezone: "UTC"
+      interval: cron
+      cronjob: "0 * * * *"
     cooldown:
       default-days: 7
     versioning-strategy: increase
@@ -91,10 +89,8 @@ updates:
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
-      interval: weekly
-      day: monday
-      time: "09:00"
-      timezone: "UTC"
+      interval: cron
+      cronjob: "0 * * * *"
     cooldown:
       default-days: 7
     open-pull-requests-limit: 5
