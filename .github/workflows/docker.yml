@@ -203,8 +203,9 @@ jobs:
             OPENHANDS_BUILD_GIT_REF=${{ env.RELEVANT_REF }}
             VITE_POSTHOG_API_KEY=${{ steps.prep.outputs.posthog_api_key }}
             VITE_BASE_PATH=${{ steps.config.outputs.canvas_base_path }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # TEMP: disable GHA cache to force fresh frontend build (stale cache
+          # served old bundle on sha-c1420eb). Revert before merging #18699.
+          no-cache: true
           provenance: true
           sbom: true
 
