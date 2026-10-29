@@ -14,6 +14,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { useFilesTabStore } from "#/stores/files-tab-store";
 import { useWorkspaceFiles } from "#/hooks/query/use-workspace-files";
 import { useWorkspaceFileContent } from "#/hooks/query/use-workspace-file-content";
+import { useWorkspaceFileBytes } from "#/hooks/query/use-workspace-file-bytes";
 import { useAutoRefreshFilesOnEdit } from "#/hooks/use-auto-refresh-files-on-edit";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useResizableDrawerWidth } from "#/hooks/use-resizable-drawer-width";
@@ -43,6 +44,7 @@ import { ResizeHandle } from "#/components/ui/resize-handle";
 import RefreshIcon from "#/icons/u-refresh.svg?react";
 import LinkExternalIcon from "#/icons/link-external.svg?react";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 /**
  * Workspace file browser. Diff/Commits live in the sibling Commits
@@ -128,22 +130,46 @@ function FilesTab() {
   // than running script in the canvas origin.
   const selectedFile = selectedFileContent.data;
   const isDataUrl = selectedFile?.staticUrl.startsWith("data:") ?? false;
-  const blobText = isDataUrl ? (selectedFile?.text ?? null) : null;
+  // A new tab on another origin sends no workspace cookie, so the backend
+  // returns 401 (#19038). Open those files from a blob too.
+  const isCrossOrigin =
+    !!selectedFile &&
+    !isDataUrl &&
+    new URL(selectedFile.staticUrl, window.location.href).origin !==
+      window.location.origin;
+  const opensFromBlob = isDataUrl || isCrossOrigin;
+  const blobText = opensFromBlob ? (selectedFile?.text ?? null) : null;
+  const selectedFileBytes = useWorkspaceFileBytes(
+    isCrossOrigin && blobText === null ? selectedPath : null,
+  );
+  const blobBytes = blobText === null ? selectedFileBytes.data : undefined;
+  const blobType =
+    blobText !== null || selectedFile?.mimeType === "image/svg+xml"
+      ? "text/plain;charset=utf-8"
+      : selectedFile?.mimeType;
   const [selectedFileBlobUrl, setSelectedFileBlobUrl] = useState<string | null>(
     null,
   );
   useEffect(() => {
-    if (blobText === null) return undefined;
-    const url = URL.createObjectURL(
-      new Blob([blobText], { type: "text/plain;charset=utf-8" }),
-    );
+    const blobPart = blobText ?? blobBytes;
+    if (blobPart === undefined) return undefined;
+    const url = URL.createObjectURL(new Blob([blobPart], { type: blobType }));
     setSelectedFileBlobUrl(url);
     return () => {
       URL.revokeObjectURL(url);
       setSelectedFileBlobUrl(null);
     };
-  }, [blobText]);
-  const selectedFileStaticUrl = isDataUrl
+  }, [blobText, blobBytes, blobType]);
+  const toastedErrorPathRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (toastedErrorPathRef.current !== selectedPath) {
+      toastedErrorPathRef.current = null;
+    }
+    if (!selectedFileBytes.isError || toastedErrorPathRef.current) return;
+    toastedErrorPathRef.current = selectedPath;
+    displayErrorToast(t(I18nKey.FILES$LOAD_ERROR));
+  }, [selectedFileBytes.isError, selectedPath, t]);
+  const selectedFileStaticUrl = opensFromBlob
     ? selectedFileBlobUrl
     : withWorkspaceCacheBuster(
         selectedFile?.staticUrl ?? null,
