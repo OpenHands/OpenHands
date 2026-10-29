@@ -17,6 +17,12 @@ export interface SchemaFormField {
   required: boolean;
   defaultValue?: unknown;
   options?: string[];
+  /**
+   * UI hint for string fields. `"textarea"` renders a multi-line input; useful
+   * for values that are naturally multi-line (feed lists, topics). Derived from
+   * the JSON schema `format` convention.
+   */
+  widget?: "textarea";
 }
 
 type ConfigSchemaProperty = Record<string, unknown>;
@@ -54,6 +60,12 @@ export function configSchemaToFormFields(
     };
     if (Array.isArray(property.enum) && property.enum.length > 0) {
       field.options = property.enum.map((option) => String(option));
+    }
+    if (
+      property.format === "textarea" ||
+      property["ui:widget"] === "textarea"
+    ) {
+      field.widget = "textarea";
     }
     return field;
   });

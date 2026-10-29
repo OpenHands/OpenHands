@@ -69,6 +69,25 @@ describe("configSchemaToFormFields", () => {
     );
     expect(fields[0]?.label).toBe("repo");
   });
+
+  it("maps format: textarea and ui:widget: textarea to the textarea widget", () => {
+    const fields = configSchemaToFormFields(
+      makePreflight({
+        name: "p",
+        config_schema: {
+          type: "object",
+          properties: {
+            feeds: { type: "string", format: "textarea" },
+            topics: { type: "string", "ui:widget": "textarea" },
+            name: { type: "string" },
+          },
+        },
+      }),
+    );
+    expect(fields[0]?.widget).toBe("textarea");
+    expect(fields[1]?.widget).toBe("textarea");
+    expect(fields[2]?.widget).toBeUndefined();
+  });
 });
 
 describe("applySchemaDefaults", () => {

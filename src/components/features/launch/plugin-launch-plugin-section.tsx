@@ -69,21 +69,22 @@ export function PluginLaunchPluginSection({
             </div>
           )}
           <div className="flex flex-col gap-4">
-            {Object.entries(plugin.parameters || {}).map(([key, value]) => (
-              <PluginLaunchParameterInput
-                key={key}
-                pluginIndex={originalIndex}
-                paramKey={key}
-                paramValue={value}
-                options={
-                  schemaFields?.find((field) => field.key === key)?.options
-                }
-                helpText={
-                  schemaFields?.find((field) => field.key === key)?.helpText
-                }
-                onParameterChange={onParameterChange}
-              />
-            ))}
+            {Object.entries(plugin.parameters || {}).map(([key, value]) => {
+              const field = schemaFields?.find((f) => f.key === key);
+              return (
+                <PluginLaunchParameterInput
+                  key={key}
+                  pluginIndex={originalIndex}
+                  paramKey={key}
+                  paramValue={value}
+                  label={field?.label}
+                  options={field?.options}
+                  helpText={field?.helpText}
+                  widget={field?.widget}
+                  onParameterChange={onParameterChange}
+                />
+              );
+            })}
           </div>
         </div>
       )}

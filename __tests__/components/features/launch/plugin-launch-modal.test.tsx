@@ -591,4 +591,54 @@ describe("automation mode preflight", () => {
       },
     ]);
   });
+
+  it("renders the schema label and help text instead of the raw key", () => {
+    renderModal(
+      [{ source: "github:org/recipe", parameters: { repo: "org/repo" } }],
+      {
+        mode: "automation",
+        preflight: {
+          ...cronPreflight,
+          fields: [
+            {
+              key: "repo",
+              type: "string",
+              label: "Repository",
+              required: false,
+              helpText: "Which repo to scan",
+            },
+          ],
+        },
+      },
+    );
+
+    expect(screen.getByText("Repository")).toBeInTheDocument();
+    expect(screen.getByText("Which repo to scan")).toBeInTheDocument();
+    expect(screen.queryByText("repo")).not.toBeInTheDocument();
+  });
+
+  it("renders textarea fields with a multi-line input", () => {
+    renderModal(
+      [{ source: "github:org/recipe", parameters: { feeds: "a\nb" } }],
+      {
+        mode: "automation",
+        preflight: {
+          ...cronPreflight,
+          fields: [
+            {
+              key: "feeds",
+              type: "string",
+              label: "Feeds",
+              required: false,
+              widget: "textarea",
+            },
+          ],
+        },
+      },
+    );
+
+    const input = screen.getByTestId("plugin-0-param-feeds");
+    expect(input.tagName).toBe("TEXTAREA");
+    expect(input).toHaveValue("a\nb");
+  });
 });
