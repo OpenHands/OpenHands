@@ -38,6 +38,7 @@ test("mobile conversation menu has a comfortable touch target", async ({
 }) => {
   const menu = page.getByTestId("sidebar-mobile-menu-toggle");
   await expect(menu).toBeVisible();
+  await expect(menu).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   expect(
     (await menu.locator("svg").boundingBox())!.width,
   ).toBeGreaterThanOrEqual(24);
@@ -59,6 +60,7 @@ test("mobile conversation menu has a comfortable touch target", async ({
   await expect(drawer).toBeHidden();
   const topBarMenu = page.getByTestId("sidebar-mobile-menu-toggle");
   await expect(topBarMenu).toBeVisible();
+  await expect(topBarMenu).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   const topBarBounds = await topBarMenu.boundingBox();
   expect(topBarBounds!.width).toBeGreaterThanOrEqual(48);
   expect(topBarBounds!.height).toBeGreaterThanOrEqual(48);

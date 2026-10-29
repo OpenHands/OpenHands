@@ -23,7 +23,7 @@ export function SidebarMobileMenuToggle() {
       }
       className={cn(
         mobileTopBarIconButtonClassName,
-        "size-12 bg-surface-raised p-0 text-contrast",
+        "size-12 p-0 text-contrast",
       )}
     >
       <BlockDrawerLeftIcon
