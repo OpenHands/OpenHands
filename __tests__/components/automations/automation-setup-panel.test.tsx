@@ -272,6 +272,7 @@ function renderPanel(
   queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   }),
+  onAskAgent?: (prompt: string) => void,
 ) {
   const value: NavigationContextValue = {
     currentPath: `/conversations/${conversationId}`,
@@ -287,6 +288,7 @@ function renderPanel(
           draft={draft}
           conversationId={conversationId}
           conversationTags={conversationTags}
+          onAskAgent={onAskAgent}
         />
       </NavigationProvider>
     </QueryClientProvider>,
@@ -1677,6 +1679,32 @@ describe("AutomationSetupPanel", () => {
       args: { content: "AUTOMATION_SETUP$ASK_AGENT_EVENT_PROMPT" },
     });
     expect(showAgent).toHaveBeenCalled();
+    window.removeEventListener(AUTOMATION_SETUP_SHOW_AGENT_EVENT, showAgent);
+  });
+
+  it("starts the setup conversation from Ask Agent when the panel has none", async () => {
+    const user = userEvent.setup();
+    const onAskAgent = vi.fn();
+    const showAgent = vi.fn();
+    window.addEventListener(AUTOMATION_SETUP_SHOW_AGENT_EVENT, showAgent);
+
+    renderPanel(
+      { prompt: "Review every pull request", kind: "prompt" },
+      PENDING_AUTOMATION_SETUP_ID,
+      null,
+      undefined,
+      onAskAgent,
+    );
+
+    await user.click(screen.getByText("AUTOMATIONS$DETAIL$TRIGGER_EVENT"));
+    await user.click(screen.getByTestId("automation-setup-ask-agent"));
+
+    expect(onAskAgent).toHaveBeenCalledWith(
+      "AUTOMATION_SETUP$ASK_AGENT_EVENT_PROMPT",
+    );
+    // There is no conversation to send into yet.
+    expect(mockSendMessage).not.toHaveBeenCalled();
+    expect(showAgent).not.toHaveBeenCalled();
     window.removeEventListener(AUTOMATION_SETUP_SHOW_AGENT_EVENT, showAgent);
   });
 
