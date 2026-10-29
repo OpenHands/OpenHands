@@ -55,4 +55,22 @@ done
 curl -fsS -o /dev/null --max-time 5 "$HEALTH_URL" ||
   fail "${HEALTH_URL} stopped answering"
 
+# The served agent-server comes from the base image, while system Python gets
+# its own copy as a dependency of openhands-workspace; a resolver conflict once
+# downgraded that copy silently (#17531). Check both against the release pin.
+if [ -n "${EXPECTED_AGENT_SERVER_VERSION:-}" ]; then
+  served=$(docker exec "$NAME" python -c 'import json, urllib.request
+print(json.load(urllib.request.urlopen("http://127.0.0.1:8000/server_info"))["version"])') ||
+    fail "could not read the agent-server version from /server_info"
+  installed=$(docker exec "$NAME" python -c 'from importlib.metadata import version
+print(version("openhands-agent-server"))') ||
+    fail "openhands-agent-server is not installed in system Python"
+  echo "Agent Server: expected ${EXPECTED_AGENT_SERVER_VERSION}, served ${served}, installed ${installed}"
+  [ "$served" = "$EXPECTED_AGENT_SERVER_VERSION" ] ||
+    fail "serves agent-server ${served}, expected ${EXPECTED_AGENT_SERVER_VERSION}"
+  [ "$installed" = "$EXPECTED_AGENT_SERVER_VERSION" ] ||
+    fail "system Python has openhands-agent-server ${installed}, expected ${EXPECTED_AGENT_SERVER_VERSION}"
+  docker exec "$NAME" python -m pip check || fail "pip check found broken requirements"
+fi
+
 echo "Smoke test passed for ${IMAGE}"

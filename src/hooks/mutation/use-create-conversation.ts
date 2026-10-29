@@ -36,10 +36,16 @@ export interface CreateConversationVariables {
   plugins?: PluginSpec[];
   workingDir?: string;
   workspaceMode?: WorkspaceMode;
+  // Cloud only: start inside this existing sandbox instead of provisioning
+  // one (the sidebar's "New Conversation in Sandbox"). Local backends have no
+  // sandboxes, and the local launch path ignores it.
+  sandboxId?: string;
   // Launch from a specific AgentProfile (local backend). When omitted, the
   // active AgentProfile (if any) is used so home-composed conversations
   // launch from the user's selected profile (#3727).
   agentProfileId?: string;
+  // Cloud: run on this LLM profile (a member's home pick) without activating it.
+  llmProfile?: string;
   entryPoint?: string; // analytics only; not forwarded to the service
 }
 
@@ -101,11 +107,12 @@ export const useCreateConversation = ({
         parentConversationId,
         agentType,
         agentProfileId,
+        llmProfile,
+        sandboxId,
       } = variables;
 
       // The active AgentProfile is the default launch profile for new
-      // conversations (#3727), on both local and cloud. sandboxId is unused
-      // here.
+      // conversations (#3727), on both local and cloud.
       const conversation = await launchConversation(
         {
           queryClient,
@@ -131,11 +138,13 @@ export const useCreateConversation = ({
           workspaceMode,
           parentConversationId,
           agentType,
-          // Only stamp the toggle when it's on so the default path stays
-          // byte-identical to the legacy launch (and the e2e snapshot tests
-          // that assert the exact createConversation payload). The active
-          // meta-profile gates the suffix: no router attached means no
-          // route-at-start instruction, even if the toggle was left on.
+          ...(llmProfile ? { llmProfile } : {}),
+          ...(sandboxId ? { sandboxId } : {}),
+          // Cloud only; a local launch reads the toggle itself and gates it
+          // on the launched profile's router. Only stamped when on, so the
+          // e2e snapshot tests that assert the exact createConversation
+          // payload stay stable. The active meta-profile gates the suffix:
+          // no router attached means no route-at-start instruction.
           ...(settings?.run_router_at_conversation_start
             ? {
                 runRouterAtConversationStart: true,

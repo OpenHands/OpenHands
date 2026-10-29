@@ -1,7 +1,6 @@
 import React, { CSSProperties, ReactNode } from "react";
 import { CircleX } from "lucide-react";
 import toast, { ToastOptions } from "react-hot-toast";
-import { OH_STATUS_ERROR_COLOR } from "#/constants/status-colors";
 import { calculateToastDuration } from "./toast-duration";
 import { cn } from "#/utils/utils";
 import i18n from "#/i18n";
@@ -74,9 +73,8 @@ export function ErrorToastContent({ message }: { message: ReactNode }) {
     >
       <CircleX
         aria-hidden
-        className="h-4 w-4 shrink-0"
+        className="h-4 w-4 shrink-0 text-status-error"
         strokeWidth={2}
-        style={{ color: OH_STATUS_ERROR_COLOR }}
       />
       <span
         ref={contentRef}

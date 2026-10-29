@@ -6,6 +6,7 @@ import { useNavigation } from "#/context/navigation-context";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useBackendScopedPath } from "#/hooks/use-backend-scoped-path";
 import { usePaginatedConversations } from "#/hooks/query/use-paginated-conversations";
+import { useAgentProfiles } from "#/hooks/query/use-agent-profiles";
 import { useResolvedWorkspaces } from "#/hooks/query/use-resolved-workspaces";
 import { useStartTasks } from "#/hooks/query/use-start-tasks";
 import { useDeleteConversation } from "#/hooks/mutation/use-delete-conversation";
@@ -61,6 +62,12 @@ import {
 import { useArchivedConversationsStore } from "#/stores/archived-conversations-store";
 import { usePinnedConversationsStore } from "#/stores/pinned-conversations-store";
 import { uniqueById } from "#/utils/unique-by-id";
+import {
+  isEffectivelyArchivedConversation,
+  isMissingSandboxStatus,
+  isRuntimeUnavailableSandboxStatus,
+} from "#/utils/conversation-archive-status";
+import type { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
 
 interface ConversationPanelProps {
   onClose?: () => void;
@@ -198,6 +205,21 @@ export function ConversationPanel({
     (state) => state.removeArchivedConversation,
   );
 
+  // The one predicate every archived presentation reads: a row is effectively
+  // archived when the user archived it, or when its runtime is missing and
+  // non-resumable. List visibility, the "Archived" chip, the dimmed title, and
+  // the status dot all derive from this so they cannot disagree.
+  // (`sandbox_status: "ERROR"` is intentionally not archived.) Menu availability
+  // is a separate concern and does not read this predicate alone.
+  const isRowArchived = React.useCallback(
+    (conversation: { id: string; sandbox_status?: SandboxStatus | null }) =>
+      isEffectivelyArchivedConversation(
+        conversation.sandbox_status,
+        archivedIdSet.has(conversation.id),
+      ),
+    [archivedIdSet],
+  );
+
   const toggleGroupCollapsed = React.useCallback((groupId: string) => {
     setCollapsedGroupIds((prev) => {
       const next = new Set(prev);
@@ -253,6 +275,16 @@ export function ConversationPanel({
 
   // Fetch in-progress start tasks
   const { data: startTasks } = useStartTasks();
+  // The hovercard names the launched agent profile: one cached list lookup
+  // (shared with the chat input), never a fetch per hover.
+  const { data: agentProfilesData } = useAgentProfiles();
+  const agentProfileNames = React.useMemo(() => {
+    const names = new Map<string, string>();
+    for (const profile of agentProfilesData?.profiles ?? []) {
+      if (profile.id) names.set(profile.id, profile.name);
+    }
+    return names;
+  }, [agentProfilesData]);
 
   // Deduped, archive-unaware collection of every conversation currently loaded
   // from the backend. Bulk actions like "Delete all" must use this list so
@@ -289,16 +321,17 @@ export function ConversationPanel({
     return pageById;
   }, [data]);
 
-  // Display collection: same loaded pages, with archived rows filtered out
-  // unless the user has opted into "Show archived".
+  // Display collection: same loaded pages, with effectively-archived rows
+  // (explicitly archived or missing-runtime) filtered out unless the user has
+  // opted into "Show archived".
   const conversations = React.useMemo(() => {
     if (showArchivedConversations) {
       return allLoadedConversations;
     }
     return allLoadedConversations.filter(
-      (conversation) => !archivedIdSet.has(conversation.id),
+      (conversation) => !isRowArchived(conversation),
     );
-  }, [allLoadedConversations, archivedIdSet, showArchivedConversations]);
+  }, [allLoadedConversations, isRowArchived, showArchivedConversations]);
 
   // Facets derive from the unfiltered list so the automation-name rows in the
   // advanced-options modal don't vanish while a narrowing selection is active.
@@ -708,6 +741,27 @@ export function ConversationPanel({
     [createConversation, isCreatingConversationFlow, navigate],
   );
 
+  // Mirrors the `/new` command: the new conversation reuses the row's sandbox
+  // and nothing else. No parent id, so it shows up in this list; no
+  // repository, so the backend doesn't touch the shared working tree's branch.
+  const handleNewConversationInSandbox = React.useCallback(
+    (sandboxId: string) => {
+      if (isCreatingConversationFlow) return;
+      createConversation(
+        {
+          sandboxId,
+          entryPoint: "sidebar_new_conversation_in_sandbox",
+        },
+        {
+          onSuccess: (data) => {
+            navigate(`/conversations/${data.conversation_id}`);
+          },
+        },
+      );
+    },
+    [createConversation, isCreatingConversationFlow, navigate],
+  );
+
   const handleDeleteProject = React.useCallback(
     (conversationId: string, title: string) => {
       setConfirmDeleteModalVisible(true);
@@ -855,7 +909,25 @@ export function ConversationPanel({
       options?: { inPinnedSection?: boolean },
     ) => {
       const isPinned = pinnedIds.includes(conversation.id);
-      const isArchived = archivedIdSet.has(conversation.id);
+      // Presentation: a row looks archived when the user archived it or its
+      // runtime is missing and non-resumable. This single predicate drives list
+      // visibility, the chip, the dot, and the dimmed title.
+      const isArchived = isRowArchived(conversation);
+      // Action availability is separate from presentation. "Unarchive" is only
+      // meaningful when clearing the browser-local flag actually returns the row
+      // to the unarchived state, so it is offered solely for an explicitly
+      // archived row whose runtime is not missing. A missing, non-resumable
+      // runtime cannot be restored from this menu, so such a row offers neither
+      // "Archive" nor "Unarchive", even when a stored archive flag is set.
+      const explicitlyArchived = archivedIdSet.has(conversation.id);
+      const runtimeMissing = isMissingSandboxStatus(
+        conversation.sandbox_status,
+      );
+      // "New Conversation in Sandbox" needs a sandbox the backend can start a
+      // conversation in: Cloud rows only (the local adapter carries no sandbox
+      // id), and not one whose runtime is MISSING or ERROR, which the start
+      // task rejects. A PAUSED sandbox is resumed by the backend.
+      const sandboxId = conversation.sandbox_id;
       if (compact) {
         return (
           <CompactConversationRow
@@ -885,6 +957,7 @@ export function ConversationPanel({
             acpModels={conversation.acp_available_models}
             tags={conversation.tags}
             showTags={showTagsMetadata}
+            isArchived={isArchived}
           />
         );
       }
@@ -917,7 +990,19 @@ export function ConversationPanel({
               agentKind={conversation.agent_kind}
               acpServer={conversation.acp_server}
               createdAt={conversation.created_at}
+              agentProfileId={
+                conversation.launched_agent_profile?.agent_profile_id ?? null
+              }
+              agentProfileName={
+                agentProfilesData
+                  ? (agentProfileNames.get(
+                      conversation.launched_agent_profile?.agent_profile_id ??
+                        "",
+                    ) ?? null)
+                  : undefined
+              }
               tags={conversation.tags}
+              isArchived={isArchived}
             />
           }
         >
@@ -936,8 +1021,10 @@ export function ConversationPanel({
               onDelete={() =>
                 handleDeleteProject(conversation.id, conversation.title ?? "")
               }
-              // Exactly one direction is offered per row, so the menu always
-              // reflects the conversation's current archived state.
+              // Archive is offered until the row is effectively archived; the
+              // reverse direction, "Unarchive", is offered only when the row is
+              // explicitly archived and its runtime is not missing. A
+              // missing-runtime row offers neither.
               onArchive={
                 isArchived
                   ? undefined
@@ -948,11 +1035,17 @@ export function ConversationPanel({
                       )
               }
               onUnarchive={
-                isArchived
+                explicitlyArchived && !runtimeMissing
                   ? () => handleUnarchiveProject(conversation.id)
                   : undefined
               }
               onStop={() => handleStopConversation(conversation.id)}
+              onNewConversationInSandbox={
+                sandboxId &&
+                !isRuntimeUnavailableSandboxStatus(conversation.sandbox_status)
+                  ? () => handleNewConversationInSandbox(sandboxId)
+                  : undefined
+              }
               onEditTags={
                 activeBackend.kind === "local"
                   ? () => handleEditTags(conversation.id)
@@ -1008,8 +1101,10 @@ export function ConversationPanel({
       handleConversationTitleChange,
       handleDeleteProject,
       handleEditTags,
+      handleNewConversationInSandbox,
       handleStopConversation,
       handleUnarchiveProject,
+      isRowArchived,
       onClose,
       openContextMenuId,
       pinnedIds,

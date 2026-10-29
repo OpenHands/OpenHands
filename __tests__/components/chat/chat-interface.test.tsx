@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, test, vi } from "vitest";
 import {
   fireEvent,
+  cleanup,
   render,
   screen,
   waitFor,
   within,
 } from "@testing-library/react";
+import { flushSync } from "react-dom";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderWithProviders, useParamsMock } from "test-utils";
@@ -32,6 +34,8 @@ import { AgentState } from "#/types/agent-state";
 import { useConversationStore } from "#/stores/conversation-store";
 import { useGoalStore } from "#/stores/goal-store";
 import { act } from "@testing-library/react";
+import ProfilesService from "#/api/profiles-service/profiles-service.api";
+import { getConversationState } from "#/utils/conversation-local-storage";
 
 const mockSend = vi.fn();
 vi.mock("#/hooks/use-send-message", () => ({
@@ -784,6 +788,94 @@ describe("ChatInterface - Pending message queue", () => {
   });
 });
 
+describe("ChatInterface - Saved draft after submit", () => {
+  const CONVERSATION_ID = "test-conversation-id";
+  let listProfilesSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    // jsdom has no innerText, which the composer reads its text from.
+    Object.defineProperty(HTMLElement.prototype, "innerText", {
+      configurable: true,
+      get(this: HTMLElement) {
+        return this.textContent ?? "";
+      },
+    });
+    mockSend.mockReset();
+    mockSend.mockResolvedValue({ queued: false });
+    localStorage.clear();
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
+    (useConfig as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      data: {},
+    });
+    (
+      useUnifiedUploadFiles as unknown as ReturnType<typeof vi.fn>
+    ).mockReturnValue({ mutateAsync: vi.fn(), isLoading: false });
+    listProfilesSpy = vi
+      .spyOn(ProfilesService, "listProfiles")
+      .mockResolvedValue({
+        profiles: [],
+        active_profile: null,
+      } as Awaited<ReturnType<typeof ProfilesService.listProfiles>>);
+  });
+
+  afterEach(() => {
+    // Unmount before restoring mocks, so no late re-render reads a restored mock.
+    cleanup();
+    Reflect.deleteProperty(HTMLElement.prototype, "innerText");
+    listProfilesSpy.mockRestore();
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
+  });
+
+  function renderInterface() {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={[`/${CONVERSATION_ID}`]}>
+          <Routes>
+            <Route path=":conversationId" element={<ChatInterface />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  }
+
+  async function typeAndWaitForSavedDraft(text: string) {
+    const input = screen.getByTestId("chat-input");
+    input.textContent = text;
+    fireEvent.input(input);
+    // The draft is saved after the input debounce.
+    await waitFor(
+      () =>
+        expect(getConversationState(CONVERSATION_ID).draftMessage).toBe(text),
+      { timeout: 2000 },
+    );
+    return input;
+  }
+
+  it.each(["/model", "/new"])(
+    "clears the saved draft of a %s command that the chat handles itself",
+    async (command) => {
+      renderInterface();
+      const input = await typeAndWaitForSavedDraft(command);
+
+      fireEvent.keyDown(input, { key: "Enter" });
+
+      expect(input).toHaveTextContent("");
+      expect(getConversationState(CONVERSATION_ID).draftMessage).toBeNull();
+      expect(mockSend).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps the saved draft of a sent message until the agent confirms it", async () => {
+    renderInterface();
+    const input = await typeAndWaitForSavedDraft("hello");
+
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await waitFor(() => expect(mockSend).toHaveBeenCalled());
+    expect(getConversationState(CONVERSATION_ID).draftMessage).toBe("hello");
+  });
+});
+
 describe("ChatInterface - Auto-scroll on submit (issue #817)", () => {
   let queryClient: QueryClient;
 
@@ -1222,5 +1314,82 @@ describe("ChatInterface - Build plan keyboard shortcut", () => {
     await waitFor(() => {
       expect(sentBuildPrompt()).toBe(true);
     });
+  });
+
+  it("sends the build prompt from the empty composer when the chat re-renders during the keypress", async () => {
+    act(() => {
+      useConversationStore.setState({
+        conversationMode: "plan",
+        planContent: "# Plan\n\n- step one",
+      });
+    });
+    // In the app React's root listeners sit on `document` ahead of this
+    // shortcut, and the browser commits the composer's keydown update between
+    // listeners. Commit a re-render at that point.
+    const commitMidKeypress = () => {
+      flushSync(() => {
+        useConversationStore.setState({
+          planContent: "# Plan\n\n- step one\n- step two",
+        });
+      });
+    };
+    document.addEventListener("keydown", commitMidKeypress, { once: true });
+    renderInterface();
+    const composer = screen.getByTestId("chat-input");
+    composer.focus();
+
+    composer.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(sentBuildPrompt()).toBe(true);
+    });
+  });
+
+  it("leaves Ctrl+Enter to a pending confirmation", () => {
+    vi.mocked(useAgentState).mockReturnValue({
+      curAgentState: AgentState.AWAITING_USER_CONFIRMATION,
+    });
+    act(() => {
+      useConversationStore.setState({
+        conversationMode: "plan",
+        planContent: "# Plan\n\n- step one",
+      });
+    });
+
+    try {
+      renderInterface();
+      pressBuildShortcut();
+
+      expect(sentBuildPrompt()).toBe(false);
+    } finally {
+      vi.mocked(useAgentState).mockReturnValue({
+        curAgentState: AgentState.AWAITING_USER_INPUT,
+      });
+    }
+  });
+
+  it("leaves Ctrl+Enter to the composer when it has text", () => {
+    act(() => {
+      useConversationStore.setState({
+        conversationMode: "plan",
+        planContent: "# Plan\n\n- step one",
+      });
+    });
+    renderInterface();
+    const composer = screen.getByTestId("chat-input");
+    composer.focus();
+    composer.textContent = "Refine step one";
+    fireEvent.input(composer);
+
+    fireEvent.keyDown(composer, { key: "Enter", ctrlKey: true });
+
+    expect(sentBuildPrompt()).toBe(false);
   });
 });

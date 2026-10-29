@@ -22,6 +22,7 @@ import { ConversationCardHeader } from "./conversation-card-header";
 import { ConversationCardActions } from "./conversation-card-actions";
 import { ConversationCardFooter } from "./conversation-card-footer";
 import { ConversationStatusBadges } from "./conversation-status-badges";
+import { isMissingSandboxStatus } from "#/utils/conversation-archive-status";
 import { useDownloadConversation } from "#/hooks/use-download-conversation";
 
 interface ConversationCardProps {
@@ -35,6 +36,12 @@ interface ConversationCardProps {
    */
   onUnarchive?: () => void;
   onStop?: () => void;
+  /**
+   * Starts a new conversation in this conversation's sandbox. The panel
+   * passes it only for Cloud rows whose sandbox can still be used, so the
+   * menu item disappears on Local backends and on missing/errored sandboxes.
+   */
+  onNewConversationInSandbox?: () => void;
   onChangeTitle?: (title: string) => void;
   /**
    * Opens the tag editor for this conversation. Local agent-server backends
@@ -63,6 +70,12 @@ interface ConversationCardProps {
   tags?: Record<string, string> | null;
   /** Gates the tag-chip row; wired to the panel's "Tags" metadata toggle. */
   showTags?: boolean;
+  /**
+   * The row's effective archived state. Leave undefined to let the card infer
+   * it from `sandboxStatus` (a missing, non-resumable runtime); pass it
+   * explicitly when the panel also knows about an explicit archive so the
+   * chip, dot, and dimmed title stay in agreement.
+   */
   isArchived?: boolean;
   isPinned?: boolean;
   onTogglePin?: () => void;
@@ -76,6 +89,7 @@ export function ConversationCard({
   onArchive,
   onUnarchive,
   onStop,
+  onNewConversationInSandbox,
   onChangeTitle,
   onEditTags,
   showOptions,
@@ -98,7 +112,7 @@ export function ConversationCard({
   acpModels = null,
   tags = null,
   showTags = false,
-  isArchived = false,
+  isArchived,
   isPinned = false,
   onTogglePin,
   alwaysShowPinIcon = false,
@@ -111,6 +125,11 @@ export function ConversationCard({
   const displayTags = getDisplayConversationTags(tags);
   const hasDisplayTags = displayTags.length > 0;
   const showTagChipRow = showTags && hasDisplayTags;
+
+  // Effective archived state: an explicit prop (the panel passes the user's
+  // archive plus the missing-runtime inference), or the missing-runtime
+  // fallback for standalone callers that only pass `sandboxStatus`.
+  const effectiveArchived = isArchived ?? isMissingSandboxStatus(sandboxStatus);
 
   const onTitleSave = (newTitle: string) => {
     if (newTitle !== "" && newTitle !== title) {
@@ -144,6 +163,15 @@ export function ConversationCard({
     event.preventDefault();
     event.stopPropagation();
     onStop?.();
+    onContextMenuToggle?.(false);
+  };
+
+  const handleNewConversationInSandbox = (
+    event: React.MouseEvent<HTMLButtonElement>,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onNewConversationInSandbox?.();
     onContextMenuToggle?.(false);
   };
 
@@ -249,7 +277,7 @@ export function ConversationCard({
   const showPersistentPinIcon = alwaysShowPinIcon && isPinned && !!onTogglePin;
   const shouldRenderFooter =
     showRepositoryMetadata ||
-    isArchived ||
+    effectiveArchived ||
     (showLlmProfiles && (agentKind === "acp" || !!llmModel)) ||
     (showTagChipRow && displayTags.length > 0);
 
@@ -273,8 +301,11 @@ export function ConversationCard({
             onTitleSave={onTitleSave}
             executionStatus={executionStatus}
             sandboxStatus={sandboxStatus}
+            isArchived={effectiveArchived}
           />
-          {sandboxStatus === "ERROR" && <ConversationStatusBadges />}
+          {sandboxStatus === "ERROR" && !effectiveArchived && (
+            <ConversationStatusBadges />
+          )}
         </div>
 
         <div
@@ -326,6 +357,10 @@ export function ConversationCard({
                       onArchive={onArchive && handleArchive}
                       onUnarchive={onUnarchive && handleUnarchive}
                       onStop={onStop && handleStop}
+                      onNewConversationInSandbox={
+                        onNewConversationInSandbox &&
+                        handleNewConversationInSandbox
+                      }
                       onEdit={onChangeTitle && handleEdit}
                       onEditTags={onEditTags && handleEditTags}
                       onDownloadViaVSCode={handleDownloadViaVSCode}
@@ -354,6 +389,9 @@ export function ConversationCard({
                   onArchive={onArchive && handleArchive}
                   onUnarchive={onUnarchive && handleUnarchive}
                   onStop={onStop && handleStop}
+                  onNewConversationInSandbox={
+                    onNewConversationInSandbox && handleNewConversationInSandbox
+                  }
                   onEdit={onChangeTitle && handleEdit}
                   onEditTags={onEditTags && handleEditTags}
                   onDownloadViaVSCode={handleDownloadViaVSCode}
@@ -384,7 +422,7 @@ export function ConversationCard({
           acpModels={acpModels}
           tags={tags}
           showTags={showTagChipRow}
-          isArchived={isArchived}
+          isArchived={effectiveArchived}
         />
       )}
     </div>

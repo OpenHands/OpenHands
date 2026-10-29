@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -115,10 +122,33 @@ function FilesTab() {
   const bumpWorkspaceMutationCounter = useWorkspaceMutationCounter(
     (state) => state.bump,
   );
-  const selectedFileStaticUrl = withWorkspaceCacheBuster(
-    selectedFileContent.data?.staticUrl ?? null,
-    mutationCounter,
+  // Cloud backends return the file as a `data:` URL, which browsers refuse to
+  // open as a top-level page. Open the decoded text from a same-origin blob
+  // instead, typed `text/plain` so an HTML or SVG file shows its source rather
+  // than running script in the canvas origin.
+  const selectedFile = selectedFileContent.data;
+  const isDataUrl = selectedFile?.staticUrl.startsWith("data:") ?? false;
+  const blobText = isDataUrl ? (selectedFile?.text ?? null) : null;
+  const [selectedFileBlobUrl, setSelectedFileBlobUrl] = useState<string | null>(
+    null,
   );
+  useEffect(() => {
+    if (blobText === null) return undefined;
+    const url = URL.createObjectURL(
+      new Blob([blobText], { type: "text/plain;charset=utf-8" }),
+    );
+    setSelectedFileBlobUrl(url);
+    return () => {
+      URL.revokeObjectURL(url);
+      setSelectedFileBlobUrl(null);
+    };
+  }, [blobText]);
+  const selectedFileStaticUrl = isDataUrl
+    ? selectedFileBlobUrl
+    : withWorkspaceCacheBuster(
+        selectedFile?.staticUrl ?? null,
+        mutationCounter,
+      );
 
   // Restore open tabs / selection from conversation-scoped localStorage on
   // mount and when switching conversations (survives a full page refresh).
@@ -205,9 +235,13 @@ function FilesTab() {
             {isTreeVisible && (
               <>
                 <aside
-                  className="shrink-0 border-r border-border overflow-y-auto custom-scrollbar-always"
+                  className="w-(--files-tab-tree-width) shrink-0 border-r border-border overflow-y-auto custom-scrollbar-always"
                   data-testid="files-tab-tree"
-                  style={{ width: `${treeWidth}px` }}
+                  style={
+                    {
+                      "--files-tab-tree-width": `${treeWidth}px`,
+                    } as CSSProperties
+                  }
                 >
                   <FileTreeView
                     paths={paths}

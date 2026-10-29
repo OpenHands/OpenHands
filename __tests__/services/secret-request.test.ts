@@ -86,7 +86,7 @@ beforeEach(() => {
 });
 
 describe("handleRequestSecretAction", () => {
-  it("queues one modal per tool call, ignoring replays", async () => {
+  it("queues one request per tool call, ignoring replays", async () => {
     useSecretRequestStore.setState({ requests: [] });
     await handleRequestSecretAction(action, CONVERSATION_ID, "tool-call-1");
     await handleRequestSecretAction(action, CONVERSATION_ID, "tool-call-1");

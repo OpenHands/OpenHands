@@ -1,12 +1,26 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { screen, waitFor, within, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import {
   setupConversationPanelTest,
   createMockConversation,
   renderConversationPanel,
+  cloudBackend,
+  RouterStub,
 } from "./conversation-panel-test-utils";
+import { renderWithProviders } from "test-utils";
+import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import AgentProfilesService from "#/api/agent-profiles-service/agent-profiles-service.api";
+import type {
+  AppConversation,
+  AppConversationStartTask,
+  SandboxStatus,
+} from "#/api/conversation-service/agent-server-conversation-service.types";
+import {
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
 import { ExecutionStatus } from "#/types/agent-server/core";
 import { useArchivedConversationsStore } from "#/stores/archived-conversations-store";
 import { useConversationPanelPreferencesStore } from "#/stores/conversation-panel-preferences-store";
@@ -168,6 +182,191 @@ describe("ConversationPanel conversation actions", () => {
           .isArchived("default-local", "1"),
       ).toBe(false);
     });
+    expect(
+      screen.queryByTestId("conversation-card-archived-chip"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("hides a missing-runtime conversation from the default list, reveals it with the Archived chip, and offers neither action", async () => {
+    // A conversation whose runtime is gone (adapter maps a local
+    // `runtime_info.runtime_status: "missing"` + `can_resume: false` to
+    // `sandbox_status: "MISSING"`) must be treated as archived everywhere:
+    // hidden by default and chipped when "Show archived" is on. Its ⋮ menu
+    // offers neither "Archive" nor "Unarchive": the missing runtime cannot be
+    // restored from here, so neither direction can change the effective state.
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({
+      items: [
+        createMockConversation({ id: "live", title: "Live Conversation" }),
+        createMockConversation({
+          id: "gone",
+          title: "Gone Conversation",
+          sandbox_status: "MISSING",
+        }),
+      ],
+      next_page_id: null,
+    });
+
+    renderConversationPanel();
+
+    // Default list: the missing-runtime row is hidden like an archived row.
+    let cards = await screen.findAllByTestId("conversation-card");
+    expect(cards).toHaveLength(1);
+    expect(screen.queryByText("Gone Conversation")).not.toBeInTheDocument();
+
+    // "Show archived": the row reappears with the Archived chip.
+    act(() => {
+      useConversationPanelPreferencesStore.setState({
+        showArchivedConversations: true,
+      });
+    });
+    cards = await screen.findAllByTestId("conversation-card");
+    expect(cards).toHaveLength(2);
+    const goneCard = cards.find((card) =>
+      within(card).queryByText("Gone Conversation"),
+    )!;
+    expect(goneCard).toBeInTheDocument();
+    expect(
+      within(goneCard).getByTestId("conversation-card-archived-chip"),
+    ).toBeInTheDocument();
+
+    // Neither direction is offered.
+    await userEvent
+      .setup()
+      .click(within(goneCard).getByTestId("ellipsis-button"));
+    expect(screen.queryByTestId("unarchive-button")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("archive-button")).not.toBeInTheDocument();
+  });
+
+  it("keeps a missing-runtime row presented as archived and offers no action", async () => {
+    // A missing, non-resumable runtime keeps the row presented as archived:
+    // the indicator, list visibility, and chip stay in agreement. The menu
+    // offers neither direction because the runtime cannot be restored here.
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({
+      items: [
+        createMockConversation({
+          id: "gone",
+          title: "Gone Conversation",
+          sandbox_status: "MISSING",
+        }),
+      ],
+      next_page_id: null,
+    });
+    useConversationPanelPreferencesStore.setState({
+      showArchivedConversations: true,
+    });
+
+    renderConversationPanel();
+
+    const goneCard = (await screen.findByText("Gone Conversation")).closest(
+      "[data-testid='conversation-card']",
+    )!;
+    expect(
+      within(goneCard as HTMLElement).getByTestId(
+        "conversation-card-archived-chip",
+      ),
+    ).toBeInTheDocument();
+
+    await userEvent
+      .setup()
+      .click(within(goneCard as HTMLElement).getByTestId("ellipsis-button"));
+    expect(screen.queryByTestId("unarchive-button")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("archive-button")).not.toBeInTheDocument();
+
+    // Still hidden from the default list.
+    act(() => {
+      useConversationPanelPreferencesStore.setState({
+        showArchivedConversations: false,
+      });
+    });
+    expect(screen.queryByText("Gone Conversation")).not.toBeInTheDocument();
+  });
+
+  it("offers Unarchive on an explicitly archived row with a present runtime", async () => {
+    // An explicit archive whose sandbox is not missing is restorable, so its
+    // ⋮ menu offers Unarchive and removing it returns the row to the default
+    // list.
+    useArchivedConversationsStore
+      .getState()
+      .archiveConversation("default-local", "1");
+    useConversationPanelPreferencesStore.setState({
+      showArchivedConversations: true,
+    });
+
+    renderConversationPanel();
+
+    const cards = await screen.findAllByTestId("conversation-card");
+    const archivedCard = cards.find((card) =>
+      within(card).queryByText("Conversation 1"),
+    )!;
+    await userEvent
+      .setup()
+      .click(within(archivedCard).getByTestId("ellipsis-button"));
+    expect(screen.getByTestId("unarchive-button")).toBeInTheDocument();
+    expect(screen.queryByTestId("archive-button")).not.toBeInTheDocument();
+  });
+
+  it("offers neither action on a row that is both explicitly archived and missing its runtime", async () => {
+    // A stored archive id on a missing-runtime row: the menu offers neither
+    // direction. Clearing the id would not change the effective archived state
+    // (the missing runtime keeps the row archived), so it is not a useful
+    // Unarchive operation.
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({
+      items: [
+        createMockConversation({
+          id: "gone",
+          title: "Gone Conversation",
+          sandbox_status: "MISSING",
+        }),
+      ],
+      next_page_id: null,
+    });
+    useArchivedConversationsStore
+      .getState()
+      .archiveConversation("default-local", "gone");
+    useConversationPanelPreferencesStore.setState({
+      showArchivedConversations: true,
+    });
+
+    renderConversationPanel();
+
+    const goneCard = await screen.findByText("Gone Conversation");
+    const card = goneCard.closest("[data-testid='conversation-card']")!;
+    await userEvent
+      .setup()
+      .click(within(card as HTMLElement).getByTestId("ellipsis-button"));
+    expect(screen.queryByTestId("unarchive-button")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("archive-button")).not.toBeInTheDocument();
+  });
+
+  it("keeps an ERROR runtime in the default list without the Archived chip", async () => {
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({
+      items: [
+        createMockConversation({
+          id: "errored",
+          title: "Errored Conversation",
+          sandbox_status: "ERROR",
+        }),
+      ],
+      next_page_id: null,
+    });
+
+    renderConversationPanel();
+
+    const cards = await screen.findAllByTestId("conversation-card");
+    expect(cards).toHaveLength(1);
+    expect(screen.getByText("Errored Conversation")).toBeInTheDocument();
     expect(
       screen.queryByTestId("conversation-card-archived-chip"),
     ).not.toBeInTheDocument();
@@ -769,5 +968,122 @@ describe("ConversationPanel conversation actions", () => {
     expect(
       screen.queryByRole("button", { name: /confirm/i }),
     ).not.toBeInTheDocument();
+  });
+
+  describe("New Conversation in Sandbox", () => {
+    // Sandboxes exist on Cloud backends only; the local adapter never sets a
+    // sandbox id, so these rows render against the Cloud backend. The
+    // provider is needed for the panel to see that backend when it launches.
+    const openRowMenu = async (
+      conversation: AppConversation,
+      navigate = vi.fn(),
+    ) => {
+      setRegisteredBackends([cloudBackend]);
+      setActiveSelection({ backendId: cloudBackend.id, orgId: "org-2" });
+      vi.spyOn(
+        AgentServerConversationService,
+        "searchConversations",
+      ).mockResolvedValue({ items: [conversation], next_page_id: null });
+      const user = userEvent.setup();
+      renderWithProviders(
+        <ActiveBackendProvider>
+          <RouterStub />
+        </ActiveBackendProvider>,
+        { navigation: { navigate } },
+      );
+      const [card] = await screen.findAllByTestId("conversation-card");
+      await user.click(within(card).getByTestId("ellipsis-button"));
+      return user;
+    };
+
+    it("starts a new conversation in the row's sandbox and opens it", async () => {
+      // Arrange
+      const navigate = vi.fn();
+      vi.spyOn(AgentProfilesService, "listProfiles").mockResolvedValue({
+        profiles: [],
+        active_agent_profile_id: null,
+      });
+      const startTask: AppConversationStartTask = {
+        id: "9f",
+        created_by_user_id: null,
+        status: "WORKING",
+        detail: null,
+        app_conversation_id: null,
+        agent_server_url: null,
+        request: {},
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      const createSpy = vi
+        .spyOn(AgentServerConversationService, "createConversation")
+        .mockResolvedValue(startTask);
+      const user = await openRowMenu(
+        createMockConversation({
+          id: "sandboxed",
+          title: "Sandboxed Conversation",
+          sandbox_id: "oh-agent-server-abc",
+          sandbox_status: "RUNNING",
+        }),
+        navigate,
+      );
+
+      // Act
+      await user.click(
+        screen.getByTestId("new-conversation-in-sandbox-button"),
+      );
+
+      // Assert: only the sandbox is reused, so the new conversation is a
+      // top-level one (no parent) with no repository checkout of its own.
+      await waitFor(() => {
+        expect(createSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            sandboxId: "oh-agent-server-abc",
+            parentConversationId: undefined,
+            metadata: null,
+          }),
+        );
+      });
+      await waitFor(() => {
+        expect(navigate).toHaveBeenCalledWith("/conversations/task-9f");
+      });
+    });
+
+    it("offers no sandbox item for a conversation without a sandbox", async () => {
+      // Arrange + Act
+      await openRowMenu(
+        createMockConversation({ id: "no-sandbox", sandbox_id: null }),
+      );
+
+      // Assert: the menu opened, but without the sandbox item.
+      expect(screen.getByTestId("edit-button")).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("new-conversation-in-sandbox-button"),
+      ).not.toBeInTheDocument();
+    });
+
+    it.each<SandboxStatus>(["MISSING", "ERROR"])(
+      "offers no sandbox item when the sandbox is %s",
+      async (sandboxStatus) => {
+        // Arrange: a MISSING runtime is only listed with archived rows shown.
+        useConversationPanelPreferencesStore.setState({
+          showArchivedConversations: true,
+        });
+
+        // Act
+        await openRowMenu(
+          createMockConversation({
+            id: "unusable",
+            sandbox_id: "oh-agent-server-abc",
+            sandbox_status: sandboxStatus,
+          }),
+        );
+
+        // Assert
+        expect(screen.getByTestId("edit-button")).toBeInTheDocument();
+        expect(
+          screen.queryByTestId("new-conversation-in-sandbox-button"),
+        ).not.toBeInTheDocument();
+      },
+    );
   });
 });

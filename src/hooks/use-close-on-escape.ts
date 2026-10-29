@@ -73,3 +73,21 @@ export const useCloseOnEscape = (
     return () => removeLayer(layer);
   }, [isOpen]);
 };
+
+/**
+ * Keep Escape from reaching layers opened before this one while it is active,
+ * for a dialog that handles Escape itself or deliberately ignores it. Without
+ * it, a drawer under the dialog (the phone sidebar drawer that hosts the
+ * backend modals) would take Escape, close, and unmount the dialog with it.
+ * A layout effect registers the boundary before the passive effects of
+ * anything the dialog renders, so a menu inside the dialog still sits above it.
+ */
+export const useEscapeBoundary = (isActive: boolean) => {
+  React.useLayoutEffect(() => {
+    if (!isActive) return undefined;
+
+    const layer: EscapeLayer = { close: () => {} };
+    pushLayer(layer);
+    return () => removeLayer(layer);
+  }, [isActive]);
+};

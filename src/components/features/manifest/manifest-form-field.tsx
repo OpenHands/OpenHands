@@ -208,7 +208,7 @@ export function SetupFormField({
           }}
           className={cn(
             formControlSettingsFieldClassName,
-            "file:mr-3 file:rounded-md file:border-0 file:bg-neutral-700 file:px-3 file:py-1.5 file:text-sm file:text-white",
+            "file:mr-3 file:rounded-md file:border-0 file:bg-interactive-hover file:px-3 file:py-1.5 file:text-sm file:text-contrast",
             error && "border-semantic-danger",
           )}
         />

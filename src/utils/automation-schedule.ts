@@ -1,5 +1,3 @@
-import { I18nKey } from "#/i18n/declaration";
-
 export type SchedulePresetKind = "daily" | "weekdays" | "weekly";
 
 export interface PresetSchedule {
@@ -77,7 +75,3 @@ export function formatEventOn(on: string | string[] | undefined): string {
   if (Array.isArray(on)) return on.join(", ");
   return on;
 }
-
-export type CronScheduleValidation =
-  | { schedule: string }
-  | { errorKey: I18nKey };

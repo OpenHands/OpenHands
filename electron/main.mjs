@@ -341,6 +341,7 @@ function setLoadingWindowExpanded(expanded) {
 }
 
 function createLoadingWindow() {
+  bootLogReady = false;
   loadingWin = new BrowserWindow({
     width: LOADING_WIN_WIDTH,
     // Tall enough to fit the streaming status line + the "first launch can
@@ -690,6 +691,9 @@ async function startStack() {
     skipNpmCheck: true,
     agentServerReadyTimeoutMs: 10 * 60_000,
     onServiceLog: handleServiceLog,
+    // main() announces the stack without waiting for the automation backend;
+    // if it then exits during startup, the services are already stopped.
+    onAutomationStartupFailure: failStartup,
   });
 
   // main() returns { config, agentServerReady } — treat a timeout as a fatal
@@ -703,6 +707,44 @@ async function startStack() {
         "Check your internet connection and try again.",
     );
   }
+}
+
+let startupFailed = false;
+
+/**
+ * Show why startup failed on the splash, keeping the full startup log
+ * readable and copyable. The automation backend can fail after the main
+ * window has opened, so the splash is reopened in its place when needed.
+ */
+function failStartup(err) {
+  if (startupFailed) return;
+  startupFailed = true;
+  const summary =
+    err.message +
+    " Ensure ports 8000, 18000, and 18001 are free, then try again.";
+  // Record the failure in the terminal and the startup-log buffer so it
+  // shows (and copies) as the final console line.
+  console.error("[desktop] Startup failed:", err);
+  appendBootLog("desktop", summary, "error");
+  if (mainWin && !mainWin.isDestroyed()) {
+    // Open the splash before closing the main window so window-all-closed
+    // does not quit the app.
+    if (!loadingWin || loadingWin.isDestroyed()) createLoadingWindow();
+    mainWin.destroy();
+  }
+  // Keep the splash open in its failure state so the full startup log can
+  // be read and copied; the app quits via the splash's Quit button (or
+  // Cmd+Q / closing the window).
+  if (showStartupFailure(summary)) return;
+  // Loading window already gone — fall back to the old dialog-and-quit.
+  const errorTail = recentServiceErrors.length
+    ? `\n\nRecent service errors:\n${recentServiceErrors.join("\n")}`
+    : "";
+  dialog.showErrorBox(
+    "OpenHands Agent Canvas failed to start",
+    summary + errorTail,
+  );
+  app.quit();
 }
 
 // ── App lifecycle ─────────────────────────────────────────────────────────────
@@ -764,29 +806,11 @@ app.whenReady().then(async () => {
     setBootPhase("Connecting to agent server…");
     await waitForAgentServer("http://localhost:8000/server_info", 60_000);
 
+    if (startupFailed) return;
     setBootPhase("Ready.");
     createMainWindow();
   } catch (err) {
-    const summary =
-      err.message +
-      " Ensure ports 8000, 18000, and 18001 are free, then try again.";
-    // Record the failure in the terminal and the startup-log buffer so it
-    // shows (and copies) as the final console line.
-    console.error("[desktop] Startup failed:", err);
-    appendBootLog("desktop", summary, "error");
-    // Keep the splash open in its failure state so the full startup log can
-    // be read and copied; the app quits via the splash's Quit button (or
-    // Cmd+Q / closing the window).
-    if (showStartupFailure(summary)) return;
-    // Loading window already gone — fall back to the old dialog-and-quit.
-    const errorTail = recentServiceErrors.length
-      ? `\n\nRecent service errors:\n${recentServiceErrors.join("\n")}`
-      : "";
-    dialog.showErrorBox(
-      "OpenHands Agent Canvas failed to start",
-      summary + errorTail,
-    );
-    app.quit();
+    failStartup(err);
   }
 });
 

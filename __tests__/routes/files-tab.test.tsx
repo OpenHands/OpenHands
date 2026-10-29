@@ -1,4 +1,7 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { compile } from "@tailwindcss/node";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -8,6 +11,7 @@ import FilesTab from "#/routes/files-tab";
 import { useFilesTabStore } from "#/stores/files-tab-store";
 import { useWorkspaceMutationCounter } from "#/stores/use-workspace-mutation-counter";
 import { NavigationProvider } from "#/context/navigation-context";
+import { FILES_TAB_TREE_WIDTH_STORAGE_KEY } from "#/components/features/files-tab/files-tab-tree.constants";
 import {
   LOCAL_STORAGE_KEYS,
   setConversationState,
@@ -55,6 +59,25 @@ function renderTab(conversationId: string | null = null) {
 
 function openFile(path: string, conversationId: string | null = null) {
   useFilesTabStore.getState().setSelectedPath(path, conversationId);
+}
+
+// Follow the rendered classes into production Tailwind CSS instead of assuming
+// the utility name or custom property that connects the reader to the writer.
+async function getTreeWidthProperty(tree: HTMLElement) {
+  const compiler = await compile(
+    await readFile(resolve("src/tailwind.css"), "utf8"),
+    { base: resolve("src"), onDependency: () => {} },
+  );
+  const css = compiler.build([...tree.classList]);
+  const declarations = [...css.matchAll(/\.((?:\\.|[\w-])+)\s*\{([^}]+)\}/g)]
+    .filter(([, selector]) =>
+      tree.classList.contains(selector.replace(/\\(.)/g, "$1")),
+    )
+    .map(([, , body]) => body)
+    .join("\n");
+  const width = /(?:^|\n)\s*width:\s*var\((--[\w-]+)\);/.exec(declarations);
+  expect(width).not.toBeNull();
+  return width![1];
 }
 
 describe("FilesTab", () => {
@@ -217,31 +240,74 @@ describe("FilesTab", () => {
     expect(tab).toHaveAttribute("role", "tab");
   });
 
-  it("shows the file tree by default and collapses it via the caret", async () => {
+  it("retains resized pixel widths through clamps, collapse and remount", async () => {
+    // Arrange: the real resize hook measures the layout's left edge.
     const user = userEvent.setup();
+    openFile("README.md");
+    const view = renderTab();
+    const tree = screen.getByTestId("files-tab-tree");
+    const widthProperty = await getTreeWidthProperty(tree);
+    vi.spyOn(tree.parentElement!, "getBoundingClientRect").mockReturnValue(
+      DOMRect.fromRect({ x: 100, y: 0, width: 1000, height: 600 }),
+    );
+    const handle = screen.getByTestId("files-tab-tree-resize-handle");
 
-    renderTab();
+    // Act + Assert: pointer coordinates update pixel width and both clamps.
+    fireEvent.mouseDown(handle.firstElementChild!);
+    expect(document.querySelector("[data-panel-drag-shield]")).not.toBeNull();
+    for (const [clientX, expectedWidth] of [
+      [424, 324],
+      [1000, 480],
+      [100, 160],
+      [424, 324],
+    ]) {
+      fireEvent.mouseMove(document, { clientX });
+      expect(tree.style.getPropertyValue(widthProperty)).toBe(
+        `${expectedWidth}px`,
+      );
+    }
+    fireEvent.mouseUp(document);
+    expect(document.querySelector("[data-panel-drag-shield]")).toBeNull();
+    expect(
+      JSON.parse(localStorage.getItem(FILES_TAB_TREE_WIDTH_STORAGE_KEY)!),
+    ).toBe(324);
 
-    expect(screen.getByTestId("files-tab-tree")).toBeInTheDocument();
-
+    // Collapse/restore and a new mount retain width and the selected file.
     await user.click(screen.getByTestId("file-quick-row-tree-toggle"));
     expect(screen.queryByTestId("files-tab-tree")).not.toBeInTheDocument();
-
+    expect(
+      screen.queryByTestId("files-tab-tree-resize-handle"),
+    ).not.toBeInTheDocument();
     await user.click(screen.getByTestId("file-quick-row-tree-toggle"));
-    expect(screen.getByTestId("files-tab-tree")).toBeInTheDocument();
+    expect(
+      screen
+        .getByTestId("files-tab-tree")
+        .style.getPropertyValue(widthProperty),
+    ).toBe("324px");
+    view.unmount();
+    renderTab();
+    expect(
+      screen
+        .getByTestId("files-tab-tree")
+        .style.getPropertyValue(widthProperty),
+    ).toBe("324px");
+    expect(screen.getByRole("tab", { selected: true })).toHaveTextContent(
+      "README.md",
+    );
   });
 
-  it("exposes a grippable resize handle on the tree's right edge when expanded", () => {
-    window.localStorage.clear();
-
+  it("applies the default tree width through a compiled CSS reader", async () => {
+    // Arrange + Act
     renderTab();
+    const tree = screen.getByTestId("files-tab-tree");
+    const widthProperty = await getTreeWidthProperty(tree);
 
+    // Assert: native CSS consumes a px value without host spacing/font tokens.
+    expect(tree.style.width).toBe("");
+    expect(tree.style.getPropertyValue(widthProperty)).toBe("224px");
     expect(
       screen.getByTestId("files-tab-tree-resize-handle"),
     ).toBeInTheDocument();
-    expect(screen.getByTestId("files-tab-tree")).toHaveStyle({
-      width: "224px",
-    });
   });
 
   it("opens a tab from the file tree when a file is clicked", async () => {
@@ -510,6 +576,116 @@ describe("FilesTab", () => {
     expect(content).toContainElement(
       screen.getByTestId("files-tab-open-in-new-window"),
     );
+  });
+
+  // Cloud backends hand back the file as a `data:` URL, which browsers refuse
+  // to open as a top-level page (OHE-3735).
+  describe("open in new window on a Cloud backend", () => {
+    const createObjectURL = vi.fn();
+    const revokeObjectURL = vi.fn();
+
+    function cloudMarkdownFile(text: string) {
+      return {
+        data: {
+          path: "README.md",
+          kind: "text",
+          text,
+          staticUrl: `data:text/markdown;charset=utf-8;base64,${btoa(text)}`,
+          mimeType: "text/markdown",
+        },
+        isLoading: false,
+        isError: false,
+      };
+    }
+
+    beforeEach(() => {
+      let created = 0;
+      createObjectURL.mockReset().mockImplementation(() => {
+        created += 1;
+        return `blob:http://localhost/file-${created}`;
+      });
+      revokeObjectURL.mockReset();
+      // jsdom does not implement object URLs.
+      vi.stubGlobal(
+        "URL",
+        class extends URL {
+          static createObjectURL = createObjectURL;
+
+          static revokeObjectURL = revokeObjectURL;
+        },
+      );
+    });
+
+    it("opens the file's text as plain text", async () => {
+      // Arrange
+      useWorkspaceFileContentMock.mockReturnValue(
+        cloudMarkdownFile("# Hello\n\nSome **bold** text"),
+      );
+
+      // Act
+      openFile("README.md");
+      renderTab();
+
+      // Assert
+      const link = await screen.findByTestId("files-tab-open-in-new-window");
+      expect(link).toHaveAttribute("href", "blob:http://localhost/file-1");
+      const blob: Blob = createObjectURL.mock.calls[0][0];
+      expect(blob.type).toBe("text/plain;charset=utf-8");
+      await expect(blob.text()).resolves.toBe("# Hello\n\nSome **bold** text");
+    });
+
+    it("opens the current file body after Refresh", async () => {
+      // Arrange
+      useWorkspaceFileContentMock.mockReturnValue(cloudMarkdownFile("# Old"));
+      const user = userEvent.setup();
+      openFile("README.md");
+      renderTab();
+      await screen.findByTestId("files-tab-open-in-new-window");
+      useWorkspaceFileContentMock.mockReturnValue(cloudMarkdownFile("# New"));
+
+      // Act
+      await user.click(screen.getByTestId("files-tab-refresh"));
+
+      // Assert
+      await waitFor(() => {
+        expect(
+          screen.getByTestId("files-tab-open-in-new-window"),
+        ).toHaveAttribute("href", "blob:http://localhost/file-2");
+      });
+      await expect(createObjectURL.mock.calls[1][0].text()).resolves.toBe(
+        "# New",
+      );
+      expect(revokeObjectURL).toHaveBeenCalledWith(
+        "blob:http://localhost/file-1",
+      );
+    });
+
+    it("offers no link for a file without decoded text", () => {
+      // Arrange
+      useWorkspaceFileContentMock.mockReturnValue({
+        data: {
+          path: "logo.png",
+          kind: "image",
+          text: null,
+          staticUrl: "data:image/png;base64,iVBORw0KGgo=",
+          mimeType: "image/png",
+        },
+        isLoading: false,
+        isError: false,
+      });
+
+      // Act
+      openFile("logo.png");
+      renderTab();
+
+      // Assert
+      expect(
+        screen.getByTestId("files-tab-content-mode-toggle"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("files-tab-open-in-new-window"),
+      ).not.toBeInTheDocument();
+    });
   });
 
   describe("conversation switching", () => {

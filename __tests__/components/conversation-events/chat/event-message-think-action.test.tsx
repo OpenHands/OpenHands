@@ -110,7 +110,6 @@ describe("EventMessage - ThinkAction rendering", () => {
     renderWithProviders(
       <EventMessage
         event={thinkEvent}
-        messages={[thinkEvent]}
         isLastMessage={false}
         isInLast10Actions={false}
       />,
@@ -131,7 +130,6 @@ describe("EventMessage - ThinkAction rendering", () => {
     renderWithProviders(
       <EventMessage
         event={thinkEvent}
-        messages={[thinkEvent]}
         isLastMessage={false}
         isInLast10Actions={false}
       />,
@@ -156,7 +154,6 @@ describe("EventMessage - ThinkAction rendering", () => {
     renderWithProviders(
       <EventMessage
         event={thinkEvent}
-        messages={[thinkEvent]}
         isLastMessage={false}
         isInLast10Actions={false}
       />,
@@ -184,7 +181,6 @@ describe("EventMessage - ThinkAction rendering", () => {
     renderWithProviders(
       <EventMessage
         event={bashEvent}
-        messages={[bashEvent]}
         isLastMessage={false}
         isInLast10Actions={false}
       />,
@@ -209,7 +205,6 @@ describe("EventMessage - ThinkAction rendering", () => {
     renderWithProviders(
       <EventMessage
         event={bashEvent}
-        messages={[bashEvent]}
         isLastMessage={false}
         isInLast10Actions={false}
       />,
@@ -243,7 +238,6 @@ describe("EventMessage - ThinkAction rendering", () => {
     renderWithProviders(
       <EventMessage
         event={bashEvent}
-        messages={[bashEvent]}
         isLastMessage={false}
         isInLast10Actions={false}
       />,

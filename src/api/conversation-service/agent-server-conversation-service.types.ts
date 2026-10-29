@@ -73,6 +73,8 @@ export interface AppConversationStartRequest {
   initial_message?: SendMessageRequest | null;
   processors?: unknown[]; // EventCallbackProcessor - keeping as unknown for now
   llm_model?: string | null;
+  // One-off launch on a saved LLM profile (by name), without activating it.
+  llm_profile?: string | null;
   selected_repository?: string | null;
   selected_branch?: string | null;
   git_provider?: Provider | null;

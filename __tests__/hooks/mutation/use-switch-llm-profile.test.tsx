@@ -45,6 +45,21 @@ vi.mock("#/hooks/chat/model-command-event-anchor", () => ({
   getLastRenderableEventId: () => "evt-9",
 }));
 
+const updateDefaultAgentProfileMock = vi.hoisted(() => vi.fn());
+vi.mock("#/hooks/mutation/sync-agent-profiles", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("#/hooks/mutation/sync-agent-profiles")
+  >()),
+  updateDefaultAgentProfile: updateDefaultAgentProfileMock,
+}));
+
+/** The `default` fields the sync would change, from a stored LLM ref. */
+const mirroredFrom = (llmProfileRef: string) => {
+  expect(updateDefaultAgentProfileMock).toHaveBeenCalledOnce();
+  const [, change] = updateDefaultAgentProfileMock.mock.calls[0];
+  return change({ agent_kind: "openhands", llm_profile_ref: llmProfileRef });
+};
+
 const renderSwitchHook = () => {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -95,6 +110,7 @@ describe("useSwitchLlmProfile", () => {
     expect(invalidateQueriesSpy).toHaveBeenCalledWith({
       queryKey: SETTINGS_QUERY_KEYS.personal(),
     });
+    expect(mirroredFrom("old")).toEqual({ llm_profile_ref: "my-profile" });
 
     invalidateCacheSpy.mockRestore();
   });
@@ -126,6 +142,7 @@ describe("useSwitchLlmProfile", () => {
     expect(invalidateQueriesSpy).not.toHaveBeenCalledWith({
       queryKey: SETTINGS_QUERY_KEYS.personal(),
     });
+    expect(updateDefaultAgentProfileMock).not.toHaveBeenCalled();
 
     invalidateCacheSpy.mockRestore();
   });
