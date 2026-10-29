@@ -11,7 +11,12 @@ import { ServerClient } from "@openhands/typescript-client/clients";
 import { SKILLS_CATALOG } from "@openhands/extensions/skills";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import { ExecutionStatus } from "#/types/agent-server/core";
-import { AgentKind, Settings, SettingsValue } from "#/types/settings";
+import {
+  AgentKind,
+  Settings,
+  SettingsValue,
+  isProvider,
+} from "#/types/settings";
 import {
   resolveEffectiveAcpModel,
   toAcpModelOptions,
@@ -412,9 +417,15 @@ export function toAppConversation(
   return {
     id: info.id,
     created_by_user_id: null,
-    selected_repository: metadata?.selected_repository ?? null,
-    selected_branch: metadata?.selected_branch ?? null,
-    git_provider: metadata?.git_provider ?? null,
+    selected_repository:
+      metadata?.selected_repository ?? info.tags?.[REPOSITORY_TAG_KEY] ?? null,
+    selected_branch:
+      metadata?.selected_branch ?? info.tags?.[SELECTED_BRANCH_TAG_KEY] ?? null,
+    git_provider:
+      metadata?.git_provider ??
+      (isProvider(info.tags?.[GIT_PROVIDER_TAG_KEY])
+        ? info.tags[GIT_PROVIDER_TAG_KEY]
+        : null),
     // Prefer the creating client's localStorage metadata; fall back to the
     // server-side workspace tag so local sidebar grouping survives on another
     // browser, device, or after cleared site data (#17386).
@@ -557,6 +568,12 @@ export function buildWorkspaceTags(
   return workspace ? { [WORKSPACE_TAG_KEY]: workspace } : {};
 }
 
+// Repository tags, read back like the workspace tag (#15598). Keys must match
+// the agent-server's `^[a-z0-9]+$`.
+export const REPOSITORY_TAG_KEY = "repository";
+export const SELECTED_BRANCH_TAG_KEY = "selectedbranch";
+export const GIT_PROVIDER_TAG_KEY = "gitprovider";
+
 export const AUTOMATION_TRIGGER_TAG_KEY = "automationtrigger";
 export const AUTOMATION_ID_TAG_KEY = "automationid";
 export const AUTOMATION_NAME_TAG_KEY = "automationname";
@@ -609,10 +626,12 @@ export const RESERVED_CONVERSATION_TAG_KEYS: ReadonlySet<string> = new Set([
   AUTOMATION_MATERIALIZED_DRAFT_ID_TAG_KEY,
   AUTOMATION_EDIT_ID_TAG_KEY,
   "title",
+  GIT_PROVIDER_TAG_KEY,
   "git_provider",
   "repo_name",
   "repo",
   "repository",
+  SELECTED_BRANCH_TAG_KEY,
   "selected_branch",
   "branch",
   "archiveworkspacepath",

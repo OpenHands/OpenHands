@@ -40,6 +40,9 @@ import {
 } from "../cloud/conversation-service.api";
 import {
   DirectConversationInfo,
+  GIT_PROVIDER_TAG_KEY,
+  REPOSITORY_TAG_KEY,
+  SELECTED_BRANCH_TAG_KEY,
   assertSubscriptionAuthReady,
   buildRouterAtStartSystemSuffix,
   buildStartConversationRequestWithEncryptedSettings,
@@ -93,6 +96,9 @@ const DEFAULT_CONVERSATION_TIMESTAMP = "1970-01-01T00:00:00.000Z";
 // machine or the packaged desktop app, where uvx may still be warming caches)
 // can exceed the client's 60s default timeout.
 const CREATE_CONVERSATION_TIMEOUT_MS = 5 * 60 * 1000;
+// The agent-server rejects the whole create request when any tag value is
+// longer than this (SDK `TAG_VALUE_MAX_LENGTH`).
+const TAG_VALUE_MAX_LENGTH = 256;
 const INVALID_CONVERSATION_RESPONSE_MESSAGE =
   "Unable to load conversations because the selected agent server returned " +
   "data this UI does not understand. Check the backend URL/session key and " +
@@ -653,15 +659,29 @@ class AgentServerConversationService {
 
     // Persist the selected workspace as a server-side conversation tag so local
     // sidebar grouping survives on another browser, device, or after cleared
-    // localStorage (#17386). localStorage below stays the warm cache for the
-    // creating client.
-    const workspaceTags = buildWorkspaceTags(workingDirOverride);
-    if (Object.keys(workspaceTags).length > 0) {
+    // localStorage (#17386), and the repository the same way (#15598).
+    // localStorage below stays the warm cache for the creating client.
+    const metadataTags = buildWorkspaceTags(workingDirOverride);
+    if (metadata?.selected_repository) {
+      metadataTags[REPOSITORY_TAG_KEY] = metadata.selected_repository;
+    }
+    if (metadata?.selected_branch) {
+      metadataTags[SELECTED_BRANCH_TAG_KEY] = metadata.selected_branch;
+    }
+    if (metadata?.git_provider) {
+      metadataTags[GIT_PROVIDER_TAG_KEY] = metadata.git_provider;
+    }
+    // An over-long value (a deep workspace path, a long branch) stays in
+    // localStorage only, so it cannot block the conversation from starting.
+    for (const [key, value] of Object.entries(metadataTags)) {
+      if (value.length > TAG_VALUE_MAX_LENGTH) delete metadataTags[key];
+    }
+    if (Object.keys(metadataTags).length > 0) {
       const existingTags =
         payload.tags && typeof payload.tags === "object"
           ? (payload.tags as Record<string, string>)
           : {};
-      payload.tags = { ...existingTags, ...workspaceTags };
+      payload.tags = { ...existingTags, ...metadataTags };
     }
 
     const telemetryDistinctId = await getTelemetryDistinctId();

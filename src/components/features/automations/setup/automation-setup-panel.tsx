@@ -134,8 +134,17 @@ const DEFAULT_CUSTOM_SCHEDULE = "0 9 * * *";
 const DEFAULT_EVENT_SOURCE = "github";
 // Capability feature: preset repositories can be changed with PATCH.
 const REPO_UPDATE_FEATURE = "repoUpdate";
-/** Used when the deployment has not advertised its event sources yet. */
-const FALLBACK_EVENT_SOURCES = ["github", "gitlab", "slack", "linear", "jira"];
+/**
+ * Used when the deployment has not advertised its event sources yet. These are
+ * the automation service's built-in providers, which it reserves as source
+ * names, so a custom webhook is never offered under one of them.
+ */
+const FALLBACK_EVENT_SOURCES = [
+  "github",
+  "azure_devops",
+  "bitbucket_data_center",
+  "jira_dc",
+];
 const DEFAULT_EVENT_KEY = "issue_comment.created";
 const DEFAULT_CUSTOM_ENTRYPOINT = "python3 main.py";
 const MAIN_PY_FILENAME = "main.py";

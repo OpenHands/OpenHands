@@ -724,6 +724,30 @@ describe("toAppConversation", () => {
 
       expect(result.selected_workspace).toBeNull();
     });
+
+    it("hydrates repo, branch and provider from the tags (#15598)", () => {
+      const result = toAppConversation({
+        ...baseInfo,
+        tags: {
+          repository: "OpenHands/OpenHands",
+          selectedbranch: "main",
+          gitprovider: "github",
+        },
+      });
+
+      expect(result.selected_repository).toBe("OpenHands/OpenHands");
+      expect(result.selected_branch).toBe("main");
+      expect(result.git_provider).toBe("github");
+    });
+
+    it("drops an unrecognized gitprovider tag instead of casting it", () => {
+      const result = toAppConversation({
+        ...baseInfo,
+        tags: { gitprovider: "not-a-real-provider" },
+      });
+
+      expect(result.git_provider).toBeNull();
+    });
   });
 
   it("uses the archived status for a missing runtime that cannot resume", () => {

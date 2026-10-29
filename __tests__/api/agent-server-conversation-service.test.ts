@@ -847,7 +847,7 @@ describe("AgentServerConversationService", () => {
       expect(payload.worktree).toBe(false);
     });
 
-    it("stamps the selected workspace as a server-valid conversation tag (#17386)", async () => {
+    it("stamps the selected workspace and repository as server-valid conversation tags (#17386, #15598)", async () => {
       mockGetSettings.mockResolvedValue({
         agent_settings: { llm: { model: "gpt-4o" } },
         conversation_settings: {},
@@ -868,6 +868,11 @@ describe("AgentServerConversationService", () => {
       await AgentServerConversationService.createConversation({
         agentProfileId: "profile-1",
         workingDirOverride: "/Users/jane/projects/foo/",
+        metadata: {
+          selected_repository: "OpenHands/OpenHands",
+          selected_branch: "main",
+          git_provider: "github",
+        },
       });
 
       const [payloadCall] = mockHttpPost.mock.calls;
@@ -876,10 +881,49 @@ describe("AgentServerConversationService", () => {
       // validator accepts (an underscored key would 422 the create).
       expect(payload.tags).toMatchObject({
         [WORKSPACE_TAG_KEY]: "/Users/jane/projects/foo",
+        repository: "OpenHands/OpenHands",
+        selectedbranch: "main",
+        gitprovider: "github",
       });
       for (const key of Object.keys(payload.tags ?? {})) {
         expect(key).toMatch(/^[a-z0-9]+$/);
       }
+    });
+
+    it("leaves out tag values longer than the agent-server accepts", async () => {
+      mockGetSettings.mockResolvedValue({
+        agent_settings: { llm: { model: "gpt-4o" } },
+        conversation_settings: {},
+      });
+      mockGetSettingsForConversation.mockResolvedValue({
+        agentSettings: { llm: { model: "gpt-4o" } },
+        conversationSettings: {},
+        secretsEncrypted: true,
+      });
+      mockHttpPost.mockResolvedValue({
+        data: {
+          id: "ignored-server-id",
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+      });
+
+      await AgentServerConversationService.createConversation({
+        agentProfileId: "profile-1",
+        workingDirOverride: `/${"d".repeat(256)}`,
+        metadata: {
+          selected_repository: `o/${"r".repeat(254)}`,
+          selected_branch: "b".repeat(257),
+          git_provider: "github",
+        },
+      });
+
+      const [payloadCall] = mockHttpPost.mock.calls;
+      const payload = payloadCall[1] as { tags: Record<string, string> };
+      expect(payload.tags.repository).toHaveLength(256);
+      expect(payload.tags).not.toHaveProperty("selectedbranch");
+      expect(payload.tags).not.toHaveProperty(WORKSPACE_TAG_KEY);
+      expect(payload.tags.gitprovider).toBe("github");
     });
 
     it("sends no workspace tag when no workspace was selected (#17386)", async () => {
