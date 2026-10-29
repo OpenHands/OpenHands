@@ -45,22 +45,19 @@ export type ConversationTagLabelKind =
  *
  * ``origin`` / ``source`` deliberately stay "other" (humanized to "Origin" /
  * "Source"): they name where a conversation came from — Slack, an API call, an
- * automation — which is not a git fact. Only ``git_provider`` / ``gitprovider``
- * is "Git".
+ * automation — which is not a git fact. Only ``git_provider`` is "Git".
  */
 export function getConversationTagLabelKind(
   key: string,
 ): ConversationTagLabelKind {
   switch (key.trim().toLowerCase()) {
     case "git_provider":
-    case "gitprovider":
       return "git";
     case "repo_name":
     case "repo":
     case "repository":
       return "repo";
     case "selected_branch":
-    case "selectedbranch":
     case "branch":
       return "branch";
     case "archiveworkspacepath":

@@ -724,6 +724,30 @@ describe("toAppConversation", () => {
 
       expect(result.selected_workspace).toBeNull();
     });
+
+    it("hydrates repo, branch and provider from the tags (#15598)", () => {
+      const result = toAppConversation({
+        ...baseInfo,
+        tags: {
+          repository: "OpenHands/OpenHands",
+          selectedbranch: "main",
+          gitprovider: "github",
+        },
+      });
+
+      expect(result.selected_repository).toBe("OpenHands/OpenHands");
+      expect(result.selected_branch).toBe("main");
+      expect(result.git_provider).toBe("github");
+    });
+
+    it("drops an unrecognized gitprovider tag instead of casting it", () => {
+      const result = toAppConversation({
+        ...baseInfo,
+        tags: { gitprovider: "not-a-real-provider" },
+      });
+
+      expect(result.git_provider).toBeNull();
+    });
   });
 
   it("uses the archived status for a missing runtime that cannot resume", () => {
@@ -1025,68 +1049,6 @@ describe("toAppConversation", () => {
     });
     expect(result.agent_kind).toBe("acp");
     expect(result.acp_server).toBeNull();
-  });
-
-  describe("server-side tag fallback", () => {
-    const taggedInfo: DirectConversationInfo = {
-      ...baseInfo,
-      tags: {
-        repository: "OpenHands/OpenHands",
-        selectedbranch: "main",
-        gitprovider: "github",
-        workspace: "/Users/jane/projects/openhands",
-      },
-    };
-
-    afterEach(() => {
-      removeStoredConversationMetadata(baseInfo.id);
-    });
-
-    it("hydrates workspace/repo metadata from tags when localStorage has none", () => {
-      const result = toAppConversation(taggedInfo);
-
-      expect(result.selected_workspace).toBe("/Users/jane/projects/openhands");
-      expect(result.selected_repository).toBe("OpenHands/OpenHands");
-      expect(result.selected_branch).toBe("main");
-      expect(result.git_provider).toBe("github");
-    });
-
-    it("prefers stored metadata over tags so the creating client keeps its warm cache", () => {
-      setStoredConversationMetadata(baseInfo.id, {
-        selected_repository: "jane/local-fork",
-        selected_branch: "feature",
-        git_provider: "gitlab",
-        selected_workspace: "/Users/jane/projects/local-fork",
-      });
-
-      const result = toAppConversation(taggedInfo);
-
-      expect(result.selected_workspace).toBe("/Users/jane/projects/local-fork");
-      expect(result.selected_repository).toBe("jane/local-fork");
-      expect(result.selected_branch).toBe("feature");
-      expect(result.git_provider).toBe("gitlab");
-    });
-
-    it("drops an unrecognized gitprovider tag instead of casting it through", () => {
-      // Tags are free-form and any API client can PATCH them, so an unknown
-      // value must degrade to null rather than reach provider-keyed lookups
-      // (icons, repo URL builders, token checks) as a bogus Provider.
-      const result = toAppConversation({
-        ...baseInfo,
-        tags: { gitprovider: "not-a-real-provider" },
-      });
-
-      expect(result.git_provider).toBeNull();
-    });
-
-    it("leaves untagged conversations unhydrated so pre-existing ones stay ungrouped", () => {
-      const result = toAppConversation({ ...baseInfo });
-
-      expect(result.selected_workspace).toBeNull();
-      expect(result.selected_repository).toBeNull();
-      expect(result.selected_branch).toBeNull();
-      expect(result.git_provider).toBeNull();
-    });
   });
 
   it("ignores tags.acpserver on OpenHands conversations to prevent stray-tag bleed", () => {

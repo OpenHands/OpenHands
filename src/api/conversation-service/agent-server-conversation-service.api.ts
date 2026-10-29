@@ -47,7 +47,6 @@ import {
   buildRouterAtStartSystemSuffix,
   buildStartConversationRequestWithEncryptedSettings,
   buildStartPlanningConversationRequestWithEncryptedSettings,
-  buildRepositoryTags,
   buildWorkspaceTags,
   emptyHooksResponse,
   fetchBackendExecutionRuntime,
@@ -655,19 +654,20 @@ class AgentServerConversationService {
       titleLlmProfile,
     });
 
-    // Persist the selected workspace and repository as server-side
-    // conversation tags so local sidebar grouping and the repo/branch badges
-    // survive on another browser, device, or after cleared localStorage
-    // (#17386, #15598). localStorage below stays the warm cache for the
-    // creating client.
-    const metadataTags = {
-      ...buildWorkspaceTags(workingDirOverride),
-      ...buildRepositoryTags(
-        metadata?.selected_repository,
-        metadata?.selected_branch,
-        metadata?.git_provider,
-      ),
-    };
+    // Persist the selected workspace as a server-side conversation tag so local
+    // sidebar grouping survives on another browser, device, or after cleared
+    // localStorage (#17386), and the repository the same way (#15598).
+    // localStorage below stays the warm cache for the creating client.
+    const metadataTags = buildWorkspaceTags(workingDirOverride);
+    if (metadata?.selected_repository) {
+      metadataTags[REPOSITORY_TAG_KEY] = metadata.selected_repository;
+    }
+    if (metadata?.selected_branch) {
+      metadataTags[SELECTED_BRANCH_TAG_KEY] = metadata.selected_branch;
+    }
+    if (metadata?.git_provider) {
+      metadataTags[GIT_PROVIDER_TAG_KEY] = metadata.git_provider;
+    }
     if (Object.keys(metadataTags).length > 0) {
       const existingTags =
         payload.tags && typeof payload.tags === "object"
@@ -949,32 +949,6 @@ class AgentServerConversationService {
       } catch (error) {
         console.warn(
           `Failed to save the repository of conversation ${conversationId}`,
-          error,
-        );
-      }
-    } else {
-      // Agent-server conversations keep it in the repository tags (#15598),
-      // with the same best-effort rule. Read the current tags first: the
-      // PATCH replaces all tags, and keys like `acpserver`, `clientsource` and
-      // the `workspace` grouping tag must survive.
-      try {
-        const client = new ConversationClient(getAgentServerClientOptions());
-        const current = requireDirectConversationInfo(
-          await client.getConversation<DirectConversationInfo>(conversationId),
-        );
-        const tags = { ...(current.tags ?? {}) };
-        delete tags[REPOSITORY_TAG_KEY];
-        delete tags[SELECTED_BRANCH_TAG_KEY];
-        delete tags[GIT_PROVIDER_TAG_KEY];
-        await client.updateConversation(conversationId, {
-          tags: {
-            ...tags,
-            ...buildRepositoryTags(repository, branch, gitProvider),
-          },
-        });
-      } catch (error) {
-        console.warn(
-          `Failed to save the repository tags of conversation ${conversationId}`,
           error,
         );
       }

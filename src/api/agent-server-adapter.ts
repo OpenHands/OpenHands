@@ -417,21 +417,18 @@ export function toAppConversation(
   return {
     id: info.id,
     created_by_user_id: null,
-    // Stored metadata wins over the tags — localStorage is the warm cache on
-    // the creating client; tags are the cross-client fallback for devices
-    // that don't have this client's localStorage (#15598, #17386).
     selected_repository:
       metadata?.selected_repository ?? info.tags?.[REPOSITORY_TAG_KEY] ?? null,
     selected_branch:
       metadata?.selected_branch ?? info.tags?.[SELECTED_BRANCH_TAG_KEY] ?? null,
-    // The ``gitprovider`` tag is free-form wire data — validate it against
-    // the known provider union instead of casting, so an unrecognized value
-    // degrades to "no provider" rather than poisoning provider-keyed lookups.
     git_provider:
       metadata?.git_provider ??
       (isProvider(info.tags?.[GIT_PROVIDER_TAG_KEY])
         ? info.tags[GIT_PROVIDER_TAG_KEY]
         : null),
+    // Prefer the creating client's localStorage metadata; fall back to the
+    // server-side workspace tag so local sidebar grouping survives on another
+    // browser, device, or after cleared site data (#17386).
     selected_workspace:
       metadata?.selected_workspace ?? info.tags?.[WORKSPACE_TAG_KEY] ?? null,
     active_profile: metadata?.active_profile ?? null,
@@ -571,37 +568,11 @@ export function buildWorkspaceTags(
   return workspace ? { [WORKSPACE_TAG_KEY]: workspace } : {};
 }
 
-// Repository tags carry the home-page repo selection the same way (#15598).
-// Keys must match the agent-server's `^[a-z0-9]+$`, so no underscores.
+// Repository tags, read back like the workspace tag (#15598). Keys must match
+// the agent-server's `^[a-z0-9]+$`.
 export const REPOSITORY_TAG_KEY = "repository";
 export const SELECTED_BRANCH_TAG_KEY = "selectedbranch";
 export const GIT_PROVIDER_TAG_KEY = "gitprovider";
-
-// The agent-server rejects the whole request when a tag value is longer than
-// this (SDK `TAG_VALUE_MAX_LENGTH`), so an over-long value is not stamped and
-// stays in localStorage only.
-const TAG_VALUE_MAX_LENGTH = 256;
-
-/**
- * Build the repository tags for a conversation, leaving out empty or over-long
- * values. Returns an empty object when there is nothing to persist.
- */
-export function buildRepositoryTags(
-  repository?: string | null,
-  branch?: string | null,
-  gitProvider?: string | null,
-): Record<string, string> {
-  const tags: Record<string, string> = {};
-  const entries: [string, string | null | undefined][] = [
-    [REPOSITORY_TAG_KEY, repository],
-    [SELECTED_BRANCH_TAG_KEY, branch],
-    [GIT_PROVIDER_TAG_KEY, gitProvider],
-  ];
-  for (const [key, value] of entries) {
-    if (value && value.length <= TAG_VALUE_MAX_LENGTH) tags[key] = value;
-  }
-  return tags;
-}
 
 export const AUTOMATION_TRIGGER_TAG_KEY = "automationtrigger";
 export const AUTOMATION_ID_TAG_KEY = "automationid";
@@ -659,12 +630,12 @@ export const RESERVED_CONVERSATION_TAG_KEYS: ReadonlySet<string> = new Set([
   "git_provider",
   "repo_name",
   "repo",
-  REPOSITORY_TAG_KEY,
+  "repository",
   SELECTED_BRANCH_TAG_KEY,
   "selected_branch",
   "branch",
   "archiveworkspacepath",
-  WORKSPACE_TAG_KEY,
+  "workspace",
   "working_dir",
   LOCAL_PLANNER_PARENT_TAG_KEY,
   // The launched agent profile, which the app server stamps as tags; the
