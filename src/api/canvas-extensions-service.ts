@@ -99,11 +99,13 @@ function getClientForBackend(backend: Backend): AgentServerClient {
   if (backend.kind === "cloud") {
     throw new CanvasExtensionsUnsupportedError("cloud-backend");
   }
-  return new AgentServerClient({
-    host: backend.host,
-    ...(backend.apiKey ? { apiKey: backend.apiKey } : {}),
-    timeout: 60000,
-  });
+  return new AgentServerClient(
+    getAgentServerClientOptions({
+      host: backend.host,
+      apiKey: backend.apiKey ?? "",
+      timeout: 60000,
+    }),
+  );
 }
 
 async function mapUnsupported<T>(operation: () => Promise<T>): Promise<T> {
@@ -272,7 +274,7 @@ class CanvasExtensionsService {
   ): Promise<{ name: string; enabled: boolean }> {
     const client = backend ? getClientForBackend(backend) : getClient();
     if (enabled && consent) {
-      const info = await client.get<AppBackendServerInfo>("/server_info");
+      const info = await client.server.getServerInfo();
       if (
         !info.capabilities?.includes("canvas_app_backend_enable_lifecycle_v1")
       ) {

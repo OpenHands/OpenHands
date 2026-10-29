@@ -204,6 +204,7 @@ describe("CanvasExtensionsService", () => {
     expect(AgentServerClient).toHaveBeenCalledWith({
       host: localBackend.host,
       apiKey: localBackend.apiKey,
+      workingDir: expect.any(String),
       timeout: 60000,
     });
     expect(get).toHaveBeenCalledWith(
@@ -270,8 +271,8 @@ describe("CanvasExtensionsService", () => {
     expect(CanvasExtensionsClient).toHaveBeenCalledWith({
       host: localBackend.host,
       apiKey: localBackend.apiKey,
-      timeout: 60000,
       workingDir: expect.any(String),
+      timeout: 60000,
       appBackendIngressUrl: "https://apps.example.test/",
     });
     expect(createAppBackendSession).toHaveBeenCalledWith(
@@ -333,7 +334,7 @@ it("fails closed when secret grants capability is absent", async () => {
   await expect(
     CanvasExtensionsService.backendStatus("demo", localBackend),
   ).rejects.toBeInstanceOf(CanvasExtensionsUnsupportedError);
-  expect(get).not.toHaveBeenCalled();
+  expect(getBackendStatus).not.toHaveBeenCalled();
 });
 
 it("binds typed lifecycle calls to the captured backend", async () => {
@@ -357,7 +358,7 @@ it("binds typed lifecycle calls to the captured backend", async () => {
 });
 
 it("checks body-returning lifecycle capability before enabling a managed app", async () => {
-  get.mockResolvedValue({
+  getServerInfo.mockResolvedValue({
     capabilities: ["canvas_app_backend_enable_lifecycle_v1"],
   });
   setEnabled.mockResolvedValue({ name: "demo", enabled: true });
@@ -365,9 +366,68 @@ it("checks body-returning lifecycle capability before enabling a managed app", a
   await CanvasExtensionsService.setEnabled("demo", true, consent, localBackend);
   expect(setEnabled).toHaveBeenCalledWith("demo", true, consent);
   setEnabled.mockClear();
-  get.mockResolvedValue({ capabilities: [] });
+  getServerInfo.mockResolvedValue({ capabilities: [] });
   await expect(
     CanvasExtensionsService.setEnabled("demo", true, consent, localBackend),
   ).rejects.toThrow("Upgrade Agent Server");
   expect(setEnabled).not.toHaveBeenCalled();
 });
+
+it("does not borrow active-backend credentials for a captured keyless backend", async () => {
+  const captured = { ...localBackend, id: "keyless", apiKey: "" };
+  const active = {
+    ...localBackend,
+    id: "active",
+    host: "http://127.0.0.1:9999",
+  };
+  setRegisteredBackends([captured, active]);
+  setActiveSelection({ backendId: active.id });
+
+  await CanvasExtensionsService.revokeBackendSecrets("demo", captured);
+
+  expect(AgentServerClient).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      host: captured.host,
+      workingDir: expect.any(String),
+      timeout: 60000,
+    }),
+  );
+  expect(
+    vi.mocked(AgentServerClient).mock.calls.at(-1)?.[0],
+  ).not.toHaveProperty("apiKey");
+});
+
+it.each(["status", "revoke", "enable"] as const)(
+  "maps a missing typed %s endpoint to an unsupported-backend error",
+  async (operation) => {
+    const missing = Object.assign(new Error("Not Found"), {
+      name: "HttpError",
+      status: 404,
+    });
+    getServerInfo.mockResolvedValue({
+      capabilities: ["canvas_app_backend_secret_grants_v1"],
+    });
+    const endpoint = {
+      status: getBackendStatus,
+      revoke: revokeBackendSecrets,
+      enable: setEnabled,
+    }[operation];
+    endpoint.mockRejectedValueOnce(missing);
+
+    const result =
+      operation === "status"
+        ? CanvasExtensionsService.backendStatus("demo", localBackend)
+        : operation === "revoke"
+          ? CanvasExtensionsService.revokeBackendSecrets("demo", localBackend)
+          : CanvasExtensionsService.setEnabled(
+              "demo",
+              false,
+              undefined,
+              localBackend,
+            );
+
+    await expect(result).rejects.toEqual(
+      expect.objectContaining({ reason: "missing-api" }),
+    );
+  },
+);
