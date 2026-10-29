@@ -1,0 +1,10 @@
+{
+  "job_url": "https://github.com/enyst/playground/actions/runs/39074626629/job/117519125551",
+  "conclusion": "FAILURE",
+  "expected_inherited_policy_errors_found": [
+    "The first visible line of the PR description must be `HUMAN:`.",
+    "Add a short human-written note between `HUMAN:` and `AGENT:`."
+  ],
+  "source": "Read-only actual GitHub Actions failed-job log; unrelated lines omitted",
+  "scope": "User explicitly clarified HUMAN as upstream-only. Actual fork CI still executes inherited upstream validator; no claim of CI pass and no out-of-scope workflow patch."
+}

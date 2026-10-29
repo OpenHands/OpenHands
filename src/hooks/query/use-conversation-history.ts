@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import EventService from "#/api/event-service/event-service.api";
+import { getActiveBackend } from "#/api/backend-registry/active-store";
 import { useUserConversation } from "#/hooks/query/use-user-conversation";
 import type { OpenHandsEvent } from "#/types/agent-server/core";
 
@@ -19,10 +20,31 @@ export interface ConversationHistoryPage {
   /**
    * Session-socket resume cursor for the first connect: the last `seq` on
    * disk *before* this page was read, so nothing appended in between is
-   * missed and nothing older than the page is replayed. `null` when the count
+   * missed and nothing older than the page is replayed. On Cloud it is one
+   * page-width further back (see `resumeCursor`). `null` when the count
    * could not be read.
    */
   afterSeq: number | null;
+}
+
+/**
+ * First-connect `after_seq` from the runtime's event count.
+ *
+ * Locally the count and the page are the same log, so the socket resumes at
+ * the count's tail. On Cloud the page comes from the App API's webhook-fed
+ * copy of the log (`EventService.searchEvents`), which can lag the runtime:
+ * resuming at the runtime's tail would skip every event the page does not yet
+ * hold — the first user message's echo among them (#18717). There the socket
+ * replays the newest page-width of the runtime log instead; the event store
+ * dedupes what the page already has by id (both logs share event ids). Only
+ * a lag of more than a page could still leave a hole; the whole log is not
+ * replayed because that would load every older event of a long conversation
+ * past pagination and re-run their socket side effects.
+ */
+function resumeCursor(count: number): number {
+  const lastSeq = count - 1;
+  if (getActiveBackend().backend.kind !== "cloud") return lastSeq;
+  return Math.max(-1, lastSeq - INITIAL_HISTORY_PAGE_SIZE);
 }
 
 /**
@@ -93,7 +115,7 @@ export const useConversationHistory = (conversationId?: string) => {
         hasMore:
           !!page.next_page_id || page.items.length >= INITIAL_HISTORY_PAGE_SIZE,
         nextPageId: page.next_page_id ?? null,
-        afterSeq: typeof count === "number" ? count - 1 : null,
+        afterSeq: typeof count === "number" ? resumeCursor(count) : null,
       };
     },
     // Keep the cached page so returning to a conversation renders the

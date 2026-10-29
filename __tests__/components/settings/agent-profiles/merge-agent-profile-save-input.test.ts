@@ -1,3 +1,4 @@
+import { DEFAULT_ENABLED_SKILL_NAMES } from "@openhands/extensions/skills";
 import { describe, expect, it } from "vitest";
 import type {
   AgentProfile,
@@ -124,13 +125,54 @@ describe("mergeAgentProfileSaveInput", () => {
     expect(mergeAgentProfileSaveInput(storedOpenHands, edited)).toEqual(edited);
   });
 
-  it("passes the edited fields through on create (no stored profile)", () => {
+  it("starts a new OpenHands profile on the recommended catalog skills", () => {
     const edited: AgentProfileSaveInput = {
       agent_kind: "openhands",
       llm_profile_ref: "default",
     };
 
-    expect(mergeAgentProfileSaveInput(null, edited)).toEqual(edited);
+    expect(mergeAgentProfileSaveInput(null, edited)).toEqual({
+      ...edited,
+      public_skills: [...DEFAULT_ENABLED_SKILL_NAMES],
+    });
+  });
+
+  it("gives a profile switched to OpenHands the recommended catalog skills", () => {
+    const storedAcp = {
+      id: "p-2",
+      name: "agent",
+      revision: 1,
+      agent_kind: "acp",
+      acp_server: "codex",
+    } as unknown as AgentProfile;
+
+    expect(
+      mergeAgentProfileSaveInput(storedAcp, {
+        agent_kind: "openhands",
+        llm_profile_ref: "default",
+      }),
+    ).toMatchObject({ public_skills: [...DEFAULT_ENABLED_SKILL_NAMES] });
+  });
+
+  it("keeps a stored or explicit skill selection", () => {
+    const stored = {
+      ...storedOpenHands,
+      public_skills: ["github"],
+    } as unknown as AgentProfile;
+
+    expect(
+      mergeAgentProfileSaveInput(stored, {
+        agent_kind: "openhands",
+        llm_profile_ref: "x",
+      }),
+    ).toMatchObject({ public_skills: ["github"] });
+    expect(
+      mergeAgentProfileSaveInput(null, {
+        agent_kind: "openhands",
+        llm_profile_ref: "x",
+        public_skills: [],
+      } as AgentProfileSaveInput),
+    ).toMatchObject({ public_skills: [] });
   });
 });
 

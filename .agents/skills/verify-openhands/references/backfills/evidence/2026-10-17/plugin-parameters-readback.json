@@ -1,0 +1,41 @@
+{
+  "target": "61a3bd93e642a0ff4def73b29496a73245628209",
+  "sdk": "1.55.1",
+  "attempts": [
+    {
+      "ui_values": {
+        "city": "Berlin",
+        "days": 0,
+        "metric": false
+      },
+      "method": "POST",
+      "path": "/api/conversations",
+      "status": 201,
+      "plugin_fields_sent": [
+        "source"
+      ],
+      "parameters_present": false
+    },
+    {
+      "ui_values": {
+        "city": "Tokyo",
+        "days": "7",
+        "metric": true
+      },
+      "method": "POST",
+      "path": "/api/conversations",
+      "status": 201,
+      "plugin_fields_sent": [
+        "source"
+      ],
+      "parameters_present": false
+    }
+  ],
+  "projection_privacy_default_omits_fields": true,
+  "sdk_plugin_source_fields": [
+    "source",
+    "ref",
+    "repo_path"
+  ],
+  "scope": "Actual Local UI/request omission. No assertion that current SDK supports parameter runtime consumption. No model prompt sent. Private source paths and live conversation URLs omitted."
+}

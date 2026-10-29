@@ -12,6 +12,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { LanguageInput } from "#/components/features/settings/app-settings/language-input";
 import { ThemeInput } from "#/components/features/settings/app-settings/theme-input";
 import { GettingStartedChecklistSwitch } from "#/components/features/settings/app-settings/getting-started-checklist-switch";
+import { RecommendedAutomationsSwitch } from "#/components/features/settings/app-settings/recommended-automations-switch";
 import { VoiceInputSettings } from "#/components/features/settings/app-settings/voice-input-settings";
 import {
   displayErrorToast,
@@ -100,6 +101,7 @@ function AppSettingsForm() {
     [llmProfiles?.profiles, freeModels, t],
   );
 
+  // @spec APS-001 — Clear the application draft only after a successful save.
   const formAction = (formData: FormData) => {
     const languageLabel = formData.get("language-input")?.toString();
     const languageValue = AvailableLanguages.find(
@@ -133,18 +135,16 @@ function AppSettingsForm() {
         onSuccess: () => {
           void setTelemetryConsent(enableAnalytics ? "granted" : "denied");
           displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
-        },
-        onError: (error) => {
-          const errorMessage = retrieveAxiosErrorMessage(error);
-          displayErrorToast(errorMessage || t(I18nKey.ERROR$GENERIC));
-        },
-        onSettled: () => {
           setLanguageInputHasChanged(false);
           setAnalyticsSwitchHasChanged(false);
           setSoundNotificationsSwitchHasChanged(false);
           setGitUserNameHasChanged(false);
           setGitUserEmailHasChanged(false);
           setTitleLlmProfileInput(undefined);
+        },
+        onError: (error) => {
+          const errorMessage = retrieveAxiosErrorMessage(error);
+          displayErrorToast(errorMessage || t(I18nKey.ERROR$GENERIC));
         },
       },
     );
@@ -192,18 +192,20 @@ function AppSettingsForm() {
     !gitUserNameHasChanged &&
     !gitUserEmailHasChanged;
 
-  const shouldBeLoading =
-    !settings || isLoading || areLlmProfilesLoading || isPending;
+  const shouldBeLoading = !settings || isLoading || areLlmProfilesLoading;
 
   return (
     <form
       data-testid="app-settings-screen"
-      action={formAction}
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!isPending) formAction(new FormData(event.currentTarget));
+      }}
       className="flex flex-col gap-6"
     >
       {shouldBeLoading && <AppSettingsInputsSkeleton />}
       {!shouldBeLoading && (
-        <div className="flex flex-col gap-6">
+        <fieldset disabled={isPending} className="flex min-w-0 flex-col gap-6">
           <LanguageInput
             name="language-input"
             defaultKey={settings.language}
@@ -238,7 +240,9 @@ function AppSettingsForm() {
             {t(I18nKey.SETTINGS$SOUND_NOTIFICATIONS)}
           </SettingsSwitch>
 
-          <GettingStartedChecklistSwitch />
+          {/* Locked-to-Cloud never shows the checklist (OHE-3683). */}
+          {getLockedCloudHost() === null && <GettingStartedChecklistSwitch />}
+          <RecommendedAutomationsSwitch />
 
           <div className="border-t border-border pt-6 mt-2">
             <h3 className="text-lg font-medium mb-2">
@@ -318,7 +322,7 @@ function AppSettingsForm() {
               </BrandButton>
             </div>
           </div>
-        </div>
+        </fieldset>
       )}
     </form>
   );

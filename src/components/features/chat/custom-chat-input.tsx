@@ -108,11 +108,7 @@ export function CustomChatInput({
   } = useFileHandling(onFilesPaste);
 
   const {
-    gripRef,
-    isGripVisible,
-    isGripDragging,
     canResize,
-    handleTopEdgeClick,
     smartResize,
     handleGripMouseDown,
     handleGripTouchStart,
@@ -177,11 +173,7 @@ export function CustomChatInput({
       {/* Container with grip */}
       <div className="relative w-full">
         <ChatInputGrip
-          gripRef={gripRef}
-          isGripVisible={isGripVisible}
-          isGripDragging={isGripDragging}
           canResize={canResize}
-          handleTopEdgeClick={handleTopEdgeClick}
           handleGripMouseDown={handleGripMouseDown}
           handleGripTouchStart={handleGripTouchStart}
         />

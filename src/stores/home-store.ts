@@ -1,11 +1,19 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import { GitRepository } from "#/types/git";
+import { Branch, GitRepository } from "#/types/git";
 import { Provider } from "#/types/settings";
+
+export interface HomeRepositorySelection {
+  repository: GitRepository;
+  branch: Branch;
+  provider: Provider;
+}
 
 interface HomeState {
   recentRepositories: GitRepository[];
   lastSelectedProvider: Provider | null;
+  /** The home launcher's repository selection, keyed by backend id. */
+  repositorySelections: Record<string, HomeRepositorySelection>;
 }
 
 interface HomeActions {
@@ -14,6 +22,11 @@ interface HomeActions {
   getRecentRepositories: () => GitRepository[];
   setLastSelectedProvider: (provider: Provider | null) => void;
   getLastSelectedProvider: () => Provider | null;
+  setRepositorySelection: (
+    backendId: string,
+    selection: HomeRepositorySelection,
+  ) => void;
+  clearRepositorySelection: (backendId: string) => void;
 }
 
 type HomeStore = HomeState & HomeActions;
@@ -21,6 +34,7 @@ type HomeStore = HomeState & HomeActions;
 const initialState: HomeState = {
   recentRepositories: [],
   lastSelectedProvider: null,
+  repositorySelections: {},
 };
 
 export const useHomeStore = create<HomeStore>()(
@@ -56,6 +70,21 @@ export const useHomeStore = create<HomeStore>()(
         })),
 
       getLastSelectedProvider: () => get().lastSelectedProvider,
+
+      setRepositorySelection: (backendId, selection) =>
+        set((state) => ({
+          repositorySelections: {
+            ...state.repositorySelections,
+            [backendId]: selection,
+          },
+        })),
+
+      clearRepositorySelection: (backendId) =>
+        set((state) => {
+          if (!(backendId in state.repositorySelections)) return state;
+          const { [backendId]: _cleared, ...rest } = state.repositorySelections;
+          return { repositorySelections: rest };
+        }),
     }),
     {
       name: "home-store", // unique name for localStorage

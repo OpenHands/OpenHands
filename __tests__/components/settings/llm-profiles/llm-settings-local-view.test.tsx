@@ -1,6 +1,7 @@
 /* eslint-disable i18next/no-literal-string -- test mocks intentionally use literal labels */
 import { describe, expect, it, vi, beforeEach, type Mock } from "vitest";
 import { AxiosError } from "axios";
+import { HttpError } from "@openhands/typescript-client";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "test-utils";
@@ -144,6 +145,10 @@ vi.mock("#/hooks/query/use-llm-profiles");
 vi.mock("#/hooks/mutation/use-activate-llm-profile");
 vi.mock("#/hooks/mutation/use-save-llm-profile");
 vi.mock("#/api/profiles-service/profiles-service.api");
+vi.mock("#/utils/custom-toast-handlers", () => ({
+  displaySuccessToast: vi.fn(),
+  displayErrorToast: vi.fn(),
+}));
 
 const mockProfiles = [
   {
@@ -1127,6 +1132,47 @@ describe("LlmSettingsLocalView", () => {
       expect(savedLlm.temperature).toBe(0.7);
       expect(savedLlm.model).toBe("anthropic/claude-opus-4-5-20251101");
       expect(savedLlm.api_key).toBe("gAAAA_encrypted_key");
+    });
+
+    it("shows the Agent Server's reason when the save is refused with a 500", async () => {
+      // Arrange — the Agent Server refuses a too-small max_input_tokens with a
+      // 500 whose `detail` is generic and whose reason is under `exception`;
+      // the shared client throws it as an HttpError.
+      const user = userEvent.setup();
+      const { displayErrorToast } =
+        await import("#/utils/custom-toast-handlers");
+      const reason =
+        "The configured model has a context window of 16,000 tokens, which is below the minimum of 16,384 tokens required for OpenHands to function properly.";
+      vi.mocked(ProfilesService.validateProfile).mockResolvedValue(null);
+      mockSaveMutateAsync.mockRejectedValueOnce(
+        new HttpError(
+          500,
+          "Internal Server Error",
+          { detail: "Internal Server Error", exception: reason },
+          `HTTP request failed (500 Internal Server Error): {"detail":"Internal Server Error"}`,
+        ),
+      );
+      renderWithProviders(<LlmSettingsLocalView />);
+
+      // Act — edit a field on the All tab and save.
+      await user.click(screen.getAllByTestId("profile-menu-trigger")[0]);
+      await user.click(screen.getByTestId("profile-edit"));
+      await user.click(await screen.findByTestId("sdk-section-all-toggle"));
+      const temperatureInput = await screen.findByTestId(
+        "sdk-settings-llm.temperature",
+      );
+      await user.clear(temperatureInput);
+      await user.type(temperatureInput, "0.7");
+      await waitFor(() => {
+        expect(screen.getByTestId("save-profile-btn")).not.toBeDisabled();
+      });
+      await user.click(screen.getByTestId("save-profile-btn"));
+
+      // Assert — the toast carries the server's reason and the editor stays open.
+      await waitFor(() => {
+        expect(displayErrorToast).toHaveBeenCalledWith(reason);
+      });
+      expect(screen.getByTestId("save-profile-btn")).toBeInTheDocument();
     });
   });
 });

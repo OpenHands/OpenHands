@@ -23,6 +23,12 @@
   --color-feedback-success: var(--oh-feedback-success);
   /* @spec WN-001 — Warning text has a separate readable theme role */
   --color-feedback-warning: var(--oh-feedback-warning);
+  /* GitHub Markdown alert ink also owns its border and translucent fill. */
+  --color-markdown-alert-note: var(--oh-markdown-alert-note);
+  --color-markdown-alert-tip: var(--oh-markdown-alert-tip);
+  --color-markdown-alert-important: var(--oh-markdown-alert-important);
+  --color-markdown-alert-warning: var(--oh-markdown-alert-warning);
+  --color-markdown-alert-caution: var(--oh-markdown-alert-caution);
   --color-basic: var(--oh-color-basic);
   --color-tertiary: var(--oh-color-tertiary);
   --color-tertiary-light: var(--oh-color-tertiary-light);
@@ -42,6 +48,7 @@
   --color-text-secondary: var(--oh-text-secondary);
   --color-text-tertiary: var(--oh-text-tertiary);
   --color-muted: var(--oh-muted);
+  --color-link: var(--oh-link);
   --color-text-dim: var(--oh-text-dim);
   --color-text-subtle: var(--oh-text-subtle);
   --color-modal-title: var(--oh-modal-title-foreground);
@@ -84,7 +91,7 @@
 
 :root {
   color-scheme: dark;
-  --oh-color-primary: #c9b974;
+  --oh-color-primary: #ffffff;
   --oh-color-logo: #cfb755;
   --oh-color-base: var(--cool-grey-950);
   --oh-color-base-secondary: var(--cool-grey-925);
@@ -93,6 +100,11 @@
   /* Small feedback text has its own contrast contract, separate from controls. */
   --oh-feedback-error: var(--oh-color-danger);
   --oh-feedback-success: var(--oh-color-success);
+  --oh-markdown-alert-note: #8EC5FF;
+  --oh-markdown-alert-tip: #5EE9B5;
+  --oh-markdown-alert-important: #D8B4FE;
+  --oh-markdown-alert-warning: #FFE02A;
+  --oh-markdown-alert-caution: #FFB3BF;
   --oh-color-basic: var(--cool-grey-400);
   --oh-color-tertiary: var(--cool-grey-800);
   --oh-color-tertiary-light: var(--cool-grey-300);
@@ -483,6 +495,19 @@ button.extension-module-card-interactive {
   }
 }
 
+/*
+ * Syntax-highlighter tokens are inline text runs. Prism names each span after
+ * its grammar type (`token table` for TOML section headers and Markdown
+ * tables, `token static`, ...), and Tailwind generates a utility for any of
+ * those words it finds in the sources (`.table` is `display: table`, which
+ * puts `[`, the section name and `]` on separate lines). Theme colors arrive
+ * as inline styles, so they still apply. Unlayered, so it outranks utilities.
+ */
+code .token {
+  display: inline;
+  position: static;
+}
+
 /* Custom styling for xterm */
 /* XTerm.js scrollbar styling - follows custom-scrollbar pattern */
 .xterm-viewport::-webkit-scrollbar {
@@ -678,4 +703,192 @@ button.extension-module-card-interactive {
 /* Window drag handle for the macOS desktop app's hidden title bar. */
 @utility app-region-drag {
   -webkit-app-region: drag;
+}
+
+/* Reset each nested panel locally until its own measurement is available. */
+@utility add-backend-panel-height {
+  --add-backend-panel-height: auto;
+  height: var(--add-backend-panel-height);
+  transition-property: height;
+}
+
+/* Keep content fixed while the desktop Overview drawer opens or closes. */
+@utility conversation-overview-drawer {
+  width: var(--conversation-overview-drawer-width);
+  transition-property: width, transform, opacity;
+
+  &[aria-hidden="true"] {
+    width: 0px;
+  }
+
+  &[data-resizing="true"] {
+    transition-property: transform, opacity;
+  }
+}
+
+/* Match wide-table fades to the Files rich-preview surface. */
+@utility file-preview-markdown {
+  --oh-scroll-fade-from: var(--oh-surface);
+}
+
+/* Keep the Files prose palette together, including dark prose-invert mode. */
+@utility file-preview-prose {
+  --tw-prose-body: var(--oh-foreground);
+  --tw-prose-bold: var(--oh-foreground);
+  --tw-prose-headings: var(--oh-foreground);
+  --tw-prose-lead: var(--oh-text-secondary);
+  --tw-prose-counters: var(--oh-text-secondary);
+  --tw-prose-quotes: var(--oh-foreground);
+  --tw-prose-quote-borders: var(--oh-border-subtle);
+  --tw-prose-bullets: var(--oh-muted);
+  --tw-prose-hr: var(--oh-border-subtle);
+  --tw-prose-captions: var(--oh-muted);
+  --tw-prose-kbd: var(--oh-foreground);
+}
+
+/* Keep extension add/detail dialogs within their existing viewport limits. */
+@utility extension-dialog-viewport {
+  max-width: 90vw;
+  max-height: 85vh;
+}
+
+/* Keep setup content and both docked composers on the same scroll rail. */
+@utility automation-setup-scroll-gutter {
+  scrollbar-gutter: stable;
+}
+
+@utility automation-setup-content {
+  max-width: 800px;
+}
+
+@utility automation-setup-card {
+  border-radius: 15px;
+}
+
+@utility automation-setup-composer-dock {
+  @apply automation-setup-card shadow-[0_12px_40px_rgba(0,0,0,0.55)];
+}
+
+/* The tray starts under the card's rounded edge, with half a rem of space. */
+@utility automation-setup-joined-card {
+  @apply automation-setup-card;
+  margin-bottom: -15px;
+}
+
+@utility automation-setup-joined-tray {
+  border-bottom-right-radius: 15px;
+  border-bottom-left-radius: 15px;
+  padding-top: calc(15px + 0.5rem);
+}
+
+@utility automation-setup-prompt-input {
+  min-height: 120px;
+}
+
+@utility automation-setup-code-scroll {
+  min-height: 256px;
+}
+
+@utility automation-setup-details-grid {
+  grid-template-columns: 2fr 1fr;
+}
+
+/* Widths belong to this row; width utilities still merge with shared fields. */
+@utility automation-setup-schedule-row {
+  --automation-setup-cron-width: 14rem;
+  --automation-setup-datetime-width: 15rem;
+  --automation-setup-time-width: 9.5rem;
+  --automation-setup-timezone-width: 16rem;
+}
+
+@utility automation-setup-model-trigger {
+  max-width: 200px;
+}
+
+@utility automation-setup-model-popover {
+  min-width: 200px;
+  max-width: 320px;
+  max-height: 60vh;
+}
+
+@utility automation-setup-repository-dialog {
+  width: 520px;
+  max-width: 90vw;
+  max-height: 85vh;
+}
+
+@utility automation-setup-repository-menu {
+  width: min(28rem, calc(100vw - 3rem));
+}
+
+/* Command palette geometry and effects keep their viewport and filter composition. */
+@utility command-menu-overlay {
+  padding-top: 10vh;
+}
+
+@utility command-menu-backdrop {
+  @apply backdrop-blur-[2px];
+}
+
+@utility command-menu-panel {
+  max-height: min(720px, 78vh);
+  @apply shadow-[0_24px_90px_rgba(0,0,0,0.52),0_0_0_1px_rgba(255,255,255,0.03)_inset];
+}
+
+@utility command-menu-active-option {
+  @apply shadow-[0_0_0_1px_color-mix(in_srgb,var(--oh-contrast)_8%,transparent)_inset];
+}
+
+/* Fixed hint sizes inherit line height; tracking still composes through Tailwind. */
+@utility command-menu-label {
+  font-size: 11px;
+  @apply tracking-[0.18em];
+}
+
+@utility command-menu-result-hint {
+  font-size: 10px;
+  @apply tracking-[0.14em];
+}
+
+@utility command-menu-footer {
+  font-size: 11px;
+}
+
+@utility command-menu-trigger-hint {
+  font-size: 10px;
+  @apply tracking-[0.12em];
+}
+
+/* Both chooser disclosures keep their mounted content on the same grid rail. */
+@utility backend-chooser-disclosure {
+  @apply transition-[grid-template-rows];
+}
+
+@utility backend-chooser-disclosure-open {
+  grid-template-rows: 1fr;
+}
+
+@utility backend-chooser-disclosure-closed {
+  grid-template-rows: 0fr;
+}
+
+@utility backend-chooser-cloud-panel {
+  min-height: 13.5rem;
+}
+
+@utility backend-chooser-cloud-halo {
+  @apply bg-[radial-gradient(75%_75%_at_50%_50%,rgba(255,255,255,0.1)_0%,rgba(255,255,255,0)_70%)];
+}
+
+@utility backend-chooser-learn-more-icon {
+  vertical-align: -0.125em;
+}
+
+/* Add and Edit intentionally use different viewport-height units. */
+@utility backend-chooser-add-dialog {
+  max-height: 92vh;
+}
+
+@utility backend-chooser-edit-dialog {
+  max-height: 92dvh;
 }

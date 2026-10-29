@@ -23,6 +23,7 @@ import {
   getAgentServerClientOptions,
   type AgentServerClientOptions,
 } from "../agent-server-client-options";
+import { withRetry } from "../with-retry";
 
 /**
  * Fields the agent-server stores under `misc_settings.app_preferences` (see
@@ -41,6 +42,8 @@ export const APP_PREFERENCE_FIELDS = [
   "enabled_skills",
   "run_router_at_conversation_start",
   "workspace_file_discovery",
+  "home_pinned_automations",
+  "default_profile_migrated",
 ] as const;
 
 export type AppPreferenceField = (typeof APP_PREFERENCE_FIELDS)[number];
@@ -139,33 +142,6 @@ const mergeRecords = (
   base: Record<string, SettingsValue> | null | undefined,
   next: Record<string, SettingsValue> | null | undefined,
 ) => ({ ...(base ?? {}), ...(next ?? {}) });
-
-/**
- * Retry helper for API calls with exponential backoff.
- */
-async function withRetry<T>(
-  fn: () => Promise<T>,
-  maxRetries: number = 3,
-  baseDelayMs: number = 500,
-): Promise<T> {
-  for (let attempt = 0; attempt < maxRetries; attempt += 1) {
-    try {
-      return await fn();
-    } catch (error) {
-      if (attempt >= maxRetries - 1) {
-        throw error;
-      }
-
-      const delay = baseDelayMs * 2 ** attempt;
-
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, delay);
-      });
-    }
-  }
-
-  throw new Error("Retry attempts exhausted");
-}
 
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 

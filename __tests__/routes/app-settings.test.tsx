@@ -1,12 +1,21 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AppSettingsScreen from "#/routes/app-settings";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import { Settings } from "#/types/settings";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
+import {
+  displayErrorToast,
+  displaySuccessToast,
+} from "#/utils/custom-toast-handlers";
+
+vi.mock("#/utils/custom-toast-handlers", () => ({
+  displayErrorToast: vi.fn(),
+  displaySuccessToast: vi.fn(),
+}));
 
 const activeBackendState = vi.hoisted(() => ({
   id: "local",
@@ -73,6 +82,73 @@ describe("AppSettingsScreen", () => {
     activeBackendState.kind = "local";
   });
 
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("keeps edits after a failed save and lets the user retry successfully", async () => {
+    // Arrange: a real save mutation remains pending until the service rejects.
+    const user = userEvent.setup();
+    let storedSettings = buildSettings({ enable_sound_notifications: false });
+    vi.spyOn(SettingsService, "getSettings").mockImplementation(
+      async () => storedSettings,
+    );
+    let rejectSave!: (error: Error) => void;
+    const save = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            rejectSave = reject;
+          }),
+      );
+    renderAppSettingsScreen();
+    const sound = await screen.findByTestId(
+      "enable-sound-notifications-switch",
+    );
+    const name = screen.getByTestId("git-user-name-input");
+
+    // Act: edit both a switch and an uncontrolled text input, then save.
+    await user.click(sound);
+    await user.clear(name);
+    await user.type(name, "QA Tester");
+    await user.click(screen.getByTestId("submit-button"));
+
+    // Assert: inputs remain mounted during the request, with a pending button.
+    expect(sound).toBeInTheDocument();
+    expect(screen.getByTestId("submit-button")).toHaveTextContent(
+      "SETTINGS$SAVING",
+    );
+    expect(screen.getByTestId("submit-button")).toBeDisabled();
+    rejectSave(new Error("Save failed"));
+    await waitFor(() =>
+      expect(displayErrorToast).toHaveBeenCalledWith("Save failed"),
+    );
+    expect(sound).toBeChecked();
+    expect(name).toHaveValue("QA Tester");
+    expect(screen.getByTestId("submit-button")).toBeEnabled();
+
+    // Act: retry; the service persists the submitted values and refetches them.
+    save.mockImplementationOnce(async (settings) => {
+      storedSettings = buildSettings(settings);
+      return true;
+    });
+    await user.click(screen.getByTestId("submit-button"));
+
+    // Assert: the retry sends the same edit, then the form is clean.
+    await waitFor(() =>
+      expect(displaySuccessToast).toHaveBeenCalledWith("SETTINGS$SAVED"),
+    );
+    expect(save).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        enable_sound_notifications: true,
+        git_user_name: "QA Tester",
+      }),
+    );
+    expect(screen.getByTestId("submit-button")).toBeDisabled();
+    expect(sound).toBeChecked();
+  });
+
   it("renders the OSS application settings form", async () => {
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
       buildSettings({
@@ -120,6 +196,21 @@ describe("AppSettingsScreen", () => {
 
     await userEvent.click(analyticsSwitch);
     expect(submitButton).toBeDisabled();
+  });
+
+  it("hides the Getting Started checklist switch on a canvas locked to its Cloud host", async () => {
+    vi.stubEnv("VITE_LOCK_TO_CLOUD", "https://app.all-hands.dev");
+    activeBackendState.kind = "cloud";
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
+
+    renderAppSettingsScreen();
+
+    expect(
+      await screen.findByTestId("enable-sound-notifications-switch"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("show-getting-started-checklist-switch"),
+    ).not.toBeInTheDocument();
   });
 
   it("does not submit analytics consent for cloud backends", async () => {

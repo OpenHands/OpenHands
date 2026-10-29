@@ -17,6 +17,9 @@ export type SettingsNavRenderedItem =
   | { type: "header"; text: I18nKey }
   | { type: "divider" };
 
+// Locally each agent profile owns these settings.
+const PROFILE_OWNED_SETTINGS_PATHS = new Set(["/settings/condenser"]);
+
 export function useSettingsNavItems(): SettingsNavRenderedItem[] {
   const { data: config } = useConfig();
   const { backend } = useActiveBackend();
@@ -28,7 +31,8 @@ export function useSettingsNavItems(): SettingsNavRenderedItem[] {
   return OSS_NAV_ITEMS.filter(
     (item) =>
       !isSettingsPageHidden(item.to, featureFlags) &&
-      (!isLockedToCloud || item.to === LOCKED_CLOUD_SETTINGS_NAV_PATH),
+      (!isLockedToCloud || item.to === LOCKED_CLOUD_SETTINGS_NAV_PATH) &&
+      (backend.kind === "cloud" || !PROFILE_OWNED_SETTINGS_PATHS.has(item.to)),
   ).map((item) => {
     const renamedItem =
       item.to === "/settings"

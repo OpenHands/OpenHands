@@ -9,7 +9,7 @@ export interface SecretRequest {
 }
 
 interface SecretRequestState {
-  /** Pending requests, oldest first; the modal shows one at a time. */
+  /** Pending requests, oldest first; each is shown as a card in the chat. */
   requests: SecretRequest[];
 }
 

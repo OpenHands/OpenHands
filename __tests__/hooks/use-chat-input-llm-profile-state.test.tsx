@@ -6,9 +6,15 @@ const useOptionalConversationIdMock = vi.fn();
 const useActiveConversationMock = vi.fn();
 const useLlmProfilesMock = vi.fn();
 const switchAndLog = vi.fn();
+const setHomeLlmProfile = vi.fn();
 
-let modelStoreState: { activeProfileByConversation: Record<string, string> } = {
+let modelStoreState: {
+  activeProfileByConversation: Record<string, string>;
+  homeLlmProfile?: string | null;
+  setHomeLlmProfile?: typeof setHomeLlmProfile;
+} = {
   activeProfileByConversation: {},
+  setHomeLlmProfile,
 };
 
 vi.mock("#/hooks/use-conversation-id", () => ({
@@ -32,6 +38,24 @@ vi.mock("#/stores/model-store", () => ({
 const useCanManageOrgProfilesMock = vi.fn();
 vi.mock("#/hooks/use-can-manage-org-profiles", () => ({
   useCanManageOrgProfiles: () => useCanManageOrgProfilesMock(),
+}));
+
+const useAgentProfilesMock = vi.fn();
+vi.mock("#/hooks/query/use-agent-profiles", () => ({
+  useAgentProfiles: () => useAgentProfilesMock(),
+}));
+const backendKind = vi.hoisted(() => ({ current: "local" }));
+vi.mock("#/contexts/active-backend-context", () => ({
+  useActiveBackend: () => ({
+    backend: { id: "b1", kind: backendKind.current },
+  }),
+}));
+const updateAgentProfileMock = vi.hoisted(() => vi.fn());
+vi.mock("#/hooks/mutation/sync-agent-profiles", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("#/hooks/mutation/sync-agent-profiles")
+  >()),
+  updateAgentProfile: updateAgentProfileMock,
 }));
 
 // eslint-disable-next-line import/first
@@ -58,7 +82,8 @@ const PROFILES = [
 describe("useChatInputLlmProfileState", () => {
   beforeEach(() => {
     switchAndLog.mockReset();
-    modelStoreState = { activeProfileByConversation: {} };
+    setHomeLlmProfile.mockReset();
+    modelStoreState = { activeProfileByConversation: {}, setHomeLlmProfile };
     useOptionalConversationIdMock.mockReturnValue({ conversationId: "c1" });
     useActiveConversationMock.mockReturnValue({ data: undefined });
     useLlmProfilesMock.mockReturnValue({
@@ -68,6 +93,72 @@ describe("useChatInputLlmProfileState", () => {
     useCanManageOrgProfilesMock.mockReset();
     // Local backends always own their profiles.
     useCanManageOrgProfilesMock.mockReturnValue(true);
+    useAgentProfilesMock.mockReturnValue({ data: undefined });
+    updateAgentProfileMock.mockReset();
+    backendKind.current = "local";
+  });
+
+  const activeAgent = (name: string, llmProfileRef: string) =>
+    useAgentProfilesMock.mockReturnValue({
+      data: {
+        profiles: [
+          {
+            id: `id-${name}`,
+            name,
+            agent_kind: "openhands",
+            llm_profile_ref: llmProfileRef,
+          },
+        ],
+        active_agent_profile_id: `id-${name}`,
+      },
+    });
+
+  it("shows the active agent profile's own LLM on the home page", () => {
+    useOptionalConversationIdMock.mockReturnValue({ conversationId: null });
+    activeAgent("reviewer", "Smart");
+
+    const { result } = renderState();
+
+    expect(result.current.currentProfileName).toBe("Smart");
+  });
+
+  it("saves a home pick as a named agent profile's own LLM", () => {
+    useOptionalConversationIdMock.mockReturnValue({ conversationId: null });
+    activeAgent("reviewer", "Smart");
+
+    const { result } = renderState();
+    result.current.selectProfile("Fast");
+
+    expect(switchAndLog).not.toHaveBeenCalled();
+    const [, name, change] = updateAgentProfileMock.mock.calls[0];
+    expect(name).toBe("reviewer");
+    expect(
+      change({ agent_kind: "openhands", llm_profile_ref: "Smart" }),
+    ).toEqual({ llm_profile_ref: "Fast" });
+  });
+
+  it("activates a home pick account-wide while default is active", () => {
+    useOptionalConversationIdMock.mockReturnValue({ conversationId: null });
+    activeAgent("default", "Fast");
+
+    const { result } = renderState();
+    result.current.selectProfile("Smart");
+
+    expect(updateAgentProfileMock).not.toHaveBeenCalled();
+    expect(switchAndLog).toHaveBeenCalledWith(null, "Smart");
+  });
+
+  it("treats a cloud profile named default like any other profile", () => {
+    backendKind.current = "cloud";
+    useOptionalConversationIdMock.mockReturnValue({ conversationId: null });
+    activeAgent("default", "Smart");
+
+    const { result } = renderState();
+    expect(result.current.currentProfileName).toBe("Smart");
+    result.current.selectProfile("Fast");
+
+    expect(switchAndLog).not.toHaveBeenCalled();
+    expect(updateAgentProfileMock.mock.calls[0][1]).toBe("default");
   });
 
   it("prefers the profile stamped on the conversation over a model match", () => {
@@ -140,17 +231,60 @@ describe("useChatInputLlmProfileState", () => {
     expect(switchAndLog).toHaveBeenCalledWith(null, "Smart");
   });
 
-  it("keeps the home picker read-only for a member who cannot manage org profiles", () => {
-    // A home pick hits the org-gated activate endpoint, which a cloud member
-    // could only 403 on.
+  it("holds a member's home pick for the next launch instead of activating it", () => {
+    // A home activate hits the org-gated endpoint, which a cloud member could
+    // only 403 on; the pick is sent with the next home launch instead.
     useOptionalConversationIdMock.mockReturnValue({ conversationId: null });
     useCanManageOrgProfilesMock.mockReturnValue(false);
 
     const { result } = renderState();
     result.current.selectProfile("Smart");
 
-    expect(result.current.canSwitchProfile).toBe(false);
+    expect(result.current.canSwitchProfile).toBe(true);
+    expect(setHomeLlmProfile).toHaveBeenCalledWith("Smart");
     expect(switchAndLog).not.toHaveBeenCalled();
+  });
+
+  it("holds a member's home pick instead of editing the org's agent profile", () => {
+    backendKind.current = "cloud";
+    useOptionalConversationIdMock.mockReturnValue({ conversationId: null });
+    useCanManageOrgProfilesMock.mockReturnValue(false);
+    activeAgent("reviewer", "Fast");
+
+    const { result } = renderState();
+    result.current.selectProfile("Smart");
+
+    expect(setHomeLlmProfile).toHaveBeenCalledWith("Smart");
+    expect(updateAgentProfileMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      description: "names a member's home pick on the home page",
+      conversationId: null,
+      pick: "Smart",
+      expected: "Smart",
+    },
+    {
+      description: "names a member's home pick while its start task runs",
+      conversationId: "task-abc",
+      pick: "Smart",
+      expected: "Smart",
+    },
+    {
+      description:
+        "falls back to the active profile when the picked one is gone",
+      conversationId: null,
+      pick: "Deleted",
+      expected: "Fast",
+    },
+  ])("$description", ({ conversationId, pick, expected }) => {
+    useOptionalConversationIdMock.mockReturnValue({ conversationId });
+    modelStoreState = { ...modelStoreState, homeLlmProfile: pick };
+
+    const { result } = renderState();
+
+    expect(result.current.currentProfileName).toBe(expected);
   });
 
   it("keeps the picker read-only while a cloud start task is provisioning", () => {

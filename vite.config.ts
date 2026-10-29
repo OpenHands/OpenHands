@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { readFile } from "node:fs/promises";
 import { resolve, dirname, relative, isAbsolute } from "node:path";
-import { defineConfig, loadEnv } from "vite";
+import { defineConfig, esmExternalRequirePlugin, loadEnv } from "vite";
 import svgr from "vite-plugin-svgr";
 import { reactRouter } from "@react-router/dev/vite";
 import { configDefaults } from "vitest/config";
@@ -22,6 +22,8 @@ const LIB_EXTERNALS = [
   "react/jsx-runtime",
   "react/jsx-dev-runtime",
   "react-router",
+  // Preserve Motion's guarded optional-peer require at runtime.
+  "framer-motion",
 ];
 const APP_CHUNK_MAX_BYTES = 450 * 1024;
 
@@ -192,6 +194,9 @@ export default defineConfig(({ mode }) => {
           });
         },
       },
+      // Let this plugin own externalization so CJS requires become ESM
+      // imports. Top-level external entries bypass its resolve hook.
+      isLibraryBuild && esmExternalRequirePlugin({ external: LIB_EXTERNALS }),
       !process.env.VITEST && !isLibraryBuild && reactRouter(),
       svgr(),
       tailwindcss(),
@@ -227,9 +232,10 @@ export default defineConfig(({ mode }) => {
           lib: {
             entry: LIB_ENTRY,
             formats: ["es"],
+            // Exported as @openhands/agent-canvas/styles.css.
+            cssFileName: "styles",
           },
           rollupOptions: {
-            external: LIB_EXTERNALS,
             output: [
               {
                 format: "es",
@@ -237,7 +243,6 @@ export default defineConfig(({ mode }) => {
                 preserveModulesRoot: "src",
                 entryFileNames: "[name].js",
                 chunkFileNames: "chunks/[name]-[hash].js",
-                assetFileNames: "assets/[name]-[hash][extname]",
               },
               {
                 format: "cjs",
@@ -245,7 +250,6 @@ export default defineConfig(({ mode }) => {
                 preserveModulesRoot: "src",
                 entryFileNames: "[name].cjs",
                 chunkFileNames: "chunks/[name]-[hash].cjs",
-                assetFileNames: "assets/[name]-[hash][extname]",
                 exports: "named",
               },
             ],
@@ -298,6 +302,7 @@ export default defineConfig(({ mode }) => {
         "@monaco-editor/react",
         "react-textarea-autosize",
         "react-markdown",
+        "mdast-util-from-markdown",
         "remark-gfm",
         "remark-breaks",
         "react-syntax-highlighter",

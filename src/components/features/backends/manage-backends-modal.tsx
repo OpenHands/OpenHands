@@ -145,9 +145,14 @@ export function ManageBackendsModal({
     [lockedCloudBackend, updateBackend],
   );
 
-  // A removal confirmation on top owns Escape and outside clicks; closing this
-  // modal under it would unmount it mid-stop and swallow a refused destroy.
-  const isClosable = !recoveryMode && pendingRemoval === null;
+  // A modal stacked on top (removal confirmation, Add or Edit form) owns Escape
+  // and outside clicks; closing this modal under it would unmount it, losing a
+  // form draft or swallowing a refused destroy mid-stop.
+  const isClosable =
+    !recoveryMode &&
+    pendingRemoval === null &&
+    editingBackend === null &&
+    !showAddForm;
 
   return (
     <>

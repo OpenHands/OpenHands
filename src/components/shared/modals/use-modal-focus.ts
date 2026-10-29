@@ -90,7 +90,10 @@ export function useModalFocus({ elevated }: { elevated: boolean }) {
   const [opener] = React.useState(() =>
     typeof document === "undefined" ? null : document.activeElement,
   );
-  const focusEventFromDialogTree = React.useRef<Event | null>(null);
+  // Focus events that went through the dialog's onFocus. A set, not just the
+  // last one: a focusin can trigger a nested one (a combobox opening moves
+  // virtual focus to its option), and marking that must not unmark the outer.
+  const focusEventsFromDialogTree = React.useRef(new WeakSet<Event>());
 
   React.useEffect(() => {
     const root = rootRef.current;
@@ -107,7 +110,7 @@ export function useModalFocus({ elevated }: { elevated: boolean }) {
     const handleFocusIn = (event: FocusEvent) => {
       // A closing dialog is already detached here; let the new focus stand.
       if (!root.isConnected || topmostModalRoot() !== root) return;
-      if (event === focusEventFromDialogTree.current) return;
+      if (focusEventsFromDialogTree.current.has(event)) return;
       focusFirstTabbable(root);
     };
     window.addEventListener("focusin", handleFocusIn);
@@ -140,7 +143,7 @@ export function useModalFocus({ elevated }: { elevated: boolean }) {
   }, []);
 
   const onFocus = React.useCallback((event: React.FocusEvent) => {
-    focusEventFromDialogTree.current = event.nativeEvent;
+    focusEventsFromDialogTree.current.add(event.nativeEvent);
   }, []);
 
   const onKeyDown = React.useCallback((event: React.KeyboardEvent) => {

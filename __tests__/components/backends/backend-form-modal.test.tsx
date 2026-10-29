@@ -1,3 +1,7 @@
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { compile } from "@tailwindcss/node";
+import { parse } from "postcss";
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
@@ -73,7 +77,7 @@ function TestSeed({
 beforeEach(() => {
   window.localStorage.clear();
   getServerInfoMock.mockReset();
-  getServerInfoMock.mockResolvedValue({ version: "1.52.0" });
+  getServerInfoMock.mockResolvedValue({ version: "1.58.0" });
   __resetActiveStoreForTests();
 });
 
@@ -86,7 +90,7 @@ afterEach(() => {
 });
 
 describe("BackendFormModal – edit mode (BackendForm entry point)", () => {
-  it("bounds the edit dialog to the viewport with its close control outside the scrollable form", () => {
+  it("bounds the edit dialog to the viewport with its close control outside the scrollable form", async () => {
     renderWithProviders(
       <BackendFormModal
         mode="edit"
@@ -102,11 +106,30 @@ describe("BackendFormModal – edit mode (BackendForm entry point)", () => {
     );
 
     const dialog = screen.getByTestId("edit-backend-modal");
-    expect(dialog).toHaveClass(
-      MODAL_WIDTH_CLASS.md,
-      MODAL_MAX_WIDTH_VIEWPORT,
-      "max-h-[92dvh]",
+    expect(dialog).toHaveClass(MODAL_WIDTH_CLASS.md, MODAL_MAX_WIDTH_VIEWPORT);
+
+    const compiler = await compile(
+      await readFile(resolve("src/tailwind.css"), "utf8"),
+      { base: resolve("src"), onDependency: () => {} },
     );
+    const style = document.createElement("style");
+    const viewportRules: string[] = [];
+    parse(compiler.build([...dialog.classList])).walkDecls(
+      "max-height",
+      (declaration) => {
+        const rule = declaration.parent;
+        if (rule?.type === "rule" && dialog.matches(rule.selector)) {
+          viewportRules.push(`${rule.selector}{${declaration.toString()}}`);
+        }
+      },
+    );
+    style.textContent = viewportRules.join("\n");
+    document.head.appendChild(style);
+    try {
+      expect(getComputedStyle(dialog).maxHeight).toBe("92dvh");
+    } finally {
+      style.remove();
+    }
 
     const scrollRegion = screen
       .getByTestId("edit-backend-form")

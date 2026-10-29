@@ -35,6 +35,15 @@ export function subscribeToPanelReveal(
   };
 }
 
+/**
+ * Ask whoever shows the conversation drawer to reveal it. Desktop already
+ * shows the drawer from the store flags; at phone width the conversation
+ * route answers by opening `/conversations/:id/panel`.
+ */
+export function requestPanelReveal(): void {
+  panelRevealListeners.forEach((listener) => listener());
+}
+
 // Mirrors src/hooks/use-select-conversation-tab.ts so a non-React caller (the
 // WebSocket dispatch) gets the same "persist the tab and reveal the right
 // panel if collapsed" behavior as in-app tab switches.
@@ -48,7 +57,7 @@ function navigateToTab(tab: ConversationTab, conversationId: string | null) {
     store.setHasRightPanelToggled(true);
     store.setIsRightPanelShown(true);
   }
-  panelRevealListeners.forEach((listener) => listener());
+  requestPanelReveal();
 }
 
 function isValidTab(value: string): value is ConversationTab {

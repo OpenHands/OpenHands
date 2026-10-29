@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 import { renderWithProviders } from "test-utils";
 import { Messages } from "#/components/conversation-events/chat/messages";
@@ -74,7 +74,12 @@ describe("Messages model entries", () => {
 
     rerender(<Messages messages={[mergedDelta]} allEvents={[mergedDelta]} />);
 
-    // Revealed on a clock (#15493), so the added text lands over a frame or two.
-    expect(await screen.findByText("First second third")).toBeInTheDocument();
+    // Revealed on a clock (#15493), so the added text lands over a few frames.
+    // Streamed words are separate spans, so match the bubble's text.
+    await waitFor(() =>
+      expect(screen.getByTestId("agent-message")).toHaveTextContent(
+        "First second third",
+      ),
+    );
   });
 });

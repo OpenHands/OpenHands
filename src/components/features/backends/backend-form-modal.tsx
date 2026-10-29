@@ -1059,8 +1059,10 @@ function CloudLoginColumn({
                   `inert` keeps the collapsed field out of the tab order. */}
               <div
                 className={cn(
-                  "grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none",
-                  advancedOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+                  "grid backend-chooser-disclosure duration-200 ease-out motion-reduce:transition-none",
+                  advancedOpen
+                    ? "backend-chooser-disclosure-open"
+                    : "backend-chooser-disclosure-closed",
                 )}
               >
                 <div className="overflow-hidden">
@@ -1142,7 +1144,7 @@ function BackendOptionTab({
       className={cn(
         "relative flex min-h-14 w-full cursor-pointer items-center gap-2.5 px-2.5 py-2.5 text-left transition-colors",
         "not-last:border-r not-last:border-r-border",
-        "focus-visible:z-10 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue-300",
+        "focus-visible:z-10 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus",
         isSelected
           ? "bg-surface-raised text-contrast after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-primary"
           : "text-muted hover:bg-surface-raised hover:text-contrast",
@@ -1202,8 +1204,14 @@ function AnimatedPanelHeight({ children }: AnimatedPanelHeightProps) {
   return (
     <div
       data-testid="add-backend-panel-height"
-      style={height === undefined ? undefined : { height }}
-      className="overflow-hidden transition-[height] duration-300 ease-in-out motion-reduce:transition-none"
+      style={
+        height === undefined
+          ? undefined
+          : ({
+              "--add-backend-panel-height": `${height}px`,
+            } as React.CSSProperties)
+      }
+      className="add-backend-panel-height overflow-hidden duration-300 ease-in-out motion-reduce:transition-none"
     >
       <div ref={contentRef}>{children}</div>
     </div>
@@ -1264,7 +1272,7 @@ function AgentServerGuidance({ location }: { location: AgentServerLocation }) {
             // fill spans the full row.
             "flex w-full cursor-pointer items-center justify-between gap-2 rounded-lg px-3 py-2 text-left font-medium",
             "transition-colors hover:bg-interactive-hover",
-            "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300",
+            "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
           )}
         >
           <span className="flex min-w-0 items-center gap-2">
@@ -1285,8 +1293,10 @@ function AgentServerGuidance({ location }: { location: AgentServerLocation }) {
           required so `1fr` measures the content while `0fr` fully collapses. */}
       <div
         className={cn(
-          "grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none",
-          isExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+          "grid backend-chooser-disclosure duration-200 ease-out motion-reduce:transition-none",
+          isExpanded
+            ? "backend-chooser-disclosure-open"
+            : "backend-chooser-disclosure-closed",
         )}
       >
         <div className="overflow-hidden">
@@ -1371,7 +1381,7 @@ function AddBackendChooser({
           type="button"
           data-testid="add-backend-provider-digitalocean"
           onClick={onSelectProvider}
-          className="flex w-full cursor-pointer items-center gap-3 rounded-xl border border-border bg-base-secondary px-4 py-3 text-left transition-colors hover:bg-surface-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300"
+          className="flex w-full cursor-pointer items-center gap-3 rounded-xl border border-border bg-base-secondary px-4 py-3 text-left transition-colors hover:bg-surface-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
         >
           <span
             className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-surface-raised"
@@ -1402,11 +1412,11 @@ function AddBackendChooser({
       <div
         data-testid="add-backend-cloud-panel"
         className={cn(
-          "relative isolate flex min-h-[13.5rem] w-full items-center justify-center rounded-xl border border-border px-5 py-6",
+          "relative isolate flex backend-chooser-cloud-panel w-full items-center justify-center rounded-xl border border-border px-5 py-6",
           // A soft greyscale halo sits behind the CTA; -z-10 keeps it under the
           // content rather than washing over it.
           "before:pointer-events-none before:absolute before:inset-0 before:-z-10 before:rounded-xl",
-          "before:bg-[radial-gradient(75%_75%_at_50%_50%,rgba(255,255,255,0.1)_0%,rgba(255,255,255,0)_70%)]",
+          "before:backend-chooser-cloud-halo",
         )}
       >
         <CloudLoginColumn
@@ -1624,9 +1634,9 @@ function AddBackendAddModeBody({
         <div
           aria-hidden={providerOpen}
           inert={providerOpen ? true : undefined}
-          style={{ transform: `translateX(${providerOpen ? -100 : 0}%)` }}
           className={cn(
             "w-full transition-transform duration-300 ease-out motion-reduce:transition-none",
+            providerOpen ? "-translate-x-full" : "translate-x-0",
             providerOpen && "pointer-events-none absolute inset-0",
           )}
         >
@@ -1650,7 +1660,7 @@ function AddBackendAddModeBody({
                 >
                   {t(I18nKey.CTA$LEARN_MORE)}
                   <ExternalLinkIcon
-                    className="ml-1 inline size-3.5 align-[-0.125em]"
+                    className="ml-1 inline size-3.5 backend-chooser-learn-more-icon"
                     aria-hidden
                   />
                 </a>
@@ -1669,9 +1679,9 @@ function AddBackendAddModeBody({
         <div
           aria-hidden={!providerOpen}
           inert={!providerOpen ? true : undefined}
-          style={{ transform: `translateX(${providerOpen ? 0 : 100}%)` }}
           className={cn(
             "w-full transition-transform duration-300 ease-out motion-reduce:transition-none",
+            providerOpen ? "translate-x-0" : "translate-x-full",
             !providerOpen && "pointer-events-none absolute inset-0",
           )}
         >
@@ -1732,7 +1742,7 @@ export function BackendFormModal({
             hideCloseButton ? "onboarding-modal" : "add-backend-modal"
           }
           className={cn(
-            "relative max-h-[92vh] w-180 overflow-x-hidden overflow-y-auto rounded-xl border border-border bg-base-secondary p-6",
+            "relative backend-chooser-add-dialog w-180 overflow-x-hidden overflow-y-auto rounded-xl border border-border bg-base-secondary p-6",
             MODAL_MAX_WIDTH_VIEWPORT,
           )}
         >
@@ -1760,7 +1770,7 @@ export function BackendFormModal({
       <div
         data-testid={`${testIdRoot}-modal`}
         className={cn(
-          "relative max-h-[92dvh] bg-base-secondary p-6 rounded-xl flex flex-col gap-4 border border-border",
+          "relative backend-chooser-edit-dialog bg-base-secondary p-6 rounded-xl flex flex-col gap-4 border border-border",
           modalWidthClassName("md"),
           MODAL_MAX_WIDTH_VIEWPORT,
         )}

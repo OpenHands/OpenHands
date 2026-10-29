@@ -17,6 +17,23 @@ const entrypoint = readFileSync(
   "utf-8",
 );
 
+// The agent-server reads this package from disk, so no import points at it and
+// a missing copy only shows up as an agent with no public skills.
+describe("Docker image extensions package", () => {
+  it("copies the package to the path the entrypoint exports as EXTENSIONS_PATH", () => {
+    const exported = entrypoint.match(
+      /^export EXTENSIONS_PATH="\$\{EXTENSIONS_PATH:-([^}]+)\}"$/m,
+    )?.[1];
+
+    expect(exported).toBe(
+      "/opt/agent-canvas/node_modules/@openhands/extensions",
+    );
+    expect(dockerfile).toContain(
+      `COPY --from=frontend-build /build/node_modules/@openhands/extensions ${exported}`,
+    );
+  });
+});
+
 // The image copies scripts/ one file at a time, so a new import in a script
 // the entrypoint runs must come with a COPY line, or the container crashes on
 // start with ERR_MODULE_NOT_FOUND (#18342).
