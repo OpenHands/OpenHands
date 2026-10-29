@@ -86,6 +86,8 @@ export function DropdownMenu({
                       "bg-interactive-selected text-contrast",
                   ),
                 })}
+                // Grouped rows show a short label; keep the full one for screen readers.
+                aria-label={option.group ? option.label : undefined}
               >
                 {option.prefix ? (
                   <span className={dropdownMenuRowIconWrapperClassName}>

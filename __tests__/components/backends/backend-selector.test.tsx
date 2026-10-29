@@ -274,6 +274,9 @@ describe("BackendSelector", () => {
     expect(within(listbox).getAllByText("Production")).toHaveLength(1);
     expect(menuRow("Production – Personal")).toHaveTextContent(/^Personal$/);
     expect(menuRow("Production – Acme Inc")).toHaveTextContent(/^Acme Inc$/);
+    expect(
+      within(listbox).getByRole("option", { name: "Production – Acme Inc" }),
+    ).toBeInTheDocument();
 
     await user.click(menuRow("Production – Acme Inc"));
 

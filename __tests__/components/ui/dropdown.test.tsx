@@ -455,7 +455,9 @@ describe("Dropdown", () => {
       await user.click(screen.getByTestId("dropdown-trigger"));
 
       expect(screen.getAllByText("Cloud")).toHaveLength(1);
-      const beta = screen.getByRole("option", { name: "Beta" });
+      // Assistive tech still hears the group with each row.
+      const beta = screen.getByRole("option", { name: "Cloud – Beta" });
+      expect(beta).toHaveTextContent(/^Beta$/);
       expect(within(beta).getByTitle("Cloud – Beta")).toBeInTheDocument();
       await user.click(beta);
       expect(onChange).toHaveBeenCalledWith(grouped[2]);
