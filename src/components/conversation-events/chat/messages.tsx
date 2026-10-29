@@ -1,15 +1,17 @@
 import React from "react";
-import { useVirtualizer } from "@tanstack/react-virtual";
-import { ActionEvent, OpenHandsEvent } from "#/types/agent-server/core";
+import { useVirtualizer, type VirtualItem } from "@tanstack/react-virtual";
+import { OpenHandsEvent } from "#/types/agent-server/core";
 import {
   isActionEvent,
   isObservationEvent,
   isPlanningFileEditorObservationEvent,
   isUserRejectObservation,
 } from "#/types/agent-server/type-guards";
+import { cn } from "#/utils/utils";
 import { EventMessage } from "./event-message";
 import { usePlanPreviewEvents } from "./hooks/use-plan-preview-events";
 import { groupEvents, renderedItemKey, RenderedItem } from "./group-events";
+import { buildActionById } from "./event-thought-helpers";
 import { EventGroup } from "./event-message-components/event-group";
 import { ThoughtEventMessage } from "./event-message-components/thought-event-message";
 import { useModelStore } from "#/stores/model-store";
@@ -88,13 +90,10 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     // Set, so every append changed every historical item's shallow props.
     // Derive the two event-specific values once and keep unchanged wrappers
     // eligible for React.memo without removing allEvents from grouping logic.
-    const actionById = React.useMemo(() => {
-      const actions = new Map<string, ActionEvent>();
-      for (const event of allEvents) {
-        if (isActionEvent(event)) actions.set(event.id, event);
-      }
-      return actions;
-    }, [allEvents]);
+    const actionById = React.useMemo(
+      () => buildActionById(allEvents),
+      [allEvents],
+    );
 
     // Set of event ids that have a /model entry anchored to them — used to
     // avoid mounting <ModelMessages> for every event (the component would
@@ -152,8 +151,8 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     // hoisted out as their own rendered item so they always show up in the
     // message pane and a thought between actions starts a fresh group.
     const plainItems = React.useMemo(
-      () => groupEvents(messages, undefined, allEvents),
-      [messages, allEvents],
+      () => groupEvents(messages, undefined, allEvents, actionById),
+      [messages, allEvents, actionById],
     );
 
     // `null` (not `undefined`) means the caller has a scroll container but the
@@ -189,6 +188,17 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       [plainItems, shouldVirtualize, planPreviewEventIds, modelAnchorIds],
     );
 
+    // Whether a group is still the live tail is decided from `plainItems` in
+    // both modes. Filtering a non-preview planning observation (above) makes the
+    // virtualized row set shorter, so reading the tail off `renderedItems` made
+    // the two modes disagree about the last group: a group followed only by a
+    // hidden planning observation is finalized in the plain list but looked live
+    // in the virtualized one. The hidden row renders nothing, so it cannot be
+    // "after" the group.
+    const tailItemKey = plainItems.length
+      ? renderedItemKey(plainItems[plainItems.length - 1])
+      : undefined;
+
     const renderEventMessage = (
       event: OpenHandsEvent,
       index: number,
@@ -217,7 +227,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       </EventExpansionContext.Provider>
     );
 
-    const renderItem = (item: RenderedItem, itemIndex: number) => {
+    const renderItem = (item: RenderedItem) => {
       if (item.kind === "single") {
         return (
           <>
@@ -244,7 +254,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       // it, signalling the agent has moved on. While the group is still
       // the live tail, it keeps showing the latest action title as its
       // prominent summary.
-      const isFinalized = itemIndex < renderedItems.length - 1;
+      const isFinalized = renderedItemKey(item) !== tailItemKey;
       return (
         <>
           <EventGroup
@@ -304,19 +314,12 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     // estimate and jumping.
     const plainListRef = React.useRef<HTMLDivElement | null>(null);
     const plainItemHeights = React.useRef<Map<string, number>>(new Map());
-
-    // Measure every row of the plain list, keyed by row key. The rows carry
-    // `data-row-key`, so one ref on their parent is enough.
-    const measurePlainRows = React.useCallback(() => {
-      const list = plainListRef.current;
-      if (!list) return;
-      const next = new Map<string, number>();
-      for (const child of Array.from(list.children)) {
-        const measured = measurePlainRow(child);
-        if (measured) next.set(measured[0], measured[1]);
-      }
-      plainItemHeights.current = next;
-    }, []);
+    // One observer for the whole plain phase. Rebuilding it on every append
+    // would re-observe every row, and each `observe` delivers an initial
+    // callback that re-measures it — so the work would grow with the list on
+    // every append instead of tracking just the rows that changed.
+    const plainRowObserver = React.useRef<ResizeObserver | null>(null);
+    const observedPlainRows = React.useRef<Set<Element>>(new Set());
 
     // Re-measure one row in place. The observer below calls this for a row that
     // resizes, and leaving the other rows' cached heights untouched keeps the
@@ -326,50 +329,95 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       if (measured) plainItemHeights.current.set(measured[0], measured[1]);
     }, []);
 
-    // Keep the cache current while the plain list is mounted: it seeds the
-    // shell's geometry when the list later virtualizes. The row set is measured
-    // once per append (the common case), and a ResizeObserver re-measures a row
-    // that changes height *without* the row set changing — the reader expands a
-    // group, or async content settles. Without that, a resize followed by an
-    // append that crosses the threshold would seed a shell shorter than the
-    // plain list it replaced, and the browser would clamp the reader's scroll
-    // offset.
-    React.useLayoutEffect(() => {
-      if (shouldVirtualize) return undefined;
-      measurePlainRows();
-      // jsdom has no ResizeObserver; the measurement above still runs there.
-      if (typeof ResizeObserver === "undefined" || !plainListRef.current) {
-        return undefined;
+    const getPlainRowObserver = React.useCallback(() => {
+      if (plainRowObserver.current || typeof ResizeObserver === "undefined") {
+        return plainRowObserver.current;
       }
-      // Observe each row's boxes, not the wrapper: the wrapper is
-      // `display: contents` and has no box of its own. The effect re-runs on
-      // each append, so the observed set tracks the mounted rows.
-      const observer = new ResizeObserver((entries) => {
+      plainRowObserver.current = new ResizeObserver((entries) => {
         for (const entry of entries) {
           measurePlainRowInPlace(entry.target);
         }
       });
-      for (const child of Array.from(plainListRef.current.children)) {
+      return plainRowObserver.current;
+    }, [measurePlainRowInPlace]);
+
+    // Keep the cache current while the plain list is mounted: it seeds the
+    // shell's geometry when the list later virtualizes. Only rows added since
+    // the last run are measured and observed; a ResizeObserver then re-measures
+    // a row that changes height *without* the row set changing — the reader
+    // expands a group, or async content settles. Without that, a resize
+    // followed by an append that crosses the threshold would seed a shell
+    // shorter than the plain list it replaced, and the browser would clamp the
+    // reader's scroll offset.
+    React.useLayoutEffect(() => {
+      // A list with no scroll container (shared/read-only views) can never
+      // virtualize, so its cache is never read: measuring every row on every
+      // append there is pure waste.
+      if (shouldVirtualize || scrollParent === undefined) return undefined;
+      const list = plainListRef.current;
+      if (!list) return undefined;
+
+      // Observe each row's boxes, not the wrapper: the wrapper is
+      // `display: contents` and has no box of its own.
+      const observer = getPlainRowObserver();
+      const currentRows = new Set<Element>();
+      for (const child of Array.from(list.children)) {
         for (const row of Array.from(child.children)) {
-          observer.observe(row);
+          currentRows.add(row);
+          if (observedPlainRows.current.has(row)) continue;
+          const measured = measurePlainRow(child);
+          if (measured) plainItemHeights.current.set(measured[0], measured[1]);
+          observer?.observe(row);
+          observedPlainRows.current.add(row);
         }
       }
-      return () => observer.disconnect();
-    }, [shouldVirtualize, rowKeys, measurePlainRows, measurePlainRowInPlace]);
+      // Rows that left the list (collapsed history) must not keep the observer
+      // alive on a detached node.
+      observedPlainRows.current.forEach((row) => {
+        if (currentRows.has(row)) return;
+        observer?.unobserve(row);
+        observedPlainRows.current.delete(row);
+      });
+      return undefined;
+    }, [
+      shouldVirtualize,
+      scrollParent,
+      rowKeys,
+      getPlainRowObserver,
+      measurePlainRowInPlace,
+    ]);
+
+    React.useEffect(
+      () => () => {
+        plainRowObserver.current?.disconnect();
+        plainRowObserver.current = null;
+        observedPlainRows.current.clear();
+      },
+      [],
+    );
 
     // Seed the virtualizer once, the first time this list virtualizes, from the
-    // heights the plain list just had. `undefined` (the plain list) means "no
-    // seed"; once the shell is up, its own measurements take over.
-    const initialMeasurementsCache = React.useMemo(() => {
-      if (!shouldVirtualize) return undefined;
-      return buildInitialMeasurements(
-        rowKeys,
-        rowKeys.map((key) => plainItemHeights.current.get(key) ?? 0),
-        ROW_GAP_PX,
-      );
-      // Deliberately keyed on the row set only: the seed is a one-shot value
-      // read at the moment virtualization turns on, not a live input.
-    }, [shouldVirtualize, rowKeys]);
+    // heights the plain list just had. The value is captured in a ref rather
+    // than recomputed: TanStack reads `initialMeasurementsCache` only while its
+    // own cache is empty, so rebuilding it on every append after the switch
+    // would be wasted work over a row set whose plain heights are no longer
+    // updated.
+    const initialMeasurementsCacheRef = React.useRef<VirtualItem[] | undefined>(
+      undefined,
+    );
+    if (shouldVirtualize) {
+      if (initialMeasurementsCacheRef.current === undefined) {
+        initialMeasurementsCacheRef.current = buildInitialMeasurements(
+          rowKeys,
+          rowKeys.map((key) => plainItemHeights.current.get(key) ?? 0),
+          ROW_GAP_PX,
+        );
+      }
+    } else {
+      // Reset while plain, so a later switch back to the shell re-seeds from
+      // the heights current at that moment rather than a stale snapshot.
+      initialMeasurementsCacheRef.current = undefined;
+    }
 
     const shellRef = React.useCallback(
       (node: HTMLDivElement | null) => {
@@ -441,6 +489,13 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       estimateSize: () => ESTIMATED_ROW_HEIGHT,
       overscan: OVERSCAN,
       enabled: shouldVirtualize,
+      // When `enabled` first flips on, TanStack seeds its internal offset from
+      // `initialOffset` (default 0) and immediately scrolls the element there.
+      // The virtualizer tracked nothing while it was disabled, so without this
+      // the container snaps to the top on the threshold-crossing render — and
+      // flashes there even when pinned to the bottom — before the chat's
+      // stick-to-bottom pulls it back.
+      initialOffset: () => scrollParent?.scrollTop ?? 0,
       // Offsets are relative to the scroll element, so tell the virtualizer
       // where this list begins inside it and shift each row back by the same
       // amount (see the transform below).
@@ -448,7 +503,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       // Seed the first virtualized render with the plain list's real row
       // heights, so the shell's total height (and the reader's scroll offset)
       // is unchanged by the switch.
-      initialMeasurementsCache,
+      initialMeasurementsCache: initialMeasurementsCacheRef.current,
       // Row heights are unknown until they mount (code blocks, images,
       // expanded output), so measure the live DOM and let the virtualizer
       // correct the offsets. The gap is added here because absolutely
@@ -485,16 +540,16 @@ export const Messages: React.FC<MessagesProps> = React.memo(
             ref={plainListRef}
             className="contents [&>*:not(:last-child)>*:last-child]:mb-0"
           >
-            {renderedItems.map((item, itemIndex) => {
+            {renderedItems.map((item) => {
               const itemKey = renderedItemKey(item);
               return (
                 <div key={itemKey} data-row-key={itemKey} className="contents">
                   {persistExpansion ? (
                     <RowExpansionContext.Provider value={itemKey}>
-                      {renderItem(item, itemIndex)}
+                      {renderItem(item)}
                     </RowExpansionContext.Provider>
                   ) : (
-                    renderItem(item, itemIndex)
+                    renderItem(item)
                   )}
                 </div>
               );
@@ -536,7 +591,19 @@ export const Messages: React.FC<MessagesProps> = React.memo(
                 // right-aligns with `self-end`; an absolutely positioned row
                 // would drop it out of that context, so the row reproduces the
                 // column layout for its own children.
-                className="flex flex-col"
+                //
+                // `gap-2` restores the intra-row spacing the plain list gets
+                // from the scroll column's own flex gap (its row wrapper is
+                // `display: contents`, so a row's siblings are spaced by the
+                // column). The margin correction mirrors the plain wrapper's
+                // `[&>*:not(:last-child)>*:last-child]:mb-0`: each message is
+                // the last child of its own row, so its `last:mb-4` would fire
+                // on every row instead of only the final one.
+                className={cn(
+                  "flex flex-col gap-2",
+                  virtualRow.index < renderedItems.length - 1 &&
+                    "[&>*:last-child]:mb-0",
+                )}
                 style={{
                   position: "absolute",
                   top: 0,
@@ -551,7 +618,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
                 {/* Remounted rows read their expansion state back from the
                     store instead of starting collapsed. */}
                 <RowExpansionContext.Provider value={renderedItemKey(item)}>
-                  {renderItem(item, virtualRow.index)}
+                  {renderItem(item)}
                 </RowExpansionContext.Provider>
               </div>
             );

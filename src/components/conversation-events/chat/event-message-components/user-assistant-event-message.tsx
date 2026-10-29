@@ -14,8 +14,12 @@ import RepoForkedIcon from "#/icons/repo-forked.svg?react";
 import { I18nKey } from "#/i18n/declaration";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useActiveBackend } from "#/contexts/active-backend-context";
-import { useForkConversation } from "#/hooks/mutation/use-fork-conversation";
+import {
+  FORK_CONVERSATION_MUTATION_KEY,
+  useForkConversation,
+} from "#/hooks/mutation/use-fork-conversation";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
+import { useIsMutating } from "@tanstack/react-query";
 
 interface UserAssistantEventMessageProps {
   event: MessageEvent;
@@ -30,8 +34,12 @@ function UserAssistantEventMessageComponent({
   const { t } = useTranslation("openhands");
   const { conversationId } = useOptionalConversationId();
   const isCloud = useActiveBackend().backend.kind === "cloud";
-  const { mutate: forkConversation, isPending: isForking } =
-    useForkConversation();
+  const { mutate: forkConversation } = useForkConversation();
+  // `useIsMutating` reads the cache entry, so it still reports a fork started
+  // before this row was virtualized out and back — unlike the row's own
+  // `isPending`, which belongs to a fresh observer and reads `false` on remount.
+  const isForking =
+    useIsMutating({ mutationKey: FORK_CONVERSATION_MUTATION_KEY }) > 0;
   // Blocks a same-tick double-click, before `isForking` flips.
   const forkInFlightRef = React.useRef(false);
 

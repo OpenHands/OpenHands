@@ -40,3 +40,27 @@ describe("expandedRowKey", () => {
     expect(expandedRowKey("group-a")).toBe("group-a");
   });
 });
+
+describe("message expansion store setExpanded", () => {
+  it("does not notify subscribers when the value is unchanged", () => {
+    // A streaming ChatMessage resets its truncation flag on every text change
+    // (a reveal tick), so a write that recreated the state object each time
+    // would notify every subscriber on every tick for no change at all.
+    useMessageExpansionStore.setState({ expanded: {} });
+    let notifications = 0;
+    const unsubscribe = useMessageExpansionStore.subscribe(() => {
+      notifications += 1;
+    });
+
+    const { setExpanded } = useMessageExpansionStore.getState();
+    setExpanded("single-row::evt::truncation", false);
+    setExpanded("single-row::evt::truncation", false);
+    setExpanded("single-row::evt::truncation", false);
+    unsubscribe();
+
+    expect(notifications).toBe(1);
+    expect(useMessageExpansionStore.getState().expanded).toEqual({
+      "single-row::evt::truncation": false,
+    });
+  });
+});

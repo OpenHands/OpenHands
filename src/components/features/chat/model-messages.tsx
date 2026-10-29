@@ -13,12 +13,15 @@ import { usePersistentExpansion } from "#/stores/message-expansion-store";
 
 interface ProfileRowProps {
   profile: ProfileInfo;
+  /** The /model entry this row belongs to; two entries can anchor to one event. */
+  entryId: string;
 }
 
-function ProfileRow({ profile }: ProfileRowProps) {
-  // Persisted by row + profile name so a remounted row restores which profile
-  // cards the user had opened.
-  const expansionKey = useRowExpansionKey(`profile-${profile.name}`);
+function ProfileRow({ profile, entryId }: ProfileRowProps) {
+  // Persisted by row + entry + profile name so a remounted row restores which
+  // profile cards the user had opened, and two /model listings anchored to the
+  // same event keep their expansion state to themselves.
+  const expansionKey = useRowExpansionKey(`profile-${entryId}-${profile.name}`);
   const [expanded, toggleExpanded] = usePersistentExpansion(
     expansionKey,
     false,
@@ -133,7 +136,7 @@ export function ModelMessages({
               ) : (
                 <div className="flex flex-col gap-1 mt-1">
                   {entry.profiles.map((p) => (
-                    <ProfileRow key={p.name} profile={p} />
+                    <ProfileRow key={p.name} profile={p} entryId={entry.id} />
                   ))}
                 </div>
               )

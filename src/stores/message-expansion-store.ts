@@ -28,7 +28,11 @@ export const useMessageExpansionStore = create<MessageExpansionState>(
   (set) => ({
     expanded: {},
     setExpanded: (key, value) =>
-      set((state) => ({ expanded: { ...state.expanded, [key]: value } })),
+      set((state) =>
+        state.expanded[key] === value
+          ? state
+          : { expanded: { ...state.expanded, [key]: value } },
+      ),
     prune: (rowKeys) =>
       set((state) => {
         const next: Record<string, boolean> = {};

@@ -2,7 +2,11 @@ import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { Messages } from "#/components/conversation-events/chat/messages";
-import { createUserMessageEvent, renderWithProviders } from "test-utils";
+import {
+  createUserMessageEvent,
+  createPlanningObservationEvent,
+  renderWithProviders,
+} from "test-utils";
 import type { OpenHandsEvent } from "#/types/agent-server/core";
 import { useMessageExpansionStore } from "#/stores/message-expansion-store";
 
@@ -356,9 +360,10 @@ describe("Messages virtualization", () => {
       marginBottom: "0px",
     } as CSSStyleDeclaration);
 
-    // The same 150 rows before and after, so every row is measured while plain
-    // and the seed is not diluted by the fallback for an unmeasured row.
-    const { rerender } = renderMessages(buildEvents(150), false);
+    // The 149 rows below the threshold are measured while plain; the row added
+    // on the crossing is unmeasured and falls back to their average, which is
+    // the same height, so the seeded total is 150 rows of the same size.
+    const { rerender } = renderMessages(buildEvents(149));
     expect(screen.queryByTestId("virtualized-message-list")).toBeNull();
 
     rerender(<Harness events={buildEvents(150)} withScrollParent />);
@@ -431,9 +436,10 @@ describe("Messages virtualization", () => {
     vi.stubGlobal("ResizeObserver", TrackedResizeObserver);
 
     // The row set is the same array before and after, so no re-render changes
-    // it: only the resize can refresh the cache.
-    const events = buildEvents(150);
-    const { rerender } = renderMessages(events, false);
+    // it: only the resize can refresh the cache. A scroll container is required
+    // — a list that can never virtualize does not pay for the height cache — so
+    // the list sits one row below the threshold and crosses on the rerender.
+    const { rerender } = renderMessages(buildEvents(149));
     const grownRow = document.querySelector(
       `[data-row-key="single-message-${GROWN_ROW}"]`,
     ) as HTMLElement;
@@ -452,12 +458,24 @@ describe("Messages virtualization", () => {
       );
     });
 
-    rerender(<Harness events={events} withScrollParent />);
+    rerender(<Harness events={buildEvents(150)} withScrollParent />);
 
-    // The grown row seeds from its new height; the rest from their own.
+    // The grown row seeds from its new height; the other measured rows from
+    // their own. The row added on the crossing was never measured while plain,
+    // so it falls back to the average of the measured rows.
+    const measuredOccupied = Array.from({ length: 149 }, (_, index) =>
+      index === GROWN_ROW ? GROWN + MARGIN_TOP : INITIAL + MARGIN_TOP,
+    );
+    const fallback = Math.round(
+      measuredOccupied.reduce((total, height) => total + height, 0) /
+        measuredOccupied.length,
+    );
     const list = screen.getByTestId("virtualized-message-list");
-    const grownSize = GROWN + MARGIN_TOP + 8;
-    expect(list.style.height).toBe(`${grownSize + 149 * 132}px`);
+    const seededTotal =
+      148 * (INITIAL + MARGIN_TOP + 8) +
+      (GROWN + MARGIN_TOP + 8) +
+      (fallback + 8);
+    expect(list.style.height).toBe(`${seededTotal}px`);
   });
 
   it("lays out each virtualized row as a flex column, like the scroll container", () => {
@@ -631,5 +649,97 @@ describe("Messages virtualization", () => {
     expect(shellObservers.every((instance) => instance.disconnected)).toBe(
       true,
     );
+  });
+
+  it("does not scroll the container to the top when it crosses the threshold", () => {
+    // TanStack seeds its offset from `initialOffset` (default 0) the first time
+    // `enabled` flips on and immediately scrolls the element there. A reader
+    // parked mid-history would be yanked to the top — and the container would
+    // flash there even when pinned to the bottom — before stick-to-bottom
+    // recovers it. jsdom's `Element.scrollTo` is inert, so observe the call.
+    const scrollTo = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollTo", {
+      configurable: true,
+      writable: true,
+      value: scrollTo,
+    });
+    // Put the reader at a non-zero offset; jsdom ignores `scrollTop` writes on
+    // an unlaid-out element, so define the property for the read.
+    const { rerender } = renderMessages(buildEvents(100));
+    const scrollParent = screen.getByTestId("scroll-parent");
+    Object.defineProperty(scrollParent, "scrollTop", {
+      configurable: true,
+      writable: true,
+      value: 4200,
+    });
+
+    scrollTo.mockClear();
+    rerender(<Harness events={buildEvents(400)} withScrollParent />);
+    expect(screen.getByTestId("virtualized-message-list")).toBeInTheDocument();
+
+    // The virtualizer re-applies the offset it captured when it enabled, so the
+    // reader stays where they were instead of jumping to the top.
+    const topOffsets = scrollTo.mock.calls.map(
+      ([options]) => (options as ScrollToOptions | undefined)?.top,
+    );
+    expect(topOffsets).toContain(4200);
+    expect(topOffsets).not.toContain(0);
+  });
+
+  it("agrees with the plain list about the last group being finalized", () => {
+    // A group followed only by a planning observation that is not the phase's
+    // PLAN.md preview renders nothing in the virtualized list. The tail used to
+    // be read off that (shorter) row set, so the group looked live above the
+    // threshold (showing the latest action title) and finalized below it. Both
+    // modes must agree: the hidden row cannot be "after" the group.
+    const makeBashObservation = (id: string, actionId: string) => ({
+      id,
+      timestamp: new Date().toISOString(),
+      source: "environment" as const,
+      tool_name: "execute_bash",
+      tool_call_id: `call-${actionId}`,
+      action_id: actionId,
+      observation: {
+        kind: "ExecuteBashObservation" as const,
+        content: [{ type: "text" as const, text: "ok" }],
+        command: `echo ${actionId}`,
+        exit_code: 0,
+        error: false,
+        timeout: false,
+        metadata: {},
+      },
+    });
+    // The actions are not in `messages`, so the observations are resolved
+    // actions and the group is "completed" (no action left in flight).
+    const trailingPlan = createPlanningObservationEvent("plan-1", "act-1");
+    trailingPlan.observation.path = "/workspace/notes.md";
+
+    // 150 user rows push the list past the threshold; the group and its
+    // trailing observation are the tail in both modes.
+    const events = [
+      ...buildEvents(150),
+      makeBashObservation("obs-1", "act-1"),
+      makeBashObservation("obs-2", "act-2"),
+      trailingPlan,
+    ] as OpenHandsEvent[];
+    const groupHeader = () =>
+      screen.getAllByTestId("event-group-toggle").at(-1) as HTMLElement;
+
+    const { unmount } = renderMessages(events, false);
+    const plainText = groupHeader().textContent;
+    expect(plainText).toContain("EVENT_GROUP$ACTIONS_COMPLETED");
+    unmount();
+
+    renderMessages(events);
+    expect(screen.getByTestId("virtualized-message-list")).toBeInTheDocument();
+    // Scroll to the tail so the group's row mounts.
+    const scrollParent = screen.getByTestId("scroll-parent");
+    for (let top = 0; top <= 160 * 608; top += 2000) {
+      act(() => {
+        scrollParent.scrollTop = top;
+        fireEvent.scroll(scrollParent);
+      });
+    }
+    expect(groupHeader().textContent).toBe(plainText);
   });
 });

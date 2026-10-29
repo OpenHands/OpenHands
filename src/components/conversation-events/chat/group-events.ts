@@ -94,11 +94,16 @@ export const renderedItemKey = (item: RenderedItem): string => {
  *
  * `allEvents` should be the full event history so observations can find
  * their matching action; if omitted, it defaults to `events`.
+ *
+ * Pass `actionById` (from {@link buildActionById}) when the caller already
+ * indexed the same history — `Messages` keeps one such map per render — so the
+ * grouping does not scan the whole history a second time.
  */
 export const groupEvents = (
   events: OpenHandsEvent[],
   minSize: number = EVENT_GROUP_MIN_SIZE,
   allEvents: OpenHandsEvent[] = events,
+  actionById: Map<string, ActionEvent> = buildActionById(allEvents),
 ): RenderedItem[] => {
   if (minSize < 1) {
     throw new Error("minSize must be at least 1");
@@ -106,7 +111,6 @@ export const groupEvents = (
 
   const items: RenderedItem[] = [];
   const emittedThoughtActionIds = new Set<string>();
-  const actionById = buildActionById(allEvents);
   let run: { events: OpenHandsEvent[]; startIndex: number } | null = null;
 
   const flushRun = () => {
