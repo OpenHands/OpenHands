@@ -9,4 +9,11 @@ export interface DropdownOption {
    * like status indicators; not searchable.
    */
   prefix?: ReactNode;
+  /**
+   * Optional group heading. Consecutive options with the same group are
+   * listed under one heading, and their rows show `groupLabel` instead of
+   * `label`. `label` still drives the trigger, search and row title.
+   */
+  group?: string;
+  groupLabel?: string;
 }

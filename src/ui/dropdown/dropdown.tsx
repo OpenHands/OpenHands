@@ -30,6 +30,12 @@ interface DropdownProps {
   italicPlaceholder?: boolean;
   /** Size the trigger to its label instead of stretching to the container width. */
   fitContent?: boolean;
+  /** Keep the menu exactly as wide as the trigger; long labels truncate. */
+  matchTriggerWidth?: boolean;
+  /** Allow a taller menu before it scrolls, for menus with a footer and headings. */
+  tallMenu?: boolean;
+  /** Called whenever the menu opens or closes. */
+  onOpenChange?: (isOpen: boolean) => void;
 }
 
 export function Dropdown({
@@ -50,6 +56,9 @@ export function Dropdown({
   openOnHover = false,
   italicPlaceholder = true,
   fitContent = false,
+  matchTriggerWidth = false,
+  tallMenu = false,
+  onOpenChange,
 }: DropdownProps) {
   const closeTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(
     null,
@@ -103,6 +112,7 @@ export function Dropdown({
       isOpen: newIsOpen,
       selectedItem: currentSelectedItem,
     }) => {
+      onOpenChange?.(Boolean(newIsOpen));
       if (newIsOpen) {
         // Clear the input on open so the user sees an empty search box
         // (with the placeholder reminding them of the current value)
@@ -233,6 +243,8 @@ export function Dropdown({
         footer={footer}
         openUpward={openUpward}
         fitContent={fitContent}
+        matchTriggerWidth={matchTriggerWidth}
+        tallMenu={tallMenu}
       />
     </div>
   );
