@@ -1,6 +1,7 @@
 import {
   AgentServerClient,
   CanvasExtensionsClient,
+  type AgentServerCanvasBackendStatusResponse,
 } from "@openhands/typescript-client/clients";
 import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
 import { isSdkHttpStatusError } from "#/api/agent-server-compatibility";
@@ -98,11 +99,13 @@ function getClientForBackend(backend: Backend): AgentServerClient {
   if (backend.kind === "cloud") {
     throw new CanvasExtensionsUnsupportedError("cloud-backend");
   }
-  return new AgentServerClient({
-    host: backend.host,
-    ...(backend.apiKey ? { apiKey: backend.apiKey } : {}),
-    timeout: 60000,
-  });
+  return new AgentServerClient(
+    getAgentServerClientOptions({
+      host: backend.host,
+      apiKey: backend.apiKey ?? "",
+      timeout: 60000,
+    }),
+  );
 }
 
 async function mapUnsupported<T>(operation: () => Promise<T>): Promise<T> {
@@ -217,7 +220,30 @@ function normalizeInstallRequest(
   };
 }
 
+export type CanvasAppBackendStatus = AgentServerCanvasBackendStatusResponse;
+
 class CanvasExtensionsService {
+  static async backendStatus(
+    name: string,
+    backend: Backend,
+  ): Promise<CanvasAppBackendStatus> {
+    const client = getClientForBackend(backend);
+    const info = await client.server.getServerInfo();
+    if (!info.capabilities?.includes("canvas_app_backend_secret_grants_v1")) {
+      throw new CanvasExtensionsUnsupportedError("missing-api");
+    }
+    return mapUnsupported(() => client.canvasExtensions.getBackendStatus(name));
+  }
+
+  static async revokeBackendSecrets(
+    name: string,
+    backend: Backend,
+  ): Promise<CanvasAppBackendStatus> {
+    return mapUnsupported(() =>
+      getClientForBackend(backend).canvasExtensions.revokeBackendSecrets(name),
+    );
+  }
+
   static async listInstalled(): Promise<InstalledCanvasExtensionInfo[]> {
     const client = getClient();
     const response = await mapUnsupported(() =>
@@ -243,13 +269,20 @@ class CanvasExtensionsService {
   static async setEnabled(
     name: string,
     enabled: boolean,
+    consent?: { revision: string; secret_refs?: string[] },
+    backend?: Backend,
   ): Promise<{ name: string; enabled: boolean }> {
-    const client = getClient();
+    const client = backend ? getClientForBackend(backend) : getClient();
+    if (enabled && consent) {
+      const info = await client.server.getServerInfo();
+      if (
+        !info.capabilities?.includes("canvas_app_backend_enable_lifecycle_v1")
+      ) {
+        throw new Error("Upgrade Agent Server to enable managed Apps safely.");
+      }
+    }
     return mapUnsupported(() =>
-      client.patch<{ name: string; enabled: boolean }>(
-        installedExtensionPath(name),
-        { enabled },
-      ),
+      client.canvasExtensions.setEnabled(name, enabled, consent),
     );
   }
 
