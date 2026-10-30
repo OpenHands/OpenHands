@@ -95,6 +95,16 @@ export function PluginLaunchModal({
           ),
         })),
       );
+      // The preflight arrives after mount, so the initial expand state
+      // (computed from empty parameters) leaves these sections collapsed.
+      // Expand every section that now has schema-seeded parameters.
+      setExpandedSections((prev) => {
+        const next = { ...prev };
+        pluginConfigs.forEach((_, index) => {
+          next[index] = true;
+        });
+        return next;
+      });
     }
   }, [isAutomationInstall, preflight]);
 
