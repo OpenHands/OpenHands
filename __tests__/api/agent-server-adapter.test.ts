@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MockInstance } from "vitest";
+import { HttpError } from "@openhands/typescript-client";
 import { CANVAS_UI_CLIENT_TOOL_NAME } from "#/constants/canvas-ui";
 import { LAUNCH_CHILD_CONVERSATION_TOOL_NAME } from "#/constants/child-conversation";
 import { REQUEST_SECRET_TOOL_NAME } from "#/constants/secret-request";
@@ -1420,7 +1421,7 @@ describe("buildStartConversationRequestWithEncryptedSettings", () => {
   describe("skills for an ACP launch", () => {
     const launch = () =>
       buildStartConversationRequestWithEncryptedSettings({
-        settings: DEFAULT_SETTINGS,
+        settings: { ...DEFAULT_SETTINGS, enabled_skills: [first.name] },
         agentProfileId: "profile-acp",
         agentProfileKind: "acp",
         hooksProjectDir: null,
@@ -1429,31 +1430,48 @@ describe("buildStartConversationRequestWithEncryptedSettings", () => {
       (additionsOf(payload)?.skills ?? []).map((skill) => skill.name);
     const [first, second] = SKILLS_CATALOG;
 
+    afterEach(() => {
+      vi.mocked(AgentProfilesService.getProfile).mockRestore();
+    });
+
     it("follows the OpenHands default profile that owns the Skills page", async () => {
-      const profileSpy = vi
-        .spyOn(AgentProfilesService, "getProfile")
-        .mockResolvedValue({
-          profile: {
-            agent_kind: "openhands",
-            public_skills: [first.name, second.name],
-            disabled_skills: [first.name],
-          },
-        } as unknown as Awaited<
-          ReturnType<typeof AgentProfilesService.getProfile>
-        >);
+      vi.spyOn(AgentProfilesService, "getProfile").mockResolvedValue({
+        profile: {
+          agent_kind: "openhands",
+          public_skills: [first.name, second.name],
+          disabled_skills: [first.name],
+        },
+      } as unknown as Awaited<
+        ReturnType<typeof AgentProfilesService.getProfile>
+      >);
 
       expect(skillNames(await launch())).toEqual([second.name]);
-      profileSpy.mockRestore();
     });
 
     it("falls back to the settings lists when there is no default profile", async () => {
-      const profileSpy = vi
-        .spyOn(AgentProfilesService, "getProfile")
-        .mockRejectedValue(new Error("404"));
+      vi.spyOn(AgentProfilesService, "getProfile").mockRejectedValue(
+        new HttpError(404, "Not Found"),
+      );
 
-      expect(skillNames(await launch()).length).toBeGreaterThan(2);
-      profileSpy.mockRestore();
+      expect(skillNames(await launch())).toEqual([first.name]);
     });
+
+    it("uses the settings selection when the default profile is ACP", async () => {
+      vi.spyOn(AgentProfilesService, "getProfile").mockResolvedValue({
+        profile: { agent_kind: "acp" },
+      } as Awaited<ReturnType<typeof AgentProfilesService.getProfile>>);
+
+      expect(skillNames(await launch())).toEqual([first.name]);
+    });
+
+    it.each([new HttpError(500, "Server error"), new Error("Network error")])(
+      "rejects the launch when the authoritative selection cannot be read: %s",
+      async (error) => {
+        vi.spyOn(AgentProfilesService, "getProfile").mockRejectedValue(error);
+
+        await expect(launch()).rejects.toBe(error);
+      },
+    );
   });
 
   it("routes the first message for a profile that carries a router", async () => {

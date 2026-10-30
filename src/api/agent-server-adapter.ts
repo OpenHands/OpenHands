@@ -1,7 +1,11 @@
 import i18n, { OPENHANDS_I18N_NAMESPACE } from "#/i18n";
 import { I18nKey } from "#/i18n/declaration";
 import { hasPluginParameters } from "#/utils/plugin-parameters";
-import { HOOK_EVENT_FIELDS, HookType } from "@openhands/typescript-client";
+import {
+  HOOK_EVENT_FIELDS,
+  HookType,
+  HttpError,
+} from "@openhands/typescript-client";
 import type {
   ACPModelInfo,
   ConversationRuntimeInfo,
@@ -1085,7 +1089,6 @@ export interface StartConversationOptions {
   runtimeServicesInfo?: RuntimeServicesInfo | null;
   executionRuntime?: AgentServerInfo["execution_runtime"];
   workspaceHookConfig?: HookConfig | null;
-  /** The Skills page selection when `default` owns it; settings otherwise. */
   skillEnablement?: SkillEnablement | null;
 }
 
@@ -1133,9 +1136,6 @@ export function buildStartConversationRequest(
   ]
     .filter((suffix): suffix is string => Boolean(suffix))
     .join("\n\n");
-  // A catalog skill the opening message invokes loads for this conversation
-  // even when the profile does not select it. An ACP profile has no skill
-  // selection, so it also gets every skill enabled in Settings.
   const invokedSkillName = findInvokedCatalogSkill(options.query);
   const isEnabled = buildSkillEnablementFilter(
     options.skillEnablement ?? toSkillEnablement(options.settings),
@@ -1448,11 +1448,6 @@ async function resolveAgentProfileLlmSettings(
   }
 }
 
-/**
- * The selection the Skills page shows: the OpenHands `default` profile's lists,
- * or `null` (caller falls back to settings) when `default` is not an OpenHands
- * profile or the lookup fails.
- */
 async function resolveDefaultProfileSkillEnablement(): Promise<SkillEnablement | null> {
   try {
     const {
@@ -1465,8 +1460,9 @@ async function resolveDefaultProfileSkillEnablement(): Promise<SkillEnablement |
     return profile.agent_kind === "openhands"
       ? profileSkillEnablement(profile as StoredOpenHandsProfile)
       : null;
-  } catch {
-    return null;
+  } catch (error) {
+    if (error instanceof HttpError && error.status === 404) return null;
+    throw error;
   }
 }
 
