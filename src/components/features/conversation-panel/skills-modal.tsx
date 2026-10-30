@@ -8,6 +8,7 @@ import {
 import { I18nKey } from "#/i18n/declaration";
 import { getAgentServerWorkingDir } from "#/api/agent-server-config";
 import { useConversationSkills } from "#/hooks/query/use-conversation-skills";
+import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useSkillEnabledFilter } from "#/hooks/use-skill-enablement";
 import {
   groupSkillsByScope,
@@ -46,7 +47,10 @@ export function SkillsModal({ onClose }: SkillsModalProps) {
     refetch,
     isRefetching,
   } = useConversationSkills();
-  const isSkillEnabled = useSkillEnabledFilter();
+  const { data: conversation } = useActiveConversation();
+  const isSkillEnabled = useSkillEnabledFilter(
+    conversation?.launched_agent_profile?.agent_profile_id,
+  );
 
   // The modal reports what the conversation actually has, so it lists the
   // enabled set rather than the whole catalog.

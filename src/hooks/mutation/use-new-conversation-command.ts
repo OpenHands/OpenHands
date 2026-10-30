@@ -43,10 +43,10 @@ export const useNewConversationCommand = () => {
         },
         {
           sandboxId: conversation.sandbox_id ?? undefined,
-          // Only stamp the toggle when it's on so the default /new path
-          // stays byte-identical to the legacy launch. The active
-          // meta-profile gates the suffix: no router attached means no
-          // route-at-start instruction.
+          // Cloud only; a local launch reads the toggle itself and gates it
+          // on the launched profile's router. The active meta-profile gates
+          // the suffix: no router attached means no route-at-start
+          // instruction.
           ...(settings?.run_router_at_conversation_start
             ? {
                 runRouterAtConversationStart: true,

@@ -58,12 +58,12 @@ function AutomationSetupDockedComposer({
   onTarget: (element: HTMLDivElement | null) => void;
 }) {
   return (
-    <div className="custom-scrollbar-always pointer-events-none absolute inset-0 z-20 overflow-y-scroll px-5 [scrollbar-gutter:stable] [&::-webkit-scrollbar-thumb]:bg-transparent">
-      <div className="relative mx-auto h-full w-full min-w-0 max-w-[800px]">
+    <div className="automation-setup-scroll-gutter custom-scrollbar-always pointer-events-none absolute inset-0 z-20 overflow-y-scroll px-5 [&::-webkit-scrollbar-thumb]:bg-transparent">
+      <div className="automation-setup-content relative mx-auto h-full w-full min-w-0">
         <div
           ref={onTarget}
           data-testid="automation-setup-docked-composer"
-          className="pointer-events-auto absolute inset-x-0 bottom-5 overflow-visible rounded-[15px] shadow-[0_12px_40px_rgba(0,0,0,0.55)]"
+          className="automation-setup-composer-dock pointer-events-auto absolute inset-x-0 bottom-5 overflow-visible"
         />
       </div>
     </div>
@@ -173,6 +173,7 @@ export function ConversationMain() {
             className={cn(
               "flex min-w-0 items-center gap-2",
               isMobile && "h-10 justify-between px-3",
+              isSidebarRailHidden && "h-12",
             )}
           >
             <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -307,7 +308,7 @@ export function ConversationMain() {
               data-testid="chat-pane-header"
               className={cn(
                 "flex h-10 min-h-10 shrink-0 items-center",
-                isSidebarRailHidden && "gap-2 pl-2.5",
+                isSidebarRailHidden && "h-12 min-h-12 gap-2 pl-2.5",
               )}
             >
               {isSidebarRailHidden ? <SidebarMobileMenuToggle /> : null}

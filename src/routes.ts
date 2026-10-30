@@ -30,6 +30,7 @@ export default [
       route("condenser", "routes/condenser-settings.tsx"),
       route("agent-context", "routes/agent-context-settings.tsx"),
       route("verification", "routes/verification-settings.tsx"),
+      route("runtime", "routes/runtime-settings.tsx"),
       route("app", "routes/app-settings.tsx"),
       route("secrets", "routes/secrets-settings.tsx"),
     ]),

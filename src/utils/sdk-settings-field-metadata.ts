@@ -47,6 +47,14 @@ const FIELD_METADATA: Record<string, SettingsFieldMetadata> = {
       step: 1,
     },
   },
+  // Mirrors the SDK's ``container_cpus`` minimum (``ge=0.01``, what
+  // ``docker run --cpus`` accepts).
+  container_cpus: {
+    constraints: {
+      min: 0.01,
+      step: 0.01,
+    },
+  },
   "llm.top_p": {
     constraints: {
       min: 0,

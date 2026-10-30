@@ -21,6 +21,8 @@ export function makeMcpTestErrorMessage(
   switch (errorKind) {
     case "timeout":
       return t(I18nKey.MCP$TEST_ERROR_TIMEOUT);
+    case "authorization":
+      return t(I18nKey.MCP$TEST_ERROR_AUTHORIZATION);
     case "connection":
       return serverType === "stdio"
         ? t(I18nKey.MCP$TEST_ERROR_STDIO_START, { error })

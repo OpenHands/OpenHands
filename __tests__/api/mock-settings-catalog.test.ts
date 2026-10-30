@@ -37,7 +37,7 @@ describe("mock agent-server discovery", () => {
       security_analyzers: string[];
     }>("/server_info");
     expect(serverInfo).toMatchObject({
-      version: "1.55.0",
+      version: "1.58.1",
       usable_tools: [
         "terminal",
         "file_editor",

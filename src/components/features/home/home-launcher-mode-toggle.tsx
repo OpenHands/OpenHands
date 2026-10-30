@@ -138,7 +138,7 @@ export function HomeLauncherModeToggle({
           role="radiogroup"
           aria-label={t(I18nKey.HOME$MODE_TOGGLE_LABEL)}
           data-testid="home-launcher-mode-toggle"
-          className="inline-flex items-center rounded-full bg-[var(--oh-surface-raised)] p-1 text-sm font-medium"
+          className="inline-flex items-center rounded-full bg-surface-raised p-1 text-sm font-medium"
         >
           {options.map((option) => {
             const isActive = option.value === mode;
@@ -154,18 +154,14 @@ export function HomeLauncherModeToggle({
                   "relative inline-flex items-center gap-2 rounded-full px-5 py-2",
                   "cursor-pointer transition-colors",
                   // @spec HL-001 — Labels on the hover pill use the theme's high-emphasis ink
-                  isActive
-                    ? "text-contrast"
-                    : "text-[var(--oh-muted)] hover:text-contrast",
-                  disableAnimation &&
-                    isActive &&
-                    "bg-[var(--oh-interactive-hover)]",
+                  isActive ? "text-contrast" : "text-muted hover:text-contrast",
+                  disableAnimation && isActive && "bg-interactive-hover",
                 )}
               >
                 {!disableAnimation && isActive ? (
                   <motion.span
                     layoutId="home-launch-mode-pill"
-                    className="absolute inset-0 rounded-full bg-[var(--oh-interactive-hover)]"
+                    className="absolute inset-0 rounded-full bg-interactive-hover"
                     transition={PILL_TRANSITION}
                   />
                 ) : null}

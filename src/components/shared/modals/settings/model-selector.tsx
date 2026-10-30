@@ -17,6 +17,15 @@ import { useSearchProviders } from "#/hooks/query/use-search-providers";
 import { useProviderModels } from "#/hooks/query/use-provider-models";
 import { FREE_MODEL_BADGE_LABEL } from "#/utils/format-model-name";
 import { FreeOpenHandsModelsNote } from "#/components/shared/free-models-note";
+import type { LLMProvider } from "#/api/config-service/config-service.types";
+
+// Sorts by the label the picker shows, keeping the managed OpenHands provider
+// first as the backend does.
+const compareProviderLabels = (a: LLMProvider, b: LLMProvider) =>
+  Number(b.name === "openhands") - Number(a.name === "openhands") ||
+  mapProvider(a.name).localeCompare(mapProvider(b.name), undefined, {
+    sensitivity: "base",
+  });
 
 const freeModelBadgeClassName =
   "shrink-0 rounded-full border border-warning/40 bg-warning/10 px-1.5 py-0.5 text-[10px] leading-none text-warning";
@@ -55,11 +64,11 @@ export function ModelSelector({
   } = useProviderModels(selectedProvider);
 
   const verifiedProviders = React.useMemo(
-    () => providers.filter((p) => p.verified),
+    () => providers.filter((p) => p.verified).sort(compareProviderLabels),
     [providers],
   );
   const unverifiedProviders = React.useMemo(
-    () => providers.filter((p) => !p.verified),
+    () => providers.filter((p) => !p.verified).sort(compareProviderLabels),
     [providers],
   );
 
@@ -171,6 +180,9 @@ export function ModelSelector({
             if (e?.toString()) handleChangeProvider(e.toString());
           }}
           onInputChange={(value) => !value && clear()}
+          // Select the current provider's label so typing replaces it and
+          // filters the list instead of appending to it.
+          onFocus={(e) => e.target.select()}
           defaultSelectedKey={selectedProvider ?? undefined}
           selectedKey={selectedProvider}
           classNames={{

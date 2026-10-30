@@ -315,11 +315,15 @@ export function FileDiffViewer({
       return (
         <div
           className={cn(
-            "w-full border-b border-border overflow-auto p-4 bg-canvas-base prose max-w-none",
+            "w-full border-b border-border overflow-auto p-4 bg-canvas-base prose max-w-none max-h-(--markdown-preview-max-height)",
             !isLightTheme && "prose-invert",
           )}
           data-testid="markdown-preview"
-          style={{ maxHeight: MAX_DIFF_EDITOR_HEIGHT_PX }}
+          style={
+            {
+              "--markdown-preview-max-height": `${MAX_DIFF_EDITOR_HEIGHT_PX}px`,
+            } as React.CSSProperties
+          }
         >
           <MarkdownRenderer
             content={singleViewContent}

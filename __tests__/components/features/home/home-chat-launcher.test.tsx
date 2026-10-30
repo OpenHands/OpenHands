@@ -1,17 +1,30 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { readFileSync } from "node:fs";
+import { resolve as resolvePath } from "node:path";
+import { compile } from "@tailwindcss/node";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 
 import { HomeChatLauncher } from "#/components/features/home/home-chat-launcher";
+import type { WorkspaceMode } from "#/api/conversation-metadata-store";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import AutomationService from "#/api/automation-service/automation-service.api";
 import WorkspacesService from "#/api/workspaces-service/workspaces-service.api";
+import SettingsService from "#/api/settings-service/settings-service.api";
+import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
+import ProfilesService from "#/api/profiles-service/profiles-service.api";
+import GitService from "#/api/git-service/git-service.api";
+import { useHomeStore } from "#/stores/home-store";
+import { useModelStore } from "#/stores/model-store";
+import { AGENT_SERVER_UI_DEFAULT_CSS_VARIABLES } from "#/styles/agent-server-ui-style-scope";
+import { COLOR_THEMES } from "#/themes/color-themes";
 import {
   LAST_LOCAL_WORKSPACE_MODE_STORAGE_KEY,
   writeStoredLocalWorkspaceMode,
 } from "#/utils/workspace-mode";
+import { HOME_RECOMMENDED_AUTOMATIONS_DISMISSED_STORAGE_KEY } from "#/components/features/home/home-recommended-automations.constants";
 
 const mockNavigate = vi.fn();
 const mockUseActiveBackend = vi.fn();
@@ -198,30 +211,54 @@ vi.mock("#/components/features/home/open-repository-dialog", () => ({
 vi.mock("#/components/features/home/home-git-control-bar-preview", () => ({
   HomeGitControlBarPreview: ({
     workspaceMode,
+    workspaceModes,
     backendKind,
+    repository,
+    onClear,
     onWorkspaceModeChange,
   }: {
-    workspaceMode: "local_repo" | "new_worktree";
+    workspaceMode: WorkspaceMode;
+    workspaceModes: WorkspaceMode[];
     backendKind: "local" | "cloud";
-    onWorkspaceModeChange: (mode: "local_repo" | "new_worktree") => void;
+    repository?: { full_name: string } | null;
+    onClear: () => void;
+    onWorkspaceModeChange: (mode: WorkspaceMode) => void;
   }) => (
     <div data-testid="stub-git-control-bar-preview">
+      <span data-testid="stub-preview-repository">
+        {repository?.full_name ?? "none"}
+      </span>
+      <button
+        type="button"
+        data-testid="stub-clear-selection"
+        onClick={onClear}
+      >
+        Clear
+      </button>
       <span data-testid="stub-workspace-mode">
         {backendKind}:{workspaceMode}
       </span>
+      <span data-testid="stub-workspace-modes">{workspaceModes.join(",")}</span>
+      <button
+        type="button"
+        data-testid="stub-workspace-mode-docker-container"
+        onClick={() => onWorkspaceModeChange("docker_container")}
+      >
+        Docker
+      </button>
       <button
         type="button"
         data-testid="stub-workspace-mode-new-worktree"
         onClick={() => onWorkspaceModeChange("new_worktree")}
       >
-        New Worktree
+        Worktree
       </button>
       <button
         type="button"
         data-testid="stub-workspace-mode-local-repo"
         onClick={() => onWorkspaceModeChange("local_repo")}
       >
-        Local Repo
+        Local
       </button>
     </div>
   ),
@@ -236,12 +273,26 @@ vi.mock(
     RecommendedAutomationsLauncher: ({
       variant,
       className,
+      dismissible,
+      onDismiss,
     }: {
       variant?: string;
       className?: string;
+      dismissible?: boolean;
+      onDismiss?: () => void;
     }) =>
       variant === "rail" ? (
-        <div data-testid="recommended-automations-rail" className={className} />
+        <div data-testid="recommended-automations-rail" className={className}>
+          {dismissible && onDismiss && (
+            <button
+              type="button"
+              data-testid="recommended-automations-rail-dismiss"
+              onClick={onDismiss}
+            >
+              Hide
+            </button>
+          )}
+        </div>
       ) : null,
   }),
 );
@@ -284,6 +335,21 @@ const renderLauncher = () =>
       </QueryClientProvider>
     ),
   });
+
+function makeBranch(name: string) {
+  return { name, commit_sha: "abc", protected: false };
+}
+
+function mockConnectedGitHub() {
+  vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
+    ...MOCK_DEFAULT_USER_SETTINGS,
+    provider_tokens_set: { github: null },
+  });
+  vi.spyOn(GitService, "searchRepositoryBranches").mockResolvedValue({
+    items: [makeBranch("main")],
+    next_page_id: null,
+  });
+}
 
 function makeConversationResponse(
   overrides: Record<string, unknown> = {},
@@ -371,6 +437,86 @@ describe("HomeChatLauncher", () => {
   afterEach(() => {
     toast.remove();
     window.localStorage.removeItem(LAST_LOCAL_WORKSPACE_MODE_STORAGE_KEY);
+    useModelStore.setState({ homeLlmProfile: null });
+  });
+
+  it("compiles the rendered launcher colors for every theme, including the mocked isolated-workspace notice", async () => {
+    // Reuse the isolated-backend fixture; this is a consumer/compiler contract,
+    // not evidence of a running isolated runtime. Test mode uses the static pill.
+    mockIsolated = true;
+    const { container } = renderLauncher();
+    const activeOption = screen.getByRole("radio", { checked: true });
+    const roles = [
+      [screen.getByRole("heading", { level: 1 }), "color", "--oh-contrast"],
+      [
+        screen.getByTestId("home-header-subtitle"),
+        "color",
+        "--oh-text-tertiary",
+      ],
+      [activeOption, "color", "--oh-contrast"],
+      [screen.getByRole("radio", { checked: false }), "color", "--oh-muted"],
+      [
+        screen.getByRole("radiogroup"),
+        "background-color",
+        "--oh-surface-raised",
+      ],
+      [activeOption, "background-color", "--oh-interactive-hover"],
+      [screen.getByRole("status"), "color", "--oh-text-secondary"],
+    ] as const;
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "HOME$ISOLATED_WORKSPACE_NEW",
+    );
+
+    const compiler = await compile(
+      readFileSync(resolvePath("src/tailwind.css"), "utf8"),
+      { base: resolvePath("src"), onDependency: () => {} },
+    );
+    const css = compiler.build(
+      [...container.querySelectorAll("[class]")].flatMap((element) => [
+        ...element.classList,
+      ]),
+    );
+    const declaration = (element: Element, property: string) => {
+      for (const candidate of element.classList) {
+        const selector = `.${candidate.replace(/[^\w-]/g, "\\$&")} {`;
+        const start = css.indexOf(selector);
+        if (start < 0) continue;
+        const rule = css.slice(
+          start + selector.length,
+          css.indexOf("}", start),
+        );
+        const value = rule.match(
+          new RegExp(`(?:^|[;{])\\s*${property}:\\s*([^;]+);`),
+        )?.[1];
+        if (value) return value;
+      }
+      return undefined;
+    };
+    const colors = roles.map(([element, property, token]) => ({
+      value: declaration(element, property),
+      token,
+      property,
+    }));
+
+    for (const [key, theme] of Object.entries(COLOR_THEMES)) {
+      const variables: Record<string, string> = {
+        ...AGENT_SERVER_UI_DEFAULT_CSS_VARIABLES,
+        ...theme.scale,
+        ...theme.tokens,
+      };
+      const resolveColor = (value: string): string => {
+        const reference = /^var\((--[\w-]+)\)$/.exec(value);
+        if (!reference) return value;
+        const resolved = variables[reference[1]];
+        expect(resolved, `${key} ${reference[1]}`).toBeDefined();
+        return resolveColor(resolved);
+      };
+      for (const { value, token, property } of colors) {
+        expect(resolveColor(value ?? ""), `${key} ${token} ${property}`).toBe(
+          resolveColor(`var(${token})`),
+        );
+      }
+    }
   });
 
   it("defaults to Code mode and switches to Automate mode", async () => {
@@ -558,6 +704,148 @@ describe("HomeChatLauncher", () => {
     );
   });
 
+  it("starts a Docker conversation when the server offers Docker", async () => {
+    mockUseConversationWorkspace.mockReturnValue({
+      isolated: false,
+      dockerSelectable: true,
+      unsupportedMessage: null,
+    });
+    const createSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue(
+        makeConversationResponse({ app_conversation_id: "conv-docker" }),
+      );
+    renderLauncher();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByTestId("open-workspace-button"));
+    await user.click(
+      await screen.findByTestId("stub-workspace-dialog-confirm"),
+    );
+    await user.click(
+      screen.getByTestId("stub-workspace-mode-docker-container"),
+    );
+    await user.click(screen.getByTestId("stub-chat-submit"));
+
+    expect(screen.getByTestId("stub-workspace-modes")).toHaveTextContent(
+      "local_repo,new_worktree,docker_container",
+    );
+    await waitFor(() =>
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ workspaceMode: "docker_container" }),
+      ),
+    );
+  });
+
+  it("falls back from a remembered Docker mode the server does not offer", async () => {
+    writeStoredLocalWorkspaceMode("docker_container");
+    renderLauncher();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByTestId("open-workspace-button"));
+    await user.click(
+      await screen.findByTestId("stub-workspace-dialog-confirm"),
+    );
+
+    expect(screen.getByTestId("stub-workspace-modes")).toHaveTextContent(
+      "local_repo,new_worktree",
+    );
+    expect(screen.getByTestId("stub-workspace-mode")).toHaveTextContent(
+      "local:local_repo",
+    );
+  });
+
+  it("starts on the Settings → Runtime default", async () => {
+    writeStoredLocalWorkspaceMode("new_worktree");
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
+      ...MOCK_DEFAULT_USER_SETTINGS,
+      conversation_settings: { default_runtime: "docker" },
+    });
+    mockUseConversationWorkspace.mockReturnValue({
+      isolated: false,
+      dockerSelectable: true,
+      unsupportedMessage: null,
+    });
+    renderLauncher();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByTestId("open-workspace-button"));
+    await user.click(
+      await screen.findByTestId("stub-workspace-dialog-confirm"),
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("stub-workspace-mode")).toHaveTextContent(
+        "local:docker_container",
+      ),
+    );
+  });
+
+  it("offers Local or Docker before a workspace is opened", async () => {
+    mockUseConversationWorkspace.mockReturnValue({
+      isolated: false,
+      dockerSelectable: true,
+      unsupportedMessage: null,
+    });
+    const createSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue(
+        makeConversationResponse({ app_conversation_id: "conv-no-ws" }),
+      );
+    renderLauncher();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByTestId("workspace-mode-selector"));
+    expect(
+      screen
+        .getAllByRole("menuitemradio")
+        .map((option) => option.getAttribute("data-testid")),
+    ).toEqual([
+      "workspace-mode-selector-option-local_repo",
+      "workspace-mode-selector-option-docker_container",
+    ]);
+    await user.click(
+      screen.getByTestId("workspace-mode-selector-option-docker_container"),
+    );
+    await user.click(screen.getByTestId("stub-chat-submit"));
+
+    await waitFor(() =>
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ workspaceMode: "docker_container" }),
+      ),
+    );
+    expect(createSpy.mock.calls[0][0]).not.toHaveProperty("workingDir");
+  });
+
+  it("keeps a remembered Docker mode while server_info is still loading", async () => {
+    writeStoredLocalWorkspaceMode("docker_container");
+    mockUseConversationWorkspace.mockReturnValue({
+      isolated: false,
+      dockerSelectable: false,
+      serverInfoLoading: true,
+      unsupportedMessage: null,
+    });
+    const createSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue(
+        makeConversationResponse({ app_conversation_id: "conv-pending" }),
+      );
+    renderLauncher();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByTestId("open-workspace-button"));
+    await user.click(
+      await screen.findByTestId("stub-workspace-dialog-confirm"),
+    );
+    await user.click(screen.getByTestId("stub-chat-submit"));
+
+    await waitFor(() =>
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ workspaceMode: "docker_container" }),
+      ),
+    );
+  });
+
   it("restores and updates the last selected local workspace mode", async () => {
     writeStoredLocalWorkspaceMode("new_worktree");
     const { unmount } = renderLauncher();
@@ -644,6 +932,7 @@ describe("HomeChatLauncher", () => {
 
   it("passes the picked repository + branch payload on a cloud backend", async () => {
     mockUseActiveBackend.mockReturnValue(cloudBackend);
+    mockConnectedGitHub();
     const createSpy = vi
       .spyOn(AgentServerConversationService, "createConversation")
       .mockResolvedValue(
@@ -671,6 +960,177 @@ describe("HomeChatLauncher", () => {
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith("/conversations/conv-repo"),
     );
+  });
+
+  it("remembers the picked repository when the home page is revisited", async () => {
+    mockUseActiveBackend.mockReturnValue(cloudBackend);
+    mockConnectedGitHub();
+    const createSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue(makeConversationResponse());
+    const user = userEvent.setup();
+    const firstVisit = renderLauncher();
+    await user.click(screen.getByTestId("open-repository-button"));
+    await user.click(await screen.findByTestId("stub-repo-dialog-confirm"));
+    firstVisit.unmount();
+
+    renderLauncher();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("stub-preview-repository")).toHaveTextContent(
+        "org/repo",
+      ),
+    );
+    expect(GitService.searchRepositoryBranches).toHaveBeenCalledWith(
+      "org/repo",
+      "github",
+      "main",
+      undefined,
+      100,
+    );
+    await user.click(screen.getByTestId("stub-chat-submit"));
+    await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
+    expect(createSpy.mock.lastCall?.[0]?.metadata).toEqual({
+      selected_repository: "org/repo",
+      selected_branch: "main",
+      git_provider: "github",
+    });
+  });
+
+  it.each([
+    {
+      description: "the repository can no longer be reached",
+      arrange: () => {
+        mockConnectedGitHub();
+        vi.mocked(GitService.searchRepositoryBranches).mockRejectedValue(
+          new Error("Not Found"),
+        );
+      },
+    },
+    {
+      description: "the branch no longer exists",
+      arrange: () => {
+        mockConnectedGitHub();
+        vi.mocked(GitService.searchRepositoryBranches).mockResolvedValue({
+          items: [makeBranch("main-old")],
+          next_page_id: null,
+        });
+      },
+    },
+    {
+      description: "the provider is no longer connected",
+      arrange: () => {
+        vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+          MOCK_DEFAULT_USER_SETTINGS,
+        );
+      },
+    },
+  ])(
+    "forgets a remembered repository when $description",
+    async ({ arrange }) => {
+      mockUseActiveBackend.mockReturnValue(cloudBackend);
+      arrange();
+      useHomeStore.getState().setRepositorySelection("cloud-id", {
+        repository: {
+          id: "1",
+          full_name: "org/gone",
+          git_provider: "github",
+          is_public: false,
+        },
+        branch: makeBranch("main"),
+        provider: "github",
+      });
+      const createSpy = vi
+        .spyOn(AgentServerConversationService, "createConversation")
+        .mockResolvedValue(makeConversationResponse());
+
+      renderLauncher();
+
+      expect(
+        await screen.findByTestId("open-repository-button"),
+      ).toBeInTheDocument();
+      expect(useHomeStore.getState().repositorySelections).toEqual({});
+      await userEvent.click(screen.getByTestId("stub-chat-submit"));
+      await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
+      expect(
+        createSpy.mock.lastCall?.[0]?.metadata?.selected_repository,
+      ).toBeUndefined();
+    },
+  );
+
+  it("clears the repository selection so later visits start without one", async () => {
+    mockUseActiveBackend.mockReturnValue(cloudBackend);
+    mockConnectedGitHub();
+    const user = userEvent.setup();
+    const firstVisit = renderLauncher();
+    await user.click(screen.getByTestId("open-repository-button"));
+    await user.click(await screen.findByTestId("stub-repo-dialog-confirm"));
+
+    await user.click(screen.getByTestId("stub-clear-selection"));
+
+    expect(screen.getByTestId("open-repository-button")).toBeInTheDocument();
+    firstVisit.unmount();
+    renderLauncher();
+    expect(screen.getByTestId("open-repository-button")).toBeInTheDocument();
+  });
+
+  it("keeps remembered repositories separate per cloud backend", async () => {
+    mockUseActiveBackend.mockReturnValue(cloudBackend);
+    mockConnectedGitHub();
+    const user = userEvent.setup();
+    const firstVisit = renderLauncher();
+    await user.click(screen.getByTestId("open-repository-button"));
+    await user.click(await screen.findByTestId("stub-repo-dialog-confirm"));
+    firstVisit.unmount();
+
+    mockUseActiveBackend.mockReturnValue({
+      ...cloudBackend,
+      backend: { ...cloudBackend.backend, id: "other-cloud-id" },
+    });
+    renderLauncher();
+
+    expect(screen.getByTestId("open-repository-button")).toBeInTheDocument();
+  });
+
+  it.each([
+    {
+      description: "forwards a member's home LLM pick",
+      pick: "ops55",
+      expected: "ops55",
+    },
+    {
+      description: "drops a home LLM pick whose profile is gone",
+      pick: "Deleted",
+      expected: undefined,
+    },
+  ])("$description on a cloud launch", async ({ pick, expected }) => {
+    mockUseActiveBackend.mockReturnValue(cloudBackend);
+    const listProfilesSpy = vi
+      .spyOn(ProfilesService, "listProfiles")
+      .mockResolvedValue({
+        profiles: [
+          {
+            name: "ops55",
+            model: "anthropic/claude-opus-5-5",
+            base_url: null,
+            api_key_set: true,
+          },
+        ],
+        active_profile: null,
+      });
+    useModelStore.setState({ homeLlmProfile: pick });
+    const createSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue(makeConversationResponse());
+    renderLauncher();
+    await waitFor(() => expect(listProfilesSpy).toHaveBeenCalled());
+    // Let the resolved profile list reach the launcher before submitting.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+
+    await userEvent.click(screen.getByTestId("stub-chat-submit"));
+
+    await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
+    expect(createSpy.mock.lastCall?.[0]?.llmProfile).toBe(expected);
   });
 
   it("does not pass query to createConversation when attachments are present", async () => {
@@ -856,7 +1316,12 @@ describe("HomeChatLauncher", () => {
         }),
       );
       if (marksAutomationSetup) {
-        expect(mockMarkAutomationSetupHandoff).toHaveBeenCalledWith("conv-abc");
+        // Marked once the create mutation settles, after the call above.
+        await waitFor(() =>
+          expect(mockMarkAutomationSetupHandoff).toHaveBeenCalledWith(
+            "conv-abc",
+          ),
+        );
       } else {
         expect(mockMarkAutomationSetupHandoff).not.toHaveBeenCalled();
       }
@@ -872,5 +1337,43 @@ describe("HomeChatLauncher", () => {
     expect(
       screen.getByTestId("recommended-automations-rail"),
     ).toBeInTheDocument();
+  });
+
+  // @spec HL-002 — Dismissing Home's rail removes it and persists the choice.
+  it("renders recommended automations rail by default and hides it when dismissed", async () => {
+    const user = userEvent.setup();
+    renderLauncher();
+
+    expect(
+      screen.getByTestId("recommended-automations-rail"),
+    ).toBeInTheDocument();
+
+    const dismissBtn = screen.getByTestId(
+      "recommended-automations-rail-dismiss",
+    );
+    await user.click(dismissBtn);
+
+    expect(
+      screen.queryByTestId("recommended-automations-rail"),
+    ).not.toBeInTheDocument();
+    expect(
+      window.localStorage.getItem(
+        HOME_RECOMMENDED_AUTOMATIONS_DISMISSED_STORAGE_KEY,
+      ),
+    ).toBe("true");
+  });
+
+  // @spec HL-002 — A stored dismissal keeps the rail off Home.
+  it("does not render recommended automations rail when previously dismissed", () => {
+    window.localStorage.setItem(
+      HOME_RECOMMENDED_AUTOMATIONS_DISMISSED_STORAGE_KEY,
+      "true",
+    );
+
+    renderLauncher();
+
+    expect(
+      screen.queryByTestId("recommended-automations-rail"),
+    ).not.toBeInTheDocument();
   });
 });
