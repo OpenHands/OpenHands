@@ -10,6 +10,8 @@ interface ChatInputRowProps {
   onKeyDown: (e: React.KeyboardEvent) => void;
   onFocus?: () => void;
   onBlur?: () => void;
+  onCompositionStart?: () => void;
+  onCompositionEnd?: () => void;
 }
 
 export function ChatInputRow({
@@ -21,6 +23,8 @@ export function ChatInputRow({
   onKeyDown,
   onFocus,
   onBlur,
+  onCompositionStart,
+  onCompositionEnd,
 }: ChatInputRowProps) {
   return (
     <div className="box-border content-stretch flex flex-row items-end justify-between p-0 relative shrink-0 w-full pb-4.5 gap-2">
@@ -34,6 +38,8 @@ export function ChatInputRow({
           onKeyDown={onKeyDown}
           onFocus={onFocus}
           onBlur={onBlur}
+          onCompositionStart={onCompositionStart}
+          onCompositionEnd={onCompositionEnd}
         />
       </div>
     </div>
