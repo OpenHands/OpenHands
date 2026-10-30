@@ -1,7 +1,11 @@
 import i18n, { OPENHANDS_I18N_NAMESPACE } from "#/i18n";
 import { I18nKey } from "#/i18n/declaration";
 import { hasPluginParameters } from "#/utils/plugin-parameters";
-import { HOOK_EVENT_FIELDS, HookType } from "@openhands/typescript-client";
+import {
+  HOOK_EVENT_FIELDS,
+  HookType,
+  HttpError,
+} from "@openhands/typescript-client";
 import type {
   ACPModelInfo,
   ConversationRuntimeInfo,
@@ -49,6 +53,7 @@ import {
   buildSkillEnablementFilter,
   findInvokedCatalogSkill,
   profileSkillEnablement,
+  toSkillEnablement,
   type SkillEnablement,
 } from "#/utils/skill-enablement";
 import type { StoredOpenHandsProfile } from "./agent-profiles-service/profile-behavior";
@@ -637,6 +642,11 @@ export const RESERVED_CONVERSATION_TAG_KEYS: ReadonlySet<string> = new Set([
   "archiveworkspacepath",
   "workspace",
   "working_dir",
+  // `pinned` / `archived` are the sidebar's pin/archive flags (see
+  // `conversation-tag-flags.ts`), surfaced by the pin icon and the archived
+  // presentation rather than as generic tag chips.
+  "pinned",
+  "archived",
   LOCAL_PLANNER_PARENT_TAG_KEY,
   // The launched agent profile, which the app server stamps as tags; the
   // hovercard names the profile instead of echoing the raw id and revision.
@@ -1079,6 +1089,7 @@ export interface StartConversationOptions {
   runtimeServicesInfo?: RuntimeServicesInfo | null;
   executionRuntime?: AgentServerInfo["execution_runtime"];
   workspaceHookConfig?: HookConfig | null;
+  skillEnablement?: SkillEnablement | null;
 }
 
 /**
@@ -1125,21 +1136,21 @@ export function buildStartConversationRequest(
   ]
     .filter((suffix): suffix is string => Boolean(suffix))
     .join("\n\n");
-  // A catalog skill the opening message invokes loads for this conversation
-  // even when the profile does not select it.
-  const invokedSkillName =
-    options.agentProfileKind === "openhands"
-      ? findInvokedCatalogSkill(options.query)
-      : undefined;
-  const invokedSkill = invokedSkillName
-    ? buildBundledSkills().find((skill) => skill.name === invokedSkillName)
-    : undefined;
+  const invokedSkillName = findInvokedCatalogSkill(options.query);
+  const isEnabled = buildSkillEnablementFilter(
+    options.skillEnablement ?? toSkillEnablement(options.settings),
+  );
+  const launchSkills = buildBundledSkills().filter(
+    (skill) =>
+      skill.name === invokedSkillName ||
+      (options.agentProfileKind === "acp" && isEnabled(skill.name)),
+  );
   const launchAdditions = {
     ...(launchSuffix ? { system_message_suffix_append: launchSuffix } : {}),
     ...(options.llmProfileOverride
       ? { llm_profile_ref: options.llmProfileOverride }
       : {}),
-    ...(invokedSkill ? { skills: [invokedSkill] } : {}),
+    ...(launchSkills.length > 0 ? { skills: launchSkills } : {}),
   };
 
   const sourceConversationOptions = options.encryptedConversationSettings
@@ -1437,6 +1448,24 @@ async function resolveAgentProfileLlmSettings(
   }
 }
 
+async function resolveDefaultProfileSkillEnablement(): Promise<SkillEnablement | null> {
+  try {
+    const {
+      default: AgentProfilesService,
+      WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME,
+    } = await import("./agent-profiles-service/agent-profiles-service.api");
+    const { profile } = await AgentProfilesService.getProfile(
+      WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME,
+    );
+    return profile.agent_kind === "openhands"
+      ? profileSkillEnablement(profile as StoredOpenHandsProfile)
+      : null;
+  } catch (error) {
+    if (error instanceof HttpError && error.status === 404) return null;
+    throw error;
+  }
+}
+
 /**
  * The skill selection of the parent's agent profile, or of the active one when
  * the parent recorded none. `null` — caller falls back to the global lists —
@@ -1573,18 +1602,27 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
     import("./hooks-service"),
   ]);
 
-  const [settingsResult, customSecrets, serverInfo, workspaceHookConfig] =
-    await Promise.all([
-      SettingsService.getSettingsForConversation(),
-      SecretsService.getSecrets(),
-      fetchBackendServerInfo(),
-      options.hooksProjectDir === null
-        ? Promise.resolve(null)
-        : HooksService.loadWorkspaceHooks(options.hooksProjectDir),
-    ]);
+  const [
+    settingsResult,
+    customSecrets,
+    serverInfo,
+    workspaceHookConfig,
+    skillEnablement,
+  ] = await Promise.all([
+    SettingsService.getSettingsForConversation(),
+    SecretsService.getSecrets(),
+    fetchBackendServerInfo(),
+    options.hooksProjectDir === null
+      ? Promise.resolve(null)
+      : HooksService.loadWorkspaceHooks(options.hooksProjectDir),
+    options.agentProfileKind === "acp"
+      ? resolveDefaultProfileSkillEnablement()
+      : Promise.resolve(null),
+  ]);
 
   return buildStartConversationRequest({
     ...options,
+    skillEnablement,
     encryptedConversationSettings: settingsResult.conversationSettings,
     customSecrets,
     runtimeServicesInfo: parseRuntimeServicesInfo(

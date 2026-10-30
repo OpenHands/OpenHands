@@ -103,7 +103,7 @@ export function ConversationCardContextMenu({
       className={
         isPortaled
           ? "mt-0 min-w-50 w-max max-w-[min(280px,100vw-16px)]"
-          : "z-[200] mt-0"
+          : "z-200 mt-0"
       }
     >
       {generateSection(
@@ -161,7 +161,7 @@ export function ConversationCardContextMenu({
                   <SkillsIcon
                     width={16}
                     height={16}
-                    className="stroke-[1.75]"
+                    className="context-menu-icon-stroke"
                     aria-hidden
                   />
                 }

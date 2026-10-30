@@ -185,7 +185,7 @@ export function ConversationTabsContextMenu({
       position={isPortaled ? "none" : "bottom"}
       alignment={isPortaled ? "none" : "left"}
       spacing={isPortaled ? "none" : "default"}
-      className={cn("z-[9999] w-fit", isPortaled ? "mt-0" : "mt-2")}
+      className={cn("z-9999 w-fit", isPortaled ? "mt-0" : "mt-2")}
     >
       {tabConfig.map(({ tab, icon: Icon, i18nKey }) => {
         const pinned = !state.unpinnedTabs.includes(tab);
