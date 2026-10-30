@@ -76,3 +76,36 @@ def test_one_token_conversation_is_not_mistaken_for_validation(url):
 
     assert "tool_calls" in complete(url, messages, max_tokens=1)
     assert recorded(url)[0]["messages"] == messages
+
+
+@pytest.mark.parametrize("as_parts", [False, True], ids=["string", "parts"])
+def test_title_generation_leaves_the_trajectory_intact(url, as_parts):
+    messages = [
+        {"role": "system", "content": "You generate concise conversation titles."},
+        {
+            "role": "user",
+            "content": text(
+                "Generate a title (maximum 50 characters) for this conversation.", as_parts
+            ),
+        },
+    ]
+
+    reply = complete(url, messages)
+    assert recorded(url) == []
+    assert reply["content"] == server.MOCK_TITLE
+    conversation = [{"role": "user", "content": "Run the scripted command."}]
+    tool_call = complete(url, conversation)["tool_calls"][0]["function"]
+    assert server.BASH_TOKEN in tool_call["arguments"]
+    assert complete(url, conversation)["content"] == server.REPLY_TOKEN
+
+
+def test_title_prefix_in_a_conversation_does_not_consume_a_canned_reply(url):
+    messages = [
+        {"role": "system", "content": "You are an assistant."},
+        {"role": "user", "content": "Generate a title (maximum 50 characters)."},
+        {"role": "assistant", "content": "What is the topic?"},
+        {"role": "user", "content": "Run the scripted command first."},
+    ]
+
+    assert "tool_calls" in complete(url, messages)
+    assert recorded(url)[0]["messages"] == messages
