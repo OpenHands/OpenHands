@@ -16,6 +16,9 @@ export const useCondenseConversation = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
+    // The compact-context action toasts the failure itself; skip the global
+    // toast so the same error isn't shown twice.
+    meta: { disableToast: true },
     mutationFn: (variables: CondenseConversationVariables) =>
       AgentServerConversationService.condenseConversation(
         variables.conversationId,
