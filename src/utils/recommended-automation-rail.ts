@@ -3,6 +3,7 @@ import {
   type RecommendedAutomation,
 } from "@openhands/extensions/automations";
 import { getFeaturedAutomationIds } from "#/manifests/automation-interface";
+import { rankByAvailability } from "#/utils/automation-catalog";
 import { SETUP_REGISTRY } from "#/manifests/manifest-sources";
 import type { Automation } from "#/types/automation";
 
@@ -73,11 +74,13 @@ export interface RecommendedRailGroups {
  * Home / dashboard rail: remaining proven workflows, then other useful
  * automations that open in a new conversation. Already-created automations
  * are dropped from both groups, as are the entries the active backend's
- * deployment hides (`hiddenAutomationIds`).
+ * deployment hides (`hiddenAutomationIds`). Entries the instance does not
+ * appear to support (`unlikelyAutomations`) come last in each group.
  */
 export function getRecommendedRailGroups(
   installed: readonly Pick<Automation, "name">[],
   hiddenAutomationIds?: ReadonlySet<string>,
+  unlikelyAutomations?: ReadonlyMap<string, readonly string[]>,
 ): RecommendedRailGroups {
   // Every catalog entry is offerable: one that declares no integration needs
   // nothing connected, and one that names an integration this host cannot
@@ -89,10 +92,16 @@ export function getRecommendedRailGroups(
   );
 
   return {
-    proven: available.filter(isProvenAutomation),
-    conversation: available.filter(
-      (entry) =>
-        !isProvenAutomation(entry) && isConversationLaunchAutomation(entry),
+    proven: rankByAvailability(
+      available.filter(isProvenAutomation),
+      unlikelyAutomations,
+    ),
+    conversation: rankByAvailability(
+      available.filter(
+        (entry) =>
+          !isProvenAutomation(entry) && isConversationLaunchAutomation(entry),
+      ),
+      unlikelyAutomations,
     ),
   };
 }

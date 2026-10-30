@@ -5,7 +5,8 @@ import type { RecommendedAutomation } from "@openhands/extensions/automations";
 import {
   getAutomationIcon,
   getAutomationLaunchPrompt,
-  getHiddenAutomationIds,
+  getAutomationAvailability,
+  rankByAvailability,
   resolveAutomationImpactStatement,
 } from "#/utils/automation-catalog";
 import type { Automation } from "#/types/automation";
@@ -254,8 +255,8 @@ const catalog = [
   dataCenterIssueToPr,
 ];
 
-describe("getHiddenAutomationIds", () => {
-  it("shows only Data Center templates and what its providers serve on an Enterprise instance on Data Center", () => {
+describe("getAutomationAvailability", () => {
+  it("ranks what an Enterprise instance on Data Center does not report last, without hiding it", () => {
     // Arrange
     const instance = {
       deploymentMode: "self_hosted",
@@ -263,15 +264,18 @@ describe("getHiddenAutomationIds", () => {
     };
 
     // Act
-    const hidden = getHiddenAutomationIds(instance, catalog);
+    const { hidden, unlikely } = getAutomationAvailability(instance, catalog);
 
     // Assert
-    expect(
-      [...hidden].filter((id) => catalog.some((t) => t.id === id)),
-    ).toEqual(["github-reviewer", "jira-to-bitbucket", "jira-to-github"]);
+    expect(catalog.filter((t) => hidden.has(t.id))).toEqual([]);
+    expect(Object.fromEntries(unlikely)).toEqual({
+      "github-reviewer": ["github"],
+      "jira-to-bitbucket": ["bitbucket", "jira"],
+      "jira-to-github": ["github", "jira"],
+    });
   });
 
-  it("hides Jira Cloud templates on an Enterprise instance using Jira Data Center alongside a git provider they need", () => {
+  it("names Jira Cloud on an Enterprise instance using Jira Data Center alongside a git provider the template needs", () => {
     // Arrange
     const instance = {
       deploymentMode: "self_hosted",
@@ -279,14 +283,14 @@ describe("getHiddenAutomationIds", () => {
     };
 
     // Act
-    const hidden = getHiddenAutomationIds(instance, catalog);
+    const { unlikely } = getAutomationAvailability(instance, catalog);
 
     // Assert
-    expect(hidden.has("jira-to-github")).toBe(true);
-    expect(hidden.has("github-reviewer")).toBe(false);
+    expect(unlikely.get("jira-to-github")).toEqual(["jira"]);
+    expect(unlikely.has("github-reviewer")).toBe(false);
   });
 
-  it("keeps Jira Cloud templates on an Enterprise instance that also enables Jira Cloud", () => {
+  it("does not rank Jira Cloud templates down on an Enterprise instance that also enables Jira Cloud", () => {
     // Arrange
     const instance = {
       deploymentMode: "self_hosted",
@@ -294,13 +298,13 @@ describe("getHiddenAutomationIds", () => {
     };
 
     // Act
-    const hidden = getHiddenAutomationIds(instance, catalog);
+    const { unlikely } = getAutomationAvailability(instance, catalog);
 
     // Assert
-    expect(hidden.has("jira-to-github")).toBe(false);
+    expect(unlikely.has("jira-to-github")).toBe(false);
   });
 
-  it("never lets an integration a template can start without hide it", () => {
+  it("never lets an integration a template can start without count against it", () => {
     // Arrange
     const instance = {
       deploymentMode: "self_hosted",
@@ -308,14 +312,14 @@ describe("getHiddenAutomationIds", () => {
     };
 
     // Act
-    const hidden = getHiddenAutomationIds(instance, catalog);
+    const { unlikely } = getAutomationAvailability(instance, catalog);
 
     // Assert
-    expect(hidden.has("optional-gitlab")).toBe(false);
-    expect(hidden.has("news-digest")).toBe(false);
+    expect(unlikely.has("optional-gitlab")).toBe(false);
+    expect(unlikely.has("news-digest")).toBe(false);
   });
 
-  it("shows a Data Center template only where every built-in integration it needs is enabled", () => {
+  it("offers a Data Center template on an Enterprise instance missing part of it, ranked last", () => {
     // Arrange
     const instance = {
       deploymentMode: "self_hosted",
@@ -323,14 +327,15 @@ describe("getHiddenAutomationIds", () => {
     };
 
     // Act
-    const hidden = getHiddenAutomationIds(instance, catalog);
+    const { hidden, unlikely } = getAutomationAvailability(instance, catalog);
 
     // Assert
-    expect(hidden.has("bitbucket-dc-reviewer")).toBe(false);
-    expect(hidden.has("jira-dc-to-bitbucket-dc")).toBe(true);
+    expect(hidden.has("jira-dc-to-bitbucket-dc")).toBe(false);
+    expect(unlikely.get("jira-dc-to-bitbucket-dc")).toEqual(["jira_dc"]);
+    expect(unlikely.has("bitbucket-dc-reviewer")).toBe(false);
   });
 
-  it("leaves OpenHands Cloud's catalog alone apart from Data Center templates", () => {
+  it("leaves OpenHands Cloud's catalog alone apart from hiding Data Center templates", () => {
     // Arrange
     const instance = {
       deploymentMode: "cloud",
@@ -338,13 +343,14 @@ describe("getHiddenAutomationIds", () => {
     };
 
     // Act
-    const hidden = getHiddenAutomationIds(instance, catalog);
+    const { hidden, unlikely } = getAutomationAvailability(instance, catalog);
 
     // Assert
     expect([...hidden]).toEqual([
       "bitbucket-dc-reviewer",
       "jira-dc-to-bitbucket-dc",
     ]);
+    expect(unlikely.size).toBe(0);
   });
 
   it("hides only Data Center templates while the instance's integrations are unknown", () => {
@@ -352,27 +358,44 @@ describe("getHiddenAutomationIds", () => {
     const instance = { deploymentMode: null, builtInIntegrations: null };
 
     // Act
-    const hidden = getHiddenAutomationIds(instance, catalog);
+    const { hidden, unlikely } = getAutomationAvailability(instance, catalog);
 
     // Assert
     expect([...hidden]).toEqual([
       "bitbucket-dc-reviewer",
       "jira-dc-to-bitbucket-dc",
     ]);
+    expect(unlikely.size).toBe(0);
   });
 
-  it("keeps hiding what an Enterprise instance never offers before its integrations are known", () => {
+  it("keeps hiding what an Enterprise instance never offers", () => {
     // Arrange
     const instance = {
       deploymentMode: "self_hosted",
-      builtInIntegrations: null,
+      builtInIntegrations: new Set(["github"]),
     };
 
     // Act
-    const hidden = getHiddenAutomationIds(instance, catalog);
+    const { hidden } = getAutomationAvailability(instance, catalog);
 
     // Assert
     expect(hidden.has("custom-automation")).toBe(true);
-    expect(hidden.has("jira-to-bitbucket")).toBe(false);
+  });
+});
+
+describe("rankByAvailability", () => {
+  it("lists the templates an instance looks ready for first, each group in its existing order", () => {
+    // Arrange
+    const automations = [{ id: "a" }, { id: "b" }, { id: "c" }, { id: "d" }];
+    const unlikely = new Map([
+      ["a", ["github"]],
+      ["c", ["jira"]],
+    ]);
+
+    // Act
+    const ranked = rankByAvailability(automations, unlikely);
+
+    // Assert
+    expect(ranked.map(({ id }) => id)).toEqual(["b", "d", "a", "c"]);
   });
 });

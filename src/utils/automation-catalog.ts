@@ -177,65 +177,95 @@ export function getRequiredBuiltInIntegrations(
 }
 
 /**
- * Whether an OpenHands Enterprise instance can serve a template, judged by
- * the integrations it builds in. Its repositories are reachable only through
- * the git providers it configures, and an instance on Jira Data Center without
- * Jira Cloud has no use for a template that talks to Jira Cloud.
+ * The built-in integrations an OpenHands Enterprise instance does not report
+ * enabling but the template seems to need: a git provider the instance does
+ * not configure, or Jira Cloud on an instance that uses Jira Data Center
+ * instead (reported as `jira`). Empty when the instance looks ready for it.
  */
-function isUsableOnSelfHostedInstance(
+function getMissingIntegrations(
   automation: RecommendedAutomation,
   builtIns: ReadonlySet<string>,
-): boolean {
-  // An integration the template can start without never makes it unusable.
+): string[] {
+  const missing = getRequiredBuiltInIntegrations(automation).filter(
+    (id) => !builtIns.has(id),
+  );
+  // An integration the template can start without never counts against it.
   const required = getRequiredIntegrationIds(automation);
   const ids = getTemplateIntegrationIds(automation).filter(
     (id) =>
       required.includes(id) || !getIntegrationIds(automation).includes(id),
   );
-  if (
-    ids.some((id) => GIT_PROVIDER_INTEGRATION_IDS.has(id) && !builtIns.has(id))
-  ) {
-    return false;
+  for (const id of ids) {
+    if (GIT_PROVIDER_INTEGRATION_IDS.has(id) && !builtIns.has(id)) {
+      missing.push(id);
+    }
   }
   const usesJiraDcOnly = builtIns.has("jira_dc") && !builtIns.has("jira");
-  return !(
-    usesJiraDcOnly && ids.some((id) => JIRA_CLOUD_INTEGRATION_IDS.has(id))
-  );
+  if (usesJiraDcOnly && ids.some((id) => JIRA_CLOUD_INTEGRATION_IDS.has(id))) {
+    missing.push("jira");
+  }
+  return [...new Set(missing)];
+}
+
+/** How the active backend should offer the catalog. */
+export interface AutomationAvailability {
+  /** Entries this backend never offers. */
+  hidden: ReadonlySet<string>;
+  /**
+   * Entries an Enterprise instance does not appear to support, with the
+   * built-in integrations each seems to lack, by provider name. They are still
+   * offered, after the ones the instance looks ready for, because the
+   * instance's report of its integrations is a hint rather than a guarantee.
+   */
+  unlikely: ReadonlyMap<string, readonly string[]>;
 }
 
 /**
- * The catalog entries to hide on the active backend.
+ * Which catalog entries to hide and which to rank last on the active backend.
  *
- * An entry that needs built-in integrations is offered only where the
- * instance is known to enable all of them, so a local backend never shows one.
- * A self-hosted (Enterprise) instance also hides the entries it does not
- * offer at all, and, once its built-in integrations are known, the ones that
- * need a git provider it does not configure or Jira Cloud it does not use.
+ * A self-hosted (Enterprise) instance hides the entries it does not offer at
+ * all. An entry that needs built-in integrations is hidden everywhere but an
+ * Enterprise instance whose integrations are known, since no other backend has
+ * them. Once an Enterprise instance's integrations are known, an entry that
+ * seems to need one it does not report is ranked last rather than hidden.
  */
-export function getHiddenAutomationIds(
+export function getAutomationAvailability(
   { deploymentMode, builtInIntegrations }: InstanceIntegrations,
   catalog: readonly RecommendedAutomation[] = AUTOMATION_CATALOG,
-): ReadonlySet<string> {
+): AutomationAvailability {
   const isSelfHosted = deploymentMode === "self_hosted";
+  const knownSelfHosted = isSelfHosted ? builtInIntegrations : null;
   const hidden = new Set(
     isSelfHosted ? SELF_HOSTED_HIDDEN_AUTOMATION_IDS : undefined,
   );
+  const unlikely = new Map<string, readonly string[]>();
   for (const automation of catalog) {
-    const required = getRequiredBuiltInIntegrations(automation);
-    if (
-      required.length > 0 &&
-      !required.every((id) => builtInIntegrations?.has(id))
-    ) {
-      hidden.add(automation.id);
-    } else if (
-      isSelfHosted &&
-      builtInIntegrations &&
-      !isUsableOnSelfHostedInstance(automation, builtInIntegrations)
-    ) {
-      hidden.add(automation.id);
+    if (hidden.has(automation.id)) continue;
+    if (!knownSelfHosted) {
+      if (getRequiredBuiltInIntegrations(automation).length > 0) {
+        hidden.add(automation.id);
+      }
+      continue;
     }
+    const missing = getMissingIntegrations(automation, knownSelfHosted);
+    if (missing.length > 0) unlikely.set(automation.id, missing);
   }
-  return hidden;
+  return { hidden, unlikely };
+}
+
+/**
+ * The entries in their offered order: the ones the instance looks ready for,
+ * then the ones it does not appear to support, each in their existing order.
+ */
+export function rankByAvailability<T extends { id: string }>(
+  automations: readonly T[],
+  unlikely: ReadonlyMap<string, readonly string[]> | undefined,
+): T[] {
+  if (!unlikely?.size) return [...automations];
+  return [
+    ...automations.filter((automation) => !unlikely.has(automation.id)),
+    ...automations.filter((automation) => unlikely.has(automation.id)),
+  ];
 }
 
 /**

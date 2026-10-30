@@ -38,6 +38,8 @@ interface RecommendedAutomationsRailProps {
   installedAutomations: readonly Pick<Automation, "name">[];
   /** Catalog entries the active backend's deployment does not offer. */
   hiddenAutomationIds?: ReadonlySet<string>;
+  /** Entries the instance does not appear to support; listed last. */
+  unlikelyAutomations?: ReadonlyMap<string, readonly string[]>;
   onSelect: (automation: RecommendedAutomation) => void;
   className?: string;
   dismissible?: boolean;
@@ -109,6 +111,7 @@ function RailIntegrationIcons({
 export function RecommendedAutomationsRail({
   installedAutomations,
   hiddenAutomationIds,
+  unlikelyAutomations,
   onSelect,
   className,
   dismissible = false,
@@ -116,7 +119,11 @@ export function RecommendedAutomationsRail({
 }: RecommendedAutomationsRailProps) {
   const { t } = useTranslation("openhands");
   const items = flattenRecommendedRailGroups(
-    getRecommendedRailGroups(installedAutomations, hiddenAutomationIds),
+    getRecommendedRailGroups(
+      installedAutomations,
+      hiddenAutomationIds,
+      unlikelyAutomations,
+    ),
   );
   const scrollRef = useRef<HTMLDivElement>(null);
   const { handleMouseDown, handleClickCapture, handleDragStart } =

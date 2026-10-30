@@ -57,6 +57,18 @@ describe("recommended automation rail", () => {
     ]);
   });
 
+  it("lists the automations the instance does not appear to support last in each group", () => {
+    // Arrange
+    const unlikely = new Map([[prReviewer.id, ["github"]]]);
+
+    // Act
+    const groups = getRecommendedRailGroups([], undefined, unlikely);
+
+    // Assert
+    expect(groups.proven).toContain(prReviewer);
+    expect(groups.proven.at(-1)).toBe(prReviewer);
+  });
+
   it("appends other useful automations that open in a new conversation", () => {
     const groups = getRecommendedRailGroups([]);
     const conversationIds = groups.conversation.map((entry) => entry.id);

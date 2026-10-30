@@ -31,6 +31,7 @@ import {
   getAutomationLaunchPrompt,
   getIntegrationIds,
   getTemplateIntegrationIds,
+  rankByAvailability,
   getTemplateTriggerKinds,
   type TemplateTriggerKind,
 } from "#/utils/automation-catalog";
@@ -61,6 +62,8 @@ interface RecommendedAutomationsSectionProps {
   installedServers: MCPServerConfig[];
   /** Catalog entries the active backend's deployment does not offer. */
   hiddenAutomationIds?: ReadonlySet<string>;
+  /** Entries the instance does not appear to support; listed last. */
+  unlikelyAutomations?: ReadonlyMap<string, readonly string[]>;
   /** Resolves an integration's native (cloud) connection; none by default. */
   getNativeIntegration?: GetNativeIntegration;
   query?: string;
@@ -391,6 +394,7 @@ export function RecommendedAutomationsSection({
   backendKind: _backendKind,
   installedServers,
   hiddenAutomationIds,
+  unlikelyAutomations,
   getNativeIntegration = () => null,
   query = "",
   onClearQuery,
@@ -452,9 +456,13 @@ export function RecommendedAutomationsSection({
     );
   }
 
-  const provenAutomations = visibleAutomations.filter(isProvenAutomation);
-  const betaAutomations = visibleAutomations.filter(
-    (automation) => !isProvenAutomation(automation),
+  const provenAutomations = rankByAvailability(
+    visibleAutomations.filter(isProvenAutomation),
+    unlikelyAutomations,
+  );
+  const betaAutomations = rankByAvailability(
+    visibleAutomations.filter((automation) => !isProvenAutomation(automation)),
+    unlikelyAutomations,
   );
 
   return (
