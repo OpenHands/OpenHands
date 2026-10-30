@@ -75,7 +75,6 @@ export function AgentStatus({
   const isLoading = shouldShownAgentLoading || isPausing;
 
   const shouldShownAgentError =
-    curAgentState === AgentState.ERROR ||
     curAgentState === AgentState.RATE_LIMITED ||
     webSocketStatus === "CLOSED" ||
     taskStatus === "ERROR";
@@ -83,10 +82,20 @@ export function AgentStatus({
   const shouldShownAgentStop =
     !shouldShownAgentError && curAgentState === AgentState.RUNNING;
 
+  // Mid-turn ConversationErrorEvent (curAgentState === ERROR with a healthy
+  // websocket and task) is a resumable state — the agent ran out of retries
+  // but the turn is still pending. Surface the play button so the user can
+  // retry without re-sending the message (which would duplicate it and grow
+  // the context, making a deterministic failure more likely next time,
+  // per #18980).
+  //
+  // Other error-adjacent states (RATE_LIMITED, websocket CLOSED, task ERROR)
+  // still show a static error icon — they have no one-click recovery path.
   const shouldShownAgentResume =
     !shouldShownAgentError &&
     (curAgentState === AgentState.STOPPED ||
-      curAgentState === AgentState.PAUSED);
+      curAgentState === AgentState.PAUSED ||
+      curAgentState === AgentState.ERROR);
   const isInteractive =
     !isLoading && (shouldShownAgentStop || shouldShownAgentResume);
   const isDoneStatus =
