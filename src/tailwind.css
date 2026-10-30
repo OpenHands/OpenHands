@@ -712,6 +712,12 @@ code .token {
   transition-property: height;
 }
 
+/* Dragged sidebar width, never more than 40% of the window so the main view stays usable. */
+@utility sidebar-expanded-width {
+  width: min(var(--sidebar-width), 40vw);
+  min-width: min(var(--sidebar-width), 40vw);
+}
+
 /* Keep content fixed while the desktop Overview drawer opens or closes. */
 @utility conversation-overview-drawer {
   width: var(--conversation-overview-drawer-width);
