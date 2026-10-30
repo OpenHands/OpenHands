@@ -15,6 +15,10 @@ import {
 } from "#/api/cloud/organization-service.api";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
 import {
+  fetchCloudIntegrationsConfig,
+  type CloudIntegrationsConfig,
+} from "#/api/cloud/settings-service.api";
+import {
   __resetActiveStoreForTests,
   setActiveSelection,
   setRegisteredBackends,
@@ -68,6 +72,27 @@ vi.mock("#/api/cloud/organization-service.api", async (importOriginal) => ({
   getCloudOrganizationMember: vi.fn(),
   listCloudServiceAccounts: vi.fn(),
 }));
+
+// Mock only the web-client config read, which gates the service account owner
+// UI on the instance's `enable_service_accounts` flag.
+vi.mock("#/api/cloud/settings-service.api", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("#/api/cloud/settings-service.api")
+  >()),
+  fetchCloudIntegrationsConfig: vi.fn(),
+}));
+
+function mockServiceAccountsEnabled(isServiceAccountsEnabled: boolean) {
+  const config: CloudIntegrationsConfig = {
+    providersConfigured: [],
+    isJiraEnabled: false,
+    isLinearEnabled: false,
+    isSlackEnabled: false,
+    deploymentMode: null,
+    isServiceAccountsEnabled,
+  };
+  vi.mocked(fetchCloudIntegrationsConfig).mockResolvedValue(config);
+}
 
 const detailMocks = vi.hoisted(() => ({
   createConversationMutate: vi.fn(),
@@ -181,6 +206,8 @@ beforeEach(() => {
     profiles: [],
     active_profile: null,
   });
+  vi.mocked(fetchCloudIntegrationsConfig).mockReset();
+  mockServiceAccountsEnabled(false);
   detailMocks.createConversationMutate.mockReset();
   detailMocks.navigate.mockReset();
   setRegisteredBackends([localBackend, cloudBackend]);
@@ -485,6 +512,7 @@ describe("AutomationDetail — runs as a service account", () => {
       triggers: {},
       features: ["serviceAccountRunAs"],
     });
+    mockServiceAccountsEnabled(true);
     vi.mocked(AutomationService.getAutomation).mockResolvedValue(
       serviceAutomation,
     );
@@ -607,6 +635,21 @@ describe("AutomationDetail — runs as a service account", () => {
       screen.getAllByText(I18nKey.AUTOMATIONS$SERVICE_ACCOUNT_LABEL).length,
     ).toBeGreaterThan(0);
     expect(container.innerHTML).not.toContain(saId);
+    expect(listCloudServiceAccounts).not.toHaveBeenCalled();
+  });
+
+  it("does not list service accounts when the instance disables service accounts", async () => {
+    // Arrange
+    mockServiceAccountsEnabled(false);
+    renderDetail();
+    await screen.findByText(automation.name);
+
+    // Act
+    await waitFor(() =>
+      expect(fetchCloudIntegrationsConfig).toHaveBeenCalled(),
+    );
+
+    // Assert
     expect(listCloudServiceAccounts).not.toHaveBeenCalled();
   });
 });
