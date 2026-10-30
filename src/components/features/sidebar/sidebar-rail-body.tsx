@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import {
   ChevronLeft,
   ChevronRight,
+  Network,
   Plus,
   Server,
   Settings,
@@ -21,6 +22,7 @@ import {
 } from "#/hooks/use-pinned-home-route";
 import { SidebarCollapsedIconSlot } from "./sidebar-collapsed-icon-slot";
 import { SidebarNavLink } from "./sidebar-nav-link";
+import { ORGANIZATION_PATH } from "#/constants/agent-organization";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
 import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
@@ -249,6 +251,13 @@ export function SidebarRailBody({
               <path d="M12 13.5V8" />
             </svg>
           }
+        />
+        <SidebarNavLink
+          to={ORGANIZATION_PATH}
+          label={t(I18nKey.NAV$ORGANIZATION)}
+          testId="sidebar-organization-link"
+          collapsed={collapsed}
+          icon={<Network width={ICON_SIZE} height={ICON_SIZE} />}
         />
         {/* The interface manifest owns this entry's label, so an absent
             manifest leaves the rail without it rather than with host copy. */}
