@@ -1,3 +1,4 @@
+import { Server } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import type { Automation } from "#/types/automation";
@@ -13,6 +14,12 @@ import { ActiveStatusBadge } from "./active-status-badge";
 interface DetailHeaderProps {
   automation: Automation;
   onToggle: () => void;
+  /**
+   * When provided, the kebab menu offers flipping `keep_alive`. Omit it when
+   * the setting cannot be changed (no permission, draft, or forced on).
+   */
+  onToggleKeepAlive?: () => void;
+  isKeepAlivePending?: boolean;
   /** When provided (and the user can manage), the kebab menu shows an Edit entry. */
   onEdit?: () => void;
   onDelete: () => void;
@@ -33,6 +40,8 @@ interface DetailHeaderProps {
 export function DetailHeader({
   automation,
   onToggle,
+  onToggleKeepAlive,
+  isKeepAlivePending = false,
   onEdit,
   onDelete,
   onExport,
@@ -74,6 +83,19 @@ export function DetailHeader({
               : t(I18nKey.AUTOMATIONS$TURN_ON),
             icon: <PowerIcon className="size-4" />,
             onClick: onToggle,
+          },
+        ]
+      : []),
+    ...(onToggleKeepAlive
+      ? [
+          {
+            label:
+              automation.keep_alive === true
+                ? t(I18nKey.AUTOMATIONS$STOP_KEEPING_SANDBOX_ALIVE)
+                : t(I18nKey.AUTOMATIONS$KEEP_SANDBOX_ALIVE),
+            icon: <Server className="size-4" aria-hidden />,
+            onClick: onToggleKeepAlive,
+            disabled: isKeepAlivePending,
           },
         ]
       : []),

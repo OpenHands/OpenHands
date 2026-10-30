@@ -31,6 +31,7 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
     toggleAutomation: vi.fn(),
     deleteAutomation: vi.fn(),
     dispatchAutomation: vi.fn(),
+    updateAutomation: vi.fn(),
     fetchTarballBytes: vi.fn(),
     checkHealth: vi.fn(),
   },
@@ -40,6 +41,13 @@ vi.mock("#/api/profiles-service/profiles-service.api", () => ({
   default: {
     listProfiles: vi.fn(),
   },
+}));
+
+// Spy on the success toast; the test tree does not render a toaster.
+const displaySuccessToast = vi.hoisted(() => vi.fn());
+vi.mock("#/utils/custom-toast-handlers", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#/utils/custom-toast-handlers")>()),
+  displaySuccessToast,
 }));
 
 // Mock permission hooks so cloud-backend tests don't need a real /me endpoint.
@@ -509,30 +517,93 @@ describe("AutomationDetail — script automations", () => {
 
 describe("AutomationDetail — keep sandbox alive", () => {
   it.each([
-    { state: "ACTIVE", editable: true },
-    { state: "DRAFT", editable: false },
+    {
+      saved: false,
+      label: I18nKey.AUTOMATIONS$KEEP_SANDBOX_ALIVE,
+      next: true,
+      toast: I18nKey.AUTOMATIONS$KEEP_SANDBOX_ALIVE_ON_SUCCESS,
+    },
+    {
+      saved: true,
+      label: I18nKey.AUTOMATIONS$STOP_KEEPING_SANDBOX_ALIVE,
+      next: false,
+      toast: I18nKey.AUTOMATIONS$KEEP_SANDBOX_ALIVE_OFF_SUCCESS,
+    },
   ])(
-    "renders the keep-alive switch for a $state automation, editable: $editable",
-    async ({ state, editable }) => {
+    "saves keep_alive $next from the actions menu and confirms with a toast",
+    async ({ saved, label, next, toast }) => {
       // Arrange
       vi.mocked(AutomationService.getAutomation).mockResolvedValue({
         ...automation,
-        state,
-        keep_alive: true,
+        keep_alive: saved,
       });
-
+      vi.mocked(AutomationService.updateAutomation).mockResolvedValue({
+        ...automation,
+        keep_alive: next,
+      });
+      displaySuccessToast.mockClear();
       const user = userEvent.setup();
       renderDetail();
+      await user.click(
+        await screen.findByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU),
+      );
 
       // Act
-      await user.click(await screen.findByTestId("automation-advanced-toggle"));
+      await user.click(screen.getByRole("button", { name: label }));
 
       // Assert
-      const keepAliveSwitch = screen.getByRole("switch", {
-        name: I18nKey.AUTOMATIONS$DETAIL$KEEP_ALIVE,
-      });
-      expect(keepAliveSwitch).toHaveAttribute("aria-checked", "true");
-      expect(keepAliveSwitch.hasAttribute("disabled")).toBe(!editable);
+      expect(AutomationService.updateAutomation).toHaveBeenCalledWith(
+        automation.id,
+        { keep_alive: next },
+      );
+      await waitFor(() =>
+        expect(displaySuccessToast).toHaveBeenCalledWith(toast),
+      );
     },
   );
+
+  it.each([
+    { reason: "a draft", overrides: { state: "DRAFT", keep_alive: false } },
+    {
+      reason: "a continue_conversation trigger",
+      overrides: {
+        keep_alive: true,
+        trigger: {
+          type: "event" as const,
+          source: "github",
+          on: "issue_comment.created",
+          destination: "continue_conversation" as const,
+        },
+      },
+    },
+    { reason: "a service without the field", overrides: {} },
+  ])("leaves the item out of the menu for $reason", async ({ overrides }) => {
+    // Arrange
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+      ...automation,
+      ...overrides,
+    });
+    const user = userEvent.setup();
+    renderDetail();
+
+    // Act
+    await user.click(
+      await screen.findByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU),
+    );
+
+    // Assert
+    expect(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$DELETE }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", {
+        name: I18nKey.AUTOMATIONS$KEEP_SANDBOX_ALIVE,
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", {
+        name: I18nKey.AUTOMATIONS$STOP_KEEPING_SANDBOX_ALIVE,
+      }),
+    ).not.toBeInTheDocument();
+  });
 });

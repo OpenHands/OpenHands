@@ -13,6 +13,7 @@ import {
   useToggleAutomation,
   useDeleteAutomation,
   useDispatchAutomation,
+  useUpdateAutomationKeepAlive,
 } from "#/hooks/query/use-automations";
 import { useAutomationHealth } from "#/hooks/query/use-automation-health";
 import { useCloudOrgMember } from "#/hooks/query/use-cloud-org-member";
@@ -30,7 +31,6 @@ import { PromptSection } from "#/components/features/automations/detail/prompt-s
 import { ScriptSection } from "#/components/features/automations/detail/script-section";
 import { ConfigurationSection } from "#/components/features/automations/detail/configuration-section";
 import { PluginsSection } from "#/components/features/automations/detail/plugins-section";
-import { KeepAliveSection } from "#/components/features/automations/detail/keep-alive-section";
 import { ActivitySection } from "#/components/features/automations/detail/activity-section";
 import { ActivityLogSection } from "#/components/features/automations/detail/activity-log-section";
 import { DetailSkeleton } from "#/components/features/automations/detail/detail-skeleton";
@@ -46,7 +46,7 @@ import {
 } from "#/hooks/use-automation-permissions";
 import AutomationService from "#/api/automation-service/automation-service.api";
 import type { Automation } from "#/types/automation";
-import { isDraftAutomation } from "#/utils/automation-state";
+import { isDraftAutomation, isKeepAliveForced } from "#/utils/automation-state";
 import {
   getAutomationExportFilename,
   serializeAutomation,
@@ -123,6 +123,7 @@ export default function AutomationDetail() {
   const toggleMutation = useToggleAutomation();
   const deleteMutation = useDeleteAutomation();
   const dispatchMutation = useDispatchAutomation();
+  const keepAliveMutation = useUpdateAutomationKeepAlive();
   // Permission hooks must run before any early return (rules-of-hooks). The
   // owner check is a no-op while the automation hasn't loaded yet.
   const { canManage: hasManagePermission } = useAutomationPermissions();
@@ -217,6 +218,24 @@ export default function AutomationDetail() {
     });
   };
 
+  const handleToggleKeepAlive = () => {
+    const keepAlive = automation.keep_alive !== true;
+    keepAliveMutation.mutate(
+      { id: automation.id, keepAlive },
+      {
+        onSuccess: () => {
+          displaySuccessToast(
+            t(
+              keepAlive
+                ? I18nKey.AUTOMATIONS$KEEP_SANDBOX_ALIVE_ON_SUCCESS
+                : I18nKey.AUTOMATIONS$KEEP_SANDBOX_ALIVE_OFF_SUCCESS,
+            ),
+          );
+        },
+      },
+    );
+  };
+
   const handleExport = () => {
     const contents = `${JSON.stringify(serializeAutomation(automation), null, 2)}\n`;
     downloadBlob(
@@ -242,6 +261,13 @@ export default function AutomationDetail() {
   // Non-creators may turn an automation off but not back on. Draft test
   // artifacts are finalized through the draft setup flow, not this toggle.
   const canToggle = isDraft ? false : automation.enabled ? canManage : isOwner;
+  // An automation service that does not return `keep_alive` would reject it
+  // in a PATCH.
+  const canToggleKeepAlive =
+    canManage &&
+    !isDraft &&
+    automation.keep_alive !== undefined &&
+    !isKeepAliveForced(automation);
 
   return (
     <div className="min-h-full">
@@ -251,6 +277,10 @@ export default function AutomationDetail() {
           <DetailHeader
             automation={automation}
             onToggle={handleToggle}
+            onToggleKeepAlive={
+              canToggleKeepAlive ? handleToggleKeepAlive : undefined
+            }
+            isKeepAlivePending={keepAliveMutation.isPending}
             onEdit={() => openEditor(automation)}
             onDelete={() => setShowDeleteModal(true)}
             onExport={handleExport}
@@ -277,10 +307,6 @@ export default function AutomationDetail() {
           {automation.plugins && automation.plugins.length > 0 && (
             <PluginsSection plugins={automation.plugins} />
           )}
-          <KeepAliveSection
-            automation={automation}
-            canEdit={canManage && !isDraft}
-          />
           <ActivitySection
             createdAt={automation.created_at}
             lastRunAt={automation.last_triggered_at}
