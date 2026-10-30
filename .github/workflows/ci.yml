@@ -58,7 +58,7 @@ jobs:
           set -euo pipefail
           artifacts="$(git ls-tree -r --name-only HEAD -- .pr)"
           if [ -n "$artifacts" ]; then
-            echo "::error::Release PR contains temporary .pr artifacts. Merge the cleanup PR and let release-please update this PR before merging."
+            echo "::error::Release PR contains temporary .pr artifacts. Refresh the release PR (rerun the latest release workflow on its target branch) so release-please removes them, then let this check rerun before merging."
             printf '%s\n' "$artifacts"
             exit 1
           fi
@@ -133,6 +133,7 @@ jobs:
             echo "head_ref=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
             echo "head_sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
             echo "is_fork=false" >> "$GITHUB_OUTPUT"
+            echo "is_release_pr=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           case "$LIVE_E2E_PR_NUMBER" in
@@ -147,6 +148,7 @@ jobs:
           head_ref="$(gh api "$pr_api" --jq '.head.ref')"
           head_sha="$(gh api "$pr_api" --jq '.head.sha')"
           base_repo="$(gh api "$pr_api" --jq '.base.repo.full_name')"
+          has_release_label="$(gh api "$pr_api" --jq 'any(.labels[]; .name == "autorelease: pending")')"
 
           if [ -z "$head_repo" ] || [ -z "$head_ref" ] || [ -z "$head_sha" ] || [ -z "$base_repo" ]; then
             echo "::error::Failed to fetch complete PR data from GitHub API."
@@ -157,11 +159,17 @@ jobs:
           echo "head_repo=$head_repo" >> "$GITHUB_OUTPUT"
           echo "head_ref=$head_ref" >> "$GITHUB_OUTPUT"
           echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
+          is_release_pr=false
           if [ "$head_repo" = "$base_repo" ]; then
             echo "is_fork=false" >> "$GITHUB_OUTPUT"
+            # The branch prefix matches the release-tree check in test-and-build.
+            if [ "$has_release_label" = "true" ] || [[ "$head_ref" == release-please--* ]]; then
+              is_release_pr=true
+            fi
           else
             echo "is_fork=true" >> "$GITHUB_OUTPUT"
           fi
+          echo "is_release_pr=$is_release_pr" >> "$GITHUB_OUTPUT"
 
       - name: Skip live E2E for fork PRs
         if: steps.pr_context.outputs.is_fork == 'true'
@@ -332,6 +340,7 @@ jobs:
           MEDIA_RUN_DIR: ${{ github.run_id }}
           PR_ARTIFACT_PUSH_TOKEN: ${{ secrets.OPENHANDS_BOT_GITHUB_PAT_PUBLIC || github.token }}
           PR_HEAD_IS_FORK: ${{ steps.pr_context.outputs.is_fork }}
+          PR_HEAD_IS_RELEASE: ${{ steps.pr_context.outputs.is_release_pr }}
           PR_HEAD_REF: ${{ steps.pr_context.outputs.head_ref }}
           PR_HEAD_SHA: ${{ steps.pr_context.outputs.head_sha }}
           SCREENSHOT_PATH: ${{ steps.live_media.outputs.screenshot_path || '' }}
@@ -350,12 +359,17 @@ jobs:
             exit 0
           fi
 
+          if [ "$PR_HEAD_IS_RELEASE" = "true" ]; then
+            echo "::notice::Skipping .pr media publishing for release PRs, which must stay free of .pr/; the media is in the workflow artifact."
+            exit 0
+          fi
+
           media_dir=".pr/live-e2e/$MEDIA_RUN_DIR"
           mkdir -p "$media_dir"
           {
             echo "# PR Artifacts"
             echo
-            echo "This directory contains generated PR-only QA artifacts. After the PR merges to main, the PR Artifacts workflow opens or updates a cleanup PR that removes this directory from main."
+            echo "This directory contains generated PR-only QA artifacts. After the PR merges to main, the next release PR removes this directory from main."
           } > .pr/README.md
 
           if [ -n "$SCREENSHOT_PATH" ]; then

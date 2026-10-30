@@ -67,8 +67,8 @@ jobs:
                           if (file.previous_filename) paths.push(file.previous_filename);
                         }
                         const isVerify = (path) => /^\.agents\/skills\/verify-[^/]+\//.test(path);
-                        // AGENTS.md files and the temporary .pr/ evidence directory (cleaned up
-                        // by pr-artifacts.yml) may ride along with skill changes.
+                        // AGENTS.md files and the temporary .pr/ evidence directory (removed
+                        // by the release PR) may ride along with skill changes.
                         const isExempt = (path) =>
                           path.split("/").pop() === "AGENTS.md" || path.startsWith(".pr/");
                         const skillPaths = [...new Set(paths.filter(isVerify))];
