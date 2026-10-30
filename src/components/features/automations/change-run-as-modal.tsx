@@ -11,52 +11,50 @@ import {
 import { modalTitleLgMediumClassName } from "#/utils/modal-classes";
 import { cn } from "#/utils/utils";
 import type { CloudServiceAccount } from "#/api/cloud/types";
-import type { TransferAutomationRequest } from "#/types/automation";
+import type { ChangeRunAsRequest } from "#/types/automation";
 
 const SELF_TARGET = "self";
 
-interface TransferAutomationModalProps {
+interface ChangeRunAsModalProps {
   automationName: string;
   isOpen: boolean;
   /** Active service accounts of the org the automation can move to. */
   serviceAccounts: CloudServiceAccount[];
-  /** Id of the current owner, left out of the targets. */
-  currentOwnerId?: string;
-  /** Whether "me" is offered: only `manage_automations` holders may take ownership. */
-  canTransferToSelf: boolean;
+  /** Id of the current run-as identity, left out of the targets. */
+  currentRunAsId?: string;
+  /** Whether "me" is offered: only `manage_automations` holders may make it run as themselves. */
+  canChangeToSelf: boolean;
   /** The service account list is still loading. */
   isLoading?: boolean;
   /** The service account list failed to load. */
   isError?: boolean;
   isPending?: boolean;
-  onConfirm: (body: TransferAutomationRequest) => void;
+  onConfirm: (body: ChangeRunAsRequest) => void;
   onCancel: () => void;
 }
 
 /**
- * Pick the new owner of an automation: a service account of the org, or the
- * caller. The service turns the automation off after a transfer.
+ * Pick who an automation runs as: a service account of the org, or the
+ * caller. The service turns the automation off after the change.
  */
-export function TransferAutomationModal({
+export function ChangeRunAsModal({
   automationName,
   isOpen,
   serviceAccounts,
-  currentOwnerId,
-  canTransferToSelf,
+  currentRunAsId,
+  canChangeToSelf,
   isLoading = false,
   isError = false,
   isPending = false,
   onConfirm,
   onCancel,
-}: TransferAutomationModalProps) {
+}: ChangeRunAsModalProps) {
   const { t } = useTranslation("openhands");
   const targets = serviceAccounts.filter(
-    (account) => !account.is_disabled && account.id !== currentOwnerId,
+    (account) => !account.is_disabled && account.id !== currentRunAsId,
   );
   const [target, setTarget] = React.useState<string>("");
-  const defaultTarget = canTransferToSelf
-    ? SELF_TARGET
-    : (targets[0]?.id ?? "");
+  const defaultTarget = canChangeToSelf ? SELF_TARGET : (targets[0]?.id ?? "");
 
   // Reset when the dialog opens, and again when a list that arrives later
   // changes the default target.
@@ -67,15 +65,16 @@ export function TransferAutomationModal({
 
   // Nothing to pick: say why instead of showing an empty select.
   let emptyMessage: string | null = null;
-  if (targets.length === 0 && !canTransferToSelf) {
-    if (isLoading) emptyMessage = t(I18nKey.AUTOMATIONS$TRANSFER_LOADING);
-    else if (isError) emptyMessage = t(I18nKey.AUTOMATIONS$TRANSFER_LOAD_ERROR);
-    else emptyMessage = t(I18nKey.AUTOMATIONS$TRANSFER_NO_TARGETS);
+  if (targets.length === 0 && !canChangeToSelf) {
+    if (isLoading) emptyMessage = t(I18nKey.AUTOMATIONS$CHANGE_RUN_AS_LOADING);
+    else if (isError)
+      emptyMessage = t(I18nKey.AUTOMATIONS$CHANGE_RUN_AS_LOAD_ERROR);
+    else emptyMessage = t(I18nKey.AUTOMATIONS$CHANGE_RUN_AS_NO_TARGETS);
   }
 
   if (!isOpen) return null;
 
-  const title = t(I18nKey.AUTOMATIONS$TRANSFER_TITLE);
+  const title = t(I18nKey.AUTOMATIONS$CHANGE_RUN_AS_TITLE);
   const handleConfirm = () => {
     if (!target) return;
     onConfirm(
@@ -104,11 +103,13 @@ export function TransferAutomationModal({
         </button>
         <h2 className={modalTitleLgMediumClassName}>{title}</h2>
         <p className="mt-2 text-sm text-muted">
-          {t(I18nKey.AUTOMATIONS$TRANSFER_MESSAGE, { name: automationName })}
+          {t(I18nKey.AUTOMATIONS$CHANGE_RUN_AS_MESSAGE, {
+            name: automationName,
+          })}
         </p>
         {emptyMessage ? (
           <p
-            data-testid="transfer-automation-empty"
+            data-testid="change-run-as-empty"
             className="mt-4 text-sm text-muted"
           >
             {emptyMessage}
@@ -120,16 +121,16 @@ export function TransferAutomationModal({
             emptyMessage && "hidden",
           )}
         >
-          {t(I18nKey.AUTOMATIONS$TRANSFER_TARGET)}
+          {t(I18nKey.AUTOMATIONS$CHANGE_RUN_AS_TARGET)}
           <select
-            data-testid="transfer-automation-target"
+            data-testid="change-run-as-target"
             value={target}
             onChange={(event) => setTarget(event.target.value)}
             className="rounded-lg border border-border bg-base-secondary px-3 py-2 text-sm text-content"
           >
-            {canTransferToSelf ? (
+            {canChangeToSelf ? (
               <option value={SELF_TARGET}>
-                {t(I18nKey.AUTOMATIONS$OWNER_ME)}
+                {t(I18nKey.AUTOMATIONS$RUN_AS_ME)}
               </option>
             ) : null}
             {targets.map((account) => (
@@ -150,11 +151,11 @@ export function TransferAutomationModal({
           <BrandButton
             type="button"
             variant="primary"
-            testId="transfer-automation-confirm"
+            testId="change-run-as-confirm"
             isDisabled={!target || isPending}
             onClick={handleConfirm}
           >
-            {t(I18nKey.AUTOMATIONS$TRANSFER)}
+            {t(I18nKey.AUTOMATIONS$CHANGE_RUN_AS)}
           </BrandButton>
         </div>
       </div>

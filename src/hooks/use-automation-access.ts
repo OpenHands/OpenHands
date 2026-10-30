@@ -9,8 +9,9 @@ export interface AutomationAccess {
   /** Turn off, delete, run now: `manage_automations` or the owner. */
   canManage: boolean;
   /**
-   * Edit the automation. The service lets the owner edit a user-owned
-   * automation, and `manage_automations` holders edit a service-owned one.
+   * Edit the automation. The service lets the owner edit an automation that
+   * runs as them, and `manage_automations` holders edit one that runs as a
+   * service account.
    */
   canEdit: boolean;
   /** Flip `enabled`. Turning off needs `canManage`; turning on needs `canEdit`. */
@@ -19,13 +20,13 @@ export interface AutomationAccess {
 
 /**
  * Whether the caller may edit the automation: the owner, or a holder of
- * `manage_automations` when a service account owns it. Local: always `true`.
+ * `manage_automations` when it runs as a service account. Local: always `true`.
  */
 export function useCanEditAutomation(automation: Automation): boolean {
   const { canManage: hasManagePermission } = useAutomationPermissions();
   const isOwner = useIsAutomationOwner(automation);
   return (
-    isOwner || (automation.owner_kind === "service" && hasManagePermission)
+    isOwner || (automation.run_as_kind === "service" && hasManagePermission)
   );
 }
 

@@ -561,10 +561,10 @@ describe("AutomationsList — Edit from the row kebab", () => {
     // permissions come from) before mounting so the page sees it as the
     // active backend on first render.
     setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
-    // An admin edits a service-owned automation; on a user-owned one only
+    // An admin edits a automation that runs as a service account; on a one that runs as a person only
     // its creator can.
     vi.mocked(AutomationService.getAutomations).mockResolvedValue({
-      automations: [{ ...automation, owner_kind: "service" }],
+      automations: [{ ...automation, run_as_kind: "service" }],
       total: 1,
     });
     const user = userEvent.setup();

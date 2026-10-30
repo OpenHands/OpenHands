@@ -14,10 +14,10 @@ import {
   useDeleteAutomation,
   useDispatchAutomation,
   useUpdateAutomationKeepAlive,
-  useTransferAutomation,
+  useChangeRunAs,
 } from "#/hooks/query/use-automations";
 import {
-  useServiceAccountOwnersEnabled,
+  useServiceAccountRunAsEnabled,
   useServiceAccounts,
 } from "#/hooks/query/use-service-accounts";
 import { useAutomationHealth } from "#/hooks/query/use-automation-health";
@@ -43,7 +43,7 @@ import { NotFoundState } from "#/components/features/automations/detail/not-foun
 import { ErrorState } from "#/components/features/automations/error-state";
 import { BackendNotConfigured } from "#/components/features/automations/backend-not-configured";
 import { DeleteConfirmationModal } from "#/components/features/automations/delete-confirmation-modal";
-import { TransferAutomationModal } from "#/components/features/automations/transfer-automation-modal";
+import { ChangeRunAsModal } from "#/components/features/automations/change-run-as-modal";
 import { useOpenAutomationEditor } from "#/hooks/use-open-automation-editor";
 import { useTracking } from "#/hooks/use-tracking";
 import { useAutomationAccess } from "#/hooks/use-automation-access";
@@ -52,7 +52,7 @@ import {
   useIsAutomationOwner,
 } from "#/hooks/use-automation-permissions";
 import AutomationService from "#/api/automation-service/automation-service.api";
-import type { Automation, TransferAutomationRequest } from "#/types/automation";
+import type { Automation, ChangeRunAsRequest } from "#/types/automation";
 import { isDraftAutomation, isKeepAliveForced } from "#/utils/automation-state";
 import {
   getAutomationExportFilename,
@@ -94,7 +94,7 @@ export default function AutomationDetail() {
   const highlightedRunId = searchParams.get("run");
   const { navigate } = useNavigation();
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [showChangeRunAsModal, setShowChangeRunAsModal] = useState(false);
   const { openEditor } = useOpenAutomationEditor();
 
   const {
@@ -132,10 +132,10 @@ export default function AutomationDetail() {
   const deleteMutation = useDeleteAutomation();
   const dispatchMutation = useDispatchAutomation();
   const keepAliveMutation = useUpdateAutomationKeepAlive();
-  const transferMutation = useTransferAutomation();
-  // Transfer and the service-account owner name need the service account list,
+  const changeRunAsMutation = useChangeRunAs();
+  // Change Runs As and the service-account name need the service account list,
   // which only managers on a cloud team workspace with the capability can read.
-  const serviceAccountOwnersEnabled = useServiceAccountOwnersEnabled();
+  const serviceAccountRunAsEnabled = useServiceAccountRunAsEnabled();
   const serviceAccountsQuery = useServiceAccounts();
   // Permission hooks must run before any early return (rules-of-hooks). The
   // owner check is a no-op while the automation hasn't loaded yet.
@@ -144,12 +144,13 @@ export default function AutomationDetail() {
   );
   const isOwner = useIsAutomationOwner(automation ?? nullAutomation);
   const { canManage: hasManagePermission } = useAutomationPermissions();
-  // Creator lookup for "Automation Runs As"; disabled until the automation
-  // (and its user_id) has loaded, and on non-cloud backends.
-  // A service account is not an org member, so it has no member lookup.
-  const isServiceOwned = automation?.owner_kind === "service";
-  const creatorQuery = useCloudOrgMember(
-    isServiceOwned ? undefined : automation?.user_id,
+  // Member lookup for the person on the page: the run-as identity of an
+  // automation that runs as a person, or the creator of one that runs as a
+  // service account (not an org member, so it has no member lookup).
+  // Disabled until the automation has loaded, and on non-cloud backends.
+  const runsAsService = automation?.run_as_kind === "service";
+  const personQuery = useCloudOrgMember(
+    runsAsService ? automation?.created_by_user_id : automation?.user_id,
   );
 
   const is404 = isError && getErrorStatus(error) === 404;
@@ -256,17 +257,20 @@ export default function AutomationDetail() {
     );
   };
 
-  const handleTransfer = (body: TransferAutomationRequest) => {
-    transferMutation.mutate(
+  const handleChangeRunAs = (body: ChangeRunAsRequest) => {
+    changeRunAsMutation.mutate(
       { id: automation.id, body },
       {
         onSuccess: () => {
-          setShowTransferModal(false);
-          displaySuccessToast(t(I18nKey.AUTOMATIONS$TRANSFER_SUCCESS));
+          setShowChangeRunAsModal(false);
+          displaySuccessToast(t(I18nKey.AUTOMATIONS$CHANGE_RUN_AS_SUCCESS));
         },
         onError: (error) => {
           displayErrorToast(
-            getApiErrorMessage(error, t(I18nKey.AUTOMATIONS$TRANSFER_ERROR)),
+            getApiErrorMessage(
+              error,
+              t(I18nKey.AUTOMATIONS$CHANGE_RUN_AS_ERROR),
+            ),
           );
         },
       },
@@ -282,19 +286,16 @@ export default function AutomationDetail() {
     trackAutomationExported({ backendKind: active.backend.kind });
   };
 
-  // Automations run as their creator (the service mints run credentials for
-  // `automation.user_id`). Cloud only: show the creator's email once resolved,
-  // fall back to the raw user id when the lookup fails (creator left the org,
-  // or an app-server without GET /members/{user_id}), nothing while loading.
-  let runsAs: string | null = null;
-  if (
-    active.backend.kind === "cloud" &&
-    automation.user_id &&
-    !isServiceOwned
-  ) {
-    runsAs =
-      creatorQuery.data?.email ??
-      (creatorQuery.isError ? automation.user_id : null);
+  // The service mints run credentials for `automation.user_id`. Cloud only:
+  // show the person's email once resolved, fall back to the raw user id when
+  // the lookup fails (they left the org, or an app-server without
+  // GET /members/{user_id}), nothing while loading.
+  const personId = runsAsService
+    ? automation.created_by_user_id
+    : automation.user_id;
+  let person: string | null = null;
+  if (active.backend.kind === "cloud" && personId) {
+    person = personQuery.data?.email ?? (personQuery.isError ? personId : null);
   }
   const isDraft = isDraftAutomation(automation);
   // `keep_alive` only matters on cloud, where each run gets its own sandbox.
@@ -306,10 +307,11 @@ export default function AutomationDetail() {
     !isDraft &&
     automation.keep_alive !== undefined &&
     !isKeepAliveForced(automation);
-  // A service-owned automation shows the account's name from the enterprise
-  // service account list (managers only). A manager falls back to the raw id
-  // when the list is unavailable. A member sees a generic label, never the id.
-  const serviceAccountOwner = isServiceOwned
+  // An automation that runs as a service account shows the account's name
+  // from the enterprise service account list (managers only). A manager falls
+  // back to the raw id when the list is unavailable. A member sees a generic
+  // label, never the id.
+  const serviceAccountName = runsAsService
     ? (serviceAccountsQuery.data?.find(
         (account) => account.id === automation.user_id,
       )?.name ??
@@ -317,7 +319,9 @@ export default function AutomationDetail() {
         ? automation.user_id
         : t(I18nKey.AUTOMATIONS$SERVICE_ACCOUNT_LABEL)))
     : null;
-  const canTransfer = serviceAccountOwnersEnabled && !isDraft;
+  const runsAs = runsAsService ? serviceAccountName : person;
+  const createdBy = runsAsService ? person : null;
+  const canChangeRunAs = serviceAccountRunAsEnabled && !isDraft;
 
   return (
     <div className="min-h-full">
@@ -333,8 +337,8 @@ export default function AutomationDetail() {
             isKeepAlivePending={keepAliveMutation.isPending}
             onEdit={() => openEditor(automation)}
             onDelete={() => setShowDeleteModal(true)}
-            onTransfer={
-              canTransfer ? () => setShowTransferModal(true) : undefined
+            onChangeRunAs={
+              canChangeRunAs ? () => setShowChangeRunAsModal(true) : undefined
             }
             onExport={handleExport}
             onDownloadTarball={() =>
@@ -347,7 +351,7 @@ export default function AutomationDetail() {
             canToggle={canToggle}
           />
           {/* Tags follow the edit rule: the creator, or a manager of a
-              service-owned automation. */}
+              automation that runs as a service account. */}
           <AutomationTagsEditor
             automation={automation}
             canEdit={canEdit && !isDraft}
@@ -361,7 +365,8 @@ export default function AutomationDetail() {
           <ConfigurationSection
             automation={automation}
             runsAs={runsAs}
-            serviceAccountOwner={serviceAccountOwner}
+            runsAsServiceAccount={runsAsService}
+            createdBy={createdBy}
           />
           {automation.plugins && automation.plugins.length > 0 && (
             <PluginsSection plugins={automation.plugins} />
@@ -374,17 +379,17 @@ export default function AutomationDetail() {
             automation={automation}
             highlightedRunId={highlightedRunId}
           />
-          <TransferAutomationModal
+          <ChangeRunAsModal
             automationName={automation.name}
-            isOpen={showTransferModal}
+            isOpen={showChangeRunAsModal}
             serviceAccounts={serviceAccountsQuery.data ?? []}
-            currentOwnerId={automation.user_id}
-            canTransferToSelf={!isOwner}
+            currentRunAsId={automation.user_id}
+            canChangeToSelf={!isOwner}
             isLoading={serviceAccountsQuery.isLoading}
             isError={serviceAccountsQuery.isError}
-            isPending={transferMutation.isPending}
-            onConfirm={handleTransfer}
-            onCancel={() => setShowTransferModal(false)}
+            isPending={changeRunAsMutation.isPending}
+            onConfirm={handleChangeRunAs}
+            onCancel={() => setShowChangeRunAsModal(false)}
           />
           <DeleteConfirmationModal
             automationName={automation.name}
