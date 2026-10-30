@@ -124,6 +124,10 @@ interface TypingIndicatorProps {
 
 export function TypingIndicator({ events }: TypingIndicatorProps) {
   const activity = deriveLiveActivity(events);
+  // The chip only shows while the chat is scrolled to the bottom, where the
+  // running step is already the last row (with its own spinner). Repeating it
+  // here adds nothing; only "Thinking", which has no row of its own, does.
+  if (activity !== THINKING_ACTIVITY) return null;
 
   return (
     <div
