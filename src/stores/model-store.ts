@@ -3,7 +3,13 @@ import { devtools } from "zustand/middleware";
 import { v4 as uuidv4 } from "uuid";
 import type { ProfileInfo } from "#/api/profiles-service/profiles-service.api";
 
-export interface ModelListEntry {
+export interface ModelSwitchDetails {
+  id?: string;
+  initiator?: "user" | "agent" | "router";
+  reason?: string | null;
+}
+
+export interface ModelListEntry extends ModelSwitchDetails {
   id: string;
   /**
    * Id of the chat event after which this entry should render, or `null` to
@@ -20,7 +26,7 @@ export interface ModelListEntry {
  * reloads (derived from the source observation event id) so re-seeding the
  * same loaded history is idempotent.
  */
-export interface SeededSwitch {
+export interface SeededSwitch extends ModelSwitchDetails {
   id: string;
   anchorEventId: string | null;
   profileName: string;
@@ -61,6 +67,7 @@ interface ModelActions {
     conversationId: string,
     anchorEventId: string | null,
     profileName: string,
+    details?: ModelSwitchDetails,
   ) => void;
   /**
    * Seeds "Switched to" entries reconstructed from loaded history. Skips any
@@ -114,14 +121,26 @@ export const useModelStore = create<ModelStore>()(
             profiles,
           }),
         ),
-      recordSwitch: (conversationId, anchorEventId, profileName) =>
+      recordSwitch: (
+        conversationId,
+        anchorEventId,
+        profileName,
+        details = {},
+      ) =>
         set((s) => ({
-          ...appendEntry(s, conversationId, {
-            id: uuidv4(),
-            anchorEventId,
-            profiles: [],
-            switchedTo: profileName,
-          }),
+          ...(details.id &&
+          s.entriesByConversation[conversationId]?.some(
+            (entry) => entry.id === details.id,
+          )
+            ? {}
+            : appendEntry(s, conversationId, {
+                ...details,
+                id: details.id ?? uuidv4(),
+                initiator: details.initiator ?? "user",
+                anchorEventId,
+                profiles: [],
+                switchedTo: profileName,
+              })),
           activeProfileByConversation: {
             ...s.activeProfileByConversation,
             [conversationId]: profileName,
@@ -139,6 +158,8 @@ export const useModelStore = create<ModelStore>()(
                 anchorEventId: sw.anchorEventId,
                 profiles: [],
                 switchedTo: sw.profileName,
+                initiator: sw.initiator,
+                reason: sw.reason,
               }),
             );
           if (additions.length === 0) return s;

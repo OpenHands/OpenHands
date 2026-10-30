@@ -108,6 +108,7 @@ type NativeGitIntegrations = ReturnType<typeof useNativeGitIntegrations>;
 /** A backend with no native git integration to use: local, or cloud with none. */
 const NO_NATIVE_INTEGRATIONS: NativeGitIntegrations = {
   getNativeIntegration: () => null,
+  builtInIntegrations: null,
   isJiraEnabled: false,
   isLinearEnabled: false,
   isSlackEnabled: false,

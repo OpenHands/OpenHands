@@ -310,7 +310,7 @@ export function ConversationTagChips({ tags }: ConversationTagChipsProps) {
             role="dialog"
             data-testid="conversation-card-tag-overflow-popover"
             className={cn(
-              "z-[9999] min-w-[10rem] max-w-[16rem]",
+              "z-9999 min-w-[10rem] max-w-[16rem]",
               "rounded-md border border-border-subtle",
               "bg-surface p-2 shadow-lg",
             )}
