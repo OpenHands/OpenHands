@@ -125,7 +125,7 @@ describe("EventGroup", () => {
     expect(screen.queryByTestId("child")).not.toBeInTheDocument();
   });
 
-  it("keeps the summary while an action is running, with no step title or spinner", () => {
+  it("keeps the summary when it is not the live stage", () => {
     const events = [
       makeBashObservation("o1", "a1", "ls"),
       makeBashObservation("o2", "a2", "pwd"),
@@ -139,10 +139,60 @@ describe("EventGroup", () => {
       </EventGroup>,
     );
 
-    // The running step is shown by the live activity chip, not the header.
     expect(screen.getByText("EVENT_GROUP$RAN_COMMANDS")).toBeInTheDocument();
     expect(screen.queryByText(/ACTION_MESSAGE\$RUN/)).not.toBeInTheDocument();
     expect(screen.queryByTestId("spinner-icon")).not.toBeInTheDocument();
+  });
+
+  it("shows the running step with a spinner while it is the live stage", () => {
+    const events = [
+      makeBashObservation("o1", "a1", "ls"),
+      makeBashAction("a2", "echo hello"),
+    ];
+
+    renderWithProviders(
+      <EventGroup events={events} isLive>
+        <div>child</div>
+      </EventGroup>,
+    );
+
+    expect(screen.getByText(/ACTION_MESSAGE\$RUN/)).toBeInTheDocument();
+    expect(
+      screen.queryByText("EVENT_GROUP$RAN_COMMANDS"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("spinner-icon")).toBeInTheDocument();
+  });
+
+  it("shows Thinking with a spinner between steps of the live stage", () => {
+    const events = [
+      makeBashObservation("o1", "a1", "ls"),
+      makeBashObservation("o2", "a2", "pwd"),
+    ];
+
+    renderWithProviders(
+      <EventGroup events={events} isLive>
+        <div>child</div>
+      </EventGroup>,
+    );
+
+    expect(screen.getByText("ACTION_MESSAGE$THINK")).toBeInTheDocument();
+    expect(screen.getByTestId("spinner-icon")).toBeInTheDocument();
+  });
+
+  it("does not treat an action resolved by an AgentErrorEvent as running", () => {
+    const events = [
+      makeBashObservation("o1", "a1", "ls"),
+      makeBashAction("a2", "pwd"),
+    ];
+    const allEvents = [...events, makeAgentErrorEvent("e2", "a2")];
+
+    renderWithProviders(
+      <EventGroup events={events} allEvents={allEvents} isLive>
+        <div>child</div>
+      </EventGroup>,
+    );
+
+    expect(screen.getByText("ACTION_MESSAGE$THINK")).toBeInTheDocument();
   });
 
   it("lists each kind of step in order of first appearance", () => {

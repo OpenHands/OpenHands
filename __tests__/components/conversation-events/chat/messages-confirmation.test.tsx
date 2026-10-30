@@ -35,6 +35,7 @@ vi.mock("#/hooks/use-agent-state", () => ({
   useAgentState: () => ({
     curAgentState: AgentState.AWAITING_USER_CONFIRMATION,
   }),
+  usePlanningAgentState: () => ({ isPlanningAgentRunning: false }),
 }));
 
 vi.mock("#/hooks/mutation/use-respond-to-confirmation", () => ({

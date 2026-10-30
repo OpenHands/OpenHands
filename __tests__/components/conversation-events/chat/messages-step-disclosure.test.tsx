@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Messages } from "#/components/conversation-events/chat/messages";
@@ -11,7 +11,7 @@ import {
 } from "#/types/agent-server/core";
 import { ExecuteBashAction } from "#/types/agent-server/core/base/action";
 import { ExecuteBashObservation } from "#/types/agent-server/core/base/observation";
-import { renderWithProviders } from "test-utils";
+import { createUserMessageEvent, renderWithProviders } from "test-utils";
 
 vi.mock("#/hooks/query/use-config", () => ({
   useConfig: () => ({ data: {} }),
@@ -23,8 +23,11 @@ vi.mock("#/hooks/query/use-active-conversation", () => ({
   }),
 }));
 
+const agent = vi.hoisted(() => ({ state: "running" }));
+
 vi.mock("#/hooks/use-agent-state", () => ({
-  useAgentState: () => ({ curAgentState: AgentState.RUNNING }),
+  useAgentState: () => ({ curAgentState: agent.state }),
+  usePlanningAgentState: () => ({ isPlanningAgentRunning: false }),
 }));
 
 const action = (
@@ -83,11 +86,17 @@ const openSteps = () =>
   screen.queryAllByRole("button", { name: "BUTTON$COLLAPSE" });
 
 describe("Messages: opened steps and groups survive live updates", () => {
+  beforeEach(() => {
+    agent.state = AgentState.RUNNING;
+  });
+
   it("keeps a step open when its running action finishes", async () => {
     const user = userEvent.setup();
     const a1 = action("a1", "ls");
     const { rerender } = renderChat([a1], [a1]);
 
+    // While the agent works, its stage is a group from the first step.
+    await user.click(screen.getByTestId("event-group-toggle"));
     await user.click(screen.getByRole("button", { name: "BUTTON$EXPAND" }));
     expect(openSteps()).toHaveLength(1);
 
@@ -105,6 +114,9 @@ describe("Messages: opened steps and groups survive live updates", () => {
   });
 
   it("opens the group that forms around a step the user opened", async () => {
+    // Lone steps only exist while the agent is idle; a running stage is
+    // already a group.
+    agent.state = AgentState.AWAITING_USER_INPUT;
     const user = userEvent.setup();
     const a1 = action("a1", "ls");
     const a2 = action("a2", "pwd");
@@ -177,5 +189,43 @@ describe("Messages: opened steps and groups survive live updates", () => {
       "aria-expanded",
       "false",
     );
+  });
+});
+
+describe("Messages: live status at the end of the chat", () => {
+  beforeEach(() => {
+    agent.state = AgentState.RUNNING;
+  });
+
+  it("shows a Thinking line while the agent works and no stage has started", () => {
+    const message = createUserMessageEvent("m1");
+    renderChat([message], [message]);
+
+    expect(screen.getByTestId("live-thinking")).toHaveTextContent(
+      "ACTION_MESSAGE$THINK",
+    );
+  });
+
+  it("makes the stage the agent is on a group from its first step", () => {
+    const message = createUserMessageEvent("m1");
+    const a1 = action("a1", "ls");
+    renderChat([message, a1], [message, a1]);
+
+    // The live group carries the status, so there is no separate line.
+    expect(screen.getByTestId("event-group-toggle")).toHaveTextContent(
+      /ACTION_MESSAGE\$RUN/,
+    );
+    expect(screen.queryByTestId("live-thinking")).not.toBeInTheDocument();
+  });
+
+  it("shows no live status once the agent stops", () => {
+    agent.state = AgentState.AWAITING_USER_INPUT;
+    const message = createUserMessageEvent("m1");
+    const a1 = action("a1", "ls");
+    const done = [message, observation(a1)];
+    renderChat(done, [message, a1, observation(a1)]);
+
+    expect(screen.queryByTestId("live-thinking")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("event-group-toggle")).not.toBeInTheDocument();
   });
 });
