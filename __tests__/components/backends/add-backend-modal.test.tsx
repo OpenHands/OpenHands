@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { compile } from "@tailwindcss/node";
+import { parse } from "postcss";
 import type { MarsSandboxSize } from "#/api/mars/mars-tunnel-backend";
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -87,7 +88,7 @@ beforeEach(() => {
   captureMock = vi.spyOn(telemetry, "trackEvent").mockResolvedValue(undefined);
   window.localStorage.clear();
   getServerInfoMock.mockReset();
-  getServerInfoMock.mockResolvedValue({ version: "1.56.0" });
+  getServerInfoMock.mockResolvedValue({ version: "1.58.0" });
   deviceFlowMocks.startDeviceFlow.mockReset();
   deviceFlowMocks.startDeviceFlow.mockResolvedValue({
     device_code: "device-code",
@@ -259,6 +260,76 @@ describe("AddBackendModal – connection chooser", () => {
       style.remove();
       rectSpy.mockRestore();
       globalThis.ResizeObserver = originalObserver;
+    }
+  });
+
+  it("applies the compiled grid states to each mounted disclosure", async () => {
+    const compiler = await compile(
+      await readFile(resolve("src/tailwind.css"), "utf8"),
+      { base: resolve("src"), onDependency: () => {} },
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<AddBackendModal onClose={vi.fn()} />);
+    const style = document.createElement("style");
+    document.head.appendChild(style);
+    const candidates = new Set<string>();
+    const applyGridStyles = (grid: HTMLElement) => {
+      grid.classList.forEach((candidate) => candidates.add(candidate));
+      const stylesheet = parse(compiler.build([...candidates]));
+      const rules: string[] = [];
+      stylesheet.walkRules((rule) => {
+        // jsdom does not implement CSS layers or nested media. Install the
+        // compiler's base declarations; the library test covers their layers,
+        // scope and the reduced-motion override in the shipped stylesheet.
+        if (rule.parent?.type !== "atrule" || rule.parent.name !== "layer")
+          return;
+        const declarations = rule.nodes.filter((node) => node.type === "decl");
+        rules.push(`${rule.selector}{${declarations.join(";")}}`);
+      });
+      style.textContent = rules.join("\n");
+    };
+    const exerciseDisclosure = async (bodyId: string, toggleId: string) => {
+      const body = screen.getByTestId(bodyId);
+      const grid = body.parentElement!.parentElement!;
+      applyGridStyles(grid);
+      expect(getComputedStyle(grid).gridTemplateRows).toBe("0fr");
+      expect(getComputedStyle(grid).transitionProperty).toBe(
+        "grid-template-rows",
+      );
+      expect(getComputedStyle(grid).transitionDuration).toBe("200ms");
+      expect(body).toHaveAttribute("inert");
+
+      await user.click(screen.getByTestId(toggleId));
+      applyGridStyles(grid);
+      expect(screen.getByTestId(bodyId)).toBe(body);
+      expect(getComputedStyle(grid).gridTemplateRows).toBe("1fr");
+      expect(body).not.toHaveAttribute("inert");
+
+      await user.click(screen.getByTestId(toggleId));
+      expect(screen.getByTestId(bodyId)).toBe(body);
+      expect(getComputedStyle(grid).gridTemplateRows).toBe("0fr");
+      expect(body).toHaveAttribute("inert");
+    };
+
+    try {
+      await exerciseDisclosure(
+        "add-backend-advanced-panel",
+        "add-backend-advanced-toggle",
+      );
+      await selectAgentServer(user);
+      await exerciseDisclosure(
+        "add-backend-local-guidance-body",
+        "add-backend-local-guidance-toggle",
+      );
+      await user.click(
+        screen.getByTestId("add-backend-location-option-remote"),
+      );
+      await exerciseDisclosure(
+        "add-backend-remote-guidance-body",
+        "add-backend-remote-guidance-toggle",
+      );
+    } finally {
+      style.remove();
     }
   });
 
@@ -532,7 +603,7 @@ describe("AddBackendModal – connection chooser", () => {
     await user.click(screen.getByTestId("add-backend-submit"));
 
     expect(await screen.findByTestId("add-backend-error")).toHaveTextContent(
-      "Agent Canvas requires agent-server 1.55.0 or newer",
+      "Agent Canvas requires agent-server 1.57.0 or newer",
     );
     expect(onClose).not.toHaveBeenCalled();
   });
@@ -788,6 +859,32 @@ describe("AddBackendModal – DigitalOcean", () => {
     await user.click(screen.getByTestId("add-backend-option-providers"));
     await user.click(screen.getByTestId("add-backend-provider-digitalocean"));
     await screen.findByTestId("managed-agents-token");
+
+    // The real provider panel keeps the same minimum in its compiled CSS.
+    const panel = screen.getByTestId("digitalocean-connect-panel");
+    const compiler = await compile(
+      await readFile(resolve("src/tailwind.css"), "utf8"),
+      { base: resolve("src"), onDependency: () => {} },
+    );
+    const minHeightRules: string[] = [];
+    parse(compiler.build([...panel.classList])).walkDecls(
+      "min-height",
+      (declaration) => {
+        const rule = declaration.parent;
+        if (rule?.type === "rule" && panel.matches(rule.selector)) {
+          minHeightRules.push(`${rule.selector}{${declaration.toString()}}`);
+        }
+      },
+    );
+    const style = document.createElement("style");
+    style.textContent = minHeightRules.join("\n");
+    document.head.appendChild(style);
+    try {
+      expect(getComputedStyle(panel).minHeight).toBe("216px");
+    } finally {
+      style.remove();
+    }
+
     await user.click(screen.getByTestId("add-backend-providers-back"));
 
     // Assert

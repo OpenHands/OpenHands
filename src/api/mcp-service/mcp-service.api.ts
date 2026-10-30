@@ -274,47 +274,6 @@ class McpService {
     return finalizeMcpTestResponse(result, validation, [server]);
   }
 
-  static async startOAuth(
-    server: MCPServerConfig,
-  ): Promise<MCPOAuthStartResponse> {
-    const transport = McpService.createOAuthTransport();
-    try {
-      return await transport.start(server);
-    } finally {
-      transport.close();
-    }
-  }
-
-  static async getOAuthStatus(jobId: string): Promise<MCPOAuthStatusResponse> {
-    const transport = McpService.createOAuthTransport();
-    try {
-      return await transport.status(jobId);
-    } finally {
-      transport.close();
-    }
-  }
-
-  /**
-   * Local agent-server only: hands a captured loopback callback URL to the
-   * probe. On cloud backends the provider redirects straight to the app
-   * server's callback route, so there is nothing to submit.
-   */
-  static async submitOAuthCallback(
-    jobId: string,
-    callbackUrl: string,
-  ): Promise<MCPOAuthStatusResponse> {
-    const client = createMcpProbeClient();
-    try {
-      return await McpService.submitOAuthCallbackWithClient(
-        client,
-        jobId,
-        callbackUrl,
-      );
-    } finally {
-      client.close();
-    }
-  }
-
   static async authorizeOAuth(
     server: MCPServerConfig,
   ): Promise<ExtendedMCPTestResponse> {
@@ -444,16 +403,6 @@ class McpService {
     jobId: string,
   ): Promise<MCPOAuthStatusResponse> {
     return (await client.getOAuthStatus(jobId)) as MCPOAuthStatusResponse;
-  }
-
-  private static async submitOAuthCallbackWithClient(
-    client: MCPClient,
-    jobId: string,
-    callbackUrl: string,
-  ): Promise<MCPOAuthStatusResponse> {
-    return (await client.submitOAuthCallback(jobId, {
-      callback_url: callbackUrl,
-    })) as MCPOAuthStatusResponse;
   }
 }
 
