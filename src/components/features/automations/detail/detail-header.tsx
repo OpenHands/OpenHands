@@ -16,7 +16,8 @@ interface DetailHeaderProps {
   onToggle: () => void;
   /**
    * When provided, the kebab menu offers flipping `keep_alive`. Omit it when
-   * the setting cannot be changed (no permission, draft, or forced on).
+   * the setting does not apply or cannot be changed (local backend, no
+   * permission, draft, or forced on).
    */
   onToggleKeepAlive?: () => void;
   isKeepAlivePending?: boolean;

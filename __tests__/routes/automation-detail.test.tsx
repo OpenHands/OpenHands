@@ -516,6 +516,10 @@ describe("AutomationDetail — script automations", () => {
 });
 
 describe("AutomationDetail — keep sandbox alive", () => {
+  beforeEach(() => {
+    setActiveSelection({ backendId: cloudBackend.id });
+  });
+
   it.each([
     {
       saved: false,
@@ -563,6 +567,11 @@ describe("AutomationDetail — keep sandbox alive", () => {
   );
 
   it.each([
+    {
+      reason: "a local backend",
+      backendId: localBackend.id,
+      overrides: { keep_alive: false },
+    },
     { reason: "a draft", overrides: { state: "DRAFT", keep_alive: false } },
     {
       reason: "a continue_conversation trigger",
@@ -577,33 +586,37 @@ describe("AutomationDetail — keep sandbox alive", () => {
       },
     },
     { reason: "a service without the field", overrides: {} },
-  ])("leaves the item out of the menu for $reason", async ({ overrides }) => {
-    // Arrange
-    vi.mocked(AutomationService.getAutomation).mockResolvedValue({
-      ...automation,
-      ...overrides,
-    });
-    const user = userEvent.setup();
-    renderDetail();
+  ])(
+    "leaves the item out of the menu for $reason",
+    async ({ backendId, overrides }) => {
+      // Arrange
+      if (backendId) setActiveSelection({ backendId });
+      vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+        ...automation,
+        ...overrides,
+      });
+      const user = userEvent.setup();
+      renderDetail();
 
-    // Act
-    await user.click(
-      await screen.findByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU),
-    );
+      // Act
+      await user.click(
+        await screen.findByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU),
+      );
 
-    // Assert
-    expect(
-      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$DELETE }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", {
-        name: I18nKey.AUTOMATIONS$KEEP_SANDBOX_ALIVE,
-      }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", {
-        name: I18nKey.AUTOMATIONS$STOP_KEEPING_SANDBOX_ALIVE,
-      }),
-    ).not.toBeInTheDocument();
-  });
+      // Assert
+      expect(
+        screen.getByRole("button", { name: I18nKey.AUTOMATIONS$DELETE }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", {
+          name: I18nKey.AUTOMATIONS$KEEP_SANDBOX_ALIVE,
+        }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", {
+          name: I18nKey.AUTOMATIONS$STOP_KEEPING_SANDBOX_ALIVE,
+        }),
+      ).not.toBeInTheDocument();
+    },
+  );
 });

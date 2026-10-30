@@ -261,9 +261,10 @@ export default function AutomationDetail() {
   // Non-creators may turn an automation off but not back on. Draft test
   // artifacts are finalized through the draft setup flow, not this toggle.
   const canToggle = isDraft ? false : automation.enabled ? canManage : isOwner;
-  // An automation service that does not return `keep_alive` would reject it
-  // in a PATCH.
+  // `keep_alive` only matters on cloud, where each run gets its own sandbox.
+  // An automation service that does not return it would reject it in a PATCH.
   const canToggleKeepAlive =
+    active.backend.kind === "cloud" &&
     canManage &&
     !isDraft &&
     automation.keep_alive !== undefined &&
