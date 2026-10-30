@@ -27,6 +27,11 @@ import { useFreeModels } from "#/hooks/query/use-free-models";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { formatModelNameForDisplay } from "#/utils/format-model-name";
 import { getLockedCloudHost } from "#/api/agent-server-config";
+import {
+  getNotificationPermission,
+  requestNotificationPermission,
+  type NotificationPermissionState,
+} from "#/lib/os-notifications";
 
 const AUTOMATIC_TITLE_LLM_PROFILE_KEY = "__automatic__";
 
@@ -61,6 +66,12 @@ function AppSettingsForm() {
     soundNotificationsSwitchHasChanged,
     setSoundNotificationsSwitchHasChanged,
   ] = React.useState(false);
+  const [osNotificationsSwitchHasChanged, setOsNotificationsSwitchHasChanged] =
+    React.useState(false);
+  const [notificationPermission, setNotificationPermission] =
+    React.useState<NotificationPermissionState>(() =>
+      typeof window !== "undefined" ? getNotificationPermission() : "default",
+    );
   const [gitUserNameHasChanged, setGitUserNameHasChanged] =
     React.useState(false);
   const [gitUserEmailHasChanged, setGitUserEmailHasChanged] =
@@ -114,6 +125,23 @@ function AppSettingsForm() {
       : formData.get("enable-analytics-switch")?.toString() === "on";
     const enableSoundNotifications =
       formData.get("enable-sound-notifications-switch")?.toString() === "on";
+    const enableOsNotifications =
+      formData.get("enable-os-notifications-switch")?.toString() === "on";
+
+    // When the user explicitly turns OS notifications on and permission hasn't
+    // been granted yet (default / denied), request it now in reaction to that
+    // explicit toggle — the only place we ever prompt. A denied result is
+    // sticky; we surface a hint in the UI instead of retrying on every save.
+    const handleOsNotificationToggle = async () => {
+      if (enableOsNotifications) {
+        const current = getNotificationPermission();
+        if (current !== "granted") {
+          const result = await requestNotificationPermission();
+          setNotificationPermission(result);
+        }
+      }
+    };
+    void handleOsNotificationToggle();
 
     const gitUserName =
       formData.get("git-user-name-input")?.toString() ||
@@ -127,6 +155,7 @@ function AppSettingsForm() {
         language,
         ...(!isCloudBackend && { user_consents_to_analytics: enableAnalytics }),
         enable_sound_notifications: enableSoundNotifications,
+        enable_os_notifications: enableOsNotifications,
         git_user_name: gitUserName,
         git_user_email: gitUserEmail,
         title_llm_profile: selectedTitleLlmProfile,
@@ -138,6 +167,7 @@ function AppSettingsForm() {
           setLanguageInputHasChanged(false);
           setAnalyticsSwitchHasChanged(false);
           setSoundNotificationsSwitchHasChanged(false);
+          setOsNotificationsSwitchHasChanged(false);
           setGitUserNameHasChanged(false);
           setGitUserEmailHasChanged(false);
           setTitleLlmProfileInput(undefined);
@@ -174,6 +204,11 @@ function AppSettingsForm() {
     );
   };
 
+  const checkIfOsNotificationsSwitchHasChanged = (checked: boolean) => {
+    const currentOsNotifications = !!settings?.enable_os_notifications;
+    setOsNotificationsSwitchHasChanged(checked !== currentOsNotifications);
+  };
+
   const checkIfGitUserNameHasChanged = (value: string) => {
     const currentValue = settings?.git_user_name;
     setGitUserNameHasChanged(value !== currentValue);
@@ -188,6 +223,7 @@ function AppSettingsForm() {
     !languageInputHasChanged &&
     !analyticsSwitchHasChanged &&
     !soundNotificationsSwitchHasChanged &&
+    !osNotificationsSwitchHasChanged &&
     selectedTitleLlmProfile === storedTitleLlmProfile &&
     !gitUserNameHasChanged &&
     !gitUserEmailHasChanged;
@@ -239,6 +275,26 @@ function AppSettingsForm() {
           >
             {t(I18nKey.SETTINGS$SOUND_NOTIFICATIONS)}
           </SettingsSwitch>
+
+          <SettingsSwitch
+            testId="enable-os-notifications-switch"
+            name="enable-os-notifications-switch"
+            defaultIsToggled={!!settings.enable_os_notifications}
+            isDisabled={notificationPermission === "unsupported"}
+            onToggle={checkIfOsNotificationsSwitchHasChanged}
+          >
+            {t(I18nKey.SETTINGS$OS_NOTIFICATIONS)}
+          </SettingsSwitch>
+          {notificationPermission === "denied" && (
+            <p className="mt-[-1rem] text-xs leading-5 text-tertiary-light">
+              {t(I18nKey.SETTINGS$OS_NOTIFICATIONS_DENIED)}
+            </p>
+          )}
+          {notificationPermission === "unsupported" && (
+            <p className="mt-[-1rem] text-xs leading-5 text-tertiary-light">
+              {t(I18nKey.SETTINGS$OS_NOTIFICATIONS_UNSUPPORTED)}
+            </p>
+          )}
 
           {/* Locked-to-Cloud never shows the checklist (OHE-3683). */}
           {getLockedCloudHost() === null && <GettingStartedChecklistSwitch />}
