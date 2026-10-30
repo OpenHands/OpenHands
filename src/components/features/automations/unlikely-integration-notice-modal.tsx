@@ -2,20 +2,8 @@ import { useTranslation } from "react-i18next";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { I18nKey } from "#/i18n/declaration";
 import XMarkIcon from "#/icons/x-mark.svg?react";
+import { formatBuiltInIntegrations } from "#/utils/automation-catalog";
 import { modalTitleLgMediumClassName } from "#/utils/modal-classes";
-
-/** Product names for the built-in integrations an instance reports. */
-const INTEGRATION_NAMES: Record<string, string> = {
-  github: "GitHub",
-  gitlab: "GitLab",
-  bitbucket: "Bitbucket Cloud",
-  bitbucket_data_center: "Bitbucket Data Center",
-  azure_devops: "Azure DevOps",
-  jira: "Jira Cloud",
-  jira_dc: "Jira Data Center",
-  linear: "Linear",
-  slack: "Slack",
-};
 
 interface UnlikelyIntegrationNoticeModalProps {
   automationName: string;
@@ -37,9 +25,10 @@ export function UnlikelyIntegrationNoticeModal({
   onCancel,
 }: UnlikelyIntegrationNoticeModalProps) {
   const { t, i18n } = useTranslation("openhands");
-  const integrations = new Intl.ListFormat(i18n?.language ?? "en", {
-    type: "conjunction",
-  }).format(missing.map((id) => INTEGRATION_NAMES[id] ?? id));
+  const integrations = formatBuiltInIntegrations(
+    missing,
+    i18n?.language ?? "en",
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">

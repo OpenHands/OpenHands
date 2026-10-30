@@ -150,11 +150,14 @@ export function RecommendedAutomationsLauncher({
     deploymentMode,
     isLoading: isNativeIntegrationsLoading,
   } = useNativeGitIntegrations();
-  const { hidden: hiddenAutomationIds, unlikely: unlikelyAutomations } =
-    useMemo(
-      () => getAutomationAvailability({ deploymentMode, builtInIntegrations }),
-      [deploymentMode, builtInIntegrations],
-    );
+  const {
+    hidden: hiddenAutomationIds,
+    unlikely: unlikelyAutomations,
+    suggested: suggestedAutomations,
+  } = useMemo(
+    () => getAutomationAvailability({ deploymentMode, builtInIntegrations }),
+    [deploymentMode, builtInIntegrations],
+  );
   const [unlikelyNotice, setUnlikelyNotice] = useState<{
     automation: RecommendedAutomation;
     missing: readonly string[];
@@ -442,6 +445,7 @@ export function RecommendedAutomationsLauncher({
           installedAutomations={automationsData?.automations ?? []}
           hiddenAutomationIds={hiddenAutomationIds}
           unlikelyAutomations={unlikelyAutomations}
+          suggestedAutomations={suggestedAutomations}
           onSelect={handleSelectAutomation}
           dismissible={dismissible}
           onDismiss={onDismiss}
@@ -452,6 +456,7 @@ export function RecommendedAutomationsLauncher({
           installedServers={installedMcpConfig}
           hiddenAutomationIds={hiddenAutomationIds}
           unlikelyAutomations={unlikelyAutomations}
+          suggestedAutomations={suggestedAutomations}
           getNativeIntegration={getNativeIntegration}
           query={query}
           onClearQuery={onClearQuery}

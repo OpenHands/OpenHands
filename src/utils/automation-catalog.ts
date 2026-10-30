@@ -147,6 +147,29 @@ const JIRA_CLOUD_INTEGRATION_IDS: ReadonlySet<string> = new Set([
   "jira",
 ]);
 
+/** Product names for the built-in integrations an instance reports. */
+export const BUILT_IN_INTEGRATION_NAMES: Readonly<Record<string, string>> = {
+  github: "GitHub",
+  gitlab: "GitLab",
+  bitbucket: "Bitbucket Cloud",
+  bitbucket_data_center: "Bitbucket Data Center",
+  azure_devops: "Azure DevOps",
+  jira: "Jira Cloud",
+  jira_dc: "Jira Data Center",
+  linear: "Linear",
+  slack: "Slack",
+};
+
+/** Built-in integrations, by provider name, as one localized phrase. */
+export function formatBuiltInIntegrations(
+  ids: readonly string[],
+  language: string,
+): string {
+  return new Intl.ListFormat(language, { type: "conjunction" }).format(
+    ids.map((id) => BUILT_IN_INTEGRATION_NAMES[id] ?? id),
+  );
+}
+
 /** What the active backend says about the integrations built into it. */
 export interface InstanceIntegrations {
   /** The cloud web-client config's `feature_flags.deployment_mode`. */
@@ -174,6 +197,21 @@ export function getRequiredBuiltInIntegrations(
         (id): id is string => typeof id === "string" && id.length > 0,
       )
     : [];
+}
+
+/**
+ * The built-in integrations, by provider name, a template works with: the ones
+ * it requires, and the ones its integrations or repository picker name.
+ */
+function getUsedBuiltInIntegrations(
+  automation: RecommendedAutomation,
+): string[] {
+  const used = getRequiredBuiltInIntegrations(automation);
+  for (const id of getTemplateIntegrationIds(automation)) {
+    if (JIRA_CLOUD_INTEGRATION_IDS.has(id)) used.push("jira");
+    else if (Object.hasOwn(BUILT_IN_INTEGRATION_NAMES, id)) used.push(id);
+  }
+  return [...new Set(used)];
 }
 
 /**
@@ -218,6 +256,11 @@ export interface AutomationAvailability {
    * instance's report of its integrations is a hint rather than a guarantee.
    */
   unlikely: ReadonlyMap<string, readonly string[]>;
+  /**
+   * Entries an Enterprise instance looks ready for that use one of its
+   * built-in integrations, with the ones each uses, by provider name.
+   */
+  suggested: ReadonlyMap<string, readonly string[]>;
 }
 
 /**
@@ -227,7 +270,8 @@ export interface AutomationAvailability {
  * all. An entry that needs built-in integrations is hidden everywhere but an
  * Enterprise instance whose integrations are known, since no other backend has
  * them. Once an Enterprise instance's integrations are known, an entry that
- * seems to need one it does not report is ranked last rather than hidden.
+ * seems to need one it does not report is ranked last rather than hidden, and
+ * one that uses an integration it does report is suggested.
  */
 export function getAutomationAvailability(
   { deploymentMode, builtInIntegrations }: InstanceIntegrations,
@@ -239,6 +283,7 @@ export function getAutomationAvailability(
     isSelfHosted ? SELF_HOSTED_HIDDEN_AUTOMATION_IDS : undefined,
   );
   const unlikely = new Map<string, readonly string[]>();
+  const suggested = new Map<string, readonly string[]>();
   for (const automation of catalog) {
     if (hidden.has(automation.id)) continue;
     if (!knownSelfHosted) {
@@ -248,9 +293,16 @@ export function getAutomationAvailability(
       continue;
     }
     const missing = getMissingIntegrations(automation, knownSelfHosted);
-    if (missing.length > 0) unlikely.set(automation.id, missing);
+    if (missing.length > 0) {
+      unlikely.set(automation.id, missing);
+      continue;
+    }
+    const used = getUsedBuiltInIntegrations(automation).filter((id) =>
+      knownSelfHosted.has(id),
+    );
+    if (used.length > 0) suggested.set(automation.id, used);
   }
-  return { hidden, unlikely };
+  return { hidden, unlikely, suggested };
 }
 
 /**
@@ -266,6 +318,44 @@ export function rankByAvailability<T extends { id: string }>(
     ...automations.filter((automation) => !unlikely.has(automation.id)),
     ...automations.filter((automation) => unlikely.has(automation.id)),
   ];
+}
+
+/** The Templates page's two groups, each in its offered order. */
+export interface SuggestedTemplates<T> {
+  suggested: T[];
+  more: T[];
+}
+
+/**
+ * Splits entries into the suggested ones and the rest. Suggested are the ones
+ * using an integration the instance reports, then the featured ones the
+ * instance looks ready for; with nothing reported, that is just the featured
+ * ones. The rest keep their order, with those the instance does not appear to
+ * support last.
+ */
+export function splitBySuggestion<T extends { id: string }>(
+  automations: readonly T[],
+  isFeatured: (automation: T) => boolean,
+  {
+    suggested,
+    unlikely,
+  }: Partial<Pick<AutomationAvailability, "suggested" | "unlikely">>,
+): SuggestedTemplates<T> {
+  const matched = automations.filter(({ id }) => suggested?.has(id));
+  const featured = automations.filter(
+    (automation) =>
+      !suggested?.has(automation.id) &&
+      !unlikely?.has(automation.id) &&
+      isFeatured(automation),
+  );
+  const chosen = new Set([...matched, ...featured]);
+  return {
+    suggested: [...matched, ...featured],
+    more: rankByAvailability(
+      automations.filter((automation) => !chosen.has(automation)),
+      unlikely,
+    ),
+  };
 }
 
 /**

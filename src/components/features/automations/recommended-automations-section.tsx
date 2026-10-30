@@ -31,8 +31,8 @@ import {
   getAutomationLaunchPrompt,
   getIntegrationIds,
   getTemplateIntegrationIds,
-  rankByAvailability,
   getTemplateTriggerKinds,
+  splitBySuggestion,
   type TemplateTriggerKind,
 } from "#/utils/automation-catalog";
 import { getAutomationsByPopularity } from "#/utils/recommended-automation-rail";
@@ -64,6 +64,8 @@ interface RecommendedAutomationsSectionProps {
   hiddenAutomationIds?: ReadonlySet<string>;
   /** Entries the instance does not appear to support; listed last. */
   unlikelyAutomations?: ReadonlyMap<string, readonly string[]>;
+  /** Entries using an integration the instance reports; suggested first. */
+  suggestedAutomations?: ReadonlyMap<string, readonly string[]>;
   /** Resolves an integration's native (cloud) connection; none by default. */
   getNativeIntegration?: GetNativeIntegration;
   query?: string;
@@ -81,10 +83,10 @@ export { getAutomationsByPopularity };
 
 const RECOMMENDED_AUTOMATIONS = getAutomationsByPopularity(AUTOMATION_CATALOG);
 
-// Proven automations are featured above the Beta group. The set is owned by
-// the interface manifest (falling back to the host default), not derived from
-// popularityRank: slack-standup-digest@94 outranks slack-channel-monitor@92
-// yet is Beta.
+// Proven automations are suggested on any backend; the rest carry a Beta tag.
+// The set is owned by the interface manifest (falling back to the host
+// default), not derived from popularityRank: slack-standup-digest@94 outranks
+// slack-channel-monitor@92 yet is Beta.
 function isProvenAutomation(automation: RecommendedAutomation): boolean {
   return getFeaturedAutomationIds().includes(automation.id);
 }
@@ -351,6 +353,16 @@ function AutomationCardGrid({
                     </h3>
                     <p className="mt-0.5 truncate text-xs text-tertiary-alt">
                       {automation.category}
+                      {!isProvenAutomation(automation) && (
+                        <span
+                          data-testid={`recommended-automation-beta-${automation.id}`}
+                          className="ml-2 rounded border border-border px-1.5 py-px text-[10px] uppercase tracking-wide"
+                        >
+                          {translate(
+                            I18nKey.RECOMMENDED_AUTOMATIONS$BETA_LABEL,
+                          )}
+                        </span>
+                      )}
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-1.5">
@@ -395,6 +407,7 @@ export function RecommendedAutomationsSection({
   installedServers,
   hiddenAutomationIds,
   unlikelyAutomations,
+  suggestedAutomations,
   getNativeIntegration = () => null,
   query = "",
   onClearQuery,
@@ -456,13 +469,10 @@ export function RecommendedAutomationsSection({
     );
   }
 
-  const provenAutomations = rankByAvailability(
-    visibleAutomations.filter(isProvenAutomation),
-    unlikelyAutomations,
-  );
-  const betaAutomations = rankByAvailability(
-    visibleAutomations.filter((automation) => !isProvenAutomation(automation)),
-    unlikelyAutomations,
+  const { suggested, more } = splitBySuggestion(
+    visibleAutomations,
+    isProvenAutomation,
+    { suggested: suggestedAutomations, unlikely: unlikelyAutomations },
   );
 
   return (
@@ -483,20 +493,20 @@ export function RecommendedAutomationsSection({
       >
         {filterChips && <div className="mb-4">{filterChips}</div>}
 
-        {provenAutomations.length > 0 && (
+        {suggested.length > 0 && (
           <>
             <div className="flex items-center">
               <h2 className="text-base font-semibold text-foreground">
-                {t(I18nKey.RECOMMENDED_AUTOMATIONS$SECTION_TITLE)}
+                {t(I18nKey.RECOMMENDED_AUTOMATIONS$SUGGESTED_TITLE)}
               </h2>
-              <StatusBadge count={provenAutomations.length} />
+              <StatusBadge count={suggested.length} />
             </div>
             <p className="mt-1 text-sm text-muted">
               {t(I18nKey.RECOMMENDED_AUTOMATIONS$SECTION_DESCRIPTION)}
             </p>
 
             <AutomationCardGrid
-              automations={provenAutomations}
+              automations={suggested}
               installedServers={installedServers}
               getNativeIntegration={getNativeIntegration}
               onSelect={onSelect}
@@ -505,23 +515,23 @@ export function RecommendedAutomationsSection({
           </>
         )}
 
-        {betaAutomations.length > 0 && (
+        {more.length > 0 && (
           <section
-            data-testid="recommended-automations-beta-section"
-            className={cn(provenAutomations.length > 0 && "mt-8")}
+            data-testid="recommended-automations-more-section"
+            className={cn(suggested.length > 0 && "mt-8")}
           >
             <div
-              data-testid="recommended-automations-beta-heading"
+              data-testid="recommended-automations-more-heading"
               className="flex items-center"
             >
               <h2 className="text-base font-semibold text-foreground">
-                {t(I18nKey.RECOMMENDED_AUTOMATIONS$BETA_LABEL)}
+                {t(I18nKey.RECOMMENDED_AUTOMATIONS$MORE_TITLE)}
               </h2>
-              <StatusBadge count={betaAutomations.length} />
+              <StatusBadge count={more.length} />
             </div>
 
             <AutomationCardGrid
-              automations={betaAutomations}
+              automations={more}
               installedServers={installedServers}
               getNativeIntegration={getNativeIntegration}
               onSelect={onSelect}

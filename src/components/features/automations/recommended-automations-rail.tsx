@@ -40,6 +40,8 @@ interface RecommendedAutomationsRailProps {
   hiddenAutomationIds?: ReadonlySet<string>;
   /** Entries the instance does not appear to support; listed last. */
   unlikelyAutomations?: ReadonlyMap<string, readonly string[]>;
+  /** Entries using an integration the instance reports; listed first. */
+  suggestedAutomations?: ReadonlyMap<string, readonly string[]>;
   onSelect: (automation: RecommendedAutomation) => void;
   className?: string;
   dismissible?: boolean;
@@ -112,6 +114,7 @@ export function RecommendedAutomationsRail({
   installedAutomations,
   hiddenAutomationIds,
   unlikelyAutomations,
+  suggestedAutomations,
   onSelect,
   className,
   dismissible = false,
@@ -123,6 +126,7 @@ export function RecommendedAutomationsRail({
       installedAutomations,
       hiddenAutomationIds,
       unlikelyAutomations,
+      suggestedAutomations,
     ),
   );
   const scrollRef = useRef<HTMLDivElement>(null);

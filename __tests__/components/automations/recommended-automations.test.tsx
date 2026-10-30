@@ -236,7 +236,7 @@ describe("recommended automations", () => {
     __resetActiveStoreForTests();
   });
 
-  it("renders the proven automations before the beta ones, each in popularity order", () => {
+  it("renders the suggested automations before the rest, each in popularity order", () => {
     render(
       <RecommendedAutomationsSection
         backendKind="local"
@@ -280,7 +280,7 @@ describe("recommended automations", () => {
     ]);
   });
 
-  it("groups the non-proven automations under a labeled Beta section", () => {
+  it("suggests the proven automations and lists the rest, tagged Beta, under More templates", () => {
     render(
       <RecommendedAutomationsSection
         backendKind="local"
@@ -289,31 +289,40 @@ describe("recommended automations", () => {
       />,
     );
 
-    const provenHeading = screen.getByText(
-      I18nKey.RECOMMENDED_AUTOMATIONS$SECTION_TITLE,
+    const suggestedHeading = screen.getByText(
+      I18nKey.RECOMMENDED_AUTOMATIONS$SUGGESTED_TITLE,
     ).parentElement!;
-    expect(within(provenHeading).getByText("6")).toBeInTheDocument();
+    expect(within(suggestedHeading).getByText("6")).toBeInTheDocument();
+    expect(
+      screen.getByText(I18nKey.RECOMMENDED_AUTOMATIONS$SECTION_DESCRIPTION),
+    ).toBeInTheDocument();
 
-    const betaHeading = screen.getByTestId(
-      "recommended-automations-beta-heading",
+    const moreHeading = screen.getByTestId(
+      "recommended-automations-more-heading",
     );
-    expect(betaHeading).toHaveTextContent(
-      I18nKey.RECOMMENDED_AUTOMATIONS$BETA_LABEL,
+    expect(moreHeading).toHaveTextContent(
+      I18nKey.RECOMMENDED_AUTOMATIONS$MORE_TITLE,
     );
-    expect(within(betaHeading).getByText("17")).toBeInTheDocument();
+    expect(within(moreHeading).getByText("17")).toBeInTheDocument();
 
-    const betaSection = screen.getByTestId(
-      "recommended-automations-beta-section",
+    const moreSection = screen.getByTestId(
+      "recommended-automations-more-section",
     );
     expect(
-      within(betaSection).getByTestId(
+      within(moreSection).getByTestId(
         "recommended-automation-card-slack-standup-digest",
       ),
     ).toBeInTheDocument();
     expect(
-      within(betaSection).queryByTestId(
+      within(moreSection).queryByTestId(
         "recommended-automation-card-github-pr-reviewer",
       ),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("recommended-automation-beta-slack-standup-digest"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("recommended-automation-beta-github-pr-reviewer"),
     ).not.toBeInTheDocument();
   });
 
@@ -1270,6 +1279,29 @@ describe("recommended automations", () => {
         );
       },
     );
+  });
+
+  it("suggests first the templates using an integration an Enterprise instance reports", async () => {
+    await withBuiltInRequirement(["bitbucket_data_center"], async () => {
+      // Arrange
+      await activateCloudBackend({
+        deploymentMode: "self_hosted",
+        providersConfigured: ["bitbucket_data_center"],
+        jiraDcEnabled: true,
+      });
+
+      // Act
+      renderLauncher({ withBackendProvider: true });
+
+      // Assert
+      await screen.findByTestId("recommended-automation-card-news-digest");
+      expect(cardOrder()[0]).toBe("news-digest");
+      expect(
+        within(
+          screen.getByTestId("recommended-automations-more-section"),
+        ).getByTestId("recommended-automation-card-github-pr-reviewer"),
+      ).toBeInTheDocument();
+    });
   });
 
   it("explains what the instance does not report before setting such a template up, and lets the user continue", async () => {
