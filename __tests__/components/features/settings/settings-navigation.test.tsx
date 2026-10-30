@@ -14,7 +14,7 @@ import { OSS_NAV_ITEMS } from "#/constants/settings-nav";
 import { SettingsNavRenderedItem } from "#/hooks/use-settings-nav-items";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 
-const llmItem = OSS_NAV_ITEMS.find((item) => item.to === "/settings/llm")!;
+const agentItem = OSS_NAV_ITEMS.find((item) => item.to === "/settings/agents")!;
 const condenserItem = OSS_NAV_ITEMS.find(
   (item) => item.to === "/settings/condenser",
 )!;
@@ -22,14 +22,14 @@ const verificationItem = OSS_NAV_ITEMS.find(
   (item) => item.to === "/settings/verification",
 )!;
 const acpAccessibleItems: SettingsNavRenderedItem[] = [
-  { type: "item", item: llmItem },
+  { type: "item", item: agentItem },
   { type: "item", item: condenserItem },
   { type: "item", item: verificationItem },
 ];
 
 const baseItems: SettingsNavRenderedItem[] = [
   { type: "header", text: "SETTINGS$TITLE" as never },
-  { type: "item", item: llmItem },
+  { type: "item", item: agentItem },
   { type: "divider" },
   { type: "item", item: condenserItem },
 ];
@@ -60,7 +60,7 @@ describe("SettingsNavigation", () => {
 
     expect(screen.getByTestId("settings-navbar")).toBeInTheDocument();
     expect(screen.getAllByText("SETTINGS$TITLE").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("SETTINGS$NAV_LLM").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("SETTINGS$NAV_AGENT").length).toBeGreaterThan(0);
     expect(
       screen.getAllByText("SETTINGS$NAV_CONDENSER").length,
     ).toBeGreaterThan(0);
@@ -129,7 +129,7 @@ describe("SettingsNavigation", () => {
     );
 
     const mobileNav = screen.getByTestId("settings-navbar");
-    await userEvent.click(within(mobileNav).getByText("SETTINGS$NAV_LLM"));
+    await userEvent.click(within(mobileNav).getByText("SETTINGS$NAV_AGENT"));
 
     expect(onCloseMobileMenu).toHaveBeenCalledTimes(1);
   });
@@ -143,7 +143,7 @@ describe("SettingsNavigation", () => {
       />,
     );
     const desktopNav = screen.getByTestId("settings-navbar-desktop");
-    for (const item of [llmItem, condenserItem, verificationItem]) {
+    for (const item of [agentItem, condenserItem, verificationItem]) {
       const link = within(desktopNav).getByTestId(
         `sidebar-settings-${item.to}`,
       );
@@ -172,7 +172,7 @@ describe("SettingsDesktopSidebar", () => {
 
     expect(links).toHaveLength(2);
     expect(
-      within(desktopNav).getByTestId("sidebar-settings-/settings/llm"),
+      within(desktopNav).getByTestId("sidebar-settings-/settings/agents"),
     ).toBeInTheDocument();
     expect(
       within(desktopNav).getByTestId("sidebar-settings-/settings/condenser"),
@@ -187,7 +187,7 @@ describe("SettingsMobileHub", () => {
     );
 
     const mobileNav = screen.getByTestId("settings-mobile-hub");
-    for (const item of [llmItem, condenserItem, verificationItem]) {
+    for (const item of [agentItem, condenserItem, verificationItem]) {
       const link = within(mobileNav).getByRole("link", {
         name: item.text,
       });

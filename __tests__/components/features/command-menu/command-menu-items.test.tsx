@@ -46,13 +46,11 @@ describe("the command menu settings group", () => {
     expect(settingsItemIds(items)).toEqual([
       "settings",
       "agent-settings",
-      "llm-settings",
       "meta-llm-settings",
       "agent-context-settings",
       "verification-settings",
       "runtime-settings",
       "app-settings",
-      "secrets-settings",
     ]);
   });
 
@@ -84,7 +82,6 @@ describe("the command menu settings group", () => {
     expect(items.map((item) => item.id)).toEqual([
       "new-chat",
       "customize",
-      "mcp",
       "settings",
       "app-settings",
       "toggle-sidebar",

@@ -1,4 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
+import { Navigate } from "react-router";
 import React, { useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { BackNavButton } from "#/components/shared/buttons/back-nav-button";
@@ -228,4 +229,6 @@ export function SecretsSettingsScreen() {
   );
 }
 
-export default SecretsSettingsScreen;
+export default function SecretsSettingsRoute() {
+  return <Navigate to="/settings/agents" replace />;
+}

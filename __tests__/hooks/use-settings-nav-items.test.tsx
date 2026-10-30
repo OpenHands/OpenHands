@@ -67,22 +67,21 @@ describe("useSettingsNavItems", () => {
     vi.unstubAllEnvs();
   });
 
-  it("returns the LLM settings item unchanged on local backends", () => {
+  it("returns Agents as the configuration entry on local backends", () => {
     useConfigMock.mockReturnValue({ data: createConfig() });
 
     const { result } = renderHook(() => useSettingsNavItems());
-    const llmItem = result.current.find(
-      (item) => item.type === "item" && item.item.to === "/settings/llm",
+    const agentsItem = result.current.find(
+      (item) => item.type === "item" && item.item.to === "/settings/agents",
     );
 
-    const baseLlm = OSS_NAV_ITEMS.find((item) => item.to === "/settings/llm")!;
-    expect(llmItem).toEqual({
-      type: "item",
-      item: baseLlm,
-    });
+    const baseAgents = OSS_NAV_ITEMS.find(
+      (item) => item.to === "/settings/agents",
+    )!;
+    expect(agentsItem).toEqual({ type: "item", item: baseAgents });
   });
 
-  it("keeps the generic LLM settings item on cloud backends", () => {
+  it("keeps the same Agents entry on cloud backends", () => {
     useConfigMock.mockReturnValue({ data: createConfig() });
     useActiveBackendMock.mockReturnValue({
       backend: { kind: "cloud" },
@@ -91,9 +90,8 @@ describe("useSettingsNavItems", () => {
 
     const { result } = renderHook(() => useSettingsNavItems());
 
-    // Agent profiles are available on cloud too (OpenHands #15060), so every
-    // OSS item is present; only the `/settings` LLM-Profiles rename stays
-    // local-only, so on cloud every item is passed through unchanged.
+    // Agent profiles are available on cloud too (OpenHands #15060), so the
+    // same settings navigation is available on both backends.
     expect(result.current).toEqual(
       OSS_NAV_ITEMS.map((item) => ({ type: "item", item })),
     );
@@ -130,8 +128,9 @@ describe("useSettingsNavItems", () => {
       .map((item) => (item.type === "item" ? item.item.to : null));
 
     expect(paths).not.toContain("/settings/llm");
+    expect(paths).not.toContain("/settings/secrets");
+    expect(paths).toContain("/settings/agents");
     expect(paths).toContain("/settings/app");
-    expect(paths).toContain("/settings/secrets");
   });
 
   it("never lists removed settings sub-pages", () => {
@@ -168,7 +167,7 @@ describe("useSettingsNavItems", () => {
         ),
     );
 
-    for (const path of ["/settings/llm", "/settings/verification"]) {
+    for (const path of ["/settings/agents", "/settings/verification"]) {
       const renderedItem = byPath.get(path);
       expect(renderedItem).toEqual({
         type: "item",

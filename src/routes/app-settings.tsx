@@ -268,10 +268,10 @@ function AppSettingsForm() {
                 );
               }}
             />
-            {/* Locked-to-Cloud blocks the Canvas LLM page (OHE-3457). */}
+            {/* Locked-to-Cloud manages profiles through the Cloud settings shell. */}
             {getLockedCloudHost() === null && (
               <NavigationLink
-                to="/settings/llm"
+                to="/settings/agents"
                 className="mt-3 inline-block text-sm text-primary hover:underline"
               >
                 {t(I18nKey.SETTINGS$MANAGE_LLM_PROFILES)}

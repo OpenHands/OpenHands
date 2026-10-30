@@ -31,7 +31,7 @@ describe("setup guide tours", () => {
 
   it.each<[SuperAdminSetupStepId, string]>([
     ["first-automation", "/automations/templates"],
-    ["add-integration", "/mcp"],
+    ["add-integration", "/settings/agents"],
   ])(
     "starts the %s tour on the step's page and waits for the step",
     async (stepId, route) => {

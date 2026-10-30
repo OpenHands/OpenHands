@@ -95,7 +95,15 @@ export function shouldReapplyProfileAfterSave({
  * See PR review feedback for details.
  */
 
-export function LlmSettingsLocalView() {
+export function LlmSettingsLocalView({
+  createInAgent,
+  onSavedProfile,
+  onCancel,
+}: {
+  createInAgent?: boolean;
+  onSavedProfile?: (name: string) => void;
+  onCancel?: () => void;
+} = {}) {
   const { t } = useTranslation("openhands");
   const { setHideSectionHeader } = useSettingsSectionHeader();
   const saveProfile = useSaveLlmProfile();
@@ -153,7 +161,9 @@ export function LlmSettingsLocalView() {
   const supportsConnections =
     backend.kind === "local" || (backend.kind === "cloud" && !!orgId);
 
-  const [viewMode, setViewMode] = useState<ViewMode>("list");
+  const [viewMode, setViewMode] = useState<ViewMode>(
+    createInAgent ? "create" : "list",
+  );
   const [profileName, setProfileName] = useState("");
   // Whether the user typed the current create-mode name. Until they do (or
   // after they clear it), the name is auto-derived from the selected model.
@@ -169,9 +179,10 @@ export function LlmSettingsLocalView() {
   const [isValidating, setIsValidating] = useState(false);
 
   useEffect(() => {
+    if (createInAgent) return undefined;
     setHideSectionHeader(viewMode !== "list");
     return () => setHideSectionHeader(false);
-  }, [viewMode, setHideSectionHeader]);
+  }, [createInAgent, viewMode, setHideSectionHeader]);
 
   // Get existing profile names for validation
   const existingNames = useMemo(
@@ -241,12 +252,16 @@ export function LlmSettingsLocalView() {
   );
 
   const handleBackToList = useCallback(() => {
+    if (createInAgent) {
+      onCancel?.();
+      return;
+    }
     automaticCreateBooleanKeys.current = null;
     setViewMode("list");
     setEditingProfile(null);
     setProfileName("");
     setSaveControl(null);
-  }, []);
+  }, [createInAgent, onCancel]);
 
   const handleSaveControlChange = useCallback(
     (control: SdkSectionSaveControl) => {
@@ -418,6 +433,7 @@ export function LlmSettingsLocalView() {
           ? t(I18nKey.SETTINGS$PROFILE_CREATED, { name: trimmedName })
           : t(I18nKey.SETTINGS$PROFILE_UPDATED, { name: trimmedName }),
       );
+      onSavedProfile?.(trimmedName);
       handleBackToList();
     } catch (error) {
       console.error("Failed to save profile:", error);
@@ -439,6 +455,7 @@ export function LlmSettingsLocalView() {
     saveProfile,
     activateProfile,
     t,
+    onSavedProfile,
     handleBackToList,
   ]);
 

@@ -144,10 +144,10 @@ describe("SidebarOnboardingChecklist", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByTestId("sidebar-onboarding-checklist-item-configure-llm"),
-    ).toHaveAttribute("href", "/settings/llm");
+    ).toHaveAttribute("href", "/settings/agents");
     expect(
       screen.getByTestId("sidebar-onboarding-checklist-item-connect-mcp"),
-    ).toHaveAttribute("href", "/mcp");
+    ).toHaveAttribute("href", "/settings/agents");
     expect(
       screen.getByTestId("sidebar-onboarding-checklist-item-schedule-task"),
     ).toHaveAttribute("href", "/automations");
@@ -408,7 +408,7 @@ describe("SidebarOnboardingChecklist", () => {
         checklist_item: "configure_llm",
         is_external: false,
       });
-      expect(navigate).toHaveBeenCalledWith("/settings/llm", {
+      expect(navigate).toHaveBeenCalledWith("/settings/agents", {
         replace: false,
       });
     });

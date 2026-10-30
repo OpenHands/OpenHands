@@ -63,40 +63,16 @@ describe("ExtensionsMobileHub", () => {
     );
   });
 
-  describe("cloud backend", () => {
-    it("renders the Skills item as an external link to {cloudHost}/settings/skills with the renamed label", () => {
-      setRegisteredBackends([cloudBackend]);
-      setActiveSelection({ backendId: cloudBackend.id });
-
-      renderMobileHub(<ExtensionsMobileHub />);
-
-      const hub = screen.getByTestId("extensions-mobile-hub");
-      const skillsItem = within(hub).getByTestId("sidebar-extensions-/skills");
-      expect(skillsItem.tagName).toBe("A");
-      expect(skillsItem).toHaveAttribute(
-        "href",
-        "https://app.all-hands.dev/settings/skills",
-      );
-      expect(skillsItem).toHaveAttribute("target", "_blank");
-      expect(skillsItem).toHaveAttribute("rel", "noopener noreferrer");
-      expect(skillsItem).toHaveTextContent(
-        "SIDEBAR$SKILLS_AND_PLUGINS_CLOUD_LINK",
-      );
-    });
-
-    it("hides the Plugins and Apps items", () => {
-      setRegisteredBackends([cloudBackend]);
-      setActiveSelection({ backendId: cloudBackend.id });
-
-      renderMobileHub(<ExtensionsMobileHub />);
-
-      const hub = screen.getByTestId("extensions-mobile-hub");
-      expect(
-        within(hub).queryByTestId("sidebar-extensions-/plugins"),
-      ).not.toBeInTheDocument();
-      expect(
-        within(hub).queryByTestId("sidebar-extensions-/apps"),
-      ).not.toBeInTheDocument();
-    });
+  it("keeps agent-related items out of the mobile Customize navigation", () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+    renderMobileHub(<ExtensionsMobileHub />);
+    const hub = screen.getByTestId("extensions-mobile-hub");
+    expect(
+      within(hub).queryByTestId("sidebar-extensions-/skills"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(hub).queryByTestId("sidebar-extensions-/mcp"),
+    ).not.toBeInTheDocument();
   });
 });
