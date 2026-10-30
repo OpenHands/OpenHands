@@ -76,10 +76,10 @@ body:
     attributes:
       label: Actual Behavior
       description: |
-        What actually happened? To qualify for the `ready-for-dev` label,
-        describe the observed behavior and attach a screenshot or video of the
-        bug in this section.
-        Drag a screenshot/video into this field, or paste a link.
+        Describe what happened. For functional Canvas bugs, include a screenshot
+        or video of the failure in the running app. Logs, API output, and
+        reproducers can supplement it. Say if you have not reproduced it.
+        Links in comments count; no after-fix evidence is needed for triage.
       placeholder: |
         The button moved to the next step unexpectedly.
 
@@ -109,11 +109,11 @@ body:
     attributes:
       label: Acceptance Criteria
       description: |
-        Required for the `ready-for-dev` label. Testable, checkable bullets a
-        reviewer can verify. Describe the *fixed* state, not the bug.
+        For `ready-for-dev`, list observable fixed outcomes, not PR artifacts.
+        Tests and before/after fix evidence are not needed for triage.
       placeholder: |
-        - [ ] A screenshot/video demonstrating the bug can be replicated on main is attached to the PR.
-        - [ ] A screenshot/video demonstrating that the bug is fixed on the PR branch is attached to the PR.
+        - [ ] Following the reproduction steps produces the expected result.
+        - [ ] The affected mode handles the failure without losing user state.
         - [ ] …
     validations:
       required: false

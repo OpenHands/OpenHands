@@ -51,13 +51,15 @@ export function McpLogoBadge({
       data-testid={testId}
       className={cn(
         "inline-flex shrink-0 items-center justify-center overflow-hidden",
-        "border border-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]",
+        "border border-contrast/10 shadow-[inset_0_1px_0_color-mix(in_srgb,var(--oh-contrast)_18%,transparent)]",
         sizeClassNames[size],
         className,
       )}
       style={{
         backgroundColor: entry?.iconBg ?? "var(--oh-color-tertiary)",
-        color: entry?.iconColor ?? "#FFFFFF",
+        color:
+          entry?.iconColor ??
+          (entry?.iconBg ? "#FFFFFF" : "var(--oh-contrast)"),
       }}
     >
       {LocalLogoIcon ? (

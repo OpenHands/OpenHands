@@ -204,7 +204,7 @@ export function TranscriptExportModal({
     >
       <ModalBody
         testID="transcript-export-modal"
-        className="relative items-start border border-[var(--oh-border)]"
+        className="relative items-start border border-border"
       >
         <ModalCloseButton
           onClose={handleClose}
@@ -219,10 +219,10 @@ export function TranscriptExportModal({
         </div>
 
         <fieldset className="flex w-full flex-col gap-2">
-          <legend className="mb-2 text-sm font-medium text-white">
+          <legend className="mb-2 text-sm font-medium text-contrast">
             {t(I18nKey.TRANSCRIPT_EXPORT$FORMAT)}
           </legend>
-          <label className="flex cursor-pointer items-center gap-3 rounded-md border border-[var(--oh-border)] px-3 py-2 text-sm text-white">
+          <label className="flex cursor-pointer items-center gap-3 rounded-md border border-border px-3 py-2 text-sm text-contrast">
             <input
               type="radio"
               name={TRANSCRIPT_FORMAT_RADIO_NAME}
@@ -233,7 +233,7 @@ export function TranscriptExportModal({
             />
             {t(I18nKey.TRANSCRIPT_EXPORT$MARKDOWN)}
           </label>
-          <label className="flex cursor-pointer items-center gap-3 rounded-md border border-[var(--oh-border)] px-3 py-2 text-sm text-white">
+          <label className="flex cursor-pointer items-center gap-3 rounded-md border border-border px-3 py-2 text-sm text-contrast">
             <input
               type="radio"
               name={TRANSCRIPT_FORMAT_RADIO_NAME}
@@ -251,7 +251,7 @@ export function TranscriptExportModal({
             className="flex w-full flex-col gap-2"
             data-testid="transcript-export-scope"
           >
-            <legend className="mb-2 text-sm font-medium text-white">
+            <legend className="mb-2 text-sm font-medium text-contrast">
               {t(I18nKey.TRANSCRIPT_EXPORT$SCOPE)}
             </legend>
             <p className="mb-1 text-xs text-modal-muted">
@@ -259,7 +259,7 @@ export function TranscriptExportModal({
                 count: expectedEventCount,
               })}
             </p>
-            <label className="flex cursor-pointer items-start gap-3 rounded-md border border-[var(--oh-border)] px-3 py-2 text-sm text-white">
+            <label className="flex cursor-pointer items-start gap-3 rounded-md border border-border px-3 py-2 text-sm text-contrast">
               <input
                 type="radio"
                 className="mt-1"
@@ -280,7 +280,7 @@ export function TranscriptExportModal({
                 </span>
               </span>
             </label>
-            <label className="flex cursor-pointer items-start gap-3 rounded-md border border-[var(--oh-border)] px-3 py-2 text-sm text-white">
+            <label className="flex cursor-pointer items-start gap-3 rounded-md border border-border px-3 py-2 text-sm text-contrast">
               <input
                 type="radio"
                 className="mt-1"
@@ -303,7 +303,7 @@ export function TranscriptExportModal({
           </fieldset>
         )}
 
-        <div className="flex w-full flex-col gap-3 text-sm text-white">
+        <div className="flex w-full flex-col gap-3 text-sm text-contrast">
           <label className="flex cursor-pointer items-center gap-3">
             <input
               type="checkbox"

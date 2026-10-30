@@ -55,7 +55,7 @@ export const EllipsisButton = React.forwardRef<
       className={cn(
         "p-1 rounded-md cursor-pointer",
         formControlTransitionClassName,
-        "text-[var(--oh-muted)]",
+        "text-muted",
         formControlMutedHoverClassName,
         "flex items-center justify-center",
         className,

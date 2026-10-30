@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, within } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import { useConversationStore } from "#/stores/conversation-store";
 
@@ -6,6 +6,12 @@ import { useConversationStore } from "#/stores/conversation-store";
 vi.mock(
   "#/components/features/conversation/conversation-tabs/conversation-tabs",
   () => ({ ConversationTabs: () => <div data-testid="conversation-tabs" /> }),
+);
+vi.mock(
+  "#/components/features/conversation/conversation-tabs/conversation-planner-build-bar",
+  () => ({
+    ConversationPlannerBuildBar: () => <div data-testid="planner-build-bar" />,
+  }),
 );
 vi.mock(
   "#/components/features/conversation/conversation-tabs/conversation-tab-content/conversation-tab-content",
@@ -28,5 +34,18 @@ describe("ConversationMobilePanelPage", () => {
     fireEvent.click(screen.getByTestId("conversation-mobile-panel-back"));
 
     expect(onNavigateBack).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders the planner build bar below the fixed-height top bar, not inside it", () => {
+    render(<ConversationMobilePanelPage onNavigateBack={vi.fn()} />);
+
+    const topBar = screen.getByTestId("conversation-mobile-panel-top");
+    const buildBar = screen.getByTestId("planner-build-bar");
+
+    expect(within(topBar).queryByTestId("planner-build-bar")).toBeNull();
+    expect(
+      topBar.compareDocumentPosition(buildBar) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 });

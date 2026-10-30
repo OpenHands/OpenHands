@@ -13,8 +13,3 @@ export interface SuggestedTask {
   title: string;
   task_type: SuggestedTaskType;
 }
-
-export interface SuggestedTaskGroup {
-  title: string;
-  tasks: SuggestedTask[];
-}

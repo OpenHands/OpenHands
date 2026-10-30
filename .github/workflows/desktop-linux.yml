@@ -23,6 +23,7 @@ on:
       - .github/workflows/desktop-linux.yml
       - electron/**
       - electron-builder.config.mjs
+      - scripts/download-arch-utils.mjs
       - scripts/download-uv.mjs
       - scripts/download-node.mjs
   release:

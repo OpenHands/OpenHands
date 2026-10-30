@@ -5,9 +5,8 @@ import { SettingsDropdownInput } from "../settings-dropdown-input";
 import {
   AVAILABLE_COLOR_THEMES,
   type ColorThemeKey,
-  applyColorTheme,
-  persistColorTheme,
   readPersistedColorTheme,
+  setColorTheme,
 } from "#/themes/color-themes";
 
 export function ThemeInput() {
@@ -16,8 +15,7 @@ export function ThemeInput() {
   const handleSelectionChange = React.useCallback((key: React.Key | null) => {
     if (!key) return;
     const next = key as ColorThemeKey;
-    applyColorTheme(next);
-    persistColorTheme(next);
+    setColorTheme(next);
   }, []);
 
   return (

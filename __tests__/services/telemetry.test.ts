@@ -9,7 +9,6 @@ let latestPostHogConfig:
 const mockPosthog = {
   init: vi.fn(),
   capture: vi.fn(),
-  captureException: vi.fn(),
   opt_in_capturing: vi.fn(),
   opt_out_capturing: vi.fn(),
   has_opted_out_capturing: vi.fn(() => false),
@@ -51,10 +50,10 @@ import {
   setTelemetryBackendContext,
   setTelemetryCloudContext,
   setTelemetryConsent,
+  setTelemetryWebsiteAttribution,
   setTelemetryIdentity,
   subscribeTelemetryConsent,
   trackEvent,
-  trackException,
   trackInstall,
   trackSessionStart,
 } from "#/services/telemetry";
@@ -86,6 +85,7 @@ describe("Telemetry Service", () => {
     );
     await setTelemetryIdentity(null);
     setTelemetryBackendContext({});
+    setTelemetryWebsiteAttribution(undefined);
   });
 
   afterEach(() => {
@@ -124,7 +124,7 @@ describe("Telemetry Service", () => {
           consent_persistence_name: "agent-canvas-consent",
           person_profiles: "always",
           capture_pageview: "history_change",
-          autocapture: true,
+          autocapture: false,
         }),
         "agent-canvas",
       );
@@ -143,6 +143,7 @@ describe("Telemetry Service", () => {
           package_name: "@openhands/agent-canvas",
           package_version: expect.any(String),
           backend_kind: null,
+          deployment_kind: null,
           agent_server_version: "unknown",
           automation_sdk_version: "unknown",
           backend_version: "unknown",
@@ -155,6 +156,15 @@ describe("Telemetry Service", () => {
         agentServerVersion: "1.36.2",
         automationSdkVersion: "1.36.3",
       });
+      setTelemetryWebsiteAttribution({
+        utm_source: "newsletter",
+        utm_medium: "email",
+        utm_campaign: "launch",
+        landing_page_category: "home",
+        cta_id: "hero-cloud",
+        cta_surface: "homepage_hero",
+        referring_domain_category: "search",
+      });
       expect(
         config.before_send({
           event: "backend_context_event",
@@ -164,9 +174,17 @@ describe("Telemetry Service", () => {
         event: "backend_context_event",
         properties: expect.objectContaining({
           backend_kind: "cloud",
+          deployment_kind: "remote",
           agent_server_version: "1.36.2",
           automation_sdk_version: "1.36.3",
           backend_version: "1.36.2",
+          utm_source: "newsletter",
+          utm_medium: "email",
+          utm_campaign: "launch",
+          landing_page_category: "home",
+          cta_id: "hero-cloud",
+          cta_surface: "homepage_hero",
+          referring_domain_category: "search",
           custom: "value",
         }),
       });
@@ -495,6 +513,25 @@ describe("Telemetry Service", () => {
     });
   });
 
+  describe("build-time do-not-track", () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it("never initializes PostHog, even when the provider asks", async () => {
+      vi.stubEnv("VITE_DO_NOT_TRACK", "1");
+      vi.resetModules();
+      const telemetry = await import("#/services/telemetry");
+
+      await expect(telemetry.initializePostHogClient()).resolves.toBeNull();
+      await telemetry.trackInstall();
+      await telemetry.setTelemetryConsent("granted");
+
+      expect(telemetry.getTelemetryConsent()).toBe("denied");
+      expect(mockPosthog.init).not.toHaveBeenCalled();
+    });
+  });
+
   describe("getTelemetryDistinctId", () => {
     it("returns null when consent is not granted", async () => {
       await expect(getTelemetryDistinctId()).resolves.toBeNull();
@@ -584,30 +621,34 @@ describe("Telemetry Service", () => {
     });
   });
 
-  describe("trackException", () => {
-    it("uses the consent-aware boundary", async () => {
-      await setTelemetryConsent("granted");
-      const error = new Error("failure");
-
-      await trackException(error, { error_source: "test" });
-
-      expect(mockPosthog.captureException).toHaveBeenCalledWith(error, {
-        error_source: "test",
-      });
-    });
-  });
-
   describe("clearTelemetryData", () => {
-    it("clears all telemetry data from localStorage", async () => {
+    it("clears all telemetry data from browser storage", async () => {
       await setTelemetryConsent("granted");
       await setTelemetryIdentity("user-a");
       localStorage.setItem("openhands-telemetry-first-use", "true");
+      localStorage.setItem(
+        "posthog_bootstrap:consumed_nonces",
+        JSON.stringify({ "nonce-a": Date.now() + 60_000 }),
+      );
+      localStorage.setItem("posthog_bootstrap:legacy", "legacy");
+      sessionStorage.setItem(
+        "posthog_bootstrap",
+        JSON.stringify({
+          bootstrap: { distinctID: "website-anon", sessionID: "session-a" },
+          attribution: { cta_surface: "docs_link" },
+        }),
+      );
 
       await clearTelemetryData();
 
       expect(localStorage.getItem("openhands-telemetry-consent")).toBeNull();
       expect(getPendingCloudTelemetryConsent()).toBeNull();
       expect(localStorage.getItem("openhands-telemetry-first-use")).toBeNull();
+      expect(
+        localStorage.getItem("posthog_bootstrap:consumed_nonces"),
+      ).toBeNull();
+      expect(localStorage.getItem("posthog_bootstrap:legacy")).toBeNull();
+      expect(sessionStorage.getItem("posthog_bootstrap")).toBeNull();
       expect(mockPosthog.reset).toHaveBeenCalledWith(true);
       expect(mockPosthog.opt_out_capturing).toHaveBeenCalled();
       await expect(getTelemetryDistinctIdForConsentSync()).resolves.toBe(

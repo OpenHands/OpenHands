@@ -14,7 +14,7 @@ export function ConversationLoading({ className }: ConversationLoadingProps) {
   return (
     <div
       className={cn(
-        "bg-[var(--oh-surface)] flex h-full w-full flex-col items-center justify-center gap-3",
+        "bg-surface flex h-full w-full flex-col items-center justify-center gap-3",
         className,
       )}
     >

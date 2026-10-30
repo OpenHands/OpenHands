@@ -22,11 +22,27 @@ export const LLM_PROFILES_QUERY_KEYS = {
   all: ["llm-profiles"] as const,
 } as const;
 
+export const META_PROFILES_QUERY_KEYS = {
+  all: ["meta-profiles"] as const,
+} as const;
+
+export const ACP_MODEL_DISCOVERY_QUERY_KEYS = {
+  all: ["acp-model-discovery"] as const,
+} as const;
+
 export const AGENT_PROFILES_QUERY_KEYS = {
   all: ["agent-profiles"] as const,
   // Nested under `all` so profile mutations invalidate cached details too.
   detail: (backendId: string, orgId: string | null | undefined, name: string) =>
     ["agent-profiles", backendId, orgId, "detail", name] as const,
+} as const;
+
+export const TOOL_CATALOG_QUERY_KEYS = {
+  all: ["tool-catalog"] as const,
+} as const;
+
+export const SKILL_CATALOG_QUERY_KEYS = {
+  all: ["skill-catalog"] as const,
 } as const;
 
 export const PROVIDER_CONNECTIONS_QUERY_KEYS = {
@@ -71,11 +87,45 @@ export const CANVAS_EXTENSIONS_QUERY_KEYS = {
       orgId,
       connectionRevision,
     ] as const,
+  icon: (
+    backendId: string,
+    orgId: string | null,
+    connectionRevision: number,
+    name: string,
+  ) =>
+    [
+      "canvas-extensions",
+      "icon",
+      backendId,
+      orgId,
+      connectionRevision,
+      name,
+    ] as const,
+} as const;
+
+export const SUPER_ADMIN_SETUP_QUERY_KEYS = {
+  /** Every backend's setup-guide state, for invalidation. */
+  all: ["super-admin-setup-state"] as const,
+  /** Enterprise Super Admin setup-guide state for a cloud backend. */
+  state: (backendId: string, connectionRevision: number) =>
+    ["super-admin-setup-state", backendId, connectionRevision] as const,
 } as const;
 
 export const SETUP_QUERY_KEYS = {
   /** What the deployment supports. The same answer for every setup entry. */
   capabilities: () => ["setup-capabilities"] as const,
+} as const;
+
+export const MARS_QUERY_KEYS = {
+  all: ["mars"] as const,
+  authState: ["mars", "auth-state"] as const,
+  /** Every connection's agent list, for invalidating after a change. */
+  allAgents: ["mars", "agents"] as const,
+  /** Keyed by connection so switching teams never shows another team's list. */
+  agents: (connectionId: string | null) =>
+    ["mars", "agents", connectionId] as const,
+  /** DigitalOcean's sandbox size catalog; the same for every team. */
+  sandboxSizes: ["mars", "sandbox-sizes"] as const,
 } as const;
 
 export const APP_UPDATE_QUERY_KEYS = {
@@ -96,5 +146,3 @@ export const CONFIG_CACHE_OPTIONS = {
   staleTime: 1000 * 60 * 5, // 5 minutes
   gcTime: 1000 * 60 * 15, // 15 minutes
 } as const;
-
-export type QueryKeys = (typeof QUERY_KEYS)[keyof typeof QUERY_KEYS];

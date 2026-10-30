@@ -11,6 +11,7 @@ import { cn } from "#/utils/utils";
 import { useSidebarMobileNav } from "./sidebar-mobile-nav-context";
 import { useSidebarStore } from "#/stores/sidebar-store";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
+import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { useBackendsHealth } from "#/hooks/query/use-backends-health";
 // The LLM settings modal is only mounted when the settings query 404s and
 // LLM settings aren't hidden — keep it out of the sidebar's eager graph.
@@ -35,6 +36,9 @@ const ManageBackendsModal = React.lazy(() =>
 );
 
 const MOBILE_DRAWER_TRANSITION_MS = 250;
+const MOBILE_DRAWER_TRANSITION_STYLE = {
+  "--mobile-drawer-transition-duration": `${MOBILE_DRAWER_TRANSITION_MS}ms`,
+} as React.CSSProperties;
 
 export function Sidebar() {
   const { t } = useTranslation("openhands");
@@ -95,20 +99,8 @@ export function Sidebar() {
     return () => window.clearTimeout(timer);
   }, [isMobileNavOpen]);
 
-  React.useEffect(() => {
-    if (!isMobileNavOpen) {
-      return undefined;
-    }
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        closeMobileNav();
-      }
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [isMobileNavOpen, closeMobileNav]);
+  // A menu or the command menu opened over the drawer takes Escape first.
+  useCloseOnEscape(isMobileNavOpen, closeMobileNav);
 
   React.useEffect(() => {
     if (currentPath === "/settings") {
@@ -218,11 +210,11 @@ export function Sidebar() {
           setCollapsedRailHovered(false);
         }}
         className={cn(
-          "max-md:hidden flex bg-base flex-col min-h-0 transition-[width,min-width] duration-200",
-          "md:border-r md:border-[var(--oh-border)] md:h-full",
+          "max-md:hidden flex bg-canvas-base flex-col min-h-0 transition-[width,min-width] duration-200",
+          "md:border-r md:border-border md:h-full",
           collapsed
-            ? "md:w-[60px] md:min-w-[60px] md:px-2.5"
-            : "md:w-[300px] md:min-w-[300px] pb-2 md:pl-2.5 md:pr-0",
+            ? "md:w-15 md:min-w-15 md:px-2.5"
+            : "md:w-75 md:min-w-75 pb-2 md:pl-2.5 md:pr-0",
           currentPath === "/" && "md:pb-3",
         )}
       >
@@ -238,12 +230,12 @@ export function Sidebar() {
           <div
             className={cn(
               "fixed inset-0 z-40 bg-black/50 md:hidden",
-              "transition-opacity ease-in-out motion-reduce:transition-none",
+              "transition-opacity duration-(--mobile-drawer-transition-duration) ease-in-out motion-reduce:transition-none",
               mobileDrawerVisible
                 ? "opacity-100"
                 : "pointer-events-none opacity-0",
             )}
-            style={{ transitionDuration: `${MOBILE_DRAWER_TRANSITION_MS}ms` }}
+            style={MOBILE_DRAWER_TRANSITION_STYLE}
             onClick={closeMobileNav}
             aria-hidden={!mobileDrawerVisible}
           />
@@ -252,12 +244,12 @@ export function Sidebar() {
             data-testid="sidebar-mobile-drawer"
             aria-hidden={!mobileDrawerVisible}
             className={cn(
-              "fixed inset-y-0 left-0 z-50 flex min-h-0 w-[min(300px,85vw)] flex-col bg-base",
-              "border-r border-[var(--oh-border)] pb-2 pl-2.5 pr-0 md:hidden",
-              "transition-transform ease-in-out motion-reduce:transition-none",
+              "fixed inset-y-0 left-0 z-50 flex min-h-0 w-[min(300px,85vw)] flex-col bg-canvas-base",
+              "border-r border-border pb-2 pl-2.5 pr-0 md:hidden",
+              "transition-transform duration-(--mobile-drawer-transition-duration) ease-in-out motion-reduce:transition-none",
               mobileDrawerVisible ? "translate-x-0" : "-translate-x-full",
             )}
-            style={{ transitionDuration: `${MOBILE_DRAWER_TRANSITION_MS}ms` }}
+            style={MOBILE_DRAWER_TRANSITION_STYLE}
           >
             <SidebarRailBody
               collapsed={false}

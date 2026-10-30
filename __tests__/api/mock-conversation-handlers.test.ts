@@ -58,17 +58,25 @@ describe("mock conversation handlers", () => {
   // lets Stryker's per-test mutants actually take effect against these
   // handlers. `resetHandlers` (replace, not append) drops the default base
   // handlers so a mutated-away route has no unmutated duplicate to fall back
-  // to. The git-repository handlers are included for the git-changes case.
+  // to. The git-repository handlers are included for the git-changes case, and
+  // the settings handlers supply `/server_info` — the scoped runtime clients
+  // probe it to negotiate conversation-runtime routes. Without it those probes
+  // hit the 599 catch-all below and the request never reaches the real handler.
   beforeEach(async () => {
     vi.resetModules();
-    const [{ CONVERSATION_HANDLERS }, { GIT_REPOSITORY_HANDLERS }] =
-      await Promise.all([
-        import("#/mocks/conversation-handlers"),
-        import("#/mocks/git-repository-handlers"),
-      ]);
+    const [
+      { CONVERSATION_HANDLERS },
+      { GIT_REPOSITORY_HANDLERS },
+      { SETTINGS_HANDLERS },
+    ] = await Promise.all([
+      import("#/mocks/conversation-handlers"),
+      import("#/mocks/git-repository-handlers"),
+      import("#/mocks/settings-handlers"),
+    ]);
     server.resetHandlers(
       ...CONVERSATION_HANDLERS,
       ...GIT_REPOSITORY_HANDLERS,
+      ...SETTINGS_HANDLERS,
       ...UNHANDLED_REQUESTS,
     );
   });

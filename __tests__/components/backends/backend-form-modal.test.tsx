@@ -1,3 +1,7 @@
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { compile } from "@tailwindcss/node";
+import { parse } from "postcss";
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
@@ -14,6 +18,10 @@ import {
   type NavigationContextValue,
 } from "#/context/navigation-context";
 import { BackendFormModal } from "#/components/features/backends/backend-form-modal";
+import {
+  MODAL_MAX_WIDTH_VIEWPORT,
+  MODAL_WIDTH_CLASS,
+} from "#/components/shared/modals/modal-body";
 
 const getServerInfoMock = vi.hoisted(() => vi.fn());
 const getSettingsMock = vi.hoisted(() => vi.fn().mockResolvedValue({}));
@@ -69,7 +77,7 @@ function TestSeed({
 beforeEach(() => {
   window.localStorage.clear();
   getServerInfoMock.mockReset();
-  getServerInfoMock.mockResolvedValue({ version: "1.28.0" });
+  getServerInfoMock.mockResolvedValue({ version: "1.58.0" });
   __resetActiveStoreForTests();
 });
 
@@ -82,6 +90,62 @@ afterEach(() => {
 });
 
 describe("BackendFormModal – edit mode (BackendForm entry point)", () => {
+  it("bounds the edit dialog to the viewport with its close control outside the scrollable form", async () => {
+    renderWithProviders(
+      <BackendFormModal
+        mode="edit"
+        backend={{
+          id: "seeded-id",
+          name: "My Server",
+          host: "http://localhost:9000",
+          apiKey: "",
+          kind: "local",
+        }}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const dialog = screen.getByTestId("edit-backend-modal");
+    expect(dialog).toHaveClass(MODAL_WIDTH_CLASS.md, MODAL_MAX_WIDTH_VIEWPORT);
+
+    const compiler = await compile(
+      await readFile(resolve("src/tailwind.css"), "utf8"),
+      { base: resolve("src"), onDependency: () => {} },
+    );
+    const style = document.createElement("style");
+    const viewportRules: string[] = [];
+    parse(compiler.build([...dialog.classList])).walkDecls(
+      "max-height",
+      (declaration) => {
+        const rule = declaration.parent;
+        if (rule?.type === "rule" && dialog.matches(rule.selector)) {
+          viewportRules.push(`${rule.selector}{${declaration.toString()}}`);
+        }
+      },
+    );
+    style.textContent = viewportRules.join("\n");
+    document.head.appendChild(style);
+    try {
+      expect(getComputedStyle(dialog).maxHeight).toBe("92dvh");
+    } finally {
+      style.remove();
+    }
+
+    const scrollRegion = screen
+      .getByTestId("edit-backend-form")
+      .closest(".overflow-y-auto");
+    expect(scrollRegion).toHaveClass("min-h-0");
+    expect(scrollRegion).toContainElement(
+      screen.getByTestId("edit-backend-cancel"),
+    );
+    expect(scrollRegion).toContainElement(
+      screen.getByTestId("edit-backend-submit"),
+    );
+    expect(scrollRegion).not.toContainElement(
+      screen.getByTestId("edit-backend-close"),
+    );
+  });
+
   it("pre-fills fields with the backend data passed as prop", () => {
     renderWithProviders(
       <BackendFormModal

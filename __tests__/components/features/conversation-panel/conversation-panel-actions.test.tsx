@@ -1,0 +1,1335 @@
+import { screen, waitFor, within, act } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
+import {
+  setupConversationPanelTest,
+  createMockConversation,
+  mockConversations,
+  renderConversationPanel,
+  cloudBackend,
+  RouterStub,
+} from "./conversation-panel-test-utils";
+import { withConversationTagFlags } from "#/utils/conversation-tag-flags";
+import { renderWithProviders } from "test-utils";
+import { ActiveBackendProvider } from "#/contexts/active-backend-context";
+import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import AgentProfilesService from "#/api/agent-profiles-service/agent-profiles-service.api";
+import type {
+  AppConversation,
+  AppConversationStartTask,
+  SandboxStatus,
+} from "#/api/conversation-service/agent-server-conversation-service.types";
+import {
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
+import { ExecutionStatus } from "#/types/agent-server/core";
+import { useArchivedConversationsStore } from "#/stores/archived-conversations-store";
+import { usePinnedConversationsStore } from "#/stores/pinned-conversations-store";
+import { useConversationPanelPreferencesStore } from "#/stores/conversation-panel-preferences-store";
+
+const mockStopConversationMutate = vi.fn();
+vi.mock("#/hooks/mutation/use-unified-stop-conversation", () => ({
+  useUnifiedPauseConversation: () => ({ mutate: mockStopConversationMutate }),
+}));
+vi.mock("#/utils/custom-toast-handlers", () => ({
+  displaySuccessToast: vi.fn(),
+  displayErrorToast: vi.fn(),
+  TOAST_OPTIONS: {},
+}));
+
+describe("ConversationPanel conversation actions", () => {
+  setupConversationPanelTest();
+
+  it("should cancel deleting a conversation", async () => {
+    const user = userEvent.setup();
+    renderConversationPanel();
+
+    let cards = await screen.findAllByTestId("conversation-card");
+    // Closed state is observable via the data-context-menu-open attr on the
+    // conversation-card root; visual hiding is covered by Playwright.
+    expect(cards[0]).toHaveAttribute("data-context-menu-open", "false");
+
+    const ellipsisButton = within(cards[0]).getByTestId("ellipsis-button");
+    await user.click(ellipsisButton);
+    const deleteButton = screen.getByTestId("delete-button");
+
+    // Click the first delete button
+    await user.click(deleteButton);
+
+    // Cancel the deletion
+    const cancelButton = screen.getByRole("button", { name: /cancel/i });
+    await user.click(cancelButton);
+
+    expect(
+      screen.queryByRole("button", { name: /cancel/i }),
+    ).not.toBeInTheDocument();
+
+    // Ensure the conversation is not deleted
+    cards = await screen.findAllByTestId("conversation-card");
+    expect(cards).toHaveLength(3);
+  });
+
+  it("should delete a conversation", async () => {
+    const user = userEvent.setup();
+    const mockData: import("#/api/conversation-service/agent-server-conversation-service.types").AppConversation[] =
+      [
+        createMockConversation({ id: "1", title: "Conversation 1" }),
+        createMockConversation({ id: "2", title: "Conversation 2" }),
+        createMockConversation({ id: "3", title: "Conversation 3" }),
+      ];
+
+    const searchConversationsSpy = vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    );
+    searchConversationsSpy.mockImplementation(async () => ({
+      items: mockData,
+      next_page_id: null,
+    }));
+
+    const deleteConversationSpy = vi.spyOn(
+      AgentServerConversationService,
+      "deleteConversation",
+    );
+    deleteConversationSpy.mockImplementation(async (id: string) => {
+      const index = mockData.findIndex((conv) => conv.id === id);
+      if (index !== -1) {
+        mockData.splice(index, 1);
+      }
+    });
+
+    renderConversationPanel();
+
+    const cards = await screen.findAllByTestId("conversation-card");
+    // Initially shows 3 conversations (no filtering)
+    expect(cards).toHaveLength(3);
+
+    const ellipsisButton = within(cards[0]).getByTestId("ellipsis-button");
+    await user.click(ellipsisButton);
+    const deleteButton = screen.getByTestId("delete-button");
+
+    // Click the first delete button
+    await user.click(deleteButton);
+
+    // Confirm the deletion
+    const confirmButton = screen.getByRole("button", { name: /confirm/i });
+    await user.click(confirmButton);
+
+    // Verify modal is closed after confirmation
+    expect(
+      screen.queryByRole("button", { name: /confirm/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("should archive a conversation and remove it from the list", async () => {
+    const user = userEvent.setup();
+    const items = mockConversations.map((conversation) => ({
+      ...conversation,
+    }));
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({ items, next_page_id: null });
+    // Stateful fake: tag-flag writes update what later searches return,
+    // mirroring the server round-trip the settle-invalidation performs.
+    vi.spyOn(
+      AgentServerConversationService,
+      "updateConversationTagFlags",
+    ).mockImplementation(async (conversationId, _currentTags, changes) => {
+      const target = items.find(
+        (conversation) => conversation.id === conversationId,
+      )!;
+      target.tags = withConversationTagFlags(target.tags, changes);
+      return target;
+    });
+    renderConversationPanel();
+
+    let cards = await screen.findAllByTestId("conversation-card");
+    expect(cards).toHaveLength(3);
+
+    const firstCardTitle = within(cards[0]).getByText("Conversation 1");
+    expect(firstCardTitle).toBeInTheDocument();
+
+    const ellipsisButton = within(cards[0]).getByTestId("ellipsis-button");
+    await user.click(ellipsisButton);
+    await user.click(screen.getByTestId("archive-button"));
+
+    expect(
+      screen.getByText("CONVERSATION$CONFIRM_ARCHIVE"),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /archive/i }));
+
+    await waitFor(() => {
+      expect(
+        screen.queryByText("CONVERSATION$CONFIRM_ARCHIVE"),
+      ).not.toBeInTheDocument();
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText("Conversation 1")).not.toBeInTheDocument();
+    });
+    cards = await screen.findAllByTestId("conversation-card");
+    expect(cards).toHaveLength(2);
+  });
+
+  it("migrates a legacy localStorage pin into a server tag and drains it", async () => {
+    // Pins written before tags existed live in the localStorage store; the
+    // panel replays them into the conversation's tags on load and removes
+    // the legacy entry so the migration cannot run twice.
+    usePinnedConversationsStore
+      .getState()
+      .pinConversation("default-local", "2");
+
+    renderConversationPanel();
+
+    await waitFor(() => {
+      expect(
+        AgentServerConversationService.updateConversationTagFlags,
+      ).toHaveBeenCalledWith("2", undefined, { pinned: true });
+    });
+    await waitFor(() => {
+      expect(
+        usePinnedConversationsStore.getState().pinsByBackendId[
+          "default-local"
+        ] ?? [],
+      ).not.toContain("2");
+    });
+  });
+
+  it("migrates a legacy localStorage archive into a server tag and drains it", async () => {
+    useArchivedConversationsStore
+      .getState()
+      .archiveConversation("default-local", "1");
+    // Stateful fake: the migrated tag must survive the settle refetch,
+    // exactly as it would against a real server.
+    const items = mockConversations.map((conversation) => ({
+      ...conversation,
+    }));
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({ items, next_page_id: null });
+    vi.spyOn(
+      AgentServerConversationService,
+      "updateConversationTagFlags",
+    ).mockImplementation(async (conversationId, _currentTags, changes) => {
+      const target = items.find(
+        (conversation) => conversation.id === conversationId,
+      )!;
+      target.tags = withConversationTagFlags(target.tags, changes);
+      return target;
+    });
+
+    renderConversationPanel();
+
+    await waitFor(() => {
+      expect(
+        AgentServerConversationService.updateConversationTagFlags,
+      ).toHaveBeenCalledWith("1", undefined, { archived: true });
+    });
+    await waitFor(() => {
+      expect(
+        useArchivedConversationsStore.getState().archivesByBackendId[
+          "default-local"
+        ] ?? [],
+      ).not.toContain("1");
+    });
+    // The archived row leaves the default list once the tag lands
+    // (optimistically, before any refetch).
+    await waitFor(() => {
+      expect(screen.queryByText("Conversation 1")).not.toBeInTheDocument();
+    });
+  });
+
+  it("migrates both legacy flags in one write and drains only after success", async () => {
+    usePinnedConversationsStore
+      .getState()
+      .pinConversation("default-local", "1");
+    useArchivedConversationsStore
+      .getState()
+      .archiveConversation("default-local", "1");
+    const conversation = createMockConversation({
+      id: "1",
+      tags: { origin: "automation" },
+    });
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({ items: [conversation], next_page_id: null });
+    let finishWrite!: () => void;
+    const write = vi
+      .spyOn(AgentServerConversationService, "updateConversationTagFlags")
+      .mockImplementation(
+        (_id, currentTags, changes) =>
+          new Promise((resolve) => {
+            finishWrite = () => {
+              conversation.tags = withConversationTagFlags(
+                currentTags,
+                changes,
+              );
+              resolve(conversation);
+            };
+          }),
+      );
+
+    renderConversationPanel();
+
+    await waitFor(() => expect(write).toHaveBeenCalledTimes(1));
+    expect(write).toHaveBeenCalledWith(
+      "1",
+      { origin: "automation" },
+      {
+        pinned: true,
+        archived: true,
+      },
+    );
+    expect(
+      usePinnedConversationsStore.getState().pinsByBackendId["default-local"],
+    ).toContain("1");
+    expect(
+      useArchivedConversationsStore.getState().archivesByBackendId[
+        "default-local"
+      ],
+    ).toContain("1");
+
+    await act(async () => finishWrite());
+
+    await waitFor(() => {
+      expect(
+        usePinnedConversationsStore.getState().pinsByBackendId[
+          "default-local"
+        ] ?? [],
+      ).not.toContain("1");
+      expect(
+        useArchivedConversationsStore.getState().archivesByBackendId[
+          "default-local"
+        ] ?? [],
+      ).not.toContain("1");
+    });
+    expect(conversation.tags).toEqual({
+      origin: "automation",
+      pinned: "true",
+      archived: "true",
+    });
+    expect(write).toHaveBeenCalledTimes(1);
+  });
+
+  it("retains legacy flags after a failed migration and retries on remount", async () => {
+    usePinnedConversationsStore
+      .getState()
+      .pinConversation("default-local", "1");
+    useArchivedConversationsStore
+      .getState()
+      .archiveConversation("default-local", "1");
+    let failWrite!: () => void;
+    const write = vi
+      .spyOn(AgentServerConversationService, "updateConversationTagFlags")
+      .mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            failWrite = () => reject(new Error("Network unavailable"));
+          }),
+      );
+
+    const { unmount } = renderConversationPanel();
+    await waitFor(() => expect(write).toHaveBeenCalledTimes(1));
+    await act(async () => failWrite());
+
+    expect(
+      usePinnedConversationsStore.getState().pinsByBackendId["default-local"],
+    ).toContain("1");
+    expect(
+      useArchivedConversationsStore.getState().archivesByBackendId[
+        "default-local"
+      ],
+    ).toContain("1");
+    expect(write).toHaveBeenCalledTimes(1);
+    unmount();
+    renderConversationPanel();
+    await waitFor(() => {
+      expect(
+        usePinnedConversationsStore.getState().pinsByBackendId[
+          "default-local"
+        ] ?? [],
+      ).not.toContain("1");
+      expect(
+        useArchivedConversationsStore.getState().archivesByBackendId[
+          "default-local"
+        ] ?? [],
+      ).not.toContain("1");
+    });
+    expect(write).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows archived conversations when the preference is on and restores them", async () => {
+    // Archiving must stay reversible — that is the whole distinction from
+    // deleting, which removes the conversation from the agent server.
+    const user = userEvent.setup();
+    const items = [
+      createMockConversation({
+        id: "1",
+        title: "Conversation 1",
+        tags: { archived: "true" },
+      }),
+      createMockConversation({ id: "2", title: "Conversation 2" }),
+      createMockConversation({ id: "3", title: "Conversation 3" }),
+    ];
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({
+      items,
+      next_page_id: null,
+    });
+    vi.spyOn(
+      AgentServerConversationService,
+      "updateConversationTagFlags",
+    ).mockImplementation(async (conversationId, _currentTags, changes) => {
+      const target = items.find(
+        (conversation) => conversation.id === conversationId,
+      )!;
+      target.tags = withConversationTagFlags(target.tags, changes);
+      return target;
+    });
+    useConversationPanelPreferencesStore.setState({
+      showArchivedConversations: true,
+    });
+
+    renderConversationPanel();
+
+    const cards = await screen.findAllByTestId("conversation-card");
+    expect(cards).toHaveLength(3);
+    const archivedCard = cards.find((card) =>
+      within(card).queryByText("Conversation 1"),
+    )!;
+    expect(
+      within(archivedCard).getByTestId("conversation-card-archived-chip"),
+    ).toBeInTheDocument();
+
+    await user.click(within(archivedCard).getByTestId("ellipsis-button"));
+    await user.click(screen.getByTestId("unarchive-button"));
+
+    await waitFor(() => {
+      expect(
+        AgentServerConversationService.updateConversationTagFlags,
+      ).toHaveBeenCalledWith("1", { archived: "true" }, { archived: false });
+    });
+    await waitFor(() => {
+      expect(
+        screen.queryByTestId("conversation-card-archived-chip"),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it("hides a missing-runtime conversation from the default list, reveals it with the Archived chip, and offers neither action", async () => {
+    // A conversation whose runtime is gone (adapter maps a local
+    // `runtime_info.runtime_status: "missing"` + `can_resume: false` to
+    // `sandbox_status: "MISSING"`) must be treated as archived everywhere:
+    // hidden by default and chipped when "Show archived" is on. Its ⋮ menu
+    // offers neither "Archive" nor "Unarchive": the missing runtime cannot be
+    // restored from here, so neither direction can change the effective state.
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({
+      items: [
+        createMockConversation({ id: "live", title: "Live Conversation" }),
+        createMockConversation({
+          id: "gone",
+          title: "Gone Conversation",
+          sandbox_status: "MISSING",
+        }),
+      ],
+      next_page_id: null,
+    });
+
+    renderConversationPanel();
+
+    // Default list: the missing-runtime row is hidden like an archived row.
+    let cards = await screen.findAllByTestId("conversation-card");
+    expect(cards).toHaveLength(1);
+    expect(screen.queryByText("Gone Conversation")).not.toBeInTheDocument();
+
+    // "Show archived": the row reappears with the Archived chip.
+    act(() => {
+      useConversationPanelPreferencesStore.setState({
+        showArchivedConversations: true,
+      });
+    });
+    cards = await screen.findAllByTestId("conversation-card");
+    expect(cards).toHaveLength(2);
+    const goneCard = cards.find((card) =>
+      within(card).queryByText("Gone Conversation"),
+    )!;
+    expect(goneCard).toBeInTheDocument();
+    expect(
+      within(goneCard).getByTestId("conversation-card-archived-chip"),
+    ).toBeInTheDocument();
+
+    // Neither direction is offered.
+    await userEvent
+      .setup()
+      .click(within(goneCard).getByTestId("ellipsis-button"));
+    expect(screen.queryByTestId("unarchive-button")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("archive-button")).not.toBeInTheDocument();
+  });
+
+  it("keeps a missing-runtime row presented as archived and offers no action", async () => {
+    // A missing, non-resumable runtime keeps the row presented as archived:
+    // the indicator, list visibility, and chip stay in agreement. The menu
+    // offers neither direction because the runtime cannot be restored here.
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({
+      items: [
+        createMockConversation({
+          id: "gone",
+          title: "Gone Conversation",
+          sandbox_status: "MISSING",
+        }),
+      ],
+      next_page_id: null,
+    });
+    useConversationPanelPreferencesStore.setState({
+      showArchivedConversations: true,
+    });
+
+    renderConversationPanel();
+
+    const goneCard = (await screen.findByText("Gone Conversation")).closest(
+      "[data-testid='conversation-card']",
+    )!;
+    expect(
+      within(goneCard as HTMLElement).getByTestId(
+        "conversation-card-archived-chip",
+      ),
+    ).toBeInTheDocument();
+
+    await userEvent
+      .setup()
+      .click(within(goneCard as HTMLElement).getByTestId("ellipsis-button"));
+    expect(screen.queryByTestId("unarchive-button")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("archive-button")).not.toBeInTheDocument();
+
+    // Still hidden from the default list.
+    act(() => {
+      useConversationPanelPreferencesStore.setState({
+        showArchivedConversations: false,
+      });
+    });
+    expect(screen.queryByText("Gone Conversation")).not.toBeInTheDocument();
+  });
+
+  it("offers Unarchive on an explicitly archived row with a present runtime", async () => {
+    // An explicit archive whose sandbox is not missing is restorable, so its
+    // ⋮ menu offers Unarchive and removing it returns the row to the default
+    // list.
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({
+      items: [
+        createMockConversation({
+          id: "1",
+          title: "Conversation 1",
+          tags: { archived: "true" },
+        }),
+        createMockConversation({ id: "2", title: "Conversation 2" }),
+        createMockConversation({ id: "3", title: "Conversation 3" }),
+      ],
+      next_page_id: null,
+    });
+    useConversationPanelPreferencesStore.setState({
+      showArchivedConversations: true,
+    });
+
+    renderConversationPanel();
+
+    const cards = await screen.findAllByTestId("conversation-card");
+    const archivedCard = cards.find((card) =>
+      within(card).queryByText("Conversation 1"),
+    )!;
+    await userEvent
+      .setup()
+      .click(within(archivedCard).getByTestId("ellipsis-button"));
+    expect(screen.getByTestId("unarchive-button")).toBeInTheDocument();
+    expect(screen.queryByTestId("archive-button")).not.toBeInTheDocument();
+  });
+
+  it("offers neither action on a row that is both explicitly archived and missing its runtime", async () => {
+    // A stored archive id on a missing-runtime row: the menu offers neither
+    // direction. Clearing the id would not change the effective archived state
+    // (the missing runtime keeps the row archived), so it is not a useful
+    // Unarchive operation.
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({
+      items: [
+        createMockConversation({
+          id: "gone",
+          title: "Gone Conversation",
+          sandbox_status: "MISSING",
+          tags: { archived: "true" },
+        }),
+      ],
+      next_page_id: null,
+    });
+    useConversationPanelPreferencesStore.setState({
+      showArchivedConversations: true,
+    });
+
+    renderConversationPanel();
+
+    const goneCard = await screen.findByText("Gone Conversation");
+    const card = goneCard.closest("[data-testid='conversation-card']")!;
+    await userEvent
+      .setup()
+      .click(within(card as HTMLElement).getByTestId("ellipsis-button"));
+    expect(screen.queryByTestId("unarchive-button")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("archive-button")).not.toBeInTheDocument();
+  });
+
+  it("keeps an ERROR runtime in the default list without the Archived chip", async () => {
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({
+      items: [
+        createMockConversation({
+          id: "errored",
+          title: "Errored Conversation",
+          sandbox_status: "ERROR",
+        }),
+      ],
+      next_page_id: null,
+    });
+
+    renderConversationPanel();
+
+    const cards = await screen.findAllByTestId("conversation-card");
+    expect(cards).toHaveLength(1);
+    expect(screen.getByText("Errored Conversation")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("conversation-card-archived-chip"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("should cancel stopping a conversation", async () => {
+    const user = userEvent.setup();
+
+    // Create mock data with a RUNNING conversation
+    const mockRunningConversations = [
+      createMockConversation({
+        id: "1",
+        title: "Running Conversation",
+        execution_status: ExecutionStatus.RUNNING,
+      }),
+      createMockConversation({
+        id: "2",
+        title: "Starting Conversation",
+        execution_status: ExecutionStatus.RUNNING,
+      }),
+      createMockConversation({
+        id: "3",
+        title: "Stopped Conversation",
+        execution_status: ExecutionStatus.PAUSED,
+      }),
+    ];
+
+    const searchConversationsSpy = vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    );
+    searchConversationsSpy.mockResolvedValue({
+      items: mockRunningConversations,
+      next_page_id: null,
+    });
+
+    renderConversationPanel();
+
+    const cards = await screen.findAllByTestId("conversation-card");
+    expect(cards).toHaveLength(3);
+
+    // Click ellipsis on the first card (RUNNING status)
+    const ellipsisButton = within(cards[0]).getByTestId("ellipsis-button");
+    await user.click(ellipsisButton);
+
+    // Stop button should be available for RUNNING conversation
+    const stopButton = screen.getByTestId("stop-button");
+    expect(stopButton).toBeInTheDocument();
+
+    // Click the stop button
+    await user.click(stopButton);
+
+    // Cancel the stopping action
+    const cancelButton = screen.getByRole("button", { name: /cancel/i });
+    await user.click(cancelButton);
+
+    expect(
+      screen.queryByRole("button", { name: /cancel/i }),
+    ).not.toBeInTheDocument();
+
+    // Ensure the conversation status hasn't changed
+    const updatedCards = await screen.findAllByTestId("conversation-card");
+    expect(updatedCards).toHaveLength(3);
+  });
+
+  it("should stop a conversation", async () => {
+    const user = userEvent.setup();
+
+    const mockData = [
+      createMockConversation({
+        id: "1",
+        title: "Conversation 1",
+        execution_status: ExecutionStatus.RUNNING,
+      }),
+      createMockConversation({
+        id: "2",
+        title: "Conversation 2",
+        execution_status: ExecutionStatus.FINISHED,
+      }),
+      createMockConversation({
+        id: "3",
+        title: "Conversation 3",
+        execution_status: ExecutionStatus.FINISHED,
+      }),
+    ];
+
+    const searchConversationsSpy = vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    );
+    searchConversationsSpy.mockImplementation(async () => ({
+      items: mockData,
+      next_page_id: null,
+    }));
+
+    renderConversationPanel();
+
+    const cards = await screen.findAllByTestId("conversation-card");
+    // Component shows all 3 conversations (no filtering by status)
+    expect(cards).toHaveLength(3);
+
+    // Click ellipsis on the first card (RUNNING status)
+    const ellipsisButton = within(cards[0]).getByTestId("ellipsis-button");
+    await user.click(ellipsisButton);
+
+    const stopButton = screen.getByTestId("stop-button");
+
+    // Click the stop button
+    await user.click(stopButton);
+
+    // Confirm the stopping action
+    const confirmButton = screen.getByRole("button", { name: /confirm/i });
+    await user.click(confirmButton);
+
+    expect(
+      screen.queryByRole("button", { name: /confirm/i }),
+    ).not.toBeInTheDocument();
+
+    // Verify the mutation was called
+    expect(mockStopConversationMutate).toHaveBeenCalledWith({
+      conversationId: "1",
+    });
+    expect(mockStopConversationMutate).toHaveBeenCalledTimes(1);
+  });
+
+  it("should only show stop button for STARTING or RUNNING conversations", async () => {
+    const user = userEvent.setup();
+
+    const mockMixedStatusConversations = [
+      createMockConversation({
+        id: "1",
+        title: "Running Conversation",
+        execution_status: ExecutionStatus.RUNNING,
+      }),
+      createMockConversation({
+        id: "2",
+        title: "Starting Conversation",
+        execution_status: ExecutionStatus.RUNNING,
+      }),
+      createMockConversation({
+        id: "3",
+        title: "Stopped Conversation",
+        execution_status: ExecutionStatus.PAUSED,
+      }),
+    ];
+
+    const searchConversationsSpy = vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    );
+    searchConversationsSpy.mockResolvedValue({
+      items: mockMixedStatusConversations,
+      next_page_id: null,
+    });
+
+    renderConversationPanel();
+
+    const cards = await screen.findAllByTestId("conversation-card");
+    expect(cards).toHaveLength(3);
+
+    const getCardByTitle = async (title: string) => {
+      const currentCards = await screen.findAllByTestId("conversation-card");
+      const card = currentCards.find((candidate) =>
+        within(candidate).queryByText(title),
+      );
+      expect(card).toBeDefined();
+      return card as HTMLElement;
+    };
+
+    // Test RUNNING conversation - should show stop button
+    const runningCard = await getCardByTitle("Running Conversation");
+    const runningEllipsisButton =
+      within(runningCard).getByTestId("ellipsis-button");
+    await user.click(runningEllipsisButton);
+
+    expect(await screen.findByTestId("stop-button")).toBeInTheDocument();
+
+    // Click outside to close the menu
+    await user.click(document.body);
+
+    // Wait for context menu to close before opening the next one.
+    await waitFor(() => {
+      expect(screen.queryByTestId("stop-button")).not.toBeInTheDocument();
+    });
+
+    // Test STARTING/RUNNING conversation - should show stop button
+    const startingCard = await getCardByTitle("Starting Conversation");
+    const startingEllipsisButton =
+      within(startingCard).getByTestId("ellipsis-button");
+    await user.click(startingEllipsisButton);
+
+    expect(await screen.findByTestId("stop-button")).toBeInTheDocument();
+
+    // Click outside to close the menu
+    await user.click(document.body);
+
+    // Wait for context menu to close before opening the next one.
+    await waitFor(() => {
+      expect(screen.queryByTestId("stop-button")).not.toBeInTheDocument();
+    });
+
+    // Test STOPPED conversation - should NOT show stop button
+    const stoppedCard = await getCardByTitle("Stopped Conversation");
+    const stoppedEllipsisButton =
+      within(stoppedCard).getByTestId("ellipsis-button");
+    await user.click(stoppedEllipsisButton);
+
+    await waitFor(() => {
+      expect(stoppedCard).toHaveAttribute("data-context-menu-open", "true");
+    });
+    expect(screen.queryByTestId("stop-button")).not.toBeInTheDocument();
+  });
+
+  it("should show edit button in context menu", async () => {
+    const user = userEvent.setup();
+    renderConversationPanel();
+
+    const cards = await screen.findAllByTestId("conversation-card");
+    expect(cards).toHaveLength(3);
+
+    // Click ellipsis to open context menu
+    const ellipsisButton = within(cards[0]).getByTestId("ellipsis-button");
+    await user.click(ellipsisButton);
+
+    // Edit button should be visible within the first card's context menu
+    const editButton = screen.getByTestId("edit-button");
+    expect(editButton).toBeInTheDocument();
+    expect(editButton).toHaveTextContent("BUTTON$RENAME");
+  });
+
+  it("should enter edit mode when edit button is clicked", async () => {
+    const user = userEvent.setup();
+    renderConversationPanel();
+
+    const cards = await screen.findAllByTestId("conversation-card");
+
+    // Click ellipsis to open context menu
+    const ellipsisButton = within(cards[0]).getByTestId("ellipsis-button");
+    await user.click(ellipsisButton);
+
+    // Click edit button within the first card's context menu
+    const editButton = screen.getByTestId("edit-button");
+    await user.click(editButton);
+
+    // Should find input field instead of title text
+    const titleInput = within(cards[0]).getByTestId("conversation-card-title");
+    expect(titleInput).toBeInTheDocument();
+    expect(titleInput.tagName).toBe("INPUT");
+    expect(titleInput).toHaveValue("Conversation 1");
+    expect(titleInput).toHaveFocus();
+  });
+
+  it("should successfully update conversation title", async () => {
+    const user = userEvent.setup();
+
+    // Mock the updateConversationTitle API call
+    const updateConversationTitleSpy = vi.spyOn(
+      AgentServerConversationService,
+      "updateConversationTitle",
+    );
+    updateConversationTitleSpy.mockResolvedValue(
+      createMockConversation({ id: "1", title: "Updated Title" }),
+    );
+
+    renderConversationPanel();
+
+    const cards = await screen.findAllByTestId("conversation-card");
+
+    // Enter edit mode
+    const ellipsisButton = within(cards[0]).getByTestId("ellipsis-button");
+    await user.click(ellipsisButton);
+
+    const editButton = screen.getByTestId("edit-button");
+    await user.click(editButton);
+
+    // Edit the title
+    const titleInput = within(cards[0]).getByTestId("conversation-card-title");
+    await user.clear(titleInput);
+    await user.type(titleInput, "Updated Title");
+
+    // Blur the input to save
+    await user.tab();
+
+    // Verify API call was made with correct parameters
+    expect(updateConversationTitleSpy).toHaveBeenCalledWith(
+      "1",
+      "Updated Title",
+    );
+  });
+
+  it("should save title when Enter key is pressed", async () => {
+    const user = userEvent.setup();
+
+    const updateConversationTitleSpy = vi.spyOn(
+      AgentServerConversationService,
+      "updateConversationTitle",
+    );
+    updateConversationTitleSpy.mockResolvedValue(
+      createMockConversation({ id: "1", title: "Updated Title" }),
+    );
+
+    renderConversationPanel();
+
+    const cards = await screen.findAllByTestId("conversation-card");
+
+    // Enter edit mode
+    const ellipsisButton = within(cards[0]).getByTestId("ellipsis-button");
+    await user.click(ellipsisButton);
+
+    const editButton = screen.getByTestId("edit-button");
+    await user.click(editButton);
+
+    // Edit the title and press Enter
+    const titleInput = within(cards[0]).getByTestId("conversation-card-title");
+    await user.clear(titleInput);
+    await user.type(titleInput, "Title Updated via Enter");
+    await user.keyboard("{Enter}");
+
+    // Verify API call was made
+    expect(updateConversationTitleSpy).toHaveBeenCalledWith(
+      "1",
+      "Title Updated via Enter",
+    );
+  });
+
+  it("should trim whitespace from title", async () => {
+    const user = userEvent.setup();
+
+    const updateConversationTitleSpy = vi.spyOn(
+      AgentServerConversationService,
+      "updateConversationTitle",
+    );
+    updateConversationTitleSpy.mockResolvedValue(
+      createMockConversation({ id: "1", title: "Updated Title" }),
+    );
+
+    renderConversationPanel();
+
+    const cards = await screen.findAllByTestId("conversation-card");
+
+    // Enter edit mode
+    const ellipsisButton = within(cards[0]).getByTestId("ellipsis-button");
+    await user.click(ellipsisButton);
+
+    const editButton = screen.getByTestId("edit-button");
+    await user.click(editButton);
+
+    // Edit the title with extra whitespace
+    const titleInput = within(cards[0]).getByTestId("conversation-card-title");
+    await user.clear(titleInput);
+    await user.type(titleInput, "   Trimmed Title   ");
+    await user.tab();
+
+    // Verify API call was made with trimmed title
+    expect(updateConversationTitleSpy).toHaveBeenCalledWith(
+      "1",
+      "Trimmed Title",
+    );
+  });
+
+  it("should revert to original title when empty", async () => {
+    const user = userEvent.setup();
+
+    const updateConversationTitleSpy = vi.spyOn(
+      AgentServerConversationService,
+      "updateConversationTitle",
+    );
+    updateConversationTitleSpy.mockResolvedValue(
+      createMockConversation({ id: "1", title: "Updated Title" }),
+    );
+
+    renderConversationPanel();
+
+    const cards = await screen.findAllByTestId("conversation-card");
+
+    // Enter edit mode
+    const ellipsisButton = within(cards[0]).getByTestId("ellipsis-button");
+    await user.click(ellipsisButton);
+
+    const editButton = screen.getByTestId("edit-button");
+    await user.click(editButton);
+
+    // Clear the title completely
+    const titleInput = within(cards[0]).getByTestId("conversation-card-title");
+    await user.clear(titleInput);
+    await user.tab();
+
+    // Verify API was not called
+    expect(updateConversationTitleSpy).not.toHaveBeenCalled();
+  });
+
+  it("should handle API error when updating title", async () => {
+    const user = userEvent.setup();
+
+    const updateConversationTitleSpy = vi.spyOn(
+      AgentServerConversationService,
+      "updateConversationTitle",
+    );
+    updateConversationTitleSpy.mockRejectedValue(new Error("API Error"));
+    // Provide return type for mock
+
+    renderConversationPanel();
+
+    const cards = await screen.findAllByTestId("conversation-card");
+    // Enter edit mode
+    const ellipsisButton = within(cards[0]).getByTestId("ellipsis-button");
+    await user.click(ellipsisButton);
+
+    const editButton = screen.getByTestId("edit-button");
+    await user.click(editButton);
+
+    // Edit the title
+    const titleInput = within(cards[0]).getByTestId("conversation-card-title");
+    await user.clear(titleInput);
+    await user.type(titleInput, "Failed Update");
+    await user.tab();
+
+    // Verify API call was made
+    expect(updateConversationTitleSpy).toHaveBeenCalledWith(
+      "1",
+      "Failed Update",
+    );
+
+    // Wait for error handling
+    await waitFor(() => {
+      expect(updateConversationTitleSpy).toHaveBeenCalled();
+    });
+  });
+
+  it("should close context menu when edit button is clicked", async () => {
+    const user = userEvent.setup();
+    renderConversationPanel();
+
+    const cards = await screen.findAllByTestId("conversation-card");
+
+    // Click ellipsis to open context menu
+    const ellipsisButton = within(cards[0]).getByTestId("ellipsis-button");
+    await user.click(ellipsisButton);
+
+    // Verify context menu is open (portaled to document.body)
+    const contextMenu = screen.getByTestId("context-menu");
+    expect(contextMenu).toBeInTheDocument();
+
+    // Click edit button within the open context menu
+    const editButton = screen.getByTestId("edit-button");
+    await user.click(editButton);
+
+    // Wait for context menu to close after edit button click.
+    await waitFor(() => {
+      expect(cards[0]).toHaveAttribute("data-context-menu-open", "false");
+    });
+  });
+
+  it("should not call API when title is unchanged", async () => {
+    const user = userEvent.setup();
+
+    const updateConversationTitleSpy = vi.spyOn(
+      AgentServerConversationService,
+      "updateConversationTitle",
+    );
+    updateConversationTitleSpy.mockResolvedValue(
+      createMockConversation({ id: "1", title: "Updated Title" }),
+    );
+
+    renderConversationPanel();
+
+    const cards = await screen.findAllByTestId("conversation-card");
+
+    // Enter edit mode
+    const ellipsisButton = within(cards[0]).getByTestId("ellipsis-button");
+    await user.click(ellipsisButton);
+
+    const editButton = screen.getByTestId("edit-button");
+    await user.click(editButton);
+
+    // Don't change the title, just blur
+    await user.tab();
+
+    // Verify API was NOT called with the same title (since handleConversationTitleChange will always be called)
+    expect(updateConversationTitleSpy).not.toHaveBeenCalledWith("1", {
+      title: "Conversation 1",
+    });
+  });
+
+  it("should handle special characters in title", async () => {
+    const user = userEvent.setup();
+
+    const updateConversationTitleSpy = vi.spyOn(
+      AgentServerConversationService,
+      "updateConversationTitle",
+    );
+    updateConversationTitleSpy.mockResolvedValue(
+      createMockConversation({ id: "1", title: "Updated Title" }),
+    );
+
+    renderConversationPanel();
+
+    const cards = await screen.findAllByTestId("conversation-card");
+
+    // Enter edit mode
+    const ellipsisButton = within(cards[0]).getByTestId("ellipsis-button");
+    await user.click(ellipsisButton);
+
+    const editButton = screen.getByTestId("edit-button");
+    await user.click(editButton);
+
+    // Edit the title with special characters
+    const titleInput = within(cards[0]).getByTestId("conversation-card-title");
+    await user.clear(titleInput);
+    await user.type(titleInput, "Special @#$%^&*()_+ Characters");
+    await user.tab();
+
+    // Verify API call was made with special characters
+    expect(updateConversationTitleSpy).toHaveBeenCalledWith(
+      "1",
+      "Special @#$%^&*()_+ Characters",
+    );
+  });
+
+  it("should close delete modal when clicking backdrop", async () => {
+    const user = userEvent.setup();
+    renderConversationPanel();
+
+    const cards = await screen.findAllByTestId("conversation-card");
+
+    // Open context menu and click delete
+    const ellipsisButton = within(cards[0]).getByTestId("ellipsis-button");
+    await user.click(ellipsisButton);
+    const deleteButton = screen.getByTestId("delete-button");
+    await user.click(deleteButton);
+
+    // Modal should be visible
+    expect(
+      screen.getByRole("button", { name: /confirm/i }),
+    ).toBeInTheDocument();
+
+    // Click the backdrop (the dark overlay behind the modal)
+    const backdrop = document.querySelector(".bg-black.opacity-60");
+    expect(backdrop).toBeInTheDocument();
+    await user.click(backdrop!);
+
+    // Modal should be closed
+    expect(
+      screen.queryByRole("button", { name: /confirm/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("should close stop modal when clicking backdrop", async () => {
+    const user = userEvent.setup();
+
+    // Create mock data with a RUNNING conversation
+    const mockRunningConversations = [
+      createMockConversation({
+        id: "1",
+        title: "Running Conversation",
+        execution_status: ExecutionStatus.RUNNING,
+      }),
+      createMockConversation({
+        id: "2",
+        title: "Starting Conversation",
+        execution_status: ExecutionStatus.RUNNING,
+      }),
+      createMockConversation({
+        id: "3",
+        title: "Stopped Conversation",
+        execution_status: ExecutionStatus.PAUSED,
+      }),
+    ];
+
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({
+      items: mockRunningConversations,
+      next_page_id: null,
+    });
+
+    renderConversationPanel();
+
+    const cards = await screen.findAllByTestId("conversation-card");
+
+    // Open context menu and click stop
+    const ellipsisButton = within(cards[0]).getByTestId("ellipsis-button");
+    await user.click(ellipsisButton);
+    const stopButton = screen.getByTestId("stop-button");
+    await user.click(stopButton);
+
+    // Modal should be visible
+    expect(
+      screen.getByRole("button", { name: /confirm/i }),
+    ).toBeInTheDocument();
+
+    // Click the backdrop
+    const backdrop = document.querySelector(".bg-black.opacity-60");
+    expect(backdrop).toBeInTheDocument();
+    await user.click(backdrop!);
+
+    // Modal should be closed
+    expect(
+      screen.queryByRole("button", { name: /confirm/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  describe("New Conversation in Sandbox", () => {
+    // Sandboxes exist on Cloud backends only; the local adapter never sets a
+    // sandbox id, so these rows render against the Cloud backend. The
+    // provider is needed for the panel to see that backend when it launches.
+    const openRowMenu = async (
+      conversation: AppConversation,
+      navigate = vi.fn(),
+    ) => {
+      setRegisteredBackends([cloudBackend]);
+      setActiveSelection({ backendId: cloudBackend.id, orgId: "org-2" });
+      vi.spyOn(
+        AgentServerConversationService,
+        "searchConversations",
+      ).mockResolvedValue({ items: [conversation], next_page_id: null });
+      const user = userEvent.setup();
+      renderWithProviders(
+        <ActiveBackendProvider>
+          <RouterStub />
+        </ActiveBackendProvider>,
+        { navigation: { navigate } },
+      );
+      const [card] = await screen.findAllByTestId("conversation-card");
+      await user.click(within(card).getByTestId("ellipsis-button"));
+      return user;
+    };
+
+    it("starts a new conversation in the row's sandbox and opens it", async () => {
+      // Arrange
+      const navigate = vi.fn();
+      vi.spyOn(AgentProfilesService, "listProfiles").mockResolvedValue({
+        profiles: [],
+        active_agent_profile_id: null,
+      });
+      const startTask: AppConversationStartTask = {
+        id: "9f",
+        created_by_user_id: null,
+        status: "WORKING",
+        detail: null,
+        app_conversation_id: null,
+        agent_server_url: null,
+        request: {},
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      const createSpy = vi
+        .spyOn(AgentServerConversationService, "createConversation")
+        .mockResolvedValue(startTask);
+      const user = await openRowMenu(
+        createMockConversation({
+          id: "sandboxed",
+          title: "Sandboxed Conversation",
+          sandbox_id: "oh-agent-server-abc",
+          sandbox_status: "RUNNING",
+        }),
+        navigate,
+      );
+
+      // Act
+      await user.click(
+        screen.getByTestId("new-conversation-in-sandbox-button"),
+      );
+
+      // Assert: only the sandbox is reused, so the new conversation is a
+      // top-level one (no parent) with no repository checkout of its own.
+      await waitFor(() => {
+        expect(createSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            sandboxId: "oh-agent-server-abc",
+            parentConversationId: undefined,
+            metadata: null,
+          }),
+        );
+      });
+      await waitFor(() => {
+        expect(navigate).toHaveBeenCalledWith("/conversations/task-9f");
+      });
+    });
+
+    it("offers no sandbox item for a conversation without a sandbox", async () => {
+      // Arrange + Act
+      await openRowMenu(
+        createMockConversation({ id: "no-sandbox", sandbox_id: null }),
+      );
+
+      // Assert: the menu opened, but without the sandbox item.
+      expect(screen.getByTestId("edit-button")).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("new-conversation-in-sandbox-button"),
+      ).not.toBeInTheDocument();
+    });
+
+    it.each<SandboxStatus>(["MISSING", "ERROR"])(
+      "offers no sandbox item when the sandbox is %s",
+      async (sandboxStatus) => {
+        // Arrange: a MISSING runtime is only listed with archived rows shown.
+        useConversationPanelPreferencesStore.setState({
+          showArchivedConversations: true,
+        });
+
+        // Act
+        await openRowMenu(
+          createMockConversation({
+            id: "unusable",
+            sandbox_id: "oh-agent-server-abc",
+            sandbox_status: sandboxStatus,
+          }),
+        );
+
+        // Assert
+        expect(screen.getByTestId("edit-button")).toBeInTheDocument();
+        expect(
+          screen.queryByTestId("new-conversation-in-sandbox-button"),
+        ).not.toBeInTheDocument();
+      },
+    );
+  });
+});

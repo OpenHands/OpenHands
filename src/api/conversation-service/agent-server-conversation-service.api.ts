@@ -1,4 +1,5 @@
 import {
+  type ACPModelInfo,
   ConversationSortOrder,
   type ForkConversationRequest,
   type LLMConfig,
@@ -13,13 +14,12 @@ import {
 import { v4 as uuidv4 } from "uuid";
 import { AgentKind, Provider } from "#/types/settings";
 import type { ConversationRuntimeContext } from "#/api/conversation-file-upload.api";
-import { buildHttpBaseUrl } from "#/utils/websocket-url";
+import { getAgentServerWorkingDir } from "../agent-server-config";
 import {
-  buildConversationWorkingDirForBackend,
-  getAgentServerWorkingDir,
-  getWorkspaceRootForBackend,
-} from "../agent-server-config";
-import { resolveAbsoluteAgentServerPath } from "../agent-server-home";
+  resolveConversationHooksProjectDir,
+  resolveNewConversationWorkspace,
+} from "../conversation-workspace";
+import HooksService from "../hooks-service";
 import {
   getActiveBackend,
   getEffectiveLocalBackend,
@@ -35,17 +35,30 @@ import {
   readCloudConversationFile,
   searchCloudConversations,
   updateCloudConversationPublicFlag,
+  updateCloudConversationRepository,
+  updateCloudConversationTags,
   updateCloudConversationTitle,
 } from "../cloud/conversation-service.api";
 import {
+  conversationTagFlagPatch,
+  withConversationTagFlags,
+} from "#/utils/conversation-tag-flags";
+import {
   DirectConversationInfo,
+  GIT_PROVIDER_TAG_KEY,
+  REPOSITORY_TAG_KEY,
+  SELECTED_BRANCH_TAG_KEY,
   assertSubscriptionAuthReady,
+  buildRouterAtStartSystemSuffix,
   buildStartConversationRequestWithEncryptedSettings,
   buildStartPlanningConversationRequestWithEncryptedSettings,
+  buildWorkspaceTags,
   emptyHooksResponse,
+  fetchBackendExecutionRuntime,
   getDefaultConversationTitle,
   toAppConversation,
   toConversationPage,
+  toHooksResponse,
 } from "../agent-server-adapter";
 import { GetVSCodeUrlResponse } from "../open-hands.types";
 import {
@@ -63,7 +76,12 @@ import {
   type WorkspaceMode,
 } from "../conversation-metadata-store";
 import { resolveTitleLlmProfile } from "#/utils/title-llm-profile";
+import { toAcpModelOptions } from "#/constants/acp-providers";
 import { isPlannerConversationOf } from "#/utils/plan-file";
+import { buildAutomationSetupModeTags } from "#/utils/automation-draft-tags";
+import { AUTOMATION_FORM_UPDATE_CLIENT_TOOL } from "../automation-form-client-tool";
+import { CANVAS_UI_CLIENT_TOOL } from "../canvas-ui-client-tool";
+import { LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL } from "../launch-child-conversation-client-tool";
 import type {
   GetHooksResponse,
   PluginSpec,
@@ -83,6 +101,9 @@ const DEFAULT_CONVERSATION_TIMESTAMP = "1970-01-01T00:00:00.000Z";
 // machine or the packaged desktop app, where uvx may still be warming caches)
 // can exceed the client's 60s default timeout.
 const CREATE_CONVERSATION_TIMEOUT_MS = 5 * 60 * 1000;
+// The agent-server rejects the whole create request when any tag value is
+// longer than this (SDK `TAG_VALUE_MAX_LENGTH`).
+const TAG_VALUE_MAX_LENGTH = 256;
 const INVALID_CONVERSATION_RESPONSE_MESSAGE =
   "Unable to load conversations because the selected agent server returned " +
   "data this UI does not understand. Check the backend URL/session key and " +
@@ -105,6 +126,20 @@ function numberOrZero(value: unknown): number {
 
 function stringOrNull(value: unknown): string | null {
   return typeof value === "string" ? value : null;
+}
+
+function normalizeAcpModels(value: unknown): ACPModelInfo[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!isRecord(entry) || typeof entry.model_id !== "string") return [];
+    return [
+      {
+        model_id: entry.model_id,
+        name: stringOrNull(entry.name),
+        description: stringOrNull(entry.description),
+      },
+    ];
+  });
 }
 
 function readTimestamp(
@@ -151,6 +186,27 @@ function normalizeStats(value: unknown): RuntimeConversationStats | null {
   return isRecord(value)
     ? (value as unknown as RuntimeConversationStats)
     : null;
+}
+
+function normalizeRuntimeInfo(
+  value: unknown,
+): DirectConversationInfo["runtime_info"] {
+  if (!isRecord(value)) return null;
+  const runtimeStatus = value.runtime_status;
+  if (
+    runtimeStatus !== "available" &&
+    runtimeStatus !== "starting" &&
+    runtimeStatus !== "missing" &&
+    runtimeStatus !== "ownership_lost" &&
+    runtimeStatus !== "error"
+  ) {
+    return null;
+  }
+
+  return {
+    runtime_status: runtimeStatus,
+    can_resume: value.can_resume === true,
+  };
 }
 
 function normalizeAgent(value: unknown): DirectConversationInfo["agent"] {
@@ -221,11 +277,21 @@ function normalizeLaunchedAgentProfile(
   value: unknown,
 ): DirectConversationInfo["launched_agent_profile"] {
   if (!isRecord(value)) return null;
-  const { agent_profile_id: agentProfileId, revision } = value;
+  const {
+    agent_profile_id: agentProfileId,
+    revision,
+    secret_refs: secretRefs,
+  } = value;
   if (typeof agentProfileId !== "string" || typeof revision !== "number") {
     return null;
   }
-  return { agent_profile_id: agentProfileId, revision };
+  return {
+    agent_profile_id: agentProfileId,
+    revision,
+    secret_refs: Array.isArray(secretRefs)
+      ? secretRefs.filter((name): name is string => typeof name === "string")
+      : null,
+  };
 }
 
 function normalizeAbsolutePath(path: string): string | null {
@@ -274,6 +340,7 @@ function requireDirectConversationInfo(item: unknown): DirectConversationInfo {
     updated_at: readTimestamp(item, "updated_at", "updatedAt"),
     execution_status: stringOrNull(item.execution_status),
     sandbox_status: stringOrNull(item.sandbox_status),
+    runtime_info: normalizeRuntimeInfo(item.runtime_info),
     metrics: normalizeMetrics(item.metrics),
     stats: normalizeStats(item.stats),
     agent: normalizeAgent(item.agent),
@@ -291,6 +358,7 @@ function requireDirectConversationInfo(item: unknown): DirectConversationInfo {
     // omit these — adapter handles ``undefined`` / ``null`` gracefully.
     current_model_id: stringOrNull(item.current_model_id),
     current_model_name: stringOrNull(item.current_model_name),
+    available_models: normalizeAcpModels(item.available_models),
   };
 }
 
@@ -301,6 +369,22 @@ function requireDirectConversationItems(
     throw invalidConversationResponse();
   }
   return items.map(requireDirectConversationInfo);
+}
+
+/**
+ * Validates a `GET /api/conversations?ids=...` response. The agent server
+ * answers `null` for each id it does not have, so a `null` entry means "not
+ * found" (the caller decides how to report it), not an incompatible response.
+ */
+function requireDirectConversationBatch(
+  items: unknown,
+): (DirectConversationInfo | null)[] {
+  if (!Array.isArray(items)) {
+    throw invalidConversationResponse();
+  }
+  return items.map((item) =>
+    item === null ? null : requireDirectConversationInfo(item),
+  );
 }
 
 function requireConversationSearchPage(page: unknown): {
@@ -359,6 +443,8 @@ function requireAppConversation(
  */
 export interface CreateConversationOptions {
   initialUserMsg?: string;
+  automationSetup?: boolean;
+  automationSetupTags?: Record<string, string>;
   conversationInstructions?: string;
   plugins?: PluginSpec[];
   metadata?: ConversationMetadata | null;
@@ -367,12 +453,38 @@ export interface CreateConversationOptions {
   parentConversationId?: string;
   agentType?: "default" | "plan";
   sandboxId?: string;
-  // Launch from a saved AgentProfile (resolved server-side) instead of the
-  // current encrypted agent_settings (#3727). Supported on both local and the
-  // cloud app-server (OpenHands #15060): local threads it through the
-  // encrypted-settings builder; cloud sends it as a flat request field.
+  // The saved AgentProfile the server builds the agent from (#3727). Required
+  // on local; cloud without one launches the org's default (OpenHands #15060).
   agentProfileId?: string;
   agentProfileKind?: AgentKind;
+  /**
+   * Cloud only: whether the first message should be routed through the
+   * active Model Router. The local path reads the toggle from its own
+   * settings fetch. Threaded in by the caller from the warmed settings query
+   * to avoid a settings round-trip on the cloud hot path.
+   */
+  runRouterAtConversationStart?: boolean;
+  /**
+   * Cloud only: whether a Model Router meta-profile is currently active. The
+   * route-at-start suffix is only emitted when this is true AND
+   * ``runRouterAtConversationStart`` is on — without an active meta-profile
+   * the agent-server does not attach ``route_task_to_model``, so the
+   * instruction would tell the agent to call a tool it lacks. Threaded in
+   * by the caller from the warmed meta-profiles query.
+   */
+  hasActiveMetaProfile?: boolean;
+  /** Local only: the launched profile carries a Model Router. */
+  profileHasRouter?: boolean;
+  /** Local only: the launched ACP profile's server, for the conversation tag. */
+  acpServer?: string;
+  // The LLM profile the launched agent profile runs. When set and no explicit
+  // title_llm_profile preference exists, title generation uses this profile so
+  // both the agent and its title use the same model.
+  agentLlmProfileRef?: string | null;
+  /** Local only: run the agent profile with this LLM profile instead of its own. */
+  agentLlmProfileOverride?: string;
+  /** Cloud only: run this conversation on the named LLM profile (`llm_profile`). */
+  llmProfile?: string;
 }
 
 class AgentServerConversationService {
@@ -386,6 +498,9 @@ class AgentServerConversationService {
     let sessionApiKey = runtime?.sessionApiKey ?? null;
 
     if (active.kind === "cloud") {
+      // Cloud runtimes live at a per-conversation host whose URL + session
+      // API key come from the App API. Resolve them first, then call the
+      // runtime directly (CORS allowlisted for the Canvas origin).
       if (!conversationUrl || !sessionApiKey) {
         const [conversation] = await batchGetCloudConversations([
           conversationId,
@@ -399,18 +514,6 @@ class AgentServerConversationService {
           "Conversation sandbox is still starting. Wait for it to finish, then try again.",
         );
       }
-
-      await callCloudProxy({
-        backend: active,
-        method: "POST",
-        hostOverride: buildHttpBaseUrl(conversationUrl),
-        path: `/api/conversations/${conversationId}/events`,
-        body: { ...message, run: true },
-        authMode: "session-api-key",
-        sessionApiKey,
-      });
-
-      return message;
     }
 
     await new ConversationClient(
@@ -427,6 +530,8 @@ class AgentServerConversationService {
   ): Promise<AppConversationStartTask> {
     const {
       initialUserMsg,
+      automationSetup,
+      automationSetupTags,
       conversationInstructions,
       plugins,
       metadata,
@@ -437,6 +542,11 @@ class AgentServerConversationService {
       sandboxId,
       agentProfileId,
       agentProfileKind,
+      agentLlmProfileRef,
+      agentLlmProfileOverride,
+      profileHasRouter,
+      acpServer,
+      llmProfile,
     } = options;
 
     if (getActiveBackend().backend.kind === "cloud") {
@@ -447,6 +557,13 @@ class AgentServerConversationService {
       // round-trip — the cloud backend holds secrets server-side.
       // When launching from a profile, send `agent_profile_id`; the backend
       // resolves it to agent_settings server-side.
+      // The "Run on first message" toggle is threaded in by the caller
+      // (from the warmed settings query) to avoid a settings round-trip on
+      // this hot path; the local path reads it from its own settings fetch.
+      const routerAtStartSuffix = buildRouterAtStartSystemSuffix(
+        options.runRouterAtConversationStart ?? false,
+        options.hasActiveMetaProfile ?? false,
+      );
       const request: AppConversationStartRequest = {
         initial_message: initialUserMsg
           ? {
@@ -463,11 +580,34 @@ class AgentServerConversationService {
         agent_type: agentType,
         sandbox_id: sandboxId ?? null,
         agent_profile_id: agentProfileId ?? null,
+        ...(llmProfile ? { llm_profile: llmProfile } : {}),
+        ...(routerAtStartSuffix
+          ? {
+              agent_launch_additions: {
+                system_message_suffix_append: routerAtStartSuffix,
+              },
+            }
+          : {}),
         trigger: "gui",
+        ...(automationSetup
+          ? { tags: buildAutomationSetupModeTags(automationSetupTags) }
+          : {}),
+        ...(automationSetup && agentProfileKind !== "acp"
+          ? {
+              client_tools: [
+                CANVAS_UI_CLIENT_TOOL,
+                LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL,
+                AUTOMATION_FORM_UPDATE_CLIENT_TOOL,
+              ],
+            }
+          : {}),
       };
       return createCloudAppConversation(request);
     }
 
+    if (!agentProfileId) {
+      throw new Error("A local conversation needs an agent profile.");
+    }
     const [settings, profiles] = await Promise.all([
       SettingsService.getSettings(),
       ProfilesService.listProfiles().catch(() => undefined),
@@ -475,49 +615,34 @@ class AgentServerConversationService {
     const titleLlmProfile = resolveTitleLlmProfile(
       settings.title_llm_profile,
       profiles,
+      agentLlmProfileRef,
     );
     const conversationId = uuidv4();
-    // @spec WUP-001 — Send an absolute working_dir to the agent-server.
-    // The default is `workspace/project/<hex>` (relative); without
-    // resolving it here, `/api/file/upload` later prepends `/` and writes
-    // to `/workspace/...` (read-only on macOS and fresh containers). When
-    // the user picks an explicit workspace, `workingDirOverride` is
-    // already absolute (it comes from `search_subdirs`).
-    //
-    // Pick the base working dir per-backend:
-    //   1. explicit user workspace pick → use it as-is;
-    //   2. no pick, backend that served this frontend → the baked default
-    //      (honors a launcher-baked absolute `VITE_WORKING_DIR`);
-    //   3. no pick, any other backend → the backend-relative default.
-    // A baked absolute dir is a path on the host that served this frontend,
-    // so it is only valid on that backend. Using it for a different backend
-    // (e.g. a remote sandbox) makes the agent-server mkdir an unwritable path
-    // and the conversation fails at the first prompt (e.g. `Permission
-    // denied: '/Users'`). The relative default is anchored per-backend by
-    // `resolveAbsoluteAgentServerPath()` via `/api/file/home`. The gate keys
-    // on the active backend's host (not its id): the seeded `default-local`
-    // entry is mutable, so a user can edit it to point at a remote host while
-    // its id stays `default-local`.
-    const backendHost = getActiveBackend().backend.host;
-    const baseWorkingDir =
-      workingDirOverride ??
-      buildConversationWorkingDirForBackend(conversationId, backendHost);
-    const workingDir = await resolveAbsoluteAgentServerPath(baseWorkingDir);
-    // The agent-server checks `<project_dir>/.openhands/hooks.json` literally,
-    // so hooks need the workspace root: the per-conversation subdir below it is
-    // created only after this request (#16907). An explicit pick is the root.
-    const hooksProjectDir = workingDirOverride
-      ? workingDir
-      : await resolveAbsoluteAgentServerPath(
-          getWorkspaceRootForBackend(backendHost),
-        );
     const resolvedWorkspaceMode =
       workspaceMode ?? (workingDirOverride ? "local_repo" : "new_worktree");
+    const inContainer = resolvedWorkspaceMode === "docker_container";
+    const { workingDir, hooksProjectDir, isolated, runtimeSelectable } =
+      await resolveNewConversationWorkspace({
+        conversationId,
+        workingDir: workingDirOverride,
+        selectedRepository: metadata?.selected_repository,
+        parentConversationId,
+        inContainer,
+      });
+    // A server offering both runtimes is told which one; whatever its default
+    // is, a host mode then runs on the host. Other servers keep their own.
+    const conversationRuntime = inContainer
+      ? "docker"
+      : runtimeSelectable
+        ? "local"
+        : undefined;
 
     // Use encrypted settings to avoid exposing secrets in the browser
     const payload = await buildStartConversationRequestWithEncryptedSettings({
       settings,
       query: initialUserMsg,
+      automationSetup,
+      automationSetupTags,
       conversationInstructions,
       plugins,
       conversationId,
@@ -528,23 +653,58 @@ class AgentServerConversationService {
       parentConversationId,
       workingDir,
       hooksProjectDir,
-      worktree: resolvedWorkspaceMode === "new_worktree",
+      worktree: !isolated && resolvedWorkspaceMode === "new_worktree",
       agentProfileId,
       agentProfileKind,
+      llmProfileOverride: agentLlmProfileOverride,
+      profileHasRouter,
+      acpServer,
       titleLlmProfile,
     });
+
+    // Persist the selected workspace as a server-side conversation tag so local
+    // sidebar grouping survives on another browser, device, or after cleared
+    // localStorage (#17386), and the repository the same way (#15598).
+    // localStorage below stays the warm cache for the creating client.
+    const metadataTags = buildWorkspaceTags(workingDirOverride);
+    if (metadata?.selected_repository) {
+      metadataTags[REPOSITORY_TAG_KEY] = metadata.selected_repository;
+    }
+    if (metadata?.selected_branch) {
+      metadataTags[SELECTED_BRANCH_TAG_KEY] = metadata.selected_branch;
+    }
+    if (metadata?.git_provider) {
+      metadataTags[GIT_PROVIDER_TAG_KEY] = metadata.git_provider;
+    }
+    // An over-long value (a deep workspace path, a long branch) stays in
+    // localStorage only, so it cannot block the conversation from starting.
+    for (const [key, value] of Object.entries(metadataTags)) {
+      if (value.length > TAG_VALUE_MAX_LENGTH) delete metadataTags[key];
+    }
+    if (Object.keys(metadataTags).length > 0) {
+      const existingTags =
+        payload.tags && typeof payload.tags === "object"
+          ? (payload.tags as Record<string, string>)
+          : {};
+      payload.tags = { ...existingTags, ...metadataTags };
+    }
 
     const telemetryDistinctId = await getTelemetryDistinctId();
     const data = await new ConversationClient(
       getAgentServerClientOptions({ timeout: CREATE_CONVERSATION_TIMEOUT_MS }),
     ).createConversation<DirectConversationInfo>({
       ...payload,
+      ...(conversationRuntime
+        ? { conversation_runtime: conversationRuntime }
+        : {}),
       ...(telemetryDistinctId ? { user_id: telemetryDistinctId } : {}),
     });
     const localBackend = getEffectiveLocalBackend();
     if (!localBackend) throw new NoBackendAvailableError();
 
-    if (metadata?.selected_repository || workingDirOverride) {
+    // A Docker conversation is recorded even without a workspace: hooks and
+    // restarts read its workspace_mode.
+    if (metadata?.selected_repository || workingDirOverride || inContainer) {
       // The agent-server runtime has no concept of selected repo/branch/
       // workspace, so persist the home-page selection client-side.
       // `toAppConversation` reads the repo/branch fields back to hydrate
@@ -592,10 +752,17 @@ class AgentServerConversationService {
     const workingDir =
       parent?.workspace?.working_dir ?? getAgentServerWorkingDir();
 
+    // The planner must use the same workspace variety as the parent
+    // conversation's server. A Docker execution server enforces one workspace
+    // variety per server, so requesting LocalWorkspace for the planner would
+    // be rejected.
+    const executionRuntime = await fetchBackendExecutionRuntime();
+
     const payload =
       await buildStartPlanningConversationRequestWithEncryptedSettings({
         workingDir,
         parentConversationId,
+        executionRuntime,
         // Pin the planner to the parent's own current model. Only meaningful
         // for "openhands"-kind parents: an ACP parent's active_profile is a
         // stale launch-time snapshot (/model is a no-op for ACP), not a live
@@ -703,6 +870,7 @@ class AgentServerConversationService {
     // directly via the conversationUrl override.
     const vscodeUrl = await new VSCodeClient(
       getAgentServerClientOptions({
+        conversationId,
         conversationUrl,
         sessionApiKey,
       }),
@@ -754,12 +922,12 @@ class AgentServerConversationService {
       return batchGetCloudConversations(ids);
     }
 
-    const data = await new ConversationClient(
+    const data: unknown = await new ConversationClient(
       getAgentServerClientOptions(),
     ).getConversations<DirectConversationInfo>(ids);
 
-    return requireDirectConversationItems(data).map((item) =>
-      toAppConversation(item),
+    return requireDirectConversationBatch(data).map((item) =>
+      item ? toAppConversation(item) : null,
     );
   }
 
@@ -777,15 +945,34 @@ class AgentServerConversationService {
     conversationId: string,
     repository: string | null,
     branch?: string | null,
-    gitProvider?: string | null,
+    gitProvider?: Provider | null,
   ): Promise<AppConversation> {
+    // Cloud conversations keep the repository on the server, so other
+    // browsers and server features see it. Best effort: an older server can
+    // reject some names (e.g. Azure DevOps org/project/repo), and Connect Repo
+    // must still work, so a failure keeps the local selection only.
+    if (getActiveBackend().backend.kind === "cloud") {
+      try {
+        await updateCloudConversationRepository(
+          conversationId,
+          repository,
+          branch ?? null,
+          gitProvider ?? null,
+        );
+      } catch (error) {
+        console.warn(
+          `Failed to save the repository of conversation ${conversationId}`,
+          error,
+        );
+      }
+    }
     if (repository) {
       const existing = getStoredConversationMetadata(conversationId);
       setStoredConversationMetadata(conversationId, {
         ...(existing ?? {}),
         selected_repository: repository,
         selected_branch: branch ?? null,
-        git_provider: (gitProvider as Provider | null | undefined) ?? null,
+        git_provider: gitProvider ?? null,
       });
     } else {
       removeStoredConversationMetadata(conversationId);
@@ -816,7 +1003,9 @@ class AgentServerConversationService {
       filePath ?? `${workingDir}/.agents_tmp/PLAN.md`,
       workingDir,
     );
-    return new FileClient(getAgentServerClientOptions()).downloadTextFile(path);
+    return new FileClient(
+      getAgentServerClientOptions({ conversationId, workingDir }),
+    ).downloadTextFile(path);
   }
 
   static async downloadConversation(conversationId: string): Promise<Blob> {
@@ -829,11 +1018,22 @@ class AgentServerConversationService {
     );
   }
 
+  /**
+   * Hooks of the workspace a local conversation runs in, re-read on each call
+   * so the dialog's Refresh picks up `.openhands/hooks.json` edits. Cloud has
+   * no per-conversation hooks route, so it keeps an empty list.
+   */
   static async getHooks(conversationId: string): Promise<GetHooksResponse> {
-    if (!conversationId) {
+    if (!conversationId || !getEffectiveLocalBackend()) {
       return emptyHooksResponse();
     }
-    return emptyHooksResponse();
+    const metadata = getStoredConversationMetadata(conversationId);
+    const projectDir = await resolveConversationHooksProjectDir(
+      metadata?.selected_workspace,
+      metadata?.workspace_mode === "docker_container",
+    );
+    if (projectDir === null) return emptyHooksResponse();
+    return toHooksResponse(await HooksService.fetchWorkspaceHooks(projectDir));
   }
 
   static async getRuntimeConversation(
@@ -860,14 +1060,15 @@ class AgentServerConversationService {
       updated_at: data.updated_at,
       status: toRuntimeStatus(data.execution_status),
       stats: data.stats ?? { usage_to_metrics: {} },
+      available_models: toAcpModelOptions(data.available_models),
     };
   }
 
   /**
    * Force condensation ("compact") of the conversation history via
-   * `POST /api/conversations/{id}/condense`. Routed the same way as
-   * {@link sendMessage}: through the cloud proxy at the conversation's own
-   * runtime host for cloud backends, directly against that runtime otherwise.
+   * `POST /api/conversations/{id}/condense`. Calls the conversation's own
+   * runtime host directly (CORS allowlisted for the Canvas origin in cloud
+   * mode), the same path used for sending events.
    */
   static async condenseConversation(
     conversationId: string,
@@ -876,16 +1077,15 @@ class AgentServerConversationService {
   ): Promise<void> {
     const active = getActiveBackend().backend;
 
-    if (active.kind === "cloud" && conversationUrl) {
-      await callCloudProxy({
-        backend: active,
-        method: "POST",
-        hostOverride: buildHttpBaseUrl(conversationUrl),
-        path: `/api/conversations/${conversationId}/condense`,
-        authMode: "session-api-key",
-        sessionApiKey,
-      });
-      return;
+    // Symmetric with every other cloud runtime call in this module: on cloud
+    // backends the condense endpoint lives on the per-conversation runtime
+    // host, so a missing conversation URL is a caller bug, not a "no backend
+    // configured" condition. Throw the specific message instead of letting
+    // `getAgentServerClientOptions` surface a generic `NoBackendAvailableError`.
+    if (active.kind === "cloud" && !conversationUrl) {
+      throw new Error(
+        "AgentServerConversationService.condenseConversation requires a conversation URL on cloud backends",
+      );
     }
 
     await new ConversationClient(
@@ -967,10 +1167,12 @@ class AgentServerConversationService {
   }
 
   /**
-   * Replaces the conversation's complete server-side tag map (the PATCH is
-   * replace-all, so callers must merge user edits with any reserved/internal
-   * keys before calling). Mirrors `updateConversationTitle`; local
-   * agent-server conversations only — Cloud conversations don't carry tags.
+   * Replaces the conversation's complete server-side tag map (the local
+   * agent-server PATCH is replace-all, so callers must merge user edits with
+   * any reserved/internal keys before calling). Mirrors
+   * `updateConversationTitle`; local agent-server conversations only — Cloud
+   * callers go through {@link updateConversationTagFlags}, which uses the
+   * app-server's merge patch instead.
    */
   static async updateConversationTags(
     conversationId: string,
@@ -980,6 +1182,37 @@ class AgentServerConversationService {
       getAgentServerClientOptions(),
     ).updateConversation(conversationId, {
       tags,
+    });
+    const [conversation] = await this.batchGetAppConversations([
+      conversationId,
+    ]);
+    return requireAppConversation(conversation, conversationId);
+  }
+
+  /**
+   * Sets or clears boolean conversation flags carried in server-side tags
+   * (e.g. `pinned` / `archived`; see `conversation-tag-flags.ts`). Works on
+   * both backends: the local agent-server receives the complete replacement
+   * map derived from `currentTags` (its PATCH is replace-all), while the
+   * Cloud app-server receives a merge patch that sets enabled keys and
+   * deletes disabled ones, leaving every other tag untouched.
+   */
+  static async updateConversationTagFlags(
+    conversationId: string,
+    currentTags: Record<string, string> | null | undefined,
+    changes: Record<string, boolean>,
+  ): Promise<AppConversation> {
+    if (getActiveBackend().backend.kind === "cloud") {
+      return updateCloudConversationTags(
+        conversationId,
+        conversationTagFlagPatch(changes),
+      );
+    }
+
+    await new ConversationClient(
+      getAgentServerClientOptions(),
+    ).updateConversation(conversationId, {
+      tags: withConversationTagFlags(currentTags, changes),
     });
     const [conversation] = await this.batchGetAppConversations([
       conversationId,

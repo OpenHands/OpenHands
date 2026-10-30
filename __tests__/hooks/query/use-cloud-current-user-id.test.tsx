@@ -1,6 +1,6 @@
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   __resetActiveStoreForTests,
@@ -54,6 +54,9 @@ beforeEach(() => {
     [cloudBackend.id]: {
       backend: cloudBackend,
       isLoading: false,
+      isSuccess: true,
+      hasData: true,
+      isFetching: false,
       orgs: [
         { id: "org-personal", name: "Personal" },
         { id: "org-2", name: "Acme Inc" },
@@ -68,6 +71,30 @@ afterEach(() => {
 });
 
 describe("useCloudCurrentUserId", () => {
+  it("waits for a removed selection to recover before requesting identity", async () => {
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "removed-org" });
+    getCloudOrganizationMeMock.mockResolvedValue({
+      orgId: "org-personal",
+      userId: "user-X",
+    });
+    const { result } = renderHook(() => useCloudCurrentUserId(), {
+      wrapper: makeWrapper(),
+    });
+    expect(result.current[cloudBackend.id]).toBeUndefined();
+    expect(getCloudOrganizationMeMock).not.toHaveBeenCalled();
+
+    act(() => {
+      setActiveSelection({ backendId: cloudBackend.id, orgId: "org-personal" });
+    });
+    await waitFor(() => {
+      expect(result.current[cloudBackend.id]?.userId).toBe("user-X");
+    });
+    expect(getCloudOrganizationMeMock).toHaveBeenCalledExactlyOnceWith(
+      "org-personal",
+      cloudBackend,
+    );
+  });
+
   it("uses active.orgId for /me when the active backend is this cloud backend", async () => {
     setActiveSelection({ backendId: cloudBackend.id, orgId: "org-2" });
     getCloudOrganizationMeMock.mockResolvedValue({

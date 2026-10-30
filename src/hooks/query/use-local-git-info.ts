@@ -116,13 +116,12 @@ export const useLocalGitInfo = () => {
       !hasConversationProvider ||
       !hasConversationBranch);
 
-  // Persistent WebSocket connection to the bash-events endpoint. The
-  // connection is opened when the query is enabled and closed on unmount or
-  // when the conversation changes.
+  // The SDK owns command transport and scopes each probe to its conversation.
   const runCommand = useBashCommandRunner(
     conversationUrl,
     sessionApiKey,
     queryEnabled,
+    conversationId,
   );
 
   // Keep a ref so queryFn can call the latest runner without capturing it
@@ -153,8 +152,7 @@ export const useLocalGitInfo = () => {
     // Re-probe the workspace every 10s so the UI reflects branch/repo
     // changes (e.g. `git checkout`, adding a remote) without requiring a
     // manual refresh when there is no `selected_repository` recorded on
-    // the conversation. Commands now run over the persistent WebSocket
-    // connection rather than individual REST calls.
+    // the conversation.
     staleTime: 10_000,
     refetchInterval: 10_000,
     gcTime: 1000 * 60 * 5,

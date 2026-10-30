@@ -157,8 +157,8 @@ export function EnvironmentSwitchOverlay() {
       aria-live="polite"
       aria-atomic="true"
     >
-      <div className="pointer-events-none flex min-w-[280px] max-w-[420px] flex-col items-center gap-2 rounded-xl border border-[var(--oh-border)] bg-[var(--oh-surface)] px-5 py-4 text-[var(--oh-foreground)] shadow-2xl">
-        <EnvironmentSwitchIcon className="mb-2 h-6 w-20 shrink-0 text-[var(--oh-foreground)]" />
+      <div className="pointer-events-none flex min-w-70 max-w-105 flex-col items-center gap-2 rounded-xl border border-border bg-surface px-5 py-4 text-foreground shadow-2xl">
+        <EnvironmentSwitchIcon className="mb-2 h-6 w-20 shrink-0 text-foreground" />
         <p className="text-center text-sm font-medium">
           {t(I18nKey.BACKEND$SWITCHING_TO, { environment: target })}
         </p>

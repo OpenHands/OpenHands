@@ -1,0 +1,139 @@
+{
+  "target": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+  "sdk": "1.54.0",
+  "events_count_before_restart": 3,
+  "latest_sequence_before_restart": 2,
+  "page_reloaded": false,
+  "recovery_marker_dom_count": 1,
+  "events": [
+    {
+      "ts": "2026-10-12T09:28:58.489Z",
+      "kind": "websocket-created",
+      "appOrigin": true,
+      "connectionId": "42b4ed0f95dd5c07",
+      "afterSeq": "-1",
+      "receivedFrames": 0,
+      "sentFrames": 0
+    },
+    {
+      "ts": "2026-10-12T09:28:58.490Z",
+      "kind": "websocket-open",
+      "appOrigin": true,
+      "connectionId": "42b4ed0f95dd5c07",
+      "afterSeq": "-1",
+      "receivedFrames": 0,
+      "sentFrames": 1,
+      "observed": "first-frame"
+    },
+    {
+      "ts": "2026-10-12T09:29:08.789Z",
+      "kind": "websocket-close",
+      "appOrigin": true,
+      "connectionId": "42b4ed0f95dd5c07",
+      "afterSeq": "-1",
+      "receivedFrames": 5,
+      "sentFrames": 1
+    },
+    {
+      "ts": "2026-10-12T09:29:09.801Z",
+      "kind": "websocket-created",
+      "appOrigin": true,
+      "connectionId": "f563e2f6058190ba",
+      "afterSeq": "2",
+      "receivedFrames": 0,
+      "sentFrames": 0
+    },
+    {
+      "ts": "2026-10-12T09:29:09.801Z",
+      "kind": "websocket-error",
+      "appOrigin": true,
+      "connectionId": "f563e2f6058190ba",
+      "afterSeq": "2",
+      "receivedFrames": 0,
+      "sentFrames": 0
+    },
+    {
+      "ts": "2026-10-12T09:29:09.805Z",
+      "kind": "websocket-close",
+      "appOrigin": true,
+      "connectionId": "f563e2f6058190ba",
+      "afterSeq": "2",
+      "receivedFrames": 0,
+      "sentFrames": 0
+    },
+    {
+      "ts": "2026-10-12T09:29:12.179Z",
+      "kind": "websocket-created",
+      "appOrigin": true,
+      "connectionId": "a1a6fcd9f74e114d",
+      "afterSeq": "2",
+      "receivedFrames": 0,
+      "sentFrames": 0
+    },
+    {
+      "ts": "2026-10-12T09:29:12.180Z",
+      "kind": "websocket-error",
+      "appOrigin": true,
+      "connectionId": "a1a6fcd9f74e114d",
+      "afterSeq": "2",
+      "receivedFrames": 0,
+      "sentFrames": 0
+    },
+    {
+      "ts": "2026-10-12T09:29:12.183Z",
+      "kind": "websocket-close",
+      "appOrigin": true,
+      "connectionId": "a1a6fcd9f74e114d",
+      "afterSeq": "2",
+      "receivedFrames": 0,
+      "sentFrames": 0
+    },
+    {
+      "ts": "2026-10-12T09:29:17.106Z",
+      "kind": "websocket-created",
+      "appOrigin": true,
+      "connectionId": "e16f1230363f6eb7",
+      "afterSeq": "2",
+      "receivedFrames": 0,
+      "sentFrames": 0
+    },
+    {
+      "ts": "2026-10-12T09:29:17.106Z",
+      "kind": "websocket-error",
+      "appOrigin": true,
+      "connectionId": "e16f1230363f6eb7",
+      "afterSeq": "2",
+      "receivedFrames": 0,
+      "sentFrames": 0
+    },
+    {
+      "ts": "2026-10-12T09:29:17.111Z",
+      "kind": "websocket-close",
+      "appOrigin": true,
+      "connectionId": "e16f1230363f6eb7",
+      "afterSeq": "2",
+      "receivedFrames": 0,
+      "sentFrames": 0
+    },
+    {
+      "ts": "2026-10-12T09:29:26.434Z",
+      "kind": "websocket-created",
+      "appOrigin": true,
+      "connectionId": "9a07f9bd0056c27d",
+      "afterSeq": "2",
+      "receivedFrames": 0,
+      "sentFrames": 0
+    },
+    {
+      "ts": "2026-10-12T09:29:26.465Z",
+      "kind": "websocket-open",
+      "appOrigin": true,
+      "connectionId": "9a07f9bd0056c27d",
+      "afterSeq": "2",
+      "receivedFrames": 0,
+      "sentFrames": 1,
+      "observed": "first-frame"
+    }
+  ],
+  "privacy": "Page and socket session URLs are omitted. Only the numeric reconnect cursor, lifecycle timestamps and frame counts are published."
+}

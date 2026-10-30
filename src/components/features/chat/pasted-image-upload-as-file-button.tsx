@@ -25,7 +25,7 @@ export function PastedImageUploadAsFileButton({
         placement="bottom"
         offset={10}
         shouldFlip={false}
-        tooltipClassName="bg-white text-black text-xs font-medium leading-5"
+        tooltipClassName="bg-contrast text-contrast-foreground text-xs font-medium leading-5"
       >
         <button
           type="button"
@@ -36,7 +36,7 @@ export function PastedImageUploadAsFileButton({
             onToggle();
           }}
           className={cn(
-            "flex h-4 w-4 items-center justify-center rounded-full bg-[var(--oh-surface)] text-[var(--oh-foreground)] transition-colors cursor-pointer hover:bg-[var(--oh-muted)]",
+            "flex h-4 w-4 items-center justify-center rounded-full bg-surface text-foreground transition-colors cursor-pointer hover:bg-muted",
           )}
         >
           {active ? (

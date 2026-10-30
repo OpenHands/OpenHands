@@ -28,6 +28,7 @@ import { toLatestRunState } from "./to-latest-run-state";
 import { RunPhase, shouldShowRunPhase } from "./detail/run-phase";
 import { resolveAutomationImpactStatement } from "#/utils/automation-catalog";
 import { RunStatusBadge } from "./detail/run-status-badge";
+import { ActiveStatusBadge } from "./detail/active-status-badge";
 import { AutomationRunActivitySparkline } from "#/components/features/home/featured-automations/automation-run-activity-sparkline";
 import type { RunSummaryState } from "#/manifests/automation-insights";
 import type { InterfaceListInsights } from "#/manifests/types";
@@ -36,6 +37,7 @@ import {
   shortenAutomationRunSummary,
   shouldShowAutomationRunSummaryHovercard,
 } from "#/components/features/home/featured-automations/automation-run-health";
+import { isDraftAutomation } from "#/utils/automation-state";
 
 /** Run insights shown when the manifest declares the dashboard surface. */
 export interface AutomationInsightsProps {
@@ -70,8 +72,10 @@ export function AutomationCard({
   const isOwner = useIsAutomationOwner(automation);
   // Write actions on a specific automation: manage OR creator (escape hatch).
   const canManage = hasManagePermission || isOwner;
-  // Non-creators may turn an automation off but not back on.
-  const canToggle = automation.enabled ? canManage : isOwner;
+  const isDraft = isDraftAutomation(automation);
+  // Non-creators may turn an automation off but not back on. Draft test
+  // artifacts are finalized through the draft setup flow, not this toggle.
+  const canToggle = isDraft ? false : automation.enabled ? canManage : isOwner;
 
   const scheduleLabel =
     automation.trigger.schedule_human || automation.trigger.type;
@@ -114,6 +118,7 @@ export function AutomationCard({
     shouldShowAutomationRunSummaryHovercard(summary, shortSummary);
   const showPhase = shouldShowRunPhase(latestRun?.status);
   const disableAnimation = import.meta.env.MODE === "test";
+  const showDraftBadge = isDraft;
 
   return (
     <div
@@ -132,9 +137,14 @@ export function AutomationCard({
     >
       <header className="flex flex-col gap-1.5">
         <div className="flex h-8 items-center justify-between gap-3">
-          <h3 className="min-w-0 flex-1 truncate text-sm font-semibold leading-none text-[var(--oh-foreground)]">
-            {automation.name}
-          </h3>
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <h3 className="min-w-0 truncate text-sm font-semibold leading-none text-foreground">
+              {automation.name}
+            </h3>
+            {showDraftBadge ? (
+              <ActiveStatusBadge automation={automation} compact />
+            ) : null}
+          </div>
           <div className="flex shrink-0 items-center gap-0.5">
             {canManage ? (
               <StyledTooltip
@@ -164,7 +174,7 @@ export function AutomationCard({
           </div>
         </div>
         {automation.prompt ? (
-          <p className="line-clamp-2 text-xs leading-relaxed text-[var(--oh-text-secondary)]">
+          <p className="line-clamp-2 text-xs leading-relaxed text-text-secondary">
             {automation.prompt}
           </p>
         ) : null}
@@ -206,13 +216,13 @@ export function AutomationCard({
             ) : null}
 
             {!isLoading && isError ? (
-              <p className="truncate text-[var(--oh-text-secondary)]">
+              <p className="truncate text-text-secondary">
                 {t(I18nKey.FEATURED_AUTOMATIONS$STATUS_UNAVAILABLE)}
               </p>
             ) : null}
 
             {!isLoading && !isError && !latestRun ? (
-              <p className="truncate text-[var(--oh-text-secondary)]">
+              <p className="truncate text-text-secondary">
                 {t(I18nKey.AUTOMATIONS$DETAIL$NO_RUNS)}
               </p>
             ) : null}
@@ -226,12 +236,7 @@ export function AutomationCard({
                 />
 
                 {showPhase ? (
-                  <RunPhase
-                    status={latestRun.status}
-                    code={latestRun.phase_code}
-                    label={latestRun.phase_label}
-                    updatedAt={latestRun.phase_updated_at}
-                  />
+                  <RunPhase currentPhase={latestRun.current_phase} />
                 ) : null}
 
                 {shortSummary ? (
@@ -245,14 +250,14 @@ export function AutomationCard({
                       placement="top"
                       closeDelay={100}
                       disableAnimation={disableAnimation}
-                      className="rounded-xl border border-[var(--oh-border)] bg-base-secondary p-0 text-white shadow-xl"
+                      className="rounded-xl border border-border bg-base-secondary p-0 text-contrast shadow-xl"
                     >
-                      <span className="min-w-0 flex-1 cursor-default truncate text-[var(--oh-text-secondary)]">
+                      <span className="min-w-0 flex-1 cursor-default truncate text-text-secondary">
                         {shortSummary}
                       </span>
                     </Tooltip>
                   ) : (
-                    <p className="min-w-0 flex-1 truncate text-[var(--oh-text-secondary)]">
+                    <p className="min-w-0 flex-1 truncate text-text-secondary">
                       {shortSummary}
                     </p>
                   )
@@ -264,7 +269,7 @@ export function AutomationCard({
           {timestamp ? (
             <span
               data-testid={`automation-last-run-${automation.id}`}
-              className="shrink-0 text-[var(--oh-text-secondary)]"
+              className="shrink-0 text-text-secondary"
             >
               {formatRelativeTime(timestamp, i18n.language, t)}
             </span>
@@ -275,7 +280,7 @@ export function AutomationCard({
       {impactStatement ? (
         <p
           data-testid={`automation-impact-${automation.id}`}
-          className="mt-3 truncate text-xs text-[var(--oh-text-secondary)]"
+          className="mt-3 truncate text-xs text-text-secondary"
         >
           {impactStatement}
         </p>

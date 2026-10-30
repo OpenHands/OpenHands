@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -10,11 +10,24 @@ import {
 } from "#/routes/agent-settings";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { SecretsService } from "#/api/secrets-service";
+import SkillsService from "#/api/skills-service";
+import MetaProfilesService from "#/api/meta-profiles-service/meta-profiles-service.api";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
-import { Settings } from "#/types/settings";
-import { ACP_PROVIDERS } from "#/constants/acp-providers";
+import { Settings, SkillInfo } from "#/types/settings";
+import {
+  ACP_PROVIDERS,
+  ACP_VERTEX_SAFE_MODEL,
+} from "#/constants/acp-providers";
+import {
+  __resetActiveStoreForTests,
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
+import { ActiveBackendProvider } from "#/contexts/active-backend-context";
+import { parseCommand } from "#/utils/acp-command";
 const CLAUDE_COMMAND = getClientAcpProvider("claude-code")!.default_command;
 const CODEX_COMMAND = getClientAcpProvider("codex")!.default_command;
+const OPENCODE_PROVIDER = getClientAcpProvider("opencode")!;
 
 // Stub the login-detection probe so the ACP credentials section doesn't spin a
 // subprocess; default to no detected session so existing tests are unaffected.
@@ -23,14 +36,33 @@ vi.mock("#/hooks/query/use-acp-auth-status", () => ({
   useAcpAuthStatus: (...args: unknown[]) => acpAuthStatusMock(...args),
 }));
 
-// The profile editor gates the LLM-switching toggle on the backend's *profile*
-// model, which gained the field later than the settings schema did. Stub the
-// probe so both sides of that gate are reachable without a live server.
-const profileSupportsSwitchLlmToolMock = vi.hoisted(() => vi.fn(() => true));
+// What the provider's own server reports; empty unless a test sets it.
+const acpModelDiscoveryMock = vi.hoisted(() => vi.fn());
+vi.mock("#/hooks/query/use-acp-model-discovery", () => ({
+  useAcpModelDiscovery: (...args: unknown[]) => acpModelDiscoveryMock(...args),
+}));
+const NO_DISCOVERY = {
+  discovery: null,
+  models: [],
+  source: "none",
+  defaultModelId: null,
+  isDiscovering: false,
+};
+const CLAUDE_MODELS = [
+  { id: "default", label: "Default (recommended)" },
+  { id: "haiku", label: "Haiku" },
+];
+
 const profileSupportsSecretRefsMock = vi.hoisted(() => vi.fn(() => true));
+const profileSupportsInstructionsMock = vi.hoisted(() => vi.fn(() => false));
+const profileSupportsSkillsMock = vi.hoisted(() => vi.fn(() => true));
+const profileSupportsRouterMock = vi.hoisted(() => vi.fn(() => true));
 vi.mock("#/api/agent-profiles-service/profile-field-support", () => ({
-  agentProfileSupportsSwitchLlmTool: () => profileSupportsSwitchLlmToolMock(),
   agentProfileSupportsSecretRefs: () => profileSupportsSecretRefsMock(),
+  agentProfileSupportsInstructions: () => profileSupportsInstructionsMock(),
+  agentProfileSupportsSkills: () => profileSupportsSkillsMock(),
+  agentProfileSupportsTools: () => true,
+  agentProfileSupportsRouter: () => profileSupportsRouterMock(),
 }));
 
 // The secret picker lists the user's saved secrets; stub the query so these
@@ -42,8 +74,7 @@ vi.mock("#/hooks/query/use-get-secrets", () => ({
   useSearchSecrets: () => ({ data: savedSecretsMock() }),
 }));
 
-// Observe save toasts so we can assert the single Save shows one confirmation,
-// not one per persisted thing (agent spec + credentials).
+// Observe toasts so a silent credential save can be asserted as silent.
 const toastMocks = vi.hoisted(() => ({
   success: vi.fn(),
   error: vi.fn(),
@@ -65,29 +96,46 @@ function buildSettings(overrides: Partial<Settings> = {}): Settings {
 }
 
 function renderAgentSettingsScreen(
-  props: React.ComponentProps<typeof AgentSettingsScreen> = {},
+  props: Partial<React.ComponentProps<typeof AgentSettingsScreen>> = {},
 ) {
-  return render(<AgentSettingsScreen {...props} />, {
-    wrapper: ({ children }) => (
-      <MemoryRouter>
-        <QueryClientProvider
-          client={
-            new QueryClient({ defaultOptions: { queries: { retry: false } } })
-          }
-        >
-          {children}
-        </QueryClientProvider>
-      </MemoryRouter>
-    ),
-  });
+  let control: AgentSettingsSaveControl | null = null;
+  const view = render(
+    <AgentSettingsScreen
+      onSaveControlChange={(next) => {
+        control = next;
+      }}
+      {...props}
+    />,
+    {
+      wrapper: ({ children }) => (
+        <MemoryRouter>
+          <QueryClientProvider
+            client={
+              new QueryClient({ defaultOptions: { queries: { retry: false } } })
+            }
+          >
+            {children}
+          </QueryClientProvider>
+        </MemoryRouter>
+      ),
+    },
+  );
+  return { ...view, control: () => control! };
 }
+
+const CLAUDE_PROFILE = {
+  agent_kind: "acp",
+  acp_server: "claude-code",
+  acp_command: [],
+  acp_args: [],
+  acp_model: "",
+};
 
 describe("AgentSettingsScreen", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    vi.spyOn(SettingsService, "saveSettings").mockResolvedValue(true);
-    // The page owns the ACP credential form (single Save), so it reads/writes
-    // secrets even on non-ACP renders.
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
+    // The form owns the ACP credential form, which reads secrets on mount.
     vi.spyOn(SecretsService, "getSecrets").mockResolvedValue([]);
     vi.spyOn(SecretsService, "createSecret").mockResolvedValue();
     acpAuthStatusMock.mockReturnValue({
@@ -95,10 +143,10 @@ describe("AgentSettingsScreen", () => {
       isChecking: false,
       isSupported: true,
     });
+    acpModelDiscoveryMock.mockReturnValue(NO_DISCOVERY);
     toastMocks.success.mockClear();
     toastMocks.error.mockClear();
     toastMocks.warning.mockClear();
-    profileSupportsSwitchLlmToolMock.mockReturnValue(true);
     profileSupportsSecretRefsMock.mockReturnValue(true);
     savedSecretsMock.mockReturnValue([
       { name: "GITHUB_TOKEN", description: "repo access" },
@@ -107,506 +155,505 @@ describe("AgentSettingsScreen", () => {
     ]);
   });
 
-  it("renders the agent type selector defaulting to OpenHands with sub-agents toggle", async () => {
-    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
-      buildSettings({
-        agent_settings: {
-          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
-          agent_kind: "openhands",
-        },
-      }),
-    );
-
-    renderAgentSettingsScreen();
-    await screen.findByTestId("agent-settings-screen");
-    expect(screen.getByTestId("agent-type-selector")).toBeInTheDocument();
-    // Sub-agents toggle visible on the OpenHands branch.
-    expect(
-      screen.getByTestId("agent-settings-enable-sub-agents"),
-    ).toBeInTheDocument();
-    // ACP-only fields stay hidden on the OpenHands branch.
-    expect(screen.queryByTestId("agent-command-input")).not.toBeInTheDocument();
-  });
-
-  it("labels the save button 'Save Changes' for consistency with other settings pages", async () => {
-    // Arrange — render with any valid settings; the label is independent
-    // of the form's state.
-    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
-      buildSettings({
-        agent_settings: {
-          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
-          agent_kind: "openhands",
-        },
-      }),
-    );
-
-    // Act
-    renderAgentSettingsScreen();
-    await screen.findByTestId("agent-settings-screen");
-
-    // Assert — t() is stubbed to return the key, so the rendered text is
-    // the translation key. SETTINGS$SAVE_CHANGES = "Save Changes" in
-    // public/locales/en/openhands.json; BUTTON$SAVE = "Save" (the bug).
-    expect(screen.getByTestId("agent-save-button")).toHaveTextContent(
-      "SETTINGS$SAVE_CHANGES",
-    );
-  });
-
-  it("saves enable_sub_agents when toggling on the OpenHands path", async () => {
+  it("builds tool_concurrency_limit from the input on the OpenHands path", async () => {
     const user = userEvent.setup();
-    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
-      buildSettings({
-        agent_settings: {
-          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
-          agent_kind: "openhands",
-          enable_sub_agents: false,
-        },
-      }),
-    );
-    const save = vi.spyOn(SettingsService, "saveSettings");
-
-    renderAgentSettingsScreen();
-    await screen.findByTestId("agent-settings-screen");
-
-    // Toggle sub-agents on via the enclosing label
-    const toggle = screen.getByTestId("agent-settings-enable-sub-agents");
-    const label = toggle.closest("label")!;
-    await user.click(label);
-
-    await user.click(screen.getByTestId("agent-save-button"));
-
-    await waitFor(() => {
-      expect(save).toHaveBeenCalledTimes(1);
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: {
+        agent_kind: "openhands",
+        tool_concurrency_limit: 1,
+      },
     });
-    const call = save.mock.calls[0]?.[0] as {
-      agent_settings_diff?: Record<string, unknown>;
-    };
-    expect(call.agent_settings_diff).toEqual({
-      agent_kind: "openhands",
-      enable_sub_agents: true,
-      enable_switch_llm_tool: true,
-      tool_concurrency_limit: 1,
-    });
-  });
-
-  it("renders the LLM-switching toggle on the OpenHands path and saves it when toggled off", async () => {
-    const user = userEvent.setup();
-    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
-      buildSettings({
-        agent_settings: {
-          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
-          agent_kind: "openhands",
-          enable_switch_llm_tool: true,
-        },
-      }),
-    );
-    const save = vi.spyOn(SettingsService, "saveSettings");
-
-    renderAgentSettingsScreen();
-    await screen.findByTestId("agent-settings-screen");
-
-    // The toggle renders (schema exposes the field) and starts on.
-    const toggle = screen.getByTestId("agent-settings-enable-switch-llm-tool");
-    expect(toggle).toBeChecked();
-
-    // Toggle it off via the enclosing label, then save.
-    const label = toggle.closest("label")!;
-    await user.click(label);
-    expect(toggle).not.toBeChecked();
-
-    await user.click(screen.getByTestId("agent-save-button"));
-
-    await waitFor(() => {
-      expect(save).toHaveBeenCalledTimes(1);
-    });
-    const call = save.mock.calls[0]?.[0] as {
-      agent_settings_diff?: Record<string, unknown>;
-    };
-    expect(call.agent_settings_diff).toEqual({
-      agent_kind: "openhands",
-      enable_sub_agents: false,
-      enable_switch_llm_tool: false,
-      tool_concurrency_limit: 1,
-    });
-  });
-
-  it("hides the LLM-switching toggle when the schema predates the field", async () => {
-    const schema = MOCK_DEFAULT_USER_SETTINGS.agent_settings_schema;
-    const schemaWithoutField = schema && {
-      ...schema,
-      sections: schema.sections.map((section) => ({
-        ...section,
-        fields: section.fields.filter(
-          (field) => field.key !== "enable_switch_llm_tool",
-        ),
-      })),
-    };
-    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
-      buildSettings({
-        agent_settings_schema: schemaWithoutField,
-        agent_settings: {
-          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
-          agent_kind: "openhands",
-        },
-      }),
-    );
-
-    renderAgentSettingsScreen();
-    await screen.findByTestId("agent-settings-screen");
-
-    // Older agent-servers without the field hide the toggle cleanly...
-    expect(
-      screen.queryByTestId("agent-settings-enable-switch-llm-tool"),
-    ).not.toBeInTheDocument();
-    // ...while the other OpenHands controls still render.
-    expect(
-      screen.getByTestId("agent-settings-enable-sub-agents"),
-    ).toBeInTheDocument();
-  });
-
-  it("hides the LLM-switching toggle in the profile editor when the profile model predates the field", async () => {
-    // agent-server 1.29.0–1.30.x advertises the field in the settings schema
-    // while `OpenHandsAgentProfile` still rejects it. Rendering the toggle
-    // there would offer a control whose save the server refuses outright.
-    profileSupportsSwitchLlmToolMock.mockReturnValue(false);
-    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
-      buildSettings({
-        agent_settings: {
-          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
-          agent_kind: "openhands",
-        },
-      }),
-    );
-
-    renderAgentSettingsScreen({
-      embedded: true,
-      agentSettingsOverride: { agent_kind: "openhands" },
-    });
-    await screen.findByTestId("agent-settings-screen");
-
-    expect(
-      screen.queryByTestId("agent-settings-enable-switch-llm-tool"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.getByTestId("agent-settings-enable-sub-agents"),
-    ).toBeInTheDocument();
-  });
-
-  it("renders the LLM-switching toggle in the profile editor once the profile model carries the field", async () => {
-    profileSupportsSwitchLlmToolMock.mockReturnValue(true);
-    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
-      buildSettings({
-        agent_settings: {
-          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
-          agent_kind: "openhands",
-        },
-      }),
-    );
-
-    renderAgentSettingsScreen({
-      embedded: true,
-      agentSettingsOverride: { agent_kind: "openhands" },
-    });
-    await screen.findByTestId("agent-settings-screen");
-
-    expect(
-      screen.getByTestId("agent-settings-enable-switch-llm-tool"),
-    ).toBeInTheDocument();
-  });
-
-  it("keeps the LLM-switching toggle in non-embedded mode even when the profile model predates the field", async () => {
-    // Non-embedded, the form writes `agent_settings`, which has accepted the
-    // key since 1.22.0. The profile-model gap must not reach back and hide it.
-    // (That mode has no route today — #1571 turned /settings/agent into a
-    // redirect — but the gate should stay scoped to what it actually knows.)
-    profileSupportsSwitchLlmToolMock.mockReturnValue(false);
-    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
-      buildSettings({
-        agent_settings: {
-          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
-          agent_kind: "openhands",
-        },
-      }),
-    );
-
-    renderAgentSettingsScreen();
-    await screen.findByTestId("agent-settings-screen");
-
-    expect(
-      screen.getByTestId("agent-settings-enable-switch-llm-tool"),
-    ).toBeInTheDocument();
-  });
-
-  it("saves tool_concurrency_limit when changed on the OpenHands path", async () => {
-    const user = userEvent.setup();
-    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
-      buildSettings({
-        agent_settings: {
-          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
-          agent_kind: "openhands",
-          enable_sub_agents: false,
-          tool_concurrency_limit: 1,
-        },
-      }),
-    );
-    const save = vi.spyOn(SettingsService, "saveSettings");
-
-    renderAgentSettingsScreen();
     await screen.findByTestId("agent-settings-screen");
 
     const input = screen.getByTestId("sdk-settings-tool_concurrency_limit");
     await user.clear(input);
     await user.type(input, "4");
 
-    await user.click(screen.getByTestId("agent-save-button"));
-
-    await waitFor(() => {
-      expect(save).toHaveBeenCalledTimes(1);
-    });
-    const call = save.mock.calls[0]?.[0] as {
-      agent_settings_diff?: Record<string, unknown>;
-    };
     // Coerced to a number (not the raw input string) via the shared
     // schema-driven coercion.
-    expect(call.agent_settings_diff?.tool_concurrency_limit).toBe(4);
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      tool_concurrency_limit: 4,
+    });
   });
 
-  it("hides sub-agents toggle when ACP is selected", async () => {
-    const user = userEvent.setup();
-    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
-      buildSettings({
-        agent_settings: {
-          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
-          agent_kind: "openhands",
-        },
-      }),
-    );
+  it("opens a stored ACP profile on its command and saved model", async () => {
+    renderAgentSettingsScreen({
+      agentSettingsOverride: {
+        ...CLAUDE_PROFILE,
+        acp_command: ["npx", "-y", "@agentclientprotocol/claude-agent-acp"],
+        acp_model: "my-pinned-fork-model",
+      },
+    });
 
-    renderAgentSettingsScreen();
-    await screen.findByTestId("agent-settings-screen");
-
-    // Sub-agents toggle should be visible initially
-    expect(
-      screen.getByTestId("agent-settings-enable-sub-agents"),
-    ).toBeInTheDocument();
-
-    // Switch to ACP
-    await user.click(screen.getByTestId("agent-type-selector"));
-    await user.click(
-      await screen.findByRole("option", { name: "SETTINGS$AGENT_TYPE_ACP" }),
-    );
-
-    // Sub-agents toggle should be hidden, ACP fields should appear
-    expect(
-      screen.queryByTestId("agent-settings-enable-sub-agents"),
-    ).not.toBeInTheDocument();
-    expect(screen.getByTestId("agent-command-input")).toBeInTheDocument();
-  });
-
-  it("shows the ACP form when the active agent_kind is acp", async () => {
-    // Use a model ID that isn't in CLAUDE_MODELS so the form falls through to
-    // the custom-input branch — that's the path this test is asserting (saved
-    // value round-trips into the visible input). Known IDs go through the
-    // dropdown instead and are covered separately.
-    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
-      buildSettings({
-        agent_settings: {
-          schema_version: 1,
-          agent_kind: "acp",
-          acp_server: "claude-code",
-          acp_command: ["npx", "-y", "@agentclientprotocol/claude-agent-acp"],
-          acp_model: "my-pinned-fork-model",
-        },
-      }),
-    );
-
-    renderAgentSettingsScreen();
     const commandInput = (await screen.findByTestId(
       "agent-command-input",
     )) as HTMLTextAreaElement;
     expect(commandInput.value).toBe(
       "npx -y @agentclientprotocol/claude-agent-acp",
     );
-    const modelInput = screen.getByTestId(
-      "agent-model-input",
-    ) as HTMLInputElement;
-    expect(modelInput.value).toBe("my-pinned-fork-model");
+    expect(screen.getByLabelText("SETTINGS$AGENT_MODEL")).toHaveValue(
+      "my-pinned-fork-model",
+    );
+    expect(screen.queryByTestId("agent-model-input")).toBeNull();
   });
 
-  it("defaults built-in ACP providers to a suggested model when none is saved", async () => {
-    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
-      buildSettings({
-        agent_settings: {
-          schema_version: 1,
-          agent_kind: "acp",
-          acp_server: "claude-code",
-          acp_command: [],
-          acp_model: null,
-        },
-      }),
-    );
-
-    renderAgentSettingsScreen();
+  it("starts a built-in provider on the agent's own default before any model list", async () => {
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: CLAUDE_PROFILE,
+    });
 
     await screen.findByTestId("agent-command-input");
     expect(screen.getByLabelText("SETTINGS$AGENT_MODEL")).toHaveValue(
-      "Claude Opus (1M)",
+      "SETTINGS$AGENT_MODEL_AGENT_DEFAULT",
     );
+    expect(
+      screen.getByTestId("agent-model-list-after-first-conversation"),
+    ).toBeInTheDocument();
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      acp_model: null,
+    });
   });
 
-  it("saves the selected built-in ACP model", async () => {
-    const user = userEvent.setup();
-    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
-      buildSettings({
-        agent_settings: {
-          schema_version: 1,
-          agent_kind: "acp",
-          acp_server: "claude-code",
-          acp_command: [],
-          acp_model: null,
-        },
-      }),
-    );
-    const save = vi.spyOn(SettingsService, "saveSettings");
+  it("says when the models come from the last conversation", async () => {
+    acpModelDiscoveryMock.mockReturnValue({
+      ...NO_DISCOVERY,
+      models: CLAUDE_MODELS,
+      source: "remembered",
+    });
+    renderAgentSettingsScreen({ agentSettingsOverride: CLAUDE_PROFILE });
 
-    renderAgentSettingsScreen();
+    expect(
+      await screen.findByTestId("agent-model-list-remembered"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("agent-model-list-after-first-conversation"),
+    ).toBeNull();
+  });
+
+  it("keeps Gemini on its Vertex-safe model instead of offering its own default", async () => {
+    const user = userEvent.setup();
+    renderAgentSettingsScreen({
+      agentSettingsOverride: { ...CLAUDE_PROFILE, acp_server: "gemini-cli" },
+    });
+
+    await screen.findByTestId("agent-command-input");
+    expect(screen.getByLabelText("SETTINGS$AGENT_MODEL")).toHaveValue(
+      ACP_VERTEX_SAFE_MODEL,
+    );
+    await user.click(screen.getByLabelText("SETTINGS$AGENT_MODEL"));
+    expect(
+      screen.queryByRole("option", {
+        name: "SETTINGS$AGENT_MODEL_AGENT_DEFAULT",
+      }),
+    ).toBeNull();
+  });
+
+  it("puts the credentials before the model, since the models depend on them", async () => {
+    renderAgentSettingsScreen({ agentSettingsOverride: CLAUDE_PROFILE });
+
+    const model = await screen.findByTestId("agent-model-selector");
+    const credentials = screen.getByText("SETTINGS$ACP_CREDENTIALS_TITLE");
+    expect(
+      credentials.compareDocumentPosition(model) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("builds the selected built-in ACP model", async () => {
+    acpModelDiscoveryMock.mockReturnValue({
+      ...NO_DISCOVERY,
+      models: CLAUDE_MODELS,
+      source: "live",
+    });
+    const user = userEvent.setup();
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: CLAUDE_PROFILE,
+    });
+
     await screen.findByTestId("agent-command-input");
     await user.click(screen.getByLabelText("SETTINGS$AGENT_MODEL"));
-    await user.click(await screen.findByText("Claude Haiku"));
-    await user.click(screen.getByTestId("agent-save-button"));
+    await user.click(await screen.findByText("Haiku"));
 
-    await waitFor(() => {
-      expect(save).toHaveBeenCalledTimes(1);
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      acp_model: "haiku",
     });
-    const call = save.mock.calls[0]?.[0] as {
-      agent_settings_diff?: Record<string, unknown>;
-    };
-    expect(call.agent_settings_diff?.acp_model).toBe("haiku");
   });
 
+  it("offers OpenCode and leaves its default command to the profile resolver", async () => {
+    const user = userEvent.setup();
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: CLAUDE_PROFILE,
+    });
+    await screen.findByTestId("agent-command-input");
+    await user.click(screen.getByTestId("agent-preset-selector"));
+    await user.click(await screen.findByRole("option", { name: "OpenCode" }));
+
+    expect(screen.getByTestId("agent-command-input")).toHaveValue(
+      OPENCODE_PROVIDER.default_command.join(" "),
+    );
+    expect(screen.getByLabelText("SETTINGS$AGENT_MODEL")).toHaveValue(
+      "SETTINGS$AGENT_MODEL_AGENT_DEFAULT",
+    );
+
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      agent_kind: "acp",
+      acp_server: "opencode",
+      acp_command: null,
+      acp_args: null,
+      acp_model: null,
+    });
+  });
+
+  it.each([null, [...OPENCODE_PROVIDER.default_command]])(
+    "reloads OpenCode with command %j without losing its preset or model",
+    async (command) => {
+      const { control } = renderAgentSettingsScreen({
+        agentSettingsOverride: {
+          agent_kind: "acp",
+          acp_server: "opencode",
+          acp_command: command,
+          acp_model: "opencode/big-pickle",
+        },
+      });
+
+      expect(await screen.findByTestId("agent-preset-selector")).toHaveValue(
+        "OpenCode",
+      );
+      expect(screen.getByTestId("agent-command-input")).toHaveValue(
+        OPENCODE_PROVIDER.default_command.join(" "),
+      );
+      expect(screen.getByLabelText("SETTINGS$AGENT_MODEL")).toHaveValue(
+        "opencode/big-pickle",
+      );
+      // Old explicit defaults are cleared on the next save; new profiles
+      // resolve the current registry command rather than pinning a CLI version.
+      expect(control().buildAgentProfileFields()).toMatchObject({
+        acp_server: "opencode",
+        acp_command: null,
+        acp_model: "opencode/big-pickle",
+      });
+    },
+  );
+
+  it.each(["opencode-go/kimi-k3"])(
+    "preserves the OpenCode preset when reopening and changing Go model %s",
+    async (model) => {
+      const user = userEvent.setup();
+      const { control } = renderAgentSettingsScreen({
+        agentSettingsOverride: {
+          agent_kind: "acp",
+          acp_server: "opencode",
+          acp_command: null,
+          acp_model: model,
+        },
+      });
+
+      expect(await screen.findByTestId("agent-preset-selector")).toHaveValue(
+        "OpenCode",
+      );
+      expect(screen.getByLabelText("SETTINGS$AGENT_MODEL")).toHaveValue(model);
+      expect(control().buildAgentProfileFields()).toMatchObject({
+        acp_server: "opencode",
+        acp_command: null,
+        acp_model: model,
+      });
+
+      // Changing the model must not turn the provider into a Custom ACP command.
+      await user.click(screen.getByLabelText("SETTINGS$AGENT_MODEL"));
+      await user.click(
+        await screen.findByRole("option", {
+          name: "SETTINGS$AGENT_PRESET_CUSTOM",
+        }),
+      );
+      await user.type(
+        screen.getByTestId("agent-model-input"),
+        "opencode-go/deepseek-v4-flash",
+      );
+      expect(control().buildAgentProfileFields()).toMatchObject({
+        acp_server: "opencode",
+        acp_command: null,
+        acp_model: "opencode-go/deepseek-v4-flash",
+      });
+    },
+  );
+
   it("clears the model when switching from a built-in provider to Custom", async () => {
-    // F3 from review: built-ins seed ``acp_model`` to their registered
-    // ``default_model`` on load. Picking Custom must not leak that built-in
-    // default into custom settings — otherwise a user choosing Custom from
-    // Claude Code would silently save ``acp_model: "claude-opus-4-7"`` on an
+    // Picking Custom must not leak the built-in default model onto an
     // unrelated wrapper.
     const user = userEvent.setup();
-    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
-      buildSettings({
-        agent_settings: {
-          schema_version: 1,
-          agent_kind: "acp",
-          acp_server: "claude-code",
-          acp_command: [],
-          acp_model: null,
-        },
-      }),
-    );
-    const save = vi.spyOn(SettingsService, "saveSettings");
-
-    renderAgentSettingsScreen();
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: CLAUDE_PROFILE,
+    });
     await screen.findByTestId("agent-command-input");
-    // Form loads with the Claude Code default visible.
     expect(screen.getByLabelText("SETTINGS$AGENT_MODEL")).toHaveValue(
-      "Claude Opus (1M)",
+      "SETTINGS$AGENT_MODEL_AGENT_DEFAULT",
     );
 
-    // Switch to the Custom preset, then enter a different command — the
-    // form's ``selectedPreset`` re-derives from the command text, so the
-    // save path only treats it as Custom once the command no longer matches
-    // a built-in provider's default.
     await user.click(screen.getByTestId("agent-preset-selector"));
     await user.click(
       await screen.findByRole("option", {
         name: "SETTINGS$AGENT_PRESET_CUSTOM",
       }),
     );
-    const commandInput = screen.getByTestId(
-      "agent-command-input",
-    ) as HTMLTextAreaElement;
+    const commandInput = screen.getByTestId("agent-command-input");
     await user.clear(commandInput);
     await user.type(commandInput, "my-custom-acp --flag");
 
-    await user.click(screen.getByTestId("agent-save-button"));
-    await waitFor(() => {
-      expect(save).toHaveBeenCalledTimes(1);
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      acp_server: "custom",
+      acp_command: "my-custom-acp --flag",
+      acp_model: null,
+    });
+  });
+
+  it("offers the Pi preset and leaves its model to Pi", async () => {
+    const pi = getClientAcpProvider("pi")!;
+    const user = userEvent.setup();
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: CLAUDE_PROFILE,
+    });
+    await screen.findByTestId("agent-command-input");
+
+    await user.click(screen.getByTestId("agent-preset-selector"));
+    await user.click(await screen.findByRole("option", { name: "Pi" }));
+
+    expect(screen.getByTestId("agent-command-input")).toHaveValue(
+      pi.default_command.join(" "),
+    );
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      acp_server: "pi",
+      acp_command: null,
+      acp_model: null,
+    });
+  });
+
+  it("lists the models the agent reports and names its own default", async () => {
+    acpModelDiscoveryMock.mockReturnValue({
+      ...NO_DISCOVERY,
+      source: "live",
+      models: [
+        { id: "default", label: "Default (recommended)" },
+        { id: "claude-fable-5[1m]", label: "Fable 5 (1M)" },
+        { id: "sonnet", label: "Sonnet" },
+      ],
+      defaultModelId: "default",
+    });
+    const user = userEvent.setup();
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: CLAUDE_PROFILE,
+    });
+    await screen.findByTestId("agent-command-input");
+    expect(acpModelDiscoveryMock).toHaveBeenLastCalledWith("claude-code", {
+      secretRefs: null,
     });
 
-    const call = save.mock.calls[0]?.[0] as {
-      agent_settings_diff?: Record<string, unknown>;
-    };
-    // Custom preset has no registered default — saved acp_model must be null,
-    // not the inherited Claude Opus default.
-    expect(call.agent_settings_diff?.acp_server).toBe("custom");
-    expect(call.agent_settings_diff?.acp_model).toBeNull();
+    await user.click(screen.getByLabelText("SETTINGS$AGENT_MODEL"));
+    await user.click(
+      await screen.findByRole("option", { name: "Fable 5 (1M)" }),
+    );
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      acp_model: "claude-fable-5[1m]",
+    });
+
+    await user.click(screen.getByLabelText("SETTINGS$AGENT_MODEL"));
+    await user.click(
+      await screen.findByRole("option", {
+        name: "SETTINGS$AGENT_MODEL_AGENT_DEFAULT_IS",
+      }),
+    );
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      acp_model: null,
+    });
+  });
+
+  it("keeps a saved model selectable when the agent no longer lists it", async () => {
+    acpModelDiscoveryMock.mockReturnValue({
+      ...NO_DISCOVERY,
+      source: "live",
+      models: [{ id: "gpt-6-astra", label: "GPT-6 Astra" }],
+      defaultModelId: "gpt-6-astra",
+    });
+    renderAgentSettingsScreen({
+      agentSettingsOverride: {
+        ...CLAUDE_PROFILE,
+        acp_server: "codex",
+        acp_model: "gpt-5.5",
+      },
+    });
+
+    await screen.findByTestId("agent-command-input");
+    expect(screen.getByLabelText("SETTINGS$AGENT_MODEL")).toHaveValue(
+      "gpt-5.5",
+    );
+    expect(screen.queryByTestId("agent-model-input")).toBeNull();
+  });
+
+  it("offers Pi's own default and saves no model for it", async () => {
+    acpModelDiscoveryMock.mockReturnValue({
+      ...NO_DISCOVERY,
+      models: [
+        { id: "anthropic/claude-opus-4-8", label: "Claude Opus 4.8" },
+        { id: "anthropic/claude-sonnet-5", label: "Claude Sonnet 5" },
+      ],
+      defaultModelId: "anthropic/claude-opus-4-8",
+    });
+    const user = userEvent.setup();
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: { ...CLAUDE_PROFILE, acp_server: "pi" },
+    });
+
+    await screen.findByTestId("agent-command-input");
+    expect(screen.getByLabelText("SETTINGS$AGENT_MODEL")).toHaveValue(
+      "SETTINGS$AGENT_MODEL_AGENT_DEFAULT_IS",
+    );
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      acp_server: "pi",
+      acp_model: null,
+    });
+
+    await user.click(screen.getByLabelText("SETTINGS$AGENT_MODEL"));
+    await user.click(
+      await screen.findByRole("option", { name: "Claude Sonnet 5" }),
+    );
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      acp_model: "anthropic/claude-sonnet-5",
+    });
+  });
+
+  it("asks for models with only the secrets the profile allows", async () => {
+    renderAgentSettingsScreen({
+      agentSettingsOverride: {
+        ...CLAUDE_PROFILE,
+        secret_refs: ["ANTHROPIC_API_KEY"],
+      },
+    });
+
+    await screen.findByTestId("agent-command-input");
+    expect(acpModelDiscoveryMock).toHaveBeenLastCalledWith("claude-code", {
+      secretRefs: ["ANTHROPIC_API_KEY"],
+    });
+  });
+
+  it("does not ask a custom command for its models", async () => {
+    renderAgentSettingsScreen({
+      agentSettingsOverride: {
+        ...CLAUDE_PROFILE,
+        acp_server: "custom",
+        acp_command: ["my-acp-wrapper"],
+      },
+    });
+
+    await screen.findByTestId("agent-command-input");
+    expect(acpModelDiscoveryMock).toHaveBeenLastCalledWith(null, {
+      secretRefs: null,
+    });
+  });
+
+  it("asks for credentials when the agent needs a login to list models", async () => {
+    acpModelDiscoveryMock.mockReturnValue({
+      ...NO_DISCOVERY,
+      discovery: {
+        agent_name: null,
+        agent_version: null,
+        current_model_id: null,
+        available_models: [],
+        supports_runtime_model_switch: false,
+        error: { code: "ACPAuthRequired", detail: "log in" },
+      },
+    });
+    acpAuthStatusMock.mockReturnValue({
+      status: "authenticated",
+      isChecking: false,
+      isSupported: true,
+    });
+    renderAgentSettingsScreen({
+      agentSettingsOverride: { ...CLAUDE_PROFILE, acp_server: "gemini-cli" },
+    });
+
+    expect(
+      await screen.findByTestId("agent-model-discovery-needs-auth"),
+    ).toBeInTheDocument();
+    // The agent refused the login a local file check counted as signed in.
+    expect(screen.queryByTestId("settings-acp-auth-detected")).toBeNull();
+  });
+
+  it("hides the local-only presets on a cloud backend", async () => {
+    __resetActiveStoreForTests();
+    setRegisteredBackends([
+      {
+        id: "cloud-1",
+        name: "Cloud",
+        host: "https://app.example.com",
+        apiKey: "key",
+        kind: "cloud",
+      },
+    ]);
+    setActiveSelection({ backendId: "cloud-1", orgId: null });
+    try {
+      render(
+        <AgentSettingsScreen
+          agentSettingsOverride={CLAUDE_PROFILE}
+          onSaveControlChange={() => {}}
+        />,
+        {
+          wrapper: ({ children }) => (
+            <MemoryRouter>
+              <QueryClientProvider
+                client={
+                  new QueryClient({
+                    defaultOptions: { queries: { retry: false } },
+                  })
+                }
+              >
+                <ActiveBackendProvider>{children}</ActiveBackendProvider>
+              </QueryClientProvider>
+            </MemoryRouter>
+          ),
+        },
+      );
+      await screen.findByTestId("agent-command-input");
+      await userEvent
+        .setup()
+        .click(screen.getByTestId("agent-preset-selector"));
+
+      expect(
+        await screen.findByRole("option", { name: "Codex" }),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("option", { name: "Pi" })).toBeNull();
+      expect(screen.queryByRole("option", { name: "OpenCode" })).toBeNull();
+    } finally {
+      window.localStorage.clear();
+      __resetActiveStoreForTests();
+    }
   });
 
   it("reconciles the model when the command is retyped to a different provider", async () => {
-    // Editing the command textarea (rather than the preset dropdown) into a
-    // different built-in provider must not leave the previous provider's model
-    // selected — otherwise Save would persist e.g. ``claude-opus-4-7`` against
-    // a Codex wrapper. The detected preset changes, so the model reconciles to
-    // the new provider's default.
+    // The textarea is the other way to change provider, so it must drop the
+    // previous provider's model just like the preset dropdown does.
     const user = userEvent.setup();
-    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
-      buildSettings({
-        agent_settings: {
-          schema_version: 1,
-          agent_kind: "acp",
-          acp_server: "claude-code",
-          acp_command: [],
-          acp_model: null,
-        },
-      }),
-    );
-    const save = vi.spyOn(SettingsService, "saveSettings");
-
-    renderAgentSettingsScreen();
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: { ...CLAUDE_PROFILE, acp_model: "haiku" },
+    });
     await screen.findByTestId("agent-command-input");
-    expect(screen.getByLabelText("SETTINGS$AGENT_MODEL")).toHaveValue(
-      "Claude Opus (1M)",
-    );
 
-    const commandInput = screen.getByTestId(
-      "agent-command-input",
-    ) as HTMLTextAreaElement;
+    const commandInput = screen.getByTestId("agent-command-input");
     await user.clear(commandInput);
     await user.type(commandInput, CODEX_COMMAND.join(" "));
 
-    // The model field now reflects the Codex default, not the stale Claude one.
-    expect(screen.getByLabelText("SETTINGS$AGENT_MODEL")).toHaveValue(
-      "GPT-5.5",
-    );
-
-    await user.click(screen.getByTestId("agent-save-button"));
-    await waitFor(() => {
-      expect(save).toHaveBeenCalledTimes(1);
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      acp_server: "codex",
+      acp_command: null,
+      acp_model: null,
     });
-
-    const call = save.mock.calls[0]?.[0] as {
-      agent_settings_diff?: Record<string, unknown>;
-    };
-    expect(call.agent_settings_diff?.acp_server).toBe("codex");
-    expect(call.agent_settings_diff?.acp_model).toBe("gpt-5.5");
   });
 
-  it("saves an ACP diff when switching to ACP + Claude Code", async () => {
+  it("prefills Claude Code when switching to ACP", async () => {
     const user = userEvent.setup();
-    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
-      buildSettings({
-        agent_settings: {
-          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
-          agent_kind: "openhands",
-        },
-      }),
-    );
-    const save = vi.spyOn(SettingsService, "saveSettings");
-
-    renderAgentSettingsScreen();
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: { agent_kind: "openhands" },
+    });
     await screen.findByTestId("agent-settings-screen");
 
-    // Switching to ACP prefills the command from the first registered provider
-    // (Claude Code).
     await user.click(screen.getByTestId("agent-type-selector"));
     await user.click(
       await screen.findByRole("option", { name: "SETTINGS$AGENT_TYPE_ACP" }),
@@ -616,49 +663,24 @@ describe("AgentSettingsScreen", () => {
       "agent-command-input",
     )) as HTMLTextAreaElement;
     expect(commandInput.value).toBe(CLAUDE_COMMAND.join(" "));
-    expect(screen.getByLabelText("SETTINGS$AGENT_MODEL")).toHaveValue(
-      "Claude Opus (1M)",
-    );
-
-    await user.click(screen.getByTestId("agent-save-button"));
-
-    await waitFor(() => {
-      expect(save).toHaveBeenCalledTimes(1);
-    });
-    const call = save.mock.calls[0]?.[0] as {
-      agent_settings_diff?: Record<string, unknown>;
-    };
-    expect(call.agent_settings_diff).toEqual({
+    expect(control().buildAgentProfileFields()).toEqual({
       agent_kind: "acp",
+      mcp_server_refs: null,
+      secret_refs: null,
       acp_server: "claude-code",
-      // The default-command path stores acp_command: [] and lets the registry
-      // resolve it on the agent-server side. Round-tripping verbatim would
-      // pin a stale command if the registry default changes upstream.
-      acp_command: [],
-      // ``acp_args: []`` is reset on every save so an API-set
-      // ``acp_args`` can't survive and concatenate onto the spawn
-      // command at conversation-create time.
-      acp_args: [],
-      acp_model: "opus[1m]",
+      // The default command is left to the registry rather than pinned.
+      acp_command: null,
+      acp_args: null,
+      acp_model: null,
     });
   });
 
-  it("clears ACP fields when switching back to OpenHands", async () => {
+  it("drops the ACP fields when switching back to OpenHands", async () => {
     const user = userEvent.setup();
-    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
-      buildSettings({
-        agent_settings: {
-          schema_version: 1,
-          agent_kind: "acp",
-          acp_server: "claude-code",
-          acp_command: ["npx", "-y", "@agentclientprotocol/claude-agent-acp"],
-        },
-      }),
-    );
-    const save = vi.spyOn(SettingsService, "saveSettings");
-
-    renderAgentSettingsScreen();
-    await screen.findByTestId("agent-settings-screen");
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: CLAUDE_PROFILE,
+    });
+    await screen.findByTestId("agent-command-input");
 
     await user.click(screen.getByTestId("agent-type-selector"));
     await user.click(
@@ -666,194 +688,92 @@ describe("AgentSettingsScreen", () => {
         name: "SETTINGS$AGENT_TYPE_OPENHANDS",
       }),
     );
-    await user.click(screen.getByTestId("agent-save-button"));
 
-    await waitFor(() => {
-      expect(save).toHaveBeenCalledTimes(1);
-    });
-    const call = save.mock.calls[0]?.[0] as {
-      agent_settings_diff?: Record<string, unknown>;
-    };
-    expect(call.agent_settings_diff).toEqual({
+    const fields = control().buildAgentProfileFields();
+    expect(fields).not.toHaveProperty("acp_server");
+    expect(fields).toMatchObject({
       agent_kind: "openhands",
-      enable_sub_agents: false,
-      enable_switch_llm_tool: true,
+      mcp_server_refs: null,
+      secret_refs: null,
+      tools: null,
       tool_concurrency_limit: 1,
     });
+    // Like a new profile, the OpenHands variant starts from the global values.
+    expect(fields).toHaveProperty("condenser");
+    expect(fields).toHaveProperty("verification");
   });
 
-  it("disables Save when the user has cleared the command on the ACP path", async () => {
+  it.each(["", "   \t   "])(
+    "is invalid when the ACP command is %j",
+    async (command) => {
+      // The agent-server cannot spawn an empty command.
+      const user = userEvent.setup();
+      const { control } = renderAgentSettingsScreen({
+        agentSettingsOverride: CLAUDE_PROFILE,
+      });
+      const cmd = await screen.findByTestId("agent-command-input");
+      expect(control().isValid).toBe(true);
+
+      await user.clear(cmd);
+      if (command) await user.type(cmd, command);
+
+      expect(control().isValid).toBe(false);
+    },
+  );
+
+  it("round-trips a Custom command with quoted args", async () => {
+    // ``bash -c "echo hi"`` must not tokenise as
+    // ``["bash","-c","\"echo","hi\""]``.
     const user = userEvent.setup();
-    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
-      buildSettings({
-        agent_settings: {
-          schema_version: 1,
-          agent_kind: "acp",
-          acp_server: "claude-code",
-          acp_command: ["npx", "-y", "@agentclientprotocol/claude-agent-acp"],
-        },
-      }),
-    );
-
-    renderAgentSettingsScreen();
-    const cmd = (await screen.findByTestId(
-      "agent-command-input",
-    )) as HTMLTextAreaElement;
-    const save = screen.getByTestId("agent-save-button") as HTMLButtonElement;
-
-    // Clear the field. Save should be disabled (the agent-server would
-    // crash on an empty acp_command and the adapter has no way to
-    // recover — better to block the save than silently submit garbage).
-    await user.clear(cmd);
-    expect(save).toBeDisabled();
-  });
-
-  it("treats whitespace-only as empty and keeps Save disabled", async () => {
-    const user = userEvent.setup();
-    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
-      buildSettings({
-        agent_settings: {
-          schema_version: 1,
-          agent_kind: "acp",
-          acp_server: "claude-code",
-          acp_command: ["npx", "-y", "@agentclientprotocol/claude-agent-acp"],
-        },
-      }),
-    );
-
-    renderAgentSettingsScreen();
-    const cmd = (await screen.findByTestId(
-      "agent-command-input",
-    )) as HTMLTextAreaElement;
-    const save = screen.getByTestId("agent-save-button") as HTMLButtonElement;
-    await user.clear(cmd);
-    await user.type(cmd, "   \t   ");
-    expect(save).toBeDisabled();
-  });
-
-  it("preserves a Custom command with quoted args end-to-end", async () => {
-    // Regression guard for the .split-vs-shell-quote bug: a Custom
-    // command like ``bash -c "echo hi"`` used to get tokenised as
-    // ``["bash","-c","\"echo","hi\""]`` and silently fail at spawn.
-    const user = userEvent.setup();
-    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
-      buildSettings({
-        agent_settings: {
-          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
-          agent_kind: "openhands",
-        },
-      }),
-    );
-    const save = vi.spyOn(SettingsService, "saveSettings");
-
-    renderAgentSettingsScreen();
-    await screen.findByTestId("agent-settings-screen");
-
-    await user.click(screen.getByTestId("agent-type-selector"));
-    await user.click(
-      await screen.findByRole("option", { name: "SETTINGS$AGENT_TYPE_ACP" }),
-    );
-    const cmd = (await screen.findByTestId(
-      "agent-command-input",
-    )) as HTMLTextAreaElement;
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: CLAUDE_PROFILE,
+    });
+    const cmd = await screen.findByTestId("agent-command-input");
     await user.clear(cmd);
     await user.type(cmd, 'bash -c "echo hi"');
-    await user.click(screen.getByTestId("agent-save-button"));
 
-    await waitFor(() => {
-      expect(save).toHaveBeenCalledTimes(1);
-    });
-    const call = save.mock.calls[0]?.[0] as {
-      agent_settings_diff?: Record<string, unknown>;
-    };
-    expect(call.agent_settings_diff?.acp_command).toEqual([
-      "bash",
-      "-c",
-      "echo hi",
-    ]);
-    // Anything that diverges from a built-in default-command snaps to
-    // the Custom preset.
-    expect(call.agent_settings_diff?.acp_server).toBe("custom");
+    const fields = control().buildAgentProfileFields();
+    expect(fields).toMatchObject({ acp_server: "custom" });
+    expect(
+      parseCommand((fields as { acp_command: string }).acp_command),
+    ).toEqual(["bash", "-c", "echo hi"]);
   });
 
-  it("preserves the registry default when acp_command:[] + non-empty acp_args is loaded", async () => {
-    // Regression guard for the data-corruption bug:
-    //
-    //   stored: acp_server: 'claude-code', acp_command: [], acp_args:
-    //           ['--extra-arg']
-    //   actual spawn: ['npx', '-y', '@agentclientprotocol/claude-agent-acp',
-    //                  '--extra-arg']
-    //
-    // The form used to merge acp_command + acp_args literally and would
-    // show only ``--extra-arg`` in the textarea. Saving then sent
-    // ``acp_command: ['--extra-arg']`` and flipped the preset to
-    // ``custom``, silently dropping the registry-default prefix.
-    // The load path must expand the default *before* merging with args.
+  it("keeps the registry default when a profile stores only acp_args", async () => {
+    // The default command must be expanded before the args are appended, or
+    // an edit would save the bare args and drop the provider's command.
     const user = userEvent.setup();
-    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
-      buildSettings({
-        agent_settings: {
-          schema_version: 1,
-          agent_kind: "acp",
-          acp_server: "claude-code",
-          acp_command: [],
-          acp_args: ["--extra-arg"],
-        },
-      }),
-    );
-    const save = vi.spyOn(SettingsService, "saveSettings");
-
-    renderAgentSettingsScreen();
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: { ...CLAUDE_PROFILE, acp_args: ["--extra-arg"] },
+    });
     const cmd = (await screen.findByTestId(
       "agent-command-input",
     )) as HTMLTextAreaElement;
     expect(cmd.value).toBe(`${CLAUDE_COMMAND.join(" ")} --extra-arg`);
 
-    // Make a real edit so Save enables, then submit. The payload must
-    // carry the registry-default prefix the user can SEE in the textarea,
-    // not the bare ``--extra-arg`` that was stored.
     await user.click(cmd);
     await user.keyboard("{End} --saved");
 
-    await user.click(screen.getByTestId("agent-save-button"));
-    await waitFor(() => {
-      expect(save).toHaveBeenCalledTimes(1);
-    });
-    const call = save.mock.calls[0]?.[0] as {
-      agent_settings_diff?: Record<string, unknown>;
-    };
-    expect(call.agent_settings_diff?.acp_server).toBe("custom");
-    expect(call.agent_settings_diff?.acp_command).toEqual([
-      ...CLAUDE_COMMAND,
-      "--extra-arg",
-      "--saved",
-    ]);
-    // ``acp_args: []`` resets the API-set args so they don't double up
-    // at spawn time.
-    expect(call.agent_settings_diff?.acp_args).toEqual([]);
+    const fields = control().buildAgentProfileFields();
+    expect(fields).toMatchObject({ acp_server: "custom", acp_args: null });
+    expect(
+      parseCommand((fields as { acp_command: string }).acp_command),
+    ).toEqual([...CLAUDE_COMMAND, "--extra-arg", "--saved"]);
   });
 
-  it("disables Save after reverting an agent-type dropdown change", async () => {
+  it("is clean again after reverting an agent-type change", async () => {
     const user = userEvent.setup();
-    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
-      buildSettings({
-        agent_settings: {
-          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
-          agent_kind: "openhands",
-        },
-      }),
-    );
-
-    renderAgentSettingsScreen();
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: { agent_kind: "openhands" },
+    });
     await screen.findByTestId("agent-type-selector");
-    const save = screen.getByTestId("agent-save-button") as HTMLButtonElement;
-    expect(save).toBeDisabled();
+    expect(control().isDirty).toBe(false);
 
     await user.click(screen.getByTestId("agent-type-selector"));
     await user.click(
       await screen.findByRole("option", { name: "SETTINGS$AGENT_TYPE_ACP" }),
     );
-    expect(save).not.toBeDisabled();
+    expect(control().isDirty).toBe(true);
 
     await user.click(screen.getByTestId("agent-type-selector"));
     await user.click(
@@ -861,126 +781,17 @@ describe("AgentSettingsScreen", () => {
         name: "SETTINGS$AGENT_TYPE_OPENHANDS",
       }),
     );
-    expect(save).toBeDisabled();
+    expect(control().isDirty).toBe(false);
   });
 
-  it("preserves an unknown loaded acp_server when the user saves without editing", async () => {
-    // Data-corruption regression: a user with an ``acp_server`` value
-    // canvas's registry doesn't know about (e.g. set via the API for a
-    // future provider that hasn't been mirrored into ``ACP_PROVIDERS``
-    // yet) opens Settings → Agent and clicks Save. Without preservation
-    // the save flow demotes ``acp_server: "amp"`` → ``acp_server:
-    // "custom"`` because ``detectPreset`` returns ``custom`` for any
-    // unknown server. The original key name is silently lost.
-    //
-    // The fix is narrow: when the user hasn't touched the command since
-    // load AND the loaded server is non-empty, non-``"custom"``, and
-    // absent from ``ACP_PROVIDERS``, write the loaded key back verbatim
-    // via the ``allowUnknownServer`` pass-through.
+  it("saves typed ACP credentials through the save control", async () => {
     const user = userEvent.setup();
-    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
-      buildSettings({
-        agent_settings: {
-          schema_version: 1,
-          agent_kind: "acp",
-          acp_server: "amp",
-          acp_command: ["npx", "-y", "@some-future/amp-acp"],
-          acp_args: [],
-        },
-      }),
-    );
-    const save = vi.spyOn(SettingsService, "saveSettings");
-
-    renderAgentSettingsScreen();
-    const cmd = (await screen.findByTestId(
-      "agent-command-input",
-    )) as HTMLTextAreaElement;
-    expect(cmd.value).toBe("npx -y @some-future/amp-acp");
-
-    // Change only the model so Save enables while the command stays
-    // identical to what was loaded — preserves the unknown acp_server path.
-    const modelInput = await screen.findByTestId("agent-model-input");
-    await user.type(modelInput, "future-model");
-
-    await user.click(screen.getByTestId("agent-save-button"));
-    await waitFor(() => {
-      expect(save).toHaveBeenCalledTimes(1);
-    });
-    const call = save.mock.calls[0]?.[0] as {
-      agent_settings_diff?: Record<string, unknown>;
-    };
-    expect(call.agent_settings_diff?.acp_server).toBe("amp");
-    expect(call.agent_settings_diff?.acp_command).toEqual([
-      "npx",
-      "-y",
-      "@some-future/amp-acp",
-    ]);
-  });
-
-  it("demotes an unknown loaded acp_server to 'custom' when the user edits the command", async () => {
-    // Counterpart to the preserve test: editing the command is a
-    // material change of configuration, so it's correct to drop the
-    // unknown ``amp`` key and fall back to ``"custom"``. The user is
-    // configuring a new command, not preserving the prior one — so
-    // the preset name follows the command.
-    const user = userEvent.setup();
-    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
-      buildSettings({
-        agent_settings: {
-          schema_version: 1,
-          agent_kind: "acp",
-          acp_server: "amp",
-          acp_command: ["npx", "-y", "@some-future/amp-acp"],
-          acp_args: [],
-        },
-      }),
-    );
-    const save = vi.spyOn(SettingsService, "saveSettings");
-
-    renderAgentSettingsScreen();
-    const cmd = (await screen.findByTestId(
-      "agent-command-input",
-    )) as HTMLTextAreaElement;
-
-    // Actually change the command — append a flag so the textarea
-    // differs from the loaded value.
-    await user.click(cmd);
-    await user.keyboard("{End} --new-flag");
-
-    await user.click(screen.getByTestId("agent-save-button"));
-    await waitFor(() => {
-      expect(save).toHaveBeenCalledTimes(1);
-    });
-    const call = save.mock.calls[0]?.[0] as {
-      agent_settings_diff?: Record<string, unknown>;
-    };
-    expect(call.agent_settings_diff?.acp_server).toBe("custom");
-    expect(call.agent_settings_diff?.acp_command).toEqual([
-      "npx",
-      "-y",
-      "@some-future/amp-acp",
-      "--new-flag",
-    ]);
-  });
-
-  it("a single Save persists ACP credentials together with the agent spec", async () => {
-    const user = userEvent.setup();
-    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
-      buildSettings({
-        agent_settings: {
-          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
-          agent_kind: "openhands",
-        },
-      }),
-    );
-    const saveSettings = vi.spyOn(SettingsService, "saveSettings");
     const createSecret = vi.spyOn(SecretsService, "createSecret");
-
-    renderAgentSettingsScreen();
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: { agent_kind: "openhands" },
+    });
     await screen.findByTestId("agent-settings-screen");
 
-    // Switch to ACP (Claude Code prefilled) and paste a credential, then click
-    // the single page-level Save button.
     await user.click(screen.getByTestId("agent-type-selector"));
     await user.click(
       await screen.findByRole("option", { name: "SETTINGS$AGENT_TYPE_ACP" }),
@@ -989,65 +800,37 @@ describe("AgentSettingsScreen", () => {
       await screen.findByTestId("settings-acp-secret-ANTHROPIC_API_KEY"),
       "sk-ant-xyz",
     );
+    expect(control().credentials.isDirty).toBe(true);
 
-    await user.click(screen.getByTestId("agent-save-button"));
-
-    // One click persists both: the credential as a secret AND the agent spec.
-    await waitFor(() => {
-      expect(createSecret).toHaveBeenCalledWith(
-        "ANTHROPIC_API_KEY",
-        "sk-ant-xyz",
-        undefined,
-      );
-      expect(saveSettings).toHaveBeenCalledTimes(1);
+    let saved = false;
+    await act(async () => {
+      saved = await control().credentials.save({ silent: true });
     });
-    const diff = (
-      saveSettings.mock.calls[0]?.[0] as {
-        agent_settings_diff?: Record<string, unknown>;
-      }
-    ).agent_settings_diff;
-    expect(diff?.agent_kind).toBe("acp");
-    expect(diff?.acp_server).toBe("claude-code");
 
-    // One click → one confirmation, even though it persisted both the spec and
-    // the credential (the credential save is silenced so it doesn't double up).
-    expect(toastMocks.success).toHaveBeenCalledTimes(1);
+    expect(saved).toBe(true);
+    expect(createSecret).toHaveBeenCalledWith(
+      "ANTHROPIC_API_KEY",
+      "sk-ant-xyz",
+      undefined,
+    );
+    // The editor owns the single "saved" toast.
+    expect(toastMocks.success).not.toHaveBeenCalled();
   });
 
-  it("a credentials-only change saves the secret without re-writing settings", async () => {
+  it("a credentials-only edit marks the form dirty", async () => {
     const user = userEvent.setup();
-    // Already on ACP, so loading introduces no settings change.
-    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
-      buildSettings({
-        agent_settings: {
-          schema_version: 1,
-          agent_kind: "acp",
-          acp_server: "claude-code",
-          acp_command: [],
-        },
-      }),
-    );
-    const saveSettings = vi.spyOn(SettingsService, "saveSettings");
-    const createSecret = vi.spyOn(SecretsService, "createSecret");
-
-    renderAgentSettingsScreen();
-    await screen.findByTestId("agent-settings-screen");
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: CLAUDE_PROFILE,
+    });
+    await screen.findByTestId("agent-command-input");
+    expect(control().isDirty).toBe(false);
 
     await user.type(
       await screen.findByTestId("settings-acp-secret-ANTHROPIC_API_KEY"),
       "sk-ant-only",
     );
-    await user.click(screen.getByTestId("agent-save-button"));
 
-    await waitFor(() => {
-      expect(createSecret).toHaveBeenCalledWith(
-        "ANTHROPIC_API_KEY",
-        "sk-ant-only",
-        undefined,
-      );
-    });
-    // No spec change → no settings write (and no double toast).
-    expect(saveSettings).not.toHaveBeenCalled();
+    expect(control().isDirty).toBe(true);
   });
 
   it("shows the 'already signed in' banner in the credentials section when authenticated", async () => {
@@ -1056,18 +839,8 @@ describe("AgentSettingsScreen", () => {
       isChecking: false,
       isSupported: true,
     });
-    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
-      buildSettings({
-        agent_settings: {
-          schema_version: 1,
-          agent_kind: "acp",
-          acp_server: "claude-code",
-          acp_command: [],
-        },
-      }),
-    );
 
-    renderAgentSettingsScreen();
+    renderAgentSettingsScreen({ agentSettingsOverride: CLAUDE_PROFILE });
     await screen.findByTestId("agent-settings-screen");
 
     expect(
@@ -1079,7 +852,6 @@ describe("AgentSettingsScreen", () => {
 describe("AgentSettingsScreen — MCP server scope", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    vi.spyOn(SettingsService, "saveSettings").mockResolvedValue(true);
   });
 
   function seedWithMcp(mcpConfig: Record<string, unknown>) {
@@ -1105,10 +877,8 @@ describe("AgentSettingsScreen — MCP server scope", () => {
     seedWithMcp(TWO_SERVERS);
     let control: AgentSettingsSaveControl | null = null;
     renderAgentSettingsScreen({
-      embedded: true,
       agentSettingsOverride: {
         agent_kind: "openhands",
-        enable_sub_agents: false,
         mcp_server_refs: null,
       },
       onSaveControlChange: (next) => {
@@ -1129,10 +899,8 @@ describe("AgentSettingsScreen — MCP server scope", () => {
     seedWithMcp(TWO_SERVERS);
     let control: AgentSettingsSaveControl | null = null;
     renderAgentSettingsScreen({
-      embedded: true,
       agentSettingsOverride: {
         agent_kind: "openhands",
-        enable_sub_agents: false,
         mcp_server_refs: ["github"],
       },
       onSaveControlChange: (next) => {
@@ -1154,10 +922,8 @@ describe("AgentSettingsScreen — MCP server scope", () => {
     seedWithMcp(TWO_SERVERS);
     let control: AgentSettingsSaveControl | null = null;
     renderAgentSettingsScreen({
-      embedded: true,
       agentSettingsOverride: {
         agent_kind: "openhands",
-        enable_sub_agents: false,
         mcp_server_refs: null,
       },
       onSaveControlChange: (next) => {
@@ -1188,10 +954,8 @@ describe("AgentSettingsScreen — MCP server scope", () => {
   it("warns about a ref whose server is gone, which would fail the launch", async () => {
     seedWithMcp(TWO_SERVERS);
     renderAgentSettingsScreen({
-      embedded: true,
       agentSettingsOverride: {
         agent_kind: "openhands",
-        enable_sub_agents: false,
         mcp_server_refs: ["github", "deleted-server"],
       },
     });
@@ -1209,7 +973,6 @@ describe("AgentSettingsScreen — MCP server scope", () => {
     seedWithMcp(TWO_SERVERS);
     let control: AgentSettingsSaveControl | null = null;
     renderAgentSettingsScreen({
-      embedded: true,
       agentSettingsOverride: {
         agent_kind: "acp",
         acp_server: "claude-code",
@@ -1231,10 +994,8 @@ describe("AgentSettingsScreen — MCP server scope", () => {
   it("explains the empty state when no server is configured", async () => {
     seedWithMcp({});
     renderAgentSettingsScreen({
-      embedded: true,
       agentSettingsOverride: {
         agent_kind: "openhands",
-        enable_sub_agents: false,
       },
     });
     await screen.findByTestId("agent-settings-screen");
@@ -1245,23 +1006,11 @@ describe("AgentSettingsScreen — MCP server scope", () => {
       screen.getByText("SETTINGS$AGENT_PROFILE_MCP_NONE"),
     ).toBeInTheDocument();
   });
-
-  it("is hidden outside the profile editor", async () => {
-    // The global page saves `agent_settings`, which carries the resolved
-    // `mcp_config`, not refs.
-    seedWithMcp(TWO_SERVERS);
-    renderAgentSettingsScreen({});
-    await screen.findByTestId("agent-settings-screen");
-    expect(
-      screen.queryByTestId("agent-settings-mcp-mode"),
-    ).not.toBeInTheDocument();
-  });
 });
 
 describe("AgentSettingsScreen — MCP scope dirty tracking", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    vi.spyOn(SettingsService, "saveSettings").mockResolvedValue(true);
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
       buildSettings({
         agent_settings: {
@@ -1279,10 +1028,8 @@ describe("AgentSettingsScreen — MCP scope dirty tracking", () => {
   async function dirtyForStoredRefs(refs: string[]) {
     let control: AgentSettingsSaveControl | null = null;
     renderAgentSettingsScreen({
-      embedded: true,
       agentSettingsOverride: {
         agent_kind: "openhands",
-        enable_sub_agents: false,
         mcp_server_refs: refs,
       },
       onSaveControlChange: (next) => {
@@ -1328,23 +1075,12 @@ describe("AgentSettingsScreen — MCP scope dirty tracking", () => {
       );
     }
 
-    it("hides the control outside the profile editor", async () => {
-      seedOpenHandsSettings();
-      renderAgentSettingsScreen();
-      await screen.findByTestId("agent-settings-screen");
-      expect(
-        screen.queryByTestId("agent-settings-secrets-mode"),
-      ).not.toBeInTheDocument();
-    });
-
     it("lists every saved secret read-only and persists null by default", async () => {
       seedOpenHandsSettings();
       let control: AgentSettingsSaveControl | null = null;
       renderAgentSettingsScreen({
-        embedded: true,
         agentSettingsOverride: {
           agent_kind: "openhands",
-          enable_sub_agents: false,
           secret_refs: null,
         },
         onSaveControlChange: (next) => {
@@ -1371,10 +1107,8 @@ describe("AgentSettingsScreen — MCP scope dirty tracking", () => {
       seedOpenHandsSettings();
       let control: AgentSettingsSaveControl | null = null;
       renderAgentSettingsScreen({
-        embedded: true,
         agentSettingsOverride: {
           agent_kind: "openhands",
-          enable_sub_agents: false,
           secret_refs: ["DATADOG_API_KEY"],
         },
         onSaveControlChange: (next) => {
@@ -1400,10 +1134,8 @@ describe("AgentSettingsScreen — MCP scope dirty tracking", () => {
       seedOpenHandsSettings();
       let control: AgentSettingsSaveControl | null = null;
       renderAgentSettingsScreen({
-        embedded: true,
         agentSettingsOverride: {
           agent_kind: "openhands",
-          enable_sub_agents: false,
           secret_refs: ["DELETED_SECRET"],
         },
         onSaveControlChange: (next) => {
@@ -1430,7 +1162,6 @@ describe("AgentSettingsScreen — MCP scope dirty tracking", () => {
         seedOpenHandsSettings();
         let control: AgentSettingsSaveControl | null = null;
         renderAgentSettingsScreen({
-          embedded: true,
           agentSettingsOverride: {
             agent_kind: "acp",
             acp_server: "claude-code",
@@ -1474,7 +1205,6 @@ describe("AgentSettingsScreen — MCP scope dirty tracking", () => {
         control = next;
       };
       const view = renderAgentSettingsScreen({
-        embedded: true,
         agentSettingsOverride: {
           agent_kind: "acp",
           acp_server: "claude-code",
@@ -1494,7 +1224,6 @@ describe("AgentSettingsScreen — MCP scope dirty tracking", () => {
       expect(saved).toMatchObject({ secret_refs: ["PROD_DB_URL"] });
       view.unmount();
       renderAgentSettingsScreen({
-        embedded: true,
         agentSettingsOverride: saved,
         onSaveControlChange,
       });
@@ -1523,7 +1252,6 @@ describe("AgentSettingsScreen — MCP scope dirty tracking", () => {
         seedOpenHandsSettings();
         let control: AgentSettingsSaveControl | null = null;
         renderAgentSettingsScreen({
-          embedded: true,
           agentSettingsOverride: {
             agent_kind: "acp",
             acp_server: "claude-code",
@@ -1586,7 +1314,6 @@ describe("AgentSettingsScreen — MCP scope dirty tracking", () => {
         ]);
         seedOpenHandsSettings();
         renderAgentSettingsScreen({
-          embedded: true,
           agentSettingsOverride: {
             agent_kind: "acp",
             acp_server: "claude-code",
@@ -1626,10 +1353,8 @@ describe("AgentSettingsScreen — MCP scope dirty tracking", () => {
       seedOpenHandsSettings();
       let control: AgentSettingsSaveControl | null = null;
       renderAgentSettingsScreen({
-        embedded: true,
         agentSettingsOverride: {
           agent_kind: "openhands",
-          enable_sub_agents: false,
         },
         onSaveControlChange: (next) => {
           control = next;
@@ -1657,10 +1382,8 @@ describe("AgentSettingsScreen — MCP scope dirty tracking", () => {
       seedOpenHandsSettings();
       let control: AgentSettingsSaveControl | null = null;
       renderAgentSettingsScreen({
-        embedded: true,
         agentSettingsOverride: {
           agent_kind: "openhands",
-          enable_sub_agents: false,
         },
         onSaveControlChange: (next) => {
           control = next;
@@ -1680,10 +1403,8 @@ describe("AgentSettingsScreen — MCP scope dirty tracking", () => {
       savedSecretsMock.mockReturnValue([]);
       seedOpenHandsSettings();
       renderAgentSettingsScreen({
-        embedded: true,
         agentSettingsOverride: {
           agent_kind: "openhands",
-          enable_sub_agents: false,
         },
       });
       await screen.findByTestId("agent-settings-screen");
@@ -1697,6 +1418,630 @@ describe("AgentSettingsScreen — MCP scope dirty tracking", () => {
       expect(
         screen.getByTestId("agent-settings-secrets-mode"),
       ).toBeInTheDocument();
+    });
+
+    it("keeps the secrets picker on an ACP default", async () => {
+      seedOpenHandsSettings();
+      renderAgentSettingsScreen({
+        agentSettingsOverride: {
+          agent_kind: "acp",
+          acp_server: "claude-code",
+          acp_command: [...CLAUDE_COMMAND],
+          acp_args: [],
+          acp_model: "",
+          secret_refs: ["PROD_DB_URL"],
+        },
+        isDefaultProfile: true,
+      });
+      await screen.findByTestId("agent-settings-screen");
+
+      expect(
+        screen.getByTestId("agent-settings-secrets-mode"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("agent-settings-secrets-default-note"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("agent-settings-mcp-default-note"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("moves an ACP default switched to OpenHands onto the MCP page's switches", async () => {
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+        buildSettings({
+          agent_settings: {
+            ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+            agent_kind: "openhands",
+            mcp_config: {
+              github: { transport: "http", url: "https://github.example/mcp" },
+              slack: {
+                transport: "http",
+                url: "https://slack.example/mcp",
+                enabled: false,
+              },
+            },
+          },
+        }),
+      );
+      let control: AgentSettingsSaveControl | null = null;
+      renderAgentSettingsScreen({
+        agentSettingsOverride: {
+          agent_kind: "acp",
+          acp_server: "claude-code",
+          acp_command: [...CLAUDE_COMMAND],
+          acp_args: [],
+          acp_model: "",
+          mcp_server_refs: ["slack"],
+          secret_refs: ["PROD_DB_URL"],
+        },
+        isDefaultProfile: true,
+        onSaveControlChange: (next) => {
+          control = next;
+        },
+      });
+      await screen.findByTestId("agent-command-input");
+      expect(control!.buildAgentProfileFields()).toMatchObject({
+        mcp_server_refs: ["slack"],
+      });
+
+      const user = userEvent.setup();
+      await user.click(screen.getByTestId("agent-type-selector"));
+      await user.click(
+        await screen.findByRole("option", {
+          name: "SETTINGS$AGENT_TYPE_OPENHANDS",
+        }),
+      );
+
+      await waitFor(() =>
+        expect(control!.buildAgentProfileFields()).toMatchObject({
+          agent_kind: "openhands",
+          mcp_server_refs: ["github"],
+        }),
+      );
+      expect(
+        screen.queryByTestId("agent-settings-secrets-mode"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByTestId("agent-settings-mcp-default-note"),
+      ).toBeInTheDocument();
+    });
+
+    it("gives the default profile every secret, with no picker", async () => {
+      seedOpenHandsSettings();
+      let control: AgentSettingsSaveControl | null = null;
+      renderAgentSettingsScreen({
+        agentSettingsOverride: { agent_kind: "openhands", secret_refs: null },
+        isDefaultProfile: true,
+        onSaveControlChange: (next) => {
+          control = next;
+        },
+      });
+      await screen.findByTestId("agent-settings-screen");
+
+      expect(
+        screen.queryByTestId("agent-settings-secrets-mode"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByTestId("agent-settings-secrets-default-note"),
+      ).toHaveTextContent("SETTINGS$AGENT_PROFILE_DEFAULT_SECRETS_NOTE");
+      expect(
+        screen.getByTestId("agent-settings-mcp-default-note"),
+      ).toHaveTextContent("SETTINGS$AGENT_PROFILE_DEFAULT_MCP_NOTE");
+      expect(control!.buildAgentProfileFields()).toMatchObject({
+        secret_refs: null,
+      });
+    });
+  });
+});
+
+describe("AgentSettingsScreen — skills", () => {
+  const CATALOG: SkillInfo[] = [
+    { name: "alpha", type: "knowledge", source: null, origin: "public" },
+    { name: "beta", type: "knowledge", source: null, origin: "public" },
+    { name: "mine", type: "knowledge", source: null, origin: "user" },
+  ];
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
+    vi.spyOn(SecretsService, "getSecrets").mockResolvedValue([]);
+    vi.spyOn(SkillsService, "getSkillCatalog").mockResolvedValue(CATALOG);
+    profileSupportsSkillsMock.mockReturnValue(true);
+    acpAuthStatusMock.mockReturnValue({
+      status: "unknown",
+      isChecking: false,
+      isSupported: true,
+    });
+    acpModelDiscoveryMock.mockReturnValue(NO_DISCOVERY);
+  });
+
+  it("opens on the stored list and saves an edit to it", async () => {
+    let control: AgentSettingsSaveControl | null = null;
+    renderAgentSettingsScreen({
+      agentSettingsOverride: {
+        agent_kind: "openhands",
+        public_skills: ["alpha"],
+        disabled_skills: [],
+      },
+      onSaveControlChange: (next) => {
+        control = next;
+      },
+    });
+    const beta = await screen.findByTestId("agent-settings-skills-beta");
+    expect(screen.getByTestId("agent-settings-skills-alpha")).toBeChecked();
+    expect(beta).not.toBeChecked();
+    expect(screen.getByTestId("agent-settings-skills-mine")).toBeChecked();
+
+    const user = userEvent.setup();
+    await user.click(beta);
+    await user.click(screen.getByTestId("agent-settings-skills-mine"));
+
+    await waitFor(() => expect(control!.isDirty).toBe(true));
+    expect(control!.buildAgentProfileFields()).toMatchObject({
+      public_skills: ["alpha", "beta"],
+      disabled_skills: ["mine"],
+    });
+  });
+
+  it("filters a long skill list by name, description or trigger", async () => {
+    const many: SkillInfo[] = Array.from({ length: 12 }, (_, i) => ({
+      name: `skill-${i}`,
+      type: "knowledge" as const,
+      source: null,
+      origin: "public" as const,
+      description: i === 3 ? "Reviews pull requests" : null,
+      triggers: i === 7 ? ["deploy"] : [],
+    }));
+    vi.spyOn(SkillsService, "getSkillCatalog").mockResolvedValue(many);
+    renderAgentSettingsScreen({
+      agentSettingsOverride: {
+        agent_kind: "openhands",
+        public_skills: [],
+        disabled_skills: [],
+      },
+    });
+    const search = await screen.findByTestId("agent-settings-skills-search");
+    const user = userEvent.setup();
+
+    await user.type(search, "review");
+    expect(screen.getByTestId("agent-settings-skills-skill-3")).toBeVisible();
+    expect(
+      screen.queryByTestId("agent-settings-skills-skill-1"),
+    ).not.toBeInTheDocument();
+
+    await user.clear(search);
+    await user.type(search, "deploy");
+    expect(screen.getByTestId("agent-settings-skills-skill-7")).toBeVisible();
+  });
+
+  it("shows the LLM picker under the agent type for OpenHands only", async () => {
+    renderAgentSettingsScreen({
+      agentSettingsOverride: CLAUDE_PROFILE,
+      llmPicker: <div data-testid="llm-picker-slot" />,
+    });
+    await screen.findByTestId("agent-command-input");
+    expect(screen.queryByTestId("llm-picker-slot")).not.toBeInTheDocument();
+  });
+
+  it("puts the LLM picker right after the agent type", async () => {
+    renderAgentSettingsScreen({
+      agentSettingsOverride: { agent_kind: "openhands" },
+      llmPicker: <div data-testid="llm-picker-slot" />,
+    });
+    const slot = await screen.findByTestId("llm-picker-slot");
+    const agentType = screen.getByTestId("agent-type-selector");
+
+    expect(
+      agentType.compareDocumentPosition(slot) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      slot.compareDocumentPosition(
+        screen.getByTestId("agent-settings-mcp-mode"),
+      ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("tells the default profile its list is the Skills page", async () => {
+    renderAgentSettingsScreen({
+      agentSettingsOverride: {
+        agent_kind: "openhands",
+        public_skills: ["alpha"],
+        disabled_skills: [],
+      },
+      isDefaultProfile: true,
+    });
+    await screen.findByTestId("agent-settings-skills-alpha");
+
+    expect(
+      screen.getByTestId("agent-settings-skills-default-note"),
+    ).toHaveTextContent("SETTINGS$AGENT_PROFILE_DEFAULT_SKILLS_NOTE");
+  });
+
+  it("keeps a profile without a list unset until the user edits it", async () => {
+    let control: AgentSettingsSaveControl | null = null;
+    renderAgentSettingsScreen({
+      agentSettingsOverride: {
+        agent_kind: "openhands",
+        public_skills: null,
+        disabled_skills: [],
+      },
+      onSaveControlChange: (next) => {
+        control = next;
+      },
+    });
+
+    // No stored list loads every catalog skill.
+    expect(
+      await screen.findByTestId("agent-settings-skills-beta"),
+    ).toBeChecked();
+    expect(control!.isDirty).toBe(false);
+    expect(control!.buildAgentProfileFields()).not.toHaveProperty(
+      "public_skills",
+    );
+  });
+
+  it("hides skills and leaves them out of the save on a cloud backend", async () => {
+    profileSupportsSkillsMock.mockReturnValue(false);
+    let control: AgentSettingsSaveControl | null = null;
+    renderAgentSettingsScreen({
+      agentSettingsOverride: {
+        agent_kind: "openhands",
+        public_skills: ["alpha"],
+        disabled_skills: [],
+      },
+      onSaveControlChange: (next) => {
+        control = next;
+      },
+    });
+
+    await screen.findByTestId("agent-settings-screen");
+    await waitFor(() => expect(control).not.toBeNull());
+    expect(
+      screen.queryByTestId("agent-settings-skills-section"),
+    ).not.toBeInTheDocument();
+    expect(SkillsService.getSkillCatalog).not.toHaveBeenCalled();
+    expect(control!.buildAgentProfileFields()).not.toHaveProperty(
+      "public_skills",
+    );
+  });
+});
+
+describe("AgentSettingsScreen — condenser and verification", () => {
+  const STORED = {
+    agent_kind: "openhands",
+    mcp_server_refs: null,
+    condenser: { enable_default_condenser: true, condenser_max_size: 100 },
+    verification: {
+      critic_enabled: true,
+      critic_mode: "finish_and_message",
+      enable_iterative_refinement: false,
+      critic_threshold: 0.6,
+      max_refinement_iterations: 3,
+      critic_server_url: null,
+      critic_model_name: null,
+    },
+  };
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
+    vi.spyOn(SecretsService, "getSecrets").mockResolvedValue([]);
+    acpAuthStatusMock.mockReturnValue({
+      status: "unknown",
+      isChecking: false,
+      isSupported: true,
+    });
+    acpModelDiscoveryMock.mockReturnValue(NO_DISCOVERY);
+  });
+
+  it("opens on the profile's values and saves an edit to them", async () => {
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: STORED,
+    });
+    const maxSize = await screen.findByTestId(
+      "sdk-settings-condenser.condenser_max_size",
+    );
+    expect(maxSize).toHaveValue(100);
+    expect(control().isDirty).toBe(false);
+    expect(control().buildAgentProfileFields()).not.toHaveProperty("condenser");
+
+    const user = userEvent.setup();
+    await user.clear(maxSize);
+    await user.type(maxSize, "120");
+
+    await waitFor(() => expect(control().isDirty).toBe(true));
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      condenser: { enable_default_condenser: true, condenser_max_size: 120 },
+    });
+    expect(control().buildAgentProfileFields()).not.toHaveProperty(
+      "verification",
+    );
+  });
+
+  it("keeps the critic API key out of the profile", async () => {
+    renderAgentSettingsScreen({ agentSettingsOverride: STORED });
+
+    expect(
+      await screen.findByTestId("sdk-settings-verification.critic_enabled"),
+    ).toBeChecked();
+    expect(
+      screen.queryByTestId("sdk-settings-verification.critic_api_key"),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("AgentSettingsScreen — Model Router", () => {
+  const WITH_ROUTER = {
+    agent_kind: "openhands",
+    mcp_server_refs: null,
+    enable_classify_and_switch_llm_tool: true,
+    meta_profile_ref: "fast-router",
+  };
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    profileSupportsRouterMock.mockReturnValue(true);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
+    vi.spyOn(SecretsService, "getSecrets").mockResolvedValue([]);
+    vi.spyOn(MetaProfilesService, "listMetaProfiles").mockResolvedValue({
+      meta_profiles: [
+        { name: "fast-router", classifier_model: null, num_classes: 2 },
+        { name: "pro-router", classifier_model: null, num_classes: 3 },
+      ],
+      active_meta_profile: null,
+    });
+    acpAuthStatusMock.mockReturnValue({
+      status: "unknown",
+      isChecking: false,
+      isSupported: true,
+    });
+    acpModelDiscoveryMock.mockReturnValue(NO_DISCOVERY);
+  });
+
+  async function choose(
+    user: ReturnType<typeof userEvent.setup>,
+    name: string,
+  ) {
+    const combo = screen.getByTestId("agent-settings-router-select");
+    combo.focus();
+    await user.keyboard("{ArrowDown}");
+    await user.click(await screen.findByRole("option", { name }));
+  }
+
+  it("opens on the profile's router and saves a change to it", async () => {
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: WITH_ROUTER,
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("agent-settings-router-select")).toHaveValue(
+        "fast-router",
+      ),
+    );
+    expect(control().isDirty).toBe(false);
+
+    const user = userEvent.setup();
+    await choose(user, "pro-router");
+    await waitFor(() => expect(control().isDirty).toBe(true));
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      enable_classify_and_switch_llm_tool: true,
+      meta_profile_ref: "pro-router",
+    });
+
+    await choose(user, "SETTINGS$AGENT_PROFILE_ROUTER_OFF");
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      enable_classify_and_switch_llm_tool: false,
+      meta_profile_ref: null,
+    });
+  });
+
+  it("leaves the stored router alone when saving other changes", async () => {
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: WITH_ROUTER,
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("agent-settings-router-select")).toHaveValue(
+        "fast-router",
+      ),
+    );
+
+    const fields = control().buildAgentProfileFields();
+    expect(fields).not.toHaveProperty("enable_classify_and_switch_llm_tool");
+    expect(fields).not.toHaveProperty("meta_profile_ref");
+  });
+
+  it("shows a router left on without a name as the first saved router and keeps it", async () => {
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: { ...WITH_ROUTER, meta_profile_ref: null },
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("agent-settings-router-select")).toHaveValue(
+        "SETTINGS$AGENT_PROFILE_ROUTER_FIRST",
+      ),
+    );
+    expect(
+      screen.queryByTestId("agent-settings-router-dangling"),
+    ).not.toBeInTheDocument();
+    expect(control().isDirty).toBe(false);
+    expect(control().buildAgentProfileFields()).not.toHaveProperty(
+      "enable_classify_and_switch_llm_tool",
+    );
+
+    const user = userEvent.setup();
+    await choose(user, "SETTINGS$AGENT_PROFILE_ROUTER_OFF");
+    await waitFor(() => expect(control().isDirty).toBe(true));
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      enable_classify_and_switch_llm_tool: false,
+      meta_profile_ref: null,
+    });
+  });
+
+  it("is not offered on Cloud, which keeps routers per organization", async () => {
+    profileSupportsRouterMock.mockReturnValue(false);
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: WITH_ROUTER,
+    });
+    await screen.findByTestId("agent-settings-screen");
+
+    expect(
+      screen.queryByTestId("agent-settings-router"),
+    ).not.toBeInTheDocument();
+    expect(control().buildAgentProfileFields()).not.toHaveProperty(
+      "meta_profile_ref",
+    );
+  });
+
+  it("warns about a router that no longer exists, which would fail the launch", async () => {
+    renderAgentSettingsScreen({
+      agentSettingsOverride: { ...WITH_ROUTER, meta_profile_ref: "gone" },
+    });
+
+    expect(
+      await screen.findByTestId("agent-settings-router-dangling"),
+    ).toHaveTextContent("SETTINGS$AGENT_PROFILE_ROUTER_DANGLING");
+  });
+});
+
+describe("AgentSettingsScreen — system prompt", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
+    vi.spyOn(SecretsService, "getSecrets").mockResolvedValue([]);
+    profileSupportsInstructionsMock.mockReturnValue(true);
+  });
+
+  const OPENHANDS_PROFILE = {
+    agent_kind: "openhands",
+    mcp_server_refs: null,
+  };
+
+  async function openModes() {
+    const user = userEvent.setup();
+    const combo = screen.getByTestId("agent-settings-system-prompt-mode");
+    combo.focus();
+    await user.keyboard("{ArrowDown}");
+    return user;
+  }
+
+  async function chooseMode(name: string) {
+    const user = await openModes();
+    await user.click(await screen.findByRole("option", { name }));
+    return user;
+  }
+
+  it("is hidden where launches would not apply it", async () => {
+    profileSupportsInstructionsMock.mockReturnValue(false);
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: OPENHANDS_PROFILE,
+    });
+    await screen.findByTestId("agent-settings-screen");
+
+    expect(
+      screen.queryByTestId("agent-settings-system-prompt-mode"),
+    ).not.toBeInTheDocument();
+    const fields = control().buildAgentProfileFields();
+    expect(fields).not.toHaveProperty("persona");
+    expect(fields).not.toHaveProperty("system_message_suffix");
+  });
+
+  it("persists null for both fields on the OpenHands default", async () => {
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: OPENHANDS_PROFILE,
+    });
+    await screen.findByTestId("agent-settings-system-prompt-mode");
+
+    expect(
+      screen.queryByTestId("agent-settings-system-prompt"),
+    ).not.toBeInTheDocument();
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      persona: null,
+      system_message_suffix: null,
+    });
+  });
+
+  it.each([
+    ["system_message_suffix", "append"],
+    ["persona", "custom"],
+  ])("opens a stored %s in %s mode, clean", async (field, mode) => {
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: { ...OPENHANDS_PROFILE, [field]: "Stored text." },
+    });
+
+    expect(
+      await screen.findByTestId("agent-settings-system-prompt"),
+    ).toHaveValue("Stored text.");
+    expect(
+      screen.getByTestId("agent-settings-system-prompt-hint"),
+    ).toHaveTextContent(
+      mode === "append"
+        ? "SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_APPEND_HINT"
+        : "SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_CUSTOM_HINT",
+    );
+    expect(control().isDirty).toBe(false);
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      [field]: "Stored text.",
+    });
+  });
+
+  it("saves typed instructions as the suffix, not an override", async () => {
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: OPENHANDS_PROFILE,
+    });
+    await screen.findByTestId("agent-settings-system-prompt-mode");
+
+    const user = await chooseMode(
+      "SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_APPEND",
+    );
+    await user.type(
+      screen.getByTestId("agent-settings-system-prompt"),
+      "Be terse.",
+    );
+    await waitFor(() => expect(control().isDirty).toBe(true));
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      persona: null,
+      system_message_suffix: "Be terse.",
+    });
+  });
+
+  it("blocks saving empty text, then saves the typed custom persona", async () => {
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: OPENHANDS_PROFILE,
+    });
+    await screen.findByTestId("agent-settings-system-prompt-mode");
+
+    const user = await chooseMode(
+      "SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_CUSTOM",
+    );
+    await waitFor(() => expect(control().isValid).toBe(false));
+    expect(
+      screen.getByTestId("agent-settings-system-prompt-required"),
+    ).toBeInTheDocument();
+
+    await user.type(
+      screen.getByTestId("agent-settings-system-prompt"),
+      "You review PRs.",
+    );
+    await waitFor(() => expect(control().isValid).toBe(true));
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      persona: "You review PRs.",
+      system_message_suffix: null,
+    });
+  });
+
+  it("clears a stored persona when switched back to the default", async () => {
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: {
+        ...OPENHANDS_PROFILE,
+        persona: "You triage issues.",
+      },
+    });
+    await screen.findByTestId("agent-settings-system-prompt");
+
+    await chooseMode("SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_STANDARD");
+    await waitFor(() => expect(control().isDirty).toBe(true));
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      persona: null,
+      system_message_suffix: null,
     });
   });
 });

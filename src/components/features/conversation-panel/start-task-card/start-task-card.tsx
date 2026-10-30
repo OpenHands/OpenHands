@@ -30,7 +30,7 @@ export function StartTaskCard({ task, onClick }: StartTaskCardProps) {
       data-testid="start-task-card"
       onClick={onClick}
       className={cn(
-        "relative h-auto w-full p-3.5 border-b border-[var(--oh-border)] cursor-pointer",
+        "relative h-auto w-full p-3.5 border-b border-border cursor-pointer",
         "hover:bg-tertiary",
       )}
     >

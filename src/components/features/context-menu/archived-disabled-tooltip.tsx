@@ -24,7 +24,7 @@ export function ArchivedDisabledTooltip({
     <StyledTooltip
       content={t(I18nKey.CONVERSATION$UNAVAILABLE_FOR_ARCHIVES)}
       placement={placement}
-      tooltipClassName="bg-white text-black text-xs font-medium leading-5"
+      tooltipClassName="bg-contrast text-contrast-foreground text-xs font-medium leading-5"
     >
       <span className="block w-full">{children}</span>
     </StyledTooltip>

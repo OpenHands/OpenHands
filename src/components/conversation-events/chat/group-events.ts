@@ -3,6 +3,7 @@ import {
   isActionEvent,
   isObservationEvent,
   isPlanningFileEditorObservationEvent,
+  isUserRejectObservation,
 } from "#/types/agent-server/type-guards";
 import { isMarkdownFileEditorEvent } from "#/components/features/chat/tool-visualizers/primitives/markdown-file-preview";
 import { getThoughtSourceAction } from "./event-thought-helpers";
@@ -48,6 +49,12 @@ export const isGroupableEvent = (
       return false;
     }
     return true;
+  }
+
+  // A rejected action stays wherever the action itself was: in its run, or
+  // on its own when the action is a group breaker.
+  if (isUserRejectObservation(event)) {
+    return correspondingAction ? isGroupableEvent(correspondingAction) : true;
   }
 
   return false;
@@ -104,12 +111,13 @@ export const groupEvents = (
   };
 
   events.forEach((event, index) => {
-    const correspondingAction = isObservationEvent(event)
-      ? allEvents.find(
-          (candidate): candidate is ActionEvent =>
-            isActionEvent(candidate) && candidate.id === event.action_id,
-        )
-      : undefined;
+    const correspondingAction =
+      isObservationEvent(event) || isUserRejectObservation(event)
+        ? allEvents.find(
+            (candidate): candidate is ActionEvent =>
+              isActionEvent(candidate) && candidate.id === event.action_id,
+          )
+        : undefined;
     if (isGroupableEvent(event, correspondingAction)) {
       const thoughtAction = getThoughtSourceAction(event, allEvents);
       if (thoughtAction && !emittedThoughtActionIds.has(thoughtAction.id)) {

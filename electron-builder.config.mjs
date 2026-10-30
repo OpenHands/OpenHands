@@ -30,8 +30,9 @@
  *   The fix is the `afterPack` hook below: after electron-builder has
  *   finished copying files, we rm -rf the bundled Resources/app/node_modules/
  *   directory, then copy back the dependency closure of RUNTIME_PACKAGES
- *   (~200 KB). The build wastes a few seconds copying files we immediately
- *   delete, but the final artifact is correctly tiny (~10 MB vs ~600 MB).
+ *   (~6 MB, nearly all @openhands/extensions). The build wastes a few seconds
+ *   copying files we immediately delete, but the final artifact stays small
+ *   (~16 MB vs ~600 MB).
  *
  * Packaged app layout (Resources/app/ = electron/ contents):
  *   main.mjs        ← Electron entry point
@@ -42,13 +43,18 @@
  *   config/         ← defaults.json
  *   build/          ← static frontend (npm run build:app output)
  *
- * The bundled uv binary (resources/bin/) lands in <Resources>/bin/ via
- * extraResources so Electron can inject it into PATH on startup.
+ * The bundled uv / Node.js runtimes land in <Resources>/ via extraResources
+ * so Electron can inject them into PATH on startup. The per-arch repo layout
+ * (single-arch resources/{bin,node}/ vs universal
+ * resources/{bin,node}-{arm64,x64}/) is canonical in
+ * scripts/download-arch-utils.mjs; electron/main.mjs selects
+ * <Resources>/{bin,node}-<process.arch> at runtime (falling back to the flat
+ * dirs).
  *
- * The bundled Node.js distribution (resources/node/) lands in
- * <Resources>/node/ via extraResources — except for its root-level
- * node_modules (npm itself), which electron-builder refuses to copy and the
- * afterPack hook restores; see restoreBundledNodeNpm below.
+ * The bundled Node distribution's root-level node_modules (npm itself) is
+ * dropped by electron-builder's copy filter in both layouts; the afterPack
+ * hook restores and verifies it per node dir; see restoreBundledNodeNpm
+ * below.
  *
  * Electron prepends its bin dir to PATH at startup so backend scripts (`node
  * scripts/ingress.mjs` etc.) and stdio MCP servers spawned via `npx -y …`
@@ -58,18 +64,31 @@
 
 import { cp, rm } from "node:fs/promises";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { dirname, join, relative } from "node:path";
+import { basename, dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// npm packages the packaged app's child-process scripts import at runtime:
+// Arch the desktop runtimes are bundled for — "universal" (macOS) or a
+// single arch. The per-arch layouts live in scripts/download-arch-utils.mjs;
+// extraResources below maps them onto <Resources>/.
+const ELECTRON_ARCH = process.env.ELECTRON_ARCH;
+const isUniversal = ELECTRON_ARCH === "universal";
+
+// npm packages imported at runtime by code that isn't bundled through Vite
+// (main.mjs itself, and the child-process scripts it spawns):
 //   scripts/static-server.mjs  → sirv
 //   scripts/proxy-utils.mjs    → httpxy   (imported by ingress.mjs)
+//   scripts/tunnel-client.mjs  → ws       (imported directly by main.mjs,
+//                                          not spawned — the MARS
+//                                          port-forward tunnel client)
+//   scripts/dev-safe.mjs       → @openhands/extensions (read from disk by
+//                                          the agent-server as EXTENSIONS_PATH)
 // Their dependency closure is copied back into Resources/app/node_modules
-// after the strip below. If a spawned script gains a new bare import, add
-// the package here — a missing one crashes that service in the installed
-// app with ERR_MODULE_NOT_FOUND (invisible under Finder, where stdout goes
-// to /dev/null) and the splash times out waiting for port 8000.
-const RUNTIME_PACKAGES = ["sirv", "httpxy"];
+// after the strip below. If a spawned script (or main.mjs itself) gains a
+// new bare import, add the package here — a missing one crashes that
+// service in the installed app with ERR_MODULE_NOT_FOUND (invisible under
+// Finder, where stdout goes to /dev/null) and the splash times out waiting
+// for port 8000.
+const RUNTIME_PACKAGES = ["sirv", "httpxy", "ws", "@openhands/extensions"];
 
 const repoRoot = dirname(fileURLToPath(import.meta.url));
 
@@ -188,7 +207,13 @@ async function restoreRuntimeNodeModules(appDir) {
 /**
  * Restore the bundled Node distribution's root-level `node_modules` (npm
  * itself), which electron-builder silently refuses to copy, then verify the
- * packed result.
+ * packed result — for every node dir the bundle ships: the per-arch
+ * node-arm64/ + node-x64/ dirs of a universal build and/or the legacy flat
+ * node/ dir of a single-arch build.
+ *
+ * electron-builder's afterPack fires once per arch pass on universal builds,
+ * so each dir's restore keeps the `!existsSync(destNodeModules)` guard to
+ * stay idempotent; the npm-cli.js verification is read-only.
  *
  * WHY THIS IS NEEDED — app-builder-lib's copy filter drops a `node_modules`
  * directory sitting at the ROOT of a `from` dir, before any `filter` pattern
@@ -218,36 +243,49 @@ async function restoreRuntimeNodeModules(appDir) {
  */
 async function restoreBundledNodeNpm(context) {
   const isWin = context.electronPlatformName === "win32";
-  const nodeDir = join(packagedResourcesDir(context), "node");
+
+  // Universal builds ship one Node distribution per arch (node-arm64/,
+  // node-x64/); single-arch builds ship the legacy flat node/. Handle
+  // whichever of them made it into the packed output.
+  const nodeDirs = ["node-arm64", "node-x64", "node"]
+    .map((name) => join(packagedResourcesDir(context), name))
+    .filter((dir) => existsSync(dir));
 
   // No bundled Node at all — `npm run download-node` was skipped. That is a
   // different (and already loudly reported) situation; main.mjs warns at
   // startup. Don't turn it into a build failure here.
-  if (!existsSync(nodeDir)) return;
+  if (nodeDirs.length === 0) return;
 
-  const srcNodeModules = join(repoRoot, "resources", "node", "node_modules");
-  const destNodeModules = join(nodeDir, "node_modules");
-  if (!existsSync(destNodeModules) && existsSync(srcNodeModules)) {
-    await cp(srcNodeModules, destNodeModules, { recursive: true });
-    const rel = relative(process.cwd(), destNodeModules);
-    // eslint-disable-next-line no-console -- electron-builder build log
-    console.log(
-      `[electron-builder] restored bundled Node node_modules: ${rel}`,
+  for (const nodeDir of nodeDirs) {
+    const srcNodeModules = join(
+      repoRoot,
+      "resources",
+      basename(nodeDir),
+      "node_modules",
     );
-  }
+    const destNodeModules = join(nodeDir, "node_modules");
+    if (!existsSync(destNodeModules) && existsSync(srcNodeModules)) {
+      await cp(srcNodeModules, destNodeModules, { recursive: true });
+      const rel = relative(process.cwd(), destNodeModules);
+      // eslint-disable-next-line no-console -- electron-builder build log
+      console.log(
+        `[electron-builder] restored bundled Node node_modules: ${rel}`,
+      );
+    }
 
-  // Mirror the check scripts/download-node.mjs runs on the source tree, but
-  // against the packed output — the last point where a broken npm is still a
-  // build failure instead of a broken install.
-  const npmCli = isWin
-    ? join(nodeDir, "node_modules", "npm", "bin", "npm-cli.js")
-    : join(nodeDir, "lib", "node_modules", "npm", "bin", "npm-cli.js");
-  if (!existsSync(npmCli)) {
-    throw new Error(
-      `[electron-builder] packaged Node is missing npm-cli.js at ${npmCli} — ` +
-        "npm/npx would fail with MODULE_NOT_FOUND in the installed app. " +
-        "Run `npm run download-node` and rebuild.",
-    );
+    // Mirror the check scripts/download-node.mjs runs on the source tree, but
+    // against the packed output — the last point where a broken npm is still a
+    // build failure instead of a broken install.
+    const npmCli = isWin
+      ? join(nodeDir, "node_modules", "npm", "bin", "npm-cli.js")
+      : join(nodeDir, "lib", "node_modules", "npm", "bin", "npm-cli.js");
+    if (!existsSync(npmCli)) {
+      throw new Error(
+        `[electron-builder] packaged Node is missing npm-cli.js at ${npmCli} — ` +
+          "npm/npx would fail with MODULE_NOT_FOUND in the installed app. " +
+          "Run `npm run download-node` and rebuild.",
+      );
+    }
   }
 }
 
@@ -353,10 +391,29 @@ const config = {
   //            `npm run download-node`)
   // `from` is relative to the project root (not directories.app).
   // build:desktop calls both download scripts before invoking electron-builder.
-  extraResources: [
-    { from: "resources/bin/", to: "bin/", filter: ["**/*"] },
-    { from: "resources/node/", to: "node/", filter: ["**/*"] },
-  ],
+  //
+  // Universal (ELECTRON_ARCH=universal): both runtime arches (per-arch
+  // layout canonical in scripts/download-arch-utils.mjs) ship in BOTH
+  // packaging passes. @electron/universal then merges the x64 and arm64 pass
+  // trees: it lipos files that differ (the Electron framework) and rejects
+  // thin Mach-O files that are byte-identical in both trees unless they
+  // match mac.x64ArchFiles below — which is exactly what our per-arch runtime
+  // binaries are (identical arm64/x64 binaries copied into both passes).
+  // Bundling only the pass's own arch (e.g. via the ${arch} macro) does NOT
+  // work: the merger requires both trees to carry the same Mach-O file list.
+  // Missing `from` dirs fail the build, so each mode lists exactly the dirs
+  // its download scripts populate.
+  extraResources: isUniversal
+    ? [
+        { from: "resources/bin-arm64/", to: "bin-arm64/", filter: ["**/*"] },
+        { from: "resources/bin-x64/", to: "bin-x64/", filter: ["**/*"] },
+        { from: "resources/node-arm64/", to: "node-arm64/", filter: ["**/*"] },
+        { from: "resources/node-x64/", to: "node-x64/", filter: ["**/*"] },
+      ]
+    : [
+        { from: "resources/bin/", to: "bin/", filter: ["**/*"] },
+        { from: "resources/node/", to: "node/", filter: ["**/*"] },
+      ],
 
   // ── macOS ──────────────────────────────────────────────────────────────────
   //
@@ -369,23 +426,26 @@ const config = {
   // Or use the dedicated script:
   //   npm run build:desktop:universal
   //
-  // CAUTION: the bundled uv/node extraResources are downloaded for the
-  // BUILD HOST's architecture only (scripts/download-uv.mjs and
-  // download-node.mjs have no arch override), so a "universal" build still
-  // ships single-arch runtimes and breaks on the other architecture. Don't
-  // distribute universal DMGs until the download scripts support multi-arch.
+  // Universal builds download both runtime arches (layout canonical in
+  // scripts/download-arch-utils.mjs) which the conditional extraResources
+  // above packages side by side.
   //
   mac: {
     category: "public.app-category.developer-tools",
     target: [
       {
         target: "dmg",
-        arch: [
-          process.env.ELECTRON_ARCH ??
-            (process.arch === "arm64" ? "arm64" : "x64"),
-        ],
+        arch: [ELECTRON_ARCH ?? (process.arch === "arm64" ? "arm64" : "x64")],
       },
     ],
+    // Universal merge whitelist: the per-arch uv/node runtime binaries are
+    // thin single-arch Mach-O files that are intentionally byte-identical in
+    // both packaging passes (each pass bundles all four per-arch dirs — see
+    // extraResources above). Without this rule @electron/universal fails the
+    // merge with "same in both x64 and arm64 builds". Scoped to exactly our
+    // per-arch runtime dirs so any accidental duplicate elsewhere still
+    // fails the build loudly.
+    x64ArchFiles: "**/{bin,node}-{arm64,x64}/**",
     // Icon auto-discovered from directories.buildResources/icon.icns
     // (committed; regenerate with `npm run generate-icons`).
   },

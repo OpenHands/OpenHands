@@ -9,6 +9,8 @@ import type { Backend, BackendSelection, ResolvedActiveBackend } from "./types";
 import {
   currentLocationSearch,
   readBackendSelectionFromUrl,
+  readLockedCloudOrgFromUrl,
+  removeOrgFromCurrentUrl,
 } from "./url-selection";
 
 type Listener = () => void;
@@ -102,13 +104,19 @@ function computeSnapshot(
  * parameters — keeps the same backend.
  */
 function readInitialSelection(backends: Backend[]): BackendSelection | null {
-  const fromUrl = readBackendSelectionFromUrl(
-    backends,
-    currentLocationSearch(),
-  );
+  const search = currentLocationSearch();
+  const fromUrl = readBackendSelectionFromUrl(backends, search);
   if (fromUrl) {
     writeStoredActiveBackend(fromUrl);
     return fromUrl;
+  }
+  // The cloud's web app names the org it had selected. Honour it once, then
+  // drop it so a reload keeps any org picked here afterwards.
+  const handedBack = readLockedCloudOrgFromUrl(backends, search);
+  if (handedBack) {
+    writeStoredActiveBackend(handedBack);
+    removeOrgFromCurrentUrl();
+    return handedBack;
   }
   return readStoredActiveBackend();
 }

@@ -57,7 +57,7 @@ describe("AdvancedConversationOptionsModal", () => {
 
     expect(
       screen.getByTestId("advanced-conversation-options-modal"),
-    ).toHaveClass("w-[520px]");
+    ).toHaveClass("w-130");
   });
 
   it("keeps thread scope in its own section, apart from inclusion toggles", () => {

@@ -6,6 +6,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import McpService from "#/api/mcp-service/mcp-service.api";
 import {
+  __resetActiveStoreForTests,
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
+import {
   __resetMcpHealthStoreForTests,
   getMcpHealthSnapshot,
   setMcpServerHealth,
@@ -15,6 +20,8 @@ import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { CustomServerEditor } from "#/components/features/mcp-page/custom-server-editor";
 import { useSettings } from "#/hooks/query/use-settings";
+import { createAgentServerQueryClient } from "#/query-client-config";
+import * as toastHandlers from "#/utils/custom-toast-handlers";
 
 import type { Settings } from "#/types/settings";
 import type { MCPServerConfig } from "#/types/mcp-server";
@@ -36,6 +43,14 @@ const EDIT_OAUTH_SERVER: MCPServerConfig = {
     strategy: "oauth2",
     authentication: { type: "oauth", client_auth_method: "none" },
   },
+};
+
+const EDIT_REMOTE_SERVER: MCPServerConfig = {
+  id: "jira",
+  type: "shttp",
+  name: "jira",
+  url: "https://mcp-jira.example.com/mcp",
+  auth: { strategy: "bearer", value: "**********" },
 };
 
 function buildSettingsWithMcp(overrides: Partial<Settings> = {}): Settings {
@@ -85,6 +100,22 @@ function EditEditorOnceSettingsLoaded({ onClose }: { onClose: () => void }) {
   );
 }
 
+function EditRemoteEditorOnceSettingsLoaded({
+  onClose,
+}: {
+  onClose: () => void;
+}) {
+  const { data } = useSettings();
+  if (!data) return null;
+  return (
+    <CustomServerEditor
+      server={EDIT_REMOTE_SERVER}
+      existingServers={[EDIT_REMOTE_SERVER]}
+      onClose={onClose}
+    />
+  );
+}
+
 function EditOAuthEditorOnceSettingsLoaded({
   onClose,
 }: {
@@ -101,14 +132,13 @@ function EditOAuthEditorOnceSettingsLoaded({
   );
 }
 
-function renderWith(ui: React.ReactNode) {
+function renderWith(
+  ui: React.ReactNode,
+  client = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+) {
   return render(ui, {
     wrapper: ({ children }) => (
-      <QueryClientProvider
-        client={
-          new QueryClient({ defaultOptions: { queries: { retry: false } } })
-        }
-      >
+      <QueryClientProvider client={client}>
         <ActiveBackendProvider>{children}</ActiveBackendProvider>
       </QueryClientProvider>
     ),
@@ -118,6 +148,10 @@ function renderWith(ui: React.ReactNode) {
 describe("CustomServerEditor", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    // The backend registry persists to localStorage; wipe it before the
+    // reset re-reads storage so each test starts on the default local backend.
+    window.localStorage.clear();
+    __resetActiveStoreForTests();
     vi.spyOn(SettingsService, "createMcpServer").mockImplementation(
       (settingsKey, server) =>
         SettingsService.saveSettings({
@@ -156,6 +190,40 @@ describe("CustomServerEditor", () => {
       tools: [],
     });
   });
+
+  it.each([
+    ["Save", "submit-button"],
+    ["Test connection", "mcp-test-connection"],
+  ])(
+    "shows one error toast when %s cannot test the connection",
+    async (_, button) => {
+      // Arrange: use the app's global mutation handler and the real editor hooks.
+      vi.spyOn(McpService, "testServer").mockRejectedValue(
+        new AxiosError("Agent Server unavailable"),
+      );
+      const errorToast = vi
+        .spyOn(toastHandlers, "displayErrorToast")
+        .mockImplementation(() => {});
+      const onClose = vi.fn();
+      renderWith(
+        <EditEditorOnceSettingsLoaded onClose={onClose} />,
+        createAgentServerQueryClient(),
+      );
+      await screen.findByTestId("mcp-custom-editor");
+
+      // Act
+      fireEvent.click(screen.getByTestId(button));
+
+      // Assert: the failure is reported once and no save or dismissal follows.
+      await waitFor(() => expect(errorToast).toHaveBeenCalled());
+      await waitFor(() => expect(screen.getByTestId(button)).toBeEnabled());
+      expect(errorToast.mock.calls).toEqual([["Agent Server unavailable"]]);
+      expect(SettingsService.createMcpServer).not.toHaveBeenCalled();
+      expect(SettingsService.patchMcpServer).not.toHaveBeenCalled();
+      expect(onClose).not.toHaveBeenCalled();
+      expect(screen.getByTestId("mcp-custom-editor")).toBeInTheDocument();
+    },
+  );
 
   it("keeps the modal open and does not call onClose when the add mutation fails", async () => {
     // Simulate a backend rejection — the editor should surface the
@@ -270,6 +338,87 @@ describe("CustomServerEditor", () => {
     );
   });
 
+  it("explains a stdio connection failure from Test connection as a command that could not start", async () => {
+    // Arrange: editing an installed stdio server whose command cannot spawn.
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettingsWithMcp(),
+    );
+    vi.spyOn(McpService, "testServer").mockResolvedValue({
+      ok: false,
+      error: "Client failed to connect: [Errno 2] No such file or directory",
+      error_kind: "connection",
+    });
+    renderWith(<EditEditorOnceSettingsLoaded onClose={vi.fn()} />);
+    await screen.findByTestId("mcp-custom-editor");
+
+    // Act
+    fireEvent.click(screen.getByTestId("mcp-test-connection"));
+
+    // Assert: the stdio-specific message, not the URL hint.
+    await waitFor(() =>
+      expect(screen.getByTestId("mcp-test-message")).toHaveTextContent(
+        "MCP$TEST_ERROR_STDIO_START",
+      ),
+    );
+  });
+
+  it("offers Test connection for remote servers on cloud backends and shows the result", async () => {
+    // Arrange: a cloud backend is active and the probe (routed through the
+    // app server) succeeds.
+    setRegisteredBackends([
+      {
+        id: "cloud-1",
+        name: "Cloud",
+        host: "https://app.all-hands.dev",
+        apiKey: "k",
+        kind: "cloud",
+      },
+    ]);
+    setActiveSelection({ backendId: "cloud-1" });
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettingsWithMcp(),
+    );
+    const testSpy = vi
+      .spyOn(McpService, "testServer")
+      .mockResolvedValue({ ok: true, tools: ["search_issues"] });
+    renderWith(<EditRemoteEditorOnceSettingsLoaded onClose={vi.fn()} />);
+    await screen.findByTestId("mcp-custom-editor");
+
+    // Act
+    fireEvent.click(screen.getByTestId("mcp-test-connection"));
+
+    // Assert
+    await waitFor(() =>
+      expect(screen.getByTestId("mcp-test-message")).toHaveTextContent(
+        "MCP$TEST_SUCCESS",
+      ),
+    );
+    expect(testSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "shttp", url: EDIT_REMOTE_SERVER.url }),
+    );
+  });
+
+  it("hides Test connection for stdio servers on cloud backends", async () => {
+    setRegisteredBackends([
+      {
+        id: "cloud-1",
+        name: "Cloud",
+        host: "https://app.all-hands.dev",
+        apiKey: "k",
+        kind: "cloud",
+      },
+    ]);
+    setActiveSelection({ backendId: "cloud-1" });
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettingsWithMcp(),
+    );
+
+    renderWith(<EditEditorOnceSettingsLoaded onClose={vi.fn()} />);
+    await screen.findByTestId("mcp-custom-editor");
+
+    expect(screen.queryByTestId("mcp-test-connection")).not.toBeInTheDocument();
+  });
+
   it("reseeds the edited server's health from the fresh pre-save test", async () => {
     // Arrange: the installed card shows a failure; the user re-saves the
     // server (e.g. after fixing the credential) and the pre-save test now
@@ -299,6 +448,49 @@ describe("CustomServerEditor", () => {
     // Assert: the same health key now carries the fresh healthy verdict.
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
     expect(getMcpHealthSnapshot()[key]).toMatchObject({ status: "healthy" });
+  });
+
+  it("runs the OAuth flow from Test connection on cloud backends", async () => {
+    // Arrange: a cloud backend is active and an OAuth server is being edited.
+    setRegisteredBackends([
+      {
+        id: "cloud-1",
+        name: "Cloud",
+        host: "https://app.all-hands.dev",
+        apiKey: "k",
+        kind: "cloud",
+      },
+    ]);
+    setActiveSelection({ backendId: "cloud-1" });
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettingsWithMcp(),
+    );
+    const authorizeSpy = vi
+      .spyOn(McpService, "authorizeOAuth")
+      .mockResolvedValue({ ok: true, tools: ["search_mail"] });
+    const testSpy = vi
+      .spyOn(McpService, "testServer")
+      .mockResolvedValue({ ok: true, tools: [] });
+    renderWith(<EditOAuthEditorOnceSettingsLoaded onClose={vi.fn()} />);
+    await screen.findByTestId("mcp-custom-editor");
+
+    // Act
+    fireEvent.click(screen.getByTestId("mcp-test-connection"));
+
+    // Assert
+    await waitFor(() =>
+      expect(screen.getByTestId("mcp-test-message")).toHaveTextContent(
+        "MCP$TEST_SUCCESS",
+      ),
+    );
+    expect(authorizeSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "shttp",
+        url: EDIT_OAUTH_SERVER.url,
+        auth: expect.objectContaining({ strategy: "oauth2" }),
+      }),
+    );
+    expect(testSpy).not.toHaveBeenCalled();
   });
 
   it("persists OAuth state returned by the connection test when editing", async () => {

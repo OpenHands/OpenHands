@@ -16,7 +16,7 @@ import { getBackendStatusLabel } from "./backend-status-label";
 import { getLockedCloudHost } from "#/api/agent-server-config";
 
 const ROW_ACTION_BUTTON_CLASS =
-  "inline-flex cursor-pointer items-center justify-center rounded-md p-1 text-muted transition-colors hover:bg-interactive-hover hover:text-white";
+  "inline-flex cursor-pointer items-center justify-center rounded-md p-1 text-muted transition-colors hover:bg-interactive-hover hover:text-contrast";
 
 interface BackendRowProps {
   backend: Backend;
@@ -54,13 +54,19 @@ export function BackendRow({
     : getBackendStatusLabel(t, backend, health);
   const statusClassName =
     health?.isConnected === true
-      ? "text-green-300"
+      ? "text-feedback-success"
       : health?.isConnected === false
-        ? "text-red-300"
-        : "text-[var(--oh-muted)]";
+        ? "text-feedback-error"
+        : "text-muted";
   const dotStatus = isInvalidApiKey ? false : (health?.isConnected ?? null);
-  const canSelect = health?.isConnected === true && !isInvalidApiKey;
   const lockedCloudHost = getLockedCloudHost();
+  // The host is a tunnel's loopback port, owned by the Managed Agents screen.
+  const isMarsSession = Boolean(backend.marsSessionId);
+  // A MARS session reads offline whenever its tunnel is gone (e.g. after a
+  // restart), and selecting it is what reopens the tunnel — so it stays
+  // selectable rather than forcing a new session.
+  const canSelect =
+    (health?.isConnected === true || isMarsSession) && !isInvalidApiKey;
 
   return (
     <li
@@ -81,19 +87,21 @@ export function BackendRow({
         <BackendStatusDot isConnected={dotStatus} />
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex min-w-0 items-center gap-2">
-            <span className="truncate text-sm text-white">{backend.name}</span>
+            <span className="truncate text-sm text-contrast">
+              {backend.name}
+            </span>
             <BackendVersion backend={backend} />
           </div>
           {orgLabel ? (
             <span
               data-testid={`manage-backends-org-${backend.name}`}
-              className="truncate text-xs text-[var(--oh-text-secondary)]"
+              className="truncate text-xs text-text-secondary"
             >
               {orgLabel}
             </span>
           ) : null}
-          <span className="truncate text-xs text-[var(--oh-muted)]">
-            {backend.host}
+          <span className="truncate text-xs text-muted">
+            {isMarsSession ? t(I18nKey.DO_AGENTS$HOSTED_SESSION) : backend.host}
           </span>
           <span
             data-testid={`manage-backends-status-${backend.name}`}
@@ -105,16 +113,18 @@ export function BackendRow({
             <span
               data-testid={`manage-backends-status-detail-${backend.name}`}
               title={statusDetail}
-              className="text-xs text-red-300/80 whitespace-normal break-words"
+              className="text-xs text-feedback-error whitespace-normal break-words"
             >
               {statusDetail}
             </span>
           ) : null}
         </div>
-        <span className="px-2 py-1 rounded-full text-[11px] uppercase tracking-wide text-[var(--oh-text-tertiary)] bg-[var(--oh-surface)] border border-[var(--oh-border)]">
-          {backend.kind === "cloud"
-            ? t(I18nKey.BACKEND$KIND_CLOUD)
-            : t(I18nKey.BACKEND$KIND_LOCAL)}
+        <span className="px-2 py-1 rounded-full text-[11px] uppercase tracking-wide text-text-tertiary bg-surface border border-border">
+          {isMarsSession
+            ? t(I18nKey.DO_AGENTS$BADGE)
+            : backend.kind === "cloud"
+              ? t(I18nKey.BACKEND$KIND_CLOUD)
+              : t(I18nKey.BACKEND$KIND_LOCAL)}
         </span>
       </button>
       <div className="flex shrink-0 items-center gap-2 px-3 py-3">
@@ -134,7 +144,7 @@ export function BackendRow({
             analyticsSource="manage_backends_modal"
           />
         ) : null}
-        {!lockedCloudHost && (
+        {!lockedCloudHost && !isMarsSession && (
           <button
             type="button"
             onClick={onEdit}

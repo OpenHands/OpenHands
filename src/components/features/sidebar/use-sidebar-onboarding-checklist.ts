@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useOnboardingCompletion } from "#/components/features/onboarding/use-onboarding-completion";
+import { useSuperAdminSetupGuide } from "#/components/features/setup-guide/use-super-admin-setup-guide";
 import { useNavigation } from "#/context/navigation-context";
 import { useAutomations } from "#/hooks/query/use-automations";
 import { useAutomationHealth } from "#/hooks/query/use-automation-health";
@@ -8,6 +9,7 @@ import { useSettings } from "#/hooks/query/use-settings";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useLlmConfigured } from "#/hooks/use-llm-configured";
 import { parseMcpConfig } from "#/utils/mcp-config";
+import { getLockedCloudHost } from "#/api/agent-server-config";
 import {
   isCustomizeChecklistPath,
   SIDEBAR_ONBOARDING_CHECKLIST_ITEM_IDS,
@@ -37,6 +39,7 @@ function hasConfiguredMcpServers(mcpConfig: unknown): boolean {
 
 export function useSidebarOnboardingChecklist() {
   const { isCompleted: onboardingCompleted } = useOnboardingCompletion();
+  const setupGuide = useSuperAdminSetupGuide();
   const { currentPath } = useNavigation();
   const isDismissed = useSyncExternalStore(
     subscribeSidebarOnboardingChecklistDismissed,
@@ -61,8 +64,7 @@ export function useSidebarOnboardingChecklist() {
   const { data: healthData } = useAutomationHealth();
   const isAutomationBackendHealthy = healthData?.status === "ok";
   const { data: automationsData } = useAutomations({
-    limit: 1,
-    offset: 0,
+    pageSize: 1,
     enabled: isAutomationBackendHealthy,
   });
 
@@ -124,7 +126,18 @@ export function useSidebarOnboardingChecklist() {
   const completedCount = items.filter((item) => item.isComplete).length;
   const isAllComplete = completedCount === items.length;
 
-  const isVisible = onboardingCompleted && !isDismissed && !isAllComplete;
+  // A canvas locked to a Cloud host (SaaS / self-hosted OHE) never shows the
+  // checklist: the main app owns setup there (OHE-3457, OHE-3683).
+  const isLockedToCloud = getLockedCloudHost() !== null;
+
+  // The Super Admin setup guide replaces this checklist while it is shown.
+  const isVisible =
+    !isLockedToCloud &&
+    onboardingCompleted &&
+    !isDismissed &&
+    !isAllComplete &&
+    !setupGuide.isLoading &&
+    !setupGuide.visible;
 
   const dismiss = () => {
     writeSidebarOnboardingChecklistDismissed(true);

@@ -121,6 +121,15 @@ export function DeviceFlowAuth({
     }
   }, [deviceFlow.status, deviceFlow.verificationUrl]);
 
+  // A failed flow has nothing left to show in its popup; Try again opens a
+  // fresh one.
+  React.useEffect(() => {
+    if (deviceFlow.status === "error") {
+      popupRef.current?.close();
+      popupRef.current = null;
+    }
+  }, [deviceFlow.status]);
+
   // Call onSuccess when authentication completes
   React.useEffect(() => {
     if (deviceFlow.status === "success" && deviceFlow.apiKey) {
@@ -232,7 +241,7 @@ export function DeviceFlowAuth({
           <ModalBody
             testID={`${testIdRoot}-auth-modal`}
             width="sm"
-            className="items-stretch border border-[var(--oh-border)]"
+            className="items-stretch border border-border"
           >
             {statusContent}
           </ModalBody>
@@ -272,7 +281,7 @@ function DeviceFlowStatusContent({
         aria-live="polite"
       >
         <LoadingSpinner />
-        <span className="text-sm text-[var(--oh-text-tertiary)]">
+        <span className="text-sm text-text-tertiary">
           {t(I18nKey.BACKEND$AUTH_STARTING)}
         </span>
       </div>
@@ -294,12 +303,12 @@ function DeviceFlowStatusContent({
       >
         <div className="flex items-center justify-center gap-2">
           <LoadingSpinner />
-          <span className="text-sm font-medium text-white">
+          <span className="text-sm font-medium text-contrast">
             {t(I18nKey.BACKEND$AUTH_AWAITING)}
           </span>
         </div>
         <div className="flex flex-col gap-1">
-          <p className="text-center text-sm leading-5 text-[var(--oh-text-tertiary)]">
+          <p className="text-center text-sm leading-5 text-text-tertiary">
             {validVerificationUrl
               ? `${t(I18nKey.BACKEND$AUTH_BROWSER_OPENED)} ${t(I18nKey.BACKEND$AUTH_OPEN_MANUALLY)}`
               : t(I18nKey.BACKEND$AUTH_BROWSER_OPENED)}
@@ -309,7 +318,7 @@ function DeviceFlowStatusContent({
               href={validVerificationUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="max-h-16 overflow-auto break-all text-center text-xs text-blue-400 hover:underline"
+              className="max-h-16 overflow-auto break-all text-center text-xs text-contrast hover:underline"
             >
               {validVerificationUrl}
             </a>
@@ -330,11 +339,11 @@ function DeviceFlowStatusContent({
 
   return (
     <div
-      className="flex flex-col gap-3 rounded-lg border border-red-700 bg-red-900/20 p-4"
+      className="flex flex-col gap-3 rounded-lg border border-status-error/40 bg-status-error/5 p-4"
       data-testid={`${testIdRoot}-auth-error`}
       role="alert"
     >
-      <p className="text-sm text-red-400">{error}</p>
+      <p className="text-sm text-feedback-error">{error}</p>
       <BrandButton
         type="button"
         variant="secondary"
@@ -351,7 +360,7 @@ function DeviceFlowStatusContent({
 function LoadingSpinner() {
   return (
     <svg
-      className="animate-spin h-4 w-4 text-white"
+      className="animate-spin h-4 w-4 text-contrast"
       xmlns="http://www.w3.org/2000/svg"
       fill="none"
       viewBox="0 0 24 24"

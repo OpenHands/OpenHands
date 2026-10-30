@@ -18,7 +18,7 @@ describe("buildWebSocketUrl", () => {
         "http://localhost:8080/api/conversations/conv-123",
       );
 
-      expect(result).toBe("ws://localhost:8080/sockets/events/conv-123");
+      expect(result).toBe("ws://localhost:8080/sockets/session/conv-123");
     });
 
     it("should use wss:// protocol when window.location.protocol is https:", () => {
@@ -32,7 +32,7 @@ describe("buildWebSocketUrl", () => {
         "https://example.com:8080/api/conversations/conv-123",
       );
 
-      expect(result).toBe("wss://example.com:8080/sockets/events/conv-123");
+      expect(result).toBe("wss://example.com:8080/sockets/session/conv-123");
     });
 
     it("should use ws:// for external HTTP hosts when page is HTTP", () => {
@@ -46,7 +46,7 @@ describe("buildWebSocketUrl", () => {
         "http://agent-server.com:9000/api/conversations/conv-456",
       );
 
-      expect(result).toBe("ws://agent-server.com:9000/sockets/events/conv-456");
+      expect(result).toBe("ws://agent-server.com:9000/sockets/session/conv-456");
     });
 
     it("should use wss:// for external HTTPS hosts when page is HTTP", () => {
@@ -61,7 +61,7 @@ describe("buildWebSocketUrl", () => {
       );
 
       expect(result).toBe(
-        "wss://agent-server.com:9000/sockets/events/conv-456",
+        "wss://agent-server.com:9000/sockets/session/conv-456",
       );
     });
 
@@ -76,7 +76,7 @@ describe("buildWebSocketUrl", () => {
         "http://127.0.0.1:9000/api/conversations/conv-456",
       );
 
-      expect(result).toBe("ws://127.0.0.1:9000/sockets/events/conv-456");
+      expect(result).toBe("ws://127.0.0.1:9000/sockets/session/conv-456");
     });
   });
 
@@ -94,7 +94,7 @@ describe("buildWebSocketUrl", () => {
         "http://localhost:8080/api/conversations/conv-123",
       );
 
-      expect(result).toBe("ws://localhost:8080/sockets/events/conv-123");
+      expect(result).toBe("ws://localhost:8080/sockets/session/conv-123");
       expect(result).not.toContain("?");
       expect(result).not.toContain("session_api_key");
     });
@@ -109,7 +109,7 @@ describe("buildWebSocketUrl", () => {
 
       const result = buildWebSocketUrl("conv-123", null);
 
-      expect(result).toBe("ws://fallback-host:4000/sockets/events/conv-123");
+      expect(result).toBe("ws://fallback-host:4000/sockets/session/conv-123");
     });
 
     it("should use window.location.host when conversation URL is undefined", () => {
@@ -120,7 +120,7 @@ describe("buildWebSocketUrl", () => {
 
       const result = buildWebSocketUrl("conv-123", undefined);
 
-      expect(result).toBe("ws://fallback-host:4000/sockets/events/conv-123");
+      expect(result).toBe("ws://fallback-host:4000/sockets/session/conv-123");
     });
 
     it("should use window.location.host when conversation URL is relative path", () => {
@@ -134,7 +134,7 @@ describe("buildWebSocketUrl", () => {
         "/api/conversations/conv-123",
       );
 
-      expect(result).toBe("ws://fallback-host:4000/sockets/events/conv-123");
+      expect(result).toBe("ws://fallback-host:4000/sockets/session/conv-123");
     });
 
     it("should use window.location.host when conversation URL is invalid", () => {
@@ -145,7 +145,7 @@ describe("buildWebSocketUrl", () => {
 
       const result = buildWebSocketUrl("conv-123", "not-a-valid-url");
 
-      expect(result).toBe("ws://fallback-host:4000/sockets/events/conv-123");
+      expect(result).toBe("ws://fallback-host:4000/sockets/session/conv-123");
     });
   });
 
@@ -181,7 +181,7 @@ describe("buildWebSocketUrl", () => {
         "http://example.com:12345/api/conversations/conv-123",
       );
 
-      expect(result).toBe("ws://example.com:12345/sockets/events/conv-123");
+      expect(result).toBe("ws://example.com:12345/sockets/session/conv-123");
     });
 
     it("should handle conversation URLs without port (default port) on external hosts", () => {
@@ -190,7 +190,7 @@ describe("buildWebSocketUrl", () => {
         "http://example.com/api/conversations/conv-123",
       );
 
-      expect(result).toBe("ws://example.com/sockets/events/conv-123");
+      expect(result).toBe("ws://example.com/sockets/session/conv-123");
     });
 
     it("should handle conversation IDs with special characters", () => {
@@ -200,7 +200,7 @@ describe("buildWebSocketUrl", () => {
       );
 
       expect(result).toBe(
-        "ws://localhost:8080/sockets/events/conv-123-abc_def",
+        "ws://localhost:8080/sockets/session/conv-123-abc_def",
       );
     });
 
@@ -210,7 +210,7 @@ describe("buildWebSocketUrl", () => {
         "http://localhost:8080/api/conversations/conv-123",
       );
 
-      expect(result).toBe("ws://localhost:8080/sockets/events/conv-123");
+      expect(result).toBe("ws://localhost:8080/sockets/session/conv-123");
       expect(result).not.toContain("?");
     });
   });
@@ -232,7 +232,7 @@ describe("buildWebSocketUrl", () => {
       );
 
       expect(result).toBe(
-        `wss://${fakeRuntimeHost}/sockets/events/${fakeConversationId}`,
+        `wss://${fakeRuntimeHost}/sockets/session/${fakeConversationId}`,
       );
     });
 
@@ -247,7 +247,7 @@ describe("buildWebSocketUrl", () => {
         "http://[::1]:8080/api/conversations/test-conv-ipv6",
       );
 
-      expect(result).toBe("ws://[::1]:8080/sockets/events/test-conv-ipv6");
+      expect(result).toBe("ws://[::1]:8080/sockets/session/test-conv-ipv6");
     });
 
     it("should use ws:// for .localhost subdomains", () => {
@@ -262,7 +262,7 @@ describe("buildWebSocketUrl", () => {
       );
 
       expect(result).toBe(
-        "ws://api.localhost:8080/sockets/events/test-conv-localhost-subdomain",
+        "ws://api.localhost:8080/sockets/session/test-conv-localhost-subdomain",
       );
     });
   });

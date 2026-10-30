@@ -9,6 +9,7 @@ import { cn } from "#/utils/utils";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { getApiErrorMessage } from "#/utils/api-error-message";
 import { downloadActivityLogExport } from "#/utils/automation-activity-log-export";
+import { getAgentCanvasBaseUrl } from "#/utils/base-path";
 import type { ActivityLogExportFormat, Automation } from "#/types/automation";
 import { ActivityLogItem } from "./activity-log-item";
 
@@ -52,7 +53,7 @@ export function ActivityLogSection({
       await downloadActivityLogExport({
         automation,
         format,
-        conversationBaseUrl: window.location.origin,
+        conversationBaseUrl: getAgentCanvasBaseUrl(),
       });
       trackAutomationActivityLogExported({
         backendKind: active.backend.kind,
@@ -88,9 +89,9 @@ export function ActivityLogSection({
   return (
     <div
       data-testid="automation-activity-log"
-      className="rounded-2xl border border-[var(--oh-border)] bg-[var(--oh-surface)]"
+      className="rounded-2xl border border-border bg-surface"
     >
-      <div className="flex items-center gap-2 border-b border-[var(--oh-border)] px-5 py-3">
+      <div className="flex items-center gap-2 border-b border-border px-5 py-3">
         <span className="size-4 text-muted">
           <ActivityIcon className="size-4" />
         </span>
@@ -153,8 +154,8 @@ export function ActivityLogSection({
                     : undefined
                 }
                 className={cn(
-                  index > 0 ? "border-t border-[var(--oh-border)]" : "",
-                  isHighlighted && "bg-[var(--oh-focus)]/10",
+                  index > 0 ? "border-t border-border" : "",
+                  isHighlighted && "bg-focus/10",
                 )}
               >
                 <ActivityLogItem run={run} automation={automation} />
@@ -163,7 +164,7 @@ export function ActivityLogSection({
           })}
 
           {hasMore && (
-            <div className="border-t border-[var(--oh-border)] px-5 py-3">
+            <div className="border-t border-border px-5 py-3">
               <button
                 type="button"
                 onClick={() => setLimit((prev) => prev + PAGE_SIZE)}

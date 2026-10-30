@@ -34,8 +34,6 @@ const DEMO_HISTORY_PATTERN: AutomationRunStatus[] = [
  */
 export const HOME_AUTOMATIONS_FORCE_DEMO = false;
 
-export const HOME_AUTOMATIONS_DEMO_KEY = "oh:home-automations-demo";
-
 export function isHomeAutomationsDemoEnabled(): boolean {
   if (HOME_AUTOMATIONS_FORCE_DEMO) return true;
   return import.meta.env.VITE_HOME_AUTOMATIONS_DEMO === "true";

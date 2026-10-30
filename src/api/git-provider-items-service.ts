@@ -127,6 +127,34 @@ async function fetchGithubJson<T>(
   return response.json() as Promise<T>;
 }
 
+async function fetchForgejoJson<T>(
+  path: string,
+  token: string | null,
+): Promise<T> {
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+  };
+  if (token) {
+    // Forgejo/Gitea accept the `token` scheme on every supported version;
+    // `Bearer` only landed in later releases.
+    headers.Authorization = `token ${token}`;
+  }
+
+  // The provider host's own REST API (`/api/v1`), not api.github.com:
+  // Forgejo speaks the Gitea API shape on the instance that hosts the repo.
+  // eslint-disable-next-line local/no-direct-agent-server-fetch
+  const response = await fetch(
+    `${getGitProviderBaseUrl("forgejo")}/api/v1${path}`,
+    {
+      headers,
+    },
+  );
+  if (!response.ok) {
+    throw new Error(`Forgejo API ${response.status}`);
+  }
+  return response.json() as Promise<T>;
+}
+
 async function fetchGitlabJson<T>(
   path: string,
   token: string | null,
@@ -212,7 +240,28 @@ export class GitProviderItemsService {
       }));
     }
 
-    if (provider !== "github" && provider !== "forgejo") {
+    if (provider === "forgejo") {
+      const [forgejoOwner, forgejoRepo] = repository.split("/");
+      if (!forgejoOwner || !forgejoRepo) {
+        return [];
+      }
+      const items = await fetchForgejoJson<GithubIssueOrPr[]>(
+        `/repos/${forgejoOwner}/${forgejoRepo}/pulls?state=open&limit=${LIST_LIMIT}`,
+        token,
+      );
+      return items.map((item) => ({
+        id: item.id,
+        number: item.number,
+        title: item.title,
+        url:
+          item.html_url ||
+          constructPullRequestUrl(item.number, provider, repository),
+        authorLogin: item.user?.login ?? null,
+        updatedAt: item.updated_at ?? null,
+      }));
+    }
+
+    if (provider !== "github") {
       return [];
     }
 
@@ -260,7 +309,31 @@ export class GitProviderItemsService {
       }));
     }
 
-    if (provider !== "github" && provider !== "forgejo") {
+    if (provider === "forgejo") {
+      const [forgejoOwner, forgejoRepo] = repository.split("/");
+      if (!forgejoOwner || !forgejoRepo) {
+        return [];
+      }
+      const items = await fetchForgejoJson<GithubIssueOrPr[]>(
+        `/repos/${forgejoOwner}/${forgejoRepo}/issues?state=open&type=issues&limit=${LIST_LIMIT}`,
+        token,
+      );
+      // Forgejo's issues endpoint can still return pull requests.
+      return items
+        .filter((item) => !item.pull_request)
+        .map((item) => ({
+          id: item.id,
+          number: item.number,
+          title: item.title,
+          url:
+            item.html_url ||
+            constructIssueUrl(item.number, provider, repository),
+          authorLogin: item.user?.login ?? null,
+          updatedAt: item.updated_at ?? null,
+        }));
+    }
+
+    if (provider !== "github") {
       return [];
     }
 

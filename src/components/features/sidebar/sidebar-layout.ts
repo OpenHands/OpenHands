@@ -6,14 +6,11 @@ export const navInteractiveTransitionClassName =
 
 /** Expanded sidebar icon column beside labels (matches 36px nav rows). */
 export const SIDEBAR_ICON_SLOT_CLASS =
-  "flex h-9 w-[18px] shrink-0 items-center justify-center";
+  "flex h-9 w-4.5 shrink-0 items-center justify-center";
 
 /** Collapsed rail: 36px-tall hit target; width follows the row (full rail). */
 export const SIDEBAR_COLLAPSED_ICON_SLOT_CLASS =
   "relative h-9 min-h-9 max-h-9 w-full shrink-0";
-
-export const SIDEBAR_HEADER_ROW_CLASS =
-  "flex h-10 min-h-10 shrink-0 items-center gap-2 pl-2.5 pr-2.5 w-full";
 
 export function sidebarHeaderRowClassName(collapsed: boolean): string {
   return cn(
@@ -23,8 +20,8 @@ export function sidebarHeaderRowClassName(collapsed: boolean): string {
 }
 
 export const SIDEBAR_ROW_INTERACTIVE_CLASS = {
-  active: "bg-tertiary text-white font-normal",
-  idle: "text-[var(--oh-muted)] hover:text-white hover:bg-[var(--oh-surface-raised)]",
+  active: "bg-tertiary text-contrast font-normal",
+  idle: "text-muted hover:text-contrast hover:bg-surface-raised",
 } as const;
 
 export function sidebarNavListClassName(collapsed: boolean): string {
@@ -54,9 +51,7 @@ export function sidebarCollapsedIconBgClassName(active: boolean): string {
   return cn(
     "pointer-events-none absolute inset-0 z-0 rounded-md",
     navInteractiveTransitionClassName,
-    active
-      ? "bg-tertiary"
-      : "bg-transparent group-hover:bg-[var(--oh-surface-raised)]",
+    active ? "bg-tertiary" : "bg-transparent group-hover:bg-surface-raised",
   );
 }
 
@@ -64,11 +59,11 @@ export function sidebarCollapsedIconBgClassName(active: boolean): string {
 export function sidebarCollapsedIconGlyphClassName(active: boolean): string {
   return cn(
     // Full width inside the 36px-tall slot; `pl-2.5` aligns with expanded `px-2.5` rows.
-    // Do not set a narrow `w-[18px]` here — with horizontal padding it shrinks the glyph.
-    "relative z-[1] flex h-full w-full items-center justify-start pl-2.5 [&_svg]:shrink-0",
+    // Do not set a narrow `w-4.5` here — with horizontal padding it shrinks the glyph.
+    "relative z-1 flex h-full w-full items-center justify-start pl-2.5 [&_svg]:shrink-0",
     active
-      ? "text-white font-normal"
-      : "text-[var(--oh-muted)] group-hover:text-white",
+      ? "text-contrast font-normal"
+      : "text-muted group-hover:text-contrast",
   );
 }
 
@@ -96,5 +91,5 @@ export const SIDEBAR_COLLAPSE_TOGGLE_OVERLAY_CLASS = cn(
   "items-center justify-center rounded-md",
   navInteractiveTransitionClassName,
   "cursor-pointer",
-  "text-[var(--oh-muted)] hover:text-white hover:bg-[var(--oh-surface-raised)]",
+  "text-muted hover:text-contrast hover:bg-surface-raised",
 );
