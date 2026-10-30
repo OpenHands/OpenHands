@@ -11,7 +11,7 @@ import {
 import type { Backend } from "#/api/backend-registry/types";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { useDeploymentCapabilities } from "#/hooks/query/use-manifest-capabilities";
-import { useServiceAccountOwnersEnabled } from "#/hooks/query/use-service-accounts";
+import { useServiceAccountRunAsEnabled } from "#/hooks/query/use-service-accounts";
 
 const permissions = vi.hoisted(() => ({
   value: { canManage: true, userId: "user-1" as string | null },
@@ -58,7 +58,7 @@ function renderEnabled() {
   // `capabilitiesLoaded` lets a test wait until the capability answer is in.
   return renderHook(
     () => ({
-      enabled: useServiceAccountOwnersEnabled(),
+      enabled: useServiceAccountRunAsEnabled(),
       capabilitiesLoaded: useDeploymentCapabilities().isSuccess,
     }),
     {
@@ -77,7 +77,7 @@ beforeEach(() => {
   setRegisteredBackends([cloudBackend, localBackend]);
   setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
   permissions.value = { canManage: true, userId: "user-1" };
-  mockFeatures(["serviceAccountOwners"]);
+  mockFeatures(["serviceAccountRunAs"]);
 });
 
 afterEach(() => {
@@ -85,7 +85,7 @@ afterEach(() => {
   __resetActiveStoreForTests();
 });
 
-describe("useServiceAccountOwnersEnabled", () => {
+describe("useServiceAccountRunAsEnabled", () => {
   it.each([
     [
       "a local backend",
@@ -98,7 +98,7 @@ describe("useServiceAccountOwnersEnabled", () => {
   ])("requests no capabilities on %s", async (_label, arrange) => {
     arrange();
     const queryClient = new QueryClient();
-    const { result } = renderHook(() => useServiceAccountOwnersEnabled(), {
+    const { result } = renderHook(() => useServiceAccountRunAsEnabled(), {
       wrapper: ({ children }: { children: React.ReactNode }) => (
         <QueryClientProvider client={queryClient}>
           <ActiveBackendProvider>{children}</ActiveBackendProvider>

@@ -17,8 +17,8 @@ interface DetailHeaderProps {
   /** When provided (and the user can edit), the kebab menu shows an Edit entry. */
   onEdit?: () => void;
   onDelete: () => void;
-  /** When provided, the kebab menu shows a Transfer entry. */
-  onTransfer?: () => void;
+  /** When provided, the kebab menu shows a Change Runs As entry. */
+  onChangeRunAs?: () => void;
   onExport: () => void;
   onDownloadTarball: () => void;
   onRunNow?: () => void;
@@ -39,7 +39,7 @@ export function DetailHeader({
   onToggle,
   onEdit,
   onDelete,
-  onTransfer,
+  onChangeRunAs,
   onExport,
   onDownloadTarball,
   onRunNow,
@@ -83,12 +83,12 @@ export function DetailHeader({
           },
         ]
       : []),
-    ...(onTransfer
+    ...(onChangeRunAs
       ? [
           {
-            label: t(I18nKey.AUTOMATIONS$TRANSFER),
+            label: t(I18nKey.AUTOMATIONS$CHANGE_RUN_AS),
             icon: <ArrowRightLeft className="size-4" aria-hidden />,
-            onClick: onTransfer,
+            onClick: onChangeRunAs,
           },
         ]
       : []),

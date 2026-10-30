@@ -176,7 +176,7 @@ vi.mock("#/hooks/query/use-manifest-capabilities", () => ({
 
 const serviceAccountMocks = vi.hoisted(() => ({ enabled: false }));
 vi.mock("#/hooks/query/use-service-accounts", () => ({
-  useServiceAccountOwnersEnabled: () => serviceAccountMocks.enabled,
+  useServiceAccountRunAsEnabled: () => serviceAccountMocks.enabled,
   useServiceAccounts: () => ({
     data: [
       { id: "sa-1", org_id: "org-1", name: "ci-bot", is_disabled: false },
@@ -1652,7 +1652,7 @@ describe("AutomationSetupPanel", () => {
 
     const user = userEvent.setup();
     renderPanel({ prompt: "Review every pull request", kind: "prompt" });
-    const picker = screen.getByTestId("automation-setup-owner");
+    const picker = screen.getByTestId("automation-setup-run-as");
     // Disabled accounts are not offered.
     expect(
       within(picker).queryByRole("option", { name: "old-bot" }),
@@ -1662,13 +1662,13 @@ describe("AutomationSetupPanel", () => {
 
     await waitFor(() =>
       expect(AutomationService.createAutomationDraft).toHaveBeenCalledWith(
-        expect.objectContaining({ owner_user_id: "sa-1" }),
+        expect.objectContaining({ run_as_user_id: "sa-1" }),
         expect.anything(),
       ),
     );
   });
 
-  it("creates as the caller by default and without the picker when service account owners are off", async () => {
+  it("creates as the caller by default and without the picker when service account run-as is off", async () => {
     vi.mocked(AutomationService.createAutomationDraft).mockResolvedValue({
       id: "automation-1",
     });
@@ -1676,7 +1676,7 @@ describe("AutomationSetupPanel", () => {
     const user = userEvent.setup();
     renderPanel({ prompt: "Review every pull request", kind: "prompt" });
     expect(
-      screen.queryByTestId("automation-setup-owner"),
+      screen.queryByTestId("automation-setup-run-as"),
     ).not.toBeInTheDocument();
     await user.click(screen.getByTestId("automation-setup-create"));
 
@@ -1685,15 +1685,15 @@ describe("AutomationSetupPanel", () => {
     );
     expect(
       vi.mocked(AutomationService.createAutomationDraft).mock.calls[0][0],
-    ).not.toHaveProperty("owner_user_id");
+    ).not.toHaveProperty("run_as_user_id");
   });
 
-  it("does not offer the owner picker when editing an existing automation", () => {
+  it("does not offer the run-as picker when editing an existing automation", () => {
     serviceAccountMocks.enabled = true;
     renderPanel(setupDraftFromAutomation(savedReviewer()));
 
     expect(
-      screen.queryByTestId("automation-setup-owner"),
+      screen.queryByTestId("automation-setup-run-as"),
     ).not.toBeInTheDocument();
   });
 
@@ -2304,21 +2304,21 @@ describe("AutomationSetupPanel", () => {
       ).not.toHaveBeenCalled();
     });
 
-    describe("service account owner", () => {
+    describe("service account run-as", () => {
       beforeEach(() => {
         serviceAccountMocks.enabled = true;
         mockSavedDraftEcho({ validationErrors: null });
       });
 
-      const ownerOf = (call: unknown[] | undefined) =>
-        (call?.[0] as { draft: { owner_user_id?: string } }).draft
-          .owner_user_id;
+      const runAsOf = (call: unknown[] | undefined) =>
+        (call?.[0] as { draft: { run_as_user_id?: string } }).draft
+          .run_as_user_id;
 
-      it("keeps the owner through save draft, reopen, save and create", async () => {
+      it("keeps the run-as identity through save draft, reopen, save and create", async () => {
         const user = userEvent.setup();
         const first = renderPanel();
         await user.selectOptions(
-          screen.getByTestId("automation-setup-owner"),
+          screen.getByTestId("automation-setup-run-as"),
           "sa-1",
         );
         await user.click(screen.getByTestId("automation-setup-save-draft"));
@@ -2327,7 +2327,7 @@ describe("AutomationSetupPanel", () => {
         );
         const savedBody = vi.mocked(AutomationService.createServerDraft).mock
           .calls[0][0];
-        expect(ownerOf([savedBody])).toBe("sa-1");
+        expect(runAsOf([savedBody])).toBe("sa-1");
         first.unmount();
 
         // Reopen: the server returns the saved draft.
@@ -2339,7 +2339,7 @@ describe("AutomationSetupPanel", () => {
         });
 
         await waitFor(() =>
-          expect(screen.getByTestId("automation-setup-owner")).toHaveValue(
+          expect(screen.getByTestId("automation-setup-run-as")).toHaveValue(
             "sa-1",
           ),
         );
@@ -2349,7 +2349,7 @@ describe("AutomationSetupPanel", () => {
           expect(AutomationService.updateServerDraft).toHaveBeenCalled(),
         );
         expect(
-          ownerOf(
+          runAsOf(
             vi
               .mocked(AutomationService.updateServerDraft)
               .mock.calls[0].slice(1),
@@ -2362,13 +2362,13 @@ describe("AutomationSetupPanel", () => {
         await user.click(screen.getByTestId("automation-setup-create"));
         await waitFor(() =>
           expect(AutomationService.createAutomationDraft).toHaveBeenCalledWith(
-            expect.objectContaining({ owner_user_id: "sa-1" }),
+            expect.objectContaining({ run_as_user_id: "sa-1" }),
             expect.anything(),
           ),
         );
       });
 
-      it("marks the draft unsaved after an owner-only change", async () => {
+      it("marks the draft unsaved after a run-as-only change", async () => {
         const user = userEvent.setup();
         renderPanel();
         await user.click(screen.getByTestId("automation-setup-save-draft"));
@@ -2379,7 +2379,7 @@ describe("AutomationSetupPanel", () => {
         );
 
         await user.selectOptions(
-          screen.getByTestId("automation-setup-owner"),
+          screen.getByTestId("automation-setup-run-as"),
           "sa-1",
         );
 
@@ -2388,13 +2388,13 @@ describe("AutomationSetupPanel", () => {
         ).toHaveTextContent("AUTOMATION_SETUP$UNSAVED_CHANGES");
       });
 
-      it("shows a resumed draft with a service account owner as saved", async () => {
+      it("shows a resumed draft that runs as a service account as saved", async () => {
         vi.mocked(AutomationService.getServerDraft).mockResolvedValue({
           ...dispatchableDraft,
           name: "Saved Tagged Draft",
           draft: {
             prompt: "Use the persisted draft body",
-            owner_user_id: "sa-1",
+            run_as_user_id: "sa-1",
           } as never,
         });
 
@@ -2403,7 +2403,7 @@ describe("AutomationSetupPanel", () => {
         });
 
         await waitFor(() =>
-          expect(screen.getByTestId("automation-setup-owner")).toHaveValue(
+          expect(screen.getByTestId("automation-setup-run-as")).toHaveValue(
             "sa-1",
           ),
         );
@@ -2414,13 +2414,13 @@ describe("AutomationSetupPanel", () => {
         );
       });
 
-      it("keeps a resumed owner that is no longer listed, shown by its id", async () => {
+      it("keeps a resumed run-as identity that is no longer listed, shown by its id", async () => {
         vi.mocked(AutomationService.getServerDraft).mockResolvedValue({
           ...dispatchableDraft,
           name: "Saved Tagged Draft",
           draft: {
             prompt: "Use the persisted draft body",
-            owner_user_id: "sa-gone",
+            run_as_user_id: "sa-gone",
           } as never,
         });
 
@@ -2429,12 +2429,12 @@ describe("AutomationSetupPanel", () => {
         });
 
         await waitFor(() =>
-          expect(screen.getByTestId("automation-setup-owner")).toHaveValue(
+          expect(screen.getByTestId("automation-setup-run-as")).toHaveValue(
             "sa-gone",
           ),
         );
         expect(
-          within(screen.getByTestId("automation-setup-owner")).getByRole(
+          within(screen.getByTestId("automation-setup-run-as")).getByRole(
             "option",
             { name: "sa-gone" },
           ),

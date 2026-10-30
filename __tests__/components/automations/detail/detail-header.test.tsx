@@ -81,7 +81,7 @@ describe("DetailHeader — enabled toggle gating", () => {
 
 describe("DetailHeader — edit gating", () => {
   it("hides Edit when canEdit is false but keeps Delete", async () => {
-    // Arrange — a manager viewing a human-owned automation.
+    // Arrange — a manager viewing a automation that runs as a person.
     const user = userEvent.setup();
     renderHeader({ canManage: true, canEdit: false, onEdit: vi.fn() });
 

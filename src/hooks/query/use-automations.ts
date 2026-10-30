@@ -20,7 +20,7 @@ import type {
   AutomationSpec,
   AutomationTagCount,
   AutomationsResponse,
-  TransferAutomationRequest,
+  ChangeRunAsRequest,
 } from "#/types/automation";
 import type { AutomationDraftListResponse } from "#/manifests/types";
 import {
@@ -226,16 +226,11 @@ export function useToggleAutomation({
  * turns it off, so every automation view is refetched. Callers toast the
  * service's `detail` themselves.
  */
-export function useTransferAutomation() {
+export function useChangeRunAs() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({
-      id,
-      body,
-    }: {
-      id: string;
-      body: TransferAutomationRequest;
-    }) => AutomationService.transferAutomation(id, body),
+    mutationFn: ({ id, body }: { id: string; body: ChangeRunAsRequest }) =>
+      AutomationService.changeRunAs(id, body),
     meta: { disableToast: true },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: AUTOMATIONS_QUERY_KEY });

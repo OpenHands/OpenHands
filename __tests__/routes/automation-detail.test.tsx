@@ -38,7 +38,7 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
     fetchTarballBytes: vi.fn(),
     checkHealth: vi.fn(),
     getCapabilities: vi.fn(),
-    transferAutomation: vi.fn(),
+    changeRunAs: vi.fn(),
   },
 }));
 
@@ -458,13 +458,15 @@ describe("AutomationDetail — Automation Runs As", () => {
   });
 });
 
-describe("AutomationDetail — service account owner", () => {
+describe("AutomationDetail — runs as a service account", () => {
   const orgId = "0b93b5f2-5396-49f2-8d98-61f906184270";
   const saId = "5a1d2f60-1c1b-4b43-8a5f-0f8e8e2f7c11";
+  const creatorId = "7c0a3f1e-5d2b-4e8a-9b6c-1f2e3d4c5b6a";
   const serviceAutomation: Automation = {
     ...automation,
     user_id: saId,
-    owner_kind: "service",
+    run_as_kind: "service",
+    created_by_user_id: creatorId,
   };
 
   beforeEach(() => {
@@ -482,22 +484,44 @@ describe("AutomationDetail — service account owner", () => {
       eventSources: [],
       eventTypes: [],
       triggers: {},
-      features: ["serviceAccountOwners"],
+      features: ["serviceAccountRunAs"],
     });
     vi.mocked(AutomationService.getAutomation).mockResolvedValue(
       serviceAutomation,
     );
   });
 
-  it("shows the service account name with an SA badge instead of a member lookup", async () => {
+  it("shows the service account under Runs As and the person under Created By", async () => {
+    // Arrange — the creator is an org member; the service account is not.
+    vi.mocked(getCloudOrganizationMember).mockResolvedValue({
+      org_id: orgId,
+      user_id: creatorId,
+      email: "jdoe@acme.com",
+    });
+
     // Act
     renderDetail();
 
     // Assert
     expect(await screen.findByText("ci-bot")).toBeInTheDocument();
-    expect(screen.getByText(I18nKey.AUTOMATIONS$OWNED_BY)).toBeInTheDocument();
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$RUNS_AS),
+    ).toBeInTheDocument();
     expect(screen.getByTestId("service-account-badge")).toBeInTheDocument();
-    expect(getCloudOrganizationMember).not.toHaveBeenCalled();
+    expect(await screen.findByText("jdoe@acme.com")).toBeInTheDocument();
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$CREATED_BY),
+    ).toBeInTheDocument();
+    expect(getCloudOrganizationMember).toHaveBeenCalledWith(
+      orgId,
+      creatorId,
+      expect.anything(),
+    );
+    expect(getCloudOrganizationMember).not.toHaveBeenCalledWith(
+      orgId,
+      saId,
+      expect.anything(),
+    );
   });
 
   it("falls back to the raw id when the service account list is unavailable", async () => {
@@ -514,8 +538,8 @@ describe("AutomationDetail — service account owner", () => {
     expect(screen.getByTestId("service-account-badge")).toBeInTheDocument();
   });
 
-  it("lets a manager edit the tags of a service-owned automation", async () => {
-    // Arrange — the manager is not the owner; the service account is. A
+  it("lets a manager edit the tags of a automation that runs as a service account", async () => {
+    // Arrange — the manager is not the creator; it runs as the service account. A
     // service with tag support sends `tags`.
     vi.mocked(AutomationService.getAutomation).mockResolvedValue({
       ...serviceAutomation,
@@ -530,7 +554,7 @@ describe("AutomationDetail — service account owner", () => {
     expect(screen.getByTestId("automation-tags-edit")).toBeInTheDocument();
   });
 
-  it("does not let a manager edit the tags of a service-owned draft", async () => {
+  it("does not let a manager edit the tags of a draft that runs as a service account", async () => {
     // Arrange — drafts are finished through the setup flow.
     vi.mocked(AutomationService.getAutomation).mockResolvedValue({
       ...serviceAutomation,
@@ -549,11 +573,11 @@ describe("AutomationDetail — service account owner", () => {
   });
 
   it("does not let an admin edit the tags of another member's automation", async () => {
-    // Arrange — human-owned, and the caller is a manager but not the creator.
+    // Arrange — runs as a person, and the caller is a manager but not the creator.
     vi.mocked(AutomationService.getAutomation).mockResolvedValue({
       ...automation,
       user_id: "another-member",
-      owner_kind: "user",
+      run_as_kind: "user",
       // A saved tag, so the read-only tags render and the button can be absent.
       tags: ["nightly"],
     });
@@ -562,13 +586,13 @@ describe("AutomationDetail — service account owner", () => {
     renderDetail();
     await screen.findByTestId("automation-tags");
 
-    // Assert — only the creator edits a human-owned automation.
+    // Assert — only the creator edits a automation that runs as a person.
     expect(
       screen.queryByTestId("automation-tags-edit"),
     ).not.toBeInTheDocument();
   });
 
-  it("shows a member the generic label and never the owner id", async () => {
+  it("shows a member the generic label and never the service account id", async () => {
     // Arrange — a member cannot read the service account list.
     permissionMocks.canManage = false;
     const { container } = renderDetail();
@@ -577,7 +601,9 @@ describe("AutomationDetail — service account owner", () => {
     await screen.findByTestId("service-account-badge");
 
     // Assert
-    expect(screen.getByText(I18nKey.AUTOMATIONS$OWNED_BY)).toBeInTheDocument();
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$RUNS_AS),
+    ).toBeInTheDocument();
     expect(
       screen.getAllByText(I18nKey.AUTOMATIONS$SERVICE_ACCOUNT_LABEL).length,
     ).toBeGreaterThan(0);
@@ -585,10 +611,10 @@ describe("AutomationDetail — service account owner", () => {
     expect(listCloudServiceAccounts).not.toHaveBeenCalled();
   });
 
-  it("transfers the automation to the chosen service account", async () => {
+  it("changes the automation to run as the chosen service account", async () => {
     // Arrange
     const user = userEvent.setup();
-    vi.mocked(AutomationService.transferAutomation).mockResolvedValue({
+    vi.mocked(AutomationService.changeRunAs).mockResolvedValue({
       ...automation,
       enabled: false,
     });
@@ -598,30 +624,30 @@ describe("AutomationDetail — service account owner", () => {
     // Act
     await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
     await user.click(
-      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$TRANSFER }),
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$CHANGE_RUN_AS }),
     );
     await user.selectOptions(
-      screen.getByTestId("transfer-automation-target"),
+      screen.getByTestId("change-run-as-target"),
       "sa-2",
     );
-    await user.click(screen.getByTestId("transfer-automation-confirm"));
+    await user.click(screen.getByTestId("change-run-as-confirm"));
 
     // Assert — the API is called and the detail query is refetched.
     await waitFor(() => {
-      expect(AutomationService.transferAutomation).toHaveBeenCalledWith(
-        "auto-1",
-        { to: "service", service_account_id: "sa-2" },
-      );
+      expect(AutomationService.changeRunAs).toHaveBeenCalledWith("auto-1", {
+        to: "service",
+        service_account_id: "sa-2",
+      });
     });
     await waitFor(() => {
       expect(AutomationService.getAutomation).toHaveBeenCalledTimes(2);
     });
   });
 
-  it("shows the service's reason and keeps the modal open when the transfer fails", async () => {
+  it("shows the service's reason and keeps the modal open when the run-as change fails", async () => {
     // Arrange
     const user = userEvent.setup();
-    vi.mocked(AutomationService.transferAutomation).mockRejectedValue(
+    vi.mocked(AutomationService.changeRunAs).mockRejectedValue(
       new HttpError(409, "Conflict", {
         detail: "The automation has a pending or running run",
       }),
@@ -632,9 +658,9 @@ describe("AutomationDetail — service account owner", () => {
     // Act
     await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
     await user.click(
-      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$TRANSFER }),
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$CHANGE_RUN_AS }),
     );
-    await user.click(screen.getByTestId("transfer-automation-confirm"));
+    await user.click(screen.getByTestId("change-run-as-confirm"));
 
     // Assert
     await waitFor(() => {
@@ -642,10 +668,10 @@ describe("AutomationDetail — service account owner", () => {
         "The automation has a pending or running run",
       );
     });
-    expect(screen.getByTestId("transfer-automation-confirm")).toBeEnabled();
+    expect(screen.getByTestId("change-run-as-confirm")).toBeEnabled();
   });
 
-  it("does not offer Transfer without the capability", async () => {
+  it("does not offer Change Runs As without the capability", async () => {
     // Arrange
     vi.mocked(AutomationService.getCapabilities).mockResolvedValue({
       ready: true,
@@ -664,11 +690,11 @@ describe("AutomationDetail — service account owner", () => {
 
     // Assert
     expect(
-      screen.queryByRole("button", { name: I18nKey.AUTOMATIONS$TRANSFER }),
+      screen.queryByRole("button", { name: I18nKey.AUTOMATIONS$CHANGE_RUN_AS }),
     ).not.toBeInTheDocument();
   });
 
-  it("does not offer Transfer on a local backend", async () => {
+  it("does not offer Change Runs As on a local backend", async () => {
     // Arrange — default selection is the local backend.
     setActiveSelection({ backendId: localBackend.id });
     const user = userEvent.setup();
@@ -680,7 +706,7 @@ describe("AutomationDetail — service account owner", () => {
 
     // Assert
     expect(
-      screen.queryByRole("button", { name: I18nKey.AUTOMATIONS$TRANSFER }),
+      screen.queryByRole("button", { name: I18nKey.AUTOMATIONS$CHANGE_RUN_AS }),
     ).not.toBeInTheDocument();
   });
 });

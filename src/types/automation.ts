@@ -37,15 +37,15 @@ export interface AutomationRepository {
 export type AutomationState = "ACTIVE" | "INACTIVE" | "DRAFT";
 
 /**
- * `POST /v1/{id}/transfer` body: hand the automation to a service account of
+ * `POST /v1/{id}/run-as` body: hand the automation to a service account of
  * the org, or back to the caller (managers only).
  */
-export type TransferAutomationRequest =
+export type ChangeRunAsRequest =
   | { to: "service"; service_account_id: string }
   | { to: "self" };
 
 /** Who owns an automation. */
-export type AutomationOwnerKind = "user" | "service";
+export type AutomationRunAsKind = "user" | "service";
 
 export interface Automation {
   id: string;
@@ -77,18 +77,24 @@ export interface Automation {
   /** UTC timestamp the automation was last disabled. */
   disabled_at?: string | null;
   /**
-   * UUID of the user who created this automation. The backend returns it in
-   * `AutomationResponse.user_id`; the frontend uses it to implement the
-   * "creator escape hatch" — a member (view-only) may still edit their own
-   * automations even without `manage_automations`.
+   * UUID of the identity the automation runs as: a person, or a service
+   * account (see `run_as_kind`). For a person it is also the creator, and the
+   * frontend uses it for the "creator escape hatch": a member (view-only) may
+   * still edit their own automations without `manage_automations`.
    */
   user_id?: string;
   /**
    * What `user_id` identifies: a person (`user`) or a service account
-   * (`service`). Absent on an automation service older than service-account
-   * owners; treat it as `user`.
+   * (`service`). Absent on an automation service older than run-as; treat it
+   * as `user`.
    */
-  owner_kind?: AutomationOwnerKind;
+  run_as_kind?: AutomationRunAsKind;
+  /**
+   * UUID of the person who created the automation. It differs from `user_id`
+   * when the automation runs as a service account. Absent on an automation
+   * service older than run-as.
+   */
+  created_by_user_id?: string;
   /**
    * Single repository in the import/export file's shape. The automation
    * service does not return it; read `repositories` for what an automation

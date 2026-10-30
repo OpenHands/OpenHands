@@ -84,7 +84,7 @@ import { Divider } from "#/ui/divider";
 import { cn } from "#/utils/utils";
 import { useDeploymentCapabilities } from "#/hooks/query/use-manifest-capabilities";
 import {
-  useServiceAccountOwnersEnabled,
+  useServiceAccountRunAsEnabled,
   useServiceAccounts,
 } from "#/hooks/query/use-service-accounts";
 import { AUTOMATION_DETAIL_QUERY_KEY } from "#/hooks/query/use-automation-detail";
@@ -503,9 +503,9 @@ function buildInitialForm(
 }
 
 /** The service account id stored in a server draft body; empty for the caller. */
-function ownerFromDraftBody(body: unknown): string {
-  const owner = (body as { owner_user_id?: unknown } | null)?.owner_user_id;
-  return typeof owner === "string" ? owner : "";
+function runAsFromDraftBody(body: unknown): string {
+  const runAs = (body as { run_as_user_id?: unknown } | null)?.run_as_user_id;
+  return typeof runAs === "string" ? runAs : "";
 }
 
 function DraftStatusBar({
@@ -745,11 +745,11 @@ export function AutomationSetupPanel({
     ? (getAutomationFormSession(conversationId) ?? draft)
     : draft;
   const [form, setForm] = useState(() => buildInitialForm(initialDraft));
-  // The "Owner" field: the service account that will own a new
-  // automation; empty means the caller. It is saved in the server draft body
-  // (`owner_user_id`) and restored from there when a saved draft is reopened.
-  const [ownerUserId, setOwnerUserId] = useState("");
-  const serviceAccountOwnersEnabled = useServiceAccountOwnersEnabled();
+  // The "Runs as" field: the service account a new automation runs as;
+  // empty means the caller. It is saved in the server draft body
+  // (`run_as_user_id`) and restored from there when a saved draft is reopened.
+  const [runAsUserId, setRunAsUserId] = useState("");
+  const serviceAccountRunAsEnabled = useServiceAccountRunAsEnabled();
   const serviceAccounts = useServiceAccounts().data;
   const [eventTestPayload, setEventTestPayload] = useState(() =>
     buildDefaultEventTestPayload(DEFAULT_EVENT_SOURCE, DEFAULT_EVENT_KEY),
@@ -997,7 +997,7 @@ export function AutomationSetupPanel({
         setServerDraft(saved);
         setDraftRuns([]);
         setForm(nextForm);
-        setOwnerUserId(ownerFromDraftBody(saved.draft));
+        setRunAsUserId(runAsFromDraftBody(saved.draft));
         saveDraftInFormSession(saved, nextForm);
       })
       .catch((error: unknown) => {
@@ -1329,9 +1329,9 @@ export function AutomationSetupPanel({
           ),
           timezone: timezone.trim() || DEFAULT_TIMEZONE,
         };
-  // Only a new automation picks its owner; an existing one is moved with Transfer.
-  const showOwnerPicker = serviceAccountOwnersEnabled && !isEditingExisting;
-  const newAutomationOwnerId = showOwnerPicker ? ownerUserId : "";
+  // Only a new automation picks who it runs as; an existing one uses Change Runs As.
+  const showRunAsPicker = serviceAccountRunAsEnabled && !isEditingExisting;
+  const newAutomationRunAsId = showRunAsPicker ? runAsUserId : "";
   const buildPresetBody = (): SetupRequestBody => {
     const trimmedPrompt = prompt.trim();
     const body: SetupRequestBody = {
@@ -1355,7 +1355,7 @@ export function AutomationSetupPanel({
       body.plugins = configuredPlugins;
     }
     if (model.trim()) body.model = model.trim();
-    if (newAutomationOwnerId) body.owner_user_id = newAutomationOwnerId;
+    if (newAutomationRunAsId) body.run_as_user_id = newAutomationRunAsId;
     return body;
   };
   const buildCustomBody = (tarballPath: string): SetupRequestBody =>
@@ -1369,7 +1369,7 @@ export function AutomationSetupPanel({
       ...(showTimeout && timeoutSeconds.trim()
         ? { timeout: Number(timeoutSeconds) }
         : {}),
-      ...(newAutomationOwnerId ? { owner_user_id: newAutomationOwnerId } : {}),
+      ...(newAutomationRunAsId ? { run_as_user_id: newAutomationRunAsId } : {}),
     }) as SetupRequestBody;
   /**
    * The request body sent to a server-backed draft. Custom drafts reference a
@@ -1448,7 +1448,7 @@ export function AutomationSetupPanel({
       agentProfileId,
       showTimeout,
       timeoutSeconds,
-      newAutomationOwnerId,
+      newAutomationRunAsId,
     ],
   );
   const isDraftDirty = savedDraftRequestKey
@@ -2100,32 +2100,32 @@ export function AutomationSetupPanel({
                 />
               </Field>
 
-              {showOwnerPicker ? (
-                <Field label={t(I18nKey.AUTOMATION_SETUP$OWNER)}>
+              {showRunAsPicker ? (
+                <Field label={t(I18nKey.AUTOMATION_SETUP$RUN_AS)}>
                   <div className="relative">
                     <select
-                      data-testid="automation-setup-owner"
-                      value={ownerUserId}
-                      onChange={(event) => setOwnerUserId(event.target.value)}
+                      data-testid="automation-setup-run-as"
+                      value={runAsUserId}
+                      onChange={(event) => setRunAsUserId(event.target.value)}
                       className={cn(
                         formControlFieldClassName,
                         "appearance-none pr-8",
                       )}
                     >
                       <option value="">
-                        {t(I18nKey.AUTOMATIONS$OWNER_ME)}
+                        {t(I18nKey.AUTOMATIONS$RUN_AS_ME)}
                       </option>
-                      {/* A resumed draft's owner may be disabled or deleted by
+                      {/* A resumed draft's service account may be disabled or deleted by
                           now. Keep it selected, shown by its id. */}
-                      {ownerUserId &&
+                      {runAsUserId &&
                       !(serviceAccounts ?? []).some(
                         (account) =>
-                          account.id === ownerUserId && !account.is_disabled,
+                          account.id === runAsUserId && !account.is_disabled,
                       ) ? (
-                        <option value={ownerUserId}>
+                        <option value={runAsUserId}>
                           {(serviceAccounts ?? []).find(
-                            (account) => account.id === ownerUserId,
-                          )?.name ?? ownerUserId}
+                            (account) => account.id === runAsUserId,
+                          )?.name ?? runAsUserId}
                         </option>
                       ) : null}
                       {(serviceAccounts ?? [])

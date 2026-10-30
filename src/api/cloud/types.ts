@@ -39,7 +39,7 @@ export interface CloudOrganizationMember {
  * Subset of an enterprise service account that the GUI reads. Returned by
  * `GET /api/organizations/{orgId}/service-accounts` (requires
  * `manage_service_accounts`). `id` is the user id the automation service
- * stores as `Automation.user_id` when `owner_kind` is `service`.
+ * stores as `Automation.user_id` when `run_as_kind` is `service`.
  */
 export interface CloudServiceAccount {
   id: string;

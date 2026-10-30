@@ -146,10 +146,10 @@ describe("AutomationListRow — non-creator manager", () => {
 });
 
 describe("AutomationListRow — edit rule", () => {
-  it("hides Edit from a manager on a human-owned automation", async () => {
-    // Arrange — the service lets only the creator edit a user-owned automation.
+  it("hides Edit from a manager on a automation that runs as a person", async () => {
+    // Arrange — the service lets only the creator edit a automation that runs as a person.
     const user = userEvent.setup();
-    renderRow(makeAutomation({ owner_kind: "user" }));
+    renderRow(makeAutomation({ run_as_kind: "user" }));
 
     // Act
     await openActionsMenu(user);
@@ -160,10 +160,10 @@ describe("AutomationListRow — edit rule", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("offers Edit and Turn on to a manager on a disabled service-owned automation", async () => {
+  it("offers Edit and Turn on to a manager on a disabled automation that runs as a service account", async () => {
     // Arrange
     const user = userEvent.setup();
-    renderRow(makeAutomation({ owner_kind: "service", enabled: false }));
+    renderRow(makeAutomation({ run_as_kind: "service", enabled: false }));
 
     // Act
     await openActionsMenu(user);

@@ -1,17 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
 import { listCloudServiceAccounts } from "#/api/cloud/organization-service.api";
 import { useActiveBackend } from "#/contexts/active-backend-context";
-import { SERVICE_ACCOUNT_OWNERS_FEATURE } from "#/constants/automation-form";
+import { SERVICE_ACCOUNT_RUN_AS_FEATURE } from "#/constants/automation-form";
 import { useAutomationPermissions } from "#/hooks/use-automation-permissions";
 import { useDeploymentCapabilities } from "./use-manifest-capabilities";
 
 /**
- * Whether the service-account owner UI applies: a cloud team workspace whose
- * automation service advertises `serviceAccountOwners`, for a caller with
+ * Whether the service-account run-as UI applies: a cloud team workspace whose
+ * automation service advertises `serviceAccountRunAs`, for a caller with
  * `manage_automations`. Hidden on local, on personal workspaces (the org id is
  * the user id), without the capability, and for members.
  */
-export function useServiceAccountOwnersEnabled(): boolean {
+export function useServiceAccountRunAsEnabled(): boolean {
   const { backend, orgId } = useActiveBackend();
   const { canManage, userId } = useAutomationPermissions();
   const isTeamWorkspace =
@@ -20,22 +20,22 @@ export function useServiceAccountOwnersEnabled(): boolean {
   const capabilities = useDeploymentCapabilities({ enabled: isTeamWorkspace });
 
   if (!isTeamWorkspace) return false;
-  if (!capabilities.data?.features?.includes(SERVICE_ACCOUNT_OWNERS_FEATURE)) {
+  if (!capabilities.data?.features?.includes(SERVICE_ACCOUNT_RUN_AS_FEATURE)) {
     return false;
   }
   return canManage;
 }
 
 /**
- * The org's service accounts, for the owner picker and for naming a
- * service-owned automation's owner. Disabled unless
- * {@link useServiceAccountOwnersEnabled}; the enterprise list needs
+ * The org's service accounts, for the run-as picker and for naming the
+ * service account an automation runs as. Disabled unless
+ * {@link useServiceAccountRunAsEnabled}; the enterprise list needs
  * `manage_service_accounts`, which owners and admins hold along with
  * `manage_automations`.
  */
 export function useServiceAccounts() {
   const { backend, orgId } = useActiveBackend();
-  const enabled = useServiceAccountOwnersEnabled();
+  const enabled = useServiceAccountRunAsEnabled();
 
   // eslint-disable-next-line @tanstack/query/exhaustive-deps
   return useQuery({

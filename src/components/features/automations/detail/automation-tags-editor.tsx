@@ -23,7 +23,7 @@ interface AutomationTagsEditorProps {
   automation: Automation;
   /**
    * Whether the caller may change tags: the creator, or a manager of a
-   * service-owned automation. Everyone else sees them read-only.
+   * automation that runs as a service account. Everyone else sees them read-only.
    */
   canEdit: boolean;
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { I18nKey } from "#/i18n/declaration";
-import { TransferAutomationModal } from "#/components/features/automations/transfer-automation-modal";
+import { ChangeRunAsModal } from "#/components/features/automations/change-run-as-modal";
 import type { CloudServiceAccount } from "#/api/cloud/types";
 
 const bot: CloudServiceAccount = {
@@ -12,45 +12,43 @@ const bot: CloudServiceAccount = {
 };
 
 function renderModal(
-  props: Partial<React.ComponentProps<typeof TransferAutomationModal>> = {},
+  props: Partial<React.ComponentProps<typeof ChangeRunAsModal>> = {},
 ) {
-  const defaults: React.ComponentProps<typeof TransferAutomationModal> = {
+  const defaults: React.ComponentProps<typeof ChangeRunAsModal> = {
     automationName: "Nightly",
     isOpen: true,
     serviceAccounts: [bot],
-    currentOwnerId: "owner-1",
-    canTransferToSelf: false,
+    currentRunAsId: "user-1",
+    canChangeToSelf: false,
     onConfirm: vi.fn(),
     onCancel: vi.fn(),
   };
-  const view = render(<TransferAutomationModal {...defaults} {...props} />);
+  const view = render(<ChangeRunAsModal {...defaults} {...props} />);
   return {
     ...view,
     rerenderWith: (next: typeof props) =>
-      view.rerender(
-        <TransferAutomationModal {...defaults} {...props} {...next} />,
-      ),
+      view.rerender(<ChangeRunAsModal {...defaults} {...props} {...next} />),
   };
 }
 
-describe("TransferAutomationModal", () => {
+describe("ChangeRunAsModal", () => {
   it("explains that no service account is available", () => {
     renderModal({ serviceAccounts: [] });
 
     expect(
-      screen.getByText(I18nKey.AUTOMATIONS$TRANSFER_NO_TARGETS),
+      screen.getByText(I18nKey.AUTOMATIONS$CHANGE_RUN_AS_NO_TARGETS),
     ).toBeInTheDocument();
-    expect(screen.getByTestId("transfer-automation-confirm")).toBeDisabled();
+    expect(screen.getByTestId("change-run-as-confirm")).toBeDisabled();
   });
 
   it("explains that no other active service account exists", () => {
     renderModal({
       serviceAccounts: [bot, { ...bot, id: "sa-2", is_disabled: true }],
-      currentOwnerId: "sa-1",
+      currentRunAsId: "sa-1",
     });
 
     expect(
-      screen.getByText(I18nKey.AUTOMATIONS$TRANSFER_NO_TARGETS),
+      screen.getByText(I18nKey.AUTOMATIONS$CHANGE_RUN_AS_NO_TARGETS),
     ).toBeInTheDocument();
   });
 
@@ -58,10 +56,10 @@ describe("TransferAutomationModal", () => {
     renderModal({ serviceAccounts: [], isLoading: true });
 
     expect(
-      screen.getByText(I18nKey.AUTOMATIONS$TRANSFER_LOADING),
+      screen.getByText(I18nKey.AUTOMATIONS$CHANGE_RUN_AS_LOADING),
     ).toBeInTheDocument();
     expect(
-      screen.queryByText(I18nKey.AUTOMATIONS$TRANSFER_NO_TARGETS),
+      screen.queryByText(I18nKey.AUTOMATIONS$CHANGE_RUN_AS_NO_TARGETS),
     ).not.toBeInTheDocument();
   });
 
@@ -69,7 +67,7 @@ describe("TransferAutomationModal", () => {
     renderModal({ serviceAccounts: [], isError: true });
 
     expect(
-      screen.getByText(I18nKey.AUTOMATIONS$TRANSFER_LOAD_ERROR),
+      screen.getByText(I18nKey.AUTOMATIONS$CHANGE_RUN_AS_LOAD_ERROR),
     ).toBeInTheDocument();
   });
 
@@ -81,9 +79,7 @@ describe("TransferAutomationModal", () => {
 
     rerenderWith({ serviceAccounts: [bot], isLoading: false });
 
-    expect(screen.getByTestId("transfer-automation-target")).toHaveValue(
-      "sa-1",
-    );
-    expect(screen.getByTestId("transfer-automation-confirm")).toBeEnabled();
+    expect(screen.getByTestId("change-run-as-target")).toHaveValue("sa-1");
+    expect(screen.getByTestId("change-run-as-confirm")).toBeEnabled();
   });
 });
