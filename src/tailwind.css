@@ -718,6 +718,12 @@ code .token {
   min-width: min(var(--sidebar-width), 40vw);
 }
 
+/* Sidebar text reads one step larger than the default small sizes. */
+@utility sidebar-text-scale {
+  --text-xs: 0.8125rem;
+  --text-sm: 0.9375rem;
+}
+
 /* Keep content fixed while the desktop Overview drawer opens or closes. */
 @utility conversation-overview-drawer {
   width: var(--conversation-overview-drawer-width);

@@ -234,7 +234,7 @@ export function Sidebar() {
           setCollapsedRailHovered(false);
         }}
         className={cn(
-          "max-md:hidden relative flex bg-canvas-base flex-col min-h-0",
+          "max-md:hidden relative flex bg-canvas-base flex-col min-h-0 sidebar-text-scale",
           !isResizingSidebar && "transition-[width,min-width] duration-200",
           "md:border-r md:border-border md:h-full",
           collapsed
@@ -282,7 +282,7 @@ export function Sidebar() {
             data-testid="sidebar-mobile-drawer"
             aria-hidden={!mobileDrawerVisible}
             className={cn(
-              "fixed inset-y-0 left-0 z-50 flex min-h-0 w-[min(300px,85vw)] flex-col bg-canvas-base",
+              "fixed inset-y-0 left-0 z-50 flex min-h-0 w-[min(300px,85vw)] flex-col bg-canvas-base sidebar-text-scale",
               "border-r border-border pb-2 pl-2.5 pr-0 md:hidden",
               "transition-transform duration-(--mobile-drawer-transition-duration) ease-in-out motion-reduce:transition-none",
               mobileDrawerVisible ? "translate-x-0" : "-translate-x-full",
