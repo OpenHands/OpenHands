@@ -94,39 +94,47 @@ export const measurePlainRow = (wrapper: Element): [string, number] | null => {
 };
 
 interface SizeChangeInstance {
-  scrollOffset: number | null;
   scrollElement: Element | null;
 }
 
 /**
- * Decides whether a row's height correction should move the scroll offset.
+ * Restores the reader's place when a row is measured at a height other than its
+ * estimate, then reports `false` so the virtualizer does not add its own
+ * correction on top.
  *
- * The virtualizer's default keeps the *content* under the viewport fixed when a
- * row above it is measured (`item.start < scrollOffset`). The case it misses is
- * a tall row at or below the viewport growing while the reader is pinned to the
- * bottom: nothing shifts the offset, so the list ends up short of the bottom
- * and "scroll to bottom" appears to have stopped early.
+ * Two cases need a correction: a row above the viewport (`item.start` < the
+ * current offset) changing height shifts the content under the viewport, and a
+ * row at or below the viewport growing while the reader is pinned to the bottom
+ * pushes the bottom away.
  *
- * Pinning has to be judged from the geometry *before* the change. TanStack
- * calls this before it updates its size cache and before React re-renders the
- * shell, so the element's `scrollHeight` is still the pre-change height and the
- * new size is not in it yet — subtracting `delta` would compare against a
- * height that was never laid out and misread a reader who is still far from the
- * bottom as pinned.
+ * TanStack's default decides both from `getScrollOffset()` — the position cached
+ * from the last `scroll` event — and applies the delta to that same cached
+ * position. The chat also writes `scrollTop` directly (stick-to-bottom), in the
+ * same frame as these corrections, so the cache is stale by exactly that jump
+ * and the correction drags the list back to it: a pinned reader lands short of
+ * the bottom and autoscroll is then switched off.
+ *
+ * Reading the element's live position and adding the row's own `delta` once
+ * keeps every correction relative to where the reader actually is, and several
+ * rows correcting in one frame compose because each reads the position the
+ * previous one wrote.
  */
-export const shouldAdjustScrollOnSizeChange = (
+export const anchorScrollOnItemSizeChange = (
   item: Pick<VirtualItem, "start">,
   delta: number,
   instance: SizeChangeInstance,
 ): boolean => {
-  const offset = instance.scrollOffset ?? 0;
-  if (item.start < offset) return true;
-
   const element = instance.scrollElement as HTMLElement | null;
   if (!element || delta === 0) return false;
 
-  return (
-    element.scrollTop + element.clientHeight >=
-    element.scrollHeight - BOTTOM_THRESHOLD_PX
-  );
+  const offset = element.scrollTop;
+  // Pinning is judged from the geometry *before* the change: the shell has not
+  // been re-rendered at its new height yet, so `scrollHeight` is still the
+  // pre-change total and the new size is not in it.
+  const pinned =
+    offset + element.clientHeight >= element.scrollHeight - BOTTOM_THRESHOLD_PX;
+  if (item.start >= offset && !pinned) return false;
+
+  element.scrollTop = offset + delta;
+  return false;
 };

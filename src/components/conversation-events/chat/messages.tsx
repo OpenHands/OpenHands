@@ -14,6 +14,10 @@ import { groupEvents, renderedItemKey, RenderedItem } from "./group-events";
 import { buildActionById } from "./event-thought-helpers";
 import { EventGroup } from "./event-message-components/event-group";
 import { ThoughtEventMessage } from "./event-message-components/thought-event-message";
+import {
+  PLAIN_ROW_MARGIN_RESET_CLASSNAME,
+  VIRTUAL_ROW_MARGIN_RESET_CLASSNAME,
+} from "./row-margins";
 import { useModelStore } from "#/stores/model-store";
 import { ModelMessages } from "#/components/features/chat/model-messages";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
@@ -26,7 +30,7 @@ import { useMessageExpansionStore } from "#/stores/message-expansion-store";
 import {
   buildInitialMeasurements,
   measurePlainRow,
-  shouldAdjustScrollOnSizeChange,
+  anchorScrollOnItemSizeChange,
 } from "./scroll-anchoring";
 import type { SecretRequest } from "#/stores/secret-request-store";
 import {
@@ -427,6 +431,30 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       initialMeasurementsCacheRef.current = undefined;
     }
 
+    // Estimate for rows that mount after the switch (appended, or re-measured)
+    // and so were never captured while plain. Using the flat
+    // `ESTIMATED_ROW_HEIGHT` guess instead of the real rows' average height
+    // biases the shell's own total: `chat-interface` restores the reader's
+    // offset on "load older" from the shell's height delta, so a total built
+    // from an over-tall estimate over-counts the prepended page and drags the
+    // visible content up. Freeze the average of the rows measured while plain
+    // (plus the row gap, which the measurement includes) once, since the
+    // captured heights stop changing after the switch.
+    const estimatedRowHeightRef = React.useRef<number | null>(null);
+    if (shouldVirtualize) {
+      if (estimatedRowHeightRef.current === null) {
+        const heights = [...plainItemHeights.current.values()];
+        estimatedRowHeightRef.current = heights.length
+          ? Math.round(
+              heights.reduce((total, height) => total + height, 0) /
+                heights.length,
+            ) + ROW_GAP_PX
+          : ESTIMATED_ROW_HEIGHT;
+      }
+    } else {
+      estimatedRowHeightRef.current = null;
+    }
+
     const shellRef = React.useCallback(
       (node: HTMLDivElement | null) => {
         if (!node || !scrollParent) return undefined;
@@ -494,7 +522,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       count: renderedItems.length,
       getScrollElement: () => scrollParent ?? null,
       getItemKey,
-      estimateSize: () => ESTIMATED_ROW_HEIGHT,
+      estimateSize: () => estimatedRowHeightRef.current ?? ESTIMATED_ROW_HEIGHT,
       overscan: OVERSCAN,
       enabled: shouldVirtualize,
       // When `enabled` first flips on, TanStack seeds its internal offset from
@@ -520,11 +548,11 @@ export const Messages: React.FC<MessagesProps> = React.memo(
         Math.round(element.getBoundingClientRect().height) + ROW_GAP_PX,
     });
 
-    // Keep the bottom pinned when a tall row at or below the viewport is
-    // measured after it mounts (see `shouldAdjustScrollOnSizeChange`). This is
-    // an instance property, not a constructor option.
+    // Keep the reader's place when a row is measured at a height other than its
+    // estimate (see `anchorScrollOnItemSizeChange`). This is an instance
+    // property, not a constructor option.
     rowVirtualizer.shouldAdjustScrollPositionOnItemSizeChange =
-      shouldAdjustScrollOnSizeChange;
+      anchorScrollOnItemSizeChange;
 
     // With a scroll container, rows can cross the virtualization threshold
     // and remount into the shell. Persist their expansion by row key in the
@@ -542,11 +570,12 @@ export const Messages: React.FC<MessagesProps> = React.memo(
             only here to scope one correction — with a per-row wrapper each
             row's last element becomes a `:last-child`, so its `last:mb-4`
             would fire on every row instead of only the final one. The rule
-            neutralizes that margin on every row but the last.
+            neutralizes that margin on every row but the last, and only on the
+            elements that actually carry it.
           */}
           <div
             ref={plainListRef}
-            className="contents [&>*:not(:last-child)>*:last-child]:mb-0"
+            className={cn("contents", PLAIN_ROW_MARGIN_RESET_CLASSNAME)}
           >
             {renderedItems.map((item) => {
               const itemKey = renderedItemKey(item);
@@ -604,13 +633,14 @@ export const Messages: React.FC<MessagesProps> = React.memo(
                 // from the scroll column's own flex gap (its row wrapper is
                 // `display: contents`, so a row's siblings are spaced by the
                 // column). The margin correction mirrors the plain wrapper's
-                // `[&>*:not(:last-child)>*:last-child]:mb-0`: each message is
-                // the last child of its own row, so its `last:mb-4` would fire
-                // on every row instead of only the final one.
+                // reset: each message is the last child of its own row, so its
+                // `last:mb-4` would fire on every row instead of only the final
+                // one. Scoped to the elements that carry `last:mb-4`, so it
+                // leaves other margins (an `EventGroup`'s `my-1`) alone.
                 className={cn(
                   "flex flex-col gap-2",
                   virtualRow.index < renderedItems.length - 1 &&
-                    "[&>*:last-child]:mb-0",
+                    VIRTUAL_ROW_MARGIN_RESET_CLASSNAME,
                 )}
                 style={{
                   position: "absolute",

@@ -328,6 +328,44 @@ describe("Messages virtualization", () => {
     expect(list.style.height).toBe(`${400 * 108}px`);
   });
 
+  it("estimates rows that mount after the switch from the measured rows", () => {
+    // The flat 120px estimate is taller than these 100px rows, so a shell sized
+    // from it would report a total the real rows never reach. `chat-interface`
+    // restores the reader's offset on "load older" from the shell's height
+    // delta, so that bias over-counts the prepended page and drags the visible
+    // content up. The estimate must instead come from the rows measured while
+    // plain, which keeps the shell's total consistent with the rows it holds.
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: Element) {
+        const rect = {
+          width: 800,
+          height: 100,
+          top: 0,
+          left: 0,
+          right: 800,
+          bottom: 100,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+        } as DOMRect;
+        return rect;
+      },
+    );
+
+    const { rerender } = renderMessages(buildEvents(100));
+    rerender(<Harness events={buildEvents(400)} withScrollParent />);
+    // 20 more messages arrive after the switch. They were never measured while
+    // plain and sit far below the viewport, so their size comes from the
+    // estimate. The flat 120px guess would make the shell report 45600px, a
+    // total the 108px rows never reach; `chat-interface` restores the reader's
+    // offset on "load older" from exactly that delta, so the bias drags the
+    // visible content up.
+    rerender(<Harness events={buildEvents(420)} withScrollParent />);
+
+    const list = screen.getByTestId("virtualized-message-list");
+    expect(list.style.height).toBe(`${420 * 108}px`);
+  });
+
   it("seeds the shell from each row's occupied height, margins included", () => {
     // A user bubble carries `mt-6`, so a plain row occupies its border box plus
     // that margin, and a virtual row's own box contains it too (block layout).

@@ -3,7 +3,7 @@ import {
   BOTTOM_THRESHOLD_PX,
   buildInitialMeasurements,
   measurePlainRow,
-  shouldAdjustScrollOnSizeChange,
+  anchorScrollOnItemSizeChange,
 } from "#/components/conversation-events/chat/scroll-anchoring";
 
 const rectAt = (top: number, bottom: number): DOMRect =>
@@ -87,7 +87,9 @@ describe("measurePlainRow", () => {
   });
 });
 
-describe("shouldAdjustScrollOnSizeChange", () => {
+describe("anchorScrollOnItemSizeChange", () => {
+  // A mutable element standing in for the scroll container: the helper must
+  // read `scrollTop` live (not a cached offset) and write it back.
   const makeInstance = (
     scrollTop: number,
     clientHeight: number,
@@ -98,55 +100,97 @@ describe("shouldAdjustScrollOnSizeChange", () => {
       clientHeight,
       scrollHeight,
     } as unknown as HTMLElement;
-    return { scrollOffset: scrollTop, scrollElement: element };
+    return { element, instance: { scrollElement: element } };
   };
 
-  it("keeps the default behavior for a row above the viewport", () => {
-    const instance = makeInstance(500, 400, 1000);
+  it("moves a row above the viewport so the content under it stays put", () => {
+    const { element, instance } = makeInstance(500, 400, 1000);
 
-    expect(shouldAdjustScrollOnSizeChange({ start: 100 }, 50, instance)).toBe(
-      true,
-    );
-  });
-
-  it("adjusts when a row below the viewport grows while the reader is pinned to the bottom", () => {
-    // The viewport bottom (1000) is already at the pre-change content bottom, so
-    // the reader is pinned and the row's growth must be followed.
-    const instance = makeInstance(600, 400, 1000);
-
-    expect(shouldAdjustScrollOnSizeChange({ start: 800 }, 200, instance)).toBe(
-      true,
-    );
-  });
-
-  it("leaves the offset alone when the reader is not near the bottom", () => {
-    const instance = makeInstance(0, 400, 1000);
-
-    expect(shouldAdjustScrollOnSizeChange({ start: 800 }, 200, instance)).toBe(
+    // Always false: the helper applies the correction itself, so the virtualizer
+    // must not add its own on top.
+    expect(anchorScrollOnItemSizeChange({ start: 100 }, 50, instance)).toBe(
       false,
     );
+    expect(element.scrollTop).toBe(550);
   });
 
-  it("does not treat growth below the viewport top as pinned when the reader is away from the bottom", () => {
+  it("follows a row that grows while the reader is pinned to the bottom", () => {
+    // The viewport bottom (1000) is already at the pre-change content bottom, so
+    // the reader is pinned and the row's growth must be followed.
+    const { element, instance } = makeInstance(600, 400, 1000);
+
+    expect(anchorScrollOnItemSizeChange({ start: 800 }, 200, instance)).toBe(
+      false,
+    );
+    expect(element.scrollTop).toBe(800);
+  });
+
+  it("leaves a row below the viewport alone when the reader is not pinned", () => {
+    const { element, instance } = makeInstance(0, 400, 1000);
+
+    expect(anchorScrollOnItemSizeChange({ start: 800 }, 200, instance)).toBe(
+      false,
+    );
+    expect(element.scrollTop).toBe(0);
+  });
+
+  it("does not treat a visible row's growth as pinned when the reader is away from the bottom", () => {
     // scrollTop=500, clientHeight=400, scrollHeight=1000 (before the change):
     // the viewport bottom (900) is 100px short of the content bottom, so the
     // reader is scrolling history. A visible row at 600 growing by 200 must not
     // be read as pinned — comparing against a height that already includes the
-    // new 200px (`scrollHeight - delta` = 800) would wrongly return true.
-    const instance = makeInstance(500, 400, 1000);
+    // new 200px (`scrollHeight - delta` = 800) would wrongly move the offset.
+    const { element, instance } = makeInstance(500, 400, 1000);
 
-    expect(shouldAdjustScrollOnSizeChange({ start: 600 }, 200, instance)).toBe(
+    expect(anchorScrollOnItemSizeChange({ start: 600 }, 200, instance)).toBe(
       false,
     );
+    expect(element.scrollTop).toBe(500);
   });
 
   it("tolerates a change within the bottom threshold", () => {
     // Bottom is exactly BOTTOM_THRESHOLD_PX short of the pre-change content
     // bottom, which still counts as pinned.
-    const instance = makeInstance(600 - BOTTOM_THRESHOLD_PX, 400, 1000);
-
-    expect(shouldAdjustScrollOnSizeChange({ start: 800 }, 100, instance)).toBe(
-      true,
+    const { element, instance } = makeInstance(
+      600 - BOTTOM_THRESHOLD_PX,
+      400,
+      1000,
     );
+
+    expect(anchorScrollOnItemSizeChange({ start: 800 }, 100, instance)).toBe(
+      false,
+    );
+    expect(element.scrollTop).toBe(600 - BOTTOM_THRESHOLD_PX + 100);
+  });
+
+  it("corrects from the live position, not a stale cached offset", () => {
+    // The chat writes `scrollTop` directly (stick-to-bottom) in the same frame
+    // as these corrections. TanStack's default applies the delta to the offset
+    // cached at the last `scroll` event, which predates that jump, so the list
+    // is dragged back to it and ends up short of the bottom. The helper must
+    // read the element's live position instead.
+    const element = {
+      scrollTop: 1000,
+      clientHeight: 400,
+      scrollHeight: 1400,
+    } as unknown as HTMLElement;
+    // A stale cached offset that is 16px behind the live position.
+    const instance = { scrollElement: element, scrollOffset: 984 };
+
+    expect(anchorScrollOnItemSizeChange({ start: 900 }, 16, instance)).toBe(
+      false,
+    );
+    // Live position (1000) plus the delta — not the cached 984.
+    expect(element.scrollTop).toBe(1016);
+  });
+
+  it("does nothing without a scroll element or for a zero delta", () => {
+    expect(
+      anchorScrollOnItemSizeChange({ start: 0 }, 10, { scrollElement: null }),
+    ).toBe(false);
+
+    const { element, instance } = makeInstance(100, 400, 1000);
+    expect(anchorScrollOnItemSizeChange({ start: 0 }, 0, instance)).toBe(false);
+    expect(element.scrollTop).toBe(100);
   });
 });
