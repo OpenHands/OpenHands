@@ -86,13 +86,18 @@ export type RenderedItem =
  *
  * `allEvents` should be the full event history so observations can find
  * their matching action; if omitted, it defaults to `events`.
+ *
+ * `trailingMinSize` applies to the run at the very end of `events`. While the
+ * agent is working, pass 1 so the stage it is on is a group from its first
+ * step and does not jump from a lone row into a group when a second arrives.
  */
 export const groupEvents = (
   events: OpenHandsEvent[],
   minSize: number = EVENT_GROUP_MIN_SIZE,
   allEvents: OpenHandsEvent[] = events,
+  trailingMinSize: number = minSize,
 ): RenderedItem[] => {
-  if (minSize < 1) {
+  if (minSize < 1 || trailingMinSize < 1) {
     throw new Error("minSize must be at least 1");
   }
 
@@ -100,9 +105,9 @@ export const groupEvents = (
   const emittedThoughtActionIds = new Set<string>();
   let run: { events: OpenHandsEvent[]; startIndex: number } | null = null;
 
-  const flushRun = () => {
+  const flushRun = (size = minSize) => {
     if (!run) return;
-    if (run.events.length >= minSize) {
+    if (run.events.length >= size) {
       items.push({
         kind: "group",
         events: run.events,
@@ -139,6 +144,6 @@ export const groupEvents = (
     }
   });
 
-  flushRun();
+  flushRun(trailingMinSize);
   return items;
 };

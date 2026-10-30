@@ -290,6 +290,25 @@ describe("groupEvents", () => {
     expect(() => groupEvents([], 0)).toThrow("minSize must be at least 1");
   });
 
+  it("groups a lone trailing step when the trailing size allows it", () => {
+    const events = [
+      makeUserMessage("m1"),
+      makeBashObservation("o1", "a1"),
+      makeUserMessage("m2"),
+      makeBashAction("a2"),
+    ];
+
+    // The earlier lone step keeps the normal minimum; only the last run
+    // (the stage the agent is on) uses the trailing size.
+    const result = groupEvents(events, undefined, events, 1);
+    expect(result.map((item) => item.kind)).toEqual([
+      "single",
+      "single",
+      "single",
+      "group",
+    ]);
+  });
+
   it("emits singles when there are not enough actions in a row", () => {
     const events = [
       makeUserMessage("m1"),
