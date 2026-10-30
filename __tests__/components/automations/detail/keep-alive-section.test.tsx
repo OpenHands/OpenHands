@@ -30,6 +30,9 @@ const continueConversationAutomation: Automation = {
   keep_alive: true,
 };
 
+const expandAdvanced = (user: ReturnType<typeof userEvent.setup>) =>
+  user.click(screen.getByTestId("automation-advanced-toggle"));
+
 const getSwitch = () =>
   screen.getByRole("switch", { name: I18nKey.AUTOMATIONS$DETAIL$KEEP_ALIVE });
 
@@ -51,6 +54,22 @@ describe("KeepAliveSection", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
+  it("keeps the setting collapsed under Advanced until expanded", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    renderWithProviders(<KeepAliveSection automation={automation} canEdit />);
+    const toggle = screen.getByTestId("automation-advanced-toggle");
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+
+    // Act
+    await expandAdvanced(user);
+
+    // Assert
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(getSwitch()).toBeInTheDocument();
+  });
+
   it.each([
     { saved: false, next: true },
     { saved: true, next: false },
@@ -68,6 +87,7 @@ describe("KeepAliveSection", () => {
           canEdit
         />,
       );
+      await expandAdvanced(user);
       expect(getSwitch()).toHaveAttribute("aria-checked", String(saved));
       expect(
         screen.getByText(I18nKey.AUTOMATIONS$DETAIL$KEEP_ALIVE_DESCRIPTION),
@@ -83,14 +103,18 @@ describe("KeepAliveSection", () => {
     },
   );
 
-  it("treats a null keep_alive as off", () => {
-    // Arrange & Act
+  it("treats a null keep_alive as off", async () => {
+    // Arrange
+    const user = userEvent.setup();
     renderWithProviders(
       <KeepAliveSection
         automation={{ ...automation, keep_alive: null }}
         canEdit
       />,
     );
+
+    // Act
+    await expandAdvanced(user);
 
     // Assert
     expect(getSwitch()).toHaveAttribute("aria-checked", "false");
@@ -103,6 +127,7 @@ describe("KeepAliveSection", () => {
     renderWithProviders(
       <KeepAliveSection automation={automation} canEdit={false} />,
     );
+    await expandAdvanced(user);
 
     // Act
     await user.click(getSwitch());
@@ -119,6 +144,7 @@ describe("KeepAliveSection", () => {
     renderWithProviders(
       <KeepAliveSection automation={continueConversationAutomation} canEdit />,
     );
+    await expandAdvanced(user);
 
     // Act
     await user.click(getSwitch());

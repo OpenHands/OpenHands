@@ -521,11 +521,14 @@ describe("AutomationDetail — keep sandbox alive", () => {
         keep_alive: true,
       });
 
-      // Act
+      const user = userEvent.setup();
       renderDetail();
 
+      // Act
+      await user.click(await screen.findByTestId("automation-advanced-toggle"));
+
       // Assert
-      const keepAliveSwitch = await screen.findByRole("switch", {
+      const keepAliveSwitch = screen.getByRole("switch", {
         name: I18nKey.AUTOMATIONS$DETAIL$KEEP_ALIVE,
       });
       expect(keepAliveSwitch).toHaveAttribute("aria-checked", "true");
