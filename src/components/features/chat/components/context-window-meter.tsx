@@ -25,14 +25,14 @@ import {
 
 const TONE_BAR_CLASS = {
   neutral: "bg-foreground",
-  warning: "bg-amber-500",
-  danger: "bg-red-500",
+  warning: "bg-feedback-warning",
+  danger: "bg-status-error",
 } as const;
 
 const TONE_LABEL_CLASS = {
   neutral: "text-muted",
-  warning: "text-amber-500",
-  danger: "text-red-500",
+  warning: "text-feedback-warning",
+  danger: "text-feedback-error",
 } as const;
 
 export function ContextWindowMeter() {
@@ -102,7 +102,7 @@ export function ContextWindowMeter() {
           data-testid="context-window-meter-popover"
           className={cn(
             "absolute bottom-full right-0 z-[60] mb-2 w-70",
-            "flex flex-col gap-0.5 rounded-md border border-border-subtle bg-tertiary px-1 py-1 shadow-lg",
+            "flex flex-col gap-0.5 rounded-md border border-border-subtle bg-surface-raised px-1 py-1 shadow-lg",
           )}
         >
           <div className="flex flex-col gap-2 px-2 py-1.5">
@@ -118,8 +118,8 @@ export function ContextWindowMeter() {
             <button
               type="button"
               data-testid="context-window-meter-bar-button"
-              className="relative h-1.5 w-full rounded-full cursor-pointer"
-              style={{ backgroundColor: CONTEXT_WINDOW_TRACK_COLOR }}
+              className="relative h-1.5 w-full rounded-full border bg-tertiary cursor-pointer"
+              style={{ borderColor: CONTEXT_WINDOW_TRACK_COLOR }}
               aria-label={t(I18nKey.COMMON$USAGE)}
               onClick={(event) => {
                 event.preventDefault();

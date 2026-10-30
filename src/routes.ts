@@ -30,6 +30,7 @@ export default [
       route("condenser", "routes/condenser-settings.tsx"),
       route("agent-context", "routes/agent-context-settings.tsx"),
       route("verification", "routes/verification-settings.tsx"),
+      route("runtime", "routes/runtime-settings.tsx"),
       route("app", "routes/app-settings.tsx"),
       route("secrets", "routes/secrets-settings.tsx"),
     ]),
@@ -38,6 +39,7 @@ export default [
     route("automations/git-sync", "routes/automation-git-sync.tsx"),
     route("automations/templates", "routes/automation-templates.tsx"),
     route("automations/new/:automationId", "routes/automation-setup-route.tsx"),
+    route("automations/setup", "routes/automation-setup-new.tsx"),
     route("automations/:automationId", "routes/automation-detail.tsx"),
     // Unknown URLs (including /settings/<x>) render inside the app shell.
     route("*", "routes/not-found.tsx"),

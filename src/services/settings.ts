@@ -1,7 +1,5 @@
 import { Settings } from "#/types/settings";
 
-export const LATEST_SETTINGS_VERSION = 5;
-
 export const DEFAULT_SETTINGS: Settings = {
   llm_model: "openai/gpt-5.6-sol",
   llm_base_url: "",
@@ -57,8 +55,3 @@ export const DEFAULT_SETTINGS: Settings = {
     security_analyzer: "llm",
   },
 };
-
-/**
- * Get the default settings
- */
-export const getDefaultSettings = (): Settings => DEFAULT_SETTINGS;

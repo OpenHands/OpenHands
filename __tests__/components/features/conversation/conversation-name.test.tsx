@@ -15,6 +15,7 @@ import { ConversationNameContextMenu } from "#/components/features/conversation/
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import type { Backend } from "#/api/backend-registry/types";
 import type { Conversation } from "#/api/open-hands.types";
+import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 
 const localBackend: Backend = {
   id: "bundled",
@@ -95,11 +96,11 @@ vi.mock("react-i18next", async () => {
           BUTTON$SHOW_AGENT_TOOLS_AND_METADATA: "Show Agent Tools",
           CONVERSATION$SHOW_SKILLS: "Show Skills",
           BUTTON$DISPLAY_COST: "Display Usage and Cost",
-          COMMON$CLOSE_CONVERSATION_STOP_RUNTIME:
-            "Stop Conversation (Runtime)",
+          COMMON$CLOSE_CONVERSATION_STOP_RUNTIME: "Stop Conversation (Runtime)",
           COMMON$STOP_CONVERSATION: "Stop Conversation",
           COMMON$DELETE_CONVERSATION: "Delete Conversation",
           CONVERSATION$SHARE_PUBLICLY: "Share Publicly",
+          CONVERSATION$SHARE_WITH_ORG_USERS: "Share with Org users",
           CONVERSATION$LINK_COPIED: "Link copied to clipboard",
           BUTTON$COPY_TO_CLIPBOARD: "Copy to Clipboard",
           BUTTON$OPEN_IN_NEW_TAB: "Open in New Tab",
@@ -716,5 +717,53 @@ describe("ConversationName public sharing", () => {
 
     await user.click(screen.getByTestId("copy-share-link-button"));
     expect(writeTextSpy).toHaveBeenCalledWith(expectedUrl);
+  });
+
+  it("labels the share toggle for org users when the active org is a team org", async () => {
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "test-conversation-id",
+        title: "Test Conversation",
+        status: "RUNNING",
+        public: false,
+        created_by_user_id: "user-1",
+      } as Conversation & Pick<AppConversation, "created_by_user_id">,
+    });
+    useActiveBackendMock.mockReturnValue({
+      backend: cloudBackend,
+      orgId: "org-1",
+    });
+    const user = userEvent.setup();
+    renderConversationNameWithRouter();
+
+    await user.click(screen.getByTestId("ellipsis-button"));
+
+    expect(screen.getByText("Share with Org users")).toBeInTheDocument();
+    expect(screen.getByLabelText("Share with Org users")).toBe(
+      screen.getByTestId("share-publicly-button"),
+    );
+  });
+
+  it("keeps the Public Share label when the active org is the creator's personal workspace", async () => {
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "test-conversation-id",
+        title: "Test Conversation",
+        status: "RUNNING",
+        public: false,
+        created_by_user_id: "user-1",
+      } as Conversation & Pick<AppConversation, "created_by_user_id">,
+    });
+    useActiveBackendMock.mockReturnValue({
+      backend: cloudBackend,
+      orgId: "user-1",
+    });
+    const user = userEvent.setup();
+    renderConversationNameWithRouter();
+
+    await user.click(screen.getByTestId("ellipsis-button"));
+
+    expect(screen.getByText("Share Publicly")).toBeInTheDocument();
+    expect(screen.queryByText("Share with Org users")).not.toBeInTheDocument();
   });
 });

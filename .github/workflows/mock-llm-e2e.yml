@@ -75,7 +75,7 @@ jobs:
           AGENT_SERVER_VERSION: ${{ steps.defaults.outputs.agent_server_version }}
         run: |
           uv venv .mock-llm-venv
-          uv pip install -p .mock-llm-venv "openhands-sdk==$AGENT_SERVER_VERSION"
+          uv pip install -p .mock-llm-venv "openhands-sdk==$AGENT_SERVER_VERSION" pytest
 
       - name: Pre-warm automation backend (uvx cache)
         env:
@@ -86,6 +86,9 @@ jobs:
           # Without this, the 180s Playwright webServer timeout expires
           # before the automation backend finishes installing (~60-90s).
           uvx --from "openhands-automation==$AUTOMATION_VERSION" python -c "from openhands.automation.app import app; print('automation package cached')"
+
+      - name: Test mock LLM server
+        run: .mock-llm-venv/bin/python3 -m pytest tests/e2e/mock-llm/scripts -q
 
       - name: Verify mock LLM server starts
         run: |

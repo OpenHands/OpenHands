@@ -65,6 +65,9 @@ const TRIGGER_SOURCE_LABELS: Record<string, string> = {
   slack: "Slack",
   linear: "Linear",
   jira: "Jira",
+  jira_dc: "Jira Data Center",
+  bitbucket_data_center: "Bitbucket Data Center",
+  azure_devops: "Azure DevOps",
 };
 
 export function formatTriggerSourceLabel(source: string): string {
@@ -130,10 +133,6 @@ export function shouldShowAutomationRunSummaryHovercard(
 ): boolean {
   return summary.trim().replace(/\s+/g, " ") !== shortSummary;
 }
-
-export const shortenAutomationErrorDetail = shortenAutomationRunSummary;
-export const shouldShowAutomationErrorHovercard =
-  shouldShowAutomationRunSummaryHovercard;
 
 /**
  * Timestamp to show as the run's "last run" moment, or null when the run

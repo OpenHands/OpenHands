@@ -41,6 +41,8 @@ export const useUserConversation = (
     origin.current = { cid, backendId: active.backend.id };
   }
   const backendChanged = origin.current.backendId !== active.backend.id;
+  const hasConversationScope =
+    active.backend.kind !== "cloud" || !!active.orgId;
 
   return useQuery({
     // Include the active backend identity so each (backend, org) pair
@@ -59,7 +61,11 @@ export const useUserConversation = (
         await AgentServerConversationService.batchGetAppConversations([cid]);
       return results[0] ?? null;
     },
-    enabled: !!cid && !cid.startsWith("task-") && !backendChanged,
+    enabled:
+      !!cid &&
+      !cid.startsWith("task-") &&
+      !backendChanged &&
+      hasConversationScope,
     // Rate limits (429) are transient and worth a couple of backed-off
     // retries; any other failure (404, 5xx, network) fails immediately as
     // before rather than masking a real problem.

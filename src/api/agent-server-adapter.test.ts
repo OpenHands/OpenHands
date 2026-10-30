@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CANVAS_UI_CLIENT_TOOL_NAME } from "#/constants/canvas-ui";
 import { LAUNCH_CHILD_CONVERSATION_TOOL_NAME } from "#/constants/child-conversation";
+import { REQUEST_SECRET_TOOL_NAME } from "#/constants/secret-request";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import type { Settings } from "#/types/settings";
 import {
+  ACP_SERVER_TAG_KEY,
   AGENT_CANVAS_SOURCE,
   CLIENT_SOURCE_TAG_KEY,
   buildStartConversationRequest,
@@ -22,13 +24,11 @@ vi.mock("./secrets-service", () => ({
   SecretsService: { getSecrets: vi.fn().mockResolvedValue([]) },
 }));
 vi.mock("./agent-profiles-service/agent-profiles-service.api", () => ({
-  default: { listProfiles: vi.fn() },
+  default: { listProfiles: vi.fn(), getProfile: vi.fn() },
 }));
 vi.mock("./profiles-service/profiles-service.api", () => ({
   default: { getProfile: vi.fn() },
 }));
-
-const encryptedValue = "gAAAAAencrypted-mcp-header";
 
 function makeSettings(agentSettings: Settings["agent_settings"]): Settings {
   return {
@@ -42,19 +42,6 @@ function makeSettings(agentSettings: Settings["agent_settings"]): Settings {
   };
 }
 
-function getAgentContextSkillNames(
-  payload: ReturnType<typeof buildStartConversationRequest>,
-): Array<string | undefined> {
-  const agentSettings = payload.agent_settings as
-    | {
-        agent_context?: {
-          skills?: Array<{ name?: string }>;
-        };
-      }
-    | undefined;
-  return agentSettings?.agent_context?.skills?.map((skill) => skill.name) ?? [];
-}
-
 function getPlannerAgentContextSkillNames(payload: {
   agent: { agent_context?: { skills?: Array<{ name?: string }> } };
 }): Array<string | undefined> {
@@ -62,71 +49,6 @@ function getPlannerAgentContextSkillNames(payload: {
 }
 
 describe("buildStartConversationRequest", () => {
-  it("marks OpenHands start requests as encrypted when MCP headers are encrypted", () => {
-    const agentSettings = {
-      agent_kind: "openhands",
-      llm: {
-        model: "litellm_proxy/openai/gpt-5.5",
-        api_key: "gAAAAAencrypted-llm-api-key",
-      },
-      mcp_config: {
-        linear: {
-          url: "https://mcp.linear.app/mcp",
-          transport: "http",
-          headers: {
-            Authorization: encryptedValue,
-          },
-        },
-      },
-    };
-    const settings = makeSettings(agentSettings);
-
-    const payload = buildStartConversationRequest({
-      settings,
-      encryptedAgentSettings: agentSettings,
-      encryptedConversationSettings: settings.conversation_settings!,
-      secretsEncrypted: true,
-    });
-
-    expect(payload.agent_settings!.agent_kind).toBe("openhands");
-    expect(payload.agent_settings!.mcp_config).toEqual(
-      agentSettings.mcp_config,
-    );
-    expect(payload.secrets_encrypted).toBe(true);
-  });
-
-  it("marks ACP start requests as encrypted when MCP headers are encrypted", () => {
-    const agentSettings = {
-      agent_kind: "acp",
-      acp_server: "codex",
-      acp_command: ["codex-acp"],
-      acp_model: "gpt-5.5/medium",
-      mcp_config: {
-        linear: {
-          url: "https://mcp.linear.app/mcp",
-          transport: "http",
-          headers: {
-            Authorization: encryptedValue,
-          },
-        },
-      },
-    };
-    const settings = makeSettings(agentSettings);
-
-    const payload = buildStartConversationRequest({
-      settings,
-      encryptedAgentSettings: agentSettings,
-      encryptedConversationSettings: settings.conversation_settings!,
-      secretsEncrypted: true,
-    });
-
-    expect(payload.agent_settings!.agent_kind).toBe("acp");
-    expect(payload.agent_settings!.mcp_config).toEqual(
-      agentSettings.mcp_config,
-    );
-    expect(payload.secrets_encrypted).toBe(true);
-  });
-
   it("builds a raw planning agent request for local Planner", () => {
     const agentSettings = {
       agent_kind: "openhands",
@@ -180,6 +102,41 @@ describe("buildStartConversationRequest", () => {
     expect(payload.tags).toEqual({ plannerparent: "parent-1" });
     expect(payload.secrets_encrypted).toBe(true);
     expect(payload.secrets).toHaveProperty("CUSTOM_TOKEN");
+  });
+
+  // @spec LLD-001 — Frontend always sends its chosen default model
+  it.each([
+    [
+      "configured",
+      { model: "anthropic/claude-opus-4-5" },
+      "anthropic/claude-opus-4-5",
+    ],
+    ["undefined", {}, DEFAULT_SETTINGS.llm_model],
+    ["an empty string", { model: "" }, DEFAULT_SETTINGS.llm_model],
+    ["whitespace only", { model: "   " }, DEFAULT_SETTINGS.llm_model],
+  ])(
+    "sends the planner an explicit model when it is %s",
+    (_case, llm, model) => {
+      const payload = buildStartPlanningConversationRequest({
+        encryptedAgentSettings: { llm },
+        workingDir: "/workspace/project/agent-canvas",
+        parentConversationId: "parent-1",
+      });
+
+      expect(payload.agent.llm).toMatchObject({ model });
+    },
+  );
+
+  it("sends the planner the default model when settings carry no LLM", () => {
+    const payload = buildStartPlanningConversationRequest({
+      encryptedAgentSettings: {},
+      workingDir: "/workspace/project/agent-canvas",
+      parentConversationId: "parent-1",
+    });
+
+    expect(payload.agent.llm).toMatchObject({
+      model: DEFAULT_SETTINGS.llm_model,
+    });
   });
 
   it("links the local planner to its parent server-side so the relationship survives storage loss", () => {
@@ -280,158 +237,31 @@ describe("buildStartConversationRequest", () => {
     expect(page.items.map((item) => item.id)).toEqual(["main-1"]);
   });
 
-  it("keeps ACP start requests unencrypted when no encrypted MCP values are present", () => {
-    const agentSettings = {
-      agent_kind: "acp",
-      acp_server: "codex",
-      acp_command: ["codex-acp"],
-      acp_model: "gpt-5.5/medium",
-      mcp_config: {
-        publicDocs: {
-          url: "https://docs.example.com/mcp",
-          transport: "http",
-        },
-      },
-    };
-    const settings = makeSettings(agentSettings);
-
-    const payload = buildStartConversationRequest({
-      settings,
-      encryptedAgentSettings: agentSettings,
-      encryptedConversationSettings: settings.conversation_settings!,
-      secretsEncrypted: true,
-    });
-
-    expect(payload.agent_settings!.agent_kind).toBe("acp");
-    expect(payload.secrets_encrypted).toBeUndefined();
-  });
-
-  it("ships only allow-listed catalog skills to a OpenHands conversation context", () => {
-    const settings = makeSettings({
-      agent_kind: "openhands",
-      llm: {
-        model: "litellm_proxy/openai/gpt-5.5",
-        api_key: "sk-test",
-      },
-      agent_context: {
-        skills: [
-          { name: "disabled-custom", content: "disabled" },
-          { name: "enabled-custom", content: "enabled" },
-        ],
-      },
-    });
-    settings.disabled_skills = ["agent-memory", "disabled-custom"];
-
-    const payload = buildStartConversationRequest({ settings });
-    const skillNames = getAgentContextSkillNames(payload);
-
-    // `agent-memory` is default-enabled, so this asserts the deny-list still
-    // wins over the allow-list — the case that matters before the one-shot
-    // migration has run.
-    expect(skillNames).not.toContain("agent-memory");
-    expect(skillNames).not.toContain("disabled-custom");
-    // Skills already on the agent context are user-authored and stay opt-out.
-    expect(skillNames).toContain("enabled-custom");
-    // No `enabled_skills` on the settings means the curated default applies:
-    // `add-skill` is flagged `defaultEnabled` in the catalog, `add-javadoc` is
-    // not, and shipping every catalog skill is what OpenHands#16302 reported.
-    expect(skillNames).toContain("add-skill");
-    expect(skillNames).not.toContain("add-javadoc");
-
-    expect(payload.agent_settings?.agent_context?.disabled_skills).toEqual([
-      "agent-memory",
-      "disabled-custom",
-    ]);
-  });
-
-  it("ships only allow-listed catalog skills to a ACP conversation context", () => {
-    const settings = makeSettings({
-      agent_kind: "acp",
-      acp_server: "codex",
-      acp_command: ["codex-acp"],
-      acp_model: "gpt-5.5/medium",
-      agent_context: {
-        skills: [
-          { name: "disabled-custom", content: "disabled" },
-          { name: "enabled-custom", content: "enabled" },
-        ],
-      },
-    });
-    settings.disabled_skills = ["agent-memory", "disabled-custom"];
-
-    const payload = buildStartConversationRequest({ settings });
-    const skillNames = getAgentContextSkillNames(payload);
-
-    // `agent-memory` is default-enabled, so this asserts the deny-list still
-    // wins over the allow-list — the case that matters before the one-shot
-    // migration has run.
-    expect(skillNames).not.toContain("agent-memory");
-    expect(skillNames).not.toContain("disabled-custom");
-    // Skills already on the agent context are user-authored and stay opt-out.
-    expect(skillNames).toContain("enabled-custom");
-    // No `enabled_skills` on the settings means the curated default applies:
-    // `add-skill` is flagged `defaultEnabled` in the catalog, `add-javadoc` is
-    // not, and shipping every catalog skill is what OpenHands#16302 reported.
-    expect(skillNames).toContain("add-skill");
-    expect(skillNames).not.toContain("add-javadoc");
-
-    expect(payload.agent_settings?.agent_context?.disabled_skills).toEqual([
-      "agent-memory",
-      "disabled-custom",
-    ]);
-  });
-
   it("loads a catalog skill the opening slash command invokes", () => {
     // An automation card fills the chat input with the skill's own command
-    // (`findAutomationCommand`), and 18 of the catalog's 24 slash commands
-    // belong to skills that are off by default — without this the card would
-    // silently do nothing.
-    const settings = makeSettings({
-      agent_kind: "openhands",
-      llm: { model: "litellm_proxy/openai/gpt-5.5", api_key: "sk-test" },
-    });
-
+    // (`findAutomationCommand`), and most of the catalog's slash commands
+    // belong to skills a profile does not select — without this the card
+    // would silently do nothing.
     const payload = buildStartConversationRequest({
-      settings,
+      settings: makeSettings({ agent_kind: "openhands" }),
+      agentProfileId: "profile-xyz",
+      agentProfileKind: "openhands",
       query: "/standup-digest:setup",
     });
 
-    expect(getAgentContextSkillNames(payload)).toContain(
-      "slack-standup-digest",
-    );
+    expect(
+      payload.agent_launch_additions?.skills?.map((skill) => skill.name),
+    ).toEqual(["slack-standup-digest"]);
   });
-
   it("does not admit a skill named mid-sentence rather than invoked", () => {
-    const settings = makeSettings({
-      agent_kind: "openhands",
-      llm: { model: "litellm_proxy/openai/gpt-5.5", api_key: "sk-test" },
-    });
-
     const payload = buildStartConversationRequest({
-      settings,
+      settings: makeSettings({ agent_kind: "openhands" }),
+      agentProfileId: "profile-xyz",
+      agentProfileKind: "openhands",
       query: "tell me what /standup-digest:setup would do",
     });
 
-    expect(getAgentContextSkillNames(payload)).not.toContain(
-      "slack-standup-digest",
-    );
-  });
-
-  it("lets an invoked skill override a stored deny entry for that conversation", () => {
-    const settings = makeSettings({
-      agent_kind: "openhands",
-      llm: { model: "litellm_proxy/openai/gpt-5.5", api_key: "sk-test" },
-    });
-    settings.disabled_skills = ["slack-standup-digest"];
-
-    const payload = buildStartConversationRequest({
-      settings,
-      query: "/standup-digest:setup",
-    });
-
-    expect(getAgentContextSkillNames(payload)).toContain(
-      "slack-standup-digest",
-    );
+    expect(payload.agent_launch_additions).toBeUndefined();
   });
 });
 
@@ -439,6 +269,7 @@ describe("buildStartConversationRequest — execution runtime", () => {
   it("requests DockerExecutionWorkspace from Docker execution servers", () => {
     const payload = buildStartConversationRequest({
       settings: makeSettings({ agent_kind: "openhands" }),
+      agentProfileId: "profile-xyz",
       workingDir: "/host/workspace",
       executionRuntime: "docker",
     });
@@ -453,6 +284,7 @@ describe("buildStartConversationRequest — execution runtime", () => {
   it("keeps LocalWorkspace for local and older servers", () => {
     const payload = buildStartConversationRequest({
       settings: makeSettings({ agent_kind: "openhands" }),
+      agentProfileId: "profile-xyz",
       workingDir: "/host/workspace",
     });
 
@@ -534,7 +366,7 @@ describe("buildStartPlanningConversationRequestWithEncryptedSettings", () => {
         parentAgentProfileId: null,
       });
 
-    expect(AgentProfilesService.listProfiles).not.toHaveBeenCalled();
+    expect(ProfilesService.getProfile).not.toHaveBeenCalled();
     expect(payload.agent.llm).toMatchObject({
       model: "openhands/globally-active-model",
     });
@@ -580,7 +412,7 @@ describe("buildStartPlanningConversationRequestWithEncryptedSettings", () => {
     );
     // The launched agent profile must not even be consulted once
     // active_profile resolves successfully.
-    expect(AgentProfilesService.listProfiles).not.toHaveBeenCalled();
+    expect(ProfilesService.getProfile).toHaveBeenCalledTimes(1);
     expect(payload.agent.llm).toMatchObject({
       model: "openhands/switched-model",
       api_key: "gAAAAAswitched-key",
@@ -683,6 +515,36 @@ describe("buildStartPlanningConversationRequestWithEncryptedSettings", () => {
     expect(skillNames).toContain("add-javadoc");
   });
 
+  it("gives the planner the parent profile's skill selection over the global lists", async () => {
+    vi.mocked(SettingsService.getSettingsForConversation).mockResolvedValue({
+      ...globallyActiveSettings,
+      skillEnablement: { enabledSkills: ["agent-memory"], disabledSkills: [] },
+    });
+    vi.mocked(AgentProfilesService.getProfile).mockResolvedValue({
+      name: "parent-profile",
+      profile: {
+        id: "profile-parent",
+        name: "parent-profile",
+        revision: 1,
+        agent_kind: "openhands",
+        llm_profile_ref: "parent-llm",
+        public_skills: ["add-javadoc"],
+        disabled_skills: [],
+      },
+    } as never);
+
+    const payload =
+      await buildStartPlanningConversationRequestWithEncryptedSettings({
+        workingDir: "/workspace/project",
+        parentConversationId: "parent-1",
+        parentAgentProfileId: "profile-parent",
+      });
+
+    const skillNames = getPlannerAgentContextSkillNames(payload);
+    expect(skillNames).toContain("add-javadoc");
+    expect(skillNames).not.toContain("agent-memory");
+  });
+
   it("threads executionRuntime through to DockerExecutionWorkspace selection", async () => {
     const payload =
       await buildStartPlanningConversationRequestWithEncryptedSettings({
@@ -712,22 +574,6 @@ describe("buildStartPlanningConversationRequestWithEncryptedSettings", () => {
 });
 
 describe("buildStartConversationRequest — agentProfileId path", () => {
-  it("appends the saved global suffix to a profile launch", () => {
-    const payload = buildStartConversationRequest({
-      settings: makeSettings({
-        agent_kind: "openhands",
-        agent_context: { system_message_suffix: "MARKER-GLOBAL-RULES" },
-      }),
-      agentProfileId: "profile-xyz",
-      agentProfileKind: "openhands",
-    });
-
-    expect(payload.agent_launch_additions).toEqual({
-      system_message_suffix_append: "MARKER-GLOBAL-RULES",
-    });
-    expect(payload.agent_settings).toBeUndefined();
-  });
-
   it("sends agent_profile_id and omits agent_settings (mutually exclusive)", () => {
     const settings = makeSettings({
       agent_kind: "openhands",
@@ -746,64 +592,41 @@ describe("buildStartConversationRequest — agentProfileId path", () => {
     expect(payload.client_tools.map((tool) => tool.name)).toEqual([
       CANVAS_UI_CLIENT_TOOL_NAME,
       LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
+      REQUEST_SECRET_TOOL_NAME,
     ]);
   });
 
-  it("suppresses the ACP server tag when launching from a profile", () => {
-    const agentSettings = {
-      agent_kind: "acp",
-      acp_server: "codex",
-      acp_command: ["codex-acp"],
-      acp_model: "gpt-5.5/medium",
-    };
-
-    // Without a profile the ACP server tag is stamped from settings...
-    expect(
-      buildStartConversationRequest({ settings: makeSettings(agentSettings) })
-        .tags,
-    ).toBeDefined();
-
-    // ...but a profile launch resolves the server server-side, so the tag
-    // (which may not match the launched profile) is omitted while the client
-    // source telemetry tag is still stamped.
+  it("carries a per-launch LLM override", () => {
     const payload = buildStartConversationRequest({
-      settings: makeSettings(agentSettings),
+      settings: makeSettings({ agent_kind: "openhands" }),
       agentProfileId: "profile-xyz",
+      agentProfileKind: "openhands",
+      llmProfileOverride: "fast",
     });
-    expect(payload.tags).toEqual({
-      [CLIENT_SOURCE_TAG_KEY]: AGENT_CANVAS_SOURCE,
+
+    expect(payload.agent_launch_additions).toEqual({
+      llm_profile_ref: "fast",
     });
   });
+  it("stamps the launched ACP profile's server as the ACP server tag", () => {
+    const tagsFor = (
+      agentProfileKind: "acp" | "openhands",
+      acpServer?: string,
+    ) =>
+      buildStartConversationRequest({
+        // Global settings name another ACP server; the profile decides.
+        settings: makeSettings({ agent_kind: "acp", acp_server: "codex" }),
+        agentProfileId: "profile-xyz",
+        agentProfileKind,
+        acpServer,
+      }).tags;
 
-  it("suppresses secrets_encrypted when launching from a profile", () => {
-    const agentSettings = {
-      agent_kind: "openhands",
-      llm: {
-        model: "litellm_proxy/openai/gpt-5.5",
-        api_key: "gAAAAAencrypted-llm-api-key",
-      },
-      mcp_config: {
-        mcpServers: {
-          linear: {
-            url: "https://mcp.linear.app/mcp",
-            transport: "http",
-            headers: { Authorization: encryptedValue },
-          },
-        },
-      },
-    };
-    const settings = makeSettings(agentSettings);
-
-    // Same inputs without a profile would set secrets_encrypted (covered
-    // above); the profile path defers secret resolution to the server.
-    const payload = buildStartConversationRequest({
-      settings,
-      encryptedAgentSettings: agentSettings,
-      encryptedConversationSettings: settings.conversation_settings!,
-      secretsEncrypted: true,
-      agentProfileId: "profile-xyz",
+    expect(tagsFor("acp", "claude-code")).toEqual({
+      [ACP_SERVER_TAG_KEY]: "claude-code",
+      [CLIENT_SOURCE_TAG_KEY]: AGENT_CANVAS_SOURCE,
     });
-
-    expect(payload.secrets_encrypted).toBeUndefined();
+    expect(tagsFor("openhands")).toEqual({
+      [CLIENT_SOURCE_TAG_KEY]: AGENT_CANVAS_SOURCE,
+    });
   });
 });

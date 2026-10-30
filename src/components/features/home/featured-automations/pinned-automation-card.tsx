@@ -3,7 +3,6 @@ import { ExternalLink } from "lucide-react";
 import { useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { buildAutomationMetadataPills } from "#/components/features/automations/build-automation-pills";
-import { EditAutomationModal } from "#/components/features/automations/detail/edit-automation-modal";
 import {
   RunPhase,
   shouldShowRunPhase,
@@ -286,12 +285,7 @@ export function PinnedAutomationCard({
               />
 
               {showPhase ? (
-                <RunPhase
-                  status={latestRun.status}
-                  code={latestRun.phase_code}
-                  label={latestRun.phase_label}
-                  updatedAt={latestRun.phase_updated_at}
-                />
+                <RunPhase currentPhase={latestRun.current_phase} />
               ) : null}
 
               {shortSummary ? (
@@ -356,14 +350,6 @@ export function PinnedAutomationCard({
             copy={insights.stats}
           />
         </div>
-      ) : null}
-
-      {actions.editOpen ? (
-        <EditAutomationModal
-          automation={automation}
-          isOpen={actions.editOpen}
-          onClose={() => actions.setEditOpen(false)}
-        />
       ) : null}
 
       <TurnOffConfirmationModal

@@ -36,6 +36,9 @@ const ManageBackendsModal = React.lazy(() =>
 );
 
 const MOBILE_DRAWER_TRANSITION_MS = 250;
+const MOBILE_DRAWER_TRANSITION_STYLE = {
+  "--mobile-drawer-transition-duration": `${MOBILE_DRAWER_TRANSITION_MS}ms`,
+} as React.CSSProperties;
 
 export function Sidebar() {
   const { t } = useTranslation("openhands");
@@ -207,7 +210,7 @@ export function Sidebar() {
           setCollapsedRailHovered(false);
         }}
         className={cn(
-          "max-md:hidden flex bg-base flex-col min-h-0 transition-[width,min-width] duration-200",
+          "max-md:hidden flex bg-canvas-base flex-col min-h-0 transition-[width,min-width] duration-200",
           "md:border-r md:border-border md:h-full",
           collapsed
             ? "md:w-15 md:min-w-15 md:px-2.5"
@@ -227,12 +230,12 @@ export function Sidebar() {
           <div
             className={cn(
               "fixed inset-0 z-40 bg-black/50 md:hidden",
-              "transition-opacity ease-in-out motion-reduce:transition-none",
+              "transition-opacity duration-(--mobile-drawer-transition-duration) ease-in-out motion-reduce:transition-none",
               mobileDrawerVisible
                 ? "opacity-100"
                 : "pointer-events-none opacity-0",
             )}
-            style={{ transitionDuration: `${MOBILE_DRAWER_TRANSITION_MS}ms` }}
+            style={MOBILE_DRAWER_TRANSITION_STYLE}
             onClick={closeMobileNav}
             aria-hidden={!mobileDrawerVisible}
           />
@@ -241,12 +244,12 @@ export function Sidebar() {
             data-testid="sidebar-mobile-drawer"
             aria-hidden={!mobileDrawerVisible}
             className={cn(
-              "fixed inset-y-0 left-0 z-50 flex min-h-0 w-[min(300px,85vw)] flex-col bg-base",
+              "fixed inset-y-0 left-0 z-50 flex min-h-0 w-[min(300px,85vw)] flex-col bg-canvas-base",
               "border-r border-border pb-2 pl-2.5 pr-0 md:hidden",
-              "transition-transform ease-in-out motion-reduce:transition-none",
+              "transition-transform duration-(--mobile-drawer-transition-duration) ease-in-out motion-reduce:transition-none",
               mobileDrawerVisible ? "translate-x-0" : "-translate-x-full",
             )}
-            style={{ transitionDuration: `${MOBILE_DRAWER_TRANSITION_MS}ms` }}
+            style={MOBILE_DRAWER_TRANSITION_STYLE}
           >
             <SidebarRailBody
               collapsed={false}

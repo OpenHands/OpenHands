@@ -21,6 +21,12 @@ import { useGoalStore } from "#/stores/goal-store";
 import { useModelStore } from "#/stores/model-store";
 import useMetricsStore from "#/stores/metrics-store";
 import { useFilesTabStore } from "#/stores/files-tab-store";
+import {
+  __resetActiveStoreForTests,
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
+import type { Backend } from "#/api/backend-registry/types";
 import EventService from "#/api/event-service/event-service.api";
 import { SERVER_CONNECTION_ERROR_MESSAGE } from "#/constants/server-connection-error";
 import { getStoredConversationMetadata } from "#/api/conversation-metadata-store";
@@ -47,6 +53,7 @@ const socketCapture = vi.hoisted(() => ({
   disconnectMain: vi.fn(),
   disconnectPlanning: vi.fn(),
   queueMessage: vi.fn(),
+  clientOptions: vi.fn(),
   readConversationFile: vi.fn(),
   trackError: vi.fn(),
   launchChild: vi.fn(),
@@ -108,7 +115,10 @@ vi.mock("#/utils/error-handler", () => ({
 }));
 
 vi.mock("#/api/agent-server-client-options", () => ({
-  getAgentServerClientOptions: () => ({ baseUrl: "http://agent-server.test" }),
+  getAgentServerClientOptions: (...args: unknown[]) => {
+    socketCapture.clientOptions(...args);
+    return { baseUrl: "http://agent-server.test" };
+  },
 }));
 
 vi.mock("@openhands/typescript-client/clients", () => ({
@@ -342,6 +352,7 @@ describe("Conversation websocket behavior", () => {
     socketCapture.disconnectMain.mockReset();
     socketCapture.disconnectPlanning.mockReset();
     socketCapture.queueMessage.mockReset().mockResolvedValue(undefined);
+    socketCapture.clientOptions.mockReset();
     socketCapture.readConversationFile.mockReset();
     socketCapture.trackError.mockReset();
     socketCapture.launchChild.mockReset().mockResolvedValue(undefined);
@@ -2519,5 +2530,129 @@ describe("Conversation websocket — page visibility reconnect (#17894)", () => 
     // while the foreground health check is retrying.
     act(() => mainOptions().onClose?.(new CloseEvent("close")));
     expect(contextCapture.current?.hasConnectedOnce).toBe(true);
+  });
+});
+
+describe("Conversation websocket — cloud runtime without a URL (OHE-3314)", () => {
+  const cloudBackend: Backend = {
+    id: "cloud-test",
+    name: "Cloud",
+    host: "https://cloud.test",
+    apiKey: "bearer-token",
+    kind: "cloud",
+  };
+  const runtimeUrl = "https://runtime.test/api/conversations/conv-main";
+
+  const rerenderProvider = (
+    view: ReturnType<typeof renderProvider>,
+    props: Partial<ProviderProps>,
+  ) =>
+    view.rerender(
+      <QueryClientProvider client={view.queryClient}>
+        <ConversationWebSocketProvider conversationId="conv-main" {...props}>
+          <ContextProbe />
+        </ConversationWebSocketProvider>
+      </QueryClientProvider>,
+    );
+
+  beforeEach(() => {
+    socketCapture.callIndex = 0;
+    socketCapture.mainOptions = null;
+    socketCapture.planningOptions = null;
+    socketCapture.mainSocket = null;
+    socketCapture.planningSocket = null;
+    socketCapture.queueMessage.mockReset().mockResolvedValue(undefined);
+    socketCapture.clientOptions.mockReset();
+    contextCapture.current = null;
+    historyCapture.result = {
+      data: { events: [] },
+      isPending: false,
+      isFetching: false,
+      isError: false,
+    };
+    useErrorMessageStore.getState().removeErrorMessage();
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
+    useEventStore.setState({
+      events: [],
+      eventIds: new Set(),
+      uiEvents: [],
+      loadedConversationId: null,
+    });
+    useConversationStore.setState({ conversationMode: "code" });
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+  });
+
+  afterEach(() => {
+    __resetActiveStoreForTests();
+    window.localStorage.clear();
+  });
+
+  it("holds a message while the runtime has no URL and sends it once the socket opens", async () => {
+    const view = renderProvider({ conversationUrl: null });
+    const request = makeSendRequest("hello");
+
+    await expect(contextCapture.current?.sendMessage(request)).resolves.toEqual(
+      { queued: true },
+    );
+    // A second submit of the same text while still held is coalesced.
+    await contextCapture.current?.sendMessage(request);
+
+    expect(socketCapture.queueMessage).not.toHaveBeenCalled();
+    expect(useErrorMessageStore.getState().errorMessage).toBeNull();
+
+    socketCapture.mainSocket = makeSocket();
+    rerenderProvider(view, { conversationUrl: runtimeUrl, sessionApiKey: "k" });
+    act(() => socketCapture.mainOptions?.onOpen?.(new Event("open")));
+
+    await waitFor(() =>
+      expect(socketCapture.mainSocket?.send).toHaveBeenCalledTimes(1),
+    );
+    expect(socketCapture.mainSocket?.send).toHaveBeenCalledWith(
+      JSON.stringify({ ...request, run: true }),
+    );
+    expect(socketCapture.queueMessage).not.toHaveBeenCalled();
+  });
+
+  it("withdraws a held message whose pending bubble was stopped before the socket opened", async () => {
+    const view = renderProvider({ conversationUrl: null });
+    const pendingId = useOptimisticUserMessageStore
+      .getState()
+      .enqueuePendingMessage({ conversationId: "conv-main", text: "hello" });
+
+    await expect(
+      contextCapture.current?.sendMessage(makeSendRequest("hello")),
+    ).resolves.toEqual({ queued: true });
+    useOptimisticUserMessageStore.getState().removePendingMessage(pendingId);
+
+    socketCapture.mainSocket = makeSocket();
+    rerenderProvider(view, { conversationUrl: runtimeUrl });
+    await act(async () => {
+      socketCapture.mainOptions?.onOpen?.(new Event("open"));
+    });
+
+    expect(socketCapture.mainSocket?.send).not.toHaveBeenCalled();
+  });
+
+  it("posts to a reachable runtime with its coordinates while the socket is closed", async () => {
+    renderProvider({
+      conversationUrl: runtimeUrl,
+      sessionApiKey: "session-key",
+    });
+    const request = makeSendRequest("now");
+
+    await expect(contextCapture.current?.sendMessage(request)).resolves.toEqual(
+      { queued: true },
+    );
+
+    expect(socketCapture.clientOptions).toHaveBeenCalledWith({
+      conversationUrl: runtimeUrl,
+      sessionApiKey: "session-key",
+    });
+    expect(socketCapture.queueMessage).toHaveBeenCalledWith(
+      "conv-main",
+      { role: "user", content: request.content },
+      { run: true },
+    );
   });
 });

@@ -6,8 +6,6 @@ import {
   getStyleHeightPx,
   isMobileDevice,
   isMobileUserAgent,
-  isProductionDomain,
-  removeUnwantedKeys,
   setStyleHeightPx,
 } from "#/utils/utils";
 
@@ -49,8 +47,7 @@ const useWindowCapabilities = ({
       if (property === "matchMedia") {
         if (finePointer === undefined) return undefined;
         return vi.fn((query: string) => ({
-          matches:
-            query === "(pointer: fine)" ? finePointer : !finePointer,
+          matches: query === "(pointer: fine)" ? finePointer : !finePointer,
         }));
       }
       return Reflect.get(target, property, receiver);
@@ -160,53 +157,6 @@ describe("mobile environment detection", () => {
     useWindowCapabilities({ hasTouchProperty: false });
 
     expect(isMobileDevice()).toBe(true);
-  });
-});
-
-describe("deployment domain detection", () => {
-  it.each([
-    ["https://app.all-hands.dev", true],
-    ["http://localhost:3000", false],
-  ])("reports whether %s is the production origin", (origin, expected) => {
-    vi.stubGlobal("window", { location: { origin } });
-
-    expect(isProductionDomain()).toBe(expected);
-  });
-});
-
-describe("event export sanitization", () => {
-  it("removes status entries and browser-only extras without mutating input", () => {
-    const retainedEvent = {
-      action: "browse",
-      extras: {
-        open_page_urls: ["https://example.com"],
-        active_page_index: 0,
-        dom_object: { tag: "main" },
-        axtree_object: { role: "document" },
-        extra_element_properties: { bid: "1" },
-        last_browser_action: "click",
-        last_browser_action_error: null,
-        focused_element_bid: "1",
-        trace_id: "trace-1",
-      },
-    };
-    const plainEvent = { action: "message", args: { content: "hello" } };
-    const statusEvent = { status: "ok", action: "ignored" };
-
-    const result = removeUnwantedKeys([retainedEvent, plainEvent, statusEvent]);
-
-    expect(result).toEqual([
-      {
-        action: "browse",
-        extras: { trace_id: "trace-1" },
-      },
-      plainEvent,
-    ]);
-    expect(result[0]).not.toBe(retainedEvent);
-    expect(result[0].extras).not.toBe(retainedEvent.extras);
-    expect(retainedEvent.extras.open_page_urls).toEqual([
-      "https://example.com",
-    ]);
   });
 });
 

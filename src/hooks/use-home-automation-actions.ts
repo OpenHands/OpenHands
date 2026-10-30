@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { useOpenAutomationEditor } from "#/hooks/use-open-automation-editor";
 import { useTranslation } from "react-i18next";
 import { useNavigation } from "#/context/navigation-context";
 import {
@@ -54,7 +55,7 @@ export function useHomeAutomationActions(
   const toggleMutation = useToggleAutomation({ disableToast: true });
   const cancelMutation = useCancelAutomationRun();
 
-  const [editOpen, setEditOpen] = useState(false);
+  const { openEditor } = useOpenAutomationEditor();
   const [turnOffConfirmOpen, setTurnOffConfirmOpen] = useState(false);
 
   const isRunPending =
@@ -86,8 +87,8 @@ export function useHomeAutomationActions(
   }, [automation.id, navigate]);
 
   const openEdit = useCallback(() => {
-    setEditOpen(true);
-  }, []);
+    openEditor(automation);
+  }, [automation, openEditor]);
 
   const requestTurnOff = useCallback(() => {
     setTurnOffConfirmOpen(true);
@@ -138,8 +139,6 @@ export function useHomeAutomationActions(
     isRunPending,
     isCancelPending,
     canCancel,
-    editOpen,
-    setEditOpen,
     turnOffConfirmOpen,
     runNow,
     viewDetails,

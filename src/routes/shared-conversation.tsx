@@ -75,7 +75,7 @@ export default function SharedConversation() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-base">
+      <div className="flex items-center justify-center h-screen bg-canvas-base">
         <LoadingSpinner size="large" />
       </div>
     );
@@ -83,14 +83,14 @@ export default function SharedConversation() {
 
   if (error || !conversation) {
     return (
-      <div className="flex items-center justify-center h-screen bg-base">
+      <div className="flex items-center justify-center h-screen bg-canvas-base">
         <div className="text-contrast">{t(I18nKey.CONVERSATION$NOT_FOUND)}</div>
       </div>
     );
   }
 
   return (
-    <div className="h-screen bg-base text-contrast flex flex-col">
+    <div className="h-screen bg-canvas-base text-contrast flex flex-col">
       {/* Header with logo, conversation title and branch info */}
       <div className="border-b border-border-subtle p-4 flex-shrink-0">
         <div className="max-w-4xl mx-auto flex items-start gap-4">

@@ -6,6 +6,10 @@ import { WorkspaceFileDiscoverySettings } from "#/components/features/files-tab/
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import { DEFAULT_FILE_DISCOVERY } from "#/utils/workspace-file-discovery";
+import {
+  MODAL_MAX_WIDTH_VIEWPORT,
+  MODAL_WIDTH_CLASS,
+} from "#/components/shared/modals/modal-body";
 import { useSettings } from "#/hooks/query/use-settings";
 
 vi.mock("#/api/settings-service/settings-service.api", () => ({
@@ -92,6 +96,17 @@ describe("workspace discovery settings", () => {
         },
       },
     });
+  });
+
+  it("caps the 520px dialog at 90vw so phone viewports cannot clip it", async () => {
+    const { user } = setup();
+    await user.click(
+      await screen.findByRole("button", { name: "FILES$DISCOVERY_SETTINGS" }),
+    );
+
+    const modal = screen.getByTestId("file-discovery-settings-modal");
+    expect(modal).toHaveClass(MODAL_WIDTH_CLASS.md);
+    expect(modal).toHaveClass(MODAL_MAX_WIDTH_VIEWPORT);
   });
 
   it("hydrates saved options, discards canceled drafts and restores defaults only on Save", async () => {

@@ -1,12 +1,16 @@
 {
   "_comment": "Single source of truth for version pins, ports, paths, and defaults shared across the npm and Docker install paths. Read by scripts/dev-safe.mjs, scripts/dev-with-automation.mjs, docker/entrypoint.sh (via generated defaults.env), and .github/workflows/docker.yml.",
   "versions": {
-    "agentServer": "1.53.0",
-    "agentCanvas": "1.25.0",
-    "automation": "1.19.0"
+    "agentServer": "1.59.0",
+    "agentCanvas": "1.34.0",
+    "automation": "1.26.1"
   },
   "compatibility": {
-    "minimumAgentServer": "1.51.0"
+    "minimumAgentServer": "1.57.0"
+  },
+  "python": {
+    "_comment": "Interpreter request the npm and desktop launchers pass to uvx as --python for agent-server and automation. Without it uvx downloads the newest CPython when it finds no suitable interpreter, which breaks every autumn until the SDK's compiled dependencies (lmnr-claude-code-proxy, fastuuid) publish wheels for the new release (OpenHands/OpenHands#18654). Raise the upper bound once they do. UV_PYTHON in the environment replaces it.",
+    "uvxRequest": ">=3.12,<3.15"
   },
   "images": {
     "agentServer": "ghcr.io/openhands/agent-server",
@@ -33,6 +37,11 @@
     "automation": "openhands-automation",
     "tools": "openhands-tools",
     "workspace": "openhands-workspace"
+  },
+  "mars": {
+    "_comment": "DigitalOcean Managed Agents: the Electron desktop app and the web build (its server hosts the experimental bridge only with MARS_WEB=1). apiBaseUrl is the harness API both use. oauthClientId (desktop only; the web build offers personal access tokens only) is the public client ID of the DigitalOcean OAuth app registered with redirect URI http://127.0.0.1:53682/callback; implicit grant needs no secret. Leave empty to offer personal access tokens only. Overridden at runtime by DO_OAUTH_CLIENT_ID / MARS_API_BASE_URL. Read by scripts/mars-tunnel-bridge.mjs.",
+    "apiBaseUrl": "https://api.digitalocean.com",
+    "oauthClientId": ""
   },
   "telemetry": {
     "posthogApiKey": "phc_kBtz5nKmxVRRQ7HtPwr2QX9eMC5j65zE86QKocVNwb4U",

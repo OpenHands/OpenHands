@@ -55,6 +55,7 @@ interface SetupAcpSecretsStepProps {
  * already exists shows an "already saved" placeholder and is left untouched
  * unless the user types a replacement.
  */
+// @spec WN-001 — Required-secret warning uses theme-aware warning feedback
 export function SetupAcpSecretsStep({
   providerKey,
   isActive,
@@ -195,7 +196,7 @@ export function SetupAcpSecretsStep({
       {blockNext ? (
         <p
           data-testid="onboarding-acp-secrets-blocked"
-          className="text-sm text-amber-300"
+          className="text-sm text-feedback-warning"
         >
           {t(I18nKey.ONBOARDING$ACP_SECRETS_REQUIRED_BLOCKED)}
         </p>

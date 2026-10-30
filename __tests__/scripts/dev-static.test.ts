@@ -4,10 +4,17 @@ import {
   buildAutomationBackendEnv,
   buildLocalServiceRouteArgs,
   parseArgs,
+  buildMarsWebEnv,
 } from "../../scripts/dev-static.mjs";
 import { buildFrontendEnv } from "../../scripts/static-build.mjs";
 
 describe("dev-static CLI", () => {
+  it("parses the explicit LAN session-key opt-in", () => {
+    expect(parseArgs(["--allow-lan-session-key"]).allowLanSessionKey).toBe(
+      true,
+    );
+    expect(parseArgs([]).allowLanSessionKey).toBe(false);
+  });
   it.each([
     [["--host", "0.0.0.0"], "0.0.0.0"],
     [["-H", "::"], "::"],
@@ -60,5 +67,32 @@ describe("dev-static", () => {
     expect(args).toContain("/api/automation=http://127.0.0.1:18001");
     expect(args).toContain("/server_info=http://127.0.0.1:18000");
     expect(args.filter((arg: string) => arg.includes("localhost"))).toEqual([]);
+  });
+});
+
+describe("dev-static MARS web bridge env", () => {
+  it("puts the bridge on the ingress behind the session key, and off the static child", () => {
+    const config = { sessionApiKey: "stack-key" } as never;
+    expect(buildMarsWebEnv("ingress", config)).toEqual({
+      MARS_WEB_KEY: "stack-key",
+    });
+    expect(buildMarsWebEnv("static", config)).toEqual({ MARS_WEB: "0" });
+  });
+
+  it("tells the ingress bridge where to keep sign-ins and how to encrypt them", () => {
+    const config = {
+      sessionApiKey: "stack-key",
+      stateDir: "/state",
+      secretKey: "settings-key",
+    } as never;
+    expect(buildMarsWebEnv("ingress", config)).toEqual({
+      MARS_WEB_KEY: "stack-key",
+      MARS_STATE_DIR: "/state",
+      OH_SECRET_KEY: "settings-key",
+    });
+  });
+
+  it("mounts nothing when the stack has no session key", () => {
+    expect(buildMarsWebEnv("ingress", {} as never)).toEqual({ MARS_WEB: "0" });
   });
 });
