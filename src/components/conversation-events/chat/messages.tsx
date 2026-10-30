@@ -154,7 +154,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
 
     return (
       <>
-        {renderedItems.map((item, itemIndex) => {
+        {renderedItems.map((item) => {
           if (item.kind === "single") {
             return (
               <React.Fragment key={`single-${getStepKey(item.event)}`}>
@@ -177,11 +177,6 @@ export const Messages: React.FC<MessagesProps> = React.memo(
             );
           }
 
-          // A group is "finalized" once another rendered item appears after
-          // it, signalling the agent has moved on. While the group is still
-          // the live tail, it keeps showing the latest action title as its
-          // prominent summary.
-          const isFinalized = itemIndex < renderedItems.length - 1;
           const groupKey = item.events[0]
             ? getStepKey(item.events[0])
             : `group-${item.startIndex}`;
@@ -195,7 +190,6 @@ export const Messages: React.FC<MessagesProps> = React.memo(
               <EventGroup
                 events={item.events}
                 allEvents={allEvents}
-                isFinalized={isFinalized}
                 open={groupOpen}
                 onOpenChange={(open) => setRowOpen(`group:${groupKey}`, open)}
               >

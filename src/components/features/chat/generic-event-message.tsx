@@ -83,7 +83,7 @@ export function GenericEventMessage({
   const titleContent = (
     <div
       data-testid="generic-event-message-title"
-      className={cn("flex items-center", details && "cursor-pointer")}
+      className={cn("flex min-w-0 items-center", details && "cursor-pointer")}
       onClick={handleTitleClick}
       onMouseEnter={startHover}
       onMouseLeave={endHover}
@@ -99,8 +99,9 @@ export function GenericEventMessage({
       {/* Wrap the title in a span so any whitespace inside Trans-rendered
           fragments (e.g. "Editing <path>...</path>") is preserved by
           normal inline flow instead of being collapsed between
-          anonymous flex items. */}
-      <span>{title}</span>
+          anonymous flex items. Long titles stay on one line and end
+          in an ellipsis. */}
+      <span className="min-w-0 truncate">{title}</span>
       {chevronPosition === "after" && chevron}
     </div>
   );
@@ -119,7 +120,7 @@ export function GenericEventMessage({
   );
 
   const titleRow = (
-    <div className="flex items-center justify-between font-normal text-muted">
+    <div className="flex min-w-0 items-center justify-between font-normal text-muted">
       {titleContentWithTimestamp}
       <div className="flex items-center">
         {titleTrailing}

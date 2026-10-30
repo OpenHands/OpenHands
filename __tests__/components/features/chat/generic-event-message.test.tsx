@@ -40,6 +40,19 @@ describe("GenericEventMessage", () => {
     expect(screen.queryByText("file contents")).not.toBeInTheDocument();
   });
 
+  it("keeps a long title on one line", () => {
+    render(
+      <GenericEventMessage
+        title="Ran a very long command that would otherwise wrap"
+        details="output"
+      />,
+    );
+
+    expect(
+      screen.getByText("Ran a very long command that would otherwise wrap"),
+    ).toHaveClass("truncate");
+  });
+
   it("is not clickable when there are no details", () => {
     render(<GenericEventMessage title="Finished" details="" />);
 
