@@ -364,7 +364,8 @@ export function BackendSelector({
 
   return (
     <>
-      <div className="flex items-center gap-2 w-full">
+      {/* The menu spans this whole row, including the settings button. */}
+      <div className="relative flex items-center gap-2 w-full">
         <div className="flex-1 min-w-0">
           <Dropdown
             testId="backend-selector"
@@ -381,6 +382,7 @@ export function BackendSelector({
             footer={addBackendFooter}
             openUpward={openUpward}
             matchTriggerWidth
+            anchorMenuToParent
             tallMenu
             onOpenChange={onMenuOpenChange}
             hideTrigger={hideTrigger}

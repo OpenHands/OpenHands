@@ -431,6 +431,22 @@ describe("Dropdown", () => {
     });
   });
 
+  describe("Menu anchoring", () => {
+    it("anchors the menu to the trigger by default and to the parent row when asked", () => {
+      // The absolutely positioned menu takes its width and position from the
+      // nearest positioned ancestor: the trigger wrapper unless anchored to the parent.
+      const { rerender } = render(
+        <Dropdown options={mockOptions} testId="picker" />,
+      );
+      expect(screen.getByTestId("picker")).toHaveClass("relative");
+
+      rerender(
+        <Dropdown options={mockOptions} testId="picker" anchorMenuToParent />,
+      );
+      expect(screen.getByTestId("picker")).not.toHaveClass("relative");
+    });
+  });
+
   describe("Grouped options", () => {
     it("lists consecutive options under one heading with their short labels", async () => {
       const user = userEvent.setup();

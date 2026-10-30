@@ -32,6 +32,11 @@ interface DropdownProps {
   fitContent?: boolean;
   /** Keep the menu exactly as wide as the trigger; long labels truncate. */
   matchTriggerWidth?: boolean;
+  /**
+   * Position the menu against the nearest positioned ancestor instead of the
+   * trigger, so it can span a wider row that contains the trigger.
+   */
+  anchorMenuToParent?: boolean;
   /** Allow a taller menu before it scrolls, for menus with a footer and headings. */
   tallMenu?: boolean;
   /** Called whenever the menu opens or closes. */
@@ -57,6 +62,7 @@ export function Dropdown({
   italicPlaceholder = true,
   fitContent = false,
   matchTriggerWidth = false,
+  anchorMenuToParent = false,
   tallMenu = false,
   onOpenChange,
 }: DropdownProps) {
@@ -153,7 +159,10 @@ export function Dropdown({
 
   return (
     <div
-      className={cn("relative", fitContent ? "inline-block w-auto" : "w-full")}
+      className={cn(
+        !anchorMenuToParent && "relative",
+        fitContent ? "inline-block w-auto" : "w-full",
+      )}
       data-testid={testId}
       onMouseEnter={
         openOnHover
