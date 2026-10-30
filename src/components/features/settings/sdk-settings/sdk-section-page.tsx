@@ -128,6 +128,8 @@ export interface SettingsSourceConfig {
   sectionKeys: string[];
   /** Field keys to skip (rendered elsewhere by the caller). */
   excludeKeys?: Set<string>;
+  /** Choice values to hide, by field key. */
+  excludeChoices?: Record<string, string[]>;
 }
 
 export interface SdkSectionHeaderProps {
@@ -158,6 +160,11 @@ export interface SdkSectionSaveControl {
   values: SettingsFormValues;
   /** The active view tier (basic/advanced/all) the form is rendering. */
   view: SettingsView;
+  /**
+   * Returns the exact payload the built-in save action sends, including any
+   * feature-specific canonicalization supplied through `buildPayload`.
+   */
+  getSavePayload: () => Record<string, unknown>;
   /**
    * Returns the coerced, dirty-only payload as a nested object
    * (e.g. `{ llm: { temperature: 0.7 } }`). Lets a custom save flow persist
@@ -267,6 +274,7 @@ export function SdkSectionPage({
           source: s.settingsSource,
           sectionKeys: s.sectionKeys,
           excludeKeys: s.excludeKeys ? Array.from(s.excludeKeys).sort() : null,
+          excludeChoices: s.excludeChoices ?? null,
         })),
       ),
     [settingsSources],
@@ -277,11 +285,13 @@ export function SdkSectionPage({
       source: SettingsValueSource;
       sectionKeys: string[];
       excludeKeys: string[] | null;
+      excludeChoices: Record<string, string[]> | null;
     }>;
     return parsed.map((p) => ({
       settingsSource: p.source,
       sectionKeys: p.sectionKeys,
       excludeKeys: p.excludeKeys ? new Set(p.excludeKeys) : undefined,
+      excludeChoices: p.excludeChoices ?? undefined,
     }));
   }, [sourcesSignature]);
 
@@ -313,13 +323,29 @@ export function SdkSectionPage({
         // so keep the first section per key; otherwise every field renders
         // twice and React sees duplicate section keys.
         const seenKeys = new Set<string>();
+        const excludeChoices = src.excludeChoices ?? {};
         const filteredSchema: SettingsSchema = {
           ...schema,
-          sections: schema.sections.filter((s) => {
-            if (!sectionSet.has(s.key) || seenKeys.has(s.key)) return false;
-            seenKeys.add(s.key);
-            return true;
-          }),
+          sections: schema.sections
+            .filter((s) => {
+              if (!sectionSet.has(s.key) || seenKeys.has(s.key)) return false;
+              seenKeys.add(s.key);
+              return true;
+            })
+            .map((s) => ({
+              ...s,
+              fields: s.fields.map((field) =>
+                excludeChoices[field.key]
+                  ? {
+                      ...field,
+                      choices: field.choices.filter(
+                        (c) =>
+                          !excludeChoices[field.key].includes(String(c.value)),
+                      ),
+                    }
+                  : field,
+              ),
+            })),
         };
         return { ...src, filteredSchema };
       }),
@@ -579,9 +605,15 @@ export function SdkSectionPage({
     handleSaveRef.current();
   }, []);
 
-  // Stable accessor for the coerced, dirty-only payload. Mirrors the
-  // `handleSaveRef` pattern so the exposed function reference stays stable
-  // across renders while always reading the latest closure at call time.
+  // Stable payload accessors mirror `handleSaveRef`: consumers keep stable
+  // function identities while each call reads the latest form closure.
+  const buildSavePayloadRef = React.useRef<() => Record<string, unknown>>(
+    () => ({}),
+  );
+  const stableGetSavePayload = React.useCallback(
+    () => buildSavePayloadRef.current(),
+    [],
+  );
   const buildDirtyPayloadRef = React.useRef<() => Record<string, unknown>>(
     () => ({}),
   );
@@ -590,41 +622,45 @@ export function SdkSectionPage({
     [],
   );
 
+  buildSavePayloadRef.current = () => {
+    const defaultPayload: Record<string, unknown> = {};
+    for (const src of resolvedSources) {
+      if (!src.filteredSchema) continue;
+      const sourceValues = valuesBySource[src.settingsSource] ?? {};
+      const sourceDirty = dirtyBySource[src.settingsSource] ?? {};
+      const diff = buildSdkSettingsPayloadForView(
+        src.filteredSchema,
+        sourceValues,
+        sourceDirty,
+        view,
+      );
+      if (Object.keys(diff).length > 0) {
+        const diffKey = PAYLOAD_DIFF_KEY[src.settingsSource];
+        defaultPayload[diffKey] = {
+          ...((defaultPayload[diffKey] as
+            | Record<string, unknown>
+            | undefined) ?? {}),
+          ...diff,
+        };
+      }
+    }
+
+    return buildPayload
+      ? buildPayload(defaultPayload, {
+          values: flatValues,
+          dirty: flatDirty,
+          view,
+        })
+      : defaultPayload;
+  };
+
   const handleSave = () => {
     if (isReadOnly) return;
     if (resolvedSources.some((src) => !src.filteredSchema)) return;
 
     let payload: Record<string, unknown>;
     try {
-      const defaultPayload: Record<string, unknown> = {};
-      for (const src of resolvedSources) {
-        const schema = src.filteredSchema!;
-        const sourceValues = valuesBySource[src.settingsSource] ?? {};
-        const sourceDirty = dirtyBySource[src.settingsSource] ?? {};
-        const diff = buildSdkSettingsPayloadForView(
-          schema,
-          sourceValues,
-          sourceDirty,
-          view,
-        );
-        if (Object.keys(diff).length > 0) {
-          const diffKey = PAYLOAD_DIFF_KEY[src.settingsSource];
-          defaultPayload[diffKey] = {
-            ...((defaultPayload[diffKey] as
-              | Record<string, unknown>
-              | undefined) ?? {}),
-            ...diff,
-          };
-        }
-      }
-
-      payload = buildPayload
-        ? buildPayload(defaultPayload, {
-            values: flatValues,
-            dirty: flatDirty,
-            view,
-          })
-        : defaultPayload;
+      payload = stableGetSavePayload();
     } catch (error) {
       displayErrorToast(
         error instanceof Error ? error.message : t(I18nKey.ERROR$GENERIC),
@@ -677,6 +713,7 @@ export function SdkSectionPage({
       isDirty: saveControlIsDirty,
       values: flatValues,
       view,
+      getSavePayload: stableGetSavePayload,
       getDirtyPayload: stableGetDirtyPayload,
     });
   }, [isPending, saveControlIsDirty, flatValues, view]);
@@ -698,9 +735,7 @@ export function SdkSectionPage({
         data-testid="sdk-schema-unavailable"
         className={extensionModuleEmptyStateClassName}
       >
-        <p className="text-sm text-[var(--oh-muted)]">
-          {schemaUnavailableMessage}
-        </p>
+        <p className="text-sm text-muted">{schemaUnavailableMessage}</p>
       </div>
     );
   }

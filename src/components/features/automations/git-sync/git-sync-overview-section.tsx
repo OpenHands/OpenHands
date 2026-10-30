@@ -4,7 +4,7 @@ import { RefreshCw } from "lucide-react";
 import type { GitSyncStatus } from "#/types/git-sync";
 import { formatTimeDelta } from "#/utils/format-time-delta";
 import { parseGitRemoteUrl } from "#/utils/parse-git-remote-url";
-import { cn } from "#/utils/utils";
+import { cn, encodePathSegment } from "#/utils/utils";
 import GitBranchIcon from "#/icons/git-branch.svg?react";
 import GlobeIcon from "#/icons/globe.svg?react";
 import FolderIcon from "#/icons/folder.svg?react";
@@ -41,7 +41,38 @@ function browseUrlFor(repoUrl: string): string | null {
     return url.toString();
   }
 
-  return `https://${parsed.host}/${parsed.repository}`;
+  // `parsed.repository` is decoded for display, so re-encode each segment
+  // before it goes back into a URL.
+  const repositoryPath = parsed.repository
+    .split("/")
+    .map(encodePathSegment)
+    .join("/");
+  return `https://${parsed.host}/${repositoryPath}`;
+}
+
+// `scheme://userinfo@`; the greedy userinfo stops at the authority's last `@`,
+// where the WHATWG URL parser also ends it.
+const URL_USERINFO_PATTERN = /^([a-z][a-z\d+.-]*:\/\/)([^/?#]*)@/i;
+
+/**
+ * The configured remote as shown on the card, without embedded credentials.
+ * Like the href, an http(s) remote loses its whole userinfo, since a token
+ * often rides in the username slot alone. Other schemes keep the user, which
+ * names the account (`ssh://git@host`), and lose only a password. The rest of
+ * the value is shown exactly as configured.
+ */
+function displayUrlFor(repoUrl: string): string {
+  const url = repoUrl.trim();
+  const match = url.match(URL_USERINFO_PATTERN);
+  if (!match) return url;
+
+  const [userinfoPrefix, scheme, userinfo] = match;
+  const rest = url.slice(userinfoPrefix.length);
+  if (/^https?:\/\/$/i.test(scheme)) return `${scheme}${rest}`;
+
+  const passwordStart = userinfo.indexOf(":");
+  if (passwordStart === -1) return url;
+  return `${scheme}${userinfo.slice(0, passwordStart)}@${rest}`;
 }
 
 interface GitSyncOverviewSectionProps {
@@ -63,6 +94,7 @@ export function GitSyncOverviewSection({
 }: GitSyncOverviewSectionProps) {
   const { t } = useTranslation("openhands");
   const repoHref = browseUrlFor(status.repo_url);
+  const repoLabel = displayUrlFor(status.repo_url);
 
   return (
     <SectionCard
@@ -130,12 +162,11 @@ export function GitSyncOverviewSection({
               rel="noopener noreferrer"
               className="break-all underline transition-colors hover:text-foreground"
             >
-              {status.repo_url}
+              {repoLabel}
             </a>
           ) : (
             <span className="break-all">
-              {status.repo_url ||
-                t(I18nKey.AUTOMATIONS$GIT_SYNC$NOT_CONFIGURED)}
+              {repoLabel || t(I18nKey.AUTOMATIONS$GIT_SYNC$NOT_CONFIGURED)}
             </span>
           )}
         </ConfigField>
@@ -191,9 +222,7 @@ export function GitSyncOverviewSection({
           icon={<ClockIcon className="size-3.5" />}
           label={t(I18nKey.AUTOMATIONS$GIT_SYNC$PENDING_CHANGES)}
         >
-          <span
-            className={cn(status.dirty_count > 0 && "text-[var(--oh-warning)]")}
-          >
+          <span className={cn(status.dirty_count > 0 && "text-warning")}>
             {status.dirty_count}
           </span>
         </ConfigField>

@@ -17,7 +17,10 @@ export function BtwMessages({ conversationId }: BtwMessagesProps) {
   if (!conversationId || entries.length === 0) return null;
 
   return (
-    <div data-testid="btw-messages" className="flex flex-col w-full">
+    <div
+      data-testid="btw-messages"
+      className="custom-scrollbar-always flex max-h-[40vh] w-full flex-col overflow-y-auto overscroll-contain"
+    >
       {entries.map((entry) => {
         const isPending = entry.status === "pending";
         return (
@@ -32,7 +35,7 @@ export function BtwMessages({ conversationId }: BtwMessagesProps) {
                 {isPending && (
                   <span
                     data-testid="btw-spinner"
-                    className="inline-block w-3.5 h-3.5 ml-2 rounded-full border-2 border-transparent border-t-[var(--oh-border-input)] animate-spin"
+                    className="inline-block w-3.5 h-3.5 ml-2 rounded-full border-2 border-transparent border-t-border-input animate-spin"
                   />
                 )}
               </span>

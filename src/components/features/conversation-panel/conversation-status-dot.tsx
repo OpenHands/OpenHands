@@ -3,6 +3,7 @@ import { FaArchive } from "react-icons/fa";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
+import { isMissingSandboxStatus } from "#/utils/conversation-archive-status";
 
 interface ConversationStatusDotProps {
   executionStatus: ExecutionStatus | null | undefined;
@@ -19,6 +20,15 @@ interface ConversationStatusDotProps {
    * tooltip doesn't intercept the hover.
    */
   showTooltip?: boolean;
+  /**
+   * The row's effective archived state (explicit archive or a missing
+   * runtime). When true the dot shows the archive presentation even if the
+   * sandbox/execution state would otherwise render as working, finished, or
+   * errored, so the dot never disagrees with the "Archived" chip. Leave
+   * undefined for the runtime-derived archived case, which is inferred from
+   * `sandboxStatus`.
+   */
+  isArchived?: boolean;
 }
 
 type Visual = "check" | "working" | "active" | "paused" | "error" | "unknown";
@@ -66,7 +76,7 @@ function renderIndicator(visual: Visual) {
         <svg
           data-testid="conversation-status-check"
           viewBox="0 0 12 12"
-          className="w-2.5 h-2.5 stroke-[var(--oh-status-success)]"
+          className="w-2.5 h-2.5 stroke-status-success"
           fill="none"
           strokeWidth={2.25}
           strokeLinecap="round"
@@ -80,35 +90,35 @@ function renderIndicator(visual: Visual) {
       return (
         <span
           data-testid="conversation-status-working"
-          className="w-1.5 h-1.5 rounded-full animate-pulse bg-[var(--oh-status-success)]"
+          className="w-1.5 h-1.5 rounded-full animate-pulse bg-status-success"
         />
       );
     case "active":
       return (
         <span
           data-testid="conversation-status-active"
-          className="w-1.5 h-1.5 rounded-full bg-[var(--oh-status-success)]"
+          className="w-1.5 h-1.5 rounded-full bg-status-success"
         />
       );
     case "paused":
       return (
         <span
           data-testid="conversation-status-paused"
-          className="w-1.5 h-1.5 rounded-full bg-[var(--oh-muted)]"
+          className="w-1.5 h-1.5 rounded-full bg-muted"
         />
       );
     case "error":
       return (
         <span
           data-testid="conversation-status-error"
-          className="w-1.5 h-1.5 rounded-full bg-[var(--oh-status-error)]"
+          className="w-1.5 h-1.5 rounded-full bg-status-error"
         />
       );
     default:
       return (
         <span
           data-testid="conversation-status-unknown"
-          className="w-1.5 h-1.5 rounded-full bg-[var(--oh-color-tertiary)]"
+          className="w-1.5 h-1.5 rounded-full bg-tertiary"
         />
       );
   }
@@ -118,27 +128,29 @@ export function ConversationStatusDot({
   executionStatus,
   sandboxStatus,
   showTooltip = true,
+  isArchived,
 }: ConversationStatusDotProps) {
   const { t } = useTranslation("openhands");
 
-  // sandbox_status === "MISSING" → show archived (gray) dot
-  // sandbox_status === "ERROR"   → show error (red) dot
-  // Otherwise fall through to the execution-status visual.
-  const isArchived = sandboxStatus === "MISSING";
+  // An archived row (explicit archive or missing runtime) downloads to a gray
+  // archive icon so it matches the "Archived" chip. A missing sandbox is
+  // inferred here for callers that only pass `sandboxStatus`; an unarchived
+  // `ERROR` row keeps its red "Error" dot.
+  const archived = isArchived ?? isMissingSandboxStatus(sandboxStatus);
   const effectiveVisual: Visual =
-    sandboxStatus === "ERROR"
+    sandboxStatus === "ERROR" && !archived
       ? "error"
-      : isArchived
+      : archived
         ? "paused"
         : visualFor(executionStatus);
 
   const visual = effectiveVisual;
-  const label = t(labelKeyFor(visual, isArchived));
-  const indicator = isArchived ? (
+  const label = t(labelKeyFor(visual, archived));
+  const indicator = archived ? (
     <FaArchive
       data-testid="conversation-status-archived"
       size={10}
-      className="shrink-0 text-[var(--oh-muted)] opacity-60"
+      className="shrink-0 text-muted opacity-60"
       aria-hidden
     />
   ) : (
@@ -158,7 +170,7 @@ export function ConversationStatusDot({
       content={label}
       placement="right"
       showArrow
-      tooltipClassName="bg-base text-white text-xs shadow-lg"
+      tooltipClassName="bg-canvas-base text-contrast text-xs shadow-lg"
     >
       {dot}
     </StyledTooltip>

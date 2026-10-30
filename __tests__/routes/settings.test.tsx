@@ -106,7 +106,39 @@ describe("settings route", () => {
     expect(result).toBeNull();
   });
 
-  it("renders the current OSS section title", () => {
+  it.each(["/settings/app", "/settings/app/"])(
+    "renders the current OSS section title on %s",
+    (path) => {
+      const RouterStub = createRoutesStub([
+        {
+          path: "/settings",
+          Component: SettingsScreen,
+          children: [
+            {
+              path: "/settings/app",
+              Component: () => <div data-testid="app-settings-screen" />,
+            },
+          ],
+        },
+      ]);
+
+      render(
+        <QueryClientProvider client={new QueryClient()}>
+          <ActiveBackendProvider>
+            <RouterStub initialEntries={[path]} />
+          </ActiveBackendProvider>
+        </QueryClientProvider>,
+      );
+
+      expect(
+        screen.getByRole("heading", { name: "SETTINGS$NAV_APPLICATION" }),
+      ).toBeInTheDocument();
+      expect(screen.getByTestId("app-settings-screen")).toBeInTheDocument();
+    },
+  );
+
+  it("exposes a single main landmark that holds the settings page", () => {
+    // Arrange
     const RouterStub = createRoutesStub([
       {
         path: "/settings",
@@ -120,6 +152,7 @@ describe("settings route", () => {
       },
     ]);
 
+    // Act
     render(
       <QueryClientProvider client={new QueryClient()}>
         <ActiveBackendProvider>
@@ -128,10 +161,12 @@ describe("settings route", () => {
       </QueryClientProvider>,
     );
 
-    expect(
-      screen.getAllByText("SETTINGS$NAV_APPLICATION").length,
-    ).toBeGreaterThan(0);
-    expect(screen.getByTestId("app-settings-screen")).toBeInTheDocument();
+    // Assert — nested <main> elements give screen readers two landmarks.
+    const landmarks = screen.getAllByRole("main");
+    expect(landmarks).toHaveLength(1);
+    expect(landmarks[0]).toContainElement(
+      screen.getByTestId("app-settings-screen"),
+    );
   });
 
   it("keeps the section title of a page that is not in the listed navigation", () => {

@@ -110,7 +110,7 @@ Install the prerequisites on the machine. On Ubuntu:
 ```bash
 apt-get update
 apt-get install -y curl git
-# Node.js 22.x (use nvm, asdf, or NodeSource — whatever you prefer)
+# Node.js 24.x (use nvm, asdf, or NodeSource — whatever you prefer)
 # uv (for the agent-server uvx runtime):
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```

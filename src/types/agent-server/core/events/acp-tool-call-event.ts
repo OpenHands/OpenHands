@@ -5,7 +5,17 @@ import { BaseEvent } from "../base/event";
  * Tool kinds emitted by ACP agents. Matches ACP's ``ToolKind`` enum,
  * with ``"other"`` as the catch-all fallback.
  */
-export type ACPToolKind = "execute" | "edit" | "read" | "fetch" | "other";
+export type ACPToolKind =
+  | "read"
+  | "edit"
+  | "delete"
+  | "move"
+  | "search"
+  | "execute"
+  | "think"
+  | "fetch"
+  | "switch_mode"
+  | "other";
 
 /**
  * Status of an ACP tool call. The SDK persists two events per
@@ -21,9 +31,11 @@ export type ACPToolCallStatus =
   | "failed";
 
 /**
- * An ACP content block as surfaced on ``ACPToolCallEvent.content``. ACP
- * allows a mix of text, image, resource and resource_link blocks; only the
- * shape needed for rendering is captured here.
+ * An ACP tool call content block as surfaced on ``ACPToolCallEvent.content``:
+ * ``content`` (wrapping a text, image, resource or resource_link block),
+ * ``diff`` (``path`` + ``old_text`` / ``new_text``; camelCase on the ACP wire)
+ * or ``terminal``. Only the discriminator is typed; fields are read
+ * defensively by ``getACPToolCallContent``.
  */
 export interface ACPToolCallContentBlock {
   type: string;

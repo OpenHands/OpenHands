@@ -12,6 +12,7 @@ import {
   resumeGoal,
   startGoal,
   stopGoal,
+  updateConversationSecrets,
 } from "#/hooks/mutation/conversation-mutation-utils";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 
@@ -22,10 +23,12 @@ const mocks = vi.hoisted(() => ({
   getAgentServerClientOptions: vi.fn(),
   interruptConversation: vi.fn(),
   pauseCloudSandbox: vi.fn(),
+  resumeCloudSandbox: vi.fn(),
   resumeGoal: vi.fn(),
   runConversation: vi.fn(),
   startGoal: vi.fn(),
   stopGoal: vi.fn(),
+  updateSecrets: vi.fn(),
 }));
 
 vi.mock("@openhands/typescript-client/clients", () => ({
@@ -37,16 +40,19 @@ vi.mock("@openhands/typescript-client/clients", () => ({
       runConversation: mocks.runConversation,
       startGoal: mocks.startGoal,
       stopGoal: mocks.stopGoal,
+      updateSecrets: mocks.updateSecrets,
     };
   }),
 }));
 
 vi.mock("#/api/backend-registry/active-store", () => ({
   getActiveBackend: mocks.getActiveBackend,
+  getEffectiveLocalBackend: () => null,
 }));
 
 vi.mock("#/api/cloud/conversation-service.api", () => ({
   pauseCloudSandbox: mocks.pauseCloudSandbox,
+  resumeCloudSandbox: mocks.resumeCloudSandbox,
 }));
 
 vi.mock("#/api/agent-server-client-options", () => ({
@@ -260,6 +266,76 @@ describe("conversation runtime commands", () => {
     expectRuntimeClient(CONV_ID, conversation);
     expect(mocks.runConversation).toHaveBeenCalledOnce();
     expect(mocks.runConversation).toHaveBeenCalledWith(CONV_ID);
+  });
+
+  it("wakes the cloud sandbox instead of calling a runtime that has no URL yet", async () => {
+    prepareRuntimeConversation({
+      conversation_url: null,
+      session_api_key: null,
+      sandbox_status: "PAUSED",
+    });
+    mocks.getActiveBackend.mockReturnValueOnce({ backend: { kind: "cloud" } });
+    mocks.resumeCloudSandbox.mockResolvedValueOnce(undefined);
+
+    await expect(resumeConversation(CONV_ID)).resolves.toEqual({
+      success: true,
+    });
+
+    expect(mocks.resumeCloudSandbox).toHaveBeenCalledOnce();
+    expect(mocks.resumeCloudSandbox).toHaveBeenCalledWith("sandbox-1");
+    expect(mocks.runConversation).not.toHaveBeenCalled();
+    expect(mocks.getAgentServerClientOptions).not.toHaveBeenCalled();
+  });
+
+  it("names the conversation when a paused cloud sandbox has no sandbox id to wake", async () => {
+    prepareRuntimeConversation({
+      conversation_url: null,
+      session_api_key: null,
+      sandbox_id: null,
+      sandbox_status: "PAUSED",
+    });
+    mocks.getActiveBackend.mockReturnValueOnce({ backend: { kind: "cloud" } });
+
+    await expect(resumeConversation(CONV_ID)).rejects.toThrow(
+      `cloud conversation ${CONV_ID} has no sandbox_id`,
+    );
+
+    expect(mocks.resumeCloudSandbox).not.toHaveBeenCalled();
+    expect(mocks.runConversation).not.toHaveBeenCalled();
+  });
+  it("hands saved secrets to a local conversation as value-free lookups", async () => {
+    const conversation = prepareRuntimeConversation();
+    mocks.getActiveBackend.mockReturnValueOnce({ backend: { kind: "local" } });
+    mocks.updateSecrets.mockResolvedValueOnce({ success: true });
+
+    await expect(
+      updateConversationSecrets(CONV_ID, [
+        { name: "GITHUB_TOKEN", description: "Factory repo access" },
+      ]),
+    ).resolves.toBeUndefined();
+
+    expectRuntimeClient(CONV_ID, conversation);
+    expect(mocks.updateSecrets).toHaveBeenCalledOnce();
+    expect(mocks.updateSecrets).toHaveBeenCalledWith(CONV_ID, {
+      secrets: {
+        GITHUB_TOKEN: {
+          kind: "LookupSecret",
+          url: "/api/settings/secrets/GITHUB_TOKEN",
+          description: "Factory repo access",
+        },
+      },
+    });
+  });
+
+  it("leaves cloud conversations to resolve secrets server-side", async () => {
+    mocks.getActiveBackend.mockReturnValueOnce({ backend: { kind: "cloud" } });
+
+    await expect(
+      updateConversationSecrets(CONV_ID, [{ name: "GITHUB_TOKEN" }]),
+    ).resolves.toBeUndefined();
+
+    expect(mocks.batchGetAppConversations).not.toHaveBeenCalled();
+    expect(mocks.updateSecrets).not.toHaveBeenCalled();
   });
 });
 

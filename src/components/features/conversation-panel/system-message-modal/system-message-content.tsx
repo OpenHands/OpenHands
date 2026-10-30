@@ -11,7 +11,7 @@ export function SystemMessageContent({ content }: SystemMessageContentProps) {
       font="mono"
       lineHeight="relaxed"
       padding="medium"
-      className="text-[var(--oh-text-tertiary)]"
+      className="text-text-tertiary"
     >
       {content}
     </Pre>

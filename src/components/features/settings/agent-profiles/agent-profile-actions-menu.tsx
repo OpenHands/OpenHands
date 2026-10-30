@@ -15,10 +15,19 @@ import CheckCircleIcon from "#/icons/u-check-circle.svg?react";
 import DeleteIcon from "#/icons/u-delete.svg?react";
 import { MenuItem } from "#/components/features/settings/llm-profiles/profile-actions-menu-item";
 
+// A natively disabled button ignores focus(), so keyboard navigation has to
+// skip it rather than stop on it.
+const getEnabledItems = (items: (HTMLButtonElement | null)[]) =>
+  items.filter((item): item is HTMLButtonElement =>
+    Boolean(item && !item.disabled),
+  );
+
 interface AgentProfileActionsMenuProps {
   onEdit: () => void;
   onSetActive: () => void;
   onDelete: () => void;
+  /** Disables Delete and explains why. */
+  deleteDisabledReason?: string;
   isActive: boolean;
   isActivating: boolean;
   onClose: () => void;
@@ -34,6 +43,7 @@ export function AgentProfileActionsMenu({
   onEdit,
   onSetActive,
   onDelete,
+  deleteDisabledReason,
   isActive,
   isActivating,
   onClose,
@@ -71,9 +81,12 @@ export function AgentProfileActionsMenu({
     };
   }, [anchorElement]);
 
+  // The anchored menu renders nothing until its position is measured, so wait
+  // for the items to exist before focusing the first enabled one.
+  const isMenuRendered = !anchorElement || portalStyle !== undefined;
   useEffect(() => {
-    menuItemsRef.current[0]?.focus();
-  }, []);
+    if (isMenuRendered) getEnabledItems(menuItemsRef.current)[0]?.focus();
+  }, [isMenuRendered]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -83,7 +96,12 @@ export function AgentProfileActionsMenu({
       onClose();
     };
     const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") {
+        if (menuRef.current?.contains(document.activeElement)) {
+          anchorElement?.focus();
+        }
+        onClose();
+      }
     };
     document.addEventListener("mousedown", handleClickOutside);
     document.addEventListener("keydown", handleEscape);
@@ -101,21 +119,24 @@ export function AgentProfileActionsMenu({
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent, currentIndex: number) => {
       if (e.key === "Tab") {
+        // The anchored menu is portaled to the end of <body>; move focus back
+        // to its trigger so Tab continues from the row, not the page end.
+        anchorElement?.focus();
         onClose();
         return;
       }
-      const itemCount = menuItemsRef.current.filter(Boolean).length;
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        const nextIndex = (currentIndex + 1) % itemCount;
-        menuItemsRef.current[nextIndex]?.focus();
-      } else if (e.key === "ArrowUp") {
-        e.preventDefault();
-        const prevIndex = (currentIndex - 1 + itemCount) % itemCount;
-        menuItemsRef.current[prevIndex]?.focus();
-      }
+      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+      e.preventDefault();
+      const enabledItems = getEnabledItems(menuItemsRef.current);
+      const position = enabledItems.findIndex(
+        (item) => item === menuItemsRef.current[currentIndex],
+      );
+      const step = e.key === "ArrowDown" ? 1 : -1;
+      const target =
+        (position + step + enabledItems.length) % enabledItems.length;
+      enabledItems[target]?.focus();
     },
-    [onClose],
+    [anchorElement, onClose],
   );
 
   const setActiveDisabled = isActive || isActivating;
@@ -125,7 +146,7 @@ export function AgentProfileActionsMenu({
     <div
       ref={menuRef}
       className={cn(
-        "absolute right-0 top-full z-10 mt-2 w-[160px] rounded-md border border-[var(--oh-border-subtle)] bg-tertiary px-1 py-1 shadow-lg",
+        "absolute right-0 top-full z-10 mt-2 w-40 rounded-md border border-border-subtle bg-tertiary px-1 py-1 shadow-lg",
         dropdownMenuListClassName,
         isPortaled &&
           "!static !top-auto !bottom-auto !left-auto !right-auto !mt-0",
@@ -160,6 +181,8 @@ export function AgentProfileActionsMenu({
         onClick={() => handleAction(onDelete)}
         onKeyDown={handleKeyDown}
         menuItemsRef={menuItemsRef}
+        disabled={Boolean(deleteDisabledReason)}
+        title={deleteDisabledReason}
         testId="agent-profile-delete"
       />
     </div>

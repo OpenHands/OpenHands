@@ -90,18 +90,18 @@ export function DetailHeader({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-3">
-          <h1 className="text-xl font-medium text-content">
+      <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 flex-wrap items-center gap-3">
+          <h1 className="min-w-0 break-words text-xl font-medium text-content">
             {automation.name}
           </h1>
-          <ActiveStatusBadge active={automation.enabled} />
+          <ActiveStatusBadge automation={automation} />
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
           {canManage && onRunNow && (
             <button
               type="button"
-              className="inline-flex items-center gap-1.5 rounded-md border border-[var(--oh-border)] px-3 py-1.5 text-sm font-medium text-content transition-colors hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm font-medium text-content transition-colors hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-60"
               disabled={isRunningNow || !automation.enabled}
               onClick={onRunNow}
             >

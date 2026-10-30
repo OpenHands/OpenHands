@@ -1,15 +1,17 @@
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
-import {
-  collectFields,
-  fieldValues,
-} from "#/manifests/manifest-local-validation";
-import type { SetupBlock, SetupFormValues } from "#/manifests/types";
+import { fieldValues } from "#/manifests/manifest-local-validation";
+import type {
+  SetupBlock,
+  SetupFormFields,
+  SetupFormValues,
+} from "#/manifests/types";
 
 export interface SetupReviewStepProps {
   setup: SetupBlock;
+  /** The fields the form showed, in the order it showed them. */
+  fields: SetupFormFields;
   values: SetupFormValues;
-  selectedTrigger?: string | null;
   selectedAction?: string | null;
 }
 
@@ -18,13 +20,13 @@ export interface SetupReviewStepProps {
  *
  * The last cheap moment to catch a wrong answer, and the last point at which
  * nothing has been created yet. A manifest declares no summary of its own: one
- * row per declared field, labelled the way the field was labelled, says the
- * same thing without asking every entry to restate it.
+ * row per field the form showed, labelled the way the field was labelled, says
+ * the same thing without asking every entry to restate it.
  */
 export function SetupReviewStep({
   setup,
+  fields,
   values,
-  selectedTrigger,
   selectedAction,
 }: SetupReviewStepProps) {
   const { t } = useTranslation("openhands");
@@ -35,7 +37,7 @@ export function SetupReviewStep({
         {selectedAction &&
           setup.actions?.[selectedAction as keyof typeof setup.actions] && (
             <div className="flex flex-col gap-0.5">
-              <dt className="text-xs text-[var(--oh-muted)]">
+              <dt className="text-xs text-muted">
                 {t(I18nKey.SETUP$ACTION_LABEL)}
               </dt>
               <dd className="text-sm break-words">
@@ -46,11 +48,9 @@ export function SetupReviewStep({
               </dd>
             </div>
           )}
-        {Object.entries(
-          collectFields(setup, selectedTrigger, selectedAction),
-        ).map(([name, field]) => (
+        {Object.entries(fields).map(([name, field]) => (
           <div key={name} className="flex flex-col gap-0.5">
-            <dt className="text-xs text-[var(--oh-muted)]">{field.label}</dt>
+            <dt className="text-xs text-muted">{field.label}</dt>
             <dd className="text-sm break-words">
               {/* A field collecting several values reads as a list of them. */}
               {fieldValues(values[name]).join(", ") ||

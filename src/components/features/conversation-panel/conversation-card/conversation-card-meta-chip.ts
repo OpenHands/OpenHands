@@ -4,7 +4,7 @@
  * footer reads as one chip system.
  */
 export const CONVERSATION_CARD_META_CHIP_CLASSNAME =
-  "inline-flex max-w-full min-w-0 shrink-0 items-center gap-0.5 rounded-sm bg-[var(--oh-surface-raised)] px-1 py-px text-[10px] leading-4 text-[var(--oh-muted)]";
+  "inline-flex max-w-full min-w-0 shrink-0 items-center gap-0.5 rounded-sm bg-surface-raised px-1 py-px text-[10px] leading-4 text-muted";
 
 /**
  * Fixed line-height icon slot matching ``leading-4`` chip text so Lucide /

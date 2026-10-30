@@ -9,3 +9,4 @@ export {
   AgentServerUIRoot,
   type AgentServerUIRootProps,
 } from "./agent-server-ui-root";
+export { CloudOrganizationBoundary } from "../features/backends/cloud-organization-boundary";

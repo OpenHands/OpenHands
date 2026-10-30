@@ -22,7 +22,7 @@ vi.mock("#/hooks/use-conversation-id", () => ({
 describe("PendingUserMessages", () => {
   beforeEach(() => {
     mockSend.mockReset();
-    useOptimisticUserMessageStore.setState({ pendingMessages: [] });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
     useConversationStore.setState({
       messageRestoreIfEmpty: null,
       messageToSend: null,
@@ -30,7 +30,7 @@ describe("PendingUserMessages", () => {
   });
 
   afterEach(() => {
-    useOptimisticUserMessageStore.setState({ pendingMessages: [] });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
   });
 
   it("renders nothing when the queue is empty", () => {

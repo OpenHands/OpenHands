@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, type ReactNode } from "react";
-import { RefreshCw } from "lucide-react";
+import { Pencil, RefreshCw, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { I18nKey } from "#/i18n/declaration";
 import {
   displaySuccessToast,
@@ -9,19 +10,30 @@ import {
 } from "#/utils/custom-toast-handlers";
 import { getApiErrorMessage } from "#/utils/api-error-message";
 import {
+  useAutomationDrafts,
   useAutomations,
+  useAutomationTags,
   useToggleAutomation,
   useDeleteAutomation,
+  useDeleteAutomationDraft,
   useDispatchAutomation,
+  useDispatchAutomationDraft,
   useImportAutomation,
 } from "#/hooks/query/use-automations";
 import { useAutomationHealth } from "#/hooks/query/use-automation-health";
+import {
+  PENDING_AUTOMATION_SETUP_ID,
+  initializeAutomationFormSession,
+} from "#/api/automation-form-session";
+import type { AutomationSetupKind } from "#/api/automation-setup-types";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useNavigation } from "#/context/navigation-context";
 import { SearchInput } from "#/components/features/automations/search-input";
 import { AutomationGroup } from "#/components/features/automations/automation-group";
 import { AutomationViewToggle } from "#/components/features/automations/automation-view-toggle";
 import {
+  automationActivityListClassName,
+  automationActivityRowClassName,
   readStoredAutomationViewMode,
   writeStoredAutomationViewMode,
   type AutomationViewMode,
@@ -31,14 +43,18 @@ import { EmptyState } from "#/components/features/automations/empty-state";
 import { ErrorState } from "#/components/features/automations/error-state";
 import { BackendNotConfigured } from "#/components/features/automations/backend-not-configured";
 import { DeleteConfirmationModal } from "#/components/features/automations/delete-confirmation-modal";
-import { EditAutomationModal } from "#/components/features/automations/detail/edit-automation-modal";
+import { useOpenAutomationEditor } from "#/hooks/use-open-automation-editor";
+import { useStartAutomationSetup } from "#/hooks/use-start-automation-setup";
 import { AddAutomationMenu } from "#/components/features/automations/add-automation-menu";
-import { AddAutomationModal } from "#/components/features/automations/add-automation-modal";
 import { ImportAutomationModal } from "#/components/features/automations/import-automation-modal";
 import { RecommendedAutomationsLauncher } from "#/components/features/automations/recommended-automations-launcher";
 import { BrandButton } from "#/components/features/settings/brand-button";
+import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import { useTracking } from "#/hooks/use-tracking";
-import { useAutomationPermissions } from "#/hooks/use-automation-permissions";
+import {
+  useAutomationCreatorFilterUserId,
+  useAutomationPermissions,
+} from "#/hooks/use-automation-permissions";
 import type { Automation, AutomationSpec } from "#/types/automation";
 import {
   getAutomationExportFilename,
@@ -58,6 +74,8 @@ import {
 } from "#/manifests/automation-insights";
 import { interpolateValues } from "#/manifests/manifest-template";
 import type {
+  AutomationDraftApiResponse,
+  DashboardCreatedByValue,
   DashboardSortValue,
   DashboardStatusValue,
   DashboardTriggerValue,
@@ -70,6 +88,12 @@ import { MANIFEST_ICON_BY_SLUG } from "#/components/features/manifest/manifest-i
 import { ManifestOverviewTiles } from "#/components/features/manifest/manifest-overview-tiles";
 import { ManifestSubpageLayout } from "#/components/features/manifest/manifest-subpage-layout";
 import { cn, downloadBlob } from "#/utils/utils";
+import { uniqueById } from "#/utils/unique-by-id";
+import { isDraftAutomation } from "#/utils/automation-state";
+import { automationIconActionButtonClassName } from "#/components/features/automations/automation-action-button-classes";
+import PlayIcon from "#/icons/play.svg?react";
+import { StatusBadge } from "#/components/features/automations/status-badge";
+import { setupDraftFromServerDraft } from "#/components/features/automations/setup/automation-setup-draft-service";
 
 const PAGE_SIZE = 50;
 
@@ -84,6 +108,192 @@ export const clientLoader = () => {
   }
   return null;
 };
+
+function withoutDraftAutomations(
+  automations: readonly Automation[] | undefined,
+): Automation[] {
+  return (automations ?? []).filter((a) => !isDraftAutomation(a));
+}
+
+function getDraftKind(draft: AutomationDraftApiResponse): AutomationSetupKind {
+  if (draft.endpoint === "/v1") return "custom";
+  if (draft.endpoint === "/v1/preset/plugin") return "plugin";
+  return "prompt";
+}
+
+function getDraftTriggerSummary(
+  draft: AutomationDraftApiResponse,
+  t: TFunction,
+) {
+  const trigger = draft.draft.trigger as Record<string, unknown> | undefined;
+  if (!trigger || typeof trigger !== "object") return null;
+  if (trigger.type === "event") {
+    const source = typeof trigger.source === "string" ? trigger.source : null;
+    const event = Array.isArray(trigger.on)
+      ? trigger.on
+          .filter((item): item is string => typeof item === "string")
+          .join(", ")
+      : typeof trigger.on === "string"
+        ? trigger.on
+        : null;
+    return (
+      [source, event].filter(Boolean).join(" · ") ||
+      t(I18nKey.AUTOMATIONS$DETAIL$TRIGGER_EVENT)
+    );
+  }
+  const schedule =
+    typeof trigger.schedule === "string" ? trigger.schedule : null;
+  return schedule ?? t(I18nKey.AUTOMATIONS$DETAIL$TRIGGER_SCHEDULE);
+}
+
+function isEventTriggeredDraft(draft: AutomationDraftApiResponse): boolean {
+  const trigger = draft.draft.trigger as Record<string, unknown> | undefined;
+  return Boolean(
+    trigger && typeof trigger === "object" && trigger.type === "event",
+  );
+}
+
+function matchesSavedDraftSearch(
+  draft: AutomationDraftApiResponse,
+  searchQuery: string,
+): boolean {
+  const normalized = searchQuery.trim().toLowerCase();
+  if (!normalized) return true;
+  return [
+    draft.name ?? draft.id,
+    String(draft.draft.prompt ?? ""),
+    getDraftKind(draft),
+    getDraftTriggerSummary(draft, ((key: string) => key) as TFunction) ?? "",
+  ]
+    .join("\n")
+    .toLowerCase()
+    .includes(normalized);
+}
+
+interface SavedDraftsGroupProps {
+  drafts: AutomationDraftApiResponse[];
+  onResume: (draft: AutomationDraftApiResponse) => void;
+  onDelete: (draft: AutomationDraftApiResponse) => void;
+  onTest: (draft: AutomationDraftApiResponse) => void;
+  resumingDraftId: string | null;
+  deletingDraftId: string | null;
+  testingDraftId: string | null;
+}
+
+function SavedDraftsGroup({
+  drafts,
+  onResume,
+  onDelete,
+  onTest,
+  resumingDraftId,
+  deletingDraftId,
+  testingDraftId,
+}: SavedDraftsGroupProps) {
+  const { t } = useTranslation("openhands");
+  if (drafts.length === 0) return null;
+
+  return (
+    <section>
+      <div className="flex items-center">
+        <h2 className="text-base font-semibold text-foreground">
+          {t(I18nKey.AUTOMATIONS$SAVED_DRAFTS)}
+        </h2>
+        <StatusBadge count={drafts.length} />
+      </div>
+      <ul className={cn(automationActivityListClassName, "mt-3")}>
+        {drafts.map((draft) => {
+          const title = draft.name ?? t(I18nKey.AUTOMATIONS$UNTITLED_DRAFT);
+          const isResuming = resumingDraftId === draft.id;
+          const isDeleting = deletingDraftId === draft.id;
+          const isTesting = testingDraftId === draft.id;
+          const canTestDirectly =
+            draft.dispatchable && !isEventTriggeredDraft(draft);
+          const isBusy = isResuming || isDeleting || isTesting;
+          return (
+            <li
+              key={draft.id}
+              data-testid={`automation-setup-draft-${draft.id}`}
+              className={automationActivityRowClassName}
+            >
+              <button
+                type="button"
+                data-testid={`automation-setup-draft-resume-${draft.id}`}
+                className="flex min-w-0 flex-1 items-center px-3 py-2.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus"
+                disabled={isBusy}
+                aria-label={
+                  isResuming
+                    ? t(I18nKey.AUTOMATION_SETUP$RESUMING_DRAFT)
+                    : title
+                }
+                onClick={() => onResume(draft)}
+              >
+                <span
+                  data-testid={`automation-setup-draft-open-${draft.id}`}
+                  className="block min-w-0 truncate text-sm font-medium leading-5 text-foreground"
+                >
+                  {title}
+                </span>
+              </button>
+              <div className="flex shrink-0 items-center gap-1.5 pr-1.5">
+                <button
+                  type="button"
+                  data-testid={`automation-setup-draft-edit-${draft.id}`}
+                  aria-label={t(I18nKey.AUTOMATIONS$EDIT)}
+                  disabled={isBusy}
+                  onClick={() => onResume(draft)}
+                  className={automationIconActionButtonClassName}
+                >
+                  <Pencil className="size-4" aria-hidden />
+                </button>
+                {canTestDirectly && !isBusy ? (
+                  <StyledTooltip
+                    content={t(I18nKey.AUTOMATION_SETUP$TEST_RUN)}
+                    placement="top"
+                  >
+                    <button
+                      type="button"
+                      data-testid={`automation-setup-draft-test-${draft.id}`}
+                      aria-label={t(I18nKey.AUTOMATION_SETUP$TEST_DRAFT)}
+                      onClick={() => onTest(draft)}
+                      className={automationIconActionButtonClassName}
+                    >
+                      <PlayIcon className="size-4 shrink-0" aria-hidden />
+                    </button>
+                  </StyledTooltip>
+                ) : (
+                  <button
+                    type="button"
+                    data-testid={`automation-setup-draft-test-${draft.id}`}
+                    aria-label={
+                      isTesting
+                        ? t(I18nKey.AUTOMATION_SETUP$STARTING_TEST)
+                        : t(I18nKey.AUTOMATION_SETUP$TEST_DRAFT)
+                    }
+                    disabled
+                    onClick={() => onTest(draft)}
+                    className={automationIconActionButtonClassName}
+                  >
+                    <PlayIcon className="size-4 shrink-0" aria-hidden />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  data-testid={`automation-setup-draft-delete-${draft.id}`}
+                  aria-label={t(I18nKey.AUTOMATION_SETUP$DELETE_DRAFT)}
+                  disabled={isDeleting || isResuming || isTesting}
+                  onClick={() => onDelete(draft)}
+                  className={automationIconActionButtonClassName}
+                >
+                  <Trash2 className="size-4" aria-hidden />
+                </button>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
 
 export default function AutomationsList() {
   const { t } = useTranslation("openhands");
@@ -101,29 +311,39 @@ export default function AutomationsList() {
   const [statusFilter, setStatusFilter] = useState<DashboardStatusValue>("all");
   const [triggerFilter, setTriggerFilter] =
     useState<DashboardTriggerValue>("all");
+  const [createdByFilter, setCreatedByFilter] =
+    useState<DashboardCreatedByValue>("all");
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
   const [sortValue, setSortValue] = useState<DashboardSortValue>(
     dashboardSpec?.sort.default ?? "last-run",
   );
   const [viewMode, setViewMode] = useState<AutomationViewMode>(() =>
     readStoredAutomationViewMode(),
   );
-  const [limit, setLimit] = useState(PAGE_SIZE);
+  const [draftLimit, setDraftLimit] = useState(PAGE_SIZE);
   const [deleteTarget, setDeleteTarget] = useState<{
     id: string;
     name: string;
   } | null>(null);
-  const [editTarget, setEditTarget] = useState<Automation | null>(null);
-  const [isAddAutomationOpen, setIsAddAutomationOpen] = useState(false);
+  const [deleteDraftTarget, setDeleteDraftTarget] =
+    useState<AutomationDraftApiResponse | null>(null);
+  const { openEditor } = useOpenAutomationEditor();
+  const { startSetup } = useStartAutomationSetup();
   const [importSpec, setImportSpec] = useState<AutomationSpec | null>(null);
   const [isImportOpen, setIsImportOpen] = useState(false);
 
   const active = useActiveBackend();
   const { navigate } = useNavigation();
-  // Git Sync is only available on local backends.
-  const isLocalBackend = active.backend.kind === "local";
-  // Creating an automation requires manage_automations (no owner escape hatch
-  // — it's a new record, not a mutation of an existing one).
+  // Git Sync is org-level config, so its entry point requires
+  // manage_automations (admins/owners) on every backend kind.
   const { canManage } = useAutomationPermissions();
+  const creatorFilterUserId = useAutomationCreatorFilterUserId();
+  // The creator the server filters by; undefined while the filter is hidden
+  // or set to "all".
+  const serverCreatedBy =
+    creatorFilterUserId !== null && createdByFilter !== "all"
+      ? createdByFilter
+      : undefined;
 
   const {
     data: healthData,
@@ -134,49 +354,115 @@ export default function AutomationsList() {
   const isBackendHealthy = healthData?.status === "ok";
 
   // Only fetch automations if the backend is healthy
-  const { data, isLoading, isError, refetch } = useAutomations({
-    limit,
+  const {
+    data,
+    isLoading,
+    isError,
+    refetch,
+    hasNextPage,
+    fetchNextPage,
+    isFetching,
+    isPlaceholderData,
+  } = useAutomations({
+    enabled: isBackendHealthy,
+    // The server filters by creator so pages and `total` cover only matches;
+    // the client predicate in applyDashboardView stays as the fallback for
+    // an automation service that ignores the param.
+    createdBy: serverCreatedBy,
+    // Same for the tag: the server filters, the client predicate backs it up.
+    tag: tagFilter ?? undefined,
+  });
+  // The overview tiles summarize the org list above the filters, so they read
+  // it unfiltered; with no creator selected this is the same query as above.
+  const { data: orgData } = useAutomations({ enabled: isBackendHealthy });
+  const { data: tagCounts } = useAutomationTags({
+    enabled: isBackendHealthy && dashboardSpec !== null,
+  });
+  const tagOptions = useMemo(
+    () => (tagCounts ?? []).map((entry) => entry.tag),
+    [tagCounts],
+  );
+  const {
+    data: draftsData,
+    isLoading: isDraftsLoading,
+    isError: isDraftsError,
+    refetch: refetchDrafts,
+  } = useAutomationDrafts({
+    limit: draftLimit,
     offset: 0,
     enabled: isBackendHealthy,
   });
-  // One runs query per listed automation — dashboard mode only.
-  const runSummaries = useAutomationRunSummaries(data?.automations ?? [], {
+  // Testing a saved draft materializes a hidden DRAFT automation. The page
+  // lists saved drafts in their own group and never lists these test
+  // artifacts, so the groups, tiles, run summaries, and empty state all
+  // leave them out.
+  const listedAutomations = useMemo(
+    () => withoutDraftAutomations(data?.automations),
+    [data?.automations],
+  );
+  const orgAutomations = useMemo(
+    () => withoutDraftAutomations(orgData?.automations),
+    [orgData?.automations],
+  );
+  const runSummaryAutomations = useMemo(
+    () => uniqueById([...orgAutomations, ...listedAutomations]),
+    [orgAutomations, listedAutomations],
+  );
+  // One runs query per automation in either list — dashboard mode only.
+  const runSummaries = useAutomationRunSummaries(runSummaryAutomations, {
     enabled: isBackendHealthy && dashboard !== null,
   });
   const { trackPrebuiltAutomationEnabled, trackAutomationExported } =
     useTracking();
   const toggleMutation = useToggleAutomation();
   const deleteMutation = useDeleteAutomation();
+  const deleteDraftMutation = useDeleteAutomationDraft();
   const dispatchMutation = useDispatchAutomation();
+  const dispatchDraftMutation = useDispatchAutomationDraft();
   const importMutation = useImportAutomation();
 
   const visible = useMemo(() => {
-    if (!data?.automations) return [];
     if (!dashboardSpec) {
-      return data.automations.filter((a) =>
+      return listedAutomations.filter((a) =>
         matchesAutomationSearch(a, searchQuery),
       );
     }
     return applyDashboardView(
-      data.automations,
+      listedAutomations,
       {
         search: searchQuery,
         status: statusFilter,
         trigger: triggerFilter,
+        // A null id (local backend, personal workspace, or /me loading)
+        // leaves the creator filter inert, so a selection made on a team
+        // workspace has no effect while the filter is hidden.
+        createdBy: createdByFilter,
+        currentUserId: creatorFilterUserId,
+        tag: tagFilter,
         sort: sortValue,
       },
       runSummaries,
     );
   }, [
-    data?.automations,
+    listedAutomations,
     dashboardSpec,
     searchQuery,
     statusFilter,
     triggerFilter,
+    createdByFilter,
+    creatorFilterUserId,
+    tagFilter,
     sortValue,
     runSummaries,
   ]);
 
+  const visibleSavedDrafts = useMemo(
+    () =>
+      (draftsData?.drafts ?? []).filter((draft) =>
+        matchesSavedDraftSearch(draft, searchQuery),
+      ),
+    [draftsData?.drafts, searchQuery],
+  );
   const activeAutomations = useMemo(
     () => visible.filter((a) => a.enabled),
     [visible],
@@ -208,6 +494,31 @@ export default function AutomationsList() {
     });
   };
 
+  const handleResumeDraft = (draft: AutomationDraftApiResponse) => {
+    initializeAutomationFormSession(
+      PENDING_AUTOMATION_SETUP_ID,
+      setupDraftFromServerDraft(draft),
+    );
+    navigate?.(`/automations/setup?draftId=${encodeURIComponent(draft.id)}`);
+  };
+
+  const handleTestDraft = (draft: AutomationDraftApiResponse) => {
+    dispatchDraftMutation.mutate(draft.id, {
+      onSuccess: () => {
+        displaySuccessToast(t(I18nKey.AUTOMATION_SETUP$TEST_DISPATCHED));
+      },
+      onError: (error) => {
+        displayErrorToast(
+          getApiErrorMessage(error, t(I18nKey.AUTOMATIONS$RUN_NOW_ERROR)),
+        );
+      },
+    });
+  };
+
+  const handleDeleteDraftRequest = (draft: AutomationDraftApiResponse) => {
+    setDeleteDraftTarget(draft);
+  };
+
   const handleDeleteRequest = (id: string) => {
     const automation = data?.automations.find((a) => a.id === id);
     if (automation) {
@@ -217,9 +528,7 @@ export default function AutomationsList() {
 
   const handleEditRequest = (id: string) => {
     const automation = data?.automations.find((a) => a.id === id);
-    if (automation) {
-      setEditTarget(automation);
-    }
+    if (automation) openEditor(automation);
   };
 
   const handleExport = (automation: Automation) => {
@@ -279,6 +588,22 @@ export default function AutomationsList() {
     }
   };
 
+  const handleDeleteDraftConfirm = () => {
+    if (!deleteDraftTarget) return;
+    deleteDraftMutation.mutate(deleteDraftTarget.id, {
+      onSuccess: () => {
+        displaySuccessToast(t(I18nKey.AUTOMATION_SETUP$DRAFT_DELETED));
+      },
+      onError: (error) => {
+        displayErrorToast(getApiErrorMessage(error, t(I18nKey.ERROR$GENERIC)));
+      },
+      onSettled: () => setDeleteDraftTarget(null),
+    });
+  };
+
+  const deleteDraftName =
+    deleteDraftTarget?.name ?? t(I18nKey.AUTOMATIONS$UNTITLED_DRAFT);
+
   const handleViewModeChange = useCallback((view: AutomationViewMode) => {
     setViewMode(view);
     writeStoredAutomationViewMode(view);
@@ -289,13 +614,18 @@ export default function AutomationsList() {
     setSearchQuery("");
     setStatusFilter("all");
     setTriggerFilter("all");
+    setCreatedByFilter("all");
+    setTagFilter(null);
   };
 
   const overviewTiles = useMemo(() => {
     if (!dashboardSpec) return [];
-    const automations = data?.automations ?? [];
     return dashboardSpec.overview.tiles.map((tile) => {
-      const value = computeOverviewTile(tile.metric, automations, runSummaries);
+      const value = computeOverviewTile(
+        tile.metric,
+        orgAutomations,
+        runSummaries,
+      );
       const template =
         value.isZero && tile.zeroDetail ? tile.zeroDetail : tile.detail;
       return {
@@ -306,7 +636,7 @@ export default function AutomationsList() {
         Icon: MANIFEST_ICON_BY_SLUG[tile.icon],
       };
     });
-  }, [dashboardSpec, data?.automations, runSummaries]);
+  }, [dashboardSpec, orgAutomations, runSummaries]);
 
   const groupInsights = dashboard
     ? { spec: dashboard.spec.insights, byId: runSummaries }
@@ -329,9 +659,34 @@ export default function AutomationsList() {
       </div>
     );
 
-  const hasMore = data ? data.total > data.automations.length : false;
+  const hasMoreDrafts = draftsData
+    ? draftsData.total > draftsData.drafts.length
+    : false;
+  const hasMore = Boolean(hasNextPage || hasMoreDrafts);
+  // A failed refetch or Load more keeps the loaded rows; Load more retries.
+  const isListError = (isError && !data) || (isDraftsError && !draftsData);
+  // Whether the org has any automations comes from the unfiltered list, so an
+  // empty filtered response shows the filtered empty state with Clear filters.
+  // The server total includes hidden DRAFT test automations; subtract the ones
+  // loaded. Saved drafts keep the page out of the empty state, since their
+  // group lists them.
+  const orgDraftAutomationCount =
+    (orgData?.automations.length ?? 0) - orgAutomations.length;
   const hasNoAutomations =
-    !isLoading && !isError && data?.automations.length === 0;
+    !isListError &&
+    orgData !== undefined &&
+    orgData.total - orgDraftAutomationCount === 0 &&
+    (draftsData?.total ?? 0) === 0;
+  // The previous filter's rows stand in while the next page loads; when none
+  // of them match, show loading rather than a no-match that is not final. An
+  // empty org keeps its empty state instead.
+  const isListLoading =
+    !hasNoAutomations &&
+    (isLoading ||
+      isDraftsLoading ||
+      (isPlaceholderData &&
+        visible.length === 0 &&
+        visibleSavedDrafts.length === 0));
 
   // Show loading state while checking health
   if (isHealthLoading) {
@@ -366,8 +721,8 @@ export default function AutomationsList() {
   return renderShell(
     <>
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 flex-1 basis-64">
           <h1 className="text-xl font-semibold text-content">
             {interfaceCopy.listTitle}
           </h1>
@@ -376,7 +731,10 @@ export default function AutomationsList() {
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap justify-end gap-2">
-          {isLocalBackend && (
+          {/* Git sync is org-level config, so it follows manage_automations
+              (admins/owners) on every backend kind, not the local-only edit
+              gate. */}
+          {canManage && (
             <BrandButton
               type="button"
               variant="secondary"
@@ -388,12 +746,10 @@ export default function AutomationsList() {
               {t(I18nKey.AUTOMATIONS$GIT_SYNC$NAV_BUTTON)}
             </BrandButton>
           )}
-          {canManage ? (
-            <AddAutomationMenu
-              onAdd={() => setIsAddAutomationOpen(true)}
-              onImport={() => setIsImportOpen(true)}
-            />
-          ) : null}
+          <AddAutomationMenu
+            onAdd={startSetup}
+            onImport={() => setIsImportOpen(true)}
+          />
         </div>
       </div>
 
@@ -418,9 +774,15 @@ export default function AutomationsList() {
             spec={dashboard.spec}
             status={statusFilter}
             trigger={triggerFilter}
+            createdBy={createdByFilter}
+            canFilterByCreator={creatorFilterUserId !== null}
+            tag={tagFilter}
+            tagOptions={tagOptions}
             sort={sortValue}
             onStatusChange={setStatusFilter}
             onTriggerChange={setTriggerFilter}
+            onCreatedByChange={setCreatedByFilter}
+            onTagChange={setTagFilter}
             onSortChange={setSortValue}
           />
         )}
@@ -433,7 +795,7 @@ export default function AutomationsList() {
 
       {/* Content */}
       <div className={cn("flex flex-col gap-6", !dashboard && "mt-6")}>
-        {isLoading && (
+        {isListLoading && (
           <div className="flex flex-col gap-3">
             {Array.from({ length: 3 }).map((_, i) => (
               <AutomationCardSkeleton key={`skeleton-${String(i)}`} />
@@ -441,18 +803,45 @@ export default function AutomationsList() {
           </div>
         )}
 
-        {isError && !isLoading && <ErrorState onRetry={refetch} />}
+        {isListError && !(isLoading || isDraftsLoading) && (
+          <ErrorState
+            onRetry={() => {
+              void refetch();
+              void refetchDrafts();
+            }}
+          />
+        )}
 
         {hasNoAutomations && <EmptyState />}
 
-        {!isLoading &&
-          !isError &&
+        {!isListLoading &&
+          !isListError &&
           data &&
-          data.automations.length > 0 &&
-          (dashboard && visible.length === 0 ? (
+          draftsData &&
+          !hasNoAutomations &&
+          (dashboard &&
+          visible.length === 0 &&
+          visibleSavedDrafts.length === 0 ? (
             <AutomationsFilteredEmptyState onClear={handleClearFilters} />
           ) : (
             <>
+              <SavedDraftsGroup
+                drafts={visibleSavedDrafts}
+                onResume={handleResumeDraft}
+                onDelete={handleDeleteDraftRequest}
+                onTest={handleTestDraft}
+                resumingDraftId={null}
+                deletingDraftId={
+                  deleteDraftMutation.isPending
+                    ? (deleteDraftMutation.variables ?? null)
+                    : null
+                }
+                testingDraftId={
+                  dispatchDraftMutation.isPending
+                    ? (dispatchDraftMutation.variables ?? null)
+                    : null
+                }
+              />
               <AutomationGroup
                 title={t(I18nKey.AUTOMATIONS$ACTIVE)}
                 count={activeAutomations.length}
@@ -487,18 +876,29 @@ export default function AutomationsList() {
                 onEdit={handleEditRequest}
                 insights={groupInsights}
               />
-
-              {hasMore && (
-                <button
-                  type="button"
-                  onClick={() => setLimit((prev) => prev + PAGE_SIZE)}
-                  className="self-center rounded-lg border border-[var(--oh-border)] px-6 py-2 text-sm text-white hover:bg-surface-raised"
-                >
-                  {t(I18nKey.AUTOMATIONS$LOAD_MORE)}
-                </button>
-              )}
             </>
           ))}
+
+        {!isListLoading &&
+          !isListError &&
+          data &&
+          draftsData &&
+          !hasNoAutomations &&
+          hasMore && (
+            <button
+              type="button"
+              onClick={() => {
+                if (hasNextPage) void fetchNextPage();
+                if (hasMoreDrafts) {
+                  setDraftLimit((prev) => prev + PAGE_SIZE);
+                }
+              }}
+              disabled={isFetching || isDraftsLoading}
+              className="self-center rounded-lg border border-border px-6 py-2 text-sm text-contrast hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {t(I18nKey.AUTOMATIONS$LOAD_MORE)}
+            </button>
+          )}
       </div>
 
       {/* The launcher lives on the templates sub-page in dashboard mode */}
@@ -516,18 +916,18 @@ export default function AutomationsList() {
         onCancel={() => setDeleteTarget(null)}
       />
 
-      {/* Edit modal */}
-      {editTarget && (
-        <EditAutomationModal
-          automation={editTarget}
-          isOpen={editTarget !== null}
-          onClose={() => setEditTarget(null)}
-        />
-      )}
-
-      <AddAutomationModal
-        isOpen={isAddAutomationOpen}
-        onClose={() => setIsAddAutomationOpen(false)}
+      <DeleteConfirmationModal
+        automationName={deleteDraftName}
+        isOpen={deleteDraftTarget !== null}
+        onConfirm={handleDeleteDraftConfirm}
+        onCancel={() => setDeleteDraftTarget(null)}
+        title={t(I18nKey.AUTOMATION_SETUP$DELETE_DRAFT_TITLE)}
+        message={t(I18nKey.AUTOMATION_SETUP$DELETE_DRAFT_MESSAGE, {
+          name: deleteDraftName,
+        })}
+        confirmLabel={t(I18nKey.AUTOMATION_SETUP$DELETE_DRAFT)}
+        confirmTestId="automation-setup-draft-delete-confirm"
+        isConfirming={deleteDraftMutation.isPending}
       />
 
       <ImportAutomationModal

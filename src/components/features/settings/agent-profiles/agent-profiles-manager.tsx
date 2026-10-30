@@ -49,7 +49,7 @@ export function AgentProfilesManager({
     <>
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-base font-medium text-white">
+          <h2 className="text-base font-medium text-contrast">
             {t(I18nKey.SETTINGS$AVAILABLE_PROFILES)}
           </h2>
           {onAddProfile && canManage ? (

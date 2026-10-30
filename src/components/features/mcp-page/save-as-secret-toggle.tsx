@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 import { cn } from "#/utils/utils";
 import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import { I18nKey } from "#/i18n/declaration";
+import { ToggleSwitchVisual } from "#/ui/toggle-switch";
 
 interface SaveAsSecretToggleProps {
   fieldKey: string;
@@ -16,14 +17,16 @@ export function SaveAsSecretToggle({
 }: SaveAsSecretToggleProps) {
   const { t } = useTranslation("openhands");
 
+  // @spec MCP-005 — Credential selection stays readable in every theme
   return (
     <label
       data-testid={`mcp-install-save-secret-${fieldKey}`}
       className={cn(
-        "flex items-center gap-2 px-3 py-2 mt-0.5 rounded-lg border cursor-pointer transition-colors",
+        "flex flex-wrap items-center gap-2 px-3 py-2 mt-0.5 rounded-lg border cursor-pointer transition-colors",
+        "has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-focus",
         checked
-          ? "border-green-500/35 bg-green-500/10"
-          : "border-[var(--oh-border)] bg-transparent hover:bg-white/[0.03]",
+          ? "border-contrast/25 bg-contrast/5"
+          : "border-border bg-transparent hover:bg-contrast/[0.03]",
       )}
     >
       {/* sr-only keeps the real checkbox in the accessibility tree so AT
@@ -35,51 +38,34 @@ export function SaveAsSecretToggle({
         checked={checked}
         onChange={(e) => onToggle(e.target.checked)}
       />
-      {/* aria-hidden: purely decorative — the checkbox above is the semantic control. */}
-      <span
-        aria-hidden="true"
-        className={cn(
-          "relative inline-flex h-[22px] w-[40px] shrink-0 items-center rounded-full border transition-colors duration-200",
-          checked
-            ? "border-green-500 bg-green-500"
-            : "border-[var(--oh-border)] bg-surface-raised",
-        )}
-      >
-        <span
-          className={cn(
-            "inline-block size-4 rounded-full transition-transform duration-200",
-            checked
-              ? "translate-x-[21px] bg-white"
-              : "translate-x-[2px] bg-[var(--oh-muted)]",
-          )}
-        />
+      <ToggleSwitchVisual enabled={checked} />
+      <span className="text-sm text-contrast">
+        {t(I18nKey.MCP$ALSO_SAVE_AS_SECRET)}
       </span>
-      <span className="text-sm">{t(I18nKey.MCP$ALSO_SAVE_AS_SECRET)}</span>
-      <code
-        className={cn(
-          "ml-auto text-[11px] font-mono tracking-tight border rounded px-1.5 py-0.5",
-          checked
-            ? "text-green-500 border-green-500/35 bg-white/[0.04]"
-            : "text-tertiary-alt border-[var(--oh-border)]",
-        )}
-      >
-        {fieldKey}
-      </code>
-      <StyledTooltip
-        content={t(I18nKey.MCP$SAVE_AS_SECRET_TOOLTIP)}
-        placement="top"
-      >
-        {/* button so the tooltip is keyboard-reachable; type=button prevents
-            accidental form submission when the user presses Enter. */}
-        <button
-          type="button"
-          aria-label={t(I18nKey.MCP$SAVE_AS_SECRET_TOOLTIP)}
-          className="flex items-center justify-center size-[15px] shrink-0 rounded-full border border-[var(--oh-muted)] text-tertiary-alt text-[9px] font-bold cursor-help"
-          onClick={(e) => e.preventDefault()}
+      <span className="ml-auto flex min-w-0 max-w-full items-center gap-2">
+        <code
+          className={cn(
+            "min-w-0 break-all text-[11px] text-contrast font-mono tracking-tight border rounded px-1.5 py-0.5",
+            checked ? "border-contrast/25 bg-contrast/4" : "border-border",
+          )}
         >
-          ?
-        </button>
-      </StyledTooltip>
+          {fieldKey}
+        </code>
+        <StyledTooltip
+          content={t(I18nKey.MCP$SAVE_AS_SECRET_TOOLTIP)}
+          placement="top"
+        >
+          {/* The help button must stay keyboard-reachable without toggling. */}
+          <button
+            type="button"
+            aria-label={t(I18nKey.MCP$SAVE_AS_SECRET_TOOLTIP)}
+            className="flex items-center justify-center size-3.75 shrink-0 rounded-full border border-muted text-contrast text-[9px] font-bold cursor-help"
+            onClick={(e) => e.preventDefault()}
+          >
+            ?
+          </button>
+        </StyledTooltip>
+      </span>
     </label>
   );
 }

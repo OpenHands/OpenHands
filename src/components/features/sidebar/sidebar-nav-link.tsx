@@ -44,7 +44,8 @@ interface SidebarNavLinkProps {
   collapsed?: boolean;
   hoverContent?: React.ReactNode;
   /**
-   * When true, forces the active style regardless of the current path.
+   * When true, forces the active style (and `aria-current`) regardless of the
+   * current path.
    * Useful for links that should appear active for multiple related routes
    * (e.g. the Extensions link being active on /mcp and /plugins too).
    */
@@ -77,6 +78,7 @@ export function SidebarNavLink({
       data-testid={testId}
       tabIndex={disabled ? -1 : 0}
       aria-label={collapsed ? label : undefined}
+      aria-current={active ? "page" : undefined}
       // Announce the disabled state to assistive tech. The visual disabled
       // styling plus tabIndex=-1 + preventDefault gives sighted/keyboard users
       // the right behaviour already; this closes the screen-reader gap so the
@@ -134,7 +136,7 @@ export function SidebarNavLink({
           className={cn(
             "absolute right-1.5 top-1/2 -translate-y-1/2",
             "flex shrink-0 cursor-pointer items-center justify-center rounded-md p-1",
-            "text-[var(--oh-muted)] hover:bg-white/10 hover:text-white",
+            "text-muted hover:bg-contrast/10 hover:text-contrast",
             hoverRevealActionClassName(pinAction.pinned),
           )}
         >
@@ -151,7 +153,9 @@ export function SidebarNavLink({
     <StyledTooltip
       content={hoverContent ?? label}
       placement="right"
-      tooltipClassName={hoverContent ? "p-0 bg-tertiary text-white" : undefined}
+      tooltipClassName={
+        hoverContent ? "p-0 bg-tertiary text-contrast" : undefined
+      }
     >
       {link}
     </StyledTooltip>

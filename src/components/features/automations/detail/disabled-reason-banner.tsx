@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import type { Automation } from "#/types/automation";
+import { isDraftAutomation } from "#/utils/automation-state";
 import { getDisablementReasonDisplay } from "#/utils/automation-disabled-reason";
 import {
   formatRelativeTime,
@@ -27,6 +28,8 @@ export function DisabledReasonBanner({
 }: DisabledReasonBannerProps) {
   const { t, i18n } = useTranslation("openhands");
 
+  if (isDraftAutomation(automation)) return null;
+
   const display = getDisablementReasonDisplay(automation, t);
   if (!display) return null;
 
@@ -35,7 +38,7 @@ export function DisabledReasonBanner({
   return (
     <div
       data-testid="automation-disabled-reason-banner"
-      className="flex flex-col gap-2 rounded-2xl border border-[var(--oh-border)] bg-[var(--oh-surface)] px-5 py-4"
+      className="flex flex-col gap-2 rounded-2xl border border-border bg-surface px-5 py-4"
     >
       <div className="flex items-center gap-2">
         <PauseIcon className="size-4 shrink-0 text-muted" aria-hidden />
@@ -45,7 +48,7 @@ export function DisabledReasonBanner({
       </div>
       <p
         data-testid="automation-disabled-reason-text"
-        className="text-sm leading-5 text-[var(--oh-text-secondary)]"
+        className="text-sm leading-5 text-text-secondary"
       >
         {display.text}
       </p>

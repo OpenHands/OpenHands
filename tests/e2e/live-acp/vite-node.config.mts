@@ -9,6 +9,10 @@ import { defineConfig } from "vite";
 const srcDir = fileURLToPath(new URL("../../../src", import.meta.url));
 
 export default defineConfig({
+  define: {
+    // Injected by the production Vite config; these scripts load no extension skills.
+    __EXTENSIONS_SKILLS_DIR__: JSON.stringify(""),
+  },
   resolve: {
     alias: [{ find: /^#\//, replacement: `${srcDir}/` }],
   },

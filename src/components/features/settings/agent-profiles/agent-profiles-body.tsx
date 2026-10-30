@@ -50,7 +50,7 @@ export function AgentProfilesBody({
         data-testid="agent-profiles-load-error"
         className={extensionModuleEmptyStateClassName}
       >
-        <p className="text-sm text-red-400">
+        <p className="text-sm text-feedback-error">
           {t(I18nKey.SETTINGS$PROFILES_LOAD_ERROR)}
         </p>
       </div>
@@ -63,7 +63,7 @@ export function AgentProfilesBody({
         data-testid="agent-profiles-empty"
         className={extensionModuleEmptyStateClassName}
       >
-        <p className="text-sm text-[var(--oh-muted)]">
+        <p className="text-sm text-muted">
           {t(I18nKey.SETTINGS$PROFILES_EMPTY)}
         </p>
       </div>

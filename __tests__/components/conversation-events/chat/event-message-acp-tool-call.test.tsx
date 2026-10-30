@@ -47,7 +47,6 @@ describe("EventMessage - ACPToolCallEvent dispatch", () => {
     renderWithProviders(
       <EventMessage
         event={makeEvent()}
-        messages={[]}
         isLastMessage={false}
         isInLast10Actions={false}
       />,
@@ -67,7 +66,6 @@ describe("EventMessage - ACPToolCallEvent dispatch", () => {
     renderWithProviders(
       <EventMessage
         event={event}
-        messages={[]}
         isLastMessage={false}
         isInLast10Actions={false}
       />,
@@ -90,7 +88,6 @@ describe("EventMessage - ACPToolCallEvent dispatch", () => {
     renderWithProviders(
       <EventMessage
         event={event}
-        messages={[]}
         isLastMessage={false}
         isInLast10Actions={false}
       />,
@@ -107,7 +104,6 @@ describe("EventMessage - ACPToolCallEvent dispatch", () => {
     renderWithProviders(
       <EventMessage
         event={makeEvent()}
-        messages={[]}
         isLastMessage={false}
         isInLast10Actions={false}
       />,
@@ -120,7 +116,6 @@ describe("EventMessage - ACPToolCallEvent dispatch", () => {
     renderWithProviders(
       <EventMessage
         event={makeEvent({ status: "in_progress", raw_output: null })}
-        messages={[]}
         isLastMessage={false}
         isInLast10Actions={false}
       />,
@@ -136,7 +131,6 @@ describe("EventMessage - ACPToolCallEvent dispatch", () => {
     renderWithProviders(
       <EventMessage
         event={makeEvent()}
-        messages={[]}
         isLastMessage={false}
         isInLast10Actions={false}
       />,
@@ -149,12 +143,49 @@ describe("EventMessage - ACPToolCallEvent dispatch", () => {
     expect(screen.getByText(/diff output here/)).toBeInTheDocument();
   });
 
+  it("shows the diff from content instead of the model-facing raw_output for an edit", async () => {
+    const user = userEvent.setup();
+    const { container } = renderWithProviders(
+      <EventMessage
+        event={makeEvent({
+          title: "Edit demo.py",
+          tool_kind: "edit",
+          raw_input: {
+            file_path: "/workspace/demo.py",
+            old_string: "port = 3000",
+            new_string: "port = 8080",
+          },
+          raw_output:
+            "The file /workspace/demo.py has been updated successfully. (file state is current in your context — no need to Read it back)",
+          content: [
+            {
+              type: "diff",
+              path: "/workspace/demo.py",
+              old_text: "port = 3000",
+              new_text: "port = 8080",
+            },
+          ],
+        })}
+        isLastMessage={false}
+        isInLast10Actions={false}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "BUTTON$EXPAND" }));
+
+    // The diff is syntax-highlighted, which splits each line across token
+    // spans, so assert on the rendered text rather than a single element.
+    expect(container).toHaveTextContent(
+      "/workspace/demo.py - port = 3000 + port = 8080",
+    );
+    expect(container).not.toHaveTextContent("no need to Read it back");
+  });
+
   it("dismisses the timestamp when details are expanded with a pointer", async () => {
     const user = userEvent.setup();
     renderWithProviders(
       <EventMessage
         event={makeEvent()}
-        messages={[]}
         isLastMessage={false}
         isInLast10Actions={false}
       />,

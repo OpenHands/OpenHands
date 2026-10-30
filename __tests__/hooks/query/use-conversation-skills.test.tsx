@@ -123,7 +123,7 @@ afterEach(() => {
 describe("useConversationSkills", () => {
   it("lists the conversation's own skills on a cloud backend once its sandbox runs", async () => {
     // Arrange
-    setActiveSelection({ backendId: cloudBackend.id });
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
     const { wrapper } = makeWrapper(CONVERSATION_ID);
 
     // Act
@@ -141,7 +141,7 @@ describe("useConversationSkills", () => {
 
   it("does not request skills for a cloud conversation whose sandbox is not running yet", async () => {
     // Arrange
-    setActiveSelection({ backendId: cloudBackend.id });
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
     vi.mocked(
       AgentServerConversationService.batchGetAppConversations,
     ).mockResolvedValue([makeConversation({ sandbox_status: "STARTING" })]);
@@ -183,7 +183,7 @@ describe("useConversationSkills", () => {
 
   it("falls back to the global catalog on a cloud backend without a conversation route", async () => {
     // Arrange
-    setActiveSelection({ backendId: cloudBackend.id });
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
     const { wrapper } = makeWrapper(null);
 
     // Act

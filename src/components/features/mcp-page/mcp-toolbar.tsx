@@ -30,8 +30,8 @@ export function McpToolbar({
         data-testid="mcp-search"
         className={cn(
           "relative flex flex-1 min-w-0 items-center",
-          "rounded-lg border border-[var(--oh-border)] bg-base-secondary",
-          "focus-within:border-white/40 focus-within:ring-1 focus-within:ring-white/20",
+          "rounded-lg border border-border bg-base-secondary",
+          "focus-within:border-contrast/40 focus-within:ring-1 focus-within:ring-contrast/20",
           "transition-colors",
         )}
       >
@@ -58,7 +58,7 @@ export function McpToolbar({
             onClick={() => onSearchChange("")}
             aria-label={t(I18nKey.MCP$SEARCH_CLEAR)}
             data-testid="mcp-search-clear"
-            className="mr-2 p-1 rounded text-tertiary-alt hover:text-content-1 cursor-pointer"
+            className="mr-2 p-1 rounded text-tertiary-alt hover:text-content cursor-pointer"
           >
             <X className="h-4 w-4" aria-hidden />
           </button>

@@ -1,9 +1,3 @@
-export const isNonEmptyString = (value: unknown): value is string =>
-  typeof value === "string" && value.length > 0;
-
-export const pickFirstString = (...values: unknown[]): string | undefined =>
-  values.find(isNonEmptyString);
-
 export const pickFirstBoolean = (...values: unknown[]): boolean | undefined =>
   values.find((value): value is boolean => typeof value === "boolean");
 

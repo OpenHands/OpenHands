@@ -410,6 +410,7 @@ describe("useTracking", () => {
       expect(captureMock).toHaveBeenCalledWith("backend_added", {
         ...COMMON,
         backend_kind: "cloud",
+        deployment_kind: "remote",
         connection_method: "cloud_login",
         has_api_key: true,
         source: "add_backend_modal",

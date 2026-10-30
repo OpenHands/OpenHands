@@ -67,7 +67,6 @@ const renderInputEvents = ({
       smartResize,
       increaseHeight,
       isEmpty,
-      vi.fn(),
       onFocus,
       onBlur,
     ),
@@ -282,16 +281,9 @@ describe("chat input callback freshness", () => {
     const latestResize = vi.fn();
     const increaseHeight = vi.fn();
     const isEmpty = vi.fn(() => false);
-    const clearHandler = vi.fn();
     const { result, rerender } = renderHook(
       ({ inputRef, resize }) =>
-        useChatInputEvents(
-          inputRef,
-          resize,
-          increaseHeight,
-          isEmpty,
-          clearHandler,
-        ),
+        useChatInputEvents(inputRef, resize, increaseHeight, isEmpty),
       {
         initialProps: { inputRef: first.ref, resize: firstResize },
       },
@@ -312,20 +304,13 @@ describe("chat input callback freshness", () => {
   it("uses the latest empty-content callbacks after rerender", () => {
     const inputRef: RefObject<HTMLDivElement | null> = { current: null };
     const smartResize = vi.fn();
-    const clearHandler = vi.fn();
     const firstCheck = vi.fn(() => false);
     const latestCheck = vi.fn(() => true);
     const firstIncrease = vi.fn();
     const latestIncrease = vi.fn();
     const { result, rerender } = renderHook(
       ({ check, increase }) =>
-        useChatInputEvents(
-          inputRef,
-          smartResize,
-          increase,
-          check,
-          clearHandler,
-        ),
+        useChatInputEvents(inputRef, smartResize, increase, check),
       {
         initialProps: { check: firstCheck, increase: firstIncrease },
       },
@@ -353,7 +338,6 @@ describe("chat input callback freshness", () => {
     const smartResize = vi.fn();
     const increaseHeight = vi.fn();
     const isEmpty = vi.fn(() => false);
-    const clearHandler = vi.fn();
     const { result, rerender } = renderHook(
       ({ inputRef, focus, blur }) =>
         useChatInputEvents(
@@ -361,7 +345,6 @@ describe("chat input callback freshness", () => {
           smartResize,
           increaseHeight,
           isEmpty,
-          clearHandler,
           focus,
           blur,
         ),

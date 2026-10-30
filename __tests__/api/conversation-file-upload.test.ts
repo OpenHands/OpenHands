@@ -144,4 +144,61 @@ describe("uploadFilesToConversation", () => {
     );
     expect(result.uploaded_files).toEqual(["notes.md"]);
   });
+
+  it("uploads using only the basename of user-provided file names", async () => {
+    const result = await uploadFilesToConversation("conv-1", [
+      makeFile("../../evil.txt"),
+    ]);
+
+    expect(fileUploadMock).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "../../evil.txt" }),
+      "/Users/test/workspace/project/evil.txt",
+    );
+    expect(result).toEqual({
+      uploaded_files: ["evil.txt"],
+      skipped_files: [],
+    });
+  });
+
+  it("uses the conversation session key and reports per-file failures", async () => {
+    fileUploadMock
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error("too large"));
+
+    const result = await uploadFilesToConversation(
+      "conv-1",
+      [makeFile("ok.txt"), makeFile("bad.txt")],
+      { id: "conv-1", session_api_key: "session-key" } as never,
+    );
+
+    expect(RemoteWorkspace).toHaveBeenCalledWith(
+      expect.objectContaining({ apiKey: "session-key" }),
+    );
+    expect(result).toEqual({
+      uploaded_files: ["ok.txt"],
+      skipped_files: [{ name: "bad.txt", reason: "too large" }],
+    });
+  });
+
+  it("uploads files in bounded batches", async () => {
+    let activeUploads = 0;
+    let maxActiveUploads = 0;
+    fileUploadMock.mockImplementation(async () => {
+      activeUploads += 1;
+      maxActiveUploads = Math.max(maxActiveUploads, activeUploads);
+      await Promise.resolve();
+      activeUploads -= 1;
+    });
+
+    const files = Array.from({ length: 7 }, (_, index) =>
+      makeFile(`file-${String(index)}.txt`),
+    );
+
+    const result = await uploadFilesToConversation("conv-1", files);
+
+    expect(fileUploadMock).toHaveBeenCalledTimes(7);
+    expect(maxActiveUploads).toBe(5);
+    expect(result.uploaded_files).toEqual(files.map((file) => file.name));
+    expect(result.skipped_files).toEqual([]);
+  });
 });

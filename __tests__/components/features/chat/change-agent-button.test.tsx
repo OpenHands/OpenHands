@@ -244,10 +244,10 @@ describe("ChangeAgentButton mode selection", () => {
       "rounded-[100px]",
       "border",
       "border-transparent",
-      "text-[var(--oh-muted)]",
+      "text-muted",
       "cursor-pointer",
-      "hover:text-white",
-      "hover:bg-white/10",
+      "hover:text-contrast",
+      "hover:bg-contrast/10",
     );
     expect(screen.getByTestId("code-agent-icon")).toBeInTheDocument();
     expect(screen.queryByTestId("plan-agent-icon")).not.toBeInTheDocument();
@@ -262,6 +262,15 @@ describe("ChangeAgentButton mode selection", () => {
     expect(
       screen.queryByTestId("change-agent-context-menu"),
     ).not.toBeInTheDocument();
+  });
+
+  it("sizes the mode label at the intended 11px", () => {
+    renderButton();
+
+    const label = screen.getByText("COMMON$CODE");
+    expect(label).toHaveClass("text-[11px]");
+    expect(label).toHaveClass("text-inherit");
+    expect(label).not.toHaveClass("text-2.75");
   });
 
   it("selects plan and code modes from the menu", async () => {
@@ -373,13 +382,16 @@ describe("ChangeAgentButton availability", () => {
     expect(button).toHaveClass("opacity-50", "cursor-not-allowed");
     [
       "cursor-pointer",
-      "hover:text-white",
-      "hover:bg-white/10",
-      "text-white",
+      "hover:text-contrast",
+      "hover:bg-contrast/10",
       "hover:bg-[#597FF4]",
     ].forEach((interactiveClass) => {
       expect(button).not.toHaveClass(interactiveClass);
     });
+    if (overrides.conversationMode === "plan") {
+      expect(button).toHaveClass("text-white", "bg-[#4A67BD]");
+      expect(screen.getByText("COMMON$PLAN")).toHaveClass("text-inherit");
+    }
 
     await user.click(button);
     fireEvent.keyDown(document, { key: "Tab", shiftKey: true });

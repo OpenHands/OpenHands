@@ -1,5 +1,7 @@
+import { AUTOMATION_FORM_UPDATE_ACTION_KIND } from "#/constants/automation-form";
 import { CANVAS_UI_CLIENT_ACTION_KIND } from "#/constants/canvas-ui";
 import { LAUNCH_CHILD_CONVERSATION_ACTION_KIND } from "#/constants/child-conversation";
+import { REQUEST_SECRET_ACTION_KIND } from "#/constants/secret-request";
 
 type EventType =
   | "MCPTool"
@@ -12,7 +14,8 @@ type EventType =
   | "TaskTracker"
   | "PlanningFileEditor"
   | "InvokeSkill"
-  | "SwitchLLM";
+  | "SwitchLLM"
+  | "ClassifyAndSwitchLLM";
 
 type ActionOnlyType =
   | "BrowserNavigate"
@@ -39,7 +42,9 @@ type ActionEventType =
   // The `task` tool delegating work to a spawned subagent.
   | "TaskAction"
   | typeof CANVAS_UI_CLIENT_ACTION_KIND
-  | typeof LAUNCH_CHILD_CONVERSATION_ACTION_KIND;
+  | typeof AUTOMATION_FORM_UPDATE_ACTION_KIND
+  | typeof LAUNCH_CHILD_CONVERSATION_ACTION_KIND
+  | typeof REQUEST_SECRET_ACTION_KIND;
 type ObservationEventType =
   | `${ObservationOnlyType}Observation`
   | `${EventType}Observation`

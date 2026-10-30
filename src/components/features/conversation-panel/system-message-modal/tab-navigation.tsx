@@ -16,10 +16,7 @@ export function TabNavigation({
   const { t } = useTranslation("openhands");
 
   return (
-    <div
-      className="mb-2 flex border-b border-[var(--oh-border)]"
-      role="tablist"
-    >
+    <div className="mb-2 flex border-b border-border" role="tablist">
       <TabButton
         isActive={activeTab === "system"}
         onClick={() => onTabChange("system")}

@@ -99,6 +99,7 @@ export async function uploadFilesToConversation(
       sessionApiKey,
     });
     return uploadFilesToRuntime({
+      conversationId,
       files,
       workingDir,
       conversationUrl: cloudRuntime.conversationUrl,
@@ -107,6 +108,7 @@ export async function uploadFilesToConversation(
   }
 
   return uploadFilesToRuntime({
+    conversationId,
     files,
     workingDir,
     conversationUrl,
@@ -115,6 +117,7 @@ export async function uploadFilesToConversation(
 }
 
 async function uploadFilesToRuntime(options: {
+  conversationId: string;
   files: File[];
   workingDir: string;
   conversationUrl: string | null;
@@ -123,6 +126,7 @@ async function uploadFilesToRuntime(options: {
   const { files, workingDir, conversationUrl, sessionApiKey } = options;
   const workspace = new RemoteWorkspace(
     getAgentServerClientOptions({
+      conversationId: options.conversationId,
       conversationUrl,
       sessionApiKey,
       workingDir,

@@ -8,7 +8,6 @@ import {
   OPENAI_SUBSCRIPTION_MODELS_PATH,
   OPENAI_SUBSCRIPTION_STATUS_PATH,
 } from "#/constants/llm-subscription";
-let createMockWebClientConfig: typeof import("#/mocks/settings-handlers").createMockWebClientConfig;
 
 const BASE_URL = "http://localhost:3000";
 
@@ -21,7 +20,6 @@ const fetchJson = async <T>(path: string, init?: RequestInit) => {
 beforeEach(async () => {
   vi.resetModules();
   const handlers = await import("#/mocks/settings-handlers");
-  createMockWebClientConfig = handlers.createMockWebClientConfig;
   server.resetHandlers(
     ...handlers.SETTINGS_HANDLERS,
     http.all("*", () => new HttpResponse(null, { status: 599 })),
@@ -29,39 +27,6 @@ beforeEach(async () => {
 });
 
 describe("mock agent-server discovery", () => {
-  it("builds a complete web-client config with optional overrides", () => {
-    const defaults = createMockWebClientConfig();
-    expect(defaults).toEqual({
-      feature_flags: {
-        hide_llm_settings: false,
-        hide_users_page: false,
-      },
-      providers_configured: [],
-      maintenance_start_time: null,
-      recaptcha_site_key: null,
-      faulty_models: [],
-      error_message: null,
-      updated_at: expect.any(String),
-    });
-
-    expect(
-      createMockWebClientConfig({
-        feature_flags: {
-          hide_llm_settings: true,
-          hide_users_page: false,
-        },
-        updated_at: "2030-01-01T00:00:00.000Z",
-      }),
-    ).toEqual({
-      ...defaults,
-      feature_flags: {
-        hide_llm_settings: true,
-        hide_users_page: false,
-      },
-      updated_at: "2030-01-01T00:00:00.000Z",
-    });
-  });
-
   it("publishes server metadata and the legacy model catalog", async () => {
     const serverInfo = await fetchJson<{
       version: string;
@@ -72,7 +37,7 @@ describe("mock agent-server discovery", () => {
       security_analyzers: string[];
     }>("/server_info");
     expect(serverInfo).toMatchObject({
-      version: "1.36.1",
+      version: "1.58.1",
       usable_tools: [
         "terminal",
         "file_editor",

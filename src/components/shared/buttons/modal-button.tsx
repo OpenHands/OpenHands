@@ -31,7 +31,7 @@ export function ModalButton({
       disabled={disabled}
       onClick={onClick}
       className={clsx(
-        variant === "default" && "text-sm font-normal py-[10px] rounded-sm",
+        variant === "default" && "text-sm font-normal py-2.5 rounded-sm",
         variant === "text-like" && "text-xs leading-4 font-normal",
         icon && "flex items-center justify-center gap-2",
         disabled && "opacity-50 cursor-not-allowed",

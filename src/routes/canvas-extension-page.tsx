@@ -2,7 +2,10 @@ import React from "react";
 import { useNavigate, useParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
-import { useCanvasExtensionsRuntime } from "#/components/features/canvas-extensions/canvas-extensions-runtime";
+import {
+  selectCanvasExtensionPage,
+  useCanvasExtensionsRuntime,
+} from "#/components/features/canvas-extensions/canvas-extensions-runtime";
 import { I18nKey } from "#/i18n/declaration";
 
 export default function CanvasExtensionPage() {
@@ -16,18 +19,7 @@ export default function CanvasExtensionPage() {
   const [mountError, setMountError] = React.useState<string | null>(null);
 
   const page = React.useMemo(
-    () =>
-      pages
-        .filter((candidate) => candidate.extension.name === extensionName)
-        .sort(
-          (left, right) =>
-            right.contribution.path.length - left.contribution.path.length,
-        )
-        .find(
-          (candidate) =>
-            routePath === candidate.contribution.path ||
-            routePath.startsWith(`${candidate.contribution.path}/`),
-        ),
+    () => selectCanvasExtensionPage(pages, extensionName, routePath),
     [extensionName, pages, routePath],
   );
 
@@ -86,8 +78,8 @@ export default function CanvasExtensionPage() {
   if (error || !page) {
     return (
       <main className="flex h-full items-center justify-center p-8">
-        <div className="max-w-lg rounded-xl border border-[var(--oh-border)] bg-base-secondary p-6 text-center">
-          <h1 className="text-lg font-semibold text-white">
+        <div className="max-w-lg rounded-xl border border-border bg-base-secondary p-6 text-center">
+          <h1 className="text-lg font-semibold text-contrast">
             {t(I18nKey.SETUP$UNAVAILABLE_TITLE)}
           </h1>
           <p className="mt-2 text-sm text-tertiary-light">

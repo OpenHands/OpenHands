@@ -2,51 +2,13 @@ import { ConversationStatus } from "#/types/conversation-status";
 import { RuntimeStatus } from "#/types/runtime-status";
 import { Provider } from "#/types/settings";
 
-export interface ErrorResponse {
-  error: string;
-}
-
-export interface SaveFileSuccessResponse {
-  message: string;
-}
-
 export interface FileUploadSuccessResponse {
   uploaded_files: string[];
   skipped_files: { name: string; reason: string }[];
 }
 
-export interface FeedbackBodyResponse {
-  message: string;
-  feedback_id: string;
-  password: string;
-}
-
-export interface FeedbackResponse {
-  statusCode: number;
-  body: FeedbackBodyResponse;
-}
-
-export interface AuthenticationResponse {
-  message: string;
-  login?: string; // Only present when allow list is enabled
-}
-
-export interface Feedback {
-  version: string;
-  email: string;
-  token: string;
-  polarity: "positive" | "negative";
-  permissions: "public" | "private";
-  trajectory: unknown[];
-}
-
 export interface GetVSCodeUrlResponse {
   vscode_url: string | null;
-  error?: string;
-}
-
-export interface GetTrajectoryResponse {
-  trajectory: unknown[] | null;
   error?: string;
 }
 
@@ -83,11 +45,6 @@ export interface Conversation {
   llm_model?: string | null;
 }
 
-export interface ResultSet<T> {
-  results: T[];
-  next_page_id: string | null;
-}
-
 /**
  * @deprecated Use AgentServerGitChangeStatus for new code. This type is maintained for backward compatibility with V0 API.
  */
@@ -121,20 +78,4 @@ export interface GitCommit {
 export interface GitCommitsPage {
   commits: GitCommit[];
   hasMore: boolean;
-}
-
-export interface InputMetadata {
-  name: string;
-  description: string;
-}
-
-export interface IOption<T> {
-  label: string;
-  value: T;
-}
-
-export type GetFilesResponse = string[];
-
-export interface GetFileResponse {
-  code: string;
 }
