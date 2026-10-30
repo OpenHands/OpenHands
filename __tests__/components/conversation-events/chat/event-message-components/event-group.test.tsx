@@ -115,7 +115,7 @@ describe("EventGroup", () => {
     ];
 
     renderWithProviders(
-      <EventGroup events={events}>
+      <EventGroup events={events} isFinalized>
         <div data-testid="child">child content</div>
       </EventGroup>,
     );
@@ -125,7 +125,7 @@ describe("EventGroup", () => {
     expect(screen.queryByTestId("child")).not.toBeInTheDocument();
   });
 
-  it("keeps the same summary line while an action is in flight", () => {
+  it("shows the running step's title while an action is in flight", () => {
     const events = [
       makeBashObservation("o1", "a1", "ls"),
       makeBashObservation("o2", "a2", "pwd"),
@@ -139,11 +139,13 @@ describe("EventGroup", () => {
       </EventGroup>,
     );
 
-    // Same layout as a finished group: what the steps did, plus a spinner.
-    expect(screen.getByText("EVENT_GROUP$RAN_COMMANDS")).toBeInTheDocument();
+    // Translations aren't loaded in tests, so the action's key stands in for
+    // the localized title.
+    expect(screen.getByText(/ACTION_MESSAGE\$RUN/)).toBeInTheDocument();
     expect(screen.getByTestId("spinner-icon")).toBeInTheDocument();
-    expect(screen.queryByText(/ACTIONS_PROGRESS/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/ACTION_MESSAGE\$RUN/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("EVENT_GROUP$RAN_COMMANDS"),
+    ).not.toBeInTheDocument();
   });
 
   it("hides the spinner once the group is no longer the live tail", () => {
@@ -162,7 +164,7 @@ describe("EventGroup", () => {
     expect(screen.getByText("EVENT_GROUP$RAN_COMMANDS")).toBeInTheDocument();
   });
 
-  it("drops the latest action title once nothing is running, even in the live tail", () => {
+  it("keeps the latest step's title between steps in the live tail", () => {
     const events = [
       makeBashObservation("o1", "a1", "ls"),
       makeBashObservation("o2", "a2", "pwd"),
@@ -175,9 +177,12 @@ describe("EventGroup", () => {
       </EventGroup>,
     );
 
-    expect(screen.getByText("EVENT_GROUP$RAN_COMMANDS")).toBeInTheDocument();
+    // Nothing is running, but the agent hasn't moved on: the header must not
+    // switch to the summary and back between steps.
+    expect(screen.getByText(/OBSERVATION_MESSAGE\$RUN/)).toBeInTheDocument();
+    expect(screen.queryByTestId("spinner-icon")).not.toBeInTheDocument();
     expect(
-      screen.queryByText(/OBSERVATION_MESSAGE\$RUN/),
+      screen.queryByText("EVENT_GROUP$RAN_COMMANDS"),
     ).not.toBeInTheDocument();
   });
 
@@ -258,7 +263,7 @@ describe("EventGroup", () => {
     } as HookExecutionEvent;
     const events = [makeBashObservation("o1", "a1", "ls"), hook];
 
-    renderWithProviders(
+    const { rerender } = renderWithProviders(
       <EventGroup events={events} isFinalized>
         <div>child</div>
       </EventGroup>,
@@ -267,6 +272,14 @@ describe("EventGroup", () => {
     expect(
       screen.getByText("EVENT_GROUP$RAN_COMMANDS · EVENT_GROUP$RAN_HOOKS"),
     ).toBeInTheDocument();
+
+    // In the live tail a trailing hook run doesn't replace the step's title.
+    rerender(
+      <EventGroup events={events}>
+        <div>child</div>
+      </EventGroup>,
+    );
+    expect(screen.getByText(/OBSERVATION_MESSAGE\$RUN/)).toBeInTheDocument();
   });
 
   it("shows a spinner while running and no status icon when done", () => {
@@ -304,7 +317,7 @@ describe("EventGroup", () => {
     const allEvents = [makeBashAction("a2", "pwd"), ...events];
 
     renderWithProviders(
-      <EventGroup events={events} allEvents={allEvents}>
+      <EventGroup events={events} allEvents={allEvents} isFinalized>
         <div>child</div>
       </EventGroup>,
     );
@@ -319,13 +332,19 @@ describe("EventGroup", () => {
     ];
     const allEvents = [...events, makeAgentErrorEvent("e2", "a2")];
 
-    renderWithProviders(
+    // Live tail: the errored action must not keep the spinner going.
+    const { rerender } = renderWithProviders(
       <EventGroup events={events} allEvents={allEvents}>
         <div>child</div>
       </EventGroup>,
     );
-
     expect(screen.queryByTestId("spinner-icon")).not.toBeInTheDocument();
+
+    rerender(
+      <EventGroup events={events} allEvents={allEvents} isFinalized>
+        <div>child</div>
+      </EventGroup>,
+    );
     expect(screen.getByText("EVENT_GROUP$RAN_COMMANDS")).toBeInTheDocument();
   });
 

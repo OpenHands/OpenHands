@@ -1,15 +1,20 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { LoaderCircle } from "lucide-react";
-import { OpenHandsEvent } from "#/types/agent-server/core";
+import { ActionEvent, OpenHandsEvent } from "#/types/agent-server/core";
 import {
   isActionEvent,
   isAgentErrorEvent,
+  isHookExecutionEvent,
+  isObservationEvent,
+  isUserRejectObservation,
 } from "#/types/agent-server/type-guards";
 import { I18nKey } from "#/i18n/declaration";
 import { getEventGroupSummaryParts } from "./event-group-summary";
 import { DisclosureCaret } from "#/components/shared/disclosure-caret";
+import { getEventContent } from "../event-content-helpers/get-event-content";
 import { IsInEventGroupContext } from "../../../features/chat/is-in-event-group-context";
+import { PathInteractiveContext } from "../../../features/chat/path-component";
 
 interface EventGroupProps {
   /** The events represented by this group. Used to compute the summary. */
@@ -23,8 +28,9 @@ interface EventGroupProps {
   allEvents?: OpenHandsEvent[];
   /**
    * `true` once an event outside this group has been emitted after it, so the
-   * group is no longer the "live" tail of the chat. Only the live tail shows
-   * a spinner while one of its actions is running.
+   * group is no longer the "live" tail of the chat. The live tail shows its
+   * latest step and a spinner while an action runs; a finalized group shows
+   * what its steps did ("Ran 3 commands").
    */
   isFinalized?: boolean;
   /** The fully-rendered event messages to show when the group is expanded. */
@@ -35,9 +41,12 @@ interface EventGroupProps {
  * Collapsible container that wraps a run of consecutive agent action/observation
  * events into a single summary card.
  *
- * Collapsed: what the steps did, e.g. "Ran 3 commands · Read 1 file". The
- * counts grow as steps arrive, and a spinner follows the summary while an
- * action in the live tail is running, so the header never changes layout.
+ * Collapsed, while the group is the live tail of the chat: the latest tool
+ * step's title ("Ran the title tests"), with a spinner while an action runs.
+ * Hook runs don't take over the title; they are quick and fire between steps.
+ *
+ * Collapsed once the agent has moved on: what the steps did, e.g.
+ * "Ran 3 commands · Read 1 file". The layout is the same in both states.
  *
  * Expanded: the children in a bordered list, so each individual
  * action/observation can still be expanded the way it was before grouping.
@@ -74,9 +83,31 @@ export function EventGroup({
     (action) => !erroredToolCallIds?.has(action.tool_call_id),
   );
   const showSpinner = pendingActions.length > 0 && !isFinalized;
-  const summary = getEventGroupSummaryParts(events, lookupSource)
-    .map(({ key, count }) => t(key, { count }))
-    .join(" · ");
+  const latestStep = isFinalized
+    ? undefined
+    : [...events].reverse().find((e) => !isHookExecutionEvent(e));
+  let latestTitle: React.ReactNode = null;
+  if (latestStep && isActionEvent(latestStep)) {
+    latestTitle = getEventContent(latestStep).title;
+  } else if (
+    latestStep &&
+    (isObservationEvent(latestStep) || isUserRejectObservation(latestStep))
+  ) {
+    const action = lookupSource.find(
+      (e): e is ActionEvent =>
+        isActionEvent(e) && e.id === latestStep.action_id,
+    );
+    latestTitle = getEventContent(latestStep, action).title;
+  }
+  const summary = latestTitle ? (
+    <PathInteractiveContext.Provider value={false}>
+      {latestTitle}
+    </PathInteractiveContext.Provider>
+  ) : (
+    getEventGroupSummaryParts(events, lookupSource)
+      .map(({ key, count }) => t(key, { count }))
+      .join(" · ")
+  );
 
   return (
     // Agent text carries a large top margin for paragraph spacing; trim it
