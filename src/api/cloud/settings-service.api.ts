@@ -248,8 +248,8 @@ export interface CloudIntegrationsConfig {
    */
   deploymentMode: string | null;
   /**
-   * Whether the instance enables service accounts, and with them service
-   * account automation owners.
+   * Whether the instance enables service accounts, and with them automations
+   * that run as a service account.
    */
   isServiceAccountsEnabled: boolean;
 }

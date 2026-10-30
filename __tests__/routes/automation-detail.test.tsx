@@ -73,7 +73,7 @@ vi.mock("#/api/cloud/organization-service.api", async (importOriginal) => ({
   listCloudServiceAccounts: vi.fn(),
 }));
 
-// Mock only the web-client config read, which gates the service account owner
+// Mock only the web-client config read, which gates the service account run-as
 // UI on the instance's `enable_service_accounts` flag.
 vi.mock("#/api/cloud/settings-service.api", async (importOriginal) => ({
   ...(await importOriginal<
@@ -86,6 +86,7 @@ function mockServiceAccountsEnabled(isServiceAccountsEnabled: boolean) {
   const config: CloudIntegrationsConfig = {
     providersConfigured: [],
     isJiraEnabled: false,
+    isJiraDcEnabled: false,
     isLinearEnabled: false,
     isSlackEnabled: false,
     deploymentMode: null,
