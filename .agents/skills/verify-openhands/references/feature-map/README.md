@@ -249,7 +249,7 @@ How to write and prove new entries: [../mapping.md](../mapping.md).
 | F17 | [Customize hub and MCP servers](F17-mcp-servers.md) | catalog, install, test, edit, delete, custom servers, agent use | **Customize**, `/mcp` | `uvx`/`npx`; LLM | 33 |
 | F18 | [Skills catalog](F18-skills.md) | facets, search, enable/disable, add skill, Use skill, personal and project skills | `/skills` | `fixture skill`; LLM | 23 |
 | F19 | [Plugins and plugin launch](F19-plugins.md) | catalog, install, update, uninstall, enable, launch deep links | `/plugins`, `/launch` | LLM | 25 |
-| F20 | [Canvas apps](F20-canvas-apps.md) | install from path or git, enable, update, uninstall, extension pages | `/apps` | none | 24 |
+| F20 | [Canvas apps](F20-canvas-apps.md) | install from path or git, enable, update, uninstall, extension pages, registry app smoke | `/apps` | none | 25 |
 | F21 | [Automations dashboard and actions](F21-automations-dashboard.md) | cards and list, filters, sort, Run now, enable, export, import, delete, pin | `/automations` | LLM; automation service | 37 |
 | F22 | [Creating automations](F22-automation-creation.md) | templates, setup dialog, custom automations, import | `/automations/templates`, `/automations/new/<id>` | LLM | 31 |
 | F23 | [Automation detail, runs and editing](F23-automation-detail.md) | detail page, runs, logs, edit dialog, triggers, debug | `/automations/<id>` | LLM; runs | 43 |
@@ -259,7 +259,7 @@ How to write and prove new entries: [../mapping.md](../mapping.md).
 | F27 | [Workspace tools](F27-workspace-tools.md) | terminal, browser, planner, task list, usage, `canvas_ui_control` | drawer tabs | LLM | 31 |
 | F28 | [Automation setup page](F28-automation-setup-page.md) | blank form, kind toggle, schedule presets, event fields, timeout, draft save and validation, draft Test, Create | **Add Automation → Create Automation**, `/automations/setup`, draft Resume, kebab Edit | automation service; no LLM | 15 |
 
-28 families, 805 sub-features. `control-openhands map ids` lists every ID with its file.
+28 families, 806 sub-features. `control-openhands map ids` lists every ID with its file.
 
 ### Neighbouring families
 
