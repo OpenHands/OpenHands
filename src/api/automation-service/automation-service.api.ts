@@ -15,7 +15,6 @@ import type {
   AutomationTrigger,
   AutomationsResponse,
   AutomationRunsResponse,
-  ChangeRunAsRequest,
 } from "#/types/automation";
 import type {
   GitSyncCheckResponse,
@@ -605,31 +604,6 @@ class AutomationService {
     }
 
     const { data } = await localAutomationAxios.patch<Automation>(path, body);
-    return data;
-  }
-
-  /**
-   * Move an automation to a service account of the org, or back to the caller.
-   * The service leaves it turned off. Backend: POST /api/automation/v1/{id}/run-as
-   */
-  static async changeRunAs(
-    id: string,
-    body: ChangeRunAsRequest,
-  ): Promise<Automation> {
-    const active = getActiveBackend().backend;
-    const path = `${AUTOMATION_BASE_PATH}${getAutomationIdEndpoint("detail", id)}/run-as`;
-
-    if (active.kind === "cloud") {
-      return callCloudProxy<Automation>({
-        backend: active,
-        method: "POST",
-        path,
-        body,
-        headers: await buildAutomationRequestHeaders(),
-      });
-    }
-
-    const { data } = await localAutomationAxios.post<Automation>(path, body);
     return data;
   }
 

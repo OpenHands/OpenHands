@@ -369,29 +369,6 @@ describe("AutomationService", () => {
     });
   });
 
-  describe("changeRunAs", () => {
-    it("posts the target identity to the run-as endpoint for cloud backends", async () => {
-      mockGetActive.mockReturnValue({ backend: cloudBackend, orgId: "org-1" });
-      mockCallCloudProxy.mockResolvedValue({
-        ...mockAutomation,
-        enabled: false,
-      });
-
-      await AutomationService.changeRunAs("1", {
-        to: "service",
-        service_account_id: "sa-1",
-      });
-
-      expect(mockCallCloudProxy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          method: "POST",
-          path: "/api/automation/v1/1/run-as",
-          body: { to: "service", service_account_id: "sa-1" },
-        }),
-      );
-    });
-  });
-
   describe("deleteAutomation", () => {
     it("deletes an automation by id", async () => {
       mockDelete.mockResolvedValue({});

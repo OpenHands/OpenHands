@@ -38,7 +38,6 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
     fetchTarballBytes: vi.fn(),
     checkHealth: vi.fn(),
     getCapabilities: vi.fn(),
-    changeRunAs: vi.fn(),
   },
 }));
 
@@ -611,102 +610,19 @@ describe("AutomationDetail — runs as a service account", () => {
     expect(listCloudServiceAccounts).not.toHaveBeenCalled();
   });
 
-  it("changes the automation to run as the chosen service account", async () => {
-    // Arrange
+  it("never offers Change Runs As, even to a manager with the capability", async () => {
+    // Changing who an automation runs as is hidden for now: its credentials do
+    // not follow it. A new automation can still run as a service account.
     const user = userEvent.setup();
-    vi.mocked(AutomationService.changeRunAs).mockResolvedValue({
-      ...automation,
-      enabled: false,
-    });
     renderDetail();
     await screen.findByText("ci-bot");
-
-    // Act
-    await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
-    await user.click(
-      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$CHANGE_RUN_AS }),
-    );
-    await user.selectOptions(
-      screen.getByTestId("change-run-as-target"),
-      "sa-2",
-    );
-    await user.click(screen.getByTestId("change-run-as-confirm"));
-
-    // Assert — the API is called and the detail query is refetched.
-    await waitFor(() => {
-      expect(AutomationService.changeRunAs).toHaveBeenCalledWith("auto-1", {
-        to: "service",
-        service_account_id: "sa-2",
-      });
-    });
-    await waitFor(() => {
-      expect(AutomationService.getAutomation).toHaveBeenCalledTimes(2);
-    });
-  });
-
-  it("shows the service's reason and keeps the modal open when the run-as change fails", async () => {
-    // Arrange
-    const user = userEvent.setup();
-    vi.mocked(AutomationService.changeRunAs).mockRejectedValue(
-      new HttpError(409, "Conflict", {
-        detail: "The automation has a pending or running run",
-      }),
-    );
-    renderDetail();
-    await screen.findByText("ci-bot");
-
-    // Act
-    await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
-    await user.click(
-      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$CHANGE_RUN_AS }),
-    );
-    await user.click(screen.getByTestId("change-run-as-confirm"));
-
-    // Assert
-    await waitFor(() => {
-      expect(errorToast).toHaveBeenCalledWith(
-        "The automation has a pending or running run",
-      );
-    });
-    expect(screen.getByTestId("change-run-as-confirm")).toBeEnabled();
-  });
-
-  it("does not offer Change Runs As without the capability", async () => {
-    // Arrange
-    vi.mocked(AutomationService.getCapabilities).mockResolvedValue({
-      ready: true,
-      triggerKinds: [],
-      eventSources: [],
-      eventTypes: [],
-      triggers: {},
-      features: [],
-    });
-    const user = userEvent.setup();
-    renderDetail();
-    await screen.findByText(automation.name);
 
     // Act
     await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
 
     // Assert
     expect(
-      screen.queryByRole("button", { name: I18nKey.AUTOMATIONS$CHANGE_RUN_AS }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("does not offer Change Runs As on a local backend", async () => {
-    // Arrange — default selection is the local backend.
-    setActiveSelection({ backendId: localBackend.id });
-    const user = userEvent.setup();
-    renderDetail();
-    await screen.findByText(automation.name);
-
-    // Act
-    await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
-
-    // Assert
-    expect(
-      screen.queryByRole("button", { name: I18nKey.AUTOMATIONS$CHANGE_RUN_AS }),
+      screen.queryByRole("button", { name: /CHANGE_RUN_AS/ }),
     ).not.toBeInTheDocument();
   });
 });

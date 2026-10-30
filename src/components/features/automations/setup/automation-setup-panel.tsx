@@ -1329,7 +1329,7 @@ export function AutomationSetupPanel({
           ),
           timezone: timezone.trim() || DEFAULT_TIMEZONE,
         };
-  // Only a new automation picks who it runs as; an existing one uses Change Runs As.
+  // Only a new automation picks who it runs as; an existing one keeps it.
   const showRunAsPicker = serviceAccountRunAsEnabled && !isEditingExisting;
   const newAutomationRunAsId = showRunAsPicker ? runAsUserId : "";
   const buildPresetBody = (): SetupRequestBody => {

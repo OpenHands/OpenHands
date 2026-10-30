@@ -36,14 +36,6 @@ export interface AutomationRepository {
 
 export type AutomationState = "ACTIVE" | "INACTIVE" | "DRAFT";
 
-/**
- * `POST /v1/{id}/run-as` body: hand the automation to a service account of
- * the org, or back to the caller (managers only).
- */
-export type ChangeRunAsRequest =
-  | { to: "service"; service_account_id: string }
-  | { to: "self" };
-
 /** What kind of identity an automation runs as. */
 export type AutomationRunAsKind = "user" | "service";
 
