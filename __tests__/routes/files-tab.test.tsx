@@ -8,6 +8,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { MemoryRouter } from "react-router";
 
 import FilesTab from "#/routes/files-tab";
+import { downloadBlob } from "#/utils/utils";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { useFilesTabStore } from "#/stores/files-tab-store";
 import { useWorkspaceMutationCounter } from "#/stores/use-workspace-mutation-counter";
 import { NavigationProvider } from "#/context/navigation-context";
@@ -33,6 +35,16 @@ vi.mock("#/hooks/query/use-workspace-file-content", () => ({
 
 vi.mock("#/hooks/query/use-active-conversation", () => ({
   useActiveConversation: () => useActiveConversationMock(),
+}));
+
+vi.mock("#/utils/utils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#/utils/utils")>()),
+  downloadBlob: vi.fn(),
+}));
+
+vi.mock("#/utils/custom-toast-handlers", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#/utils/custom-toast-handlers")>()),
+  displayErrorToast: vi.fn(),
 }));
 
 function renderTab(conversationId: string | null = null) {
@@ -776,6 +788,186 @@ describe("FilesTab", () => {
       expect(useFilesTabStore.getState().openPaths).toEqual([]);
       expect(useFilesTabStore.getState().selectedConversationId).toBe("conv-b");
       expect(useWorkspaceFileContentMock).not.toHaveBeenCalledWith("demo.html");
+    });
+  });
+
+  // Save the selected file to the user's machine (OHE-3834). Local backends
+  // download the fileserver bytes; Cloud backends only hold decoded text.
+  describe("Download", () => {
+    const fetchMock = vi.fn();
+
+    function cloudTextFile(text: string) {
+      return {
+        data: {
+          path: "docs/README.md",
+          kind: "text",
+          text,
+          staticUrl: `data:text/markdown;charset=utf-8;base64,${btoa(text)}`,
+          mimeType: "text/markdown",
+        },
+        isLoading: false,
+        isError: false,
+      };
+    }
+
+    beforeEach(() => {
+      vi.stubGlobal("fetch", fetchMock);
+      fetchMock.mockReset();
+      // jsdom does not implement object URLs, which the new-window link needs.
+      vi.stubGlobal(
+        "URL",
+        class extends URL {
+          static createObjectURL = () => "blob:http://localhost/file";
+
+          static revokeObjectURL = () => {};
+        },
+      );
+      vi.mocked(downloadBlob).mockClear();
+      vi.mocked(displayErrorToast).mockClear();
+    });
+
+    it("saves a local file's bytes from the workspace fileserver under its own name", async () => {
+      // Arrange
+      const staticUrl =
+        "http://localhost:3000/api/conversations/c1/workspace/assets/logo.png";
+      useWorkspaceFileContentMock.mockReturnValue({
+        data: {
+          path: "assets/logo.png",
+          kind: "image",
+          text: null,
+          staticUrl,
+          mimeType: "image/png",
+        },
+        isLoading: false,
+        isError: false,
+      });
+      const bytes = new Uint8Array([137, 80, 78, 71, 0, 13]);
+      fetchMock.mockResolvedValue({
+        ok: true,
+        blob: async () => new Blob([bytes], { type: "image/png" }),
+      });
+      const user = userEvent.setup();
+      openFile("assets/logo.png");
+      renderTab();
+
+      // Act
+      await user.click(screen.getByTestId("files-tab-download"));
+
+      // Assert
+      await waitFor(() => expect(downloadBlob).toHaveBeenCalledOnce());
+      expect(fetchMock).toHaveBeenCalledWith(staticUrl, {
+        credentials: "include",
+        cache: "no-cache",
+      });
+      const [blob, filename] = vi.mocked(downloadBlob).mock.calls[0];
+      expect(filename).toBe("logo.png");
+      expect(blob.type).toBe("image/png");
+      expect(new Uint8Array(await blob.arrayBuffer())).toEqual(bytes);
+    });
+
+    it("saves a Cloud text file from its decoded text with the file's MIME type", async () => {
+      // Arrange
+      useWorkspaceFileContentMock.mockReturnValue(cloudTextFile("# Hello"));
+      const user = userEvent.setup();
+      openFile("docs/README.md");
+      renderTab();
+
+      // Act
+      await user.click(screen.getByTestId("files-tab-download"));
+
+      // Assert
+      await waitFor(() => expect(downloadBlob).toHaveBeenCalledOnce());
+      expect(fetchMock).not.toHaveBeenCalled();
+      const [blob, filename] = vi.mocked(downloadBlob).mock.calls[0];
+      expect(filename).toBe("README.md");
+      expect(blob.type).toBe("text/markdown;charset=utf-8");
+      await expect(blob.text()).resolves.toBe("# Hello");
+    });
+
+    it("saves the current Cloud file body after Refresh", async () => {
+      // Arrange
+      useWorkspaceFileContentMock.mockReturnValue(cloudTextFile("# Old"));
+      const user = userEvent.setup();
+      openFile("docs/README.md");
+      renderTab();
+      useWorkspaceFileContentMock.mockReturnValue(cloudTextFile("# New"));
+
+      // Act
+      await user.click(screen.getByTestId("files-tab-refresh"));
+      await user.click(screen.getByTestId("files-tab-download"));
+
+      // Assert
+      await waitFor(() => expect(downloadBlob).toHaveBeenCalledOnce());
+      await expect(
+        vi.mocked(downloadBlob).mock.calls[0][0].text(),
+      ).resolves.toBe("# New");
+    });
+
+    it("offers no download for a Cloud file without decoded text", () => {
+      // Arrange
+      useWorkspaceFileContentMock.mockReturnValue({
+        data: {
+          path: "logo.png",
+          kind: "image",
+          text: null,
+          staticUrl: "data:image/png;base64,iVBORw0KGgo=",
+          mimeType: "image/png",
+        },
+        isLoading: false,
+        isError: false,
+      });
+
+      // Act
+      openFile("logo.png");
+      renderTab();
+
+      // Assert
+      expect(
+        screen.getByTestId("files-tab-content-mode-toggle"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("files-tab-download"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("offers no download for a file whose read failed", () => {
+      // Arrange
+      useWorkspaceFileContentMock.mockReturnValue({
+        data: undefined,
+        isLoading: false,
+        isError: true,
+        error: new Error("Failed to read README.md: 404"),
+      });
+
+      // Act
+      openFile("README.md");
+      renderTab();
+
+      // Assert
+      expect(
+        screen.getByTestId("file-content-viewer-error"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("files-tab-download"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("shows an error and saves nothing when the local download fails", async () => {
+      // Arrange: the default fixture is a local `index.html`.
+      fetchMock.mockResolvedValue({ ok: false, status: 404 });
+      const user = userEvent.setup();
+      openFile("index.html");
+      renderTab();
+
+      // Act
+      await user.click(screen.getByTestId("files-tab-download"));
+
+      // Assert
+      await waitFor(() =>
+        expect(displayErrorToast).toHaveBeenCalledWith("FILES$DOWNLOAD_ERROR"),
+      );
+      expect(downloadBlob).not.toHaveBeenCalled();
+      expect(screen.getByTestId("files-tab-download")).toBeEnabled();
     });
   });
 });

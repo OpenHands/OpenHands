@@ -173,6 +173,7 @@ export function ConversationMain() {
             className={cn(
               "flex min-w-0 items-center gap-2",
               isMobile && "h-10 justify-between px-3",
+              isSidebarRailHidden && "h-12",
             )}
           >
             <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -307,7 +308,7 @@ export function ConversationMain() {
               data-testid="chat-pane-header"
               className={cn(
                 "flex h-10 min-h-10 shrink-0 items-center",
-                isSidebarRailHidden && "gap-2 pl-2.5",
+                isSidebarRailHidden && "h-12 min-h-12 gap-2 pl-2.5",
               )}
             >
               {isSidebarRailHidden ? <SidebarMobileMenuToggle /> : null}

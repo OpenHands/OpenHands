@@ -6,7 +6,7 @@
     "automation": "1.26.1"
   },
   "compatibility": {
-    "minimumAgentServer": "1.57.0"
+    "minimumAgentServer": "1.59.0"
   },
   "python": {
     "_comment": "Interpreter request the npm and desktop launchers pass to uvx as --python for agent-server and automation. Without it uvx downloads the newest CPython when it finds no suitable interpreter, which breaks every autumn until the SDK's compiled dependencies (lmnr-claude-code-proxy, fastuuid) publish wheels for the new release (OpenHands/OpenHands#18654). Raise the upper bound once they do. UV_PYTHON in the environment replaces it.",

@@ -189,7 +189,7 @@ function checkRequires(check: SetupChecker, requires: unknown): void {
     return;
   }
 
-  const { integrations, features } = requires;
+  const { integrations, features, builtInIntegrations } = requires;
   // Empty is meaningful rather than malformed: an automation that needs no
   // credential connects to nothing, and the key stays required so that saying
   // so is a deliberate statement instead of an omission.
@@ -221,6 +221,24 @@ function checkRequires(check: SetupChecker, requires: unknown): void {
         if (typeof feature !== "string" || feature.length === 0) {
           check.fail(
             `requires.features[${index}]`,
+            "must be a non-empty string",
+          );
+        }
+      });
+    }
+  }
+
+  if (builtInIntegrations !== undefined) {
+    if (
+      !Array.isArray(builtInIntegrations) ||
+      builtInIntegrations.length === 0
+    ) {
+      check.fail("requires.builtInIntegrations", "must be a non-empty array");
+    } else {
+      builtInIntegrations.forEach((id, index) => {
+        if (typeof id !== "string" || id.length === 0) {
+          check.fail(
+            `requires.builtInIntegrations[${index}]`,
             "must be a non-empty string",
           );
         }
@@ -503,9 +521,14 @@ function setupSuppliesEventSource(setup: Rec): boolean {
   const triggers = isRecord(form.triggers) ? form.triggers : {};
   const eventFields = triggers.event;
 
-  // An explicit event-source field fills `source` directly, regardless of which
-  // action is selected.
-  if (fieldsContainType(eventFields, "event-source")) return true;
+  // An explicit event-source field, or any field named `source`, fills
+  // `source` directly, regardless of which action is selected.
+  if (
+    fieldsContainType(eventFields, "event-source") ||
+    (isRecord(eventFields) && "source" in eventFields)
+  ) {
+    return true;
+  }
 
   // A repo-picker in the event trigger is only collected when `event` is the
   // sole trigger kind; with a sibling trigger the derivation reads no trigger
