@@ -149,8 +149,10 @@ export const getGitProviderBaseUrl = (
   gitProvider: Provider,
   host?: string | null,
 ): string => {
-  // If custom host provided, use it (with https:// prefix if needed)
-  if (host && host.trim() !== "") {
+  // If custom host provided, use it (with https:// prefix if needed). Azure
+  // DevOps is the exception: its connection `host` holds the organization, not
+  // an instance, and OpenHands serves dev.azure.com only.
+  if (host && host.trim() !== "" && gitProvider !== "azure_devops") {
     return host.startsWith("http") ? host : `https://${host}`;
   }
 

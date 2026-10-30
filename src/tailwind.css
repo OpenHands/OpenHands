@@ -892,3 +892,24 @@ code .token {
 @utility backend-chooser-edit-dialog {
   max-height: 92dvh;
 }
+
+/* Workspace picker geometry preserves its original mixed rem/px tracks. */
+@utility workspace-folder-columns {
+  grid-template-columns: minmax(0, 1fr) 4rem;
+}
+
+@utility workspace-folder-columns-desktop {
+  grid-template-columns: 1fr 120px;
+}
+
+@utility workspace-section-label {
+  font-size: 11px;
+}
+
+@utility workspace-manager-dialog {
+  max-height: 70vh;
+}
+
+@utility home-dropdown-sticky-list {
+  max-height: calc(15rem - 3rem);
+}

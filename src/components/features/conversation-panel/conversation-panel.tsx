@@ -61,6 +61,12 @@ import {
 } from "./conversation-panel-list-helpers";
 import { useArchivedConversationsStore } from "#/stores/archived-conversations-store";
 import { usePinnedConversationsStore } from "#/stores/pinned-conversations-store";
+import { useUpdateConversationTagFlags } from "#/hooks/mutation/use-update-conversation-tag-flags";
+import {
+  ARCHIVED_CONVERSATION_TAG_KEY,
+  hasConversationTagFlag,
+  PINNED_CONVERSATION_TAG_KEY,
+} from "#/utils/conversation-tag-flags";
 import { uniqueById } from "#/utils/unique-by-id";
 import {
   isEffectivelyArchivedConversation,
@@ -178,32 +184,34 @@ export function ConversationPanel({
   const [expandedPinnedPreview, setExpandedPinnedPreview] =
     React.useState(false);
 
-  const pinnedIds = usePinnedConversationsStore(
+  // Pin/archive state is server-side now: it rides the conversation tags
+  // (`pinned` / `archived`; see `conversation-tag-flags.ts`), so the derived
+  // ID sets below are computed from the loaded conversations further down,
+  // once `allLoadedConversations` exists. The localStorage stores are kept
+  // only as the migration source for entries written before tags existed;
+  // the migration effect below replays them into tags and drains them.
+  const legacyPinnedIds = usePinnedConversationsStore(
     (state) =>
       state.pinsByBackendId[activeBackend.id] ?? EMPTY_PINNED_CONVERSATION_IDS,
   );
-  const togglePin = usePinnedConversationsStore((state) => state.togglePin);
   const unpinConversation = usePinnedConversationsStore(
     (state) => state.unpinConversation,
   );
   const pruneMissingPinnedConversations = usePinnedConversationsStore(
     (state) => state.pruneMissingConversations,
   );
-  const archivedIds = useArchivedConversationsStore(
+  const legacyArchivedIds = useArchivedConversationsStore(
     (state) =>
       state.archivesByBackendId[activeBackend.id] ??
       EMPTY_PINNED_CONVERSATION_IDS,
   );
-  const archiveConversation = useArchivedConversationsStore(
-    (state) => state.archiveConversation,
-  );
-  const archivedIdSet = React.useMemo(
-    () => new Set(archivedIds),
-    [archivedIds],
-  );
   const removeArchivedConversation = useArchivedConversationsStore(
     (state) => state.removeArchivedConversation,
   );
+  const {
+    mutate: updateConversationTagFlags,
+    mutateAsync: migrateConversationTagFlags,
+  } = useUpdateConversationTagFlags();
 
   // The one predicate every archived presentation reads: a row is effectively
   // archived when the user archived it, or when its runtime is missing and
@@ -212,12 +220,19 @@ export function ConversationPanel({
   // (`sandbox_status: "ERROR"` is intentionally not archived.) Menu availability
   // is a separate concern and does not read this predicate alone.
   const isRowArchived = React.useCallback(
-    (conversation: { id: string; sandbox_status?: SandboxStatus | null }) =>
+    (conversation: {
+      id: string;
+      sandbox_status?: SandboxStatus | null;
+      tags?: Record<string, string> | null;
+    }) =>
       isEffectivelyArchivedConversation(
         conversation.sandbox_status,
-        archivedIdSet.has(conversation.id),
+        hasConversationTagFlag(
+          conversation.tags,
+          ARCHIVED_CONVERSATION_TAG_KEY,
+        ),
       ),
-    [archivedIdSet],
+    [],
   );
 
   const toggleGroupCollapsed = React.useCallback((groupId: string) => {
@@ -333,6 +348,36 @@ export function ConversationPanel({
     );
   }, [allLoadedConversations, isRowArchived, showArchivedConversations]);
 
+  // Pin/archive ID sets derive from the tags on the loaded conversations
+  // (the unfiltered set, so archived-but-pinned rows still resolve and
+  // pruning is unnecessary — a deleted conversation takes its tags with it).
+  const pinnedIds = React.useMemo(
+    () =>
+      allLoadedConversations
+        .filter((conversation) =>
+          hasConversationTagFlag(
+            conversation.tags,
+            PINNED_CONVERSATION_TAG_KEY,
+          ),
+        )
+        .map((conversation) => conversation.id),
+    [allLoadedConversations],
+  );
+  const archivedIdSet = React.useMemo(
+    () =>
+      new Set(
+        allLoadedConversations
+          .filter((conversation) =>
+            hasConversationTagFlag(
+              conversation.tags,
+              ARCHIVED_CONVERSATION_TAG_KEY,
+            ),
+          )
+          .map((conversation) => conversation.id),
+      ),
+    [allLoadedConversations],
+  );
+
   // Facets derive from the unfiltered list so the automation-name rows in the
   // advanced-options modal don't vanish while a narrowing selection is active.
   const automationNameFacets = React.useMemo(
@@ -420,18 +465,75 @@ export function ConversationPanel({
     [conversations, pinnedIds],
   );
 
+  const attemptedLegacyMigrations = React.useRef(new Set<string>());
+
   React.useEffect(() => {
     if (!isFetched) {
       return;
     }
-    // Prune pins against the unfiltered loaded pages so archived-but-still-
-    // pinned rows are not treated as missing. Archived IDs are intentionally
-    // not pruned here — pagination would otherwise drop archives that are not
-    // on the currently loaded pages and let them reappear in the list.
-    const loadedIds =
-      data?.pages.flatMap((page) => page.items.map((item) => item.id)) ?? [];
-    pruneMissingPinnedConversations(activeBackend.id, loadedIds);
-  }, [activeBackend.id, data, isFetched, pruneMissingPinnedConversations]);
+    const backendId = activeBackend.id;
+    const loadedById = new Map(
+      allLoadedConversations.map((conversation) => [
+        conversation.id,
+        conversation,
+      ]),
+    );
+    for (const conversationId of new Set([
+      ...legacyPinnedIds,
+      ...legacyArchivedIds,
+    ])) {
+      const conversation = loadedById.get(conversationId);
+      const migrationKey = JSON.stringify([backendId, conversationId]);
+      if (
+        !conversation ||
+        attemptedLegacyMigrations.current.has(migrationKey)
+      ) {
+        continue;
+      }
+      // Optimistic tag updates rerun this effect before persistence succeeds.
+      // Attempt once per mount; failed entries remain available for the next load.
+      attemptedLegacyMigrations.current.add(migrationKey);
+      const changes: Record<string, boolean> = {};
+      if (legacyPinnedIds.includes(conversationId)) {
+        changes[PINNED_CONVERSATION_TAG_KEY] = true;
+      }
+      if (legacyArchivedIds.includes(conversationId)) {
+        changes[ARCHIVED_CONVERSATION_TAG_KEY] = true;
+      }
+      void migrateConversationTagFlags({
+        conversationId,
+        currentTags: conversation.tags,
+        changes,
+      })
+        .then(() => {
+          if (changes[PINNED_CONVERSATION_TAG_KEY]) {
+            unpinConversation(backendId, conversationId);
+          }
+          if (changes[ARCHIVED_CONVERSATION_TAG_KEY]) {
+            removeArchivedConversation(backendId, conversationId);
+          }
+        })
+        .catch(() => {
+          // Keep legacy entries intact when persistence fails.
+        });
+    }
+    if (legacyPinnedIds.length > 0) {
+      pruneMissingPinnedConversations(
+        backendId,
+        allLoadedConversations.map((conversation) => conversation.id),
+      );
+    }
+  }, [
+    activeBackend.id,
+    allLoadedConversations,
+    isFetched,
+    legacyArchivedIds,
+    legacyPinnedIds,
+    migrateConversationTagFlags,
+    pruneMissingPinnedConversations,
+    removeArchivedConversation,
+    unpinConversation,
+  ]);
 
   React.useEffect(() => {
     if (pinnedIds.length === 0) {
@@ -809,9 +911,43 @@ export function ConversationPanel({
   // again in one click, and nothing about the conversation itself changes.
   const handleUnarchiveProject = React.useCallback(
     (conversationId: string) => {
+      const conversation = allLoadedConversations.find(
+        (candidate) => candidate.id === conversationId,
+      );
+      updateConversationTagFlags({
+        conversationId,
+        currentTags: conversation?.tags,
+        changes: { [ARCHIVED_CONVERSATION_TAG_KEY]: false },
+      });
+      // Drain any pre-migration localStorage entry for the same row so the
+      // migration effect cannot resurrect the archive it just cleared.
       removeArchivedConversation(activeBackend.id, conversationId);
     },
-    [activeBackend.id, removeArchivedConversation],
+    [
+      activeBackend.id,
+      allLoadedConversations,
+      removeArchivedConversation,
+      updateConversationTagFlags,
+    ],
+  );
+
+  const handleTogglePin = React.useCallback(
+    (conversation: (typeof allLoadedConversations)[number]) => {
+      updateConversationTagFlags({
+        conversationId: conversation.id,
+        currentTags: conversation.tags,
+        changes: {
+          [PINNED_CONVERSATION_TAG_KEY]: !hasConversationTagFlag(
+            conversation.tags,
+            PINNED_CONVERSATION_TAG_KEY,
+          ),
+        },
+      });
+      // Same anti-resurrection drain as unarchive: a legacy pin awaiting
+      // migration must not re-pin a row the user just unpinned.
+      unpinConversation(activeBackend.id, conversation.id);
+    },
+    [activeBackend.id, unpinConversation, updateConversationTagFlags],
   );
 
   const handleStopConversation = React.useCallback((conversationId: string) => {
@@ -854,7 +990,20 @@ export function ConversationPanel({
     if (!selectedConversationId) {
       return;
     }
-    archiveConversation(activeBackend.id, selectedConversationId);
+    const conversation = allLoadedConversations.find(
+      (candidate) => candidate.id === selectedConversationId,
+    );
+    // Archiving also clears the pin: an archived row leaves the pinned
+    // section together with the main list.
+    updateConversationTagFlags({
+      conversationId: selectedConversationId,
+      currentTags: conversation?.tags,
+      changes: {
+        [ARCHIVED_CONVERSATION_TAG_KEY]: true,
+        [PINNED_CONVERSATION_TAG_KEY]: false,
+      },
+    });
+    removeArchivedConversation(activeBackend.id, selectedConversationId);
     unpinConversation(activeBackend.id, selectedConversationId);
     if (selectedConversationId === currentConversationId) {
       navigate("/conversations");
@@ -1084,7 +1233,7 @@ export function ConversationPanel({
               showTags={showTagsMetadata}
               isArchived={isArchived}
               isPinned={isPinned}
-              onTogglePin={() => togglePin(activeBackend.id, conversation.id)}
+              onTogglePin={() => handleTogglePin(conversation)}
               alwaysShowPinIcon={isPinned && !options?.inPinnedSection}
             />
           </NavigationLink>
@@ -1103,6 +1252,7 @@ export function ConversationPanel({
       handleEditTags,
       handleNewConversationInSandbox,
       handleStopConversation,
+      handleTogglePin,
       handleUnarchiveProject,
       isRowArchived,
       onClose,
@@ -1112,7 +1262,6 @@ export function ConversationPanel({
       showLlmProfiles,
       showTagsMetadata,
       showHoverMetadata,
-      togglePin,
     ],
   );
 

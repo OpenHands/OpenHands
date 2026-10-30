@@ -288,7 +288,7 @@ export function ConversationCard({
       data-active={isActive ? "true" : "false"}
       onClick={onClick}
       className={cn(
-        "group relative h-auto w-full cursor-pointer rounded-md py-1 pl-2 pr-1 transition-colors",
+        "group relative h-auto w-full cursor-pointer rounded-md py-1 pl-2 pr-1 transition-colors max-md:flex max-md:min-h-12 max-md:flex-col max-md:justify-center",
         !contextMenuOpen && "hover:bg-surface",
         (isActive || contextMenuOpen) && "bg-surface",
       )}
