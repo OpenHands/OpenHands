@@ -3,6 +3,7 @@ import { listCloudServiceAccounts } from "#/api/cloud/organization-service.api";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { SERVICE_ACCOUNT_RUN_AS_FEATURE } from "#/constants/automation-form";
 import { useAutomationPermissions } from "#/hooks/use-automation-permissions";
+import { useCloudIntegrationsConfig } from "./use-cloud-integrations-config";
 import { useDeploymentCapabilities } from "./use-manifest-capabilities";
 
 /**
@@ -18,8 +19,12 @@ export function useServiceAccountRunAsEnabled(): boolean {
     backend.kind === "cloud" && !!orgId && !!userId && orgId !== userId;
   // Skip the capabilities request where the answer would be discarded.
   const capabilities = useDeploymentCapabilities({ enabled: isTeamWorkspace });
+  const { data: config } = useCloudIntegrationsConfig({
+    enabled: isTeamWorkspace,
+  });
 
   if (!isTeamWorkspace) return false;
+  if (config?.isServiceAccountsEnabled !== true) return false;
   if (!capabilities.data?.features?.includes(SERVICE_ACCOUNT_RUN_AS_FEATURE)) {
     return false;
   }
