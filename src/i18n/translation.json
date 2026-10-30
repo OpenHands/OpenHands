@@ -39670,5 +39670,41 @@
     "uk": "Нова розмова в пісочниці",
     "ca": "Conversa nova al sandbox",
     "id": "Percakapan baru di sandbox"
+  },
+  "HOME$SANDBOX_LABEL": {
+    "en": "Sandbox",
+    "ja": "サンドボックス",
+    "ko-KR": "샌드박스",
+    "zh-CN": "沙盒",
+    "zh-TW": "沙箱",
+    "ar": "بيئة معزولة",
+    "de": "Sandbox",
+    "fr": "Sandbox",
+    "it": "Sandbox",
+    "pt": "Sandbox",
+    "es": "Sandbox",
+    "tr": "Korumalı alan",
+    "uk": "Пісочниця",
+    "ca": "Entorn aïllat",
+    "no": "Sandkasse",
+    "id": "Sandbox"
+  },
+  "HOME$SANDBOX_DEFAULT": {
+    "en": "Default",
+    "ja": "デフォルト",
+    "ko-KR": "기본값",
+    "zh-CN": "默认",
+    "zh-TW": "預設",
+    "ar": "الافتراضي",
+    "de": "Standard",
+    "fr": "Par défaut",
+    "it": "Predefinito",
+    "pt": "Padrão",
+    "es": "Predeterminado",
+    "tr": "Varsayılan",
+    "uk": "За замовчуванням",
+    "ca": "Per defecte",
+    "no": "Standard",
+    "id": "Default"
   }
 }

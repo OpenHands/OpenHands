@@ -19,6 +19,7 @@ import {
   LLM_PROFILES_QUERY_KEYS,
 } from "#/hooks/query/query-keys";
 import { ensureDefaultAgentProfileMigrated } from "#/hooks/use-migrate-default-agent-profile";
+import { getActiveBackend } from "#/api/backend-registry/active-store";
 import i18n from "#/i18n";
 import { I18nKey } from "#/i18n/declaration";
 
@@ -216,6 +217,17 @@ export async function launchConversation(
   });
   if (!context.isCloud && launch.llmProfile) {
     await assertLaunchLlmReady(launch.llmProfile);
+  }
+  // Profile resolution can await. Keep the selected template bound to the
+  // backend and organization captured when this launch began.
+  if (options.sandboxSpecId) {
+    const current = getActiveBackend();
+    if (
+      current.backend.id !== context.backendId ||
+      current.orgId !== context.orgId
+    ) {
+      throw new Error(i18n.t(I18nKey.CONVERSATION$ERROR_STARTING_CONVERSATION));
+    }
   }
   const task = await AgentServerConversationService.createConversation({
     ...options,

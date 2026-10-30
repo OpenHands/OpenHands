@@ -12,6 +12,10 @@ export const QUERY_KEYS = {
   MAIN_APP_COOKIE_AUTH: ["main-app-cookie-auth"] as const,
 } as const;
 
+export const SANDBOX_TEMPLATES_QUERY_KEYS = {
+  all: ["sandbox-template-options"] as const,
+} as const;
+
 export const SETTINGS_QUERY_KEYS = {
   all: ["settings"] as const,
   byScope: (scope: SettingsScope) => ["settings", scope] as const,

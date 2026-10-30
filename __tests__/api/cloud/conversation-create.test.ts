@@ -6,6 +6,7 @@ import {
 } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import { getSandboxSelectionOptions } from "#/api/cloud/sandbox-template-service.api";
 import {
   getFetchCall,
   getJsonBody,
@@ -40,6 +41,31 @@ afterEach(() => {
 });
 
 describe("AgentServerConversationService cloud branch", () => {
+  it("loads template choices for the explicitly captured organization", async () => {
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-b" });
+    fetchMock.mockResolvedValue(mockJsonResponse({ enabled: true, items: [] }));
+    await getSandboxSelectionOptions(cloudBackend.id, "org-a");
+    const [url, init] = getFetchCall(fetchMock);
+    expect(url).toBe(`${cloudBackend.host}/api/v1/sandbox-specs/selection`);
+    expect(init.headers).toMatchObject({ "X-Org-Id": "org-a" });
+  });
+  it("sends the template ID only when explicitly selected", async () => {
+    fetchMock.mockImplementation(async () => mockJsonResponse({ id: "task" }));
+    await AgentServerConversationService.createConversation({
+      initialUserMsg: "hello",
+      sandboxSpecId: "monorepo_large",
+    });
+    expect(getJsonBody(getFetchCall(fetchMock)[1]).sandbox_spec_id).toBe(
+      "monorepo_large",
+    );
+    fetchMock.mockClear();
+    await AgentServerConversationService.createConversation({
+      initialUserMsg: "hello",
+    });
+    expect(getJsonBody(getFetchCall(fetchMock)[1])).not.toHaveProperty(
+      "sandbox_spec_id",
+    );
+  });
   it("createConversation POSTs the cloud payload directly and returns a WORKING task", async () => {
     fetchMock.mockResolvedValue(
       mockJsonResponse({

@@ -5,6 +5,7 @@ import {
   resolveConversationLaunch,
 } from "#/hooks/mutation/resolve-conversation-launch";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import * as ActiveBackendStore from "#/api/backend-registry/active-store";
 import { SUBSCRIPTION_LOGIN_REQUIRED_ERROR } from "#/api/agent-server-adapter";
 
 const {
@@ -293,6 +294,57 @@ describe("resolveConversationLaunch", () => {
 });
 
 describe("launchConversation", () => {
+  it.each([
+    { backendId: "cloud-1", orgId: "org-b" },
+    { backendId: "cloud-2", orgId: "org-a" },
+  ])(
+    "rejects a selected template when scope changes during profile loading: %j",
+    async (next) => {
+      arrange();
+      let finishProfiles!: (value: {
+        profiles: never[];
+        active_agent_profile_id: null;
+      }) => void;
+      listAgentProfiles.mockReturnValue(
+        new Promise((resolve) => {
+          finishProfiles = resolve;
+        }),
+      );
+      const backend = {
+        id: "cloud-1",
+        name: "Cloud",
+        kind: "cloud" as const,
+        host: "https://example.invalid",
+        apiKey: "test",
+      };
+      const selection = vi
+        .spyOn(ActiveBackendStore, "getActiveBackend")
+        .mockReturnValue({ backend, orgId: "org-a" });
+      const create = vi.spyOn(
+        AgentServerConversationService,
+        "createConversation",
+      );
+      const pending = launchConversation(
+        {
+          queryClient: new QueryClient(),
+          backendId: backend.id,
+          orgId: "org-a",
+          isCloud: true,
+        },
+        { sandboxSpecId: "large" },
+      );
+      const rejected = expect(pending).rejects.toThrow();
+      await vi.waitFor(() => expect(listAgentProfiles).toHaveBeenCalledOnce());
+      selection.mockReturnValue({
+        backend: { ...backend, id: next.backendId },
+        orgId: next.orgId,
+      });
+      finishProfiles({ profiles: [], active_agent_profile_id: null });
+      await rejected;
+      expect(create).not.toHaveBeenCalled();
+    },
+  );
+
   afterEach(() => vi.restoreAllMocks());
 
   it("refuses to launch on a subscription LLM that isn't connected", async () => {

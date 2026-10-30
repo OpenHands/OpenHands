@@ -13,6 +13,8 @@ export interface CloudProxyRequest {
   path: string;
   body?: unknown;
   headers?: Record<string, string>;
+  /** Organization captured by a scoped query; defaults to the active selection. */
+  orgId?: string;
   timeoutSeconds?: number;
   hostOverride?: string;
   authMode?: "bearer" | "session-api-key" | "none";
@@ -28,7 +30,7 @@ export async function callCloudProxy<TResponse = unknown>(
     : createCloudClient(req.backend);
   // The org this request is scoped to, read when the client is built so a
   // later org switch can't be blamed for this response.
-  const orgId = activeOrgForBackend(req.backend);
+  const orgId = req.orgId ?? activeOrgForBackend(req.backend);
   const headers = orgId ? { ...req.headers, "X-Org-Id": orgId } : req.headers;
 
   try {

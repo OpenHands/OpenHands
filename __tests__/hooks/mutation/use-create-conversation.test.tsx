@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
 import { SuggestedTask } from "#/utils/types";
+import * as ActiveBackendStore from "#/api/backend-registry/active-store";
 import {
   getStoredConversationMetadata,
   removeStoredConversationMetadata,
@@ -105,6 +106,21 @@ vi.mock("#/api/profiles-service/profiles-service.api", () => ({
 listLlmProfilesMock.mockResolvedValue({ profiles: [], active_profile: null });
 
 describe("useCreateConversation", () => {
+  it("rejects an explicit template if the active organization changes before launch", async () => {
+    mockUseActiveBackend.mockReturnValue({ backend: { id: "cloud-1", kind: "cloud" }, orgId: "org-a" });
+    const active = vi.spyOn(ActiveBackendStore, "getActiveBackend").mockReturnValue({
+      backend: { id: "cloud-1", kind: "cloud", name: "Cloud", host: "https://example.invalid", apiKey: "test" }, orgId: "org-b",
+    });
+    const create = vi.spyOn(AgentServerConversationService, "createConversation");
+    create.mockClear();
+    try {
+      const { result } = renderHook(() => useCreateConversation(), {
+        wrapper: ({ children }) => <QueryClientProvider client={new QueryClient()}>{children}</QueryClientProvider>,
+      });
+      await expect(result.current.mutateAsync({ query: "hello", sandboxSpecId: "large" })).rejects.toThrow();
+      expect(create).not.toHaveBeenCalled();
+    } finally { active.mockRestore(); }
+  });
   afterEach(() => {
     // Restore the default (`default` active) so the overrides below don't
     // leak into the other create-call assertions.
