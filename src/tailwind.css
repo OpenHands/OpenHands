@@ -913,3 +913,7 @@ code .token {
 @utility home-dropdown-sticky-list {
   max-height: calc(15rem - 3rem);
 }
+
+@utility context-menu-icon-stroke {
+  stroke-width: 1.75;
+}

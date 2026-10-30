@@ -492,6 +492,12 @@ describe("vite library build", () => {
       "max-height": "12rem",
     });
 
+    // Floating surfaces retain their stacking and compiled SVG stroke width.
+    expect(declarations(recipe("z-200"))).toMatchObject({ "z-index": "200" });
+    expect(declarations(recipe("context-menu-icon-stroke"))).toMatchObject({
+      "stroke-width": "1.75px",
+    });
+
     // `package.json` routes `require` here; stripped CSS imports must not
     // leave it unparseable.
     expect(() => new Script(file("index.cjs"))).not.toThrow();
