@@ -389,7 +389,12 @@ export function PluginLaunchModal({
               type="button"
               variant="primary"
               onClick={handleStartConversation}
-              isDisabled={isLoading || !trustConfirmed || unsupportedParameters}
+              isDisabled={
+                isLoading ||
+                !trustConfirmed ||
+                unsupportedParameters ||
+                isPreflightLoading
+              }
               className="px-4"
             >
               {isLoading
