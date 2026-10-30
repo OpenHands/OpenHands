@@ -12,6 +12,7 @@ import type { Backend } from "#/api/backend-registry/types";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { useDeploymentCapabilities } from "#/hooks/query/use-manifest-capabilities";
 import { useServiceAccountRunAsEnabled } from "#/hooks/query/use-service-accounts";
+import { CLOUD_INTEGRATIONS_CONFIG_QUERY_KEY } from "#/hooks/query/use-cloud-integrations-config";
 import { callCloudProxy } from "#/api/cloud/proxy";
 
 const permissions = vi.hoisted(() => ({
@@ -98,7 +99,7 @@ function renderEnabled() {
       expect(webClientConfigRequests()).toHaveLength(1);
       expect(
         queryClient.getQueryCache().find({
-          queryKey: ["cloud-providers-configured"],
+          queryKey: [...CLOUD_INTEGRATIONS_CONFIG_QUERY_KEY],
         })?.state.status,
       ).not.toBe("pending");
     });

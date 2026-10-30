@@ -1,12 +1,9 @@
 import { useCallback, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
-import {
-  fetchCloudIntegrationsConfig,
-  type CloudIntegrationsConfig,
-} from "#/api/cloud/settings-service.api";
+import type { CloudIntegrationsConfig } from "#/api/cloud/settings-service.api";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useUserProviders } from "#/hooks/use-user-providers";
 import type { Provider } from "#/types/settings";
+import { useCloudIntegrationsConfig } from "./use-cloud-integrations-config";
 
 /** Integration catalog entries a cloud instance can also connect natively. */
 const NATIVE_PROVIDER_BY_ENTRY_ID: Record<string, Provider> = {
@@ -60,17 +57,8 @@ export function useNativeGitIntegrations() {
   const isCloud = backend.kind === "cloud";
   const { providers: connectedProviders } = useUserProviders();
 
-  const { data: config, isLoading } = useQuery({
-    queryKey: [
-      "cloud-providers-configured",
-      backend.id,
-      backend.connectionRevision ?? 0,
-    ],
-    queryFn: fetchCloudIntegrationsConfig,
+  const { data: config, isLoading } = useCloudIntegrationsConfig({
     enabled: isCloud,
-    staleTime: 1000 * 60 * 5,
-    retry: false,
-    meta: { disableToast: true },
   });
   const configuredProviders = config?.providersConfigured;
 
