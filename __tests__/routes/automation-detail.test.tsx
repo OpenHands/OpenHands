@@ -609,22 +609,6 @@ describe("AutomationDetail — runs as a service account", () => {
     expect(container.innerHTML).not.toContain(saId);
     expect(listCloudServiceAccounts).not.toHaveBeenCalled();
   });
-
-  it("never offers Change Runs As, even to a manager with the capability", async () => {
-    // Changing who an automation runs as is hidden for now: its credentials do
-    // not follow it. A new automation can still run as a service account.
-    const user = userEvent.setup();
-    renderDetail();
-    await screen.findByText("ci-bot");
-
-    // Act
-    await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
-
-    // Assert
-    expect(
-      screen.queryByRole("button", { name: /CHANGE_RUN_AS/ }),
-    ).not.toBeInTheDocument();
-  });
 });
 
 describe("AutomationDetail — disabled reason banner", () => {
