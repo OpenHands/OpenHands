@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useState } from "react";
 import {
   act,
   fireEvent,
@@ -38,6 +39,8 @@ import {
   type RecommendedAutomation,
 } from "@openhands/extensions/automations";
 import { INTEGRATION_CATALOG } from "@openhands/extensions/integrations";
+import { getAutomationLaunchPrompt } from "#/utils/automation-catalog";
+import { EMPTY_TEMPLATE_FILTERS } from "#/components/features/automations/template-filter-chips";
 
 const {
   mockCreateConversationMutate,
@@ -364,6 +367,365 @@ describe("recommended automations", () => {
     expect(
       screen.queryByTestId("recommended-automation-card-github-pr-reviewer"),
     ).not.toBeInTheDocument();
+  });
+
+  describe("multiword search", () => {
+    const matchingIds = [
+      "github-pr-reviewer",
+      "github-agents-md-maintainer",
+      "slack-standup-digest",
+      "linear-triage-assistant",
+    ];
+    const fixtureIds = [...matchingIds, "github-issue-to-pr", "news-digest"];
+    let originals: {
+      automation: RecommendedAutomation;
+      name: string;
+      category: string;
+      description: string;
+    }[];
+
+    beforeEach(() => {
+      originals = fixtureIds.map((id) => {
+        const automation = AUTOMATION_CATALOG.find((item) => item.id === id)!;
+        const original = {
+          automation,
+          name: automation.name,
+          category: automation.category,
+          description: automation.description,
+        };
+        // Mutate after module import so the fixture also rejects eager caches.
+        automation.name =
+          id === "news-digest" ? "Separate card" : "Quartzneedle+ card";
+        automation.category = "Fixture category";
+        automation.description =
+          id === "github-issue-to-pr"
+            ? "Separate description"
+            : "Cobaltneedle.note details";
+
+        const searchFields = [
+          automation.name,
+          automation.category,
+          automation.description,
+          getAutomationLaunchPrompt(automation),
+          ...Object.keys(automation.requires.integrations).flatMap(
+            (integrationId) => {
+              const entry = INTEGRATION_CATALOG.find(
+                (item) => item.id === integrationId,
+              );
+              return entry
+                ? [entry.name, integrationId, ...(entry.keywords ?? [])]
+                : [integrationId];
+            },
+          ),
+        ];
+        // The complete phrase must not sneak into a generated launch prompt.
+        expect(
+          searchFields.some((field) =>
+            field.toLowerCase().includes("quartzneedle cobaltneedle"),
+          ),
+        ).toBe(false);
+        return original;
+      });
+    });
+
+    afterEach(() => {
+      originals.forEach(({ automation, ...original }) =>
+        Object.assign(automation, original),
+      );
+    });
+
+    it.each([
+      "quartzneedle cobaltneedle",
+      "cobaltneedle quartzneedle",
+      "  QUARTZNEEDLE\t\n  CoBaLtNeEdLe  ",
+      "quartzneedle cobaltneedle quartzneedle",
+      "uartzneed obaltneed",
+      "quartzneedle+ cobaltneedle.note",
+    ])("matches every token across fields for %j", (query) => {
+      render(
+        <RecommendedAutomationsSection
+          backendKind="local"
+          installedServers={[]}
+          query={query}
+          onSelect={vi.fn()}
+        />,
+      );
+
+      expect(
+        screen
+          .getAllByTestId(/^recommended-automation-card-/)
+          .map((card) => card.getAttribute("data-testid")),
+      ).toEqual(matchingIds.map((id) => `recommended-automation-card-${id}`));
+    });
+
+    it.each(["quartzneedle absentneedle", "quartzneedle. cobaltneedle"])(
+      "rejects a missing literal token for %j",
+      (query) => {
+        render(
+          <RecommendedAutomationsSection
+            backendKind="local"
+            installedServers={[]}
+            query={query}
+            onSelect={vi.fn()}
+          />,
+        );
+
+        expect(
+          screen.queryByTestId("recommended-automations-section"),
+        ).not.toBeInTheDocument();
+      },
+    );
+
+    it("keeps deployment-hidden cards excluded while searching and clearing", () => {
+      const props = {
+        backendKind: "local" as const,
+        installedServers: [],
+        hiddenAutomationIds: new Set([
+          "github-pr-reviewer",
+          "slack-standup-digest",
+        ]),
+        onSelect: vi.fn(),
+      };
+      const { rerender } = render(<RecommendedAutomationsSection {...props} />);
+      const cardIds = () =>
+        screen
+          .getAllByTestId(/^recommended-automation-card-/)
+          .map((card) => card.getAttribute("data-testid"));
+      const initialCardIds = cardIds();
+      expect(initialCardIds).toHaveLength(AUTOMATION_CATALOG.length - 2);
+      expect(
+        screen.queryByTestId("recommended-automation-card-github-pr-reviewer"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId(
+          "recommended-automation-card-slack-standup-digest",
+        ),
+      ).not.toBeInTheDocument();
+
+      rerender(
+        <RecommendedAutomationsSection
+          {...props}
+          query="cobaltneedle quartzneedle"
+        />,
+      );
+      expect(cardIds()).toEqual([
+        "recommended-automation-card-github-agents-md-maintainer",
+        "recommended-automation-card-linear-triage-assistant",
+      ]);
+
+      rerender(<RecommendedAutomationsSection {...props} query={" \t\n "} />);
+      expect(cardIds()).toEqual(initialCardIds);
+    });
+
+    it("combines keyword and chip filters and clears them without revealing hidden cards", () => {
+      function FilteredTemplates() {
+        const [query, setQuery] = useState("cobaltneedle quartzneedle");
+        const [filters, setFilters] = useState(EMPTY_TEMPLATE_FILTERS);
+        return (
+          <RecommendedAutomationsSection
+            backendKind="local"
+            installedServers={[]}
+            hiddenAutomationIds={
+              new Set(["github-pr-reviewer", "slack-standup-digest"])
+            }
+            query={query}
+            onClearQuery={() => setQuery("")}
+            filters={filters}
+            onFiltersChange={setFilters}
+            onSelect={vi.fn()}
+          />
+        );
+      }
+      render(<FilteredTemplates />);
+      const cardIds = () =>
+        screen
+          .queryAllByTestId(/^recommended-automation-card-/)
+          .map((card) => card.getAttribute("data-testid"));
+      expect(cardIds()).toEqual([
+        "recommended-automation-card-github-agents-md-maintainer",
+        "recommended-automation-card-linear-triage-assistant",
+      ]);
+
+      fireEvent.click(screen.getByTestId("template-filter-trigger-event"));
+      expect(cardIds()).toEqual([
+        "recommended-automation-card-linear-triage-assistant",
+      ]);
+      fireEvent.click(screen.getByTestId("template-filter-integration-github"));
+      expect(cardIds()).toEqual([]);
+      expect(
+        screen.getByTestId("automations-filtered-empty"),
+      ).toHaveTextContent(
+        I18nKey.RECOMMENDED_AUTOMATIONS$NO_MATCHING_TEMPLATES,
+      );
+      expect(
+        screen.getByTestId("template-filter-trigger-event"),
+      ).toHaveAttribute("aria-pressed", "true");
+      expect(
+        screen.getByTestId("template-filter-integration-github"),
+      ).toHaveAttribute("aria-pressed", "true");
+
+      fireEvent.click(screen.getByTestId("automations-clear-filters"));
+      expect(cardIds()).toHaveLength(AUTOMATION_CATALOG.length - 2);
+      expect(cardIds()).not.toContain(
+        "recommended-automation-card-github-pr-reviewer",
+      );
+      expect(cardIds()).not.toContain(
+        "recommended-automation-card-slack-standup-digest",
+      );
+      expect(
+        screen.queryByTestId("automations-filtered-empty"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("template-filter-all")).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+    });
+
+    it("preserves filtered group counts, connections and card selection", () => {
+      const onSelect = vi.fn();
+      render(
+        <RecommendedAutomationsSection
+          backendKind="cloud"
+          installedServers={[]}
+          getNativeIntegration={(id) =>
+            id === "github" ? { provider: "github", isConnected: true } : null
+          }
+          query="cobaltneedle quartzneedle"
+          onSelect={onSelect}
+        />,
+      );
+
+      const provenHeading = screen.getByText(
+        I18nKey.RECOMMENDED_AUTOMATIONS$SECTION_TITLE,
+      ).parentElement!;
+      expect(within(provenHeading).getByText("2")).toBeInTheDocument();
+      expect(
+        within(
+          screen.getByTestId("recommended-automations-beta-heading"),
+        ).getByText("2"),
+      ).toBeInTheDocument();
+      expect(
+        within(screen.getByTestId("recommended-automations-beta-section"))
+          .getAllByTestId(/^recommended-automation-card-/)
+          .map((card) => card.getAttribute("data-testid")),
+      ).toEqual([
+        "recommended-automation-card-slack-standup-digest",
+        "recommended-automation-card-linear-triage-assistant",
+      ]);
+      expect(
+        screen.getByTestId(
+          "recommended-automation-pills-github-agents-md-maintainer-wrap",
+        ),
+      ).toHaveTextContent(I18nKey.RECOMMENDED_AUTOMATIONS$CONNECTED);
+
+      fireEvent.click(
+        screen.getByTestId("recommended-automation-card-github-pr-reviewer"),
+      );
+      expect(onSelect).toHaveBeenCalledWith(
+        AUTOMATION_CATALOG.find((item) => item.id === "github-pr-reviewer"),
+      );
+    });
+
+    it.each(["", " \t\n "])(
+      "restores the complete catalog after no match and clearing to %j",
+      (query) => {
+        const props = { installedServers: [], onSelect: vi.fn() };
+        const { rerender } = render(
+          <RecommendedAutomationsSection backendKind="local" {...props} />,
+        );
+        const allCards = screen
+          .getAllByTestId(/^recommended-automation-card-/)
+          .map((card) => card.getAttribute("data-testid"));
+        expect(allCards).toHaveLength(AUTOMATION_CATALOG.length);
+
+        rerender(
+          <RecommendedAutomationsSection
+            backendKind="local"
+            {...props}
+            query="quartzneedle absentneedle"
+          />,
+        );
+        expect(
+          screen.queryByTestId("recommended-automations-section"),
+        ).not.toBeInTheDocument();
+
+        rerender(
+          <RecommendedAutomationsSection
+            backendKind="local"
+            {...props}
+            query={query}
+          />,
+        );
+        expect(
+          screen
+            .getAllByTestId(/^recommended-automation-card-/)
+            .map((card) => card.getAttribute("data-testid")),
+        ).toEqual(allCards);
+      },
+    );
+  });
+
+  it.each([
+    ["category", "categoryneedle", "github"],
+    ["launch prompt", "/issue-to-pr:setup", "github"],
+    ["integration name", "displayneedle", "github"],
+    ["integration ID", "github", "github"],
+    ["optional integration keyword", "keywordneedle", "github"],
+    ["unknown integration ID", "unmappedneedle", "unmappedneedle"],
+    ["non-MCP integration", "jira", "jira"],
+    ["native-only integration", "bitbucket", "bitbucket"],
+  ])("keeps the %s searchable alongside another term", (field, term, id) => {
+    const automation = AUTOMATION_CATALOG.find(
+      (item) => item.id === "github-repo-monitor",
+    )!;
+    const github = INTEGRATION_CATALOG.find((entry) => entry.id === "github")!;
+    const original = {
+      name: automation.name,
+      category: automation.category,
+      description: automation.description,
+      skill: automation.skill,
+      integrations: automation.requires.integrations,
+      integrationName: github.name,
+      keywords: github.keywords,
+    };
+    const restoreNativeOption =
+      id === "bitbucket" ? removeBitbucketMcpOption() : () => {};
+    // Give every field a distinct token, including the derived launch command.
+    automation.name = "Fieldneedle card";
+    automation.category = "Categoryneedle";
+    automation.description = "Descriptionneedle";
+    automation.skill = "github-issue-to-pr";
+    automation.requires.integrations = {
+      [id]: field === "optional integration keyword" ? { required: false } : {},
+    };
+    github.name = "Displayneedle";
+    github.keywords = ["keywordneedle"];
+
+    try {
+      render(
+        <RecommendedAutomationsSection
+          backendKind="local"
+          installedServers={[]}
+          query={`fieldneedle ${term}`}
+          onSelect={vi.fn()}
+        />,
+      );
+
+      expect(
+        screen
+          .getAllByTestId(/^recommended-automation-card-/)
+          .map((card) => card.getAttribute("data-testid")),
+      ).toEqual(["recommended-automation-card-github-repo-monitor"]);
+    } finally {
+      automation.name = original.name;
+      automation.category = original.category;
+      automation.description = original.description;
+      automation.skill = original.skill;
+      automation.requires.integrations = original.integrations;
+      github.name = original.integrationName;
+      github.keywords = original.keywords;
+      restoreNativeOption();
+    }
   });
 
   it("shows a left-aligned MCP icon stack on each card", () => {

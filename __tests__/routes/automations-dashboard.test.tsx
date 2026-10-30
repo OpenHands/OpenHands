@@ -7,6 +7,9 @@ import { MemoryRouter } from "react-router";
 
 import { I18nKey } from "#/i18n/declaration";
 import AutomationService from "#/api/automation-service/automation-service.api";
+import SettingsService from "#/api/settings-service/settings-service.api";
+import { NavigationProvider } from "#/context/navigation-context";
+import { DEFAULT_SETTINGS } from "#/services/settings";
 import {
   __resetActiveStoreForTests,
   setActiveSelection,
@@ -904,6 +907,10 @@ describe("AutomationsList — created-by filter on cloud workspaces", () => {
 });
 
 describe("AutomationTemplates — manifest-declared templates page", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("admits the route and renders the manifest identity above the launcher", async () => {
     // Arrange & Act
     expect(templatesLoader()).toBeNull();
@@ -930,5 +937,127 @@ describe("AutomationTemplates — manifest-declared templates page", () => {
     // Assert
     const nav = await screen.findByTestId("automations-navbar-desktop");
     expect(within(nav).getByText("Widget templates")).toBeInTheDocument();
+  });
+
+  it("updates multiword results as the user types, changes, and clears the search", async () => {
+    // Arrange — use the published catalog and real settings hook, with Slack
+    // connected through the underlying settings service.
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
+      ...DEFAULT_SETTINGS,
+      agent_settings: {
+        ...DEFAULT_SETTINGS.agent_settings,
+        mcp_config: { slack: { url: "https://mcp.slack.com/mcp" } },
+      },
+    });
+    const navigate = vi.fn();
+    const user = userEvent.setup();
+    renderAt(
+      "/automations/templates",
+      <NavigationProvider
+        value={{
+          currentPath: "/automations/templates",
+          conversationId: null,
+          isNavigating: false,
+          navigate,
+        }}
+      >
+        <AutomationTemplates />
+      </NavigationProvider>,
+    );
+    const search = screen.getByRole("textbox", {
+      name: I18nKey.AUTOMATIONS$SEARCH_PLACEHOLDER,
+    });
+    const cardIds = () =>
+      screen
+        .queryAllByTestId(/^recommended-automation-card-/)
+        .map((card) => card.getAttribute("data-testid"));
+    const slackCard = await screen.findByTestId(
+      "recommended-automation-card-slack-standup-digest",
+    );
+    await within(slackCard).findByText(
+      I18nKey.RECOMMENDED_AUTOMATIONS$CONNECTED,
+    );
+    const initialCardIds = cardIds();
+    const betaCount = within(
+      screen.getByTestId("recommended-automations-beta-section"),
+    ).getAllByTestId(/^recommended-automation-card-/).length;
+
+    // Act — adding a term from the description narrows the name match.
+    await user.type(search, "github");
+    expect(cardIds().length).toBeGreaterThan(1);
+    await user.type(search, " backlog");
+
+    // Assert
+    expect(cardIds()).toEqual([
+      "recommended-automation-card-github-pr-reviewer",
+    ]);
+    expect(
+      screen.queryByTestId("recommended-automations-beta-section"),
+    ).not.toBeInTheDocument();
+
+    // Act — reverse the terms and preserve selection of the result.
+    await user.clear(search);
+    await user.type(search, "BACKLOG   GITHUB");
+    await user.click(
+      screen.getByTestId("recommended-automation-card-github-pr-reviewer"),
+    );
+
+    // Assert
+    expect(navigate).toHaveBeenCalledWith(
+      "/automations/new/github-pr-reviewer",
+    );
+
+    // Act — change to a Beta result without losing its connection state.
+    await user.clear(search);
+    await user.type(search, "standup slack");
+
+    // Assert
+    const filteredBeta = screen.getByTestId(
+      "recommended-automations-beta-section",
+    );
+    expect(
+      within(filteredBeta)
+        .getAllByTestId(/^recommended-automation-card-/)
+        .map((card) => card.getAttribute("data-testid")),
+    ).toEqual(["recommended-automation-card-slack-standup-digest"]);
+    expect(
+      within(filteredBeta).getByText(I18nKey.RECOMMENDED_AUTOMATIONS$CONNECTED),
+    ).toBeInTheDocument();
+    expect(
+      within(
+        screen.getByTestId("recommended-automations-beta-heading"),
+      ).getByText("1", { exact: true }),
+    ).toBeInTheDocument();
+
+    // Act — a missing term shows the clearable empty state and keeps the chips.
+    await user.type(search, " absent-16291");
+    expect(cardIds()).toEqual([]);
+    expect(
+      screen.getByTestId("recommended-automations-section"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("template-filters")).toBeInTheDocument();
+    expect(screen.getByTestId("automations-filtered-empty")).toHaveTextContent(
+      I18nKey.RECOMMENDED_AUTOMATIONS$NO_MATCHING_TEMPLATES,
+    );
+    await user.click(screen.getByTestId("automations-clear-filters"));
+    expect(search).toHaveValue("");
+    expect(
+      screen.queryByTestId("automations-filtered-empty"),
+    ).not.toBeInTheDocument();
+
+    // Assert — both grouping counts and the original popularity order return.
+    expect(cardIds()).toEqual(initialCardIds);
+    expect(
+      within(
+        screen.getByRole("heading", {
+          name: I18nKey.RECOMMENDED_AUTOMATIONS$SECTION_TITLE,
+        }).parentElement!,
+      ).getByText("1", { exact: true }),
+    ).toBeInTheDocument();
+    expect(
+      within(
+        screen.getByTestId("recommended-automations-beta-heading"),
+      ).getByText(String(betaCount), { exact: true }),
+    ).toBeInTheDocument();
   });
 });
