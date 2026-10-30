@@ -321,6 +321,56 @@ describe("AgentServerConversationService", () => {
       ).rejects.toThrow("gone");
     });
 
+    it("applies tag flags locally as a full replacement map merged with current tags", async () => {
+      const refreshedTags = {
+        origin: "slack",
+        acpserver: "codex",
+        archived: "true",
+      };
+      mockUpdateConversation.mockResolvedValue(undefined);
+      mockHttpGet.mockResolvedValue({
+        data: [makeDirectConversation({ tags: refreshedTags })],
+      });
+      const result =
+        await AgentServerConversationService.updateConversationTagFlags(
+          "conv-1",
+          { origin: "slack", acpserver: "codex", pinned: "true" },
+          { archived: true, pinned: false },
+        );
+      // Local PATCH is replace-all: the writer merges the flag changes into
+      // the current map, preserving unrelated and reserved keys.
+      expect(mockUpdateConversation).toHaveBeenCalledWith("conv-1", {
+        tags: refreshedTags,
+      });
+      expect(result.tags).toEqual(refreshedTags);
+    });
+
+    it("applies tag flags on Cloud as a merge patch without touching other keys", async () => {
+      setRegisteredBackends([cloudBackend]);
+      setActiveSelection({ backendId: cloudBackend.id });
+      const updated = makeDirectConversation({
+        tags: { origin: "slack", pinned: "true" },
+      });
+      const requests = captureRequests(["patch"], updated);
+      await expect(
+        AgentServerConversationService.updateConversationTagFlags(
+          "conv-1",
+          { origin: "slack", pinned: "true", archived: "true" },
+          { pinned: false, archived: true },
+        ),
+      ).resolves.toEqual(updated);
+      // Cloud PATCH merges server-side: disabled flags delete via null and
+      // unmentioned keys (origin, server-managed keys) are never sent.
+      expect(requests).toEqual([
+        expect.objectContaining({
+          method: "PATCH",
+          url: `${cloudBackend.host}/api/v1/app-conversations/conv-1`,
+          body: { tags: { pinned: null, archived: "true" } },
+        }),
+      ]);
+      expect(mockUpdateConversation).not.toHaveBeenCalled();
+    });
+
     it("preserves disabled editor capability and explicit runtime credentials", async () => {
       const status = { enabled: false, running: false };
       mockVSCodeGetStatus.mockResolvedValue(status);

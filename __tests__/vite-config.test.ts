@@ -465,6 +465,33 @@ describe("vite library build", () => {
       "max-height": "92dvh",
     });
 
+    // Workspace selection keeps its mixed rem/px columns and viewport bounds.
+    const folderColumns = recipe("workspace-folder-columns");
+    expect(declarations(folderColumns)["grid-template-columns"]).toBe(
+      "minmax(0,1fr) 4rem",
+    );
+    const desktopColumns = recipe("md:workspace-folder-columns-desktop");
+    expect(declarations(desktopColumns)["grid-template-columns"]).toBe(
+      "1fr 120px",
+    );
+    expect(desktopColumns.parent).toMatchObject({
+      type: "atrule",
+      name: "media",
+      params: "(width>=48rem)",
+    });
+    expect(declarations(recipe("workspace-section-label"))).toMatchObject({
+      "font-size": "11px",
+    });
+    expect(declarations(recipe("workspace-manager-dialog"))).toMatchObject({
+      "max-height": "70vh",
+    });
+    expect(declarations(recipe("z-9999"))).toMatchObject({
+      "z-index": "9999",
+    });
+    expect(declarations(recipe("home-dropdown-sticky-list"))).toMatchObject({
+      "max-height": "12rem",
+    });
+
     // `package.json` routes `require` here; stripped CSS imports must not
     // leave it unparseable.
     expect(() => new Script(file("index.cjs"))).not.toThrow();
