@@ -8,10 +8,43 @@ import { cn } from "#/utils/utils";
 import { SidebarCollapsedIconSlot } from "./sidebar-collapsed-icon-slot";
 import {
   SIDEBAR_ICON_SLOT_CLASS,
+  SIDEBAR_NAV_DESCRIPTION_CLASS,
+  SIDEBAR_NAV_ROW_WITH_DESCRIPTION_CLASS,
   SIDEBAR_ROW_INTERACTIVE_CLASS,
   sidebarNavLabelClassName,
   sidebarNavRowClassName,
 } from "./sidebar-layout";
+
+interface SidebarNavTextProps {
+  label: string;
+  description: string;
+  labelId: string;
+  descriptionId: string;
+}
+
+/**
+ * Label plus a plain-language description for section navigation (Settings,
+ * Customize). The link must reference both ids (`aria-labelledby` /
+ * `aria-describedby`) so its accessible name stays the short label and the
+ * description is announced separately.
+ */
+export function SidebarNavText({
+  label,
+  description,
+  labelId,
+  descriptionId,
+}: SidebarNavTextProps) {
+  return (
+    <span className="flex min-w-0 flex-col">
+      <span id={labelId} className={sidebarNavLabelClassName(false)}>
+        {label}
+      </span>
+      <span id={descriptionId} className={SIDEBAR_NAV_DESCRIPTION_CLASS}>
+        {description}
+      </span>
+    </span>
+  );
+}
 
 function isPathActive(currentPath: string, to: string, end: boolean) {
   if (to === "/") {
@@ -36,6 +69,8 @@ export interface SidebarNavLinkPinAction {
 interface SidebarNavLinkProps {
   to: string;
   label: string;
+  /** Plain-language explanation shown under the label when expanded. */
+  description?: string;
   end?: boolean;
   indent?: boolean;
   testId?: string;
@@ -57,6 +92,7 @@ interface SidebarNavLinkProps {
 export function SidebarNavLink({
   to,
   label,
+  description,
   end = false,
   indent = false,
   testId,
@@ -68,8 +104,11 @@ export function SidebarNavLink({
   pinAction,
 }: SidebarNavLinkProps) {
   const { currentPath } = useNavigation();
+  const labelId = React.useId();
+  const descriptionId = React.useId();
   const active = forceActive || isPathActive(currentPath, to, end);
   const showPinAction = !collapsed && pinAction != null;
+  const showDescription = !collapsed && description !== undefined;
 
   const link = (
     <NavigationLink
@@ -78,6 +117,8 @@ export function SidebarNavLink({
       data-testid={testId}
       tabIndex={disabled ? -1 : 0}
       aria-label={collapsed ? label : undefined}
+      aria-labelledby={showDescription ? labelId : undefined}
+      aria-describedby={showDescription ? descriptionId : undefined}
       aria-current={active ? "page" : undefined}
       // Announce the disabled state to assistive tech. The visual disabled
       // styling plus tabIndex=-1 + preventDefault gives sighted/keyboard users
@@ -99,6 +140,7 @@ export function SidebarNavLink({
         disabled && "pointer-events-none",
         // Constant right reserve so label truncation doesn't reflow on hover.
         showPinAction && "pr-9",
+        showDescription && SIDEBAR_NAV_ROW_WITH_DESCRIPTION_CLASS,
       )}
     >
       {icon ? (
@@ -110,7 +152,16 @@ export function SidebarNavLink({
           <span className={SIDEBAR_ICON_SLOT_CLASS}>{icon}</span>
         )
       ) : null}
-      <span className={sidebarNavLabelClassName(collapsed)}>{label}</span>
+      {!collapsed && description !== undefined ? (
+        <SidebarNavText
+          label={label}
+          description={description}
+          labelId={labelId}
+          descriptionId={descriptionId}
+        />
+      ) : (
+        <span className={sidebarNavLabelClassName(collapsed)}>{label}</span>
+      )}
     </NavigationLink>
   );
 

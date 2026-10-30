@@ -107,18 +107,23 @@ describe("ExtensionsNavigation", () => {
     expect(skillsItem.tagName).toBe("A");
   });
 
-  it("orders MCP Servers before Skills and Plugins", () => {
+  it("orders MCP Servers before Skills, Plugins, and Apps, each with a plain-language description", () => {
     renderExtensionsNavigation(<ExtensionsNavigation />);
 
     const nav = screen.getByTestId("extensions-navbar-desktop");
     const navigationItems = within(nav).getAllByRole("link");
 
-    expect(navigationItems.map((item) => item.textContent)).toEqual([
-      "MCP Servers",
-      "Skills",
-      "Plugins",
-      "Apps",
-    ]);
+    const expected = [
+      ["NAV$CUSTOMIZE_MCP_SERVERS", "NAV$CUSTOMIZE_MCP_DESCRIPTION"],
+      ["SETTINGS$SKILLS_TITLE", "NAV$CUSTOMIZE_SKILLS_DESCRIPTION"],
+      ["SETTINGS$PLUGINS_TITLE", "NAV$CUSTOMIZE_PLUGINS_DESCRIPTION"],
+      ["Apps", "NAV$CUSTOMIZE_APPS_DESCRIPTION"],
+    ];
+    expect(navigationItems).toHaveLength(expected.length);
+    navigationItems.forEach((item, index) => {
+      expect(item).toHaveAccessibleName(expected[index][0]);
+      expect(item).toHaveAccessibleDescription(expected[index][1]);
+    });
   });
 
   it("links Apps to its management page", () => {
@@ -211,7 +216,7 @@ describe("ExtensionsNavigation", () => {
       );
 
       const trigger = screen.getByRole("button", {
-        name: "NAV$CUSTOMIZE: MCP Servers",
+        name: "NAV$CUSTOMIZE: NAV$CUSTOMIZE_MCP_SERVERS",
       });
       await user.click(trigger);
       const nav = screen.getByRole("navigation", { name: "NAV$CUSTOMIZE" });
@@ -221,9 +226,11 @@ describe("ExtensionsNavigation", () => {
           .map((link) => link.getAttribute("href")),
       ).toEqual(["/mcp", "/skills", "/plugins", "/apps"]);
       expect(
-        within(nav).getByRole("link", { name: "MCP Servers" }),
+        within(nav).getByRole("link", { name: "NAV$CUSTOMIZE_MCP_SERVERS" }),
       ).toHaveAttribute("aria-current", "page");
-      await user.click(within(nav).getByRole("link", { name: "Skills" }));
+      await user.click(
+        within(nav).getByRole("link", { name: "SETTINGS$SKILLS_TITLE" }),
+      );
 
       expect(navigate).toHaveBeenCalledWith("/skills", { replace: false });
       expect(trigger).toHaveAttribute("aria-expanded", "false");
@@ -235,7 +242,9 @@ describe("ExtensionsNavigation", () => {
       const trigger = screen.getByRole("button");
       trigger.focus();
       await user.keyboard("{Enter}{Tab}");
-      expect(screen.getByRole("link", { name: "MCP Servers" })).toHaveFocus();
+      expect(
+        screen.getByRole("link", { name: "NAV$CUSTOMIZE_MCP_SERVERS" }),
+      ).toHaveFocus();
       await user.keyboard("{Escape}");
       expect(trigger).toHaveFocus();
       expect(trigger).toHaveAttribute("aria-expanded", "false");
@@ -251,7 +260,7 @@ describe("ExtensionsNavigation", () => {
       await userEvent.click(screen.getByRole("button"));
       const nav = screen.getByRole("navigation");
       expect(
-        within(nav).queryByRole("link", { name: "Plugins" }),
+        within(nav).queryByRole("link", { name: "SETTINGS$PLUGINS_TITLE" }),
       ).not.toBeInTheDocument();
       expect(
         within(nav).queryByRole("link", { name: "Apps" }),

@@ -26,7 +26,6 @@ const TRANSLATIONS: Record<string, string> = {
   BACKEND$MANAGE_TITLE: "Manage backends",
   BACKEND$RECONNECT_CLOUD_TITLE: "Reconnect to Cloud",
   BACKEND$RECONNECT_CLOUD: "Reconnect to Cloud",
-  BACKEND$MANAGE_EMPTY: "No backends yet.",
   BACKEND$ADD: "+ Add Backend",
   BACKEND$LOG_BACK_IN: "Log back in",
   BACKEND$LOGGED_OUT: "Logged out",

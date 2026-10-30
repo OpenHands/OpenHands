@@ -1,3 +1,4 @@
+import React from "react";
 import { useTranslation } from "react-i18next";
 import { Blocks, ExternalLink } from "lucide-react";
 import { CompactSectionNavigation } from "#/components/shared/compact-section-navigation";
@@ -8,9 +9,11 @@ import SkillsIcon from "#/icons/skills.svg?react";
 import ServerProcessIcon from "#/icons/server-process.svg?react";
 import { BackendSyncedSettingsBadge } from "#/components/features/settings/backend-synced-settings-badge";
 import {
+  SIDEBAR_NAV_ROW_WITH_DESCRIPTION_CLASS,
   SIDEBAR_ROW_INTERACTIVE_CLASS,
   sidebarNavRowClassName,
 } from "#/components/features/sidebar/sidebar-layout";
+import { SidebarNavText } from "#/components/features/sidebar/sidebar-nav-link";
 import { I18nKey } from "#/i18n/declaration";
 import { useActiveBackendContext } from "#/contexts/active-backend-context";
 import { isNoBackend } from "#/api/backend-registry/active-store";
@@ -22,7 +25,9 @@ const CLOUD_HIDDEN_EXTENSION_PATHS = new Set(["/plugins", "/apps"]);
 
 interface ExtensionNavItem {
   to: string;
-  label: string;
+  label: I18nKey;
+  /** Plain-language explanation of the section for first-time users. */
+  description: I18nKey;
   icon: React.ReactElement;
   end?: boolean;
   comingSoon?: boolean;
@@ -31,19 +36,22 @@ interface ExtensionNavItem {
 export const EXTENSIONS_NAV_ITEMS: ExtensionNavItem[] = [
   {
     to: "/mcp",
-    label: "MCP Servers",
+    label: I18nKey.NAV$CUSTOMIZE_MCP_SERVERS,
+    description: I18nKey.NAV$CUSTOMIZE_MCP_DESCRIPTION,
     icon: <ServerProcessIcon width={16} height={16} />,
     end: true,
   },
   {
     to: "/skills",
-    label: "Skills",
+    label: I18nKey.SETTINGS$SKILLS_TITLE,
+    description: I18nKey.NAV$CUSTOMIZE_SKILLS_DESCRIPTION,
     icon: <SkillsIcon width={16} height={16} aria-hidden="true" />,
     end: true,
   },
   {
     to: "/plugins",
-    label: "Plugins",
+    label: I18nKey.SETTINGS$PLUGINS_TITLE,
+    description: I18nKey.NAV$CUSTOMIZE_PLUGINS_DESCRIPTION,
     icon: (
       <svg
         xmlns="http://www.w3.org/2000/svg"
@@ -66,7 +74,8 @@ export const EXTENSIONS_NAV_ITEMS: ExtensionNavItem[] = [
   },
   {
     to: "/apps",
-    label: "Apps",
+    label: I18nKey.NAV$EXTENSIONS,
+    description: I18nKey.NAV$CUSTOMIZE_APPS_DESCRIPTION,
     icon: <Blocks width={16} height={16} aria-hidden="true" />,
     end: true,
   },
@@ -92,7 +101,6 @@ export function ExtensionsNavigation() {
 }
 
 function ExtensionsNavigationLinks() {
-  const { t } = useTranslation("openhands");
   const { active } = useActiveBackendContext();
   const { backend } = active;
   const isCloudBackend = !isNoBackend(backend) && backend.kind === "cloud";
@@ -101,75 +109,100 @@ function ExtensionsNavigationLinks() {
       {EXTENSIONS_NAV_ITEMS.filter(
         (item) =>
           !(CLOUD_HIDDEN_EXTENSION_PATHS.has(item.to) && isCloudBackend),
-      ).map((item) => {
-        const isCloudSkillsLink =
-          item.to === CLOUD_LINKED_EXTENSION_PATH && isCloudBackend;
-        const baseRow = (
-          <span className="shrink-0 flex items-center justify-center">
-            {item.icon}
-          </span>
-        );
-        const label = (
-          <span className="truncate">
-            {isCloudSkillsLink
-              ? t(I18nKey.SIDEBAR$SKILLS_AND_PLUGINS_CLOUD_LINK)
-              : item.label}
-          </span>
-        );
-        const comingSoonBadge = item.comingSoon && (
-          <span className="ml-auto shrink-0 rounded-full border border-contrast/20 bg-contrast/5 px-1.5 py-0.5 text-[10px] font-medium text-text-dim">
-            {t(I18nKey.NAV$COMING_SOON)}
-          </span>
-        );
-
-        if (isCloudSkillsLink) {
-          const cloudSkillsUrl = `${backend.host.replace(/\/+$/, "")}/settings/skills`;
-          return (
-            <a
-              key={item.to}
-              data-testid={`sidebar-extensions-${item.to}`}
-              href={cloudSkillsUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={cn(
-                sidebarNavRowClassName(),
-                "truncate",
-                SIDEBAR_ROW_INTERACTIVE_CLASS.idle,
-              )}
-            >
-              {baseRow}
-              {label}
-              <ExternalLink
-                className="ml-auto size-4 shrink-0 text-muted"
-                aria-hidden
-              />
-            </a>
-          );
-        }
-
-        return (
-          <NavigationLink
-            key={item.to}
-            to={item.to}
-            end={item.end}
-            data-testid={`sidebar-extensions-${item.to}`}
-            className={({ isActive }) =>
-              cn(
-                sidebarNavRowClassName(),
-                "truncate",
-                isActive
-                  ? SIDEBAR_ROW_INTERACTIVE_CLASS.active
-                  : SIDEBAR_ROW_INTERACTIVE_CLASS.idle,
-              )
-            }
-          >
-            {baseRow}
-            {label}
-            {comingSoonBadge}
-          </NavigationLink>
-        );
-      })}
+      ).map((item) => (
+        <ExtensionsNavigationRow
+          key={item.to}
+          item={item}
+          cloudSkillsHost={
+            item.to === CLOUD_LINKED_EXTENSION_PATH && isCloudBackend
+              ? backend.host
+              : null
+          }
+        />
+      ))}
     </div>
+  );
+}
+
+function ExtensionsNavigationRow({
+  item,
+  cloudSkillsHost,
+}: {
+  item: ExtensionNavItem;
+  /** Set when the row links out to the Cloud-hosted Skills page instead. */
+  cloudSkillsHost: string | null;
+}) {
+  const { t } = useTranslation("openhands");
+  const labelId = React.useId();
+  const descriptionId = React.useId();
+  const icon = (
+    <span className="shrink-0 flex items-center justify-center">
+      {item.icon}
+    </span>
+  );
+  const text = (
+    <SidebarNavText
+      label={t(
+        cloudSkillsHost === null
+          ? item.label
+          : I18nKey.SIDEBAR$SKILLS_AND_PLUGINS_CLOUD_LINK,
+      )}
+      description={t(item.description)}
+      labelId={labelId}
+      descriptionId={descriptionId}
+    />
+  );
+  const rowClassName = cn(
+    sidebarNavRowClassName(),
+    SIDEBAR_NAV_ROW_WITH_DESCRIPTION_CLASS,
+  );
+
+  if (cloudSkillsHost !== null) {
+    const cloudSkillsUrl = `${cloudSkillsHost.replace(/\/+$/, "")}/settings/skills`;
+    return (
+      <a
+        data-testid={`sidebar-extensions-${item.to}`}
+        href={cloudSkillsUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-labelledby={labelId}
+        aria-describedby={descriptionId}
+        className={cn(rowClassName, SIDEBAR_ROW_INTERACTIVE_CLASS.idle)}
+      >
+        {icon}
+        {text}
+        <ExternalLink
+          className="ml-auto size-4 shrink-0 text-muted"
+          aria-hidden
+        />
+      </a>
+    );
+  }
+
+  return (
+    <NavigationLink
+      to={item.to}
+      end={item.end}
+      data-testid={`sidebar-extensions-${item.to}`}
+      aria-labelledby={labelId}
+      aria-describedby={descriptionId}
+      className={({ isActive }) =>
+        cn(
+          rowClassName,
+          isActive
+            ? SIDEBAR_ROW_INTERACTIVE_CLASS.active
+            : SIDEBAR_ROW_INTERACTIVE_CLASS.idle,
+        )
+      }
+    >
+      {icon}
+      {text}
+      {item.comingSoon && (
+        <span className="ml-auto shrink-0 rounded-full border border-contrast/20 bg-contrast/5 px-1.5 py-0.5 text-[10px] font-medium text-text-dim">
+          {t(I18nKey.NAV$COMING_SOON)}
+        </span>
+      )}
+    </NavigationLink>
   );
 }
 
@@ -183,7 +216,7 @@ export function ExtensionsCompactNavigation() {
   return (
     <CompactSectionNavigation
       label={t(I18nKey.NAV$CUSTOMIZE)}
-      currentLabel={currentItem?.label}
+      currentLabel={currentItem ? t(currentItem.label) : undefined}
       testId="extensions-compact-navigation"
     >
       <ExtensionsNavigationLinks />

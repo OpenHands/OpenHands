@@ -144,14 +144,14 @@ describe("SkillsSettingsScreen", () => {
     );
     expect(description).toHaveTextContent("SETTINGS$SKILLS_PAGE_DESCRIPTION");
     expect(screen.getByText("NAV$CUSTOMIZE")).toBeInTheDocument();
-    expect(screen.getByTestId("sidebar-extensions-/skills")).toHaveTextContent(
-      "Skills",
-    );
-    expect(screen.getByTestId("sidebar-extensions-/plugins")).toHaveTextContent(
-      "Plugins",
-    );
-    expect(screen.getByTestId("sidebar-extensions-/mcp")).toHaveTextContent(
-      "MCP Servers",
+    expect(
+      screen.getByTestId("sidebar-extensions-/skills"),
+    ).toHaveAccessibleName("SETTINGS$SKILLS_TITLE");
+    expect(
+      screen.getByTestId("sidebar-extensions-/plugins"),
+    ).toHaveAccessibleName("SETTINGS$PLUGINS_TITLE");
+    expect(screen.getByTestId("sidebar-extensions-/mcp")).toHaveAccessibleName(
+      "NAV$CUSTOMIZE_MCP_SERVERS",
     );
   });
 

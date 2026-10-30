@@ -319,6 +319,44 @@ describe("ManageBackendsModal", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("explains what a backend is when the no-backend gate has nothing to list", async () => {
+    // Arrange: drop the seeded default so the registry is empty, as after
+    // "Skip for now" on a fresh install.
+    renderWithProviders(
+      <TestSeed onMount={(ctx) => ctx.removeBackend(SEEDED_DEFAULT_BACKEND_ID)}>
+        <ManageBackendsModal onClose={vi.fn()} recoveryMode />
+      </TestSeed>,
+    );
+
+    // Assert
+    expect(
+      await screen.findByRole("heading", {
+        name: "BACKEND$RECOVERY_EMPTY_TITLE",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("manage-backends-list")).getByText(
+        "BACKEND$EMPTY_DESCRIPTION",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("manage-backends-add")).toBeEnabled();
+  });
+
+  it("keeps the Manage backends title outside the no-backend gate", async () => {
+    renderWithProviders(
+      <TestSeed onMount={(ctx) => ctx.removeBackend(SEEDED_DEFAULT_BACKEND_ID)}>
+        <ManageBackendsModal onClose={vi.fn()} />
+      </TestSeed>,
+    );
+
+    expect(
+      await screen.findByText("BACKEND$EMPTY_DESCRIPTION"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "BACKEND$MANAGE_TITLE" }),
+    ).toBeInTheDocument();
+  });
+
   it("opens the add-backend form when '+ Add backend' is clicked", async () => {
     const user = userEvent.setup();
     renderWithProviders(<ManageBackendsModal onClose={vi.fn()} />);

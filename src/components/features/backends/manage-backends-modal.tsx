@@ -94,10 +94,16 @@ export function ManageBackendsModal({
       : null;
   const lockedCloudReconnectHost =
     lockedCloudHost ?? lockedCloudBackend?.host ?? "";
-  const modalTitle =
-    isLockedToCloud && !isCookieAuthBackend
-      ? t(I18nKey.BACKEND$RECONNECT_CLOUD_TITLE)
-      : t(I18nKey.BACKEND$MANAGE_TITLE);
+  const hasNoBackends = backends.length === 0;
+  // With nothing registered, the recovery gate is the user's first screen
+  // (e.g. after skipping onboarding), so it states the next step instead of
+  // offering to "manage" an empty list.
+  let modalTitle = t(I18nKey.BACKEND$MANAGE_TITLE);
+  if (isLockedToCloud && !isCookieAuthBackend) {
+    modalTitle = t(I18nKey.BACKEND$RECONNECT_CLOUD_TITLE);
+  } else if (recoveryMode && hasNoBackends) {
+    modalTitle = t(I18nKey.BACKEND$RECOVERY_EMPTY_TITLE);
+  }
   const [pendingRemoval, setPendingRemoval] =
     React.useState<PendingRemoval | null>(null);
   const [editingBackend, setEditingBackend] = React.useState<Backend | null>(
@@ -193,9 +199,9 @@ export function ManageBackendsModal({
                   className="flex-1 overflow-auto rounded-md border border-border bg-surface-raised custom-scrollbar-always"
                   data-testid="manage-backends-list"
                 >
-                  {backends.length === 0 ? (
-                    <p className="px-3 py-6 text-center text-sm text-text-secondary">
-                      {t(I18nKey.BACKEND$MANAGE_EMPTY)}
+                  {hasNoBackends ? (
+                    <p className="px-4 py-6 text-center text-sm leading-relaxed text-text-secondary">
+                      {t(I18nKey.BACKEND$EMPTY_DESCRIPTION)}
                     </p>
                   ) : (
                     <ul className="divide-y divide-border">

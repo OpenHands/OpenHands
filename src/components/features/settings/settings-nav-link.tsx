@@ -1,10 +1,14 @@
+import React from "react";
 import { useTranslation } from "react-i18next";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { cn } from "#/utils/utils";
 import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
 import { SettingsNavItem } from "#/constants/settings-nav";
-import { navInteractiveTransitionClassName } from "#/components/features/sidebar/sidebar-layout";
+import {
+  navInteractiveTransitionClassName,
+  SIDEBAR_NAV_DESCRIPTION_CLASS,
+} from "#/components/features/sidebar/sidebar-layout";
 
 interface SettingsNavLinkProps {
   item: SettingsNavItem;
@@ -13,13 +17,17 @@ interface SettingsNavLinkProps {
 
 export function SettingsNavLink({ item, onClick }: SettingsNavLinkProps) {
   const { t } = useTranslation("openhands");
-  const { to, icon, text } = item;
+  const labelId = React.useId();
+  const descriptionId = React.useId();
+  const { to, icon, text, subtitle } = item;
 
   return (
     <NavigationLink
       end
       to={to}
       onClick={onClick}
+      aria-labelledby={labelId}
+      aria-describedby={descriptionId}
       className={({ isActive }) =>
         cn(
           "group flex items-center gap-3 p-1 sm:px-3.5 sm:py-2 rounded",
@@ -33,14 +41,19 @@ export function SettingsNavLink({ item, onClick }: SettingsNavLinkProps) {
         {icon}
       </Typography.Text>
       <div className="min-w-0 flex-1 overflow-hidden">
-        <Typography.Text
-          className={cn(
-            "block truncate whitespace-nowrap text-muted group-hover:text-contrast",
-            "transition-transform duration-300 motion-reduce:transition-none group-hover:translate-x-1",
-          )}
-        >
-          {t(text as I18nKey)}
-        </Typography.Text>
+        <span id={labelId}>
+          <Typography.Text
+            className={cn(
+              "block truncate whitespace-nowrap text-muted group-hover:text-contrast",
+              "transition-transform duration-300 motion-reduce:transition-none group-hover:translate-x-1",
+            )}
+          >
+            {t(text as I18nKey)}
+          </Typography.Text>
+        </span>
+        <span id={descriptionId} className={SIDEBAR_NAV_DESCRIPTION_CLASS}>
+          {t(subtitle as I18nKey)}
+        </span>
       </div>
     </NavigationLink>
   );

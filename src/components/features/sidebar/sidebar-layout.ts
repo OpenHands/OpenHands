@@ -67,6 +67,13 @@ export function sidebarCollapsedIconGlyphClassName(active: boolean): string {
   );
 }
 
+/** Rows that carry a description grow past the fixed 36px row height. */
+export const SIDEBAR_NAV_ROW_WITH_DESCRIPTION_CLASS = "h-auto py-1.5";
+
+/** Muted one-to-two line explanation under a section nav label. */
+export const SIDEBAR_NAV_DESCRIPTION_CLASS =
+  "line-clamp-2 whitespace-normal text-xs leading-4 text-text-dim";
+
 export function sidebarNavLabelClassName(collapsed: boolean): string {
   if (collapsed) {
     return "sr-only";

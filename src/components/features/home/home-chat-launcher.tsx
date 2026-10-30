@@ -48,6 +48,7 @@ import { writeHomeRecommendedAutomationsDismissed } from "./home-recommended-aut
 import { PinnedAutomationsDashboard } from "./featured-automations/pinned-automations-dashboard";
 import { RunningAutomationsList } from "./featured-automations/running-automations-list";
 import { HomeHeaderTitle } from "./home-header/home-header-title";
+import { HomeStarterPrompts } from "./home-starter-prompts";
 import {
   HomeLauncherModeToggle,
   type HomeLauncherMode,
@@ -427,9 +428,13 @@ export function HomeChatLauncher() {
           />
         </div>
 
+        {/* Each mode shows only its own next step: example prompts for Code,
+            automation templates for Automate. */}
+        {!isAutomateMode && <HomeStarterPrompts />}
+
         <div className="mt-8 flex w-full flex-col gap-8">
           {/* @spec HL-002 — Only Home's rail is dismissible; dismissal unmounts it, inset included */}
-          {!isRecommendedAutomationsDismissed && (
+          {isAutomateMode && !isRecommendedAutomationsDismissed && (
             <RecommendedAutomationsLauncher
               variant="rail"
               dismissible

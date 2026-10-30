@@ -53,6 +53,18 @@ describe("ExtensionsMobileHub", () => {
     expect(pluginsItem).not.toHaveAttribute("aria-disabled");
   });
 
+  it("labels MCP Servers through i18n and explains what it is for", () => {
+    renderMobileHub(<ExtensionsMobileHub />);
+
+    const mcpItem = within(
+      screen.getByTestId("extensions-mobile-hub"),
+    ).getByTestId("sidebar-extensions-/mcp");
+    expect(mcpItem).toHaveAccessibleName("NAV$CUSTOMIZE_MCP_SERVERS");
+    expect(mcpItem).toHaveAccessibleDescription(
+      "NAV$CUSTOMIZE_MCP_DESCRIPTION",
+    );
+  });
+
   it("links Apps to its management page", () => {
     renderMobileHub(<ExtensionsMobileHub />);
 

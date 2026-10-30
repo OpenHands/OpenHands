@@ -115,6 +115,25 @@ describe('translation.json', () => {
     });
   });
 
+  it('translates Vietnamese instead of copying English', () => {
+    // A vi value may equal English only for allowlisted terms or cognates
+    // that at least one other locale also keeps in English (e.g. "Model").
+    const otherLocales = supportedLanguageCodes.filter(
+      (lang) => lang !== 'en' && lang !== 'vi',
+    );
+    const copied = Object.entries(translationJson)
+      .filter(
+        ([key, translations]) =>
+          translations.vi === translations.en &&
+          !IDENTICAL_VALUE_ALLOWLIST.has(key) &&
+          !otherLocales.some((lang) => translations[lang] === translations.en),
+      )
+      .map(([key]) => key);
+
+    expect(supportedLanguageCodes).toContain('vi');
+    expect(copied).toEqual([]);
+  });
+
   it('stores line breaks as newlines, not a literal backslash-n', () => {
     const escapedNewlines = Object.entries(translationJson).flatMap(
       ([key, translations]) =>

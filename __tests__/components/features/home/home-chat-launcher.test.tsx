@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { readFileSync } from "node:fs";
 import { resolve as resolvePath } from "node:path";
@@ -25,12 +25,14 @@ import {
   writeStoredLocalWorkspaceMode,
 } from "#/utils/workspace-mode";
 import { HOME_RECOMMENDED_AUTOMATIONS_DISMISSED_STORAGE_KEY } from "#/components/features/home/home-recommended-automations.constants";
+import { NON_REPO_SUGGESTIONS } from "#/utils/suggestions/non-repo-suggestions";
 
 const mockNavigate = vi.fn();
 const mockUseActiveBackend = vi.fn();
 const sendMessageWithAttachments = vi.fn();
 const mockClearAllFiles = vi.fn();
 const mockRestoreMessageToInputIfEmpty = vi.fn();
+const mockSetMessageToSend = vi.fn();
 const enqueueHomeTaskPendingMessage = vi.fn();
 const mockDisplayErrorToast = vi.fn();
 const mockUseLlmConfigured = vi.fn();
@@ -63,6 +65,7 @@ vi.mock("#/stores/conversation-store", () => ({
     imagesMarkedUploadAsFile: [],
     clearAllFiles: mockClearAllFiles,
     restoreMessageToInputIfEmpty: mockRestoreMessageToInputIfEmpty,
+    setMessageToSend: mockSetMessageToSend,
   }),
 }));
 
@@ -1328,7 +1331,26 @@ describe("HomeChatLauncher", () => {
     },
   );
 
-  it("renders the recommended automations rail above pinned activity in Automate mode", async () => {
+  it("keeps Code mode focused on starter prompts instead of the recommended automations rail", async () => {
+    const user = userEvent.setup();
+    renderLauncher();
+
+    expect(
+      screen.queryByTestId("recommended-automations-rail"),
+    ).not.toBeInTheDocument();
+    const starterPrompts = screen.getByRole("group", {
+      name: "HOME$STARTER_PROMPTS_LABEL",
+    });
+    const [label, prompt] = Object.entries(NON_REPO_SUGGESTIONS)[0];
+
+    await user.click(
+      within(starterPrompts).getByRole("button", { name: label }),
+    );
+
+    expect(mockSetMessageToSend).toHaveBeenCalledWith(prompt, "home");
+  });
+
+  it("swaps starter prompts for the recommended automations rail in Automate mode", async () => {
     renderLauncher();
     const user = userEvent.setup();
 
@@ -1337,16 +1359,16 @@ describe("HomeChatLauncher", () => {
     expect(
       screen.getByTestId("recommended-automations-rail"),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("group", { name: "HOME$STARTER_PROMPTS_LABEL" }),
+    ).not.toBeInTheDocument();
   });
 
   // @spec HL-002 — Dismissing Home's rail removes it and persists the choice.
-  it("renders recommended automations rail by default and hides it when dismissed", async () => {
+  it("hides the Automate-mode recommended automations rail when dismissed", async () => {
     const user = userEvent.setup();
     renderLauncher();
-
-    expect(
-      screen.getByTestId("recommended-automations-rail"),
-    ).toBeInTheDocument();
+    await user.click(screen.getByTestId("home-launcher-mode-automate"));
 
     const dismissBtn = screen.getByTestId(
       "recommended-automations-rail-dismiss",
@@ -1364,13 +1386,15 @@ describe("HomeChatLauncher", () => {
   });
 
   // @spec HL-002 — A stored dismissal keeps the rail off Home.
-  it("does not render recommended automations rail when previously dismissed", () => {
+  it("does not render recommended automations rail when previously dismissed", async () => {
     window.localStorage.setItem(
       HOME_RECOMMENDED_AUTOMATIONS_DISMISSED_STORAGE_KEY,
       "true",
     );
+    const user = userEvent.setup();
 
     renderLauncher();
+    await user.click(screen.getByTestId("home-launcher-mode-automate"));
 
     expect(
       screen.queryByTestId("recommended-automations-rail"),

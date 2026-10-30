@@ -32,6 +32,7 @@ export function SettingsMobileHub({ navigationItems }: SettingsMobileHubProps) {
             key={renderedItem.item.to}
             to={renderedItem.item.to}
             label={t(renderedItem.item.text as I18nKey)}
+            description={t(renderedItem.item.subtitle as I18nKey)}
             end
             testId={`sidebar-settings-${renderedItem.item.to}`}
             icon={renderedItem.item.icon}

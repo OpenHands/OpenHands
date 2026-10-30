@@ -178,6 +178,19 @@ describe("SettingsDesktopSidebar", () => {
       within(desktopNav).getByTestId("sidebar-settings-/settings/condenser"),
     ).toBeInTheDocument();
   });
+
+  it("explains each settings page under its link without renaming the link", () => {
+    renderSettingsNavigation(
+      <SettingsDesktopSidebar navigationItems={baseItems} />,
+    );
+
+    const link = within(
+      screen.getByTestId("settings-navbar-desktop"),
+    ).getByTestId(`sidebar-settings-${condenserItem.to}`);
+
+    expect(link).toHaveAccessibleName(condenserItem.text);
+    expect(link).toHaveAccessibleDescription(condenserItem.subtitle);
+  });
 });
 
 describe("SettingsMobileHub", () => {
@@ -193,6 +206,7 @@ describe("SettingsMobileHub", () => {
       });
       expect(link).toHaveAttribute("href", item.to);
       expect(link).not.toHaveAttribute("aria-disabled");
+      expect(link).toHaveAccessibleDescription(item.subtitle);
     }
   });
 });

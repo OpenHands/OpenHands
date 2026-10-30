@@ -47,7 +47,7 @@ Avoid inline string literals when they represent reusable user-facing copy or sh
 
 ### Rule 1 — User-facing strings go through i18n
 
-Every visible string (button labels, headings, validation messages, `aria-label`, `title`, `alt`, toast copy, placeholders) **must** be routed through `react-i18next`'s `t()` keyed by an `I18nKey` enum member. Keys are declared once in `src/i18n/translation.json` with values for all 15 supported languages (see `src/i18n/index.ts::AvailableLanguages`), and `npm run make-i18n` regenerates `src/i18n/declaration.ts` + `public/locales/<lang>/openhands.json`. Run `npm run check-translation-completeness` when translations change; it is also part of the staged-file checks.
+Every visible string (button labels, headings, validation messages, `aria-label`, `title`, `alt`, toast copy, placeholders) **must** be routed through `react-i18next`'s `t()` keyed by an `I18nKey` enum member. Keys are declared once in `src/i18n/translation.json` with values for every supported language (see `src/i18n/index.ts::AvailableLanguages`), and `npm run make-i18n` regenerates `src/i18n/declaration.ts` + `public/locales/<lang>/openhands.json`. Run `npm run check-translation-completeness` when translations change; it is also part of the staged-file checks.
 
 ```tsx
 // CORRECT

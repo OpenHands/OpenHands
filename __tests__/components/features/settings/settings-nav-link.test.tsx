@@ -32,6 +32,14 @@ describe("SettingsNavLink", () => {
     expect(screen.getByText("SETTINGS$NAV_API_KEYS")).toBeInTheDocument();
   });
 
+  it("describes the page with its subtitle", () => {
+    renderSettingsNavLink();
+
+    const link = screen.getByRole("link");
+    expect(link).toHaveAccessibleName(mockNavItem.text);
+    expect(link).toHaveAccessibleDescription(mockNavItem.subtitle);
+  });
+
   it("should navigate to the correct route", () => {
     // Arrange & Act
     renderSettingsNavLink();
@@ -74,6 +82,9 @@ describe("SettingsNavLink", () => {
 
     // Assert
     expect(screen.getByText("SETTINGS$NAV_SECRETS")).toBeInTheDocument();
-    expect(screen.getByRole("link")).toHaveAttribute("href", "/settings/secrets");
+    expect(screen.getByRole("link")).toHaveAttribute(
+      "href",
+      "/settings/secrets",
+    );
   });
 });
