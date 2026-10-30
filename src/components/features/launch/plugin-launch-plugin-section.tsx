@@ -96,6 +96,7 @@ export function PluginLaunchPluginSection({
                   paramValue={value}
                   label={field?.label}
                   options={field?.options}
+                  enumValues={field?.enumValues}
                   helpText={field?.helpText}
                   widget={field?.widget}
                   onParameterChange={onParameterChange}

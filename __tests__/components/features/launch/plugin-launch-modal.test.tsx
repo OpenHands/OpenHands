@@ -566,6 +566,45 @@ describe("automation mode preflight", () => {
     expect(screen.getByText("Report style")).toBeInTheDocument();
   });
 
+  it("submits the raw numeric value when a numeric enum option is selected", async () => {
+    const user = userEvent.setup();
+    renderModal(
+      [{ source: "github:org/recipe", parameters: { priority: 1 } }],
+      {
+        mode: "automation",
+        preflight: {
+          ...cronPreflight,
+          fields: [
+            {
+              key: "priority",
+              type: "number",
+              label: "priority",
+              required: false,
+              options: ["0", "1", "2"],
+              enumValues: [0, 1, 2],
+            },
+          ],
+        },
+      },
+    );
+
+    const select = screen.getByTestId(
+      "plugin-0-param-priority",
+    ) as HTMLSelectElement;
+    expect(select.tagName).toBe("SELECT");
+
+    // Change to the third option (value "2"); the submit should carry the
+    // raw number 2, not the string "2".
+    await user.selectOptions(select, "2");
+    await user.click(screen.getByTestId("trust-checkbox"));
+    await user.click(screen.getByTestId("start-conversation-button"));
+
+    expect(mockOnInstallAutomation).toHaveBeenCalledTimes(1);
+    const submitted = mockOnInstallAutomation.mock.calls[0][0] as PluginSpec[];
+    expect(submitted[0].parameters).toEqual({ priority: 2 });
+    expect(typeof submitted[0].parameters?.priority).toBe("number");
+  });
+
   it("installs without an explicit trigger when preflight has no cron suggestion", async () => {
     const user = userEvent.setup();
     renderModal([{ source: "github:org/recipe" }], {

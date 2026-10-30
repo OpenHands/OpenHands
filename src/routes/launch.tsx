@@ -16,6 +16,7 @@ import {
   pluginSpecTemplateId,
   pluginSpecTemplateVersion,
 } from "#/utils/plugin-launch-preflight";
+import { getApiErrorMessage } from "#/utils/api-error-message";
 
 type ErrorType =
   | "no_plugins"
@@ -295,9 +296,7 @@ export default function LaunchRoute() {
     } catch (error) {
       setCreationErrorKind("automation");
       setCreationError(
-        error instanceof Error
-          ? error.message
-          : t(I18nKey.LAUNCH$ERROR_INSTALL_UNKNOWN),
+        getApiErrorMessage(error, t(I18nKey.LAUNCH$ERROR_INSTALL_UNKNOWN)),
       );
     } finally {
       setIsInstalling(false);

@@ -9,6 +9,8 @@ export interface PluginLaunchParameterInputProps {
   label?: string;
   /** Manifest schema options: renders a select instead of free text. */
   options?: string[];
+  /** Raw (typed) enum values paired with `options`, to avoid string coercion. */
+  enumValues?: unknown[];
   /** Manifest schema description, shown as helper text. */
   helpText?: string;
   /** UI hint: "textarea" renders a multi-line input for string fields. */
@@ -26,6 +28,7 @@ export function PluginLaunchParameterInput({
   paramValue,
   label,
   options,
+  enumValues,
   helpText,
   widget,
   onParameterChange,
@@ -34,6 +37,14 @@ export function PluginLaunchParameterInput({
   const displayLabel = label ?? paramKey;
 
   if (options && options.length > 0) {
+    // Recover the raw enum value (number/boolean/string) by matching the
+    // selected display string; fall back to the string for unknown values.
+    const resolveEnumValue = (selected: string): unknown => {
+      const index = enumValues
+        ? enumValues.findIndex((v) => String(v) === selected)
+        : -1;
+      return index >= 0 ? enumValues![index] : selected;
+    };
     return (
       <label htmlFor={inputId} className="flex flex-col gap-1.5 text-sm">
         <span className="font-medium text-contrast">{displayLabel}</span>
@@ -42,7 +53,11 @@ export function PluginLaunchParameterInput({
           data-testid={inputId}
           value={String(paramValue ?? "")}
           onChange={(e) =>
-            onParameterChange(pluginIndex, paramKey, e.target.value)
+            onParameterChange(
+              pluginIndex,
+              paramKey,
+              resolveEnumValue(e.target.value),
+            )
           }
           className="w-full rounded-md border border-tertiary-light bg-input px-3 py-2 text-contrast focus:border-primary focus:outline-none"
         >

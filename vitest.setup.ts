@@ -14,6 +14,9 @@ if (typeof HTMLCanvasElement !== "undefined") {
 
 if (typeof HTMLElement !== "undefined") {
   HTMLElement.prototype.scrollTo = vi.fn();
+  // jsdom doesn't implement scrollIntoView; components that auto-scroll on
+  // expand (e.g. the launch plugin section) call it, so stub it globally.
+  HTMLElement.prototype.scrollIntoView = vi.fn();
 }
 
 const windowStub =

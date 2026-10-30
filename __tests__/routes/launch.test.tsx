@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Routes, Route } from "react-router";
 import LaunchRoute from "#/routes/launch";
+import AutomationService from "#/api/automation-service/automation-service.api";
 
 // Mock the hooks
 const mockMutateAsync = vi.fn();
@@ -30,6 +31,15 @@ vi.mock("#/hooks/query/use-is-authed", () => ({
 
 vi.mock("#/hooks/query/use-config", () => ({
   useConfig: () => ({ data: {} }),
+}));
+
+// AutomationService is mocked per-test via vi.spyOn so each case controls
+// the preflight and install responses independently.
+vi.mock("#/api/automation-service/automation-service.api", () => ({
+  default: {
+    createPluginSpecAutomation: vi.fn(),
+    pluginSpecPreflight: vi.fn(),
+  },
 }));
 
 function renderLaunchRoute(searchParams: string) {
@@ -596,6 +606,177 @@ describe("LaunchRoute", () => {
       await waitFor(() => {
         expect(screen.getByTestId("try-again-button")).toBeInTheDocument();
       });
+    });
+  });
+
+  describe("Automation Mode", () => {
+    const mockCreate =
+      AutomationService.createPluginSpecAutomation as ReturnType<typeof vi.fn>;
+    const mockPreflight = AutomationService.pluginSpecPreflight as ReturnType<
+      typeof vi.fn
+    >;
+
+    const PREFLIGHT_RESPONSE = {
+      resolved_ref: "abc123",
+      manifest: {
+        description: "A test automation.",
+        config_schema: {
+          properties: {
+            feeds: { type: "string", format: "textarea", title: "Feeds" },
+          },
+        },
+      },
+      suggested_trigger: {
+        type: "cron",
+        schedule: "0 9 * * *",
+        timezone: "UTC",
+      },
+    };
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      mockPreflight.mockResolvedValue(PREFLIGHT_RESPONSE);
+      mockCreate.mockResolvedValue({ id: "auto-42" });
+    });
+
+    it("renders the Install Automation button in mode=automation", async () => {
+      renderLaunchRoute(
+        "?mode=automation&plugin_source=github:owner/news-digest",
+      );
+
+      await waitFor(() => {
+        expect(
+          screen.getByTestId("start-conversation-button"),
+        ).toHaveTextContent("LAUNCH$INSTALL_AUTOMATION");
+      });
+    });
+
+    it("disables Install while preflight is loading", async () => {
+      // Never resolves — keeps the loading state active.
+      mockPreflight.mockReturnValue(new Promise(() => {}));
+
+      renderLaunchRoute(
+        "?mode=automation&plugin_source=github:owner/news-digest",
+      );
+
+      expect(
+        screen.getByTestId("plugin-preflight-loading"),
+      ).toBeInTheDocument();
+      expect(screen.getByTestId("start-conversation-button")).toBeDisabled();
+    });
+
+    it("installs via createPluginSpecAutomation with config from parameters", async () => {
+      const user = userEvent.setup();
+      const plugins = [
+        {
+          source: "github:owner/news-digest",
+          ref: "main",
+          parameters: { feeds: "https://example.com/rss" },
+        },
+      ];
+
+      renderLaunchRoute(
+        `?mode=automation&plugins=${btoa(JSON.stringify(plugins))}`,
+      );
+
+      // Wait for the trigger section, which only renders once preflight
+      // has loaded and the cron suggestion is available.
+      await waitFor(() => {
+        expect(
+          screen.getByTestId("plugin-trigger-section"),
+        ).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByTestId("trust-checkbox"));
+      await user.click(screen.getByTestId("start-conversation-button"));
+
+      await waitFor(() => {
+        expect(mockCreate).toHaveBeenCalledTimes(1);
+      });
+
+      const call = mockCreate.mock.calls[0][0];
+      expect(call.plugin.source).toBe("github:owner/news-digest");
+      expect(call.config).toEqual({ feeds: "https://example.com/rss" });
+      expect(call.trigger).toEqual({
+        type: "cron",
+        schedule: "0 9 * * *",
+        timezone: "UTC",
+      });
+    });
+
+    it("navigates to the automation detail page on success", async () => {
+      const user = userEvent.setup();
+      renderLaunchRoute(
+        "?mode=automation&plugin_source=github:owner/news-digest",
+      );
+
+      await waitFor(() => {
+        expect(
+          screen.getByTestId("plugin-trigger-section"),
+        ).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByTestId("trust-checkbox"));
+      await user.click(screen.getByTestId("start-conversation-button"));
+
+      await waitFor(() => {
+        expect(mockNavigate).toHaveBeenCalledWith("/automations/auto-42");
+      });
+    });
+
+    it("surfaces the server detail message on install failure", async () => {
+      const user = userEvent.setup();
+      // Simulate an axios 422 carrying the server's actionable detail.
+      mockCreate.mockRejectedValue({
+        isAxiosError: true,
+        response: {
+          data: { detail: "Plugin config is invalid: feeds required" },
+        },
+        message: "Request failed with status code 422",
+      });
+
+      renderLaunchRoute(
+        "?mode=automation&plugin_source=github:owner/news-digest",
+      );
+
+      await waitFor(() => {
+        expect(
+          screen.getByTestId("plugin-trigger-section"),
+        ).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByTestId("trust-checkbox"));
+      await user.click(screen.getByTestId("start-conversation-button"));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("launch-error")).toBeInTheDocument();
+      });
+      // The server's detail reaches the user, not the raw transport text.
+      expect(
+        screen.getByText(/Plugin config is invalid: feeds required/),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText("Request failed with status code 422"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("falls back to the free-text flow when preflight is unavailable", async () => {
+      mockPreflight.mockRejectedValue(new Error("not found"));
+
+      renderLaunchRoute(
+        "?mode=automation&plugin_source=github:owner/news-digest",
+      );
+
+      // The loading state clears (preflight rejected → null), and no trigger
+      // section renders. The install button is gated only on trust after that.
+      await waitFor(() => {
+        expect(
+          screen.queryByTestId("plugin-preflight-loading"),
+        ).not.toBeInTheDocument();
+      });
+      expect(
+        screen.queryByTestId("plugin-trigger-section"),
+      ).not.toBeInTheDocument();
     });
   });
 });

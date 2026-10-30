@@ -16,7 +16,18 @@ export interface SchemaFormField {
   helpText?: string;
   required: boolean;
   defaultValue?: unknown;
+  /**
+   * Display strings for enum options (raw values coerced via `String`). Used
+   * for the `<option>` label and `value` attribute. Pair with `enumValues` to
+   * recover the original typed value on selection.
+   */
   options?: string[];
+  /**
+   * Raw (typed) enum values in the same order as `options`, preserved so a
+   * numeric or boolean enum isn't coerced to a string on submit. When absent,
+   * `options` strings are passed through as-is.
+   */
+  enumValues?: unknown[];
   /**
    * UI hint for string fields. `"textarea"` renders a multi-line input; useful
    * for values that are naturally multi-line (feed lists, topics). Derived from
@@ -60,6 +71,7 @@ export function configSchemaToFormFields(
     };
     if (Array.isArray(property.enum) && property.enum.length > 0) {
       field.options = property.enum.map((option) => String(option));
+      field.enumValues = property.enum;
     }
     if (
       property.format === "textarea" ||
@@ -96,7 +108,7 @@ export function applySchemaDefaults(
         merged[field.key] = false;
         break;
       default:
-        merged[field.key] = field.options?.[0] ?? "";
+        merged[field.key] = field.enumValues?.[0] ?? field.options?.[0] ?? "";
     }
   }
   return merged;
