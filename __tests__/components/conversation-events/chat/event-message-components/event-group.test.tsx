@@ -125,7 +125,7 @@ describe("EventGroup", () => {
     expect(screen.queryByTestId("child")).not.toBeInTheDocument();
   });
 
-  it("renders a progress summary and the running action title while in flight", () => {
+  it("keeps the same summary line while an action is in flight", () => {
     const events = [
       makeBashObservation("o1", "a1", "ls"),
       makeBashObservation("o2", "a2", "pwd"),
@@ -139,13 +139,27 @@ describe("EventGroup", () => {
       </EventGroup>,
     );
 
-    expect(
-      screen.getByText("EVENT_GROUP$ACTIONS_PROGRESS"),
-    ).toBeInTheDocument();
-    // The running action's title is rendered next to the summary. Translations
-    // aren't loaded in tests, so we just verify the action's translation key
-    // shows up (the localized version would interpolate the command).
-    expect(screen.getByText(/ACTION_MESSAGE\$RUN/)).toBeInTheDocument();
+    // Same layout as a finished group: what the steps did, plus a spinner.
+    expect(screen.getByText("EVENT_GROUP$RAN_COMMANDS")).toBeInTheDocument();
+    expect(screen.getByTestId("spinner-icon")).toBeInTheDocument();
+    expect(screen.queryByText(/ACTIONS_PROGRESS/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/ACTION_MESSAGE\$RUN/)).not.toBeInTheDocument();
+  });
+
+  it("hides the spinner once the group is no longer the live tail", () => {
+    const events = [
+      makeBashObservation("o1", "a1", "ls"),
+      makeBashAction("a2", "pwd"),
+    ];
+
+    renderWithProviders(
+      <EventGroup events={events} isFinalized>
+        <div>child</div>
+      </EventGroup>,
+    );
+
+    expect(screen.queryByTestId("spinner-icon")).not.toBeInTheDocument();
+    expect(screen.getByText("EVENT_GROUP$RAN_COMMANDS")).toBeInTheDocument();
   });
 
   it("drops the latest action title once nothing is running, even in the live tail", () => {

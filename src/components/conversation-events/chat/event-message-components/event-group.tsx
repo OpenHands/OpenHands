@@ -1,37 +1,30 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { LoaderCircle } from "lucide-react";
-import { OpenHandsEvent, ActionEvent } from "#/types/agent-server/core";
+import { OpenHandsEvent } from "#/types/agent-server/core";
 import {
   isActionEvent,
   isAgentErrorEvent,
-  isHookExecutionEvent,
-  isObservationEvent,
-  isUserRejectObservation,
 } from "#/types/agent-server/type-guards";
 import { I18nKey } from "#/i18n/declaration";
-import { getEventContent } from "../event-content-helpers/get-event-content";
 import { getEventGroupSummaryParts } from "./event-group-summary";
 import { DisclosureCaret } from "#/components/shared/disclosure-caret";
 import { IsInEventGroupContext } from "../../../features/chat/is-in-event-group-context";
-import { PathInteractiveContext } from "../../../features/chat/path-component";
 
 interface EventGroupProps {
   /** The events represented by this group. Used to compute the summary. */
   events: OpenHandsEvent[];
   /**
-   * Full event history. Used to resolve the action that produced the latest
-   * observation in the group so the summary title matches what the individual
-   * card would show (e.g. "Editing path/to/file"), and to find the
+   * Full event history. Used to resolve the action behind each observation so
+   * the summary counts it as the right kind of step, and to find the
    * `AgentErrorEvent` that resolved an action without an observation. Falls
    * back to `events` when omitted.
    */
   allEvents?: OpenHandsEvent[];
   /**
    * `true` once an event outside this group has been emitted after it, so the
-   * group is no longer the "live" tail of the chat. A group whose actions are
-   * still running shows its latest action and progress only while it is the
-   * live tail; otherwise it shows what its steps did ("Ran 3 commands").
+   * group is no longer the "live" tail of the chat. Only the live tail shows
+   * a spinner while one of its actions is running.
    */
   isFinalized?: boolean;
   /** The fully-rendered event messages to show when the group is expanded. */
@@ -42,11 +35,9 @@ interface EventGroupProps {
  * Collapsible container that wraps a run of consecutive agent action/observation
  * events into a single summary card.
  *
- * Collapsed, while an action is still running in the live tail of the chat:
- *   the title of the action in flight on the left, with the
- *   "{completed}/{total} actions completed" progress and a spinner on the right.
- *
- * Collapsed otherwise: what the steps did, e.g. "Ran 3 commands · Read 1 file".
+ * Collapsed: what the steps did, e.g. "Ran 3 commands · Read 1 file". The
+ * counts grow as steps arrive, and a spinner follows the summary while an
+ * action in the live tail is running, so the header never changes layout.
  *
  * Expanded: the children in a bordered list, so each individual
  * action/observation can still be expanded the way it was before grouping.
@@ -82,41 +73,10 @@ export function EventGroup({
   const pendingActions = unreplacedActions.filter(
     (action) => !erroredToolCallIds?.has(action.tool_call_id),
   );
-  // Progress counts tool steps; folded-in hook runs are not actions.
-  const totalCount = events.filter((e) => !isHookExecutionEvent(e)).length;
-  const completedCount = totalCount - pendingActions.length;
-  const isRunning = pendingActions.length > 0;
-
-  // Title of the most recent groupable event. While running this is the
-  // pending action; otherwise it's the latest observation (or rejection), with
-  // its originating action looked up so the title can be the action-style
-  // summary ("Editing path/to/file") instead of the observation default.
-  const latestEvent = events[events.length - 1];
-  let latestTitle: React.ReactNode = null;
-  if (latestEvent) {
-    if (isActionEvent(latestEvent)) {
-      latestTitle = getEventContent(latestEvent).title;
-    } else if (
-      isObservationEvent(latestEvent) ||
-      isUserRejectObservation(latestEvent)
-    ) {
-      const correspondingAction = lookupSource.find(
-        (e): e is ActionEvent =>
-          isActionEvent(e) && e.id === latestEvent.action_id,
-      );
-      latestTitle = getEventContent(latestEvent, correspondingAction).title;
-    }
-  }
-
-  const showProgress = isRunning && !isFinalized;
-  const summary = showProgress
-    ? t(I18nKey.EVENT_GROUP$ACTIONS_PROGRESS, {
-        completed: completedCount,
-        total: totalCount,
-      })
-    : getEventGroupSummaryParts(events, lookupSource)
-        .map(({ key, count }) => t(key, { count }))
-        .join(" · ");
+  const showSpinner = pendingActions.length > 0 && !isFinalized;
+  const summary = getEventGroupSummaryParts(events, lookupSource)
+    .map(({ key, count }) => t(key, { count }))
+    .join(" · ");
 
   return (
     // Agent text carries a large top margin for paragraph spacing; trim it
@@ -137,36 +97,15 @@ export function EventGroup({
             : t(I18nKey.EVENT_GROUP$EXPAND)
         }
         data-testid="event-group-toggle"
-        className={
-          showProgress
-            ? "w-full flex items-center justify-between gap-2 text-left text-muted cursor-pointer"
-            : "flex max-w-full items-center gap-2 text-left text-muted cursor-pointer"
-        }
+        className="flex max-w-full items-center gap-2 text-left text-muted cursor-pointer"
       >
-        {showProgress ? (
-          // Live step on the left, progress and spinner pinned on the right.
-          <>
-            <span className="flex items-center gap-2 min-w-0">
-              <span className="truncate">
-                <PathInteractiveContext.Provider value={false}>
-                  {latestTitle ?? summary}
-                </PathInteractiveContext.Provider>
-              </span>
-              <DisclosureCaret open={expanded} />
-            </span>
-            <span className="flex items-center flex-shrink-0">
-              <span className="truncate">{summary}</span>
-              <LoaderCircle
-                data-testid="spinner-icon"
-                className="h-4 w-4 ml-2 inline animate-spin text-muted"
-              />
-            </span>
-          </>
-        ) : (
-          <>
-            <span className="truncate">{summary}</span>
-            <DisclosureCaret open={expanded} />
-          </>
+        <span className="truncate">{summary}</span>
+        <DisclosureCaret open={expanded} />
+        {showSpinner && (
+          <LoaderCircle
+            data-testid="spinner-icon"
+            className="h-3.5 w-3.5 flex-shrink-0 animate-spin text-muted"
+          />
         )}
       </button>
 

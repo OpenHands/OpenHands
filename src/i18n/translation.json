@@ -24065,24 +24065,6 @@
     "ca": "Ha fet servir {{count}} eines",
     "id": "Menggunakan {{count}} alat"
   },
-  "EVENT_GROUP$ACTIONS_PROGRESS": {
-    "en": "{{completed}}/{{total}} actions completed",
-    "ja": "{{completed}}/{{total}} 件のアクションが完了しました",
-    "zh-CN": "已完成 {{completed}}/{{total}} 个操作",
-    "zh-TW": "已完成 {{completed}}/{{total}} 個動作",
-    "ko-KR": "{{completed}}/{{total}}개의 작업이 완료되었습니다",
-    "no": "{{completed}}/{{total}} handlinger fullført",
-    "it": "{{completed}}/{{total}} azioni completate",
-    "pt": "{{completed}}/{{total}} ações concluídas",
-    "es": "{{completed}}/{{total}} acciones completadas",
-    "ar": "اكتمل {{completed}}/{{total}} من الإجراءات",
-    "fr": "{{completed}}/{{total}} actions terminées",
-    "tr": "{{completed}}/{{total}} eylem tamamlandı",
-    "de": "{{completed}}/{{total}} Aktionen abgeschlossen",
-    "uk": "Виконано дій: {{completed}}/{{total}}",
-    "ca": "{{completed}}/{{total}} accions completades",
-    "id": "{{completed}}/{{total}} tindakan selesai"
-  },
   "EVENT_GROUP$EXPAND": {
     "en": "Expand actions",
     "ja": "アクションを展開",
