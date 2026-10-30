@@ -149,7 +149,10 @@ jobs:
           AGENT_SERVER_VERSION: ${{ steps.defaults.outputs.agent_server_version }}
         run: |
           uv venv .mock-llm-venv
-          uv pip install -p .mock-llm-venv "openhands-sdk==$AGENT_SERVER_VERSION"
+          uv pip install -p .mock-llm-venv "openhands-sdk==$AGENT_SERVER_VERSION" pytest
+
+      - name: Test mock LLM server
+        run: .mock-llm-venv/bin/python3 -m pytest tests/e2e/mock-llm/scripts -q
 
       - name: Verify mock LLM server starts
         run: |

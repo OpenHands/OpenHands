@@ -283,7 +283,7 @@ test.describe("auth mode: public gate", () => {
     // Should show an error status (not navigate away).
     const statusEl = page.getByTestId("api-key-entry-status");
     await expect(statusEl).toBeVisible({ timeout: 10_000 });
-    await expect(statusEl).toHaveClass(/text-red/);
+    await expect(statusEl).toHaveClass(/text-feedback-error/);
   });
 
   test("allows access after pasting the correct key", async ({ page }) => {

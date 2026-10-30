@@ -936,6 +936,13 @@ test.describe("UI regressions", () => {
   // @spec WN-001 — Home warning icon follows the embedding host warning role
   test("home warning icon follows the host warning color", async ({ page }) => {
     await routeSessionApiKey(page);
+    await page.route("**/api/profiles", async (route, request) => {
+      if (request.method() !== "GET") return route.fallback();
+      return route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ profiles: [], active_profile: null }),
+      });
+    });
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await expect(
       page.getByTestId("home-llm-not-configured-banner"),
