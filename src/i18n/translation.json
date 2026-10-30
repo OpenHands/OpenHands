@@ -31193,6 +31193,24 @@
     "ca": "path:",
     "id": "jalur:"
   },
+  "LAUNCH$PREFLIGHT_LOADING": {
+    "en": "Loading plugin configuration…",
+    "ja": "プラグイン設定を読み込んでいます…",
+    "zh-CN": "正在加载插件配置…",
+    "zh-TW": "正在載入外掛設定…",
+    "ko-KR": "플러그인 구성을 불러오는 중…",
+    "no": "Laster plugin-konfigurasjon…",
+    "it": "Caricamento configurazione plugin…",
+    "pt": "Carregando configuração do plugin…",
+    "es": "Cargando configuración del plugin…",
+    "ar": "جارٍ تحميل تكوين البرنامج المساعد…",
+    "fr": "Chargement de la configuration du plugin…",
+    "tr": "Eklenti yapılandırması yükleniyor…",
+    "de": "Plugin-Konfiguration wird geladen…",
+    "uk": "Завантаження конфігурації плагіна…",
+    "ca": "Carregant la configuració del plugin…",
+    "id": "Memuat konfigurasi plugin…"
+  },
   "LAUNCH$TRUST_PLUGIN_CHECKBOX": {
     "en": "I trust this plugin from {{sources}} with the agent secrets defined in my account.",
     "ja": "私は{{sources}}からのこのプラグインを、アカウントに定義されたエージェントシークレットとともに信頼します。",

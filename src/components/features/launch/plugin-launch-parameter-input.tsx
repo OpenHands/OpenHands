@@ -35,7 +35,7 @@ export function PluginLaunchParameterInput({
 
   if (options && options.length > 0) {
     return (
-      <label htmlFor={inputId} className="flex flex-col gap-1 text-sm">
+      <label htmlFor={inputId} className="flex flex-col gap-1.5 text-sm">
         <span className="font-medium text-contrast">{displayLabel}</span>
         <select
           id={inputId}
@@ -44,7 +44,7 @@ export function PluginLaunchParameterInput({
           onChange={(e) =>
             onParameterChange(pluginIndex, paramKey, e.target.value)
           }
-          className="w-full rounded-md border border-border bg-basic px-3 py-2"
+          className="w-full rounded-md border border-tertiary-light bg-input px-3 py-2 text-contrast focus:border-primary focus:outline-none"
         >
           {options.map((option) => (
             <option key={option} value={option}>
@@ -52,7 +52,11 @@ export function PluginLaunchParameterInput({
             </option>
           ))}
         </select>
-        {helpText && <span className="text-xs text-contrast">{helpText}</span>}
+        {helpText && (
+          <span className="text-xs text-tertiary leading-relaxed">
+            {helpText}
+          </span>
+        )}
       </label>
     );
   }
@@ -100,7 +104,7 @@ export function PluginLaunchParameterInput({
 
   if (widget === "textarea") {
     return (
-      <label htmlFor={inputId} className="flex flex-col gap-1 text-sm">
+      <label htmlFor={inputId} className="flex flex-col gap-1.5 text-sm">
         <span className="font-medium text-contrast">{displayLabel}</span>
         <textarea
           id={inputId}
@@ -111,11 +115,16 @@ export function PluginLaunchParameterInput({
           }
           rows={4}
           className={cn(
-            "w-full rounded-md border border-border bg-basic px-3 py-2",
-            "font-mono text-xs",
+            "w-full rounded-md border border-tertiary-light bg-input px-3 py-2",
+            "text-contrast font-mono text-xs",
+            "focus:border-primary focus:outline-none",
           )}
         />
-        {helpText && <span className="text-xs text-contrast">{helpText}</span>}
+        {helpText && (
+          <span className="text-xs text-tertiary leading-relaxed">
+            {helpText}
+          </span>
+        )}
       </label>
     );
   }

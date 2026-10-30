@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { useEffect, useRef } from "react";
 import { IoChevronDown, IoChevronForward } from "react-icons/io5";
 import { I18nKey } from "#/i18n/declaration";
 import { PluginSpec } from "#/api/conversation-service/agent-server-conversation-service.types";
@@ -33,6 +34,19 @@ export function PluginLaunchPluginSection({
   const { t } = useTranslation("openhands");
   const hasParams =
     plugin.parameters && Object.keys(plugin.parameters).length > 0;
+  const expandedRef = useRef<HTMLDivElement>(null);
+
+  // Scroll the expanded fields into view so the user sees them without
+  // hunting. Fires when the section auto-expands from the preflight arrival
+  // or when the user toggles it open.
+  useEffect(() => {
+    if (isExpanded && expandedRef.current) {
+      expandedRef.current.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+      });
+    }
+  }, [isExpanded]);
 
   if (!hasParams) {
     return null;
@@ -57,7 +71,10 @@ export function PluginLaunchPluginSection({
       </button>
 
       {isExpanded && (
-        <div className="border-t border-border-subtle px-4 pb-3">
+        <div
+          ref={expandedRef}
+          className="border-t border-border-subtle px-4 pb-4 pt-3"
+        >
           {plugin.ref && (
             <div className="mb-2 text-sm text-contrast">
               {t(I18nKey.LAUNCH$PLUGIN_REF)} {plugin.ref}

@@ -6,6 +6,7 @@ import {
   modalWidthClassName,
 } from "#/components/shared/modals/modal-body";
 import { ModalCloseButton } from "#/components/shared/modals/modal-close-button";
+import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { I18nKey } from "#/i18n/declaration";
 import { PluginSpec } from "#/api/conversation-service/agent-server-conversation-service.types";
@@ -36,6 +37,8 @@ interface PluginLaunchModalProps {
       timezone?: string;
     } | null;
   } | null;
+  /** True while the preflight is being fetched (automation mode only). */
+  isPreflightLoading?: boolean;
   onStartConversation: (plugins: PluginSpec[], initialMessage?: string) => void;
   /** Required when mode === "automation". */
   onInstallAutomation?: (
@@ -56,6 +59,7 @@ export function PluginLaunchModal({
   isLoading = false,
   mode = "conversation",
   preflight = null,
+  isPreflightLoading = false,
   onStartConversation,
   onInstallAutomation,
   onClose,
@@ -239,6 +243,17 @@ export function PluginLaunchModal({
         {message && <p className="text-sm text-contrast">{message}</p>}
 
         <div className="flex-1 overflow-y-auto custom-scrollbar">
+          {isPreflightLoading && pluginsWithParams.length === 0 && (
+            <div
+              data-testid="plugin-preflight-loading"
+              className="flex flex-col items-center justify-center gap-3 py-8 text-tertiary"
+            >
+              <LoadingSpinner size="small" />
+              <span className="text-sm">
+                {t(I18nKey.LAUNCH$PREFLIGHT_LOADING)}
+              </span>
+            </div>
+          )}
           {pluginsWithParams.length > 0 && (
             <div className="space-y-3">
               {pluginConfigs.map((plugin, index) => (

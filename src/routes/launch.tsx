@@ -345,6 +345,7 @@ export default function LaunchRoute() {
         isLoading={createConversation.isPending || isInstalling}
         mode={automationMode ? "automation" : "conversation"}
         preflight={automationMode ? (preflight ?? null) : null}
+        isPreflightLoading={automationMode && preflight === undefined}
         onStartConversation={handleStartConversation}
         onInstallAutomation={
           automationMode ? handleInstallAutomation : undefined
