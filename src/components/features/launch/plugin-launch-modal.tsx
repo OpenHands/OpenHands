@@ -301,6 +301,59 @@ export function PluginLaunchModal({
               </div>
             </div>
           )}
+
+          {isAutomationInstall && preflight?.description && (
+            <p
+              data-testid="plugin-preflight-description"
+              className="text-sm text-contrast mt-4"
+            >
+              {preflight.description}
+            </p>
+          )}
+
+          {isAutomationInstall && isCronSuggestion && (
+            <div
+              data-testid="plugin-trigger-section"
+              className="space-y-2 rounded-md bg-tertiary p-3 mt-3"
+            >
+              <label
+                htmlFor="plugin-trigger-schedule"
+                className="text-sm font-medium text-contrast"
+              >
+                {t(I18nKey.LAUNCH$TRIGGER_SCHEDULE_LABEL)}
+              </label>
+              <input
+                id="plugin-trigger-schedule"
+                data-testid="plugin-trigger-schedule"
+                type="text"
+                value={triggerSchedule}
+                onChange={(e) => setTriggerSchedule(e.target.value)}
+                placeholder={t(I18nKey.LAUNCH$TRIGGER_SCHEDULE_PLACEHOLDER)}
+                className="w-full rounded-md border border-tertiary-light bg-input px-3 py-2 text-sm text-contrast focus:border-primary focus:outline-none"
+              />
+              <label
+                htmlFor="plugin-trigger-timezone"
+                className="text-sm font-medium text-contrast"
+              >
+                {t(I18nKey.LAUNCH$TRIGGER_TIMEZONE_LABEL)}
+              </label>
+              <input
+                id="plugin-trigger-timezone"
+                data-testid="plugin-trigger-timezone"
+                type="text"
+                value={triggerTimezone}
+                onChange={(e) => setTriggerTimezone(e.target.value)}
+                placeholder={t(I18nKey.LAUNCH$TRIGGER_TIMEZONE_PLACEHOLDER)}
+                className="w-full rounded-md border border-tertiary-light bg-input px-3 py-2 text-sm text-contrast focus:border-primary focus:outline-none"
+              />
+              <p className="text-xs text-tertiary leading-relaxed">
+                {t(I18nKey.LAUNCH$TRIGGER_EDIT_HINT, {
+                  schedule: suggestedTrigger?.schedule ?? "",
+                  interpolation: { escapeValue: false },
+                })}
+              </p>
+            </div>
+          )}
         </div>
 
         {unsupportedParameters && (
@@ -311,59 +364,6 @@ export function PluginLaunchModal({
           >
             {t(I18nKey.LAUNCH$PARAMETERS_UNSUPPORTED_LOCAL)}
           </p>
-        )}
-
-        {isAutomationInstall && preflight?.description && (
-          <p
-            data-testid="plugin-preflight-description"
-            className="text-sm text-contrast"
-          >
-            {preflight.description}
-          </p>
-        )}
-
-        {isAutomationInstall && isCronSuggestion && (
-          <div
-            data-testid="plugin-trigger-section"
-            className="space-y-2 rounded-md bg-tertiary p-3"
-          >
-            <label
-              htmlFor="plugin-trigger-schedule"
-              className="text-sm font-medium text-contrast"
-            >
-              {t(I18nKey.LAUNCH$TRIGGER_SCHEDULE_LABEL)}
-            </label>
-            <input
-              id="plugin-trigger-schedule"
-              data-testid="plugin-trigger-schedule"
-              type="text"
-              value={triggerSchedule}
-              onChange={(e) => setTriggerSchedule(e.target.value)}
-              placeholder={t(I18nKey.LAUNCH$TRIGGER_SCHEDULE_PLACEHOLDER)}
-              className="w-full rounded-md border border-border bg-basic px-3 py-2 text-sm"
-            />
-            <label
-              htmlFor="plugin-trigger-timezone"
-              className="text-sm font-medium text-contrast"
-            >
-              {t(I18nKey.LAUNCH$TRIGGER_TIMEZONE_LABEL)}
-            </label>
-            <input
-              id="plugin-trigger-timezone"
-              data-testid="plugin-trigger-timezone"
-              type="text"
-              value={triggerTimezone}
-              onChange={(e) => setTriggerTimezone(e.target.value)}
-              placeholder={t(I18nKey.LAUNCH$TRIGGER_TIMEZONE_PLACEHOLDER)}
-              className="w-full rounded-md border border-border bg-basic px-3 py-2 text-sm"
-            />
-            <p className="text-xs text-contrast">
-              {t(I18nKey.LAUNCH$TRIGGER_EDIT_HINT, {
-                schedule: suggestedTrigger?.schedule ?? "",
-                interpolation: { escapeValue: false },
-              })}
-            </p>
-          </div>
         )}
 
         <div className="pt-4 border-t border-border-subtle">

@@ -43,7 +43,7 @@ export function PluginLaunchPluginSection({
     if (isExpanded && expandedRef.current) {
       expandedRef.current.scrollIntoView({
         behavior: "smooth",
-        block: "nearest",
+        block: "start",
       });
     }
   }, [isExpanded]);
