@@ -32,6 +32,7 @@ import { SKILLS_CATALOG } from "@openhands/extensions/skills";
 import type { HookConfig } from "@openhands/typescript-client";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import type { SettingsValue } from "#/types/settings";
+import { useModelStore } from "#/stores/model-store";
 
 const {
   mockGetAgentServerWorkingDir,
@@ -131,6 +132,7 @@ beforeEach(() => {
     apiKey: "session-key",
     kind: "local",
   });
+  useModelStore.getState().setHomeManualModelPick(false);
 });
 
 const PROFILE = {
@@ -1284,6 +1286,40 @@ describe("profile launch additions", () => {
       }
     },
   );
+
+  it("suppresses the route-at-start suffix when the home launch passes suppressRouterAtStart", () => {
+    // The flag is threaded in by useCreateConversation (read-and-cleared from
+    // the store) rather than read by the builder, so child/`/new` launches
+    // that don't pass it route as usual.
+    const payload = buildStartConversationRequest({
+      ...PROFILE,
+      settings: {
+        ...DEFAULT_SETTINGS,
+        run_router_at_conversation_start: true,
+      },
+      profileHasRouter: true,
+      suppressRouterAtStart: true,
+      query: "hello",
+    });
+    const appended = additionsOf(payload)?.system_message_suffix_append ?? "";
+    expect(appended).not.toContain("ROUTE_AT_CONVERSATION_START");
+  });
+
+  it("does not suppress route-at-start when suppressRouterAtStart is omitted", () => {
+    // A child or `/new` launch omits the flag — routing is unaffected by any
+    // pending home pick.
+    const payload = buildStartConversationRequest({
+      ...PROFILE,
+      settings: {
+        ...DEFAULT_SETTINGS,
+        run_router_at_conversation_start: true,
+      },
+      profileHasRouter: true,
+      query: "hello",
+    });
+    const appended = additionsOf(payload)?.system_message_suffix_append ?? "";
+    expect(appended).toContain("<ROUTE_AT_CONVERSATION_START>");
+  });
 
   it("adds a catalog skill the opening message invokes", () => {
     const [entry] = SKILLS_CATALOG;

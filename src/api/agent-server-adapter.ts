@@ -1083,6 +1083,13 @@ export interface StartConversationOptions {
   llmProfileOverride?: string;
   /** The profile carries a Model Router, so router-at-start can apply. */
   profileHasRouter?: boolean;
+  /**
+   * A home-page model pick was made before the first message, so the
+   * route-at-start suffix is suppressed for this single launch. Threaded in
+   * by the home launch (`useCreateConversation`) so this builder stays free of
+   * UI state; callers that don't pass it (child, `/new`) route as usual.
+   */
+  suppressRouterAtStart?: boolean;
   /** The ACP profile's server, stamped as the `acpserver` tag. */
   acpServer?: string;
   titleLlmProfile?: string;
@@ -1129,8 +1136,13 @@ export function buildStartConversationRequest(
 ): ProfileStartConversationPayload {
   const launchSuffix = [
     buildRuntimeServicesSystemSuffix(options.runtimeServicesInfo),
+    // A home-page model pick made before the first message is an explicit
+    // choice the router shouldn't override on turn 1 — suppress the suffix for
+    // this single launch. The flag is threaded in by the home launch so this
+    // builder is stateless; callers that don't pass it route as usual.
     buildRouterAtStartSystemSuffix(
-      options.settings.run_router_at_conversation_start ?? false,
+      options.settings.run_router_at_conversation_start &&
+        !options.suppressRouterAtStart,
       options.profileHasRouter ?? false,
     ),
   ]
@@ -1594,6 +1606,7 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
   agentProfileKind?: AgentKind;
   llmProfileOverride?: string;
   profileHasRouter?: boolean;
+  suppressRouterAtStart?: boolean;
   acpServer?: string;
   titleLlmProfile?: string;
 }): Promise<Record<string, unknown>> {
