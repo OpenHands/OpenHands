@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { useModelStore } from "#/stores/model-store";
 import {
   getStoredConversationMetadata,
@@ -337,6 +337,52 @@ describe("seedModelSwitchesFromHistory", () => {
     // The in-memory stamp takes priority over the persisted one in the pill,
     // so it must not be set to the stale profile either.
     expect(activeProfileFor("c1")).toBeUndefined();
+  });
+
+  describe("with offset-less agent-server timestamps", () => {
+    const originalTz = process.env.TZ;
+    afterEach(() => {
+      process.env.TZ = originalTz;
+    });
+
+    // A UTC sandbox records the observation at 14:00 UTC without an offset;
+    // the manual `/model` stamp is the client's 15:00 UTC.
+    const stampManualSwitch = (stampedAt: string) =>
+      setStoredConversationMetadata("c1", {
+        selected_repository: null,
+        selected_branch: null,
+        git_provider: null,
+        active_profile: "architect",
+        stamped_at: stampedAt,
+      });
+    const agentSwitchAt = (timestamp: string) => [
+      userMessage("u1"),
+      switchObservation("o1", "fast", false, timestamp),
+    ];
+
+    it("keeps a newer manual stamp when the browser is behind UTC", () => {
+      process.env.TZ = "America/New_York";
+      stampManualSwitch("2026-10-29T15:00:00.000Z");
+
+      seedModelSwitchesFromHistory(
+        "c1",
+        agentSwitchAt("2026-10-29T14:00:00.123456"),
+      );
+
+      expect(stampedProfileFor("c1")).toBe("architect");
+    });
+
+    it("re-stamps from a newer agent switch when the browser is ahead of UTC", () => {
+      process.env.TZ = "Asia/Shanghai";
+      stampManualSwitch("2026-10-29T13:00:00.000Z");
+
+      seedModelSwitchesFromHistory(
+        "c1",
+        agentSwitchAt("2026-10-29T14:00:00.123456"),
+      );
+
+      expect(stampedProfileFor("c1")).toBe("fast");
+    });
   });
 
   it("repairs a legacy stamp written before stamped_at existed", () => {

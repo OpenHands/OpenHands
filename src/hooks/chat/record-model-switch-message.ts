@@ -14,6 +14,7 @@ import {
   isSwitchLLMObservationEvent,
 } from "#/types/agent-server/type-guards";
 import { shouldRenderEvent } from "#/components/conversation-events/chat/event-content-helpers/should-render-event";
+import { parseEventTimestamp } from "#/utils/format-event-timestamp";
 
 export function recordModelSwitchMessage(
   conversationId: string,
@@ -95,6 +96,9 @@ export function stampActiveLlmProfile(
  * Observation timestamps are server-generated while `stamped_at` from the
  * mutation path is client-generated, so the cross-clock comparison is a
  * heuristic — acceptable here since the alternative is a silent rollback.
+ * Both sides go through `parseEventTimestamp`: observations (and stamps the
+ * live handler copied from them) carry no offset, and reading them as browser
+ * local time would skew the comparison by the browser's UTC offset.
  */
 export function seedModelSwitchesFromHistory(
   conversationId: string,
@@ -153,7 +157,10 @@ export function seedModelSwitchesFromHistory(
     const { profileName, timestamp } = latestSwitch;
     const stored = getStoredConversationMetadata(conversationId);
     const stampedAt = stored?.active_profile ? stored.stamped_at : null;
-    if (!stampedAt || Date.parse(timestamp) > Date.parse(stampedAt)) {
+    if (
+      !stampedAt ||
+      parseEventTimestamp(timestamp) > parseEventTimestamp(stampedAt)
+    ) {
       // Stamp with the observation's own timestamp so re-seeding the same
       // history on the next reload is a no-op (strictly-newer never matches).
       stampActiveLlmProfile(conversationId, profileName, timestamp);
