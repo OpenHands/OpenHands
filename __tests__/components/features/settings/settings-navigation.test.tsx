@@ -179,6 +179,22 @@ describe("SettingsDesktopSidebar", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows section headings above their settings links", () => {
+    renderSettingsNavigation(
+      <SettingsDesktopSidebar navigationItems={baseItems} />,
+    );
+
+    const desktopNav = screen.getByTestId("settings-navbar-desktop");
+    const heading = within(desktopNav).getByRole("heading", {
+      name: "SETTINGS$TITLE",
+    });
+    expect(
+      heading.compareDocumentPosition(
+        within(desktopNav).getByTestId(`sidebar-settings-${llmItem.to}`),
+      ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it("explains each settings page under its link without renaming the link", () => {
     renderSettingsNavigation(
       <SettingsDesktopSidebar navigationItems={baseItems} />,

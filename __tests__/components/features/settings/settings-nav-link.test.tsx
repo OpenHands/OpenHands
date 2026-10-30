@@ -10,6 +10,7 @@ const mockNavItem = {
   icon: <span data-testid="test-icon">Icon</span>,
   text: I18nKey.SETTINGS$NAV_API_KEYS,
   subtitle: I18nKey.SETTINGS$PAGE_LLM_SUBLINE,
+  group: "agent" as const,
 };
 
 const renderSettingsNavLink = (
@@ -75,6 +76,7 @@ describe("SettingsNavLink", () => {
       icon: <span>Icon</span>,
       text: I18nKey.SETTINGS$NAV_SECRETS,
       subtitle: I18nKey.SETTINGS$PAGE_SECRETS_SUBLINE,
+      group: "agent" as const,
     };
 
     // Act

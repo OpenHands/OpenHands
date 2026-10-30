@@ -9,6 +9,17 @@ import KeyIcon from "#/icons/key.svg?react";
 import MemoryIcon from "#/icons/memory_icon.svg?react";
 import CircuitIcon from "#/icons/u-circuit.svg?react";
 import RobotIcon from "#/icons/u-robot.svg?react";
+import { I18nKey } from "#/i18n/declaration";
+
+/** Sections the settings navigation is organized into, in display order. */
+export type SettingsNavGroup = "agent" | "behavior" | "environment" | "app";
+
+export const SETTINGS_NAV_GROUP_LABELS: Record<SettingsNavGroup, I18nKey> = {
+  agent: I18nKey.SETTINGS$NAV_GROUP_AGENT,
+  behavior: I18nKey.SETTINGS$NAV_GROUP_BEHAVIOR,
+  environment: I18nKey.SETTINGS$NAV_GROUP_ENVIRONMENT,
+  app: I18nKey.SETTINGS$NAV_GROUP_PREFERENCES,
+};
 
 export interface SettingsNavItem {
   icon: React.ReactElement;
@@ -16,6 +27,8 @@ export interface SettingsNavItem {
   text: string;
   /** Short grey subline under the page title (`settings.tsx`). */
   subtitle: string;
+  /** Section heading this page is listed under; items stay contiguous. */
+  group: SettingsNavGroup;
 }
 
 export const OSS_NAV_ITEMS: SettingsNavItem[] = [
@@ -28,24 +41,28 @@ export const OSS_NAV_ITEMS: SettingsNavItem[] = [
     to: "/settings/agents",
     text: "SETTINGS$NAV_AGENT",
     subtitle: "SETTINGS$PAGE_AGENT_PROFILES_SUBLINE",
+    group: "agent",
   },
   {
     icon: <CircuitIcon width={16} height={16} />,
     to: "/settings/llm",
     text: "SETTINGS$NAV_LLM",
     subtitle: "SETTINGS$PAGE_LLM_SUBLINE",
+    group: "agent",
   },
   {
     icon: <RouteIcon className="size-4" strokeWidth={2} aria-hidden />,
     to: "/settings/meta-llm",
     text: "SETTINGS$NAV_META_LLM",
     subtitle: "SETTINGS$PAGE_META_LLM_SUBLINE",
+    group: "agent",
   },
   {
     icon: <MemoryIcon width={16} height={16} />,
     to: "/settings/condenser",
     text: "SETTINGS$NAV_CONDENSER",
     subtitle: "SETTINGS$PAGE_CONDENSER_SUBLINE",
+    group: "behavior",
   },
   {
     // The agent's ``agent_context`` section, whatever the schema exposes in it
@@ -56,30 +73,35 @@ export const OSS_NAV_ITEMS: SettingsNavItem[] = [
     to: "/settings/agent-context",
     text: "SETTINGS$NAV_AGENT_CONTEXT",
     subtitle: "SETTINGS$PAGE_AGENT_CONTEXT_SUBLINE",
+    group: "behavior",
   },
   {
     icon: <Shield className="size-4" strokeWidth={2} aria-hidden />,
     to: "/settings/verification",
     text: "SETTINGS$NAV_VERIFICATION",
     subtitle: "SETTINGS$PAGE_VERIFICATION_SUBLINE",
+    group: "behavior",
   },
   {
     icon: <Container className="size-4" strokeWidth={2} aria-hidden />,
     to: "/settings/runtime",
     text: "SETTINGS$NAV_RUNTIME",
     subtitle: "SETTINGS$PAGE_RUNTIME_SUBLINE",
-  },
-  {
-    icon: <AppWindow className="size-4" strokeWidth={2} aria-hidden />,
-    to: "/settings/app",
-    text: "SETTINGS$NAV_APPLICATION",
-    subtitle: "SETTINGS$PAGE_APPLICATION_SUBLINE",
+    group: "environment",
   },
   {
     icon: <KeyIcon width={16} height={16} />,
     to: "/settings/secrets",
     text: "SETTINGS$NAV_SECRETS",
     subtitle: "SETTINGS$PAGE_SECRETS_SUBLINE",
+    group: "environment",
+  },
+  {
+    icon: <AppWindow className="size-4" strokeWidth={2} aria-hidden />,
+    to: "/settings/app",
+    text: "SETTINGS$NAV_APPLICATION",
+    subtitle: "SETTINGS$PAGE_APPLICATION_SUBLINE",
+    group: "app",
   },
 ];
 

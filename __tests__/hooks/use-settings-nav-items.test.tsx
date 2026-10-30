@@ -1,6 +1,9 @@
 import { renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { OSS_NAV_ITEMS } from "#/constants/settings-nav";
+import {
+  OSS_NAV_ITEMS,
+  SETTINGS_NAV_GROUP_LABELS,
+} from "#/constants/settings-nav";
 import { useSettingsNavItems } from "#/hooks/use-settings-nav-items";
 import { WebClientConfig } from "#/api/option-service/option.types";
 
@@ -94,7 +97,7 @@ describe("useSettingsNavItems", () => {
     // Agent profiles are available on cloud too (OpenHands #15060), so every
     // OSS item is present; only the `/settings` LLM-Profiles rename stays
     // local-only, so on cloud every item is passed through unchanged.
-    expect(result.current).toEqual(
+    expect(result.current.filter((entry) => entry.type === "item")).toEqual(
       OSS_NAV_ITEMS.map((item) => ({ type: "item", item })),
     );
   });
@@ -211,5 +214,36 @@ describe("useSettingsNavItems", () => {
       .filter((item) => item.type === "item")
       .map((item) => (item.type === "item" ? item.item.to : null));
     expect(paths).toEqual(["/settings/app"]);
+    // A lone section needs no heading.
+    expect(result.current.some((entry) => entry.type === "header")).toBe(false);
+  });
+
+  it("groups the settings pages under one heading per section", () => {
+    useConfigMock.mockReturnValue({ data: createConfig() });
+    useActiveBackendMock.mockReturnValue({
+      backend: { kind: "cloud" },
+      orgId: null,
+    });
+
+    const { result } = renderHook(() => useSettingsNavItems());
+
+    let currentHeading: string | null = null;
+    const headings: string[] = [];
+    for (const entry of result.current) {
+      if (entry.type === "header") {
+        currentHeading = entry.text;
+        headings.push(entry.text);
+      } else if (entry.type === "item") {
+        expect(currentHeading).toBe(
+          SETTINGS_NAV_GROUP_LABELS[entry.item.group],
+        );
+      }
+    }
+    expect(new Set(headings).size).toBe(headings.length);
+    expect(headings).toEqual(
+      [...new Set(OSS_NAV_ITEMS.map((item) => item.group))].map(
+        (group) => SETTINGS_NAV_GROUP_LABELS[group],
+      ),
+    );
   });
 });

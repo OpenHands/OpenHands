@@ -2,6 +2,7 @@ import { useConfig } from "#/hooks/query/use-config";
 import {
   LOCKED_CLOUD_SETTINGS_NAV_PATH,
   OSS_NAV_ITEMS,
+  SETTINGS_NAV_GROUP_LABELS,
   SettingsNavItem,
 } from "#/constants/settings-nav";
 import { isSettingsPageHidden } from "#/utils/settings-utils";
@@ -28,7 +29,7 @@ export function useSettingsNavItems(): SettingsNavRenderedItem[] {
   // the OHE settings shell behind "All Cloud Settings" owns the rest (OHE-3168).
   const isLockedToCloud = getLockedCloudHost() !== null;
 
-  return OSS_NAV_ITEMS.filter(
+  const items: SettingsNavItem[] = OSS_NAV_ITEMS.filter(
     (item) =>
       !isSettingsPageHidden(item.to, featureFlags) &&
       (!isLockedToCloud || item.to === LOCKED_CLOUD_SETTINGS_NAV_PATH) &&
@@ -49,6 +50,27 @@ export function useSettingsNavItems(): SettingsNavRenderedItem[] {
           }
         : item;
 
-    return { type: "item", item: renamedItem };
+    return renamedItem;
   });
+
+  return withGroupHeaders(items);
+}
+
+/**
+ * Precede each run of same-group items with that group's heading. A single
+ * visible group (e.g. locked-to-Cloud's lone Application page) gets none.
+ */
+function withGroupHeaders(items: SettingsNavItem[]): SettingsNavRenderedItem[] {
+  const showHeaders = new Set(items.map((item) => item.group)).size > 1;
+  const rendered: SettingsNavRenderedItem[] = [];
+  items.forEach((item, index) => {
+    if (showHeaders && item.group !== items[index - 1]?.group) {
+      rendered.push({
+        type: "header",
+        text: SETTINGS_NAV_GROUP_LABELS[item.group],
+      });
+    }
+    rendered.push({ type: "item", item });
+  });
+  return rendered;
 }
