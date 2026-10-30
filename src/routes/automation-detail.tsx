@@ -30,6 +30,7 @@ import { PromptSection } from "#/components/features/automations/detail/prompt-s
 import { ScriptSection } from "#/components/features/automations/detail/script-section";
 import { ConfigurationSection } from "#/components/features/automations/detail/configuration-section";
 import { PluginsSection } from "#/components/features/automations/detail/plugins-section";
+import { KeepAliveSection } from "#/components/features/automations/detail/keep-alive-section";
 import { ActivitySection } from "#/components/features/automations/detail/activity-section";
 import { ActivityLogSection } from "#/components/features/automations/detail/activity-log-section";
 import { DetailSkeleton } from "#/components/features/automations/detail/detail-skeleton";
@@ -276,6 +277,10 @@ export default function AutomationDetail() {
           {automation.plugins && automation.plugins.length > 0 && (
             <PluginsSection plugins={automation.plugins} />
           )}
+          <KeepAliveSection
+            automation={automation}
+            canEdit={canManage && !isDraft}
+          />
           <ActivitySection
             createdAt={automation.created_at}
             lastRunAt={automation.last_triggered_at}

@@ -506,3 +506,30 @@ describe("AutomationDetail — script automations", () => {
     ).not.toBeInTheDocument();
   });
 });
+
+describe("AutomationDetail — keep sandbox alive", () => {
+  it.each([
+    { state: "ACTIVE", editable: true },
+    { state: "DRAFT", editable: false },
+  ])(
+    "renders the keep-alive switch for a $state automation, editable: $editable",
+    async ({ state, editable }) => {
+      // Arrange
+      vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+        ...automation,
+        state,
+        keep_alive: true,
+      });
+
+      // Act
+      renderDetail();
+
+      // Assert
+      const keepAliveSwitch = await screen.findByRole("switch", {
+        name: I18nKey.AUTOMATIONS$DETAIL$KEEP_ALIVE,
+      });
+      expect(keepAliveSwitch).toHaveAttribute("aria-checked", "true");
+      expect(keepAliveSwitch.hasAttribute("disabled")).toBe(!editable);
+    },
+  );
+});
