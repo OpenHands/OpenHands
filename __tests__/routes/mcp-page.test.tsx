@@ -7,6 +7,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router";
 import MCPPage from "#/routes/mcp";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import McpService from "#/api/mcp-service/mcp-service.api";
@@ -26,16 +27,18 @@ function buildSettings(overrides: Partial<Settings> = {}): Settings {
   };
 }
 
-function renderPage() {
+function renderPage(path = "/mcp") {
   return render(<MCPPage />, {
     wrapper: ({ children }) => (
-      <QueryClientProvider
-        client={
-          new QueryClient({ defaultOptions: { queries: { retry: false } } })
-        }
-      >
-        <ActiveBackendProvider>{children}</ActiveBackendProvider>
-      </QueryClientProvider>
+      <MemoryRouter initialEntries={[path]}>
+        <QueryClientProvider
+          client={
+            new QueryClient({ defaultOptions: { queries: { retry: false } } })
+          }
+        >
+          <ActiveBackendProvider>{children}</ActiveBackendProvider>
+        </QueryClientProvider>
+      </MemoryRouter>
     ),
   });
 }
@@ -412,5 +415,18 @@ describe("MCPPage", () => {
     await waitFor(() => {
       expect(screen.getByTestId("mcp-custom-editor")).toBeInTheDocument();
     });
+  });
+
+  it("leaves out the extensions navigation when embedded", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
+
+    renderPage("/mcp?embed=1");
+
+    expect(
+      await screen.findByTestId("mcp-add-custom-server"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("extensions-navbar-desktop"),
+    ).not.toBeInTheDocument();
   });
 });
