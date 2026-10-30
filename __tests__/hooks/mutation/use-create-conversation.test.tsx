@@ -308,10 +308,10 @@ describe("useCreateConversation", () => {
     expect(call.hasActiveMetaProfile).toBe(true);
   });
 
-  it("does not suppress route-at-start on a launch after a failed home pick (flag already cleared)", async () => {
+  it("does not suppress route-at-start on a second launch after the first consumed the flag", async () => {
     // The flag is read-and-cleared by the first launch. A second launch —
     // even immediately after — routes as normal because the flag is gone,
-    // so a failed/abandoned home pick can't leak to an unrelated launch.
+    // so a consumed pick can't leak to an unrelated launch.
     mockUseActiveBackend.mockReturnValue({
       backend: { id: "cloud-1", kind: "cloud" },
       orgId: null,
@@ -348,6 +348,53 @@ describe("useCreateConversation", () => {
     const call = createConversationSpy.mock.lastCall?.[0] ?? {};
     expect(call.runRouterAtConversationStart).toBe(true);
     expect(call).not.toHaveProperty("suppressRouterAtStart");
+  });
+
+  it("suppresses route-at-start on a retry after the first launch was rejected", async () => {
+    // A home pick sets the flag; the first launch rejects (e.g. agent-server
+    // 500). The retry must still suppress routing — the user's manual pick
+    // hasn't been honored by a successful launch yet, so clearing the flag
+    // before the launch resolves would lose it on rejection.
+    mockUseActiveBackend.mockReturnValue({
+      backend: { id: "cloud-1", kind: "cloud" },
+      orgId: null,
+    });
+    useSettingsMock.mockReturnValue({
+      data: { run_router_at_conversation_start: true },
+    });
+    useMetaProfilesMock.mockReturnValue({
+      data: { active_meta_profile: "balanced" },
+    });
+    const createConversationSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockRejectedValueOnce(new Error("agent-server 500"))
+      .mockResolvedValue({
+        id: "task-id",
+        app_conversation_id: null,
+        agent_server_url: "http://agent-server.local",
+      } as never);
+
+    useModelStore.getState().setHomeManualModelPick(true);
+    const { result } = renderHook(() => useCreateConversation(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={new QueryClient()}>
+          {children}
+        </QueryClientProvider>
+      ),
+    });
+
+    // First launch rejects; the flag must survive so a retry still suppresses.
+    await expect(
+      result.current.mutateAsync({ query: "pick" }),
+    ).rejects.toThrow("agent-server 500");
+    createConversationSpy.mockClear();
+
+    // Retry: no new pick, but the prior pick was never honored.
+    await result.current.mutateAsync({ query: "pick" });
+
+    const call = createConversationSpy.mock.lastCall?.[0] ?? {};
+    expect(call.suppressRouterAtStart).toBe(true);
+    expect(call).not.toHaveProperty("runRouterAtConversationStart");
   });
 
 

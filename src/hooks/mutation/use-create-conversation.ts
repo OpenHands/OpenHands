@@ -116,12 +116,12 @@ export const useCreateConversation = ({
       // first message is an explicit choice the router shouldn't override on
       // turn 1 — suppress the suffix for this single launch without touching
       // the global setting. The flag is set at the UI pick handlers (the
-      // single chokepoint) and consumed here: read-and-clear so it can never
-      // leak to a later, unrelated launch (child, `/new`, sidebar New, …) —
-      // a failed or abandoned home launch has already cleared it.
+      // single chokepoint) and read here. It is cleared in `onSuccess` (not
+      // here) so a rejected launch doesn't consume it — a retry after a
+      // failed launch still suppresses, and the flag can't leak to an
+      // unrelated launch because a successful launch always clears it.
       const suppressRouterAtStart =
         useModelStore.getState().homeManualModelPick;
-      useModelStore.getState().setHomeManualModelPick(false);
 
       // The active AgentProfile is the default launch profile for new
       // conversations (#3727), on both local and cloud.
@@ -236,6 +236,10 @@ export const useCreateConversation = ({
       };
     },
     onSuccess: async (data, variables) => {
+      // The home-manual-pick flag was read (not cleared) in the mutation fn
+      // so a rejected launch wouldn't consume it. Now that the launch
+      // succeeded, clear it so it can't leak to a later, unrelated launch.
+      useModelStore.getState().setHomeManualModelPick(false);
       trackConversationCreated({
         conversationId: data.conversation_id,
         taskId: data.task_id,
