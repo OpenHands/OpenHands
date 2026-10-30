@@ -409,6 +409,43 @@ describe("Sidebar", () => {
     expect(getDesktopSidebar(true).dataset.collapsed).toBe("true");
   });
 
+  it("resizes the expanded sidebar by dragging its edge and remembers the width", () => {
+    // Arrange: the sidebar starts at the left edge of the viewport.
+    const { unmount } = renderSidebar("/conversations");
+    const sidebar = getDesktopSidebar(false);
+    vi.spyOn(sidebar, "getBoundingClientRect").mockReturnValue(
+      DOMRect.fromRect({ x: 0, width: 300, height: 800 }),
+    );
+    const handle = screen
+      .getByTestId("sidebar-resize-handle")
+      .querySelector(".cursor-ew-resize")!;
+    expect(sidebar.style.getPropertyValue("--sidebar-width")).toBe("300px");
+
+    // Act + Assert: the width follows the pointer within its bounds.
+    fireEvent.mouseDown(handle);
+    for (const [clientX, expectedWidth] of [
+      [420, "420px"],
+      [100, "240px"],
+      [2000, "560px"],
+      [380, "380px"],
+    ] as const) {
+      fireEvent.mouseMove(document, { clientX });
+      expect(sidebar.style.getPropertyValue("--sidebar-width")).toBe(
+        expectedWidth,
+      );
+    }
+    fireEvent.mouseUp(document);
+
+    // The chosen width survives a remount; the collapsed rail has no handle.
+    unmount();
+    renderSidebar("/conversations");
+    expect(
+      getDesktopSidebar(false).style.getPropertyValue("--sidebar-width"),
+    ).toBe("380px");
+    fireEvent.click(screen.getByTestId("sidebar-collapse-toggle"));
+    expect(screen.queryByTestId("sidebar-resize-handle")).toBeNull();
+  });
+
   it("expands the sidebar when the toggle is clicked from the collapsed state", () => {
     // Arrange: simulate a user whose sidebar was previously collapsed.
     useSidebarStore.setState({ collapsed: true });

@@ -13,6 +13,15 @@ import { useSidebarStore } from "#/stores/sidebar-store";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
 import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { useBackendsHealth } from "#/hooks/query/use-backends-health";
+import { useResizableDrawerWidth } from "#/hooks/use-resizable-drawer-width";
+import { ResizeHandle } from "#/components/ui/resize-handle";
+import {
+  SIDEBAR_DEFAULT_WIDTH_PX,
+  SIDEBAR_MAX_WIDTH_PX,
+  SIDEBAR_MIN_WIDTH_PX,
+  SIDEBAR_RESIZE_HANDLE_TEST_ID,
+  SIDEBAR_WIDTH_STORAGE_KEY,
+} from "./sidebar-layout";
 // The LLM settings modal is only mounted when the settings query 404s and
 // LLM settings aren't hidden — keep it out of the sidebar's eager graph.
 const SettingsModal = React.lazy(() =>
@@ -78,6 +87,20 @@ export function Sidebar() {
     () => setCollapsedBackendPopoverOpen(false),
   );
   const settingsErrorStatus = getErrorStatus(settingsError);
+  const desktopSidebarRef = React.useRef<HTMLElement>(null);
+  const {
+    drawerWidth: sidebarWidth,
+    isDragging: isResizingSidebar,
+    handleMouseDown: handleSidebarResizeStart,
+  } = useResizableDrawerWidth({
+    containerRef: desktopSidebarRef,
+    defaultWidth: SIDEBAR_DEFAULT_WIDTH_PX,
+    minWidth: SIDEBAR_MIN_WIDTH_PX,
+    maxWidth: SIDEBAR_MAX_WIDTH_PX,
+    storageKey: SIDEBAR_WIDTH_STORAGE_KEY,
+    enabled: !collapsed,
+    edge: "left",
+  });
 
   React.useEffect(() => {
     closeMobileNav();
@@ -198,6 +221,7 @@ export function Sidebar() {
     <>
       {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- the aside acts as a hit-area for the collapsed rail; nested controls handle their own keyboard interactions. */}
       <aside
+        ref={desktopSidebarRef}
         aria-label={t(I18nKey.SIDEBAR$NAVIGATION_LABEL)}
         data-collapsed={collapsed ? "true" : "false"}
         onClick={handleCollapsedRailClick}
@@ -210,19 +234,33 @@ export function Sidebar() {
           setCollapsedRailHovered(false);
         }}
         className={cn(
-          "max-md:hidden flex bg-canvas-base flex-col min-h-0 sidebar-text-scale transition-[width,min-width] duration-200",
+          "max-md:hidden relative flex bg-canvas-base flex-col min-h-0 sidebar-text-scale",
+          !isResizingSidebar && "transition-[width,min-width] duration-200",
           "md:border-r md:border-border md:h-full",
           collapsed
             ? "md:w-15 md:min-w-15 md:px-2.5"
-            : "md:w-75 md:min-w-75 pb-2 md:pl-2.5 md:pr-0",
+            : "md:sidebar-expanded-width pb-2 md:pl-2.5 md:pr-0",
           currentPath === "/" && "md:pb-3",
         )}
+        style={
+          {
+            "--sidebar-width": `${sidebarWidth}px`,
+          } as React.CSSProperties
+        }
       >
         <SidebarRailBody
           collapsed={collapsed}
           showCollapseToggle
           {...railBodyProps}
         />
+        {collapsed ? null : (
+          <ResizeHandle
+            testId={SIDEBAR_RESIZE_HANDLE_TEST_ID}
+            className="absolute inset-y-0 -right-px"
+            onMouseDown={handleSidebarResizeStart}
+            isDragging={isResizingSidebar}
+          />
+        )}
       </aside>
 
       {mobileDrawerMounted ? (
