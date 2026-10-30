@@ -167,12 +167,16 @@ function settingsWithGithubMcp() {
 async function activateCloudBackend({
   providersConfigured = [],
   jiraEnabled = false,
+  jiraDcEnabled = false,
   linearEnabled = false,
+  deploymentMode,
   settings = {},
 }: {
   providersConfigured?: string[];
   jiraEnabled?: boolean;
+  jiraDcEnabled?: boolean;
   linearEnabled?: boolean;
+  deploymentMode?: string;
   settings?: object;
 } = {}) {
   setRegisteredBackends([cloudBackend]);
@@ -183,7 +187,9 @@ async function activateCloudBackend({
         providers_configured: providersConfigured,
         feature_flags: {
           enable_jira: jiraEnabled,
+          enable_jira_dc: jiraDcEnabled,
           enable_linear: linearEnabled,
+          deployment_mode: deploymentMode,
         },
       }),
     ),
@@ -232,7 +238,7 @@ describe("recommended automations", () => {
     __resetActiveStoreForTests();
   });
 
-  it("renders the proven automations before the beta ones, each in popularity order", () => {
+  it("renders the suggested automations before the rest, each in popularity order", () => {
     render(
       <RecommendedAutomationsSection
         backendKind="local"
@@ -276,7 +282,7 @@ describe("recommended automations", () => {
     ]);
   });
 
-  it("groups the non-proven automations under a labeled Beta section", () => {
+  it("suggests the proven automations and lists the rest, tagged Beta, under More templates", () => {
     render(
       <RecommendedAutomationsSection
         backendKind="local"
@@ -285,31 +291,40 @@ describe("recommended automations", () => {
       />,
     );
 
-    const provenHeading = screen.getByText(
-      I18nKey.RECOMMENDED_AUTOMATIONS$SECTION_TITLE,
+    const suggestedHeading = screen.getByText(
+      I18nKey.RECOMMENDED_AUTOMATIONS$SUGGESTED_TITLE,
     ).parentElement!;
-    expect(within(provenHeading).getByText("6")).toBeInTheDocument();
+    expect(within(suggestedHeading).getByText("6")).toBeInTheDocument();
+    expect(
+      screen.getByText(I18nKey.RECOMMENDED_AUTOMATIONS$SECTION_DESCRIPTION),
+    ).toBeInTheDocument();
 
-    const betaHeading = screen.getByTestId(
+    const moreHeading = screen.getByTestId(
       "recommended-automations-beta-heading",
     );
-    expect(betaHeading).toHaveTextContent(
-      I18nKey.RECOMMENDED_AUTOMATIONS$BETA_LABEL,
+    expect(moreHeading).toHaveTextContent(
+      I18nKey.RECOMMENDED_AUTOMATIONS$MORE_TITLE,
     );
-    expect(within(betaHeading).getByText("17")).toBeInTheDocument();
+    expect(within(moreHeading).getByText("17")).toBeInTheDocument();
 
-    const betaSection = screen.getByTestId(
+    const moreSection = screen.getByTestId(
       "recommended-automations-beta-section",
     );
     expect(
-      within(betaSection).getByTestId(
+      within(moreSection).getByTestId(
         "recommended-automation-card-slack-standup-digest",
       ),
     ).toBeInTheDocument();
     expect(
-      within(betaSection).queryByTestId(
+      within(moreSection).queryByTestId(
         "recommended-automation-card-github-pr-reviewer",
       ),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("recommended-automation-beta-slack-standup-digest"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("recommended-automation-beta-github-pr-reviewer"),
     ).not.toBeInTheDocument();
   });
 
@@ -1246,6 +1261,176 @@ describe("recommended automations", () => {
       screen.queryByTestId("built-in-integration-choice-modal"),
     ).not.toBeInTheDocument();
     expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Runs `body` with the `news-digest` entry needing the given built-in
+   * integrations, so what a package release ships never decides the case. The
+   * entry is mutated in place because the section reads the catalog at import.
+   */
+  async function withBuiltInRequirement(
+    builtInIntegrations: string[],
+    body: () => Promise<void>,
+  ) {
+    const entry = AUTOMATION_CATALOG.find(({ id }) => id === "news-digest")!;
+    const requires = entry.requires as unknown as Record<string, unknown>;
+    requires.builtInIntegrations = builtInIntegrations;
+    try {
+      await body();
+    } finally {
+      delete requires.builtInIntegrations;
+    }
+  }
+
+  /** Card ids in the order the Templates page lists them. */
+  function cardOrder() {
+    return screen
+      .getAllByTestId(/^recommended-automation-card-/)
+      .map((card) =>
+        card
+          .getAttribute("data-testid")
+          ?.replace("recommended-automation-card-", ""),
+      );
+  }
+
+  it("lists what an Enterprise instance on Data Center does not report after everything else, without hiding it", async () => {
+    await withBuiltInRequirement(
+      ["jira_dc", "bitbucket_data_center"],
+      async () => {
+        // Arrange
+        await activateCloudBackend({
+          deploymentMode: "self_hosted",
+          providersConfigured: ["bitbucket_data_center"],
+          jiraDcEnabled: true,
+        });
+
+        // Act
+        renderLauncher({ withBackendProvider: true });
+
+        // Assert — every Beta card the instance looks ready for comes first.
+        await screen.findByTestId("recommended-automation-card-news-digest");
+        const order = cardOrder();
+        const unlikely = [
+          "jira-issue-to-bitbucket-pr",
+          "jira-issue-to-pr",
+          "linear-issue-to-bitbucket-pr",
+        ];
+        for (const id of unlikely) expect(order).toContain(id);
+        expect(order.indexOf("research-brief-writer")).toBeLessThan(
+          Math.min(...unlikely.map((id) => order.indexOf(id))),
+        );
+      },
+    );
+  });
+
+  it("suggests first the templates using an integration an Enterprise instance reports", async () => {
+    await withBuiltInRequirement(["bitbucket_data_center"], async () => {
+      // Arrange
+      await activateCloudBackend({
+        deploymentMode: "self_hosted",
+        providersConfigured: ["bitbucket_data_center"],
+        jiraDcEnabled: true,
+      });
+
+      // Act
+      renderLauncher({ withBackendProvider: true });
+
+      // Assert
+      await screen.findByTestId("recommended-automation-card-news-digest");
+      expect(cardOrder()[0]).toBe("news-digest");
+      expect(
+        within(
+          screen.getByTestId("recommended-automations-beta-section"),
+        ).getByTestId("recommended-automation-card-github-pr-reviewer"),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("explains what the instance does not report before setting such a template up, and lets the user continue", async () => {
+    // Arrange
+    await activateCloudBackend({
+      deploymentMode: "self_hosted",
+      providersConfigured: ["bitbucket_data_center"],
+      jiraDcEnabled: true,
+    });
+    renderLauncher({ withBackendProvider: true });
+    const card = await screen.findByTestId(
+      "recommended-automation-card-github-pr-reviewer",
+    );
+
+    // Act — open it and cancel.
+    fireEvent.click(card);
+
+    // Assert
+    expect(screen.getByTestId("unlikely-integration-notice")).toHaveTextContent(
+      "GitHub",
+    );
+    fireEvent.click(screen.getByTestId("unlikely-integration-notice-cancel"));
+    expect(
+      screen.queryByTestId("unlikely-integration-notice"),
+    ).not.toBeInTheDocument();
+    expect(mockNavigate).not.toHaveBeenCalled();
+
+    // Act — open it again and continue.
+    fireEvent.click(card);
+    fireEvent.click(screen.getByTestId("unlikely-integration-notice-continue"));
+
+    // Assert
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith(
+        "/automations/new/github-pr-reviewer",
+      ),
+    );
+  });
+
+  it("sets up a template the instance looks ready for without the notice", async () => {
+    // Arrange
+    await activateCloudBackend({
+      deploymentMode: "self_hosted",
+      providersConfigured: ["github"],
+    });
+    renderLauncher({ withBackendProvider: true });
+
+    // Act
+    fireEvent.click(
+      await screen.findByTestId(
+        "recommended-automation-card-github-pr-reviewer",
+      ),
+    );
+
+    // Assert
+    expect(
+      screen.queryByTestId("unlikely-integration-notice"),
+    ).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith(
+        "/automations/new/github-pr-reviewer",
+      ),
+    );
+  });
+
+  it("does not offer Data Center templates on OpenHands Cloud", async () => {
+    await withBuiltInRequirement(["bitbucket_data_center"], async () => {
+      // Arrange
+      await activateCloudBackend({
+        deploymentMode: "cloud",
+        providersConfigured: ["github", "gitlab", "bitbucket"],
+        jiraEnabled: true,
+      });
+
+      // Act
+      renderLauncher({ withBackendProvider: true });
+
+      // Assert
+      expect(
+        await screen.findByTestId(
+          "recommended-automation-card-jira-issue-to-pr",
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("recommended-automation-card-news-digest"),
+      ).not.toBeInTheDocument();
+    });
   });
 
   it("shows the native integration first and the MCP server on its own tab", async () => {

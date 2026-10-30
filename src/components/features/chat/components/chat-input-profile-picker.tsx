@@ -143,7 +143,7 @@ export function ChatInputProfileMenuContent({
 /** Names the agent profile a new conversation will run, and switches it. */
 export function ChatInputAgentProfilePicker() {
   const { t } = useTranslation("openhands");
-  const { currentProfileName, isLoading, isSwitching } =
+  const { profiles, currentProfileName, isLoading, isSwitching } =
     useChatInputProfileState();
   const [isOpen, setIsOpen] = React.useState(false);
   const triggerRef = React.useRef<HTMLButtonElement>(null);
@@ -152,7 +152,11 @@ export function ChatInputAgentProfilePicker() {
     triggerRef,
   );
 
-  if (isLoading || !currentProfileName) return null;
+  // No profiles yet: stay out of the way, like the LLM picker. With profiles
+  // but nothing selected, the pill still renders so the user can pick one.
+  if (isLoading || profiles.length === 0) return null;
+
+  const label = currentProfileName ?? t(I18nKey.CHAT$AGENT_PROFILE_PLACEHOLDER);
 
   return (
     <div className="relative min-w-0">
@@ -161,7 +165,7 @@ export function ChatInputAgentProfilePicker() {
         type="button"
         className={cn(chatInputPillButtonClassName, "max-w-40")}
         title={t(I18nKey.CHAT$SWITCH_AGENT_PROFILE)}
-        aria-label={`${t(I18nKey.CHAT$SWITCH_AGENT_PROFILE)}: ${currentProfileName}`}
+        aria-label={`${t(I18nKey.CHAT$SWITCH_AGENT_PROFILE)}: ${label}`}
         data-testid="chat-input-agent-profile"
         aria-expanded={isOpen}
         aria-haspopup="dialog"
@@ -174,7 +178,7 @@ export function ChatInputAgentProfilePicker() {
         }}
       >
         <RobotIcon width={14} height={14} className="shrink-0" aria-hidden />
-        <span className="truncate">{currentProfileName}</span>
+        <span className="truncate">{label}</span>
         <ComboboxCaretInline isOpen={isOpen} />
       </button>
       {isOpen && (

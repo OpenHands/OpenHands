@@ -21,6 +21,7 @@ import {
 import type { Backend } from "#/api/backend-registry/types";
 import { clearCachedAgentServerInfo } from "#/api/agent-server-compatibility";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import HooksService from "#/api/hooks-service";
 import LLMSubscriptionService from "#/api/llm-subscription-service";
 import {
   LLM_AUTH_TYPE_SUBSCRIPTION,
@@ -318,6 +319,56 @@ describe("AgentServerConversationService", () => {
       await expect(
         AgentServerConversationService.updateConversationTags("gone", {}),
       ).rejects.toThrow("gone");
+    });
+
+    it("applies tag flags locally as a full replacement map merged with current tags", async () => {
+      const refreshedTags = {
+        origin: "slack",
+        acpserver: "codex",
+        archived: "true",
+      };
+      mockUpdateConversation.mockResolvedValue(undefined);
+      mockHttpGet.mockResolvedValue({
+        data: [makeDirectConversation({ tags: refreshedTags })],
+      });
+      const result =
+        await AgentServerConversationService.updateConversationTagFlags(
+          "conv-1",
+          { origin: "slack", acpserver: "codex", pinned: "true" },
+          { archived: true, pinned: false },
+        );
+      // Local PATCH is replace-all: the writer merges the flag changes into
+      // the current map, preserving unrelated and reserved keys.
+      expect(mockUpdateConversation).toHaveBeenCalledWith("conv-1", {
+        tags: refreshedTags,
+      });
+      expect(result.tags).toEqual(refreshedTags);
+    });
+
+    it("applies tag flags on Cloud as a merge patch without touching other keys", async () => {
+      setRegisteredBackends([cloudBackend]);
+      setActiveSelection({ backendId: cloudBackend.id });
+      const updated = makeDirectConversation({
+        tags: { origin: "slack", pinned: "true" },
+      });
+      const requests = captureRequests(["patch"], updated);
+      await expect(
+        AgentServerConversationService.updateConversationTagFlags(
+          "conv-1",
+          { origin: "slack", pinned: "true", archived: "true" },
+          { pinned: false, archived: true },
+        ),
+      ).resolves.toEqual(updated);
+      // Cloud PATCH merges server-side: disabled flags delete via null and
+      // unmentioned keys (origin, server-managed keys) are never sent.
+      expect(requests).toEqual([
+        expect.objectContaining({
+          method: "PATCH",
+          url: `${cloudBackend.host}/api/v1/app-conversations/conv-1`,
+          body: { tags: { pinned: null, archived: "true" } },
+        }),
+      ]);
+      expect(mockUpdateConversation).not.toHaveBeenCalled();
     });
 
     it("preserves disabled editor capability and explicit runtime credentials", async () => {
@@ -846,7 +897,7 @@ describe("AgentServerConversationService", () => {
       expect(payload.worktree).toBe(false);
     });
 
-    it("stamps the selected workspace as a server-valid conversation tag (#17386)", async () => {
+    it("stamps the selected workspace and repository as server-valid conversation tags (#17386, #15598)", async () => {
       mockGetSettings.mockResolvedValue({
         agent_settings: { llm: { model: "gpt-4o" } },
         conversation_settings: {},
@@ -867,6 +918,11 @@ describe("AgentServerConversationService", () => {
       await AgentServerConversationService.createConversation({
         agentProfileId: "profile-1",
         workingDirOverride: "/Users/jane/projects/foo/",
+        metadata: {
+          selected_repository: "OpenHands/OpenHands",
+          selected_branch: "main",
+          git_provider: "github",
+        },
       });
 
       const [payloadCall] = mockHttpPost.mock.calls;
@@ -875,10 +931,49 @@ describe("AgentServerConversationService", () => {
       // validator accepts (an underscored key would 422 the create).
       expect(payload.tags).toMatchObject({
         [WORKSPACE_TAG_KEY]: "/Users/jane/projects/foo",
+        repository: "OpenHands/OpenHands",
+        selectedbranch: "main",
+        gitprovider: "github",
       });
       for (const key of Object.keys(payload.tags ?? {})) {
         expect(key).toMatch(/^[a-z0-9]+$/);
       }
+    });
+
+    it("leaves out tag values longer than the agent-server accepts", async () => {
+      mockGetSettings.mockResolvedValue({
+        agent_settings: { llm: { model: "gpt-4o" } },
+        conversation_settings: {},
+      });
+      mockGetSettingsForConversation.mockResolvedValue({
+        agentSettings: { llm: { model: "gpt-4o" } },
+        conversationSettings: {},
+        secretsEncrypted: true,
+      });
+      mockHttpPost.mockResolvedValue({
+        data: {
+          id: "ignored-server-id",
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+      });
+
+      await AgentServerConversationService.createConversation({
+        agentProfileId: "profile-1",
+        workingDirOverride: `/${"d".repeat(256)}`,
+        metadata: {
+          selected_repository: `o/${"r".repeat(254)}`,
+          selected_branch: "b".repeat(257),
+          git_provider: "github",
+        },
+      });
+
+      const [payloadCall] = mockHttpPost.mock.calls;
+      const payload = payloadCall[1] as { tags: Record<string, string> };
+      expect(payload.tags.repository).toHaveLength(256);
+      expect(payload.tags).not.toHaveProperty("selectedbranch");
+      expect(payload.tags).not.toHaveProperty(WORKSPACE_TAG_KEY);
+      expect(payload.tags.gitprovider).toBe("github");
     });
 
     it("sends no workspace tag when no workspace was selected (#17386)", async () => {
@@ -939,6 +1034,111 @@ describe("AgentServerConversationService", () => {
       };
       expect(payload.workspace.working_dir).toBe("/Users/jane/projects/foo");
       expect(payload.worktree).toBe(true);
+    });
+
+    it("asks for the docker runtime in docker-container mode", async () => {
+      const loadWorkspaceHooks = vi.spyOn(HooksService, "loadWorkspaceHooks");
+      mockGetSettings.mockResolvedValue({
+        agent_settings: { llm: { model: "gpt-4o" } },
+        conversation_settings: {},
+      });
+      mockGetSettingsForConversation.mockResolvedValue({
+        agentSettings: { llm: { model: "gpt-4o" } },
+        conversationSettings: {},
+        secretsEncrypted: true,
+      });
+      mockHttpPost.mockResolvedValue({
+        data: {
+          id: "ignored-server-id",
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+      });
+
+      await AgentServerConversationService.createConversation({
+        agentProfileId: "profile-1",
+        workingDirOverride: "/Users/jane/projects/foo",
+        workspaceMode: "docker_container",
+      });
+
+      const [payloadCall] = mockHttpPost.mock.calls;
+      const payload = payloadCall[1] as {
+        workspace: { working_dir: string };
+        worktree: boolean;
+        conversation_runtime?: string;
+      };
+      expect(payload.workspace.working_dir).toBe("/Users/jane/projects/foo");
+      expect(payload.worktree).toBe(false);
+      expect(payload.conversation_runtime).toBe("docker");
+      // The container cannot see host paths, so no host hooks are loaded.
+      expect(loadWorkspaceHooks).not.toHaveBeenCalled();
+    });
+
+    it("records a docker conversation started without a workspace", async () => {
+      mockGetSettings.mockResolvedValue({
+        agent_settings: { llm: { model: "gpt-4o" } },
+        conversation_settings: {},
+      });
+      mockGetSettingsForConversation.mockResolvedValue({
+        agentSettings: { llm: { model: "gpt-4o" } },
+        conversationSettings: {},
+        secretsEncrypted: true,
+      });
+      mockHttpPost.mockResolvedValue({
+        data: {
+          id: "docker-no-workspace",
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+      });
+
+      const created = await AgentServerConversationService.createConversation({
+        agentProfileId: "profile-1",
+        workspaceMode: "docker_container",
+      });
+
+      // Hooks and restarts read it to keep the conversation in its container.
+      expect(getStoredConversationMetadata(created.id)?.workspace_mode).toBe(
+        "docker_container",
+      );
+    });
+
+    it("asks a server offering both runtimes for the local one in a host mode", async () => {
+      server.use(
+        http.get("*/server_info", () =>
+          HttpResponse.json({
+            version: "1.54.0",
+            conversation_runtime: "docker",
+            available_conversation_runtimes: ["local", "docker"],
+          }),
+        ),
+      );
+      clearCachedAgentServerInfo();
+      mockGetSettings.mockResolvedValue({
+        agent_settings: { llm: { model: "gpt-4o" } },
+        conversation_settings: {},
+      });
+      mockGetSettingsForConversation.mockResolvedValue({
+        agentSettings: { llm: { model: "gpt-4o" } },
+        conversationSettings: {},
+        secretsEncrypted: true,
+      });
+      mockHttpPost.mockResolvedValue({
+        data: {
+          id: "ignored-server-id",
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+      });
+
+      await AgentServerConversationService.createConversation({
+        agentProfileId: "profile-1",
+        workingDirOverride: "/Users/jane/projects/foo",
+        workspaceMode: "local_repo",
+      });
+
+      const [payloadCall] = mockHttpPost.mock.calls;
+      expect(payloadCall[1]).toMatchObject({ conversation_runtime: "local" });
     });
   });
 

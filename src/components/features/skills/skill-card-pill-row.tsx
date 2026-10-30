@@ -252,7 +252,7 @@ export function SkillCardPillRow({ pills, testId }: SkillCardPillRowProps) {
             role="dialog"
             data-testid={`${testId}-overflow-popover`}
             className={cn(
-              "z-[9999] flex w-max max-w-[20rem] flex-col gap-1.5",
+              "z-9999 flex w-max max-w-[20rem] flex-col gap-1.5",
               "rounded-md border border-border-subtle",
               "bg-surface p-2 shadow-lg",
             )}
