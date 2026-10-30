@@ -144,7 +144,10 @@ function AppSettingsForm() {
         language,
         ...(!isCloudBackend && { user_consents_to_analytics: enableAnalytics }),
         enable_sound_notifications: enableSoundNotifications,
-        enable_desktop_notifications: enableDesktopNotifications,
+        // Cloud has no backend field for this yet, so it stays local-only.
+        ...(!isCloudBackend && {
+          enable_desktop_notifications: enableDesktopNotifications,
+        }),
         git_user_name: gitUserName,
         git_user_email: gitUserEmail,
         title_llm_profile: selectedTitleLlmProfile,
@@ -310,30 +313,32 @@ function AppSettingsForm() {
             {t(I18nKey.SETTINGS$SOUND_NOTIFICATIONS)}
           </SettingsSwitch>
 
-          <div>
-            <SettingsSwitch
-              testId="enable-desktop-notifications-switch"
-              name="enable-desktop-notifications-switch"
-              isToggled={desktopNotificationsEnabled}
-              isDisabled={
-                isRequestingNotificationPermission ||
-                desktopNotificationPermission === "denied" ||
-                desktopNotificationPermission === "unsupported"
-              }
-              onToggle={handleDesktopNotificationsToggle}
-            >
-              {t(I18nKey.SETTINGS$DESKTOP_NOTIFICATIONS)}
-            </SettingsSwitch>
-            <p className="mt-1 text-sm leading-5 text-tertiary-light">
-              {t(I18nKey.SETTINGS$DESKTOP_NOTIFICATIONS_DESCRIPTION)}
-            </p>
-            {(desktopNotificationPermission === "denied" ||
-              desktopNotificationPermission === "unsupported") && (
-              <p className="mt-1 text-sm leading-5 text-danger">
-                {t(I18nKey.SETTINGS$DESKTOP_NOTIFICATIONS_UNAVAILABLE)}
+          {!isCloudBackend && (
+            <div>
+              <SettingsSwitch
+                testId="enable-desktop-notifications-switch"
+                name="enable-desktop-notifications-switch"
+                isToggled={desktopNotificationsEnabled}
+                isDisabled={
+                  isRequestingNotificationPermission ||
+                  desktopNotificationPermission === "denied" ||
+                  desktopNotificationPermission === "unsupported"
+                }
+                onToggle={handleDesktopNotificationsToggle}
+              >
+                {t(I18nKey.SETTINGS$DESKTOP_NOTIFICATIONS)}
+              </SettingsSwitch>
+              <p className="mt-1 text-sm leading-5 text-tertiary-light">
+                {t(I18nKey.SETTINGS$DESKTOP_NOTIFICATIONS_DESCRIPTION)}
               </p>
-            )}
-          </div>
+              {(desktopNotificationPermission === "denied" ||
+                desktopNotificationPermission === "unsupported") && (
+                <p className="mt-1 text-sm leading-5 text-danger">
+                  {t(I18nKey.SETTINGS$DESKTOP_NOTIFICATIONS_UNAVAILABLE)}
+                </p>
+              )}
+            </div>
+          )}
           {/* Locked-to-Cloud never shows the checklist (OHE-3683). */}
           {getLockedCloudHost() === null && <GettingStartedChecklistSwitch />}
           <RecommendedAutomationsSwitch />

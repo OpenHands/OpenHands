@@ -256,6 +256,35 @@ describe("AppSettingsScreen", () => {
     });
   });
 
+  it("hides desktop notifications and does not submit them for cloud backends", async () => {
+    activeBackendState.kind = "cloud";
+    const saveSettingsSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({ enable_desktop_notifications: true }),
+    );
+
+    renderAppSettingsScreen();
+
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByTestId("enable-sound-notifications-switch"),
+    );
+    expect(
+      screen.queryByTestId("enable-desktop-notifications-switch"),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByTestId("submit-button"));
+
+    await waitFor(() => {
+      expect(saveSettingsSpy).toHaveBeenCalledWith(
+        expect.not.objectContaining({
+          enable_desktop_notifications: expect.anything(),
+        }),
+      );
+    });
+  });
+
   it("saves updated git author details in OSS mode", async () => {
     const saveSettingsSpy = vi
       .spyOn(SettingsService, "saveSettings")
