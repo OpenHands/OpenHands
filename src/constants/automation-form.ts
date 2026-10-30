@@ -17,7 +17,7 @@ export const AUTOMATION_DRAFTS_FEATURE = "automationDrafts";
 
 /**
  * The capabilities feature flag the automation service advertises when an
- * automation can be owned by a service account (`run_as_kind: "service"`,
+ * automation can run as a service account (`run_as_kind: "service"`,
  * `run_as_user_id` on create, `POST /v1/{id}/run-as`).
  */
 export const SERVICE_ACCOUNT_RUN_AS_FEATURE = "serviceAccountRunAs";
