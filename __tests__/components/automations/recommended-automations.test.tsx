@@ -298,7 +298,7 @@ describe("recommended automations", () => {
     ).toBeInTheDocument();
 
     const moreHeading = screen.getByTestId(
-      "recommended-automations-more-heading",
+      "recommended-automations-beta-heading",
     );
     expect(moreHeading).toHaveTextContent(
       I18nKey.RECOMMENDED_AUTOMATIONS$MORE_TITLE,
@@ -306,7 +306,7 @@ describe("recommended automations", () => {
     expect(within(moreHeading).getByText("17")).toBeInTheDocument();
 
     const moreSection = screen.getByTestId(
-      "recommended-automations-more-section",
+      "recommended-automations-beta-section",
     );
     expect(
       within(moreSection).getByTestId(
@@ -1298,7 +1298,7 @@ describe("recommended automations", () => {
       expect(cardOrder()[0]).toBe("news-digest");
       expect(
         within(
-          screen.getByTestId("recommended-automations-more-section"),
+          screen.getByTestId("recommended-automations-beta-section"),
         ).getByTestId("recommended-automation-card-github-pr-reviewer"),
       ).toBeInTheDocument();
     });

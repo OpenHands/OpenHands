@@ -356,7 +356,7 @@ function AutomationCardGrid({
                       {!isProvenAutomation(automation) && (
                         <span
                           data-testid={`recommended-automation-beta-${automation.id}`}
-                          className="ml-2 rounded border border-border px-1.5 py-px text-[10px] uppercase tracking-wide"
+                          className="ml-2 rounded border border-border px-1.5 text-xs leading-none"
                         >
                           {translate(
                             I18nKey.RECOMMENDED_AUTOMATIONS$BETA_LABEL,
@@ -515,13 +515,15 @@ export function RecommendedAutomationsSection({
           </>
         )}
 
+        {/* The test ids predate the More templates name; the verify-openhands
+            feature map cites them. */}
         {more.length > 0 && (
           <section
-            data-testid="recommended-automations-more-section"
+            data-testid="recommended-automations-beta-section"
             className={cn(suggested.length > 0 && "mt-8")}
           >
             <div
-              data-testid="recommended-automations-more-heading"
+              data-testid="recommended-automations-beta-heading"
               className="flex items-center"
             >
               <h2 className="text-base font-semibold text-foreground">
