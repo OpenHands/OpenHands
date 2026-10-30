@@ -332,6 +332,45 @@ describe("Sidebar", () => {
     }
   });
 
+  it("renders sidebar text one step above the app's small text sizes", async () => {
+    // Arrange: compile the production stylesheet and open both sidebar variants.
+    const compiler = await compile(
+      await readFile(resolve("src/tailwind.css"), "utf8"),
+      { base: resolve("src"), onDependency: () => {} },
+    );
+    renderSidebar("/conversations");
+    fireEvent.click(screen.getByTestId("sidebar-mobile-menu-toggle"));
+    const sidebars = [
+      getDesktopSidebar(false),
+      await screen.findByTestId("sidebar-mobile-drawer"),
+    ];
+    const rem = (css: string, token: string, selectorTest: RegExp) =>
+      [...css.matchAll(/([^{}]+)\{([^{}]+)\}/g)]
+        .filter(([, selector]) => selectorTest.test(selector.trim()))
+        .map(
+          ([, , body]) =>
+            body.match(new RegExp(`${token}:\\s*([\\d.]+)rem`))?.[1],
+        )
+        .filter(Boolean)
+        .map(Number)[0];
+    const theme = compiler.build(["text-sm", "text-xs"]);
+
+    for (const sidebar of sidebars) {
+      // Act: build only the classes this element actually carries.
+      const css = compiler.build([...sidebar.classList]);
+      const own = new RegExp(
+        `^\\.(${[...sidebar.classList].map((c) => c.replace(/[^\w-]/g, "\\\\$&")).join("|")})$`,
+      );
+
+      // Assert: text-sm / text-xs resolve to larger sizes inside the sidebar.
+      for (const token of ["--text-sm", "--text-xs"]) {
+        const base = rem(theme, token, /^:root/);
+        expect(base).toBeGreaterThan(0);
+        expect(rem(css, token, own)).toBeGreaterThan(base!);
+      }
+    }
+  });
+
   it("leaves the mobile drawer open when a menu inside it already handled Escape", () => {
     renderSidebar("/conversations");
     const toggle = screen.getByTestId("sidebar-mobile-menu-toggle");
