@@ -33,6 +33,12 @@ interface EventGroupProps {
    * what its steps did ("Ran 3 commands").
    */
   isFinalized?: boolean;
+  /**
+   * Open state kept by the message list, so the group stays open when it
+   * remounts. Falls back to local state when omitted.
+   */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   /** The fully-rendered event messages to show when the group is expanded. */
   children: React.ReactNode;
 }
@@ -55,10 +61,15 @@ export function EventGroup({
   events,
   allEvents,
   isFinalized = false,
+  open,
+  onOpenChange,
   children,
 }: EventGroupProps) {
   const { t } = useTranslation("openhands");
-  const [expanded, setExpanded] = React.useState(false);
+  const [localExpanded, setLocalExpanded] = React.useState(false);
+  const expanded = open ?? localExpanded;
+  const toggleExpanded = () =>
+    onOpenChange ? onOpenChange(!expanded) : setLocalExpanded(!expanded);
   const contentId = React.useId();
   const buttonId = `${contentId}-toggle`;
 
@@ -119,7 +130,7 @@ export function EventGroup({
       <button
         id={buttonId}
         type="button"
-        onClick={() => setExpanded((prev) => !prev)}
+        onClick={toggleExpanded}
         aria-controls={contentId}
         aria-expanded={expanded}
         aria-label={

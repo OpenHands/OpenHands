@@ -9,6 +9,10 @@ import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import { formatEventTimestamp } from "#/utils/format-event-timestamp";
 import { cn } from "#/utils/utils";
 import { useTimestampHover } from "#/hooks/use-timestamp-hover";
+import {
+  StepDisclosureContext,
+  useStepDisclosure,
+} from "#/components/conversation-events/chat/step-disclosure-context";
 
 interface GenericEventMessageProps {
   title: React.ReactNode;
@@ -35,7 +39,7 @@ export function GenericEventMessage({
   timestamp,
 }: GenericEventMessageProps) {
   const { t, i18n } = useTranslation("openhands");
-  const [showDetails, setShowDetails] = React.useState(initiallyExpanded);
+  const [showDetails, toggleDetails] = useStepDisclosure(initiallyExpanded);
   const [hasFocusWithin, setHasFocusWithin] = React.useState(false);
   const timestampLabel = formatEventTimestamp(timestamp, i18n?.language);
   const {
@@ -48,7 +52,7 @@ export function GenericEventMessage({
     <button
       type="button"
       onClick={(event) => {
-        setShowDetails((prev) => !prev);
+        toggleDetails();
         if (event.detail > 0) {
           endHover();
           event.currentTarget.blur();
@@ -73,7 +77,7 @@ export function GenericEventMessage({
     if ((event.target as HTMLElement).closest("a, button, input")) return;
     if (window.getSelection()?.type === "Range") return;
     endHover();
-    setShowDetails((prev) => !prev);
+    toggleDetails();
   };
 
   const titleContent = (
@@ -129,11 +133,15 @@ export function GenericEventMessage({
       {titleRow}
       {showDetails && (
         <div className="ml-1 flex flex-col gap-1.5 border-l border-border-subtle pl-3">
-          {typeof details === "string" ? (
-            <MarkdownRenderer>{details}</MarkdownRenderer>
-          ) : (
-            details
-          )}
+          {/* The row's shared state belongs to this message, not to anything
+              nested in its details. */}
+          <StepDisclosureContext.Provider value={null}>
+            {typeof details === "string" ? (
+              <MarkdownRenderer>{details}</MarkdownRenderer>
+            ) : (
+              details
+            )}
+          </StepDisclosureContext.Provider>
         </div>
       )}
     </div>
