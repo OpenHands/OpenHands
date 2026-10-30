@@ -22,6 +22,9 @@ interface DropdownMenuProps {
   footer?: React.ReactNode;
   openUpward?: boolean;
   fitContent?: boolean;
+  /** Accepted for API parity; this version already sizes non-fitContent menus to the trigger. */
+  matchTriggerWidth?: boolean;
+  tallMenu?: boolean;
 }
 
 export function DropdownMenu({
@@ -34,6 +37,7 @@ export function DropdownMenu({
   footer,
   openUpward = false,
   fitContent = false,
+  tallMenu = false,
 }: DropdownMenuProps) {
   return (
     <div
@@ -42,7 +46,8 @@ export function DropdownMenu({
         fitContent ? "min-w-full w-max" : "w-full",
         openUpward ? "bottom-full mb-1" : "mt-1",
         "bg-tertiary rounded-md context-menu-box-shadow p-1",
-        "max-h-60 overflow-auto",
+        tallMenu ? "max-h-96" : "max-h-60",
+        "overflow-auto",
         !isOpen && "hidden",
       )}
     >
@@ -56,26 +61,42 @@ export function DropdownMenu({
         )}
         {isOpen &&
           filteredOptions.map((option, index) => (
-            <li
-              key={option.value}
-              {...getItemProps({
-                item: option,
-                index,
-                className: cn(
-                  dropdownMenuRowClassName,
-                  "focus:outline-none",
-                  selectedItem?.value === option.value &&
-                    "bg-interactive-selected text-contrast",
-                ),
-              })}
-            >
-              {option.prefix ? (
-                <span className={dropdownMenuRowIconWrapperClassName}>
-                  {option.prefix}
-                </span>
+            <React.Fragment key={option.value}>
+              {option.group &&
+              option.group !== filteredOptions[index - 1]?.group ? (
+                <li
+                  role="presentation"
+                  className="truncate px-2 pt-2 pb-1 text-xs text-muted"
+                >
+                  {option.group}
+                </li>
               ) : null}
-              <span className="min-w-0 truncate">{option.label}</span>
-            </li>
+              <li
+                {...getItemProps({
+                  item: option,
+                  index,
+                  className: cn(
+                    dropdownMenuRowClassName,
+                    "focus:outline-none",
+                    selectedItem?.value === option.value &&
+                      "bg-interactive-selected text-contrast",
+                  ),
+                })}
+                // Grouped rows show a short label; keep the full one for screen readers.
+                aria-label={option.group ? option.label : undefined}
+              >
+                {option.prefix ? (
+                  <span className={dropdownMenuRowIconWrapperClassName}>
+                    {option.prefix}
+                  </span>
+                ) : null}
+                <span className="min-w-0 truncate" title={option.label}>
+                  {option.group
+                    ? (option.groupLabel ?? option.label)
+                    : option.label}
+                </span>
+              </li>
+            </React.Fragment>
           ))}
       </ul>
       {isOpen && footer ? (

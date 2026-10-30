@@ -693,3 +693,15 @@ code .token {
 @utility app-region-drag {
   -webkit-app-region: drag;
 }
+
+/* Dragged sidebar width, never more than 40% of the window so the main view stays usable. */
+@utility sidebar-expanded-width {
+  width: min(var(--sidebar-width), 40vw);
+  min-width: min(var(--sidebar-width), 40vw);
+}
+
+/* Sidebar text reads one step larger than the default small sizes. */
+@utility sidebar-text-scale {
+  --text-xs: 0.8125rem;
+  --text-sm: 0.9375rem;
+}

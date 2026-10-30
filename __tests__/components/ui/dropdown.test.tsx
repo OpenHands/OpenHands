@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
 import { Dropdown } from "#/ui/dropdown/dropdown";
@@ -362,6 +362,53 @@ describe("Dropdown", () => {
       await user.click(clearButton);
 
       expect(onChangeMock).toHaveBeenCalledWith(null);
+    });
+  });
+
+  describe("onOpenChange", () => {
+    it("reports when the menu opens and closes", async () => {
+      const user = userEvent.setup();
+      const onOpenChange = vi.fn();
+      render(<Dropdown options={mockOptions} onOpenChange={onOpenChange} />);
+
+      await user.click(screen.getByTestId("dropdown-trigger"));
+      expect(onOpenChange).toHaveBeenLastCalledWith(true);
+
+      await user.click(screen.getByRole("option", { name: "Option 2" }));
+      expect(onOpenChange).toHaveBeenLastCalledWith(false);
+    });
+  });
+
+  describe("Grouped options", () => {
+    it("lists consecutive options under one heading with their short labels", async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      const grouped = [
+        { value: "local", label: "Local" },
+        {
+          value: "a",
+          label: "Cloud – Alpha",
+          group: "Cloud",
+          groupLabel: "Alpha",
+        },
+        {
+          value: "b",
+          label: "Cloud – Beta",
+          group: "Cloud",
+          groupLabel: "Beta",
+        },
+      ];
+      render(<Dropdown options={grouped} onChange={onChange} />);
+
+      await user.click(screen.getByTestId("dropdown-trigger"));
+
+      expect(screen.getAllByText("Cloud")).toHaveLength(1);
+      // Assistive tech still hears the group with each row.
+      const beta = screen.getByRole("option", { name: "Cloud – Beta" });
+      expect(beta).toHaveTextContent(/^Beta$/);
+      expect(within(beta).getByTitle("Cloud – Beta")).toBeInTheDocument();
+      await user.click(beta);
+      expect(onChange).toHaveBeenCalledWith(grouped[2]);
     });
   });
 

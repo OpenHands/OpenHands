@@ -927,6 +927,8 @@ export function ConversationPanel({
         <Tooltip
           key={conversation.id}
           placement="right-start"
+          // Clear the sidebar's resize handle so the preview never covers it.
+          offset={20}
           delay={1000}
           closeDelay={100}
           isDisabled={

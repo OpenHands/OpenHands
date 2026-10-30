@@ -70,6 +70,9 @@ function buildOptions(
 
   const locals = registered.filter((b) => b.kind === "local");
   const clouds = registered.filter((b) => b.kind === "cloud");
+  // With a single backend the backend name tells the rows nothing, so give
+  // the org name the full width.
+  const showBackendName = registered.length > 1;
 
   for (const b of locals) {
     options.push({
@@ -100,7 +103,10 @@ function buildOptions(
         const orgLabel = isPersonal ? personalWorkspaceLabel : org.name;
         options.push({
           value: makeOptionValue(b.id, org.id),
-          label: `${b.name} – ${orgLabel}`,
+          label: showBackendName ? `${b.name} – ${orgLabel}` : orgLabel,
+          // Rows list orgs under one backend heading instead of repeating
+          // the backend name; the full label stays on the trigger.
+          ...(showBackendName ? { group: b.name, groupLabel: orgLabel } : {}),
           // All org rows for the same cloud backend share that backend's
           // single connectivity verdict — there is no per-org probe.
           prefix,
@@ -137,6 +143,8 @@ interface BackendSelectorProps {
    * the expanded rail) can override the persisted desktop value.
    */
   sidebarCollapsed?: boolean;
+  /** Called whenever the options menu opens or closes. */
+  onMenuOpenChange?: (isOpen: boolean) => void;
 }
 
 export function BackendSelector({
@@ -147,6 +155,7 @@ export function BackendSelector({
   onOpenAddBackend,
   onOpenManageBackends,
   sidebarCollapsed = false,
+  onMenuOpenChange,
 }: BackendSelectorProps = {}) {
   const { t } = useTranslation("openhands");
   const { backends, active, setActive } = useActiveBackendContext();
@@ -371,6 +380,9 @@ export function BackendSelector({
             }
             footer={addBackendFooter}
             openUpward={openUpward}
+            matchTriggerWidth
+            tallMenu
+            onOpenChange={onMenuOpenChange}
             hideTrigger={hideTrigger}
             defaultOpen={defaultOpen}
             openOnHover={!hideTrigger}
