@@ -21,7 +21,6 @@ import {
 } from "#/types/agent-server/type-guards";
 import { handleEventForUI } from "#/utils/handle-event-for-ui";
 import { markdownFence } from "#/utils/markdown-fence";
-import { parseEventTimestamp } from "#/utils/format-event-timestamp";
 import { shouldRenderEvent } from "#/components/conversation-events/chat/event-content-helpers/should-render-event";
 import { parseMessageFromEvent } from "#/components/conversation-events/chat/event-content-helpers/parse-message-from-event";
 import { getActionContent } from "#/components/conversation-events/chat/event-content-helpers/get-action-content";
@@ -123,10 +122,9 @@ const cleanInlineText = (value: string): string =>
 const truncate = (value: string, maxLength = 100): string =>
   value.length > maxLength ? `${value.slice(0, maxLength)}…` : value;
 
-// Same reading as the chat's hover timestamps, so an export matches the UI.
 const formatTimestamp = (timestamp: string): string => {
-  const time = parseEventTimestamp(timestamp);
-  return Number.isNaN(time) ? timestamp : new Date(time).toISOString();
+  const date = new Date(timestamp);
+  return Number.isNaN(date.getTime()) ? timestamp : date.toISOString();
 };
 
 const escapeHtml = (value: string): string =>

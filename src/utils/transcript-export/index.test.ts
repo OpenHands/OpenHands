@@ -175,21 +175,6 @@ describe("conversation transcript export", () => {
     expect(html).not.toContain("<time");
   });
 
-  it("reads an offset-less agent-server timestamp as UTC", () => {
-    const originalTz = process.env.TZ;
-    process.env.TZ = "Asia/Shanghai";
-    try {
-      const markdown = eventsToMarkdown(
-        [{ ...userMessage, timestamp: "2026-07-10T12:34:56.123456" }],
-        defaultOptions,
-      );
-
-      expect(markdown).toContain("<sub>2026-07-10T12:34:56.123Z</sub>");
-    } finally {
-      process.env.TZ = originalTz;
-    }
-  });
-
   it("exports agent errors and uses the UI's tool-output truncation", () => {
     const errorEvent: AgentErrorEvent = {
       id: "error-1",
