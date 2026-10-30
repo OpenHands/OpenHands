@@ -147,9 +147,10 @@ export default function AutomationDetail() {
   // service account (not an org member, so it has no member lookup).
   // Disabled until the automation has loaded, and on non-cloud backends.
   const runsAsService = automation?.run_as_kind === "service";
-  const personQuery = useCloudOrgMember(
-    runsAsService ? automation?.created_by_user_id : automation?.user_id,
-  );
+  const personId = runsAsService
+    ? automation?.created_by_user_id
+    : automation?.user_id;
+  const personQuery = useCloudOrgMember(personId);
 
   const is404 = isError && getErrorStatus(error) === 404;
 
@@ -270,9 +271,6 @@ export default function AutomationDetail() {
   // show the person's email once resolved, fall back to the raw user id when
   // the lookup fails (they left the org, or an app-server without
   // GET /members/{user_id}), nothing while loading.
-  const personId = runsAsService
-    ? automation.created_by_user_id
-    : automation.user_id;
   let person: string | null = null;
   if (active.backend.kind === "cloud" && personId) {
     person = personQuery.data?.email ?? (personQuery.isError ? personId : null);

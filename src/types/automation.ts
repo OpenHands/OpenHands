@@ -44,7 +44,7 @@ export type ChangeRunAsRequest =
   | { to: "service"; service_account_id: string }
   | { to: "self" };
 
-/** Who owns an automation. */
+/** What kind of identity an automation runs as. */
 export type AutomationRunAsKind = "user" | "service";
 
 export interface Automation {
@@ -78,9 +78,11 @@ export interface Automation {
   disabled_at?: string | null;
   /**
    * UUID of the identity the automation runs as: a person, or a service
-   * account (see `run_as_kind`). For a person it is also the creator, and the
-   * frontend uses it for the "creator escape hatch": a member (view-only) may
-   * still edit their own automations without `manage_automations`.
+   * account (see `run_as_kind`). Usually the creator for a person, but not
+   * after a manager changes it to run as themselves (`created_by_user_id`
+   * keeps the creator). The frontend uses it for the "creator escape hatch":
+   * a member (view-only) may still edit automations that run as them without
+   * `manage_automations`.
    */
   user_id?: string;
   /**
