@@ -9845,6 +9845,24 @@
     "ca": "Més informació a la documentació",
     "id": "Pelajari lebih lanjut di dokumentasi"
   },
+  "AUTOMATIONS$DOCS_LINK": {
+    "en": "Learn how automations work",
+    "ja": "オートメーションの仕組みを確認",
+    "zh-CN": "了解自动化的工作原理",
+    "zh-TW": "了解自動化的運作方式",
+    "ko-KR": "자동화 작동 방식 알아보기",
+    "no": "Lær hvordan automatiseringer fungerer",
+    "it": "Scopri come funzionano le automazioni",
+    "pt": "Saiba como as automações funcionam",
+    "es": "Descubre cómo funcionan las automatizaciones",
+    "ar": "تعرّف على كيفية عمل الأتمتة",
+    "fr": "Découvrez le fonctionnement des automatisations",
+    "tr": "Otomasyonların nasıl çalıştığını öğrenin",
+    "de": "Erfahren Sie, wie Automatisierungen funktionieren",
+    "uk": "Дізнайтеся, як працюють автоматизації",
+    "ca": "Descobreix com funcionen les automatitzacions",
+    "id": "Pelajari cara kerja otomatisasi"
+  },
   "AUTOMATIONS$SEARCH_PLACEHOLDER": {
     "en": "Search automations...",
     "ja": "オートメーションを検索...",
