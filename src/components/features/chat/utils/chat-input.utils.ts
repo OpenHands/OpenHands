@@ -86,9 +86,16 @@ export const isContentEmpty = (element: HTMLDivElement | null): boolean => {
 };
 
 /**
- * Clear empty content from contentEditable element for placeholder display
+ * Clear empty content from contentEditable element for placeholder display.
+ * Avoids wiping if an IME composition session is active on the element.
  */
-export const clearEmptyContent = (element: HTMLDivElement | null): void => {
+export const clearEmptyContent = (
+  element: HTMLDivElement | null,
+  isComposing?: boolean,
+): void => {
+  if (isComposing || element?.getAttribute("data-composing") === "true") {
+    return;
+  }
   if (element && isContentEmpty(element)) {
     element.innerHTML = "";
     element.textContent = "";
