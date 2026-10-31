@@ -662,9 +662,10 @@ describe("AgentServerConversationService", () => {
       );
     });
 
-    it("keeps an explicit title_llm_profile preference over the agent profile's pinned LLM", async () => {
+    it("keeps an explicit title_llm_profile preference and forwards the custom title prompt", async () => {
       mockGetSettings.mockResolvedValue({
         title_llm_profile: "Titles",
+        title_generation_prompt: "Summarize {conversation_content}",
         agent_settings: { llm: { model: "gpt-4o" } },
         conversation_settings: {},
       });
@@ -705,7 +706,10 @@ describe("AgentServerConversationService", () => {
 
       expect(mockHttpPost).toHaveBeenCalledWith(
         "/api/conversations",
-        expect.objectContaining({ title_llm_profile: "Titles" }),
+        expect.objectContaining({
+          title_llm_profile: "Titles",
+          prompt: "Summarize {conversation_content}",
+        }),
       );
     });
 

@@ -38,6 +38,7 @@ export const APP_PREFERENCE_FIELDS = [
   "git_user_name",
   "git_user_email",
   "title_llm_profile",
+  "title_generation_prompt",
   "disabled_skills",
   "enabled_skills",
   "run_router_at_conversation_start",
