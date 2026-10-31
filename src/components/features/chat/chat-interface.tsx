@@ -128,6 +128,16 @@ export function ChatInterface({
   );
   const { t } = useTranslation("openhands");
   const scrollRef = React.useRef<HTMLDivElement>(null);
+  // The message list virtualizes against this element, so it needs the DOM
+  // node itself (a ref owned here would never re-render `Messages` once
+  // populated). The callback is stable so React attaches it once per mount
+  // instead of detaching and re-attaching it on every render.
+  const [scrollElement, setScrollElement] =
+    React.useState<HTMLDivElement | null>(null);
+  const setScrollNode = React.useCallback((node: HTMLDivElement | null) => {
+    scrollRef.current = node;
+    setScrollElement(node);
+  }, []);
   useClampDragSelection(scrollRef);
   // A streamed reply grows inside one event as it is revealed, so follow it
   // frame by frame while it does.
@@ -598,7 +608,7 @@ export function ChatInterface({
           {/* Note: We only hide chat suggestions when there's a user message */}
 
           <div
-            ref={scrollRef}
+            ref={setScrollNode}
             data-testid="chat-scroll-container"
             onScroll={(e) => {
               onChatBodyScroll(e.currentTarget);
@@ -652,6 +662,7 @@ export function ChatInterface({
               <Messages
                 messages={renderableEvents}
                 allEvents={allConversationEvents}
+                scrollParent={scrollElement}
               />
             )}
 

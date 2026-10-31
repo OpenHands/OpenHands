@@ -3,12 +3,15 @@ import { useTranslation } from "react-i18next";
 import ArrowDown from "#/icons/angle-down-solid.svg?react";
 import ArrowUp from "#/icons/angle-up-solid.svg?react";
 import LightbulbIcon from "#/icons/lightbulb.svg?react";
+import { useRowExpansionKey } from "#/components/features/chat/row-expansion-context";
+import { usePersistentExpansion } from "#/stores/message-expansion-store";
 import { I18nKey } from "#/i18n/declaration";
 import { MarkdownRenderer } from "../../../features/markdown/markdown-renderer";
 
 interface CollapsibleThinkingProps {
   /** The thinking / reasoning content to display when expanded. */
   content: string;
+  expansionId?: string;
 }
 
 /**
@@ -16,9 +19,16 @@ interface CollapsibleThinkingProps {
  * section.  Collapsed by default so the chat stays compact — especially
  * useful when the thinking language differs from the conversation language.
  */
-export function CollapsibleThinking({ content }: CollapsibleThinkingProps) {
+export function CollapsibleThinking({
+  content,
+  expansionId = "reasoning",
+}: CollapsibleThinkingProps) {
   const { t } = useTranslation("openhands");
-  const [expanded, setExpanded] = React.useState(false);
+  const expansionKey = useRowExpansionKey(expansionId);
+  const [expanded, toggleExpanded] = usePersistentExpansion(
+    expansionKey,
+    false,
+  );
 
   if (!content.trim()) {
     return null;
@@ -33,7 +43,7 @@ export function CollapsibleThinking({ content }: CollapsibleThinkingProps) {
     >
       <button
         type="button"
-        onClick={() => setExpanded((prev) => !prev)}
+        onClick={toggleExpanded}
         aria-expanded={expanded}
         aria-label={
           expanded ? t(I18nKey.THINKING$COLLAPSE) : t(I18nKey.THINKING$EXPAND)

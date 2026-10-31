@@ -9,6 +9,8 @@ import { cn } from "#/utils/utils";
 import { I18nKey } from "#/i18n/declaration";
 import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import { formatEventTimestamp } from "#/utils/format-event-timestamp";
+import { useRowExpansionKey } from "#/components/features/chat/row-expansion-context";
+import { usePersistentExpansion } from "#/stores/message-expansion-store";
 
 interface GenericEventMessageProps {
   title: React.ReactNode;
@@ -22,6 +24,12 @@ interface GenericEventMessageProps {
   /** Optional icon rendered before the title text. */
   titleIcon?: React.ReactNode;
   timestamp?: string;
+  /**
+   * Distinguishes this control from any sibling inside the same row when its
+   * expansion state is persisted across virtualized remounts. Defaults to
+   * `"details"`.
+   */
+  expansionId?: string;
 }
 
 export function GenericEventMessage({
@@ -33,9 +41,14 @@ export function GenericEventMessage({
   titleTrailing,
   titleIcon,
   timestamp,
+  expansionId = "details",
 }: GenericEventMessageProps) {
   const { t, i18n } = useTranslation("openhands");
-  const [showDetails, setShowDetails] = React.useState(initiallyExpanded);
+  const expansionKey = useRowExpansionKey(expansionId);
+  const [showDetails, toggleDetails] = usePersistentExpansion(
+    expansionKey,
+    initiallyExpanded,
+  );
   const [isHovered, setIsHovered] = React.useState(false);
   const [hasFocusWithin, setHasFocusWithin] = React.useState(false);
   const timestampLabel = formatEventTimestamp(timestamp, i18n?.language);
@@ -44,7 +57,7 @@ export function GenericEventMessage({
     <button
       type="button"
       onClick={(event) => {
-        setShowDetails((prev) => !prev);
+        toggleDetails();
         if (event.detail > 0) {
           setIsHovered(false);
           event.currentTarget.blur();
