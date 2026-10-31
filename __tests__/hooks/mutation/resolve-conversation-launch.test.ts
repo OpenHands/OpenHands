@@ -1,3 +1,4 @@
+import * as activeStore from "#/api/backend-registry/active-store";
 import { QueryClient } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -294,6 +295,41 @@ describe("resolveConversationLaunch", () => {
 
 describe("launchConversation", () => {
   afterEach(() => vi.restoreAllMocks());
+
+  it("does not create in a different environment after awaiting profiles", async () => {
+    const original = activeStore.getActiveBackend();
+    const active = vi
+      .spyOn(activeStore, "getActiveBackend")
+      .mockReturnValue(original);
+    let finish!: (value: {
+      profiles: [];
+      active_agent_profile_id: null;
+    }) => void;
+    listAgentProfiles.mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const create = vi.spyOn(
+      AgentServerConversationService,
+      "createConversation",
+    );
+    const result = launchConversation(
+      {
+        queryClient: new QueryClient(),
+        backendId: original.backend.id,
+        orgId: original.orgId,
+        isCloud: true,
+      },
+      {},
+    );
+    active.mockReturnValue({ ...original, orgId: "different-org" });
+    finish({ profiles: [], active_agent_profile_id: null });
+    await expect(result).rejects.toThrow(
+      "CONVERSATION$START_ENVIRONMENT_CHANGED",
+    );
+    expect(create).not.toHaveBeenCalled();
+  });
 
   it("refuses to launch on a subscription LLM that isn't connected", async () => {
     arrange({ activeId: "profile-1", activeLlm: "slow" });
