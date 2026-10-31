@@ -36,6 +36,19 @@ export interface AutomationRepository {
 
 export type AutomationState = "ACTIVE" | "INACTIVE" | "DRAFT";
 
+/** The service generates this bundle at dispatch time, so it cannot be downloaded. */
+export const PLUGIN_SPEC_RUNTIME_TARBALL_PATH = "plugin-spec://runtime";
+
+/** Definition returned by the automation service for a plugin-spec automation. */
+export interface AutomationPluginSpec {
+  plugin: {
+    source: string;
+    ref?: string | null;
+    repo_path?: string | null;
+  };
+  config?: Record<string, unknown> | null;
+}
+
 export interface Automation {
   id: string;
   name: string;
@@ -125,6 +138,8 @@ export interface Automation {
    * `#/utils/automation-preset-sources`.
    */
   preset_metadata?: Record<string, unknown> | null;
+  /** Existing, non-secret plugin definition; absent on older services. */
+  plugin_spec?: AutomationPluginSpec | null;
   /**
    * Labels the creator groups automations by, normalized by the automation
    * service. Absent from an automation service older than tag support.
@@ -145,6 +160,7 @@ export type AutomationSpec = Omit<
   | "updated_at"
   | "last_triggered_at"
   | "preset_metadata"
+  | "plugin_spec"
   | "repositories"
   | "entrypoint"
   | "disabled_reason"

@@ -64,6 +64,37 @@ afterEach(() => {
 });
 
 describe("ScriptSection", () => {
+  it("explains a runtime-generated plugin bundle without requesting a tarball", () => {
+    // Arrange — runtime bundles cannot be downloaded before dispatch.
+    const fetchTarball = vi
+      .spyOn(AutomationService, "fetchTarballBytes")
+      .mockRejectedValue(new HttpError(422, "Unprocessable Entity"));
+    const entrypoint =
+      'cd "$AUTOMATION_PLUGIN_ROOT/scripts" && python3 worker.py';
+
+    // Act
+    renderSection({
+      ...automation,
+      entrypoint,
+      tarball_path: "plugin-spec://runtime",
+    });
+
+    // Assert
+    expect(
+      screen.getByTestId("automation-script-entrypoint"),
+    ).toHaveTextContent(entrypoint);
+    expect(
+      screen.getByText("AUTOMATIONS$DETAIL$SCRIPT_RUNTIME_BUNDLE"),
+    ).toBeInTheDocument();
+    expect(fetchTarball).not.toHaveBeenCalled();
+    expect(
+      screen.queryByTestId("automation-script-unavailable"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(I18nKey.AUTOMATIONS$DETAIL$SCRIPT_LOADING),
+    ).not.toBeInTheDocument();
+  });
+
   it("lists the bundle's files with the entrypoint first and badged", async () => {
     // Arrange
     vi.spyOn(AutomationService, "fetchTarballBytes").mockResolvedValue(
