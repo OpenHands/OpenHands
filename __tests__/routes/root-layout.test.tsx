@@ -201,6 +201,19 @@ describe("root layout", () => {
     });
   });
 
+  it("renders only the page, without Canvas chrome, when embedded", () => {
+    renderMainApp("/settings?embed=1");
+
+    expect(screen.getByTestId("outlet-content")).toBeInTheDocument();
+    expect(screen.getByTestId("root-layout")).toHaveAttribute(
+      "data-embedded",
+      "true",
+    );
+    expect(screen.queryByTestId("sidebar")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("mobile-menu-bar")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("command-menu")).not.toBeInTheDocument();
+  });
+
   it("shows a loading spinner while config is loading", () => {
     useConfigMock.mockReturnValue({ isLoading: true, data: null });
 
