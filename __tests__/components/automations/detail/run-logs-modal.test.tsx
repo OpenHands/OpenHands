@@ -105,6 +105,7 @@ describe("RunLogsModal", () => {
     );
     const properties: Record<string, string> = {};
     parse(compiler.build([...body.classList])).walkDecls((declaration) => {
+      if (!["max-height", "overflow-y"].includes(declaration.prop)) return;
       const rule = declaration.parent;
       if (rule?.type === "rule" && body.matches(rule.selector))
         properties[declaration.prop] = declaration.value;
