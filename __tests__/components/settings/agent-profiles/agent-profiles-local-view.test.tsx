@@ -1030,6 +1030,20 @@ describe("AgentProfilesLocalView save mapping", () => {
     expect(screen.getByTestId("save-agent-profile-btn")).toBeDisabled();
   });
 
+  it("keeps the agent draft while creating a reusable LLM profile inline", async () => {
+    llmProfilesData = { profiles: [], active_profile: null };
+    renderView();
+    const user = await openCreateAndName("my-agent");
+
+    await user.click(screen.getByTestId("agent-profile-add-llm"));
+
+    expect(screen.getByTestId("agent-inline-llm-editor")).toBeInTheDocument();
+    expect(screen.getByTestId("agent-profile-name-input")).toHaveValue(
+      "my-agent",
+    );
+    expect(screen.getByTestId("save-agent-profile-btn")).toBeDisabled();
+  });
+
   it("blocks an OpenHands save when no LLM profile is available", async () => {
     llmProfilesData = { profiles: [], active_profile: null };
     emitControl = {

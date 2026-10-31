@@ -155,6 +155,61 @@ describe("AgentSettingsScreen", () => {
     ]);
   });
 
+  it("adds a reusable secret inline without narrowing the agent's secret scope", async () => {
+    const user = userEvent.setup();
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: { agent_kind: "openhands", secret_refs: null },
+    });
+    await screen.findByTestId("agent-settings-screen");
+    await user.click(
+      screen.getByTestId("agent-secrets-section").querySelector("summary")!,
+    );
+    await user.click(screen.getByTestId("agent-add-secret"));
+    await user.type(screen.getByTestId("name-input"), "NEW_SECRET");
+    await user.type(screen.getByTestId("value-input"), "test-value");
+    await user.click(screen.getByTestId("submit-button"));
+
+    await waitFor(() => expect(SecretsService.createSecret).toHaveBeenCalled());
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      secret_refs: null,
+    });
+  });
+
+  it("opens MCP server setup inside the agent form", async () => {
+    const user = userEvent.setup();
+    renderAgentSettingsScreen({
+      agentSettingsOverride: { agent_kind: "openhands" },
+    });
+    await screen.findByTestId("agent-settings-screen");
+    await user.click(
+      screen.getByTestId("agent-mcp-section").querySelector("summary")!,
+    );
+    expect(screen.getByTestId("agent-mcp-setup")).toBeVisible();
+    await user.click(screen.getByTestId("agent-mcp-add-custom"));
+    expect(screen.getByTestId("mcp-custom-editor")).toBeInTheDocument();
+  });
+
+  it("includes a new secret in a custom scope before its catalog reloads", async () => {
+    const user = userEvent.setup();
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: { agent_kind: "openhands", secret_refs: [] },
+    });
+    await screen.findByTestId("agent-settings-screen");
+    await user.click(
+      screen.getByTestId("agent-secrets-section").querySelector("summary")!,
+    );
+    await user.click(screen.getByTestId("agent-add-secret"));
+    await user.type(screen.getByTestId("name-input"), "NEW_SECRET");
+    await user.type(screen.getByTestId("value-input"), "test-value");
+    await user.click(screen.getByTestId("submit-button"));
+
+    await waitFor(() =>
+      expect(control().buildAgentProfileFields()).toMatchObject({
+        secret_refs: ["NEW_SECRET"],
+      }),
+    );
+  });
+
   it("builds tool_concurrency_limit from the input on the OpenHands path", async () => {
     const user = userEvent.setup();
     const { control } = renderAgentSettingsScreen({
@@ -1603,6 +1658,11 @@ describe("AgentSettingsScreen — skills", () => {
     const search = await screen.findByTestId("agent-settings-skills-search");
     const user = userEvent.setup();
 
+    await user.click(
+      screen
+        .getByTestId("agent-settings-skills-section")
+        .querySelector("summary")!,
+    );
     await user.type(search, "review");
     expect(screen.getByTestId("agent-settings-skills-skill-3")).toBeVisible();
     expect(

@@ -7,6 +7,9 @@ import { AgentProfilesManager } from "./agent-profiles-manager";
 import { mergeAgentProfileSaveInput } from "./merge-agent-profile-save-input";
 import { newProfileSeed } from "./new-profile-seed";
 import { ProfileNameInput } from "#/components/features/settings/llm-profiles/profile-name-input";
+import { LlmSettingsLocalView } from "#/components/features/settings/llm-profiles/llm-settings-local-view";
+import { SecretsSettingsScreen } from "#/routes/secrets-settings";
+import { SkillsSettingsScreen } from "#/routes/skills-settings";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
 import {
@@ -110,7 +113,7 @@ function defaultProfileOverride(
  * AgentProfilesLocalView mirrors {@link LlmSettingsLocalView}: a list of the
  * user's Agent profiles, with a create/edit view that reuses the existing Agent
  * settings form (embedded) plus a profile name and — for OpenHands profiles —
- * an LLM-profile picker. Available on local backends only.
+ * an LLM-profile picker.
  */
 export function AgentProfilesLocalView() {
   const { t } = useTranslation("openhands");
@@ -151,6 +154,10 @@ export function AgentProfilesLocalView() {
     SettingsValue
   > | null>(null);
   const [llmProfileRef, setLlmProfileRef] = useState("");
+  const [creatingLlmProfile, setCreatingLlmProfile] = useState(false);
+  const [showLlmLibrary, setShowLlmLibrary] = useState(false);
+  const [showSecretsLibrary, setShowSecretsLibrary] = useState(false);
+  const [showSkillsLibrary, setShowSkillsLibrary] = useState(false);
   const [saveControl, setSaveControl] =
     useState<AgentSettingsSaveControl | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -207,6 +214,7 @@ export function AgentProfilesLocalView() {
       agent_kind: "openhands",
     });
     setLlmProfileRef(defaultLlmProfileRef);
+    setCreatingLlmProfile(false);
     setSaveControl(null);
     setViewMode("create");
   }, [backend.kind, waitForMigration, defaultLlmProfileRef, settings]);
@@ -256,6 +264,7 @@ export function AgentProfilesLocalView() {
           setLlmProfileRef("");
         }
         setProfileName(profile.name);
+        setCreatingLlmProfile(false);
         setSaveControl(null);
         setViewMode("edit");
       } catch (error) {
@@ -281,6 +290,7 @@ export function AgentProfilesLocalView() {
     setProfileName("");
     setNameTouched(false);
     setOverride(null);
+    setCreatingLlmProfile(false);
     setSaveControl(null);
   }, []);
 
@@ -387,6 +397,48 @@ export function AgentProfilesLocalView() {
           onAddProfile={handleAddProfile}
           onEditProfile={handleEditProfile}
         />
+        <details
+          data-testid="agents-llm-library"
+          className="rounded-lg border border-border p-4"
+          onToggle={(event) => setShowLlmLibrary(event.currentTarget.open)}
+        >
+          <summary className="cursor-pointer font-medium">
+            {t(I18nKey.SETTINGS$LLM_PROFILES)}
+          </summary>
+          {showLlmLibrary && (
+            <div className="pt-4">
+              <LlmSettingsLocalView />
+            </div>
+          )}
+        </details>
+        <details
+          data-testid="agents-secrets-library"
+          className="rounded-lg border border-border p-4"
+          onToggle={(event) => setShowSecretsLibrary(event.currentTarget.open)}
+        >
+          <summary className="cursor-pointer font-medium">
+            {t(I18nKey.SETTINGS$NAV_SECRETS)}
+          </summary>
+          {showSecretsLibrary && (
+            <div className="pt-4">
+              <SecretsSettingsScreen />
+            </div>
+          )}
+        </details>
+        <details
+          data-testid="agents-skills-library"
+          className="rounded-lg border border-border p-4"
+          onToggle={(event) => setShowSkillsLibrary(event.currentTarget.open)}
+        >
+          <summary className="cursor-pointer font-medium">
+            {t(I18nKey.SETTINGS$SKILLS_TITLE)}
+          </summary>
+          {showSkillsLibrary && (
+            <div className="pt-4">
+              <SkillsSettingsScreen embedded />
+            </div>
+          )}
+        </details>
       </div>
     );
   }
@@ -420,37 +472,48 @@ export function AgentProfilesLocalView() {
 
   // @spec FF-001 — Profile validation feedback follows the host error role
   // OpenHands profiles reference an LLM profile (required).
-  const llmPicker =
-    llmProfiles.length > 0 ? (
-      <div className="flex flex-col gap-2">
-        <SettingsDropdownInput
-          testId="agent-profile-llm-selector"
-          name="agent-profile-llm"
-          label={t(I18nKey.SETTINGS$AGENT_PROFILE_LLM_LABEL)}
-          items={llmProfiles.map((p) => ({
-            key: p.name,
-            label: p.model ? `${p.name} (${p.model})` : p.name,
-          }))}
-          selectedKey={llmProfileRef}
-          onSelectionChange={(key) => key && setLlmProfileRef(String(key))}
-        />
-        {isEditingDefault ? (
-          <p
-            data-testid="agent-profile-llm-default-note"
-            className="text-xs text-tertiary-alt"
-          >
-            {t(I18nKey.SETTINGS$AGENT_PROFILE_DEFAULT_LLM_NOTE)}
-          </p>
-        ) : null}
-      </div>
-    ) : (
-      <p
-        data-testid="agent-profile-no-llm"
-        className="text-sm text-feedback-error"
+  const llmPicker = (
+    <div className="flex flex-col gap-2">
+      {llmProfiles.length > 0 ? (
+        <div className="flex flex-col gap-2">
+          <SettingsDropdownInput
+            testId="agent-profile-llm-selector"
+            name="agent-profile-llm"
+            label={t(I18nKey.SETTINGS$AGENT_PROFILE_LLM_LABEL)}
+            items={llmProfiles.map((p) => ({
+              key: p.name,
+              label: p.model ? `${p.name} (${p.model})` : p.name,
+            }))}
+            selectedKey={llmProfileRef}
+            onSelectionChange={(key) => key && setLlmProfileRef(String(key))}
+          />
+          {isEditingDefault ? (
+            <p
+              data-testid="agent-profile-llm-default-note"
+              className="text-xs text-tertiary-alt"
+            >
+              {t(I18nKey.SETTINGS$AGENT_PROFILE_DEFAULT_LLM_NOTE)}
+            </p>
+          ) : null}
+        </div>
+      ) : (
+        <p
+          data-testid="agent-profile-no-llm"
+          className="text-sm text-feedback-error"
+        >
+          {t(I18nKey.SETTINGS$AGENT_PROFILE_NO_LLM)}
+        </p>
+      )}
+      <BrandButton
+        testId="agent-profile-add-llm"
+        type="button"
+        variant="secondary"
+        onClick={() => setCreatingLlmProfile(true)}
       >
-        {t(I18nKey.SETTINGS$AGENT_PROFILE_NO_LLM)}
-      </p>
-    );
+        {t(I18nKey.SETTINGS$ADD_LLM_PROFILE)}
+      </BrandButton>
+    </div>
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -508,6 +571,19 @@ export function AgentProfilesLocalView() {
         llmPicker={llmPicker}
       />
 
+      {creatingLlmProfile && (
+        <section
+          data-testid="agent-inline-llm-editor"
+          className="max-w-2xl border-t border-border pt-6"
+        >
+          <LlmSettingsLocalView
+            createInAgent
+            onSavedProfile={setLlmProfileRef}
+            onCancel={() => setCreatingLlmProfile(false)}
+          />
+        </section>
+      )}
+
       <div className="flex justify-start gap-3 pt-4">
         <BrandButton
           testId="cancel-agent-profile-btn"
@@ -525,6 +601,7 @@ export function AgentProfilesLocalView() {
           isDisabled={
             !isNameValid ||
             isSaving ||
+            creatingLlmProfile ||
             !saveControl?.isValid ||
             !hasUnsavedChanges
           }

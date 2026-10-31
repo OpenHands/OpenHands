@@ -1,4 +1,5 @@
 import React from "react";
+import { Navigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { ModelSelector } from "#/components/shared/modals/settings/model-selector";
 import { useAgentSettingsSchema } from "#/hooks/query/use-agent-settings-schema";
@@ -13,7 +14,6 @@ import {
   SdkSectionPage,
   SdkSectionSaveControl,
 } from "#/components/features/settings/sdk-settings/sdk-section-page";
-import { LlmSettingsLocalView } from "#/components/features/settings/llm-profiles";
 import { I18nKey } from "#/i18n/declaration";
 import { Settings, SettingsSchema, SettingsScope } from "#/types/settings";
 import { extractModelAndProvider } from "#/utils/extract-model-and-provider";
@@ -647,20 +647,6 @@ export function LlmSettingsScreen({
   );
 }
 
-/**
- * Default export for the route renders the LLM-profile management view for both
- * backend types. Both manage the LLM through named profiles — local via the
- * agent-server (`/api/profiles`), cloud via the app-server
- * (`/api/v1/settings/profiles`) — and the view is backend-agnostic because it
- * goes through ProfilesService, which routes per active backend.
- *
- * The LlmSettingsScreen component is also exported for embedded use cases
- * (e.g., onboarding, the profile create/edit form).
- *
- * Note: This is a route file, only the router should import the default export.
- * Other consumers should use the named export `LlmSettingsScreen` for embedded
- * use cases.
- */
 export default function LlmSettingsRoute() {
-  return <LlmSettingsLocalView />;
+  return <Navigate to="/settings/agents" replace />;
 }

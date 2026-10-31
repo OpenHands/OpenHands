@@ -666,7 +666,7 @@ describe("Sidebar", () => {
     );
   });
 
-  it.each(["/customize", "/mcp", "/skills", "/plugins", "/apps"])(
+  it.each(["/customize", "/plugins", "/apps"])(
     "marks the Customize row as the current page on %s",
     (path) => {
       renderSidebar(path);

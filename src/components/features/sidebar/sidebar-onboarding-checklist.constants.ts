@@ -46,8 +46,8 @@ export const SIDEBAR_ONBOARDING_CHECKLIST_ROUTES: Record<
   SidebarOnboardingChecklistInternalItemId,
   string
 > = {
-  "configure-llm": "/settings/llm",
-  "connect-mcp": "/mcp",
+  "configure-llm": "/settings/agents",
+  "connect-mcp": "/settings/agents",
   "start-conversation": "/conversations",
   "schedule-task": "/automations",
   "customize-agent": "/settings/agents",
