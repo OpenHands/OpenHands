@@ -55,7 +55,10 @@ export function ConversationOverviewDrawer({
   return (
     <>
       {isOpen && resizeContainerRef ? (
-        <div data-testid={CONVERSATION_OVERVIEW_DRAWER_RESIZE_HANDLE_TEST_ID}>
+        <div
+          data-testid={CONVERSATION_OVERVIEW_DRAWER_RESIZE_HANDLE_TEST_ID}
+          className="flex self-stretch"
+        >
           <ResizeHandle onMouseDown={handleMouseDown} isDragging={isDragging} />
         </div>
       ) : null}
