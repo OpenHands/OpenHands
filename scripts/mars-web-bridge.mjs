@@ -250,6 +250,7 @@ export function mountMarsWebBridge({
     env,
     host,
     key,
+    sessionApiKey,
     basePath,
     stateDir: resolveMarsStateDir(env),
   });
@@ -555,6 +556,7 @@ function toUpstreamRequest(req, path) {
  * @param {Record<string, string | undefined>} [options.env]
  * @param {string} [options.host] The server's bind host; loopback gets the Host check
  * @param {string | null} [options.key] Session key every request must present; null = open (loopback dev only — see mountMarsWebBridge)
+ * @param {string | null} [options.sessionApiKey] The agent-server's own key, when the server has one; pairing needs it to be `key`
  * @param {string} [options.basePath] Where the app is mounted (`/canvas` in Docker); pairing links open a page under it
  * @param {string | null} [options.stateDir] Canvas state directory; null keeps credentials in memory
  * @param {number} [options.authTimeoutMs] How long a socket may take to send the key
@@ -565,12 +567,18 @@ export function createMarsWebBridge({
   env = process.env,
   host = DEFAULT_BIND_HOST,
   key = null,
+  sessionApiKey = null,
   basePath = "",
   stateDir = null,
   authTimeoutMs = FIRST_MESSAGE_AUTH_TIMEOUT_MS,
   log = (message, error) => console.warn(`[mars-web] ${message}`, error ?? ""),
 } = {}) {
   const pairPage = `${String(basePath).replace(/\/+$/, "")}${PAIR_PAGE_PATH}`;
+  // A paired device keeps the key it gets as its backend's key. A separate
+  // MARS_WEB_KEY would not open the agent-server, and handing out the
+  // agent-server's key would reach past what the bridge's key allows.
+  const backendKey = sessionApiKey?.trim() || null;
+  const canPair = Boolean(key) && (!backendKey || backendKey === key);
   const dir = stateDir ? path.join(stateDir, STATE_SUBDIR) : null;
   const bridge =
     bridgeOverride ??
@@ -658,8 +666,12 @@ export function createMarsWebBridge({
      * reaches a server or proxy log.
      */
     createPairingLink(req) {
-      if (!key) {
-        const error = new Error("Pairing needs a Canvas session key.");
+      if (!canPair) {
+        const error = new Error(
+          key
+            ? "Pairing is off because this Canvas has a separate MARS_WEB_KEY. Enter the session key on the new device instead."
+            : "Pairing needs a Canvas session key.",
+        );
         error.status = 400;
         throw error;
       }
@@ -737,7 +749,7 @@ export function createMarsWebBridge({
     }
     prunePairings();
     const hash = secret ? hashSecret(secret) : null;
-    if (!key || !hash || !pairings.has(hash)) {
+    if (!canPair || !hash || !pairings.has(hash)) {
       writeJson(res, 400, {
         error: {
           message:

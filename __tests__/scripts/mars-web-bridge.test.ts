@@ -1443,7 +1443,11 @@ describe("createMarsWebBridge sign-in with DigitalOcean", () => {
 describe("createMarsWebBridge pairing a new device", () => {
   const KEY = "canvas-key";
 
-  async function start(host: string, basePath?: string) {
+  async function start(
+    host: string,
+    basePath?: string,
+    sessionApiKey: string | null = null,
+  ) {
     const marsWeb = createMarsWebBridge({
       bridge: {
         getTunnel: () => undefined,
@@ -1452,6 +1456,7 @@ describe("createMarsWebBridge pairing a new device", () => {
       env: {},
       host,
       key: KEY,
+      sessionApiKey,
       basePath,
       log: () => {},
     });
@@ -1515,6 +1520,37 @@ describe("createMarsWebBridge pairing a new device", () => {
     expect(first.headers.get("set-cookie")).toMatch(/^mars_web_auth=/);
     expect(again.status).toBe(400);
     expect((await redeem(web.origin, "guessed")).status).toBe(400);
+    await close();
+  });
+
+  it("pairs when the bridge's key is the agent-server's own", async () => {
+    const { web, close } = await start("0.0.0.0", undefined, KEY);
+    const port = new URL(web.origin).port;
+    const { links } = await createLinkFrom(web.origin, `192.168.1.20:${port}`);
+
+    const redeemed = await redeem(web.origin, new URL(links[0]).hash.slice(1));
+
+    expect(await redeemed.json()).toEqual({ result: { sessionApiKey: KEY } });
+    await close();
+  });
+
+  it("refuses to pair when MARS_WEB_KEY is not the agent-server's key", async () => {
+    // A paired device would keep the bridge's key as its backend key, which
+    // the agent-server refuses.
+    const { web, close } = await start(
+      "0.0.0.0",
+      undefined,
+      "agent-server-key",
+    );
+
+    const { status, body } = await rpc(web.origin, "createPairingLink", [], {
+      headers: { "X-Session-API-Key": KEY },
+    });
+
+    expect(status).toBe(400);
+    expect(body.error.message).toBe(
+      "Pairing is off because this Canvas has a separate MARS_WEB_KEY. Enter the session key on the new device instead.",
+    );
     await close();
   });
 
