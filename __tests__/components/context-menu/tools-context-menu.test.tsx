@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { compile } from "@tailwindcss/node";
 import { parse } from "postcss";
-import { describe, it, expect, vi } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
@@ -162,5 +162,82 @@ describe("ToolsContextMenu - Show Plugins", () => {
     );
 
     expect(screen.queryByTestId("show-plugins-button")).not.toBeInTheDocument();
+  });
+});
+
+describe("ToolsContextMenu - Macros submenu placement", () => {
+  // jsdom has no layout: give the Macros row and its submenu the geometry the
+  // browser renders (row at x=21, 240px wide; submenu 201px wide beside it).
+  const ROW_LEFT = 21;
+  const ROW_WIDTH = 240;
+  const SUBMENU_WIDTH = 201;
+  const VIEWPORT_GUTTER = 8;
+
+  const renderAtViewportWidth = (width: number) => {
+    vi.spyOn(window, "innerWidth", "get").mockReturnValue(width);
+    const isFlyout = (el: HTMLElement) =>
+      el.querySelector(":scope > [data-testid='macros-submenu']") !== null;
+    const realRect = HTMLElement.prototype.getBoundingClientRect;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      function getRect(this: HTMLElement) {
+        return [...this.children].some(
+          (child) => child instanceof HTMLElement && isFlyout(child),
+        )
+          ? DOMRect.fromRect({
+              x: ROW_LEFT,
+              y: 0,
+              width: ROW_WIDTH,
+              height: 36,
+            })
+          : realRect.call(this);
+      },
+    );
+    vi.spyOn(HTMLElement.prototype, "offsetLeft", "get").mockImplementation(
+      function getOffsetLeft(this: HTMLElement) {
+        return isFlyout(this) ? ROW_WIDTH + 1 : 0;
+      },
+    );
+    vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(
+      function getOffsetWidth(this: HTMLElement) {
+        return this.dataset.testid === "macros-submenu" ? SUBMENU_WIDTH : 0;
+      },
+    );
+    render(
+      <ToolsContextMenu
+        onClose={() => {}}
+        onShowSkills={() => {}}
+        onShowPlugins={() => {}}
+        onShowHooks={() => {}}
+        onShowAgentTools={() => {}}
+      />,
+    );
+  };
+
+  // Where the submenu lands on screen: its beside-the-row position plus the
+  // horizontal shift the flyout applies through its CSS variable.
+  const renderedSubmenuLeft = () => {
+    const flyout = screen.getByTestId("macros-submenu").parentElement!;
+    const shift =
+      parseFloat(flyout.style.getPropertyValue("--tools-submenu-shift")) || 0;
+    return ROW_LEFT + ROW_WIDTH + 1 + shift;
+  };
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("keeps the Macros submenu inside a phone-width viewport", async () => {
+    renderAtViewportWidth(320);
+    await userEvent.click(screen.getByTestId("macros-button"));
+
+    const left = renderedSubmenuLeft();
+    expect(left).toBeGreaterThanOrEqual(VIEWPORT_GUTTER);
+    expect(left + SUBMENU_WIDTH).toBeLessThanOrEqual(320 - VIEWPORT_GUTTER);
+  });
+
+  it("leaves the Macros submenu beside the menu when the viewport has room", () => {
+    renderAtViewportWidth(1440);
+
+    expect(renderedSubmenuLeft()).toBe(ROW_LEFT + ROW_WIDTH + 1);
   });
 });

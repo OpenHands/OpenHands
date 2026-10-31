@@ -3,7 +3,6 @@ import { useTranslation } from "react-i18next";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useUserProviders } from "#/hooks/use-user-providers";
-import { cn } from "#/utils/utils";
 import { ContextMenu } from "#/ui/context-menu";
 import { ContextMenuListItem } from "../context-menu/context-menu-list-item";
 import { Divider } from "#/ui/divider";
@@ -20,6 +19,7 @@ import CarretRightFillIcon from "#/icons/carret-right-fill.svg?react";
 import { ToolsContextMenuIconText } from "./tools-context-menu-icon-text";
 import { GitToolsSubmenu } from "./git-tools-submenu";
 import { MacrosSubmenu } from "./macros-submenu";
+import { ToolsSubmenuFlyout } from "./tools-submenu-flyout";
 import { ChatInputProfileMenuContent } from "#/components/features/chat/components/chat-input-profile-picker";
 import { ArchivedDisabledTooltip } from "../context-menu/archived-disabled-tooltip";
 import { useIsArchivedConversation } from "#/hooks/use-is-archived-conversation";
@@ -112,14 +112,10 @@ export function ToolsContextMenu({
               rightIcon={<CarretRightFillIcon width={10} height={10} />}
             />
           </ContextMenuListItem>
-          <div
-            className={cn(
-              "absolute left-full top-[-4px] z-60 opacity-0 invisible pointer-events-none transition-all duration-200 ml-px",
-              "group-hover/agent-profile:opacity-100 group-hover/agent-profile:visible group-hover/agent-profile:pointer-events-auto",
-              "hover:opacity-100 hover:visible hover:pointer-events-auto",
-              activeSubmenu === "agent-profile" &&
-                "opacity-100 visible pointer-events-auto",
-            )}
+          <ToolsSubmenuFlyout
+            group="agent-profile"
+            sideTopClassName="top-[-4px]"
+            isOpen={activeSubmenu === "agent-profile"}
           >
             {/* overflow-y-auto so a long profile list scrolls within the menu;
                 safe because the content has no floating children — only the
@@ -133,7 +129,7 @@ export function ToolsContextMenu({
                 dividerInset="menu"
               />
             </ContextMenu>
-          </div>
+          </ToolsSubmenuFlyout>
         </div>
       )}
 
@@ -154,17 +150,13 @@ export function ToolsContextMenu({
             </ContextMenuListItem>
           </ArchivedDisabledTooltip>
           {!isArchivedConversation && (
-            <div
-              className={cn(
-                "absolute left-full top-[-6px] z-60 opacity-0 invisible pointer-events-none transition-all duration-200 ml-px",
-                "group-hover/git:opacity-100 group-hover/git:visible group-hover/git:pointer-events-auto",
-                "hover:opacity-100 hover:visible hover:pointer-events-auto",
-                activeSubmenu === "git" &&
-                  "opacity-100 visible pointer-events-auto",
-              )}
+            <ToolsSubmenuFlyout
+              group="git"
+              sideTopClassName="top-[-6px]"
+              isOpen={activeSubmenu === "git"}
             >
               <GitToolsSubmenu onClose={handleClose} />
-            </div>
+            </ToolsSubmenuFlyout>
           )}
         </div>
       )}
@@ -185,17 +177,13 @@ export function ToolsContextMenu({
           </ContextMenuListItem>
         </ArchivedDisabledTooltip>
         {!isArchivedConversation && (
-          <div
-            className={cn(
-              "absolute left-full top-[-4px] z-60 opacity-0 invisible pointer-events-none transition-all duration-200 ml-px",
-              "group-hover/macros:opacity-100 group-hover/macros:visible group-hover/macros:pointer-events-auto",
-              "hover:opacity-100 hover:visible hover:pointer-events-auto",
-              activeSubmenu === "macros" &&
-                "opacity-100 visible pointer-events-auto",
-            )}
+          <ToolsSubmenuFlyout
+            group="macros"
+            sideTopClassName="top-[-4px]"
+            isOpen={activeSubmenu === "macros"}
           >
             <MacrosSubmenu onClose={handleClose} />
-          </div>
+          </ToolsSubmenuFlyout>
         )}
       </div>
 
