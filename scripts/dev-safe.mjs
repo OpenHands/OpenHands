@@ -277,11 +277,13 @@ export async function assertPortsFree(portConfigs, host = "127.0.0.1") {
   const lines = busy
     .map(({ name, port }) => `   • ${name}: port ${port}`)
     .join("\n");
-  throw new Error(
+  const error = new Error(
     `Cannot start: the following ports are already in use:\n\n${lines}\n\n` +
       `Another agent-canvas instance may already be running.\n` +
-      `Stop it first, or override the port via environment variables (e.g. PORT=<other>).`,
+      `Stop it first, or override the occupied ports via environment variables (for ingress, --port <other> or PORT=<other>).`,
   );
+  error.code = "EADDRINUSE";
+  throw error;
 }
 
 /**
@@ -442,7 +444,7 @@ export function buildUvxPythonArgs(env = process.env) {
  *   edits are picked up without a manual reinstall. The agent-server itself
  *   is rebuilt from local source on each invocation (--reinstall).
  * - OH_AGENT_SERVER_GIT_REF: Git commit SHA or branch name
- * - OH_AGENT_SERVER_VERSION: Specific PyPI version (e.g., "1.58.1")
+ * - OH_AGENT_SERVER_VERSION: Specific PyPI version (e.g., "1.59.0")
  *
  * If none are set, defaults to the released version specified by
  * DEFAULT_AGENT_SERVER_VERSION. Set OH_AGENT_SERVER_GIT_REF to use a
