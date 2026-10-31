@@ -43,6 +43,20 @@ export type SettingsValueType =
 
 export type SettingProminence = "critical" | "major" | "minor";
 
+/**
+ * Numeric constraints that the SDK may supply on numeric fields
+ * (integer / number). Every field is optional so older servers that do not
+ * expose these descriptors stay usable — the frontend falls back to its
+ * own per-field metadata map for backward compatibility.
+ */
+export type SettingsFieldNumericConstraints = {
+  min?: number;
+  max?: number;
+  step?: number;
+  exclusive_min?: boolean;
+  exclusive_max?: boolean;
+};
+
 export type SettingsFieldSchema = {
   key: string;
   label: string;
@@ -56,6 +70,12 @@ export type SettingsFieldSchema = {
   prominence: SettingProminence;
   secret: boolean;
   required: boolean;
+  /**
+   * SDK-supplied numeric bounds / step for integer / number fields.
+   * Absent on older agent-server releases; the frontend falls back to
+   * its hardcoded per-field metadata map in that case.
+   */
+  constraints?: SettingsFieldNumericConstraints;
 };
 
 export type SettingsSectionSchema = {
