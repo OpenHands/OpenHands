@@ -1,6 +1,12 @@
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HttpError } from "@openhands/typescript-client";
 import { TaskStartupProgress } from "#/components/features/chat/task-startup-progress";
@@ -60,6 +66,20 @@ beforeEach(() => {
   );
 });
 afterEach(() => client.clear());
+
+it("announces startup as busy until the task is ready", async () => {
+  mount();
+  expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true");
+  await waitFor(() =>
+    expect(client.getQueryData(["start-task", "123"])).toEqual(task),
+  );
+  act(() => {
+    client.setQueryData(["start-task", "123"], { ...task, status: "READY" });
+  });
+  await waitFor(() =>
+    expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "false"),
+  );
+});
 
 describe("startup error recovery", () => {
   it("retries a status read without creating another conversation", async () => {
