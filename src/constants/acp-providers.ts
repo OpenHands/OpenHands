@@ -1,6 +1,7 @@
 import {
   getAcpProvider as getClientAcpProvider,
   type ACPModelInfo,
+  type AgentProfile,
 } from "@openhands/typescript-client";
 import type { BackendKind } from "#/api/backend-registry/types";
 import { I18nKey } from "#/i18n/declaration";
@@ -531,5 +532,29 @@ export function buildAcpAgentSettingsDiff(
     acp_command: [],
     acp_args: [],
     acp_model: getAcpPreferredDefaultModel(providerKey) ?? null,
+  };
+}
+
+/**
+ * Build the ``agent_settings_diff`` payload that keeps the global
+ * ``agent_kind`` in step with a stored agent profile (#18883). Onboarding
+ * writes the same field through {@link buildAcpAgentSettingsDiff}; this
+ * variant sources the ACP fields from the profile itself instead of a
+ * preset, so activating an ACP profile re-states its provider config rather
+ * than leaving the kind flip to reset the base to server defaults.
+ */
+export function buildAgentSettingsDiffForProfile(
+  profile: AgentProfile,
+): Record<string, unknown> {
+  if (profile.agent_kind === "openhands") {
+    return { agent_kind: "openhands" };
+  }
+
+  return {
+    agent_kind: "acp",
+    acp_server: profile.acp_server,
+    acp_command: profile.acp_command ?? [],
+    acp_args: profile.acp_args ?? [],
+    acp_model: profile.acp_model ?? null,
   };
 }
