@@ -60,7 +60,9 @@ function RepositoryName({ name }: { name: string }) {
   return (
     <span className="flex min-w-0 w-full whitespace-nowrap">
       <span className="min-w-0 shrink-96 truncate">{organization}</span>
-      {project && <span className="min-w-0 shrink truncate">{project}</span>}
+      {project && (
+        <span className="min-w-0 max-w-48 shrink-0 truncate">{project}</span>
+      )}
       <span className="min-w-0 max-w-full shrink-0 truncate">{repository}</span>
     </span>
   );
