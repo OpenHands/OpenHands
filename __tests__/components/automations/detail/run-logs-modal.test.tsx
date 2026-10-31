@@ -1,3 +1,7 @@
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { compile } from "@tailwindcss/node";
+import { parse } from "postcss";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { I18nKey } from "#/i18n/declaration";
@@ -69,7 +73,7 @@ describe("RunLogsModal", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("scrolls long log content inside the dialog", () => {
+  it("scrolls long log content inside the dialog", async () => {
     useBashCommandLogsMock.mockReturnValue(
       makeHookResult({
         data: [
@@ -95,7 +99,20 @@ describe("RunLogsModal", () => {
     );
 
     const body = screen.getByTestId("run-logs-body");
-    expect(body).toHaveClass("max-h-[80vh]", "overflow-y-auto");
+    const compiler = await compile(
+      await readFile(resolve("src/tailwind.css"), "utf8"),
+      { base: resolve("src"), onDependency: () => {} },
+    );
+    const properties: Record<string, string> = {};
+    parse(compiler.build([...body.classList])).walkDecls((declaration) => {
+      const rule = declaration.parent;
+      if (rule?.type === "rule" && body.matches(rule.selector))
+        properties[declaration.prop] = declaration.value;
+    });
+    expect(properties).toMatchObject({
+      "max-height": "80vh",
+      "overflow-y": "auto",
+    });
     expect(
       screen.getByTestId("run-logs-output-stdout").parentElement,
     ).not.toHaveClass("overflow-auto");
