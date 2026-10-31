@@ -113,8 +113,11 @@ export const useLoadOlderEvents = (
       return;
     }
 
+    // The store also holds the planner's events, replayed in full by its own
+    // socket, so they can be far older than this conversation's REST tail.
+    // Anchoring on one would page past every main event in between.
     const { events } = useEventStore.getState();
-    const oldest = events[0];
+    const oldest = events.find((event) => !event.isFromPlanningAgent);
 
     // No anchor yet — defer until the initial REST load has populated the
     // store (avoids fetching twice with the same `TIMESTAMP_DESC` window).
