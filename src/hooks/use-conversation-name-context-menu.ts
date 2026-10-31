@@ -7,6 +7,7 @@ import { useUnifiedPauseConversation } from "./mutation/use-unified-stop-convers
 import { useUpdateConversationPublicFlag } from "./mutation/use-update-conversation-public-flag";
 import { useActiveConversation } from "./query/use-active-conversation";
 import { useEventStore } from "#/stores/use-event-store";
+import { useArchivedConversationsStore } from "#/stores/archived-conversations-store";
 import { displaySuccessToast } from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
 import { getStoredConversationMetadata } from "#/api/conversation-metadata-store";
@@ -19,6 +20,7 @@ import {
 } from "#/utils/system-message-adapter";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import { isExecutionActive } from "#/utils/status";
+import { isMissingSandboxStatus } from "#/utils/conversation-archive-status";
 import { useSelectConversationTab } from "./use-select-conversation-tab";
 
 interface UseConversationNameContextMenuProps {
@@ -42,6 +44,12 @@ export function useConversationNameContextMenu({
   const { mutate: stopConversation } = useUnifiedPauseConversation();
   const { mutate: updatePublicFlag } = useUpdateConversationPublicFlag();
   const { data: conversation } = useActiveConversation();
+  const isExplicitlyArchived = useArchivedConversationsStore((state) =>
+    conversationId ? state.isArchived(backend.id, conversationId) : false,
+  );
+  const removeArchivedConversation = useArchivedConversationsStore(
+    (state) => state.removeArchivedConversation,
+  );
   const [systemModalVisible, setSystemModalVisible] = React.useState(false);
   const [skillsModalVisible, setSkillsModalVisible] = React.useState(false);
   const [pluginsModalVisible, setPluginsModalVisible] = React.useState(false);
@@ -67,6 +75,15 @@ export function useConversationNameContextMenu({
     event.preventDefault();
     event.stopPropagation();
     setConfirmStopModalVisible(true);
+    onContextMenuToggle?.(false);
+  };
+
+  const handleUnarchive = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (conversationId) {
+      removeArchivedConversation(backend.id, conversationId);
+    }
     onContextMenuToggle?.(false);
   };
 
@@ -191,6 +208,7 @@ export function useConversationNameContextMenu({
     // Handlers
     handleDelete,
     handleStop,
+    handleUnarchive,
     handleEdit,
     handleDownloadConversation,
     handleDisplayCost,
@@ -222,6 +240,11 @@ export function useConversationNameContextMenu({
     systemMessage,
 
     shouldShowStop: isExecutionActive(executionStatus),
+    // A missing runtime keeps the thread archived either way (#18159), so
+    // Unarchive is offered only where it returns the thread to the list.
+    shouldShowUnarchive:
+      isExplicitlyArchived &&
+      !isMissingSandboxStatus(conversation?.sandbox_status),
     shouldShowDownloadConversation: Boolean(conversationId && showOptions),
     shouldShowDisplayCost: showOptions,
     shouldShowAgentTools: Boolean(showOptions && systemMessage),

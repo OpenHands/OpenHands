@@ -147,6 +147,7 @@ describe("useConversationNameContextMenu", () => {
     expect(result.current.confirmDeleteModalVisible).toBe(false);
     expect(result.current.confirmStopModalVisible).toBe(false);
     expect(result.current.shouldShowStop).toBe(false);
+    expect(result.current.shouldShowUnarchive).toBe(false);
     expect(result.current.shouldShowDownloadConversation).toBe(false);
     expect(result.current.shouldShowDisplayCost).toBe(false);
     expect(result.current.shouldShowAgentTools).toBe(false);
@@ -180,6 +181,11 @@ describe("useConversationNameContextMenu", () => {
     act(() => result.current.handleEdit(editClick.event));
     expect(editClick.preventDefault).toHaveBeenCalledOnce();
     expect(editClick.stopPropagation).toHaveBeenCalledOnce();
+
+    const unarchiveClick = clickEvent();
+    act(() => result.current.handleUnarchive(unarchiveClick.event));
+    expect(unarchiveClick.preventDefault).toHaveBeenCalledOnce();
+    expect(unarchiveClick.stopPropagation).toHaveBeenCalledOnce();
 
     act(() => result.current.handleTogglePublic());
     expect(harness.updatePublicFlag).not.toHaveBeenCalled();
