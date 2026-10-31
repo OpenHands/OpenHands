@@ -1,5 +1,7 @@
 import { AgentServerClient } from "@openhands/typescript-client/clients";
 import { getAgentServerClientOptions } from "./agent-server-client-options";
+import { getActiveBackend } from "./backend-registry/active-store";
+import { callCloudProxy } from "./cloud/proxy";
 import {
   OPENAI_SUBSCRIPTION_DEVICE_POLL_PATH,
   OPENAI_SUBSCRIPTION_DEVICE_START_PATH,
@@ -80,6 +82,15 @@ async function requestSubscriptionEndpoint(
   path: string,
   options: SubscriptionRequestOptions = {},
 ): Promise<unknown> {
+  const { backend } = getActiveBackend();
+  if (backend.kind === "cloud") {
+    return callCloudProxy({
+      backend,
+      method: options.method ?? "GET",
+      path,
+      body: options.jsonBody,
+    });
+  }
   const { host, apiKey } = getAgentServerClientOptions();
   const client = new AgentServerClient({ host, apiKey });
   try {

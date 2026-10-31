@@ -1,4 +1,6 @@
-import { http, HttpResponse } from "msw";
+import { createServer } from "node:http";
+import { once } from "node:events";
+import { http, HttpResponse, passthrough } from "msw";
 import { AgentServerClient } from "@openhands/typescript-client/clients";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import LLMSubscriptionService from "#/api/llm-subscription-service";
@@ -11,11 +13,13 @@ import {
 import {
   OPENAI_SUBSCRIPTION_DEVICE_POLL_PATH,
   OPENAI_SUBSCRIPTION_DEVICE_START_PATH,
+  OPENAI_SUBSCRIPTION_LOGOUT_PATH,
   OPENAI_SUBSCRIPTION_MODELS_PATH,
   OPENAI_SUBSCRIPTION_STATUS_PATH,
 } from "#/constants/llm-subscription";
 import { server } from "#/mocks/node";
 import { resetTestHandlersMockSettings } from "#/mocks/settings-handlers";
+import { describeSubscriptionStatusError } from "#/utils/subscription-status-error";
 
 describe("LLMSubscriptionService", () => {
   beforeEach(() => {
@@ -24,6 +28,82 @@ describe("LLMSubscriptionService", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it("routes every Cloud subscription operation through the selected Cloud backend", async () => {
+    const originalBackends = getRegisteredBackends();
+    const originalSelection = getActiveSelection();
+    const cloud = {
+      id: "cloud-test",
+      name: "Cloud",
+      host: "https://cloud.example.test",
+      apiKey: "cloud-test-key",
+      kind: "cloud" as const,
+    };
+    const seen: string[] = [];
+    const respond = async ({ request }: { request: Request }) => {
+      expect(request.headers.get("Authorization")).toBe(
+        "Bearer cloud-test-key",
+      );
+      expect(request.headers.get("X-Org-Id")).toBe("personal-org");
+      expect(request.headers.has("X-Session-API-Key")).toBe(false);
+      const path = new URL(request.url).pathname;
+      seen.push(`${request.method} ${path}`);
+      if (path === OPENAI_SUBSCRIPTION_DEVICE_START_PATH) {
+        return HttpResponse.json({
+          device_code: "opaque",
+          user_code: "CODE",
+          verification_uri: "https://auth.openai.com/codex/device",
+        });
+      }
+      if (path === OPENAI_SUBSCRIPTION_DEVICE_POLL_PATH) {
+        expect(await request.json()).toEqual({ device_code: "opaque" });
+        return HttpResponse.json({ connected: true });
+      }
+      if (path === OPENAI_SUBSCRIPTION_MODELS_PATH)
+        return HttpResponse.json({ models: ["gpt-test"] });
+      return HttpResponse.json({ connected: false });
+    };
+    try {
+      setRegisteredBackends([cloud]);
+      setActiveSelection({ backendId: cloud.id, orgId: "personal-org" });
+      server.use(
+        http.get(
+          "https://cloud.example.test/api/llm/subscription/openai/*",
+          respond,
+        ),
+        http.post(
+          "https://cloud.example.test/api/llm/subscription/openai/*",
+          respond,
+        ),
+      );
+      expect(await LLMSubscriptionService.getOpenAIModels()).toEqual([
+        "gpt-test",
+      ]);
+      expect((await LLMSubscriptionService.getOpenAIStatus()).connected).toBe(
+        false,
+      );
+      expect(
+        (await LLMSubscriptionService.startOpenAIDeviceLogin()).deviceCode,
+      ).toBe("opaque");
+      expect(
+        (await LLMSubscriptionService.pollOpenAIDeviceLogin("opaque"))
+          .connected,
+      ).toBe(true);
+      expect((await LLMSubscriptionService.logoutOpenAI()).connected).toBe(
+        false,
+      );
+      expect(seen).toEqual([
+        `GET ${OPENAI_SUBSCRIPTION_MODELS_PATH}`,
+        `GET ${OPENAI_SUBSCRIPTION_STATUS_PATH}`,
+        `POST ${OPENAI_SUBSCRIPTION_DEVICE_START_PATH}`,
+        `POST ${OPENAI_SUBSCRIPTION_DEVICE_POLL_PATH}`,
+        `POST ${OPENAI_SUBSCRIPTION_LOGOUT_PATH}`,
+      ]);
+    } finally {
+      setRegisteredBackends(originalBackends);
+      setActiveSelection(originalSelection);
+    }
   });
 
   it("uses an explicit GET request and closes the client after fetching models", async () => {
@@ -256,6 +336,84 @@ describe("LLMSubscriptionService", () => {
       accountEmail: null,
       expiresAt: null,
     });
+  });
+
+  it("sends login requests to both Cloud and local backends and redacts errors", async () => {
+    const requests: string[] = [];
+    const endpoint = createServer((request, response) => {
+      requests.push(`${request.method} ${request.url}`);
+      if (request.url === OPENAI_SUBSCRIPTION_STATUS_PATH) {
+        response.writeHead(500, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({ detail: "sensitive-example-token" }));
+        return;
+      }
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(
+        JSON.stringify({
+          device_code: "device-code",
+          user_code: "USER-CODE",
+          verification_uri: "https://auth.openai.com/activate",
+        }),
+      );
+    });
+    endpoint.listen(0, "127.0.0.1");
+    await once(endpoint, "listening");
+    const address = endpoint.address();
+    if (!address || typeof address === "string") throw new Error("No port");
+    const host = `http://127.0.0.1:${address.port}`;
+    server.use(http.all(`${host}/*`, () => passthrough()));
+    const originalBackends = getRegisteredBackends();
+    const originalSelection = getActiveSelection();
+    const cloud = {
+      id: "cloud-test",
+      name: "Cloud",
+      host,
+      apiKey: "",
+      kind: "cloud" as const,
+    };
+    const local = {
+      id: "local-test",
+      name: "Local",
+      host,
+      apiKey: "",
+      kind: "local" as const,
+    };
+
+    try {
+      setRegisteredBackends([cloud, local]);
+      setActiveSelection({ backendId: cloud.id });
+      await expect(
+        LLMSubscriptionService.startOpenAIDeviceLogin(),
+      ).resolves.toMatchObject({ userCode: "USER-CODE" });
+      expect(requests).toEqual([
+        `POST ${OPENAI_SUBSCRIPTION_DEVICE_START_PATH}`,
+      ]);
+
+      setActiveSelection({ backendId: local.id });
+      await expect(
+        LLMSubscriptionService.startOpenAIDeviceLogin(),
+      ).resolves.toMatchObject({ userCode: "USER-CODE" });
+      expect(requests).toEqual([
+        `POST ${OPENAI_SUBSCRIPTION_DEVICE_START_PATH}`,
+        `POST ${OPENAI_SUBSCRIPTION_DEVICE_START_PATH}`,
+      ]);
+      const failure: unknown =
+        await LLMSubscriptionService.getOpenAIStatus().then(
+          () => null,
+          (error: unknown) => error,
+        );
+      expect(describeSubscriptionStatusError(failure)).toEqual({
+        kind: "failed",
+        detail: `GET ${OPENAI_SUBSCRIPTION_STATUS_PATH} → HTTP 500`,
+      });
+      expect(requests).toContain(`GET ${OPENAI_SUBSCRIPTION_STATUS_PATH}`);
+    } finally {
+      setRegisteredBackends(originalBackends);
+      setActiveSelection(originalSelection);
+      await new Promise<void>((resolve, reject) =>
+        endpoint.close((error) => (error ? reject(error) : resolve())),
+      );
+    }
   });
 
   it("normalizes device login challenge responses", async () => {
