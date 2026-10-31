@@ -50,6 +50,7 @@ export function ConversationLaunchView({ launchId }: { launchId: string }) {
             )}
           </div>
           <ConversationStartupProgress
+            key={launch.id}
             error={launch.error}
             onEdit={() => {
               const composer = useConversationStore.getState();

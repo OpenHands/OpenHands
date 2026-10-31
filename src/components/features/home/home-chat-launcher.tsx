@@ -462,6 +462,7 @@ export function HomeChatLauncher() {
               )}
             </div>
             <ConversationStartupProgress
+              key={activeLaunch.id}
               error={activeLaunch.error}
               onEdit={() => {
                 useConversationLaunchStore.getState().remove(activeLaunch.id);

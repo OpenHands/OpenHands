@@ -1,8 +1,7 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { LoaderCircle } from "lucide-react";
-import ArrowDown from "#/icons/angle-down-solid.svg?react";
-import ArrowUp from "#/icons/angle-up-solid.svg?react";
+import { CollapsibleEventGroup } from "#/components/features/chat/collapsible-event-group";
 import { OpenHandsEvent, ActionEvent } from "#/types/agent-server/core";
 import {
   isActionEvent,
@@ -66,9 +65,6 @@ export function EventGroup({
   children,
 }: EventGroupProps) {
   const { t } = useTranslation("openhands");
-  const [expanded, setExpanded] = React.useState(false);
-  const contentId = React.useId();
-  const buttonId = `${contentId}-toggle`;
 
   if (events.length === 0) {
     return null;
@@ -122,65 +118,36 @@ export function EventGroup({
       })
     : t(I18nKey.EVENT_GROUP$ACTIONS_COMPLETED, { count: totalCount });
 
-  const Chevron = expanded ? ArrowUp : ArrowDown;
-
   return (
-    <div className="my-1 w-full py-1 text-sm" data-testid="event-group">
-      <button
-        id={buttonId}
-        type="button"
-        onClick={() => setExpanded((prev) => !prev)}
-        aria-controls={contentId}
-        aria-expanded={expanded}
-        aria-label={
-          expanded
-            ? t(I18nKey.EVENT_GROUP$COLLAPSE)
-            : t(I18nKey.EVENT_GROUP$EXPAND)
-        }
-        data-testid="event-group-toggle"
-        className="w-full flex items-center justify-between gap-2 text-left cursor-pointer"
-      >
-        {isFinalized ? (
-          <span className="flex items-center gap-2 min-w-0 font-normal text-muted">
-            <Chevron className="h-4 w-4 fill-muted flex-shrink-0" />
-            <span className="truncate">{countSummary}</span>
-          </span>
+    <CollapsibleEventGroup
+      title={
+        isFinalized ? (
+          countSummary
         ) : (
+          <PathInteractiveContext.Provider value={false}>
+            {latestTitle ?? countSummary}
+          </PathInteractiveContext.Provider>
+        )
+      }
+      trailing={
+        !isFinalized && (
           <>
-            <span className="flex items-center gap-2 min-w-0 font-normal text-muted">
-              <Chevron className="h-4 w-4 fill-muted flex-shrink-0" />
-              <span className="truncate">
-                <PathInteractiveContext.Provider value={false}>
-                  {latestTitle ?? countSummary}
-                </PathInteractiveContext.Provider>
-              </span>
-            </span>
-            <span className="flex items-center flex-shrink-0 font-normal text-muted">
-              <span className="truncate">{countSummary}</span>
-              {isRunning ? (
-                <LoaderCircle
-                  data-testid="spinner-icon"
-                  className="h-4 w-4 ml-2 inline animate-spin text-muted"
-                />
-              ) : null}
-            </span>
+            <span className="truncate">{countSummary}</span>
+            {isRunning && (
+              <LoaderCircle
+                data-testid="spinner-icon"
+                className="h-4 w-4 ml-2 inline animate-spin text-muted"
+              />
+            )}
           </>
-        )}
-      </button>
-
-      {expanded && (
-        <div
-          id={contentId}
-          role="region"
-          aria-labelledby={buttonId}
-          className="mt-1.5 flex flex-col"
-          data-testid="event-group-content"
-        >
-          <IsInEventGroupContext.Provider value>
-            {children}
-          </IsInEventGroupContext.Provider>
-        </div>
-      )}
-    </div>
+        )
+      }
+      expandLabel={t(I18nKey.EVENT_GROUP$EXPAND)}
+      collapseLabel={t(I18nKey.EVENT_GROUP$COLLAPSE)}
+    >
+      <IsInEventGroupContext.Provider value>
+        {children}
+      </IsInEventGroupContext.Provider>
+    </CollapsibleEventGroup>
   );
 }

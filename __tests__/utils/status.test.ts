@@ -62,6 +62,15 @@ describe("getStatusCode", () => {
     expect(result).toBe(I18nKey.CHAT_INTERFACE$RECONNECTING);
   });
 
+  it.each(["CLOSED", "CLOSING"] as const)(
+    "shows reconnecting during %s retry backoff",
+    (state) => {
+      expect(
+        getStatusCode(state, ExecutionStatus.IDLE, undefined, undefined, true),
+      ).toBe(I18nKey.CHAT_INTERFACE$RECONNECTING);
+    },
+  );
+
   it("returns COMMON$WAITING_FOR_SANDBOX when task is waiting for sandbox", () => {
     const result = getStatusCode("OPEN", null, "WAITING_FOR_SANDBOX");
     expect(result).toBe(I18nKey.COMMON$WAITING_FOR_SANDBOX);

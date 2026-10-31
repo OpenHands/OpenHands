@@ -79,6 +79,7 @@ export function TaskStartupProgress() {
 
   return (
     <ConversationStartupProgress
+      key={taskId}
       editLabel={
         attachmentFailure?.error
           ? t(I18nKey.CONVERSATION$OPEN_CREATED)

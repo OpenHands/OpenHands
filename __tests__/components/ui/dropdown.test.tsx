@@ -1,7 +1,14 @@
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { compile } from "@tailwindcss/node";
+import { parse } from "postcss";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
 import { Dropdown } from "#/ui/dropdown/dropdown";
+
+const mockPlaceholder = "Select an option";
+const mockBackendPlaceholder = "Choose a backend";
 
 const mockOptions = [
   { value: "1", label: "Option 1" },
@@ -30,6 +37,23 @@ describe("Dropdown", () => {
 
       const listbox = screen.getByRole("listbox");
       expect(listbox).toBeInTheDocument();
+      const panel = listbox.parentElement;
+      if (!panel) throw new Error("Expected the dropdown panel");
+      const compiler = await compile(
+        await readFile(resolve("src/tailwind.css"), "utf8"),
+        { base: resolve("src"), onDependency: () => {} },
+      );
+      const caps: string[] = [];
+      parse(compiler.build([...panel.classList])).walkDecls(
+        "max-width",
+        (declaration) => {
+          const rule = declaration.parent;
+          if (rule?.type === "rule" && panel.matches(rule.selector)) {
+            caps.push(declaration.value.replace(/\s/g, ""));
+          }
+        },
+      );
+      expect(caps).toContain("min(26rem,calc(100vw-2rem))");
       expect(screen.getByText("Option 1")).toBeInTheDocument();
       expect(screen.getByText("Option 2")).toBeInTheDocument();
       expect(screen.getByText("Option 3")).toBeInTheDocument();
@@ -44,7 +68,7 @@ describe("Dropdown", () => {
       const { container } = render(
         <Dropdown
           options={mockOptions}
-          placeholder="Choose a backend"
+          placeholder={mockBackendPlaceholder}
           hideTrigger
           defaultOpen
           onChange={onChange}
@@ -276,7 +300,7 @@ describe("Dropdown", () => {
         <Dropdown
           options={mockOptions}
           clearable
-          placeholder="Select an option"
+          placeholder={mockPlaceholder}
         />,
       );
 
@@ -337,7 +361,7 @@ describe("Dropdown", () => {
 
   describe("Placeholder", () => {
     it("should display placeholder text when no value selected", () => {
-      render(<Dropdown options={mockOptions} placeholder="Select an option" />);
+      render(<Dropdown options={mockOptions} placeholder={mockPlaceholder} />);
 
       const input = screen.getByRole("combobox");
       expect(input).toHaveAttribute("placeholder", "Select an option");
