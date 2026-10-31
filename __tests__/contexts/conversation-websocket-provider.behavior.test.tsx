@@ -48,6 +48,8 @@ const socketCapture = vi.hoisted(() => ({
   planningOptions: null as WebSocketHookOptions | null,
   mainSocket: null as TestSocket | null,
   planningSocket: null as TestSocket | null,
+  mainReconnecting: false,
+  planningReconnecting: false,
   reconnectMain: vi.fn(),
   reconnectPlanning: vi.fn(),
   disconnectMain: vi.fn(),
@@ -82,6 +84,7 @@ vi.mock("#/hooks/use-websocket", () => ({
         socket: socketCapture.mainSocket,
         reconnect: socketCapture.reconnectMain,
         disconnect: socketCapture.disconnectMain,
+        isReconnecting: socketCapture.mainReconnecting,
       };
     }
 
@@ -91,6 +94,7 @@ vi.mock("#/hooks/use-websocket", () => ({
       socket: socketCapture.planningSocket,
       reconnect: socketCapture.reconnectPlanning,
       disconnect: socketCapture.disconnectPlanning,
+      isReconnecting: socketCapture.planningReconnecting,
     };
   }),
 }));
@@ -347,6 +351,8 @@ describe("Conversation websocket behavior", () => {
     socketCapture.planningOptions = null;
     socketCapture.mainSocket = null;
     socketCapture.planningSocket = null;
+    socketCapture.mainReconnecting = false;
+    socketCapture.planningReconnecting = false;
     socketCapture.reconnectMain.mockReset();
     socketCapture.reconnectPlanning.mockReset();
     socketCapture.disconnectMain.mockReset();
@@ -711,6 +717,70 @@ describe("Conversation websocket behavior", () => {
       errorMessage: SERVER_CONNECTION_ERROR_MESSAGE,
       errorType: "connection",
     });
+  });
+
+  it("reads a dropped socket as reconnecting while it is retried, and clears the banner once it reopens", () => {
+    renderProvider();
+    act(() => mainOptions().onOpen?.(new Event("open")));
+
+    // The runtime goes away: every retry fails until it is back.
+    socketCapture.mainReconnecting = true;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      act(() => {
+        mainOptions().onError?.(new Event("error"));
+        mainOptions().onClose?.(new CloseEvent("close", { code: 1006 }));
+      });
+      expect(screen.getByTestId("connection-state")).toHaveTextContent(
+        "CONNECTING",
+      );
+      expect(contextCapture.current?.mainConnectionState).toBe("CONNECTING");
+      expect(useErrorMessageStore.getState()).toMatchObject({
+        errorMessage: SERVER_CONNECTION_ERROR_MESSAGE,
+        errorType: "connection",
+      });
+    }
+
+    socketCapture.mainReconnecting = false;
+    act(() => mainOptions().onOpen?.(new Event("open")));
+    expect(screen.getByTestId("connection-state")).toHaveTextContent("OPEN");
+    expect(useErrorMessageStore.getState().errorMessage).toBeNull();
+  });
+
+  it("reads a dropped socket as closed once it is no longer retried or has no URL", () => {
+    const view = renderProvider();
+    act(() => mainOptions().onOpen?.(new Event("open")));
+    act(() => mainOptions().onClose?.(new CloseEvent("close", { code: 1006 })));
+    expect(screen.getByTestId("connection-state")).toHaveTextContent("CLOSED");
+    view.unmount();
+
+    // A missing runtime has no URL, so a stale retry flag must not read as an
+    // endless reconnect.
+    socketCapture.callIndex = 0;
+    socketCapture.mainReconnecting = true;
+    renderProvider({ conversationUrl: null });
+    act(() => mainOptions().onClose?.(new CloseEvent("close", { code: 1006 })));
+    expect(screen.getByTestId("connection-state")).toHaveTextContent("CLOSED");
+  });
+
+  it("reads a retried planning socket as reconnecting in the merged state", async () => {
+    vi.spyOn(EventService, "getEventCount").mockResolvedValue(0);
+    renderProvider({
+      subConversations: [makeSubConversation()],
+      subConversationIds: ["conv-planning"],
+    });
+    await act(async () => {
+      mainOptions().onOpen?.(new Event("open"));
+      await planningOptions().onOpen?.(new Event("open"));
+    });
+
+    socketCapture.planningReconnecting = true;
+    act(() =>
+      planningOptions().onClose?.(new CloseEvent("close", { code: 1006 })),
+    );
+    expect(screen.getByTestId("connection-state")).toHaveTextContent(
+      "CONNECTING",
+    );
+    expect(contextCapture.current?.mainConnectionState).toBe("OPEN");
   });
 
   it("merges main and planning connection lifecycles", async () => {
@@ -2294,6 +2364,8 @@ describe("Conversation websocket — page visibility reconnect (#17894)", () => 
     socketCapture.planningOptions = null;
     socketCapture.mainSocket = null;
     socketCapture.planningSocket = null;
+    socketCapture.mainReconnecting = false;
+    socketCapture.planningReconnecting = false;
     socketCapture.reconnectMain.mockReset();
     socketCapture.reconnectPlanning.mockReset();
     socketCapture.disconnectMain.mockReset();
@@ -2561,6 +2633,8 @@ describe("Conversation websocket — cloud runtime without a URL (OHE-3314)", ()
     socketCapture.planningOptions = null;
     socketCapture.mainSocket = null;
     socketCapture.planningSocket = null;
+    socketCapture.mainReconnecting = false;
+    socketCapture.planningReconnecting = false;
     socketCapture.queueMessage.mockReset().mockResolvedValue(undefined);
     socketCapture.clientOptions.mockReset();
     contextCapture.current = null;
