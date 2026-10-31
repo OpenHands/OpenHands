@@ -37,9 +37,15 @@ describe("Docker image extensions package", () => {
 // The image copies scripts/ one file at a time, so a new import in a script
 // the entrypoint runs must come with a COPY line, or the container crashes on
 // start with ERR_MODULE_NOT_FOUND (#18342).
-function imageScriptGraph(): { scripts: Set<string>; packages: Set<string> } {
+function imageScriptGraph(): {
+  scripts: Set<string>;
+  packages: Set<string>;
+  repoFiles: Set<string>;
+} {
   const scripts = new Set<string>();
   const packages = new Set<string>();
+  // Files outside scripts/ (e.g. `../config/features.json`), as repo paths.
+  const repoFiles = new Set<string>();
   const queue = [
     ...entrypoint.matchAll(/\bnode \/opt\/agent-canvas\/([\w.-]+\.mjs)/g),
   ].map((match) => match[1]);
@@ -63,6 +69,8 @@ function imageScriptGraph(): { scripts: Set<string>; packages: Set<string> } {
     for (const specifier of specifiers) {
       if (specifier.startsWith("./")) {
         queue.push(specifier.slice(2));
+      } else if (specifier.startsWith("../")) {
+        repoFiles.add(specifier.slice(3));
       } else if (!specifier.startsWith("node:")) {
         const [scope, name] = specifier.split("/");
         packages.add(scope.startsWith("@") ? `${scope}/${name}` : scope);
@@ -70,11 +78,11 @@ function imageScriptGraph(): { scripts: Set<string>; packages: Set<string> } {
     }
   }
 
-  return { scripts, packages };
+  return { scripts, packages, repoFiles };
 }
 
 describe("Docker image script imports", () => {
-  const { scripts, packages } = imageScriptGraph();
+  const { scripts, packages, repoFiles } = imageScriptGraph();
 
   it("finds the scripts the entrypoint runs", () => {
     expect(scripts).toContain("static-server.mjs");
@@ -86,6 +94,14 @@ describe("Docker image script imports", () => {
       `COPY scripts/${script} /opt/agent-canvas/${script}`,
     );
   });
+
+  // A script at /opt/agent-canvas/x.mjs resolves `../<file>` to /opt/<file>.
+  it.each([...repoFiles].sort())(
+    "copies %s beside /opt/agent-canvas",
+    (file) => {
+      expect(dockerfile).toContain(`COPY ${file} /opt/${file}`);
+    },
+  );
 
   it.each([...packages].sort())(
     "copies the %s package into /opt/agent-canvas/node_modules",

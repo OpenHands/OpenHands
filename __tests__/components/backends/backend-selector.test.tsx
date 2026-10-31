@@ -22,6 +22,7 @@ import {
 } from "#/contexts/active-backend-context";
 import { CloudOrganizationBoundary } from "#/components/features/backends/cloud-organization-boundary";
 import { BackendSelector } from "#/components/features/backends/backend-selector";
+import { FeaturePolicyProvider } from "#/feature-policy/feature-policy-context";
 import {
   __resetEnvironmentSwitchOverlayForTests,
   EnvironmentSwitchOverlay,
@@ -882,6 +883,28 @@ describe("BackendSelector", () => {
     await waitFor(() => {
       expect(screen.queryByTestId("add-backend-modal")).not.toBeInTheDocument();
     });
+  });
+
+  it("hides only the Add Backend action when the operator turned adding off", async () => {
+    // Arrange
+    renderWithProviders(
+      <FeaturePolicyProvider
+        policy={{ version: 1, disabled: ["backends.add"] }}
+      >
+        <BackendSelector />
+      </FeaturePolicyProvider>,
+    );
+
+    // Act
+    await openDropdown();
+
+    // Assert
+    expect(
+      screen.queryByTestId("add-backend-menu-item"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("manage-backends-menu-item")).toHaveTextContent(
+      "BACKEND$MANAGE",
+    );
   });
 
   it("hides add-backend footer action when locked to Cloud", async () => {

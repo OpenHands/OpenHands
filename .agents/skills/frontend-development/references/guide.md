@@ -27,6 +27,33 @@ Public skills are loaded from the `@openhands/extensions` npm package at build t
 Bundled catalog skills use the persisted `enabled_skills` allow-list defaulted from `DEFAULT_ENABLED_SKILL_NAMES`. User and project skills remain enabled unless listed in `disabled_skills`. Keep this logic centralized in `src/utils/skill-enablement.ts`. The Agent Server no longer clones the extensions repository or uses `EXTENSIONS_REF` for public skills.
 
 
+## Operator feature policy
+
+An operator can turn Canvas features off at startup (`AGENT_CANVAS_FEATURES` /
+`AGENT_CANVAS_FEATURES_FILE`; see `docs/SELF_HOSTING.md`). Gate a feature
+through one API:
+
+```ts
+const featurePolicy = useFeaturePolicy();
+if (!featurePolicy.isEnabled("backends.add")) …
+```
+
+- Write the feature ID as a string literal at the call site, including
+  `feature: "<id>"` fields on nav or menu items. IDs are typed by `FeatureId`
+  (a Rule 3 union below), so `grep -rn '"backends.add"' src` lists every gate.
+- Gate at the place that already decides whether the control renders. How a
+  disabled feature looks is that feature's choice; it must leave no empty menu
+  or broken layout behind.
+- Rules grow one at a time. A new ID, or an existing ID covering one more
+  element, is its own PR or commit: add a test for each element, and update the
+  ID's description in `config/features.json` so it lists exactly what the ID
+  hides.
+- Adding an ID: add it to `config/features.json` (the launcher validates against
+  it) and to `FEATURE_IDS` in `src/feature-policy/feature-policy.ts`; a contract
+  test keeps the two equal.
+- Say "feature policy", not "feature flag": Cloud's server-sent
+  `WebClientFeatureFlags` is a different thing.
+
 ## Workspace files
 
 Local Files discovery preferences belong to `misc_settings.app_preferences.workspace_file_discovery`, keyed by working directory on the active backend. `useWorkspaceFileDiscovery` reads the settings cache and saves sparse workspace patches. Preserve default exclusions and the 2,000-file cap when no configuration exists. Fetch one extra result to distinguish truncation from an exact-size list. Cloud keeps its server-side listing contract without these controls.
