@@ -53,6 +53,8 @@ export class TarTooLargeError extends Error {
 
 const asciiDecoder = new TextDecoder("ascii");
 const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
+// For names, a leading U+FEFF is part of the name, not a byte order mark.
+const nameDecoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 
 function isGzip(bytes: Uint8Array): boolean {
   return bytes[0] === GZIP_MAGIC[0] && bytes[1] === GZIP_MAGIC[1];
@@ -87,10 +89,29 @@ function stringField(
   return end === -1 ? raw : raw.slice(0, end);
 }
 
+/**
+ * A NUL-terminated name field, read as UTF-8 the way `packTarGzip` writes
+ * names, falling back to the single-byte reading for a legacy name that is
+ * not valid UTF-8.
+ */
+function nameField(
+  header: Uint8Array,
+  field: { offset: number; size: number },
+): string {
+  const raw = header.subarray(field.offset, field.offset + field.size);
+  const end = raw.indexOf(0);
+  const bytes = end === -1 ? raw : raw.subarray(0, end);
+  try {
+    return nameDecoder.decode(bytes);
+  } catch {
+    return asciiDecoder.decode(bytes);
+  }
+}
+
 /** The member's path as ustar spells it: `prefix/name` when a prefix is set. */
 function entryPath(header: Uint8Array): string {
-  const name = stringField(header, NAME);
-  const prefix = stringField(header, PREFIX);
+  const name = nameField(header, NAME);
+  const prefix = nameField(header, PREFIX);
   const joined = prefix ? `${prefix}/${name}` : name;
   return joined.replace(/^\.\//, "");
 }
