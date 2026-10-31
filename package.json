@@ -24,7 +24,7 @@
     "@microlink/react-json-view": "1.31.25",
     "@monaco-editor/react": "4.7.0",
     "@openhands/extensions": "0.37.0",
-    "@openhands/typescript-client": "1.58.1",
+    "@openhands/typescript-client": "1.59.0",
     "@react-router/node": "7.18.2",
     "@tailwindcss/vite": "4.3.3",
     "@tanstack/react-query": "5.103.1",
@@ -195,6 +195,11 @@
     "dompurify": "3.4.17",
     "typed-rest-client": {
       "qs": "6.15.3"
+    },
+    "app-builder-lib": {
+      "@electron/get": {
+        "global-agent": "4.1.3"
+      }
     }
   },
   "main": "./dist/index.cjs",

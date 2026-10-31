@@ -807,6 +807,26 @@ describe("stack mode routing", () => {
     expect(viteEnv.VITE_AUTH_REQUIRED).toBe("true");
   });
 
+  it("honors the explicit LAN session-key opt-in for Vite", async () => {
+    const config = await buildConfig(
+      { host: "0.0.0.0", allowLanSessionKey: true },
+      envWithIsolatedKeyPath(),
+    );
+    const env = buildViteFrontendEnv(config);
+    expect(env.VITE_SESSION_API_KEY).toBe(config.sessionApiKey);
+    expect(env.VITE_AUTH_REQUIRED).toBeUndefined();
+  });
+
+  it("keeps public mode key-free even with the LAN opt-in", async () => {
+    const config = await buildConfig(
+      { host: "0.0.0.0", public: true, allowLanSessionKey: true },
+      envWithIsolatedKeyPath({ LOCAL_BACKEND_API_KEY: "public-test-key" }),
+    );
+    const env = buildViteFrontendEnv(config);
+    expect(env.VITE_SESSION_API_KEY).toBeUndefined();
+    expect(env.VITE_AUTH_REQUIRED).toBe("true");
+  });
+
   it("makes the key-free ingress reachable to Docker conversations", async () => {
     const config = await buildConfig(
       {},

@@ -16,6 +16,7 @@ export const useCondenseConversation = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
+    meta: { disableToast: true },
     mutationFn: (variables: CondenseConversationVariables) =>
       AgentServerConversationService.condenseConversation(
         variables.conversationId,
