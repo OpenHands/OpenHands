@@ -8,8 +8,10 @@ export const AUTOMATION_TARBALL_FILES_QUERY_KEY = [
   "automation-tarball-files",
 ] as const;
 
-/** Bundles that unpack to more than this are reported as unavailable. */
-const MAX_UNPACKED_BYTES = 16 * 1024 * 1024;
+/** Bundles with more regular-file content than this are unavailable. */
+const MAX_CONTENT_BYTES = 16 * 1024 * 1024;
+/** Allow tar headers and padding without changing the content limit. */
+const MAX_ARCHIVE_BYTES = MAX_CONTENT_BYTES + 1024 * 1024;
 
 /**
  * The files inside an automation's uploaded bundle, read back from the
@@ -35,7 +37,8 @@ export function useAutomationTarballFiles(
     ],
     queryFn: async () =>
       unpackTarGzip(await AutomationService.fetchTarballBytes(automation.id), {
-        maxTotalBytes: MAX_UNPACKED_BYTES,
+        maxContentBytes: MAX_CONTENT_BYTES,
+        maxArchiveBytes: MAX_ARCHIVE_BYTES,
       }),
     staleTime: 5 * 60 * 1000,
     retry: false,
