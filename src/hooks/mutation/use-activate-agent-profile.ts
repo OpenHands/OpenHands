@@ -7,6 +7,7 @@ import {
   AGENT_PROFILES_QUERY_KEYS,
   SETTINGS_QUERY_KEYS,
 } from "#/hooks/query/query-keys";
+import { syncCloudAgentSettings } from "./sync-cloud-agent-settings";
 
 /**
  * Shared key so any picker instance can observe an in-flight activation via
@@ -54,7 +55,9 @@ export function useActivateAgentProfile() {
         queryClient.setQueryData(key, data);
       });
     },
-    onSuccess: async () => {
+    onSuccess: async ({ agent_settings_applied: applied }) => {
+      // Cloud only.
+      if (!applied) await syncCloudAgentSettings();
       SettingsService.invalidateCache();
       await queryClient.invalidateQueries({
         queryKey: AGENT_PROFILES_QUERY_KEYS.all,
