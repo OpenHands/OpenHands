@@ -7,13 +7,16 @@ import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import { I18nKey } from "#/i18n/declaration";
 import { TextShimmer } from "#/components/shared/text-shimmer";
 import { formatEventTimestamp } from "#/utils/format-event-timestamp";
-import { MarkdownRenderer } from "../markdown/markdown-renderer";
 import { PendingStopIcon } from "./pending-stop-icon";
+import { MarkdownRenderer } from "../markdown/markdown-renderer";
+import { useJumpToEvent } from "#/hooks/chat/use-jump-to-event";
 import {
   UserMessageBody,
   chatBubbleMarkdownComponents,
   USER_MESSAGE_LINE_HEIGHT_PX,
 } from "./user-message-body";
+import { QuoteCard } from "./quote-card";
+import { splitReplyFromText } from "#/utils/message-quote";
 
 export type ChatMessagePendingStatus = "sending" | "error";
 
@@ -31,6 +34,12 @@ interface ChatMessageProps {
   onDismiss?: () => void;
   onStop?: () => void;
   timestamp?: string;
+  /**
+   * The source event's id, rendered as a `data-event-id` anchor so
+   * `useJumpToEvent` can scroll to this bubble. A product anchor, not a
+   * test hook.
+   */
+  eventId?: string;
   /** The message is a reply still being streamed in. */
   isStreaming?: boolean;
 }
@@ -46,6 +55,7 @@ export function ChatMessage({
   onDismiss,
   onStop,
   timestamp,
+  eventId,
   isStreaming = false,
 }: React.PropsWithChildren<ChatMessageProps>) {
   const { t, i18n } = useTranslation("openhands");
@@ -120,9 +130,16 @@ export function ChatMessage({
     return () => observer.disconnect();
   }, [message, canStopPendingMessage, useTruncatedUserBody]);
 
+  // User bubbles may carry a leading reply-quote envelope; extract it so the
+  // card renders above the body and only the follow-up feeds truncation
+  // (a 6+ line quote must never swallow the follow-up behind the clamp).
+  const reply = type === "user" ? splitReplyFromText(message) : null;
+  const replyQuote = reply?.quote ?? null;
+  const bodyText = reply ? reply.body : message;
+
   const messageContent = useTruncatedUserBody ? (
     <UserMessageBody
-      message={message}
+      message={bodyText}
       isHovering={isHovering}
       isExpanded={isExpanded}
       onTruncatableChange={setIsTruncatable}
@@ -139,17 +156,30 @@ export function ChatMessage({
         components={chatBubbleMarkdownComponents}
         streaming={isStreaming}
       >
-        {message}
+        {bodyText}
       </MarkdownRenderer>
     </div>
   );
 
-  const renderedMessageContent = messageContent;
+  const jumpToEvent = useJumpToEvent();
+
+  const renderedMessageContent = replyQuote ? (
+    <>
+      <QuoteCard
+        quote={replyQuote}
+        onJump={() => jumpToEvent(replyQuote.sourceEventId)}
+      />
+      {messageContent}
+    </>
+  ) : (
+    messageContent
+  );
 
   const messageBubble = (
     <article
       data-testid={`${type}-message`}
       data-pending-status={pendingStatus}
+      {...(eventId ? { "data-event-id": eventId } : {})}
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}
       className={cn(

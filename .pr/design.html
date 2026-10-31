@@ -1,0 +1,216 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reply to a message: quote-in-text design</title>
+<style>
+  :root{
+    --fg:#1a1a1a; --muted:#5a5a5a; --subtle:#8a8a82;
+    --bg:#fdfdfb; --card:#ffffff; --elevated:#f7f6f1;
+    --accent:#2b4eaa; --accent-soft:#e6ecfa;
+    --rule:#e2e2dc; --rule-strong:#bdbcb4;
+    --code-bg:#f3f1ec; --warn:#b25b0e; --ok:#2f7a3a; --crit:#a02020;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box} html,body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans)}
+  body{line-height:1.6;font-size:16px}
+  .wrap{display:grid;grid-template-columns:240px minmax(0,1fr);gap:48px;max-width:1180px;margin:0 auto;padding:32px 28px 96px}
+  nav.toc{position:sticky;top:24px;align-self:start;font-size:13px}
+  nav.toc h2{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+  nav.toc ol{list-style:none;padding:0;margin:0;counter-reset:toc}
+  nav.toc li{counter-increment:toc;margin:4px 0}
+  nav.toc li::before{content:counter(toc) ". ";color:var(--muted)}
+  nav.toc a{color:var(--fg);text-decoration:none} nav.toc a:hover{color:var(--accent)}
+  header.title{border-bottom:1px solid var(--rule);padding-bottom:22px;margin-bottom:28px}
+  header.title .eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700}
+  header.title h1{font-size:34px;margin:6px 0 4px;letter-spacing:-.01em}
+  header.title .sub{color:var(--muted);max-width:740px}
+  h2{font-size:22px;margin:44px 0 10px} h2 .num{color:var(--muted);font-weight:500;margin-right:8px}
+  h3{font-size:16px;margin:22px 0 8px}
+  code{font-family:var(--mono);font-size:.88em;background:var(--code-bg);padding:1px 5px;border-radius:3px}
+  pre{font-family:var(--mono);font-size:13px;background:var(--code-bg);padding:14px 16px;border-radius:6px;overflow-x:auto;border:1px solid var(--rule)}
+  pre code{background:transparent;padding:0}
+  .kw{color:#7048a8}.str{color:var(--ok)}.com{color:var(--subtle);font-style:italic}
+  table{border-collapse:collapse;width:100%;font-size:14px;margin:12px 0}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--rule);vertical-align:top}
+  th{font-weight:600;background:var(--code-bg)}
+  .callout{border-left:3px solid var(--accent);background:var(--accent-soft);padding:10px 14px;margin:14px 0;border-radius:0 4px 4px 0;font-size:14.5px}
+  .callout.warn{border-color:var(--warn);background:#fbf1e6} .callout.note{border-color:var(--muted);background:#f3f1ec}
+  .fig{margin:18px 0 22px}
+  .fig svg{display:block;max-width:100%;height:auto;background:#fff;border:1px solid var(--rule);border-radius:6px}
+  .fig figcaption{font-size:13px;color:var(--muted);margin-top:6px;text-align:center}
+  a.src{font-family:var(--mono);font-size:12px;color:var(--accent);text-decoration:none;border-bottom:1px dotted var(--accent)}
+  details{border:1px solid var(--rule);border-radius:6px;margin:12px 0}
+  details>summary{cursor:pointer;padding:8px 12px;color:var(--muted);font-size:13px;list-style:none}
+  details>summary::-webkit-details-marker{display:none}
+  details>summary::before{content:"▸ "} details[open]>summary::before{content:"▾ "}
+  .ba{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+  @media(max-width:760px){.wrap{grid-template-columns:1fr}.ba{grid-template-columns:1fr}}
+</style></head><body>
+<div class="wrap">
+  <nav class="toc"><h2>Contents</h2><ol>
+    <li><a href="#sec1">What changed</a></li>
+    <li><a href="#sec2">The message format</a></li>
+    <li><a href="#sec3">Send path, before and after</a></li>
+    <li><a href="#sec4">State owner and lifecycle</a></li>
+    <li><a href="#sec5">Render path in the bubble</a></li>
+    <li><a href="#sec6">Jump to the quoted message</a></li>
+    <li><a href="#sec7">Where the Reply action appears</a></li>
+    <li><a href="#sec8">Compatibility and risk</a></li>
+    <li><a href="#sec9">Evidence</a></li>
+  </ol></nav>
+  <main>
+    <header class="title"><div class="eyebrow">Design doc</div><h1>Reply to a message</h1>
+      <p class="sub">A user can reply to any message in the chat. The replied-to message travels inside the outgoing user text as a start-anchored envelope, so the model receives it as ordinary context and every renderer rebuilds the quote card from the message itself. Nothing on the wire changes: no SDK field, no agent-server release, no compatibility floor.</p></header>
+
+    <section id="sec1"><h2><span class="num">1</span>What changed</h2>
+      <p>Before this branch there is no way to point at one message. A follow-up arrives as a plain user turn, and the model resolves "that" from event order. This PR adds three things: a Reply action per bubble, an armed quote in the composer, and a pure text module that owns the quote format.</p>
+
+      <div class="callout">★ The whole feature is a text convention plus a store. Because the quote lives in the message body, pending, sent, and reloaded bubbles all render identically with no server support, and the feature works on Local and Cloud backends as well as OpenHands and ACP agents.</div>
+
+      <p>31 files, +3105 / −92. The load-bearing pieces:</p>
+      <table>
+        <tr><th>Path</th><th>Role</th></tr>
+        <tr><td><a class="src" href="https://github.com/IlmanNafi11/OpenHands/blob/423f42516b895af07d2adae35d886b9899b29985/src/utils/message-quote.ts#L1">src/utils/message-quote.ts</a></td><td>New, 208 lines. The only owner of compose and parse. Pure, React-free.</td></tr>
+        <tr><td><a class="src" href="https://github.com/IlmanNafi11/OpenHands/blob/423f42516b895af07d2adae35d886b9899b29985/src/stores/reply-quote-store.ts#L1">src/stores/reply-quote-store.ts</a></td><td>New, 81 lines. Armed quote, conversation-scoped, with two writers.</td></tr>
+        <tr><td><a class="src" href="https://github.com/IlmanNafi11/OpenHands/blob/423f42516b895af07d2adae35d886b9899b29985/src/components/features/chat/quote-card.tsx#L1">src/components/features/chat/quote-card.tsx</a></td><td>New, 86 lines. One card component for composer, pending, and sent bubbles.</td></tr>
+        <tr><td><a class="src" href="https://github.com/IlmanNafi11/OpenHands/blob/423f42516b895af07d2adae35d886b9899b29985/src/hooks/chat/use-jump-to-event.ts#L1">src/hooks/chat/use-jump-to-event.ts</a></td><td>New, 83 lines. Scroll to a source event, loading older pages until found.</td></tr>
+        <tr><td><a class="src" href="https://github.com/IlmanNafi11/OpenHands/blob/423f42516b895af07d2adae35d886b9899b29985/src/utils/conversation-local-storage.ts#L113">src/utils/conversation-local-storage.ts</a></td><td>Changed. Persists and sanitizes the armed quote next to <code>draftMessage</code>.</td></tr>
+      </table>
+    </section>
+
+    <section id="sec2"><h2><span class="num">2</span>The message format</h2>
+      <p>The envelope is anchored at position 0 of the user text, the same convention <code>splitInlineThink</code> already uses. Tokens are locale-independent program identifiers, never i18n keys.</p>
+      <pre><code>&lt;reply-to id="&lt;source event id&gt;" source="user|agent" truncated="false"&gt;
+&lt;quoted body, verbatim, inner envelopes stripped&gt;
+&lt;/reply-to&gt;
+&lt;user's follow-up text&gt;</code></pre>
+      <p>Three properties make this safe to introduce without a migration:</p>
+      <ol>
+        <li>The parser degrades. A malformed or absent envelope renders as plain text, never a crash (<a class="src" href="https://github.com/IlmanNafi11/OpenHands/blob/423f42516b895af07d2adae35d886b9899b29985/src/utils/message-quote.ts#L89">message-quote.ts:89</a>).</li>
+        <li>Depth is capped at two. Quoting a message that is itself a reply strips the inner envelope first (<code>stripReplyEnvelopes</code>, <a class="src" href="https://github.com/IlmanNafi11/OpenHands/blob/423f42516b895af07d2adae35d886b9899b29985/src/utils/message-quote.ts#L155">line 155</a>), so nesting cannot grow.</li>
+        <li>Compose is idempotent. A follow-up that already starts with the open tag is left alone.</li>
+      </ol>
+      <div class="callout warn">⚠ Slash commands must never be wrapped. <code>/model</code> and friends are matched as exact or prefix text downstream, and an envelope in front would break the match and leak markup to the agent. <code>isBuiltInSlashCommand</code> (<a class="src" href="https://github.com/IlmanNafi11/OpenHands/blob/423f42516b895af07d2adae35d886b9899b29985/src/utils/message-quote.ts#L23">line 23</a>) gates the compose step.</div>
+      <p>The quoted body is capped at 2000 characters and flagged with <code>truncated="true"</code>, which renders a localized "quote was cut" label. The cap is a named constant, not an inline literal.</p>
+    </section>
+
+    <section id="sec3"><h2><span class="num">3</span>Send path, before and after</h2>
+      <p>The submit path keeps its shape. One step is inserted between reading the composer and calling <code>onSubmit</code>, and it runs in the same transaction that clears the draft.</p>
+
+      <figure class="fig">
+      <svg viewBox="0 0 960 400" role="img" aria-labelledby="f1t f1d">
+        <title id="f1t">Submit path before and after the reply envelope</title>
+        <desc id="f1d">Before, the composer text goes straight to onSubmit. After, the armed quote composes into the text and disarms inside the same callback.</desc>
+        <defs>
+          <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="var(--subtle)"/></marker>
+          <marker id="arrchg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="var(--warn)"/></marker>
+          <style>
+            .existing{fill:var(--code-bg);stroke:var(--subtle);stroke-width:1.4;stroke-dasharray:5 3}
+            .ex-title{font:700 13px var(--sans);fill:var(--muted)} .ex-detail{font:11.5px var(--mono);fill:var(--subtle)}
+            .new{fill:var(--accent-soft);stroke:var(--accent);stroke-width:2}
+            .new-title{font:800 13px var(--sans);fill:var(--accent)} .detail{font:11.5px var(--mono);fill:var(--fg)}
+            .edge{stroke:var(--subtle);stroke-width:1.5;stroke-dasharray:5 3;fill:none}
+            .edge-chg{stroke:var(--warn);stroke-width:1.8;fill:none;stroke-dasharray:5 3}
+            .lbl{font:600 10.5px var(--mono);fill:var(--accent)} .gap{font:700 11.5px var(--mono);fill:var(--warn)}
+          </style>
+        </defs>
+        <text class="ex-title" x="40" y="30">BEFORE</text>
+        <g>
+          <rect class="existing" x="40" y="48" width="190" height="70" rx="6"/>
+          <text class="ex-title" x="135" y="74" text-anchor="middle">composer innerText</text>
+          <text class="ex-detail" x="135" y="94" text-anchor="middle">use-chat-submission.ts</text>
+          <rect class="existing" x="300" y="48" width="170" height="70" rx="6"/>
+          <text class="ex-title" x="385" y="74" text-anchor="middle">onSubmit(text)</text>
+          <text class="ex-detail" x="385" y="94" text-anchor="middle">useSendMessage</text>
+          <path class="edge" d="M230,83 L300,83" marker-end="url(#arr)"/>
+        </g>
+        <text class="new-title" x="40" y="180">AFTER</text>
+        <g>
+          <rect class="existing" x="40" y="198" width="190" height="70" rx="6"/>
+          <text class="ex-title" x="135" y="224" text-anchor="middle">composer innerText</text>
+          <text class="ex-detail" x="135" y="244" text-anchor="middle">use-chat-submission.ts</text>
+          <rect class="new" x="300" y="190" width="210" height="86" rx="6"/>
+          <text class="new-title" x="405" y="216" text-anchor="middle">composeReplyText()</text>
+          <text class="detail" x="405" y="236" text-anchor="middle">message-quote.ts:59</text>
+          <text class="detail" x="405" y="256" text-anchor="middle">idempotent, slash-safe</text>
+          <rect class="existing" x="590" y="198" width="170" height="70" rx="6"/>
+          <text class="ex-title" x="675" y="224" text-anchor="middle">onSubmit(text)</text>
+          <text class="ex-detail" x="675" y="244" text-anchor="middle">useSendMessage</text>
+          <rect class="new" x="300" y="312" width="210" height="60" rx="6"/>
+          <text class="new-title" x="405" y="336" text-anchor="middle">clearReplyQuote()</text>
+          <text class="detail" x="405" y="356" text-anchor="middle">same callback</text>
+          <path class="edge-chg" d="M230,233 L300,233" marker-end="url(#arrchg)"/>
+          <path class="edge" d="M510,233 L590,233" marker-end="url(#arr)"/>
+          <path class="edge-chg" d="M405,276 L405,312" marker-end="url(#arrchg)"/>
+        </g>
+      </svg>
+      <figcaption>Fig 1 · The armed quote joins the outgoing text inside the submit callback that already clears the draft. Disarming in the same callback is what prevents a stale quote from re-arming on the next send.</figcaption>
+      </figure>
+
+      <p>Attachment sending keeps its own path. <code>sendMessageWithAttachments</code> appends its files prompt after the composed text, so a reply with an attachment carries both the quote and the file list (<a class="src" href="https://github.com/IlmanNafi11/OpenHands/blob/423f42516b895af07d2adae35d886b9899b29985/src/hooks/chat/use-chat-submission.ts#L30">use-chat-submission.ts:30</a>).</p>
+    </section>
+
+    <section id="sec4"><h2><span class="num">4</span>State owner and lifecycle</h2>
+      <p>One store owns the armed quote, keyed by conversation id, with exactly two writers: <code>setReplyQuote</code> from the Reply action and <code>clearReplyQuote</code> from dismiss or submit. That follows the repo rule that durable frontend state has one named owner and one obvious writer.</p>
+      <table>
+        <tr><th>Transition</th><th>Where</th><th>Result</th></tr>
+        <tr><td>Reply clicked</td><td><code>setReplyQuote</code></td><td>Quote armed, composer cleared, caret at end</td></tr>
+        <tr><td>Dismiss clicked</td><td><code>clearReplyQuote</code></td><td>Quote disarmed, draft untouched</td></tr>
+        <tr><td>Message submitted</td><td><code>clearReplyQuote</code></td><td>Quote disarmed after composing</td></tr>
+        <tr><td>Page reloaded mid-compose</td><td><code>sanitizeReplyQuote</code></td><td>Quote restored from localStorage, or dropped if malformed</td></tr>
+        <tr><td>Conversation switched</td><td>selector by id</td><td>No quote leaks across conversations</td></tr>
+      </table>
+      <div class="callout note">ⓘ The persisted quote is sanitized on read (<a class="src" href="https://github.com/IlmanNafi11/OpenHands/blob/423f42516b895af07d2adae35d886b9899b29985/src/utils/conversation-local-storage.ts#L121">conversation-local-storage.ts:121</a>). localStorage is user-editable, so a quote restored from it is treated as untrusted input, not as state the app wrote.</div>
+    </section>
+
+    <section id="sec5"><h2><span class="num">5</span>Render path in the bubble</h2>
+      <p>The bubble splits the message before rendering. The quote card renders above the body, and only the follow-up feeds the existing truncation measurement.</p>
+      <pre><code><span class="com">// chat-message.tsx, user bubbles only</span>
+<span class="kw">const</span> reply = type === <span class="str">"user"</span> ? splitReplyFromText(message) : <span class="kw">null</span>;
+<span class="kw">const</span> bodyText = reply ? reply.body : message;</code></pre>
+      <p>Extraction order is the whole point. <code>UserMessageBody</code> clamps at five lines, so a six-line quote left in the body would swallow the actual follow-up behind the "show more" control. Splitting first keeps the clamp measuring only what the user typed (<a class="src" href="https://github.com/IlmanNafi11/OpenHands/blob/423f42516b895af07d2adae35d886b9899b29985/src/components/features/chat/chat-message.tsx#L130">chat-message.tsx:130</a>).</p>
+      <div class="callout warn">⚠ The quote card renders markdown with raw HTML parsing off, always. A quote carries provenance context, and a user-sourced quote must not gain HTML privileges that the user's own bubble never grants (<a class="src" href="https://github.com/IlmanNafi11/OpenHands/blob/423f42516b895af07d2adae35d886b9899b29985/src/components/features/chat/quote-card.tsx#L20">quote-card.tsx:20</a>).</div>
+    </section>
+
+    <section id="sec6"><h2><span class="num">6</span>Jump to the quoted message</h2>
+      <p>Each bubble gains a <code>data-event-id</code> anchor carrying the source event id. Clicking a quote card calls <code>useJumpToEvent</code>, which scrolls to that anchor and highlights it briefly.</p>
+      <p>The target may not be mounted yet, so the hook loads older pages until it finds the anchor, bounded at ten pages. Past that bound it stops and surfaces a localized "message not in loaded history" hint instead of scrolling somewhere wrong (<a class="src" href="https://github.com/IlmanNafi11/OpenHands/blob/423f42516b895af07d2adae35d886b9899b29985/src/hooks/chat/use-jump-to-event.ts#L10">use-jump-to-event.ts:10</a>).</p>
+      <div class="callout note">ⓘ <code>data-event-id</code> is a product anchor, not a test hook. The E2E test uses it because a user click produces the same attribute, not because the attribute exists for testing.</div>
+    </section>
+
+    <section id="sec7"><h2><span class="num">7</span>Where the Reply action appears</h2>
+      <p>Reply uses the existing per-bubble hover <code>actions</code> slot in <code>ChatMessage</code>, so it inherits the positioning and keyboard behavior of its neighbours. Gating:</p>
+      <ul>
+        <li>Main chat tab of a standard conversation only. Hidden in plan mode and on planning-agent bubbles.</li>
+        <li>Hidden on BTW messages and on pending "sending" bubbles, which have no event id yet.</li>
+        <li>Text only. An image-only message parses to an empty body and offers no Reply action.</li>
+      </ul>
+      <p>There is no backend branch anywhere in this path. The quote is plain text, so Local, Cloud, OpenHands, and ACP agents all take the same route.</p>
+    </section>
+
+    <section id="sec8"><h2><span class="num">8</span>Compatibility and risk</h2>
+      <table>
+        <tr><th>Surface</th><th>Change</th></tr>
+        <tr><td><code>SendMessageRequest</code> / <code>MessageEvent</code></td><td>Unchanged</td></tr>
+        <tr><td>Agent server</td><td>Unchanged</td></tr>
+        <tr><td><code>compatibility.minimumAgentServer</code></td><td>Not raised</td></tr>
+        <tr><td>i18n</td><td>Additive: 6 keys per locale across 16 locales</td></tr>
+      </table>
+      <p>Residual risks worth a reviewer's attention:</p>
+      <ol>
+        <li><b>The envelope is visible to the model.</b> That is the mechanism, not a leak: the model reads the quote as context. A user who types the open tag by hand gets a rendered card instead of literal text, which the idempotence rule accepts.</li>
+        <li><b>Two writers on one store.</b> Both are guarded by conversation id, and the store clears on submit inside the same callback that reads the composer.</li>
+        <li><b>Jump depends on paging.</b> A quote older than ten loaded pages resolves to a hint rather than a scroll. Raising the bound is a one-constant change.</li>
+      </ol>
+      <p>Deliberately out of scope: selecting a range instead of the whole message, threads, and a protocol-level <code>reply_to_event_id</code>. The last one belongs to <code>software-agent-sdk</code> and can replace this envelope later without a data migration, since a message body stays readable either way.</p>
+    </section>
+
+    <section id="sec9"><h2><span class="num">9</span>Evidence</h2>
+      <p>Unit and integration suites cover the format, the store, the submission hook, jump, and i18n keys. The end-to-end proof runs the real stack against a scripted mock LLM:</p>
+      <pre><code>npx playwright test --config=playwright.mock-llm.config.ts \
+  -g "reply quote rides the message"</code></pre>
+      <p>Result: 1 passed in 1.1m. The run creates a real conversation, replies to an agent message, asserts the envelope reached the persisted user event, reloads the page, asserts the quote card survived the reload, then clicks it and asserts the source bubble got the jump highlight. The video is attached to the PR description.</p>
+      <p>Full-suite state on this branch: 868 test files and 9731 tests pass, typecheck and Prettier are clean, ESLint reports zero errors.</p>
+    </section>
+  </main>
+</div></body></html>

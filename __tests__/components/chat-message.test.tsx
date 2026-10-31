@@ -1,7 +1,8 @@
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
 import util from "util";
+import { renderWithProviders } from "test-utils";
 import { ChatMessage } from "#/components/features/chat/chat-message";
 
 describe("ChatMessage", () => {
@@ -15,7 +16,9 @@ describe("ChatMessage", () => {
         timeStyle: "short",
       });
 
-      render(<ChatMessage type={type} message="Hello" timestamp={timestamp} />);
+      renderWithProviders(
+        <ChatMessage type={type} message="Hello" timestamp={timestamp} />,
+      );
 
       const message = screen.getByTestId(`${type}-message`);
       await user.hover(message);
@@ -30,7 +33,9 @@ describe("ChatMessage", () => {
   );
 
   it("does not fabricate a timestamp for an invalid value", () => {
-    render(<ChatMessage type="user" message="Hello" timestamp="not-a-date" />);
+    renderWithProviders(
+      <ChatMessage type="user" message="Hello" timestamp="not-a-date" />,
+    );
 
     expect(screen.getByTestId("user-message")).not.toHaveAttribute("tabindex");
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
@@ -95,7 +100,7 @@ describe("ChatMessage", () => {
     const message = "word ".repeat(20).trim();
 
     try {
-      render(<ChatMessage type="user" message={message} />);
+      renderWithProviders(<ChatMessage type="user" message={message} />);
 
       await waitFor(() => {
         expect(screen.getByTestId("user-message")).toBeInTheDocument();
@@ -130,14 +135,14 @@ describe("ChatMessage", () => {
   });
 
   it("should render a user message", () => {
-    render(<ChatMessage type="user" message="Hello, World!" />);
+    renderWithProviders(<ChatMessage type="user" message="Hello, World!" />);
     expect(screen.getByTestId("user-message")).toBeInTheDocument();
     expect(screen.getByText("Hello, World!")).toBeInTheDocument();
   });
 
   it("should support code syntax highlighting", () => {
     const code = "```js\nconsole.log('Hello, World!')\n```";
-    render(<ChatMessage type="user" message={code} />);
+    renderWithProviders(<ChatMessage type="user" message={code} />);
 
     // SyntaxHighlighter breaks the code blocks into "tokens"
     expect(screen.getByText("console")).toBeInTheDocument();
@@ -147,7 +152,7 @@ describe("ChatMessage", () => {
 
   it("should render the copy to clipboard button when the user hovers over the message", async () => {
     const user = userEvent.setup();
-    render(<ChatMessage type="user" message="Hello, World!" />);
+    renderWithProviders(<ChatMessage type="user" message="Hello, World!" />);
     const message = screen.getByText("Hello, World!");
 
     expect(screen.getByTestId("copy-to-clipboard")).not.toBeVisible();
@@ -159,7 +164,7 @@ describe("ChatMessage", () => {
 
   it("should copy content to clipboard", async () => {
     const user = userEvent.setup();
-    render(<ChatMessage type="user" message="Hello, World!" />);
+    renderWithProviders(<ChatMessage type="user" message="Hello, World!" />);
     const copyToClipboardButton = screen.getByTestId("copy-to-clipboard");
 
     await user.click(copyToClipboardButton);
@@ -173,7 +178,7 @@ describe("ChatMessage", () => {
     function Component() {
       return <div data-testid="custom-component">Custom Component</div>;
     }
-    render(
+    renderWithProviders(
       <ChatMessage type="user" message="Hello, World">
         <Component />
       </ChatMessage>,
@@ -182,7 +187,7 @@ describe("ChatMessage", () => {
   });
 
   it("should apply correct styles to inline code", () => {
-    render(
+    renderWithProviders(
       <ChatMessage type="agent" message="Here is some `inline code` text" />,
     );
     const codeElement = screen.getByText("inline code");
@@ -193,7 +198,7 @@ describe("ChatMessage", () => {
 
   it("truncates long sent user messages to five lines with view more on hover", async () => {
     const longMessage = `${"Here's a long message. ".repeat(40)}`.trim();
-    render(<ChatMessage type="user" message={longMessage} />);
+    renderWithProviders(<ChatMessage type="user" message={longMessage} />);
 
     expect(
       screen.getByText(longMessage).closest(".line-clamp-5"),
@@ -221,7 +226,7 @@ describe("ChatMessage", () => {
 
   it("shows a stop control for a sending user message and calls onStop when clicked", () => {
     const onStop = vi.fn();
-    render(
+    renderWithProviders(
       <ChatMessage
         type="user"
         message="Working on it"
@@ -243,7 +248,7 @@ describe("ChatMessage", () => {
   it("shows retry and dismiss controls for a failed user message", async () => {
     const onRetry = vi.fn();
     const onDismiss = vi.fn();
-    render(
+    renderWithProviders(
       <ChatMessage
         type="user"
         message="Failed to deliver"
@@ -266,7 +271,7 @@ describe("ChatMessage", () => {
     // so a message like "<something>" was parsed as an unknown HTML tag and
     // dropped by rehype-sanitize — leaving an empty bubble that looked like
     // nothing was sent. User input must render literally.
-    const { container } = render(
+    const { container } = renderWithProviders(
       <ChatMessage type="user" message="<something>" />,
     );
 
@@ -280,7 +285,7 @@ describe("ChatMessage", () => {
   it("renders literal angle-bracket text in a sending user message", () => {
     // The pending/sending bubble renders through a different branch than the
     // settled message, so it gets its own guard.
-    const { container } = render(
+    const { container } = renderWithProviders(
       <ChatMessage type="user" message="<something>" pendingStatus="sending" />,
     );
 
@@ -291,10 +296,107 @@ describe("ChatMessage", () => {
   it("still parses inline HTML for agent messages", () => {
     // The fix is scoped to user input: agent output keeps raw-HTML parsing so
     // allowed inline tags (badges, <mark>, <details>, …) continue to render.
-    const { container } = render(
+    const { container } = renderWithProviders(
       <ChatMessage type="agent" message="Hello <mark>world</mark>" />,
     );
 
     expect(container.querySelector("mark")?.textContent).toBe("world");
+  });
+});
+
+describe("ChatMessage event anchor", () => {
+  it("renders the eventId as a data-event-id anchor on the bubble", () => {
+    renderWithProviders(
+      <ChatMessage type="user" message="hello" eventId="evt-anchor" />,
+    );
+
+    expect(screen.getByTestId("user-message")).toHaveAttribute(
+      "data-event-id",
+      "evt-anchor",
+    );
+  });
+
+  it("omits the anchor when no eventId is given", () => {
+    renderWithProviders(<ChatMessage type="user" message="hello" />);
+
+    expect(screen.getByTestId("user-message")).not.toHaveAttribute(
+      "data-event-id",
+    );
+  });
+});
+
+describe("ChatMessage reply-quote extraction", () => {
+  const TYPED = "and what about the failing test?";
+  const ENVELOPE =
+    '<reply-to id="evt-1" source="agent" truncated="false">the original question</reply-to>';
+  const composed = `${ENVELOPE}\n${TYPED}`;
+
+  it("renders the quote card above the body and only the follow-up as message text", () => {
+    renderWithProviders(<ChatMessage type="user" message={composed} />);
+
+    expect(screen.getByTestId("quote-card")).toBeInTheDocument();
+    expect(screen.getByText("the original question")).toBeInTheDocument();
+    // Only the follow-up is the visible bubble text; the envelope is gone.
+    expect(screen.getByTestId("user-message")).toHaveTextContent(TYPED);
+    expect(screen.getByTestId("user-message").textContent).not.toContain(
+      "reply-to",
+    );
+  });
+
+  it("a long quote does not push the follow-up behind the five-line clamp", () => {
+    const longQuote = `${"line\n".repeat(9)}deep history context`;
+    const longComposed = `<reply-to id="evt-1" source="agent" truncated="false">${longQuote}</reply-to>\n${TYPED}`;
+    renderWithProviders(<ChatMessage type="user" message={longComposed} />);
+
+    // The clamped body receives the follow-up text only — 1 line — so the
+    // clamp logic must not engage for a short follow-up.
+    expect(
+      screen.queryByTestId("chat-message-truncation-gradient"),
+    ).not.toBeInTheDocument();
+    const bodyContainer = screen
+      .getByTestId("user-message")
+      .querySelector(".relative.min-w-0");
+    // Only the follow-up feeds the body — the 9-line quote never reaches the
+    // clamp logic, and the quote preview lives solely in the card above.
+    expect(bodyContainer).toHaveTextContent(TYPED);
+    expect(bodyContainer).not.toHaveTextContent("deep history context");
+    expect(screen.getByTestId("quote-card")).toHaveTextContent(
+      "deep history context",
+    );
+  });
+
+  it("extracts the quote from a sending (pending) bubble too", () => {
+    renderWithProviders(
+      <ChatMessage type="user" message={composed} pendingStatus="sending" />,
+    );
+
+    expect(screen.getByTestId("quote-card")).toBeInTheDocument();
+    expect(screen.getByTestId("user-message")).toHaveTextContent(TYPED);
+  });
+
+  it("shows the truncation label on the card when flagged", () => {
+    const flagged = `${ENVELOPE.replace('truncated="false"', 'truncated="true"')}\n${TYPED}`;
+    renderWithProviders(<ChatMessage type="user" message={flagged} />);
+
+    expect(
+      screen.getByText("CHAT_INTERFACE$REPLY_TRUNCATED"),
+    ).toBeInTheDocument();
+  });
+
+  it("never extracts from agent messages (only user bubbles carry replies)", () => {
+    renderWithProviders(<ChatMessage type="agent" message={composed} />);
+
+    expect(screen.queryByTestId("quote-card")).not.toBeInTheDocument();
+  });
+
+  it("renders a plain user message unchanged (no envelope, no card)", () => {
+    renderWithProviders(
+      <ChatMessage type="user" message="just a normal message" />,
+    );
+
+    expect(screen.queryByTestId("quote-card")).not.toBeInTheDocument();
+    expect(screen.getByTestId("user-message")).toHaveTextContent(
+      "just a normal message",
+    );
   });
 });

@@ -3,6 +3,7 @@ import type {
   ConversationTab,
   ConversationMode,
 } from "#/stores/conversation-store";
+import type { ReplyQuote } from "#/utils/message-quote";
 import type { ViewMode } from "#/components/features/files-tab/view-mode";
 import {
   DEFAULT_UNPINNED_OVERVIEW_GIT_PARTS,
@@ -42,6 +43,11 @@ export interface ConversationState {
   conversationMode: ConversationMode;
   subConversationTaskId: string | null;
   draftMessage: string | null;
+  /**
+   * Armed reply quote awaiting submit; validated in `sanitizeStoredState`.
+   * Optional in the type so older persisted blobs and mock fixtures omit it.
+   */
+  pendingReplyQuote?: ReplyQuote | null;
   rightPanelShown?: boolean;
   /**
    * Legacy Files-tab Diff/Files toggle preference. Kept for blob
@@ -67,6 +73,7 @@ const DEFAULT_CONVERSATION_STATE: ConversationState = {
   conversationMode: "code",
   subConversationTaskId: null,
   draftMessage: null,
+  pendingReplyQuote: null,
   rightPanelShown: false,
   filesTabDiffView: null,
   filesTabContentViewMode: "rich",
@@ -102,6 +109,35 @@ const REMOVED_CONVERSATION_TABS: ReadonlySet<string> = new Set([
 ]);
 
 const VALID_VIEW_MODES: ReadonlySet<ViewMode> = new Set(["rich", "plain"]);
+
+/** Hard cap mirrored from `message-quote.ts` — quotes never exceed it. */
+const MAX_PERSISTED_QUOTE_BODY = 2000;
+
+/**
+ * Validated persisted reply quote. Corrupt entries (wrong shape, unknown
+ * source, oversized body) are dropped entirely rather than repaired —
+ * same policy as the other optional fields above.
+ */
+function sanitizeReplyQuote(value: unknown): ReplyQuote | null {
+  if (value == null || typeof value !== "object") return null;
+  const quote = value as Record<string, unknown>;
+  if (
+    typeof quote.sourceEventId !== "string" ||
+    quote.sourceEventId.length === 0 ||
+    (quote.source !== "user" && quote.source !== "agent") ||
+    typeof quote.body !== "string" ||
+    quote.body.length > MAX_PERSISTED_QUOTE_BODY ||
+    typeof quote.truncated !== "boolean"
+  ) {
+    return null;
+  }
+  return {
+    sourceEventId: quote.sourceEventId,
+    source: quote.source,
+    body: quote.body,
+    truncated: quote.truncated,
+  };
+}
 
 function sanitizeStoredState(
   stored: Record<string, unknown>,
@@ -190,6 +226,16 @@ function sanitizeStoredState(
       if (filtered.length !== result.filesTabOpenPaths.length) {
         result = { ...result, filesTabOpenPaths: filtered };
       }
+    }
+  }
+
+  if (result.pendingReplyQuote !== undefined) {
+    const sanitized = sanitizeReplyQuote(result.pendingReplyQuote);
+    result = { ...result };
+    if (sanitized) {
+      result.pendingReplyQuote = sanitized;
+    } else {
+      delete result.pendingReplyQuote;
     }
   }
 

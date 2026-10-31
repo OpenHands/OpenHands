@@ -1,5 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
+import { MessageSquareReply } from "lucide-react";
 import { useNavigation } from "#/context/navigation-context";
 import { MessageEvent } from "#/types/agent-server/core";
 import { ChatMessage } from "../../../features/chat/chat-message";
@@ -16,6 +17,9 @@ import { I18nKey } from "#/i18n/declaration";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useForkConversation } from "#/hooks/mutation/use-fork-conversation";
+import { useReplyQuoteStore } from "#/stores/reply-quote-store";
+import { useConversationStore } from "#/stores/conversation-store";
+import { quoteBodyForEvent } from "#/utils/message-quote";
 import { setConversationState } from "#/utils/conversation-local-storage";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
@@ -69,6 +73,30 @@ function UserAssistantEventMessageComponent({
   // restores its text to the composer); an assistant message branches
   // inclusively. Local agent-server only, inside a conversation.
   const canBranch = !isCloud && !!conversationId;
+
+  // "Reply": arm the composer's quote card from this message. Main chat
+  // surface only — hidden on planning-agent bubbles (rendered in the planner
+  // flow), in plan mode, and on image-only messages (nothing text to quote).
+  const conversationMode = useConversationStore(
+    (state) => state.conversationMode,
+  );
+  const setMessageToSend = useConversationStore(
+    (state) => state.setMessageToSend,
+  );
+  const canReply =
+    !!conversationId && !isFromPlanningAgent && conversationMode !== "plan";
+  const replyQuote = canReply ? quoteBodyForEvent(event, message) : null;
+  const handleReply = () => {
+    if (!conversationId || !replyQuote) return;
+    useReplyQuoteStore.getState().setReplyQuote(conversationId, replyQuote);
+    // Reply replaces the draft (spec Q3a): clear unsent text, caret at the
+    // end of the now-empty composer via the one-shot prefill path. The
+    // clear must also reach the persisted draft: the prefill writes the DOM
+    // directly without an input event, so a reload before the next keystroke
+    // would otherwise resurrect the pre-reply draft from localStorage.
+    setMessageToSend("");
+    setConversationState(conversationId, { draftMessage: null });
+  };
   const handleBranch = () => {
     if (!conversationId || isForking || forkInFlightRef.current) return;
     forkInFlightRef.current = true;
@@ -111,15 +139,26 @@ function UserAssistantEventMessageComponent({
       },
     );
   };
-  const actions = canBranch
-    ? [
-        {
-          icon: <RepoForkedIcon width={15} height={15} aria-hidden />,
-          onClick: handleBranch,
-          tooltip: t(I18nKey.CHAT_INTERFACE$BRANCH_FROM_HERE),
-        },
-      ]
-    : undefined;
+  const actions = [
+    ...(replyQuote
+      ? [
+          {
+            icon: <MessageSquareReply width={15} height={15} aria-hidden />,
+            onClick: handleReply,
+            tooltip: t(I18nKey.CHAT_INTERFACE$REPLY),
+          },
+        ]
+      : []),
+    ...(canBranch
+      ? [
+          {
+            icon: <RepoForkedIcon width={15} height={15} aria-hidden />,
+            onClick: handleBranch,
+            tooltip: t(I18nKey.CHAT_INTERFACE$BRANCH_FROM_HERE),
+          },
+        ]
+      : []),
+  ];
 
   return (
     <>
@@ -130,6 +169,7 @@ function UserAssistantEventMessageComponent({
         isFromPlanningAgent={isFromPlanningAgent}
         actions={actions}
         timestamp={event.timestamp}
+        eventId={event.id}
       >
         {imageUrls.length > 0 && (
           <ImageCarousel size="small" images={imageUrls} />

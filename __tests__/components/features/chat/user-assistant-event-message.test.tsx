@@ -1,9 +1,19 @@
+import {
+  afterEach,
+  describe,
+  expect,
+  it,
+  vi,
+  beforeEach,
+  onTestFinished,
+} from "vitest";
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
-import { describe, it, expect, vi, beforeEach, onTestFinished } from "vitest";
 import { renderWithProviders } from "test-utils";
 import type { MessageEvent } from "#/types/agent-server/core";
 import { I18nKey } from "#/i18n/declaration";
 import { UserAssistantEventMessage } from "#/components/conversation-events/chat/event-message-components/user-assistant-event-message";
+import { useReplyQuoteStore } from "#/stores/reply-quote-store";
+import { useConversationStore } from "#/stores/conversation-store";
 import { CustomChatInput } from "#/components/features/chat/custom-chat-input";
 import { getConversationState } from "#/utils/conversation-local-storage";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
@@ -37,6 +47,7 @@ vi.mock("#/context/navigation-context", async (importActual) => ({
 // test-utils re-inits i18n with empty resources, so `t()` returns the key —
 // which becomes the button's accessible name (aria-label).
 const BRANCH_LABEL = I18nKey.CHAT_INTERFACE$BRANCH_FROM_HERE;
+const REPLY_LABEL = I18nKey.CHAT_INTERFACE$REPLY;
 const forkResult = { id: "fork-123" } as DirectConversationInfo;
 
 let forkSpy: ReturnType<typeof vi.spyOn>;
@@ -295,6 +306,153 @@ describe("UserAssistantEventMessage — branch action", () => {
     fireEvent.mouseEnter(screen.getByTestId("agent-message"));
     expect(
       screen.queryByRole("button", { name: BRANCH_LABEL }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("UserAssistantEventMessage — reply action", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    useActiveBackendMock.mockReset();
+    useOptionalConversationIdMock.mockReset();
+    navigateMock.mockReset();
+    localStorage.clear();
+    useReplyQuoteStore.setState({ pendingReplyQuote: null });
+
+    useActiveBackendMock.mockReturnValue({
+      backend: { kind: "local" },
+      orgId: null,
+    });
+    useOptionalConversationIdMock.mockReturnValue({
+      conversationId: "conv-1",
+    });
+  });
+
+  afterEach(() => {
+    useReplyQuoteStore.setState({ pendingReplyQuote: null });
+  });
+
+  it("offers Reply on an agent message and arms the composer quote", () => {
+    renderMessage(makeEvent("agent", "evt-agent"));
+
+    fireEvent.mouseEnter(screen.getByTestId("agent-message"));
+    fireEvent.click(screen.getByRole("button", { name: REPLY_LABEL }));
+
+    expect(useReplyQuoteStore.getState().pendingReplyQuote).toEqual({
+      sourceEventId: "evt-agent",
+      source: "agent",
+      body: "Hello world",
+      truncated: false,
+      conversationId: "conv-1",
+    });
+  });
+
+  it('offers Reply on a user message with source "user"', () => {
+    renderMessage(makeEvent("user", "evt-user"));
+
+    fireEvent.mouseEnter(screen.getByTestId("user-message"));
+    fireEvent.click(screen.getByRole("button", { name: REPLY_LABEL }));
+
+    expect(useReplyQuoteStore.getState().pendingReplyQuote).toMatchObject({
+      sourceEventId: "evt-user",
+      source: "user",
+    });
+  });
+
+  it("Reply replaces the composer draft", () => {
+    renderMessage(makeEvent("agent", "evt-agent"));
+
+    fireEvent.mouseEnter(screen.getByTestId("agent-message"));
+    fireEvent.click(screen.getByRole("button", { name: REPLY_LABEL }));
+
+    // The one-shot prefill path stores a MessageToSend payload; the
+    // composer reads `text` and applies it (replace-draft contract).
+    expect(useConversationStore.getState().messageToSend?.text).toBe("");
+  });
+
+  it("strips an inner reply envelope from the quoted body", () => {
+    const nested = makeEvent("agent", "evt-nested");
+    nested.llm_message = {
+      role: "assistant",
+      content: [
+        {
+          type: "text",
+          text: '<reply-to id="evt-older" source="user" truncated="false">older</reply-to>\nthe visible part',
+        },
+      ],
+    } as typeof nested.llm_message;
+    renderMessage(nested);
+
+    fireEvent.mouseEnter(screen.getByTestId("agent-message"));
+    fireEvent.click(screen.getByRole("button", { name: REPLY_LABEL }));
+
+    expect(useReplyQuoteStore.getState().pendingReplyQuote).toMatchObject({
+      sourceEventId: "evt-nested",
+      // Inner envelope stripped; the leading separator newline is kept by
+      // the format module (same shape a reload-split produces).
+      body: "\nthe visible part",
+    });
+  });
+
+  it("truncates a long quoted body and flags it", () => {
+    const long = makeEvent("agent", "evt-long");
+    long.llm_message = {
+      role: "assistant",
+      content: [{ type: "text", text: "x".repeat(2500) }],
+    } as typeof long.llm_message;
+    renderMessage(long);
+
+    fireEvent.mouseEnter(screen.getByTestId("agent-message"));
+    fireEvent.click(screen.getByRole("button", { name: REPLY_LABEL }));
+
+    const armed = useReplyQuoteStore.getState().pendingReplyQuote;
+    expect(armed?.truncated).toBe(true);
+    expect(armed?.body.length).toBeLessThanOrEqual(2000);
+  });
+
+  it("hides Reply on an image-only message", () => {
+    renderMessage(makeImageOnlyEvent("evt-img"));
+
+    fireEvent.mouseEnter(screen.getByTestId("user-message"));
+    expect(
+      screen.queryByRole("button", { name: REPLY_LABEL }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("hides Reply on planning-agent bubbles", () => {
+    renderWithProviders(
+      <UserAssistantEventMessage
+        event={makeEvent("agent", "evt-agent")}
+        isLastMessage={false}
+        isFromPlanningAgent
+      />,
+    );
+
+    fireEvent.mouseEnter(screen.getByTestId("agent-message"));
+    expect(
+      screen.queryByRole("button", { name: REPLY_LABEL }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("hides Reply in plan mode", () => {
+    useConversationStore.setState({ conversationMode: "plan" });
+    renderMessage(makeEvent("agent", "evt-agent"));
+
+    fireEvent.mouseEnter(screen.getByTestId("agent-message"));
+    expect(
+      screen.queryByRole("button", { name: REPLY_LABEL }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("hides Reply outside a conversation", () => {
+    useOptionalConversationIdMock.mockReturnValue({
+      conversationId: undefined,
+    });
+    renderMessage(makeEvent("agent", "evt-agent"));
+
+    fireEvent.mouseEnter(screen.getByTestId("agent-message"));
+    expect(
+      screen.queryByRole("button", { name: REPLY_LABEL }),
     ).not.toBeInTheDocument();
   });
 });

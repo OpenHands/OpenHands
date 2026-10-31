@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
+import type { ReplyQuote } from "#/utils/message-quote";
 import {
   clearConversationLocalStorage,
   getConversationState,
@@ -66,9 +67,9 @@ describe("conversation localStorage utilities", () => {
     });
 
     it("defaults rightPanelShown to false and drops corrupt values", () => {
-      expect(getConversationState("conv-right-panel-default").rightPanelShown).toBe(
-        false,
-      );
+      expect(
+        getConversationState("conv-right-panel-default").rightPanelShown,
+      ).toBe(false);
 
       const conversationId = "conv-right-panel-corrupt";
       const key = `${LOCAL_STORAGE_KEYS.CONVERSATION_STATE}-${conversationId}`;
@@ -153,7 +154,12 @@ describe("conversation localStorage utilities", () => {
     it("persists and sanitizes unpinnedOverviewSections", () => {
       const conversationId = "conv-overview-pins";
       setConversationState(conversationId, {
-        unpinnedOverviewSections: ["skills", "not-a-section", "mcp", "workspace"],
+        unpinnedOverviewSections: [
+          "skills",
+          "not-a-section",
+          "mcp",
+          "workspace",
+        ],
       });
 
       const state = getConversationState(conversationId);
@@ -687,6 +693,140 @@ describe("conversation localStorage utilities", () => {
       expect(state.filesTabTreeVisible).toBe(true);
       expect(state.filesTabOpenPaths).toEqual(["ok.ts"]);
       expect(state.filesTabSelectedPath).toBeNull();
+    });
+  });
+
+  describe("pendingReplyQuote persistence", () => {
+    const validQuote: ReplyQuote = {
+      sourceEventId: "evt-1",
+      source: "agent",
+      body: "quoted text",
+      truncated: false,
+    };
+
+    it("defaults to null when no state exists", () => {
+      const state = getConversationState("conv-quote-default");
+      expect(state.pendingReplyQuote).toBeNull();
+    });
+
+    it("round-trips a valid quote through set/get", () => {
+      const conversationId = "conv-quote-roundtrip";
+      setConversationState(conversationId, { pendingReplyQuote: validQuote });
+
+      const state = getConversationState(conversationId);
+      expect(state.pendingReplyQuote).toEqual(validQuote);
+    });
+
+    it("drops a corrupt quote object so it falls back to null", () => {
+      const conversationId = "conv-quote-corrupt";
+      const key = `${LOCAL_STORAGE_KEYS.CONVERSATION_STATE}-${conversationId}`;
+      localStorage.setItem(
+        key,
+        JSON.stringify({ pendingReplyQuote: { nope: true } }),
+      );
+
+      const state = getConversationState(conversationId);
+      expect(state.pendingReplyQuote).toBeNull();
+    });
+
+    it("drops quotes with an unknown or missing source", () => {
+      const conversationId = "conv-quote-bad-source";
+      const key = `${LOCAL_STORAGE_KEYS.CONVERSATION_STATE}-${conversationId}`;
+      localStorage.setItem(
+        key,
+        JSON.stringify({
+          pendingReplyQuote: [
+            { ...validQuote, source: "system" },
+            { ...validQuote, source: undefined },
+          ][0],
+        }),
+      );
+
+      const state = getConversationState(conversationId);
+      expect(state.pendingReplyQuote).toBeNull();
+    });
+
+    it("drops quotes with a missing or non-string sourceEventId", () => {
+      const conversationId = "conv-quote-bad-id";
+      const key = `${LOCAL_STORAGE_KEYS.CONVERSATION_STATE}-${conversationId}`;
+      localStorage.setItem(
+        key,
+        JSON.stringify({
+          pendingReplyQuote: { ...validQuote, sourceEventId: 42 },
+        }),
+      );
+
+      const state = getConversationState(conversationId);
+      expect(state.pendingReplyQuote).toBeNull();
+    });
+
+    it("drops quotes whose body exceeds the 2000-char cap", () => {
+      const conversationId = "conv-quote-oversize";
+      const key = `${LOCAL_STORAGE_KEYS.CONVERSATION_STATE}-${conversationId}`;
+      localStorage.setItem(
+        key,
+        JSON.stringify({
+          pendingReplyQuote: { ...validQuote, body: "x".repeat(2001) },
+        }),
+      );
+
+      const state = getConversationState(conversationId);
+      expect(state.pendingReplyQuote).toBeNull();
+    });
+
+    it("accepts a body at exactly the 2000-char cap", () => {
+      const conversationId = "conv-quote-at-cap";
+      const key = `${LOCAL_STORAGE_KEYS.CONVERSATION_STATE}-${conversationId}`;
+      localStorage.setItem(
+        key,
+        JSON.stringify({
+          pendingReplyQuote: { ...validQuote, body: "x".repeat(2000) },
+        }),
+      );
+
+      const state = getConversationState(conversationId);
+      expect(state.pendingReplyQuote?.body).toHaveLength(2000);
+    });
+
+    it("drops quotes with a non-boolean truncated flag", () => {
+      const conversationId = "conv-quote-bad-flag";
+      const key = `${LOCAL_STORAGE_KEYS.CONVERSATION_STATE}-${conversationId}`;
+      localStorage.setItem(
+        key,
+        JSON.stringify({
+          pendingReplyQuote: { ...validQuote, truncated: "false" },
+        }),
+      );
+
+      const state = getConversationState(conversationId);
+      expect(state.pendingReplyQuote).toBeNull();
+    });
+
+    it("clears an invalid persisted quote on the next state write", () => {
+      // Arrange — a corrupt blob landed in storage (e.g. manual edit)
+      const conversationId = "conv-quote-heal";
+      const key = `${LOCAL_STORAGE_KEYS.CONVERSATION_STATE}-${conversationId}`;
+      localStorage.setItem(
+        key,
+        JSON.stringify({ pendingReplyQuote: "not-an-object" }),
+      );
+
+      // Act — the merge path re-persists the full (sanitized) state
+      setConversationState(conversationId, { selectedTab: "files" });
+
+      // Assert — the corrupt quote is gone; the sanitized blob carries a
+      // clean explicit null (the typed default), never the junk value.
+      const stored = JSON.parse(localStorage.getItem(key)!);
+      expect(stored.pendingReplyQuote).toEqual(null);
+    });
+
+    it("is not persisted for task conversation IDs", () => {
+      const taskId = "task-quote-xyz";
+      setConversationState(taskId, { pendingReplyQuote: validQuote });
+
+      const key = `${LOCAL_STORAGE_KEYS.CONVERSATION_STATE}-${taskId}`;
+      expect(localStorage.getItem(key)).toBeNull();
+      expect(getConversationState(taskId).pendingReplyQuote).toBeNull();
     });
   });
 });

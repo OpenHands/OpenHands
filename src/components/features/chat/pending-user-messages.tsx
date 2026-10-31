@@ -67,7 +67,10 @@ export function PendingUserMessages() {
       try {
         await send(
           createChatMessage(
-            message.text,
+            // `content`, not `text`: content is the exact string the send
+            // path handed to the server (reply-quote envelope and appended
+            // file prompt included). The bubble text is only for display.
+            message.content,
             message.imageUrls,
             message.fileUrls,
             message.timestamp,
