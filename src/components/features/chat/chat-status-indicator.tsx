@@ -38,7 +38,7 @@ function ChatStatusIndicator({
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 2 }}
           transition={{ duration: 0.3 }}
-          className="pr-1.5 font-normal text-[11px] leading-4 normal-case break-words whitespace-normal"
+          className="pr-1.5 font-normal text-2xs leading-4 normal-case break-words whitespace-normal"
         >
           {status}
         </motion.span>

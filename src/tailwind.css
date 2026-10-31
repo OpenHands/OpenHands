@@ -10,6 +10,10 @@
 }
 
 @theme inline {
+  /* Compact metadata retains its original pixel sizes and inherited leading. */
+  --text-2xs: 11px;
+  --text-3xs: 10px;
+
   --color-primary: var(--oh-color-primary);
   --color-logo: var(--oh-color-logo);
   --color-canvas-base: var(--oh-color-base);

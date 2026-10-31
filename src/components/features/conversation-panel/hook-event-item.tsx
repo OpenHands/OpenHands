@@ -21,7 +21,7 @@ const EVENT_TYPE_I18N_KEYS: Record<string, I18nKey> = {
 };
 
 const HOOK_PILL_CLASS =
-  "inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[11px] font-medium leading-4 border border-border bg-surface text-tertiary-light";
+  "inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-2xs font-medium leading-4 border border-border bg-surface text-tertiary-light";
 
 const HOOK_COUNT_I18N_KEY = "HOOKS_MODAL$HOOK_COUNT";
 

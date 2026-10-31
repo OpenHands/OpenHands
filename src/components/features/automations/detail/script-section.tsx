@@ -101,7 +101,7 @@ export function ScriptSection({ automation }: ScriptSectionProps) {
                 <div className="flex items-center gap-2 border-b border-border bg-black/20 px-3 py-2 font-mono text-xs text-content">
                   <span className="truncate">{entry.path}</span>
                   {entry.path === entrypointPath ? (
-                    <span className="shrink-0 rounded-md bg-surface-raised px-2 py-0.5 text-[10px] font-medium text-muted">
+                    <span className="shrink-0 rounded-md bg-surface-raised px-2 py-0.5 text-3xs font-medium text-muted">
                       {t(I18nKey.AUTOMATIONS$DETAIL$SCRIPT_ENTRYPOINT)}
                     </span>
                   ) : null}
