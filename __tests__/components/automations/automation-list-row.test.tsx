@@ -12,7 +12,8 @@ import { I18nKey } from "#/i18n/declaration";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string) => key,
+    t: (key: string, options?: { count?: number | string }) =>
+      options?.count === undefined ? key : `${key}:${options.count}`,
     i18n: { language: "en" },
   }),
 }));
@@ -206,6 +207,7 @@ describe("AutomationListRow", () => {
             summary: {
               total: 4,
               completedTotal: 4,
+              pendingTotal: 0,
               latestRun,
               recentRuns: [latestRun],
               recentSuccessRate: 1,
@@ -225,6 +227,49 @@ describe("AutomationListRow", () => {
     expect(
       screen.getByTestId("automation-activity-automation-1"),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automation-pending-automation-1"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the queued run count in the meta line", () => {
+    // Arrange
+    const latestRun = createRun({
+      status: AutomationRunStatus.PENDING,
+      completed_at: null,
+    });
+
+    // Act
+    render(
+      <AutomationListRow
+        automation={automation}
+        onToggle={vi.fn()}
+        onRunNow={vi.fn()}
+        onExport={vi.fn()}
+        onDelete={vi.fn()}
+        insights={{
+          spec: insightsSpec satisfies InterfaceListInsights,
+          state: {
+            summary: {
+              total: 7,
+              completedTotal: 4,
+              pendingTotal: 3,
+              latestRun,
+              recentRuns: [latestRun],
+              recentSuccessRate: 1,
+              averageDurationMs: 120_000,
+            },
+            isLoading: false,
+            isError: false,
+          },
+        }}
+      />,
+    );
+
+    // Assert
+    expect(
+      screen.getByTestId("automation-pending-automation-1"),
+    ).toHaveTextContent("AUTOMATIONS$PENDING_RUN_COUNT:3");
   });
 
   it("shows the value statement in the meta line", () => {
@@ -251,6 +296,7 @@ describe("AutomationListRow", () => {
             summary: {
               total: 5,
               completedTotal: 4,
+              pendingTotal: 0,
               latestRun,
               recentRuns: [latestRun],
               recentSuccessRate: 1,
