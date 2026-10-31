@@ -1393,3 +1393,71 @@ describe("ChatInterface - Build plan keyboard shortcut", () => {
     expect(sentBuildPrompt()).toBe(false);
   });
 });
+
+describe("ChatInterface - initial attachment recovery", () => {
+  it("keeps a second failed upload unsent and clears the error after a successful retry", async () => {
+    localStorage.clear();
+    sessionStorage.clear();
+    useConversationStore.getState().resetConversationState();
+    useConversationStore.getState().clearMessageToSend();
+    const file = new File(["notes"], "notes.txt");
+    const upload = vi
+      .fn()
+      .mockResolvedValueOnce({
+        skipped_files: [{ name: file.name, reason: "Interrupted" }],
+        uploaded_files: [],
+      })
+      .mockResolvedValueOnce({
+        skipped_files: [],
+        uploaded_files: [file.name],
+      });
+    vi.mocked(useUnifiedUploadFiles).mockReturnValue({
+      mutateAsync: upload,
+      isLoading: false,
+    } as never);
+    vi.mocked(useConfig).mockReturnValue({ data: {} } as never);
+    mockSend.mockReset();
+    mockSend.mockResolvedValue({ queued: false });
+    useEventStore.setState({ events: [], eventIds: new Set(), uiEvents: [] });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
+    useConversationStore.getState().clearAllFiles();
+    useConversationStore.getState().addFiles([file]);
+    useErrorMessageStore
+      .getState()
+      .setErrorMessage(
+        "Upload failed",
+        "conversation",
+        "StartupAttachmentUploadFailed",
+      );
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const page = renderWithQueryClient(<ChatInterface />, queryClient);
+    const input = screen.getByTestId("chat-input");
+    Object.defineProperty(input, "innerText", {
+      configurable: true,
+      get() {
+        return this.textContent ?? "";
+      },
+    });
+    input.textContent = "Read my notes";
+    fireEvent.input(input);
+    await waitFor(() =>
+      expect(getConversationState("test-conversation-id").draftMessage).toBe(
+        "Read my notes",
+      ),
+    );
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(upload).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(useConversationStore.getState().files).toEqual([file]),
+    );
+    expect(mockSend).not.toHaveBeenCalled();
+    await waitFor(() => expect(input).toHaveTextContent("Read my notes"));
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(mockSend).toHaveBeenCalledTimes(1));
+    expect(useErrorMessageStore.getState().errorMessage).toBeNull();
+    page.unmount();
+    queryClient.clear();
+  });
+});

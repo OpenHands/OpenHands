@@ -64,8 +64,11 @@ const CREATING_TOAST_MIN_VISIBLE_MS = 700;
 
 export function HomeChatLauncher() {
   const { t } = useTranslation("openhands");
-  const { backend } = useActiveBackend();
-  const { navigate } = useNavigation();
+  const { backend, orgId } = useActiveBackend();
+  const { navigate, currentPath } = useNavigation();
+  const ownerKey = JSON.stringify([backend.id, orgId, currentPath]);
+  const currentOwner = useRef(ownerKey);
+  currentOwner.current = ownerKey;
   const isLocal = backend.kind === "local";
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -165,6 +168,9 @@ export function HomeChatLauncher() {
     // API-key error on the first turn).
     if (llmBlocked) return;
 
+    const ownsLaunch = () =>
+      isMountedRef.current && currentOwner.current === ownerKey;
+
     const attachmentSnapshot = {
       images: [...images],
       files: [...files],
@@ -258,7 +264,8 @@ export function HomeChatLauncher() {
         isCreated = true;
         dismissCreatingToast();
         try {
-          sessionStorage.removeItem(HOME_PROMPT_DRAFT_KEY);
+          if (sessionStorage.getItem(HOME_PROMPT_DRAFT_KEY) === message)
+            sessionStorage.removeItem(HOME_PROMPT_DRAFT_KEY);
         } catch {
           // sessionStorage not available
         }
@@ -283,18 +290,21 @@ export function HomeChatLauncher() {
             }
 
             setPendingTaskAttachments(taskId, {
+              backendId: backend.id,
+              orgId: orgId ?? null,
               content: trimmed,
               images: attachmentSnapshot.images,
               files: attachmentSnapshot.files,
               imagesMarkedUploadAsFile: [...imagesMarkedUploadAsFile],
             });
-            clearAllFiles();
+            if (ownsLaunch()) clearAllFiles();
             await enqueueHomeTaskPendingMessage({
               conversationId: targetConversationId,
               text: trimmed,
               images: attachmentSnapshot.images,
               imagesMarkedUploadAsFile,
             });
+            if (!ownsLaunch()) return;
             openAutomationSetupMode(targetConversationId);
             navigate(`/conversations/${targetConversationId}`);
             return;
@@ -308,7 +318,7 @@ export function HomeChatLauncher() {
                 imagesMarkedUploadAsFile,
                 t,
               });
-              clearAllFiles();
+              if (ownsLaunch()) clearAllFiles();
             } catch (error) {
               displayErrorToast(error instanceof Error ? error.message : null);
               return;
@@ -325,6 +335,7 @@ export function HomeChatLauncher() {
           });
         }
 
+        if (!ownsLaunch()) return;
         openAutomationSetupMode(targetConversationId);
         navigate(`/conversations/${targetConversationId}`);
       } catch (error) {
@@ -332,6 +343,7 @@ export function HomeChatLauncher() {
         // Prefer the server's own message; without one, keep the launcher's
         // existing wording (the error's message).
         const fallback = error instanceof Error ? error.message : "";
+        if (!ownsLaunch()) return;
         displayErrorToast(getApiErrorMessage(error, fallback) || null);
         // The composer cleared itself on submit; hand the prompt back so the
         // user can retry without retyping it. Only when the create itself

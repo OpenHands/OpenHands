@@ -39724,5 +39724,41 @@
     "uk": "Середовище змінилося. Поверніться до початкового середовища, щоб продовжити.",
     "ca": "L’entorn ha canviat. Torna a l’entorn original per continuar.",
     "id": "Lingkungan telah berubah. Kembali ke lingkungan semula untuk melanjutkan."
+  },
+  "CONVERSATION$OPEN_CREATED": {
+    "en": "Open conversation",
+    "ja": "会話を開く",
+    "zh-CN": "打开会话",
+    "zh-TW": "開啟對話",
+    "ko-KR": "대화 열기",
+    "no": "Åpne samtale",
+    "it": "Apri conversazione",
+    "pt": "Abrir conversa",
+    "es": "Abrir conversación",
+    "ar": "فتح المحادثة",
+    "fr": "Ouvrir la conversation",
+    "tr": "Konuşmayı aç",
+    "de": "Unterhaltung öffnen",
+    "uk": "Відкрити розмову",
+    "ca": "Obre la conversa",
+    "id": "Buka percakapan"
+  },
+  "CONVERSATION$START_UPLOAD_FAILED": {
+    "en": "Your message was not sent because a file could not be uploaded. Your draft and files are ready to retry.",
+    "ja": "ファイルをアップロードできなかったため、メッセージは送信されませんでした。下書きとファイルは再試行できます。",
+    "zh-CN": "由于文件上传失败，消息未发送。草稿和文件已保留，可重试。",
+    "zh-TW": "由於檔案上傳失敗，訊息未送出。草稿和檔案已保留，可重試。",
+    "ko-KR": "파일을 업로드할 수 없어 메시지가 전송되지 않았습니다. 초안과 파일이 보존되어 다시 시도할 수 있습니다.",
+    "no": "Meldingen ble ikke sendt fordi en fil ikke kunne lastes opp. Utkastet og filene er klare for et nytt forsøk.",
+    "it": "Il messaggio non è stato inviato perché non è stato possibile caricare un file. La bozza e i file sono pronti per un nuovo tentativo.",
+    "pt": "Sua mensagem não foi enviada porque um arquivo não pôde ser carregado. O rascunho e os arquivos estão prontos para tentar novamente.",
+    "es": "No se envió el mensaje porque no se pudo subir un archivo. El borrador y los archivos están listos para volver a intentarlo.",
+    "ar": "لم تُرسل رسالتك لتعذر رفع ملف. المسودة والملفات محفوظة وجاهزة لإعادة المحاولة.",
+    "fr": "Votre message n’a pas été envoyé car un fichier n’a pas pu être téléversé. Le brouillon et les fichiers sont prêts pour une nouvelle tentative.",
+    "tr": "Bir dosya yüklenemediği için mesajınız gönderilmedi. Taslağınız ve dosyalarınız yeniden denemeye hazır.",
+    "de": "Ihre Nachricht wurde nicht gesendet, weil eine Datei nicht hochgeladen werden konnte. Ihr Entwurf und die Dateien sind für einen erneuten Versuch bereit.",
+    "uk": "Повідомлення не надіслано, оскільки не вдалося завантажити файл. Чернетку та файли збережено для повторної спроби.",
+    "ca": "No s’ha enviat el missatge perquè no s’ha pogut pujar un fitxer. L’esborrany i els fitxers estan preparats per tornar-ho a provar.",
+    "id": "Pesan Anda tidak terkirim karena file tidak dapat diunggah. Draf dan file Anda siap untuk dicoba lagi."
   }
 }
