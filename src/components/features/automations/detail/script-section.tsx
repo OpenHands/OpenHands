@@ -5,6 +5,7 @@ import { HighlightedSourceView } from "#/components/features/files-tab/highlight
 import { useAutomationTarballFiles } from "#/hooks/query/use-automation-tarball-files";
 import type { Automation } from "#/types/automation";
 import type { TarEntry } from "#/utils/tar-unpack";
+import { getAutomationPluginSpec } from "#/utils/automation-preset-sources";
 import { SectionCard } from "./section-card";
 
 interface ScriptSectionProps {
@@ -47,6 +48,7 @@ function orderEntries(
  */
 export function ScriptSection({ automation }: ScriptSectionProps) {
   const { t } = useTranslation("openhands");
+  const pluginSpec = getAutomationPluginSpec(automation);
   const {
     data: entries,
     isPending,
@@ -59,7 +61,7 @@ export function ScriptSection({ automation }: ScriptSectionProps) {
   );
   // A bundle the service can't hand back (external URL, deleted upload) or
   // that isn't an archive gets the same answer: download it instead.
-  const unavailable = isError || entries?.length === 0;
+  const unavailable = !pluginSpec && (isError || entries?.length === 0);
 
   return (
     <SectionCard
@@ -76,13 +78,22 @@ export function ScriptSection({ automation }: ScriptSectionProps) {
           </code>
         ) : null}
 
-        {isPending ? (
+        {pluginSpec ? (
+          <p
+            data-testid="automation-script-runtime-generated"
+            className="text-sm text-muted"
+          >
+            {t(I18nKey.AUTOMATIONS$DETAIL$SCRIPT_RUNTIME_GENERATED)}
+          </p>
+        ) : null}
+
+        {!pluginSpec && isPending ? (
           <p className="text-sm italic text-muted">
             {t(I18nKey.AUTOMATIONS$DETAIL$SCRIPT_LOADING)}
           </p>
         ) : null}
 
-        {unavailable ? (
+        {!pluginSpec && unavailable ? (
           <p
             data-testid="automation-script-unavailable"
             className="text-sm text-muted"
@@ -91,7 +102,7 @@ export function ScriptSection({ automation }: ScriptSectionProps) {
           </p>
         ) : null}
 
-        {entries && entries.length > 0
+        {!pluginSpec && entries && entries.length > 0
           ? orderEntries(entries, entrypointPath).map((entry) => (
               <div
                 key={entry.path}

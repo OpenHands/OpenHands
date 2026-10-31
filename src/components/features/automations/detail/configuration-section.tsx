@@ -8,15 +8,17 @@ import CheckCircleIcon from "#/icons/check-circle.svg?react";
 import CalendarIcon from "#/icons/calendar.svg?react";
 import SparkleIcon from "#/icons/sparkle.svg?react";
 import UserIcon from "#/icons/user.svg?react";
-import { Zap } from "lucide-react";
+import { Clock, Zap } from "lucide-react";
 import BellIcon from "#/icons/bell.svg?react";
 import CodeTagIcon from "#/icons/code-tag.svg?react";
+import PuzzleIcon from "#/icons/puzzle.svg?react";
 import LinkExternalIcon from "#/icons/link-external.svg?react";
 import { formatEventOn } from "#/utils/automation-schedule";
 import { automationRepositoryLabel } from "#/utils/automation-repo-sources";
 import { SectionCard } from "./section-card";
 import { ConfigField } from "./config-field";
 import { BranchBadge } from "./branch-badge";
+import { getAutomationPluginSpec } from "#/utils/automation-preset-sources";
 
 interface ConfigurationSectionProps {
   automation: Automation;
@@ -58,12 +60,49 @@ function FilterExpression({ filter }: { filter: string }) {
   );
 }
 
+function ExpandableJsonValue({
+  value,
+  testId,
+}: {
+  value: unknown;
+  testId: string;
+}) {
+  const { t } = useTranslation("openhands");
+  const [expanded, setExpanded] = useState(false);
+  const formatted = JSON.stringify(value, null, 2) ?? String(value);
+  const isLong = formatted.length > 120;
+
+  return (
+    <div className="flex flex-col gap-1">
+      <pre
+        data-testid={testId}
+        className="max-h-60 overflow-auto whitespace-pre-wrap break-all rounded-md bg-surface-raised p-2 font-mono text-xs text-content"
+      >
+        {isLong && !expanded ? formatted.slice(0, 120) + "…" : formatted}
+      </pre>
+      {isLong && (
+        <button
+          type="button"
+          onClick={() => setExpanded(!expanded)}
+          aria-expanded={expanded}
+          className="self-start text-xs text-muted hover:text-content"
+        >
+          {expanded
+            ? t(I18nKey.SETTINGS$SKILLS_SHOW_LESS)
+            : t(I18nKey.SETTINGS$SKILLS_SHOW_MORE)}
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function ConfigurationSection({
   automation,
   runsAs,
 }: ConfigurationSectionProps) {
   const { t } = useTranslation("openhands");
   const isEvent = automation.trigger.type === "event";
+  const pluginSpec = getAutomationPluginSpec(automation);
 
   let scheduleDisplay = automation.trigger.schedule ?? "";
   if (automation.trigger.schedule_human) {
@@ -144,6 +183,39 @@ export function ConfigurationSection({
             label={t(I18nKey.AUTOMATIONS$DETAIL$EVENT_FILTER)}
           >
             <FilterExpression filter={automation.trigger.filter} />
+          </ConfigField>
+        )}
+
+        {pluginSpec && (
+          <ConfigField
+            icon={<PuzzleIcon className="size-3.5" />}
+            label={t(I18nKey.AUTOMATIONS$DETAIL$PLUGIN_SPEC)}
+          >
+            <ExpandableJsonValue
+              value={pluginSpec.plugin}
+              testId="automation-plugin-spec"
+            />
+          </ConfigField>
+        )}
+
+        {pluginSpec && Object.keys(pluginSpec.config ?? {}).length > 0 && (
+          <ConfigField
+            icon={<CodeTagIcon className="size-3.5" />}
+            label={t(I18nKey.AUTOMATIONS$DETAIL$PLUGIN_CONFIG)}
+          >
+            <ExpandableJsonValue
+              value={pluginSpec.config}
+              testId="automation-plugin-config"
+            />
+          </ConfigField>
+        )}
+
+        {automation.timeout != null && (
+          <ConfigField
+            icon={<Clock className="size-3.5" aria-hidden="true" />}
+            label={t(I18nKey.SETTINGS$MCP_TIMEOUT_LABEL)}
+          >
+            <span data-testid="automation-timeout">{automation.timeout}</span>
           </ConfigField>
         )}
 
