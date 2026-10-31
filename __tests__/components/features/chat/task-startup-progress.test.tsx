@@ -83,18 +83,28 @@ it("announces startup as busy until the task is ready", async () => {
 });
 
 it("expands observed startup steps and keeps failures actionable when collapsed", async () => {
+  client.setQueryData(["start-task", "123"], task);
   mount();
   await waitFor(() =>
     expect(client.getQueryData(["start-task", "123"])).toEqual(task),
   );
-  const toggle = screen.getByRole("button", { name: "BUTTON$EXPAND" });
+  expect(
+    screen.queryByRole("button", { name: "BUTTON$EXPAND" }),
+  ).not.toBeInTheDocument();
+  act(() => {
+    client.setQueryData(["start-task", "123"], {
+      ...task,
+      status: "WAITING_FOR_SANDBOX",
+    });
+  });
+  const toggle = await screen.findByRole("button", { name: "BUTTON$EXPAND" });
   expect(toggle).toHaveAttribute("aria-expanded", "false");
   fireEvent.click(toggle);
   expect(screen.getByRole("region")).toBeVisible();
   act(() => {
     client.setQueryData(["start-task", "123"], {
       ...task,
-      status: "WAITING_FOR_SANDBOX",
+      status: "PREPARING_REPOSITORY",
     });
   });
   await waitFor(() =>
