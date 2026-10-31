@@ -561,18 +561,26 @@ describe("AutomationsList — Edit from the row kebab", () => {
     // permissions come from) before mounting so the page sees it as the
     // active backend on first render.
     setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
+    // An admin edits a automation that runs as a service account; on a one that runs as a person only
+    // its creator can.
+    vi.mocked(AutomationService.getAutomations).mockResolvedValue({
+      automations: [{ ...automation, run_as_kind: "service" }],
+      total: 1,
+    });
     const user = userEvent.setup();
     renderList();
     await waitFor(() => {
       expect(AutomationService.getAutomations).toHaveBeenCalledTimes(1);
     });
     await screen.findByText(automation.name);
+    // Run now renders once the caller's permissions have resolved.
+    await screen.findByTestId(`automation-run-now-${automation.id}`);
 
     // Act — open the row kebab and pick Edit. The aria-label resolves to
     // the I18n key in tests because `t` is mocked to return the key itself.
     await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
     await user.click(
-      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
+      await screen.findByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
     );
 
     // Assert — cloud uses the same collapsed setup form; the permission model

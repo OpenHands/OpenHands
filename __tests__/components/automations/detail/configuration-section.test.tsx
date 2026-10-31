@@ -198,4 +198,63 @@ describe("ConfigurationSection", () => {
       screen.queryByText("AUTOMATIONS$DETAIL$RUNS_AS"),
     ).not.toBeInTheDocument();
   });
+
+  it("renders a service account under Runs As with an SA badge", () => {
+    render(
+      <ConfigurationSection
+        automation={cronAutomation}
+        runsAs="ci-bot"
+        runsAsServiceAccount
+      />,
+    );
+
+    expect(screen.getByText("AUTOMATIONS$DETAIL$RUNS_AS")).toBeInTheDocument();
+    expect(screen.getByText("ci-bot")).toBeInTheDocument();
+    expect(screen.getByTestId("service-account-badge")).toHaveAttribute(
+      "title",
+      "AUTOMATIONS$SERVICE_ACCOUNT_LABEL",
+    );
+  });
+
+  it("does not badge a person under Runs As", () => {
+    render(
+      <ConfigurationSection
+        automation={cronAutomation}
+        runsAs="jdoe@acme.com"
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("service-account-badge"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders Created By when the creator is given", () => {
+    render(
+      <ConfigurationSection
+        automation={cronAutomation}
+        runsAs="ci-bot"
+        runsAsServiceAccount
+        createdBy="jdoe@acme.com"
+      />,
+    );
+
+    expect(
+      screen.getByText("AUTOMATIONS$DETAIL$CREATED_BY"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("jdoe@acme.com")).toBeInTheDocument();
+  });
+
+  it("does not render Created By without a creator", () => {
+    render(
+      <ConfigurationSection
+        automation={cronAutomation}
+        runsAs="jdoe@acme.com"
+      />,
+    );
+
+    expect(
+      screen.queryByText("AUTOMATIONS$DETAIL$CREATED_BY"),
+    ).not.toBeInTheDocument();
+  });
 });

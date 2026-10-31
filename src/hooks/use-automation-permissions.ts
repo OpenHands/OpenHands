@@ -18,6 +18,8 @@ export interface AutomationPermissionsResult {
   canView: boolean;
   /** Full write access (update, delete, dispatch, git-sync config). */
   canManage: boolean;
+  /** The caller's user id in the active org; `null` on local or until `/me` resolves. */
+  userId: string | null;
   /**
    * `true` when permissions are still being resolved on cloud. Local always
    * resolves synchronously. Mutating controls should stay hidden while this is
@@ -57,17 +59,22 @@ export function useAutomationPermissions(): AutomationPermissionsResult {
   });
 
   if (!isCloud) {
-    return { canView: true, canManage: true, isLoading: false };
+    return { canView: true, canManage: true, userId: null, isLoading: false };
   }
 
   if (isLoading || !data) {
-    return { canView: false, canManage: false, isLoading };
+    return { canView: false, canManage: false, userId: null, isLoading };
   }
 
   if (data.permissions) {
     const canView = data.permissions.includes(VIEW_AUTOMATIONS);
     const canManage = data.permissions.includes(MANAGE_AUTOMATIONS);
-    return { canView, canManage, isLoading: false };
+    return {
+      canView,
+      canManage,
+      userId: data.userId || null,
+      isLoading: false,
+    };
   }
 
   // Fall back to role check for older app-servers without `permissions`.
@@ -75,6 +82,7 @@ export function useAutomationPermissions(): AutomationPermissionsResult {
   return {
     canView: isOwnerOrAdmin || data.role === "member",
     canManage: isOwnerOrAdmin,
+    userId: data.userId || null,
     isLoading: false,
   };
 }

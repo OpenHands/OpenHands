@@ -569,7 +569,6 @@ describe("AutomationService", () => {
       expect(result.repositories).toEqual([{ url: "acme/repo", ref: "main" }]);
     });
 
-
     it("checkHealth calls the cloud host with a fail-fast timeout and returns the upstream status", async () => {
       mockCallCloudProxy.mockResolvedValue({ status: "ok" });
 
