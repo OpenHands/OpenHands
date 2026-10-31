@@ -38,7 +38,7 @@ export function SecretsSettingsScreen() {
     onLoadMore,
   } = useSearchSecrets();
 
-  const { mutate: deleteSecret } = useDeleteSecret();
+  const { mutate: deleteSecret, isPending: isDeleting } = useDeleteSecret();
 
   const [view, setView] = React.useState<
     "list" | "add-secret-form" | "edit-secret-form"
@@ -220,9 +220,12 @@ export function SecretsSettingsScreen() {
 
       {confirmationModalIsVisible && (
         <ConfirmationModal
-          text={t(I18nKey.SECRETS$CONFIRM_DELETE_KEY)}
+          text={`${t(I18nKey.SECRETS$CONFIRM_DELETE_KEY)} ${t(I18nKey.SETTINGS$SHARED_RESOURCE_DELETE_WARNING)}`}
           onConfirm={onConfirmDeleteSecret}
           onCancel={onCancelDeleteSecret}
+          confirmText={t(I18nKey.BUTTON$DELETE)}
+          isDestructive
+          isConfirming={isDeleting}
         />
       )}
     </div>

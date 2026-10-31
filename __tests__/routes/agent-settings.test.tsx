@@ -177,6 +177,102 @@ describe("AgentSettingsScreen", () => {
     });
   });
 
+  it("confirms shared secret deletion, keeps it on cancel, and clears this agent's custom selection on confirm", async () => {
+    const user = userEvent.setup();
+    const deleteSecret = vi
+      .spyOn(SecretsService, "deleteSecret")
+      .mockResolvedValue();
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: {
+        agent_kind: "openhands",
+        secret_refs: ["GITHUB_TOKEN"],
+      },
+    });
+    await screen.findByTestId("agent-settings-screen");
+    await user.click(
+      screen.getByTestId("agent-secrets-section").querySelector("summary")!,
+    );
+    await user.click(
+      screen.getByTestId("agent-settings-secret-delete-GITHUB_TOKEN"),
+    );
+    expect(screen.getByTestId("confirmation-modal")).toHaveTextContent(
+      "SETTINGS$SHARED_RESOURCE_DELETE_WARNING",
+    );
+    await user.click(screen.getByTestId("cancel-button"));
+    expect(deleteSecret).not.toHaveBeenCalled();
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      secret_refs: ["GITHUB_TOKEN"],
+    });
+
+    await user.click(
+      screen.getByTestId("agent-settings-secret-delete-GITHUB_TOKEN"),
+    );
+    await user.click(screen.getByTestId("confirm-button"));
+    await waitFor(() =>
+      expect(deleteSecret).toHaveBeenCalledWith("GITHUB_TOKEN"),
+    );
+    await waitFor(() =>
+      expect(control().buildAgentProfileFields()).toMatchObject({
+        secret_refs: [],
+      }),
+    );
+    expect(
+      screen.queryByTestId("agent-settings-secret-GITHUB_TOKEN"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps the secret and current agent selection when global deletion fails", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(SecretsService, "deleteSecret").mockRejectedValue(
+      new Error("Cannot delete secret"),
+    );
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: {
+        agent_kind: "openhands",
+        secret_refs: ["GITHUB_TOKEN"],
+      },
+    });
+    await screen.findByTestId("agent-settings-screen");
+    await user.click(
+      screen.getByTestId("agent-secrets-section").querySelector("summary")!,
+    );
+    await user.click(
+      screen.getByTestId("agent-settings-secret-delete-GITHUB_TOKEN"),
+    );
+    await user.click(screen.getByTestId("confirm-button"));
+
+    await waitFor(() => expect(toastMocks.error).toHaveBeenCalled());
+    expect(screen.getByTestId("confirmation-modal")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("agent-settings-secret-GITHUB_TOKEN"),
+    ).toBeChecked();
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      secret_refs: ["GITHUB_TOKEN"],
+    });
+  });
+
+  it("offers global secret deletion even on the default agent without letting its shared scope be toggled", async () => {
+    const user = userEvent.setup();
+    renderAgentSettingsScreen({
+      isDefaultProfile: true,
+      agentSettingsOverride: { agent_kind: "openhands", secret_refs: null },
+    });
+    await screen.findByTestId("agent-settings-screen");
+    await user.click(
+      screen.getByTestId("agent-secrets-section").querySelector("summary")!,
+    );
+
+    expect(
+      screen.getByTestId("agent-settings-secret-GITHUB_TOKEN"),
+    ).toBeDisabled();
+    await user.click(
+      screen.getByTestId("agent-settings-secret-delete-GITHUB_TOKEN"),
+    );
+    expect(screen.getByTestId("confirmation-modal")).toHaveTextContent(
+      "SETTINGS$SHARED_RESOURCE_DELETE_WARNING",
+    );
+  });
+
   it("opens MCP server setup inside the agent form", async () => {
     const user = userEvent.setup();
     renderAgentSettingsScreen({
@@ -971,6 +1067,41 @@ describe("AgentSettingsScreen — MCP server scope", () => {
     expect(control!.buildAgentProfileFields()).toMatchObject({
       mcp_server_refs: ["github"],
     });
+  });
+
+  it("does not restore a globally deleted MCP server when saving an open agent form", async () => {
+    seedWithMcp(TWO_SERVERS);
+    const deleteServer = vi
+      .spyOn(SettingsService, "deleteMcpServer")
+      .mockResolvedValue(true);
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: {
+        agent_kind: "openhands",
+        mcp_server_refs: ["github", "postgres"],
+      },
+    });
+    await screen.findByTestId("agent-settings-screen");
+    const user = userEvent.setup();
+    await user.click(
+      screen.getByTestId("agent-mcp-section").querySelector("summary")!,
+    );
+    await user.click(
+      screen
+        .getByTestId("agent-mcp-setup")
+        .querySelector('[data-server-id="github"]')!,
+    );
+    await user.click(await screen.findByTestId("mcp-custom-editor-delete"));
+    expect(screen.getByTestId("confirmation-modal")).toHaveTextContent(
+      "SETTINGS$SHARED_RESOURCE_DELETE_WARNING",
+    );
+    await user.click(screen.getByTestId("confirm-button"));
+
+    await waitFor(() => expect(deleteServer).toHaveBeenCalledWith("github"));
+    await waitFor(() =>
+      expect(control().buildAgentProfileFields()).toMatchObject({
+        mcp_server_refs: ["postgres"],
+      }),
+    );
   });
 
   it("seeds a switch to custom with every configured server", async () => {

@@ -90,6 +90,9 @@ export function DeleteProfileModal({
           name: profile.name,
         })}
       </p>
+      <p className="text-sm break-words">
+        {t(I18nKey.SETTINGS$LLM_PROFILE_DELETE_WARNING)}
+      </p>
     </ApiKeyModalBase>
   );
 }

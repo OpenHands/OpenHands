@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { readFileSync } from "node:fs";
 import { resolve as resolvePath } from "node:path";
@@ -14,10 +14,10 @@ import AutomationService from "#/api/automation-service/automation-service.api";
 import WorkspacesService from "#/api/workspaces-service/workspaces-service.api";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
-import ProfilesService from "#/api/profiles-service/profiles-service.api";
 import GitService from "#/api/git-service/git-service.api";
 import { useHomeStore } from "#/stores/home-store";
 import { useModelStore } from "#/stores/model-store";
+import { LLM_PROFILES_QUERY_KEYS } from "#/hooks/query/query-keys";
 import { AGENT_SERVER_UI_DEFAULT_CSS_VARIABLES } from "#/styles/agent-server-ui-style-scope";
 import { COLOR_THEMES } from "#/themes/color-themes";
 import {
@@ -318,21 +318,17 @@ vi.mock("#/components/features/plugins/plugin-picker-modal", () => ({
   ),
 }));
 
-const renderLauncher = () =>
+const renderLauncher = (
+  queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  }),
+) =>
   render(<HomeChatLauncher />, {
     wrapper: ({ children }) => (
-      <QueryClientProvider
-        client={
-          new QueryClient({
-            defaultOptions: {
-              queries: { retry: false },
-              mutations: { retry: false },
-            },
-          })
-        }
-      >
-        {children}
-      </QueryClientProvider>
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     ),
   });
 
@@ -1092,46 +1088,29 @@ describe("HomeChatLauncher", () => {
     expect(screen.getByTestId("open-repository-button")).toBeInTheDocument();
   });
 
-  it.each([
-    {
-      description: "forwards a member's home LLM pick",
-      pick: "ops55",
-      expected: "ops55",
-    },
-    {
-      description: "drops a home LLM pick whose profile is gone",
-      pick: "Deleted",
-      expected: undefined,
-    },
-  ])("$description on a cloud launch", async ({ pick, expected }) => {
-    mockUseActiveBackend.mockReturnValue(cloudBackend);
-    const listProfilesSpy = vi
-      .spyOn(ProfilesService, "listProfiles")
-      .mockResolvedValue({
-        profiles: [
-          {
-            name: "ops55",
-            model: "anthropic/claude-opus-5-5",
-            base_url: null,
-            api_key_set: true,
-          },
-        ],
-        active_profile: null,
-      });
-    useModelStore.setState({ homeLlmProfile: pick });
-    const createSpy = vi
-      .spyOn(AgentServerConversationService, "createConversation")
-      .mockResolvedValue(makeConversationResponse());
-    renderLauncher();
-    await waitFor(() => expect(listProfilesSpy).toHaveBeenCalled());
-    // Let the resolved profile list reach the launcher before submitting.
-    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+  it.each(["ops55", "Deleted"])(
+    "ignores a stored home LLM override (%s) when launching the selected agent",
+    async (pick) => {
+      mockUseActiveBackend.mockReturnValue(cloudBackend);
+      useModelStore.setState({ homeLlmProfile: pick });
+      const queryClient = new QueryClient();
+      queryClient.setQueryData(
+        [...LLM_PROFILES_QUERY_KEYS.all, cloudBackend.backend.id, null],
+        {
+          profiles: [{ name: "ops55", model: "anthropic/claude-opus-5-5" }],
+          active_profile: null,
+        },
+      );
+      const createSpy = vi
+        .spyOn(AgentServerConversationService, "createConversation")
+        .mockResolvedValue(makeConversationResponse());
+      renderLauncher(queryClient);
+      await userEvent.click(screen.getByTestId("stub-chat-submit"));
 
-    await userEvent.click(screen.getByTestId("stub-chat-submit"));
-
-    await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
-    expect(createSpy.mock.lastCall?.[0]?.llmProfile).toBe(expected);
-  });
+      await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
+      expect(createSpy.mock.lastCall?.[0]?.llmProfile).toBeUndefined();
+    },
+  );
 
   it("does not pass query to createConversation when attachments are present", async () => {
     mockImages = [new File(["x"], "shot.png", { type: "image/png" })];

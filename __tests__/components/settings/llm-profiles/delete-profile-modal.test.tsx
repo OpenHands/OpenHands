@@ -12,16 +12,16 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, params?: Record<string, string>) => {
       const translations: Record<string, string> = {
-        "SETTINGS$PROFILE_DELETE_TITLE": "Delete Profile",
-        "SETTINGS$PROFILE_DELETE_CONFIRMATION": params?.name
+        SETTINGS$PROFILE_DELETE_TITLE: "Delete Profile",
+        SETTINGS$PROFILE_DELETE_CONFIRMATION: params?.name
           ? `Are you sure you want to delete "${params.name}"?`
           : "Are you sure you want to delete this profile?",
-        "SETTINGS$PROFILE_DELETED": params?.name
+        SETTINGS$PROFILE_DELETED: params?.name
           ? `Profile "${params.name}" deleted`
           : "Profile deleted",
-        "BUTTON$DELETE": "Delete",
-        "BUTTON$CANCEL": "Cancel",
-        "ERROR$GENERIC": "An error occurred",
+        BUTTON$DELETE: "Delete",
+        BUTTON$CANCEL: "Cancel",
+        ERROR$GENERIC: "An error occurred",
       };
       return translations[key] || key;
     },
@@ -41,10 +41,7 @@ const mockProfile: ProfileInfo = {
 describe("DeleteProfileModal", () => {
   let queryClient: QueryClient;
 
-  const renderModal = (
-    profile: ProfileInfo | null,
-    onClose = vi.fn(),
-  ) => {
+  const renderModal = (profile: ProfileInfo | null, onClose = vi.fn()) => {
     return render(
       <QueryClientProvider client={queryClient}>
         <DeleteProfileModal profile={profile} onClose={onClose} />
@@ -76,6 +73,9 @@ describe("DeleteProfileModal", () => {
     expect(
       screen.getByText('Are you sure you want to delete "profile-to-delete"?'),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText("SETTINGS$LLM_PROFILE_DELETE_WARNING"),
+    ).toBeInTheDocument();
   });
 
   it("shows Delete and Cancel buttons", () => {
@@ -97,8 +97,7 @@ describe("DeleteProfileModal", () => {
     // Assert: Cancel precedes the dominant Delete action in DOM order.
     // eslint-disable-next-line no-bitwise
     expect(
-      cancel.compareDocumentPosition(danger) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
+      cancel.compareDocumentPosition(danger) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });
 

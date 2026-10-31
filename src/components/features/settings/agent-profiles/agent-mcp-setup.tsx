@@ -12,7 +12,13 @@ import { useUpdateMcpServer } from "#/hooks/mutation/use-update-mcp-server";
 import type { MCPServerConfig } from "#/types/mcp-server";
 import { I18nKey } from "#/i18n/declaration";
 
-export function AgentMcpSetup({ servers }: { servers: MCPServerConfig[] }) {
+export function AgentMcpSetup({
+  servers,
+  onServerDeleted,
+}: {
+  servers: MCPServerConfig[];
+  onServerDeleted?: (serverId: string) => void;
+}) {
   const { t } = useTranslation("openhands");
   const { mutate: updateServer } = useUpdateMcpServer();
   const [installEntry, setInstallEntry] =
@@ -63,6 +69,7 @@ export function AgentMcpSetup({ servers }: { servers: MCPServerConfig[] }) {
           server={editingServer}
           existingServers={servers}
           onClose={() => setEditingServer(null)}
+          onDeleted={onServerDeleted}
         />
       )}
     </div>

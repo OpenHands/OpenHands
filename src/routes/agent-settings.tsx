@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Navigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { useSettings } from "#/hooks/query/use-settings";
@@ -28,6 +29,10 @@ import { ProfileScopeList } from "#/components/features/settings/agent-profiles/
 import { AgentMcpSetup } from "#/components/features/settings/agent-profiles/agent-mcp-setup";
 import { AgentFormSection } from "#/components/features/settings/agent-profiles/agent-form-section";
 import { SecretForm } from "#/components/features/settings/secrets-settings/secret-form";
+import { ConfirmationModal } from "#/components/shared/modals/confirmation-modal";
+import { useDeleteSecret } from "#/hooks/mutation/use-delete-secret";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import { getApiErrorMessage } from "#/utils/api-error-message";
 import { AddSkillModal } from "#/components/features/skills/add-skill-modal";
 import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
@@ -393,6 +398,8 @@ export function AgentSettingsScreen({
   llmPicker = null,
 }: AgentSettingsScreenProps) {
   const { t } = useTranslation("openhands");
+  const queryClient = useQueryClient();
+  const deleteSecret = useDeleteSecret();
   const { data: settings, isLoading } = useSettings();
   const { data: schema } = useAgentSettingsSchema(
     settings?.agent_settings_schema,
@@ -624,6 +631,8 @@ export function AgentSettingsScreen({
   const [selectedSecrets, setSelectedSecrets] = useState<string[]>(
     initialSecretRefs.selected,
   );
+  const [secretToDelete, setSecretToDelete] = useState<string | null>(null);
+  const [deletedSecrets, setDeletedSecrets] = useState<string[]>([]);
   // Scoping is strict server-side — nothing is added back — so an ACP profile
   // that omits its provider credential simply fails to authenticate. Keep the
   // names selected by default rather than re-adding them behind the user's
@@ -675,10 +684,12 @@ export function AgentSettingsScreen({
   // Available provider credentials must remain visible when deselected, even
   // before their values are saved. Stored references also survive deletion.
   const secretCatalog = React.useMemo(() => {
-    const saved = (savedSecrets ?? []).map((secret) => ({
-      name: secret.name,
-      description: secret.description ?? null,
-    }));
+    const saved = (savedSecrets ?? [])
+      .filter((secret) => !deletedSecrets.includes(secret.name))
+      .map((secret) => ({
+        name: secret.name,
+        description: secret.description ?? null,
+      }));
     const known = new Set(saved.map((secret) => secret.name));
     return [
       ...saved,
@@ -689,13 +700,14 @@ export function AgentSettingsScreen({
           ...acpCredentialForm.fields.map(({ name }) => name),
         ]),
       ]
-        .filter((name) => !known.has(name))
+        .filter((name) => !known.has(name) && !deletedSecrets.includes(name))
         .map((name) => ({ name, description: null as string | null })),
     ];
   }, [
     savedSecrets,
     initialSecretRefs,
     selectedSecrets,
+    deletedSecrets,
     acpCredentialForm.fields,
   ]);
   const orderedSelectedSecrets = React.useMemo(
@@ -705,6 +717,21 @@ export function AgentSettingsScreen({
         .filter((name) => selectedSecrets.includes(name)),
     [secretCatalog, selectedSecrets],
   );
+
+  const handleConfirmDeleteSecret = async () => {
+    if (!secretToDelete) return;
+    try {
+      await deleteSecret.mutateAsync(secretToDelete);
+      setSelectedSecrets((current) =>
+        current.filter((name) => name !== secretToDelete),
+      );
+      setDeletedSecrets((current) => [...current, secretToDelete]);
+      void queryClient.invalidateQueries({ queryKey: ["secrets"] });
+      setSecretToDelete(null);
+    } catch (error) {
+      displayErrorToast(getApiErrorMessage(error, t(I18nKey.ERROR$GENERIC)));
+    }
+  };
 
   const [loadedSnapshot, setLoadedSnapshot] = useState<AgentSettingsSnapshot>(
     EMPTY_AGENT_SETTINGS_SNAPSHOT,
@@ -1378,6 +1405,16 @@ export function AgentSettingsScreen({
               >
                 {t(I18nKey.SETTINGS$AGENT_PROFILE_DEFAULT_SECRETS_NOTE)}
               </Typography.Text>
+              {secretCatalog.length > 0 && (
+                <ProfileScopeList
+                  testId="agent-settings-secret"
+                  items={secretCatalog}
+                  selected={secretCatalog.map(({ name }) => name)}
+                  onDelete={setSecretToDelete}
+                  deletableNames={savedSecrets?.map(({ name }) => name)}
+                  isDeleteDisabled={isSaving || deleteSecret.isPending}
+                />
+              )}
             </div>
           ) : (
             <div className="flex flex-col gap-2.5 pt-4">
@@ -1425,6 +1462,9 @@ export function AgentSettingsScreen({
                         : prev.filter((entry) => entry !== name),
                     )
                   }
+                  onDelete={setSecretToDelete}
+                  deletableNames={savedSecrets?.map(({ name }) => name)}
+                  isDeleteDisabled={isSaving || deleteSecret.isPending}
                 />
               ) : (
                 <Typography.Text className="text-xs text-tertiary-alt">
@@ -1447,6 +1487,9 @@ export function AgentSettingsScreen({
               keepOpenOnError
               onCancel={() => setAddingSecret(false)}
               onSaved={({ name }) => {
+                setDeletedSecrets((deleted) =>
+                  deleted.filter((entry) => entry !== name),
+                );
                 if (secretsMode === "custom") {
                   setSelectedSecrets((selected) => [
                     ...new Set([...selected, name]),
@@ -1465,6 +1508,16 @@ export function AgentSettingsScreen({
             </BrandButton>
           )}
         </AgentFormSection>
+      )}
+      {secretToDelete && (
+        <ConfirmationModal
+          text={`${t(I18nKey.SECRETS$CONFIRM_DELETE_KEY)} ${t(I18nKey.SETTINGS$SHARED_RESOURCE_DELETE_WARNING)}`}
+          onCancel={() => setSecretToDelete(null)}
+          onConfirm={() => void handleConfirmDeleteSecret()}
+          confirmText={t(I18nKey.BUTTON$DELETE)}
+          isDestructive
+          isConfirming={deleteSecret.isPending}
+        />
       )}
 
       <AgentFormSection
@@ -1557,6 +1610,11 @@ export function AgentSettingsScreen({
               settings?.mcp_config ??
                 parseMcpConfig(settings?.agent_settings?.mcp_config),
             )}
+            onServerDeleted={(serverId) =>
+              setSelectedMcpServers((selected) =>
+                selected.filter((name) => name !== serverId),
+              )
+            }
           />
         </div>
       </AgentFormSection>
