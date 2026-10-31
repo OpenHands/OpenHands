@@ -51,6 +51,27 @@ describe("GitSyncOverviewSection", () => {
     );
   });
 
+  it.each([
+    [
+      "git@ssh.dev.azure.com:v3/qa-org/Web%20Apps/qa-azure-repo",
+      "https://dev.azure.com/qa-org/Web%20Apps/_git/qa-azure-repo",
+    ],
+    [
+      "ssh://git@ssh.dev.azure.com/v3/qa-org/Web%20Apps/qa-azure-repo",
+      "https://dev.azure.com/qa-org/Web%20Apps/_git/qa-azure-repo",
+    ],
+    [
+      "https://dev.azure.com/qa-org/Web%20Apps/_git/qa-azure-repo",
+      "https://dev.azure.com/qa-org/Web%20Apps/_git/qa-azure-repo",
+    ],
+  ])("links an Azure DevOps remote %s with _git", (repoUrl, expectedHref) => {
+    renderWith(repoUrl);
+
+    const link = screen.getByTestId("git-sync-repo-link");
+    expect(link).toHaveAttribute("href", expectedHref);
+    expect(link).toHaveTextContent(repoUrl);
+  });
+
   it("keeps a self-hosted forge's port and forge-specific path", () => {
     renderWith("https://git.example.com:8443/org/team/_git/repo.git");
 
