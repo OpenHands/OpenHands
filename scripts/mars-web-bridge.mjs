@@ -33,7 +33,9 @@
  * already sends the agent-server), and a request that presents it gets an
  * `HttpOnly; SameSite=Strict; Path=/mars` cookie back, which the browser then
  * attaches on its own to the proxied REST calls and to the WebSocket upgrade
- * — the one request a browser cannot put a header on. The key is
+ * — the one request a browser cannot put a header on. An agent's SDK client
+ * sends neither on the upgrade; it sends the key as its first message, which
+ * the proxy checks before it dials the session. The key is
  * `MARS_WEB_KEY`, else the server's `--session-api-key`; with neither, the
  * bridge mounts only on a loopback bind (dev), where a `Host` check keeps a
  * DNS-rebound page from reaching it (cookies are host-scoped, so with a key in
@@ -52,6 +54,8 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { homedir } from "node:os";
 import path from "node:path";
+
+import WebSocket, { WebSocketServer } from "ws";
 
 import { DEFAULT_BIND_HOST, isLoopbackBind } from "./bind-host.mjs";
 import { readRequestBody } from "./http-body.mjs";
@@ -75,6 +79,35 @@ const JSON_REWRITE_LIMIT_BYTES = 8 * 1024 * 1024;
 const AUTH_HEADER = "x-session-api-key";
 /** Issued to a request that presented the key; carries auth to WebSocket upgrades. */
 const AUTH_COOKIE = "mars_web_auth";
+/**
+ * An upgrade with neither key nor cookie (an agent's SDK client) may send the
+ * key as its first message, `{"type":"auth","session_api_key":…}`, the way
+ * the Agent Server itself takes it. Nothing reaches the session before that.
+ */
+const FIRST_MESSAGE_AUTH_TIMEOUT_MS = 10_000;
+/**
+ * Anyone who can reach the server can open such a socket before the key is
+ * checked, so bound what one may send until it logs in (the login frame, and
+ * anything a client sends right behind it in the same burst) and how many
+ * may wait to log in at once.
+ */
+export const FIRST_MESSAGE_AUTH_MAX_BYTES = 64 * 1024;
+export const FIRST_MESSAGE_AUTH_MAX_PENDING = 32;
+/**
+ * Unsent bytes a slow reader may leave before the relay pauses its sender;
+ * the sender resumes once that falls to a quarter.
+ */
+const RELAY_HIGH_WATER_BYTES = 1024 * 1024;
+/** What the Agent Server closes a socket with when its key is wrong. */
+const CLOSE_AUTH_FAILED = 4001;
+const CLOSE_UNREACHABLE = 1011;
+/** Close codes a peer may not send itself; relayed as their nearest cousin. */
+const RESERVED_CLOSE_CODES = new Map([
+  [1005, 1000],
+  [1006, CLOSE_UNREACHABLE],
+  [1015, CLOSE_UNREACHABLE],
+]);
+
 /** Domain separator for the cookie value derived from the session key. */
 const AUTH_COOKIE_CONTEXT = "mars-web-cookie/v1";
 /** Under the Canvas state directory: credential descriptions and secrets file. */
@@ -230,6 +263,61 @@ function safeEqual(a, b) {
   return x.length === y.length && timingSafeEqual(x, y);
 }
 
+/** Whether a socket's first message is the Agent Server login with the key. */
+function isAuthFrame(text, key) {
+  let message;
+  try {
+    message = JSON.parse(text);
+  } catch {
+    return false;
+  }
+  return (
+    message?.type === "auth" &&
+    typeof message.session_api_key === "string" &&
+    safeEqual(message.session_api_key, key)
+  );
+}
+
+/** Whether a request brought the key header or a bridge cookie, right or not. */
+function presentsCredentials(req) {
+  return (
+    req.headers[AUTH_HEADER] !== undefined ||
+    readCookie(req, AUTH_COOKIE) !== null
+  );
+}
+
+/**
+ * Forward `from`'s frames to `to`. Frames that arrive while `to` is still
+ * connecting wait in order, and `from` is paused while `to` has more than
+ * RELAY_HIGH_WATER_BYTES unsent, so a slow reader cannot make this process
+ * buffer without bound.
+ */
+function relayFrames(from, to) {
+  const early = [];
+  const forward = (data, isBinary) => {
+    to.send(data, { binary: isBinary }, () => {
+      if (from.isPaused && to.bufferedAmount < RELAY_HIGH_WATER_BYTES / 4) {
+        from.resume();
+      }
+    });
+    if (to.bufferedAmount > RELAY_HIGH_WATER_BYTES) from.pause();
+  };
+  from.on("message", (data, isBinary) => {
+    if (to.readyState === WebSocket.CONNECTING) {
+      early.push([data, isBinary]);
+      from.pause();
+    } else if (to.readyState === WebSocket.OPEN) {
+      forward(data, isBinary);
+    }
+  });
+  to.once("open", () => {
+    for (const [data, isBinary] of early.splice(0)) forward(data, isBinary);
+    if (from.isPaused && to.bufferedAmount < RELAY_HIGH_WATER_BYTES) {
+      from.resume();
+    }
+  });
+}
+
 function readCookie(req, name) {
   const header = req.headers.cookie;
   if (!header) return null;
@@ -376,6 +464,9 @@ class BadSessionPath extends Error {}
 
 function parseSessionPath(url) {
   if (!url.startsWith(SESSIONS_PREFIX)) return null;
+  // Browsers never send a fragment, and the relay's own client refuses to
+  // dial one, so it is a 400 here rather than an error later.
+  if (url.includes("#")) throw new BadSessionPath("fragment in session path");
   const rest = url.slice(SESSIONS_PREFIX.length);
   const slash = rest.indexOf("/");
   const queryStart = rest.search(/[?#]/);
@@ -407,6 +498,7 @@ function toUpstreamRequest(req, path) {
  * @param {string} [options.host] The server's bind host; loopback gets the Host check
  * @param {string | null} [options.key] Session key every request must present; null = open (loopback dev only — see mountMarsWebBridge)
  * @param {string | null} [options.stateDir] Canvas state directory; null keeps credentials in memory
+ * @param {number} [options.authTimeoutMs] How long a socket may take to send the key
  * @param {(message: string, error?: unknown) => void} [options.log]
  */
 export function createMarsWebBridge({
@@ -415,6 +507,7 @@ export function createMarsWebBridge({
   host = DEFAULT_BIND_HOST,
   key = null,
   stateDir = null,
+  authTimeoutMs = FIRST_MESSAGE_AUTH_TIMEOUT_MS,
   log = (message, error) => console.warn(`[mars-web] ${message}`, error ?? ""),
 } = {}) {
   const dir = stateDir ? path.join(stateDir, STATE_SUBDIR) : null;
@@ -593,6 +686,103 @@ export function createMarsWebBridge({
     });
   }
 
+  /** Accepts upgrades that log in by their first message. */
+  const firstMessageAuth = new WebSocketServer({ noServer: true });
+  /** Sockets taken but not yet logged in. */
+  let pendingLogins = 0;
+
+  /**
+   * Take the upgrade, wait for the key as the first message, and only then
+   * dial the session and relay both ways. The login frame stays here: the
+   * guest agent-server takes no key.
+   */
+  function acceptFirstMessageAuth(req, socket, head, session) {
+    if (pendingLogins >= FIRST_MESSAGE_AUTH_MAX_PENDING) {
+      socket.end("HTTP/1.1 503 Service Unavailable\r\n\r\n");
+      return;
+    }
+    pendingLogins += 1;
+    // ws buffers a whole frame before handing it over, so the bytes are
+    // counted off the raw socket rather than left to its payload limit.
+    let received = head.length;
+    const countBytes = (chunk) => {
+      received += chunk.length;
+      if (received > FIRST_MESSAGE_AUTH_MAX_BYTES) socket.destroy();
+    };
+    let waiting = true;
+    const loggedInOrGone = () => {
+      if (!waiting) return;
+      waiting = false;
+      pendingLogins -= 1;
+      socket.off("data", countBytes);
+    };
+    socket.on("data", countBytes);
+    socket.once("close", loggedInOrGone);
+    track(socket);
+    firstMessageAuth.handleUpgrade(req, socket, head, (client) => {
+      client.on("error", () => {});
+      const timer = setTimeout(
+        () => client.close(CLOSE_AUTH_FAILED, "Authentication failed"),
+        authTimeoutMs,
+      );
+      client.once("message", (data, isBinary) => {
+        clearTimeout(timer);
+        // A key that arrives after the window closed is too late. A refused
+        // socket keeps its place and byte limit until it is gone: the peer
+        // may take its time answering the close.
+        if (client.readyState !== WebSocket.OPEN) return;
+        if (isBinary || !isAuthFrame(data.toString("utf8"), key)) {
+          client.close(CLOSE_AUTH_FAILED, "Authentication failed");
+          return;
+        }
+        loggedInOrGone();
+        relayWebSocket(client, session);
+      });
+      client.once("close", () => clearTimeout(timer));
+    });
+  }
+
+  function relayWebSocket(client, { sessionId, path }) {
+    const target = upstreamFor(sessionId);
+    if (!target) {
+      // Fixed text: a close reason over 123 bytes makes ws throw, and a long
+      // session id in the path would otherwise take the whole server down.
+      client.close(CLOSE_UNREACHABLE, "session is not connected");
+      return;
+    }
+    let upstream;
+    try {
+      // The guest's pings are passed to the agent and its pongs back, so a
+      // dead agent connection is noticed instead of answered for here.
+      upstream = new WebSocket(`${target.replace(/^http/, "ws")}${path}`, {
+        autoPong: false,
+      });
+    } catch {
+      // ws refuses some URLs synchronously; that must not escape the handler.
+      client.close(CLOSE_UNREACHABLE, "session is not reachable");
+      return;
+    }
+    track(upstream);
+    upstream.on("error", () => {});
+    relayFrames(client, upstream);
+    relayFrames(upstream, client);
+    upstream.on("ping", (data) => {
+      if (client.readyState === WebSocket.OPEN) client.ping(data);
+    });
+    client.on("pong", (data) => {
+      if (upstream.readyState === WebSocket.OPEN) upstream.pong(data);
+    });
+    upstream.on("close", (code, reason) => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.close(RESERVED_CLOSE_CODES.get(code) ?? code, reason);
+      }
+    });
+    client.on("close", () => {
+      if (upstream.readyState === WebSocket.CONNECTING) upstream.terminate();
+      else upstream.close();
+    });
+  }
+
   function proxyWebSocket(req, socket, head, { sessionId, path }) {
     const target = upstreamFor(sessionId);
     if (!target) {
@@ -662,10 +852,7 @@ export function createMarsWebBridge({
         socket.end("HTTP/1.1 403 Forbidden\r\n\r\n");
         return true;
       }
-      if (authorize(req) === "deny") {
-        socket.end("HTTP/1.1 401 Unauthorized\r\n\r\n");
-        return true;
-      }
+      const allowed = authorize(req) !== "deny";
       let session;
       try {
         session = parseSessionPath(url);
@@ -675,15 +862,30 @@ export function createMarsWebBridge({
         return true;
       }
       if (!session) {
-        socket.end("HTTP/1.1 404 Not Found\r\n\r\n");
+        socket.end(
+          allowed
+            ? "HTTP/1.1 404 Not Found\r\n\r\n"
+            : "HTTP/1.1 401 Unauthorized\r\n\r\n",
+        );
         return true;
       }
-      proxyWebSocket(req, socket, head, session);
+      if (allowed) {
+        proxyWebSocket(req, socket, head, session);
+      } else if (presentsCredentials(req)) {
+        // A wrong key or a stale cookie (the key was rotated) is refused at
+        // once, as before; only a bare upgrade may log in by first message.
+        socket.end("HTTP/1.1 401 Unauthorized\r\n\r\n");
+      } else {
+        acceptFirstMessageAuth(req, socket, head, session);
+      }
       return true;
     },
 
     async dispose() {
-      for (const socket of sockets) socket.destroy();
+      for (const socket of sockets) {
+        if (socket instanceof WebSocket) socket.terminate();
+        else socket.destroy();
+      }
       sockets.clear();
       await bridge.dispose();
     },

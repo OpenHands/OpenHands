@@ -7,8 +7,8 @@ import {
   getMarsConnectionHost,
   openMarsTunnel,
   waitForMarsAgentServer,
+  type MarsTunnelStatus,
 } from "#/api/mars/mars-tunnel-backend";
-import { prepareMarsSandbox } from "#/api/mars/mars-sandbox-setup";
 import { resetBackendHealth } from "#/api/backend-registry/health-store";
 import { useActiveBackendContext } from "#/contexts/active-backend-context";
 import {
@@ -39,7 +39,7 @@ export interface AttachMarsSessionResult {
 async function openHealthyConnection(
   sessionId: string,
   localPort?: number,
-): Promise<string> {
+): Promise<{ host: string; sandbox: MarsTunnelStatus["sandbox"] }> {
   const connection = await openMarsTunnel({ sessionId, localPort });
   const host = getMarsConnectionHost(connection);
   if (connection.status === "error" || host === undefined) {
@@ -47,7 +47,7 @@ async function openHealthyConnection(
       connection.error ?? `Failed to connect to session ${sessionId}`,
     );
   }
-  return host;
+  return { host, sandbox: connection.sandbox };
 }
 
 /**
@@ -71,10 +71,17 @@ async function connectAndWait(
     closeOnFailure?: boolean;
   } = {},
 ): Promise<string> {
-  const host = await openHealthyConnection(sessionId, localPort);
+  const { host, sandbox } = await openHealthyConnection(sessionId, localPort);
   onTunnelReady?.();
   try {
-    await waitForMarsAgentServer(host, { sessionId });
+    // The bridge has already waited out an agent-server it reports
+    // unreachable; one probe says why instead of waiting all over again.
+    await waitForMarsAgentServer(
+      host,
+      sandbox === "unreachable"
+        ? { sessionId, budgetMs: 0, portClosedGraceMs: 0 }
+        : { sessionId },
+    );
   } catch (error) {
     if (closeOnFailure) {
       await getMarsBridge()
@@ -114,7 +121,6 @@ export function useMarsTunnelBackend() {
         onTunnelReady,
         closeOnFailure: true,
       });
-      await prepareMarsSandbox(host, sessionId);
       // Read before the registry switch below, while nothing else is
       // pointed at this host yet.
       const latestConversationId = await fetchLatestMarsConversationId(host);
