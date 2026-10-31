@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useRef } from "react";
+import { CONVERSATION_LAUNCH_PREFIX } from "#/stores/conversation-launch-store";
 import { Query, useQuery } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
@@ -25,6 +26,8 @@ export const useUserConversation = (
   refetchInterval?: RefetchInterval,
 ) => {
   const active = useActiveBackend();
+  const isPendingId =
+    cid?.startsWith("task-") || cid?.startsWith(CONVERSATION_LAUNCH_PREFIX);
 
   // The cid belongs to whichever backend was active when the user opened this
   // conversation. If they switch to a *different* backend (e.g. cloud → local)
@@ -54,18 +57,19 @@ export const useUserConversation = (
     // hard-refreshes the page. Mirrors `usePaginatedConversations`.
     queryKey: ["user", "conversation", cid, active.backend.id, active.orgId],
     queryFn: async () => {
-      if (!cid) return null;
+      if (
+        !cid ||
+        cid.startsWith("task-") ||
+        cid.startsWith(CONVERSATION_LAUNCH_PREFIX)
+      )
+        return null;
 
       // Use the V1 batch API endpoint to get a single conversation
       const results =
         await AgentServerConversationService.batchGetAppConversations([cid]);
       return results[0] ?? null;
     },
-    enabled:
-      !!cid &&
-      !cid.startsWith("task-") &&
-      !backendChanged &&
-      hasConversationScope,
+    enabled: !!cid && !isPendingId && !backendChanged && hasConversationScope,
     // Rate limits (429) are transient and worth a couple of backed-off
     // retries; any other failure (404, 5xx, network) fails immediately as
     // before rather than masking a real problem.

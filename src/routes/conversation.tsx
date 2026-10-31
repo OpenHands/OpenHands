@@ -1,4 +1,6 @@
 import { restoreStartupAttachmentDraft } from "#/utils/restore-startup-attachment-draft";
+import { CONVERSATION_LAUNCH_PREFIX } from "#/stores/conversation-launch-store";
+import { ConversationLaunchView } from "#/components/features/chat/conversation-launch-view";
 import React from "react";
 import { useNavigate, useLocation } from "react-router";
 import { useTranslation } from "react-i18next";
@@ -231,6 +233,9 @@ function AppContent() {
 }
 
 export function ConversationView() {
+  const { conversationId } = useConversationId();
+  if (conversationId.startsWith(CONVERSATION_LAUNCH_PREFIX))
+    return <ConversationLaunchView launchId={conversationId} />;
   return <AppContent />;
 }
 

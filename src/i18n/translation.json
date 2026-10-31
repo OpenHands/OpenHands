@@ -39725,6 +39725,24 @@
     "ca": "L’entorn ha canviat. Torna a l’entorn original per continuar.",
     "id": "Lingkungan telah berubah. Kembali ke lingkungan semula untuk melanjutkan."
   },
+  "CONVERSATION$START_NOT_IN_TAB": {
+    "en": "This start is no longer available in this tab. Check your recent conversations before starting again.",
+    "ja": "このタブでは開始情報を利用できません。再度開始する前に最近の会話を確認してください。",
+    "zh-CN": "此标签页中已无此次启动的信息。再次启动前请查看最近的会话。",
+    "zh-TW": "此分頁中已無此次啟動的資訊。再次啟動前請查看最近的對話。",
+    "ko-KR": "이 탭에서 시작 정보를 더 이상 사용할 수 없습니다. 다시 시작하기 전에 최근 대화를 확인하세요.",
+    "no": "Denne oppstarten er ikke lenger tilgjengelig i fanen. Sjekk nylige samtaler før du starter på nytt.",
+    "it": "Questo avvio non è più disponibile nella scheda. Controlla le conversazioni recenti prima di ricominciare.",
+    "pt": "Este início não está mais disponível nesta aba. Verifique as conversas recentes antes de começar novamente.",
+    "es": "Este inicio ya no está disponible en esta pestaña. Revisa las conversaciones recientes antes de empezar de nuevo.",
+    "ar": "لم تعد معلومات البدء متاحة في علامة التبويب هذه. تحقق من المحادثات الأخيرة قبل البدء مجددًا.",
+    "fr": "Ce démarrage n’est plus disponible dans cet onglet. Consultez vos conversations récentes avant de recommencer.",
+    "tr": "Bu başlatma artık bu sekmede mevcut değil. Yeniden başlatmadan önce son konuşmalarınızı kontrol edin.",
+    "de": "Dieser Start ist in diesem Tab nicht mehr verfügbar. Prüfe deine letzten Unterhaltungen, bevor du erneut startest.",
+    "uk": "Цей запуск більше недоступний у цій вкладці. Перевірте нещодавні розмови, перш ніж починати знову.",
+    "ca": "Aquest inici ja no està disponible en aquesta pestanya. Revisa les converses recents abans de tornar a començar.",
+    "id": "Informasi mulai ini tidak lagi tersedia di tab ini. Periksa percakapan terbaru sebelum memulai lagi."
+  },
   "CONVERSATION$OPEN_CREATED": {
     "en": "Open conversation",
     "ja": "会話を開く",

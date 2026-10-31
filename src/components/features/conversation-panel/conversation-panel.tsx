@@ -1,4 +1,5 @@
 import { usePendingTaskAttachmentsStore } from "#/stores/pending-task-attachments-store";
+import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
 import React from "react";
 import { Tooltip } from "@heroui/react";
 import { useTranslation } from "react-i18next";
@@ -290,7 +291,12 @@ export function ConversationPanel({
   const { workspaces: knownWorkspaces } = useResolvedWorkspaces();
 
   // Fetch in-progress start tasks
-  const { data: startTasks } = useStartTasks();
+  const {
+    data: startTasks,
+    unresolvedTaskIds = [],
+    failedTaskIds = [],
+  } = useStartTasks();
+  const pendingLaunches = useConversationLaunchStore((state) => state.launches);
   const pendingAttachments = usePendingTaskAttachmentsStore(
     (state) => state.byTaskId,
   );
@@ -1436,6 +1442,39 @@ export function ConversationPanel({
             }
           />
         ) : null}
+
+        {!compact &&
+          Object.values(pendingLaunches)
+            .filter(
+              (launch) =>
+                (!launch.targetId ||
+                  (launch.targetId.startsWith("task-") &&
+                    unresolvedTaskIds.includes(launch.targetId.slice(5)) &&
+                    !pendingAttachments[launch.targetId.slice(5)]?.error &&
+                    !pendingAttachments[launch.targetId.slice(5)]
+                      ?.readError)) &&
+                launch.backendId === activeBackend.id &&
+                launch.orgId === orgId,
+            )
+            .map((launch) => (
+              <NavigationLink
+                key={launch.id}
+                to={backendScopedPath(`/conversations/${launch.id}`)}
+                onClick={onClose}
+                className="block rounded-lg border border-border p-3 text-sm"
+              >
+                <p className="truncate">
+                  {launch.message || t(I18nKey.HOME$CREATING_CONVERSATION)}
+                </p>
+                <p className="text-xs text-text-secondary">
+                  {launch.error ||
+                  (launch.targetId?.startsWith("task-") &&
+                    failedTaskIds.includes(launch.targetId.slice(5)))
+                    ? t(I18nKey.COMMON$ERROR)
+                    : t(I18nKey.HOME$CREATING_CONVERSATION)}
+                </p>
+              </NavigationLink>
+            ))}
 
         {!compact &&
           Object.entries(pendingAttachments)
