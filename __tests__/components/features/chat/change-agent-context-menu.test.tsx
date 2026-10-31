@@ -1,10 +1,14 @@
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { compile } from "@tailwindcss/node";
+import { parse } from "postcss";
 import { fireEvent, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { renderWithProviders } from "test-utils";
 import { ChangeAgentContextMenu } from "#/components/features/chat/change-agent-context-menu";
 
 describe("ChangeAgentContextMenu", () => {
-  it("marks the active mode with hover background and a checkmark", () => {
+  it("marks the active mode and preserves its compact description type", async () => {
     renderWithProviders(
       <ChangeAgentContextMenu
         activeMode="code"
@@ -19,6 +23,31 @@ describe("ChangeAgentContextMenu", () => {
 
     expect(codeOption).toHaveClass("bg-interactive-hover");
     expect(planOption).not.toHaveClass("bg-interactive-hover");
+    const description = codeOption.querySelector(".whitespace-pre-wrap");
+    if (!description) throw new Error("Expected the mode description");
+    const compiler = await compile(
+      await readFile(resolve("src/tailwind.css"), "utf8"),
+      { base: resolve("src"), onDependency: () => {} },
+    );
+    const rules: string[] = [];
+    parse(compiler.build([...description.classList])).walkDecls(
+      "font-size",
+      (declaration) => {
+        const rule = declaration.parent;
+        if (rule?.type === "rule" && description.matches(rule.selector)) {
+          rules.push(`${rule.selector}{${declaration.toString()}}`);
+        }
+      },
+    );
+    const style = document.createElement("style");
+    style.textContent = rules.join("\n");
+    document.head.appendChild(style);
+    try {
+      expect(getComputedStyle(description).fontSize).toBe("10px");
+    } finally {
+      style.remove();
+    }
+
     expect(codeOption.querySelectorAll("svg")).toHaveLength(2);
     expect(planOption.querySelectorAll("svg")).toHaveLength(1);
   });
