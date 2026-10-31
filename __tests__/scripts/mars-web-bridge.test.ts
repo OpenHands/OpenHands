@@ -43,7 +43,7 @@ const SESSION_ID = "sess_a";
 // connects, which MSW's interceptor never signals for a request it bypasses.
 // Everything here talks to real loopback servers, so take MSW out of the way.
 beforeAll(() => mswServer.close());
-afterAll(() => mswServer.listen({ onUnhandledRequest: "bypass" }));
+afterAll(() => mswServer.listen({ onUnhandledFrame: "bypass" }));
 
 function listen(server: Server): Promise<string> {
   return new Promise((resolve) => {
