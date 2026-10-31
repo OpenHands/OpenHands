@@ -57,6 +57,11 @@ import { OpenWorkspaceDialog } from "./open-workspace-dialog";
 import { OpenRepositoryDialog } from "./open-repository-dialog";
 import { HomeGitControlBarPreview } from "./home-git-control-bar-preview";
 
+// How long a create may run before the "Creating conversation…" toast appears.
+const CREATING_TOAST_DELAY_MS = 600;
+// Once shown, how long it stays up at least, so it never flashes.
+const CREATING_TOAST_MIN_VISIBLE_MS = 700;
+
 export function HomeChatLauncher() {
   const { t } = useTranslation("openhands");
   const { backend } = useActiveBackend();
@@ -222,19 +227,36 @@ export function HomeChatLauncher() {
       markAutomationSetupHandoff(conversationId);
     };
 
-    // Loading toast gives the user a clear signal that the request is in
-    // flight; dismissed precisely once the mutation resolves.
-    const toastId = toast.loading(
-      t(I18nKey.HOME$CREATING_CONVERSATION),
-      TOAST_OPTIONS,
-    );
+    // Most creates resolve quickly and navigate away, so an immediate loading
+    // toast only flashes. Show it only once the request is noticeably slow,
+    // and once shown keep it up long enough to read. The Toaster is global, so
+    // it outlives the navigation without delaying it. A failure removes it at
+    // once because the error toast takes its place.
+    let toastId: string | undefined;
+    let toastShownAt = 0;
+    const toastTimer = setTimeout(() => {
+      toastShownAt = Date.now();
+      toastId = toast.loading(
+        t(I18nKey.HOME$CREATING_CONVERSATION),
+        TOAST_OPTIONS,
+      );
+    }, CREATING_TOAST_DELAY_MS);
+    const dismissCreatingToast = ({ immediately = false } = {}) => {
+      clearTimeout(toastTimer);
+      if (!toastId) return;
+      const id = toastId;
+      const remaining =
+        CREATING_TOAST_MIN_VISIBLE_MS - (Date.now() - toastShownAt);
+      if (immediately || remaining <= 0) toast.dismiss(id);
+      else setTimeout(() => toast.dismiss(id), remaining);
+    };
 
     void (async () => {
       let isCreated = false;
       try {
         const data = await createConversation(variables);
         isCreated = true;
-        toast.dismiss(toastId);
+        dismissCreatingToast();
         try {
           sessionStorage.removeItem(HOME_PROMPT_DRAFT_KEY);
         } catch {
@@ -306,7 +328,7 @@ export function HomeChatLauncher() {
         openAutomationSetupMode(targetConversationId);
         navigate(`/conversations/${targetConversationId}`);
       } catch (error) {
-        toast.dismiss(toastId);
+        dismissCreatingToast({ immediately: true });
         // Prefer the server's own message; without one, keep the launcher's
         // existing wording (the error's message).
         const fallback = error instanceof Error ? error.message : "";
