@@ -1,0 +1,17 @@
+{
+  "rest": {
+    "id": "ef0913eb-4edc-4662-9d12-4495a6a6170f",
+    "cap": null,
+    "status": "finished",
+    "cost": 0.000157776,
+    "legacy_caps": {
+      "default": null,
+      "condenser": null
+    },
+    "sub_conversation_ids": []
+  },
+  "usage": "Context Window\n2% used (98% left)\n17,048 / 1,000,000\nCompact context\nToken Usage\nInput\n17,036\nCache Hit\n16,896\nCache Write\n0\nOutput\n12\nTotal\n17,048\nTotal Cost\n$0.0002",
+  "meter": {
+    "meterCount": 0
+  }
+}

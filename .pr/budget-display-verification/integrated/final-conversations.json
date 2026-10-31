@@ -1,0 +1,59 @@
+{
+  "normal": {
+    "id": "c3078282-b795-46aa-ad52-da6c193130ad",
+    "cap": 0.05,
+    "status": "finished",
+    "cost": 0.0030587879999999994,
+    "legacy_caps": {
+      "default": null,
+      "condenser": null
+    },
+    "sub_conversation_ids": [
+      "04c8eb23-01ef-499c-89a4-58add50baf08"
+    ]
+  },
+  "unbounded": {
+    "id": "ef0913eb-4edc-4662-9d12-4495a6a6170f",
+    "cap": null,
+    "status": "finished",
+    "cost": 0.000157776,
+    "legacy_caps": {
+      "default": null,
+      "condenser": null
+    },
+    "sub_conversation_ids": []
+  },
+  "warning": {
+    "id": "b8f41e40-48d8-4167-a777-a27f541effb2",
+    "cap": 0.003,
+    "status": "finished",
+    "cost": 0.0024789599999999997,
+    "legacy_caps": {
+      "default": null,
+      "condenser": null
+    },
+    "sub_conversation_ids": []
+  },
+  "over": {
+    "id": "3342d69a-d73e-4662-af1a-679e99151a25",
+    "cap": 0.0001,
+    "status": "error",
+    "cost": 0.00035260799999999997,
+    "legacy_caps": {
+      "default": null,
+      "condenser": null
+    },
+    "sub_conversation_ids": []
+  },
+  "planner": {
+    "id": "04c8eb23-01ef-499c-89a4-58add50baf08",
+    "cap": null,
+    "status": "finished",
+    "cost": 0.000953496,
+    "legacy_caps": {
+      "default": null,
+      "planning_condenser": null
+    },
+    "sub_conversation_ids": []
+  }
+}

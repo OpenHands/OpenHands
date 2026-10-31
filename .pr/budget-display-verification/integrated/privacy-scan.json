@@ -1,0 +1,8 @@
+{
+  "date": "2026-10-26",
+  "scan": "Exact DeepSeek API key and run session-key byte strings across all proposed published text, binary media and embedded metadata",
+  "files_scanned": 65,
+  "credential_matches": 0,
+  "visual_review": "Every published screenshot and representative first/middle/last frames from every published recording were inspected; no credentials or unrelated user material visible",
+  "excluded": "Raw private configuration, provider profiles, raw logs, machine-specific driver, command scratch log, abandoned captures"
+}

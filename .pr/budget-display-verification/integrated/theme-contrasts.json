@@ -1,0 +1,522 @@
+[
+  {
+    "rest": {
+      "id": "c3078282-b795-46aa-ad52-da6c193130ad",
+      "cap": 0.05,
+      "status": "finished",
+      "cost": 0.0028797119999999995,
+      "legacy_caps": {
+        "default": null,
+        "condenser": null
+      },
+      "sub_conversation_ids": [
+        "04c8eb23-01ef-499c-89a4-58add50baf08"
+      ]
+    },
+    "usage": "Context Window\n2% used (98% left)\n17,109 / 1,000,000\nCompact context\nToken Usage\nInput\n51,216\nCache Hit\n42,752\nCache Write\n0\nOutput\n70\nTotal\n51,286\n$0.0029 / $0.0500 (5.76% used)\nTotal Cost\n$0.0029",
+    "meter": {
+      "meterCount": 1,
+      "budgetText": "$0.0029 / $0.0500 (5.76% used)",
+      "inlineWidth": "5.75942%",
+      "fillWidth": 29.890625,
+      "trackWidth": 519,
+      "fillColor": "rgb(238, 242, 247)",
+      "trackColor": "rgb(56, 63, 80)",
+      "fillTrackContrast": 9.363131678064242,
+      "foregroundRole": "#EEF2F7",
+      "errorRole": "#ff684e",
+      "textColor": "rgb(163, 176, 196)",
+      "surfaceColor": "rgb(44, 49, 63)",
+      "textSurfaceContrast": 5.910621864355188
+    },
+    "theme": "OpenHands-DeepSea",
+    "viewport": {
+      "ok": true,
+      "box": {
+        "x": 871,
+        "y": 41,
+        "width": 569,
+        "height": 959
+      },
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "insideViewport": true,
+      "overflow": {
+        "scrollWidth": 569,
+        "clientWidth": 569,
+        "scrollHeight": 959,
+        "clientHeight": 959
+      },
+      "pageHorizontalOverflow": false
+    }
+  },
+  {
+    "rest": {
+      "id": "3342d69a-d73e-4662-af1a-679e99151a25",
+      "cap": 0.0001,
+      "status": "error",
+      "cost": 0.00035260799999999997,
+      "legacy_caps": {
+        "default": null,
+        "condenser": null
+      },
+      "sub_conversation_ids": []
+    },
+    "usage": "Context Window\n2% used (98% left)\n17,197 / 1,000,000\nCompact context\nToken Usage\nInput\n17,060\nCache Hit\n16,768\nCache Write\n0\nOutput\n137\nTotal\n17,197\n$0.0004 / $0.0001 (352.61% used)\nTotal Cost\n$0.0004",
+    "meter": {
+      "meterCount": 1,
+      "budgetText": "$0.0004 / $0.0001 (352.61% used)",
+      "inlineWidth": "100%",
+      "fillWidth": 519,
+      "trackWidth": 519,
+      "fillColor": "rgb(255, 104, 78)",
+      "trackColor": "rgb(56, 63, 80)",
+      "fillTrackContrast": 3.6802865254903763,
+      "foregroundRole": "#EEF2F7",
+      "errorRole": "#ff684e",
+      "textColor": "rgb(163, 176, 196)",
+      "surfaceColor": "rgb(44, 49, 63)",
+      "textSurfaceContrast": 5.910621864355188
+    },
+    "theme": "OpenHands-DeepSea",
+    "viewport": {
+      "ok": true,
+      "box": {
+        "x": 871,
+        "y": 41,
+        "width": 569,
+        "height": 959
+      },
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "insideViewport": true,
+      "overflow": {
+        "scrollWidth": 569,
+        "clientWidth": 569,
+        "scrollHeight": 959,
+        "clientHeight": 959
+      },
+      "pageHorizontalOverflow": false
+    }
+  },
+  {
+    "rest": {
+      "id": "c3078282-b795-46aa-ad52-da6c193130ad",
+      "cap": 0.05,
+      "status": "finished",
+      "cost": 0.0028797119999999995,
+      "legacy_caps": {
+        "default": null,
+        "condenser": null
+      },
+      "sub_conversation_ids": [
+        "04c8eb23-01ef-499c-89a4-58add50baf08"
+      ]
+    },
+    "usage": "Context Window\n2% used (98% left)\n17,109 / 1,000,000\nCompact context\nToken Usage\nInput\n51,216\nCache Hit\n42,752\nCache Write\n0\nOutput\n70\nTotal\n51,286\n$0.0029 / $0.0500 (5.76% used)\nTotal Cost\n$0.0029",
+    "meter": {
+      "meterCount": 1,
+      "budgetText": "$0.0029 / $0.0500 (5.76% used)",
+      "inlineWidth": "5.75942%",
+      "fillWidth": 29.890625,
+      "trackWidth": 519,
+      "fillColor": "rgb(236, 236, 236)",
+      "trackColor": "rgb(49, 49, 49)",
+      "fillTrackContrast": 11.011784042828806,
+      "foregroundRole": "#ECECEC",
+      "errorRole": "#ff684e",
+      "textColor": "rgb(151, 151, 151)",
+      "surfaceColor": "rgb(40, 40, 40)",
+      "textSurfaceContrast": 5.047373179150879
+    },
+    "theme": "OpenHands-Neutral",
+    "viewport": {
+      "ok": true,
+      "box": {
+        "x": 871,
+        "y": 41,
+        "width": 569,
+        "height": 959
+      },
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "insideViewport": true,
+      "overflow": {
+        "scrollWidth": 569,
+        "clientWidth": 569,
+        "scrollHeight": 959,
+        "clientHeight": 959
+      },
+      "pageHorizontalOverflow": false
+    }
+  },
+  {
+    "rest": {
+      "id": "3342d69a-d73e-4662-af1a-679e99151a25",
+      "cap": 0.0001,
+      "status": "error",
+      "cost": 0.00035260799999999997,
+      "legacy_caps": {
+        "default": null,
+        "condenser": null
+      },
+      "sub_conversation_ids": []
+    },
+    "usage": "Context Window\n2% used (98% left)\n17,197 / 1,000,000\nCompact context\nToken Usage\nInput\n17,060\nCache Hit\n16,768\nCache Write\n0\nOutput\n137\nTotal\n17,197\n$0.0004 / $0.0001 (352.61% used)\nTotal Cost\n$0.0004",
+    "meter": {
+      "meterCount": 1,
+      "budgetText": "$0.0004 / $0.0001 (352.61% used)",
+      "inlineWidth": "100%",
+      "fillWidth": 519,
+      "trackWidth": 519,
+      "fillColor": "rgb(255, 104, 78)",
+      "trackColor": "rgb(49, 49, 49)",
+      "fillTrackContrast": 4.548274223419064,
+      "foregroundRole": "#ECECEC",
+      "errorRole": "#ff684e",
+      "textColor": "rgb(151, 151, 151)",
+      "surfaceColor": "rgb(40, 40, 40)",
+      "textSurfaceContrast": 5.047373179150879
+    },
+    "theme": "OpenHands-Neutral",
+    "viewport": {
+      "ok": true,
+      "box": {
+        "x": 871,
+        "y": 41,
+        "width": 569,
+        "height": 959
+      },
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "insideViewport": true,
+      "overflow": {
+        "scrollWidth": 569,
+        "clientWidth": 569,
+        "scrollHeight": 959,
+        "clientHeight": 959
+      },
+      "pageHorizontalOverflow": false
+    }
+  },
+  {
+    "rest": {
+      "id": "c3078282-b795-46aa-ad52-da6c193130ad",
+      "cap": 0.05,
+      "status": "finished",
+      "cost": 0.0028797119999999995,
+      "legacy_caps": {
+        "default": null,
+        "condenser": null
+      },
+      "sub_conversation_ids": [
+        "04c8eb23-01ef-499c-89a4-58add50baf08"
+      ]
+    },
+    "usage": "Context Window\n2% used (98% left)\n17,109 / 1,000,000\nCompact context\nToken Usage\nInput\n51,216\nCache Hit\n42,752\nCache Write\n0\nOutput\n70\nTotal\n51,286\n$0.0029 / $0.0500 (5.76% used)\nTotal Cost\n$0.0029",
+    "meter": {
+      "meterCount": 1,
+      "budgetText": "$0.0029 / $0.0500 (5.76% used)",
+      "inlineWidth": "5.75942%",
+      "fillWidth": 29.890625,
+      "trackWidth": 519,
+      "fillColor": "rgb(236, 236, 236)",
+      "trackColor": "rgb(49, 49, 49)",
+      "fillTrackContrast": 11.011784042828806,
+      "foregroundRole": "#ECECEC",
+      "errorRole": "#ff684e",
+      "textColor": "rgb(151, 151, 151)",
+      "surfaceColor": "rgb(40, 40, 40)",
+      "textSurfaceContrast": 5.047373179150879
+    },
+    "theme": "OpenHands-Neo",
+    "viewport": {
+      "ok": true,
+      "box": {
+        "x": 871,
+        "y": 41,
+        "width": 569,
+        "height": 959
+      },
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "insideViewport": true,
+      "overflow": {
+        "scrollWidth": 569,
+        "clientWidth": 569,
+        "scrollHeight": 959,
+        "clientHeight": 959
+      },
+      "pageHorizontalOverflow": false
+    }
+  },
+  {
+    "rest": {
+      "id": "3342d69a-d73e-4662-af1a-679e99151a25",
+      "cap": 0.0001,
+      "status": "error",
+      "cost": 0.00035260799999999997,
+      "legacy_caps": {
+        "default": null,
+        "condenser": null
+      },
+      "sub_conversation_ids": []
+    },
+    "usage": "Context Window\n2% used (98% left)\n17,197 / 1,000,000\nCompact context\nToken Usage\nInput\n17,060\nCache Hit\n16,768\nCache Write\n0\nOutput\n137\nTotal\n17,197\n$0.0004 / $0.0001 (352.61% used)\nTotal Cost\n$0.0004",
+    "meter": {
+      "meterCount": 1,
+      "budgetText": "$0.0004 / $0.0001 (352.61% used)",
+      "inlineWidth": "100%",
+      "fillWidth": 519,
+      "trackWidth": 519,
+      "fillColor": "rgb(255, 104, 78)",
+      "trackColor": "rgb(49, 49, 49)",
+      "fillTrackContrast": 4.548274223419064,
+      "foregroundRole": "#ECECEC",
+      "errorRole": "#ff684e",
+      "textColor": "rgb(151, 151, 151)",
+      "surfaceColor": "rgb(40, 40, 40)",
+      "textSurfaceContrast": 5.047373179150879
+    },
+    "theme": "OpenHands-Neo",
+    "viewport": {
+      "ok": true,
+      "box": {
+        "x": 871,
+        "y": 41,
+        "width": 569,
+        "height": 959
+      },
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "insideViewport": true,
+      "overflow": {
+        "scrollWidth": 569,
+        "clientWidth": 569,
+        "scrollHeight": 959,
+        "clientHeight": 959
+      },
+      "pageHorizontalOverflow": false
+    }
+  },
+  {
+    "rest": {
+      "id": "c3078282-b795-46aa-ad52-da6c193130ad",
+      "cap": 0.05,
+      "status": "finished",
+      "cost": 0.0028797119999999995,
+      "legacy_caps": {
+        "default": null,
+        "condenser": null
+      },
+      "sub_conversation_ids": [
+        "04c8eb23-01ef-499c-89a4-58add50baf08"
+      ]
+    },
+    "usage": "Context Window\n2% used (98% left)\n17,109 / 1,000,000\nCompact context\nToken Usage\nInput\n51,216\nCache Hit\n42,752\nCache Write\n0\nOutput\n70\nTotal\n51,286\n$0.0029 / $0.0500 (5.76% used)\nTotal Cost\n$0.0029",
+    "meter": {
+      "meterCount": 1,
+      "budgetText": "$0.0029 / $0.0500 (5.76% used)",
+      "inlineWidth": "5.75942%",
+      "fillWidth": 29.890625,
+      "trackWidth": 519,
+      "fillColor": "rgb(31, 31, 31)",
+      "trackColor": "rgb(229, 229, 229)",
+      "fillTrackContrast": 13.084937754820528,
+      "foregroundRole": "#1F1F1F",
+      "errorRole": "#D13438",
+      "textColor": "rgb(97, 97, 97)",
+      "surfaceColor": "rgb(238, 238, 238)",
+      "textSurfaceContrast": 5.337979234928643
+    },
+    "theme": "Light+",
+    "viewport": {
+      "ok": true,
+      "box": {
+        "x": 871,
+        "y": 41,
+        "width": 569,
+        "height": 959
+      },
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "insideViewport": true,
+      "overflow": {
+        "scrollWidth": 569,
+        "clientWidth": 569,
+        "scrollHeight": 959,
+        "clientHeight": 959
+      },
+      "pageHorizontalOverflow": false
+    }
+  },
+  {
+    "rest": {
+      "id": "3342d69a-d73e-4662-af1a-679e99151a25",
+      "cap": 0.0001,
+      "status": "error",
+      "cost": 0.00035260799999999997,
+      "legacy_caps": {
+        "default": null,
+        "condenser": null
+      },
+      "sub_conversation_ids": []
+    },
+    "usage": "Context Window\n2% used (98% left)\n17,197 / 1,000,000\nCompact context\nToken Usage\nInput\n17,060\nCache Hit\n16,768\nCache Write\n0\nOutput\n137\nTotal\n17,197\n$0.0004 / $0.0001 (352.61% used)\nTotal Cost\n$0.0004",
+    "meter": {
+      "meterCount": 1,
+      "budgetText": "$0.0004 / $0.0001 (352.61% used)",
+      "inlineWidth": "100%",
+      "fillWidth": 519,
+      "trackWidth": 519,
+      "fillColor": "rgb(209, 52, 56)",
+      "trackColor": "rgb(229, 229, 229)",
+      "fillTrackContrast": 3.9139079668555423,
+      "foregroundRole": "#1F1F1F",
+      "errorRole": "#D13438",
+      "textColor": "rgb(97, 97, 97)",
+      "surfaceColor": "rgb(238, 238, 238)",
+      "textSurfaceContrast": 5.337979234928643
+    },
+    "theme": "Light+",
+    "viewport": {
+      "ok": true,
+      "box": {
+        "x": 871,
+        "y": 41,
+        "width": 569,
+        "height": 959
+      },
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "insideViewport": true,
+      "overflow": {
+        "scrollWidth": 569,
+        "clientWidth": 569,
+        "scrollHeight": 959,
+        "clientHeight": 959
+      },
+      "pageHorizontalOverflow": false
+    }
+  },
+  {
+    "rest": {
+      "id": "c3078282-b795-46aa-ad52-da6c193130ad",
+      "cap": 0.05,
+      "status": "finished",
+      "cost": 0.0028797119999999995,
+      "legacy_caps": {
+        "default": null,
+        "condenser": null
+      },
+      "sub_conversation_ids": [
+        "04c8eb23-01ef-499c-89a4-58add50baf08"
+      ]
+    },
+    "usage": "Context Window\n2% used (98% left)\n17,109 / 1,000,000\nCompact context\nToken Usage\nInput\n51,216\nCache Hit\n42,752\nCache Write\n0\nOutput\n70\nTotal\n51,286\n$0.0029 / $0.0500 (5.76% used)\nTotal Cost\n$0.0029",
+    "meter": {
+      "meterCount": 1,
+      "budgetText": "$0.0029 / $0.0500 (5.76% used)",
+      "inlineWidth": "5.75942%",
+      "fillWidth": 29.890625,
+      "trackWidth": 519,
+      "fillColor": "rgb(101, 123, 131)",
+      "trackColor": "rgb(230, 223, 204)",
+      "fillTrackContrast": 3.3497489334782227,
+      "foregroundRole": "#657B83",
+      "errorRole": "#DC322F",
+      "textColor": "rgb(131, 148, 150)",
+      "surfaceColor": "rgb(240, 233, 214)",
+      "textSurfaceContrast": 2.609625654193781
+    },
+    "theme": "Solarized Light",
+    "viewport": {
+      "ok": true,
+      "box": {
+        "x": 871,
+        "y": 41,
+        "width": 569,
+        "height": 959
+      },
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "insideViewport": true,
+      "overflow": {
+        "scrollWidth": 569,
+        "clientWidth": 569,
+        "scrollHeight": 959,
+        "clientHeight": 959
+      },
+      "pageHorizontalOverflow": false
+    }
+  },
+  {
+    "rest": {
+      "id": "3342d69a-d73e-4662-af1a-679e99151a25",
+      "cap": 0.0001,
+      "status": "error",
+      "cost": 0.00035260799999999997,
+      "legacy_caps": {
+        "default": null,
+        "condenser": null
+      },
+      "sub_conversation_ids": []
+    },
+    "usage": "Context Window\n2% used (98% left)\n17,197 / 1,000,000\nCompact context\nToken Usage\nInput\n17,060\nCache Hit\n16,768\nCache Write\n0\nOutput\n137\nTotal\n17,197\n$0.0004 / $0.0001 (352.61% used)\nTotal Cost\n$0.0004",
+    "meter": {
+      "meterCount": 1,
+      "budgetText": "$0.0004 / $0.0001 (352.61% used)",
+      "inlineWidth": "100%",
+      "fillWidth": 519,
+      "trackWidth": 519,
+      "fillColor": "rgb(220, 50, 47)",
+      "trackColor": "rgb(230, 223, 204)",
+      "fillTrackContrast": 3.4780057921590943,
+      "foregroundRole": "#657B83",
+      "errorRole": "#DC322F",
+      "textColor": "rgb(131, 148, 150)",
+      "surfaceColor": "rgb(240, 233, 214)",
+      "textSurfaceContrast": 2.609625654193781
+    },
+    "theme": "Solarized Light",
+    "viewport": {
+      "ok": true,
+      "box": {
+        "x": 871,
+        "y": 41,
+        "width": 569,
+        "height": 959
+      },
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "insideViewport": true,
+      "overflow": {
+        "scrollWidth": 569,
+        "clientWidth": 569,
+        "scrollHeight": 959,
+        "clientHeight": 959
+      },
+      "pageHorizontalOverflow": false
+    }
+  }
+]

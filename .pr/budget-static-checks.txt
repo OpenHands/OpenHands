@@ -1,0 +1,92 @@
+Canvas budget display — static verification
+Recorded: 2026-10-26
+Working directory: /private/tmp/canvas-budget-display
+Final source commit: 90350be6e173d1a28fbd74038fb3a2ca8c650017
+Original PR head: 50ae78643fb497b028bdddf6adfd0dea366b5b49
+Checks ran on the working-tree changes subsequently committed as 90350be.
+This record makes no live UI/server verification claim.
+
+TDD observations before their corresponding production fixes
+
+1. npx vitest run __tests__/api/agent-server-conversation-service.test.ts -t 'safe defaults for a sparse runtime response|preserves valid runtime status|loads runtime state directly' --reporter=dot
+   Result: 3 failed, 127 skipped. The new cap was dropped from runtime results.
+
+2. npx vitest run __tests__/hooks/use-live-conversation-metrics.test.ts __tests__/components/features/conversation-panel/budget-display.test.tsx --reporter=dot
+   Result: 8 failed, 3 passed before integration: missing independent maxBudget output and display prop mismatch.
+
+3. npx vitest run __tests__/contexts/conversation-websocket-provider.behavior.test.tsx -t 'keeps planning spend separate' --reporter=dot
+   Result: 1 failed, 73 skipped before the ownership fix. The real provider/store/query/hook boundary rendered 99/5 after a planning stats frame instead of parent REST 2/5.
+
+Successful test commands
+
+4. npx vitest run __tests__/api/agent-server-conversation-service.test.ts __tests__/hooks/use-live-conversation-metrics.test.ts __tests__/hooks/query/use-conversation-metrics.test.ts __tests__/components/features/conversation-panel/budget-display.test.tsx --reporter=dot
+   Result: 4 files, 145 tests passed. The query filename filter also selects its .tsx test file.
+
+5. npx vitest run __tests__/hooks/use-context-window-usage.test.ts __tests__/components/features/chat/components/context-window-meter.test.tsx __tests__/components/features/chat/components/context-window-ring.test.tsx __tests__/components/features/conversation-panel/budget-usage-text.test.tsx __tests__/utils/conversation-metrics.test.ts --reporter=dot
+   Result: 4 files, 34 tests passed. The last filename filter matched no test; it is not claimed as coverage.
+
+6. npx vitest run __tests__/hooks/use-live-conversation-metrics.test.ts __tests__/themes/color-themes.test.tsx __tests__/themes/color-theme-runtime.test.tsx --reporter=dot
+   Result: 3 files, 27 tests passed (includes 5 hook tests also covered by command 4).
+
+Final ownership-fix regressions
+
+7. npx vitest run __tests__/contexts/conversation-websocket-provider.behavior.test.tsx __tests__/contexts/conversation-websocket-context.test.tsx __tests__/hooks/use-live-conversation-metrics.test.ts --reporter=dot
+   Result: 3 files, 117 tests passed. Includes planning child mismatch, subsequent live parent overshoot, existing multi-LLM combination, reset and planning-provider behavior.
+
+8. npx vitest run __tests__/hooks/use-context-window-usage.test.ts __tests__/components/features/chat/components/context-window-meter.test.tsx __tests__/components/features/chat/components/context-window-ring.test.tsx __tests__/hooks/query/use-conversation-metrics.test.tsx --reporter=dot
+   Result: 4 files, 35 tests passed.
+
+9. npx vitest run src/hooks/use-await-context-compaction.test.ts src/hooks/use-compact-context-action.test.tsx --reporter=dot
+   Result: 2 files, 7 tests passed after fixture writers supplied their conversation ID.
+
+Type/build checks (rerun after the ownership fix)
+
+10. npm run typecheck
+    Result: passed (react-router typegen && tsc).
+    Earlier attempts identified a nullable test-fixture type and existing test writers missing the newly required source ID. Both were corrected; the final invocation exited 0.
+
+11. npm run build:app
+    Result: passed. Build emitted existing ineffective-dynamic-import warnings.
+
+12. npm run build:lib
+    Result: passed (including tsc -p tsconfig.lib.json).
+
+Formatting/lint checks
+
+13. Changed source files were checked after each edit with:
+      npx prettier --write <edited-file>
+      npx eslint <edited-source-file>
+    Edited test files were checked/formatted with npx prettier --check/--write <edited-test-file>.
+    The two colocated compaction test files also passed npx eslint after their final edit.
+
+14. The consolidated changed-file check ran this exact Python command body:
+    import subprocess
+    paths = subprocess.check_output(['git', 'diff', '--name-only'], text=True).splitlines()
+    subprocess.run(['npx', 'prettier', '--check', *paths], check=True)
+    subprocess.run(['npx', 'eslint', *[p for p in paths if p.startswith('src/')]], check=True)
+    subprocess.run(['git', 'diff', '--check'], check=True)
+    Result: passed. This ran before the two compaction fixture edits, which were checked separately as in command 13.
+
+15. git diff --check
+    Result: passed after the final fixture edits.
+
+Non-failing test diagnostics included missing sourcemap-source warnings from the released TypeScript client, mocked hook-load fetch warnings in the existing API suite, and an existing act-environment warning in a provider test.
+
+Design artifact checks
+
+16. npx prettier --write .pr/budget-display-design.html
+    npx prettier --check .pr/budget-display-design.html
+    Result: passed.
+
+17. HTMLParser/source-manifest check
+    Result: validated 65 distinct pinned code links against their local Git objects, all section anchors and unique IDs; no external scripts or assets.
+
+18. Offline layout check with @playwright/test Chromium
+    Loaded file:///private/tmp/canvas-budget-display/.pr/budget-display-design.html and captured full-page desktop (1360x1050) and mobile (390x844) screenshots.
+    Result: desktop and mobile had no horizontal document overflow; both SVG figures rendered; desktop document height 3865px. Screenshots inspected.
+    Initial sandboxed Chromium launch was blocked by macOS MachPort permission. The authorized isolated headless launch succeeded; browser closed in finally.
+
+19. git merge-base 50ae78643fb497b028bdddf6adfd0dea366b5b49 upstream/main
+    Result: 8238b7af825b8639191b9d7b4c6b080d4a93f388. This is the selected color before-state in the design document.
+    git diff fd3a76f48327ac142473026a874dd917977b745c 8238b7af825b8639191b9d7b4c6b080d4a93f388 -- src/components/features/conversation-panel/budget-progress-bar.tsx
+    Result: no difference; the earlier local-main merge base has identical color source.

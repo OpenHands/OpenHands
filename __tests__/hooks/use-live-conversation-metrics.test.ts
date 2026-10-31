@@ -1,21 +1,20 @@
-import { renderHook } from "@testing-library/react";
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import React from "react";
+import { act, renderHook, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import useMetricsStore, { type MetricsState } from "#/stores/metrics-store";
+import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import type {
-  MetricsSnapshot,
+  RuntimeMetrics,
+  RuntimeConversationInfo,
   TokenUsage,
 } from "#/api/conversation-service/agent-server-conversation-service.types";
+import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 
 const useActiveConversationMock = vi.fn();
-const useConversationMetricsMock = vi.fn();
 
 vi.mock("#/hooks/query/use-active-conversation", () => ({
   useActiveConversation: () => useActiveConversationMock(),
-}));
-
-vi.mock("#/hooks/query/use-conversation-metrics", () => ({
-  useConversationMetrics: (...args: unknown[]) =>
-    useConversationMetricsMock(...args),
 }));
 
 import { useLiveConversationMetrics } from "#/hooks/use-live-conversation-metrics";
@@ -39,13 +38,32 @@ const restUsage = (overrides: Record<string, number | null> = {}): TokenUsage =>
     ...overrides,
   }) as unknown as TokenUsage;
 
-const snapshot = (
-  overrides: Partial<MetricsSnapshot> = {},
-): MetricsSnapshot => ({
-  accumulated_cost: 1.23,
-  max_budget_per_task: 5,
-  accumulated_token_usage: restUsage(),
-  ...overrides,
+const runtimeInfo = (
+  metrics: Partial<RuntimeMetrics> = {},
+  maxBudget: number | null = 5,
+): RuntimeConversationInfo => ({
+  id: CONVERSATION.id,
+  title: "Budget conversation",
+  created_at: "2026-10-26T00:00:00Z",
+  updated_at: "2026-10-26T00:00:00Z",
+  status: ExecutionStatus.IDLE,
+  available_models: [],
+  metrics: null,
+  max_budget_per_run: maxBudget,
+  stats: {
+    usage_to_metrics: {
+      agent: {
+        model_name: "test-model",
+        accumulated_cost: 1.23,
+        max_budget_per_task: 10,
+        accumulated_token_usage: restUsage(),
+        costs: [],
+        response_latencies: [],
+        token_usages: [],
+        ...metrics,
+      },
+    },
+  },
 });
 
 const storeMetrics: MetricsState = {
@@ -61,99 +79,129 @@ const storeMetrics: MetricsState = {
   },
 };
 
+function makeWrapper() {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  });
+  return ({ children }: { children: React.ReactNode }) =>
+    React.createElement(QueryClientProvider, { client }, children);
+}
+
 describe("useLiveConversationMetrics", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useMetricsStore.setState({
-      cost: null,
-      max_budget_per_task: null,
-      usage: null,
-    });
+    useMetricsStore.getState().resetMetrics();
     useActiveConversationMock.mockReturnValue({ data: CONVERSATION });
-    useConversationMetricsMock.mockReturnValue({ data: undefined });
+    vi.spyOn(
+      AgentServerConversationService,
+      "getRuntimeConversation",
+    ).mockResolvedValue(runtimeInfo());
   });
 
-  it("prefers the live store over the REST snapshot", () => {
-    useMetricsStore.setState(storeMetrics);
-    useConversationMetricsMock.mockReturnValue({ data: snapshot() });
-
-    const { result } = renderHook(() => useLiveConversationMetrics());
-
-    expect(result.current).toEqual(storeMetrics);
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
-  it("coerces null token fields from the wire to zero", () => {
-    useConversationMetricsMock.mockReturnValue({
-      data: snapshot({
+  it("retains the conversation cap when live cost replaces the REST snapshot", async () => {
+    const { result } = renderHook(() => useLiveConversationMetrics(), {
+      wrapper: makeWrapper(),
+    });
+    await waitFor(() => expect(result.current.cost).toBe(1.23));
+    expect(result.current.maxBudget).toBe(5);
+
+    act(() =>
+      useMetricsStore.getState().setMetrics(storeMetrics, CONVERSATION.id),
+    );
+
+    expect(result.current).toEqual({
+      cost: 9.99,
+      maxBudget: 5,
+      usage: storeMetrics.usage,
+    });
+  });
+
+  it("coerces null token fields from the wire to zero", async () => {
+    vi.mocked(
+      AgentServerConversationService.getRuntimeConversation,
+    ).mockResolvedValue(
+      runtimeInfo({
         accumulated_token_usage: restUsage({
           completion_tokens: null,
           context_window: null,
           per_turn_token: null,
         }),
       }),
+    );
+    const { result } = renderHook(() => useLiveConversationMetrics(), {
+      wrapper: makeWrapper(),
     });
 
-    const { result } = renderHook(() => useLiveConversationMetrics());
-
-    expect(result.current.usage).toEqual({
-      prompt_tokens: 10,
-      completion_tokens: 0,
-      cache_read_tokens: 1,
-      cache_write_tokens: 2,
-      context_window: 0,
-      per_turn_token: 0,
-    });
-  });
-
-  it("maps a missing accumulated_token_usage to null usage", () => {
-    useConversationMetricsMock.mockReturnValue({
-      data: snapshot({ accumulated_token_usage: null }),
-    });
-
-    const { result } = renderHook(() => useLiveConversationMetrics());
-
-    expect(result.current).toEqual({
-      cost: 1.23,
-      max_budget_per_task: 5,
-      usage: null,
-    });
-  });
-
-  it("falls back to the REST snapshot while the store is empty", () => {
-    useConversationMetricsMock.mockReturnValue({ data: snapshot() });
-
-    const { result } = renderHook(() => useLiveConversationMetrics());
-
-    expect(result.current).toEqual({
-      cost: 1.23,
-      max_budget_per_task: 5,
-      usage: {
+    await waitFor(() =>
+      expect(result.current.usage).toEqual({
         prompt_tokens: 10,
-        completion_tokens: 20,
+        completion_tokens: 0,
         cache_read_tokens: 1,
         cache_write_tokens: 2,
-        context_window: 128_000,
-        per_turn_token: 500,
-      },
-    });
+        context_window: 0,
+        per_turn_token: 0,
+      }),
+    );
   });
 
-  it("threads the enabled flag through to the polling query", () => {
-    renderHook(() => useLiveConversationMetrics(false));
-    expect(useConversationMetricsMock).toHaveBeenCalledWith(
-      "conv-1",
-      CONVERSATION.conversation_url,
-      "sess-key",
-      false,
-    );
+  it("maps missing token usage to null usage", async () => {
+    vi.mocked(
+      AgentServerConversationService.getRuntimeConversation,
+    ).mockResolvedValue(runtimeInfo({ accumulated_token_usage: null }));
+    const { result } = renderHook(() => useLiveConversationMetrics(), {
+      wrapper: makeWrapper(),
+    });
 
-    useConversationMetricsMock.mockClear();
-    renderHook(() => useLiveConversationMetrics());
-    expect(useConversationMetricsMock).toHaveBeenCalledWith(
-      "conv-1",
-      CONVERSATION.conversation_url,
-      "sess-key",
-      true,
+    await waitFor(() =>
+      expect(result.current).toEqual({
+        cost: 1.23,
+        maxBudget: 5,
+        usage: null,
+      }),
     );
+  });
+
+  it("drops the previous cap when switching to an unbounded conversation", async () => {
+    vi.mocked(
+      AgentServerConversationService.getRuntimeConversation,
+    ).mockImplementation(async (id) =>
+      id === CONVERSATION.id
+        ? runtimeInfo()
+        : runtimeInfo({ accumulated_cost: 2 }, null),
+    );
+    const { result, rerender } = renderHook(
+      () => useLiveConversationMetrics(),
+      {
+        wrapper: makeWrapper(),
+      },
+    );
+    await waitFor(() => expect(result.current.maxBudget).toBe(5));
+
+    useActiveConversationMock.mockReturnValue({
+      data: { ...CONVERSATION, id: "conv-2", conversation_url: null },
+    });
+    rerender();
+
+    expect(result.current.maxBudget).toBeNull();
+    await waitFor(() => expect(result.current.cost).toBe(2));
+    expect(result.current.maxBudget).toBeNull();
+  });
+
+  it("pauses the runtime query until enabled", async () => {
+    const { result, rerender } = renderHook(
+      ({ enabled }) => useLiveConversationMetrics(enabled),
+      { wrapper: makeWrapper(), initialProps: { enabled: false } },
+    );
+    expect(
+      AgentServerConversationService.getRuntimeConversation,
+    ).not.toHaveBeenCalled();
+
+    rerender({ enabled: true });
+
+    await waitFor(() => expect(result.current.cost).toBe(1.23));
   });
 });

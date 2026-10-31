@@ -312,7 +312,10 @@ export function ConversationWebSocketProvider({
 
   // Helper function to update metrics from stats event
   const updateMetricsFromStats = useCallback(
-    (event: ConversationStateUpdateEventStats) => {
+    (
+      event: ConversationStateUpdateEventStats,
+      sourceConversationId: string,
+    ) => {
       const usageToMetrics = event.value.usage_to_metrics;
       if (!usageToMetrics) {
         return;
@@ -363,11 +366,14 @@ export function ConversationWebSocketProvider({
         { cost: 0, maxBudgetPerTask: null, usage: null },
       );
 
-      useMetricsStore.getState().setMetrics({
-        cost: combined.cost,
-        max_budget_per_task: combined.maxBudgetPerTask,
-        usage: combined.usage,
-      });
+      useMetricsStore.getState().setMetrics(
+        {
+          cost: combined.cost,
+          max_budget_per_task: combined.maxBudgetPerTask,
+          usage: combined.usage,
+        },
+        sourceConversationId,
+      );
     },
     [],
   );
@@ -753,8 +759,8 @@ export function ConversationWebSocketProvider({
             ) {
               setExecutionStatus(conversationId, event.value);
             }
-            if (isStatsConversationStateUpdateEvent(event)) {
-              updateMetricsFromStats(event);
+            if (isStatsConversationStateUpdateEvent(event) && conversationId) {
+              updateMetricsFromStats(event, conversationId);
             }
             // Mirror goal status into the store. Intentionally duplicated across
             // the main and planning WebSocket handlers (like the execution_status
@@ -1061,8 +1067,11 @@ export function ConversationWebSocketProvider({
             ) {
               setExecutionStatus(planningConversationId, event.value);
             }
-            if (isStatsConversationStateUpdateEvent(event)) {
-              updateMetricsFromStats(event);
+            if (
+              isStatsConversationStateUpdateEvent(event) &&
+              planningConversationId
+            ) {
+              updateMetricsFromStats(event, planningConversationId);
             }
             // Mirror goal status into the store. Intentionally duplicated across
             // the main and planning WebSocket handlers (like the execution_status

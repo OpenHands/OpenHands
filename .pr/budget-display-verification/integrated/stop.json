@@ -1,0 +1,17 @@
+{
+  "run": "/var/folders/15/pyrd6jhs3tnd259qd39xsplm0000gn/T/openhands-verify/budget-display-integrated",
+  "browser": {
+    "stopped": true,
+    "pid": 54678
+  },
+  "launcherStopped": true,
+  "ports": {
+    "ingress": "closed",
+    "agentServer": "closed",
+    "automation": "closed",
+    "frontend": "closed",
+    "vscode": "closed"
+  },
+  "evidenceFiles": 48,
+  "ok": true
+}

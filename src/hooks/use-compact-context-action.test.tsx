@@ -60,11 +60,14 @@ describe("useCompactContextAction (integration)", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     useEventStore.getState().clearEvents();
-    useMetricsStore.getState().setMetrics({
-      cost: null,
-      max_budget_per_task: null,
-      usage: usage(50_000),
-    });
+    useMetricsStore.getState().setMetrics(
+      {
+        cost: null,
+        max_budget_per_task: null,
+        usage: usage(50_000),
+      },
+      "c1",
+    );
     mutateMock.mockImplementation((_vars, opts) => opts.onSuccess());
     successToast.mockClear();
     errorToast.mockClear();
@@ -87,11 +90,14 @@ describe("useCompactContextAction (integration)", () => {
 
     act(() => {
       useEventStore.getState().addEvent(condensationEvent("cond-x"));
-      useMetricsStore.getState().setMetrics({
-        cost: null,
-        max_budget_per_task: null,
-        usage: usage(20_000),
-      });
+      useMetricsStore.getState().setMetrics(
+        {
+          cost: null,
+          max_budget_per_task: null,
+          usage: usage(20_000),
+        },
+        "c1",
+      );
     });
 
     expect(successToast).toHaveBeenCalledWith(

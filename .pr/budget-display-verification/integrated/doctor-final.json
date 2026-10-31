@@ -1,0 +1,25 @@
+{
+  "ok": true,
+  "run": "/var/folders/15/pyrd6jhs3tnd259qd39xsplm0000gn/T/openhands-verify/budget-display-integrated",
+  "baseUrl": "http://127.0.0.1:18800",
+  "failed": [],
+  "warnings": [],
+  "passed": [
+    "launcher process group alive: /opt/homebrew/Cellar/node@24/24.22.1/bin/node /private/tmp/canvas-budget-display/bin/agent-canvas.mjs --port 18800",
+    "launcher is this run's agent-canvas: /opt/homebrew/Cellar/node@24/24.22.1/bin/node /private/tmp/canvas-budget-display/bin/agent-canvas.mjs --port 18800",
+    "port ingress:18800 listening: open",
+    "port agentServer:18801 listening: open",
+    "port automation:18802 listening: open",
+    "port frontend:18803 listening: open",
+    "served build matches this checkout's build inputs: served=c4139faed8d2b9d7 run=c4139faed8d2b9d7 revision=90350be6e173",
+    "checkout build inputs unchanged since launch: launch=c4139faed8d2b9d7 now=c4139faed8d2b9d7",
+    "unauthenticated API rejected: status=401",
+    "authenticated settings readable: status=200",
+    "LLM configured: model=deepseek/deepseek-flash",
+    "agent-server reachable: version=1.58.2",
+    "agent-server matches pin: server=1.58.2, chosen by OH_AGENT_SERVER_LOCAL_PATH (default pin 1.55.1)",
+    "agent-server meets the UI minimum: server=1.58.2 minimum=1.51.0",
+    "automation healthy: status=200",
+    "UI loads without page errors: markers=home-chat-launcher pageErrors=0 testidsInDom=108 (hidden included)"
+  ]
+}

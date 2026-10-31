@@ -309,6 +309,7 @@ export interface ResponseLatency {
 
 export interface RuntimeConversationInfo {
   id: string;
+  max_budget_per_run?: number | null;
   title: string | null;
   metrics: MetricsSnapshot | null;
   created_at: string;
