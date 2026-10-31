@@ -27323,7 +27323,6 @@
     "uk": "Рекомендовані",
     "id": "Disarankan"
   },
-
   "RECOMMENDED_AUTOMATIONS$MORE_TITLE": {
     "en": "More templates",
     "ja": "その他のテンプレート",
@@ -39707,5 +39706,23 @@
     "uk": "Нова розмова в пісочниці",
     "ca": "Conversa nova al sandbox",
     "id": "Percakapan baru di sandbox"
+  },
+  "CONVERSATION$START_ENVIRONMENT_CHANGED": {
+    "en": "The environment changed. Return to the original environment to continue.",
+    "ja": "環境が変更されました。続行するには元の環境に戻ってください。",
+    "zh-CN": "环境已更改。请返回原来的环境以继续。",
+    "zh-TW": "環境已變更。請返回原本的環境以繼續。",
+    "ko-KR": "환경이 변경되었습니다. 계속하려면 원래 환경으로 돌아가세요.",
+    "no": "Miljøet ble endret. Gå tilbake til det opprinnelige miljøet for å fortsette.",
+    "it": "L’ambiente è cambiato. Torna all’ambiente originale per continuare.",
+    "pt": "O ambiente foi alterado. Volte ao ambiente original para continuar.",
+    "es": "El entorno ha cambiado. Vuelve al entorno original para continuar.",
+    "ar": "تغيرت البيئة. عُد إلى البيئة الأصلية للمتابعة.",
+    "fr": "L’environnement a changé. Revenez à l’environnement d’origine pour continuer.",
+    "tr": "Ortam değişti. Devam etmek için önceki ortama dönün.",
+    "de": "Die Umgebung wurde geändert. Kehre zur ursprünglichen Umgebung zurück, um fortzufahren.",
+    "uk": "Середовище змінилося. Поверніться до початкового середовища, щоб продовжити.",
+    "ca": "L’entorn ha canviat. Torna a l’entorn original per continuar.",
+    "id": "Lingkungan telah berubah. Kembali ke lingkungan semula untuk melanjutkan."
   }
 }
