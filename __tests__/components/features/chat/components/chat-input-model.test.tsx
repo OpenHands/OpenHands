@@ -82,10 +82,10 @@ describe("ChatInputModel", () => {
     fireEvent.click(model);
     const popover = screen.getByTestId("chat-input-llm-model-popover");
     expect(popover).toHaveTextContent("openai/gpt-4o");
-    const llmSettingsLink = screen.getByRole("link", {
-      name: /LLM Profiles|SETTINGS\$LLM_PROFILES|LLM Settings|SETTINGS\$LLM_SETTINGS/,
+    const agentSettingsLink = screen.getByRole("link", {
+      name: /Agent|SETTINGS\$NAV_AGENT/,
     });
-    expect(llmSettingsLink).toHaveAttribute("href", "/settings/llm");
+    expect(agentSettingsLink).toHaveAttribute("href", "/settings/agents");
   });
 
   it("renders nothing when llm_model is missing", () => {
