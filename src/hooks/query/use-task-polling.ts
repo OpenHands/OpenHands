@@ -22,6 +22,7 @@ import {
   linkPendingTaskMessages,
   schedulePendingTaskMessageReassign,
 } from "#/utils/pending-task-message-link";
+import { retryTransientRequest } from "#/utils/transient-error-retry";
 import { useBackendScopedPath } from "#/hooks/use-backend-scoped-path";
 
 const storeTaskPlugins = (
@@ -76,6 +77,7 @@ export const useTaskPolling = () => {
     },
     enabled: !!taskId,
     refetchInterval: (query) => {
+      if (query.state.status === "error") return false;
       const task = query.state.data;
       if (!task) return false;
 
@@ -87,7 +89,7 @@ export const useTaskPolling = () => {
       // Poll every 3 seconds while task is in progress
       return 3000;
     },
-    retry: false,
+    retry: retryTransientRequest,
   });
 
   return {

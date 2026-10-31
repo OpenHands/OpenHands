@@ -1,4 +1,5 @@
 import React from "react";
+import { HttpError } from "@openhands/typescript-client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -49,7 +50,7 @@ describe("useTaskPolling", () => {
 
   const createWrapper = () => {
     queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
+      defaultOptions: { queries: { retry: false, retryDelay: 1 } },
     });
 
     return function Wrapper({ children }: { children: React.ReactNode }) {
@@ -166,7 +167,7 @@ describe("useTaskPolling", () => {
 
     const createWrapperForConversation = (conversationId: string) => {
       queryClient = new QueryClient({
-        defaultOptions: { queries: { retry: false } },
+        defaultOptions: { queries: { retry: false, retryDelay: 1 } },
       });
 
       return function Wrapper({ children }: { children: React.ReactNode }) {
@@ -262,5 +263,29 @@ describe("useTaskPolling", () => {
       "123",
       "conversation-1",
     );
+  });
+  it("recovers the first task read after a transient failure and navigates once", async () => {
+    vi.mocked(AgentServerConversationService.getStartTask)
+      .mockRejectedValueOnce(new HttpError(503, "Unavailable", null))
+      .mockResolvedValue(readyTask);
+    renderHook(() => useTaskPollingController(), { wrapper: createWrapper() });
+    await waitFor(() => expect(navigate).toHaveBeenCalledOnce());
+    expect(AgentServerConversationService.getStartTask).toHaveBeenCalledTimes(
+      2,
+    );
+  });
+
+  it("stops polling after a terminal request error", async () => {
+    vi.mocked(AgentServerConversationService.getStartTask).mockRejectedValue(
+      new HttpError(404, "Not found", null),
+    );
+    const { result } = renderHook(() => useTaskPolling(), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.taskError).toBeTruthy());
+    expect(AgentServerConversationService.getStartTask).toHaveBeenCalledTimes(
+      1,
+    );
+    expect(navigate).not.toHaveBeenCalled();
   });
 });
