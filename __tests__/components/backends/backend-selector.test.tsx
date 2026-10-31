@@ -23,7 +23,7 @@ import {
 import { CloudOrganizationBoundary } from "#/components/features/backends/cloud-organization-boundary";
 import { BackendSelector } from "#/components/features/backends/backend-selector";
 import {
-  __resetEnvironmentSwitchOverlayForTests,
+  dismissEnvironmentSwitch,
   EnvironmentSwitchOverlay,
 } from "#/components/features/backends/environment-switch-overlay";
 
@@ -203,7 +203,7 @@ afterEach(() => {
   window.localStorage.clear();
   vi.unstubAllEnvs();
   __resetActiveStoreForTests();
-  __resetEnvironmentSwitchOverlayForTests();
+  dismissEnvironmentSwitch();
 });
 
 describe("BackendSelector", () => {

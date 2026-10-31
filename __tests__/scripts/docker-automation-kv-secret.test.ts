@@ -48,7 +48,7 @@ function dockerScript(): string {
 }
 
 function runDockerKvSecret(env: Record<string, string>) {
-  return spawnSync("bash", ["-c", dockerScript()], {
+  return spawnSync("bash", ["--norc", "-c", dockerScript()], {
     encoding: "utf-8",
     env: { PATH: process.env.PATH ?? "", ...env },
   });
@@ -70,7 +70,7 @@ async function racingLauncher(
 ): Promise<string> {
   const child =
     launcher === "docker"
-      ? spawn("bash", ["-c", dockerScript()], {
+      ? spawn("bash", ["--norc", "-c", dockerScript()], {
           env: {
             PATH: process.env.PATH ?? "",
             STATE_DIR: stateDir,
