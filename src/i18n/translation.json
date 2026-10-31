@@ -1493,6 +1493,24 @@
     "ca": "Agent",
     "id": "Agen"
   },
+  "SETTINGS$AGENT_PROFILE_BEHAVIOR": {
+    "en": "Agent behavior",
+    "ja": "エージェントの動作",
+    "zh-CN": "代理行为",
+    "zh-TW": "代理行為",
+    "ko-KR": "에이전트 동작",
+    "no": "Agentatferd",
+    "it": "Comportamento dell'agente",
+    "pt": "Comportamento do agente",
+    "es": "Comportamiento del agente",
+    "ar": "سلوك الوكيل",
+    "fr": "Comportement de l'agent",
+    "tr": "Ajan davranışı",
+    "de": "Agentenverhalten",
+    "uk": "Поведінка агента",
+    "ca": "Comportament de l'agent",
+    "id": "Perilaku agen"
+  },
   "SETTINGS$PAGE_AGENT_PROFILES_SUBLINE": {
     "en": "Create and manage reusable agent setups.",
     "ja": "再利用可能なエージェント設定を作成・管理します。",

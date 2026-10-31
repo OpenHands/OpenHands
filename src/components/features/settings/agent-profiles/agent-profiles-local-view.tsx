@@ -4,6 +4,7 @@ import { useActiveBackend } from "#/contexts/active-backend-context";
 import { ensureDefaultAgentProfileMigrated } from "#/hooks/use-migrate-default-agent-profile";
 import { useTranslation } from "react-i18next";
 import { AgentProfilesManager } from "./agent-profiles-manager";
+import { AgentFormSection } from "./agent-form-section";
 import { mergeAgentProfileSaveInput } from "./merge-agent-profile-save-input";
 import { newProfileSeed } from "./new-profile-seed";
 import { ProfileNameInput } from "#/components/features/settings/llm-profiles/profile-name-input";
@@ -449,92 +450,89 @@ export function AgentProfilesLocalView() {
           ) : null}
         </div>
       ) : (
-        <p
-          data-testid="agent-profile-no-llm"
-          className="text-sm text-feedback-error"
-        >
-          {t(I18nKey.SETTINGS$AGENT_PROFILE_NO_LLM)}
-        </p>
+        <div className="flex flex-col gap-2">
+          <p className="text-sm">
+            {t(I18nKey.SETTINGS$AGENT_PROFILE_LLM_LABEL)}
+          </p>
+          <p
+            data-testid="agent-profile-no-llm"
+            className="text-sm text-feedback-error"
+          >
+            {t(I18nKey.SETTINGS$AGENT_PROFILE_NO_LLM)}
+          </p>
+        </div>
       )}
-      <BrandButton
+      <AgentFormSection
         testId="agent-profile-add-llm"
-        type="button"
-        variant="secondary"
-        onClick={() => setCreatingLlmProfile(true)}
+        title={t(I18nKey.SETTINGS$ADD_LLM_PROFILE)}
+        optional={false}
+        open={creatingLlmProfile}
+        onToggle={setCreatingLlmProfile}
       >
-        {t(I18nKey.SETTINGS$ADD_LLM_PROFILE)}
-      </BrandButton>
+        {creatingLlmProfile && (
+          <section data-testid="agent-inline-llm-editor">
+            <LlmSettingsLocalView
+              createInAgent
+              onSavedProfile={setLlmProfileRef}
+              onCancel={() => setCreatingLlmProfile(false)}
+            />
+          </section>
+        )}
+      </AgentFormSection>
     </div>
   );
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-2">
-        <BackNavButton
-          testId="back-to-agent-profiles"
-          onClick={handleBackToList}
-        >
-          {t(I18nKey.BUTTON$BACK)}
-        </BackNavButton>
-        <Typography.H2 testId="agent-profile-editor-title">
-          {editorTitle}
-        </Typography.H2>
-        <p
-          data-testid="agent-profile-editor-description"
-          className="text-sm leading-5 text-tertiary-light"
-        >
-          {editorDescription}
-        </p>
-      </div>
+      <BackNavButton testId="back-to-agent-profiles" onClick={handleBackToList}>
+        {t(I18nKey.BUTTON$BACK)}
+      </BackNavButton>
 
-      <div className="flex flex-col gap-2">
-        <ProfileNameInput
-          testId="agent-profile-name-input"
-          value={profileName}
-          onChange={(name) => {
-            setNameTouched(true);
-            setProfileName(name);
-          }}
-          // A new profile's empty name isn't an error until the user types.
-          isRequired={viewMode === "edit" || nameTouched}
-          isDisabled={isDefaultLocked}
-          error={
-            isDuplicateName
-              ? t(I18nKey.SETTINGS$AGENT_PROFILE_NAME_TAKEN)
-              : undefined
-          }
-        />
-        {isDefaultLocked ? (
-          <p
-            data-testid="agent-profile-default-locked-note"
-            className="text-xs text-tertiary-alt"
-          >
-            {t(I18nKey.SETTINGS$AGENT_PROFILE_DEFAULT_LOCKED)}
-          </p>
-        ) : null}
-      </div>
-
-      {/* Reuse the existing Agent settings form to define the agent. */}
       <AgentSettingsScreen
         key={viewMode === "edit" ? `edit-${editingProfile?.id}` : "new-profile"}
         agentSettingsOverride={override}
         onSaveControlChange={setSaveControl}
         isDefaultProfile={isEditingDefault}
+        profileNameField={
+          <div className="flex flex-col gap-5">
+            <div className="flex flex-col gap-1">
+              <Typography.H2 testId="agent-profile-editor-title">
+                {editorTitle}
+              </Typography.H2>
+              <p
+                data-testid="agent-profile-editor-description"
+                className="text-sm leading-5 text-tertiary-light"
+              >
+                {editorDescription}
+              </p>
+            </div>
+            <ProfileNameInput
+              testId="agent-profile-name-input"
+              value={profileName}
+              onChange={(name) => {
+                setNameTouched(true);
+                setProfileName(name);
+              }}
+              isRequired={viewMode === "edit" || nameTouched}
+              isDisabled={isDefaultLocked}
+              error={
+                isDuplicateName
+                  ? t(I18nKey.SETTINGS$AGENT_PROFILE_NAME_TAKEN)
+                  : undefined
+              }
+            />
+            {isDefaultLocked && (
+              <p
+                data-testid="agent-profile-default-locked-note"
+                className="text-xs text-tertiary-alt"
+              >
+                {t(I18nKey.SETTINGS$AGENT_PROFILE_DEFAULT_LOCKED)}
+              </p>
+            )}
+          </div>
+        }
         llmPicker={llmPicker}
       />
-
-      {creatingLlmProfile && (
-        <section
-          data-testid="agent-inline-llm-editor"
-          className="max-w-2xl border-t border-border pt-6"
-        >
-          <LlmSettingsLocalView
-            createInAgent
-            onSavedProfile={setLlmProfileRef}
-            onCancel={() => setCreatingLlmProfile(false)}
-          />
-        </section>
-      )}
 
       <div className="flex justify-start gap-3 pt-4">
         <BrandButton

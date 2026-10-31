@@ -483,21 +483,22 @@ export function LlmSettingsLocalView({
   // Create/Edit view: show form with profile name input
   return (
     <div className="flex flex-col gap-6">
-      {/* Header with back button */}
-      <div className="flex flex-col gap-2">
-        <BackNavButton testId="back-to-profiles" onClick={handleBackToList}>
-          {t(I18nKey.BUTTON$BACK)}
-        </BackNavButton>
-        <Typography.H2 testId="profile-editor-title">
-          {profileEditorTitle}
-        </Typography.H2>
-        <p
-          data-testid="profile-editor-description"
-          className="text-sm leading-5 text-tertiary-light"
-        >
-          {profileEditorDescription}
-        </p>
-      </div>
+      {!createInAgent && (
+        <div className="flex flex-col gap-2">
+          <BackNavButton testId="back-to-profiles" onClick={handleBackToList}>
+            {t(I18nKey.BUTTON$BACK)}
+          </BackNavButton>
+          <Typography.H2 testId="profile-editor-title">
+            {profileEditorTitle}
+          </Typography.H2>
+          <p
+            data-testid="profile-editor-description"
+            className="text-sm leading-5 text-tertiary-light"
+          >
+            {profileEditorDescription}
+          </p>
+        </div>
+      )}
 
       {/* Profile name input */}
       <ProfileNameInput

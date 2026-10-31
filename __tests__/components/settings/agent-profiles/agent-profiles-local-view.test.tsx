@@ -30,11 +30,13 @@ vi.mock("#/routes/agent-settings", () => {
     agentSettingsOverride,
     onSaveControlChange,
     isDefaultProfile,
+    profileNameField,
     llmPicker,
   }: {
     agentSettingsOverride?: Record<string, unknown> | null;
     onSaveControlChange?: (c: AgentSettingsSaveControl) => void;
     isDefaultProfile?: boolean;
+    profileNameField?: React.ReactNode;
     llmPicker?: React.ReactNode;
   }) => {
     useEffect(() => {
@@ -48,6 +50,7 @@ vi.mock("#/routes/agent-settings", () => {
         data-override={JSON.stringify(agentSettingsOverride)}
         data-default-profile={String(Boolean(isDefaultProfile))}
       >
+        {profileNameField}
         {emitControl?.agentType === "acp" ? null : llmPicker}
       </div>
     );
@@ -1059,9 +1062,15 @@ describe("AgentProfilesLocalView save mapping", () => {
     renderView();
     const user = await openCreateAndName("my-agent");
 
-    await user.click(screen.getByTestId("agent-profile-add-llm"));
+    await user.click(
+      screen.getByTestId("agent-profile-add-llm").querySelector("summary")!,
+    );
 
-    expect(screen.getByTestId("agent-inline-llm-editor")).toBeInTheDocument();
+    expect(await screen.findByTestId("agent-inline-llm-editor")).toBeVisible();
+    expect(screen.queryByTestId("back-to-profiles")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("profile-editor-title"),
+    ).not.toBeInTheDocument();
     expect(screen.getByTestId("agent-profile-name-input")).toHaveValue(
       "my-agent",
     );

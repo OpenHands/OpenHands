@@ -25,6 +25,8 @@ import {
 } from "#/api/backend-registry/active-store";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { parseCommand } from "#/utils/acp-command";
+import { I18nKey } from "#/i18n/declaration";
+
 const CLAUDE_COMMAND = getClientAcpProvider("claude-code")!.default_command;
 const CODEX_COMMAND = getClientAcpProvider("codex")!.default_command;
 const OPENCODE_PROVIDER = getClientAcpProvider("opencode")!;
@@ -1674,7 +1676,40 @@ describe("AgentSettingsScreen — skills", () => {
     expect(screen.getByTestId("agent-settings-skills-skill-7")).toBeVisible();
   });
 
-  it("shows the LLM picker under the agent type for OpenHands only", async () => {
+  it("keeps the required fields visible while optional settings are collapsed", async () => {
+    const user = userEvent.setup();
+    renderAgentSettingsScreen({
+      agentSettingsOverride: { agent_kind: "openhands" },
+      profileNameField: (
+        <input aria-label={I18nKey.SETTINGS$PROFILE_NAME_LABEL} />
+      ),
+      llmPicker: <div data-testid="llm-picker-slot" />,
+    });
+
+    await screen.findByTestId("agent-settings-screen");
+    expect(
+      screen.getByLabelText(I18nKey.SETTINGS$PROFILE_NAME_LABEL),
+    ).toBeVisible();
+    expect(screen.getByTestId("llm-picker-slot")).toBeVisible();
+    for (const section of [
+      "agent-secrets-section",
+      "agent-mcp-section",
+      "agent-settings-skills-section",
+      "agent-behavior-section",
+    ]) {
+      expect(screen.getByTestId(section)).not.toHaveAttribute("open");
+    }
+    await user.click(
+      screen.getByTestId("agent-mcp-section").querySelector("summary")!,
+    );
+    expect(screen.getByTestId("agent-mcp-setup")).toBeVisible();
+    await user.click(
+      screen.getByTestId("agent-behavior-section").querySelector("summary")!,
+    );
+    expect(screen.getByTestId("agent-settings-tools-mode")).toBeVisible();
+  });
+
+  it("shows the LLM picker for OpenHands profiles only", async () => {
     renderAgentSettingsScreen({
       agentSettingsOverride: CLAUDE_PROFILE,
       llmPicker: <div data-testid="llm-picker-slot" />,
@@ -1683,22 +1718,23 @@ describe("AgentSettingsScreen — skills", () => {
     expect(screen.queryByTestId("llm-picker-slot")).not.toBeInTheDocument();
   });
 
-  it("puts the LLM picker right after the agent type", async () => {
+  it("shows the required LLM directly after the profile name, before optional sections", async () => {
     renderAgentSettingsScreen({
       agentSettingsOverride: { agent_kind: "openhands" },
+      profileNameField: (
+        <input aria-label={I18nKey.SETTINGS$PROFILE_NAME_LABEL} />
+      ),
       llmPicker: <div data-testid="llm-picker-slot" />,
     });
     const slot = await screen.findByTestId("llm-picker-slot");
-    const agentType = screen.getByTestId("agent-type-selector");
+    const name = screen.getByLabelText(I18nKey.SETTINGS$PROFILE_NAME_LABEL);
 
     expect(
-      agentType.compareDocumentPosition(slot) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
+      name.compareDocumentPosition(slot) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
-      slot.compareDocumentPosition(
-        screen.getByTestId("agent-settings-mcp-mode"),
-      ) & Node.DOCUMENT_POSITION_FOLLOWING,
+      slot.compareDocumentPosition(screen.getByTestId("agent-mcp-section")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });
 
