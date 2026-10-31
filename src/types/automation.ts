@@ -125,6 +125,17 @@ export interface Automation {
    * `#/utils/automation-preset-sources`.
    */
   preset_metadata?: Record<string, unknown> | null;
+  /**
+   * Labels the creator groups automations by, normalized by the automation
+   * service. Absent from an automation service older than tag support.
+   */
+  tags?: string[];
+}
+
+/** One of the org's tags and how many live automations carry it. */
+export interface AutomationTagCount {
+  tag: string;
+  count: number;
 }
 
 export type AutomationSpec = Omit<

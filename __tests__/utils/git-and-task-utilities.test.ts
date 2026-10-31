@@ -246,21 +246,45 @@ describe("constructRepositoryUrl", () => {
     );
   });
 
+  it("encodes a repository name with a space one segment at a time", () => {
+    // `parseGitRemoteUrl` now decodes the remote path, so link inputs are
+    // raw names like "qa-example/qa-f07 repo".
+    expect(constructRepositoryUrl("github", "qa-example/qa-f07 repo")).toBe(
+      "https://github.com/qa-example/qa-f07%20repo",
+    );
+    expect(constructRepositoryUrl("gitlab", "qa-group/Web Apps/repo")).toBe(
+      "https://gitlab.com/qa-group/Web%20Apps/repo",
+    );
+  });
+
+  it("does not encode an already-encoded GitHub name twice", () => {
+    expect(constructRepositoryUrl("github", "qa-example/qa%2Df07%20repo")).toBe(
+      "https://github.com/qa-example/qa-f07%20repo",
+    );
+  });
+
   it("encodes a stray % in an Azure DevOps name", () => {
     expect(constructRepositoryUrl("azure_devops", "org/100%/repo")).toBe(
       "https://dev.azure.com/org/100%25/_git/repo",
     );
   });
 
-  it("uses a custom host for Azure DevOps", () => {
-    expect(
-      constructRepositoryUrl(
-        "azure_devops",
-        "org/project/repo",
-        "ado.example.com",
-      ),
-    ).toBe("https://ado.example.com/org/project/_git/repo");
-  });
+  it.each(["org", "https://dev.azure.com/org"])(
+    "keeps Azure DevOps links on dev.azure.com when the connection host is %s",
+    (host) => {
+      // The server stores an Azure DevOps connection's organization in `host`
+      // and always calls dev.azure.com, so the host is not a base URL.
+      expect(
+        constructRepositoryUrl("azure_devops", "org/project/repo", host),
+      ).toBe("https://dev.azure.com/org/project/_git/repo");
+      expect(
+        constructBranchUrl("azure_devops", "org/project/repo", "main", host),
+      ).toBe("https://dev.azure.com/org/project/_git/repo?version=GBmain");
+      expect(
+        constructPullRequestUrl(7, "azure_devops", "org/project/repo", host),
+      ).toBe("https://dev.azure.com/org/project/_git/repo/pullrequest/7");
+    },
+  );
 
   it("keeps the plain path for an Azure DevOps name without three parts", () => {
     expect(constructRepositoryUrl("azure_devops", "org/repo")).toBe(

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MockInstance } from "vitest";
+import { HttpError } from "@openhands/typescript-client";
 import { CANVAS_UI_CLIENT_TOOL_NAME } from "#/constants/canvas-ui";
 import { LAUNCH_CHILD_CONVERSATION_TOOL_NAME } from "#/constants/child-conversation";
 import { REQUEST_SECRET_TOOL_NAME } from "#/constants/secret-request";
@@ -7,8 +8,6 @@ import { AUTOMATION_FORM_UPDATE_TOOL_NAME } from "#/constants/automation-form";
 
 import {
   ACP_SERVER_TAG_KEY,
-  AGENT_CANVAS_SOURCE,
-  CLIENT_SOURCE_TAG_KEY,
   WORKSPACE_TAG_KEY,
   buildWorkspaceTags,
   buildRuntimeServicesSystemSuffix,
@@ -23,6 +22,7 @@ import {
 } from "#/api/agent-server-adapter";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { SecretsService } from "#/api/secrets-service";
+import AgentProfilesService from "#/api/agent-profiles-service/agent-profiles-service.api";
 import {
   removeStoredConversationMetadata,
   setStoredConversationMetadata,
@@ -32,6 +32,7 @@ import { SKILLS_CATALOG } from "@openhands/extensions/skills";
 import type { HookConfig } from "@openhands/typescript-client";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import type { SettingsValue } from "#/types/settings";
+import { useModelStore } from "#/stores/model-store";
 
 const {
   mockGetAgentServerWorkingDir,
@@ -131,6 +132,7 @@ beforeEach(() => {
     apiKey: "session-key",
     kind: "local",
   });
+  useModelStore.getState().setHomeManualModelPick(false);
 });
 
 const PROFILE = {
@@ -202,6 +204,54 @@ describe("buildStartConversationRequest", () => {
     });
 
     expect(payload.title_llm_profile).toBe("Titles");
+  });
+
+  it("sends no runtime options while Settings → Runtime is at its defaults", () => {
+    const payload = buildStartConversationRequest({
+      ...PROFILE,
+      settings: {
+        ...DEFAULT_SETTINGS,
+        conversation_settings: {
+          ...DEFAULT_SETTINGS.conversation_settings,
+          worktree_base: "default_branch",
+          worktree_base_ref: null,
+          worktree_branch_prefix: "openhands/",
+          container_memory: null,
+          container_cpus: null,
+          container_browser: true,
+        },
+      },
+    });
+
+    expect(payload).not.toHaveProperty("worktree_options");
+    expect(payload).not.toHaveProperty("container");
+  });
+
+  it("sends the Settings → Runtime options a user changed", () => {
+    const payload = buildStartConversationRequest({
+      ...PROFILE,
+      settings: {
+        ...DEFAULT_SETTINGS,
+        conversation_settings: {
+          ...DEFAULT_SETTINGS.conversation_settings,
+          worktree_base: "ref",
+          worktree_base_ref: "origin/release",
+          worktree_branch_prefix: "me/",
+          container_memory: "4g",
+          container_cpus: 2,
+          container_browser: false,
+        },
+      },
+    });
+
+    expect(payload).toMatchObject({
+      worktree_options: {
+        base: "ref",
+        ref: "origin/release",
+        branch_prefix: "me/",
+      },
+      container: { memory: "4g", cpus: 2, browser: false },
+    });
   });
 
   it("omits the title LLM profile in automatic mode without a default", () => {
@@ -675,6 +725,30 @@ describe("toAppConversation", () => {
       const result = toAppConversation({ ...baseInfo, tags: {} });
 
       expect(result.selected_workspace).toBeNull();
+    });
+
+    it("hydrates repo, branch and provider from the tags (#15598)", () => {
+      const result = toAppConversation({
+        ...baseInfo,
+        tags: {
+          repository: "OpenHands/OpenHands",
+          selectedbranch: "main",
+          gitprovider: "github",
+        },
+      });
+
+      expect(result.selected_repository).toBe("OpenHands/OpenHands");
+      expect(result.selected_branch).toBe("main");
+      expect(result.git_provider).toBe("github");
+    });
+
+    it("drops an unrecognized gitprovider tag instead of casting it", () => {
+      const result = toAppConversation({
+        ...baseInfo,
+        tags: { gitprovider: "not-a-real-provider" },
+      });
+
+      expect(result.git_provider).toBeNull();
     });
   });
 
@@ -1213,6 +1287,40 @@ describe("profile launch additions", () => {
     },
   );
 
+  it("suppresses the route-at-start suffix when the home launch passes suppressRouterAtStart", () => {
+    // The flag is threaded in by useCreateConversation (read-and-cleared from
+    // the store) rather than read by the builder, so child/`/new` launches
+    // that don't pass it route as usual.
+    const payload = buildStartConversationRequest({
+      ...PROFILE,
+      settings: {
+        ...DEFAULT_SETTINGS,
+        run_router_at_conversation_start: true,
+      },
+      profileHasRouter: true,
+      suppressRouterAtStart: true,
+      query: "hello",
+    });
+    const appended = additionsOf(payload)?.system_message_suffix_append ?? "";
+    expect(appended).not.toContain("ROUTE_AT_CONVERSATION_START");
+  });
+
+  it("does not suppress route-at-start when suppressRouterAtStart is omitted", () => {
+    // A child or `/new` launch omits the flag — routing is unaffected by any
+    // pending home pick.
+    const payload = buildStartConversationRequest({
+      ...PROFILE,
+      settings: {
+        ...DEFAULT_SETTINGS,
+        run_router_at_conversation_start: true,
+      },
+      profileHasRouter: true,
+      query: "hello",
+    });
+    const appended = additionsOf(payload)?.system_message_suffix_append ?? "";
+    expect(appended).toContain("<ROUTE_AT_CONVERSATION_START>");
+  });
+
   it("adds a catalog skill the opening message invokes", () => {
     const [entry] = SKILLS_CATALOG;
     const payload = buildStartConversationRequest({
@@ -1227,19 +1335,26 @@ describe("profile launch additions", () => {
     expect(skills[0].source).toMatch(new RegExp(`/${entry.name}/SKILL\\.md$`));
   });
 
-  it.each([
-    ["an ACP profile", "acp" as const, (name: string) => `/${name} please`],
-    [
-      "a message that invokes no catalog skill",
-      "openhands" as const,
-      () => "/not-a-catalog-skill please",
-    ],
-  ])("adds no skills for %s", (_case, kind, query) => {
+  it("adds the invoked catalog skill to an ACP launch", () => {
+    const [entry] = SKILLS_CATALOG;
+    const payload = buildStartConversationRequest({
+      settings: DEFAULT_SETTINGS,
+      agentProfileId: "profile-acp",
+      agentProfileKind: "acp",
+      query: `/${entry.name} please`,
+    });
+
+    expect(additionsOf(payload)?.skills?.map((skill) => skill.name)).toContain(
+      entry.name,
+    );
+  });
+
+  it("adds no skills for a message that invokes no catalog skill", () => {
     const payload = buildStartConversationRequest({
       settings: DEFAULT_SETTINGS,
       agentProfileId: "profile-1",
-      agentProfileKind: kind,
-      query: query(SKILLS_CATALOG[0].name),
+      agentProfileKind: "openhands",
+      query: "/not-a-catalog-skill please",
     });
 
     expect(additionsOf(payload)?.skills).toBeUndefined();
@@ -1337,6 +1452,62 @@ describe("buildStartConversationRequestWithEncryptedSettings", () => {
 
     expect(payload.hook_config).toBeUndefined();
     expect(payload.agent_profile_id).toBe("profile-1");
+  });
+
+  describe("skills for an ACP launch", () => {
+    const launch = () =>
+      buildStartConversationRequestWithEncryptedSettings({
+        settings: { ...DEFAULT_SETTINGS, enabled_skills: [first.name] },
+        agentProfileId: "profile-acp",
+        agentProfileKind: "acp",
+        hooksProjectDir: null,
+      });
+    const skillNames = (payload: unknown) =>
+      (additionsOf(payload)?.skills ?? []).map((skill) => skill.name);
+    const [first, second] = SKILLS_CATALOG;
+
+    afterEach(() => {
+      vi.mocked(AgentProfilesService.getProfile).mockRestore();
+    });
+
+    it("follows the OpenHands default profile that owns the Skills page", async () => {
+      vi.spyOn(AgentProfilesService, "getProfile").mockResolvedValue({
+        profile: {
+          agent_kind: "openhands",
+          public_skills: [first.name, second.name],
+          disabled_skills: [first.name],
+        },
+      } as unknown as Awaited<
+        ReturnType<typeof AgentProfilesService.getProfile>
+      >);
+
+      expect(skillNames(await launch())).toEqual([second.name]);
+    });
+
+    it("falls back to the settings lists when there is no default profile", async () => {
+      vi.spyOn(AgentProfilesService, "getProfile").mockRejectedValue(
+        new HttpError(404, "Not Found"),
+      );
+
+      expect(skillNames(await launch())).toEqual([first.name]);
+    });
+
+    it("uses the settings selection when the default profile is ACP", async () => {
+      vi.spyOn(AgentProfilesService, "getProfile").mockResolvedValue({
+        profile: { agent_kind: "acp" },
+      } as Awaited<ReturnType<typeof AgentProfilesService.getProfile>>);
+
+      expect(skillNames(await launch())).toEqual([first.name]);
+    });
+
+    it.each([new HttpError(500, "Server error"), new Error("Network error")])(
+      "rejects the launch when the authoritative selection cannot be read: %s",
+      async (error) => {
+        vi.spyOn(AgentProfilesService, "getProfile").mockRejectedValue(error);
+
+        await expect(launch()).rejects.toBe(error);
+      },
+    );
   });
 
   it("routes the first message for a profile that carries a router", async () => {

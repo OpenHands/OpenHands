@@ -240,7 +240,7 @@ export function MetaProfileEditor({
             }))
           }
         />
-        <p className="text-xs text-[var(--oh-muted)]">
+        <p className="text-xs text-muted">
           {t(I18nKey.SETTINGS$META_PROFILE_CLASSIFIER_HELP)}
         </p>
       </div>
@@ -269,7 +269,7 @@ export function MetaProfileEditor({
             )}
           />
         </label>
-        <p className="text-xs text-[var(--oh-muted)]">
+        <p className="text-xs text-muted">
           {t(I18nKey.SETTINGS$META_PROFILE_PROMPT_TEMPLATE_HELP, {
             instance_text: INSTANCE_TEXT_PLACEHOLDER_TEXT,
             model_table: MODEL_TABLE_PLACEHOLDER_TEXT,
@@ -303,7 +303,7 @@ export function MetaProfileEditor({
             )}
           />
         </label>
-        <p className="text-xs text-[var(--oh-muted)]">
+        <p className="text-xs text-muted">
           {t(I18nKey.SETTINGS$META_PROFILE_MODEL_TABLE_HELP, {
             model_table: MODEL_TABLE_PLACEHOLDER_TEXT,
           })}
@@ -326,7 +326,7 @@ export function MetaProfileEditor({
             }
           />
           <div className="flex flex-wrap items-center gap-3">
-            <p className="text-xs text-[var(--oh-muted)]">
+            <p className="text-xs text-muted">
               {t(I18nKey.SETTINGS$META_PROFILE_CREATE_ROUTER_PROFILES_HELP)}
             </p>
             <BrandButton

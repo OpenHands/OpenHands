@@ -1,3 +1,6 @@
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { compile } from "@tailwindcss/node";
 import {
   act,
   fireEvent,
@@ -364,6 +367,119 @@ describe("AutomationSetupPanel", () => {
     vi.useRealTimers();
   });
 
+  it("preserves fixed card edges and root-scaled schedule fields in compiled CSS", async () => {
+    // Arrange: use the real stylesheet and classes emitted by the panel.
+    const compiler = await compile(
+      await readFile(resolve("src/tailwind.css"), "utf8"),
+      { base: resolve("src"), onDependency: () => {} },
+    );
+    const user = userEvent.setup();
+    const { container } = renderPanel();
+    const style = document.createElement("style");
+    const originalRootFontSize = document.documentElement.style.fontSize;
+    document.head.appendChild(style);
+    const applyLayout = () => {
+      const classes = new Set(
+        [...container.querySelectorAll("[class]")].flatMap((element) => [
+          ...element.classList,
+        ]),
+      );
+      // jsdom does not apply cascade layers. Keep each matching compiled rule
+      // in its original order, so shared form styles still participate.
+      style.textContent = [
+        ...compiler
+          .build([...classes])
+          .matchAll(/\.((?:\\.|[\w-])+)\s*\{([^{}]+)\}/g),
+      ]
+        .filter(([, selector]) => classes.has(selector.replace(/\\(.)/g, "$1")))
+        .map(([rule]) => rule)
+        .join("\n");
+    };
+    const assertJoinedCard = (card: HTMLElement, tray: HTMLElement) => {
+      expect(getComputedStyle(card).borderRadius).toBe("15px");
+      expect(getComputedStyle(card).marginBottom).toBe("-15px");
+      const trayStyle = getComputedStyle(tray);
+      expect(trayStyle.borderBottomLeftRadius).toBe("15px");
+      expect(trayStyle.borderBottomRightRadius).toBe("15px");
+      expect(trayStyle.paddingTop).toBe("23px");
+    };
+    const scheduleWidth = (element: HTMLElement) => {
+      // jsdom keeps var() in computed widths. Resolve it from the actual row
+      // to verify both the field's winning width and the variable's owner.
+      const rowStyle = getComputedStyle(
+        screen.getByTestId("automation-setup-at-row"),
+      );
+      return getComputedStyle(element).width.replace(
+        /var\((--[\w-]+)\)/g,
+        (_, property: string) => rowStyle.getPropertyValue(property).trim(),
+      );
+    };
+
+    try {
+      // Act / Assert: the prompt and custom-code modes share the joined edge,
+      // while their editing areas retain their distinct minimum heights.
+      applyLayout();
+      assertJoinedCard(
+        screen.getByTestId("automation-setup-prompt-container"),
+        screen.getByTestId("automation-setup-prompt-drawer"),
+      );
+      expect(
+        getComputedStyle(screen.getByTestId("automation-setup-prompt"))
+          .minHeight,
+      ).toBe("120px");
+      expect(scheduleWidth(screen.getByTestId("automation-setup-time"))).toBe(
+        "9.5rem",
+      );
+
+      // Host font-size changes scale the rem-based fields, while the joined
+      // card edge stays fixed and the tray keeps its mixed px/rem inset.
+      document.documentElement.style.fontSize = "20px";
+      expect(
+        scheduleWidth(
+          screen.getByTestId("automation-setup-timezone").parentElement!,
+        ),
+      ).toBe("16rem");
+      expect(
+        getComputedStyle(screen.getByTestId("automation-setup-prompt-drawer"))
+          .paddingTop,
+      ).toBe("25px");
+      expect(
+        getComputedStyle(
+          screen.getByTestId("automation-setup-prompt-container"),
+        ).borderRadius,
+      ).toBe("15px");
+
+      await user.click(screen.getByTestId("automation-setup-frequency-once"));
+      applyLayout();
+      expect(
+        scheduleWidth(screen.getByTestId("automation-setup-datetime")),
+      ).toBe("15rem");
+      await user.click(screen.getByTestId("automation-setup-frequency-custom"));
+      applyLayout();
+      expect(
+        scheduleWidth(screen.getByTestId("automation-setup-custom-schedule")),
+      ).toBe("14rem");
+
+      document.documentElement.style.fontSize = originalRootFontSize;
+      await user.click(screen.getByTestId("automation-setup-kind-custom"));
+      applyLayout();
+      const codeScroll = screen.getByTestId(
+        "automation-setup-custom-code-scroll",
+      );
+      assertJoinedCard(
+        codeScroll.parentElement!,
+        screen.getByTestId("automation-setup-custom-details-drawer"),
+      );
+      expect(getComputedStyle(codeScroll).minHeight).toBe("256px");
+      const grip = screen.getByTestId("automation-setup-custom-code-grip");
+      expect(getComputedStyle(grip.children[0]).zIndex).toBe("1");
+      expect(getComputedStyle(grip.children[1]).zIndex).toBe("2");
+    } finally {
+      document.documentElement.style.fontSize = originalRootFontSize;
+      style.remove();
+    }
+  });
+
   it("shows a one-time date when Once is selected and a time of day otherwise", async () => {
     const user = userEvent.setup();
     renderPanel();
@@ -421,9 +537,6 @@ describe("AutomationSetupPanel", () => {
       screen.queryByText("AUTOMATION_SETUP$PYTHON_CODE"),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByTestId("automation-setup-model"),
-    ).not.toBeInTheDocument();
-    expect(
       screen.getByTestId("automation-setup-custom-code-grip"),
     ).toBeInTheDocument();
     expect(
@@ -435,9 +548,6 @@ describe("AutomationSetupPanel", () => {
     expect(
       screen.queryByTestId("automation-setup-entrypoint"),
     ).not.toBeInTheDocument();
-    expect(
-      screen.getByTestId("automation-setup-custom-details-drawer"),
-    ).toHaveClass("border-x", "border-b", "rounded-b-[15px]");
     await user.click(
       screen.getByTestId("automation-setup-custom-details-toggle"),
     );
@@ -705,6 +815,27 @@ describe("AutomationSetupPanel", () => {
       screen.queryByTestId("automation-setup-repository-menu"),
     ).not.toBeInTheDocument();
     expect(repositoryTrigger).toHaveFocus();
+  });
+
+  it("closes the event source menu on Escape and returns focus to its toggle", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(screen.getByText("AUTOMATIONS$DETAIL$TRIGGER_EVENT"));
+    const sourceToggle = screen.getByTestId(
+      "automation-setup-event-source-toggle",
+    );
+    await user.click(sourceToggle);
+    expect(
+      screen.getByTestId("automation-setup-event-source-menu"),
+    ).toBeInTheDocument();
+    expect(sourceToggle).toHaveAttribute("aria-expanded", "true");
+    await user.keyboard("{Escape}");
+    expect(
+      screen.queryByTestId("automation-setup-event-source-menu"),
+    ).not.toBeInTheDocument();
+    expect(sourceToggle).toHaveAttribute("aria-expanded", "false");
+    expect(sourceToggle).toHaveFocus();
   });
 
   it("sends each comma-separated repository to the automation service", async () => {
@@ -1260,6 +1391,76 @@ describe("AutomationSetupPanel", () => {
     );
   });
 
+  it("offers Bitbucket Data Center repositories when the service clones them", async () => {
+    vi.mocked(useDeploymentCapabilities).mockReturnValue({
+      data: {
+        ready: true,
+        features: [],
+        triggerKinds: ["cron"],
+        eventSources: [],
+        eventTypes: [],
+        triggers: {},
+        repoProviders: ["bitbucket_data_center", "github"],
+      },
+      isLoading: false,
+    } as never);
+    vi.mocked(AutomationService.createServerDraft).mockRejectedValue({
+      response: { status: 404 },
+    });
+    vi.mocked(AutomationService.validateDraft).mockResolvedValue({
+      valid: true,
+      errors: [],
+    });
+    mockUseUserProviders.mockReturnValue({
+      providers: ["bitbucket_data_center"],
+      isLoadingSettings: false,
+    });
+    mockUseSettings.mockReturnValue({
+      data: {
+        provider_tokens_set: {
+          bitbucket_data_center: "bitbucket.example.com",
+        },
+      },
+    });
+    mockUseGitRepositories.mockReturnValue(
+      createProviderRepositoriesQueryResult(
+        "bitbucket_data_center",
+        "DEM/demo-app",
+      ),
+    );
+
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(screen.getByTestId("automation-setup-repository-add"));
+    const option = screen.getByTestId(
+      "automation-setup-repository-option-DEM/demo-app",
+    );
+    expect(option).not.toBeDisabled();
+    await user.click(option);
+
+    expect(
+      screen.getByTestId("automation-setup-repository-value"),
+    ).toHaveTextContent("https://bitbucket.example.com/scm/DEM/demo-app.git");
+
+    await user.click(screen.getByTestId("automation-setup-test"));
+
+    await waitFor(() =>
+      expect(AutomationService.validateDraft).toHaveBeenCalledWith(
+        expect.objectContaining({
+          draft: expect.objectContaining({
+            repos: [
+              {
+                url: "https://bitbucket.example.com/scm/DEM/demo-app.git",
+                provider: "bitbucket_data_center",
+              },
+            ],
+          }),
+        }),
+      ),
+    );
+  });
+
   it("streams agent form updates field by field without overwriting user edits", async () => {
     vi.useFakeTimers();
     const conversationId = "conv-agent-updates";
@@ -1613,7 +1814,7 @@ describe("AutomationSetupPanel", () => {
     );
   });
 
-  it("creates custom bundle drafts with entrypoint and setup script path", async () => {
+  it("creates custom bundle drafts with entrypoint, setup script path and model", async () => {
     vi.mocked(AutomationService.uploadAutomationTarball).mockResolvedValue(
       "oh-internal://uploads/custom-archive",
     );
@@ -1635,6 +1836,8 @@ describe("AutomationSetupPanel", () => {
       screen.getByTestId("automation-setup-entrypoint"),
       "python3 main.py --once",
     );
+    await user.click(screen.getByTestId("automation-setup-model"));
+    await user.click(screen.getByTestId("automation-setup-model-option-fast"));
     await user.click(screen.getByTestId("automation-setup-create"));
 
     await waitFor(() =>
@@ -1652,6 +1855,7 @@ describe("AutomationSetupPanel", () => {
         tarball_path: "oh-internal://uploads/custom-archive",
         entrypoint: "python3 main.py --once",
         setup_script_path: "setup.sh",
+        model: "fast",
       }),
       "custom",
     );
@@ -2328,6 +2532,40 @@ describe("AutomationSetupPanel", () => {
       );
     });
 
+    it("treats the service's built-in sources as known before capabilities answer", async () => {
+      // The default capabilities mock returns no data, so the panel is on its
+      // fallback source list.
+      const user = userEvent.setup();
+      renderPanel();
+
+      await user.click(screen.getByText("AUTOMATIONS$DETAIL$TRIGGER_EVENT"));
+      await user.click(
+        screen.getByTestId("automation-setup-event-source-toggle"),
+      );
+      await user.click(
+        screen.getByTestId("automation-setup-event-source-custom"),
+      );
+      const sourceInput = screen.getByTestId("automation-setup-event-source");
+
+      for (const builtin of [
+        "jira_dc",
+        "bitbucket_data_center",
+        "azure_devops",
+      ]) {
+        fireEvent.change(sourceInput, { target: { value: builtin } });
+        expect(
+          screen.queryByTestId("automation-setup-custom-webhook-enabled"),
+        ).not.toBeInTheDocument();
+      }
+
+      for (const external of ["linear", "slack"]) {
+        fireEvent.change(sourceInput, { target: { value: external } });
+        expect(
+          screen.getByTestId("automation-setup-custom-webhook-enabled"),
+        ).toBeChecked();
+      }
+    });
+
     it("registers a custom webhook source before testing an event draft", async () => {
       vi.mocked(useDeploymentCapabilities).mockReturnValue({
         data: {
@@ -2451,6 +2689,101 @@ describe("AutomationSetupPanel", () => {
             trigger: expect.objectContaining({
               type: "event",
               source: "incident-alerts",
+            }),
+          }),
+        }),
+      );
+    });
+
+    it("offers each Data Center source's own event types and saves the picked one", async () => {
+      vi.mocked(useDeploymentCapabilities).mockReturnValue({
+        data: {
+          ready: true,
+          features: ["automationDrafts", "webhookDelivery"],
+          triggerKinds: ["cron", "event"],
+          eventSources: ["github", "jira_dc", "bitbucket_data_center"],
+          eventTypes: ["issues.*", "issue_comment.*"],
+          eventTypesBySource: {
+            github: ["issues.*", "issue_comment.*"],
+            jira_dc: ["comment_created", "jira:issue_created"],
+            bitbucket_data_center: ["pr:comment:added", "pr:opened"],
+          },
+          triggers: {},
+        },
+        isLoading: false,
+      } as never);
+      mockSavedDraftEcho();
+      const eventTypeOptions = () =>
+        Array.from(
+          document.querySelectorAll(
+            "#automation-setup-event-key-options option",
+          ),
+        ).map((option) => option.getAttribute("value"));
+      const pickSource = async (
+        user: ReturnType<typeof userEvent.setup>,
+        source: string,
+      ) => {
+        await user.click(
+          screen.getByTestId("automation-setup-event-source-toggle"),
+        );
+        await user.click(
+          screen.getByTestId(`automation-setup-event-source-option-${source}`),
+        );
+      };
+
+      const user = userEvent.setup();
+      renderPanel();
+      await user.click(screen.getByText("AUTOMATIONS$DETAIL$TRIGGER_EVENT"));
+      expect(eventTypeOptions()).toEqual(["issues.*", "issue_comment.*"]);
+      // GitHub's default key still matches a GitHub pattern.
+      expect(screen.getByTestId("automation-setup-event-key")).toHaveValue(
+        "issue_comment.created",
+      );
+
+      await pickSource(user, "jira_dc");
+      expect(eventTypeOptions()).toEqual([
+        "comment_created",
+        "jira:issue_created",
+      ]);
+      expect(screen.getByTestId("automation-setup-event-key")).toHaveValue(
+        "comment_created",
+      );
+      await user.click(
+        screen.getByTestId("automation-setup-event-test-payload-toggle"),
+      );
+      expect(
+        JSON.parse(
+          (
+            screen.getByTestId(
+              "automation-setup-event-test-payload",
+            ) as HTMLTextAreaElement
+          ).value,
+        ),
+      ).toMatchObject({ webhookEvent: "comment_created" });
+
+      await pickSource(user, "bitbucket_data_center");
+      expect(eventTypeOptions()).toEqual(["pr:comment:added", "pr:opened"]);
+      fireEvent.change(screen.getByTestId("automation-setup-event-key"), {
+        target: { value: "pr:opened" },
+      });
+      expect(
+        JSON.parse(
+          (
+            screen.getByTestId(
+              "automation-setup-event-test-payload",
+            ) as HTMLTextAreaElement
+          ).value,
+        ),
+      ).toMatchObject({ eventKey: "pr:opened" });
+      await saveDraftAndWaitForTest(user);
+
+      expect(AutomationService.createServerDraft).toHaveBeenCalledWith(
+        expect.objectContaining({
+          draft: expect.objectContaining({
+            trigger: expect.objectContaining({
+              type: "event",
+              source: "bitbucket_data_center",
+              on: "pr:opened",
             }),
           }),
         }),
@@ -3064,7 +3397,7 @@ describe("AutomationSetupPanel", () => {
     expect(queryClient.getQueryState(listKey)?.isInvalidated).toBe(true);
   });
 
-  it("shows existing custom bundle metadata without replacing it on save", async () => {
+  it("shows existing custom bundle metadata and saves a model change without replacing the bundle", async () => {
     vi.mocked(AutomationService.updateAutomation).mockResolvedValue({
       id: "auto-1",
     } as never);
@@ -3081,6 +3414,7 @@ describe("AutomationSetupPanel", () => {
         entrypoint: "python3 scan.py",
         setup_script_path: "install.sh",
         tarball_path: "oh-internal://uploads/REAL-user-code.tar.gz",
+        model: "fast",
         trigger: {
           type: "cron",
           schedule: "0 9 * * *",
@@ -3102,6 +3436,16 @@ describe("AutomationSetupPanel", () => {
       screen.queryByTestId("automation-setup-custom-code"),
     ).not.toBeInTheDocument();
 
+    expect(screen.getByTestId("automation-setup-model")).toHaveAttribute(
+      "aria-label",
+      "fast",
+    );
+    await user.click(screen.getByTestId("automation-setup-model"));
+    await user.click(
+      screen.getByTestId(
+        "automation-setup-model-option-claude-opus-4-5-20251101",
+      ),
+    );
     await user.click(screen.getByTestId("automation-setup-save"));
 
     await waitFor(() =>
@@ -3109,6 +3453,7 @@ describe("AutomationSetupPanel", () => {
         "auto-1",
         expect.objectContaining({
           name: "Nightly scan",
+          model: "claude-opus-4-5-20251101",
         }),
       ),
     );
