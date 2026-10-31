@@ -153,7 +153,15 @@ async function stripBundledNodeModules(context) {
       sizeMb = Math.round(getDirSizeBytes(nm) / (1024 * 1024));
     } catch {}
 
-    await rm(nm, { recursive: true, force: true });
+    // On Windows a file another process still holds (a virus scan of the
+    // freshly copied tree) fails rmdir with ENOTEMPTY or EBUSY; Node retries
+    // those only when asked to.
+    await rm(nm, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 200,
+    });
 
     const rel = relative(process.cwd(), nm);
     const human = sizeMb != null ? ` (~${sizeMb} MB)` : "";
