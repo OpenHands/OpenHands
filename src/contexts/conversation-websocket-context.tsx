@@ -505,6 +505,89 @@ export function ConversationWebSocketProvider({
     [subConversationIds],
   );
 
+  const isCloudBackend = getActiveBackend().backend.kind === "cloud";
+
+  // A 4001 close means the runtime rejected the key used by that socket. For
+  // Cloud, refetch conversation data before allowing the hook to reconnect.
+  const refreshConversationSessionApiKey = useCallback(
+    async (
+      rejectedSessionApiKey: string | null | undefined,
+      planningConversationIdToRefresh?: string,
+    ): Promise<string | undefined> => {
+      if (!conversationId || getActiveBackend().backend.kind !== "cloud") {
+        return undefined;
+      }
+
+      const { backend, orgId } = getActiveBackend();
+      const parentQueryKey = [
+        "user",
+        "conversation",
+        conversationId,
+        backend.id,
+        orgId,
+      ] as const;
+      const refetches: Promise<void>[] = [
+        queryClient.refetchQueries({
+          queryKey: parentQueryKey,
+          type: "active",
+        }),
+      ];
+
+      if (planningConversationIdToRefresh && subConversationIds?.length) {
+        refetches.push(
+          queryClient.refetchQueries({
+            queryKey: [
+              "v1",
+              "sub-conversations",
+              subConversationIds,
+              backend.id,
+              orgId,
+            ],
+            type: "active",
+          }),
+        );
+      }
+
+      await Promise.all(refetches);
+
+      const parentConversation = queryClient.getQueryData<AppConversation | null>(
+        parentQueryKey,
+      );
+      const parentSessionApiKey = parentConversation?.session_api_key;
+
+      if (planningConversationIdToRefresh) {
+        const planningConversations = queryClient.getQueryData<
+          (AppConversation | null)[]
+        >([
+          "v1",
+          "sub-conversations",
+          subConversationIds ?? [],
+          backend.id,
+          orgId,
+        ]);
+        const planningSessionApiKey = planningConversations?.find(
+          (conversation) =>
+            conversation?.id === planningConversationIdToRefresh,
+        )?.session_api_key;
+
+        // Prefer the planning conversation's own fresh key. If it has no key
+        // (or only the rejected fallback key), try the refreshed parent key.
+        if (
+          planningSessionApiKey &&
+          planningSessionApiKey !== rejectedSessionApiKey
+        ) {
+          return planningSessionApiKey;
+        }
+      }
+
+      return parentSessionApiKey &&
+        parentSessionApiKey !== rejectedSessionApiKey
+        ? parentSessionApiKey
+        : undefined;
+    },
+    [queryClient, conversationId, subConversationIds],
+  );
+
   const planningAgentWsUrl = useMemo(() => {
     if (!subConversations?.length) {
       return null;
@@ -1165,6 +1248,12 @@ export function ConversationWebSocketProvider({
       queryParams,
       sessionApiKey,
       reconnect: { enabled: true },
+      ...(isCloudBackend
+        ? {
+            refreshSessionApiKey: (rejectedSessionApiKey) =>
+              refreshConversationSessionApiKey(rejectedSessionApiKey),
+          }
+        : {}),
       onOpen: () => {
         setMainConnectionState("OPEN");
         hasConnectedRefMain.current = true; // Mark that we've successfully connected
@@ -1198,7 +1287,14 @@ export function ConversationWebSocketProvider({
       },
       onMessage: handleMainMessage,
     };
-  }, [handleMainMessage, setErrorMessage, clearConnectionError, sessionApiKey]);
+  }, [
+    handleMainMessage,
+    setErrorMessage,
+    clearConnectionError,
+    sessionApiKey,
+    isCloudBackend,
+    refreshConversationSessionApiKey,
+  ]);
 
   // Separate WebSocket options for planning agent connection
   const planningWebsocketOptions: WebSocketHookOptions = useMemo(() => {
@@ -1218,6 +1314,15 @@ export function ConversationWebSocketProvider({
       queryParams,
       sessionApiKey: planningApiKey,
       reconnect: { enabled: true },
+      ...(isCloudBackend
+        ? {
+            refreshSessionApiKey: (rejectedSessionApiKey) =>
+              refreshConversationSessionApiKey(
+                rejectedSessionApiKey,
+                planningConversationId ?? undefined,
+              ),
+          }
+        : {}),
       onOpen: async () => {
         setPlanningConnectionState("OPEN");
         hasConnectedRefPlanning.current = true; // Mark that we've successfully connected
@@ -1273,6 +1378,9 @@ export function ConversationWebSocketProvider({
     clearConnectionError,
     sessionApiKey,
     subConversations,
+    isCloudBackend,
+    planningConversationId,
+    refreshConversationSessionApiKey,
   ]);
 
   // Only attempt WebSocket connection when we have a valid URL
