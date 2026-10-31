@@ -1,3 +1,7 @@
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { compile } from "@tailwindcss/node";
+import { parse } from "postcss";
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -40,6 +44,42 @@ vi.mock("#/hooks/use-user-providers", () => ({
 }));
 
 describe("SystemMessage UI Rendering", () => {
+  it("keeps the Skills icon's unitless stroke in the rendered menu", async () => {
+    render(
+      <ToolsContextMenu
+        onClose={() => {}}
+        onShowSkills={() => {}}
+        onShowPlugins={() => {}}
+        onShowHooks={() => {}}
+        onShowAgentTools={() => {}}
+      />,
+    );
+    const icon = screen.getByTestId("show-skills-button").querySelector("svg");
+    if (!icon) throw new Error("Expected the menu's Skills icon");
+    const compiler = await compile(
+      await readFile(resolve("src/tailwind.css"), "utf8"),
+      { base: resolve("src"), onDependency: () => {} },
+    );
+    const rules: string[] = [];
+    parse(compiler.build([...icon.classList])).walkDecls(
+      "stroke-width",
+      (declaration) => {
+        const rule = declaration.parent;
+        if (rule?.type === "rule" && icon.matches(rule.selector)) {
+          rules.push(`${rule.selector}{${declaration.toString()}}`);
+        }
+      },
+    );
+    const style = document.createElement("style");
+    style.textContent = rules.join("\n");
+    document.head.appendChild(style);
+    try {
+      expect(getComputedStyle(icon).strokeWidth).toBe("1.75");
+    } finally {
+      style.remove();
+    }
+  });
+
   it("should render the 'Show Agent Tools' button in the context menu", () => {
     render(
       <ToolsContextMenu

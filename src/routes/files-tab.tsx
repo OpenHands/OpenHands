@@ -16,6 +16,7 @@ import { useFilesTabStore } from "#/stores/files-tab-store";
 import { useWorkspaceFiles } from "#/hooks/query/use-workspace-files";
 import { useWorkspaceFileContent } from "#/hooks/query/use-workspace-file-content";
 import { useAutoRefreshFilesOnEdit } from "#/hooks/use-auto-refresh-files-on-edit";
+import { useDownloadWorkspaceFile } from "#/hooks/use-download-workspace-file";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useResizableDrawerWidth } from "#/hooks/use-resizable-drawer-width";
 import {
@@ -40,6 +41,7 @@ import {
 import { ResizeHandle } from "#/components/ui/resize-handle";
 import RefreshIcon from "#/icons/u-refresh.svg?react";
 import LinkExternalIcon from "#/icons/link-external.svg?react";
+import DownloadIcon from "#/icons/u-download.svg?react";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import AgentServerRuntimeService from "#/api/runtime-service/agent-server-runtime-service";
 import { getGitPath } from "#/utils/get-git-path";
@@ -182,7 +184,6 @@ function FilesTab() {
         }
       }
     };
-
     void prepareObjectUrl();
     return () => {
       cancelled = true;
@@ -199,6 +200,14 @@ function FilesTab() {
     selectedFile?.path,
     selectedFile?.text,
   ]);
+  const download = useDownloadWorkspaceFile();
+  // Cloud backends hand the file back as UTF-8 text, so a Cloud file without
+  // decoded text (image, PDF, binary) can't be saved faithfully until
+  // OHE-3631 lands: offer no download for it, like the new-window link.
+  const downloadableFile =
+    selectedFile && (!isDataUrl || selectedFile.text !== null)
+      ? selectedFile
+      : null;
 
   // Restore open tabs / selection from conversation-scoped localStorage on
   // mount and when switching conversations (survives a full page refresh).
@@ -323,19 +332,34 @@ function FilesTab() {
                       ]}
                       onChange={setFilesTabContentViewMode}
                     />
-                    {selectedFileBlobUrl ? (
-                      <a
-                        href={selectedFileBlobUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        aria-label={t(I18nKey.FILES$OPEN_IN_NEW_WINDOW)}
-                        title={t(I18nKey.FILES$OPEN_IN_NEW_WINDOW)}
-                        data-testid="files-tab-open-in-new-window"
-                        className="ml-auto flex items-center justify-center w-6.5 py-1 rounded-[7px] hover:bg-interactive-hover cursor-pointer text-contrast"
-                      >
-                        <LinkExternalIcon width={14} height={14} />
-                      </a>
-                    ) : null}
+                    <div className="ml-auto flex items-center gap-1">
+                      {downloadableFile ? (
+                        <button
+                          type="button"
+                          onClick={() => download.mutate(downloadableFile)}
+                          disabled={download.isPending}
+                          aria-label={t(I18nKey.FILES$DOWNLOAD)}
+                          title={t(I18nKey.FILES$DOWNLOAD)}
+                          data-testid="files-tab-download"
+                          className="flex items-center justify-center w-6.5 py-1 rounded-[7px] hover:enabled:bg-interactive-hover cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed text-contrast"
+                        >
+                          <DownloadIcon width={14} height={14} />
+                        </button>
+                      ) : null}
+                      {selectedFileBlobUrl ? (
+                        <a
+                          href={selectedFileBlobUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label={t(I18nKey.FILES$OPEN_IN_NEW_WINDOW)}
+                          title={t(I18nKey.FILES$OPEN_IN_NEW_WINDOW)}
+                          data-testid="files-tab-open-in-new-window"
+                          className="flex items-center justify-center w-6.5 py-1 rounded-[7px] hover:bg-interactive-hover cursor-pointer text-contrast"
+                        >
+                          <LinkExternalIcon width={14} height={14} />
+                        </a>
+                      ) : null}
+                    </div>
                   </div>
                   <FileContentViewer
                     path={selectedPath}

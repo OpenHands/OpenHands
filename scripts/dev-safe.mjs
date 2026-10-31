@@ -277,11 +277,13 @@ export async function assertPortsFree(portConfigs, host = "127.0.0.1") {
   const lines = busy
     .map(({ name, port }) => `   • ${name}: port ${port}`)
     .join("\n");
-  throw new Error(
+  const error = new Error(
     `Cannot start: the following ports are already in use:\n\n${lines}\n\n` +
       `Another agent-canvas instance may already be running.\n` +
-      `Stop it first, or override the port via environment variables (e.g. PORT=<other>).`,
+      `Stop it first, or override the occupied ports via environment variables (for ingress, --port <other> or PORT=<other>).`,
   );
+  error.code = "EADDRINUSE";
+  throw error;
 }
 
 /**

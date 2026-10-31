@@ -2532,6 +2532,40 @@ describe("AutomationSetupPanel", () => {
       );
     });
 
+    it("treats the service's built-in sources as known before capabilities answer", async () => {
+      // The default capabilities mock returns no data, so the panel is on its
+      // fallback source list.
+      const user = userEvent.setup();
+      renderPanel();
+
+      await user.click(screen.getByText("AUTOMATIONS$DETAIL$TRIGGER_EVENT"));
+      await user.click(
+        screen.getByTestId("automation-setup-event-source-toggle"),
+      );
+      await user.click(
+        screen.getByTestId("automation-setup-event-source-custom"),
+      );
+      const sourceInput = screen.getByTestId("automation-setup-event-source");
+
+      for (const builtin of [
+        "jira_dc",
+        "bitbucket_data_center",
+        "azure_devops",
+      ]) {
+        fireEvent.change(sourceInput, { target: { value: builtin } });
+        expect(
+          screen.queryByTestId("automation-setup-custom-webhook-enabled"),
+        ).not.toBeInTheDocument();
+      }
+
+      for (const external of ["linear", "slack"]) {
+        fireEvent.change(sourceInput, { target: { value: external } });
+        expect(
+          screen.getByTestId("automation-setup-custom-webhook-enabled"),
+        ).toBeChecked();
+      }
+    });
+
     it("registers a custom webhook source before testing an event draft", async () => {
       vi.mocked(useDeploymentCapabilities).mockReturnValue({
         data: {

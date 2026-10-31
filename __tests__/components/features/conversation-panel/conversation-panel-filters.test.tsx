@@ -9,7 +9,6 @@ import {
 } from "./conversation-panel-test-utils";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { useConversationPanelPreferencesStore } from "#/stores/conversation-panel-preferences-store";
-import { useArchivedConversationsStore } from "#/stores/archived-conversations-store";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 const mockStopConversationMutate = vi.fn();
@@ -609,21 +608,18 @@ describe("ConversationPanel filters and pagination", () => {
             id: "archived-1",
             title: "Archived 1",
             updated_at: recentIso(),
+            tags: { archived: "true" },
           }),
           createMockConversation({
             id: "archived-2",
             title: "Archived 2",
             updated_at: recentIso(),
+            tags: { archived: "true" },
           }),
         ],
         next_page_id: null,
       });
 
-      useArchivedConversationsStore.setState({
-        archivesByBackendId: {
-          "default-local": ["archived-1", "archived-2"],
-        },
-      });
       useConversationPanelPreferencesStore.setState({
         showArchivedConversations: false,
       });

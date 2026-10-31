@@ -1,3 +1,7 @@
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { compile } from "@tailwindcss/node";
+import { parse, type AnyNode } from "postcss";
 import { http, HttpResponse } from "msw";
 import { server } from "#/mocks/node";
 import { clearCachedAgentServerInfo } from "#/api/agent-server-compatibility";
@@ -427,7 +431,7 @@ describe("WorkspaceSelectionForm (server-backed workspaces)", () => {
     });
   });
 
-  it("keeps folder names readable in the Add Workspace browser below the md breakpoint", async () => {
+  it("ships matching responsive columns for the folder header and entries", async () => {
     // Arrange
     mockSearchSubdirectories.mockImplementation(async (path: string) =>
       path === "/Users/me"
@@ -445,19 +449,44 @@ describe("WorkspaceSelectionForm (server-backed workspaces)", () => {
     await user.click(await screen.findByTestId("add-workspaces-button"));
     const entry = await screen.findByTestId("folder-browser-entry-dev");
 
-    // Assert: at phone width the sidebar narrows and the Kind column shrinks,
-    // so a fixed 180px sidebar plus 120px Kind track can no longer squeeze the
-    // name track to 0px; desktop (md and up) keeps the original layout.
+    // Assert the actual grid declarations from the rendered consumers, rather
+    // than their class spelling. jsdom does not perform viewport layout.
     expect(screen.getByTestId("folder-browser-sidebar")).toHaveClass(
       "w-28",
       "md:w-45",
     );
     const header = screen.getByTestId("folder-browser-column-headers");
+    const compiler = await compile(
+      await readFile(resolve("src/tailwind.css"), "utf8"),
+      { base: resolve("src"), onDependency: () => {} },
+    );
+    const stylesheet = parse(
+      compiler.build([...header.classList, ...entry.classList]),
+    );
     for (const row of [header, entry]) {
-      expect(row).toHaveClass(
-        "grid-cols-[minmax(0,1fr)_4rem]",
-        "md:grid-cols-[1fr_120px]",
-      );
+      const columns: Array<{ media: string | null; value: string }> = [];
+      stylesheet.walkDecls("grid-template-columns", (declaration) => {
+        const rule = declaration.parent;
+        if (rule?.type !== "rule" || !row.matches(rule.selector)) return;
+        let media: string | null = null;
+        for (
+          let parent: AnyNode | undefined = rule.parent;
+          parent;
+          parent = parent.parent
+        ) {
+          if (parent.type === "atrule" && parent.name === "media") {
+            media = parent.params;
+          }
+        }
+        columns.push({
+          media,
+          value: declaration.value.replace(/,\s*/g, ","),
+        });
+      });
+      expect(columns).toEqual([
+        { media: null, value: "minmax(0,1fr) 4rem" },
+        { media: "(width >= 48rem)", value: "1fr 120px" },
+      ]);
     }
   });
 

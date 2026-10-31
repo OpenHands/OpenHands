@@ -14,6 +14,10 @@ export const ProviderOptions = {
 
 export type Provider = keyof typeof ProviderOptions;
 
+/** Narrow an untrusted value, such as a conversation tag, to a {@link Provider}. */
+export const isProvider = (value: unknown): value is Provider =>
+  typeof value === "string" && Object.hasOwn(ProviderOptions, value);
+
 export type SettingsChoiceValue = boolean | number | string;
 
 export type SettingsChoice = {

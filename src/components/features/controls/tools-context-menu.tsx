@@ -212,7 +212,7 @@ export function ToolsContextMenu({
               <SkillsIcon
                 width={16}
                 height={16}
-                className="stroke-[1.75]"
+                className="context-menu-icon-stroke"
                 aria-hidden
               />
             }
