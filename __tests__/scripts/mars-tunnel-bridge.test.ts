@@ -20,7 +20,10 @@ import {
   refreshGrant,
   revokeToken,
 } from "../../scripts/mars-oauth.mjs";
-import { createEncryptedFileStore } from "../../scripts/mars-secret-store.mjs";
+import {
+  createEncryptedFileStore,
+  createMemoryStore,
+} from "../../scripts/mars-secret-store.mjs";
 
 vi.mock("../../scripts/mars-oauth.mjs", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../scripts/mars-oauth.mjs")>()),
@@ -896,6 +899,45 @@ describe("signing in with DigitalOcean (code + PKCE)", () => {
       token: "new-access",
       refreshToken: "refresh-2",
     });
+  });
+
+  it("renews a sign-in the keychain refused to save, instead of losing it", async () => {
+    const refusing = {
+      ...createMemoryStore(),
+      isPersistent: true,
+      write: () => {
+        throw new Error("macOS Keychain refused to save");
+      },
+    };
+    const credentials = createCredentialStore({
+      userDataPath: mkdtempSync(join(tmpdir(), "mars-unsaved-")),
+      secrets: refusing,
+      log: () => {},
+    });
+    const saved = credentials.save({
+      ...expiring,
+      accessExpiresAt: inMinutes(0.5),
+    });
+    expect(saved.isSaved).toBe(false);
+    const registry = fakeRegistry();
+    const bridge = createMarsTunnelBridge({
+      registry,
+      api: fakeApi(),
+      credentials,
+      env: { ...WITH_CLIENT.env, MARS_API_BASE_URL: API_URL },
+    });
+    vi.mocked(refreshGrant).mockResolvedValueOnce({
+      ...GRANT,
+      accessToken: "new-access",
+      refreshToken: "refresh-2",
+    });
+
+    expect(await (await dialToken(bridge, registry))()).toBe("new-access");
+
+    expect(refreshGrant).toHaveBeenCalledWith(
+      expect.objectContaining({ refreshToken: "refresh-1" }),
+    );
+    expect(credentials.getGrant(saved.id)?.refreshToken).toBe("refresh-2");
   });
 
   it.each([

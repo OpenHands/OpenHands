@@ -364,6 +364,100 @@ describe("createCredentialStore with a SecretStore (the Agent Canvas server)", (
     });
   });
 
+  it.each([
+    { what: "renews", grant: { token: "late", refreshToken: "late-refresh" } },
+    { what: "forgets", grant: null },
+  ])(
+    "never $what a grant another Canvas process replaced since it was read",
+    ({ grant }) => {
+      const { dir, store: first } = serverStore();
+      const saved = first.save({
+        kind: CREDENTIAL_KIND_OAUTH,
+        token: "access-1",
+        refreshToken: "refresh-1",
+        label: "DigitalOcean",
+      });
+      const second = serverStore(dir).store;
+      // A new sign-in for the team, saved by the other process.
+      second.updateGrant(saved.id, {
+        token: "signed-in-again",
+        refreshToken: "refresh-new",
+      });
+
+      expect(
+        first.updateGrant(saved.id, grant, { replacing: "refresh-1" }),
+      ).toBe(false);
+
+      expect(first.getGrant(saved.id)).toMatchObject({
+        token: "signed-in-again",
+        refreshToken: "refresh-new",
+      });
+      expect(serverStore(dir).store.getGrant(saved.id)?.refreshToken).toBe(
+        "refresh-new",
+      );
+    },
+  );
+
+  it("renews a grant the store still holds", () => {
+    const { dir, store } = serverStore();
+    const saved = store.save({
+      kind: CREDENTIAL_KIND_OAUTH,
+      token: "access-1",
+      refreshToken: "refresh-1",
+      label: "DigitalOcean",
+    });
+
+    expect(
+      store.updateGrant(
+        saved.id,
+        { token: "access-2", refreshToken: "refresh-2" },
+        { replacing: "refresh-1" },
+      ),
+    ).toBe(true);
+    expect(serverStore(dir).store.getGrant(saved.id)?.refreshToken).toBe(
+      "refresh-2",
+    );
+  });
+
+  it("keeps a grant it could not save when it reads the store again", () => {
+    let refuse = false;
+    const memory = createMemoryStore();
+    const flaky = {
+      ...memory,
+      isPersistent: true,
+      write: (account: string, secret: string) => {
+        if (refuse) throw new Error("macOS Keychain refused to save");
+        memory.write(account, secret);
+      },
+    };
+    const store = createCredentialStore({
+      userDataPath: mkdtempSync(join(tmpdir(), "mars-unsaved-")),
+      secrets: flaky,
+      log: () => {},
+    });
+    const saved = store.save({
+      kind: CREDENTIAL_KIND_OAUTH,
+      token: "access-1",
+      refreshToken: "refresh-1",
+      label: "DigitalOcean",
+    });
+    // The renewal is refused: the keychain still has the spent refresh-1.
+    refuse = true;
+    store.updateGrant(saved.id, {
+      token: "access-2",
+      refreshToken: "refresh-2",
+    });
+
+    expect(store.readGrant(saved.id)?.refreshToken).toBe("refresh-2");
+    expect(
+      store.updateGrant(
+        saved.id,
+        { token: "access-3", refreshToken: "refresh-3" },
+        { replacing: "refresh-2" },
+      ),
+    ).toBe(true);
+  });
+
   it("keeps a sign-in for this run when the store refuses it, and says it was not saved", () => {
     const refusing = {
       ...createMemoryStore(),
