@@ -12,10 +12,20 @@ import {
   DEFAULT_AGENT_SERVER_ANALYTICS,
 } from "./components/providers";
 import { installMarsWebBridge } from "./api/mars/mars-web-bridge";
+import { redeemPairingLink } from "./api/mars/pairing";
+import { buildAgentCanvasPath } from "./utils/base-path";
 import { waitForI18n } from "./i18n";
 import { shouldStartMockWorker } from "./mocks/should-start-mock-worker";
 
 async function prepareApp() {
+  // A pairing link (`<base path>/pair#…`) from a device that is already in:
+  // redeem it, then start over so everything reads the saved key from the
+  // beginning.
+  if (await redeemPairingLink()) {
+    window.location.replace(buildAgentCanvasPath("/"));
+    await new Promise<never>(() => {});
+  }
+
   // DigitalOcean Managed Agents in the browser: present only when the server
   // this page came from hosts the MARS bridge (scripts/mars-web-bridge.mjs).
   // Must settle before render — the UI reads `window.marsBridge` synchronously.

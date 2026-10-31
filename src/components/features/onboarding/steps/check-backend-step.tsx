@@ -23,6 +23,7 @@ import { I18nKey } from "#/i18n/declaration";
 import ChevronDownSmallIcon from "#/icons/chevron-down-small.svg?react";
 import { cn } from "#/utils/utils";
 import { getBackendStatusLabel } from "#/components/features/backends/backend-status-label";
+import { PairingFailedNote } from "#/components/features/backends/pairing-failed-note";
 
 interface CheckBackendStepProps {
   onBack?: () => void;
@@ -282,6 +283,10 @@ export function CheckBackendStep({
       ) : null}
 
       <div data-testid="onboarding-backend-configuration-fields">
+        <PairingFailedNote
+          testId="onboarding-backend-pairing-failed"
+          className="mb-3"
+        />
         {!hideConfigurationFields ? (
           <BackendConnectionOptions
             onConnected={handleConnected}

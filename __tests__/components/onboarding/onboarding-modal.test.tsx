@@ -424,6 +424,21 @@ describe("OnboardingModal", () => {
     expect(screen.getByTestId("onboarding-backend-login-button")).toBeVisible();
   });
 
+  it("says why it asks for a key when a pairing link did not work", () => {
+    window.localStorage.clear();
+    window.sessionStorage.setItem("openhands-pairing-failed", "1");
+    vi.stubEnv("VITE_BACKEND_BASE_URL", "");
+    vi.stubEnv("VITE_SESSION_API_KEY", "");
+    __resetActiveStoreForTests();
+
+    renderModal();
+
+    expect(
+      screen.getByTestId("onboarding-backend-pairing-failed"),
+    ).toHaveTextContent("AUTH$PAIRING_LINK_FAILED");
+    window.sessionStorage.clear();
+  });
+
   it("locks no-backend onboarding to Cloud login when VITE_LOCK_TO_CLOUD is set", () => {
     window.localStorage.clear();
     vi.stubEnv("VITE_BACKEND_BASE_URL", "");

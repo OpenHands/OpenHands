@@ -126,6 +126,8 @@ export const MARS_QUERY_KEYS = {
     ["mars", "agents", connectionId] as const,
   /** DigitalOcean's sandbox size catalog; the same for every team. */
   sandboxSizes: ["mars", "sandbox-sizes"] as const,
+  /** A one-time link for another device; each attempt is a new link. */
+  pairingLink: (attempt: number) => ["mars", "pairing-link", attempt] as const,
 } as const;
 
 export const APP_UPDATE_QUERY_KEYS = {

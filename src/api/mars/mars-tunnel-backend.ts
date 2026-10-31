@@ -72,6 +72,13 @@ export interface MarsSignInAttempt {
   returnsHere?: boolean;
 }
 
+/** A one-time link that lets another device in; see src/api/mars/pairing.ts. */
+export interface MarsPairingLink {
+  /** One per address this Canvas listens on; empty when only on this computer. */
+  links: string[];
+  expiresAt: string;
+}
+
 export type MarsSignInStatus =
   | { status: "pending" }
   | { status: "done"; authState: MarsAuthState }
@@ -207,6 +214,8 @@ export interface MarsBridge {
     attemptId?: string,
   ) => Promise<MarsAuthState>;
   cancelSignIn?: (attemptId: string) => Promise<void>;
+  /** Web build only: a one-time link for another device. */
+  createPairingLink?: () => Promise<MarsPairingLink>;
   savePat: (payload: {
     token: string;
     label?: string;
