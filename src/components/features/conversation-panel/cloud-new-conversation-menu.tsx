@@ -316,7 +316,7 @@ export function CloudNewConversationMenu({
 
           <ul
             className={cn(
-              "max-h-[40vh] overflow-y-auto custom-scrollbar-always sm:max-h-70",
+              "new-conversation-menu-height overflow-y-auto custom-scrollbar-always sm:max-h-70",
               dropdownMenuListClassName,
             )}
           >

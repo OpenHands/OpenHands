@@ -15,6 +15,8 @@ import WorkspacesService from "#/api/workspaces-service/workspaces-service.api";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
+import GitService from "#/api/git-service/git-service.api";
+import { useHomeStore } from "#/stores/home-store";
 import { useModelStore } from "#/stores/model-store";
 import { AGENT_SERVER_UI_DEFAULT_CSS_VARIABLES } from "#/styles/agent-server-ui-style-scope";
 import { COLOR_THEMES } from "#/themes/color-themes";
@@ -211,14 +213,28 @@ vi.mock("#/components/features/home/home-git-control-bar-preview", () => ({
     workspaceMode,
     workspaceModes,
     backendKind,
+    repository,
+    onClear,
     onWorkspaceModeChange,
   }: {
     workspaceMode: WorkspaceMode;
     workspaceModes: WorkspaceMode[];
     backendKind: "local" | "cloud";
+    repository?: { full_name: string } | null;
+    onClear: () => void;
     onWorkspaceModeChange: (mode: WorkspaceMode) => void;
   }) => (
     <div data-testid="stub-git-control-bar-preview">
+      <span data-testid="stub-preview-repository">
+        {repository?.full_name ?? "none"}
+      </span>
+      <button
+        type="button"
+        data-testid="stub-clear-selection"
+        onClick={onClear}
+      >
+        Clear
+      </button>
       <span data-testid="stub-workspace-mode">
         {backendKind}:{workspaceMode}
       </span>
@@ -319,6 +335,21 @@ const renderLauncher = () =>
       </QueryClientProvider>
     ),
   });
+
+function makeBranch(name: string) {
+  return { name, commit_sha: "abc", protected: false };
+}
+
+function mockConnectedGitHub() {
+  vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
+    ...MOCK_DEFAULT_USER_SETTINGS,
+    provider_tokens_set: { github: null },
+  });
+  vi.spyOn(GitService, "searchRepositoryBranches").mockResolvedValue({
+    items: [makeBranch("main")],
+    next_page_id: null,
+  });
+}
 
 function makeConversationResponse(
   overrides: Record<string, unknown> = {},
@@ -901,6 +932,7 @@ describe("HomeChatLauncher", () => {
 
   it("passes the picked repository + branch payload on a cloud backend", async () => {
     mockUseActiveBackend.mockReturnValue(cloudBackend);
+    mockConnectedGitHub();
     const createSpy = vi
       .spyOn(AgentServerConversationService, "createConversation")
       .mockResolvedValue(
@@ -928,6 +960,136 @@ describe("HomeChatLauncher", () => {
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith("/conversations/conv-repo"),
     );
+  });
+
+  it("remembers the picked repository when the home page is revisited", async () => {
+    mockUseActiveBackend.mockReturnValue(cloudBackend);
+    mockConnectedGitHub();
+    const createSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue(makeConversationResponse());
+    const user = userEvent.setup();
+    const firstVisit = renderLauncher();
+    await user.click(screen.getByTestId("open-repository-button"));
+    await user.click(await screen.findByTestId("stub-repo-dialog-confirm"));
+    firstVisit.unmount();
+
+    renderLauncher();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("stub-preview-repository")).toHaveTextContent(
+        "org/repo",
+      ),
+    );
+    expect(GitService.searchRepositoryBranches).toHaveBeenCalledWith(
+      "org/repo",
+      "github",
+      "main",
+      undefined,
+      100,
+    );
+    await user.click(screen.getByTestId("stub-chat-submit"));
+    await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
+    expect(createSpy.mock.lastCall?.[0]?.metadata).toEqual({
+      selected_repository: "org/repo",
+      selected_branch: "main",
+      git_provider: "github",
+    });
+  });
+
+  it.each([
+    {
+      description: "the repository can no longer be reached",
+      arrange: () => {
+        mockConnectedGitHub();
+        vi.mocked(GitService.searchRepositoryBranches).mockRejectedValue(
+          new Error("Not Found"),
+        );
+      },
+    },
+    {
+      description: "the branch no longer exists",
+      arrange: () => {
+        mockConnectedGitHub();
+        vi.mocked(GitService.searchRepositoryBranches).mockResolvedValue({
+          items: [makeBranch("main-old")],
+          next_page_id: null,
+        });
+      },
+    },
+    {
+      description: "the provider is no longer connected",
+      arrange: () => {
+        vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+          MOCK_DEFAULT_USER_SETTINGS,
+        );
+      },
+    },
+  ])(
+    "forgets a remembered repository when $description",
+    async ({ arrange }) => {
+      mockUseActiveBackend.mockReturnValue(cloudBackend);
+      arrange();
+      useHomeStore.getState().setRepositorySelection("cloud-id", {
+        repository: {
+          id: "1",
+          full_name: "org/gone",
+          git_provider: "github",
+          is_public: false,
+        },
+        branch: makeBranch("main"),
+        provider: "github",
+      });
+      const createSpy = vi
+        .spyOn(AgentServerConversationService, "createConversation")
+        .mockResolvedValue(makeConversationResponse());
+
+      renderLauncher();
+
+      expect(
+        await screen.findByTestId("open-repository-button"),
+      ).toBeInTheDocument();
+      expect(useHomeStore.getState().repositorySelections).toEqual({});
+      await userEvent.click(screen.getByTestId("stub-chat-submit"));
+      await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
+      expect(
+        createSpy.mock.lastCall?.[0]?.metadata?.selected_repository,
+      ).toBeUndefined();
+    },
+  );
+
+  it("clears the repository selection so later visits start without one", async () => {
+    mockUseActiveBackend.mockReturnValue(cloudBackend);
+    mockConnectedGitHub();
+    const user = userEvent.setup();
+    const firstVisit = renderLauncher();
+    await user.click(screen.getByTestId("open-repository-button"));
+    await user.click(await screen.findByTestId("stub-repo-dialog-confirm"));
+
+    await user.click(screen.getByTestId("stub-clear-selection"));
+
+    expect(screen.getByTestId("open-repository-button")).toBeInTheDocument();
+    firstVisit.unmount();
+    renderLauncher();
+    expect(screen.getByTestId("open-repository-button")).toBeInTheDocument();
+  });
+
+  it("keeps remembered repositories separate per cloud backend", async () => {
+    mockUseActiveBackend.mockReturnValue(cloudBackend);
+    mockConnectedGitHub();
+    const user = userEvent.setup();
+    const firstVisit = renderLauncher();
+    await user.click(screen.getByTestId("open-repository-button"));
+    await user.click(await screen.findByTestId("stub-repo-dialog-confirm"));
+    firstVisit.unmount();
+
+    mockUseActiveBackend.mockReturnValue({
+      ...cloudBackend,
+      backend: { ...cloudBackend.backend, id: "other-cloud-id" },
+    });
+    renderLauncher();
+
+    expect(screen.getByTestId("open-repository-button")).toBeInTheDocument();
   });
 
   it.each([

@@ -6,6 +6,7 @@ import AgentServerConversationService from "#/api/conversation-service/agent-ser
 import AgentProfilesService from "#/api/agent-profiles-service/agent-profiles-service.api";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { SETTINGS_QUERY_KEYS } from "#/hooks/query/query-keys";
+import { useModelStore } from "#/stores/model-store";
 
 vi.mock(
   "#/api/conversation-service/agent-server-conversation-service.api",
@@ -50,6 +51,7 @@ const renderSwitchHook = () => {
 describe("useSwitchAcpModel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useModelStore.getState().setHomeManualModelPick(false);
   });
 
   it("live-switches the ACP model for an active conversation and invalidates conversation queries", async () => {
@@ -238,5 +240,35 @@ describe("useSwitchAcpModel", () => {
     expect(invalidateQueriesSpy).not.toHaveBeenCalledWith({
       queryKey: ["user", "conversation", "conv-1"],
     });
+  });
+
+  it("does not set the home-pick flag (the UI handler does that, not the hook)", async () => {
+    // The flag moved to the UI pick handlers (selectProfile /
+    // handleSelectAcpModel) — the single chokepoint. The hook itself no
+    // longer touches it, so a home ACP pick leaves the flag alone.
+    vi.mocked(AgentProfilesService.listProfiles).mockResolvedValue({
+      profiles: [
+        { id: "id-default", name: "default", agent_kind: "openhands" },
+      ],
+      active_agent_profile_id: "id-default",
+    } as never);
+    vi.mocked(SettingsService.saveSettings).mockResolvedValue(true);
+
+    const { result } = renderSwitchHook();
+    result.current.mutate({ conversationId: null, model: "claude-sonnet" });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(useModelStore.getState().homeManualModelPick).toBe(false);
+  });
+
+  it("does not mark a pick made inside an existing conversation", async () => {
+    vi.mocked(AgentServerConversationService.switchAcpModel).mockResolvedValue(
+      undefined,
+    );
+    const { result } = renderSwitchHook();
+    result.current.mutate({ conversationId: "conv-1", model: "claude-sonnet" });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(useModelStore.getState().homeManualModelPick).toBe(false);
   });
 });

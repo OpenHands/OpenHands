@@ -12,6 +12,11 @@ export type PendingUserMessageStatus = "sending" | "error";
  * "server crashed / websocket dropped after our send resolved, echo never
  * arrives" scenario where the message would otherwise hang forever.
  *
+ * A cloud start-task message (keyed to `task-{uuid}`) travels inside the
+ * create request and cannot be echoed until the sandbox is ready and the
+ * route moves to the real conversation id, so its timer starts at that
+ * reassignment rather than at enqueue (see `reassignPendingMessages`).
+ *
  * Exported so tests can override it via vi.fakeTimers without hard-coding the
  * value.
  */
@@ -65,7 +70,8 @@ interface OptimisticUserMessageActions {
    * Append a new user message to the queue with status "sending".
    * Returns the locally-generated id for later updates. Schedules a
    * `PENDING_MESSAGE_TIMEOUT_MS` watchdog that flips the entry to "error" if
-   * it's still in "sending" state when the timer fires.
+   * it's still in "sending" state when the timer fires; for a start-task id
+   * the watchdog is scheduled by `reassignPendingMessages` instead.
    */
   enqueuePendingMessage: (payload: EnqueuePendingMessagePayload) => string;
   /** Mark a pending message as failed (the API rejected it). */
@@ -85,7 +91,8 @@ interface OptimisticUserMessageActions {
   clearPendingMessages: () => void;
   /**
    * Move pending entries from a provisional task URL (`task-{uuid}`) to the
-   * real conversation id once cloud provisioning finishes.
+   * real conversation id once cloud provisioning finishes, and start their
+   * send watchdog now that the conversation can echo them.
    */
   reassignPendingMessages: (
     fromConversationId: string,
@@ -130,6 +137,21 @@ const latestServerTimestamp = (conversationId: string): number | undefined => {
   return latest;
 };
 
+// Watchdog: if the server echo never lands (WS dropped, server crashed,
+// network partition), flip the entry to "error" so the user gets a retry
+// link instead of a permanently-pinned "Sending…" bubble.
+const scheduleSendTimeout = (
+  get: () => OptimisticUserMessageStore,
+  id: string,
+): void => {
+  setTimeout(() => {
+    const current = get().pendingMessages.find((m) => m.id === id);
+    if (current?.status === "sending") {
+      get().markPendingMessageError(id, "Send timed out");
+    }
+  }, PENDING_MESSAGE_TIMEOUT_MS);
+};
+
 export const useOptimisticUserMessageStore = create<OptimisticUserMessageStore>(
   (set, get) => ({
     ...initialState,
@@ -151,15 +173,11 @@ export const useOptimisticUserMessageStore = create<OptimisticUserMessageStore>(
         pendingMessages: [...state.pendingMessages, message],
       }));
 
-      // Watchdog: if the server echo never lands (WS dropped, server crashed,
-      // network partition), flip this entry to "error" so the user gets a
-      // retry link instead of a permanently-pinned "Sending…" bubble.
-      setTimeout(() => {
-        const current = get().pendingMessages.find((m) => m.id === id);
-        if (current?.status === "sending") {
-          get().markPendingMessageError(id, "Send timed out");
-        }
-      }, PENDING_MESSAGE_TIMEOUT_MS);
+      // A start-task message cannot be echoed before the sandbox is ready;
+      // its watchdog starts when the entry is reassigned to the real id.
+      if (!payload.conversationId.startsWith("task-")) {
+        scheduleSendTimeout(get, id);
+      }
 
       return id;
     },
@@ -231,13 +249,18 @@ export const useOptimisticUserMessageStore = create<OptimisticUserMessageStore>(
     clearPendingMessages: () =>
       set(() => ({ pendingMessages: [], confirmedEventIds: new Set() })),
 
-    reassignPendingMessages: (fromConversationId, toConversationId) =>
+    reassignPendingMessages: (fromConversationId, toConversationId) => {
+      const moved = get().pendingMessages.filter(
+        (message) => message.conversationId === fromConversationId,
+      );
       set((state) => ({
         pendingMessages: state.pendingMessages.map((message) =>
           message.conversationId === fromConversationId
             ? { ...message, conversationId: toConversationId }
             : message,
         ),
-      })),
+      }));
+      moved.forEach((message) => scheduleSendTimeout(get, message.id));
+    },
   }),
 );
