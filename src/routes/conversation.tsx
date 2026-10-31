@@ -75,7 +75,7 @@ function AppContent() {
     owner.current.backendId !== active.backend.id ||
     owner.current.orgId !== active.orgId;
 
-  const { data: conversation, isFetched } = useActiveConversation();
+  const { data: conversation, isFetched, isSuccess } = useActiveConversation();
   const { data: isAuthed } = useIsAuthed();
   const { resetConversationState } = useConversationStore();
   const clearTerminal = useCommandStore((state) => state.clearTerminal);
@@ -130,7 +130,7 @@ function AppContent() {
   // this route — don't toast/navigate based on a 404 that's just
   // "this id doesn't exist on the new backend".
   const ownerLookupMissed =
-    isFetched && !!isAuthed && !backendChanged && !conversation;
+    isSuccess && !!isAuthed && !backendChanged && !conversation;
 
   // On cloud, a conversation the owner lookup cannot see may still be shared
   // with this user: public, or created by an automation in one of their orgs.
@@ -142,13 +142,16 @@ function AppContent() {
     active.backend.kind === "cloud" &&
     !!conversationId &&
     !conversationId.startsWith("task-");
-  const { data: sharedConversation, isFetched: isSharedProbeFetched } =
-    useSharedConversation(conversationId, { enabled: shouldProbeShared });
+  const { data: sharedConversation, isSuccess: isSharedProbeSuccessful } =
+    useSharedConversation(conversationId, {
+      enabled: shouldProbeShared,
+      showErrorToast: true,
+    });
 
   React.useEffect(() => {
     if (!ownerLookupMissed) return;
     if (shouldProbeShared) {
-      if (!isSharedProbeFetched) return;
+      if (!isSharedProbeSuccessful) return;
       if (sharedConversation) {
         navigate(`/shared/conversations/${conversationId}`, { replace: true });
         return;
@@ -162,7 +165,7 @@ function AppContent() {
   }, [
     ownerLookupMissed,
     shouldProbeShared,
-    isSharedProbeFetched,
+    isSharedProbeSuccessful,
     sharedConversation,
     conversationId,
     navigate,

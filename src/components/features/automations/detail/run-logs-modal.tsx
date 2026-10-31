@@ -273,7 +273,7 @@ export function RunLogsModal({
       />
       <div
         data-testid="run-logs-body"
-        className="relative flex max-h-[80vh] w-full max-w-3xl flex-col overflow-y-auto overscroll-contain rounded-xl border border-border bg-surface"
+        className="relative flex dialog-content-height w-full max-w-3xl flex-col overflow-y-auto overscroll-contain rounded-xl border border-border bg-surface"
       >
         <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between gap-4 bg-surface px-6 pb-4 pt-6">
           <h2 className={modalTitleLgMediumClassName}>
@@ -331,7 +331,7 @@ export function RunLogsModal({
             role="tabpanel"
             id={`run-logs-panel-${activeTab}`}
             aria-labelledby={`run-logs-tab-${activeTab}`}
-            className="mt-3 min-h-[12rem] rounded-lg border border-border bg-black/40 p-4 font-mono text-xs"
+            className="mt-3 automation-log-min-height rounded-lg border border-border bg-black/40 p-4 font-mono text-xs"
           >
             {noBashCommand && (
               <p className="text-muted italic">

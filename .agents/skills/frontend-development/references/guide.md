@@ -1,7 +1,9 @@
 ## Raw-color class-map scanning
 
-`shadcn/no-raw-colors` stays at warning severity. The audited component paths in
-`eslint.config.js` also enable `scanAllStrings` so literal class recipes remain
+`shadcn/no-raw-colors` warns globally. Three migrated owners reject new raw colors:
+backend-status-dot, Markdown blockquote and mcp-server-health. Start-task badge
+and indicator remain warning-only pending their separate migration. Their exact paths in `eslint.config.js` also
+enable `scanAllStrings` so literal class recipes remain
 visible when dynamic map or helper lookups hide them from class-site analysis.
 Keep this adoption scoped: scanning every string can mistake program tags for
 color utilities. Review newly included findings before extending the file list;

@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LoaderCircle } from "lucide-react";
 import { GenericEventMessage } from "./generic-event-message";
+import { CollapsibleEventGroup } from "./collapsible-event-group";
 import { I18nKey } from "#/i18n/declaration";
 import type { AppConversationStartTaskStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { getTaskStatusI18nKey } from "#/utils/status";
@@ -23,29 +25,25 @@ export function ConversationStartupProgress({
 }: Props) {
   const { t } = useTranslation("openhands");
   const isRunning = !error && status !== "READY" && status !== "ERROR";
+  const label = status
+    ? getTaskStatusI18nKey(status)
+    : I18nKey.HOME$CREATING_CONVERSATION;
+  const [observedSteps, setObservedSteps] = useState([label]);
+  if (!observedSteps.includes(label)) {
+    setObservedSteps([...observedSteps, label]);
+  }
   return (
     <div data-testid="conversation-startup-progress">
-      <GenericEventMessage
+      <CollapsibleEventGroup
+        testId="startup-progress-group"
         title={
-          error ? (
-            <span
-              role="alert"
-              className="whitespace-pre-wrap break-words text-status-error"
-            >
-              {error}
-            </span>
-          ) : (
-            <span role="status" aria-busy={isRunning}>
-              {t(
-                status
-                  ? getTaskStatusI18nKey(status)
-                  : I18nKey.HOME$CREATING_CONVERSATION,
-              )}
-            </span>
-          )
+          <span role="status" aria-busy={isRunning}>
+            {t(error ? I18nKey.COMMON$ERROR : label)}
+          </span>
         }
-        details=""
-        titleTrailing={
+        expandLabel={t(I18nKey.BUTTON$EXPAND)}
+        collapseLabel={t(I18nKey.BUTTON$COLLAPSE)}
+        trailing={
           isRunning ? (
             <LoaderCircle
               aria-hidden="true"
@@ -53,7 +51,19 @@ export function ConversationStartupProgress({
             />
           ) : undefined
         }
-      />
+      >
+        {observedSteps.map((step) => (
+          <GenericEventMessage key={step} title={t(step)} details="" />
+        ))}
+      </CollapsibleEventGroup>
+      {error && (
+        <p
+          role="alert"
+          className="whitespace-pre-wrap break-words text-sm text-status-error"
+        >
+          {error}
+        </p>
+      )}
       {error && (onEdit || onRetry) && (
         <div className="flex flex-wrap items-center gap-2 pb-2">
           {onEdit && (

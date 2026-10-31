@@ -6,6 +6,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HttpError } from "@openhands/typescript-client";
@@ -79,6 +80,52 @@ it("announces startup as busy until the task is ready", async () => {
   await waitFor(() =>
     expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "false"),
   );
+});
+
+it("expands observed startup steps and keeps failures actionable when collapsed", async () => {
+  mount();
+  await waitFor(() =>
+    expect(client.getQueryData(["start-task", "123"])).toEqual(task),
+  );
+  const toggle = screen.getByRole("button", { name: "BUTTON$EXPAND" });
+  expect(toggle).toHaveAttribute("aria-expanded", "false");
+  fireEvent.click(toggle);
+  expect(screen.getByRole("region")).toBeVisible();
+  act(() => {
+    client.setQueryData(["start-task", "123"], {
+      ...task,
+      status: "WAITING_FOR_SANDBOX",
+    });
+  });
+  await waitFor(() =>
+    expect(
+      within(screen.getByRole("region")).getByText(
+        "COMMON$WAITING_FOR_SANDBOX",
+      ),
+    ).toBeVisible(),
+  );
+  expect(
+    within(screen.getByRole("region")).getByText(
+      "CONVERSATION$STARTING_CONVERSATION",
+    ),
+  ).toBeVisible();
+  expect(
+    within(screen.getByRole("region")).queryByText("STATUS$SETTING_UP_SKILLS"),
+  ).not.toBeInTheDocument();
+  fireEvent.click(toggle);
+  expect(screen.queryByRole("region")).not.toBeInTheDocument();
+  act(() => {
+    client.setQueryData(["start-task", "123"], {
+      ...task,
+      status: "ERROR",
+      detail: "",
+    });
+  });
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "CONVERSATION$FAILED_TO_START_FROM_TASK",
+  );
+  fireEvent.click(screen.getByRole("button", { name: "BUTTON$EDIT" }));
+  expect(navigate).toHaveBeenCalledWith("/conversations");
 });
 
 describe("startup error recovery", () => {
