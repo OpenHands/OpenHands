@@ -1,16 +1,15 @@
 /* Integration: useCompactContextAction end-to-end through real stores. */
 import { act, renderHook } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import useMetricsStore from "#/stores/metrics-store";
 import { useEventStore } from "#/stores/use-event-store";
 import type { OpenHandsEvent } from "#/types/agent-server/core";
 
-const mutateMock = vi.fn();
-vi.mock("#/hooks/mutation/use-condense-conversation", () => ({
-  useCondenseConversation: () => ({ mutate: mutateMock, isPending: false }),
-}));
+import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import { createAgentServerQueryClient } from "#/query-client-config";
+import { HttpError } from "@openhands/typescript-client";
 vi.mock("#/hooks/query/use-active-conversation", () => ({
   useActiveConversation: () => ({
     data: { id: "c1", conversation_url: null, session_api_key: null },
@@ -51,7 +50,7 @@ const usage = (perTurn: number) => ({
 function wrapper({ children }: { children: React.ReactNode }) {
   return React.createElement(
     QueryClientProvider,
-    { client: new QueryClient() },
+    { client: createAgentServerQueryClient() },
     children,
   );
 }
@@ -65,22 +64,29 @@ describe("useCompactContextAction (integration)", () => {
       max_budget_per_task: null,
       usage: usage(50_000),
     });
-    mutateMock.mockImplementation((_vars, opts) => opts.onSuccess());
+    vi.spyOn(
+      AgentServerConversationService,
+      "condenseConversation",
+    ).mockResolvedValue(undefined);
     successToast.mockClear();
     errorToast.mockClear();
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.useRealTimers();
     useEventStore.getState().clearEvents();
   });
 
-  it("toasts counts when condensation lands and metrics drop", () => {
+  it("toasts counts when condensation lands and metrics drop", async () => {
     const { result } = renderHook(() => useCompactContextAction(50_000), {
       wrapper,
     });
 
-    act(() => result.current.handleCompact());
+    await act(async () => {
+      result.current.handleCompact();
+      await vi.advanceTimersByTimeAsync(0);
+    });
     expect(successToast).toHaveBeenCalledWith(
       I18nKey.CONVERSATION$COMPACT_CONTEXT_STARTED,
     );
@@ -100,12 +106,15 @@ describe("useCompactContextAction (integration)", () => {
     expect(errorToast).not.toHaveBeenCalled();
   });
 
-  it("toasts error when no condensation arrives in time", () => {
+  it("toasts error when no condensation arrives in time", async () => {
     const { result } = renderHook(() => useCompactContextAction(50_000), {
       wrapper,
     });
 
-    act(() => result.current.handleCompact());
+    await act(async () => {
+      result.current.handleCompact();
+      await vi.advanceTimersByTimeAsync(0);
+    });
     act(() => {
       vi.advanceTimersByTime(90_000);
     });
@@ -113,5 +122,22 @@ describe("useCompactContextAction (integration)", () => {
     expect(errorToast).toHaveBeenCalledWith(
       I18nKey.CONVERSATION$COMPACT_CONTEXT_FAILED,
     );
+  });
+  it("shows one error for a rejected compaction and allows another attempt", async () => {
+    const reason = "This agent has no condenser configured";
+    vi.mocked(
+      AgentServerConversationService.condenseConversation,
+    ).mockRejectedValue(new HttpError(409, "Conflict", { detail: reason }));
+    const { result } = renderHook(() => useCompactContextAction(50_000), {
+      wrapper,
+    });
+    await act(async () => {
+      result.current.handleCompact();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(errorToast).toHaveBeenCalledExactlyOnceWith(reason);
+    expect(successToast).not.toHaveBeenCalled();
+    expect(result.current.isCompacting).toBe(false);
+    expect(result.current.isDisabled).toBe(false);
   });
 });
