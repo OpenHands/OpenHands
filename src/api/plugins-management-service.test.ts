@@ -91,6 +91,32 @@ describe("PluginsManagementService", () => {
     expect(result).toEqual([]);
   });
 
+  it.each([
+    { activeKind: "local" as const, requestedKey: "" },
+    { activeKind: "cloud" as const, requestedKey: "requested-key" },
+  ])(
+    "lists plugins on the requested server while the active backend is $activeKind",
+    async ({ activeKind, requestedKey }) => {
+      useBackend(activeKind);
+      listInstalledPlugins.mockResolvedValue({ plugins: [installedPlugin] });
+      const requested: Backend = {
+        id: "requested",
+        name: "Requested",
+        kind: "local",
+        host: "http://requested:9000",
+        apiKey: requestedKey,
+      };
+
+      expect(
+        await PluginsManagementService.listInstalledPlugins(requested),
+      ).toEqual([installedPlugin]);
+      const options = vi.mocked(PluginsClient).mock.calls[0][0];
+      expect(options).toMatchObject({ host: requested.host });
+      if (requestedKey) expect(options).toHaveProperty("apiKey", requestedKey);
+      else expect(options).not.toHaveProperty("apiKey");
+    },
+  );
+
   it("forwards source, ref, and repo_path when installing a plugin", async () => {
     useBackend("local");
     installPlugin.mockResolvedValue(installedPlugin);

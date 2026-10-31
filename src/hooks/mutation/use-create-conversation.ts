@@ -8,9 +8,7 @@ import { useAgentProfiles } from "#/hooks/query/use-agent-profiles";
 import { useSettings } from "#/hooks/query/use-settings";
 import { useMetaProfiles } from "#/hooks/query/use-meta-profiles";
 import { useActiveBackend } from "#/contexts/active-backend-context";
-import PluginsManagementService, {
-  type InstalledPluginInfo,
-} from "#/api/plugins-management-service";
+import PluginsManagementService from "#/api/plugins-management-service";
 import { PLUGINS_QUERY_KEYS } from "#/hooks/query/query-keys";
 import { launchConversation } from "#/hooks/mutation/resolve-conversation-launch";
 import { pluginReferenceKey } from "#/utils/plugin-display";
@@ -185,38 +183,49 @@ export const useCreateConversation = ({
       //   2. enabled installed plugins, which the SDK auto-loads into every new
       //      local conversation (see use-set-plugin-enabled).
       const explicitPlugins = plugins?.map(toPluginCoordinates) ?? [];
-      let attachedPlugins: PluginSpec[] = explicitPlugins;
+      if (localConversationId && explicitPlugins.length) {
+        mergeStoredConversationMetadata(localConversationId, {
+          plugins: explicitPlugins,
+        });
+      }
       if (localConversationId) {
-        let installed: InstalledPluginInfo[] = [];
-        try {
-          installed = await queryClient.ensureQueryData({
+        // Navigation must not wait for this optional snapshot. Capture the
+        // launch backend so switching servers cannot redirect its late lookup.
+        void queryClient
+          // The shared key identifies this backend by id, without caching
+          // the credentials captured by the query function.
+          // eslint-disable-next-line @tanstack/query/exhaustive-deps
+          .ensureQueryData({
             // Same key `usePlugins` writes. Unscoped, this served the previous
             // backend's list and attached plugins the target server lacks.
             queryKey: [...PLUGINS_QUERY_KEYS.installed, backend.id, orgId],
-            queryFn: () => PluginsManagementService.listInstalledPlugins(),
+            queryFn: () =>
+              PluginsManagementService.listInstalledPlugins(backend),
+            meta: { disableToast: true },
+          })
+          .then((installed) => {
+            const seen = new Set(explicitPlugins.map(pluginReferenceKey));
+            const enabledInstalled = installed
+              .filter((plugin) => plugin.enabled)
+              .map((plugin) => ({
+                source: plugin.source,
+                ref: plugin.resolved_ref ?? null,
+                repo_path: plugin.repo_path ?? null,
+                // Retain the display name, but never plugin parameters.
+                name: plugin.name,
+              }))
+              .filter((plugin) => !seen.has(pluginReferenceKey(plugin)));
+            if (enabledInstalled.length) {
+              // Preserve source/profile metadata written by the launch.
+              mergeStoredConversationMetadata(localConversationId, {
+                plugins: [...explicitPlugins, ...enabledInstalled],
+              });
+            }
+          })
+          .catch(() => {
+            // Lookup or storage failure must not turn a successful launch
+            // into an error or an unhandled background rejection.
           });
-        } catch {
-          // Best-effort: never let plugin lookup block conversation creation.
-        }
-        const seen = new Set(explicitPlugins.map(pluginReferenceKey));
-        const enabledInstalled = installed
-          .filter((plugin) => plugin.enabled)
-          .map((plugin) => ({
-            source: plugin.source,
-            ref: plugin.resolved_ref ?? null,
-            repo_path: plugin.repo_path ?? null,
-            // Keep the human-friendly name so the plugins view shows e.g.
-            // "city-weather" rather than deriving "local" from the source.
-            name: plugin.name,
-          }))
-          .filter((plugin) => !seen.has(pluginReferenceKey(plugin)));
-        attachedPlugins = [...explicitPlugins, ...enabledInstalled];
-      }
-      // Merge so the metadata the launch just persisted is preserved.
-      if (localConversationId && attachedPlugins.length) {
-        mergeStoredConversationMetadata(localConversationId, {
-          plugins: attachedPlugins,
-        });
       }
 
       // OpenHands cloud pattern: when the start task isn't immediately
