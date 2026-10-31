@@ -61,6 +61,31 @@ interface ModelRow {
 const KEYLESS_CONNECTION_VALUE = "";
 
 /**
+ * Append a numeric suffix to `base` (e.g. "gpt-5.1" -> "gpt-5.1-2") until
+ * the result is not in `taken`. The suffix starts at 2 and grows until a
+ * free slot is found. Returns the original `base` when it is already free.
+ *
+ * `taken` is checked first so we never collide with the user's existing
+ * profiles (passed via `existingNames`) or with rows already picked from
+ * the same provider catalog (the Azure `azure/eu/gpt-5.1` vs
+ * `azure/global/gpt-5.1` case that #18957 reports).
+ */
+function uniquifyName(base: string, taken: ReadonlySet<string>): string {
+  if (!taken.has(base)) {
+    return base;
+  }
+  let i = 2;
+  // Clamp to the 64-char PROFILE_NAME_PATTERN ceiling; the suffix "-NN" can
+  // be at most 4 chars ("-99"), so truncate first then append.
+  const maxBase =
+    base.length > 60 ? base.substring(0, 60).replace(/-+$/, "") : base;
+  while (taken.has(`${maxBase}-${i}`)) {
+    i += 1;
+  }
+  return `${maxBase}-${i}`;
+}
+
+/**
  * Bulk-add models as LLM profiles. One modal serves two entry points: the top
  * "Add from provider connections" button (chooser mode — pick a provider) and
  * a connection row's "…" (preselect mode — opens on that connection's
@@ -128,6 +153,14 @@ export function AddModelsModal({
     const selectNew = autoSelectRef.current;
     setRows((prev) => {
       const prior = new Map(prev.map((row) => [row.model, row]));
+      // Names already in use: the user's existing profiles + any name
+      // already claimed by a prior (carried-over) row in this session.
+      // We seed with existingNames here so we never silently collide
+      // with the user's own profiles — new rows pick a suffix instead.
+      const taken = new Set<string>(existingNames);
+      for (const carried of prior.values()) {
+        taken.add(carried.name);
+      }
       // Dedupe by canonical model id: a provider's catalog can list the same
       // model twice (e.g. once in the verified set and once in the raw list
       // when the two disagree on prefixing). Without dedup each copy becomes
@@ -143,25 +176,28 @@ export function AddModelsModal({
         if (seen.has(full)) continue;
         seen.add(full);
         const carried = prior.get(full);
-        built.push(
-          carried
-            ? carried
-            : {
-                model: full,
-                name: deriveProfileNameFromModel(full),
-                // Chooser mode leaves rows unselected: the server caps how
-                // many profiles an account may hold, so defaulting to "all"
-                // invites a submission that is mostly refusals. Preselect mode
-                // (autoSelectRef) selects them — see the comment above.
-                selected: selectNew,
-                status: "idle" as RowStatus,
-              },
-        );
+        if (carried) {
+          built.push(carried);
+          continue;
+        }
+        const baseName = deriveProfileNameFromModel(full);
+        const uniqueName = uniquifyName(baseName, taken);
+        taken.add(uniqueName);
+        built.push({
+          model: full,
+          name: uniqueName,
+          // Chooser mode leaves rows unselected: the server caps how
+          // many profiles an account may hold, so defaulting to "all"
+          // invites a submission that is mostly refusals. Preselect mode
+          // (autoSelectRef) selects them — see the comment above.
+          selected: selectNew,
+          status: "idle" as RowStatus,
+        });
       }
       return built;
     });
     if (items.length > 0) autoSelectRef.current = false;
-  }, [models.data]);
+  }, [models.data, existingNames]);
 
   // The manager keeps this component mounted and drives it with `isOpen`, so
   // without an explicit reset a reopened modal still shows the last session's
