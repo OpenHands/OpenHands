@@ -198,16 +198,24 @@ function rawUpgrade(
   });
 }
 
-/** A masked client text frame (payload under 126 bytes). */
+/** A masked client text frame. */
 function clientTextFrame(text: string): Buffer {
   const payload = Buffer.from(text);
   const mask = Buffer.from([1, 2, 3, 4]);
   const masked = payload.map((byte, i) => byte ^ mask[i % 4]);
-  return Buffer.concat([
-    Buffer.from([0x81, 0x80 | payload.length]),
-    mask,
-    Buffer.from(masked),
-  ]);
+  let header: Buffer;
+  if (payload.length < 126) {
+    header = Buffer.from([0x81, 0x80 | payload.length]);
+  } else if (payload.length <= 0xffff) {
+    header = Buffer.from([0x81, 0x80 | 126, 0, 0]);
+    header.writeUInt16BE(payload.length, 2);
+  } else {
+    header = Buffer.alloc(10);
+    header[0] = 0x81;
+    header[1] = 0x80 | 127;
+    header.writeBigUInt64BE(BigInt(payload.length), 2);
+  }
+  return Buffer.concat([header, mask, Buffer.from(masked)]);
 }
 
 /** The status an upgrade was refused with, or 101 if it went through. */
@@ -952,6 +960,59 @@ describe("createMarsWebBridge with a session key", () => {
     waiting[0].close();
     await vi.waitFor(async () => expect(await upgradeStatus(url)).toBe(101));
     waiting.forEach((ws) => ws.terminate());
+  });
+
+  /** A raw socket refused for a wrong key, which never answers the close. */
+  async function refusedSocket() {
+    const { status, socket } = await rawUpgrade(
+      web.origin,
+      `/mars/sessions/${SESSION_ID}/mars-upstream/socket`,
+    );
+    expect(status).toBe("HTTP/1.1 101 Switching Protocols");
+    socket.on("error", () => {});
+    const refused = new Promise((resolve) => {
+      socket.once("data", resolve);
+    });
+    socket.write(
+      clientTextFrame(
+        JSON.stringify({ type: "auth", session_api_key: "wrong" }),
+      ),
+    );
+    // The server's close frame.
+    await refused;
+    return socket;
+  }
+
+  it("keeps a refused socket's place until it is gone, however long its close takes", async () => {
+    await rpc(web.origin, "openTunnel", [{ sessionId: SESSION_ID }], {
+      headers: { "X-Session-API-Key": KEY },
+    });
+    const url = `${web.origin.replace("http", "ws")}/mars/sessions/${SESSION_ID}/mars-upstream/socket`;
+    const refused: net.Socket[] = [];
+    for (let i = 0; i < FIRST_MESSAGE_AUTH_MAX_PENDING; i += 1) {
+      refused.push(await refusedSocket());
+    }
+
+    expect(await upgradeStatus(url)).toBe(503);
+
+    refused.forEach((socket) => socket.destroy());
+    await vi.waitFor(async () => expect(await upgradeStatus(url)).toBe(101));
+  });
+
+  it("drops a refused socket that keeps sending, before it piles up data", async () => {
+    await rpc(web.origin, "openTunnel", [{ sessionId: SESSION_ID }], {
+      headers: { "X-Session-API-Key": KEY },
+    });
+    const socket = await refusedSocket();
+    const closed = new Promise((resolve) => {
+      socket.once("close", resolve);
+    });
+
+    socket.write(clientTextFrame("x".repeat(FIRST_MESSAGE_AUTH_MAX_BYTES + 1)));
+
+    await closed;
+    expect(upstream.seen.ws).toHaveLength(0);
+    expect((await fetch(`${web.origin}/mars/health`)).status).toBe(200);
   });
 
   it("answers 400 to a socket path with a fragment, and stays up", async () => {

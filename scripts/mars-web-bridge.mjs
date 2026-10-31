@@ -854,13 +854,15 @@ export function createMarsWebBridge({
       );
       client.once("message", (data, isBinary) => {
         clearTimeout(timer);
-        loggedInOrGone();
-        // A key that arrives after the window closed is too late.
+        // A key that arrives after the window closed is too late. A refused
+        // socket keeps its place and byte limit until it is gone: the peer
+        // may take its time answering the close.
         if (client.readyState !== WebSocket.OPEN) return;
         if (isBinary || !isAuthFrame(data.toString("utf8"), key)) {
           client.close(CLOSE_AUTH_FAILED, "Authentication failed");
           return;
         }
+        loggedInOrGone();
         relayWebSocket(client, session);
       });
       client.once("close", () => clearTimeout(timer));

@@ -77,15 +77,12 @@ interface ConversationPanelPreferencesActions {
   setShowOlderConversations: (value: boolean) => void;
   toggleShowOlderConversations: () => void;
   setOlderConversationCutoff: (value: OlderConversationCutoff) => void;
-  setShowArchivedConversations: (value: boolean) => void;
   toggleShowArchivedConversations: () => void;
   setShowRepoBranchMetadata: (value: boolean) => void;
   toggleShowRepoBranchMetadata: () => void;
   setShowLlmProfiles: (value: boolean) => void;
   toggleShowLlmProfiles: () => void;
-  setShowTagsMetadata: (value: boolean) => void;
   toggleShowTagsMetadata: () => void;
-  setShowHoverMetadata: (value: boolean) => void;
   toggleShowHoverMetadata: () => void;
   setOrganizeMode: (value: OrganizeMode) => void;
   setConversationSort: (value: ConversationSortField) => void;
@@ -139,8 +136,6 @@ export const useConversationPanelPreferencesStore =
               : DEFAULT_OLDER_CONVERSATION_CUTOFF,
           })),
 
-        setShowArchivedConversations: (value) =>
-          set(() => ({ showArchivedConversations: value })),
         toggleShowArchivedConversations: () =>
           set((state) => ({
             showArchivedConversations: !state.showArchivedConversations,
@@ -159,15 +154,11 @@ export const useConversationPanelPreferencesStore =
             showLlmProfiles: !state.showLlmProfiles,
           })),
 
-        setShowTagsMetadata: (value) =>
-          set(() => ({ showTagsMetadata: value })),
         toggleShowTagsMetadata: () =>
           set((state) => ({
             showTagsMetadata: !state.showTagsMetadata,
           })),
 
-        setShowHoverMetadata: (value) =>
-          set(() => ({ showHoverMetadata: value })),
         toggleShowHoverMetadata: () =>
           set((state) => ({
             showHoverMetadata: !state.showHoverMetadata,
