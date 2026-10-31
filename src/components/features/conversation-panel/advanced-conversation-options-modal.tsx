@@ -128,7 +128,7 @@ export function AdvancedConversationOptionsModal({
           </BaseModalDescription>
         </div>
 
-        <div className="relative -mx-6 w-[calc(100%+3rem)] min-h-0">
+        <div className="relative -mx-6 conversation-options-bleed-width min-h-0">
           <div
             aria-hidden
             data-testid="advanced-options-scroll-edge-top"
@@ -147,7 +147,7 @@ export function AdvancedConversationOptionsModal({
             // out of the natural Tab order (the rows are tabbable buttons).
             tabIndex={-1}
             data-testid="advanced-options-scroll"
-            className="custom-scrollbar-always flex max-h-[60vh] w-full flex-col overflow-y-auto px-6"
+            className="custom-scrollbar-always flex dialog-scroll-height w-full flex-col overflow-y-auto px-6"
             onClick={(event) => event.stopPropagation()}
             onScroll={updateScrollEdges}
           >
