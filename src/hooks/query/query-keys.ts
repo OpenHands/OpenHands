@@ -137,6 +137,23 @@ export const CONVERSATION_QUERY_KEYS = {
   subConversations: ["v1", "sub-conversations"] as const,
 } as const;
 
+export const CONVERSATION_PULL_REQUESTS_QUERY_KEYS = {
+  all: ["conversation-pull-requests"] as const,
+  detail: (
+    provider: string | null | undefined,
+    repository: string | null | undefined,
+    branch: string | null,
+    prNumbers: readonly number[],
+  ) =>
+    [
+      "conversation-pull-requests",
+      provider,
+      repository,
+      branch,
+      [...prNumbers].sort((a, b) => a - b),
+    ] as const,
+} as const;
+
 export const LOCAL_PLANNER_MUTATION_KEYS = {
   create: ["create-local-planning-conversation"] as const,
 } as const;
