@@ -1,5 +1,7 @@
 // @vitest-environment node
 import viteConfig from "../vite.config";
+import { NODE_TEST_SUITES } from "../vitest.node-suites";
+import { FORK_TEST_SUITES } from "../vitest.fork-suites";
 import { build } from "vite";
 import { execFileSync } from "node:child_process";
 import { mkdtemp, writeFile, symlink, rm } from "node:fs/promises";
@@ -37,6 +39,7 @@ describe("vitest environment projects", () => {
       test?: {
         name?: string;
         environment?: string;
+        pool?: string;
         setupFiles?: string[];
         include?: string[];
         exclude?: string[];
@@ -49,33 +52,38 @@ describe("vitest environment projects", () => {
     name: string,
   ) => projects.find((project) => project.test?.name === name)?.test;
 
-  it("runs the DOM-free pilot suites in the Node environment without the jsdom setup", async () => {
+  it("runs the setup-free suites in the Node environment without the jsdom setup", async () => {
     const nodeProject = findProject(await getProjects(), "node");
 
     expect(nodeProject?.environment).toBe("node");
-    // The pilot suites are pure functions: no DOM, no Web Storage, no MSW.
+    // Each suite owns its fixtures; none needs the shared browser setup.
     expect(nodeProject?.setupFiles).toEqual([]);
-    expect(nodeProject?.include).toEqual([
-      "__tests__/utils/file-language.test.ts",
-      "__tests__/utils/format-model-name.test.ts",
-      "__tests__/utils/parse-terminal-output.test.ts",
-    ]);
+    expect(nodeProject?.include).toEqual(NODE_TEST_SUITES);
+    expect(new Set(NODE_TEST_SUITES).size).toBe(NODE_TEST_SUITES.length);
   });
 
-  it("keeps every other suite in jsdom with the shared setup", async () => {
+  it("keeps browser suites in jsdom with the shared setup", async () => {
     const jsdomProject = findProject(await getProjects(), "jsdom");
 
-    expect(jsdomProject?.environment).toBe("jsdom");
+    expect(jsdomProject?.environment).toBe("./vitest.environment.ts");
+    expect(jsdomProject?.pool).toBe("vmForks");
     expect(jsdomProject?.setupFiles).toEqual(["vitest.setup.ts"]);
   });
 
-  it("excludes the pilot suites from jsdom so they run exactly once", async () => {
+  it("routes native contracts to forks without duplicating setup-free suites", async () => {
     const projects = await getProjects();
     const nodeInclude = findProject(projects, "node")?.include ?? [];
     const jsdomExclude = findProject(projects, "jsdom")?.exclude ?? [];
 
     expect(nodeInclude.length).toBeGreaterThan(0);
     expect(jsdomExclude).toEqual(expect.arrayContaining(nodeInclude));
+    expect(jsdomExclude).toEqual(expect.arrayContaining(FORK_TEST_SUITES));
+    const forks = findProject(projects, "forks");
+    expect(forks?.pool).toBe("forks");
+    expect(forks?.environment).toBe("jsdom");
+    expect(forks?.include).toEqual(FORK_TEST_SUITES);
+    expect(forks?.exclude).toEqual(expect.arrayContaining(nodeInclude));
+    expect(new Set(FORK_TEST_SUITES).size).toBe(FORK_TEST_SUITES.length);
   });
 });
 

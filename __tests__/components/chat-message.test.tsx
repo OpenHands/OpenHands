@@ -1,8 +1,17 @@
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import {
+  render,
+  screen,
+  waitFor,
+  fireEvent,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import util from "util";
 import { ChatMessage } from "#/components/features/chat/chat-message";
+import { ImagePreview } from "#/components/features/images/image-preview";
+import { Suggestions } from "#/components/features/suggestions/suggestions";
+import { UserAvatar } from "#/components/features/sidebar/user-avatar";
 
 describe("ChatMessage", () => {
   it.each(["user", "agent"] as const)(
@@ -296,5 +305,186 @@ describe("ChatMessage", () => {
     );
 
     expect(container.querySelector("mark")?.textContent).toBe("world");
+  });
+});
+
+describe("image-preview", () => {
+  const SRC = "https://example.com/image.jpg";
+
+  describe("ImagePreview", () => {
+    it("should render an image", () => {
+      render(<ImagePreview src={SRC} onRemove={vi.fn} />);
+
+      expect(screen.getByTestId("image-preview")).toBeInTheDocument();
+      expect(screen.getByRole("img")).toHaveAttribute("src", SRC);
+    });
+
+    it("should call onRemove when the close button is clicked", async () => {
+      const user = userEvent.setup();
+      const onRemoveMock = vi.fn();
+      render(<ImagePreview src={SRC} onRemove={onRemoveMock} />);
+
+      await user.click(
+        screen.getByRole("button", { name: "BUTTON$REMOVE_IMAGE" }),
+      );
+
+      expect(onRemoveMock).toHaveBeenCalledOnce();
+    });
+
+    it("should not display the close button when onRemove is not provided", () => {
+      render(<ImagePreview src={SRC} />);
+
+      expect(
+        screen.queryByRole("button", { name: "BUTTON$REMOVE_IMAGE" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("should not open the lightbox until the thumbnail is clicked", () => {
+      render(<ImagePreview src={SRC} />);
+
+      expect(screen.getByTestId("expand-image-button")).toBeInTheDocument();
+      expect(screen.queryByTestId("image-lightbox")).not.toBeInTheDocument();
+    });
+
+    it("should open a full-size lightbox when the thumbnail is clicked", async () => {
+      const user = userEvent.setup();
+      render(<ImagePreview src={SRC} />);
+
+      await user.click(screen.getByTestId("expand-image-button"));
+
+      const lightbox = screen.getByTestId("image-lightbox");
+      expect(lightbox).toBeInTheDocument();
+      // The full-size image renders the same source as the thumbnail — the
+      // thumbnail is only a CSS downscale, so no refetch is needed.
+      expect(within(lightbox).getByRole("img")).toHaveAttribute("src", SRC);
+    });
+
+    it("should keep the lightbox out of the remove flow", async () => {
+      const user = userEvent.setup();
+      const onRemoveMock = vi.fn();
+      render(<ImagePreview src={SRC} onRemove={onRemoveMock} />);
+
+      await user.click(
+        screen.getByRole("button", { name: "BUTTON$REMOVE_IMAGE" }),
+      );
+
+      expect(onRemoveMock).toHaveBeenCalledOnce();
+      expect(screen.queryByTestId("image-lightbox")).not.toBeInTheDocument();
+    });
+
+    it("should close the lightbox via its close button", async () => {
+      const user = userEvent.setup();
+      render(<ImagePreview src={SRC} />);
+
+      await user.click(screen.getByTestId("expand-image-button"));
+      await user.click(screen.getByTestId("image-lightbox-close"));
+
+      expect(screen.queryByTestId("image-lightbox")).not.toBeInTheDocument();
+    });
+
+    it("should close the lightbox when Escape is pressed", async () => {
+      const user = userEvent.setup();
+      render(<ImagePreview src={SRC} />);
+
+      await user.click(screen.getByTestId("expand-image-button"));
+      await user.keyboard("{Escape}");
+
+      expect(screen.queryByTestId("image-lightbox")).not.toBeInTheDocument();
+    });
+  });
+});
+
+describe("Suggestions", () => {
+  const firstSuggestion = {
+    label: "first-suggestion",
+    value: "value-of-first-suggestion",
+  };
+  const secondSuggestion = {
+    label: "second-suggestion",
+    value: "value-of-second-suggestion",
+  };
+  const suggestions = [firstSuggestion, secondSuggestion];
+
+  const onSuggestionClickMock = vi.fn();
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("should render suggestions", () => {
+    render(
+      <Suggestions
+        suggestions={suggestions}
+        onSuggestionClick={onSuggestionClickMock}
+      />,
+    );
+
+    expect(screen.getByTestId("suggestions")).toBeInTheDocument();
+    const suggestionElements = screen.getAllByTestId("suggestion");
+
+    expect(suggestionElements).toHaveLength(2);
+    expect(suggestionElements[0]).toHaveTextContent("first-suggestion");
+    expect(suggestionElements[1]).toHaveTextContent("second-suggestion");
+  });
+
+  it("should call onSuggestionClick when clicking a suggestion", async () => {
+    const user = userEvent.setup();
+    render(
+      <Suggestions
+        suggestions={suggestions}
+        onSuggestionClick={onSuggestionClickMock}
+      />,
+    );
+
+    const suggestionElements = screen.getAllByTestId("suggestion");
+
+    await user.click(suggestionElements[0]);
+    expect(onSuggestionClickMock).toHaveBeenCalledWith(
+      "value-of-first-suggestion",
+    );
+
+    await user.click(suggestionElements[1]);
+    expect(onSuggestionClickMock).toHaveBeenCalledWith(
+      "value-of-second-suggestion",
+    );
+  });
+});
+
+describe("UserAvatar", () => {
+  it("(default) should render the placeholder avatar when the user is logged out", () => {
+    render(<UserAvatar />);
+    expect(screen.getByTestId("user-avatar")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("USER$AVATAR_PLACEHOLDER"),
+    ).toBeInTheDocument();
+  });
+
+  it("should display the user's avatar when available", () => {
+    render(<UserAvatar avatarUrl="https://example.com/avatar.png" />);
+
+    expect(screen.getByAltText("AVATAR$ALT_TEXT")).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("USER$AVATAR_PLACEHOLDER"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("should display a loading spinner instead of an avatar when isLoading is true", () => {
+    const { rerender } = render(<UserAvatar />);
+    expect(screen.queryByTestId("loading-spinner")).not.toBeInTheDocument();
+    expect(
+      screen.getByLabelText("USER$AVATAR_PLACEHOLDER"),
+    ).toBeInTheDocument();
+
+    rerender(<UserAvatar isLoading />);
+    expect(screen.getByTestId("loading-spinner")).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("USER$AVATAR_PLACEHOLDER"),
+    ).not.toBeInTheDocument();
+
+    rerender(
+      <UserAvatar avatarUrl="https://example.com/avatar.png" isLoading />,
+    );
+    expect(screen.getByTestId("loading-spinner")).toBeInTheDocument();
+    expect(screen.queryByAltText("AVATAR$ALT_TEXT")).not.toBeInTheDocument();
   });
 });

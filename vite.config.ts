@@ -10,6 +10,8 @@ import { reactRouter } from "@react-router/dev/vite";
 import { configDefaults } from "vitest/config";
 import tailwindcss from "@tailwindcss/vite";
 import prefixer from "postcss-prefix-selector";
+import { NODE_TEST_SUITES } from "./vitest.node-suites";
+import { FORK_TEST_SUITES } from "./vitest.fork-suites";
 import {
   AGENT_SERVER_UI_SCOPE_SELECTOR,
   transformAgentServerUISelector,
@@ -26,18 +28,6 @@ const LIB_EXTERNALS = [
   "framer-motion",
 ];
 const APP_CHUNK_MAX_BYTES = 450 * 1024;
-
-// Suites verified to be DOM-free: they import pure functions only, touch no
-// DOM, Web Storage, timers or network, and therefore need neither the jsdom
-// environment nor the shared `vitest.setup.ts`. They run in a separate Node
-// project instead, which is measurably faster. See docs/DEVELOPMENT.md →
-// "Unit test environments" for the classification rules a suite must meet
-// before it is added here, and for how to roll the pilot back.
-const NODE_ENV_PILOT_TESTS = [
-  "__tests__/utils/file-language.test.ts",
-  "__tests__/utils/format-model-name.test.ts",
-  "__tests__/utils/parse-terminal-output.test.ts",
-];
 
 const normalizeBasePath = (value?: string) => {
   const raw = value?.trim();
@@ -482,30 +472,91 @@ export default defineConfig(({ mode }) => {
     },
     clearScreen: false,
     test: {
+      vmMemoryLimit: "1024MB",
+      deps: {
+        optimizer: {
+          client: {
+            enabled: true,
+            include: ["@heroui/react"],
+            exclude: [
+              "react",
+              "react/jsx-runtime",
+              "react/jsx-dev-runtime",
+              "react-dom",
+              "framer-motion",
+              "react-router",
+              "react-i18next",
+              "zustand",
+              "@tanstack/react-query",
+              "posthog-js",
+              "@openhands/typescript-client",
+            ],
+          },
+        },
+      },
       projects: [
         {
           extends: true,
           test: {
             name: "jsdom",
-            environment: "jsdom",
+            pool: "vmForks",
+            environment: "./vitest.environment.ts",
             setupFiles: ["vitest.setup.ts"],
-            // The pilot suites are excluded here so they run exactly once,
-            // in the Node project below.
+            // Each explicitly classified suite runs in exactly one project.
             exclude: [
               ...configDefaults.exclude,
               "tests",
-              ...NODE_ENV_PILOT_TESTS,
+              ...NODE_TEST_SUITES,
+              ...FORK_TEST_SUITES,
+              "__tests__/vite-config.test.ts",
             ],
           },
         },
         {
           extends: true,
           test: {
+            name: "forks",
+            pool: "forks",
+            environment: "jsdom",
+            include: [...FORK_TEST_SUITES],
+            exclude: [
+              ...configDefaults.exclude,
+              ...NODE_TEST_SUITES,
+              "__tests__/vite-config.test.ts",
+            ],
+            setupFiles: ["vitest.setup.ts"],
+          },
+        },
+        {
+          extends: true,
+          test: {
             name: "node",
+            pool: "vmForks",
             environment: "node",
-            include: [...NODE_ENV_PILOT_TESTS],
-            // These suites exercise pure functions, so they need none of the
-            // jsdom / Testing Library / MSW wiring in vitest.setup.ts.
+            include: [...NODE_TEST_SUITES],
+            exclude: [...configDefaults.exclude, ...FORK_TEST_SUITES],
+            // These suites own their fixtures and need no shared browser setup.
+            setupFiles: [],
+          },
+        },
+        {
+          extends: true,
+          test: {
+            name: "node-forks",
+            pool: "forks",
+            environment: "node",
+            include: NODE_TEST_SUITES.filter((suite) =>
+              FORK_TEST_SUITES.includes(suite),
+            ),
+            setupFiles: [],
+          },
+        },
+        {
+          extends: true,
+          test: {
+            name: "config",
+            environment: "node",
+            include: ["__tests__/vite-config.test.ts"],
             setupFiles: [],
           },
         },
@@ -518,11 +569,6 @@ export default defineConfig(({ mode }) => {
       // production behavior.
       testTimeout: 30000,
       hookTimeout: 30000,
-      server: {
-        deps: {
-          inline: ["@openhands/typescript-client"],
-        },
-      },
       coverage: {
         reporter: ["text", "json", "html", "lcov", "text-summary"],
         reportsDirectory: "coverage",

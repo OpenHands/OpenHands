@@ -1,4 +1,5 @@
-import { delay, http, HttpResponse } from "msw";
+import { networkDelay } from "./network-delay";
+import { http, HttpResponse } from "msw";
 import { GitRepository, Branch, PaginatedBranchesResponse } from "#/types/git";
 import { Provider } from "#/types/settings";
 
@@ -60,7 +61,7 @@ const MOCK_GIT_CHANGES: Array<{ path: string; status: string }> = [
 
 export const GIT_REPOSITORY_HANDLERS = [
   http.get("*/api/user/repositories", async ({ request }) => {
-    await delay(500); // Simulate network delay
+    await networkDelay(500); // Simulate network delay
 
     const url = new URL(request.url);
     const selectedProvider = url.searchParams.get("selected_provider");
@@ -145,7 +146,7 @@ export const GIT_REPOSITORY_HANDLERS = [
   }),
 
   http.get("*/api/user/search/repositories", async ({ request }) => {
-    await delay(300); // Simulate network delay
+    await networkDelay(300); // Simulate network delay
 
     const url = new URL(request.url);
     const query = url.searchParams.get("query") || "";
@@ -189,7 +190,7 @@ export const GIT_REPOSITORY_HANDLERS = [
 
   // Repository branches endpoint
   http.get("*/api/user/repository/branches", async ({ request }) => {
-    await delay(300);
+    await networkDelay(300);
 
     const url = new URL(request.url);
     const repository = url.searchParams.get("repository");
@@ -221,7 +222,7 @@ export const GIT_REPOSITORY_HANDLERS = [
 
   // Search repository branches endpoint
   http.get("*/api/user/search/branches", async ({ request }) => {
-    await delay(200);
+    await networkDelay(200);
 
     const url = new URL(request.url);
     const repository = url.searchParams.get("repository");
