@@ -87,9 +87,10 @@ function buildTunnelWsUrl(apiUrl, sessionId, remotePort) {
  * @param {string} options.sessionId MARS session id
  * @param {number} options.remotePort Port inside the guest sandbox
  * @param {string} [options.accessToken] Bearer token for the tunnel
- * @param {() => string | null} [options.getAccessToken] Read on every local
+ * @param {() => string | null | Promise<string | null>} [options.getAccessToken] Read on every local
  *   connection instead of `accessToken`, so a rotated or revoked credential
- *   takes effect on the next dial. Returning null refuses the connection.
+ *   takes effect on the next dial (after a refresh, when it returns a promise).
+ *   Returning null refuses the connection.
  * @param {string} [options.apiUrl] harness-api base URL (http(s)://...); translated to ws(s)://
  * @param {number} [options.localPort] Local port to listen on (0 lets the OS pick one)
  * @param {string} [options.address] Local bind address
@@ -133,18 +134,36 @@ export async function startPortForwardTunnel({
    */
   let lastUpstreamFailure = null;
 
+  function refuse(localSocket, httpStatus, message) {
+    lastUpstreamFailure = { closeCode: null, httpStatus, message };
+    localSocket.end();
+  }
+
   function bridgeConnection(localSocket) {
     activeSockets.add(localSocket);
     localSocket.once("close", () => activeSockets.delete(localSocket));
+    // Nothing else listens for errors until the dial; a reset while the
+    // token is read must not become an uncaught exception.
+    localSocket.on("error", () => {});
+    // The token may need a refresh first. The local socket stays paused
+    // meanwhile: nothing reads it until the tunnel is open.
+    Promise.resolve()
+      .then(readToken)
+      .then(
+        (token) => dial(localSocket, token),
+        (error) =>
+          refuse(
+            localSocket,
+            null,
+            error instanceof Error ? error.message : String(error),
+          ),
+      );
+  }
 
-    const token = readToken();
+  function dial(localSocket, token) {
+    if (localSocket.destroyed) return;
     if (!token) {
-      lastUpstreamFailure = {
-        closeCode: null,
-        httpStatus: 401,
-        message: "Not signed in to DigitalOcean.",
-      };
-      localSocket.end();
+      refuse(localSocket, 401, "Not signed in to DigitalOcean.");
       return;
     }
 

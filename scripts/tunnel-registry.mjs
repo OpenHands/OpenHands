@@ -65,7 +65,7 @@ import { startPortForwardTunnel } from "./tunnel-client.mjs";
 /**
  * @param {object} options
  * @param {typeof startPortForwardTunnel} [options.startTunnel] Override for tests
- * @param {(options: { sessionId: string, apiUrl?: string, getAccessToken: () => string | null }) => Promise<unknown>} options.ensureAwake
+ * @param {(options: { sessionId: string, apiUrl?: string, getAccessToken: () => string | null | Promise<string | null> }) => Promise<unknown>} options.ensureAwake
  *   Resolves once the session is READY (mars-session.mjs's
  *   ensureSessionAwake over a client authenticated with the tunnel's own
  *   token, in the bridge).
@@ -77,7 +77,7 @@ export function createTunnelRegistry({
   if (typeof ensureAwake !== "function") {
     throw new Error("ensureAwake is required");
   }
-  /** @type {Map<string, { status: "connecting" | "connected" | "error", remotePort: number, apiUrl: string | undefined, getAccessToken: () => string | null, owner: string | undefined, tunnel: object | null, error: Error | null, promise: Promise<void> | null }>} */
+  /** @type {Map<string, { status: "connecting" | "connected" | "error", remotePort: number, apiUrl: string | undefined, getAccessToken: () => string | null | Promise<string | null>, owner: string | undefined, tunnel: object | null, error: Error | null, promise: Promise<void> | null }>} */
   const entries = new Map();
 
   function snapshot(sessionId) {
@@ -114,7 +114,7 @@ export function createTunnelRegistry({
    * @param {object} options
    * @param {string} options.sessionId
    * @param {number} options.remotePort
-   * @param {() => string | null} options.getAccessToken Read on every dial,
+   * @param {() => string | null | Promise<string | null>} options.getAccessToken Read on every dial,
    *   so a tunnel keeps using whichever credential it was opened with and
    *   stops working once that credential is gone.
    * @param {string} [options.apiUrl]

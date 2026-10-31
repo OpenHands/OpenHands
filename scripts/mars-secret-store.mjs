@@ -38,6 +38,8 @@ import {
 import { hostname } from "node:os";
 import path from "node:path";
 
+import { withLockFileSync } from "./mars-lock-file.mjs";
+
 export const SECRET_STORE_KEYCHAIN = "keychain";
 export const SECRET_STORE_FILE = "encrypted-file";
 export const SECRET_STORE_MEMORY = "memory";
@@ -48,6 +50,13 @@ const KEYCHAIN_LABEL = "OpenHands Agent Canvas";
 
 const SECRETS_FILENAME = "secrets.json";
 const SECRETS_FILE_VERSION = 1;
+/** Held for one read and rewrite of the secrets file. */
+const FILE_LOCK = {
+  staleMs: 30_000,
+  waitMs: 10_000,
+  busyMessage:
+    "Another Canvas process is still writing the encrypted secrets file. Try again.",
+};
 const MACOS_SECURITY = "/usr/bin/security";
 /** `security` exit status for "the item could not be found in the keychain". */
 const MACOS_ITEM_NOT_FOUND = 44;
@@ -240,7 +249,6 @@ export function createEncryptedFileStore({ dir, secretKey }) {
   }
 
   function save(entries) {
-    mkdirSync(dir, { recursive: true, mode: 0o700 });
     const temporary = `${filePath}.${process.pid}.tmp`;
     writeFileSync(
       temporary,
@@ -248,6 +256,27 @@ export function createEncryptedFileStore({ dir, secretKey }) {
       { mode: 0o600 },
     );
     renameSync(temporary, filePath);
+  }
+
+  /**
+   * Every write rewrites the whole file, and other Canvas processes may
+   * share it: read and rewrite under its lock, so no process writes back
+   * entries it read before another's write. A lost write would cost a
+   * rotated refresh token, which works only once.
+   *
+   * @param {(entries: Record<string, unknown>) => Record<string, unknown> | null} change
+   *   Returns the entries to save, or null to leave the file alone.
+   */
+  function update(change) {
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    withLockFileSync(
+      `${filePath}.lock`,
+      () => {
+        const entries = change(load());
+        if (entries) save(entries);
+      },
+      FILE_LOCK,
+    );
   }
 
   return {
@@ -280,20 +309,19 @@ export function createEncryptedFileStore({ dir, secretKey }) {
         cipher.update(Buffer.from(value, "utf8")),
         cipher.final(),
       ]);
-      save({
-        ...load(),
-        [account]: {
-          iv: iv.toString("base64"),
-          tag: cipher.getAuthTag().toString("base64"),
-          data: data.toString("base64"),
-        },
-      });
+      const entry = {
+        iv: iv.toString("base64"),
+        tag: cipher.getAuthTag().toString("base64"),
+        data: data.toString("base64"),
+      };
+      update((entries) => ({ ...entries, [account]: entry }));
     },
     remove(account) {
-      const entries = load();
-      if (!(account in entries)) return;
-      delete entries[account];
-      save(entries);
+      update((entries) => {
+        if (!(account in entries)) return null;
+        delete entries[account];
+        return entries;
+      });
     },
   };
 }

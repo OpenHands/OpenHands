@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getMarsBridge,
   isOpenHandsConfig,
@@ -80,9 +80,23 @@ export function useMarsAgents(
     refetchIntervalMs = REFETCH_INTERVAL_MS,
   }: { refetchIntervalMs?: number } = {},
 ) {
+  const queryClient = useQueryClient();
   return useQuery({
     queryKey: MARS_QUERY_KEYS.agents(connectionId),
-    queryFn: fetchMarsAgents,
+    queryFn: async () => {
+      try {
+        return await fetchMarsAgents();
+      } catch (error) {
+        // A control-plane request may discover that OAuth renewal was refused.
+        // Re-read the bridge's auth state so the view can offer sign-in, while
+        // an ordinary network failure keeps the existing connection selected.
+        // Electron IPC does not preserve the error's HTTP status.
+        await queryClient
+          .invalidateQueries({ queryKey: MARS_QUERY_KEYS.authState })
+          .catch(() => {});
+        throw error;
+      }
+    },
     enabled: connectionId !== null && getMarsBridge() !== null,
     refetchInterval: refetchIntervalMs,
     staleTime: refetchIntervalMs,

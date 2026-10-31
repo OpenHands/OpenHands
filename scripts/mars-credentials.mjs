@@ -22,6 +22,8 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { hostname, platform } from "node:os";
 import path from "node:path";
 
+import { withLockFile, withLockFileSync } from "./mars-lock-file.mjs";
+
 const STORE_FILENAME = "mars-credentials.json";
 const STORE_VERSION = 1;
 
@@ -37,20 +39,57 @@ export function secretAccountFor(connectionId) {
   return `digitalocean/${connectionId}`;
 }
 
-/** Version of the record kept in a `SecretStore`, so it can grow later. */
+/** Version of the record kept for each connection's secret. */
 const SECRET_VERSION = 1;
 
-/** The token in a stored record; null for anything this version cannot read. */
-function tokenFromSecret(secret) {
+/**
+ * @typedef {object} Grant What a connection signs in with.
+ * @property {string} token The bearer token: a personal access token, or an
+ *   OAuth access token.
+ * @property {string | null} [refreshToken] OAuth only; works exactly once.
+ * @property {string | null} [accessExpiresAt] OAuth only; when `token` stops
+ *   working and must be refreshed.
+ * @property {string | null} [clientId] The OAuth client it was issued to,
+ *   which a refresh must name.
+ */
+
+/** @param {string} kind @param {Grant} grant */
+function secretFor(kind, grant) {
+  return JSON.stringify({
+    v: SECRET_VERSION,
+    kind,
+    token: grant.token,
+    ...(grant.refreshToken ? { refreshToken: grant.refreshToken } : {}),
+    ...(grant.accessExpiresAt
+      ? { accessExpiresAt: grant.accessExpiresAt }
+      : {}),
+    ...(grant.clientId ? { clientId: grant.clientId } : {}),
+  });
+}
+
+/**
+ * A stored secret as a grant; null for anything this version cannot read.
+ * A bare token is what the desktop app stored before records existed.
+ *
+ * @returns {Grant | null}
+ */
+function grantFromSecret(secret) {
+  if (!secret) return null;
+  let record;
   try {
-    const record = JSON.parse(secret);
-    if (record?.v === SECRET_VERSION && typeof record.token === "string") {
-      return record.token;
-    }
+    record = JSON.parse(secret);
   } catch {
-    // Not a record this code wrote.
+    return { token: secret };
   }
-  return null;
+  if (record?.v !== SECRET_VERSION || typeof record.token !== "string") {
+    return null;
+  }
+  return {
+    token: record.token,
+    refreshToken: record.refreshToken ?? null,
+    accessExpiresAt: record.accessExpiresAt ?? null,
+    clientId: record.clientId ?? null,
+  };
 }
 
 /**
@@ -74,6 +113,28 @@ export function isValidPatFormat(token) {
 function fingerprintOf(token) {
   return createHash("sha256").update(token).digest("hex").slice(0, 16);
 }
+
+/**
+ * Held across one refresh: a token request times out after 15 s, so a lock
+ * this old was abandoned.
+ */
+const GRANT_LOCK = {
+  staleMs: 120_000,
+  waitMs: 30_000,
+  busyMessage:
+    "Another Canvas process is still renewing this DigitalOcean sign-in. Try again.",
+};
+
+/**
+ * Held while the connection list is read and written back, which may include
+ * saving a secret in the keychain (its tool times out after 10 s).
+ */
+const STORE_LOCK = {
+  staleMs: 60_000,
+  waitMs: 20_000,
+  busyMessage:
+    "Another Canvas process is still saving a DigitalOcean sign-in. Try again.",
+};
 
 function emptyState() {
   return {
@@ -116,21 +177,28 @@ export function createCredentialStore({
     !secrets && filePath && safeStorage?.isEncryptionAvailable?.(),
   );
   /**
-   * Plaintext token per connection id. The only copy when nothing persists
-   * it; otherwise a cache, so the keychain is not hit on every dial.
+   * Plaintext grant per connection id. The only copy when nothing persists
+   * it; otherwise a cache, so the keychain is not hit on every dial. Null
+   * records a secret that could not be read.
+   *
+   * @type {Map<string, Grant | null>}
    */
-  const memoryTokens = new Map();
+  const memoryGrants = new Map();
+  /** Connections whose grant this process could not save: memory holds it. */
+  const unsaved = new Set();
 
   let state = load();
 
-  function load() {
-    memoryTokens.clear();
-    if (!filePath) return emptyState();
-    let loaded;
+  /**
+   * The connection list as the file holds it now; null when there is no
+   * usable file. Other Canvas processes sharing the store write it too.
+   */
+  function readState() {
+    if (!filePath) return null;
     try {
       const parsed = JSON.parse(readFileSync(filePath, "utf8"));
-      if (parsed?.version !== STORE_VERSION) return emptyState();
-      loaded = {
+      if (parsed?.version !== STORE_VERSION) return null;
+      return {
         ...emptyState(),
         ...parsed,
         connections: Array.isArray(parsed.connections)
@@ -138,26 +206,57 @@ export function createCredentialStore({
           : [],
       };
     } catch {
-      // Missing or corrupt store — start clean rather than blocking sign-in.
-      return emptyState();
+      return null;
     }
+  }
+
+  /** Read a connection's secret into the cache. */
+  function readSecret(id) {
+    let grant = null;
+    try {
+      grant = grantFromSecret(secrets.read(secretAccountFor(id)));
+    } catch (error) {
+      // A locked keychain: the connection stays listed, needing sign-in.
+      log(error instanceof Error ? error.message : String(error));
+    }
+    memoryGrants.set(id, grant);
+    return grant;
+  }
+
+  function load() {
+    memoryGrants.clear();
+    unsaved.clear();
+    // Missing or corrupt store — start clean rather than blocking sign-in.
+    const loaded = readState() ?? emptyState();
     if (secrets) {
-      for (const connection of loaded.connections) {
-        try {
-          const secret = secrets.read(secretAccountFor(connection.id));
-          const token = secret ? tokenFromSecret(secret) : null;
-          if (token) memoryTokens.set(connection.id, token);
-        } catch (error) {
-          // A locked keychain: the connection stays listed, needing sign-in.
-          log(error instanceof Error ? error.message : String(error));
-        }
-      }
+      for (const connection of loaded.connections) readSecret(connection.id);
     }
     return loaded;
   }
 
+  /**
+   * Change the store as the file holds it now, under the store's lock, and
+   * write it back, so a change another Canvas process made meanwhile is
+   * kept. `change` returns false when it changed nothing in the file.
+   *
+   * @param {() => boolean | void} change
+   */
+  function mutate(change) {
+    if (!filePath) {
+      change();
+      return;
+    }
+    withLockFileSync(
+      `${filePath}.lock`,
+      () => {
+        state = readState() ?? state;
+        if (change() !== false) persist();
+      },
+      STORE_LOCK,
+    );
+  }
+
   function persist() {
-    if (!filePath) return;
     mkdirSync(path.dirname(filePath), { recursive: true });
     const serializable = {
       ...state,
@@ -175,49 +274,58 @@ export function createCredentialStore({
     renameSync(temporary, filePath);
   }
 
-  function encrypt(token) {
+  function encrypt(secret) {
     if (!canEncrypt) return null;
-    return safeStorage.encryptString(token).toString("base64");
+    return safeStorage.encryptString(secret).toString("base64");
   }
 
+  /** @returns {Grant | null} */
   function decrypt(connection) {
-    const cached = memoryTokens.get(connection.id);
+    const cached = memoryGrants.get(connection.id);
     if (cached !== undefined) return cached;
+    // A connection another Canvas process added since this one started.
+    if (secrets) return readSecret(connection.id);
     if (!canEncrypt || !connection.token) return null;
     try {
-      const token = safeStorage.decryptString(
-        Buffer.from(connection.token, "base64"),
+      const grant = grantFromSecret(
+        safeStorage.decryptString(Buffer.from(connection.token, "base64")),
       );
-      memoryTokens.set(connection.id, token);
-      return token;
+      if (grant) memoryGrants.set(connection.id, grant);
+      return grant;
     } catch {
       // Keychain rotated or the profile moved between machines.
       return null;
     }
   }
 
-  /** Keep a token where this store keeps tokens; false when it was refused. */
-  function storeToken(connection, token) {
-    memoryTokens.set(connection.id, token);
+  /**
+   * Keep a grant where this store keeps secrets; false when it was refused.
+   *
+   * @param {object} connection
+   * @param {Grant} grant
+   */
+  function storeGrant(connection, grant) {
+    memoryGrants.set(connection.id, grant);
+    const secret = secretFor(connection.kind, grant);
     if (!secrets) {
-      connection.token = encrypt(token);
+      connection.token = encrypt(secret);
       return true;
     }
     try {
-      secrets.write(
-        secretAccountFor(connection.id),
-        JSON.stringify({ v: SECRET_VERSION, kind: connection.kind, token }),
-      );
+      secrets.write(secretAccountFor(connection.id), secret);
+      unsaved.delete(connection.id);
       return true;
     } catch (error) {
       // Usable for this run; the UI says it was not saved.
       log(error instanceof Error ? error.message : String(error));
+      unsaved.add(connection.id);
       return false;
     }
   }
 
   function forgetToken(id) {
-    memoryTokens.delete(id);
+    memoryGrants.delete(id);
+    unsaved.delete(id);
     if (!secrets) return;
     try {
       secrets.remove(secretAccountFor(id));
@@ -228,6 +336,30 @@ export function createCredentialStore({
 
   function find(id) {
     return state.connections.find((connection) => connection.id === id) ?? null;
+  }
+
+  /**
+   * The grant the store holds for `connection` now, past this process's
+   * cache. One this process could not save exists only in its memory, so
+   * the store's copy (none, or an older one) does not replace it.
+   *
+   * @param {object} connection
+   * @returns {Grant | null}
+   */
+  function storedGrant(connection) {
+    if (!secrets) return decrypt(connection);
+    const kept = memoryGrants.get(connection.id);
+    if (kept && unsaved.has(connection.id)) return kept;
+    let grant;
+    try {
+      grant = grantFromSecret(secrets.read(secretAccountFor(connection.id)));
+    } catch (error) {
+      log(error instanceof Error ? error.message : String(error));
+      return decrypt(connection);
+    }
+    if (grant) memoryGrants.set(connection.id, grant);
+    else memoryGrants.delete(connection.id);
+    return grant;
   }
 
   /** Public shape of a connection: everything except the secret. */
@@ -294,40 +426,138 @@ export function createCredentialStore({
 
     /** Token of one connection, or null once it is removed or expired. */
     getToken(id) {
+      return this.getGrant(id)?.token ?? null;
+    },
+
+    /**
+     * Everything a connection signs in with, refresh token included; null
+     * once it is removed or expired. Never leaves the bridge.
+     *
+     * @returns {Grant | null}
+     */
+    getGrant(id) {
       const connection = find(id);
       if (!connection || isExpired(connection)) return null;
       return decrypt(connection);
     },
 
     /**
+     * The grant as the store holds it now, read past this process's cache:
+     * another Canvas process sharing the store may have renewed or removed
+     * it. Without a SecretStore, this process is the only writer.
+     *
+     * @returns {Grant | null}
+     */
+    readGrant(id) {
+      const connection = find(id);
+      if (!connection || isExpired(connection)) return null;
+      return storedGrant(connection);
+    },
+
+    /**
+     * Run `fn` holding this connection's grant lock, which every Canvas
+     * process sharing the store respects: a refresh token works only once.
+     *
+     * @template T
+     * @param {string} id
+     * @param {() => Promise<T>} fn
+     * @returns {Promise<T>}
+     */
+    withGrantLock(id, fn) {
+      if (!filePath) return fn();
+      return withLockFile(
+        path.join(path.dirname(filePath), `grant-${id}.lock`),
+        fn,
+        GRANT_LOCK,
+      );
+    },
+
+    /**
+     * Replace a connection's grant after a refresh. Null forgets it: the
+     * connection stays listed and asks for sign-in.
+     *
+     * With `replacing`, only while the store still holds the grant with that
+     * refresh token. That is checked in the same locked step as the write,
+     * so a new sign-in another Canvas process saved meanwhile stands.
+     * Returns false when the grant it would replace is gone.
+     *
+     * @param {string} id
+     * @param {Grant | null} grant
+     * @param {{ replacing?: string }} [options]
+     * @returns {boolean}
+     */
+    updateGrant(id, grant, { replacing } = {}) {
+      let updated = false;
+      mutate(() => {
+        const connection = find(id);
+        if (!connection) return false;
+        if (
+          replacing !== undefined &&
+          storedGrant(connection)?.refreshToken !== replacing
+        ) {
+          return false;
+        }
+        updated = true;
+        const before = { token: connection.token, isSaved: connection.isSaved };
+        if (grant) {
+          connection.isSaved = storeGrant(connection, grant);
+        } else {
+          forgetToken(id);
+          connection.token = null;
+        }
+        // With a SecretStore a renewal changes nothing in the file, unless
+        // the secret could not be saved.
+        return (
+          connection.token !== before.token ||
+          connection.isSaved !== before.isSaved
+        );
+      });
+      return updated;
+    },
+
+    /**
      * Save a credential and make it active. Entering a token this store
      * already holds updates that connection instead of adding a second one.
      *
-     * @param {object} input
-     * @param {string} input.kind
-     * @param {string} input.token
-     * @param {string | null} [input.expiresAt]
-     * @param {string} input.label
-     * @param {string | null} [input.teamName]
+     * @param {Grant & { kind: string, expiresAt?: string | null, label: string, teamName?: string | null }} input
+     *   `expiresAt` is when the whole credential lapses (a token that cannot be
+     *   refreshed); `accessExpiresAt` only says when to refresh.
      * @returns {ReturnType<typeof toMetadata> & { reused: boolean }}
      */
-    save({ kind, token, expiresAt = null, label, teamName = null }) {
+    save({
+      kind,
+      token,
+      refreshToken = null,
+      accessExpiresAt = null,
+      clientId = null,
+      expiresAt = null,
+      label,
+      teamName = null,
+    }) {
       const fingerprint = fingerprintOf(token);
-      const existing = state.connections.find(
-        (connection) => connection.fingerprint === fingerprint,
-      );
-      const connection = existing ?? { id: randomUUID() };
-      Object.assign(connection, {
-        kind,
-        label,
-        teamName: teamName ?? connection.teamName ?? null,
-        expiresAt,
-        fingerprint,
+      let connection;
+      let existing;
+      mutate(() => {
+        existing = state.connections.find(
+          (other) => other.fingerprint === fingerprint,
+        );
+        connection = existing ?? { id: randomUUID() };
+        Object.assign(connection, {
+          kind,
+          label,
+          teamName: teamName ?? connection.teamName ?? null,
+          expiresAt,
+          fingerprint,
+        });
+        connection.isSaved = storeGrant(connection, {
+          token,
+          refreshToken,
+          accessExpiresAt,
+          clientId,
+        });
+        if (!existing) state.connections = [...state.connections, connection];
+        state.activeConnectionId = connection.id;
       });
-      connection.isSaved = storeToken(connection, token);
-      if (!existing) state.connections = [...state.connections, connection];
-      state.activeConnectionId = connection.id;
-      persist();
       return { ...toMetadata(connection), reused: Boolean(existing) };
     },
 
@@ -336,62 +566,89 @@ export function createCredentialStore({
      * older connection keeps that connection: it takes the new token, and the
      * new entry is dropped, so anything bound to the old id carries on.
      *
+     * The older connection's own OAuth grant is then held nowhere, so it is
+     * handed to `onReplacedGrant` to be ended. A personal access token is
+     * the person's own and is never handed over.
+     *
      * @param {string} id
      * @param {{ uuid?: string | null, name?: string | null, email?: string | null }} team
+     * @param {{ onReplacedGrant?: (grant: Grant) => void }} [options]
      */
-    setTeam(id, { uuid = null, name = null, email = null } = {}) {
-      const connection = find(id);
-      if (!connection) return this.getActive();
-      const older = uuid
-        ? state.connections.find(
-            (other) => other.id !== id && other.teamUuid === uuid,
-          )
-        : null;
-      const target = older ?? connection;
-      if (older) {
-        const token = decrypt(connection);
-        Object.assign(older, {
-          kind: connection.kind,
-          label: connection.label,
-          expiresAt: connection.expiresAt ?? null,
-          fingerprint: connection.fingerprint,
-        });
-        if (token) older.isSaved = storeToken(older, token);
-        forgetToken(id);
-        state.connections = state.connections.filter(
-          (other) => other.id !== id,
-        );
-        // Follow the merge only if this connection was the active one; a
-        // switch made meanwhile stands.
-        if (state.activeConnectionId === id) {
-          state.activeConnectionId = older.id;
+    setTeam(
+      id,
+      { uuid = null, name = null, email = null } = {},
+      { onReplacedGrant } = {},
+    ) {
+      let target = null;
+      let replaced = null;
+      mutate(() => {
+        const connection = find(id);
+        if (!connection) return false;
+        const older = uuid
+          ? state.connections.find(
+              (other) => other.id !== id && other.teamUuid === uuid,
+            )
+          : null;
+        target = older ?? connection;
+        if (older) {
+          const grant = decrypt(connection);
+          const previous = decrypt(older);
+          if (
+            older.kind === CREDENTIAL_KIND_OAUTH &&
+            previous &&
+            previous.token !== grant?.token
+          ) {
+            replaced = previous;
+          }
+          Object.assign(older, {
+            kind: connection.kind,
+            label: connection.label,
+            expiresAt: connection.expiresAt ?? null,
+            fingerprint: connection.fingerprint,
+          });
+          if (grant) older.isSaved = storeGrant(older, grant);
+          forgetToken(id);
+          state.connections = state.connections.filter(
+            (other) => other.id !== id,
+          );
+          // Follow the merge only if this connection was the active one; a
+          // switch made meanwhile stands.
+          if (state.activeConnectionId === id) {
+            state.activeConnectionId = older.id;
+          }
         }
-      }
-      Object.assign(target, {
-        teamUuid: uuid ?? target.teamUuid ?? null,
-        teamName: name ?? target.teamName ?? null,
-        email: email ?? target.email ?? null,
+        Object.assign(target, {
+          teamUuid: uuid ?? target.teamUuid ?? null,
+          teamName: name ?? target.teamName ?? null,
+          email: email ?? target.email ?? null,
+        });
+        return true;
       });
-      persist();
-      return toMetadata(target);
+      if (replaced) onReplacedGrant?.(replaced);
+      return target ? toMetadata(target) : this.getActive();
     },
 
     setActive(id) {
-      if (!find(id)) return null;
-      state.activeConnectionId = id;
-      persist();
-      return this.getActive();
+      let found = false;
+      mutate(() => {
+        found = Boolean(find(id));
+        if (!found) return false;
+        state.activeConnectionId = id;
+        return true;
+      });
+      return found ? this.getActive() : null;
     },
 
     remove(id) {
-      forgetToken(id);
-      state.connections = state.connections.filter(
-        (connection) => connection.id !== id,
-      );
-      if (state.activeConnectionId === id) {
-        state.activeConnectionId = state.connections[0]?.id ?? null;
-      }
-      persist();
+      mutate(() => {
+        forgetToken(id);
+        state.connections = state.connections.filter(
+          (connection) => connection.id !== id,
+        );
+        if (state.activeConnectionId === id) {
+          state.activeConnectionId = state.connections[0]?.id ?? null;
+        }
+      });
       return this.getActive();
     },
 
