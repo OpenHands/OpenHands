@@ -51,6 +51,37 @@ function truncateLabel(label: string): string {
     : `${label.slice(0, PROFILE_LABEL_MAX_CHARS)}…`;
 }
 
+function RepositoryName({ name }: { name: string }) {
+  const parts = name.split("/");
+  const repository = parts.pop() ?? "";
+  const project = parts.length > 1 ? `${parts.pop()}/` : null;
+  const organization = parts.length ? `${parts.join("/")}/` : "";
+
+  return (
+    <span className="flex min-w-0 w-full whitespace-nowrap">
+      <span className="min-w-0 shrink-96 truncate">{organization}</span>
+      {project && (
+        <span className="min-w-0 max-w-48 shrink-0 truncate">{project}</span>
+      )}
+      <span className="min-w-0 max-w-full shrink-0 truncate">{repository}</span>
+    </span>
+  );
+}
+
+function RepositoryAddress({ address }: { address: string }) {
+  const repositoryStart = address.lastIndexOf("/") + 1;
+  return (
+    <span className="flex min-w-0 max-w-full whitespace-nowrap">
+      <span className="min-w-0 truncate">
+        {address.slice(0, repositoryStart)}
+      </span>
+      <span className="min-w-0 max-w-full shrink-0 truncate">
+        {address.slice(repositoryStart)}
+      </span>
+    </span>
+  );
+}
+
 function parseRepositories(value: string): string[] {
   const seen = new Set<string>();
   return value
@@ -622,11 +653,6 @@ export function AutomationSetupPromptStack({
                         </div>
                       ) : (
                         visibleRepositoryNames.map((name) => {
-                          // Organization/project/repository names can be
-                          // long; each option stays on one line and shortens
-                          // the organization/project part first, so the
-                          // repository name stays visible.
-                          const nameStart = Math.max(name.lastIndexOf("/"), 0);
                           return (
                             <ContextMenuListItem
                               key={name}
@@ -646,14 +672,11 @@ export function AutomationSetupPromptStack({
                               isDisabled={isRepositoryProviderUnsupported}
                               className="flex w-full items-center"
                             >
-                              <span className="flex min-w-0" title={name}>
-                                <span className="min-w-0 truncate">
-                                  {name.slice(0, nameStart)}
+                              <StyledTooltip content={name} placement="top">
+                                <span className="flex min-w-0 w-full">
+                                  <RepositoryName name={name} />
                                 </span>
-                                <span className="max-w-full shrink-0 truncate">
-                                  {name.slice(nameStart)}
-                                </span>
-                              </span>
+                              </StyledTooltip>
                             </ContextMenuListItem>
                           );
                         })
@@ -704,9 +727,11 @@ export function AutomationSetupPromptStack({
                       "gap-1 pr-1",
                     )}
                   >
-                    <span className="truncate" title={item}>
-                      {item}
-                    </span>
+                    <StyledTooltip content={item} placement="top">
+                      <span className="flex min-w-0 max-w-full">
+                        <RepositoryAddress address={item} />
+                      </span>
+                    </StyledTooltip>
                     {repositoryReadOnly ? null : (
                       <button
                         type="button"
