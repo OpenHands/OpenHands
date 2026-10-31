@@ -63,6 +63,30 @@ function parseRepositories(value: string): string[] {
     });
 }
 
+// Organization/project/repository names can be long and often share their
+// organization. On one line, the organization shortens first, then the
+// project, so the repository name and the part that tells similar names apart
+// stay visible. The full name shows on hover.
+function RepositoryName({ name }: { name: string }) {
+  const nameStart = Math.max(name.lastIndexOf("/"), 0);
+  const projectStart = Math.max(name.lastIndexOf("/", nameStart - 1), 0);
+  return (
+    <StyledTooltip content={name} placement="top">
+      <span className="flex min-w-0">
+        <span className="min-w-0 truncate">{name.slice(0, projectStart)}</span>
+        <span className="flex max-w-full shrink-0">
+          <span className="min-w-0 truncate">
+            {name.slice(projectStart, nameStart)}
+          </span>
+          <span className="max-w-full shrink-0 truncate">
+            {name.slice(nameStart)}
+          </span>
+        </span>
+      </span>
+    </StyledTooltip>
+  );
+}
+
 // Typing in the repository menu stays inside it, except Escape, which closes
 // the menu through `useCloseOnEscape`.
 function stopMenuKeyPropagation(event: ReactKeyboardEvent) {
@@ -621,42 +645,25 @@ export function AutomationSetupPromptStack({
                           <LoadingSpinner size="small" />
                         </div>
                       ) : (
-                        visibleRepositoryNames.map((name) => {
-                          // Organization/project/repository names can be
-                          // long; each option stays on one line and shortens
-                          // the organization/project part first, so the
-                          // repository name stays visible.
-                          const nameStart = Math.max(name.lastIndexOf("/"), 0);
-                          return (
-                            <ContextMenuListItem
-                              key={name}
-                              testId={`automation-setup-repository-option-${name}`}
-                              onClick={(event) => {
-                                event.preventDefault();
-                                event.stopPropagation();
-                                const address = addressFor(name);
-                                if (
-                                  address &&
-                                  !repositories.includes(address)
-                                ) {
-                                  writeRepositories([...repositories, address]);
-                                }
-                                setIsRepositoryMenuOpen(false);
-                              }}
-                              isDisabled={isRepositoryProviderUnsupported}
-                              className="flex w-full items-center"
-                            >
-                              <span className="flex min-w-0" title={name}>
-                                <span className="min-w-0 truncate">
-                                  {name.slice(0, nameStart)}
-                                </span>
-                                <span className="max-w-full shrink-0 truncate">
-                                  {name.slice(nameStart)}
-                                </span>
-                              </span>
-                            </ContextMenuListItem>
-                          );
-                        })
+                        visibleRepositoryNames.map((name) => (
+                          <ContextMenuListItem
+                            key={name}
+                            testId={`automation-setup-repository-option-${name}`}
+                            onClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              const address = addressFor(name);
+                              if (address && !repositories.includes(address)) {
+                                writeRepositories([...repositories, address]);
+                              }
+                              setIsRepositoryMenuOpen(false);
+                            }}
+                            isDisabled={isRepositoryProviderUnsupported}
+                            className="flex w-full items-center"
+                          >
+                            <RepositoryName name={name} />
+                          </ContextMenuListItem>
+                        ))
                       )}
                       {repositorySearchText &&
                       !isRepositoryListLoading &&
@@ -704,9 +711,7 @@ export function AutomationSetupPromptStack({
                       "gap-1 pr-1",
                     )}
                   >
-                    <span className="truncate" title={item}>
-                      {item}
-                    </span>
+                    <RepositoryName name={item} />
                     {repositoryReadOnly ? null : (
                       <button
                         type="button"
