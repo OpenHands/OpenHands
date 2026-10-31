@@ -1,8 +1,7 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LoaderCircle } from "lucide-react";
-import { GenericEventMessage } from "./generic-event-message";
-import { CollapsibleEventGroup } from "./collapsible-event-group";
+import { DisclosureCaret } from "#/components/shared/disclosure-caret";
 import { I18nKey } from "#/i18n/declaration";
 import type { AppConversationStartTaskStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { getTaskStatusI18nKey } from "#/utils/status";
@@ -32,30 +31,64 @@ export function ConversationStartupProgress({
   if (!observedSteps.includes(label)) {
     setObservedSteps([...observedSteps, label]);
   }
+  const [expanded, setExpanded] = useState(false);
+  const contentId = useId();
+  const buttonId = `${contentId}-toggle`;
+  const expandable = observedSteps.length > 1;
+  const title = (
+    <span role="status" aria-busy={isRunning} className="truncate">
+      {t(error ? I18nKey.COMMON$ERROR : label)}
+    </span>
+  );
+  const spinner = isRunning ? (
+    <LoaderCircle
+      aria-hidden="true"
+      className="h-3.5 w-3.5 shrink-0 animate-spin"
+    />
+  ) : null;
   return (
     <div data-testid="conversation-startup-progress">
-      <CollapsibleEventGroup
-        testId="startup-progress-group"
-        title={
-          <span role="status" aria-busy={isRunning}>
-            {t(error ? I18nKey.COMMON$ERROR : label)}
-          </span>
-        }
-        expandLabel={t(I18nKey.BUTTON$EXPAND)}
-        collapseLabel={t(I18nKey.BUTTON$COLLAPSE)}
-        trailing={
-          isRunning ? (
-            <LoaderCircle
-              aria-hidden="true"
-              className="h-4 w-4 ml-2 inline animate-spin text-muted"
-            />
-          ) : undefined
-        }
+      <div
+        className="my-1 w-full py-1 text-sm text-muted"
+        data-testid="startup-progress-group"
       >
-        {observedSteps.map((step) => (
-          <GenericEventMessage key={step} title={t(step)} details="" />
-        ))}
-      </CollapsibleEventGroup>
+        {expandable ? (
+          <button
+            id={buttonId}
+            type="button"
+            onClick={() => setExpanded((previous) => !previous)}
+            aria-controls={contentId}
+            aria-expanded={expanded}
+            aria-label={t(
+              expanded ? I18nKey.BUTTON$COLLAPSE : I18nKey.BUTTON$EXPAND,
+            )}
+            className="flex max-w-full items-center gap-2 text-left cursor-pointer"
+          >
+            {title}
+            <DisclosureCaret open={expanded} />
+            {spinner}
+          </button>
+        ) : (
+          <div className="flex items-center gap-2">
+            {title}
+            {spinner}
+          </div>
+        )}
+        {expandable && expanded && (
+          <div
+            id={contentId}
+            role="region"
+            aria-labelledby={buttonId}
+            className="mt-1.5 flex flex-col divide-y divide-border-subtle/50 rounded-lg border border-border-subtle/50"
+          >
+            {observedSteps.map((step) => (
+              <div key={step} className="px-3 py-2">
+                {t(step)}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
       {error && (
         <p
           role="alert"
