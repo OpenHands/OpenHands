@@ -5,6 +5,7 @@ import { ComboboxCaretInline } from "#/ui/combobox-caret";
 import SettingsGearIcon from "#/icons/settings-gear.svg?react";
 import CheckIcon from "#/icons/checkmark.svg?react";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
+import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { ContextMenu } from "#/ui/context-menu";
 import { ContextMenuListItem } from "#/components/features/context-menu/context-menu-list-item";
@@ -190,6 +191,9 @@ export function ChatInputLlmProfilePicker() {
     () => setIsPopoverOpen(false),
     triggerRef,
   );
+  // Escape closes the popover and returns focus to the pill, matching every
+  // other composer menu (#18808); the click-outside ref alone left it open.
+  useCloseOnEscape(isPopoverOpen, () => setIsPopoverOpen(false), triggerRef);
 
   React.useLayoutEffect(() => {
     if (!isPopoverOpen) return undefined;
