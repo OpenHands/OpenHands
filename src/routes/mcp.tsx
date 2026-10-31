@@ -194,5 +194,5 @@ export function MCPPage() {
 }
 
 export default function MCPRoute() {
-  return <Navigate to="/settings/agents" replace />;
+  return <Navigate to="/agents" replace />;
 }

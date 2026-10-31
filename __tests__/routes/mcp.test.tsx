@@ -20,7 +20,7 @@ describe("legacy agent configuration routes", () => {
       <MemoryRouter initialEntries={[path]}>
         <Routes>
           <Route path={path} element={createElement(Component)} />
-          <Route path="/settings/agents" element={<p>Agents</p>} />
+          <Route path="/agents" element={<p>Agents</p>} />
         </Routes>
       </MemoryRouter>,
     );

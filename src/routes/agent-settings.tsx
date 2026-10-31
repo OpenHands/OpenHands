@@ -1893,7 +1893,7 @@ export function AgentSettingsScreen({
 
 /**
  * Legacy `/settings/agent` route. Settings → Agent is now the Agent Profile
- * library (`/settings/agents`), whose editor reuses the named
+ * library (`/agents`), whose editor reuses the named
  * `AgentSettingsScreen` export below; this global-agent-form route is retired
  * and redirects there so old links/bookmarks keep working.
  *
@@ -1905,5 +1905,5 @@ export function AgentSettingsScreen({
  * `onSaveControlChange` never arrive. Mirrors `LlmSettingsRoute`.
  */
 export default function AgentSettingsRoute() {
-  return <Navigate to="/settings/agents" replace />;
+  return <Navigate to="/agents" replace />;
 }

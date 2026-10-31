@@ -71,7 +71,7 @@ export const SUPER_ADMIN_SETUP_STEPS: readonly SuperAdminSetupStep[] = [
     id: "add-integration",
     labelKey: I18nKey.ONBOARDING$SETUP_GUIDE_STEP_INTEGRATION,
     completion: "mcp_server",
-    destination: { kind: "canvas", path: "/settings/agents" },
+    destination: { kind: "canvas", path: "/agents" },
   },
   {
     id: "invite-users",

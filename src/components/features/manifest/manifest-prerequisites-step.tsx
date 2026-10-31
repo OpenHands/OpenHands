@@ -4,7 +4,7 @@ import { NavigationLink } from "#/components/shared/navigation-link";
 import type { SetupPrerequisitesResult } from "#/hooks/query/use-manifest-prerequisites";
 
 /** Where the user goes to connect an integration. */
-const INTEGRATIONS_PATH = "/settings/agents";
+const INTEGRATIONS_PATH = "/agents";
 
 export interface SetupPrerequisitesStepProps {
   prerequisites: SetupPrerequisitesResult;

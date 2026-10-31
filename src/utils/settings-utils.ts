@@ -47,14 +47,7 @@ export function isSettingsPageHidden(
 }
 
 export function getFirstAvailablePath(
-  featureFlags: WebClientFeatureFlags | undefined,
-): string | null {
-  const fallbackOrder = [
-    { path: "/settings/agents", hidden: false },
-    { path: "/settings", hidden: !!featureFlags?.hide_llm_settings },
-    { path: "/settings/app", hidden: false },
-  ];
-
-  const firstAvailable = fallbackOrder.find((item) => !item.hidden);
-  return firstAvailable?.path ?? null;
+  _featureFlags: WebClientFeatureFlags | undefined,
+): string {
+  return "/settings/app";
 }

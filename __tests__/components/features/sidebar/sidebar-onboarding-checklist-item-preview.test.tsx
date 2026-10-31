@@ -60,7 +60,7 @@ describe("SidebarOnboardingChecklistItemPreview", () => {
       screen.getByTestId(
         "sidebar-onboarding-checklist-preview-action-configure-llm",
       ),
-    ).toHaveAttribute("href", "/settings/agents");
+    ).toHaveAttribute("href", "/agents");
     expect(
       screen.getByText(
         I18nKey.SIDEBAR$ONBOARDING_CHECKLIST_ACTION_CONFIGURE_LLM,

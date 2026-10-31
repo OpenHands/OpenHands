@@ -67,21 +67,22 @@ describe("useSettingsNavItems", () => {
     vi.unstubAllEnvs();
   });
 
-  it("returns Agents as the configuration entry on local backends", () => {
+  it("keeps standalone Agents out of local Settings navigation", () => {
     useConfigMock.mockReturnValue({ data: createConfig() });
 
     const { result } = renderHook(() => useSettingsNavItems());
-    const agentsItem = result.current.find(
-      (item) => item.type === "item" && item.item.to === "/settings/agents",
+    expect(result.current).not.toContainEqual(
+      expect.objectContaining({
+        item: expect.objectContaining({ to: "/agents" }),
+      }),
     );
-
-    const baseAgents = OSS_NAV_ITEMS.find(
-      (item) => item.to === "/settings/agents",
-    )!;
-    expect(agentsItem).toEqual({ type: "item", item: baseAgents });
+    expect(result.current).toContainEqual({
+      type: "item",
+      item: OSS_NAV_ITEMS.find((item) => item.to === "/settings/app"),
+    });
   });
 
-  it("keeps the same Agents entry on cloud backends", () => {
+  it("keeps the remaining Settings entries on cloud backends", () => {
     useConfigMock.mockReturnValue({ data: createConfig() });
     useActiveBackendMock.mockReturnValue({
       backend: { kind: "cloud" },
@@ -89,15 +90,12 @@ describe("useSettingsNavItems", () => {
     });
 
     const { result } = renderHook(() => useSettingsNavItems());
-
-    // Agent profiles are available on cloud too (OpenHands #15060), so the
-    // same settings navigation is available on both backends.
     expect(result.current).toEqual(
       OSS_NAV_ITEMS.map((item) => ({ type: "item", item })),
     );
   });
 
-  it("shows a single Agent item (the profile library) on both local and cloud", () => {
+  it("does not list the standalone Agent route on either backend", () => {
     useConfigMock.mockReturnValue({ data: createConfig() });
 
     for (const kind of ["local", "cloud"] as const) {
@@ -108,12 +106,8 @@ describe("useSettingsNavItems", () => {
       const paths = renderHook(() => useSettingsNavItems())
         .result.current.filter((item) => item.type === "item")
         .map((item) => (item.type === "item" ? item.item.to : null));
-      // "Agent" IS the profile library; the old standalone /settings/agent
-      // global-agent form + separate /settings/agents "Agent profiles" item
-      // were collapsed into one.
-      expect(paths).toContain("/settings/agents");
+      expect(paths).not.toContain("/agents");
       expect(paths).not.toContain("/settings/agent");
-      expect(paths.filter((p) => p === "/settings/agents")).toHaveLength(1);
     }
   });
 
@@ -129,7 +123,7 @@ describe("useSettingsNavItems", () => {
 
     expect(paths).not.toContain("/settings/llm");
     expect(paths).not.toContain("/settings/secrets");
-    expect(paths).toContain("/settings/agents");
+    expect(paths).not.toContain("/agents");
     expect(paths).toContain("/settings/app");
   });
 
@@ -167,7 +161,7 @@ describe("useSettingsNavItems", () => {
         ),
     );
 
-    for (const path of ["/settings/agents", "/settings/verification"]) {
+    for (const path of ["/settings/app", "/settings/verification"]) {
       const renderedItem = byPath.get(path);
       expect(renderedItem).toEqual({
         type: "item",

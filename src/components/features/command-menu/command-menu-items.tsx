@@ -31,7 +31,7 @@ export const COMMAND_MENU_ROUTE = {
   customize: "/customize",
   automations: automationListPath(),
   settings: "/settings",
-  agentSettings: "/settings/agents",
+  agentSettings: "/agents",
   metaLlmSettings: "/settings/meta-llm",
   condenserSettings: "/settings/condenser",
   agentContextSettings: "/settings/agent-context",

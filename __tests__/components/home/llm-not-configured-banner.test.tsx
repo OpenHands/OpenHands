@@ -238,6 +238,6 @@ describe("LlmNotConfiguredBanner", () => {
     );
 
     // Assert
-    expect(navigate).toHaveBeenCalledWith("/settings/agents");
+    expect(navigate).toHaveBeenCalledWith("/agents");
   });
 });

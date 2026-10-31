@@ -49,7 +49,7 @@ export function LlmNotConfiguredBanner() {
           type="button"
           variant="primary"
           className="w-fit shrink-0 self-start whitespace-nowrap sm:self-auto"
-          onClick={() => navigate("/settings/agents")}
+          onClick={() => navigate("/agents")}
         >
           {t(I18nKey.HOME$LLM_NOT_CONFIGURED_ACTION)}
         </BrandButton>

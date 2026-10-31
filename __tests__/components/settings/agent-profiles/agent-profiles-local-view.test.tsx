@@ -6,6 +6,7 @@ import userEvent from "@testing-library/user-event";
 import { useEffect } from "react";
 import type { AgentSettingsSaveControl } from "#/routes/agent-settings";
 import { AgentProfilesLocalView } from "#/components/features/settings/agent-profiles/agent-profiles-local-view";
+import AgentProfilesSettingsRoute from "#/routes/agent-profiles-settings";
 import AgentProfilesService from "#/api/agent-profiles-service/agent-profiles-service.api";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { ensureDefaultAgentProfileMigrated } from "#/hooks/use-migrate-default-agent-profile";
@@ -192,6 +193,29 @@ describe("AgentProfilesLocalView save mapping", () => {
     editTarget = "my-agent";
     profileSupportsSkillsMock.mockReturnValue(true);
     backendKind.current = "local";
+  });
+
+  it("renders the Agents route as a standalone page without settings navigation", () => {
+    render(<AgentProfilesSettingsRoute />, {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={new QueryClient()}>
+          {children}
+        </QueryClientProvider>
+      ),
+    });
+
+    expect(screen.getAllByRole("main")).toHaveLength(1);
+    expect(screen.getByTestId("add-agent-profile")).toBeInTheDocument();
+    expect(screen.queryByTestId("settings-navbar-desktop")).toBeNull();
+  });
+
+  it("keeps the list focused on agent profiles rather than separate resource libraries", () => {
+    renderView();
+
+    expect(screen.getByTestId("add-agent-profile")).toBeInTheDocument();
+    expect(screen.queryByTestId("agents-llm-library")).toBeNull();
+    expect(screen.queryByTestId("agents-secrets-library")).toBeNull();
+    expect(screen.queryByTestId("agents-skills-library")).toBeNull();
   });
 
   it("opens a new profile on the settings lists when there is no OpenHands default", async () => {

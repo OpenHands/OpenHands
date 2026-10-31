@@ -214,13 +214,13 @@ export function SidebarRailBody({
           icon={<Plus width={ICON_SIZE} height={ICON_SIZE} />}
         />
         <SidebarNavLink
-          to="/settings/agents"
+          to="/agents"
           label={t(I18nKey.SETTINGS$NAV_AGENT)}
           testId="sidebar-agents-link"
           collapsed={collapsed}
           icon={<RobotIcon width={ICON_SIZE} height={ICON_SIZE} />}
           pinAction={buildPinAction(
-            "/settings/agents",
+            "/agents",
             "sidebar-pin-home-toggle-agents",
           )}
         />

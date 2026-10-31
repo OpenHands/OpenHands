@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { ensureDefaultAgentProfileMigrated } from "#/hooks/use-migrate-default-agent-profile";
@@ -8,8 +8,6 @@ import { mergeAgentProfileSaveInput } from "./merge-agent-profile-save-input";
 import { newProfileSeed } from "./new-profile-seed";
 import { ProfileNameInput } from "#/components/features/settings/llm-profiles/profile-name-input";
 import { LlmSettingsLocalView } from "#/components/features/settings/llm-profiles/llm-settings-local-view";
-import { SecretsSettingsScreen } from "#/routes/secrets-settings";
-import { SkillsSettingsScreen } from "#/routes/skills-settings";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
 import {
@@ -37,7 +35,6 @@ import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message"
 import { SettingsValue } from "#/types/settings";
 import { BackNavButton } from "#/components/shared/buttons/back-nav-button";
 import { Typography } from "#/ui/typography";
-import { useSettingsSectionHeader } from "#/contexts/settings-section-header-context";
 import { parseCommand } from "#/utils/acp-command";
 import { agentProfileSupportsSkills } from "#/api/agent-profiles-service/profile-field-support";
 import {
@@ -117,7 +114,6 @@ function defaultProfileOverride(
  */
 export function AgentProfilesLocalView() {
   const { t } = useTranslation("openhands");
-  const { setHideSectionHeader } = useSettingsSectionHeader();
   const saveProfile = useSaveAgentProfile();
   const renameProfile = useRenameAgentProfile();
   const { data: profilesData } = useAgentProfiles();
@@ -155,17 +151,9 @@ export function AgentProfilesLocalView() {
   > | null>(null);
   const [llmProfileRef, setLlmProfileRef] = useState("");
   const [creatingLlmProfile, setCreatingLlmProfile] = useState(false);
-  const [showLlmLibrary, setShowLlmLibrary] = useState(false);
-  const [showSecretsLibrary, setShowSecretsLibrary] = useState(false);
-  const [showSkillsLibrary, setShowSkillsLibrary] = useState(false);
   const [saveControl, setSaveControl] =
     useState<AgentSettingsSaveControl | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-
-  useEffect(() => {
-    setHideSectionHeader(viewMode !== "list");
-    return () => setHideSectionHeader(false);
-  }, [viewMode, setHideSectionHeader]);
 
   const llmProfiles = llmProfilesData?.profiles ?? [];
   const defaultLlmProfileRef =
@@ -392,53 +380,17 @@ export function AgentProfilesLocalView() {
 
   if (viewMode === "list") {
     return (
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-6">
+        <header className="space-y-1">
+          <Typography.H2>{t(I18nKey.SETTINGS$NAV_AGENT)}</Typography.H2>
+          <p className="text-sm leading-5 text-tertiary-light">
+            {t(I18nKey.SETTINGS$PAGE_AGENT_PROFILES_SUBLINE)}
+          </p>
+        </header>
         <AgentProfilesManager
           onAddProfile={handleAddProfile}
           onEditProfile={handleEditProfile}
         />
-        <details
-          data-testid="agents-llm-library"
-          className="rounded-lg border border-border p-4"
-          onToggle={(event) => setShowLlmLibrary(event.currentTarget.open)}
-        >
-          <summary className="cursor-pointer font-medium">
-            {t(I18nKey.SETTINGS$LLM_PROFILES)}
-          </summary>
-          {showLlmLibrary && (
-            <div className="pt-4">
-              <LlmSettingsLocalView />
-            </div>
-          )}
-        </details>
-        <details
-          data-testid="agents-secrets-library"
-          className="rounded-lg border border-border p-4"
-          onToggle={(event) => setShowSecretsLibrary(event.currentTarget.open)}
-        >
-          <summary className="cursor-pointer font-medium">
-            {t(I18nKey.SETTINGS$NAV_SECRETS)}
-          </summary>
-          {showSecretsLibrary && (
-            <div className="pt-4">
-              <SecretsSettingsScreen />
-            </div>
-          )}
-        </details>
-        <details
-          data-testid="agents-skills-library"
-          className="rounded-lg border border-border p-4"
-          onToggle={(event) => setShowSkillsLibrary(event.currentTarget.open)}
-        >
-          <summary className="cursor-pointer font-medium">
-            {t(I18nKey.SETTINGS$SKILLS_TITLE)}
-          </summary>
-          {showSkillsLibrary && (
-            <div className="pt-4">
-              <SkillsSettingsScreen embedded />
-            </div>
-          )}
-        </details>
       </div>
     );
   }

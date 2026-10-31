@@ -76,7 +76,7 @@ describe("Settings compact section navigation", () => {
     const items = navigationItems.filter(
       (item) =>
         item.type === "item" &&
-        ["/settings/app", "/settings/agents"].includes(item.item.to),
+        ["/settings/app", "/settings/verification"].includes(item.item.to),
     );
     const { navigate } = renderCompact("/settings/app", items);
     const user = userEvent.setup();
@@ -85,10 +85,10 @@ describe("Settings compact section navigation", () => {
     const nav = screen.getByRole("navigation");
     expect(within(nav).getAllByRole("link")).toHaveLength(2);
     await user.click(
-      within(nav).getByRole("link", { name: "SETTINGS$NAV_AGENT" }),
+      within(nav).getByRole("link", { name: "SETTINGS$NAV_VERIFICATION" }),
     );
 
-    expect(navigate).toHaveBeenCalledWith("/settings/agents", {
+    expect(navigate).toHaveBeenCalledWith("/settings/verification", {
       replace: false,
     });
     expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
@@ -100,8 +100,8 @@ describe("Settings compact section navigation", () => {
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 
-  it.each(["/settings/agents/", "/settings/agents/profile"])(
-    "keeps the Agents section reachable and selected on %s",
+  it.each(["/settings/verification/", "/settings/verification/profile"])(
+    "keeps the Verification section reachable and selected on %s",
     async (currentPath) => {
       window.innerWidth = 820;
       renderCompact(currentPath);
@@ -109,13 +109,13 @@ describe("Settings compact section navigation", () => {
 
       await user.click(
         screen.getByRole("button", {
-          name: "SETTINGS$TITLE: SETTINGS$NAV_AGENT",
+          name: "SETTINGS$TITLE: SETTINGS$NAV_VERIFICATION",
         }),
       );
 
       const nav = screen.getByRole("navigation");
       expect(
-        within(nav).getByRole("link", { name: "SETTINGS$NAV_AGENT" }),
+        within(nav).getByRole("link", { name: "SETTINGS$NAV_VERIFICATION" }),
       ).toHaveAttribute("aria-current", "page");
       expect(
         within(nav).getByRole("link", { name: "SETTINGS$NAV_APPLICATION" }),
@@ -123,9 +123,9 @@ describe("Settings compact section navigation", () => {
     },
   );
 
-  it("does not treat a similarly named path as an Agents child", () => {
+  it("does not treat a similarly named path as a Verification child", () => {
     window.innerWidth = 820;
-    renderCompact("/settings/agents-other");
+    renderCompact("/settings/verification-other");
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 });

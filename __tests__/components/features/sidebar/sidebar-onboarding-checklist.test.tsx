@@ -144,16 +144,16 @@ describe("SidebarOnboardingChecklist", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByTestId("sidebar-onboarding-checklist-item-configure-llm"),
-    ).toHaveAttribute("href", "/settings/agents");
+    ).toHaveAttribute("href", "/agents");
     expect(
       screen.getByTestId("sidebar-onboarding-checklist-item-connect-mcp"),
-    ).toHaveAttribute("href", "/settings/agents");
+    ).toHaveAttribute("href", "/agents");
     expect(
       screen.getByTestId("sidebar-onboarding-checklist-item-schedule-task"),
     ).toHaveAttribute("href", "/automations");
     expect(
       screen.getByTestId("sidebar-onboarding-checklist-item-customize-agent"),
-    ).toHaveAttribute("href", "/settings/agents");
+    ).toHaveAttribute("href", "/agents");
     expect(
       screen.getByTestId("sidebar-onboarding-checklist-item-join-slack"),
     ).toHaveAttribute("href", OPENHANDS_SLACK_COMMUNITY_URL);
@@ -408,7 +408,7 @@ describe("SidebarOnboardingChecklist", () => {
         checklist_item: "configure_llm",
         is_external: false,
       });
-      expect(navigate).toHaveBeenCalledWith("/settings/agents", {
+      expect(navigate).toHaveBeenCalledWith("/agents", {
         replace: false,
       });
     });

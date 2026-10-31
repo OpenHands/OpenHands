@@ -271,7 +271,7 @@ function AppSettingsForm() {
             {/* Locked-to-Cloud manages profiles through the Cloud settings shell. */}
             {getLockedCloudHost() === null && (
               <NavigationLink
-                to="/settings/agents"
+                to="/agents"
                 className="mt-3 inline-block text-sm text-primary hover:underline"
               >
                 {t(I18nKey.SETTINGS$MANAGE_LLM_PROFILES)}

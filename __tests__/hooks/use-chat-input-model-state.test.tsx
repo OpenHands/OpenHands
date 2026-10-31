@@ -75,7 +75,7 @@ const acpContext = (
   isActiveAcpConversation: false,
   isHomeAcp: false,
   isAcpContext: false,
-  destinationPath: "/settings/agents",
+  destinationPath: "/agents",
   destinationLabel: "Agent",
   ...overrides,
 });
@@ -272,7 +272,7 @@ describe("useChatInputModelState", () => {
     expect(result.current.showAcpPicker).toBe(false);
     // switchConversationId is ACP-only — null for native conversations.
     expect(result.current.switchConversationId).toBeNull();
-    expect(result.current.destinationPath).toBe("/settings/agents");
+    expect(result.current.destinationPath).toBe("/agents");
   });
 
   it("non-ACP: falls back to settings.llm_model when the conversation has none", () => {
@@ -298,7 +298,7 @@ describe("useChatInputModelState", () => {
       acpContext({
         isActiveAcpConversation: true,
         isAcpContext: true,
-        destinationPath: "/settings/agents",
+        destinationPath: "/agents",
         destinationLabel: "Agent",
       }),
     );
@@ -312,7 +312,7 @@ describe("useChatInputModelState", () => {
     expect(result.current.showAcpPicker).toBe(false);
     // Live switch targets the navigation conversation id.
     expect(result.current.switchConversationId).toBe("c1");
-    expect(result.current.destinationPath).toBe("/settings/agents");
+    expect(result.current.destinationPath).toBe("/agents");
   });
 
   it("home ACP: resolves the configured acp_model and exposes the picker, but no live-switch target", () => {
@@ -331,7 +331,7 @@ describe("useChatInputModelState", () => {
       acpContext({
         isHomeAcp: true,
         isAcpContext: true,
-        destinationPath: "/settings/agents",
+        destinationPath: "/agents",
         destinationLabel: "Agent",
       }),
     );

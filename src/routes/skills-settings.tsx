@@ -319,5 +319,5 @@ export function SkillsSettingsScreen({
 }
 
 export default function SkillsSettingsRoute() {
-  return <Navigate to="/settings/agents" replace />;
+  return <Navigate to="/agents" replace />;
 }

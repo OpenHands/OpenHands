@@ -230,5 +230,5 @@ export function SecretsSettingsScreen() {
 }
 
 export default function SecretsSettingsRoute() {
-  return <Navigate to="/settings/agents" replace />;
+  return <Navigate to="/agents" replace />;
 }

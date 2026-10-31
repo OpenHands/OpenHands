@@ -3,7 +3,7 @@ import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useActiveAgentKind } from "#/hooks/use-active-agent-profile";
 import { I18nKey } from "#/i18n/declaration";
 
-const AGENT_SETTINGS_PATH = "/settings/agents";
+const AGENT_SETTINGS_PATH = "/agents";
 
 export interface AcpModelContext {
   /** The active conversation runs an ACP agent. */

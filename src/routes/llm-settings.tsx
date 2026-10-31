@@ -648,5 +648,5 @@ export function LlmSettingsScreen({
 }
 
 export default function LlmSettingsRoute() {
-  return <Navigate to="/settings/agents" replace />;
+  return <Navigate to="/agents" replace />;
 }

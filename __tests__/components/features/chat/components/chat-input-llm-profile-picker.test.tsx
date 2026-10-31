@@ -168,7 +168,7 @@ describe("ChatInputLlmProfilePicker", () => {
     fireEvent.click(screen.getByTestId("chat-input-llm-profile"));
 
     expect(
-      container.ownerDocument.querySelector('a[href="/settings/agents"]'),
+      container.ownerDocument.querySelector('a[href="/agents"]'),
     ).not.toBeNull();
   });
 });

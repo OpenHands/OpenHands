@@ -152,7 +152,7 @@ export function ChatInputLlmProfileMenuContent({
       {showSettingsLink && (
         <li className="text-sm">
           <NavigationLink
-            to="/settings/agents"
+            to="/agents"
             onClick={onClose}
             className={cn(
               "flex h-7.5 items-center gap-2 rounded p-2 leading-5 text-foreground hover:bg-interactive-hover transition-colors",
