@@ -6,6 +6,8 @@ import { MAX_CONTENT_LENGTH } from "#/components/conversation-events/chat/event-
 import { useColorTheme } from "#/hooks/use-color-theme";
 import { I18nKey } from "#/i18n/declaration";
 import { getSyntaxHighlighterTheme } from "#/themes/syntax-highlighter-themes";
+import { useEventExpansionKey } from "#/components/features/chat/row-expansion-context";
+import { usePersistentExpansion } from "#/stores/message-expansion-store";
 
 interface CodeBlockProps {
   code: string;
@@ -19,6 +21,12 @@ interface CodeBlockProps {
   expandable?: boolean;
   /** Wrap long lines instead of horizontal-only scrolling. Defaults to false. */
   wrapLongLines?: boolean;
+  /**
+   * Distinguishes this block's inline expand control from a sibling block in
+   * the same event card when its state is persisted across virtualized
+   * remounts. Defaults to `"code-block"`.
+   */
+  expansionId?: string;
 }
 
 /**
@@ -34,10 +42,15 @@ export function CodeBlock({
   placeholder,
   expandable = false,
   wrapLongLines = false,
+  expansionId = "code-block",
 }: CodeBlockProps) {
   const { t } = useTranslation("openhands");
   const colorTheme = useColorTheme();
-  const [isExpanded, setIsExpanded] = React.useState(false);
+  const expansionKey = useEventExpansionKey(expansionId);
+  const [isExpanded, toggleExpanded] = usePersistentExpansion(
+    expansionKey,
+    false,
+  );
   const isTruncated = code.length > MAX_CONTENT_LENGTH;
   const display =
     isTruncated && !(expandable && isExpanded)
@@ -75,7 +88,7 @@ export function CodeBlock({
       {expandable && isTruncated && (
         <button
           type="button"
-          onClick={() => setIsExpanded((prev) => !prev)}
+          onClick={() => toggleExpanded()}
           className="self-start text-xs text-muted transition-colors hover:text-contrast hover:underline"
         >
           {toggleLabel}

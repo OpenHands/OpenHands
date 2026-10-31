@@ -10,6 +10,12 @@ import ConversationService from "#/api/conversation-service/conversation-service
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import type { DirectConversationInfo } from "#/api/agent-server-adapter";
+import {
+  useIsMutating,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
+import { FORK_CONVERSATION_MUTATION_KEY } from "#/hooks/mutation/use-fork-conversation";
 
 const { useActiveBackendMock, useOptionalConversationIdMock, navigateMock } =
   vi.hoisted(() => ({
@@ -269,6 +275,75 @@ describe("UserAssistantEventMessage — branch action", () => {
 
     await waitFor(() => expect(forkSpy).toHaveBeenCalled());
     expect(forkSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("still blocks a second fork after the row is unmounted and remounted", async () => {
+    // A virtualized row unmounts when it scrolls out, taking the mutation
+    // observer (and its `isPending`) with it. A remounted row must still see
+    // the in-flight fork, which it reads from the cache entry via
+    // `useIsMutating`. The providers stay mounted, as they do in the app.
+    let resolveFork: ((value: DirectConversationInfo) => void) | undefined;
+    forkSpy.mockImplementation(
+      () =>
+        new Promise<DirectConversationInfo>((resolve) => {
+          resolveFork = resolve;
+        }),
+    );
+    const Row = ({ mounted }: { mounted: boolean }) =>
+      mounted ? (
+        <UserAssistantEventMessage
+          event={makeEvent("user", "evt-user")}
+          isLastMessage={false}
+          isFromPlanningAgent={false}
+        />
+      ) : null;
+    // Observes the same cache entry the row reads, so we can wait until the
+    // in-flight fork is visible before clicking again.
+    const ForkCount = () => (
+      <span data-testid="fork-count">
+        {useIsMutating({ mutationKey: FORK_CONVERSATION_MUTATION_KEY })}
+      </span>
+    );
+    // A stable client: the mutation observer created on first mount must live
+    // on the same cache the remounted row reads from.
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    const tree = (mounted: boolean) => (
+      <QueryClientProvider client={client}>
+        <Row mounted={mounted} />
+        <ForkCount />
+      </QueryClientProvider>
+    );
+
+    const { rerender } = renderWithProviders(tree(true));
+    fireEvent.mouseEnter(screen.getByTestId("user-message"));
+    fireEvent.click(screen.getByRole("button", { name: BRANCH_LABEL }));
+    await waitFor(() => expect(forkSpy).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(screen.getByTestId("fork-count")).toHaveTextContent("1"),
+    );
+
+    rerender(tree(false));
+    rerender(tree(true));
+    await waitFor(() =>
+      expect(screen.getByTestId("fork-count")).toHaveTextContent("1"),
+    );
+
+    fireEvent.mouseEnter(screen.getByTestId("user-message"));
+    fireEvent.click(screen.getByRole("button", { name: BRANCH_LABEL }));
+
+    // Give the second click a chance to reach the service; it must not.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(forkSpy).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveFork?.({ ...forkResult } as DirectConversationInfo);
+      await Promise.resolve();
+    });
   });
 
   it("hides the branch action on the cloud backend", () => {

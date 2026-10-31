@@ -14,6 +14,8 @@ import { I18nKey } from "#/i18n/declaration";
 import { getEventContent } from "../event-content-helpers/get-event-content";
 import { IsInEventGroupContext } from "../../../features/chat/is-in-event-group-context";
 import { PathInteractiveContext } from "../../../features/chat/path-component";
+import { useRowExpansionKey } from "../../../features/chat/row-expansion-context";
+import { usePersistentExpansion } from "#/stores/message-expansion-store";
 
 interface EventGroupProps {
   /** The events represented by this group. Used to compute the summary. */
@@ -66,7 +68,11 @@ export function EventGroup({
   children,
 }: EventGroupProps) {
   const { t } = useTranslation("openhands");
-  const [expanded, setExpanded] = React.useState(false);
+  const expansionKey = useRowExpansionKey("group");
+  const [expanded, toggleExpanded] = usePersistentExpansion(
+    expansionKey,
+    false,
+  );
   const contentId = React.useId();
   const buttonId = `${contentId}-toggle`;
 
@@ -129,7 +135,7 @@ export function EventGroup({
       <button
         id={buttonId}
         type="button"
-        onClick={() => setExpanded((prev) => !prev)}
+        onClick={() => toggleExpanded()}
         aria-controls={contentId}
         aria-expanded={expanded}
         aria-label={

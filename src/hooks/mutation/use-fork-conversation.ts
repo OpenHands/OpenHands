@@ -1,6 +1,16 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { DirectConversationInfo } from "#/api/agent-server-adapter";
+import { useNavigation } from "#/context/navigation-context";
+import { setConversationState } from "#/utils/conversation-local-storage";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
+
+/**
+ * Mutation key for {@link useForkConversation}. Shared so callers can read the
+ * in-flight state with `useIsMutating`, which lives on the cache entry and
+ * therefore survives a caller unmounting (a virtualized row scrolling out).
+ */
+export const FORK_CONVERSATION_MUTATION_KEY = ["fork-conversation"];
 
 interface ForkConversationVariables {
   /** The conversation being branched from. */
@@ -15,8 +25,6 @@ interface ForkConversationVariables {
 
 interface ForkConversationResult {
   info: DirectConversationInfo;
-  /** Whether the message was excluded; the caller only prefills when true. */
-  excluded: boolean;
 }
 
 /**
@@ -24,12 +32,26 @@ interface ForkConversationResult {
  * the message's parent (via getEventParentId) and branches there, excluding
  * the message; otherwise it branches at the message (inclusive). Local
  * agent-server only.
+ *
+ * Completion side effects (navigation, draft restoration, error toast) run in
+ * the mutation-level callbacks, not per-call ones: a virtualized chat can
+ * unmount the message row — and with it the per-call `onSuccess` — while the
+ * fork request is still in flight, which would strand the user on the source
+ * conversation. Mutation callbacks live on the cache entry and fire even when
+ * the calling component has unmounted.
+ *
+ * Because the callbacks outlive the row, navigation always runs once the fork
+ * lands, even if the reader has since moved to another conversation. That is
+ * deliberate: the fork is the result of an explicit action, and the row can
+ * unmount (virtualization) while it is in flight, so there is no reliable
+ * per-row "am I still mounted?" signal to fall back on.
  */
 export const useForkConversation = () => {
   const queryClient = useQueryClient();
+  const { navigate } = useNavigation();
 
   return useMutation({
-    mutationKey: ["fork-conversation"],
+    mutationKey: FORK_CONVERSATION_MUTATION_KEY,
     mutationFn: async ({
       sourceConversationId,
       eventId,
@@ -67,11 +89,21 @@ export const useForkConversation = () => {
         }
       }
 
-      return { info, excluded };
+      // Seed the fork's saved draft before navigating: the composer clears
+      // itself on the conversation switch and then restores that draft, so
+      // text pushed into it before the route settles would be wiped.
+      if (excluded && editText) {
+        setConversationState(info.id, { draftMessage: editText });
+      }
+
+      return { info };
     },
-    onSuccess: () => {
+    onSuccess: ({ info }) => {
       // Surface the fork in the sidebar without wiping loaded pages.
       queryClient.invalidateQueries({ queryKey: ["user", "conversations"] });
+      navigate(`/conversations/${info.id}`);
     },
+    onError: (error) =>
+      displayErrorToast(error instanceof Error ? error.message : null),
   });
 };

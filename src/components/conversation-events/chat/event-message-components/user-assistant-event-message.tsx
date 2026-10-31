@@ -1,6 +1,5 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigation } from "#/context/navigation-context";
 import { MessageEvent } from "#/types/agent-server/core";
 import { ChatMessage } from "../../../features/chat/chat-message";
 import { ImageCarousel } from "../../../features/images/image-carousel";
@@ -15,10 +14,12 @@ import RepoForkedIcon from "#/icons/repo-forked.svg?react";
 import { I18nKey } from "#/i18n/declaration";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useActiveBackend } from "#/contexts/active-backend-context";
-import { useForkConversation } from "#/hooks/mutation/use-fork-conversation";
-import { setConversationState } from "#/utils/conversation-local-storage";
+import {
+  FORK_CONVERSATION_MUTATION_KEY,
+  useForkConversation,
+} from "#/hooks/mutation/use-fork-conversation";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
-import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import { useIsMutating } from "@tanstack/react-query";
 
 interface UserAssistantEventMessageProps {
   event: MessageEvent;
@@ -31,11 +32,14 @@ function UserAssistantEventMessageComponent({
   isFromPlanningAgent,
 }: UserAssistantEventMessageProps) {
   const { t } = useTranslation("openhands");
-  const { navigate } = useNavigation();
   const { conversationId } = useOptionalConversationId();
   const isCloud = useActiveBackend().backend.kind === "cloud";
-  const { mutate: forkConversation, isPending: isForking } =
-    useForkConversation();
+  const { mutate: forkConversation } = useForkConversation();
+  // `useIsMutating` reads the cache entry, so it still reports a fork started
+  // before this row was virtualized out and back — unlike the row's own
+  // `isPending`, which belongs to a fresh observer and reads `false` on remount.
+  const isForking =
+    useIsMutating({ mutationKey: FORK_CONVERSATION_MUTATION_KEY }) > 0;
   // Blocks a same-tick double-click, before `isForking` flips.
   const forkInFlightRef = React.useRef(false);
 
@@ -93,18 +97,9 @@ function UserAssistantEventMessageComponent({
         ...(branchTitle ? { title: branchTitle } : {}),
       },
       {
-        onSuccess: ({ info, excluded }) => {
-          // Prefill only when excluded (else the send duplicates it). Seed the
-          // fork's saved draft before navigating: the composer clears itself
-          // on the conversation switch and then restores that draft, so text
-          // pushed into it before the route settles would be wiped.
-          if (excluded) {
-            setConversationState(info.id, { draftMessage: message });
-          }
-          navigate(`/conversations/${info.id}`);
-        },
-        onError: (error) =>
-          displayErrorToast(error instanceof Error ? error.message : null),
+        // Only clears the same-tick guard; navigation, draft restoration and
+        // the error toast are handled by the mutation itself so they survive
+        // this row being virtualized out mid-flight.
         onSettled: () => {
           forkInFlightRef.current = false;
         },
@@ -123,7 +118,12 @@ function UserAssistantEventMessageComponent({
 
   return (
     <>
-      {reasoning && <CollapsibleThinking content={reasoning} />}
+      {reasoning && (
+        <CollapsibleThinking
+          content={reasoning}
+          expansionId={`reasoning-${event.id}`}
+        />
+      )}
       <ChatMessage
         type={event.source}
         message={message}
