@@ -112,6 +112,14 @@ export async function resolveConversationLaunch(
       profile.name === WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME
         ? llm?.active_profile
         : null);
+    // A server with no LLM profile at all — a never-configured account, where
+    // the seeded `default` profile's ref dangles — rejects the launch with a
+    // raw `unresolved_profile_references` 422 naming a profile the user never
+    // created. Fail here with the not-configured guidance instead; a ref that
+    // is gone while other profiles exist is left for the server to report.
+    if (llm?.profiles.length === 0 && !preferredLlmProfile) {
+      throw new Error(i18n.t(I18nKey.HOME$LLM_NOT_CONFIGURED_MESSAGE));
+    }
     if (
       preferredLlmProfile &&
       preferredLlmProfile !== profile.llm_profile_ref
