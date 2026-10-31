@@ -169,10 +169,8 @@ export const useLoadOlderEvents = (
         // The initial preload only seeds switches from the tail page; a switch
         // in an older page is hidden as a card but never seeded — silently lost.
         // Reseed over the merged `uiEvents` (idempotent) so it still surfaces.
-        seedModelSwitchesFromHistory(
-          conversationId,
-          useEventStore.getState().uiEvents,
-        );
+        const { uiEvents, events } = useEventStore.getState();
+        seedModelSwitchesFromHistory(conversationId, uiEvents, events);
       }
       // Stop once the server signals there are no more pages, OR — for
       // servers that don't fill in `next_page_id` for filtered queries —

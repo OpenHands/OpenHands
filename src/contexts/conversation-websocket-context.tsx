@@ -161,7 +161,8 @@ function extractMessageEventText(
  * the streaming slot here and produce no event. Durable and transient frames
  * are unwrapped and returned for the caller's normal event handling; a durable
  * frame also advances the resume cursor and stamps its `seq` on the event, so
- * the UI can place a slot relative to it.
+ * the UI can place a slot relative to it, and a transient frame's event is
+ * marked `isTransient`.
  */
 const routeSessionFrame = (
   raw: unknown,
@@ -195,7 +196,7 @@ const routeSessionFrame = (
       advanceCursor(frame.seq);
       return { ...frame.event, seq: frame.seq };
     case "transient":
-      return frame.event;
+      return { ...frame.event, isTransient: true };
     case "error":
       // The server answers a rejected inbound message with an ErrorFrame and
       // keeps the socket open ("not worth dropping over"), so there is no
@@ -446,10 +447,8 @@ export function ConversationWebSocketProvider({
       // Read the post-`addEvents` `uiEvents` (actions replaced by observations,
       // Think/Finish observations dropped) — not the raw history — so anchors
       // match the ids the renderer actually mounts.
-      seedModelSwitchesFromHistory(
-        conversationId,
-        useEventStore.getState().uiEvents,
-      );
+      const { uiEvents, events } = useEventStore.getState();
+      seedModelSwitchesFromHistory(conversationId, uiEvents, events);
 
       for (const event of preloadedHistory.events) {
         if (isUserMessageEvent(event)) {
@@ -813,13 +812,13 @@ export function ConversationWebSocketProvider({
 
             // Mirror the user-driven `/model` path: persist the profile so the
             // chat-header switcher shows the right name after a reload, even
-            // when several profiles share a model (#1082). Stamp with the
-            // observation's own timestamp so a later history seed of this same
-            // event can't roll it back (or needlessly rewrite it).
+            // when several profiles share a model (#1082). Anchor on the
+            // observation itself so a later history seed of this same event
+            // can't roll it back (or needlessly rewrite it).
             stampActiveLlmProfile(
               conversationId,
               switchLLMObservation.observation.profile_name,
-              switchLLMObservation.timestamp,
+              switchLLMObservation.id,
             );
 
             if (switchLLMObservation.observation.active_model) {
@@ -859,7 +858,7 @@ export function ConversationWebSocketProvider({
             stampActiveLlmProfile(
               conversationId,
               profileName,
-              classifyAndSwitchLLMObservation.timestamp,
+              classifyAndSwitchLLMObservation.id,
             );
 
             if (classifyAndSwitchLLMObservation.observation.active_model) {
