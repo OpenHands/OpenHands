@@ -110,7 +110,9 @@ export function PendingUserMessages() {
           key={message.id}
           type="user"
           message={message.text}
-          pendingStatus={message.status}
+          pendingStatus={
+            conversationId?.startsWith("task-") ? undefined : message.status
+          }
           onRetry={
             message.status === "error"
               ? () => handleRetry(message.id)

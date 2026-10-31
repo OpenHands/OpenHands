@@ -1,6 +1,8 @@
+import * as attachmentDelivery from "#/utils/flush-pending-task-attachments";
+import { usePendingTaskAttachmentsStore } from "#/stores/pending-task-attachments-store";
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import type { AppConversationStartTask } from "#/api/conversation-service/agent-server-conversation-service.types";
@@ -76,12 +78,62 @@ describe("useTaskPolling", () => {
     sessionStorage.clear();
     resetPendingTaskMessageLinkState();
     useOptimisticUserMessageStore.getState().clearPendingMessages();
+    usePendingTaskAttachmentsStore.setState({ byTaskId: {} });
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     queryClient?.clear();
     localStorage.clear();
     sessionStorage.clear();
+  });
+
+  it("does not redirect after leaving while initial attachments are uploading", async () => {
+    let finish!: () => void;
+    const delivery = vi
+      .spyOn(attachmentDelivery, "flushPendingTaskAttachments")
+      .mockReturnValue(
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+      );
+    vi.mocked(AgentServerConversationService.getStartTask).mockResolvedValue(
+      readyTask,
+    );
+    const { unmount } = renderHook(() => useTaskPollingController(), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(delivery).toHaveBeenCalled());
+    unmount();
+    await act(async () => finish());
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it("opens the created conversation for draft recovery after an upload fails", async () => {
+    usePendingTaskAttachmentsStore.getState().setPendingTaskAttachments("123", {
+      content: "Read my file",
+      files: [new File(["notes"], "notes.txt")],
+      images: [],
+      imagesMarkedUploadAsFile: [],
+      conversationId: "conversation-1",
+      error: "Upload interrupted",
+      recoverInConversation: true,
+    });
+    vi.mocked(AgentServerConversationService.getStartTask).mockResolvedValue(
+      readyTask,
+    );
+    renderHook(() => useTaskPollingController(), { wrapper: createWrapper() });
+    await waitFor(() =>
+      expect(navigate).toHaveBeenCalledWith(
+        "/conversations/conversation-1?backend=default-local",
+        {
+          replace: true,
+        },
+      ),
+    );
+    expect(
+      usePendingTaskAttachmentsStore.getState().byTaskId["123"].files,
+    ).toHaveLength(1);
   });
 
   it("moves pending task drafts onto the real conversation before redirecting", async () => {
