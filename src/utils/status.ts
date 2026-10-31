@@ -92,7 +92,9 @@ export function getStatusCode(
     switch (webSocketConnectionState) {
       case "CLOSED":
       case "CLOSING":
-        return I18nKey.CHAT_INTERFACE$DISCONNECTED;
+        return hasConnectedOnce
+          ? I18nKey.CHAT_INTERFACE$RECONNECTING
+          : I18nKey.CHAT_INTERFACE$DISCONNECTED;
       case "CONNECTING":
         return hasConnectedOnce
           ? I18nKey.CHAT_INTERFACE$RECONNECTING

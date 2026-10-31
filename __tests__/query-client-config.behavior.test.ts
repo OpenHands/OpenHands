@@ -579,3 +579,27 @@ describe("query client selection and proxy behavior", () => {
     },
   );
 });
+
+it("reports a repeated polling failure once until a successful response", async () => {
+  vi.useFakeTimers();
+  const toast = vi
+    .spyOn(ToastHandlers, "displayErrorToast")
+    .mockImplementation(() => "toast");
+  const client = createAgentServerQueryClient();
+  const error = createAxiosError({
+    status: 503,
+    message: "polling unavailable",
+  });
+  await expect(executeFailingQuery(client, error)).rejects.toBe(error);
+  await vi.advanceTimersByTimeAsync(4000);
+  await expect(executeFailingQuery(client, error)).rejects.toBe(error);
+  expect(toast).toHaveBeenCalledTimes(1);
+  await client.fetchQuery({
+    queryKey: ["behavior", "failure"],
+    queryFn: async () => "recovered",
+    staleTime: 0,
+  });
+  await expect(executeFailingQuery(client, error)).rejects.toBe(error);
+  expect(toast).toHaveBeenCalledTimes(2);
+  client.clear();
+});
