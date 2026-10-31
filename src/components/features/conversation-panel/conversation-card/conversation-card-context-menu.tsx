@@ -7,7 +7,7 @@ import { ContextMenuListItem } from "../../context-menu/context-menu-list-item";
 import { I18nKey } from "#/i18n/declaration";
 import { ConversationNameContextMenuIconText } from "../../conversation/conversation-name-context-menu-icon-text";
 
-import { Archive, ArchiveRestore, Gauge, Tags } from "lucide-react";
+import { Archive, ArchiveRestore, Gauge, SquarePlus, Tags } from "lucide-react";
 import EditIcon from "#/icons/u-edit.svg?react";
 import SkillsIcon from "#/icons/skills.svg?react";
 import ToolsIcon from "#/icons/u-tools.svg?react";
@@ -22,6 +22,9 @@ interface ConversationCardContextMenuProps {
   onArchive?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onUnarchive?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onStop?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onNewConversationInSandbox?: (
+    event: React.MouseEvent<HTMLButtonElement>,
+  ) => void;
   onEdit?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onEditTags?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDisplayCost?: (event: React.MouseEvent<HTMLButtonElement>) => void;
@@ -44,6 +47,7 @@ export function ConversationCardContextMenu({
   onArchive,
   onUnarchive,
   onStop,
+  onNewConversationInSandbox,
   onEdit,
   onEditTags,
   onDisplayCost,
@@ -99,7 +103,7 @@ export function ConversationCardContextMenu({
       className={
         isPortaled
           ? "mt-0 min-w-50 w-max max-w-[min(280px,100vw-16px)]"
-          : "z-[200] mt-0"
+          : "z-200 mt-0"
       }
     >
       {generateSection(
@@ -157,7 +161,7 @@ export function ConversationCardContextMenu({
                   <SkillsIcon
                     width={16}
                     height={16}
-                    className="stroke-[1.75]"
+                    className="context-menu-icon-stroke"
                     aria-hidden
                   />
                 }
@@ -171,6 +175,18 @@ export function ConversationCardContextMenu({
       )}
       {generateSection(
         [
+          onNewConversationInSandbox && (
+            <ContextMenuListItem
+              key="new-conversation-in-sandbox-button"
+              testId="new-conversation-in-sandbox-button"
+              onClick={onNewConversationInSandbox}
+            >
+              <ConversationNameContextMenuIconText
+                icon={<SquarePlus className="h-4 w-4" aria-hidden />}
+                text={t(I18nKey.CONVERSATION$NEW_IN_SANDBOX)}
+              />
+            </ContextMenuListItem>
+          ),
           onStop && (
             <ContextMenuListItem
               key="stop-button"

@@ -198,7 +198,7 @@ export function CommandMenu() {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[70] flex items-start justify-center px-3 pt-[10vh] sm:px-6"
+      className="fixed inset-0 z-70 flex items-start justify-center px-3 command-menu-overlay sm:px-6"
       data-testid={COMMAND_MENU_TEST_ID}
       role="dialog"
       aria-modal="true"
@@ -206,15 +206,15 @@ export function CommandMenu() {
     >
       <button
         type="button"
-        className="absolute inset-0 cursor-default bg-black/65 backdrop-blur-[2px]"
+        className="absolute inset-0 cursor-default bg-black/65 command-menu-backdrop"
         aria-label={t(I18nKey.COMMAND_MENU$CLOSE_LABEL)}
         onClick={close}
       />
       <div
         className={cn(
-          "relative flex max-h-[min(720px,78vh)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl",
+          "relative flex w-full max-w-2xl flex-col overflow-hidden rounded-2xl",
           "border border-border bg-surface",
-          "shadow-[0_24px_90px_rgba(0,0,0,0.52),0_0_0_1px_rgba(255,255,255,0.03)_inset]",
+          "command-menu-panel",
         )}
       >
         <div className="relative flex items-center gap-3 border-b border-border px-4 py-3">
@@ -248,7 +248,7 @@ export function CommandMenu() {
               <X className="size-4" />
             </button>
           ) : null}
-          <kbd className="hidden rounded-md border border-border bg-black/25 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-text-dim sm:inline-flex">
+          <kbd className="hidden rounded-md border border-border bg-black/25 px-2 py-1 command-menu-label font-semibold uppercase text-text-dim sm:inline-flex">
             {t(getCommandMenuShortcutKey())}
           </kbd>
         </div>
@@ -282,7 +282,7 @@ export function CommandMenu() {
 
               return (
                 <section key={groupId} className="py-1">
-                  <div className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-text-dim">
+                  <div className="px-3 pb-1 pt-2 command-menu-label font-semibold uppercase text-text-dim">
                     {t(COMMAND_MENU_GROUP_LABELS[groupId])}
                   </div>
                   <div className="space-y-1">
@@ -302,7 +302,7 @@ export function CommandMenu() {
                       const optionClassName = cn(
                         "group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors duration-150",
                         isActive
-                          ? "bg-contrast/[0.09] text-contrast shadow-[0_0_0_1px_color-mix(in_srgb,var(--oh-contrast)_8%,transparent)_inset]"
+                          ? "bg-contrast/[0.09] text-contrast command-menu-active-option"
                           : "text-muted hover:bg-contrast/[0.05] hover:text-contrast",
                       );
 
@@ -335,7 +335,7 @@ export function CommandMenu() {
                               )}
                             </span>
                           </span>
-                          <span className="hidden shrink-0 rounded-md border border-border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-text-dim sm:inline-flex">
+                          <span className="hidden shrink-0 rounded-md border border-border px-2 py-1 command-menu-result-hint font-semibold uppercase text-text-dim sm:inline-flex">
                             {to
                               ? t(I18nKey.COMMAND_MENU$GO_HINT)
                               : t(I18nKey.COMMAND_MENU$RUN_HINT)}
@@ -395,7 +395,7 @@ export function CommandMenu() {
           )}
         </div>
 
-        <div className="border-t border-border px-4 py-2.5 text-[11px] text-text-dim">
+        <div className="border-t border-border px-4 py-2.5 command-menu-footer text-text-dim">
           {t(I18nKey.COMMAND_MENU$FOOTER_HINT)}
         </div>
       </div>

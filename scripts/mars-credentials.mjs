@@ -184,6 +184,8 @@ export function createCredentialStore({
    * @type {Map<string, Grant | null>}
    */
   const memoryGrants = new Map();
+  /** Connections whose grant this process could not save: memory holds it. */
+  const unsaved = new Set();
 
   let state = load();
 
@@ -223,6 +225,7 @@ export function createCredentialStore({
 
   function load() {
     memoryGrants.clear();
+    unsaved.clear();
     // Missing or corrupt store — start clean rather than blocking sign-in.
     const loaded = readState() ?? emptyState();
     if (secrets) {
@@ -310,16 +313,19 @@ export function createCredentialStore({
     }
     try {
       secrets.write(secretAccountFor(connection.id), secret);
+      unsaved.delete(connection.id);
       return true;
     } catch (error) {
       // Usable for this run; the UI says it was not saved.
       log(error instanceof Error ? error.message : String(error));
+      unsaved.add(connection.id);
       return false;
     }
   }
 
   function forgetToken(id) {
     memoryGrants.delete(id);
+    unsaved.delete(id);
     if (!secrets) return;
     try {
       secrets.remove(secretAccountFor(id));
@@ -330,6 +336,30 @@ export function createCredentialStore({
 
   function find(id) {
     return state.connections.find((connection) => connection.id === id) ?? null;
+  }
+
+  /**
+   * The grant the store holds for `connection` now, past this process's
+   * cache. One this process could not save exists only in its memory, so
+   * the store's copy (none, or an older one) does not replace it.
+   *
+   * @param {object} connection
+   * @returns {Grant | null}
+   */
+  function storedGrant(connection) {
+    if (!secrets) return decrypt(connection);
+    const kept = memoryGrants.get(connection.id);
+    if (kept && unsaved.has(connection.id)) return kept;
+    let grant;
+    try {
+      grant = grantFromSecret(secrets.read(secretAccountFor(connection.id)));
+    } catch (error) {
+      log(error instanceof Error ? error.message : String(error));
+      return decrypt(connection);
+    }
+    if (grant) memoryGrants.set(connection.id, grant);
+    else memoryGrants.delete(connection.id);
+    return grant;
   }
 
   /** Public shape of a connection: everything except the secret. */
@@ -421,17 +451,7 @@ export function createCredentialStore({
     readGrant(id) {
       const connection = find(id);
       if (!connection || isExpired(connection)) return null;
-      if (!secrets) return decrypt(connection);
-      let grant;
-      try {
-        grant = grantFromSecret(secrets.read(secretAccountFor(id)));
-      } catch (error) {
-        log(error instanceof Error ? error.message : String(error));
-        return decrypt(connection);
-      }
-      if (grant) memoryGrants.set(id, grant);
-      else memoryGrants.delete(id);
-      return grant;
+      return storedGrant(connection);
     },
 
     /**
@@ -456,13 +476,28 @@ export function createCredentialStore({
      * Replace a connection's grant after a refresh. Null forgets it: the
      * connection stays listed and asks for sign-in.
      *
+     * With `replacing`, only while the store still holds the grant with that
+     * refresh token. That is checked in the same locked step as the write,
+     * so a new sign-in another Canvas process saved meanwhile stands.
+     * Returns false when the grant it would replace is gone.
+     *
      * @param {string} id
      * @param {Grant | null} grant
+     * @param {{ replacing?: string }} [options]
+     * @returns {boolean}
      */
-    updateGrant(id, grant) {
+    updateGrant(id, grant, { replacing } = {}) {
+      let updated = false;
       mutate(() => {
         const connection = find(id);
         if (!connection) return false;
+        if (
+          replacing !== undefined &&
+          storedGrant(connection)?.refreshToken !== replacing
+        ) {
+          return false;
+        }
+        updated = true;
         const before = { token: connection.token, isSaved: connection.isSaved };
         if (grant) {
           connection.isSaved = storeGrant(connection, grant);
@@ -477,6 +512,7 @@ export function createCredentialStore({
           connection.isSaved !== before.isSaved
         );
       });
+      return updated;
     },
 
     /**

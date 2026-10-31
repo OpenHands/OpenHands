@@ -211,8 +211,8 @@ export function createMarsTunnelBridge({
       if (!current) return null;
       if (!refreshDue(current)) return current.token;
       const clientId = current.clientId ?? config.oauthClientId;
-      const stillCurrent = () =>
-        store.readGrant(id)?.refreshToken === current.refreshToken;
+      // The store writes only while it still holds the grant renewed here.
+      const replacing = { replacing: current.refreshToken };
       let next;
       try {
         next = await refreshGrant({
@@ -221,23 +221,28 @@ export function createMarsTunnelBridge({
         });
       } catch (error) {
         if (!error?.isRevoked) throw error;
-        if (!stillCurrent()) return store.getGrant(id)?.token ?? null;
-        store.updateGrant(id, null);
+        if (!store.updateGrant(id, null, replacing)) {
+          return store.getGrant(id)?.token ?? null;
+        }
         return null;
       }
-      if (!stillCurrent()) {
+      const renewed = store.updateGrant(
+        id,
+        {
+          token: next.accessToken,
+          // DigitalOcean always sends a new one; without it, a null here
+          // would never be refreshed again.
+          refreshToken: next.refreshToken ?? current.refreshToken,
+          accessExpiresAt: next.accessExpiresAt,
+          clientId,
+        },
+        replacing,
+      );
+      if (!renewed) {
         // The newer grant stays; the one renewed here is ended.
         void revokeToken(next.accessToken);
         return store.getGrant(id)?.token ?? null;
       }
-      store.updateGrant(id, {
-        token: next.accessToken,
-        // DigitalOcean always sends a new one; without it, a null here would
-        // never be refreshed again.
-        refreshToken: next.refreshToken ?? current.refreshToken,
-        accessExpiresAt: next.accessExpiresAt,
-        clientId,
-      });
       return next.accessToken;
     });
   }

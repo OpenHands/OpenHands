@@ -59,10 +59,14 @@ import { BrandButton } from "#/components/features/settings/brand-button";
 import { BackNavButton } from "#/components/shared/buttons/back-nav-button";
 import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import { OptionalTag } from "#/components/features/settings/optional-tag";
-import { AutomationSetupPromptStack } from "#/components/features/automations/setup/automation-setup-prompt-stack";
+import {
+  AutomationSetupPromptStack,
+  SetupModelPill,
+} from "#/components/features/automations/setup/automation-setup-prompt-stack";
 import { ContextMenuListItem } from "#/components/features/context-menu/context-menu-list-item";
 import { formatTriggerSourceLabel } from "#/components/features/home/featured-automations/automation-run-health";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
+import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { useSettings } from "#/hooks/query/use-settings";
 import { usePromptTextareaResize } from "#/hooks/use-prompt-textarea-resize";
 import { useSendMessage } from "#/hooks/use-send-message";
@@ -90,6 +94,7 @@ import { getApiErrorMessage } from "#/utils/api-error-message";
 import { useNavigation } from "#/context/navigation-context";
 import type {
   AutomationDraftApiResponse,
+  DeploymentCapabilities,
   SetupRequestBody,
 } from "#/manifests/types";
 import type { Automation, AutomationRun } from "#/types/automation";
@@ -129,8 +134,17 @@ const DEFAULT_CUSTOM_SCHEDULE = "0 9 * * *";
 const DEFAULT_EVENT_SOURCE = "github";
 // Capability feature: preset repositories can be changed with PATCH.
 const REPO_UPDATE_FEATURE = "repoUpdate";
-/** Used when the deployment has not advertised its event sources yet. */
-const FALLBACK_EVENT_SOURCES = ["github", "gitlab", "slack", "linear", "jira"];
+/**
+ * Used when the deployment has not advertised its event sources yet. These are
+ * the automation service's built-in providers, which it reserves as source
+ * names, so a custom webhook is never offered under one of them.
+ */
+const FALLBACK_EVENT_SOURCES = [
+  "github",
+  "azure_devops",
+  "bitbucket_data_center",
+  "jira_dc",
+];
 const DEFAULT_EVENT_KEY = "issue_comment.created";
 const DEFAULT_CUSTOM_ENTRYPOINT = "python3 main.py";
 const MAIN_PY_FILENAME = "main.py";
@@ -367,16 +381,65 @@ function streamingHighlightClassName(isStreaming: boolean) {
   return isStreaming ? streamingFieldHighlightClassName : undefined;
 }
 
+/**
+ * The event types the service offers for a source. A service without
+ * `eventTypesBySource` lists GitHub's only, in `eventTypes`.
+ */
+function eventTypeOptionsForSource(
+  capabilities: DeploymentCapabilities | undefined,
+  eventSource: string,
+): string[] {
+  if (capabilities?.eventTypesBySource) {
+    return capabilities.eventTypesBySource[eventSource] ?? [];
+  }
+  return eventSource === DEFAULT_EVENT_SOURCE
+    ? (capabilities?.eventTypes ?? [])
+    : [];
+}
+
+function eventTypeMatches(pattern: string, eventKey: string): boolean {
+  return pattern.endsWith(".*")
+    ? eventKey.startsWith(pattern.slice(0, -1))
+    : pattern === eventKey;
+}
+
+// Test payloads shaped like each Data Center source's webhook, which names its
+// event in `webhookEvent` (Jira) or `eventKey` (Bitbucket).
+const EVENT_TEST_PAYLOAD_SAMPLES: Record<
+  string,
+  (eventKey: string) => Record<string, unknown>
+> = {
+  jira_dc: (eventKey) => ({
+    webhookEvent: eventKey,
+    issue: { key: "PROJ-1", fields: { summary: "Example issue" } },
+    comment: { body: "Example comment" },
+  }),
+  bitbucket_data_center: (eventKey) => ({
+    eventKey,
+    pullRequest: {
+      id: 1,
+      title: "Example pull request",
+      toRef: {
+        displayId: "main",
+        repository: { slug: "repo", project: { key: "PROJ" } },
+      },
+    },
+  }),
+};
+
 function buildDefaultEventTestPayload(
   eventSource: string = DEFAULT_EVENT_SOURCE,
   eventKey: string = DEFAULT_EVENT_KEY,
 ): string {
+  const sample = EVENT_TEST_PAYLOAD_SAMPLES[eventSource];
   return `${JSON.stringify(
-    {
-      source: eventSource || DEFAULT_EVENT_SOURCE,
-      event: eventKey || DEFAULT_EVENT_KEY,
-      action: "test",
-    },
+    sample
+      ? sample(eventKey)
+      : {
+          source: eventSource || DEFAULT_EVENT_SOURCE,
+          event: eventKey || DEFAULT_EVENT_KEY,
+          action: "test",
+        },
     null,
     2,
   )}\n`;
@@ -668,7 +731,6 @@ export function AutomationSetupPanel({
     deploymentCapabilities.data?.repoProviders,
   );
   const eventSourceOptions = deploymentCapabilities.data?.eventSources ?? [];
-  const eventTypeOptions = deploymentCapabilities.data?.eventTypes ?? [];
   const initialDraft = conversationId
     ? (getAutomationFormSession(conversationId) ?? draft)
     : draft;
@@ -972,6 +1034,10 @@ export function AutomationSetupPanel({
     showTimeout,
     timeoutSeconds,
   } = form;
+  const eventTypeOptions = eventTypeOptionsForSource(
+    deploymentCapabilities.data,
+    eventSource,
+  );
   const hasExistingCustomBundle = Boolean(
     isEditingExisting && kind === "custom" && existingCustomTarballPath.trim(),
   );
@@ -1278,6 +1344,7 @@ export function AutomationSetupPanel({
       tarball_path: tarballPath,
       entrypoint: entrypoint.trim(),
       setup_script_path: setupScriptPath.trim(),
+      ...(model.trim() ? { model: model.trim() } : {}),
       ...(showTimeout && timeoutSeconds.trim()
         ? { timeout: Number(timeoutSeconds) }
         : {}),
@@ -1953,11 +2020,11 @@ export function AutomationSetupPanel({
 
         <div
           className={cn(
-            "custom-scrollbar-always min-h-0 flex-1 overflow-y-auto px-5 pt-5 [scrollbar-gutter:stable]",
+            "automation-setup-scroll-gutter custom-scrollbar-always min-h-0 flex-1 overflow-y-auto px-5 pt-5",
             reserveComposerSpace ? "pb-52" : "pb-5",
           )}
         >
-          <div className="mx-auto flex w-full min-w-0 max-w-[800px] flex-col gap-6">
+          <div className="automation-setup-content mx-auto flex w-full min-w-0 flex-col gap-6">
             {serverDraft && !isViewingDraftRuns ? (
               <DraftStatusBar
                 draft={serverDraft}
@@ -2123,6 +2190,12 @@ export function AutomationSetupPanel({
                     />
                   )}
                 </SetupKindCrossfade>
+                {kind === "custom" ? (
+                  <SetupModelPill
+                    value={model}
+                    onChange={(value) => updateField("model", value)}
+                  />
+                ) : null}
               </div>
 
               <section className="flex flex-col gap-2.5">
@@ -2219,7 +2292,23 @@ export function AutomationSetupPanel({
                     eventFilter: agentUpdatedSuffix("eventFilter"),
                   }}
                   streamingField={streamingField}
-                  setEventSource={(value) => updateField("eventSource", value)}
+                  setEventSource={(value) => {
+                    updateField("eventSource", value);
+                    // Keep the key when the new source delivers it; otherwise
+                    // start from the new source's first event type.
+                    const options = eventTypeOptionsForSource(
+                      deploymentCapabilities.data,
+                      value,
+                    );
+                    if (
+                      options.length > 0 &&
+                      !options.some((option) =>
+                        eventTypeMatches(option, eventKey),
+                      )
+                    ) {
+                      updateField("eventKey", options[0]);
+                    }
+                  }}
                   setEventKey={(value) => updateField("eventKey", value)}
                   setEventFilter={(value) => updateField("eventFilter", value)}
                   setEventTestPayload={(value) => {
@@ -2247,7 +2336,7 @@ export function AutomationSetupPanel({
                           index === 0 ? "items-end" : "items-center",
                         )}
                       >
-                        <div className="grid min-w-0 flex-1 gap-3 md:grid-cols-[2fr_1fr]">
+                        <div className="grid min-w-0 flex-1 gap-3 md:automation-setup-details-grid">
                           <Field
                             label={t(I18nKey.AUTOMATION_SETUP$PLUGIN_SOURCE)}
                             showLabel={index === 0}
@@ -2518,7 +2607,7 @@ function ExistingCustomBundleSummary({ tarballPath }: { tarballPath: string }) {
   return (
     <div
       data-testid="automation-setup-existing-bundle"
-      className="rounded-[15px] border border-border bg-surface p-4"
+      className="automation-setup-card border border-border bg-surface p-4"
     >
       <div className="mb-2 flex items-center gap-2 text-sm text-content">
         <span>{t(I18nKey.AUTOMATION_SETUP$EXISTING_BUNDLE)}</span>
@@ -2613,14 +2702,14 @@ function CustomCodeFields({
           streamingField === "customCode" ? "true" : undefined
         }
         className={cn(
-          "relative z-10 -mb-[15px] overflow-hidden rounded-[15px] border border-border bg-surface",
+          "automation-setup-joined-card relative z-10 overflow-hidden border border-border bg-surface",
           streamingHighlightClassName(streamingField === "customCode"),
         )}
       >
         <div
           ref={frameRef}
           data-testid="automation-setup-custom-code-scroll"
-          className="custom-scrollbar-always min-h-[256px] overflow-x-hidden"
+          className="automation-setup-code-scroll custom-scrollbar-always overflow-x-hidden"
         >
           <div className="px-4 pt-4 pb-4">
             <textarea
@@ -2640,7 +2729,7 @@ function CustomCodeFields({
           className="group absolute bottom-0 left-0 z-20 h-3 w-full"
         >
           <div
-            className="absolute inset-0 z-[1] cursor-ns-resize select-none"
+            className="absolute inset-0 z-1 cursor-ns-resize select-none"
             onMouseDown={handleGripMouseDown}
             onTouchStart={handleGripTouchStart}
             aria-hidden
@@ -2648,7 +2737,7 @@ function CustomCodeFields({
           <div
             ref={gripRef}
             className={cn(
-              "pointer-events-none absolute bottom-0 left-0 z-[2] h-px w-full bg-white transition-opacity duration-200",
+              "pointer-events-none absolute bottom-0 left-0 z-2 h-px w-full bg-white transition-opacity duration-200",
               isGripDragging
                 ? "opacity-100"
                 : "opacity-0 group-hover:opacity-100",
@@ -2658,7 +2747,7 @@ function CustomCodeFields({
       </div>
       <div
         data-testid="automation-setup-custom-details-drawer"
-        className="rounded-b-[15px] border-x border-b border-border bg-surface-raised px-4 pb-2 pt-[calc(15px+0.5rem)]"
+        className="automation-setup-joined-tray border-x border-b border-border bg-surface-raised px-4 pb-2"
       >
         <button
           type="button"
@@ -2679,7 +2768,7 @@ function CustomCodeFields({
         </button>
         <CustomDetailsReveal open={detailsOpen} instant={reduceMotion}>
           <div className="flex flex-col gap-4 pt-3">
-            <div className="grid gap-3 md:grid-cols-[2fr_1fr]">
+            <div className="grid gap-3 md:automation-setup-details-grid">
               <Field
                 label={t(I18nKey.AUTOMATION_SETUP$ENTRYPOINT)}
                 suffix={updatedSuffixes.entrypoint}
@@ -2879,7 +2968,7 @@ function ScheduleFields({
       </div>
       <div
         data-testid="automation-setup-at-row"
-        className="flex w-full min-w-0 items-center gap-4 overflow-x-auto"
+        className="automation-setup-schedule-row flex w-full min-w-0 items-center gap-4 overflow-x-auto"
       >
         {frequency === "custom" ? (
           <label className="flex shrink-0 items-center gap-2.5">
@@ -2890,7 +2979,10 @@ function ScheduleFields({
               data-testid="automation-setup-custom-schedule"
               value={customSchedule}
               onChange={(event) => setCustomSchedule(event.target.value)}
-              className={cn(formControlFieldClassName, "w-[14rem]")}
+              className={cn(
+                formControlFieldClassName,
+                "w-(--automation-setup-cron-width)",
+              )}
             />
           </label>
         ) : null}
@@ -2905,7 +2997,10 @@ function ScheduleFields({
               type="datetime-local"
               value={scheduleDateTime || defaultScheduleDateTimeLocal()}
               onChange={(event) => setScheduleDateTime(event.target.value)}
-              className={cn(formControlFieldClassName, "w-[15rem]")}
+              className={cn(
+                formControlFieldClassName,
+                "w-(--automation-setup-datetime-width)",
+              )}
             />
           </div>
         ) : null}
@@ -2920,7 +3015,10 @@ function ScheduleFields({
               type="time"
               value={time}
               onChange={(event) => setTime(event.target.value)}
-              className={cn(formControlFieldClassName, "w-[9.5rem]")}
+              className={cn(
+                formControlFieldClassName,
+                "w-(--automation-setup-time-width)",
+              )}
             />
           </div>
         ) : null}
@@ -2963,7 +3061,7 @@ function ScheduleFields({
             streamingField === "timezone" ? "true" : undefined
           }
           className={cn(
-            "relative w-[16rem] shrink-0",
+            "relative w-(--automation-setup-timezone-width) shrink-0",
             streamingHighlightClassName(streamingField === "timezone"),
           )}
         >
@@ -3044,6 +3142,7 @@ function EventSourceControl({
     () => setIsMenuOpen(false),
     triggerRef,
   );
+  useCloseOnEscape(isMenuOpen, () => setIsMenuOpen(false), triggerRef);
 
   return (
     <div className="relative">
@@ -3077,7 +3176,7 @@ function EventSourceControl({
           ref={menuRef}
           role="menu"
           data-testid="automation-setup-event-source-menu"
-          className="absolute top-full left-0 z-[60] mt-1 flex max-h-72 w-full flex-col overflow-hidden rounded-md border border-border-subtle bg-tertiary py-1 shadow-lg"
+          className="absolute top-full left-0 z-60 mt-1 flex max-h-72 w-full flex-col overflow-hidden rounded-md border border-border-subtle bg-tertiary py-1 shadow-lg"
         >
           <div className="min-h-0 flex-1 overflow-y-auto px-1">
             {knownSources.map((source) => (
