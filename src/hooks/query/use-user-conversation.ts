@@ -16,7 +16,7 @@ type RefetchInterval = (
     AppConversation | null,
     AxiosError<unknown, any>,
     AppConversation | null,
-    (string | null)[]
+    (string | number | null)[]
   >,
 ) => number;
 
@@ -25,6 +25,7 @@ export const useUserConversation = (
   refetchInterval?: RefetchInterval,
 ) => {
   const active = useActiveBackend();
+  const connectionRevision = active.backend.connectionRevision ?? 0;
 
   // The cid belongs to whichever backend was active when the user opened this
   // conversation. If they switch to a *different* backend (e.g. cloud → local)
@@ -35,24 +36,42 @@ export const useUserConversation = (
   // the query until the route navigates to a valid id. Compare backend id
   // ONLY — org changes within the same backend (e.g. the cloud
   // personal-workspace self-heal in BackendSelector) keep the same
-  // agent-server schema and must still refetch.
-  const origin = useRef({ cid, backendId: active.backend.id });
+  // agent-server schema and must still refetch. A connection revision is a
+  // new origin even when the saved backend id stays the same.
+  const origin = useRef({
+    cid,
+    backendId: active.backend.id,
+    connectionRevision,
+  });
   if (origin.current.cid !== cid) {
-    origin.current = { cid, backendId: active.backend.id };
+    origin.current = {
+      cid,
+      backendId: active.backend.id,
+      connectionRevision,
+    };
   }
-  const backendChanged = origin.current.backendId !== active.backend.id;
+  const backendChanged =
+    origin.current.backendId !== active.backend.id ||
+    origin.current.connectionRevision !== connectionRevision;
   const hasConversationScope =
     active.backend.kind !== "cloud" || !!active.orgId;
 
   return useQuery({
-    // Include the active backend identity so each (backend, org) pair
+    // Include the active backend identity so each connection and org pair
     // maintains its own per-conversation cache entry. Without this, a
     // local→cloud→local switch can leave a `null` cached value (from a
     // refetch that ran while the cloud backend was active) under the
     // shared cid key, which then makes the conversation route toast
     // "conversation not available or no permission" until the user
     // hard-refreshes the page. Mirrors `usePaginatedConversations`.
-    queryKey: ["user", "conversation", cid, active.backend.id, active.orgId],
+    queryKey: [
+      "user",
+      "conversation",
+      cid,
+      active.backend.id,
+      active.orgId,
+      connectionRevision,
+    ],
     queryFn: async () => {
       if (!cid) return null;
 
