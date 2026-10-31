@@ -1,7 +1,7 @@
 import React from "react";
 import { HttpError } from "@openhands/typescript-client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import type { AppConversationStartTask } from "#/api/conversation-service/agent-server-conversation-service.types";
@@ -81,6 +81,7 @@ describe("useTaskPolling", () => {
 
   afterEach(() => {
     queryClient?.clear();
+    vi.useRealTimers();
     localStorage.clear();
     sessionStorage.clear();
   });
@@ -287,5 +288,50 @@ describe("useTaskPolling", () => {
       1,
     );
     expect(navigate).not.toHaveBeenCalled();
+  });
+  it("discovers a ready session within a second and stops polling", async () => {
+    vi.useFakeTimers();
+    vi.mocked(AgentServerConversationService.getStartTask)
+      .mockResolvedValueOnce({
+        ...readyTask,
+        status: "WORKING",
+        app_conversation_id: null,
+      })
+      .mockResolvedValue(readyTask);
+    const { result } = renderHook(() => useTaskPolling(), {
+      wrapper: createWrapper(),
+    });
+    await act(() => vi.advanceTimersByTimeAsync(1000));
+    expect(result.current.taskStatus).toBe("READY");
+    const calls = vi.mocked(AgentServerConversationService.getStartTask).mock
+      .calls.length;
+    await act(() => vi.advanceTimersByTimeAsync(10000));
+    expect(AgentServerConversationService.getStartTask).toHaveBeenCalledTimes(
+      calls,
+    );
+  });
+
+  it("backs off long starts and releases the polling timer on unmount", async () => {
+    vi.useFakeTimers();
+    vi.mocked(AgentServerConversationService.getStartTask).mockResolvedValue({
+      ...readyTask,
+      status: "WORKING",
+      app_conversation_id: null,
+    });
+    const { unmount } = renderHook(() => useTaskPolling(), {
+      wrapper: createWrapper(),
+    });
+    await act(() => vi.advanceTimersByTimeAsync(31000));
+    const calls = vi.mocked(AgentServerConversationService.getStartTask).mock
+      .calls.length;
+    await act(() => vi.advanceTimersByTimeAsync(3000));
+    expect(AgentServerConversationService.getStartTask).toHaveBeenCalledTimes(
+      calls + 1,
+    );
+    unmount();
+    await act(() => vi.advanceTimersByTimeAsync(10000));
+    expect(AgentServerConversationService.getStartTask).toHaveBeenCalledTimes(
+      calls + 1,
+    );
   });
 });
