@@ -437,7 +437,42 @@ describe("SettingsService", () => {
     const settings = await SettingsService.getSettings();
 
     expect(settings.user_consents_to_analytics).toBeNull();
+    expect(settings.is_fallback).toBeUndefined();
   });
+
+  it.each([
+    [
+      "local",
+      () => server.use(http.get("*/api/settings", () => HttpResponse.error())),
+    ],
+    [
+      "cloud",
+      () => {
+        setRegisteredBackends([cloudBackend]);
+        setActiveSelection({ backendId: cloudBackend.id });
+        mockFetchCloudSettings.mockRejectedValue(new TypeError("offline"));
+      },
+    ],
+  ])(
+    "marks display defaults for an unreachable %s backend as fallback",
+    async (_kind, makeUnreachable) => {
+      vi.useFakeTimers();
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      makeUnreachable();
+
+      const pending = SettingsService.getSettings();
+      await vi.runAllTimersAsync();
+      const settings = await pending;
+      vi.useRealTimers();
+      warn.mockRestore();
+
+      expect(settings).toMatchObject({
+        is_fallback: true,
+        llm_model: DEFAULT_SETTINGS.llm_model,
+        user_consents_to_analytics: null,
+      });
+    },
+  );
 
   it("surfaces server-side misc_settings.app_preferences in getSettings on a local backend", async () => {
     // The local agent-server returns app_preferences nested under

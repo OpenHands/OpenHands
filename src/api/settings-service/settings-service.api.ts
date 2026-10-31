@@ -574,6 +574,15 @@ const syncDerivedSettings = (settings: Partial<Settings>): Settings => {
   return merged;
 };
 
+/**
+ * Display defaults for a backend whose settings could not be read. Marked so
+ * callers can tell them apart from settings the backend actually stores.
+ */
+const fallbackSettings = (): Settings => ({
+  ...syncDerivedSettings({}),
+  is_fallback: true,
+});
+
 class SettingsService {
   /**
    * Fetch settings from the agent server API with retry logic.
@@ -596,7 +605,8 @@ class SettingsService {
 
   /**
    * Get settings for display (secrets are redacted).
-   * Uses in-memory cache for performance.
+   * Uses in-memory cache for performance. When the backend cannot be read,
+   * resolves to display defaults marked `is_fallback` instead of rejecting.
    */
   static async getSettings(): Promise<Settings> {
     // Cloud uses a different settings shape (flat top-level fields
@@ -611,7 +621,7 @@ class SettingsService {
         return syncDerivedSettings(cloud);
       } catch (error) {
         console.warn("Failed to fetch cloud settings, using defaults:", error);
-        return syncDerivedSettings({});
+        return fallbackSettings();
       }
     }
 
@@ -637,7 +647,7 @@ class SettingsService {
     } catch (error) {
       // If API fails, return defaults
       console.warn("Failed to fetch settings from API, using defaults:", error);
-      return syncDerivedSettings({});
+      return fallbackSettings();
     }
   }
 
