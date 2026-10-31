@@ -1046,7 +1046,7 @@ describe("ChatInterface - Auto-scroll on submit (issue #817)", () => {
 });
 
 describe("ChatInterface - Status Indicator", () => {
-  it("shows the unresolved terminal action while the agent is running", () => {
+  it("hides the live activity chip while a step it would repeat is running", () => {
     const terminalAction: ActionEvent = {
       id: "action-running-terminal",
       timestamp: "2026-07-27T18:00:00Z",
@@ -1084,8 +1084,20 @@ describe("ChatInterface - Status Indicator", () => {
 
     renderChatInterfaceWithRouter();
 
+    // The running command is already the last row of the chat.
+    expect(screen.queryByTestId("live-activity-chip")).not.toBeInTheDocument();
+  });
+
+  it("shows Thinking in the live activity chip between steps", () => {
+    useEventStore.setState({ events: [], eventIds: new Set(), uiEvents: [] });
+    vi.mocked(useAgentState).mockReturnValue({
+      curAgentState: AgentState.RUNNING,
+    });
+
+    renderChatInterfaceWithRouter();
+
     const chip = screen.getByTestId("live-activity-chip");
-    expect(chip).toHaveTextContent("ACTION_MESSAGE$RUN");
+    expect(chip).toHaveTextContent("ACTION_MESSAGE$THINK");
     expect(chip.parentElement).toHaveClass("inset-x-9");
   });
 
