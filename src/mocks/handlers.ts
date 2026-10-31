@@ -28,6 +28,7 @@ import {
   CANVAS_EXTENSIONS_HANDLERS,
   resetCanvasExtensionsMockData,
 } from "./canvas-extensions-handlers";
+import { LOOPBACK_PASSTHROUGH_HANDLERS } from "./loopback-passthrough";
 
 export const handlers = [
   ...FILE_SERVICE_HANDLERS,
@@ -43,6 +44,9 @@ export const handlers = [
   ...MCP_HANDLERS,
   ...WORKSPACES_HANDLERS,
   ...CANVAS_EXTENSIONS_HANDLERS,
+  // Last: the catch-all allowance for intentional in-process traffic must not
+  // shadow an explicit mock for the same URL.
+  ...LOOPBACK_PASSTHROUGH_HANDLERS,
 ];
 
 export {
