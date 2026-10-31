@@ -1,5 +1,4 @@
 import type { CustomSecretInput } from "#/api/agent-server-adapter";
-import { SecretsService } from "#/api/secrets-service";
 import {
   REQUEST_SECRET_TOOL_NAME,
   SECRET_REQUEST_RESULT_PREFIX,
@@ -21,24 +20,7 @@ type SecretRequestResult =
   | { status: "not_saved"; name: string; guidance: string }
   | { status: "error"; name: string; error: string; guidance: string };
 
-async function findSavedSecret(
-  name: string,
-): Promise<CustomSecretInput | null> {
-  try {
-    const secrets = await SecretsService.getSecretsOrThrow();
-    return secrets.find((secret) => secret.name === name) ?? null;
-  } catch {
-    // Unknown — let the user answer; the form reports a duplicate name.
-    return null;
-  }
-}
-
-/**
- * Execute a `request_secret` tool call. A secret the user already saved (for
- * example in Settings after this conversation started) is attached straight
- * away, as every saved secret is at conversation start; otherwise the request
- * is queued for its chat card, which reports through {@link completeSecretRequest}.
- */
+/** Queue a secure form; only an explicit user save can report success. */
 export async function handleRequestSecretAction(
   action: RequestSecretAction,
   conversationId: string,
@@ -60,11 +42,7 @@ export async function handleRequestSecretAction(
     name: action.name,
     reason: action.reason ?? null,
   };
-  const savedSecret = await findSavedSecret(request.name);
   useSecretRequestStore.getState().enqueue(request);
-  if (savedSecret) {
-    await completeSecretRequest(request, savedSecret);
-  }
 }
 
 async function resolveResult(
@@ -96,8 +74,7 @@ async function resolveResult(
 
 /**
  * Hand the outcome of a secret request back to the agent. It never carries the
- * value. Each request is reported once, whichever of the card and the
- * already-saved shortcut finishes first.
+ * value. Each request is reported once, even if the form settles after cancel.
  *
  * Never rejects: the user has already answered, so a failure to report is
  * logged rather than surfaced.
