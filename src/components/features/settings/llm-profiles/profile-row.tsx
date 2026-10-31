@@ -27,6 +27,7 @@ interface ProfileRowProps {
   onDelete: (profile: ProfileInfo) => void;
   isActivating: boolean;
   isModelUnlisted?: boolean;
+  className?: string;
 }
 
 export function ProfileRow({
@@ -40,6 +41,7 @@ export function ProfileRow({
   onDelete,
   isActivating,
   isModelUnlisted = false,
+  className,
 }: ProfileRowProps) {
   const { t } = useTranslation("openhands");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -47,26 +49,48 @@ export function ProfileRow({
   const freeModels = useFreeModels();
   const displayModel = formatModelNameForDisplay(profile.model, freeModels);
 
+  const details = (
+    <>
+      <span
+        className="min-w-0 max-w-full truncate text-sm font-medium text-contrast"
+        title={profile.name}
+      >
+        {profile.name}
+      </span>
+      {displayModel ? (
+        <span
+          className="min-w-0 max-w-full truncate text-sm text-muted"
+          title={profile.model ?? undefined}
+        >
+          {displayModel}
+        </span>
+      ) : null}
+    </>
+  );
+
   return (
     <div
       data-testid="profile-row"
-      className={cn(settingsListRowClassName, "justify-between gap-3")}
+      className={cn(
+        settingsListRowClassName,
+        "justify-between gap-3",
+        className,
+      )}
     >
       <div className="flex min-w-0 flex-1 items-center gap-3">
-        <span
-          className="min-w-0 max-w-full truncate text-sm font-medium text-contrast"
-          title={profile.name}
-        >
-          {profile.name}
-        </span>
-        {displayModel ? (
-          <span
-            className="min-w-0 max-w-full truncate text-sm text-muted"
-            title={profile.model ?? undefined}
+        {canManage ? (
+          // Managers open the profile editor by clicking its name or model.
+          <button
+            type="button"
+            data-testid="profile-row-edit"
+            onClick={() => onEdit(profile)}
+            className="flex min-w-0 cursor-pointer items-center gap-3 self-stretch rounded-md text-left"
           >
-            {displayModel}
-          </span>
-        ) : null}
+            {details}
+          </button>
+        ) : (
+          details
+        )}
         {isActive && (
           <BrandBadge
             className="shrink-0 whitespace-nowrap px-2.5 py-1 text-xs"

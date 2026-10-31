@@ -16,6 +16,35 @@ import {
 } from "#/utils/sdk-settings-schema";
 
 /**
+ * Seeds a new profile started from another flow, such as the Add models
+ * hint for a model the catalog doesn't list.
+ */
+export interface NewProfilePrefill {
+  /** Provider id that prefixes the model, e.g. "openrouter". */
+  provider: string;
+  /** Connection to link, or null for a profile with its own key. */
+  providerConnectionId: string | null;
+}
+
+/**
+ * Initial form values for a prefilled new profile: the Custom Model holds just
+ * the provider prefix, so no model is chosen yet, and the connection is linked.
+ */
+export function prefillToFormValues(
+  prefill: NewProfilePrefill,
+): SettingsFormValues {
+  return {
+    "llm.model": `${prefill.provider}/`,
+    [LLM_PROVIDER_CONNECTION_KEY]: prefill.providerConnectionId ?? "",
+  };
+}
+
+/** A model id that is only a provider prefix ("openrouter/") names no model. */
+export function isBareProviderPrefix(model: string): boolean {
+  return model.endsWith("/");
+}
+
+/**
  * Form values for an LLM profile, so every tab of the embedded LLM form shows
  * the profile's real values rather than the active settings. `config` is the
  * profile's flat LLM config (`{ model, api_key, base_url, ... }`, with

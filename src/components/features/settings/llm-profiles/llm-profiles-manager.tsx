@@ -1,15 +1,21 @@
 import { useMemo, useState } from "react";
+import { Info } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { BrandButton } from "#/components/features/settings/brand-button";
+import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import { RenameProfileModal } from "./rename-profile-modal";
 import { DeleteProfileModal } from "./delete-profile-modal";
 import { AddModelsModal } from "./add-models-modal";
 import { ProfilesBody } from "./profiles-body";
-import { ProviderConnectionsManager } from "./provider-connections-manager";
+import { DefaultLlmProfileSelector } from "./default-llm-profile-selector";
+import type { NewProfilePrefill } from "./llm-profile-form";
+import { ProviderConnectionModal } from "./provider-connection-modal";
+import { DeleteProviderConnectionModal } from "./delete-provider-connection-modal";
 import ProfilesService, {
   ProfileInfo,
   type SaveProfileRequest,
 } from "#/api/profiles-service/profiles-service.api";
+import type { ProviderConnection } from "#/api/provider-connections-service/provider-connections-service.api";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useModelCatalogWarning } from "#/hooks/use-model-catalog-warning";
 import { useProviderConnections } from "#/hooks/query/use-provider-connections";
@@ -22,9 +28,11 @@ import {
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
+import { extensionModuleEmptyStateClassName } from "#/utils/extension-module-card-classes";
 
 interface LlmProfilesManagerProps {
-  onAddProfile?: () => void;
+  /** Starts a new profile; a prefill seeds it (e.g. from Add models' hint). */
+  onAddProfile?: (prefill?: NewProfilePrefill) => void;
   onEditProfile?: (profile: ProfileInfo) => void;
 }
 
@@ -42,7 +50,7 @@ export function LlmProfilesManager({
   const canManage = useCanManageOrgProfiles();
   // Provider connections exist on the local agent-server and on cloud when an
   // org is bound (the org-scoped CRUD routes). A cloud backend without an org
-  // (legacy API keys) cannot address them, so the manager stays hidden there.
+  // (legacy API keys) cannot address them, so profiles render as a flat list.
   const { backend, orgId } = useActiveBackend();
   const supportsConnections =
     backend.kind === "local" || (backend.kind === "cloud" && !!orgId);
@@ -57,31 +65,26 @@ export function LlmProfilesManager({
   const [profileToDelete, setProfileToDelete] = useState<ProfileInfo | null>(
     null,
   );
-  // One AddModelsModal serves both entry points: the top "Add from provider
-  // connections" button (chooser — no preselect) and a connection row's "..."
-  // (preselect to that connection). `addModelsConnectionId` is null in chooser
-  // mode and the connection id in preselect mode.
-  const [showAddModels, setShowAddModels] = useState(false);
+  // Each connection group's "Add models" opens the AddModelsModal preselected
+  // to that connection.
   const [addModelsConnectionId, setAddModelsConnectionId] = useState<
     string | null
   >(null);
+  const [isCreatingConnection, setIsCreatingConnection] = useState(false);
+  const [connectionToEdit, setConnectionToEdit] =
+    useState<ProviderConnection | null>(null);
+  const [connectionToDelete, setConnectionToDelete] =
+    useState<ProviderConnection | null>(null);
 
   const profiles = data?.profiles ?? [];
   const active = data?.active_profile ?? null;
   const connectionList = useMemo(() => connections ?? [], [connections]);
-
-  const connectionNamesById = useMemo(
-    () => Object.fromEntries(connectionList.map((c) => [c.id, c.display_name])),
-    [connectionList],
-  );
-  const linkedCountById = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const profile of profiles) {
-      const id = profile.provider_connection_id;
-      if (id) counts[id] = (counts[id] ?? 0) + 1;
-    }
-    return counts;
-  }, [profiles]);
+  // Linked profiles can't be placed under their connection until the list
+  // arrives; wait for it rather than flash raw connection ids as group names.
+  const isWaitingForLinkedConnections =
+    supportsConnections &&
+    isLoadingConnections &&
+    profiles.some((profile) => profile.provider_connection_id);
 
   const handleActivate = async (name: string) => {
     try {
@@ -134,68 +137,87 @@ export function LlmProfilesManager({
 
   return (
     <>
-      <div className="flex flex-col gap-8">
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-base font-medium text-contrast">
-              {t(I18nKey.SETTINGS$AVAILABLE_PROFILES)}
-            </h2>
-            <div className="ml-auto flex items-center gap-2">
-              {canManage && supportsConnections ? (
-                <BrandButton
-                  testId="add-models-from-provider"
-                  type="button"
-                  variant="tertiary"
-                  onClick={() => {
-                    setAddModelsConnectionId(null);
-                    setShowAddModels(true);
-                  }}
-                >
-                  {t(I18nKey.SETTINGS$ADD_MODELS_FROM_PROVIDER)}
-                </BrandButton>
-              ) : null}
-              {onAddProfile && canManage ? (
-                <BrandButton
-                  testId="add-llm-profile"
-                  type="button"
-                  variant="secondary"
-                  onClick={onAddProfile}
-                >
-                  {t(I18nKey.SETTINGS$ADD_LLM_PROFILE)}
-                </BrandButton>
-              ) : null}
-            </div>
-          </div>
-
-          <ProfilesBody
-            isLoading={isLoading}
-            loadError={error ?? null}
+      {!isLoading && !error && profiles.length > 0 ? (
+        <div className="mb-8">
+          <DefaultLlmProfileSelector
             profiles={profiles}
-            active={active}
+            activeProfile={active}
+            connections={connectionList}
             canManage={canManage}
-            connectionNamesById={connectionNamesById}
-            onActivate={handleActivate}
-            onEdit={handleEdit}
-            onRename={setProfileToRename}
-            onDuplicate={handleDuplicate}
-            onDelete={setProfileToDelete}
             isActivating={activateProfile.isPending}
-            isModelUnlisted={isModelUnlisted}
+            onSelect={handleActivate}
           />
         </div>
+      ) : null}
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-base font-medium text-contrast">
+            {t(I18nKey.SETTINGS$AVAILABLE_PROFILES)}
+          </h2>
+          <div className="ml-auto flex items-center gap-2">
+            {canManage && supportsConnections ? (
+              <StyledTooltip
+                content={t(I18nKey.SETTINGS$PROVIDER_CONNECTION_ADD_TOOLTIP)}
+                placement="top"
+                tooltipClassName="max-w-xs whitespace-normal"
+              >
+                {/* BrandButton doesn't forward the tooltip's trigger props, so
+                    this span carries them; focus bubbles up to it too. */}
+                <span className="inline-flex">
+                  <BrandButton
+                    testId="add-provider-connection"
+                    type="button"
+                    variant="secondary"
+                    onClick={() => setIsCreatingConnection(true)}
+                  >
+                    {t(I18nKey.SETTINGS$PROVIDER_CONNECTION_ADD)}
+                    <Info aria-hidden className="h-4 w-4 text-muted" />
+                  </BrandButton>
+                </span>
+              </StyledTooltip>
+            ) : null}
+            {onAddProfile && canManage ? (
+              <BrandButton
+                testId="add-llm-profile"
+                type="button"
+                variant="secondary"
+                onClick={() => onAddProfile()}
+              >
+                {t(I18nKey.SETTINGS$ADD_LLM_PROFILE)}
+              </BrandButton>
+            ) : null}
+          </div>
+        </div>
 
-        {supportsConnections && canManage ? (
-          <ProviderConnectionsManager
-            connections={connectionList}
-            linkedCountById={linkedCountById}
-            isLoading={isLoadingConnections}
-            loadError={connectionsError ?? null}
-            onAddModels={(connection) => {
-              setAddModelsConnectionId(connection.id);
-              setShowAddModels(true);
-            }}
-          />
+        {supportsConnections && connectionsError ? (
+          <div
+            data-testid="provider-connections-load-error"
+            className={extensionModuleEmptyStateClassName}
+          >
+            <p className="text-sm text-feedback-error">
+              {t(I18nKey.SETTINGS$PROVIDER_CONNECTIONS_LOAD_ERROR)}
+            </p>
+          </div>
         ) : null}
+
+        <ProfilesBody
+          isLoading={isLoading || isWaitingForLinkedConnections}
+          loadError={error ?? null}
+          profiles={profiles}
+          active={active}
+          canManage={canManage}
+          connections={supportsConnections ? connectionList : undefined}
+          onActivate={handleActivate}
+          onEdit={handleEdit}
+          onRename={setProfileToRename}
+          onDuplicate={handleDuplicate}
+          onDelete={setProfileToDelete}
+          onAddModels={(connection) => setAddModelsConnectionId(connection.id)}
+          onEditConnection={setConnectionToEdit}
+          onDeleteConnection={setConnectionToDelete}
+          isActivating={activateProfile.isPending}
+          isModelUnlisted={isModelUnlisted}
+        />
       </div>
 
       <RenameProfileModal
@@ -207,11 +229,29 @@ export function LlmProfilesManager({
         onClose={() => setProfileToDelete(null)}
       />
       <AddModelsModal
-        isOpen={showAddModels}
+        isOpen={addModelsConnectionId !== null}
         connections={connectionList}
         initialConnectionId={addModelsConnectionId}
         existingNames={profiles.map((p) => p.name)}
-        onClose={() => setShowAddModels(false)}
+        onClose={() => setAddModelsConnectionId(null)}
+        onAddCustomProfile={
+          onAddProfile && canManage ? onAddProfile : undefined
+        }
+      />
+      {isCreatingConnection && (
+        <ProviderConnectionModal
+          isCreate
+          onClose={() => setIsCreatingConnection(false)}
+        />
+      )}
+      <ProviderConnectionModal
+        isCreate={false}
+        connection={connectionToEdit}
+        onClose={() => setConnectionToEdit(null)}
+      />
+      <DeleteProviderConnectionModal
+        connection={connectionToDelete}
+        onClose={() => setConnectionToDelete(null)}
       />
     </>
   );

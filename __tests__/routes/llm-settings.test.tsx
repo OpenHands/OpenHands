@@ -200,6 +200,47 @@ describe("LlmSettingsScreen", () => {
     expect(llmPayload).not.toHaveProperty("base_url");
   });
 
+  it("opens a new profile on Basic even when the saved settings would open All", async () => {
+    // A custom saved base URL makes the inferred tab "All"; a new profile's
+    // form must not inherit that from the existing configuration.
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        llm_model: "openai/gpt-4o",
+        llm_base_url: "https://custom.example/v1",
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          llm: {
+            model: "openai/gpt-4o",
+            api_key: null,
+            base_url: "https://custom.example/v1",
+          },
+        },
+      }),
+    );
+
+    const { unmount } = renderLlmSettingsScreen({
+      embedded: true,
+      hideSaveButton: true,
+    });
+    await screen.findByTestId("llm-settings-screen");
+    expect(await screen.findByTestId("sdk-section-all-toggle")).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    unmount();
+
+    renderLlmSettingsScreen({
+      embedded: true,
+      hideSaveButton: true,
+      initialView: "basic",
+    });
+    await screen.findByTestId("llm-settings-screen");
+    expect(screen.getByTestId("sdk-section-basic-toggle")).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+
   it("does not show a 'key set' indicator for a brand-new embedded profile even when a global key exists (bug #640)", async () => {
     // A global key exists, but a fresh profile form must look unset so the user
     // knows they have to enter one — otherwise the profile saves with no key.
