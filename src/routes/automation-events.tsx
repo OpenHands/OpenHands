@@ -229,19 +229,24 @@ function EventsContent({
                   className="rounded border border-border p-2"
                 />
               </label>
-              <label className="flex flex-col gap-1 text-sm">
-                {t(I18nKey.AUTOMATIONS$EVENTS$SOURCE)}
+              <div className="flex flex-col gap-1 text-sm">
+                <label htmlFor="webhook-source-id">
+                  {t(I18nKey.AUTOMATIONS$EVENTS$SOURCE)}
+                </label>
                 <input
+                  id="webhook-source-id"
                   name="source"
                   required
                   pattern="[a-z0-9]([a-z0-9-]{0,48}[a-z0-9])?"
                   maxLength={50}
+                  placeholder={t(I18nKey.AUTOMATIONS$EVENTS$SOURCE_PLACEHOLDER)}
+                  aria-describedby="webhook-source-help"
                   className="rounded border border-border p-2"
                 />
-                <span className="text-muted">
+                <span id="webhook-source-help" className="text-muted">
                   {t(I18nKey.AUTOMATIONS$EVENTS$SOURCE_HELP)}
                 </span>
-              </label>
+              </div>
               <label className="flex flex-col gap-1 text-sm">
                 {t(I18nKey.AUTOMATION_SETUP$CUSTOM_WEBHOOK_EVENT_KEY_EXPR)}
                 <input

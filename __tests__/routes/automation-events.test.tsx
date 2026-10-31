@@ -202,10 +202,17 @@ describe("automation Events page", () => {
       }),
       "Issues",
     );
-    await userEvent.type(
-      screen.getByRole("textbox", { name: /AUTOMATIONS\$EVENTS\$SOURCE/ }),
-      "issues",
+    const sourceIdField = screen.getByRole("textbox", {
+      name: I18nKey.AUTOMATIONS$EVENTS$SOURCE,
+    });
+    expect(sourceIdField).toHaveAccessibleDescription(
+      I18nKey.AUTOMATIONS$EVENTS$SOURCE_HELP,
     );
+    expect(sourceIdField).toHaveAttribute(
+      "placeholder",
+      I18nKey.AUTOMATIONS$EVENTS$SOURCE_PLACEHOLDER,
+    );
+    await userEvent.type(sourceIdField, "issues");
     await userEvent.click(
       screen.getByRole("button", {
         name: I18nKey.AUTOMATIONS$EVENTS$ADD,
