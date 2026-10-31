@@ -363,7 +363,7 @@ export function HomeChatLauncher() {
                 imagesMarkedUploadAsFile,
                 t,
               });
-              clearAllFiles();
+              if (ownsLaunch()) clearAllFiles();
             } catch (error) {
               displayErrorToast(error instanceof Error ? error.message : null);
               return;
