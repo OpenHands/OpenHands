@@ -191,6 +191,18 @@ export function useUpdateAutomationTags() {
   });
 }
 
+export function useUpdateAutomationKeepAlive() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, keepAlive }: { id: string; keepAlive: boolean }) =>
+      AutomationService.updateAutomation(id, { keep_alive: keepAlive }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: AUTOMATIONS_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: AUTOMATION_DETAIL_QUERY_KEY });
+    },
+  });
+}
+
 interface UseToggleAutomationOptions {
   /**
    * Skip the global error toast, for a caller that shows its own. Dashboard

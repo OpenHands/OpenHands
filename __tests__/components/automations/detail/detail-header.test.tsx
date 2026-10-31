@@ -78,3 +78,77 @@ describe("DetailHeader — enabled toggle gating", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("DetailHeader — keep sandbox alive", () => {
+  const enabledAutomation: Automation = {
+    ...disabledAutomation,
+    enabled: true,
+  };
+
+  it.each([
+    { keepAlive: false, label: I18nKey.AUTOMATIONS$KEEP_SANDBOX_ALIVE },
+    { keepAlive: true, label: I18nKey.AUTOMATIONS$STOP_KEEPING_SANDBOX_ALIVE },
+  ])(
+    "lists $label between Turn off and Delete when keep_alive is $keepAlive",
+    async ({ keepAlive, label }) => {
+      // Arrange
+      const user = userEvent.setup();
+      const onToggleKeepAlive = vi.fn();
+      renderHeader({
+        automation: { ...enabledAutomation, keep_alive: keepAlive },
+        onToggleKeepAlive,
+      });
+      await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+      const names = screen
+        .getAllByRole("button")
+        .map((button) => button.textContent);
+      expect(names.slice(names.indexOf(I18nKey.AUTOMATIONS$TURN_OFF))).toEqual([
+        I18nKey.AUTOMATIONS$TURN_OFF,
+        label,
+        I18nKey.AUTOMATIONS$DELETE,
+      ]);
+
+      // Act
+      await user.click(screen.getByRole("button", { name: label }));
+
+      // Assert
+      expect(onToggleKeepAlive).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("disables the item while a keep_alive save is pending", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    renderHeader({
+      automation: { ...enabledAutomation, keep_alive: false },
+      onToggleKeepAlive: vi.fn(),
+      isKeepAlivePending: true,
+    });
+
+    // Act
+    await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+
+    // Assert
+    expect(
+      screen.getByRole("button", {
+        name: I18nKey.AUTOMATIONS$KEEP_SANDBOX_ALIVE,
+      }),
+    ).toBeDisabled();
+  });
+
+  it("leaves the item out when onToggleKeepAlive is omitted", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    renderHeader({ automation: { ...enabledAutomation, keep_alive: false } });
+
+    // Act
+    await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+
+    // Assert
+    expect(
+      screen.queryByRole("button", {
+        name: I18nKey.AUTOMATIONS$KEEP_SANDBOX_ALIVE,
+      }),
+    ).not.toBeInTheDocument();
+  });
+});
