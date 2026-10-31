@@ -152,6 +152,7 @@ export function AgentProfilesLocalView() {
   > | null>(null);
   const [llmProfileRef, setLlmProfileRef] = useState("");
   const [creatingLlmProfile, setCreatingLlmProfile] = useState(false);
+  const [editingRouter, setEditingRouter] = useState(false);
   const [saveControl, setSaveControl] =
     useState<AgentSettingsSaveControl | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -204,6 +205,7 @@ export function AgentProfilesLocalView() {
     });
     setLlmProfileRef(defaultLlmProfileRef);
     setCreatingLlmProfile(false);
+    setEditingRouter(false);
     setSaveControl(null);
     setViewMode("create");
   }, [backend.kind, waitForMigration, defaultLlmProfileRef, settings]);
@@ -254,6 +256,7 @@ export function AgentProfilesLocalView() {
         }
         setProfileName(profile.name);
         setCreatingLlmProfile(false);
+        setEditingRouter(false);
         setSaveControl(null);
         setViewMode("edit");
       } catch (error) {
@@ -280,11 +283,12 @@ export function AgentProfilesLocalView() {
     setNameTouched(false);
     setOverride(null);
     setCreatingLlmProfile(false);
+    setEditingRouter(false);
     setSaveControl(null);
   }, []);
 
   const handleSave = useCallback(async () => {
-    if (!saveControl || !isNameValid) return;
+    if (!saveControl || !isNameValid || editingRouter) return;
 
     // Build the variant-specific fields from the embedded form (may throw on
     // invalid input, e.g. a bad concurrency value).
@@ -365,6 +369,7 @@ export function AgentProfilesLocalView() {
   }, [
     saveControl,
     isNameValid,
+    editingRouter,
     llmProfileRef,
     profileName,
     viewMode,
@@ -492,6 +497,7 @@ export function AgentProfilesLocalView() {
         key={viewMode === "edit" ? `edit-${editingProfile?.id}` : "new-profile"}
         agentSettingsOverride={override}
         onSaveControlChange={setSaveControl}
+        onRouterEditingChange={setEditingRouter}
         isDefaultProfile={isEditingDefault}
         profileNameField={
           <div className="flex flex-col gap-5">
@@ -552,6 +558,7 @@ export function AgentProfilesLocalView() {
             !isNameValid ||
             isSaving ||
             creatingLlmProfile ||
+            editingRouter ||
             !saveControl?.isValid ||
             !hasUnsavedChanges
           }

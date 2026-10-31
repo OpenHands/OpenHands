@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { HttpError } from "@openhands/typescript-client";
 import { BrandButton } from "#/components/features/settings/brand-button";
@@ -53,7 +53,19 @@ const CUSTOM_META_PROFILE_CONFIG: MetaProfile = {
   model_table: "",
 };
 
-export function MetaLlmSettingsView() {
+interface MetaLlmSettingsViewProps {
+  embedded?: boolean;
+  onCreated?: (name: string) => void;
+  onDeleted?: (name: string) => void;
+  onEditingChange?: (editing: boolean) => void;
+}
+
+export function MetaLlmSettingsView({
+  embedded = false,
+  onCreated,
+  onDeleted,
+  onEditingChange,
+}: MetaLlmSettingsViewProps = {}) {
   const { t } = useTranslation("openhands");
   const { data, isLoading, error } = useMetaProfiles();
   const { data: llmProfilesData } = useLlmProfiles();
@@ -66,6 +78,9 @@ export function MetaLlmSettingsView() {
     useSaveSettings();
 
   const [view, setView] = useState<ViewMode>("list");
+  useEffect(() => {
+    onEditingChange?.(view !== "list");
+  }, [onEditingChange, view]);
   const [editing, setEditing] = useState<EditingMetaProfile | null>(null);
   const [createInitial, setCreateInitial] = useState<EditingMetaProfile | null>(
     null,
@@ -239,6 +254,7 @@ export function MetaLlmSettingsView() {
       if (shouldActivateAfterCreate) {
         await activateMetaProfile.mutateAsync(name);
       }
+      if (view === "create") onCreated?.(name);
       if (!autoEnableFailed) {
         displaySuccessToast(t(I18nKey.SETTINGS$META_PROFILE_SAVED, { name }));
       }
@@ -328,9 +344,15 @@ export function MetaLlmSettingsView() {
         ) : null}
 
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-base font-medium text-contrast">
-            {t(I18nKey.SETTINGS$META_PROFILES_AVAILABLE)}
-          </h2>
+          {embedded ? (
+            <h3 className="text-base font-medium text-contrast">
+              {t(I18nKey.SETTINGS$META_PROFILES_AVAILABLE)}
+            </h3>
+          ) : (
+            <h2 className="text-base font-medium text-contrast">
+              {t(I18nKey.SETTINGS$META_PROFILES_AVAILABLE)}
+            </h2>
+          )}
           <BrandButton
             testId="add-meta-profile"
             type="button"
@@ -405,6 +427,7 @@ export function MetaLlmSettingsView() {
       <DeleteMetaProfileModal
         name={nameToDelete}
         onClose={() => setNameToDelete(null)}
+        onDeleted={onDeleted}
       />
       <ApiKeyModalBase
         isOpen={isTemplateModalOpen}

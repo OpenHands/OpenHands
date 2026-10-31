@@ -28,6 +28,7 @@ import {
 import { ProfileScopeList } from "#/components/features/settings/agent-profiles/profile-scope-list";
 import { AgentMcpSetup } from "#/components/features/settings/agent-profiles/agent-mcp-setup";
 import { AgentFormSection } from "#/components/features/settings/agent-profiles/agent-form-section";
+import { MetaLlmSettingsView } from "#/components/features/settings/meta-llm-profiles/meta-llm-settings-view";
 import { SecretForm } from "#/components/features/settings/secrets-settings/secret-form";
 import { ConfirmationModal } from "#/components/shared/modals/confirmation-modal";
 import { useDeleteSecret } from "#/hooks/mutation/use-delete-secret";
@@ -388,6 +389,7 @@ interface AgentSettingsScreenProps {
   profileNameField?: React.ReactNode;
   /** Shown under the agent type for an OpenHands agent. */
   llmPicker?: React.ReactNode;
+  onRouterEditingChange?: (editing: boolean) => void;
 }
 
 export function AgentSettingsScreen({
@@ -396,6 +398,7 @@ export function AgentSettingsScreen({
   isDefaultProfile = false,
   profileNameField = null,
   llmPicker = null,
+  onRouterEditingChange,
 }: AgentSettingsScreenProps) {
   const { t } = useTranslation("openhands");
   const queryClient = useQueryClient();
@@ -927,6 +930,7 @@ export function AgentSettingsScreen({
         : ROUTER_FIRST_KEY;
   }
   const [router, setRouter] = useState<string | null>(initialRouter);
+  const [routerSectionVisited, setRouterSectionVisited] = useState(false);
   useEffect(() => {
     setRouter(initialRouter);
   }, [initialRouter]);
@@ -1782,58 +1786,6 @@ export function AgentSettingsScreen({
           </div>
         ) : null}
 
-        {!isAcp && routerSupported ? (
-          <div
-            className="flex flex-col gap-2.5"
-            data-testid="agent-settings-router"
-          >
-            <Typography.Text className="text-sm">
-              {t(I18nKey.SETTINGS$NAV_META_LLM)}
-            </Typography.Text>
-            <SettingsDropdownInput
-              testId="agent-settings-router-select"
-              name="agent-router"
-              label=""
-              items={[
-                {
-                  key: ROUTER_OFF_KEY,
-                  label: t(I18nKey.SETTINGS$AGENT_PROFILE_ROUTER_OFF),
-                },
-                ...(initialRouter === ROUTER_FIRST_KEY
-                  ? [
-                      {
-                        key: ROUTER_FIRST_KEY,
-                        label: t(I18nKey.SETTINGS$AGENT_PROFILE_ROUTER_FIRST),
-                      },
-                    ]
-                  : []),
-                ...[
-                  ...routerNames,
-                  ...(routerDangling && router ? [router] : []),
-                ].map((name) => ({ key: name, label: name })),
-              ]}
-              selectedKey={router ?? ROUTER_OFF_KEY}
-              isDisabled={isSaving}
-              onSelectionChange={(key) => {
-                if (key === null || key === undefined) return;
-                setRouter(key === ROUTER_OFF_KEY ? null : String(key));
-              }}
-            />
-            {routerDangling ? (
-              <Typography.Text
-                testId="agent-settings-router-dangling"
-                className="text-xs text-danger"
-              >
-                {t(I18nKey.SETTINGS$AGENT_PROFILE_ROUTER_DANGLING, {
-                  name: router,
-                })}
-              </Typography.Text>
-            ) : null}
-            <Typography.Text className="text-xs text-tertiary-alt">
-              {t(I18nKey.SETTINGS$AGENT_PROFILE_ROUTER_HINT)}
-            </Typography.Text>
-          </div>
-        ) : null}
         {!isAcp && toolConcurrencyField ? (
           <SchemaField
             field={toolConcurrencyField}
@@ -1952,6 +1904,74 @@ export function AgentSettingsScreen({
             ))
           : null}
       </AgentFormSection>
+
+      {!isAcp && routerSupported ? (
+        <AgentFormSection
+          testId="agent-model-router-section"
+          title={t(I18nKey.SETTINGS$NAV_META_LLM)}
+          onToggle={(open) => {
+            if (open) setRouterSectionVisited(true);
+          }}
+        >
+          <div
+            className="flex flex-col gap-2.5"
+            data-testid="agent-settings-router"
+          >
+            <SettingsDropdownInput
+              testId="agent-settings-router-select"
+              name="agent-router"
+              label=""
+              items={[
+                {
+                  key: ROUTER_OFF_KEY,
+                  label: t(I18nKey.SETTINGS$AGENT_PROFILE_ROUTER_OFF),
+                },
+                ...(initialRouter === ROUTER_FIRST_KEY
+                  ? [
+                      {
+                        key: ROUTER_FIRST_KEY,
+                        label: t(I18nKey.SETTINGS$AGENT_PROFILE_ROUTER_FIRST),
+                      },
+                    ]
+                  : []),
+                ...[
+                  ...routerNames,
+                  ...(routerDangling && router ? [router] : []),
+                ].map((name) => ({ key: name, label: name })),
+              ]}
+              selectedKey={router ?? ROUTER_OFF_KEY}
+              isDisabled={isSaving}
+              onSelectionChange={(key) => {
+                if (key === null || key === undefined) return;
+                setRouter(key === ROUTER_OFF_KEY ? null : String(key));
+              }}
+            />
+            {routerDangling ? (
+              <Typography.Text
+                testId="agent-settings-router-dangling"
+                className="text-xs text-danger"
+              >
+                {t(I18nKey.SETTINGS$AGENT_PROFILE_ROUTER_DANGLING, {
+                  name: router,
+                })}
+              </Typography.Text>
+            ) : null}
+            <Typography.Text className="text-xs text-tertiary-alt">
+              {t(I18nKey.SETTINGS$AGENT_PROFILE_ROUTER_HINT)}
+            </Typography.Text>
+            {routerSectionVisited ? (
+              <MetaLlmSettingsView
+                embedded
+                onCreated={setRouter}
+                onDeleted={(name) =>
+                  setRouter((current) => (current === name ? null : current))
+                }
+                onEditingChange={onRouterEditingChange}
+              />
+            ) : null}
+          </div>
+        </AgentFormSection>
+      ) : null}
     </div>
   );
 }

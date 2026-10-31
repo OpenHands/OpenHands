@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -2060,6 +2060,22 @@ describe("AgentSettingsScreen — Model Router", () => {
       enable_classify_and_switch_llm_tool: false,
       meta_profile_ref: null,
     });
+  });
+
+  it("manages shared routers from an optional section of the agent form", async () => {
+    renderAgentSettingsScreen({ agentSettingsOverride: WITH_ROUTER });
+    const user = userEvent.setup();
+
+    const section = await screen.findByTestId("agent-model-router-section");
+    expect(section).toBeInTheDocument();
+    await user.click(within(section).getByText("SETTINGS$NAV_META_LLM"));
+    expect(
+      await screen.findByTestId("meta-profile-row-fast-router"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("add-meta-profile")).toBeInTheDocument();
+    expect(screen.getByTestId("agent-settings-router-select")).toHaveValue(
+      "fast-router",
+    );
   });
 
   it("leaves the stored router alone when saving other changes", async () => {

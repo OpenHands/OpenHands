@@ -29,12 +29,14 @@ vi.mock("#/routes/agent-settings", () => {
   const MockAgentSettings = ({
     agentSettingsOverride,
     onSaveControlChange,
+    onRouterEditingChange,
     isDefaultProfile,
     profileNameField,
     llmPicker,
   }: {
     agentSettingsOverride?: Record<string, unknown> | null;
     onSaveControlChange?: (c: AgentSettingsSaveControl) => void;
+    onRouterEditingChange?: (editing: boolean) => void;
     isDefaultProfile?: boolean;
     profileNameField?: React.ReactNode;
     llmPicker?: React.ReactNode;
@@ -52,6 +54,16 @@ vi.mock("#/routes/agent-settings", () => {
       >
         {profileNameField}
         {emitControl?.agentType === "acp" ? null : llmPicker}
+        <button
+          type="button"
+          data-testid="test-router-edit"
+          onClick={() => onRouterEditingChange?.(true)}
+        />
+        <button
+          type="button"
+          data-testid="test-router-done"
+          onClick={() => onRouterEditingChange?.(false)}
+        />
       </div>
     );
   };
@@ -237,6 +249,28 @@ describe("AgentProfilesLocalView save mapping", () => {
       public_skills: ["add-skill"],
       disabled_skills: ["mine"],
     });
+  });
+
+  it("prevents agent save until the inline router editor finishes", async () => {
+    emitControl = {
+      agentType: "openhands",
+      isValid: true,
+      isDirty: true,
+      buildAgentProfileFields: () => ({
+        agent_kind: "openhands",
+        mcp_server_refs: null,
+      }),
+      credentials: { isDirty: false, save: vi.fn(), reset: vi.fn() },
+    };
+    renderView();
+    const user = await openCreateAndName("router-agent");
+    const save = screen.getByTestId("save-agent-profile-btn");
+    expect(save).toBeEnabled();
+
+    await user.click(screen.getByTestId("test-router-edit"));
+    expect(save).toBeDisabled();
+    await user.click(screen.getByTestId("test-router-done"));
+    expect(save).toBeEnabled();
   });
 
   it("opens a new profile without a skill list on a cloud backend", async () => {

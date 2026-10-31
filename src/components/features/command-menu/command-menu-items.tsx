@@ -236,7 +236,9 @@ export const createCommandMenuItems = ({
 
   return items.filter(
     (item) =>
-      (isCloud || item.to !== COMMAND_MENU_ROUTE.condenserSettings) &&
+      (isCloud ||
+        (item.to !== COMMAND_MENU_ROUTE.condenserSettings &&
+          item.to !== COMMAND_MENU_ROUTE.metaLlmSettings)) &&
       (!isLockedToCloud ||
         item.group !== "settings" ||
         item.to === COMMAND_MENU_ROUTE.settings ||

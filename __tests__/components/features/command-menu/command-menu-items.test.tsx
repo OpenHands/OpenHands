@@ -46,7 +46,6 @@ describe("the command menu settings group", () => {
     expect(settingsItemIds(items)).toEqual([
       "settings",
       "agent-settings",
-      "meta-llm-settings",
       "agent-context-settings",
       "verification-settings",
       "runtime-settings",
@@ -64,7 +63,7 @@ describe("the command menu settings group", () => {
     expect(routes).toEqual(
       expect.arrayContaining(
         OSS_NAV_ITEMS.map((navItem) => navItem.to).filter(
-          (to) => to !== "/settings/condenser",
+          (to) => to !== "/settings/condenser" && to !== "/settings/meta-llm",
         ),
       ),
     );

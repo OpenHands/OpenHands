@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRoutesStub } from "react-router";
 import SettingsScreen, { clientLoader } from "#/routes/settings";
 import AgentProfilesRedirect from "#/routes/agent-profiles-redirect";
+import MetaLlmSettingsRoute from "#/routes/meta-llm-settings";
 import OptionService from "#/api/option-service/option-service.api";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import {
@@ -56,6 +57,31 @@ describe("settings route", () => {
       <QueryClientProvider client={new QueryClient()}>
         <ActiveBackendProvider>
           <RouterStub initialEntries={["/settings/agents"]} />
+        </ActiveBackendProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByTestId("standalone-agents")).toBeInTheDocument();
+    expect(screen.queryByTestId("settings-navbar-desktop")).toBeNull();
+  });
+
+  it("redirects the old local Model Router page to standalone Agents", async () => {
+    const RouterStub = createRoutesStub([
+      {
+        path: "/settings",
+        Component: SettingsScreen,
+        children: [{ path: "meta-llm", Component: MetaLlmSettingsRoute }],
+      },
+      {
+        path: "/agents",
+        Component: () => <main data-testid="standalone-agents" />,
+      },
+    ]);
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ActiveBackendProvider>
+          <RouterStub initialEntries={["/settings/meta-llm"]} />
         </ActiveBackendProvider>
       </QueryClientProvider>,
     );

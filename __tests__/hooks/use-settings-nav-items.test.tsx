@@ -80,6 +80,10 @@ describe("useSettingsNavItems", () => {
       type: "item",
       item: OSS_NAV_ITEMS.find((item) => item.to === "/settings/app"),
     });
+    expect(result.current).not.toContainEqual({
+      type: "item",
+      item: OSS_NAV_ITEMS.find((item) => item.to === "/settings/meta-llm"),
+    });
   });
 
   it("keeps the remaining Settings entries on cloud backends", () => {
