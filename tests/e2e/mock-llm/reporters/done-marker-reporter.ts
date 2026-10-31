@@ -1,28 +1,18 @@
 /**
- * Custom Playwright reporter that writes marker files for CI coordination.
- *
- * Marker files are written to `.mock-llm-markers/` at the project root —
- * intentionally outside Playwright's `outputDir` (`test-results-mock-llm/`)
- * to avoid being cleaned up.
- *
- * Written markers:
- *   .results.json — written after EVERY test; always has the latest results
- *                   so that even a mid-suite kill leaves usable data
- *   .tests-done   — written only when all tests complete; content is
- *                   "passed" or "failed"
- *   .all-passed   — written only when all tests passed
+ * Incremental mock-LLM results and completion markers for the CI wrappers.
+ * Keep these outside Playwright's outputDir, which it clears during startup.
  */
-
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { stripVTControlCharacters } from "node:util";
 import type {
   FullResult,
   Reporter,
   TestCase,
+  TestError,
   TestResult,
 } from "@playwright/test/reporter";
 
-// Playwright runs from the project root (where the config file lives).
 const MARKER_DIR = join(process.cwd(), ".mock-llm-markers");
 
 interface TestRecord {
@@ -32,107 +22,128 @@ interface TestRecord {
   error: string;
 }
 
-/**
- * Tracks test results and writes them incrementally.
- *
- * `.results.json` is flushed after every `onTestEnd()` so the CI report
- * script always has data — even when the process is killed mid-suite
- * (e.g. the CI polling deadline expires before all tests finish).
- *
- * `.tests-done` / `.all-passed` are written only when the full suite
- * completes, letting the CI wrapper distinguish "still running" from
- * "done".
- */
+let finishActiveRun: (() => void) | undefined;
+
+/** Global teardown runs after test scheduling, before webServer teardown. */
+export function finishTestRun() {
+  finishActiveRun?.();
+}
+
 class DoneMarkerReporter implements Reporter {
   private totalTests = 0;
-  private completedTests = 0;
-  private allPassed = true;
-  private tests: TestRecord[] = [];
-  private markerDirCreated = false;
+  private testsById = new Map<string, TestRecord>();
+  private schedulingFinished = false;
+  private hasRunError = false;
 
   onBegin(_config: unknown, suite: { allTests(): TestCase[] }) {
+    finishActiveRun = () => this.finish();
     this.totalTests = suite.allTests().length;
   }
 
   onTestEnd(test: TestCase, result: TestResult) {
-    this.completedTests++;
-    const passed = result.status === "passed" || result.status === "skipped";
-    if (!passed) {
-      this.allPassed = false;
+    // Expected failures pass; an unexpected pass fails. Skips are intentional
+    // or follow a serial failure, whose final record keeps the suite red.
+    let status: string = result.status;
+    if (status !== "skipped") {
+      if (result.status === test.expectedStatus) status = "passed";
+      else if (status === "passed") status = "failed";
     }
-
-    this.tests.push({
+    this.testsById.set(test.id, {
       title: test.titlePath().filter(Boolean).join(" › "),
-      status: result.status,
+      status,
       durationMs: result.duration,
-      error: result.errors
-        .map((e) => e.message ?? "")
-        .filter(Boolean)
-        .join("\n\n")
-        .slice(0, 1500),
+      error:
+        status === "passed"
+          ? ""
+          : result.errors
+              .map((error) => error.message ?? "")
+              .filter(Boolean)
+              .join("\n\n")
+              .slice(0, 1500),
     });
-
-    // Always flush results so a mid-suite kill still leaves usable data.
+    // A serial retry reruns passed/skipped cases too: even seeing every case
+    // once does not mean scheduling is over. Publish only incremental results.
     this.writeResults();
-
-    // Write completion markers only after the last test.
-    if (this.completedTests >= this.totalTests) {
-      this.writeCompletionMarkers();
-    }
   }
 
-  onEnd(_result: FullResult) {
-    // Fallback: if onTestEnd never fired (webServer timeout, config
-    // error, etc.), treat that as a failure and write what we have.
-    if (this.totalTests === 0 || this.completedTests === 0) {
-      this.allPassed = false;
-    }
-    this.writeResults();
-    this.writeCompletionMarkers();
+  onError(error: TestError) {
+    // The pinned Playwright runner reports a webServer teardown timeout via
+    // onError too. Preserve the workflow's grace only after scheduling ended;
+    // all other global/worker errors, including late cleanup failures, fail.
+    const teardownTimeout =
+      this.schedulingFinished &&
+      !error.stack &&
+      /^Timed out waiting [\d.]+s for the teardown for plugin setup to run$/.test(
+        stripVTControlCharacters(error.message ?? ""),
+      );
+    if (teardownTimeout) return;
+    this.hasRunError = true;
+    if (this.schedulingFinished) this.finish();
   }
 
-  /** Flush per-test timing/error data — called after every test. */
-  private writeResults() {
-    const done = this.completedTests >= this.totalTests;
-    const status = done
-      ? this.allPassed
-        ? "passed"
-        : "failed"
-      : "in_progress";
+  onEnd(result: FullResult) {
+    // Without the pre-teardown signal, a non-passing result may reflect
+    // interrupted scheduling. A genuine failure always invalidates markers.
+    if (
+      result.status === "failed" ||
+      (!this.schedulingFinished && result.status !== "passed")
+    ) {
+      this.hasRunError = true;
+    }
+    this.finish();
+  }
+
+  private finish() {
+    this.schedulingFinished = true;
+    this.writeResults();
+    const passed = this.allPassed();
     try {
-      this.ensureMarkerDir();
+      mkdirSync(MARKER_DIR, { recursive: true });
+      const passMarker = join(MARKER_DIR, ".all-passed");
+      if (passed) writeFileSync(passMarker, "1");
+      else rmSync(passMarker, { force: true });
+      // Publish the completion signal last, after its results and verdict.
+      writeFileSync(
+        join(MARKER_DIR, ".tests-done"),
+        passed ? "passed" : "failed",
+      );
+    } catch {
+      // Reporting must not crash Playwright.
+    }
+  }
+
+  private allPassed() {
+    return (
+      this.schedulingFinished &&
+      !this.hasRunError &&
+      this.totalTests > 0 &&
+      this.testsById.size === this.totalTests &&
+      [...this.testsById.values()].every(
+        (test) => test.status === "passed" || test.status === "skipped",
+      )
+    );
+  }
+
+  private writeResults() {
+    const complete =
+      this.schedulingFinished && this.testsById.size === this.totalTests;
+    try {
+      mkdirSync(MARKER_DIR, { recursive: true });
       writeFileSync(
         join(MARKER_DIR, ".results.json"),
         JSON.stringify({
-          status,
-          completed: this.completedTests,
+          status: complete
+            ? this.allPassed()
+              ? "passed"
+              : "failed"
+            : "in_progress",
+          completed: this.testsById.size,
           total: this.totalTests,
-          tests: this.tests,
+          tests: [...this.testsById.values()],
         }),
       );
     } catch {
-      // Don't crash Playwright if marker write fails
-    }
-  }
-
-  /** Write .tests-done and .all-passed — only when the suite is complete. */
-  private writeCompletionMarkers() {
-    const status = this.allPassed ? "passed" : "failed";
-    try {
-      this.ensureMarkerDir();
-      writeFileSync(join(MARKER_DIR, ".tests-done"), status);
-      if (this.allPassed) {
-        writeFileSync(join(MARKER_DIR, ".all-passed"), "1");
-      }
-    } catch {
-      // Don't crash Playwright if marker write fails
-    }
-  }
-
-  private ensureMarkerDir() {
-    if (!this.markerDirCreated) {
-      mkdirSync(MARKER_DIR, { recursive: true });
-      this.markerDirCreated = true;
+      // A mid-suite kill should retain the latest successfully written data.
     }
   }
 }

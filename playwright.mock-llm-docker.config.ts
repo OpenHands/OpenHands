@@ -149,6 +149,7 @@ export default defineConfig({
   workers: 1,
   timeout: 60_000,
   globalTimeout: process.env.CI ? ciGlobalTimeoutMs : 0, // 20 min hard cap in CI
+  globalTeardown: "./tests/e2e/mock-llm/reporters/done-marker-teardown.ts",
   reporter: [
     ["line"],
     ["json", { outputFile: "test-results-mock-llm-docker/results.json" }],
@@ -231,7 +232,7 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
     },
   ],
-  // globalTeardown stops the Docker container when Playwright exits.
+  // webServer teardown stops the Docker container after tests finish.
   // Playwright sends SIGTERM to the webServer command, but `docker run`
   // with --rm handles cleanup automatically on termination.
 });
