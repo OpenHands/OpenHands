@@ -4,6 +4,7 @@ export const FORK_TEST_SUITES = [
   "__tests__/components/automations/automation-setup-panel.test.tsx",
   "__tests__/components/backends/add-backend-modal.test.tsx",
   "__tests__/components/onboarding/onboarding-modal.test.tsx",
+  "__tests__/components/features/chat/change-agent-context-menu.test.tsx",
   "__tests__/components/features/command-menu/command-menu.test.tsx",
   "__tests__/components/features/conversation/conversation-overview-drawer-content.test.tsx",
   "__tests__/components/features/home/home-chat-launcher.test.tsx",

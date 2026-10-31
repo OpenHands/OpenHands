@@ -108,7 +108,7 @@ export function ConversationGitActionsMenu({
       testId={`${testIdPrefix}-menu`}
       theme="popover"
       style={portalStyle}
-      className="w-max min-w-[8rem]"
+      className="w-max conversation-git-actions-width"
     >
       <ContextMenuListItem
         testId={`${testIdPrefix}-commit`}

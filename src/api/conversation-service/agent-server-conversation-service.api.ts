@@ -36,8 +36,13 @@ import {
   searchCloudConversations,
   updateCloudConversationPublicFlag,
   updateCloudConversationRepository,
+  updateCloudConversationTags,
   updateCloudConversationTitle,
 } from "../cloud/conversation-service.api";
+import {
+  conversationTagFlagPatch,
+  withConversationTagFlags,
+} from "#/utils/conversation-tag-flags";
 import {
   DirectConversationInfo,
   GIT_PROVIDER_TAG_KEY,
@@ -470,6 +475,13 @@ export interface CreateConversationOptions {
   hasActiveMetaProfile?: boolean;
   /** Local only: the launched profile carries a Model Router. */
   profileHasRouter?: boolean;
+  /**
+   * A home-page model pick was made before the first message, so the
+   * route-at-start suffix should be suppressed for this single launch. The
+   * home launch decides this once and threads it down so the local builder
+   * needn't read UI state — child/`/new` launches omit it and route as usual.
+   */
+  suppressRouterAtStart?: boolean;
   /** Local only: the launched ACP profile's server, for the conversation tag. */
   acpServer?: string;
   // The LLM profile the launched agent profile runs. When set and no explicit
@@ -653,6 +665,7 @@ class AgentServerConversationService {
       agentProfileKind,
       llmProfileOverride: agentLlmProfileOverride,
       profileHasRouter,
+      suppressRouterAtStart: options.suppressRouterAtStart,
       acpServer,
       titleLlmProfile,
     });
@@ -1162,10 +1175,12 @@ class AgentServerConversationService {
   }
 
   /**
-   * Replaces the conversation's complete server-side tag map (the PATCH is
-   * replace-all, so callers must merge user edits with any reserved/internal
-   * keys before calling). Mirrors `updateConversationTitle`; local
-   * agent-server conversations only — Cloud conversations don't carry tags.
+   * Replaces the conversation's complete server-side tag map (the local
+   * agent-server PATCH is replace-all, so callers must merge user edits with
+   * any reserved/internal keys before calling). Mirrors
+   * `updateConversationTitle`; local agent-server conversations only — Cloud
+   * callers go through {@link updateConversationTagFlags}, which uses the
+   * app-server's merge patch instead.
    */
   static async updateConversationTags(
     conversationId: string,
@@ -1175,6 +1190,37 @@ class AgentServerConversationService {
       getAgentServerClientOptions(),
     ).updateConversation(conversationId, {
       tags,
+    });
+    const [conversation] = await this.batchGetAppConversations([
+      conversationId,
+    ]);
+    return requireAppConversation(conversation, conversationId);
+  }
+
+  /**
+   * Sets or clears boolean conversation flags carried in server-side tags
+   * (e.g. `pinned` / `archived`; see `conversation-tag-flags.ts`). Works on
+   * both backends: the local agent-server receives the complete replacement
+   * map derived from `currentTags` (its PATCH is replace-all), while the
+   * Cloud app-server receives a merge patch that sets enabled keys and
+   * deletes disabled ones, leaving every other tag untouched.
+   */
+  static async updateConversationTagFlags(
+    conversationId: string,
+    currentTags: Record<string, string> | null | undefined,
+    changes: Record<string, boolean>,
+  ): Promise<AppConversation> {
+    if (getActiveBackend().backend.kind === "cloud") {
+      return updateCloudConversationTags(
+        conversationId,
+        conversationTagFlagPatch(changes),
+      );
+    }
+
+    await new ConversationClient(
+      getAgentServerClientOptions(),
+    ).updateConversation(conversationId, {
+      tags: withConversationTagFlags(currentTags, changes),
     });
     const [conversation] = await this.batchGetAppConversations([
       conversationId,

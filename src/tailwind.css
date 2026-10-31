@@ -712,6 +712,18 @@ code .token {
   transition-property: height;
 }
 
+/* Dragged sidebar width, never more than 40% of the window so the main view stays usable. */
+@utility sidebar-expanded-width {
+  width: min(var(--sidebar-width), 40vw);
+  min-width: min(var(--sidebar-width), 40vw);
+}
+
+/* Sidebar text reads one step larger than the default small sizes. */
+@utility sidebar-text-scale {
+  --text-xs: 0.8125rem;
+  --text-sm: 0.9375rem;
+}
+
 /* Keep content fixed while the desktop Overview drawer opens or closes. */
 @utility conversation-overview-drawer {
   width: var(--conversation-overview-drawer-width);
@@ -891,4 +903,95 @@ code .token {
 
 @utility backend-chooser-edit-dialog {
   max-height: 92dvh;
+}
+
+/* Workspace picker geometry preserves its original mixed rem/px tracks. */
+@utility workspace-folder-columns {
+  grid-template-columns: minmax(0, 1fr) 4rem;
+}
+
+@utility workspace-folder-columns-desktop {
+  grid-template-columns: 1fr 120px;
+}
+
+@utility workspace-section-label {
+  font-size: 11px;
+}
+
+@utility workspace-manager-dialog {
+  max-height: 70vh;
+}
+
+@utility home-dropdown-sticky-list {
+  max-height: calc(15rem - 3rem);
+}
+
+@utility context-menu-icon-stroke {
+  stroke-width: 1.75;
+}
+
+/* Menu geometry keeps its existing pixel, rem and viewport units. */
+@utility tools-menu-offset {
+  left: -16px;
+}
+
+@utility tools-submenu-offset {
+  top: -4px;
+}
+
+@utility tools-git-submenu-offset {
+  top: -6px;
+}
+
+@utility profile-menu-height {
+  max-height: 60vh;
+}
+
+@utility new-conversation-menu-height {
+  max-height: 40vh;
+}
+
+@utility menu-caption-text {
+  font-size: 11px;
+}
+
+@utility menu-detail-text {
+  font-size: 10px;
+}
+
+@utility conversation-meta-text {
+  font-size: 10px;
+}
+
+@utility conversation-card-menu-width {
+  max-width: min(280px, 100vw - 16px);
+}
+
+@utility conversation-tag-popover-width {
+  min-width: 10rem;
+  max-width: 16rem;
+}
+
+@utility conversation-tag-popover-columns {
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+}
+
+@utility skill-pill-popover-width {
+  max-width: 20rem;
+}
+
+@utility conversation-git-actions-width {
+  min-width: 8rem;
+}
+
+@utility automation-actions-menu-width {
+  min-width: 10rem;
+}
+
+@utility dropdown-menu-width {
+  max-width: min(26rem, calc(100vw - 2rem));
+}
+
+@utility dropdown-menu-viewport-height {
+  max-height: min(60vh, calc(100dvh - 5rem));
 }
