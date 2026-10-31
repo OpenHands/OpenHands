@@ -1,19 +1,8 @@
 import React from "react";
 import { create } from "zustand";
 
-/**
- * Reveal pace, in characters per millisecond (60 chars/s). Fast models deliver
- * several hundred characters a second; revealing at that pace reads as text
- * being dumped rather than written.
- */
-const PACE = 0.06;
-
-/**
- * How far the reveal may trail the model before it speeds up beyond `PACE`:
- * past this backlog, it drains at least `backlog / MAX_LAG_MS`, so a long
- * reply from a fast model never ends up more than ~10 seconds behind.
- */
-const MAX_LAG_MS = 10000;
+/** Smooth bursts without holding received text for more than 100ms. */
+const MAX_REVEAL_MS = 100;
 
 /**
  * Hooks still revealing text, so the chat can keep following a reply that is
@@ -41,20 +30,11 @@ const setRevealing = (id: symbol, isRevealing: boolean) =>
 export const useIsRevealingStreamedText = () =>
   useRevealingStore((state) => state.ids.size > 0);
 
-/**
- * Reveal `target` on a clock rather than at the granularity the network
- * happened to deliver it (#15493).
- *
- * Text is revealed at a steady `PACE`, so chunks that land in bursts read as
- * writing instead of a jump followed by a pause; only a backlog worth more
- * than `MAX_LAG_MS` speeds it up. Text that is not an extension of what is
- * already on screen (a superseding retry, or a different slot) snaps
- * immediately rather than being re-typed.
- */
-export function useStreamedText(target: string): string {
+/** Smooth live deltas briefly; completed replies are immediately readable. */
+export function useStreamedText(target: string, streaming = true): string {
   const [revealed, setRevealed] = React.useState(target);
   const revealedRef = React.useRef(target);
-  // Fractional reveal position: the pace is under one character per frame.
+  // Keep fractional positions when a short chunk advances less than one character.
   const positionRef = React.useRef(target.length);
   const frameRef = React.useRef<number | null>(null);
   const [revealId] = React.useState(() => Symbol("streamed-text"));
@@ -67,6 +47,7 @@ export function useStreamedText(target: string): string {
     };
 
     if (
+      !streaming ||
       !target.startsWith(revealedRef.current) ||
       typeof requestAnimationFrame !== "function"
     ) {
@@ -77,14 +58,14 @@ export function useStreamedText(target: string): string {
       return undefined;
     }
 
+    const speed = (target.length - positionRef.current) / MAX_REVEAL_MS;
     let lastTick = 0;
     const tick = (now: number) => {
       frameRef.current = null;
       const elapsed = lastTick ? now - lastTick : 16;
       lastTick = now;
 
-      const backlog = target.length - positionRef.current;
-      const step = Math.max(PACE, backlog / MAX_LAG_MS) * elapsed;
+      const step = speed * elapsed;
       const position = Math.min(target.length, positionRef.current + step);
       const nextLength = Math.floor(position);
       if (nextLength !== revealedRef.current.length) {
@@ -108,7 +89,7 @@ export function useStreamedText(target: string): string {
         frameRef.current = null;
       }
     };
-  }, [target, revealId]);
+  }, [target, revealId, streaming]);
 
-  return revealed;
+  return streaming ? revealed : target;
 }

@@ -4,6 +4,7 @@ import {
   type ChatInputModelState,
 } from "#/hooks/use-chat-input-model-state";
 import { useSwitchAcpModel } from "#/hooks/mutation/use-switch-acp-model";
+import { useModelStore } from "#/stores/model-store";
 import { ComboboxCaretInline } from "#/ui/combobox-caret";
 import SettingsGearIcon from "#/icons/settings-gear.svg?react";
 import CheckIcon from "#/icons/checkmark.svg?react";
@@ -58,6 +59,13 @@ export function ChatInputModelMenuContent({
 
   const handleSelectAcpModel = (modelId: string | null) => {
     if (modelId !== model.selectedModelId) {
+      // A home-page ACP model pick (no conversation) is an explicit model
+      // choice made before the first message: mark it so the next home launch
+      // suppresses "Run on first message" routing for that one conversation.
+      // `useCreateConversation` reads-and-clears it.
+      if (!model.switchConversationId) {
+        useModelStore.getState().setHomeManualModelPick(true);
+      }
       switchAcpModel.mutate({
         conversationId: model.switchConversationId,
         model: modelId,

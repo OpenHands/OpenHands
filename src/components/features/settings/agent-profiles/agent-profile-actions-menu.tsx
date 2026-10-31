@@ -26,6 +26,8 @@ interface AgentProfileActionsMenuProps {
   onEdit: () => void;
   onSetActive: () => void;
   onDelete: () => void;
+  /** Disables Delete and explains why. */
+  deleteDisabledReason?: string;
   isActive: boolean;
   isActivating: boolean;
   onClose: () => void;
@@ -41,6 +43,7 @@ export function AgentProfileActionsMenu({
   onEdit,
   onSetActive,
   onDelete,
+  deleteDisabledReason,
   isActive,
   isActivating,
   onClose,
@@ -178,6 +181,8 @@ export function AgentProfileActionsMenu({
         onClick={() => handleAction(onDelete)}
         onKeyDown={handleKeyDown}
         menuItemsRef={menuItemsRef}
+        disabled={Boolean(deleteDisabledReason)}
+        title={deleteDisabledReason}
         testId="agent-profile-delete"
       />
     </div>

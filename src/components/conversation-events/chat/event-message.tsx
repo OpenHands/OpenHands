@@ -46,11 +46,9 @@ import { useStreamedText } from "#/hooks/use-streamed-text";
 
 interface EventMessageProps {
   event: OpenHandsEvent & { isFromPlanningAgent?: boolean };
-  /** @deprecated Prefer the stable correspondingAction prop. */
-  messages?: OpenHandsEvent[];
   /**
    * The action paired with an observation. null means the caller performed
-   * the lookup and found no action; undefined keeps legacy messages lookup.
+   * the lookup and found no action.
    */
   correspondingAction?: ActionEvent | null;
   isLastMessage: boolean;
@@ -179,7 +177,6 @@ function PlanningObservationPreview({
 
 function EventMessageComponent({
   event,
-  messages,
   correspondingAction: suppliedCorrespondingAction,
   isLastMessage,
   isInLast10Actions,
@@ -200,18 +197,14 @@ function EventMessageComponent({
   // Read isFromPlanningAgent directly from the event object
   const isFromPlanningAgent = event.isFromPlanningAgent || false;
 
-  // Streaming slots render on a clock rather than at the granularity the
-  // network delivered (#15493). Unconditional: hooks cannot be nested in the
-  // per-kind branches below. A finished agent message is fed through it too:
-  // it replaces its slot in place, so the reveal carries on from where the
-  // slot left off instead of the unrevealed rest appearing at once. Any other
-  // message mounts complete and is shown as is.
+  // Smooth live deltas, then show the complete durable reply immediately.
   const finishedReply =
     isMessageEvent(event) && event.source === "agent"
       ? parseMessageFromEvent(event)
       : "";
   const streamedContent = useStreamedText(
     isStreamingDeltaEvent(event) ? (event.content ?? "") : finishedReply,
+    isStreamingDeltaEvent(event),
   );
 
   // Common props for components that need them
@@ -280,11 +273,6 @@ function EventMessageComponent({
     return renderStreamingReply(event.reasoning_content ?? "");
   }
 
-  // The finished reply is still being revealed: keep the streaming bubble.
-  if (isMessageEvent(event) && streamedContent.length < finishedReply.length) {
-    return renderStreamingReply(getReasoningContent(event.llm_message));
-  }
-
   // Finish actions
   if (isActionEvent(event) && event.action.kind === "FinishAction") {
     return (
@@ -348,13 +336,8 @@ function EventMessageComponent({
       return null;
     }
 
-    // Find the action that this observation is responding to
-    const correspondingAction =
-      suppliedCorrespondingAction === undefined
-        ? messages?.find(
-            (msg) => isActionEvent(msg) && msg.id === event.action_id,
-          )
-        : (suppliedCorrespondingAction ?? undefined);
+    // The action that this observation is responding to
+    const correspondingAction = suppliedCorrespondingAction ?? undefined;
 
     // Skip ThoughtEventMessage for ThinkAction (thought IS the action)
     const shouldShowThought =

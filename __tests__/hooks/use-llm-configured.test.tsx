@@ -70,29 +70,9 @@ describe("useLlmConfigured (local, agent-profile-driven)", () => {
     },
   });
 
-  it("is configured when the LLM profile the AGENT profile references has a key", () => {
-    useLlmProfilesMock.mockReturnValue(
-      llmProfiles("default", [
-        { name: "default", api_key_set: false },
-        { name: "sonnet", api_key_set: true },
-      ]),
-    );
-    useActiveAgentProfileMock.mockReturnValue({
-      activeProfile: {
-        agent_kind: "openhands",
-        llm_profile_ref: "sonnet",
-        name: "MyOH",
-      },
-    });
-
-    const { result } = renderHook(() => useLlmConfigured(), { wrapper });
-    expect(result.current.isConfigured).toBe(true);
-  });
-
-  it("is NOT configured when the referenced profile has no key, even if the active LLM profile has one", () => {
-    // Discriminating case: the standalone active LLM profile ("default") HAS a
-    // key, but the active agent profile references "sonnet", which does not.
-    // Conversations launch from the agent profile, so the ref is what matters.
+  it("is NOT configured when the agent profile's own LLM, which a home launch runs, has no key", () => {
+    // Discriminating case: the active LLM profile ("default") has a key, but
+    // the launch runs the agent profile's own ref ("sonnet"), which has none.
     useLlmProfilesMock.mockReturnValue(
       llmProfiles("default", [
         { name: "default", api_key_set: true },
@@ -110,14 +90,45 @@ describe("useLlmConfigured (local, agent-profile-driven)", () => {
     const { result } = renderHook(() => useLlmConfigured(), { wrapper });
     expect(result.current.isConfigured).toBe(false);
   });
+  it("is configured when the agent profile's own LLM has a key, even if the active LLM profile has none", () => {
+    useLlmProfilesMock.mockReturnValue(
+      llmProfiles("default", [
+        { name: "default", api_key_set: false },
+        { name: "sonnet", api_key_set: true },
+      ]),
+    );
+    useActiveAgentProfileMock.mockReturnValue({
+      activeProfile: {
+        agent_kind: "openhands",
+        llm_profile_ref: "sonnet",
+        name: "MyOH",
+      },
+    });
 
-  it("falls back to the active LLM profile when the ref is stale (matches the launch fallback)", () => {
-    // The agent profile references "ghost", which no longer exists in the list
-    // (deleted profile / seed ref pointing at a named profile that was never
-    // created). The launch path drops a stale-ref profile launch to an
-    // agent_settings launch on the active LLM ("default", which HAS a key), so
-    // this hook must report configured too — otherwise the composer is
-    // spuriously disabled even though launch succeeds (VascoSch92 review #1571).
+    const { result } = renderHook(() => useLlmConfigured(), { wrapper });
+    expect(result.current.isConfigured).toBe(true);
+  });
+  it("checks the active LLM profile for `default`, which a local launch runs", () => {
+    useLlmProfilesMock.mockReturnValue(
+      llmProfiles("active", [
+        { name: "active", api_key_set: false },
+        { name: "sonnet", api_key_set: true },
+      ]),
+    );
+    useActiveAgentProfileMock.mockReturnValue({
+      activeProfile: {
+        agent_kind: "openhands",
+        llm_profile_ref: "sonnet",
+        name: "default",
+      },
+    });
+
+    const { result } = renderHook(() => useLlmConfigured(), { wrapper });
+    expect(result.current.isConfigured).toBe(false);
+  });
+  it("checks the active LLM profile when the agent profile's ref is stale", () => {
+    // The agent profile references "ghost", which no longer exists; the launch
+    // runs the active LLM profile ("default", which HAS a key) instead.
     useLlmProfilesMock.mockReturnValue(
       llmProfiles("default", [{ name: "default", api_key_set: true }]),
     );
@@ -132,48 +143,30 @@ describe("useLlmConfigured (local, agent-profile-driven)", () => {
     const { result } = renderHook(() => useLlmConfigured(), { wrapper });
     expect(result.current.isConfigured).toBe(true);
   });
+  it.each([
+    [true, true],
+    [false, false],
+  ])(
+    "falls back to the agent profile's ref when no LLM profile is active (key set: %s)",
+    (keySet, expected) => {
+      useLlmProfilesMock.mockReturnValue({
+        data: {
+          active_profile: null,
+          profiles: [{ name: "B", model: "m", api_key_set: keySet }],
+        },
+      });
+      useActiveAgentProfileMock.mockReturnValue({
+        activeProfile: {
+          agent_kind: "openhands",
+          llm_profile_ref: "B",
+          name: "default",
+        },
+      });
 
-  it("is configured for the local seeded `default` agent profile when its ref is unauthenticated (matches the agent_settings launch)", () => {
-    // #16193: "B" EXISTS (so the stale-ref fallback above doesn't fire) but has
-    // no key. `default` launches via `agent_settings` on the active LLM "A".
-    useLlmProfilesMock.mockReturnValue(
-      llmProfiles("A", [
-        { name: "A", api_key_set: true },
-        { name: "B", api_key_set: false },
-      ]),
-    );
-    useActiveAgentProfileMock.mockReturnValue({
-      activeProfile: {
-        agent_kind: "openhands",
-        llm_profile_ref: "B",
-        name: "default",
-      },
-    });
-
-    const { result } = renderHook(() => useLlmConfigured(), { wrapper });
-    expect(result.current.isConfigured).toBe(true);
-  });
-
-  it("is NOT configured for the local seeded `default` profile when the active LLM profile has no key either", () => {
-    // The fallback must still validate: nothing here is usable.
-    useLlmProfilesMock.mockReturnValue(
-      llmProfiles("A", [
-        { name: "A", api_key_set: false },
-        { name: "B", api_key_set: false },
-      ]),
-    );
-    useActiveAgentProfileMock.mockReturnValue({
-      activeProfile: {
-        agent_kind: "openhands",
-        llm_profile_ref: "B",
-        name: "default",
-      },
-    });
-
-    const { result } = renderHook(() => useLlmConfigured(), { wrapper });
-    expect(result.current.isConfigured).toBe(false);
-  });
-
+      const { result } = renderHook(() => useLlmConfigured(), { wrapper });
+      expect(result.current.isConfigured).toBe(expected);
+    },
+  );
   it("is configured for an ACP agent profile regardless of LLM keys", () => {
     useLlmProfilesMock.mockReturnValue(
       llmProfiles("default", [{ name: "default", api_key_set: false }]),

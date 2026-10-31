@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MockInstance } from "vitest";
-import { getAcpProvider as getClientAcpProvider } from "@openhands/typescript-client";
+import { HttpError } from "@openhands/typescript-client";
 import { CANVAS_UI_CLIENT_TOOL_NAME } from "#/constants/canvas-ui";
 import { LAUNCH_CHILD_CONVERSATION_TOOL_NAME } from "#/constants/child-conversation";
 import { REQUEST_SECRET_TOOL_NAME } from "#/constants/secret-request";
@@ -8,13 +8,12 @@ import { AUTOMATION_FORM_UPDATE_TOOL_NAME } from "#/constants/automation-form";
 
 import {
   ACP_SERVER_TAG_KEY,
-  AGENT_CANVAS_SOURCE,
-  CLIENT_SOURCE_TAG_KEY,
+  WORKSPACE_TAG_KEY,
+  buildWorkspaceTags,
   buildRuntimeServicesSystemSuffix,
   buildStartConversationRequest,
   buildStartConversationRequestWithEncryptedSettings,
   fetchBackendExecutionRuntime,
-  backendSupportsLaunchLlmOverride,
   getDefaultConversationTitle,
   parseRuntimeServicesInfo,
   toAppConversation,
@@ -23,19 +22,17 @@ import {
 } from "#/api/agent-server-adapter";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { SecretsService } from "#/api/secrets-service";
+import AgentProfilesService from "#/api/agent-profiles-service/agent-profiles-service.api";
 import {
   removeStoredConversationMetadata,
   setStoredConversationMetadata,
 } from "#/api/conversation-metadata-store";
 import { HookType } from "@openhands/typescript-client";
+import { SKILLS_CATALOG } from "@openhands/extensions/skills";
 import type { HookConfig } from "@openhands/typescript-client";
-import { ACP_VERTEX_SAFE_MODEL } from "#/constants/acp-providers";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import type { SettingsValue } from "#/types/settings";
-import {
-  LLM_AUTH_TYPE_SUBSCRIPTION,
-  OPENAI_SUBSCRIPTION_VENDOR,
-} from "#/constants/llm-subscription";
+import { useModelStore } from "#/stores/model-store";
 
 const {
   mockGetAgentServerWorkingDir,
@@ -44,7 +41,6 @@ const {
   mockGetServerInfo,
   mockGetActiveBackend,
   mockLoadHooks,
-  mockListMetaProfiles,
 } = vi.hoisted(() => ({
   mockGetAgentServerWorkingDir: vi.fn(() => "/workspace/project/agent-canvas"),
   mockGetEffectiveLocalBackend: vi.fn(() => ({
@@ -66,7 +62,6 @@ const {
     },
   })),
   mockLoadHooks: vi.fn(),
-  mockListMetaProfiles: vi.fn(),
 }));
 
 vi.mock("@openhands/typescript-client/clients", () => ({
@@ -77,9 +72,6 @@ vi.mock("@openhands/typescript-client/clients", () => ({
   }),
   HooksClient: vi.fn(function HooksClientMock() {
     return { loadHooks: mockLoadHooks };
-  }),
-  MetaProfilesClient: vi.fn(function MetaProfilesClientMock() {
-    return { listMetaProfiles: mockListMetaProfiles };
   }),
 }));
 
@@ -140,7 +132,13 @@ beforeEach(() => {
     apiKey: "session-key",
     kind: "local",
   });
+  useModelStore.getState().setHomeManualModelPick(false);
 });
+
+const PROFILE = {
+  agentProfileId: "profile-1",
+  agentProfileKind: "openhands" as const,
+};
 
 describe("buildStartConversationRequest", () => {
   it.each([{ city: "Tokyo" }, { metric: false }, { days: 0 }])(
@@ -148,6 +146,7 @@ describe("buildStartConversationRequest", () => {
     (parameters) => {
       expect(() =>
         buildStartConversationRequest({
+          ...PROFILE,
           settings: DEFAULT_SETTINGS,
           plugins: [{ source: "local-plugin", parameters }],
         }),
@@ -167,7 +166,11 @@ describe("buildStartConversationRequest", () => {
         JSON.stringify([{ source: "local-plugin", parameters }]),
       );
       expect(() =>
-        buildStartConversationRequest({ settings: DEFAULT_SETTINGS, plugins }),
+        buildStartConversationRequest({
+          ...PROFILE,
+          settings: DEFAULT_SETTINGS,
+          plugins,
+        }),
       ).toThrow();
     },
   );
@@ -176,6 +179,7 @@ describe("buildStartConversationRequest", () => {
     "keeps coordinate-only plugins when parameters are %o",
     (parameters) => {
       const payload = buildStartConversationRequest({
+        ...PROFILE,
         settings: DEFAULT_SETTINGS,
         plugins: [
           {
@@ -194,6 +198,7 @@ describe("buildStartConversationRequest", () => {
 
   it("includes the resolved title LLM profile when configured", () => {
     const payload = buildStartConversationRequest({
+      ...PROFILE,
       settings: DEFAULT_SETTINGS,
       titleLlmProfile: "Titles",
     });
@@ -201,217 +206,66 @@ describe("buildStartConversationRequest", () => {
     expect(payload.title_llm_profile).toBe("Titles");
   });
 
+  it("sends no runtime options while Settings → Runtime is at its defaults", () => {
+    const payload = buildStartConversationRequest({
+      ...PROFILE,
+      settings: {
+        ...DEFAULT_SETTINGS,
+        conversation_settings: {
+          ...DEFAULT_SETTINGS.conversation_settings,
+          worktree_base: "default_branch",
+          worktree_base_ref: null,
+          worktree_branch_prefix: "openhands/",
+          container_memory: null,
+          container_cpus: null,
+          container_browser: true,
+        },
+      },
+    });
+
+    expect(payload).not.toHaveProperty("worktree_options");
+    expect(payload).not.toHaveProperty("container");
+  });
+
+  it("sends the Settings → Runtime options a user changed", () => {
+    const payload = buildStartConversationRequest({
+      ...PROFILE,
+      settings: {
+        ...DEFAULT_SETTINGS,
+        conversation_settings: {
+          ...DEFAULT_SETTINGS.conversation_settings,
+          worktree_base: "ref",
+          worktree_base_ref: "origin/release",
+          worktree_branch_prefix: "me/",
+          container_memory: "4g",
+          container_cpus: 2,
+          container_browser: false,
+        },
+      },
+    });
+
+    expect(payload).toMatchObject({
+      worktree_options: {
+        base: "ref",
+        ref: "origin/release",
+        branch_prefix: "me/",
+      },
+      container: { memory: "4g", cpus: 2, browser: false },
+    });
+  });
+
   it("omits the title LLM profile in automatic mode without a default", () => {
     const payload = buildStartConversationRequest({
+      ...PROFILE,
       settings: DEFAULT_SETTINGS,
     });
 
     expect(payload).not.toHaveProperty("title_llm_profile");
   });
 
-  it("uses nested settings as the source of truth and lets the SDK create the agent", () => {
-    const payload = buildStartConversationRequest({
-      settings: {
-        ...DEFAULT_SETTINGS,
-        llm_model: "stale-top-level-model",
-        agent_settings: {
-          ...DEFAULT_SETTINGS.agent_settings,
-          agent: "CodeActAgent",
-          llm: {
-            model: "nested-model",
-            api_key: "  nested-key  ",
-            base_url: " https://nested.example.com ",
-          },
-          condenser: {
-            enabled: true,
-            max_size: 120,
-          },
-        },
-        conversation_settings: {
-          ...DEFAULT_SETTINGS.conversation_settings,
-          max_iterations: 123,
-        },
-      },
-      query: "hello",
-    }) as {
-      agent?: unknown;
-      agent_settings: Record<string, unknown> & {
-        llm: Record<string, unknown>;
-        tools: Array<{ name: string; params: Record<string, unknown> }>;
-        agent_context: Record<string, unknown>;
-      };
-      workspace: { working_dir: string };
-      initial_message: { content: Array<{ text: string }> };
-      max_iterations: number;
-    };
-
-    expect(payload.agent).toBeUndefined();
-    expect(payload.agent_settings.llm).toMatchObject({
-      model: "nested-model",
-      api_key: "nested-key",
-      base_url: "https://nested.example.com",
-      // Streaming is enabled so the OpenHands agent emits StreamingDeltaEvents.
-      stream: true,
-    });
-    expect(payload.agent_settings.condenser).toEqual({
-      enabled: true,
-      max_size: 120,
-    });
-    expect(
-      JSON.parse(JSON.stringify(payload.agent_settings)),
-    ).not.toHaveProperty("tools");
-    expect(payload.agent_settings.agent_context).toMatchObject({
-      load_public_skills: false,
-      load_user_skills: true,
-      load_project_skills: true,
-    });
-    // Persistent memory is opt-in: the key must be absent (not false) so the
-    // wire payload for un-opted users stays byte-identical to before.
-    expect(payload.agent_settings.agent_context).not.toHaveProperty(
-      "load_memory",
-    );
-    // Bundled public skills are injected into agent_context.skills so the
-    // SDK can perform trigger matching without cloning the extensions repo.
-    expect(Array.isArray(payload.agent_settings.agent_context.skills)).toBe(
-      true,
-    );
-    const skills = payload.agent_settings.agent_context.skills as Record<
-      string,
-      unknown
-    >[];
-    expect(skills.length).toBeGreaterThan(0);
-    // Every bundled skill must carry the fields the SDK needs for trigger
-    // matching and system-prompt injection.
-    for (const skill of skills) {
-      expect(skill).toHaveProperty("name");
-      expect(skill).toHaveProperty("content");
-      // source must be an absolute path to the skill's SKILL.md so the
-      // Python agent-server can resolve bundled resources (scripts/, references/).
-      const source = skill.source as string;
-      expect(source).toMatch(/^\//);
-      expect(source).toMatch(
-        new RegExp(`/${skill.name as string}/SKILL\\.md$`),
-      );
-      expect(skill).toHaveProperty("is_agentskills_format", true);
-      // trigger is either null (always-active) or { type, keywords }
-      if (skill.trigger !== null) {
-        expect(skill.trigger).toMatchObject({
-          type: "keyword",
-          keywords: expect.arrayContaining([expect.any(String)]),
-        });
-      }
-    }
-    expect(payload.agent_settings.agent).toBe("CodeActAgent");
-    expect(payload.workspace.working_dir).toBe(
-      "/workspace/project/agent-canvas",
-    );
-    expect(payload.max_iterations).toBe(123);
-    expect(payload.initial_message.content[0]?.text).toBe("hello");
-  });
-
-  it("preserves base_url for subscription auth while stripping api_key", () => {
-    const payload = buildStartConversationRequest({
-      settings: {
-        ...DEFAULT_SETTINGS,
-        agent_settings: {
-          ...DEFAULT_SETTINGS.agent_settings,
-          llm: {
-            model: "gpt-5.2-codex",
-            api_key: "stale-api-key",
-            base_url: "https://chatgpt.com/backend-api/codex",
-            auth_type: LLM_AUTH_TYPE_SUBSCRIPTION,
-            subscription_vendor: OPENAI_SUBSCRIPTION_VENDOR,
-          },
-        },
-      },
-    }) as { agent_settings: { llm: Record<string, unknown> } };
-
-    expect(payload.agent_settings.llm).toEqual({
-      model: "gpt-5.2-codex",
-      stream: true,
-      base_url: "https://chatgpt.com/backend-api/codex",
-      auth_type: LLM_AUTH_TYPE_SUBSCRIPTION,
-      subscription_vendor: OPENAI_SUBSCRIPTION_VENDOR,
-    });
-  });
-
-  it("passes the stored model through unchanged for subscription auth", () => {
-    const payload = buildStartConversationRequest({
-      settings: {
-        ...DEFAULT_SETTINGS,
-        agent_settings: {
-          ...DEFAULT_SETTINGS.agent_settings,
-          llm: {
-            model: "openai/gpt-4o",
-            auth_type: LLM_AUTH_TYPE_SUBSCRIPTION,
-            subscription_vendor: OPENAI_SUBSCRIPTION_VENDOR,
-          },
-        },
-      },
-    }) as { agent_settings: { llm: Record<string, unknown> } };
-
-    expect(payload.agent_settings.llm.model).toBe("openai/gpt-4o");
-  });
-
-  it("sends configured tools as given", () => {
-    const payload = buildStartConversationRequest({
-      settings: {
-        ...DEFAULT_SETTINGS,
-        agent_settings: {
-          ...DEFAULT_SETTINGS.agent_settings,
-          tools: [
-            { name: "glob", params: {} },
-            { name: "task_tool_set", params: { x: 1 } },
-          ],
-          llm: { model: "nested-model" },
-        },
-      },
-    }) as {
-      agent_settings: {
-        tools: Array<{ name: string; params: Record<string, unknown> }>;
-      };
-    };
-
-    expect(payload.agent_settings.tools).toEqual([
-      { name: "glob", params: {} },
-      { name: "task_tool_set", params: { x: 1 } },
-    ]);
-  });
-
-  it("leaves a null tool list to the server", () => {
-    const payload = buildStartConversationRequest({
-      settings: {
-        ...DEFAULT_SETTINGS,
-        agent_settings: {
-          ...DEFAULT_SETTINGS.agent_settings,
-          tools: null,
-          llm: { model: "nested-model" },
-        },
-      },
-    }) as { agent_settings: Record<string, unknown> };
-
-    expect(
-      JSON.parse(JSON.stringify(payload.agent_settings)),
-    ).not.toHaveProperty("tools");
-  });
-
-  it("keeps an explicitly empty tool list bare", () => {
-    const payload = buildStartConversationRequest({
-      settings: {
-        ...DEFAULT_SETTINGS,
-        agent_settings: {
-          ...DEFAULT_SETTINGS.agent_settings,
-          tools: [],
-          llm: { model: "nested-model" },
-        },
-      },
-    }) as { agent_settings: { tools: unknown[] } };
-
-    expect(payload.agent_settings.tools).toEqual([]);
-  });
-
   it("derives confirmation and security settings the same way as OpenHands", () => {
     const payload = buildStartConversationRequest({
+      ...PROFILE,
       settings: {
         ...DEFAULT_SETTINGS,
         agent_settings: {
@@ -443,6 +297,7 @@ describe("buildStartConversationRequest", () => {
     const conversationId = "11111111-1111-4111-8111-111111111111";
     const workingDir = `/base/${conversationId}`;
     const payload = buildStartConversationRequest({
+      ...PROFILE,
       settings: {
         ...DEFAULT_SETTINGS,
         agent_settings: {
@@ -463,6 +318,7 @@ describe("buildStartConversationRequest", () => {
 
   it("requests a git worktree for new conversations by default", () => {
     const payload = buildStartConversationRequest({
+      ...PROFILE,
       settings: {
         ...DEFAULT_SETTINGS,
         agent_settings: {
@@ -477,6 +333,7 @@ describe("buildStartConversationRequest", () => {
 
   it("can start a conversation without requesting a git worktree", () => {
     const payload = buildStartConversationRequest({
+      ...PROFILE,
       settings: {
         ...DEFAULT_SETTINGS,
         agent_settings: {
@@ -496,6 +353,7 @@ describe("buildStartConversationRequest", () => {
 
   it("forwards supported conversation runtime fields from nested settings", () => {
     const payload = buildStartConversationRequest({
+      ...PROFILE,
       settings: {
         ...DEFAULT_SETTINGS,
         agent_settings: {
@@ -536,6 +394,7 @@ describe("buildStartConversationRequest", () => {
 
   it("uses workspaceHookConfig when conversation_settings.hook_config is omitted", () => {
     const payload = buildStartConversationRequest({
+      ...PROFILE,
       settings: DEFAULT_SETTINGS,
       workspaceHookConfig: WORKSPACE_HOOK_CONFIG,
     }) as Record<string, unknown>;
@@ -545,6 +404,7 @@ describe("buildStartConversationRequest", () => {
 
   it("prioritizes conversation_settings.hook_config over workspaceHookConfig", () => {
     const payload = buildStartConversationRequest({
+      ...PROFILE,
       settings: {
         ...DEFAULT_SETTINGS,
         conversation_settings: {
@@ -560,6 +420,7 @@ describe("buildStartConversationRequest", () => {
 
   it("serializes custom secrets as host-relative LookupSecret entries", () => {
     const payload = buildStartConversationRequest({
+      ...PROFILE,
       settings: {
         ...DEFAULT_SETTINGS,
         agent_settings: {
@@ -599,249 +460,38 @@ describe("buildStartConversationRequest", () => {
     });
   });
 
-  it("passes a stored agent_context.load_memory through on an inline launch", () => {
-    // The persistent-memory toggle persists into
-    // ``agent_settings.agent_context.load_memory``; buildAgentContext spreads
-    // the stored context, so the flag needs no dedicated adapter wiring.
-    //
-    // This is the inline path only. A profile launch sends ``agent_profile_id``
-    // and no ``agent_settings`` at all (pinned in
-    // src/api/agent-server-adapter.test.ts), so there the agent-server reads the
-    // same stored preference itself — covered by the SDK's
-    // tests/agent_server/test_agent_profile_conv_start.py.
-    const payload = buildStartConversationRequest({
-      settings: {
-        ...DEFAULT_SETTINGS,
-        agent_settings: {
-          ...DEFAULT_SETTINGS.agent_settings,
-          agent_context: { load_memory: true },
-        },
-      },
-    }) as {
-      agent_settings: { agent_context: Record<string, unknown> };
-    };
-
-    expect(payload.agent_settings.agent_context.load_memory).toBe(true);
-  });
-
-  it("passes a stored agent_context.load_memory through on an inline ACP launch", () => {
-    // Inline ACP settings are the fallback used when no agent profile is
-    // available; a normal ACP conversation launches from a profile (see
-    // use-create-conversation.test.tsx) and never reaches this branch.
-    const payload = buildStartConversationRequest({
-      settings: {
-        ...DEFAULT_SETTINGS,
-        agent_settings: {
-          ...DEFAULT_SETTINGS.agent_settings,
-          agent_kind: "acp",
-          acp_server: "claude-code",
-          acp_command: ["npx", "-y", "@agentclientprotocol/claude-agent-acp"],
-          agent_context: { load_memory: true },
-        },
-      },
-    }) as {
-      agent_settings: { agent_context: Record<string, unknown> };
-    };
-
-    expect(payload.agent_settings.agent_context.load_memory).toBe(true);
-  });
-
-  it("does NOT mirror conversation secrets onto agent_context for ACP — request.secrets is the sole channel", () => {
-    // The compatible agent-server line injects the ACP spawn env from
-    // ``secret_registry``, which is seeded from ``request.secrets``
-    // (sdk#3299/#3464; the agent_context drain is gone entirely in sdk#3528).
-    // Mirroring the map onto ``agent_context.secrets`` would keep a second,
-    // dead credential channel alive (agent-canvas#1039 wants exactly one).
-    const payload = buildStartConversationRequest({
-      settings: {
-        ...DEFAULT_SETTINGS,
-        agent_settings: {
-          ...DEFAULT_SETTINGS.agent_settings,
-          agent_kind: "acp",
-          acp_server: "claude-code",
-          acp_command: ["npx", "-y", "@agentclientprotocol/claude-agent-acp"],
-        },
-      },
-      customSecrets: [{ name: "ANTHROPIC_API_KEY" }],
-    }) as {
-      agent_settings: { agent_context?: { secrets?: Record<string, unknown> } };
-      secrets: Record<string, unknown>;
-    };
-
-    expect(payload.secrets.ANTHROPIC_API_KEY).toBeDefined();
-    expect(payload.agent_settings.agent_context?.secrets).toBeUndefined();
-  });
-
-  it("does not synthesize agent_context.secrets for ACP when no custom secrets are set", () => {
-    // Empty/absent customSecrets must not introduce an empty
-    // ``agent_context.secrets`` map on the ACPAgent payload.
-    const payload = buildStartConversationRequest({
-      settings: {
-        ...DEFAULT_SETTINGS,
-        agent_settings: {
-          ...DEFAULT_SETTINGS.agent_settings,
-          agent_kind: "acp",
-          acp_server: "claude-code",
-          acp_command: ["npx", "-y", "@agentclientprotocol/claude-agent-acp"],
-        },
-      },
-    }) as {
-      agent_settings: { agent_context?: { secrets?: Record<string, unknown> } };
-    };
-
-    expect(payload.agent_settings.agent_context?.secrets).toBeUndefined();
-  });
-
-  it("does not mirror conversation secrets onto agent_context for non-ACP conversations", () => {
-    // The OpenHands ``Agent`` reads secrets from ``secret_registry``
-    // directly (no spawn-env bridging needed), so the LLM-driven path
-    // must not get an extra ``agent_context.secrets`` map — that would
-    // be both redundant and a surprise for any code that inspects
-    // ``agent_context`` for non-secret payload (skills, suffixes, etc.).
-    const payload = buildStartConversationRequest({
-      settings: DEFAULT_SETTINGS,
-      customSecrets: [{ name: "ANTHROPIC_API_KEY" }],
-    }) as {
-      agent_settings: { agent_context?: { secrets?: Record<string, unknown> } };
-    };
-
-    expect(payload.agent_settings.agent_context?.secrets).toBeUndefined();
-  });
-
-  it("appends the route-at-conversation-start suffix when the toggle is on and a meta-profile is active (OpenHands agent)", () => {
-    const payload = buildStartConversationRequest({
-      settings: {
-        ...DEFAULT_SETTINGS,
-        run_router_at_conversation_start: true,
-      },
-      hasActiveMetaProfile: true,
-    }) as {
-      agent_settings: { agent_context?: { system_message_suffix?: string } };
-    };
-
-    const suffix = payload.agent_settings.agent_context?.system_message_suffix;
-    expect(suffix).toContain("ROUTE_AT_CONVERSATION_START");
-    expect(suffix).toContain("route_task_to_model");
-  });
-
-  it("appends the route-at-conversation-start suffix for an inline ACP launch when the toggle is on and a meta-profile is active", () => {
-    const payload = buildStartConversationRequest({
-      settings: {
-        ...DEFAULT_SETTINGS,
-        agent_settings: {
-          ...DEFAULT_SETTINGS.agent_settings,
-          agent_kind: "acp",
-          acp_server: "claude-code",
-          acp_command: ["npx", "-y", "@agentclientprotocol/claude-agent-acp"],
-        },
-        run_router_at_conversation_start: true,
-      },
-      hasActiveMetaProfile: true,
-    }) as {
-      agent_settings: { agent_context?: { system_message_suffix?: string } };
-    };
-
-    expect(
-      payload.agent_settings.agent_context?.system_message_suffix,
-    ).toContain("ROUTE_AT_CONVERSATION_START");
-  });
-
-  it("does not add the router suffix when the toggle is on but no meta-profile is active", () => {
-    // With no active meta-profile the agent-server does not attach
-    // `route_task_to_model`, so the instruction must not be emitted even if
-    // the toggle was left on (e.g. the active profile was just deleted).
-    const payload = buildStartConversationRequest({
-      settings: {
-        ...DEFAULT_SETTINGS,
-        run_router_at_conversation_start: true,
-      },
-      hasActiveMetaProfile: false,
-    }) as {
-      agent_settings: { agent_context?: { system_message_suffix?: string } };
-    };
-
-    const suffix =
-      payload.agent_settings.agent_context?.system_message_suffix ?? "";
-    expect(suffix).not.toContain("ROUTE_AT_CONVERSATION_START");
-  });
-
-  it("does not add a system_message_suffix for the router when the toggle is off (default)", () => {
-    const payload = buildStartConversationRequest({
-      settings: DEFAULT_SETTINGS,
-    }) as {
-      agent_settings: { agent_context?: { system_message_suffix?: string } };
-    };
-
-    // The suffix may be undefined (no runtime-services block either); assert
-    // specifically that the router sentinel is absent when present.
-    const suffix =
-      payload.agent_settings.agent_context?.system_message_suffix ?? "";
-    expect(suffix).not.toContain("ROUTE_AT_CONVERSATION_START");
-  });
-
-  describe("ACP secret delivery", () => {
-    // Settings factory for a containerized ACP conversation.
-    const acpSettings = (overrides: Record<string, unknown> = {}) => ({
-      ...DEFAULT_SETTINGS,
-      agent_settings: {
-        ...DEFAULT_SETTINGS.agent_settings,
-        agent_kind: "acp",
-        acp_server: "codex",
-        acp_command: ["npx", "-y", "@zed-industries/codex-acp"],
-        acp_model: "gpt-5.5/medium",
-        ...overrides,
-      },
-    });
-
-    it("delivers provider credentials and user secrets uniformly as LookupSecrets in request.secrets only", () => {
-      // Provider credentials (e.g. a saved CODEX_AUTH_JSON) are no longer special
-      // on the wire — they ride as LookupSecrets like any custom secret. The SDK
-      // resolves them off the event loop at spawn, so the loopback fetch is safe
-      // (software-agent-sdk#3510). "Reserved" is now only an onboarding concept.
+  describe("secret delivery", () => {
+    it("delivers provider credentials and user secrets as LookupSecrets for an ACP profile", () => {
+      // Provider credentials (e.g. a saved CODEX_AUTH_JSON) ride as
+      // LookupSecrets like any custom secret; the server keeps only the ones
+      // the profile's `secret_refs` allows.
       const payload = buildStartConversationRequest({
-        settings: acpSettings(),
+        settings: DEFAULT_SETTINGS,
+        agentProfileId: "profile-acp",
+        agentProfileKind: "acp",
         customSecrets: [{ name: "CODEX_AUTH_JSON" }, { name: "MY_TOKEN" }],
-      }) as {
-        agent_settings: {
-          acp_model?: string;
-          agent_context?: { secrets?: Record<string, { kind: string }> };
-        };
-        secrets: Record<string, { kind: string }>;
-      };
+      }) as unknown as { secrets: Record<string, { kind: string }> };
 
       expect(payload.secrets.CODEX_AUTH_JSON?.kind).toBe("LookupSecret");
       expect(payload.secrets.MY_TOKEN?.kind).toBe("LookupSecret");
-      // ``request.secrets`` is the sole channel — no agent_context mirror
-      // (agent-server >=1.25.0 injects the spawn env from secret_registry).
-      expect(payload.agent_settings.agent_context?.secrets).toBeUndefined();
-      // The configured model rides along unchanged.
-      expect(payload.agent_settings.acp_model).toBe("gpt-5.5/medium");
     });
 
-    it("does NOT set secrets_encrypted for ACP — there is no encrypted payload to decrypt", () => {
-      // An ACP request carries no encrypted secret (no LLM api_key; credentials
-      // are LookupSecrets resolved at runtime). Flagging it encrypted hard-fails
-      // ("cipher not configured") on a fresh ACP container without OH_SECRET_KEY.
+    it("never asks the server to decrypt request secrets", () => {
       const payload = buildStartConversationRequest({
-        settings: acpSettings(),
-        secretsEncrypted: true,
-        customSecrets: [{ name: "CODEX_AUTH_JSON" }],
-      }) as { secrets_encrypted?: boolean };
-      expect(payload.secrets_encrypted).toBeUndefined();
-    });
-
-    it("still sets secrets_encrypted for a non-ACP conversation (encrypted LLM key)", () => {
-      const payload = buildStartConversationRequest({
+        ...PROFILE,
         settings: DEFAULT_SETTINGS,
-        secretsEncrypted: true,
-      }) as { secrets_encrypted?: boolean };
-      expect(payload.secrets_encrypted).toBe(true);
+        customSecrets: [{ name: "MY_TOKEN" }],
+      });
+
+      expect(payload).not.toHaveProperty("secrets_encrypted");
+      expect(payload).not.toHaveProperty("agent_settings");
     });
   });
 
   describe("client tool injection", () => {
     it("sends canvas_ui as a client-defined JSON tool", () => {
       const payload = buildStartConversationRequest({
+        ...PROFILE,
         settings: DEFAULT_SETTINGS,
       });
 
@@ -863,26 +513,7 @@ describe("buildStartConversationRequest", () => {
           openWorldHint: false,
         },
       });
-      expect(
-        payload.agent_settings?.tools?.map((tool) => tool.name) ?? [],
-      ).not.toContain("canvas_ui");
       expect(payload.tool_module_qualnames).toBeUndefined();
-    });
-
-    it("omits the client tool for an inline ACP agent", () => {
-      const payload = buildStartConversationRequest({
-        settings: {
-          ...DEFAULT_SETTINGS,
-          agent_settings: {
-            ...DEFAULT_SETTINGS.agent_settings,
-            agent_kind: "acp",
-            acp_server: "custom",
-            acp_command: ["custom-acp"],
-          },
-        },
-      });
-
-      expect(payload.client_tools).toEqual([]);
     });
 
     it("omits the client tool for an ACP profile when global settings are stale", () => {
@@ -911,6 +542,7 @@ describe("buildStartConversationRequest", () => {
 
     it("adds automation setup tags to local conversation requests", () => {
       const payload = buildStartConversationRequest({
+        ...PROFILE,
         settings: DEFAULT_SETTINGS,
         automationSetup: true,
         automationSetupTags: {
@@ -951,6 +583,7 @@ describe("buildStartConversationRequest", () => {
       "builds client tools for automationSetup=$automationSetup",
       ({ automationSetup, expectedTools }) => {
         const payload = buildStartConversationRequest({
+          ...PROFILE,
           settings: DEFAULT_SETTINGS,
           automationSetup,
         });
@@ -963,6 +596,7 @@ describe("buildStartConversationRequest", () => {
 
     it("sends the client tool when resuming a conversation", () => {
       const payload = buildStartConversationRequest({
+        ...PROFILE,
         settings: DEFAULT_SETTINGS,
         conversationId: "legacy-conversation-id",
       }) as { conversation_id: string; client_tools: Array<{ name: string }> };
@@ -977,6 +611,7 @@ describe("buildStartConversationRequest", () => {
 
     it("drops conflicting user-supplied Canvas module qualnames", () => {
       const payload = buildStartConversationRequest({
+        ...PROFILE,
         settings: {
           ...DEFAULT_SETTINGS,
           conversation_settings: {
@@ -997,6 +632,7 @@ describe("buildStartConversationRequest", () => {
 
     it("preserves non-Canvas custom tool modules", () => {
       const payload = buildStartConversationRequest({
+        ...PROFILE,
         settings: {
           ...DEFAULT_SETTINGS,
           conversation_settings: {
@@ -1011,91 +647,6 @@ describe("buildStartConversationRequest", () => {
       });
     });
   });
-
-  // @spec LLD-001 — Frontend always sends its chosen default model
-  describe("llm.model fallback — frontend always sends its chosen default", () => {
-    type ModelPayload = {
-      agent_settings: Record<string, unknown> & {
-        llm: Record<string, unknown>;
-      };
-    };
-
-    function getModelFrom(
-      options: Parameters<typeof buildStartConversationRequest>[0],
-    ): unknown {
-      return (buildStartConversationRequest(options) as unknown as ModelPayload)
-        .agent_settings.llm.model;
-    }
-
-    it("uses the configured model when one is set", () => {
-      expect(
-        getModelFrom({
-          settings: {
-            ...DEFAULT_SETTINGS,
-            agent_settings: {
-              ...DEFAULT_SETTINGS.agent_settings,
-              llm: { model: "anthropic/claude-opus-4-5" },
-            },
-          },
-        }),
-      ).toBe("anthropic/claude-opus-4-5");
-    });
-
-    // The agent-server returns '' when no model has been saved yet.
-    // Without this guard the empty string passes the old typeof check and
-    // the agent-server falls back to its own SDK default (gpt-5.5).
-    // SettingsValue includes scalars so inline literals are type-safe here.
-    it.each([
-      ["undefined", { ...DEFAULT_SETTINGS.agent_settings, llm: {} }],
-      [
-        "an empty string",
-        { ...DEFAULT_SETTINGS.agent_settings, llm: { model: "" } },
-      ],
-      [
-        "whitespace only",
-        { ...DEFAULT_SETTINGS.agent_settings, llm: { model: "   " } },
-      ],
-      // No llm key at all — SettingsValue accepts plain scalars.
-      [
-        "absent (no llm block)",
-        { schema_version: 1, agent_kind: "openhands", agent: "CodeActAgent" },
-      ],
-      // Mirrors a fresh user who skipped onboarding: server returns {}.
-      ["entirely empty", {}],
-    ])(
-      "falls back to DEFAULT_SETTINGS.llm_model when agent_settings.llm.model is %s",
-      (_, agentSettings) => {
-        expect(
-          getModelFrom({
-            settings: {
-              ...DEFAULT_SETTINGS,
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              agent_settings: agentSettings as any,
-            },
-          }),
-        ).toBe(DEFAULT_SETTINGS.llm_model);
-      },
-    );
-
-    // encryptedAgentSettings overrides settings.agent_settings at conversation
-    // start; if the encrypted payload has no model set the frontend default
-    // must still be sent explicitly.
-    it.each([
-      ["carries an empty model", { llm: { model: "" } }],
-      ["is empty", {}],
-    ])(
-      "falls back to DEFAULT_SETTINGS.llm_model when encryptedAgentSettings %s",
-      (_, encryptedAgentSettings) => {
-        expect(
-          getModelFrom({
-            settings: DEFAULT_SETTINGS,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            encryptedAgentSettings: encryptedAgentSettings as any,
-          }),
-        ).toBe(DEFAULT_SETTINGS.llm_model);
-      },
-    );
-  });
 });
 
 describe("getDefaultConversationTitle", () => {
@@ -1106,12 +657,100 @@ describe("getDefaultConversationTitle", () => {
   });
 });
 
+describe("buildWorkspaceTags (#17386)", () => {
+  it("emits the workspace tag with a normalized path", () => {
+    expect(buildWorkspaceTags("/Users/jane/projects/openhands/")).toEqual({
+      [WORKSPACE_TAG_KEY]: "/Users/jane/projects/openhands",
+    });
+  });
+
+  it("returns an empty object for null/empty/whitespace input", () => {
+    expect(buildWorkspaceTags(null)).toEqual({});
+    expect(buildWorkspaceTags(undefined)).toEqual({});
+    expect(buildWorkspaceTags("   ")).toEqual({});
+  });
+
+  it("only ever emits keys the agent-server accepts (`^[a-z0-9]+$`)", () => {
+    const tags = buildWorkspaceTags("/Users/jane/projects/openhands");
+    for (const key of Object.keys(tags)) {
+      expect(key).toMatch(/^[a-z0-9]+$/);
+    }
+  });
+});
+
 describe("toAppConversation", () => {
   const baseInfo: DirectConversationInfo = {
     id: "372eb-1234-5678-9abc",
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
   };
+
+  describe("server-side workspace tag fallback (#17386)", () => {
+    afterEach(() => {
+      removeStoredConversationMetadata(baseInfo.id);
+    });
+
+    it("uses a key the agent-server will accept (lowercase alphanumeric)", () => {
+      // The agent-server rejects tag keys that are not `^[a-z0-9]+$` (SDK
+      // conversation/types.py), which would 422 the create request.
+      expect(WORKSPACE_TAG_KEY).toMatch(/^[a-z0-9]+$/);
+    });
+
+    it("hydrates selected_workspace from the tag when localStorage has none", () => {
+      const result = toAppConversation({
+        ...baseInfo,
+        tags: { [WORKSPACE_TAG_KEY]: "/Users/jane/projects/openhands" },
+      });
+
+      expect(result.selected_workspace).toBe("/Users/jane/projects/openhands");
+    });
+
+    it("prefers stored metadata over the tag (warm cache for the creating client)", () => {
+      setStoredConversationMetadata(baseInfo.id, {
+        selected_repository: null,
+        selected_branch: null,
+        git_provider: null,
+        selected_workspace: "/Users/jane/projects/local-fork",
+      });
+
+      const result = toAppConversation({
+        ...baseInfo,
+        tags: { [WORKSPACE_TAG_KEY]: "/Users/jane/projects/openhands" },
+      });
+
+      expect(result.selected_workspace).toBe("/Users/jane/projects/local-fork");
+    });
+
+    it("stays null when neither localStorage nor the tag has a workspace", () => {
+      const result = toAppConversation({ ...baseInfo, tags: {} });
+
+      expect(result.selected_workspace).toBeNull();
+    });
+
+    it("hydrates repo, branch and provider from the tags (#15598)", () => {
+      const result = toAppConversation({
+        ...baseInfo,
+        tags: {
+          repository: "OpenHands/OpenHands",
+          selectedbranch: "main",
+          gitprovider: "github",
+        },
+      });
+
+      expect(result.selected_repository).toBe("OpenHands/OpenHands");
+      expect(result.selected_branch).toBe("main");
+      expect(result.git_provider).toBe("github");
+    });
+
+    it("drops an unrecognized gitprovider tag instead of casting it", () => {
+      const result = toAppConversation({
+        ...baseInfo,
+        tags: { gitprovider: "not-a-real-provider" },
+      });
+
+      expect(result.git_provider).toBeNull();
+    });
+  });
 
   it("uses the archived status for a missing runtime that cannot resume", () => {
     const result = toAppConversation({
@@ -1564,96 +1203,30 @@ describe("buildRuntimeServicesSystemSuffix", () => {
     expect(runtime).toBe("local");
     expect(mockGetServerInfo).toHaveBeenCalledOnce();
   });
-
-  it("reports the per-launch LLM override from server capabilities", async () => {
-    mockGetCachedAgentServerInfo.mockReturnValue({
-      version: "1.54.0",
-      capabilities: ["tool_catalog_v1"],
-    });
-    await expect(backendSupportsLaunchLlmOverride()).resolves.toBe(false);
-
-    mockGetCachedAgentServerInfo.mockReturnValue({
-      version: "1.54.0",
-      capabilities: ["tool_catalog_v1", "agent_launch_pipeline_v1"],
-    });
-    await expect(backendSupportsLaunchLlmOverride()).resolves.toBe(true);
-  });
 });
 
-describe("agent_settings runtime services suffix", () => {
-  it("does not set system_message_suffix when no runtime info is provided", () => {
-    const payload = buildStartConversationRequest({
-      settings: DEFAULT_SETTINGS,
-      query: "hello",
-    }) as {
-      agent_settings: { agent_context: Record<string, unknown> };
-    };
-    expect(payload.agent_settings.agent_context).toMatchObject({
-      load_public_skills: false,
-      load_user_skills: true,
-      load_project_skills: true,
-    });
-    expect(Array.isArray(payload.agent_settings.agent_context.skills)).toBe(
-      true,
-    );
-  });
+type LaunchAdditions = {
+  system_message_suffix_append?: string;
+  llm_profile_ref?: string;
+  skills?: Array<{ name: string; source: string; content: string }>;
+};
 
-  it("sets system_message_suffix when backend runtime info is provided", () => {
-    const payload = buildStartConversationRequest({
-      settings: DEFAULT_SETTINGS,
-      query: "hello",
-      runtimeServicesInfo: {
-        mode: "dev:automation",
-        services: {
-          agent_server: { url_from_agent: "http://localhost:18000" },
-          automation: {
-            url_from_agent: "http://localhost:18001",
-          },
-        },
-      },
-    }) as {
-      agent_settings: { agent_context: Record<string, unknown> };
-    };
-    expect(payload.agent_settings.agent_context).toMatchObject({
-      load_public_skills: false,
-      load_user_skills: true,
-    });
-    expect(
-      payload.agent_settings.agent_context.system_message_suffix as string,
-    ).toContain("<RUNTIME_SERVICES>");
-  });
+const additionsOf = (payload: unknown): LaunchAdditions | undefined =>
+  (payload as { agent_launch_additions?: LaunchAdditions })
+    .agent_launch_additions;
 
-  it("preserves a saved system_message_suffix when runtime services are advertised", () => {
-    const payload = buildStartConversationRequest({
-      settings: {
-        ...DEFAULT_SETTINGS,
-        agent_settings: {
-          ...DEFAULT_SETTINGS.agent_settings,
-          agent_context: {
-            system_message_suffix: "MARKER-GLOBAL-RULES",
-          },
-        },
-      },
-      query: "hello",
-      runtimeServicesInfo: {
-        mode: "dev:automation",
-        services: {
-          agent_server: { url_from_agent: "http://localhost:18000" },
-          automation: {
-            url_from_agent: "http://localhost:18001",
-          },
-        },
-      },
-    }) as {
-      agent_settings: { agent_context: Record<string, unknown> };
-    };
-    const suffix = payload.agent_settings.agent_context
-      .system_message_suffix as string;
-    expect(suffix).toMatch(/^MARKER-GLOBAL-RULES\n\n<RUNTIME_SERVICES>/);
-  });
+const RUNTIME_SERVICES = {
+  mode: "dev:automation",
+  services: {
+    agent_server: { url_from_agent: "http://localhost:18000" },
+    automation: { url_from_agent: "http://localhost:18001" },
+  },
+};
 
-  it("keeps a saved suffix when no runtime services are advertised", () => {
+describe("profile launch additions", () => {
+  it("carries runtime services and leaves the saved global suffix to the profile", () => {
     const payload = buildStartConversationRequest({
+      ...PROFILE,
       settings: {
         ...DEFAULT_SETTINGS,
         agent_settings: {
@@ -1662,109 +1235,15 @@ describe("agent_settings runtime services suffix", () => {
         },
       },
       query: "hello",
-    }) as { agent_settings: { agent_context: Record<string, unknown> } };
+      runtimeServicesInfo: RUNTIME_SERVICES,
+    });
 
-    expect(payload.agent_settings.agent_context.system_message_suffix).toBe(
-      "MARKER-GLOBAL-RULES",
-    );
-  });
-
-  it("omits the suffix when neither a saved suffix nor runtime services exist", () => {
-    const payload = buildStartConversationRequest({
-      settings: DEFAULT_SETTINGS,
-      query: "hello",
-    }) as { agent_settings: { agent_context: Record<string, unknown> } };
-
-    expect(payload.agent_settings.agent_context).not.toHaveProperty(
-      "system_message_suffix",
-    );
-  });
-
-  it("combines saved and runtime suffixes on the profile path", () => {
-    const payload = buildStartConversationRequest({
-      settings: {
-        ...DEFAULT_SETTINGS,
-        agent_settings: {
-          ...DEFAULT_SETTINGS.agent_settings,
-          agent_context: { system_message_suffix: "MARKER-GLOBAL-RULES" },
-        },
-      },
-      query: "hello",
-      agentProfileId: "profile-openhands",
-      agentProfileKind: "openhands",
-      runtimeServicesInfo: {
-        mode: "dev:automation",
-        services: {
-          agent_server: { url_from_agent: "http://localhost:18000" },
-          automation: { url_from_agent: "http://localhost:18001" },
-        },
-      },
-    }) as {
-      agent_profile_id?: string;
-      agent_settings?: unknown;
-      agent_launch_additions?: { system_message_suffix_append?: string };
-    };
-
-    expect(payload.agent_profile_id).toBe("profile-openhands");
-    expect(payload.agent_settings).toBeUndefined();
-    expect(
-      payload.agent_launch_additions?.system_message_suffix_append,
-    ).toMatch(/^MARKER-GLOBAL-RULES\n\n<RUNTIME_SERVICES>/);
-    expect(
-      payload.agent_launch_additions?.system_message_suffix_append,
-    ).toContain("http://localhost:18001");
-  });
-
-  it("carries runtime services on the profile path", () => {
-    const payload = buildStartConversationRequest({
-      settings: DEFAULT_SETTINGS,
-      query: "hello",
-      agentProfileId: "profile-openhands",
-      agentProfileKind: "openhands",
-      runtimeServicesInfo: {
-        mode: "dev:automation",
-        services: {
-          agent_server: { url_from_agent: "http://localhost:18000" },
-          automation: { url_from_agent: "http://localhost:18001" },
-        },
-      },
-    }) as {
-      agent_profile_id?: string;
-      agent_settings?: unknown;
-      agent_launch_additions?: { system_message_suffix_append?: string };
-    };
-
-    expect(payload.agent_profile_id).toBe("profile-openhands");
-    expect(payload.agent_settings).toBeUndefined();
-    expect(
-      payload.agent_launch_additions?.system_message_suffix_append,
-    ).toContain("<RUNTIME_SERVICES>");
-    expect(
-      payload.agent_launch_additions?.system_message_suffix_append,
-    ).toContain("http://localhost:18001");
-  });
-
-  it("keeps the route-at-conversation-start suffix off the profile path", () => {
-    const payload = buildStartConversationRequest({
-      settings: { ...DEFAULT_SETTINGS, run_router_at_conversation_start: true },
-      hasActiveMetaProfile: true,
-      query: "hello",
-      agentProfileId: "profile-openhands",
-      agentProfileKind: "openhands",
-      runtimeServicesInfo: {
-        mode: "dev:automation",
-        services: {
-          automation: { url_from_agent: "http://localhost:18001" },
-        },
-      },
-    }) as {
-      agent_launch_additions?: { system_message_suffix_append?: string };
-    };
-
-    const appended =
-      payload.agent_launch_additions?.system_message_suffix_append;
-    expect(appended).toContain("<RUNTIME_SERVICES>");
-    expect(appended).not.toContain("ROUTE_AT_CONVERSATION_START");
+    const appended = additionsOf(payload)?.system_message_suffix_append;
+    expect(payload.agent_profile_id).toBe("profile-1");
+    expect(payload).not.toHaveProperty("agent_settings");
+    expect(appended).toMatch(/^<RUNTIME_SERVICES>/);
+    expect(appended).toContain("http://localhost:18001");
+    expect(appended).not.toContain("MARKER-GLOBAL-RULES");
   });
 
   it("carries runtime services on an ACP profile launch too", () => {
@@ -1773,385 +1252,122 @@ describe("agent_settings runtime services suffix", () => {
       query: "hello",
       agentProfileId: "profile-acp",
       agentProfileKind: "acp",
-      runtimeServicesInfo: {
-        mode: "dev:automation",
-        services: {
-          automation: { url_from_agent: "http://localhost:18001" },
-        },
-      },
-    }) as {
-      agent_profile_id?: string;
-      agent_launch_additions?: { system_message_suffix_append?: string };
-    };
+      runtimeServicesInfo: RUNTIME_SERVICES,
+    });
 
     expect(payload.agent_profile_id).toBe("profile-acp");
-    expect(
-      payload.agent_launch_additions?.system_message_suffix_append,
-    ).toContain("<RUNTIME_SERVICES>");
-  });
-
-  it("omits profile additions without a saved suffix or runtime services", () => {
-    const payload = buildStartConversationRequest({
-      settings: DEFAULT_SETTINGS,
-      query: "hello",
-      agentProfileId: "profile-openhands",
-      agentProfileKind: "openhands",
-    }) as { agent_launch_additions?: unknown };
-
-    expect(payload.agent_launch_additions).toBeUndefined();
-  });
-});
-
-describe("buildStartConversationRequest — ACP discriminator", () => {
-  it("builds ACP agent settings when agent_kind is 'acp'", () => {
-    const payload = buildStartConversationRequest({
-      settings: {
-        ...DEFAULT_SETTINGS,
-        agent_settings: {
-          schema_version: 1,
-          agent_kind: "acp",
-          acp_server: "claude-code",
-          acp_command: [],
-          acp_model: "claude-opus-4-5",
-          // These fields are LLM-only and must NOT leak into ACP settings.
-          // (mcp_config is handled separately — it IS forwarded for ACP; see
-          // the dedicated tests below.)
-          agent: "CodeActAgent",
-          llm: { model: "gpt-4", api_key: "should-not-appear" },
-          condenser: { enabled: true, max_size: 240 },
-        },
-      },
-    }) as {
-      agent?: unknown;
-      agent_settings: Record<string, unknown> & {
-        acp_command?: string[];
-        acp_model?: string | null;
-        agent_context?: unknown;
-      };
-      tags?: Record<string, string>;
-    };
-
-    expect(payload.agent).toBeUndefined();
-    expect(payload.agent_settings.agent_kind).toBe("acp");
-    expect(payload.agent_settings.acp_command).toEqual([
-      ...getClientAcpProvider("claude-code")!.default_command,
-    ]);
-    expect(payload.agent_settings.acp_model).toBe("claude-opus-4-5");
-    // LLM-only fields must not leak into the ACP settings payload.
-    expect(payload.agent_settings.llm).toBeUndefined();
-    expect(payload.agent_settings.condenser).toBeUndefined();
-    expect(payload.agent_settings.tools).toBeUndefined();
-    const acpAgentContext = payload.agent_settings.agent_context as Record<
-      string,
-      unknown
-    >;
-    expect(acpAgentContext).toMatchObject({
-      load_public_skills: false,
-      load_user_skills: true,
-      load_project_skills: true,
-    });
-    expect(Array.isArray(acpAgentContext.skills)).toBe(true);
-    expect(payload.tags).toEqual({
-      [ACP_SERVER_TAG_KEY]: "claude-code",
-      [CLIENT_SOURCE_TAG_KEY]: AGENT_CANVAS_SOURCE,
-    });
-  });
-
-  it("forwards mcp_config to the ACP subprocess when servers are configured", () => {
-    // mcp_config is a shared field: the SDK's ACPAgent forwards these servers
-    // to the ACP subprocess at session creation, so the start payload must
-    // carry it (it is intentionally NOT one of the stripped ACP-only fields).
-    const payload = buildStartConversationRequest({
-      settings: {
-        ...DEFAULT_SETTINGS,
-        agent_settings: {
-          schema_version: 1,
-          agent_kind: "acp",
-          acp_server: "claude-code",
-          acp_command: ["npx", "-y", "@agentclientprotocol/claude-agent-acp"],
-          mcp_config: {
-            fetch: { command: "uvx", args: ["mcp-server-fetch"] },
-          },
-        },
-      },
-    }) as { agent_settings: { mcp_config?: unknown } };
-
-    expect(payload.agent_settings.mcp_config).toEqual({
-      fetch: { command: "uvx", args: ["mcp-server-fetch"] },
-    });
-  });
-
-  it("omits mcp_config from the ACP payload when it carries no servers", () => {
-    // An empty / serverless mcp_config must not be sent as ``mcp_config: {}``.
-    const payload = buildStartConversationRequest({
-      settings: {
-        ...DEFAULT_SETTINGS,
-        agent_settings: {
-          schema_version: 1,
-          agent_kind: "acp",
-          acp_server: "claude-code",
-          acp_command: ["npx", "-y", "@agentclientprotocol/claude-agent-acp"],
-          mcp_config: {},
-        },
-      },
-    }) as { agent_settings: { mcp_config?: unknown } };
-
-    expect(payload.agent_settings.mcp_config).toBeUndefined();
-  });
-
-  it("does not include ACP-only fields in OpenHands agent settings", () => {
-    const payload = buildStartConversationRequest({
-      settings: {
-        ...DEFAULT_SETTINGS,
-        agent_settings: {
-          ...DEFAULT_SETTINGS.agent_settings,
-          agent_kind: "openhands",
-          llm: { model: "gpt-4" },
-          acp_command: ["npx", "leftover"],
-          acp_server: "claude-code",
-        },
-      },
-    }) as {
-      agent?: unknown;
-      agent_settings: Record<string, unknown> & {
-        llm: Record<string, unknown>;
-      };
-      tags?: Record<string, string>;
-    };
-
-    expect(payload.agent).toBeUndefined();
-    expect(payload.agent_settings.agent_kind).toBe("openhands");
-    expect(payload.agent_settings.acp_command).toBeUndefined();
-    expect(payload.agent_settings.acp_server).toBeUndefined();
-    expect(payload.agent_settings.llm.model).toBe("gpt-4");
-    expect(payload.tags).toEqual({
-      [CLIENT_SOURCE_TAG_KEY]: AGENT_CANVAS_SOURCE,
-    });
-  });
-
-  it("omits acp_model when the user clears it (null)", () => {
-    const payload = buildStartConversationRequest({
-      settings: {
-        ...DEFAULT_SETTINGS,
-        agent_settings: {
-          schema_version: 1,
-          agent_kind: "acp",
-          acp_server: "custom",
-          acp_command: ["./bin/my-agent"],
-          acp_model: null,
-        },
-      },
-    }) as { agent_settings: Record<string, unknown> };
-
-    expect(payload.agent_settings.agent_kind).toBe("acp");
-    expect(payload.agent_settings.acp_model).toBeUndefined();
-  });
-
-  it("falls back to the preferred (Vertex-safe) default for a null Gemini acp_model", () => {
-    // The start-request fallback is the third default-model surface (after
-    // onboarding and Settings → Agent) — all three must substitute the same
-    // Vertex-safe model, or a saved ``null`` would silently run gemini-cli's
-    // 404-prone default on Vertex (software-agent-sdk#3532).
-    const payload = buildStartConversationRequest({
-      settings: {
-        ...DEFAULT_SETTINGS,
-        agent_settings: {
-          schema_version: 1,
-          agent_kind: "acp",
-          acp_server: "gemini-cli",
-          acp_model: null,
-        },
-      },
-    }) as { agent_settings: Record<string, unknown> };
-
-    expect(payload.agent_settings.acp_model).toBe(ACP_VERTEX_SAFE_MODEL);
-  });
-
-  it("resolves an empty acp_command from the registry by acp_server", () => {
-    const payload = buildStartConversationRequest({
-      settings: {
-        ...DEFAULT_SETTINGS,
-        agent_settings: {
-          schema_version: 1,
-          agent_kind: "acp",
-          acp_server: "claude-code",
-          acp_command: [],
-          acp_model: null,
-        },
-      },
-    }) as {
-      agent_settings: Record<string, unknown> & { acp_command?: unknown[] };
-    };
-
-    expect(payload.agent_settings.acp_command).toEqual([
-      ...getClientAcpProvider("claude-code")!.default_command,
-    ]);
-  });
-
-  it("resolves an absent acp_command for built-in providers too", () => {
-    const payload = buildStartConversationRequest({
-      settings: {
-        ...DEFAULT_SETTINGS,
-        agent_settings: {
-          schema_version: 1,
-          agent_kind: "acp",
-          acp_server: "codex",
-          acp_model: null,
-        },
-      },
-    }) as {
-      agent_settings: Record<string, unknown> & { acp_command?: unknown[] };
-    };
-
-    expect(payload.agent_settings.acp_command).toEqual([
-      ...getClientAcpProvider("codex")!.default_command,
-    ]);
-  });
-
-  it("leaves acp_command alone when acp_server is 'custom'", () => {
-    const payload = buildStartConversationRequest({
-      settings: {
-        ...DEFAULT_SETTINGS,
-        agent_settings: {
-          schema_version: 1,
-          agent_kind: "acp",
-          acp_server: "custom",
-          acp_command: [],
-          acp_model: null,
-        },
-      },
-    }) as {
-      agent_settings: Record<string, unknown> & { acp_command?: unknown[] };
-    };
-
-    expect(payload.agent_settings.acp_command).toEqual([]);
-  });
-
-  it("leaves acp_command alone for an unknown acp_server key", () => {
-    const payload = buildStartConversationRequest({
-      settings: {
-        ...DEFAULT_SETTINGS,
-        agent_settings: {
-          schema_version: 1,
-          agent_kind: "acp",
-          acp_server: "future-provider-not-yet-mirrored",
-          acp_command: [],
-          acp_model: null,
-        },
-      },
-    }) as {
-      agent_settings: Record<string, unknown> & { acp_command?: unknown[] };
-    };
-
-    expect(payload.agent_settings.acp_command).toEqual([]);
+    expect(additionsOf(payload)?.system_message_suffix_append).toContain(
+      "<RUNTIME_SERVICES>",
+    );
   });
 
   it.each([
-    ["claude-code", undefined],
-    ["gemini-cli", ACP_VERTEX_SAFE_MODEL],
+    ["the toggle is on and the profile carries a router", true, true, true],
+    ["the profile carries no router", true, false, false],
+    ["the toggle is off", false, true, false],
   ])(
-    "leaves an empty %s acp_model to the agent unless Canvas prefers one",
-    (acpServer, expected) => {
+    "routes the first message only when %s",
+    (_case, runAtStart, profileHasRouter, expected) => {
       const payload = buildStartConversationRequest({
+        ...PROFILE,
         settings: {
           ...DEFAULT_SETTINGS,
-          agent_settings: {
-            schema_version: 1,
-            agent_kind: "acp",
-            acp_server: acpServer,
-            acp_command: [],
-            acp_model: "",
-          },
+          run_router_at_conversation_start: runAtStart,
         },
-      }) as {
-        agent_settings: Record<string, unknown> & { acp_model?: unknown };
-      };
+        profileHasRouter,
+        query: "hello",
+      });
 
-      expect(payload.agent_settings.acp_model).toBe(expected);
+      const appended = additionsOf(payload)?.system_message_suffix_append;
+      if (expected) {
+        expect(appended).toContain("<ROUTE_AT_CONVERSATION_START>");
+      } else {
+        expect(appended ?? "").not.toContain("ROUTE_AT_CONVERSATION_START");
+      }
     },
   );
 
-  it("omits acp_model for the custom preset when none is configured", () => {
+  it("suppresses the route-at-start suffix when the home launch passes suppressRouterAtStart", () => {
+    // The flag is threaded in by useCreateConversation (read-and-cleared from
+    // the store) rather than read by the builder, so child/`/new` launches
+    // that don't pass it route as usual.
     const payload = buildStartConversationRequest({
+      ...PROFILE,
       settings: {
         ...DEFAULT_SETTINGS,
-        agent_settings: {
-          schema_version: 1,
-          agent_kind: "acp",
-          acp_server: "custom",
-          acp_command: ["my-custom-acp"],
-          acp_model: "",
-        },
+        run_router_at_conversation_start: true,
       },
-    }) as {
-      agent_settings: Record<string, unknown> & { acp_model?: unknown };
-    };
-
-    expect(payload.agent_settings.acp_model).toBeUndefined();
+      profileHasRouter: true,
+      suppressRouterAtStart: true,
+      query: "hello",
+    });
+    const appended = additionsOf(payload)?.system_message_suffix_append ?? "";
+    expect(appended).not.toContain("ROUTE_AT_CONVERSATION_START");
   });
 
-  it("ACP → OpenHands → ACP round trip leaves no field leakage", () => {
-    const baseAcpSettings = {
-      ...DEFAULT_SETTINGS,
-      agent_settings: {
-        schema_version: 1,
-        agent_kind: "acp",
-        acp_server: "claude-code",
-        acp_command: [],
-        // Legacy persisted value: provider creds no longer ride acp_env —
-        // they flow through the Secrets panel (request.secrets). A stale
-        // acp_env left on saved settings must be dropped, not forwarded.
-        acp_env: { ANTHROPIC_API_KEY: "user-set-via-api" },
-        acp_model: "claude-opus-4-5",
-        agent: "CodeActAgent",
-        llm: { model: "gpt-4o", api_key: "stale-from-prior-oh-run" },
-        condenser: { enabled: true, max_size: 200 },
-      },
-    };
-
-    const ohPayload = buildStartConversationRequest({
+  it("does not suppress route-at-start when suppressRouterAtStart is omitted", () => {
+    // A child or `/new` launch omits the flag — routing is unaffected by any
+    // pending home pick.
+    const payload = buildStartConversationRequest({
+      ...PROFILE,
       settings: {
-        ...baseAcpSettings,
-        agent_settings: {
-          ...baseAcpSettings.agent_settings,
-          agent_kind: "openhands",
-        },
+        ...DEFAULT_SETTINGS,
+        run_router_at_conversation_start: true,
       },
-    }) as {
-      agent_settings: Record<string, unknown> & {
-        llm: Record<string, unknown>;
-      };
-    };
+      profileHasRouter: true,
+      query: "hello",
+    });
+    const appended = additionsOf(payload)?.system_message_suffix_append ?? "";
+    expect(appended).toContain("<ROUTE_AT_CONVERSATION_START>");
+  });
 
-    expect(ohPayload.agent_settings.agent_kind).toBe("openhands");
-    expect(ohPayload.agent_settings.acp_command).toBeUndefined();
-    expect(ohPayload.agent_settings.acp_env).toBeUndefined();
-    expect(ohPayload.agent_settings.acp_model).toBeUndefined();
-    expect(ohPayload.agent_settings.acp_server).toBeUndefined();
-    expect(ohPayload.agent_settings.llm.model).toBe("gpt-4o");
+  it("adds a catalog skill the opening message invokes", () => {
+    const [entry] = SKILLS_CATALOG;
+    const payload = buildStartConversationRequest({
+      ...PROFILE,
+      settings: DEFAULT_SETTINGS,
+      query: `/${entry.name} please`,
+    });
 
-    const acpPayload = buildStartConversationRequest({
-      settings: baseAcpSettings,
-    }) as {
-      agent_settings: Record<string, unknown> & {
-        acp_command?: unknown;
-        acp_env?: unknown;
-        acp_model?: unknown;
-        llm?: unknown;
-        condenser?: unknown;
-      };
-    };
+    const skills = additionsOf(payload)?.skills ?? [];
+    expect(skills.map((skill) => skill.name)).toEqual([entry.name]);
+    expect(skills[0].content).toBe(entry.content);
+    expect(skills[0].source).toMatch(new RegExp(`/${entry.name}/SKILL\\.md$`));
+  });
 
-    expect(acpPayload.agent_settings.agent_kind).toBe("acp");
-    expect(acpPayload.agent_settings.acp_command).toEqual([
-      ...getClientAcpProvider("claude-code")!.default_command,
-    ]);
-    expect(acpPayload.agent_settings.acp_model).toBe("claude-opus-4-5");
-    // acp_env is no longer a forwarded ACP setting — a stale value on saved
-    // settings is dropped rather than leaked into the conversation request.
-    expect(acpPayload.agent_settings.acp_env).toBeUndefined();
-    expect(acpPayload.agent_settings.llm).toBeUndefined();
-    expect(acpPayload.agent_settings.condenser).toBeUndefined();
+  it("adds the invoked catalog skill to an ACP launch", () => {
+    const [entry] = SKILLS_CATALOG;
+    const payload = buildStartConversationRequest({
+      settings: DEFAULT_SETTINGS,
+      agentProfileId: "profile-acp",
+      agentProfileKind: "acp",
+      query: `/${entry.name} please`,
+    });
+
+    expect(additionsOf(payload)?.skills?.map((skill) => skill.name)).toContain(
+      entry.name,
+    );
+  });
+
+  it("adds no skills for a message that invokes no catalog skill", () => {
+    const payload = buildStartConversationRequest({
+      settings: DEFAULT_SETTINGS,
+      agentProfileId: "profile-1",
+      agentProfileKind: "openhands",
+      query: "/not-a-catalog-skill please",
+    });
+
+    expect(additionsOf(payload)?.skills).toBeUndefined();
+  });
+
+  it("omits additions when there is nothing to add", () => {
+    const payload = buildStartConversationRequest({
+      ...PROFILE,
+      settings: DEFAULT_SETTINGS,
+      query: "hello",
+    });
+
+    expect(additionsOf(payload)).toBeUndefined();
   });
 });
 
@@ -2175,12 +1391,6 @@ describe("buildStartConversationRequestWithEncryptedSettings", () => {
         skillEnablement: { disabledSkills: [] },
       });
     secretsSpy = vi.spyOn(SecretsService, "getSecrets").mockResolvedValue([]);
-    // Default: no active meta-profile so the route-at-start suffix is off.
-    mockListMetaProfiles.mockReset();
-    mockListMetaProfiles.mockResolvedValue({
-      meta_profiles: [],
-      active_meta_profile: null,
-    });
   });
 
   // vitest is not configured with `restoreMocks`, so restore explicitly.
@@ -2193,6 +1403,7 @@ describe("buildStartConversationRequestWithEncryptedSettings", () => {
     mockLoadHooks.mockResolvedValue({ hook_config: WORKSPACE_HOOK_CONFIG });
 
     const payload = await buildStartConversationRequestWithEncryptedSettings({
+      ...PROFILE,
       settings: DEFAULT_SETTINGS,
       workingDir: "/workspace/my-project/0f1e2d3c",
       hooksProjectDir: "/workspace/my-project",
@@ -2208,6 +1419,7 @@ describe("buildStartConversationRequestWithEncryptedSettings", () => {
     mockLoadHooks.mockResolvedValue({ hook_config: null });
 
     await buildStartConversationRequestWithEncryptedSettings({
+      ...PROFILE,
       settings: DEFAULT_SETTINGS,
       workingDir: "/workspace/my-project/0f1e2d3c",
     });
@@ -2221,6 +1433,7 @@ describe("buildStartConversationRequestWithEncryptedSettings", () => {
     mockLoadHooks.mockResolvedValue({ hook_config: null });
 
     const payload = await buildStartConversationRequestWithEncryptedSettings({
+      ...PROFILE,
       settings: DEFAULT_SETTINGS,
       hooksProjectDir: "/workspace/my-project",
     });
@@ -2232,86 +1445,85 @@ describe("buildStartConversationRequestWithEncryptedSettings", () => {
     mockLoadHooks.mockRejectedValue(new Error("500 Internal Server Error"));
 
     const payload = await buildStartConversationRequestWithEncryptedSettings({
+      ...PROFILE,
       settings: DEFAULT_SETTINGS,
       hooksProjectDir: "/workspace/my-project",
     });
 
     expect(payload.hook_config).toBeUndefined();
-    expect(payload.agent_settings).toBeDefined();
+    expect(payload.agent_profile_id).toBe("profile-1");
   });
 
-  it("stamps the route-at-start suffix when the toggle is on and a meta-profile is active", async () => {
-    mockListMetaProfiles.mockResolvedValue({
-      meta_profiles: [],
-      active_meta_profile: {
-        llm_router_profile_id: "router-1",
-        name: "Model Router",
-        routing_strategy: "classification",
-        routing_models: [],
-        router_model: null,
-        fallback_model: null,
-      },
+  describe("skills for an ACP launch", () => {
+    const launch = () =>
+      buildStartConversationRequestWithEncryptedSettings({
+        settings: { ...DEFAULT_SETTINGS, enabled_skills: [first.name] },
+        agentProfileId: "profile-acp",
+        agentProfileKind: "acp",
+        hooksProjectDir: null,
+      });
+    const skillNames = (payload: unknown) =>
+      (additionsOf(payload)?.skills ?? []).map((skill) => skill.name);
+    const [first, second] = SKILLS_CATALOG;
+
+    afterEach(() => {
+      vi.mocked(AgentProfilesService.getProfile).mockRestore();
     });
 
-    const payload = (await buildStartConversationRequestWithEncryptedSettings({
-      settings: {
-        ...DEFAULT_SETTINGS,
-        run_router_at_conversation_start: true,
+    it("follows the OpenHands default profile that owns the Skills page", async () => {
+      vi.spyOn(AgentProfilesService, "getProfile").mockResolvedValue({
+        profile: {
+          agent_kind: "openhands",
+          public_skills: [first.name, second.name],
+          disabled_skills: [first.name],
+        },
+      } as unknown as Awaited<
+        ReturnType<typeof AgentProfilesService.getProfile>
+      >);
+
+      expect(skillNames(await launch())).toEqual([second.name]);
+    });
+
+    it("falls back to the settings lists when there is no default profile", async () => {
+      vi.spyOn(AgentProfilesService, "getProfile").mockRejectedValue(
+        new HttpError(404, "Not Found"),
+      );
+
+      expect(skillNames(await launch())).toEqual([first.name]);
+    });
+
+    it("uses the settings selection when the default profile is ACP", async () => {
+      vi.spyOn(AgentProfilesService, "getProfile").mockResolvedValue({
+        profile: { agent_kind: "acp" },
+      } as Awaited<ReturnType<typeof AgentProfilesService.getProfile>>);
+
+      expect(skillNames(await launch())).toEqual([first.name]);
+    });
+
+    it.each([new HttpError(500, "Server error"), new Error("Network error")])(
+      "rejects the launch when the authoritative selection cannot be read: %s",
+      async (error) => {
+        vi.spyOn(AgentProfilesService, "getProfile").mockRejectedValue(error);
+
+        await expect(launch()).rejects.toBe(error);
       },
-      hooksProjectDir: "/workspace/my-project",
-    })) as {
-      agent_settings: {
-        agent_context?: { system_message_suffix?: string };
-      };
-    };
-
-    expect(
-      payload.agent_settings?.agent_context?.system_message_suffix,
-    ).toContain("ROUTE_AT_CONVERSATION_START");
-  });
-
-  it("omits the route-at-start suffix when the toggle is on but no meta-profile is active", async () => {
-    // active_meta_profile is null by default (see beforeEach). Even with the
-    // toggle on, no suffix should be emitted since the agent-server won't
-    // attach `route_task_to_model` without an active profile.
-    const payload = (await buildStartConversationRequestWithEncryptedSettings({
-      settings: {
-        ...DEFAULT_SETTINGS,
-        run_router_at_conversation_start: true,
-      },
-      hooksProjectDir: "/workspace/my-project",
-    })) as {
-      agent_settings: {
-        agent_context?: { system_message_suffix?: string };
-      };
-    };
-
-    expect(
-      payload.agent_settings?.agent_context?.system_message_suffix ?? "",
-    ).not.toContain("ROUTE_AT_CONVERSATION_START");
-  });
-
-  it("omits the route-at-start suffix when the meta-profiles endpoint fails (fails closed)", async () => {
-    mockListMetaProfiles.mockRejectedValue(
-      new Error("503 Service Unavailable"),
     );
+  });
 
-    const payload = (await buildStartConversationRequestWithEncryptedSettings({
+  it("routes the first message for a profile that carries a router", async () => {
+    const payload = await buildStartConversationRequestWithEncryptedSettings({
+      ...PROFILE,
       settings: {
         ...DEFAULT_SETTINGS,
         run_router_at_conversation_start: true,
       },
+      profileHasRouter: true,
       hooksProjectDir: "/workspace/my-project",
-    })) as {
-      agent_settings: {
-        agent_context?: { system_message_suffix?: string };
-      };
-    };
+    });
 
-    // If we can't confirm a router is active, fail closed: no instruction.
-    expect(
-      payload.agent_settings?.agent_context?.system_message_suffix ?? "",
-    ).not.toContain("ROUTE_AT_CONVERSATION_START");
+    expect(additionsOf(payload)?.system_message_suffix_append).toContain(
+      "ROUTE_AT_CONVERSATION_START",
+    );
   });
 });
 

@@ -65,6 +65,12 @@ export const LIGHT_PLUS_TOKENS: Partial<
   // Feedback text must remain readable on the light modal surface.
   "--oh-feedback-error": "#C0282D",
   "--oh-feedback-success": "#0F734D",
+  // Alert ink clears small-text contrast on tinted and nested Markdown panels.
+  "--oh-markdown-alert-note": "#005A99",
+  "--oh-markdown-alert-tip": "#08633F",
+  "--oh-markdown-alert-important": "#7E22CE",
+  "--oh-markdown-alert-warning": "#6D4C00",
+  "--oh-markdown-alert-caution": "#AA2025",
   // @spec WN-001 — Darker warning text preserves contrast on light surfaces
   "--oh-feedback-warning": "#7D5D08",
   "--oh-color-basic": "#616161",

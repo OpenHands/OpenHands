@@ -47,7 +47,7 @@ candidate. Sources, roughly in order of yield:
 6. **Backends and modes**: local vs Cloud backend, public vs local auth, ACP
    agents, partial stacks (`agent-canvas --help`), Electron, Docker, and the
    embeddable library (`src/index.ts` / `build:lib`).
-7. **Docs, specs and tests**: `README.md`, `docs/*.md`, `specs/*.md` describe
+7. **Docs and tests**: `README.md`, `docs/*.md` describe
    intended behavior. The Playwright suites under `tests/e2e/` (mock-LLM, live,
    bind-policy, live-acp) assert behaviors a user sees too: read them for
    selectors and for behaviors the map lacks, then map those behaviors as

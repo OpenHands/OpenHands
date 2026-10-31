@@ -77,7 +77,6 @@ beforeAll(async () => {
 describe("hook execution event message", () => {
   it.each([
     ["blocked", { blocked: true, success: false }, "--oh-feedback-warning"],
-    ["ok", { blocked: false, success: true }, "--oh-feedback-success"],
     ["failed", { blocked: false, success: false }, "--oh-feedback-error"],
   ] as const)(
     "builds theme feedback ink and tint for the %s badge",
@@ -129,24 +128,33 @@ describe("hook execution event message", () => {
   });
 
   it.each([
-    ["PreToolUse", "⏳"],
-    ["PostToolUse", "✅"],
-    ["UserPromptSubmit", "📝"],
-    ["SessionStart", "🚀"],
-    ["SessionEnd", "🏁"],
-    ["Stop", "⏹️"],
-    ["FutureHook", "🔗"],
-  ])("uses the expected icon for %s hooks", (hookType, icon) => {
+    "PreToolUse",
+    "PostToolUse",
+    "UserPromptSubmit",
+    "SessionStart",
+    "SessionEnd",
+    "Stop",
+    "FutureHook",
+  ])("titles %s hooks with the label and no emoji prefix", (hookType) => {
     renderHookEvent({
       hook_event_type: hookType as HookExecutionEvent["hook_event_type"],
     });
 
     const message = screen.getByTestId("generic-event-message");
-    expect(message).toHaveTextContent(
-      `${icon} ${I18nKey.HOOK$HOOK_LABEL}: ${hookType}`,
-    );
+    expect(
+      message.textContent?.startsWith(
+        `${I18nKey.HOOK$HOOK_LABEL}: ${hookType}`,
+      ),
+    ).toBe(true);
     expect(message).toHaveAttribute("data-success", "success");
-    expect(screen.getByText("ok")).toBeInTheDocument();
+  });
+
+  it("shows no status badge for a successful hook", () => {
+    renderHookEvent({ blocked: false, success: true });
+
+    expect(screen.queryByText("ok")).not.toBeInTheDocument();
+    expect(screen.queryByText("blocked")).not.toBeInTheDocument();
+    expect(screen.queryByText("failed")).not.toBeInTheDocument();
   });
 
   it("shows all available metadata for a blocked hook", () => {
@@ -166,9 +174,11 @@ describe("hook execution event message", () => {
 
     const message = screen.getByTestId("generic-event-message");
     expect(message).toHaveAttribute("data-success", "none");
-    expect(message).toHaveTextContent(
-      `🚫 ${I18nKey.HOOK$HOOK_LABEL}: PostToolUse`,
-    );
+    expect(
+      message.textContent?.startsWith(
+        `${I18nKey.HOOK$HOOK_LABEL}: PostToolUse`,
+      ),
+    ).toBe(true);
     expect(screen.getByText("(terminal)")).toBeInTheDocument();
     expect(screen.getByText("blocked")).toBeInTheDocument();
     expect(message).toHaveTextContent(`${I18nKey.HOOK$COMMAND}: check-policy`);

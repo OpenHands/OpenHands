@@ -30,6 +30,7 @@ import { groupAlive, privatePurgeAllowed } from "./lib/process-groups.mjs";
 import {
   editorOffset,
   launcherEnvFor,
+  lockedCloudOrigin,
   portsAfterRestart,
   runPorts,
 } from "./lib/launcher-env.mjs";
@@ -41,6 +42,7 @@ import {
   knownBugBlocks,
   parseBugPredicate,
   proofVerdict,
+  viewportToRestore,
 } from "./lib/known-bug.mjs";
 import { routePattern } from "./lib/route-pattern.mjs";
 import {
@@ -290,13 +292,14 @@ function releaseClaim(run) {
   }
 }
 
-async function findPortBlock(start, runDir, editor) {
+async function findPortBlock(start, runDir, editor, options) {
   // The launcher needs ingress P, agent-server P+1, automation P+2, static
   // frontend P+3, and the editor port only when it serves VS Code (`editor`
   // is its offset from the agent-server port, or null; see editorOffset).
+  // A --lock-to-cloud run also needs P+4.
   mkdirSync(verifyHome, { recursive: true });
   for (let base = start; base < start + 900; base += 10) {
-    const ports = Object.values(runPorts(base, editor));
+    const ports = Object.values(runPorts(base, editor, options));
     const busy = await Promise.all(ports.map((p) => portOpen(p)));
     if (busy.some(Boolean)) continue;
     if (tryClaim(base, runDir)) return base;
@@ -419,6 +422,8 @@ async function startBrowser(run) {
       ...process.env,
       OH_VERIFY_RUN: run.dir,
       OH_VERIFY_BASE_URL: run.baseUrl,
+      // `browser goto` may also open the run's own locked-to-Cloud page.
+      OH_VERIFY_EXTRA_ORIGINS: run.lockedCloud?.url ?? "",
     },
   });
   child.unref();
@@ -529,6 +534,19 @@ async function cmdLaunch({ flags }) {
   // and run.json of a run that may still be live. `restart` reuses a run.
   const requestedRunId = flags["run-id"];
   if (requestedRunId !== undefined) checkNewRunId(requestedRunId);
+  let lockedCloud;
+  if (flags["lock-to-cloud"] !== undefined) {
+    try {
+      lockedCloud = lockedCloudOrigin(
+        flags["lock-to-cloud"] === true ? "" : flags["lock-to-cloud"],
+      );
+    } catch (error) {
+      usage(
+        error.message,
+        "control-openhands launch --new --lock-to-cloud https://app.all-hands.dev",
+      );
+    }
+  }
   if (nodeMajor() < 24) {
     throw new CliError(
       `Node >=24 is required by the launcher; this is ${process.version}.`,
@@ -699,18 +717,22 @@ async function cmdLaunch({ flags }) {
   if (flags["automation-version"])
     env.OH_AUTOMATION_VERSION = flags["automation-version"];
   if (flags.vscode) env.OH_CANVAS_ENABLE_VSCODE = "true";
+  // The ingress hosts the DigitalOcean Managed Agents web bridge (/mars/*)
+  // only with exactly MARS_WEB=1 (OpenHands/OpenHands#18783).
+  if (flags["mars-web"]) env.MARS_WEB = "1";
   // Only PASS_ENV and the flags above reach the launcher, so a version pin
   // exported in the caller's shell would be dropped without a word.
   const ignoredEnv = Object.keys(process.env).filter(
     (k) =>
       (/^OH_(AGENT_SERVER|AUTOMATION)_/.test(k) ||
-        k === "OH_CANVAS_ENABLE_VSCODE") &&
+        k === "OH_CANVAS_ENABLE_VSCODE" ||
+        k === "MARS_WEB") &&
       !(k in env),
   );
   const warnings = [];
   if (ignoredEnv.length)
     warnings.push(
-      `Ignored ${ignoredEnv.join(", ")} from your shell: runs are isolated. Use --sdk-version/--sdk-ref/--sdk-path, --automation-version/--automation-ref/--automation-path or --vscode.`,
+      `Ignored ${ignoredEnv.join(", ")} from your shell: runs are isolated. Use --sdk-version/--sdk-ref/--sdk-path, --automation-version/--automation-ref/--automation-path, --vscode or --mars-web.`,
     );
 
   // 4. Ports. The editor port is reserved only when this checkout's launcher
@@ -721,14 +743,16 @@ async function cmdLaunch({ flags }) {
     warnings.push(
       `Could not ask scripts/dev-with-automation.mjs whether it serves VS Code (${editor.reason}); reserving the editor port as before.`,
     );
+  const portOptions = { lockedCloud: lockedCloud !== undefined };
   const base = flags.port
     ? intFlag(flags.port)
     : await findPortBlock(
         intFlag(flags["port-from"], 18800),
         dir,
         editor.offset,
+        portOptions,
       );
-  const ports = runPorts(base, editor.offset);
+  const ports = runPorts(base, editor.offset, portOptions);
   if (flags.port) {
     const busy = [];
     for (const [name, port] of Object.entries(ports))
@@ -779,9 +803,19 @@ async function cmdLaunch({ flags }) {
     pins: defaults().versions,
     overrides: Object.fromEntries(
       Object.entries(env).filter(([k]) =>
-        /^OH_(AGENT_SERVER_|AUTOMATION_|CANVAS_ENABLE_VSCODE$)/.test(k),
+        /^(OH_(AGENT_SERVER_|AUTOMATION_|CANVAS_ENABLE_VSCODE$)|MARS_WEB$)/.test(
+          k,
+        ),
       ),
     ),
+    ...(lockedCloud
+      ? {
+          lockedCloud: {
+            cloud: lockedCloud,
+            url: `http://127.0.0.1:${ports.lockedCloud}`,
+          },
+        }
+      : {}),
   };
   spawnLauncher(run);
   saveRun(run);
@@ -806,6 +840,7 @@ async function cmdLaunch({ flags }) {
   };
   run.readyAt = new Date().toISOString();
   saveRun(run);
+  if (run.lockedCloud) await startLockedCloud(run, intFlag(flags.timeout, 600));
 
   let browser;
   if (!flags["no-browser"]) {
@@ -837,6 +872,7 @@ async function cmdLaunch({ flags }) {
     revision,
     builtThisRun: built,
     ports,
+    ...(run.lockedCloud ? { lockedCloud: run.lockedCloud } : {}),
     versions: run.versions,
     browser,
     next: [
@@ -914,6 +950,102 @@ function spawnLauncher(run) {
   return child;
 }
 
+// A page locked to one OpenHands Cloud host (F01.locked-cloud-first-run,
+// F25.locked-cloud). bin/agent-canvas.mjs has no option for it; only
+// scripts/static-server.mjs --lock-to-cloud has. So a --lock-to-cloud run
+// serves the same build from a second static server on P+4, in its own
+// process group, which `stop` ends with the run. The locked page talks only
+// to that Cloud host, so it gets no session key.
+async function startLockedCloud(run, timeoutSec) {
+  const priv = join(run.dir, "private");
+  const env = {};
+  for (const name of PASS_ENV)
+    if (process.env[name] !== undefined) env[name] = process.env[name];
+  Object.assign(env, {
+    HOME: join(priv, "home"),
+    DO_NOT_TRACK: "1",
+    // One bridge per stack at most: this page never hosts /mars/*.
+    MARS_WEB: "0",
+  });
+  const logPath = join(priv, "locked-cloud.log");
+  const logFd = openSync(logPath, "a", 0o600);
+  const child = spawn(
+    process.execPath,
+    [
+      join(repoRoot, "scripts", "static-server.mjs"),
+      "--dir",
+      join(repoRoot, "build"),
+      "--host",
+      "127.0.0.1",
+      "--port",
+      String(run.ports.lockedCloud),
+      "--lock-to-cloud",
+      run.lockedCloud.cloud,
+    ],
+    { cwd: repoRoot, env, detached: true, stdio: ["ignore", logFd, logFd] },
+  );
+  child.unref();
+  run.lockedCloud.pgid = child.pid;
+  saveRun(run);
+  const deadline = Date.now() + timeoutSec * 1000;
+  let last = "";
+  for (;;) {
+    if (!groupAlive(child.pid)) {
+      throw new CliError("The locked-to-Cloud static server exited.", {
+        code: 3,
+        hint: "The stack is running; `control-openhands stop` it and retry.",
+        extra: {
+          run: run.dir,
+          logTail: readFileSync(logPath, "utf8")
+            .split("\n")
+            .slice(-15)
+            .join("\n"),
+        },
+      });
+    }
+    try {
+      const response = await fetch(`${run.lockedCloud.url}/`, {
+        signal: AbortSignal.timeout(4000),
+      });
+      const html = await response.text();
+      last = `status=${response.status}`;
+      if (response.ok && html.includes("__AGENT_CANVAS_LOCK_TO_CLOUD__"))
+        return;
+    } catch (error) {
+      last = String(error.message);
+    }
+    if (Date.now() > deadline)
+      throw new CliError(
+        `The locked-to-Cloud page is not ready after ${timeoutSec}s (${last}).`,
+        { code: 3, extra: { run: run.dir } },
+      );
+    await delay(500);
+  }
+}
+
+async function stopLockedCloud(run) {
+  const pgid = run.lockedCloud?.pgid;
+  if (!groupAlive(pgid)) return { stopped: true };
+  const cmd = commandLine(pgid);
+  if (cmd && !cmd.includes("static-server.mjs")) {
+    throw new CliError(
+      `PID ${pgid} is no longer this run's locked-to-Cloud server (${cmd.slice(0, 80)}); refusing to signal it.`,
+      { code: 3 },
+    );
+  }
+  let forced = false;
+  process.kill(-pgid, "SIGTERM");
+  for (let i = 0; i < 20 && groupAlive(pgid); i += 1) await delay(500);
+  if (groupAlive(pgid)) {
+    process.kill(-pgid, "SIGKILL");
+    forced = true;
+    await delay(1000);
+  }
+  for (let i = 0; i < 20 && (await portOpen(run.ports.lockedCloud)); i += 1)
+    await delay(500);
+  return { stopped: !groupAlive(pgid), forced };
+}
+
 async function stopLauncher(run) {
   const pgid = run.launcherPgid;
   let forced = false;
@@ -950,7 +1082,9 @@ async function stopLauncher(run) {
     }
   }
   // Give sockets a moment to close before callers check or reuse the ports.
-  for (const port of Object.values(run.ports)) {
+  // The locked-to-Cloud page is not the launcher's: a restart keeps it.
+  for (const [name, port] of Object.entries(run.ports)) {
+    if (name === "lockedCloud") continue;
     for (let i = 0; i < 20 && (await portOpen(port)); i += 1) await delay(500);
   }
   return { stopped: !groupAlive(pgid), forced };
@@ -1124,6 +1258,14 @@ async function cmdStatus({ flags }) {
     launcherAlive: groupAlive(run.launcherPgid),
     browserAlive: Boolean(daemonInfo(run)),
     ports: run.ports,
+    ...(run.lockedCloud
+      ? {
+          lockedCloud: {
+            ...run.lockedCloud,
+            alive: groupAlive(run.lockedCloud.pgid),
+          },
+        }
+      : {}),
     versions: run.versions,
     startedAt: run.startedAt,
   });
@@ -1231,8 +1373,38 @@ async function cmdDoctor({ flags }) {
         automation.status === 200,
         `status=${automation.status}`,
       );
+      if (run.overrides?.MARS_WEB === "1") {
+        const mars = await http(run, "GET", "/mars/health", { auth: false });
+        add(
+          "Managed Agents web bridge mounted (--mars-web)",
+          mars.status === 200 && mars.json?.ok === true,
+          `GET /mars/health status=${mars.status} ${mars.text.slice(0, 80)}`,
+        );
+      }
     } catch (error) {
       add("HTTP checks", false, String(error.message));
+    }
+  }
+  if (run.lockedCloud) {
+    try {
+      const response = await fetch(`${run.lockedCloud.url}/`, {
+        signal: AbortSignal.timeout(4000),
+      });
+      const html = await response.text();
+      const locked = html.match(/__AGENT_CANVAS_LOCK_TO_CLOUD__=([^;<]*)/);
+      add(
+        "locked-to-Cloud page serves the lock (--lock-to-cloud)",
+        response.ok &&
+          Boolean(locked) &&
+          locked[1].includes(run.lockedCloud.cloud),
+        `${run.lockedCloud.url}/ status=${response.status} lock=${locked?.[1] ?? "missing"}`,
+      );
+    } catch (error) {
+      add(
+        "locked-to-Cloud page serves the lock (--lock-to-cloud)",
+        false,
+        String(error.message),
+      );
     }
   }
   if (!flags["skip-ui"]) {
@@ -1288,10 +1460,15 @@ async function cmdStop({ flags }) {
   const pgid = run.launcherPgid;
   const launcher = await stopLauncher(run);
   if (launcher.forced) result.forced = true;
+  if (run.lockedCloud) {
+    const locked = await stopLockedCloud(run);
+    if (locked.forced) result.forced = true;
+  }
   const ports = {};
   for (const [name, port] of Object.entries(run.ports))
     ports[name] = (await portOpen(port)) ? "still open" : "closed";
-  result.launcherStopped = !groupAlive(pgid);
+  result.launcherStopped =
+    !groupAlive(pgid) && !groupAlive(run.lockedCloud?.pgid);
   if (privatePurgeAllowed(result.launcherStopped, ports)) {
     releaseClaim(run);
     rmSync(tmuxPathFor(run.dir), { recursive: true, force: true });
@@ -1919,7 +2096,7 @@ async function openWorkspace(run, name, { stay, mode } = {}) {
     selector: "testid=workspace-launch-button",
     timeout: 30_000,
   });
-  // The mode selector (Local Repo / New Worktree) sits in the preview bar
+  // The mode selector (Local / Worktree) sits in the preview bar
   // the launch click leaves behind.
   let preview;
   if (mode !== undefined) {
@@ -2631,6 +2808,15 @@ function inspectDownload(path, needle) {
   return info;
 }
 
+function networkOrder(value) {
+  if (value === undefined) return undefined;
+  if (value === "request" || value === "completion") return value;
+  usage(
+    `--order must be request or completion, got ${value === true ? "nothing" : value}`,
+    "control-openhands browser network --filter 'schema' --order completion",
+  );
+}
+
 async function cmdBrowser({ positional, flags }) {
   const run = loadRun(flags);
   const [verb, ...rest] = positional;
@@ -2844,6 +3030,7 @@ async function cmdBrowser({ positional, flags }) {
         last: flags.last,
         filter:
           flags.filter && flags.filter !== true ? flags.filter : undefined,
+        order: networkOrder(flags.order),
       });
       break;
     case "hover":
@@ -3620,6 +3807,10 @@ async function cmdBug({ positional, flags }) {
         const logFile = join(work, `${stamp}.asserts.jsonl`);
         const failureFile = join(work, `${stamp}.failed`);
         const doctorBefore = doctor();
+        // Every attempt starts at the viewport the caller had, and leaves it so.
+        const viewportBefore = daemonInfo(run)
+          ? (await browserCall(run, "url").catch(() => ({}))).viewport
+          : undefined;
         let exec = {
           exitCode: null,
           timedOut: false,
@@ -3660,6 +3851,15 @@ async function cmdBug({ positional, flags }) {
         const page = daemonInfo(run)
           ? await browserCall(run, "url").catch(() => ({}))
           : {};
+        const restore = viewportToRestore(viewportBefore, page.viewport);
+        let viewportRestored;
+        if (restore) {
+          viewportRestored = await browserCall(run, "viewport", {
+            size: restore,
+          })
+            .then(() => restore)
+            .catch((error) => `failed: ${error.message}`);
+        }
         const transcript = join(dir, `${stamp}.json`);
         writeFileSync(
           transcript,
@@ -3709,6 +3909,7 @@ async function cmdBug({ positional, flags }) {
           viewport: page.viewport
             ? `${page.viewport.width}x${page.viewport.height}`
             : undefined,
+          ...(viewportRestored ? { viewportRestored } : {}),
           transcript: relative(run.dir, transcript),
         };
         appendFileSync(attemptsFile(run.dir), `${JSON.stringify(attempt)}\n`);
@@ -3773,6 +3974,12 @@ async function cmdBug({ positional, flags }) {
         "bug proof needs a sub-feature ID, --baseline RUN_DIR and --fix RUN_DIR",
         "control-openhands bug proof F05.prefill-send --baseline $BASE_RUN --fix $FIX_RUN",
       );
+    const vary = flags.vary === undefined ? "revision" : String(flags.vary);
+    if (vary !== "revision" && vary !== "backend")
+      usage(
+        "bug proof --vary takes revision or backend",
+        "control-openhands bug proof F08.diff-view-modes --vary backend --baseline $OLD_SDK_RUN --fix $RUN",
+      );
     const blocks = selectBlocks(id, flags);
     const read = (dir) => {
       const path = attemptsFile(resolve(String(dir)));
@@ -3797,6 +4004,7 @@ async function cmdBug({ positional, flags }) {
         fix: fix.filter((r) => r.name === block.name),
         sha: block.sha,
         min: intFlag(flags.min, 2),
+        vary,
       }),
     }));
     const verified = verdicts.every((v) => v.verdict === "verified");
@@ -4583,6 +4791,7 @@ Examples:
   launch: `control-openhands launch [--public] [--new] [--print-run] [--port N | --port-from N] [--build auto|always|never] [--min-free-mb 2000]
                          [--no-browser] [--timeout SEC] [--sdk-path DIR | --sdk-ref REF | --sdk-version V]
                          [--automation-path DIR | --automation-ref REF | --automation-version V] [--run-id ID] [--vscode]
+                         [--mars-web] [--lock-to-cloud URL]
 
 Builds the checkout when build/verify-revision.txt does not match HEAD, then
 starts bin/agent-canvas.mjs with a private HOME, state dir, session key and
@@ -4593,14 +4802,23 @@ ports, only when the checkout's launcher serves VS Code. Where that is opt-in
 is bundled (before #17660, or since #18048), it is always reserved and --vscode
 changes nothing. Waits for authenticated settings, automation health and the
 SPA, then starts the browser daemon.
+--mars-web starts the launcher with MARS_WEB=1, so the run's ingress hosts the
+DigitalOcean Managed Agents web bridge (/mars/*) and Add Backend offers the
+Providers tab; doctor checks /mars/health.
+--lock-to-cloud URL also serves this build locked to that OpenHands Cloud host
+(scripts/static-server.mjs --lock-to-cloud; bin/agent-canvas.mjs has no such
+option) on P+4, listed as ports.lockedCloud and lockedCloud.url. The locked page
+talks only to that Cloud host, never to the run's backend. \`browser goto
+<lockedCloud.url>/\` opens it without --allow-external, doctor checks the lock is
+injected, and stop ends it with the run.
 Idempotent: an alive current run is reused unless --new is given.
 --print-run prints only the run directory, for
   export OH_VERIFY_RUN=$(control-openhands launch --new --print-run)
 Every other command uses --run, else $OH_VERIFY_RUN, else the only live run;
 with several live runs it refuses to guess (several agents on one machine).
-Backend versions and VS Code come only from the flags: OH_AGENT_SERVER_*,
-OH_AUTOMATION_* and OH_CANVAS_ENABLE_VSCODE in your shell are not forwarded
-(launch warns). An Agent Server below
+Backend versions, VS Code and the bridge come only from the flags:
+OH_AGENT_SERVER_*, OH_AUTOMATION_*, OH_CANVAS_ENABLE_VSCODE and MARS_WEB in your
+shell are not forwarded (launch warns). An Agent Server below
 config/defaults.json compatibility.minimumAgentServer never gets
 past the UI's backend-compatibility gate.
 
@@ -4613,6 +4831,8 @@ Examples:
   control-openhands launch
   control-openhands launch --public --new
   control-openhands launch --sdk-path ../software-agent-sdk --build always
+  control-openhands launch --new --mars-web
+  control-openhands launch --new --lock-to-cloud https://app.all-hands.dev
 `,
   doctor: `control-openhands doctor [--skip-ui]
 
@@ -4686,7 +4906,7 @@ control-openhands conversation events ID [--last N] [--kinds MessageEvent,Action
 testid=submit-button and returns the new /conversations/<id>. --stay uses the
 current page's composer instead of navigating home first. --workspace PATH
 first picks that folder through Open Workspace (see 'workspace open'), so the
-conversation runs in it; --mode picks Local Repo or New Worktree there. 'wait' polls the
+conversation runs in it; --mode picks Local or Worktree there. 'wait' polls the
 conversation's execution_status until one of --until (default: any terminal).
 
 Examples:
@@ -4704,7 +4924,7 @@ control-openhands fixture file [--name qa-note.txt] [--content TEXT]
 control-openhands fixture tarball [--name qa-tarball]   # evidence/_fixtures/qa-tarball.tar.gz (main.py prints pong)
 control-openhands fixture skill [--name qa-hello] [--repo qa-repo] [--trigger qa-ping] [--body TEXT] [--commit]
         # SKILL.md in the run's private ~/.agents/skills, or in a fixture repo's .agents/skills;
-        # --commit records it in the repo (a New Worktree conversation checks out commits only)
+        # --commit records it in the repo (a Worktree conversation checks out commits only)
 `,
   workspace: `control-openhands workspace open PATH|NAME [--stay] [--mode local_repo|new_worktree]
 
@@ -4712,7 +4932,7 @@ NAME (no slash) resolves inside <run>/workspace, where 'fixture' creates repos.
 
 Drives Home > Open Workspace > workspace dropdown > + Add Workspace, walks the
 folder browser (folder-browser-up / folder-browser-entry-<name>) to PATH,
-clicks Use and Launch, then with --mode picks Local Repo or New Worktree in the
+clicks Use and Launch, then with --mode picks Local or Worktree in the
 preview bar's mode selector (printed back as mode and preview). The composer then
 carries the workspace chip; follow
 with 'conversation start --stay', or use 'conversation start --workspace PATH'.
@@ -4788,12 +5008,18 @@ Verbs
                                          observe playback; optionally emulate active-page motion preference
   network-state offline|online|status     interrupt or restore this browser context's real network; status is read-only
                                          (all its tabs; restore online before doctor/cleanup; no request interception)
-  network [--external] [--filter REGEX] [--clear] [--last N] [--bodies]   requests with status and redacted query (rows under "recent")
+  network [--external] [--filter REGEX] [--clear] [--last N] [--bodies] [--order request|completion]
+                                        requests with status and redacted query (rows under "recent"); each row
+                                        also has responseMs (headers), durationMs and completedTs (body done or
+                                        failed), outcome and completedSeq. --order completion lists the last N
+                                        rows in the order they completed, then the last N still pending: use it
+                                        for response races
         (--bodies adds each app-origin write's body, JSON with credential values and env/header maps
          replaced by their length, URL userinfo and secret-named query values redacted in any string;
          the settings API's ********** placeholder is kept as is; body is capped at 2000 chars.
-         bodyFields.plugins projects only top-level plugins before that cap, recursively redacted,
-         at most 16384 UTF-8 bytes; oversized values are omitted with bodyFieldsOmitted.plugins.
+         bodyFields projects only the top-level plugins, conversation_runtime, worktree,
+         worktree_options and container before that cap, recursively redacted, at most 16384
+         UTF-8 bytes; oversized values are omitted with bodyFieldsOmitted.<field>.
          Body fields and omission metadata are absent without --bodies)
                                          (privacy/telemetry checks; --clear as for errors)
   toasts [--history [--clear]]          toasts on screen now (with links); --history adds every
@@ -4838,7 +5064,7 @@ spaces. The result lists each clause under bugChecks.
 `,
   bug: `control-openhands bug list [--file PATH]
 control-openhands bug run ID [--name N] [--attempts N] [--label L] [--timeout SEC] [--no-doctor] [--file PATH]
-control-openhands bug proof ID --baseline RUN_DIR --fix RUN_DIR [--baseline-label L] [--fix-label L] [--min 2]
+control-openhands bug proof ID --baseline RUN_DIR --fix RUN_DIR [--baseline-label L] [--fix-label L] [--min 2] [--vary revision|backend]
 
 A known bug in the map can carry a fenced block, opened with
 "\`\`\`sh known-bug <ID> [name]", whose commands assert the correct behavior. Its one
@@ -4855,6 +5081,9 @@ attempt after a passing doctor, and classifies it:
 Each attempt is appended to evidence/known-bugs/attempts.jsonl (revision,
 backend, viewport, recipe hash, failing line, assertion, transcript) and to the
 ledger as an xfail/xpass/fail row. Exit 0 only when every attempt is xfail.
+Every attempt starts at the viewport the browser had before 'run': a block that
+switches it (browser viewport phone) is put back afterwards, and the attempt
+records the size it ran at (viewport) and what it restored (viewportRestored).
 Each assertion is logged with the recipe line that ran it, and the first
 failure is the one kept, so a cleanup step (an EXIT trap) cannot replace the
 marked command's observation.
@@ -4863,10 +5092,15 @@ marked command's observation.
 run: verified only when the baseline has at least two attempts, all xfail, the
 fix at least two, all xpass, on different revisions with the same viewport and
 backend. A fix that still reproduces is not-fixed; anything else is inconclusive.
+--vary backend proves an Agent Server or automation fix instead: both runs serve
+the same revision at the same viewport, and each side has its own backend
+versions (the baseline launched with --sdk-version or --automation-version set
+to a release before the fix).
 
   control-openhands bug run F25.selector-dropdown --attempts 2 --label baseline --run $BASE_RUN
   control-openhands bug run F25.selector-dropdown --attempts 2 --label fix --run $FIX_RUN
   control-openhands bug proof F25.selector-dropdown --baseline $BASE_RUN --baseline-label baseline --fix $FIX_RUN --fix-label fix
+  control-openhands bug proof F08.diff-view-modes --vary backend --baseline $OLD_SDK_RUN --baseline-label baseline --fix $RUN --fix-label fix
 `,
   map: `control-openhands map check [--file Fnn-name.md]   lint the map (or one entry, skipping index links): four H2s, unique IDs, links, known commands, index counts
 control-openhands map check --fix-counts   rewrite the index's sub-feature counts and total from the files, then lint

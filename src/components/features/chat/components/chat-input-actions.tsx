@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Cpu } from "lucide-react";
 import { AgentStatus } from "#/components/features/controls/agent-status";
 import { ChangeAgentButton } from "../change-agent-button";
+import { ChatInputAgentProfilePicker } from "./chat-input-profile-picker";
 import { ChatInputModel, ChatInputModelMenuContent } from "./chat-input-model";
 import {
   ChatInputLlmProfilePicker,
@@ -104,6 +105,7 @@ export function ChatInputActions({
   const addFileRef = React.useRef<HTMLDivElement>(null);
   const codeRef = React.useRef<HTMLDivElement>(null);
   const modelRef = React.useRef<HTMLDivElement>(null);
+  const agentProfileRef = React.useRef<HTMLDivElement>(null);
   const overflowTriggerRef = React.useRef<HTMLButtonElement>(null);
   const [actionsRowWidth, setActionsRowWidth] = React.useState<number>(
     Number.POSITIVE_INFINITY,
@@ -112,6 +114,7 @@ export function ChatInputActions({
   const [addFileWidth, setAddFileWidth] = React.useState(32);
   const [codeWidth, setCodeWidth] = React.useState(96);
   const [modelWidth, setModelWidth] = React.useState(120);
+  const [agentProfileWidth, setAgentProfileWidth] = React.useState(110);
   const [isOverflowOpen, setIsOverflowOpen] = React.useState(false);
   const [activeSubmenu, setActiveSubmenu] = React.useState<
     "agent" | "model" | null
@@ -125,6 +128,7 @@ export function ChatInputActions({
     const addEl = addFileRef.current;
     const codeEl = codeRef.current;
     const modelEl = modelRef.current;
+    const agentProfileEl = agentProfileRef.current;
 
     if (
       !rowEl ||
@@ -152,6 +156,10 @@ export function ChatInputActions({
         const nextCodeWidth = codeEl.getBoundingClientRect().width;
         if (nextCodeWidth > 0) setCodeWidth(nextCodeWidth);
       }
+      if (agentProfileEl) {
+        const nextAgentWidth = agentProfileEl.getBoundingClientRect().width;
+        if (nextAgentWidth > 0) setAgentProfileWidth(nextAgentWidth);
+      }
     };
 
     const observer = new ResizeObserver(() => {
@@ -165,11 +173,14 @@ export function ChatInputActions({
     if (codeEl) {
       observer.observe(codeEl);
     }
+    if (agentProfileEl) {
+      observer.observe(agentProfileEl);
+    }
 
     syncWidths();
 
     return () => observer.disconnect();
-  }, [showChangeAgentButton]);
+  }, [showChangeAgentButton, showAgentProfileSwitch]);
 
   const handlePauseAgent = () => {
     if (!conversationId) return;
@@ -194,6 +205,7 @@ export function ChatInputActions({
       const next = {
         showCodeInline: false,
         showModelInline: false,
+        showAgentProfileInline: false,
       };
 
       if (showChangeAgentButton && remaining >= codeWidth) {
@@ -203,11 +215,23 @@ export function ChatInputActions({
 
       if (remaining >= modelWidth) {
         next.showModelInline = true;
+        remaining -= modelWidth + INLINE_GAP;
+      }
+
+      // Drops first: the "+" menu also switches the agent profile.
+      if (showAgentProfileSwitch && remaining >= agentProfileWidth) {
+        next.showAgentProfileInline = true;
       }
 
       return next;
     },
-    [showChangeAgentButton, codeWidth, modelWidth],
+    [
+      showChangeAgentButton,
+      codeWidth,
+      modelWidth,
+      showAgentProfileSwitch,
+      agentProfileWidth,
+    ],
   );
 
   const leftBaseWidth =
@@ -226,6 +250,7 @@ export function ChatInputActions({
     ? false
     : fitWithOverflow.showCodeInline;
   const showModelInline = fitWithOverflow.showModelInline;
+  const showAgentProfileInline = fitWithOverflow.showAgentProfileInline;
   const showAddFileInline = true;
   const showAgentStatusInline = actionsRowWidth >= 360;
 
@@ -494,6 +519,14 @@ export function ChatInputActions({
           {showChangeAgentButton && (
             <div ref={codeRef} className={cn(!showCodeInline && "hidden")}>
               <ChangeAgentButton />
+            </div>
+          )}
+          {showAgentProfileSwitch && (
+            <div
+              ref={agentProfileRef}
+              className={cn(!showAgentProfileInline && "hidden")}
+            >
+              <ChatInputAgentProfilePicker />
             </div>
           )}
           <div ref={modelRef} className={cn(!showModelInline && "hidden")}>

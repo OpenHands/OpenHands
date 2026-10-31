@@ -36,14 +36,23 @@ import {
   searchCloudConversations,
   updateCloudConversationPublicFlag,
   updateCloudConversationRepository,
+  updateCloudConversationTags,
   updateCloudConversationTitle,
 } from "../cloud/conversation-service.api";
 import {
+  conversationTagFlagPatch,
+  withConversationTagFlags,
+} from "#/utils/conversation-tag-flags";
+import {
   DirectConversationInfo,
+  GIT_PROVIDER_TAG_KEY,
+  REPOSITORY_TAG_KEY,
+  SELECTED_BRANCH_TAG_KEY,
   assertSubscriptionAuthReady,
   buildRouterAtStartSystemSuffix,
   buildStartConversationRequestWithEncryptedSettings,
   buildStartPlanningConversationRequestWithEncryptedSettings,
+  buildWorkspaceTags,
   emptyHooksResponse,
   fetchBackendExecutionRuntime,
   getDefaultConversationTitle,
@@ -92,6 +101,9 @@ const DEFAULT_CONVERSATION_TIMESTAMP = "1970-01-01T00:00:00.000Z";
 // machine or the packaged desktop app, where uvx may still be warming caches)
 // can exceed the client's 60s default timeout.
 const CREATE_CONVERSATION_TIMEOUT_MS = 5 * 60 * 1000;
+// The agent-server rejects the whole create request when any tag value is
+// longer than this (SDK `TAG_VALUE_MAX_LENGTH`).
+const TAG_VALUE_MAX_LENGTH = 256;
 const INVALID_CONVERSATION_RESPONSE_MESSAGE =
   "Unable to load conversations because the selected agent server returned " +
   "data this UI does not understand. Check the backend URL/session key and " +
@@ -441,22 +453,19 @@ export interface CreateConversationOptions {
   parentConversationId?: string;
   agentType?: "default" | "plan";
   sandboxId?: string;
-  // Launch from a saved AgentProfile (resolved server-side) instead of the
-  // current encrypted agent_settings (#3727). Supported on both local and the
-  // cloud app-server (OpenHands #15060): local threads it through the
-  // encrypted-settings builder; cloud sends it as a flat request field.
+  // The saved AgentProfile the server builds the agent from (#3727). Required
+  // on local; cloud without one launches the org's default (OpenHands #15060).
   agentProfileId?: string;
   agentProfileKind?: AgentKind;
   /**
-   * Whether the first message should be routed through the active Model
-   * Router. Only consumed on the cloud path — the local path reads the
-   * toggle from its own settings fetch. Threaded in by the caller from the
-   * warmed settings query to avoid a settings round-trip on the cloud hot
-   * path.
+   * Cloud only: whether the first message should be routed through the
+   * active Model Router. The local path reads the toggle from its own
+   * settings fetch. Threaded in by the caller from the warmed settings query
+   * to avoid a settings round-trip on the cloud hot path.
    */
   runRouterAtConversationStart?: boolean;
   /**
-   * Whether a Model Router meta-profile is currently active. The
+   * Cloud only: whether a Model Router meta-profile is currently active. The
    * route-at-start suffix is only emitted when this is true AND
    * ``runRouterAtConversationStart`` is on — without an active meta-profile
    * the agent-server does not attach ``route_task_to_model``, so the
@@ -464,12 +473,25 @@ export interface CreateConversationOptions {
    * by the caller from the warmed meta-profiles query.
    */
   hasActiveMetaProfile?: boolean;
+  /** Local only: the launched profile carries a Model Router. */
+  profileHasRouter?: boolean;
+  /**
+   * A home-page model pick was made before the first message, so the
+   * route-at-start suffix should be suppressed for this single launch. The
+   * home launch decides this once and threads it down so the local builder
+   * needn't read UI state — child/`/new` launches omit it and route as usual.
+   */
+  suppressRouterAtStart?: boolean;
+  /** Local only: the launched ACP profile's server, for the conversation tag. */
+  acpServer?: string;
   // The LLM profile the launched agent profile runs. When set and no explicit
   // title_llm_profile preference exists, title generation uses this profile so
   // both the agent and its title use the same model.
   agentLlmProfileRef?: string | null;
   /** Local only: run the agent profile with this LLM profile instead of its own. */
   agentLlmProfileOverride?: string;
+  /** Cloud only: run this conversation on the named LLM profile (`llm_profile`). */
+  llmProfile?: string;
 }
 
 class AgentServerConversationService {
@@ -529,6 +551,9 @@ class AgentServerConversationService {
       agentProfileKind,
       agentLlmProfileRef,
       agentLlmProfileOverride,
+      profileHasRouter,
+      acpServer,
+      llmProfile,
     } = options;
 
     if (getActiveBackend().backend.kind === "cloud") {
@@ -562,6 +587,7 @@ class AgentServerConversationService {
         agent_type: agentType,
         sandbox_id: sandboxId ?? null,
         agent_profile_id: agentProfileId ?? null,
+        ...(llmProfile ? { llm_profile: llmProfile } : {}),
         ...(routerAtStartSuffix
           ? {
               agent_launch_additions: {
@@ -586,6 +612,9 @@ class AgentServerConversationService {
       return createCloudAppConversation(request);
     }
 
+    if (!agentProfileId) {
+      throw new Error("A local conversation needs an agent profile.");
+    }
     const [settings, profiles] = await Promise.all([
       SettingsService.getSettings(),
       ProfilesService.listProfiles().catch(() => undefined),
@@ -596,15 +625,24 @@ class AgentServerConversationService {
       agentLlmProfileRef,
     );
     const conversationId = uuidv4();
-    const { workingDir, hooksProjectDir, isolated } =
+    const resolvedWorkspaceMode =
+      workspaceMode ?? (workingDirOverride ? "local_repo" : "new_worktree");
+    const inContainer = resolvedWorkspaceMode === "docker_container";
+    const { workingDir, hooksProjectDir, isolated, runtimeSelectable } =
       await resolveNewConversationWorkspace({
         conversationId,
         workingDir: workingDirOverride,
         selectedRepository: metadata?.selected_repository,
         parentConversationId,
+        inContainer,
       });
-    const resolvedWorkspaceMode =
-      workspaceMode ?? (workingDirOverride ? "local_repo" : "new_worktree");
+    // A server offering both runtimes is told which one; whatever its default
+    // is, a host mode then runs on the host. Other servers keep their own.
+    const conversationRuntime = inContainer
+      ? "docker"
+      : runtimeSelectable
+        ? "local"
+        : undefined;
 
     // Use encrypted settings to avoid exposing secrets in the browser
     const payload = await buildStartConversationRequestWithEncryptedSettings({
@@ -626,20 +664,55 @@ class AgentServerConversationService {
       agentProfileId,
       agentProfileKind,
       llmProfileOverride: agentLlmProfileOverride,
+      profileHasRouter,
+      suppressRouterAtStart: options.suppressRouterAtStart,
+      acpServer,
       titleLlmProfile,
     });
+
+    // Persist the selected workspace as a server-side conversation tag so local
+    // sidebar grouping survives on another browser, device, or after cleared
+    // localStorage (#17386), and the repository the same way (#15598).
+    // localStorage below stays the warm cache for the creating client.
+    const metadataTags = buildWorkspaceTags(workingDirOverride);
+    if (metadata?.selected_repository) {
+      metadataTags[REPOSITORY_TAG_KEY] = metadata.selected_repository;
+    }
+    if (metadata?.selected_branch) {
+      metadataTags[SELECTED_BRANCH_TAG_KEY] = metadata.selected_branch;
+    }
+    if (metadata?.git_provider) {
+      metadataTags[GIT_PROVIDER_TAG_KEY] = metadata.git_provider;
+    }
+    // An over-long value (a deep workspace path, a long branch) stays in
+    // localStorage only, so it cannot block the conversation from starting.
+    for (const [key, value] of Object.entries(metadataTags)) {
+      if (value.length > TAG_VALUE_MAX_LENGTH) delete metadataTags[key];
+    }
+    if (Object.keys(metadataTags).length > 0) {
+      const existingTags =
+        payload.tags && typeof payload.tags === "object"
+          ? (payload.tags as Record<string, string>)
+          : {};
+      payload.tags = { ...existingTags, ...metadataTags };
+    }
 
     const telemetryDistinctId = await getTelemetryDistinctId();
     const data = await new ConversationClient(
       getAgentServerClientOptions({ timeout: CREATE_CONVERSATION_TIMEOUT_MS }),
     ).createConversation<DirectConversationInfo>({
       ...payload,
+      ...(conversationRuntime
+        ? { conversation_runtime: conversationRuntime }
+        : {}),
       ...(telemetryDistinctId ? { user_id: telemetryDistinctId } : {}),
     });
     const localBackend = getEffectiveLocalBackend();
     if (!localBackend) throw new NoBackendAvailableError();
 
-    if (metadata?.selected_repository || workingDirOverride) {
+    // A Docker conversation is recorded even without a workspace: hooks and
+    // restarts read its workspace_mode.
+    if (metadata?.selected_repository || workingDirOverride || inContainer) {
       // The agent-server runtime has no concept of selected repo/branch/
       // workspace, so persist the home-page selection client-side.
       // `toAppConversation` reads the repo/branch fields back to hydrate
@@ -962,8 +1035,10 @@ class AgentServerConversationService {
     if (!conversationId || !getEffectiveLocalBackend()) {
       return emptyHooksResponse();
     }
+    const metadata = getStoredConversationMetadata(conversationId);
     const projectDir = await resolveConversationHooksProjectDir(
-      getStoredConversationMetadata(conversationId)?.selected_workspace,
+      metadata?.selected_workspace,
+      metadata?.workspace_mode === "docker_container",
     );
     if (projectDir === null) return emptyHooksResponse();
     return toHooksResponse(await HooksService.fetchWorkspaceHooks(projectDir));
@@ -1100,10 +1175,12 @@ class AgentServerConversationService {
   }
 
   /**
-   * Replaces the conversation's complete server-side tag map (the PATCH is
-   * replace-all, so callers must merge user edits with any reserved/internal
-   * keys before calling). Mirrors `updateConversationTitle`; local
-   * agent-server conversations only — Cloud conversations don't carry tags.
+   * Replaces the conversation's complete server-side tag map (the local
+   * agent-server PATCH is replace-all, so callers must merge user edits with
+   * any reserved/internal keys before calling). Mirrors
+   * `updateConversationTitle`; local agent-server conversations only — Cloud
+   * callers go through {@link updateConversationTagFlags}, which uses the
+   * app-server's merge patch instead.
    */
   static async updateConversationTags(
     conversationId: string,
@@ -1113,6 +1190,37 @@ class AgentServerConversationService {
       getAgentServerClientOptions(),
     ).updateConversation(conversationId, {
       tags,
+    });
+    const [conversation] = await this.batchGetAppConversations([
+      conversationId,
+    ]);
+    return requireAppConversation(conversation, conversationId);
+  }
+
+  /**
+   * Sets or clears boolean conversation flags carried in server-side tags
+   * (e.g. `pinned` / `archived`; see `conversation-tag-flags.ts`). Works on
+   * both backends: the local agent-server receives the complete replacement
+   * map derived from `currentTags` (its PATCH is replace-all), while the
+   * Cloud app-server receives a merge patch that sets enabled keys and
+   * deletes disabled ones, leaving every other tag untouched.
+   */
+  static async updateConversationTagFlags(
+    conversationId: string,
+    currentTags: Record<string, string> | null | undefined,
+    changes: Record<string, boolean>,
+  ): Promise<AppConversation> {
+    if (getActiveBackend().backend.kind === "cloud") {
+      return updateCloudConversationTags(
+        conversationId,
+        conversationTagFlagPatch(changes),
+      );
+    }
+
+    await new ConversationClient(
+      getAgentServerClientOptions(),
+    ).updateConversation(conversationId, {
+      tags: withConversationTagFlags(currentTags, changes),
     });
     const [conversation] = await this.batchGetAppConversations([
       conversationId,

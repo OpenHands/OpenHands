@@ -1,3 +1,6 @@
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { compile } from "@tailwindcss/node";
 import {
   act,
   render,
@@ -81,10 +84,6 @@ vi.mock("#/components/shared/buttons/styled-tooltip", () => ({
 
 vi.mock("#/components/shared/buttons/openhands-logo-button", () => ({
   OpenHandsLogoButton: () => <div data-testid="logo-button" />,
-}));
-
-vi.mock("#/components/features/sidebar/user-actions", () => ({
-  UserActions: () => <div data-testid="user-actions" />,
 }));
 
 vi.mock("#/components/features/conversation-panel/conversation-panel", () => ({
@@ -273,6 +272,105 @@ describe("Sidebar", () => {
     });
   });
 
+  it("keeps the CSS drawer and backdrop timing in step with removal", async () => {
+    // Arrange: compile the production stylesheet, then drive the real drawer.
+    const compiler = await compile(
+      await readFile(resolve("src/tailwind.css"), "utf8"),
+      { base: resolve("src"), onDependency: () => {} },
+    );
+    vi.useFakeTimers();
+    try {
+      renderSidebar("/conversations");
+      fireEvent.click(screen.getByTestId("sidebar-mobile-menu-toggle"));
+      act(() => vi.advanceTimersToNextFrame());
+      const drawer = screen.getByTestId("sidebar-mobile-drawer");
+      const backdrop = drawer.previousElementSibling as HTMLElement;
+      expect(drawer).toHaveAttribute("aria-hidden", "false");
+      expect(backdrop).toHaveAttribute("aria-hidden", "false");
+
+      // Act: use only duration classes actually emitted by each element.
+      const durations = [drawer, backdrop].map((element) => {
+        const css = compiler.build(
+          [...element.classList].filter((candidate) =>
+            candidate.startsWith("duration-"),
+          ),
+        );
+        const declarations = [
+          ...css.matchAll(/\.((?:\\.|[\w-])+)\s*\{([^}]+)\}/g),
+        ]
+          .filter(([, selector]) =>
+            element.classList.contains(selector.replace(/\\(.)/g, "$1")),
+          )
+          .map(([, , body]) => body)
+          .join("\n");
+        const property = declarations.match(
+          /transition-duration:\s*var\((--[\w-]+)\);/,
+        )?.[1];
+        expect(property).toBeDefined();
+        const value = element.style.getPropertyValue(property!);
+        expect(value).toMatch(/^\d+ms$/);
+        return Number.parseFloat(value);
+      });
+
+      // Assert: the visible CSS duration and the lifecycle timer agree.
+      const [duration] = durations;
+      expect(duration).toBeGreaterThan(0);
+      expect(durations[1]).toBe(duration);
+      fireEvent.click(
+        within(drawer).getByTestId("sidebar-mobile-drawer-close"),
+      );
+      expect(drawer).toHaveAttribute("aria-hidden", "true");
+      expect(backdrop).toHaveAttribute("aria-hidden", "true");
+      act(() => vi.advanceTimersByTime(duration - 1));
+      expect(drawer).toBeInTheDocument();
+      expect(backdrop).toBeInTheDocument();
+      act(() => vi.advanceTimersByTime(1));
+      expect(drawer).not.toBeInTheDocument();
+      expect(backdrop).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("renders sidebar text one step above the app's small text sizes", async () => {
+    // Arrange: compile the production stylesheet and open both sidebar variants.
+    const compiler = await compile(
+      await readFile(resolve("src/tailwind.css"), "utf8"),
+      { base: resolve("src"), onDependency: () => {} },
+    );
+    renderSidebar("/conversations");
+    fireEvent.click(screen.getByTestId("sidebar-mobile-menu-toggle"));
+    const sidebars = [
+      getDesktopSidebar(false),
+      await screen.findByTestId("sidebar-mobile-drawer"),
+    ];
+    const rem = (css: string, token: string, selectorTest: RegExp) =>
+      [...css.matchAll(/([^{}]+)\{([^{}]+)\}/g)]
+        .filter(([, selector]) => selectorTest.test(selector.trim()))
+        .map(
+          ([, , body]) =>
+            body.match(new RegExp(`${token}:\\s*([\\d.]+)rem`))?.[1],
+        )
+        .filter(Boolean)
+        .map(Number)[0];
+    const theme = compiler.build(["text-sm", "text-xs"]);
+
+    for (const sidebar of sidebars) {
+      // Act: build only the classes this element actually carries.
+      const css = compiler.build([...sidebar.classList]);
+      const own = new RegExp(
+        `^\\.(${[...sidebar.classList].map((c) => c.replace(/[^\w-]/g, "\\\\$&")).join("|")})$`,
+      );
+
+      // Assert: text-sm / text-xs resolve to larger sizes inside the sidebar.
+      for (const token of ["--text-sm", "--text-xs"]) {
+        const base = rem(theme, token, /^:root/);
+        expect(base).toBeGreaterThan(0);
+        expect(rem(css, token, own)).toBeGreaterThan(base!);
+      }
+    }
+  });
+
   it("leaves the mobile drawer open when a menu inside it already handled Escape", () => {
     renderSidebar("/conversations");
     const toggle = screen.getByTestId("sidebar-mobile-menu-toggle");
@@ -309,6 +407,43 @@ describe("Sidebar", () => {
     unmount();
     renderSidebar("/conversations");
     expect(getDesktopSidebar(true).dataset.collapsed).toBe("true");
+  });
+
+  it("resizes the expanded sidebar by dragging its edge and remembers the width", () => {
+    // Arrange: the sidebar starts at the left edge of the viewport.
+    const { unmount } = renderSidebar("/conversations");
+    const sidebar = getDesktopSidebar(false);
+    vi.spyOn(sidebar, "getBoundingClientRect").mockReturnValue(
+      DOMRect.fromRect({ x: 0, width: 300, height: 800 }),
+    );
+    const handle = screen
+      .getByTestId("sidebar-resize-handle")
+      .querySelector(".cursor-ew-resize")!;
+    expect(sidebar.style.getPropertyValue("--sidebar-width")).toBe("300px");
+
+    // Act + Assert: the width follows the pointer within its bounds.
+    fireEvent.mouseDown(handle);
+    for (const [clientX, expectedWidth] of [
+      [420, "420px"],
+      [100, "240px"],
+      [2000, "560px"],
+      [380, "380px"],
+    ] as const) {
+      fireEvent.mouseMove(document, { clientX });
+      expect(sidebar.style.getPropertyValue("--sidebar-width")).toBe(
+        expectedWidth,
+      );
+    }
+    fireEvent.mouseUp(document);
+
+    // The chosen width survives a remount; the collapsed rail has no handle.
+    unmount();
+    renderSidebar("/conversations");
+    expect(
+      getDesktopSidebar(false).style.getPropertyValue("--sidebar-width"),
+    ).toBe("380px");
+    fireEvent.click(screen.getByTestId("sidebar-collapse-toggle"));
+    expect(screen.queryByTestId("sidebar-resize-handle")).toBeNull();
   });
 
   it("expands the sidebar when the toggle is clicked from the collapsed state", () => {

@@ -12,17 +12,29 @@ import {
   type AutomationSetupKind,
 } from "#/api/automation-setup-types";
 import type { Automation } from "#/types/automation";
+import { formatAutomationRepositories } from "#/utils/automation-repo-sources";
 import {
   formatTimeOfDay,
   parseCronSchedule,
 } from "#/utils/automation-schedule";
 
 const HOURLY_CRON = "0 * * * *";
+// Prompt and plugin presets bake their repositories into a package the
+// service can rebuild; other automations keep them fixed.
+const REPOSITORY_UPDATABLE_PRESET_TYPES = new Set(["prompt", "plugin"]);
 
 function setupKind(automation: Automation): AutomationSetupKind {
   if ((automation.plugins?.length ?? 0) > 0) return "plugin";
   if (!automation.prompt?.trim() && automation.entrypoint) return "custom";
   return "prompt";
+}
+
+function canUpdateRepositories(automation: Automation): boolean {
+  const presetType = automation.preset_metadata?.preset_type;
+  return (
+    typeof presetType === "string" &&
+    REPOSITORY_UPDATABLE_PRESET_TYPES.has(presetType)
+  );
 }
 
 function eventKey(on: Automation["trigger"]["on"]): string {
@@ -86,7 +98,9 @@ export function setupDraftFromAutomation(
     kind,
     name: automation.name,
     prompt,
-    repository: automation.repository ?? "",
+    repository:
+      formatAutomationRepositories(automation.repositories) ||
+      (automation.repository ?? ""),
     model: automation.model ?? "",
     agentProfileId: automation.agent_profile_id ?? "",
     entrypoint: automation.entrypoint ?? "",
@@ -113,6 +127,8 @@ export function setupDraftFromAutomation(
     prompt,
     kind,
     editingAutomationId: automation.id,
+    existingRepositories: automation.repositories ?? [],
+    canUpdateRepositories: canUpdateRepositories(automation),
     ...(kind === "custom" && automation.tarball_path
       ? { existingCustomTarballPath: automation.tarball_path }
       : {}),
