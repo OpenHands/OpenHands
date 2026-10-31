@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
-import { LoadingSpinner } from "#/components/shared/loading-spinner";
+import { LoaderCircle } from "lucide-react";
+import { GenericEventMessage } from "./generic-event-message";
 import { I18nKey } from "#/i18n/declaration";
 import type { AppConversationStartTaskStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { getTaskStatusI18nKey } from "#/utils/status";
@@ -21,19 +22,40 @@ export function ConversationStartupProgress({
   onRetry,
 }: Props) {
   const { t } = useTranslation("openhands");
+  const isRunning = !error && status !== "READY" && status !== "ERROR";
   return (
-    <div
-      data-testid="conversation-startup-progress"
-      className="my-4 rounded-xl border border-border p-4 text-sm text-text-secondary"
-    >
-      {error ? (
-        <div className="flex flex-col items-start gap-3">
-          <p
-            role="alert"
-            className="whitespace-pre-wrap break-words text-status-error"
-          >
-            {error}
-          </p>
+    <div data-testid="conversation-startup-progress">
+      <GenericEventMessage
+        title={
+          error ? (
+            <span
+              role="alert"
+              className="whitespace-pre-wrap break-words text-status-error"
+            >
+              {error}
+            </span>
+          ) : (
+            <span role="status" aria-busy={isRunning}>
+              {t(
+                status
+                  ? getTaskStatusI18nKey(status)
+                  : I18nKey.HOME$CREATING_CONVERSATION,
+              )}
+            </span>
+          )
+        }
+        details=""
+        titleTrailing={
+          isRunning ? (
+            <LoaderCircle
+              aria-hidden="true"
+              className="h-4 w-4 ml-2 inline animate-spin text-muted"
+            />
+          ) : undefined
+        }
+      />
+      {error && (onEdit || onRetry) && (
+        <div className="flex flex-wrap items-center gap-2 pb-2">
           {onEdit && (
             <button
               type="button"
@@ -52,17 +74,6 @@ export function ConversationStartupProgress({
               {t(I18nKey.CHAT_INTERFACE$MESSAGE_RETRY)}
             </button>
           )}
-        </div>
-      ) : (
-        <div role="status" className="flex items-center gap-3">
-          <LoadingSpinner size="small" />
-          <span>
-            {t(
-              status
-                ? getTaskStatusI18nKey(status)
-                : I18nKey.HOME$CREATING_CONVERSATION,
-            )}
-          </span>
         </div>
       )}
     </div>
