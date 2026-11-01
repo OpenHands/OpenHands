@@ -147,6 +147,47 @@ describe("ScriptSection", () => {
     ).toBeInTheDocument();
   });
 
+  it("does not fetch a runtime-generated plugin-spec bundle", async () => {
+    // Arrange
+    const fetchBundle = vi
+      .spyOn(AutomationService, "fetchTarballBytes")
+      .mockRejectedValue(
+        new HttpError(422, "Unprocessable Entity", {
+          detail: "plugin-spec bundles are generated at run time",
+        }),
+      );
+    const pluginAutomation: Automation = {
+      ...automation,
+      prompt: null,
+      entrypoint: 'cd "$AUTOMATION_PLUGIN_ROOT/scripts" && python3 worker.py',
+      tarball_path: "plugin-spec://runtime",
+      preset_metadata: { preset_type: "plugin_spec" },
+      plugin_spec: {
+        plugin: {
+          source: "github:openhands/pr-reviewer",
+          ref: "main",
+          repo_path: "plugins/pr-reviewer",
+        },
+        config: { event: "pull_request.opened" },
+      },
+    };
+
+    // Act
+    renderSection(pluginAutomation);
+
+    // Assert
+    expect(
+      await screen.findByTestId("automation-script-entrypoint"),
+    ).toHaveTextContent(pluginAutomation.entrypoint!);
+    expect(fetchBundle).not.toHaveBeenCalled();
+    expect(
+      screen.queryByTestId("automation-script-unavailable"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("automation-script-runtime-generated"),
+    ).toBeInTheDocument();
+  });
+
   it("labels a binary member instead of rendering it", async () => {
     // Arrange: a member whose bytes are not UTF-8.
     const archive = packTar([{ name: "model.bin", content: "AAAA" }]);

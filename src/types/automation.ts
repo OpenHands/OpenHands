@@ -34,6 +34,17 @@ export interface AutomationRepository {
   provider?: string;
 }
 
+export interface AutomationPluginSpecSource {
+  source: string;
+  ref?: string;
+  repo_path?: string;
+}
+
+export interface AutomationPluginSpec {
+  plugin?: AutomationPluginSpecSource;
+  config?: Record<string, unknown>;
+}
+
 export type AutomationState = "ACTIVE" | "INACTIVE" | "DRAFT";
 
 export interface Automation {
@@ -125,6 +136,8 @@ export interface Automation {
    * `#/utils/automation-preset-sources`.
    */
   preset_metadata?: Record<string, unknown> | null;
+  /** Plugin source and validated configuration returned for plugin-spec automations. */
+  plugin_spec?: AutomationPluginSpec | null;
   /**
    * Labels the creator groups automations by, normalized by the automation
    * service. Absent from an automation service older than tag support.

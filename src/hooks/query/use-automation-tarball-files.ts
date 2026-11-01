@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import AutomationService from "#/api/automation-service/automation-service.api";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import type { Automation } from "#/types/automation";
+import { getAutomationPluginSpec } from "#/utils/automation-preset-sources";
 import { unpackTarGzip } from "#/utils/tar-unpack";
 
 export const AUTOMATION_TARBALL_FILES_QUERY_KEY = [
@@ -22,9 +23,13 @@ const MAX_UNPACKED_BYTES = 16 * 1024 * 1024;
  * toast is disabled.
  */
 export function useAutomationTarballFiles(
-  automation: Pick<Automation, "id" | "updated_at">,
+  automation: Pick<
+    Automation,
+    "id" | "updated_at" | "preset_metadata" | "plugin_spec"
+  >,
 ) {
   const active = useActiveBackend();
+  const pluginSpec = getAutomationPluginSpec(automation) !== null;
   return useQuery({
     queryKey: [
       ...AUTOMATION_TARBALL_FILES_QUERY_KEY,
@@ -39,7 +44,7 @@ export function useAutomationTarballFiles(
       }),
     staleTime: 5 * 60 * 1000,
     retry: false,
-    enabled: !!automation.id,
+    enabled: !!automation.id && !pluginSpec,
     meta: { disableToast: true },
   });
 }
