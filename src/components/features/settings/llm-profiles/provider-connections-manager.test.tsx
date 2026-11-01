@@ -183,6 +183,52 @@ describe("ProviderConnectionsManager", () => {
     ).toBeInTheDocument();
   });
 
+  it("moves focus to the first item (Bulk add) upon opening the menu and supports arrow navigation and escape", async () => {
+    const user = userEvent.setup();
+    renderWith(
+      <ProviderConnectionsManager
+        connections={[connection]}
+        linkedCountById={{}}
+        isLoading={false}
+        onAddModels={vi.fn()}
+        loadError={null}
+      />,
+    );
+
+    const trigger = screen.getByTestId("provider-connection-menu-trigger");
+    await user.click(trigger);
+
+    const bulkAddBtn = await screen.findByTestId(
+      "provider-connection-add-models",
+    );
+    expect(bulkAddBtn).toBeInTheDocument();
+    expect(document.activeElement).toBe(bulkAddBtn);
+
+    const editBtn = screen.getByTestId("provider-connection-edit");
+    const deleteBtn = screen.getByTestId("provider-connection-delete");
+
+    // ArrowDown moves focus to Edit
+    await user.keyboard("{ArrowDown}");
+    expect(document.activeElement).toBe(editBtn);
+
+    // ArrowDown again moves focus to Delete
+    await user.keyboard("{ArrowDown}");
+    expect(document.activeElement).toBe(deleteBtn);
+
+    // ArrowDown again wraps around to Bulk add
+    await user.keyboard("{ArrowDown}");
+    expect(document.activeElement).toBe(bulkAddBtn);
+
+    // ArrowUp wraps around to Delete
+    await user.keyboard("{ArrowUp}");
+    expect(document.activeElement).toBe(deleteBtn);
+
+    // Escape closes the menu and returns focus to trigger
+    await user.keyboard("{Escape}");
+    expect(bulkAddBtn).not.toBeInTheDocument();
+    expect(document.activeElement).toBe(trigger);
+  });
+
   it("calls onAddModels with the clicked connection (parent opens the modal)", async () => {
     const user = userEvent.setup();
     const onAddModels = vi.fn();
