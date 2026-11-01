@@ -27,6 +27,7 @@ vi.mock("#/hooks/use-conversation-id", () => ({
 
 vi.mock("#/contexts/active-backend-context", () => ({
   useActiveBackend: () => useActiveBackendMock(),
+  useOptionalActiveBackendContext: () => null,
 }));
 
 vi.mock("#/context/navigation-context", async (importActual) => ({
