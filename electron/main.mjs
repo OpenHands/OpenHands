@@ -46,6 +46,7 @@ import {
   ipcMain,
   nativeImage,
   nativeTheme,
+  safeStorage,
   shell,
 } from "electron";
 import { chmodSync, existsSync } from "node:fs";
@@ -313,6 +314,8 @@ async function waitForAgentServer(
 
 let loadingWin = null;
 let mainWin = null;
+/** MARS session bridge (port-forward tunnels, MARSOHS-1429) — created in app.whenReady(). */
+let marsTunnelBridge = null;
 
 // Collapsed splash size — loading.html's .container height must match. The
 // expanded height reveals the startup-log console below it ("Show details").
@@ -338,6 +341,7 @@ function setLoadingWindowExpanded(expanded) {
 }
 
 function createLoadingWindow() {
+  bootLogReady = false;
   loadingWin = new BrowserWindow({
     width: LOADING_WIN_WIDTH,
     // Tall enough to fit the streaming status line + the "first launch can
@@ -395,6 +399,7 @@ function createMainWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      // Desktop-shell state and the MARS tunnel bridge (see preload-main.cjs).
       preload: join(__dirname, "preload-main.cjs"),
     },
   });
@@ -680,9 +685,15 @@ async function startStack() {
     staticDir: buildDir,
     mode: "agent-canvas",
     isPublic: false,
+    // The preload provides window.marsBridge; the stack's ingress must not
+    // host a second, separate one.
+    marsWebBridge: false,
     skipNpmCheck: true,
     agentServerReadyTimeoutMs: 10 * 60_000,
     onServiceLog: handleServiceLog,
+    // main() announces the stack without waiting for the automation backend;
+    // if it then exits during startup, the services are already stopped.
+    onAutomationStartupFailure: failStartup,
   });
 
   // main() returns { config, agentServerReady } — treat a timeout as a fatal
@@ -696,6 +707,44 @@ async function startStack() {
         "Check your internet connection and try again.",
     );
   }
+}
+
+let startupFailed = false;
+
+/**
+ * Show why startup failed on the splash, keeping the full startup log
+ * readable and copyable. The automation backend can fail after the main
+ * window has opened, so the splash is reopened in its place when needed.
+ */
+function failStartup(err) {
+  if (startupFailed) return;
+  startupFailed = true;
+  const summary =
+    err.message +
+    " Ensure ports 8000, 18000, and 18001 are free, then try again.";
+  // Record the failure in the terminal and the startup-log buffer so it
+  // shows (and copies) as the final console line.
+  console.error("[desktop] Startup failed:", err);
+  appendBootLog("desktop", summary, "error");
+  if (mainWin && !mainWin.isDestroyed()) {
+    // Open the splash before closing the main window so window-all-closed
+    // does not quit the app.
+    if (!loadingWin || loadingWin.isDestroyed()) createLoadingWindow();
+    mainWin.destroy();
+  }
+  // Keep the splash open in its failure state so the full startup log can
+  // be read and copied; the app quits via the splash's Quit button (or
+  // Cmd+Q / closing the window).
+  if (showStartupFailure(summary)) return;
+  // Loading window already gone — fall back to the old dialog-and-quit.
+  const errorTail = recentServiceErrors.length
+    ? `\n\nRecent service errors:\n${recentServiceErrors.join("\n")}`
+    : "";
+  dialog.showErrorBox(
+    "OpenHands Agent Canvas failed to start",
+    summary + errorTail,
+  );
+  app.quit();
 }
 
 // ── App lifecycle ─────────────────────────────────────────────────────────────
@@ -714,6 +763,19 @@ app.whenReady().then(async () => {
 
   injectBundledUv();
   injectBundledNode();
+
+  // Registered before the window loads so the renderer's first paint can
+  // already reach the bridge (MARSOHS-1429). Independent of the agent-server
+  // stack below — MARS sessions don't need the bundled backend to be up.
+  const { createMarsTunnelBridge } = await import(
+    pathToFileURL(join(scriptsDir, "mars-tunnel-bridge.mjs")).href
+  );
+  marsTunnelBridge = createMarsTunnelBridge({
+    userDataPath: app.getPath("userData"),
+    safeStorage,
+    openExternal: (url) => shell.openExternal(url),
+  });
+  marsTunnelBridge.registerIpc(ipcMain);
 
   if (!uvxAvailable()) {
     dialog.showErrorBox(
@@ -744,26 +806,11 @@ app.whenReady().then(async () => {
     setBootPhase("Connecting to agent server…");
     await waitForAgentServer("http://localhost:8000/server_info", 60_000);
 
+    if (startupFailed) return;
     setBootPhase("Ready.");
     createMainWindow();
   } catch (err) {
-    const summary =
-      err.message +
-      " Ensure ports 8000, 18000, and 18001 are free, then try again.";
-    // Record the failure in the terminal and the startup-log buffer so it
-    // shows (and copies) as the final console line.
-    console.error("[desktop] Startup failed:", err);
-    appendBootLog("desktop", summary, "error");
-    // Keep the splash open in its failure state so the full startup log can
-    // be read and copied; the app quits via the splash's Quit button (or
-    // Cmd+Q / closing the window).
-    if (showStartupFailure(summary)) return;
-    // Loading window already gone — fall back to the old dialog-and-quit.
-    const errorTail = recentServiceErrors.length
-      ? `\n\nRecent service errors:\n${recentServiceErrors.join("\n")}`
-      : "";
-    dialog.showErrorBox("OpenHands Agent Canvas failed to start", summary + errorTail);
-    app.quit();
+    failStartup(err);
   }
 });
 
@@ -798,6 +845,14 @@ app.on("before-quit", (event) => {
 
   cleanupStarted = true;
   event.preventDefault();
+
+  // MARS connections are in-process state (tunnel listeners to close; no OS
+  // subprocess to signal and wait on), so this
+  // doesn't need the SIGTERM-based cleanup path below — just tear them down
+  // directly. Best-effort: quitting must not hang on it.
+  void marsTunnelBridge?.dispose().catch((err) => {
+    console.warn("[desktop] Failed to close MARS connections:", err);
+  });
 
   console.log("[desktop] Stopping backend services…");
   if (process.platform === "win32") {

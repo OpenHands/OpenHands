@@ -96,9 +96,9 @@ export function ScriptSection({ automation }: ScriptSectionProps) {
               <div
                 key={entry.path}
                 data-testid="automation-script-file"
-                className="overflow-hidden rounded-lg border border-[var(--oh-border)]"
+                className="overflow-hidden rounded-lg border border-border"
               >
-                <div className="flex items-center gap-2 border-b border-[var(--oh-border)] bg-black/20 px-3 py-2 font-mono text-xs text-content">
+                <div className="flex items-center gap-2 border-b border-border bg-black/20 px-3 py-2 font-mono text-xs text-content">
                   <span className="truncate">{entry.path}</span>
                   {entry.path === entrypointPath ? (
                     <span className="shrink-0 rounded-md bg-surface-raised px-2 py-0.5 text-[10px] font-medium text-muted">

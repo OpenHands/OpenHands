@@ -9,6 +9,7 @@ import {
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import type { BackendKind } from "#/api/backend-registry/types";
 import { I18nKey } from "#/i18n/declaration";
+import { retryTransientRequest } from "#/utils/transient-error-retry";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 const CLOUD_RESUME_RETRY_DELAY_MS =
@@ -49,16 +50,16 @@ export function useCloudSandboxAutoResume({
     mutationFn: async ({ resumeKey, sandboxId }: ResumeVariables) => {
       if (activeResumeKeyRef.current !== resumeKey) return;
 
-      try {
-        await resumeCloudSandbox(sandboxId);
-      } catch (error) {
-        if (activeResumeKeyRef.current === resumeKey) {
-          displayErrorToast(t(I18nKey.CONVERSATION$FAILED_TO_START_FROM_TASK));
-        }
-        throw error;
+      await resumeCloudSandbox(sandboxId);
+    },
+    retry: (failureCount, error) =>
+      activeResumeKeyRef.current !== null &&
+      retryTransientRequest(failureCount, error),
+    onError: (_error, variables) => {
+      if (activeResumeKeyRef.current === variables.resumeKey) {
+        displayErrorToast(t(I18nKey.CONVERSATION$FAILED_TO_START_FROM_TASK));
       }
     },
-    retry: () => activeResumeKeyRef.current !== null,
     retryDelay: () => CLOUD_RESUME_RETRY_DELAY_MS,
     onSuccess: (_, variables) => {
       if (activeResumeKeyRef.current === variables.resumeKey) {

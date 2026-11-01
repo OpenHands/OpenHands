@@ -28,15 +28,6 @@ export class NoBackendAvailableError extends Error {
   }
 }
 
-export const isNoBackendAvailableError = (
-  error: unknown,
-): error is NoBackendAvailableError =>
-  error instanceof NoBackendAvailableError ||
-  (typeof error === "object" &&
-    error !== null &&
-    "name" in error &&
-    error.name === "NoBackendAvailableError");
-
 function normalizeHost(host: string): string {
   return host.replace(/\/+$/, "");
 }

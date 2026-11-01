@@ -180,7 +180,7 @@ describe("ChooseAgentStep", () => {
     expect(call.agent_settings_diff).toEqual({ agent_kind: "openhands" });
   });
 
-  it("persists an ACP diff matching the registry when Claude Code is selected", async () => {
+  it("persists an ACP diff for Claude Code that leaves the model to the agent", async () => {
     const save = vi.spyOn(SettingsService, "saveSettings");
     const { onNext } = renderStep("claude-code");
     const user = userEvent.setup();
@@ -204,7 +204,8 @@ describe("ChooseAgentStep", () => {
       // ``acp_args`` can't survive and concatenate onto the spawn
       // command at conversation-create time.
       acp_args: [],
-      acp_model: "opus[1m]",
+      // No model: Claude Code starts on its own default.
+      acp_model: null,
     });
   });
 

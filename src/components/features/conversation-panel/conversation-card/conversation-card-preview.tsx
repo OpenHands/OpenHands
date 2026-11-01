@@ -14,6 +14,7 @@ import { resolveAcpProviderIcon } from "#/constants/acp-providers";
 import AzureDevOpsLogo from "#/assets/branding/azure-devops-logo.svg?react";
 import { AgentBrandIcon } from "#/components/shared/agent-brand-icon";
 import { ConversationStatusDot } from "../conversation-status-dot";
+import { isMissingSandboxStatus } from "#/utils/conversation-archive-status";
 import { getConversationTagLabel } from "./conversation-tag-display";
 import { getConversationTagIcon } from "./conversation-tag-icons";
 
@@ -34,12 +35,27 @@ interface ConversationCardPreviewProps {
   /** Registry key of the ACP CLI server, resolved to its brand mark. */
   acpServer?: string | null;
   createdAt?: string;
+  /** Id of the agent profile the conversation was launched from. */
+  agentProfileId?: string | null;
+  /**
+   * The launched profile's name, resolved by the panel from the profile list:
+   * a string when known, ``null`` when the list has no such profile (deleted,
+   * another organization), ``undefined`` while the list is still loading.
+   */
+  agentProfileName?: string | null;
   /**
    * Server-side conversation tags. Always shown in the hovercard when present
    * (except keys already covered by repository / branch / directory rows).
    * Sidebar card chips stay gated by the panel's Tags preference.
    */
   tags?: Record<string, string> | null;
+  /**
+   * The row's effective archived state. Keeps the preview's status dot in
+   * agreement with the "Archived" chip shown on the card being hovered. Leave
+   * undefined to infer it from `sandboxStatus` (a missing, non-resumable
+   * runtime).
+   */
+  isArchived?: boolean;
 }
 
 const providerIcon: Partial<Record<Provider, IconType>> = {
@@ -113,10 +129,14 @@ export function ConversationCardPreview({
   agentKind = null,
   acpServer = null,
   createdAt,
+  agentProfileId = null,
+  agentProfileName,
   tags = null,
+  isArchived,
 }: ConversationCardPreviewProps) {
   const { t } = useTranslation("openhands");
 
+  const effectiveArchived = isArchived ?? isMissingSandboxStatus(sandboxStatus);
   const repository = selectedRepository?.selected_repository ?? null;
   const branch = selectedRepository?.selected_branch ?? null;
   const provider = selectedRepository?.git_provider ?? null;
@@ -142,6 +162,7 @@ export function ConversationCardPreview({
             <ConversationStatusDot
               executionStatus={executionStatus}
               sandboxStatus={sandboxStatus}
+              isArchived={effectiveArchived}
               showTooltip={false}
             />
           </span>
@@ -200,6 +221,20 @@ export function ConversationCardPreview({
             >
               {llmModel}
             </PreviewValueWithIcon>
+          </PreviewRow>
+        ) : null}
+
+        {agentProfileId && agentProfileName !== undefined ? (
+          <PreviewRow
+            label={t(
+              agentProfileName
+                ? I18nKey.CONVERSATION_PANEL$PREVIEW_AGENT_PROFILE
+                : I18nKey.CONVERSATION_PANEL$PREVIEW_AGENT_PROFILE_ID,
+            )}
+          >
+            <span data-testid="conversation-card-preview-agent-profile">
+              {agentProfileName ?? agentProfileId}
+            </span>
           </PreviewRow>
         ) : null}
 

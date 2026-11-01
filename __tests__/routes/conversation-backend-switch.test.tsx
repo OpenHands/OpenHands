@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import React from "react";
+import { HttpError } from "@openhands/typescript-client";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import type { SharedConversation } from "@openhands/typescript-client";
@@ -124,18 +125,21 @@ function makeConversation(
   };
 }
 
-function renderConversation() {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  return render(
-    <MemoryRouter initialEntries={[`/conversations/${CLOUD_CONVERSATION_ID}`]}>
+// Shared by `conversationTree` so a `rerender` keeps the same cache; each
+// `renderConversation` starts a fresh one, like a real remount.
+let queryClient: QueryClient;
+
+function conversationTree(conversationId: string, search = "") {
+  return (
+    <MemoryRouter
+      initialEntries={[`/conversations/${conversationId}${search}`]}
+    >
       <QueryClientProvider client={queryClient}>
         <ActiveBackendProvider>
           <NavigationProvider
             value={{
-              currentPath: `/conversations/${CLOUD_CONVERSATION_ID}`,
-              conversationId: CLOUD_CONVERSATION_ID,
+              currentPath: `/conversations/${conversationId}`,
+              conversationId,
               isNavigating: false,
               navigate: vi.fn(),
             }}
@@ -144,8 +148,15 @@ function renderConversation() {
           </NavigationProvider>
         </ActiveBackendProvider>
       </QueryClientProvider>
-    </MemoryRouter>,
+    </MemoryRouter>
   );
+}
+
+function renderConversation(search = "") {
+  queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false, retryDelay: 1 } },
+  });
+  return render(conversationTree(CLOUD_CONVERSATION_ID, search));
 }
 
 function makeSharedConversation(id: string): SharedConversation {
@@ -170,7 +181,7 @@ function makeSharedConversation(id: string): SharedConversation {
 // observable destinations.
 function renderConversationRoute(conversationId: string) {
   const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+    defaultOptions: { queries: { retry: false, retryDelay: 1 } },
   });
   return render(
     <MemoryRouter initialEntries={[`/conversations/${conversationId}`]}>
@@ -244,6 +255,40 @@ describe("conversation route — backend switch", () => {
     await waitFor(() => {
       expect(screen.queryByTestId("conversation-main")).not.toBeInTheDocument();
     });
+  });
+
+  it("tears down the view when the org changes away from the one the URL pins", async () => {
+    // Arrange — the link pins the conversation to org-a of the cloud backend.
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    renderConversation(`?backend=${cloudBackend.id}&org=org-a`);
+    expect(await screen.findByTestId("conversation-main")).toBeInTheDocument();
+
+    // Act — same backend, another org.
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-b" });
+
+    // Assert
+    await waitFor(() => {
+      expect(screen.queryByTestId("conversation-main")).not.toBeInTheDocument();
+    });
+  });
+
+  it("renders a conversation of the new backend reached without leaving the route", async () => {
+    // Arrange — switching DigitalOcean sessions swaps the backend and goes
+    // straight to that session's conversation, never via /conversations.
+    const LOCAL_CONVERSATION_ID = "conv-local";
+    vi.mocked(
+      AgentServerConversationService.batchGetAppConversations,
+    ).mockImplementation(async (ids) => ids.map((id) => makeConversation(id)));
+    setActiveSelection({ backendId: cloudBackend.id });
+    const { rerender } = renderConversation();
+    await screen.findByTestId("conversation-main");
+
+    // Act
+    setActiveSelection({ backendId: localBackend.id });
+    rerender(conversationTree(LOCAL_CONVERSATION_ID));
+
+    // Assert
+    expect(await screen.findByTestId("conversation-main")).toBeInTheDocument();
   });
 });
 
@@ -333,7 +378,7 @@ describe("conversation route — cloud sandbox resume", () => {
       }),
     ]);
     vi.mocked(resumeCloudSandbox)
-      .mockRejectedValueOnce(new Error("resume failed"))
+      .mockRejectedValueOnce(new HttpError(503, "Unavailable", null))
       .mockResolvedValueOnce(undefined);
 
     renderConversation();
@@ -346,6 +391,7 @@ describe("conversation route — cloud sandbox resume", () => {
       expect(resumeCloudSandbox).toHaveBeenCalledTimes(2);
     });
     expect(resumeCloudSandbox).toHaveBeenNthCalledWith(2, "sandbox-paused-2");
+    expect(displayErrorToast).not.toHaveBeenCalled();
   });
 
   it("does not retry or toast when a pending cloud resume fails after unmount", async () => {
@@ -442,4 +488,63 @@ describe("conversation route — shared read-only fallback", () => {
     expect(getCloudSharedConversation).not.toHaveBeenCalled();
     expect(displayErrorToast).toHaveBeenCalledTimes(1);
   });
+});
+
+describe("transient conversation failures", () => {
+  it("recovers a failed owner lookup without redirecting or probing sharing", async () => {
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    vi.mocked(AgentServerConversationService.batchGetAppConversations)
+      .mockRejectedValueOnce(new HttpError(503, "Unavailable", null))
+      .mockResolvedValue([makeConversation(CLOUD_CONVERSATION_ID)]);
+    renderConversationRoute(CLOUD_CONVERSATION_ID);
+    await waitFor(() =>
+      expect(
+        AgentServerConversationService.batchGetAppConversations,
+      ).toHaveBeenCalledTimes(2),
+    );
+    expect(screen.queryByTestId("conversations-home")).not.toBeInTheDocument();
+    expect(getCloudSharedConversation).not.toHaveBeenCalled();
+    expect(displayErrorToast).not.toHaveBeenCalled();
+  });
+
+  it("waits for a successful shared lookup before deciding a conversation is missing", async () => {
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    vi.mocked(
+      AgentServerConversationService.batchGetAppConversations,
+    ).mockResolvedValue([null]);
+    vi.mocked(getCloudSharedConversation)
+      .mockRejectedValueOnce(new HttpError(503, "Unavailable", null))
+      .mockResolvedValue(makeSharedConversation(CLOUD_CONVERSATION_ID));
+    renderConversationRoute(CLOUD_CONVERSATION_ID);
+    expect(
+      await screen.findByTestId("shared-conversation-view"),
+    ).toBeInTheDocument();
+    expect(displayErrorToast).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { status: 403, attempts: 1 },
+    { status: 503, attempts: 4 },
+  ])(
+    "reports exhausted resume failure once ($status)",
+    async ({ status, attempts }) => {
+      setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+      vi.mocked(
+        AgentServerConversationService.batchGetAppConversations,
+      ).mockResolvedValue([
+        makeConversation(CLOUD_CONVERSATION_ID, {
+          sandbox_status: "PAUSED",
+          sandbox_id: "paused",
+        }),
+      ]);
+      vi.mocked(resumeCloudSandbox).mockRejectedValue(
+        new HttpError(status, "Failure", null),
+      );
+      renderConversation();
+      await waitFor(() => expect(displayErrorToast).toHaveBeenCalledTimes(1));
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      expect(resumeCloudSandbox).toHaveBeenCalledTimes(attempts);
+      expect(displayErrorToast).toHaveBeenCalledTimes(1);
+    },
+  );
 });

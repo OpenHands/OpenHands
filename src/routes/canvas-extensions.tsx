@@ -38,6 +38,7 @@ type PendingAction =
 const CANVAS_EXTENSIONS_DOCS_URL =
   "https://docs.openhands.dev/openhands/usage/agent-canvas/canvas-extensions";
 
+// @spec WN-001 — Apps trust notice uses theme-aware warning feedback
 export default function CanvasExtensionsScreen() {
   const { t } = useTranslation("openhands");
   const { backend } = useActiveBackend();
@@ -125,7 +126,7 @@ export default function CanvasExtensionsScreen() {
             </BrandButton>
           </div>
 
-          <div className="rounded-xl border border-amber-400/30 bg-amber-400/5 px-4 py-3 text-sm text-amber-100">
+          <div className="rounded-xl border border-warning/30 bg-warning/5 px-4 py-3 text-sm text-feedback-warning">
             {t(I18nKey.SETTINGS$APPS_TRUST_NOTICE)}
           </div>
 

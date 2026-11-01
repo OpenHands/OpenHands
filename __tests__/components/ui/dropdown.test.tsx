@@ -1,7 +1,14 @@
-import { render, screen } from "@testing-library/react";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { compile } from "@tailwindcss/node";
+import { parse } from "postcss";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
 import { Dropdown } from "#/ui/dropdown/dropdown";
+
+const mockPlaceholder = "Select an option";
+const mockBackendPlaceholder = "Choose a backend";
 
 const mockOptions = [
   { value: "1", label: "Option 1" },
@@ -30,9 +37,63 @@ describe("Dropdown", () => {
 
       const listbox = screen.getByRole("listbox");
       expect(listbox).toBeInTheDocument();
+      const panel = listbox.parentElement;
+      if (!panel) throw new Error("Expected the dropdown panel");
+      const compiler = await compile(
+        await readFile(resolve("src/tailwind.css"), "utf8"),
+        { base: resolve("src"), onDependency: () => {} },
+      );
+      const caps: string[] = [];
+      parse(compiler.build([...panel.classList])).walkDecls(
+        "max-width",
+        (declaration) => {
+          const rule = declaration.parent;
+          if (rule?.type === "rule" && panel.matches(rule.selector)) {
+            caps.push(declaration.value.replace(/\s/g, ""));
+          }
+        },
+      );
+      expect(caps).toContain("min(26rem,calc(100vw-2rem))");
       expect(screen.getByText("Option 1")).toBeInTheDocument();
       expect(screen.getByText("Option 2")).toBeInTheDocument();
       expect(screen.getByText("Option 3")).toBeInTheDocument();
+    });
+  });
+
+  describe("Hidden trigger", () => {
+    it("keeps Downshift controls connected while selecting from the popover", async () => {
+      // Arrange: collapsed navigation supplies its own visible trigger.
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      const { container } = render(
+        <Dropdown
+          options={mockOptions}
+          placeholder={mockBackendPlaceholder}
+          hideTrigger
+          defaultOpen
+          onChange={onChange}
+        />,
+      );
+      const input = screen.getByRole("combobox", {
+        name: "Choose a backend",
+      });
+      const toggle = container.querySelector("button[aria-hidden]");
+      expect(input).toHaveAttribute("tabindex", "-1");
+      expect(input).toHaveAttribute(
+        "aria-controls",
+        screen.getByRole("listbox").id,
+      );
+      expect(toggle).toHaveAttribute("tabindex", "-1");
+      expect(toggle).toHaveAttribute("aria-hidden", "true");
+      expect(screen.queryByTestId("dropdown-trigger")).not.toBeInTheDocument();
+
+      // Act: choose through the visible option, not the hidden input or toggle.
+      await user.click(screen.getByRole("option", { name: "Option 2" }));
+
+      // Assert: the same real combobox owns the selected value and closes.
+      expect(onChange).toHaveBeenCalledExactlyOnceWith(mockOptions[1]);
+      expect(input).toHaveValue("Option 2");
+      expect(input).toHaveAttribute("aria-expanded", "false");
     });
   });
 
@@ -180,6 +241,21 @@ describe("Dropdown", () => {
     });
   });
 
+  describe("Full label on hover", () => {
+    it("should expose the full label as a title on the trigger and each option", async () => {
+      const user = userEvent.setup();
+      render(<Dropdown options={mockOptions} defaultValue={mockOptions[1]} />);
+
+      expect(screen.getByRole("combobox")).toHaveAttribute("title", "Option 2");
+
+      await user.click(screen.getByTestId("dropdown-trigger"));
+
+      mockOptions.forEach(({ label }) => {
+        expect(screen.getByText(label)).toHaveAttribute("title", label);
+      });
+    });
+  });
+
   describe("Clear button", () => {
     it("should not render clear button by default", () => {
       render(<Dropdown options={mockOptions} />);
@@ -224,7 +300,7 @@ describe("Dropdown", () => {
         <Dropdown
           options={mockOptions}
           clearable
-          placeholder="Select an option"
+          placeholder={mockPlaceholder}
         />,
       );
 
@@ -285,7 +361,7 @@ describe("Dropdown", () => {
 
   describe("Placeholder", () => {
     it("should display placeholder text when no value selected", () => {
-      render(<Dropdown options={mockOptions} placeholder="Select an option" />);
+      render(<Dropdown options={mockOptions} placeholder={mockPlaceholder} />);
 
       const input = screen.getByRole("combobox");
       expect(input).toHaveAttribute("placeholder", "Select an option");
@@ -362,6 +438,69 @@ describe("Dropdown", () => {
       await user.click(clearButton);
 
       expect(onChangeMock).toHaveBeenCalledWith(null);
+    });
+  });
+
+  describe("onOpenChange", () => {
+    it("reports when the menu opens and closes", async () => {
+      const user = userEvent.setup();
+      const onOpenChange = vi.fn();
+      render(<Dropdown options={mockOptions} onOpenChange={onOpenChange} />);
+
+      await user.click(screen.getByTestId("dropdown-trigger"));
+      expect(onOpenChange).toHaveBeenLastCalledWith(true);
+
+      await user.click(screen.getByRole("option", { name: "Option 2" }));
+      expect(onOpenChange).toHaveBeenLastCalledWith(false);
+    });
+  });
+
+  describe("Menu anchoring", () => {
+    it("anchors the menu to the trigger by default and to the parent row when asked", () => {
+      // The absolutely positioned menu takes its width and position from the
+      // nearest positioned ancestor: the trigger wrapper unless anchored to the parent.
+      const { rerender } = render(
+        <Dropdown options={mockOptions} testId="picker" />,
+      );
+      expect(screen.getByTestId("picker")).toHaveClass("relative");
+
+      rerender(
+        <Dropdown options={mockOptions} testId="picker" anchorMenuToParent />,
+      );
+      expect(screen.getByTestId("picker")).not.toHaveClass("relative");
+    });
+  });
+
+  describe("Grouped options", () => {
+    it("lists consecutive options under one heading with their short labels", async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      const grouped = [
+        { value: "local", label: "Local" },
+        {
+          value: "a",
+          label: "Cloud – Alpha",
+          group: "Cloud",
+          groupLabel: "Alpha",
+        },
+        {
+          value: "b",
+          label: "Cloud – Beta",
+          group: "Cloud",
+          groupLabel: "Beta",
+        },
+      ];
+      render(<Dropdown options={grouped} onChange={onChange} />);
+
+      await user.click(screen.getByTestId("dropdown-trigger"));
+
+      expect(screen.getAllByText("Cloud")).toHaveLength(1);
+      // Assistive tech still hears the group with each row.
+      const beta = screen.getByRole("option", { name: "Cloud – Beta" });
+      expect(beta).toHaveTextContent(/^Beta$/);
+      expect(within(beta).getByTitle("Cloud – Beta")).toBeInTheDocument();
+      await user.click(beta);
+      expect(onChange).toHaveBeenCalledWith(grouped[2]);
     });
   });
 

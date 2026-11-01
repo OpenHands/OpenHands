@@ -1,6 +1,7 @@
 import React from "react";
+import { HttpError } from "@openhands/typescript-client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import type { AppConversationStartTask } from "#/api/conversation-service/agent-server-conversation-service.types";
@@ -49,7 +50,7 @@ describe("useTaskPolling", () => {
 
   const createWrapper = () => {
     queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
+      defaultOptions: { queries: { retry: false, retryDelay: 1 } },
     });
 
     return function Wrapper({ children }: { children: React.ReactNode }) {
@@ -80,6 +81,7 @@ describe("useTaskPolling", () => {
 
   afterEach(() => {
     queryClient?.clear();
+    vi.useRealTimers();
     localStorage.clear();
     sessionStorage.clear();
   });
@@ -166,7 +168,7 @@ describe("useTaskPolling", () => {
 
     const createWrapperForConversation = (conversationId: string) => {
       queryClient = new QueryClient({
-        defaultOptions: { queries: { retry: false } },
+        defaultOptions: { queries: { retry: false, retryDelay: 1 } },
       });
 
       return function Wrapper({ children }: { children: React.ReactNode }) {
@@ -212,6 +214,33 @@ describe("useTaskPolling", () => {
     });
   });
 
+  it("marks the sidebar conversation list stale once the task is ready", async () => {
+    vi.mocked(AgentServerConversationService.getStartTask).mockResolvedValue(
+      readyTask,
+    );
+    const wrapper = createWrapper();
+    // Same key shapes `usePaginatedConversations` and `useStartTasks` read.
+    const conversationsKey = [
+      "user",
+      "conversations",
+      "paginated",
+      20,
+      "default-local",
+      null,
+    ];
+    const startTasksKey = ["start-tasks", "search", 10];
+    queryClient.setQueryData(conversationsKey, { pages: [], pageParams: [] });
+    queryClient.setQueryData(startTasksKey, []);
+
+    renderHook(() => useTaskPollingController(), { wrapper });
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledOnce());
+    expect(queryClient.getQueryState(conversationsKey)?.isInvalidated).toBe(
+      true,
+    );
+    expect(queryClient.getQueryState(startTasksKey)?.isInvalidated).toBe(true);
+  });
+
   it("handles a ready task once when multiple components consume polling state", async () => {
     vi.mocked(AgentServerConversationService.getStartTask).mockResolvedValue(
       readyTask,
@@ -234,6 +263,75 @@ describe("useTaskPolling", () => {
     expect(trackCloudConversationReady).toHaveBeenCalledWith(
       "123",
       "conversation-1",
+    );
+  });
+  it("recovers the first task read after a transient failure and navigates once", async () => {
+    vi.mocked(AgentServerConversationService.getStartTask)
+      .mockRejectedValueOnce(new HttpError(503, "Unavailable", null))
+      .mockResolvedValue(readyTask);
+    renderHook(() => useTaskPollingController(), { wrapper: createWrapper() });
+    await waitFor(() => expect(navigate).toHaveBeenCalledOnce());
+    expect(AgentServerConversationService.getStartTask).toHaveBeenCalledTimes(
+      2,
+    );
+  });
+
+  it("stops polling after a terminal request error", async () => {
+    vi.mocked(AgentServerConversationService.getStartTask).mockRejectedValue(
+      new HttpError(404, "Not found", null),
+    );
+    const { result } = renderHook(() => useTaskPolling(), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.taskError).toBeTruthy());
+    expect(AgentServerConversationService.getStartTask).toHaveBeenCalledTimes(
+      1,
+    );
+    expect(navigate).not.toHaveBeenCalled();
+  });
+  it("discovers a ready session within a second and stops polling", async () => {
+    vi.useFakeTimers();
+    vi.mocked(AgentServerConversationService.getStartTask)
+      .mockResolvedValueOnce({
+        ...readyTask,
+        status: "WORKING",
+        app_conversation_id: null,
+      })
+      .mockResolvedValue(readyTask);
+    const { result } = renderHook(() => useTaskPolling(), {
+      wrapper: createWrapper(),
+    });
+    await act(() => vi.advanceTimersByTimeAsync(1000));
+    expect(result.current.taskStatus).toBe("READY");
+    const calls = vi.mocked(AgentServerConversationService.getStartTask).mock
+      .calls.length;
+    await act(() => vi.advanceTimersByTimeAsync(10000));
+    expect(AgentServerConversationService.getStartTask).toHaveBeenCalledTimes(
+      calls,
+    );
+  });
+
+  it("backs off long starts and releases the polling timer on unmount", async () => {
+    vi.useFakeTimers();
+    vi.mocked(AgentServerConversationService.getStartTask).mockResolvedValue({
+      ...readyTask,
+      status: "WORKING",
+      app_conversation_id: null,
+    });
+    const { unmount } = renderHook(() => useTaskPolling(), {
+      wrapper: createWrapper(),
+    });
+    await act(() => vi.advanceTimersByTimeAsync(31000));
+    const calls = vi.mocked(AgentServerConversationService.getStartTask).mock
+      .calls.length;
+    await act(() => vi.advanceTimersByTimeAsync(3000));
+    expect(AgentServerConversationService.getStartTask).toHaveBeenCalledTimes(
+      calls + 1,
+    );
+    unmount();
+    await act(() => vi.advanceTimersByTimeAsync(10000));
+    expect(AgentServerConversationService.getStartTask).toHaveBeenCalledTimes(
+      calls + 1,
     );
   });
 });

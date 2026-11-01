@@ -26,6 +26,10 @@ export const META_PROFILES_QUERY_KEYS = {
   all: ["meta-profiles"] as const,
 } as const;
 
+export const ACP_MODEL_DISCOVERY_QUERY_KEYS = {
+  all: ["acp-model-discovery"] as const,
+} as const;
+
 export const AGENT_PROFILES_QUERY_KEYS = {
   all: ["agent-profiles"] as const,
   // Nested under `all` so profile mutations invalidate cached details too.
@@ -35,6 +39,10 @@ export const AGENT_PROFILES_QUERY_KEYS = {
 
 export const TOOL_CATALOG_QUERY_KEYS = {
   all: ["tool-catalog"] as const,
+} as const;
+
+export const SKILL_CATALOG_QUERY_KEYS = {
+  all: ["skill-catalog"] as const,
 } as const;
 
 export const PROVIDER_CONNECTIONS_QUERY_KEYS = {
@@ -108,6 +116,18 @@ export const SETUP_QUERY_KEYS = {
   capabilities: () => ["setup-capabilities"] as const,
 } as const;
 
+export const MARS_QUERY_KEYS = {
+  all: ["mars"] as const,
+  authState: ["mars", "auth-state"] as const,
+  /** Every connection's agent list, for invalidating after a change. */
+  allAgents: ["mars", "agents"] as const,
+  /** Keyed by connection so switching teams never shows another team's list. */
+  agents: (connectionId: string | null) =>
+    ["mars", "agents", connectionId] as const,
+  /** DigitalOcean's sandbox size catalog; the same for every team. */
+  sandboxSizes: ["mars", "sandbox-sizes"] as const,
+} as const;
+
 export const APP_UPDATE_QUERY_KEYS = {
   /** Latest published @openhands/agent-canvas version (npm `latest` dist-tag). */
   latestVersion: ["agent-canvas-latest-version"] as const,
@@ -126,5 +146,3 @@ export const CONFIG_CACHE_OPTIONS = {
   staleTime: 1000 * 60 * 5, // 5 minutes
   gcTime: 1000 * 60 * 15, // 15 minutes
 } as const;
-
-export type QueryKeys = (typeof QUERY_KEYS)[keyof typeof QUERY_KEYS];

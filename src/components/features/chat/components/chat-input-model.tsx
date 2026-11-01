@@ -4,6 +4,7 @@ import {
   type ChatInputModelState,
 } from "#/hooks/use-chat-input-model-state";
 import { useSwitchAcpModel } from "#/hooks/mutation/use-switch-acp-model";
+import { useModelStore } from "#/stores/model-store";
 import { ComboboxCaretInline } from "#/ui/combobox-caret";
 import SettingsGearIcon from "#/icons/settings-gear.svg?react";
 import CheckIcon from "#/icons/checkmark.svg?react";
@@ -56,8 +57,15 @@ export function ChatInputModelMenuContent({
   // Locked-to-Cloud blocks the Canvas settings pages this links to (OHE-3457).
   const showSettingsLink = getLockedCloudHost() === null;
 
-  const handleSelectAcpModel = (modelId: string) => {
-    if (modelId !== model.currentModelId) {
+  const handleSelectAcpModel = (modelId: string | null) => {
+    if (modelId !== model.selectedModelId) {
+      // A home-page ACP model pick (no conversation) is an explicit model
+      // choice made before the first message: mark it so the next home launch
+      // suppresses "Run on first message" routing for that one conversation.
+      // `useCreateConversation` reads-and-clears it.
+      if (!model.switchConversationId) {
+        useModelStore.getState().setHomeManualModelPick(true);
+      }
       switchAcpModel.mutate({
         conversationId: model.switchConversationId,
         model: modelId,
@@ -78,12 +86,17 @@ export function ChatInputModelMenuContent({
               {t(I18nKey.MODEL$AVAILABLE_MODELS)}
             </Typography.Text>
           </li>
-          {model.availableAcpModels.map((option) => {
-            const isSelected = option.id === model.currentModelId;
+          {[
+            ...(model.agentDefaultLabel
+              ? [{ id: null, label: model.agentDefaultLabel }]
+              : []),
+            ...model.availableAcpModels,
+          ].map((option) => {
+            const isSelected = option.id === model.selectedModelId;
             return (
               <ContextMenuListItem
-                key={option.id}
-                testId={`chat-input-acp-model-option-${option.id}`}
+                key={option.id ?? ""}
+                testId={`chat-input-acp-model-option-${option.id ?? "agent-default"}`}
                 onClick={(event) => {
                   event.preventDefault();
                   event.stopPropagation();

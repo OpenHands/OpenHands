@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import type { AppConversationStartTask } from "#/api/conversation-service/agent-server-conversation-service.types";
 import {
@@ -22,7 +22,13 @@ import {
   linkPendingTaskMessages,
   schedulePendingTaskMessageReassign,
 } from "#/utils/pending-task-message-link";
+import { retryTransientRequest } from "#/utils/transient-error-retry";
 import { useBackendScopedPath } from "#/hooks/use-backend-scoped-path";
+
+const pollingStartedAt = new WeakMap<object, number>();
+const FAST_POLL_INTERVAL_MS = 500;
+const FAST_POLL_WINDOW_MS = 10_000;
+const SLOW_POLL_INTERVAL_MS = 3000;
 
 const storeTaskPlugins = (
   task: AppConversationStartTask,
@@ -48,7 +54,7 @@ const storeTaskPlugins = (
  *
  * This hook:
  * - Detects if the conversationId URL param is a task ID (format: "task-{uuid}")
- * - Polls the V1 start task API every 3 seconds until status is READY or ERROR
+ * - Polls active starts quickly, then backs off until READY or ERROR
  * - Exposes task status and details for UI components to show loading states and errors
  *
  * URL patterns:
@@ -76,6 +82,7 @@ export const useTaskPolling = () => {
     },
     enabled: !!taskId,
     refetchInterval: (query) => {
+      if (query.state.status === "error") return false;
       const task = query.state.data;
       if (!task) return false;
 
@@ -84,10 +91,13 @@ export const useTaskPolling = () => {
         return false;
       }
 
-      // Poll every 3 seconds while task is in progress
-      return 3000;
+      const startedAt = pollingStartedAt.get(query) ?? Date.now();
+      pollingStartedAt.set(query, startedAt);
+      return Date.now() - startedAt < FAST_POLL_WINDOW_MS
+        ? FAST_POLL_INTERVAL_MS
+        : SLOW_POLL_INTERVAL_MS;
     },
-    retry: false,
+    retry: retryTransientRequest,
   });
 
   return {
@@ -115,6 +125,7 @@ export const useTaskPollingController = () => {
   const { conversationId } = useOptionalConversationId();
   const { navigate } = useNavigation();
   const backendScopedPath = useBackendScopedPath();
+  const queryClient = useQueryClient();
   const handledReadyTaskIdRef = useRef<string | null>(null);
 
   // Reassign optimistic pending messages before paint on the real conversation
@@ -156,6 +167,13 @@ export const useTaskPollingController = () => {
     trackCloudConversationReady(taskId, appConversationId);
     storeTaskPlugins(task, appConversationId);
 
+    // The create mutation invalidated the conversation list before the
+    // conversation row existed (cloud returns the start task first). The row
+    // is persisted by the time the task is READY, so refetch now so the
+    // sidebar shows the new conversation without waiting for the 30s poll.
+    queryClient.invalidateQueries({ queryKey: ["user", "conversations"] });
+    queryClient.invalidateQueries({ queryKey: ["start-tasks"] });
+
     void (async () => {
       await flushPendingTaskAttachments(taskId, appConversationId);
 
@@ -174,7 +192,7 @@ export const useTaskPollingController = () => {
         replace: true,
       });
     })();
-  }, [backendScopedPath, task, taskId, navigate]);
+  }, [backendScopedPath, task, taskId, navigate, queryClient]);
 
   return polling;
 };

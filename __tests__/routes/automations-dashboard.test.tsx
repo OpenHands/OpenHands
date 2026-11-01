@@ -402,6 +402,105 @@ describe("AutomationsList — manifest-declared dashboard", () => {
   });
 });
 
+describe("AutomationsList — draft test automations stay out of the overview", () => {
+  // Testing a saved draft materializes a hidden automation in the DRAFT
+  // state; the groups never list it, so the tiles must not count it either.
+  const draftTestAutomation = createAutomation({
+    id: "a-draft",
+    name: "Draft widget",
+    enabled: false,
+    state: "DRAFT",
+  });
+  const savedDraft = {
+    id: "draft-1",
+    endpoint: "/v1/preset/prompt" as const,
+    name: "Saved widget draft",
+    draft: { prompt: "Draft prompt" },
+    validationErrors: null,
+    dispatchable: true,
+    sourceAutomationId: null,
+    materializedAutomationId: "a-draft",
+    lastTestRunId: "run-draft",
+    createdAt: "2026-01-02T00:00:00Z",
+    updatedAt: "2026-01-02T00:00:00Z",
+  };
+
+  beforeEach(() => {
+    vi.mocked(AutomationService.getAutomationRuns).mockImplementation((id) => {
+      if (id === "a-draft") {
+        return Promise.resolve({ runs: [createRun({})], total: 9 });
+      }
+      return Promise.resolve({ runs: [createRun({})], total: 6 });
+    });
+  });
+
+  it("counts only the listed automations and their runs in the tiles", async () => {
+    // Arrange
+    vi.mocked(AutomationService.getAutomations).mockResolvedValue({
+      automations: [okAutomation, draftTestAutomation],
+      total: 2,
+    });
+
+    // Act
+    renderAt("/automations", <AutomationsList />);
+    await within(
+      await screen.findByTestId("automation-card-a-ok"),
+    ).findByTestId("run-status-icon-completed");
+
+    // Assert
+    const automationsTile = screen.getByTestId("overview-tile-automations");
+    expect(
+      within(automationsTile).getByText("1", { exact: true }),
+    ).toBeInTheDocument();
+    expect(within(automationsTile).getByText("1 live")).toBeInTheDocument();
+    const runsTile = screen.getByTestId("overview-tile-total-runs");
+    expect(
+      within(runsTile).getByText("6", { exact: true }),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("automation-card-a-draft")).toBeNull();
+  });
+
+  it("shows the first-run empty state when only draft test automations exist", async () => {
+    // Arrange — the saved draft is gone, its test automation is not.
+    vi.mocked(AutomationService.getAutomations).mockResolvedValue({
+      automations: [draftTestAutomation],
+      total: 1,
+    });
+
+    // Act
+    renderAt("/automations", <AutomationsList />);
+
+    // Assert
+    expect(await screen.findByTestId("automations-empty")).toBeInTheDocument();
+    const automationsTile = screen.getByTestId("overview-tile-automations");
+    expect(
+      within(automationsTile).getByText("0", { exact: true }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps a saved draft listed when its test automation is the only automation", async () => {
+    // Arrange
+    vi.mocked(AutomationService.getAutomations).mockResolvedValue({
+      automations: [draftTestAutomation],
+      total: 1,
+    });
+    vi.mocked(AutomationService.listServerDrafts).mockResolvedValue({
+      drafts: [savedDraft],
+      total: 1,
+    });
+
+    // Act
+    renderAt("/automations", <AutomationsList />);
+
+    // Assert
+    expect(
+      await screen.findByTestId("automation-setup-draft-draft-1"),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("automations-empty")).toBeNull();
+    expect(screen.queryByTestId("automations-filtered-empty")).toBeNull();
+  });
+});
+
 describe("AutomationsList — created-by filter on cloud workspaces", () => {
   const TEAM_ORG_ID = "org-team";
   const CURRENT_USER_ID = "user-me";
@@ -538,6 +637,7 @@ describe("AutomationsList — created-by filter on cloud workspaces", () => {
       50,
       0,
       "me",
+      undefined,
     );
   });
 
@@ -681,6 +781,7 @@ describe("AutomationsList — created-by filter on cloud workspaces", () => {
         50,
         0,
         "me",
+        undefined,
       ),
     );
     expect(screen.getByTestId("automations-empty")).toBeInTheDocument();
@@ -796,6 +897,7 @@ describe("AutomationsList — created-by filter on cloud workspaces", () => {
     expect(AutomationService.getAutomations).toHaveBeenLastCalledWith(
       50,
       0,
+      undefined,
       undefined,
     );
   });

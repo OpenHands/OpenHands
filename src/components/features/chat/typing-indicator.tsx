@@ -1,11 +1,11 @@
 import { Trans } from "react-i18next";
 import type { OHEvent } from "#/stores/use-event-store";
-import type { UserRejectObservation } from "#/types/agent-server/core";
 import {
   isACPToolCallEvent,
   isActionEvent,
   isAgentErrorEvent,
   isObservationEvent,
+  isUserRejectObservation,
 } from "#/types/agent-server/type-guards";
 import {
   getACPToolCallTitleKey,
@@ -61,11 +61,6 @@ const getLiveActionTitle = (event: OHEvent): EventTitleDescriptor | null => {
     ? getActionEventTitleDescriptor(event)
     : null;
 };
-
-const isUserRejectObservation = (
-  event: OHEvent,
-): event is UserRejectObservation =>
-  event.source === "environment" && "rejection_reason" in event;
 
 export const deriveLiveActivity = (
   events: readonly OHEvent[],

@@ -1,0 +1,19 @@
+{
+  "target": "61a3bd93e642a0ff4def73b29496a73245628209",
+  "consumer": "Separate Vite browser host, normal bare package import and optimizeDeps.include",
+  "entryImport": "import {AgentServerUIRoot} from '@openhands/agent-canvas'",
+  "reactPeer": "19.3.0",
+  "reactDomPeer": "19.3.0",
+  "viteVersion": "8.0.16",
+  "httpStatus": 200,
+  "insideCount": 0,
+  "insideCountEvidence": "Wait for #inside timed out after15000ms; reviewed screenshot shows outsidehost only",
+  "pageError": "Calling `require` for \"react\" in an environment that doesn't expose the `require` function. See https://rolldown.rs/in-depth/bundling-cjs#require-external-modules for more details.",
+  "errorObservedUTC": "2026-10-17T19:23:10.153Z",
+  "emittedSource": "dist/node_modules/use-sync-external-store/cjs/use-sync-external-store-shim.production.js:4 invokes __require(\"react\")",
+  "screenshot": "../_failures/1792265005715.png",
+  "cssScopeSeparateResult": "Built CSS parser45non-keyframe rules,0unscoped; not a component mount proof",
+  "credentialsRequired": false,
+  "fixtureRoot404": "Corrected scratch Vite root before HTTP200 finalreproduction",
+  "globalRequireShim": false
+}

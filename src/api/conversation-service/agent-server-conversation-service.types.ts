@@ -3,6 +3,7 @@ import type { ClientToolSpec } from "../canvas-ui-client-tool";
 import { Provider } from "#/types/settings";
 import { SuggestedTask } from "#/utils/types";
 import { ExecutionStatus } from "#/types/agent-server/core";
+import type { ACPModelOption } from "#/constants/acp-providers";
 
 /**
  * Lifecycle state of a cloud sandbox. Mirrors OpenHands' V1SandboxStatus.
@@ -72,6 +73,8 @@ export interface AppConversationStartRequest {
   initial_message?: SendMessageRequest | null;
   processors?: unknown[]; // EventCallbackProcessor - keeping as unknown for now
   llm_model?: string | null;
+  // One-off launch on a saved LLM profile (by name), without activating it.
+  llm_profile?: string | null;
   selected_repository?: string | null;
   selected_branch?: string | null;
   git_provider?: Provider | null;
@@ -130,11 +133,6 @@ export interface SendMessageResponse {
   content: MessageContent[];
 }
 
-export interface AppConversationStartTaskPage {
-  items: AppConversationStartTask[];
-  next_page_id: string | null;
-}
-
 export interface ConversationWorkspace {
   working_dir: string | null;
 }
@@ -142,6 +140,8 @@ export interface ConversationWorkspace {
 export interface LaunchedAgentProfile {
   agent_profile_id: string;
   revision: number;
+  /** The secrets the conversation may use; null is every saved secret. */
+  secret_refs?: string[] | null;
 }
 
 export interface AppConversation {
@@ -177,19 +177,28 @@ export interface AppConversation {
    */
   acp_server?: string | null;
   /**
+   * Models the conversation's ACP session offers, as its server reported them.
+   * Empty before the session starts and on servers that don't report models.
+   */
+  acp_available_models?: ACPModelOption[] | null;
+  /**
    * Server-side key-value tags from the agent-server's
    * ``ConversationInfo.tags`` (settable at creation and via
    * ``PATCH /api/conversations/{id}``). Automations and API clients use these
    * for attribution (e.g. ``origin=slack``, ``owner=alice``). Includes
    * reserved/internal keys such as ``acpserver`` — display consumers should
    * go through ``getDisplayConversationTags`` in ``agent-server-adapter.ts``
-   * rather than reading this raw. ``null``/absent for Cloud conversations
-   * and agent-servers that don't return tags.
+   * rather than reading this raw. Cloud conversations carry tags too, from
+   * the app-server's app-conversation. ``null``/absent for agent-servers
+   * that don't return tags. The sidebar's pin/archive state rides this map
+   * (see `conversation-tag-flags.ts`).
    *
-   * PATCH semantics: the agent-server replaces the **complete** ``tags`` map
-   * on every PATCH — it does not merge individual keys. A writer adding one
-   * tag must read the current map, merge, and send the full desired result,
-   * or it will silently drop every other tag (including ``acpserver``).
+   * PATCH semantics differ by backend: the agent-server replaces the
+   * **complete** ``tags`` map on every PATCH — it does not merge individual
+   * keys, so a writer adding one tag must read the current map, merge, and
+   * send the full desired result, or it will silently drop every other tag
+   * (including ``acpserver``). The Cloud app-server instead applies a merge
+   * patch (a `null` value deletes a key) and rejects server-managed keys.
    */
   tags?: Record<string, string> | null;
   llm_model: string | null;
@@ -246,10 +255,6 @@ export interface Skill {
   allowed_tools?: string[] | null;
   is_agentskills_format?: boolean;
   disable_model_invocation?: boolean;
-}
-
-export interface GetSkillsResponse {
-  skills: Skill[];
 }
 
 export interface HookDefinition {
@@ -310,4 +315,6 @@ export interface RuntimeConversationInfo {
   updated_at: string;
   status: ExecutionStatus;
   stats: RuntimeConversationStats;
+  /** Models an ACP session reported; empty otherwise. */
+  available_models: ACPModelOption[];
 }

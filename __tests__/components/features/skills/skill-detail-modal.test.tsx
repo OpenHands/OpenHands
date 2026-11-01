@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { render, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -178,18 +179,26 @@ describe("SkillDetailModal", () => {
     sessionStorage.setItem(HOME_PROMPT_DRAFT_KEY, "earlier home draft");
     useConversationStore.getState().setMessageToSend("for a conversation");
     const skill = buildSkill({ name: "docker" });
+    // The modal really closes, as on the Skills page; an open modal would keep
+    // focus inside itself rather than let the composer behind it take it.
+    function SkillsPageWithComposer() {
+      const [isOpen, setIsOpen] = useState(true);
+      return (
+        <>
+          <CustomChatInput onSubmit={vi.fn()} />
+          {isOpen ? (
+            <SkillDetailModal
+              skill={skill}
+              enabled
+              onToggle={vi.fn()}
+              onClose={() => setIsOpen(false)}
+            />
+          ) : null}
+        </>
+      );
+    }
 
-    renderWithProviders(
-      <>
-        <CustomChatInput onSubmit={vi.fn()} />
-        <SkillDetailModal
-          skill={skill}
-          enabled
-          onToggle={vi.fn()}
-          onClose={vi.fn()}
-        />
-      </>,
-    );
+    renderWithProviders(<SkillsPageWithComposer />);
     const composer = screen.getByTestId("chat-input");
     expect(composer).toHaveTextContent("earlier home draft");
 

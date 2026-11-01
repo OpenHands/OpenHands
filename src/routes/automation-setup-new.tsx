@@ -106,7 +106,7 @@ export default function AutomationSetupNew() {
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-canvas-base">
       <header
         data-testid="automation-setup-topbar"
-        className="flex h-10 min-h-10 shrink-0 items-center justify-between gap-2 border-b border-[var(--oh-border)] bg-canvas-base px-3"
+        className="flex h-10 min-h-10 shrink-0 items-center justify-between gap-2 border-b border-border bg-canvas-base px-3"
       >
         <h2 className="min-w-0 truncate text-sm font-medium text-content">
           {title}
@@ -130,26 +130,30 @@ export default function AutomationSetupNew() {
         ) : (
           <div
             role="status"
-            className="flex flex-1 items-center justify-center text-sm text-[var(--oh-muted)]"
+            className="flex flex-1 items-center justify-center text-sm text-muted"
           >
             {t(I18nKey.AUTOMATION_SETUP$LOADING_DRAFT)}
           </div>
         )}
-        <div className="custom-scrollbar-always pointer-events-none absolute inset-0 z-20 overflow-y-scroll px-5 [scrollbar-gutter:stable] [&::-webkit-scrollbar-thumb]:bg-transparent">
-          <div className="relative mx-auto h-full w-full min-w-0 max-w-[800px]">
+        <div className="automation-setup-scroll-gutter custom-scrollbar-always pointer-events-none absolute inset-0 z-20 overflow-y-scroll px-5 [&::-webkit-scrollbar-thumb]:bg-transparent">
+          <div className="automation-setup-content relative mx-auto h-full w-full min-w-0">
             <div
               ref={setComposerTarget}
               data-testid="automation-setup-docked-composer"
-              className="pointer-events-auto absolute inset-x-0 bottom-5 overflow-visible rounded-[15px] shadow-[0_12px_40px_rgba(0,0,0,0.55)]"
+              className="automation-setup-composer-dock pointer-events-auto absolute inset-x-0 bottom-5 overflow-visible"
             />
           </div>
         </div>
         {composerTarget
           ? createPortal(
               <ComposerDockedProvider enabled minimal>
+                {/* No conversation route is mounted here, so a persisting
+                    composer would read and write the Home draft. The prompt
+                    belongs to this setup only and is not kept as a draft. */}
                 <InteractiveChatBox
                   onSubmit={(content) => startConversationFromPrompt(content)}
                   disabled={isPending || !draft}
+                  persistDraft={false}
                   showGitControlBar={false}
                   placeholder={t(
                     I18nKey.AUTOMATION_SETUP$DOCKED_COMPOSER_PLACEHOLDER,

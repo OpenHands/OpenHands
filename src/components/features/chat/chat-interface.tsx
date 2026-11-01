@@ -16,13 +16,14 @@ import { InteractiveChatBox } from "./interactive-chat-box";
 import { AgentState } from "#/types/agent-state";
 import { useFilteredEvents } from "#/hooks/use-filtered-events";
 import { useScrollToBottom } from "#/hooks/use-scroll-to-bottom";
+import { useIsRevealingStreamedText } from "#/hooks/use-streamed-text";
 import { useLoadOlderEvents } from "#/hooks/use-load-older-events";
+import { useClampDragSelection } from "#/hooks/chat/use-clamp-drag-selection";
 import { useAutoRefreshFilesOnEdit } from "#/hooks/use-auto-refresh-files-on-edit";
 import { WorkspaceFilesForChatProvider } from "./chat-markdown-path-code";
 import { TypingIndicator } from "./typing-indicator";
 import { ChatSuggestions } from "./chat-suggestions";
 import { ScrollProvider } from "#/context/scroll-context";
-import { useInitialQueryStore } from "#/stores/initial-query-store";
 import { useSendMessage } from "#/hooks/use-send-message";
 import { useAgentState, usePlanningAgentState } from "#/hooks/use-agent-state";
 import { useIsArchivedConversation } from "#/hooks/use-is-archived-conversation";
@@ -52,18 +53,27 @@ import ChatStatusIndicator from "./chat-status-indicator";
 import { getStatusColor, getStatusText } from "#/utils/utils";
 import { useNewConversationCommand } from "#/hooks/mutation/use-new-conversation-command";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
+import { setConversationState } from "#/utils/conversation-local-storage";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { I18nKey } from "#/i18n/declaration";
 import { hasConversationStarted } from "./components/resolve-picker-kind";
 import { ComposerDockedProvider } from "#/context/composer-docked-context";
+import { isContentEmpty } from "./utils/chat-input.utils";
 
-function getEntryPoint(
-  hasRepository: boolean | null,
-  hasReplayJson: boolean | null,
-): string {
-  if (hasRepository) return "github";
-  if (hasReplayJson) return "replay";
-  return "direct";
+// Ctrl/Cmd+Enter in a text field that holds text belongs to that field (the
+// composer sends it); an empty field or any other target builds the plan.
+function isTextFieldWithText(target: EventTarget | null): boolean {
+  if (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement
+  ) {
+    return target.value.trim() !== "";
+  }
+  if (target instanceof HTMLElement) {
+    const editable = target.closest<HTMLDivElement>("[contenteditable='true']");
+    return editable !== null && !isContentEmpty(editable);
+  }
+  return false;
 }
 
 export function ChatInterface({
@@ -118,6 +128,10 @@ export function ChatInterface({
   );
   const { t } = useTranslation("openhands");
   const scrollRef = React.useRef<HTMLDivElement>(null);
+  useClampDragSelection(scrollRef);
+  // A streamed reply grows inside one event as it is revealed, so follow it
+  // frame by frame while it does.
+  const isRevealingStreamedText = useIsRevealingStreamedText();
   const {
     scrollDomToBottom,
     onChatBodyScroll,
@@ -125,7 +139,7 @@ export function ChatInterface({
     autoScroll,
     setAutoScroll,
     setHitBottom,
-  } = useScrollToBottom(scrollRef);
+  } = useScrollToBottom(scrollRef, isRevealingStreamedText);
   const {
     mutate: newConversationCommand,
     isPending: isNewConversationPending,
@@ -159,15 +173,25 @@ export function ChatInterface({
   // when multiple PlanPreview components exist in the chat.
   // Gated on the same conditions as the Build button
   // (ConversationPlannerBuildBar's `isBuildDisabled`) so it cannot fire
-  // outside the plan flow.
+  // outside the plan flow. While an action awaits confirmation the same keys
+  // confirm it, so the build shortcut stands aside.
   React.useEffect(() => {
-    if (isAgentRunning || conversationMode !== "plan" || !planContent) {
+    if (
+      isAgentRunning ||
+      curAgentState === AgentState.AWAITING_USER_CONFIRMATION ||
+      conversationMode !== "plan" ||
+      !planContent
+    ) {
       return undefined;
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
       // Check for Cmd+Enter (Mac) or Ctrl+Enter (Windows/Linux)
-      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+      if (
+        (event.metaKey || event.ctrlKey) &&
+        event.key === "Enter" &&
+        !isTextFieldWithText(event.target)
+      ) {
         event.preventDefault();
         event.stopPropagation();
         handleBuildPlanClick(event);
@@ -175,20 +199,24 @@ export function ChatInterface({
       }
     };
 
-    document.addEventListener("keydown", handleKeyDown);
+    // Capture phase, so this runs before React's own `document` listeners
+    // hand the key to the focused composer: the re-render its handler commits
+    // between listeners re-subscribes this effect, and the browser skips a
+    // listener removed or added mid-dispatch.
+    document.addEventListener("keydown", handleKeyDown, true);
 
     return () => {
-      document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("keydown", handleKeyDown, true);
     };
   }, [
     isAgentRunning,
+    curAgentState,
     conversationMode,
     planContent,
     handleBuildPlanClick,
     scrollDomToBottom,
   ]);
 
-  const { selectedRepository, replayJson } = useInitialQueryStore();
   const { conversationId } = useOptionalConversationId();
 
   // The live goal banner renders in the scroll stream but advances via store
@@ -338,6 +366,9 @@ export function ChatInterface({
         displayErrorToast(t(I18nKey.CONVERSATION$CLEAR_NO_ID));
         return;
       }
+      // The command never reaches the agent, so no echo clears its saved
+      // draft; clear it here so the cleared composer stays empty.
+      setConversationState(conversationId, { draftMessage: null });
       if (totalEvents === 0) {
         displayErrorToast(t(I18nKey.CONVERSATION$CLEAR_EMPTY));
         return;
@@ -354,12 +385,8 @@ export function ChatInterface({
     const files = [...originalFiles];
     if (totalEvents === 0) {
       trackInitialQuerySubmitted({
-        entryPoint: getEntryPoint(
-          selectedRepository !== null,
-          replayJson !== null,
-        ),
+        entryPoint: "direct",
         queryCharacterLength: content.length,
-        replayJsonSize: replayJson?.length,
       });
     } else {
       trackUserMessageSent({
@@ -595,7 +622,7 @@ export function ChatInterface({
 
             {isLoadingOlderEvents && (
               <div
-                className="flex items-center justify-center gap-2 py-3 text-sm text-neutral-400"
+                className="flex items-center justify-center gap-2 py-3 text-sm text-text-tertiary"
                 data-testid="loading-older-events"
               >
                 <LoadingSpinner size="small" />

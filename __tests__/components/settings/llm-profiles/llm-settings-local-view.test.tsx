@@ -1,6 +1,7 @@
 /* eslint-disable i18next/no-literal-string -- test mocks intentionally use literal labels */
 import { describe, expect, it, vi, beforeEach, type Mock } from "vitest";
 import { AxiosError } from "axios";
+import { HttpError } from "@openhands/typescript-client";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "test-utils";
@@ -73,6 +74,7 @@ vi.mock("#/routes/llm-settings", async () => {
           "llm.model": model,
           "llm.api_key": apiKey,
           "llm.base_url": baseUrl,
+          "llm.temperature": temperature,
         };
         onSaveControlChange?.({
           save: vi.fn(),
@@ -143,6 +145,10 @@ vi.mock("#/hooks/query/use-llm-profiles");
 vi.mock("#/hooks/mutation/use-activate-llm-profile");
 vi.mock("#/hooks/mutation/use-save-llm-profile");
 vi.mock("#/api/profiles-service/profiles-service.api");
+vi.mock("#/utils/custom-toast-handlers", () => ({
+  displaySuccessToast: vi.fn(),
+  displayErrorToast: vi.fn(),
+}));
 
 const mockProfiles = [
   {
@@ -526,10 +532,10 @@ describe("LlmSettingsLocalView", () => {
 
       expect(nameInput).toHaveAttribute("aria-invalid", "true");
       expect(nameInput).toHaveAccessibleDescription(
-        "SETTINGS$META_PROFILE_NAME_TAKEN",
+        "SETTINGS$LLM_PROFILE_NAME_TAKEN",
       );
       expect(screen.getByRole("alert")).toHaveTextContent(
-        "SETTINGS$META_PROFILE_NAME_TAKEN",
+        "SETTINGS$LLM_PROFILE_NAME_TAKEN",
       );
       expect(screen.getByTestId("save-profile-btn")).toBeDisabled();
 
@@ -562,7 +568,7 @@ describe("LlmSettingsLocalView", () => {
 
       expect(nameInput).toHaveAttribute("aria-invalid", "true");
       expect(nameInput).toHaveAccessibleDescription(
-        "SETTINGS$META_PROFILE_NAME_TAKEN",
+        "SETTINGS$LLM_PROFILE_NAME_TAKEN",
       );
       expect(screen.getByTestId("save-profile-btn")).toBeDisabled();
     });
@@ -1045,6 +1051,40 @@ describe("LlmSettingsLocalView", () => {
     });
   });
 
+  describe("create mode save", () => {
+    it("saves a new profile with the prefilled default model even though the model was never touched", async () => {
+      // Arrange — the model is prefilled and left alone; only an unrelated
+      // field is edited, so the dirty payload carries no model at all.
+      const user = userEvent.setup();
+      mockSaveMutateAsync.mockResolvedValueOnce({ success: true });
+      renderWithProviders(<LlmSettingsLocalView />);
+      await user.click(screen.getByTestId("add-llm-profile"));
+      await waitFor(() =>
+        expect(screen.getByTestId("profile-name-input")).toHaveValue(
+          "gpt-5.6-sol",
+        ),
+      );
+
+      // Act — go to the All tab (whose dirty payload is temperature only) and save.
+      await user.click(await screen.findByTestId("sdk-section-all-toggle"));
+      const temperatureInput = await screen.findByTestId(
+        "sdk-settings-llm.temperature",
+      );
+      await user.clear(temperatureInput);
+      await user.type(temperatureInput, "0.3");
+      await waitFor(() => {
+        expect(screen.getByTestId("save-profile-btn")).not.toBeDisabled();
+      });
+      await user.click(screen.getByTestId("save-profile-btn"));
+
+      // Assert — the prefilled model rides along instead of a "Model is required" refusal.
+      await waitFor(() => expect(mockSaveMutateAsync).toHaveBeenCalled());
+      const savedLlm = mockSaveMutateAsync.mock.calls[0][0].request.llm;
+      expect(savedLlm.model).toBe("openai/gpt-5.6-sol");
+      expect(savedLlm.temperature).toBe(0.3);
+    });
+  });
+
   describe("All tab save", () => {
     it("persists a changed minor field without wiping untouched fields", async () => {
       // Arrange — a profile with a minor field (temperature) plus fields the
@@ -1092,6 +1132,47 @@ describe("LlmSettingsLocalView", () => {
       expect(savedLlm.temperature).toBe(0.7);
       expect(savedLlm.model).toBe("anthropic/claude-opus-4-5-20251101");
       expect(savedLlm.api_key).toBe("gAAAA_encrypted_key");
+    });
+
+    it("shows the Agent Server's reason when the save is refused with a 500", async () => {
+      // Arrange — the Agent Server refuses a too-small max_input_tokens with a
+      // 500 whose `detail` is generic and whose reason is under `exception`;
+      // the shared client throws it as an HttpError.
+      const user = userEvent.setup();
+      const { displayErrorToast } =
+        await import("#/utils/custom-toast-handlers");
+      const reason =
+        "The configured model has a context window of 16,000 tokens, which is below the minimum of 16,384 tokens required for OpenHands to function properly.";
+      vi.mocked(ProfilesService.validateProfile).mockResolvedValue(null);
+      mockSaveMutateAsync.mockRejectedValueOnce(
+        new HttpError(
+          500,
+          "Internal Server Error",
+          { detail: "Internal Server Error", exception: reason },
+          `HTTP request failed (500 Internal Server Error): {"detail":"Internal Server Error"}`,
+        ),
+      );
+      renderWithProviders(<LlmSettingsLocalView />);
+
+      // Act — edit a field on the All tab and save.
+      await user.click(screen.getAllByTestId("profile-menu-trigger")[0]);
+      await user.click(screen.getByTestId("profile-edit"));
+      await user.click(await screen.findByTestId("sdk-section-all-toggle"));
+      const temperatureInput = await screen.findByTestId(
+        "sdk-settings-llm.temperature",
+      );
+      await user.clear(temperatureInput);
+      await user.type(temperatureInput, "0.7");
+      await waitFor(() => {
+        expect(screen.getByTestId("save-profile-btn")).not.toBeDisabled();
+      });
+      await user.click(screen.getByTestId("save-profile-btn"));
+
+      // Assert — the toast carries the server's reason and the editor stays open.
+      await waitFor(() => {
+        expect(displayErrorToast).toHaveBeenCalledWith(reason);
+      });
+      expect(screen.getByTestId("save-profile-btn")).toBeInTheDocument();
     });
   });
 });

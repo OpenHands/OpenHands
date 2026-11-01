@@ -5,9 +5,8 @@ import { AxiosError } from "axios";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { useActiveBackend } from "#/contexts/active-backend-context";
-import { isRateLimitError } from "#/utils/rate-limit-retry";
+import { retryTransientRequest } from "#/utils/transient-error-retry";
 
-const MAX_RATE_LIMIT_RETRIES = 2;
 const FIVE_MINUTES = 1000 * 60 * 5;
 const FIFTEEN_MINUTES = 1000 * 60 * 15;
 
@@ -66,11 +65,7 @@ export const useUserConversation = (
       !cid.startsWith("task-") &&
       !backendChanged &&
       hasConversationScope,
-    // Rate limits (429) are transient and worth a couple of backed-off
-    // retries; any other failure (404, 5xx, network) fails immediately as
-    // before rather than masking a real problem.
-    retry: (failureCount, error) =>
-      failureCount < MAX_RATE_LIMIT_RETRIES && isRateLimitError(error),
+    retry: retryTransientRequest,
     // Freshness while it matters is already covered by `refetchInterval`
     // above. Refetching on every window focus too means every open
     // conversation tab/browser tab fires a request the instant it regains

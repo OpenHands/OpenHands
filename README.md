@@ -11,7 +11,6 @@
   </p>
 </div>
 <div align="center">
-  <a href="https://github.com/OpenHands/incubator-program"><img src="https://img.shields.io/badge/status-beta-blue?style=for-the-badge" alt="Project status beta"></a>
   <a href="https://github.com/OpenHands/OpenHands/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/OpenHands/OpenHands/ci.yml?branch=main&style=for-the-badge" alt="CI status"></a>
   <a href="https://www.npmjs.com/package/@openhands/agent-canvas"><img src="https://img.shields.io/npm/v/%40openhands%2Fagent-canvas?style=for-the-badge&logo=npm" alt="npm version"></a>
   <a href="https://docs.openhands.dev/openhands/usage/agent-canvas/backends"><img src="https://img.shields.io/badge/Documentation-000?logo=googledocs&logoColor=FFE165&style=for-the-badge" alt="Documentation"></a>
@@ -97,7 +96,7 @@ docker run -it --rm \
   -e AGENT_CANVAS_ALLOW_LAN_SESSION_KEY=true \
   -v "$HOME/.openhands:/home/openhands/.openhands" \
   -v "${PROJECTS_PATH}:/projects" \
-  ghcr.io/openhands/agent-canvas:1.26.0 # x-release-please-version
+  ghcr.io/openhands/agent-canvas:1.34.0 # x-release-please-version
 ```
 
 **Windows (PowerShell / Windows Terminal):** See [README.windows.md](./README.windows.md) for the equivalent commands.
@@ -126,12 +125,18 @@ This setting isolates conversation execution; it does not move the entire Canvas
 > [!WARNING]
 > This runs the agent-server directly on the machine you're installing on — the agent will have full access to your filesystem!
 
-**Prerequisites**: [Node.js](https://nodejs.org/) 24 or later, `npm`, `uv` (for running the agent server via `uvx`)
+**Prerequisites**: [Node.js](https://nodejs.org/) 24 or later, npm 11.12.1 (the repository pin), `uv` (for running the agent server via `uvx`)
+
+Check `npm --version` before resolving dependencies. The seven-day release-age
+filter (`npm install --min-release-age=7`) requires npm >=11.10; older versions
+do not enforce it. Use `npm ci` to replay the committed lockfile. This npm
+requirement is for contributor dependency resolution, not for installing the
+published Canvas package.
 
 ```sh
 git clone https://github.com/OpenHands/OpenHands.git
 cd OpenHands
-npm install
+npm ci
 npm run dev
 ```
 
@@ -175,5 +180,5 @@ The Agent Server API is implemented by the SDK and consumed through the TypeScri
 
 - [Documentation index](./docs/README.md)
 - [Architecture overview](./docs/architecture.md)
-- [Development guide](./docs/DEVELOPMENT.md)
+- [Development guide](./docs/DEVELOPMENT.md), including [embedding Canvas components in a host app](./docs/DEVELOPMENT.md#css-isolation-and-host-app-customization) (load `@openhands/agent-canvas/styles.css` once next to the component imports)
 - [Self-hosting guide](./docs/SELF_HOSTING.md)

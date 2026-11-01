@@ -8,8 +8,12 @@ import {
   type WorkspaceFileDiscovery,
 } from "#/utils/workspace-file-discovery";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
-import { ModalBody } from "#/components/shared/modals/modal-body";
+import {
+  MODAL_MAX_WIDTH_VIEWPORT,
+  ModalBody,
+} from "#/components/shared/modals/modal-body";
 import { BrandButton } from "#/components/features/settings/brand-button";
+import { cn } from "#/utils/utils";
 
 function DiscoveryForm({
   options,
@@ -53,8 +57,12 @@ function DiscoveryForm({
       closeOnBackdropClick={!isSaving}
     >
       <ModalBody
+        testID="file-discovery-settings-modal"
         width="md"
-        className="items-stretch max-h-[90vh] overflow-y-auto"
+        className={cn(
+          "items-stretch max-h-[90vh] overflow-y-auto",
+          MODAL_MAX_WIDTH_VIEWPORT,
+        )}
       >
         <h2 className="text-lg font-semibold">
           {t(I18nKey.FILES$DISCOVERY_SETTINGS)}

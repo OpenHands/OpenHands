@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { screen } from "@testing-library/react";
 import { renderWithProviders } from "test-utils";
 import { ConversationCardPreview } from "#/components/features/conversation-panel/conversation-card/conversation-card-preview";
+import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 
 const PREVIEW_TITLE = "Conversation 1";
 
@@ -30,6 +31,59 @@ describe("ConversationCardPreview", () => {
     expect(rows[0]).toHaveTextContent("slack");
     expect(rows[1]).toHaveAttribute("data-tag-key", "owner");
     expect(rows[1]).toHaveTextContent("alice");
+  });
+
+  it("names the launched agent profile instead of echoing its id tags", () => {
+    renderWithProviders(
+      <ConversationCardPreview
+        title={PREVIEW_TITLE}
+        selectedRepository={null}
+        agentProfileId="3f2a1b9c-d4e5-4f60-8a7b-9c0d1e2f3a4b"
+        agentProfileName="Research"
+        tags={{
+          agentprofileid: "3f2a1b9c-d4e5-4f60-8a7b-9c0d1e2f3a4b",
+          agentprofilerevision: "3",
+          owner: "alice",
+        }}
+      />,
+    );
+
+    expect(
+      screen.getByTestId("conversation-card-preview-agent-profile"),
+    ).toHaveTextContent("Research");
+    expect(screen.queryByText(/agentprofile/i)).not.toBeInTheDocument();
+    const tagRows = screen.getAllByTestId("conversation-card-preview-tag-row");
+    expect(tagRows).toHaveLength(1);
+    expect(tagRows[0]).toHaveAttribute("data-tag-key", "owner");
+  });
+
+  it("falls back to the profile id when the name is unknown", () => {
+    renderWithProviders(
+      <ConversationCardPreview
+        title={PREVIEW_TITLE}
+        selectedRepository={null}
+        agentProfileId="3f2a1b9c-d4e5-4f60-8a7b-9c0d1e2f3a4b"
+        agentProfileName={null}
+      />,
+    );
+
+    expect(
+      screen.getByTestId("conversation-card-preview-agent-profile"),
+    ).toHaveTextContent("3f2a1b9c-d4e5-4f60-8a7b-9c0d1e2f3a4b");
+  });
+
+  it("shows no profile row while the profile names are still loading", () => {
+    renderWithProviders(
+      <ConversationCardPreview
+        title={PREVIEW_TITLE}
+        selectedRepository={null}
+        agentProfileId="3f2a1b9c-d4e5-4f60-8a7b-9c0d1e2f3a4b"
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("conversation-card-preview-agent-profile"),
+    ).not.toBeInTheDocument();
   });
 
   it("still shows first-class repo / branch rows from selectedRepository", () => {
@@ -123,6 +177,26 @@ describe("ConversationCardPreview", () => {
     ).toBeInTheDocument();
     expect(
       screen.queryByTestId("agent-brand-icon-openhands"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("infers the archive dot from a missing runtime when isArchived is omitted", () => {
+    // A hovercard that only knows the sandbox status must match the card's
+    // missing-runtime archive presentation.
+    renderWithProviders(
+      <ConversationCardPreview
+        title={PREVIEW_TITLE}
+        selectedRepository={null}
+        executionStatus={ExecutionStatus.FINISHED}
+        sandboxStatus="MISSING"
+      />,
+    );
+
+    expect(
+      screen.getByTestId("conversation-status-archived"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("conversation-status-check"),
     ).not.toBeInTheDocument();
   });
 

@@ -41,6 +41,7 @@ import {
 import { TOAST_OPTIONS } from "#/utils/custom-toast-handlers";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { useConfig } from "#/hooks/query/use-config";
+import { useRestoreMarsTunnels } from "#/hooks/use-mars-tunnel-backend";
 import { QUERY_KEYS } from "#/hooks/query/query-keys";
 import { AgentServerUIRoot } from "#/components/providers";
 import { TelemetryConsentBanner } from "#/components/features/analytics/telemetry-consent-banner";
@@ -249,8 +250,19 @@ export default function App() {
   // the cloud backend uses its own bearer token. Skip the API-key entry screen
   // in that case so Docker/public mode doesn't block cloud-only sessions.
   const isActiveCloudBackend = active.backend.kind === "cloud";
+  // A DigitalOcean MARS session is registered as an ordinary `kind: "local"`
+  // backend whose guest key is intentionally empty (the in-guest agent-server
+  // key is set by the sandbox template, not us; the DigitalOcean token is the
+  // authorization boundary). On a page with no baked session key it must not
+  // be mistaken for an unkeyed local backend: the same-origin `/mars/sessions/*`
+  // proxy is authenticated by the bridge cookie, not by a per-backend key.
+  const isActiveMarsSession = Boolean(active.backend.marsSessionId);
   const authMissing =
-    bakedKeyMissing && !hasRegisteredKey && !isActiveCloudBackend;
+    bakedKeyMissing &&
+    !hasRegisteredKey &&
+    !isActiveCloudBackend &&
+    !isActiveMarsSession;
+  const restoringMarsTunnel = useRestoreMarsTunnels();
   const queryClient = useQueryClient();
   // In locked-to-Cloud mode the only valid backend is a Cloud backend whose
   // host matches the configured locked Cloud host. A missing backend, a stale
@@ -325,6 +337,7 @@ export default function App() {
     enabled:
       !authMissing &&
       !showFirstRunOnboarding &&
+      !restoringMarsTunnel &&
       mainAppAuthAllowsBackendQueries,
   });
   const activeCloudHealth = useBackendsHealth(
@@ -371,6 +384,7 @@ export default function App() {
   if (
     waitingForMainAppAuth ||
     redirectingToMainAppLogin ||
+    restoringMarsTunnel ||
     (cookieSessionMaybeExpired && mainAppAuth.isFetching)
   ) {
     return <AgentServerBootstrapLoading />;

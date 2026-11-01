@@ -1,6 +1,7 @@
 import { AUTOMATION_FORM_UPDATE_ACTION_KIND } from "#/constants/automation-form";
 import { CANVAS_UI_CLIENT_ACTION_KIND } from "#/constants/canvas-ui";
 import { LAUNCH_CHILD_CONVERSATION_ACTION_KIND } from "#/constants/child-conversation";
+import { REQUEST_SECRET_ACTION_KIND } from "#/constants/secret-request";
 import { ActionBase } from "./base";
 import { TaskItem } from "./common";
 
@@ -353,6 +354,18 @@ export interface LaunchChildConversationAction extends ActionBase<
   isolation?: string | null;
 }
 
+/**
+ * Request for the user to provide a secret, emitted over the existing
+ * WebSocket and intercepted by handleRequestSecretAction. Carries the secret's
+ * name and purpose only — the value never passes through the agent.
+ */
+export interface RequestSecretAction extends ActionBase<
+  typeof REQUEST_SECRET_ACTION_KIND
+> {
+  name: string;
+  reason?: string | null;
+}
+
 export type Action =
   | MCPToolAction
   | FinishAction
@@ -380,4 +393,5 @@ export type Action =
   | SwitchLLMAction
   | CanvasUIAction
   | AutomationFormUpdateAction
-  | LaunchChildConversationAction;
+  | LaunchChildConversationAction
+  | RequestSecretAction;
