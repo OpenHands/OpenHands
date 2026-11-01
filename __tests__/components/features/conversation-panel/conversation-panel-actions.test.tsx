@@ -62,9 +62,10 @@ describe("ConversationPanel conversation actions", () => {
           name: "CONVERSATION$STARTING_CONVERSATION",
         }),
       ).toBeInTheDocument();
-      expect(
-        screen.getByText("Investigate the startup indicator"),
-      ).toBeInTheDocument();
+      expect(screen.getByText("SIDEBAR$NEW_CHAT")).toHaveAttribute(
+        "aria-busy",
+        "true",
+      );
       act(() =>
         useConversationLaunchStore
           .getState()
@@ -78,6 +79,9 @@ describe("ConversationPanel conversation actions", () => {
       expect(
         screen.getByTestId("conversation-status-error"),
       ).toBeInTheDocument();
+      expect(
+        screen.getByText("Investigate the startup indicator"),
+      ).not.toHaveAttribute("aria-busy");
     } finally {
       act(() => useConversationLaunchStore.getState().remove(id));
     }
