@@ -63,11 +63,63 @@ export function specMatches(s, changed) {
   return changed === s.path;
 }
 
-/** The `Source:` line of a feature file's head (before the first H2). */
+// A `Server:` line names the Agent Server features a family calls, as IDs of
+// the verify-agent-server map (OpenHands/software-agent-sdk,
+// `.agents/skills/verify-agent-server/references/feature-map/`): a family
+// (`F15`) or one sub-feature (`F15.changes`), comma-separated and not
+// backticked, so they never read as this map's own IDs:
+//   Server: F13, F15.changes, F15.diff, F16.
+// The consumer declares the dependency; the server side looks it up with
+// `control-agent-server map dependents`.
+const SERVER_ID = /^F\d{2}(\.[a-z0-9-]+)?$/;
+
+/**
+ * Parse one `Server:` line.
+ * @returns {{ ids: string[], invalid: string[] }}
+ */
+export function parseServerLine(line) {
+  const body = line
+    .replace(/^Server:\s*/, "")
+    .trim()
+    .replace(/\.$/, "");
+  const ids = [];
+  const invalid = [];
+  for (const raw of body.split(",")) {
+    const token = raw.trim();
+    if (!token) continue;
+    (SERVER_ID.test(token) ? ids : invalid).push(token);
+  }
+  return { ids, invalid };
+}
+
+/**
+ * Agent Server IDs declared by a verify-agent-server feature-map directory:
+ * its families (`F15`, from `F15-git.md`) and the sub-feature IDs of each
+ * file's `## Sub-features` section.
+ * @param {Array<{ file: string, text: string }>} files
+ */
+export function serverMapIds(files) {
+  const ids = new Set();
+  for (const { file, text } of files) {
+    const family = /^(F\d{2})-/.exec(file)?.[1];
+    if (!family) continue;
+    ids.add(family);
+    const sub =
+      text.split(/^## /m).find((s) => s.startsWith("Sub-features")) ?? "";
+    for (const m of sub.matchAll(/^- `(F\d{2}\.[a-z0-9-]+)`/gm)) ids.add(m[1]);
+  }
+  return ids;
+}
+
+/** The `Source:` and `Server:` lines of a feature file's head (before the first H2). */
 export function familyHead(text) {
   const head = text.split(/^## /m)[0];
   const source = head.match(/^Source:.*$/m)?.[0] ?? "";
-  return { sources: source ? parseSourceLine(source) : [] };
+  const server = head.match(/^Server:.*$/m)?.[0];
+  return {
+    sources: source ? parseSourceLine(source) : [],
+    server: server ? parseServerLine(server) : { ids: [], invalid: [] },
+  };
 }
 
 // Paths outside the frontend build and the launcher are not user-facing on
