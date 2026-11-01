@@ -32,6 +32,7 @@ import { isExecutionActive } from "#/utils/status";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
 import { useIsCreatingConversation } from "#/hooks/use-is-creating-conversation";
 import { ConversationCard } from "./conversation-card/conversation-card";
+import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import { ConversationCardPreview } from "./conversation-card/conversation-card-preview";
 import { StartTaskCard } from "./start-task-card/start-task-card";
 import { ConversationCardSkeleton } from "./conversation-card/conversation-card-skeleton";
@@ -1461,18 +1462,25 @@ export function ConversationPanel({
                 key={launch.id}
                 to={backendScopedPath(`/conversations/${launch.id}`)}
                 onClick={onClose}
-                className="block rounded-lg border border-border p-3 text-sm"
+                className="block"
               >
-                <p className="truncate">
-                  {launch.message || t(I18nKey.HOME$CREATING_CONVERSATION)}
-                </p>
-                <p className="text-xs text-text-secondary">
-                  {launch.error ||
-                  (launch.targetId?.startsWith("task-") &&
-                    failedTaskIds.includes(launch.targetId.slice(5)))
-                    ? t(I18nKey.COMMON$ERROR)
-                    : t(I18nKey.HOME$CREATING_CONVERSATION)}
-                </p>
+                <ConversationCard
+                  title={launch.message || t(I18nKey.CONVERSATION$UNTITLED)}
+                  selectedRepository={null}
+                  lastUpdatedAt=""
+                  showRepositoryMetadata={false}
+                  isActive={
+                    currentConversationId === launch.id ||
+                    currentConversationId === launch.targetId
+                  }
+                  executionStatus={
+                    launch.error ||
+                    (launch.targetId?.startsWith("task-") &&
+                      failedTaskIds.includes(launch.targetId.slice(5)))
+                      ? ExecutionStatus.ERROR
+                      : null
+                  }
+                />
               </NavigationLink>
             ))}
 
@@ -1491,20 +1499,23 @@ export function ConversationPanel({
                   `/conversations/${pending.error && pending.conversationId ? pending.conversationId : `task-${taskId}`}`,
                 )}
                 onClick={onClose}
-                className="block rounded-lg border border-border p-3 text-sm"
+                className="block"
               >
-                <p className="truncate">
-                  {pending.content ||
-                    t(I18nKey.CONVERSATION$STARTING_CONVERSATION)}
-                </p>
-                <p className="text-xs text-status-error">
-                  {t(I18nKey.COMMON$ERROR)}
-                </p>
+                <ConversationCard
+                  title={pending.content || t(I18nKey.CONVERSATION$UNTITLED)}
+                  selectedRepository={null}
+                  lastUpdatedAt=""
+                  showRepositoryMetadata={false}
+                  isActive={
+                    currentConversationId === `task-${taskId}` ||
+                    currentConversationId === pending.conversationId
+                  }
+                  executionStatus={ExecutionStatus.ERROR}
+                />
               </NavigationLink>
             ))}
 
-        {/* Render in-progress start tasks first (skipped in compact mode —
-            their rich card layout doesn't fit in the icon rail). */}
+        {/* Keep pending conversations available while their sandboxes start. */}
         {!compact &&
           startTasks
             ?.filter(
@@ -1519,7 +1530,24 @@ export function ConversationPanel({
                 onClick={onClose}
                 className="block"
               >
-                <StartTaskCard task={task} />
+                <StartTaskCard
+                  task={task}
+                  initialMessage={
+                    pendingAttachments[task.id]?.content ||
+                    Object.values(pendingLaunches).find(
+                      (launch) => launch.targetId === `task-${task.id}`,
+                    )?.message
+                  }
+                  isActive={
+                    currentConversationId === `task-${task.id}` ||
+                    Object.values(pendingLaunches).some(
+                      (launch) =>
+                        launch.id === currentConversationId &&
+                        launch.targetId === `task-${task.id}`,
+                    )
+                  }
+                  showRepositoryMetadata={showRepoBranchMetadata}
+                />
               </NavigationLink>
             ))}
 
