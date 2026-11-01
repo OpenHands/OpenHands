@@ -263,6 +263,26 @@ describe("buildStartConversationRequest", () => {
     expect(payload).not.toHaveProperty("title_llm_profile");
   });
 
+  it("includes a custom title-generation prompt when configured", () => {
+    const payload = buildStartConversationRequest({
+      ...PROFILE,
+      settings: DEFAULT_SETTINGS,
+      prompt: "Summarize {conversation_content}",
+    });
+
+    expect(payload.prompt).toBe("Summarize {conversation_content}");
+  });
+
+  it("omits a blank title-generation prompt", () => {
+    const payload = buildStartConversationRequest({
+      ...PROFILE,
+      settings: DEFAULT_SETTINGS,
+      prompt: "",
+    });
+
+    expect(payload).not.toHaveProperty("prompt");
+  });
+
   it("derives confirmation and security settings the same way as OpenHands", () => {
     const payload = buildStartConversationRequest({
       ...PROFILE,
