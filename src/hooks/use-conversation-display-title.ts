@@ -78,7 +78,11 @@ export function useConversationDisplayTitle() {
             entry.targetId === id ||
             entry.conversationId === id),
       );
-      const activeTask = id === `task-${taskId}` ? task?.data : undefined;
+      const foreignTask =
+        !launch &&
+        Object.values(launches).some((entry) => entry.targetId === id);
+      const activeTask =
+        id === `task-${taskId}` && !foreignTask ? task?.data : undefined;
       const realId =
         launch?.conversationId ?? activeTask?.app_conversation_id ?? id;
       const listed = realId ? listedById.get(realId) : undefined;

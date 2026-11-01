@@ -138,3 +138,26 @@ it("keeps a generated title in the sidebar after leaving the conversation and is
   expect(result.current).not.toBe("Startup explained");
   expect(result.current).not.toBe(prompt);
 });
+
+it("does not reuse a different organization's cached task prompt", () => {
+  useConversationLaunchStore
+    .getState()
+    .update(launchId, { targetId: "task-start" });
+  routeId = "task-start";
+  client.setQueryData(CONVERSATION_QUERY_KEYS.startTask("start"), {
+    id: "start",
+    status: "WORKING",
+    request: {
+      initial_message: {
+        content: [{ type: "text", text: "Private task prompt" }],
+      },
+    },
+  });
+  const { result } = renderHook(() => useConversationDisplayTitle()(routeId), {
+    wrapper,
+  });
+  expect(result.current).toBe(prompt);
+  act(() => setActiveSelection({ backendId: "cloud", orgId: "org-2" }));
+  expect(result.current).not.toBe("Private task prompt");
+  expect(result.current).not.toBe(prompt);
+});
