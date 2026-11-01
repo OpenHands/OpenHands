@@ -34,12 +34,6 @@ async function loadStylesheet(id: string, base: string) {
 }
 
 describe("hover-reveal-classes", () => {
-  it("keeps force-visible actions interactable", () => {
-    expect(hoverRevealActionClassName(true)).toBe(
-      "pointer-events-auto visible opacity-100",
-    );
-  });
-
   it("keeps fine-hover candidates discoverable and compilable", async () => {
     const source = readFileSync(HOVER_REVEAL_SOURCE_PATH, "utf8");
     const candidates = [

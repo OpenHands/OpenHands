@@ -35,13 +35,13 @@ function resolveStaticServerArgs(allowLanSessionKey: string | undefined): {
     "PORT=8000",
     "log() { printf '%s\\n' \"$*\" >&2; }",
     sessionKeyPolicyBlock(),
-    "printf '%s\\n' \"${STATIC_SERVER_SESSION_KEY_ARGS[@]}\"",
+    "printf '%s\\n' \"${STATIC_SERVER_SESSION_KEY_ARGS[@]-}\"",
   ].join("\n");
   const env: Record<string, string> = { PATH: process.env.PATH ?? "" };
   if (allowLanSessionKey !== undefined) {
     env.AGENT_CANVAS_ALLOW_LAN_SESSION_KEY = allowLanSessionKey;
   }
-  const result = spawnSync("bash", ["-c", script], {
+  const result = spawnSync("bash", ["--norc", "-c", script], {
     encoding: "utf-8",
     env,
   });

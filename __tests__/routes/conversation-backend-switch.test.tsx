@@ -17,7 +17,7 @@ import { NavigationProvider } from "#/context/navigation-context";
 import ConversationView from "#/routes/conversation";
 import { resumeCloudSandbox } from "#/api/cloud/conversation-service.api";
 import {
-  __clearCloudAutoResumeSuppressionsForTests,
+  clearCloudAutoResumeSuppression,
   suppressNextCloudAutoResume,
 } from "#/api/cloud/cloud-sandbox-resume-suppression";
 import type { Backend } from "#/api/backend-registry/types";
@@ -234,7 +234,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
-  __clearCloudAutoResumeSuppressionsForTests();
+  clearCloudAutoResumeSuppression(CLOUD_CONVERSATION_ID);
   window.localStorage.clear();
   __resetActiveStoreForTests();
 });

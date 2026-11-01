@@ -66,13 +66,3 @@ export function subscribeEnvironmentSwitch(listener: () => void) {
 export function getEnvironmentSwitchSnapshot() {
   return snapshot;
 }
-
-/** Test-only: clear the pending hide timer and reset the snapshot. */
-
-export function __resetEnvironmentSwitchOverlayForTests() {
-  if (hideTimeoutId) {
-    clearTimeout(hideTimeoutId);
-    hideTimeoutId = null;
-  }
-  setSnapshot({ visible: false, target: "" });
-}

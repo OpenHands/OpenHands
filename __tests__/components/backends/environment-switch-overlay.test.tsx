@@ -2,7 +2,6 @@ import React from "react";
 import { act, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  __resetEnvironmentSwitchOverlayForTests,
   dismissEnvironmentSwitch,
   ENVIRONMENT_SWITCH_DURATION_MS,
   EnvironmentSwitchOverlay,
@@ -15,7 +14,7 @@ describe("EnvironmentSwitchOverlay", () => {
   });
 
   afterEach(() => {
-    __resetEnvironmentSwitchOverlayForTests();
+    dismissEnvironmentSwitch();
     vi.useRealTimers();
   });
 
