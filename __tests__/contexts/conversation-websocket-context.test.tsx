@@ -1367,6 +1367,91 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
       // conv-first's position means nothing in conv-second's log.
       expect(mainAfterSeq()).toBe("2");
     });
+
+    it("does not replay backlog events older than preloaded history into the event store", async () => {
+      const recentTimestamp = new Date(
+        "2026-10-09T12:00:00.000Z",
+      ).toISOString();
+      const olderTimestamp = new Date("2026-10-09T10:00:00.000Z").toISOString();
+      const preloadedMsg = {
+        ...createUserMessageEvent("preloaded-msg"),
+        timestamp: recentTimestamp,
+      };
+      const olderBacklogMsg = {
+        ...createUserMessageEvent("older-backlog-msg"),
+        timestamp: olderTimestamp,
+      };
+
+      vi.spyOn(EventService, "searchEvents").mockResolvedValue({
+        items: [preloadedMsg],
+        next_page_id: "older-page",
+      });
+
+      renderProviderWithUrl("conv-backlog");
+      await waitFor(() => expect(wsCapture.mainOnMessage).not.toBeNull());
+      await waitFor(() => expect(eventIds()).toEqual(["preloaded-msg"]));
+
+      act(() => {
+        wsCapture.mainOnMessage!({
+          data: durable(olderBacklogMsg, 0),
+        });
+      });
+
+      // The backlog event older than the preloaded page must NOT be added to the store
+      expect(eventIds()).toEqual(["preloaded-msg"]);
+    });
+
+    it("accepts live events newer than preloaded history", async () => {
+      const recentTimestamp = new Date(
+        "2026-10-09T12:00:00.000Z",
+      ).toISOString();
+      const liveTimestamp = new Date("2026-10-09T12:01:00.000Z").toISOString();
+      const preloadedMsg = {
+        ...createUserMessageEvent("preloaded-msg-live"),
+        timestamp: recentTimestamp,
+      };
+      const liveMsg = {
+        ...createUserMessageEvent("live-msg"),
+        timestamp: liveTimestamp,
+      };
+
+      vi.spyOn(EventService, "searchEvents").mockResolvedValue({
+        items: [preloadedMsg],
+        next_page_id: null,
+      });
+
+      renderProviderWithUrl("conv-live");
+      await waitFor(() => expect(wsCapture.mainOnMessage).not.toBeNull());
+      await waitFor(() => expect(eventIds()).toEqual(["preloaded-msg-live"]));
+
+      act(() => {
+        wsCapture.mainOnMessage!({
+          data: durable(liveMsg, 1),
+        });
+      });
+
+      expect(eventIds()).toEqual(["preloaded-msg-live", "live-msg"]);
+    });
+
+    it("falls back to accepting replayed events when history preload yields no events", async () => {
+      const fallbackMsg = createUserMessageEvent("fallback-msg");
+
+      vi.spyOn(EventService, "searchEvents").mockResolvedValue({
+        items: [],
+        next_page_id: null,
+      });
+
+      renderProviderWithUrl("conv-fallback");
+      await waitFor(() => expect(wsCapture.mainOnMessage).not.toBeNull());
+
+      act(() => {
+        wsCapture.mainOnMessage!({
+          data: durable(fallbackMsg, 0),
+        });
+      });
+
+      expect(eventIds()).toEqual(["fallback-msg"]);
+    });
   });
 
   it("does not carry the planner's cursor into a different planning conversation", async () => {
