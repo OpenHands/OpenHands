@@ -43,7 +43,7 @@ const PREFLIGHT_EXCHANGES = (
 const server = setupServer(...AUTOMATION_HANDLERS);
 
 describe("Automation MSW Handlers", () => {
-  beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
+  beforeAll(() => server.listen({ onUnhandledFrame: "error" }));
   afterAll(() => server.close());
   afterEach(() => {
     server.resetHandlers();

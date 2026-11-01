@@ -46,7 +46,7 @@ describe("LLMSubscriptionService", () => {
   it("fetches OpenAI subscription models from the agent-server endpoint", async () => {
     server.use(
       http.get(`*${OPENAI_SUBSCRIPTION_MODELS_PATH}`, ({ request }) => {
-        expect(request.headers.get("Accept")).toBeNull();
+        expect(request.headers.get("Accept")).toBe("*/*");
         expect(request.headers.get("Content-Type")).toBe("application/json");
         expect(request.headers.get("X-Session-API-Key")).toBe(
           "test-session-key",
@@ -432,7 +432,7 @@ describe("LLMSubscriptionService", () => {
       http.post(
         `*${OPENAI_SUBSCRIPTION_DEVICE_POLL_PATH}`,
         async ({ request }) => {
-          expect(request.headers.get("Accept")).toBeNull();
+          expect(request.headers.get("Accept")).toBe("*/*");
           expect(request.headers.get("Content-Type")).toBe("application/json");
           expect(request.headers.get("X-Session-API-Key")).toBe(
             "test-session-key",
