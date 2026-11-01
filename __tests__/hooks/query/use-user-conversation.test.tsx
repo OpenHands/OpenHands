@@ -1,3 +1,4 @@
+import { useConversationDisplayTitle } from "#/hooks/use-conversation-display-title";
 import { NavigationProvider } from "#/context/navigation-context";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
@@ -13,7 +14,10 @@ import {
   setRegisteredBackends,
 } from "#/api/backend-registry/active-store";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
-import { useUserConversation } from "#/hooks/query/use-user-conversation";
+import {
+  useUserConversation,
+  usePrefetchUserConversation,
+} from "#/hooks/query/use-user-conversation";
 import type { Backend } from "#/api/backend-registry/types";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 
@@ -199,33 +203,189 @@ describe("useUserConversation — backend switch", () => {
   });
 });
 
-describe("active conversation title freshness", () => {
-  it("picks up a generated title after the agent finishes without waiting for the slow poll", async () => {
-    vi.useFakeTimers();
+describe("selected conversation prefetch", () => {
+  it("shares the request started before navigation with the conversation page", async () => {
     setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
-    const conversation = {
-      ...makeConversation(CLOUD_CONVERSATION_ID),
-      created_at: new Date().toISOString(),
-      title: "Conversation conv-",
-      execution_status: ExecutionStatus.FINISHED,
-    };
-    const fetchConversation = vi.mocked(
+    let resolve!: (value: (AppConversation | null)[]) => void;
+    vi.mocked(
       AgentServerConversationService.batchGetAppConversations,
+    ).mockReturnValue(
+      new Promise((done) => {
+        resolve = done;
+      }),
     );
-    fetchConversation
-      .mockResolvedValueOnce([conversation])
-      .mockResolvedValue([{ ...conversation, title: "Startup explained" }]);
-    const { result } = renderHook(() => useActiveConversation(), {
-      wrapper: makeWrapper(CLOUD_CONVERSATION_ID),
+    const wrapper = makeWrapper();
+    const { result: prefetch } = renderHook(
+      () => usePrefetchUserConversation(),
+      { wrapper },
+    );
+    act(() => {
+      prefetch.current(CLOUD_CONVERSATION_ID);
     });
-    await act(async () => vi.advanceTimersByTimeAsync(10));
-    expect(result.current.data?.title).toBe("Conversation conv-");
-    await act(async () => vi.advanceTimersByTimeAsync(3100));
-    expect(result.current.data?.title).toBe("Startup explained");
-    expect(fetchConversation).toHaveBeenCalledTimes(2);
-    await act(async () => vi.advanceTimersByTimeAsync(10000));
-    expect(fetchConversation).toHaveBeenCalledTimes(2);
+    expect(
+      AgentServerConversationService.batchGetAppConversations,
+    ).toHaveBeenCalledOnce();
+    const { result: page } = renderHook(
+      () => useUserConversation(CLOUD_CONVERSATION_ID),
+      { wrapper },
+    );
+    await act(async () => {
+      resolve([makeConversation(CLOUD_CONVERSATION_ID)]);
+    });
+    await waitFor(() =>
+      expect(page.current.data?.id).toBe(CLOUD_CONVERSATION_ID),
+    );
+    expect(
+      AgentServerConversationService.batchGetAppConversations,
+    ).toHaveBeenCalledOnce();
   });
+
+  it("lets the page retry a failed early request instead of caching an empty conversation", async () => {
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    vi.mocked(AgentServerConversationService.batchGetAppConversations)
+      .mockRejectedValueOnce(new Error("Request failed"))
+      .mockResolvedValue([makeConversation(CLOUD_CONVERSATION_ID)]);
+    const wrapper = makeWrapper();
+    const { result: prefetch } = renderHook(
+      () => usePrefetchUserConversation(),
+      { wrapper },
+    );
+    await act(async () => {
+      await prefetch.current(CLOUD_CONVERSATION_ID);
+    });
+    const { result: page } = renderHook(
+      () => useUserConversation(CLOUD_CONVERSATION_ID),
+      { wrapper },
+    );
+    await waitFor(() =>
+      expect(page.current.data?.id).toBe(CLOUD_CONVERSATION_ID),
+    );
+    expect(
+      AgentServerConversationService.batchGetAppConversations,
+    ).toHaveBeenCalledTimes(2);
+  });
+
+  it("cancels a retry when the selected organization changes", async () => {
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    vi.mocked(AgentServerConversationService.batchGetAppConversations)
+      .mockRejectedValueOnce(
+        Object.assign(new Error("Unavailable"), { status: 503 }),
+      )
+      .mockResolvedValue([makeConversation(CLOUD_CONVERSATION_ID)]);
+    const { result } = renderHook(() => usePrefetchUserConversation(), {
+      wrapper: makeWrapper(),
+    });
+    let pending!: Promise<void>;
+    act(() => {
+      pending = result.current(CLOUD_CONVERSATION_ID);
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    act(() =>
+      setActiveSelection({ backendId: cloudBackend.id, orgId: "org-b" }),
+    );
+    await act(async () => {
+      await pending;
+    });
+    expect(
+      AgentServerConversationService.batchGetAppConversations,
+    ).toHaveBeenCalledOnce();
+    act(() =>
+      setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" }),
+    );
+    await act(async () => {
+      await result.current(CLOUD_CONVERSATION_ID);
+    });
+    expect(
+      AgentServerConversationService.batchGetAppConversations,
+    ).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps early requests scoped to the selected Cloud organization and real IDs", async () => {
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    const { result } = renderHook(() => usePrefetchUserConversation(), {
+      wrapper: makeWrapper(),
+    });
+    await act(async () => {
+      await result.current("launch-client-id");
+      await result.current("task-pending");
+    });
+    expect(
+      AgentServerConversationService.batchGetAppConversations,
+    ).not.toHaveBeenCalled();
+    await act(async () => {
+      await result.current(CLOUD_CONVERSATION_ID);
+    });
+    act(() =>
+      setActiveSelection({ backendId: cloudBackend.id, orgId: "org-b" }),
+    );
+    await act(async () => {
+      await result.current(CLOUD_CONVERSATION_ID);
+    });
+    expect(
+      AgentServerConversationService.batchGetAppConversations,
+    ).toHaveBeenCalledTimes(2);
+    act(() => setActiveSelection({ backendId: localBackend.id, orgId: null }));
+    await act(async () => {
+      await result.current("local-conversation");
+    });
+    expect(
+      AgentServerConversationService.batchGetAppConversations,
+    ).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("active conversation title freshness", () => {
+  it.each([false, true])(
+    "shares generated titles after completion with prefetch=%s",
+    async (prefetchFirst) => {
+      vi.useFakeTimers();
+      setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+      const conversation = {
+        ...makeConversation(CLOUD_CONVERSATION_ID),
+        created_at: new Date().toISOString(),
+        title: "Conversation conv-",
+        execution_status: ExecutionStatus.FINISHED,
+      };
+      const fetchConversation = vi.mocked(
+        AgentServerConversationService.batchGetAppConversations,
+      );
+      fetchConversation
+        .mockResolvedValueOnce([conversation])
+        .mockResolvedValue([{ ...conversation, title: "Startup explained" }]);
+      const wrapper = makeWrapper(CLOUD_CONVERSATION_ID);
+      if (prefetchFirst) {
+        const { result: prefetch } = renderHook(
+          () => usePrefetchUserConversation(),
+          { wrapper },
+        );
+        await act(async () => {
+          await prefetch.current(CLOUD_CONVERSATION_ID);
+        });
+      }
+      const { result } = renderHook(
+        () => ({
+          conversation: useActiveConversation(),
+          getTitle: useConversationDisplayTitle(),
+        }),
+        { wrapper },
+      );
+      await act(async () => vi.advanceTimersByTimeAsync(10));
+      expect(result.current.conversation.data?.title).toBe(
+        "Conversation conv-",
+      );
+      expect(fetchConversation).toHaveBeenCalledTimes(1);
+      await act(async () => vi.advanceTimersByTimeAsync(3100));
+      expect(result.current.conversation.data?.title).toBe("Startup explained");
+      expect(result.current.getTitle(CLOUD_CONVERSATION_ID)).toBe(
+        "Startup explained",
+      );
+      expect(fetchConversation).toHaveBeenCalledTimes(2);
+      await act(async () => vi.advanceTimersByTimeAsync(10000));
+      expect(fetchConversation).toHaveBeenCalledTimes(2);
+    },
+  );
 
   it("returns to slow polling when title generation stays unavailable", async () => {
     vi.useFakeTimers();
