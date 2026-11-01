@@ -10,6 +10,7 @@ import {
   resolveSchemaChoiceLabel,
   resolveSchemaFieldLabel,
 } from "#/utils/sdk-settings-field-metadata";
+import { isUrlField } from "#/utils/sdk-settings-schema";
 import { cn } from "#/utils/utils";
 import {
   formControlMultilineFieldClassName,
@@ -37,10 +38,6 @@ function isBooleanField(field: SettingsFieldSchema): boolean {
 
 function isJsonField(field: SettingsFieldSchema): boolean {
   return field.value_type === "array" || field.value_type === "object";
-}
-
-function isUrlField(field: SettingsFieldSchema): boolean {
-  return field.key.endsWith("url") || field.key.endsWith("_url");
 }
 
 function getInputType(
