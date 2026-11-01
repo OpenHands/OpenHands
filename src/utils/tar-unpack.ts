@@ -14,6 +14,7 @@
  */
 
 const BLOCK_SIZE = 512;
+const GZIP_INPUT_CHUNK_SIZE = 4 * 1024;
 const USTAR_MAGIC = "ustar";
 const GZIP_MAGIC = [0x1f, 0x8b] as const;
 
@@ -60,19 +61,40 @@ function isGzip(bytes: Uint8Array): boolean {
 
 async function gunzip(
   bytes: Uint8Array<ArrayBuffer>,
+  maxArchiveBytes: number,
 ): Promise<Uint8Array<ArrayBuffer>> {
   // Streamed from the bytes rather than through a Blob, mirroring
   // `packTarGzip`: a Blob's stream() is absent in the jsdom test environment.
+  let offset = 0;
   const source = new ReadableStream<BufferSource>({
-    start(controller) {
-      controller.enqueue(bytes);
-      controller.close();
+    pull(controller) {
+      if (offset >= bytes.byteLength) {
+        controller.close();
+        return;
+      }
+      const nextOffset = Math.min(
+        offset + GZIP_INPUT_CHUNK_SIZE,
+        bytes.byteLength,
+      );
+      controller.enqueue(bytes.subarray(offset, nextOffset));
+      offset = nextOffset;
     },
   });
-  const inflated = new Response(
-    source.pipeThrough(new DecompressionStream("gzip")),
-  );
-  return new Uint8Array(await inflated.arrayBuffer());
+  let archiveBytes = 0;
+  const bounded = source
+    .pipeThrough(new DecompressionStream("gzip"))
+    .pipeThrough(
+      new TransformStream<Uint8Array<ArrayBuffer>, Uint8Array<ArrayBuffer>>({
+        transform(chunk, controller) {
+          archiveBytes += chunk.byteLength;
+          if (archiveBytes > maxArchiveBytes) {
+            throw new TarTooLargeError(maxArchiveBytes);
+          }
+          controller.enqueue(chunk);
+        },
+      }),
+    );
+  return new Uint8Array(await new Response(bounded).arrayBuffer());
 }
 
 /** A NUL-terminated header string field. */
@@ -121,16 +143,21 @@ function decodeText(bytes: Uint8Array): string | null {
  * Unpack a gzipped (or plain) ustar archive into its regular files.
  *
  * Throws `TarFormatError` when the bytes are not an archive — a response
- * that is really an error page, say — and `TarTooLargeError` once the
- * unpacked members exceed `maxTotalBytes`.
+ * that is really an error page, say — and `TarTooLargeError` when the archive
+ * or its regular-file content exceeds its limit.
  */
 export async function unpackTarGzip(
   bytes: Uint8Array<ArrayBuffer>,
-  options: { maxTotalBytes: number },
+  options: { maxContentBytes: number; maxArchiveBytes: number },
 ): Promise<TarEntry[]> {
-  const archive = isGzip(bytes) ? await gunzip(bytes) : bytes;
+  const archive = isGzip(bytes)
+    ? await gunzip(bytes, options.maxArchiveBytes)
+    : bytes;
+  if (archive.byteLength > options.maxArchiveBytes) {
+    throw new TarTooLargeError(options.maxArchiveBytes);
+  }
   const entries: TarEntry[] = [];
-  let unpackedBytes = 0;
+  let contentBytes = 0;
 
   let offset = 0;
   while (offset + BLOCK_SIZE <= archive.length) {
@@ -150,9 +177,9 @@ export async function unpackTarGzip(
 
     const typeflag = String.fromCharCode(header[TYPEFLAG_OFFSET]);
     if (REGULAR_FILE_TYPEFLAGS.has(typeflag)) {
-      unpackedBytes += size;
-      if (unpackedBytes > options.maxTotalBytes) {
-        throw new TarTooLargeError(options.maxTotalBytes);
+      contentBytes += size;
+      if (contentBytes > options.maxContentBytes) {
+        throw new TarTooLargeError(options.maxContentBytes);
       }
       entries.push({
         path: entryPath(header),
