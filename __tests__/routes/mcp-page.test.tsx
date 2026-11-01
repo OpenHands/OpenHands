@@ -441,3 +441,13 @@ it("offers retry after a failed read without offering an empty editable catalog"
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   expect(screen.getByText("shttp")).toBeInTheDocument();
 });
+
+it("allows first-time MCP setup when settings do not exist yet", async () => {
+  vi.spyOn(SettingsService, "getSettings").mockRejectedValue(
+    Object.assign(new Error("Settings not found"), { status: 404 }),
+  );
+  renderPage();
+  await screen.findByTestId("mcp-installed-empty");
+  expect(screen.getByTestId("mcp-marketplace-grid")).toBeInTheDocument();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});

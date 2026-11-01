@@ -7,7 +7,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { BrandButton } from "#/components/features/settings/brand-button";
-import { useSettings } from "#/hooks/query/use-settings";
+import { getErrorStatus, useSettings } from "#/hooks/query/use-settings";
 import { useUpdateMcpServer } from "#/hooks/mutation/use-update-mcp-server";
 import { parseMcpConfig } from "#/utils/mcp-config";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
@@ -41,7 +41,7 @@ import {
 
 export default function MCPPage() {
   const { t } = useTranslation("openhands");
-  const { data: settings, isLoading, isError, refetch } = useSettings();
+  const { data: settings, isLoading, isError, error, refetch } = useSettings();
   const { mutate: updateMcpServer } = useUpdateMcpServer();
 
   const [installEntry, setInstallEntry] =
@@ -94,7 +94,7 @@ export default function MCPPage() {
     );
   };
 
-  if (isError) {
+  if (isError && getErrorStatus(error) !== 404) {
     return (
       <div
         data-testid="mcp-page"

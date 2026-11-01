@@ -2,6 +2,9 @@ import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import * as activeStore from "#/api/backend-registry/active-store";
+import * as cloudMcp from "#/api/cloud/mcp-service.api";
+import McpService from "#/api/mcp-service/mcp-service.api";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import {
   __resetMcpHealthStoreForTests,
@@ -170,6 +173,45 @@ describe("useUpdateMcpServer", () => {
       },
     });
     expect(serverSpy).not.toHaveBeenCalled();
+  });
+
+  it("sends changed cloud fields and untouched credential masks in one rename", async () => {
+    const active = activeStore.getActiveBackend();
+    vi.spyOn(activeStore, "getActiveBackend").mockReturnValue({
+      ...active,
+      backend: { ...active.backend, kind: "cloud" },
+    });
+    const renameSpy = vi
+      .spyOn(cloudMcp, "renameCloudMcpServer")
+      .mockResolvedValue();
+    const patchSpy = vi.spyOn(SettingsService, "patchMcpConfig");
+    const probeSpy = vi.spyOn(McpService, "testServer");
+    const { result } = renderHook(() => useUpdateMcpServer(), {
+      wrapper: createWrapper(),
+    });
+
+    await result.current.mutateAsync({
+      serverId: "github",
+      server: {
+        id: "github",
+        type: "shttp",
+        name: "renamed_github",
+        url: "https://github.example/v2/mcp",
+        auth: { strategy: "bearer", value: REDACTED_MCP_SECRET_VALUE },
+      },
+    });
+
+    expect(renameSpy).toHaveBeenCalledExactlyOnceWith(
+      "github",
+      "renamed_github",
+      {
+        transport: "http",
+        url: "https://github.example/v2/mcp",
+        auth: { strategy: "bearer", value: REDACTED_MCP_SECRET_VALUE },
+      },
+    );
+    expect(patchSpy).not.toHaveBeenCalled();
+    expect(probeSpy).not.toHaveBeenCalled();
   });
 
   it("renames the server in every profile that lists it", async () => {
