@@ -145,6 +145,7 @@ export const useLoadOlderEvents = (
         {
           limit: INITIAL_HISTORY_PAGE_SIZE,
           sortOrder: "TIMESTAMP_DESC",
+          excludeFullState: true,
           timestampLt: oldestTimestamp,
         },
       );

@@ -99,6 +99,7 @@ export const useConversationHistory = (conversationId?: string) => {
         {
           limit: INITIAL_HISTORY_PAGE_SIZE,
           sortOrder: "TIMESTAMP_DESC",
+          excludeFullState: true,
         },
       );
 
