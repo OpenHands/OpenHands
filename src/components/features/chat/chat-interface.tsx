@@ -1,3 +1,4 @@
+import { TaskStartupProgress } from "./task-startup-progress";
 import React from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router";
@@ -414,6 +415,13 @@ export function ChatInterface({
         ? await uploadFiles({ conversationId: conversationId!, files })
         : { skipped_files: [], uploaded_files: [] };
 
+    if (skippedFiles.length && errorCode === STARTUP_UPLOAD_ERROR_CODE) {
+      const composer = useConversationStore.getState();
+      composer.addImages(originalImages);
+      composer.addFiles(originalFiles);
+      composer.setMessageToSend(content, "conversation");
+      return;
+    }
     skippedFiles.forEach((f) => displayErrorToast(f.reason));
 
     const filePrompt = `${t(I18nKey.CHAT_INTERFACE$AUGMENTED_PROMPT_FILES_TITLE)}: ${uploadedFiles.join("\n\n")}`;
@@ -447,6 +455,9 @@ export function ChatInterface({
       await send(
         createChatMessage(prompt, imageUrls, uploadedFiles, timestamp),
       );
+      const errors = useErrorMessageStore.getState();
+      if (errors.errorCode === STARTUP_UPLOAD_ERROR_CODE)
+        errors.removeErrorMessage();
     } catch (sendError) {
       const sendErrorMessage =
         sendError instanceof Error
@@ -555,7 +566,7 @@ export function ChatInterface({
           if (isComposerDocked) onDockedComposerSubmit?.();
           return handleSendMessage(content, images, files);
         }}
-        disabled={isNewConversationPending || llmBlocked}
+        disabled={isTask || isNewConversationPending || llmBlocked}
         hasStartedConversation={hasStartedConversation}
         showGitControlBar={showGitControlBar}
         placeholder={
@@ -664,6 +675,7 @@ export function ChatInterface({
             double-renders alongside the real event list.
           */}
             <PendingUserMessages />
+            {isTask && <TaskStartupProgress />}
 
             {/* Goal-loop status sits at the end of the message flow — above the
               composer and its typing indicator — so progress stays in view. */}
@@ -722,7 +734,7 @@ export function ChatInterface({
                   <div className="flex justify-between relative">
                     <div className="flex items-end gap-1 pointer-events-auto">
                       <ConfirmationModeEnabled />
-                      {isStartingStatus && (
+                      {isStartingStatus && !isTask && (
                         <ChatStatusIndicator
                           statusColor={serverStatusColor}
                           status={serverStatusText}
@@ -754,3 +766,4 @@ export function ChatInterface({
     </WorkspaceFilesForChatProvider>
   );
 }
+import { STARTUP_UPLOAD_ERROR_CODE } from "#/utils/restore-startup-attachment-draft";
