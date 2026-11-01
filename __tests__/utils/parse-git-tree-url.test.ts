@@ -56,6 +56,8 @@ describe("parseGitTreeUrl", () => {
     "github:o/r",
     "/local/path",
     "https://github.com/o/r/blob/main/README.md",
+    "https://github.com/o/r/tree/main%/apps/demo",
+    "https://gitlab.com/group/repo/-/tree/main/apps/%E0%A4%A",
   ])("returns null for %s", (source) => {
     expect(parseGitTreeUrl(source)).toBeNull();
   });
