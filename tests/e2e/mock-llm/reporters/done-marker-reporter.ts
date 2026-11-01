@@ -55,6 +55,14 @@ class DoneMarkerReporter implements Reporter {
   }
 
   onTestEnd(test: TestCase, result: TestResult) {
+    // Playwright invokes onTestEnd once per attempt, retries included.
+    // Count a test only when its FINAL attempt finishes: otherwise a flaky
+    // retry inflates completedTests past totalTests and ends the suite
+    // early (issue #16977).
+    const finalResult = test.results[test.results.length - 1];
+    if (result !== finalResult) {
+      return;
+    }
     this.completedTests++;
     const passed = result.status === "passed" || result.status === "skipped";
     if (!passed) {
