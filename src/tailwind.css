@@ -850,7 +850,7 @@ code .token {
 }
 
 @utility automation-setup-repository-menu {
-  width: min(28rem, calc(100vw - 3rem));
+  width: min(40rem, calc(100vw - 3rem));
 }
 
 /* Command palette geometry and effects keep their viewport and filter composition. */
