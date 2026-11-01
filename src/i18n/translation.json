@@ -10799,6 +10799,24 @@
     "ca": "Pendent",
     "id": "Tertunda"
   },
+  "AUTOMATIONS$PENDING_RUN_COUNT": {
+    "en": "{{count}} pending",
+    "ja": "保留中 {{count}} 件",
+    "zh-CN": "待处理 {{count}} 项",
+    "zh-TW": "待處理 {{count}} 項",
+    "ko-KR": "대기 중 {{count}}개",
+    "no": "{{count}} venter",
+    "it": "{{count}} in attesa",
+    "pt": "{{count}} pendentes",
+    "es": "{{count}} pendientes",
+    "ar": "{{count}} قيد الانتظار",
+    "fr": "{{count}} en attente",
+    "tr": "{{count}} bekliyor",
+    "de": "{{count}} ausstehend",
+    "uk": "{{count}} в очікуванні",
+    "ca": "{{count}} pendents",
+    "id": "{{count}} tertunda"
+  },
   "AUTOMATIONS$DETAIL$RUNNING": {
     "en": "Running",
     "ja": "実行中",

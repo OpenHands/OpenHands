@@ -8,10 +8,10 @@
  * of `src/manifests/` stays about composition rather than about automations.
  *
  * Summaries are derived from the newest page of runs (the sample the runs
- * hook fetches); `total` alone is the response's lifetime count. Success rate
- * and durations consider only terminal lifecycle runs; the success numerator
- * uses task-aware display status so completed-but-blocked work is not counted
- * as successful.
+ * hook fetches); `total`, `completedTotal`, and `pendingTotal` are lifetime
+ * counts. Success rate and durations consider only terminal lifecycle runs;
+ * the success numerator uses task-aware display status so
+ * completed-but-blocked work is not counted as successful.
  */
 
 import {
@@ -47,6 +47,8 @@ export interface AutomationRunSummary {
    * and the count is null — unknowable, never guessed — otherwise.
    */
   completedTotal: number | null;
+  /** Lifetime PENDING-run count (queued runs), known by the same rule. */
+  pendingTotal: number | null;
   latestRun: AutomationRun | null;
   /** Newest-first sample used by the list sparkline (same page as the summary). */
   recentRuns: AutomationRun[];
@@ -86,6 +88,20 @@ function isTaskFailing(run: AutomationRun): boolean {
   );
 }
 
+/**
+ * A lifetime count for one status: the service's `status_counts` when
+ * reported, the sample's count when it holds the whole history, else null.
+ */
+function lifetimeStatusCount(
+  response: AutomationRunsResponse,
+  status: AutomationRunStatus,
+  sampleCount: number,
+): number | null {
+  if (response.status_counts) return response.status_counts[status] ?? 0;
+  if (response.total <= response.runs.length) return sampleCount;
+  return null;
+}
+
 export function summarizeAutomationRuns(
   response: AutomationRunsResponse,
 ): AutomationRunSummary {
@@ -93,15 +109,9 @@ export function summarizeAutomationRuns(
     TERMINAL_STATUSES.has(run.status),
   );
   const completed = terminal.filter(isTaskSuccessful).length;
-
-  let completedTotal: number | null;
-  if (response.status_counts) {
-    completedTotal = response.status_counts[AutomationRunStatus.COMPLETED] ?? 0;
-  } else if (response.total <= response.runs.length) {
-    completedTotal = completed;
-  } else {
-    completedTotal = null;
-  }
+  const pending = response.runs.filter(
+    (run) => run.status === AutomationRunStatus.PENDING,
+  ).length;
 
   const durations = terminal.flatMap((run) => {
     if (!run.completed_at) return [];
@@ -112,7 +122,16 @@ export function summarizeAutomationRuns(
 
   return {
     total: response.total,
-    completedTotal,
+    completedTotal: lifetimeStatusCount(
+      response,
+      AutomationRunStatus.COMPLETED,
+      completed,
+    ),
+    pendingTotal: lifetimeStatusCount(
+      response,
+      AutomationRunStatus.PENDING,
+      pending,
+    ),
     latestRun: response.runs[0] ?? null,
     recentRuns: response.runs,
     recentSuccessRate:
