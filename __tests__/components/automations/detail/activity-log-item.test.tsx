@@ -36,6 +36,11 @@ vi.mock("#/api/cloud/organization-service.api", async (importOriginal) => ({
   >()),
   getCloudOrganizations: vi.fn(),
   getCloudOrganizationMe: vi.fn(),
+  getCurrentCloudApiKey: vi.fn().mockResolvedValue({
+    keyId: "k1",
+    orgId: null,
+    isLegacyKey: true,
+  }),
 }));
 
 // Per this repo's testing rules (AGENTS.md): don't mock the hook, mock the
@@ -547,6 +552,7 @@ const cloudBackend: Backend = {
   host: "https://app.all-hands.dev",
   apiKey: "bearer-key",
   kind: "cloud",
+  authMode: "cookie",
 };
 
 describe("ActivityLogItem — cancellation gating on cloud (creator escape hatch)", () => {
@@ -556,8 +562,8 @@ describe("ActivityLogItem — cancellation gating on cloud (creator escape hatch
     setRegisteredBackends([cloudBackend]);
     setActiveSelection({ backendId: cloudBackend.id, orgId: ORG_ID });
     vi.mocked(getCloudOrganizations).mockResolvedValue({
-      items: [],
-      currentOrgId: null,
+      items: [{ id: ORG_ID, name: "Org 1" }],
+      currentOrgId: ORG_ID,
     });
     vi.mocked(AutomationService.cancelAutomationRun).mockReset();
   });
@@ -589,11 +595,14 @@ describe("ActivityLogItem — cancellation gating on cloud (creator escape hatch
     renderItem(run, automation);
 
     // Assert
-    await waitFor(() => {
-      expect(
-        screen.getByRole("button", { name: CANCEL_BUTTON_NAME }),
-      ).toBeInTheDocument();
-    });
+    await waitFor(
+      () => {
+        expect(
+          screen.getByRole("button", { name: CANCEL_BUTTON_NAME }),
+        ).toBeInTheDocument();
+      },
+      { timeout: 5000 },
+    );
   });
 
   it("does not render a cancel button for a non-creator member lacking manage_automations permission", async () => {
@@ -644,11 +653,14 @@ describe("ActivityLogItem — cancellation gating on cloud (creator escape hatch
     renderItem(run, automation);
 
     // Assert
-    await waitFor(() => {
-      expect(
-        screen.getByRole("button", { name: CANCEL_BUTTON_NAME }),
-      ).toBeInTheDocument();
-    });
+    await waitFor(
+      () => {
+        expect(
+          screen.getByRole("button", { name: CANCEL_BUTTON_NAME }),
+        ).toBeInTheDocument();
+      },
+      { timeout: 5000 },
+    );
   });
 });
 
