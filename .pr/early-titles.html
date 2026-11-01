@@ -1,0 +1,1020 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Early conversation titles — design review</title><style> :root{--fg:#20221f;--muted:#62685f;--rule:#d9ded3;--bg:#fcfcf8;--accent:#264f8c;--soft:#eaf0fa;--warn:#b05c12;--old:#f3f3ec}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 system-ui,sans-serif}.wrap{max-width:1240px;margin:auto;display:grid;grid-template-columns:230px minmax(0,1fr);gap:40px;padding:36px 24px 80px}nav{position:sticky;top:24px;max-height:calc(100vh - 48px);overflow:auto;align-self:start;font-size:12px}nav ul{padding:0;list-style:none}li{margin:12px 0}small{display:block;color:var(--muted)}h1{font-size:36px;line-height:1.15}h2{font-size:21px;margin-top:38px}a{color:var(--accent)}.source,figcaption{font-size:13px;color:var(--muted);overflow-wrap:anywhere}.callout{padding:16px;background:var(--soft);border-left:4px solid var(--accent)}svg{width:100%;height:auto;background:white;border:1px solid var(--rule);border-radius:8px}svg text{font:600 13px system-ui;fill:var(--fg)}svg .detail{font-size:12px;font-weight:400}svg .small{font-size:11px;fill:var(--muted)}.old{fill:var(--old);stroke:var(--muted);stroke-dasharray:5 4}.new{fill:var(--soft);stroke:var(--accent);stroke-width:2}.delta{stroke:var(--warn);stroke-width:2;fill:none;stroke-dasharray:5 3}figure{margin:18px 0}details{border:1px solid var(--rule);padding:12px;margin:12px 0}summary{cursor:pointer}pre{font:12px/1.5 ui-monospace,monospace;overflow:auto;max-height:480px}section{border-top:1px solid var(--rule);margin-top:28px}@media(max-width:800px){.wrap{display:block}nav{position:static;max-height:none;overflow:visible}nav ul{columns:2}h1{font-size:28px}}</style><body><div class="wrap"><nav><strong>Changed files</strong><ul><li><a href="#f1">conversation-name.tsx</a><small>changed · +12/−5</small></li><li><a href="#f2">use-conversation-display-title.test.tsx</a><small>changed · +142/−4</small></li><li><a href="#f3">agent-server-conversation-service.api.ts</a><small>changed · +1/−0</small></li><li><a href="#f4">agent-server-conversation-service.types.ts</a><small>changed · +9/−0</small></li><li><a href="#f5">compact-conversation-row.tsx</a><small>changed · +7/−1</small></li><li><a href="#f6">conversation-card-header.tsx</a><small>changed · +3/−0</small></li><li><a href="#f7">conversation-card-preview.tsx</a><small>changed · +4/−1</small></li><li><a href="#f8">conversation-card-title.tsx</a><small>changed · +4/−1</small></li><li><a href="#f9">conversation-card.tsx</a><small>changed · +3/−0</small></li><li><a href="#f10">conversation-panel.tsx</a><small>changed · +15/−5</small></li><li><a href="#f11">start-task-card.tsx</a><small>changed · +3/−0</small></li><li><a href="#f12">conversation-title-text.tsx</a><small>added · +22/−0</small></li><li><a href="#f13">use-update-conversation.ts</a><small>changed · +76/−40</small></li><li><a href="#f14">use-active-conversation.ts</a><small>changed · +5/−0</small></li><li><a href="#f15">use-start-tasks.ts</a><small>changed · +16/−2</small></li><li><a href="#f16">use-conversation-display-title.ts</a><small>changed · +90/−9</small></li><li><a href="#f17">index.css</a><small>changed · +27/−14</small></li><li><a href="#f18">conversation-launch-store.ts</a><small>changed · +5/−1</small></li></ul></nav><main><header><small>EARLY CONVERSATION TITLES · REVIEW GUIDE</small><h1>Reveal one title while the sandbox starts</h1><p>Canvas opens the conversation immediately, shows the same shimmering New Chat label in the sidebar and header, then reveals the app-generated title. The app server owns the generation state and deadline; the existing launch store owns only navigation aliases and optimistic timing.</p><div class="callout">★ The new Cloud opt-in is additive and defaults off on the backend. Deploy enterprise #1119 first. Local and legacy Cloud conversations keep their existing title behavior. Start with <a href="https://github.com/OpenHands/OpenHands/blob/28df7b9e7ef8281c46b5b8e2b4db122140ca4a65/src/hooks/use-conversation-display-title.ts#L44">useConversationDisplayTitleState</a> and <a href="https://github.com/OpenHands/OpenHands/blob/28df7b9e7ef8281c46b5b8e2b4db122140ca4a65/src/api/conversation-service/agent-server-conversation-service.api.ts#L575">the Cloud create payload</a>.</div><h2>API before → after</h2><p>Cloud POST /api/v1/app-conversations gains <code>generate_title_on_submit: true</code>. Optional response metadata is <code>title_generation: {status: pending | generated | fallback, title, deadline_at}</code>. A missing field uses the legacy path. This is an app-server contract; no Agent Server endpoint or minimum version changes. <a href="https://github.com/OpenHands/OpenHands/blob/28df7b9e7ef8281c46b5b8e2b4db122140ca4a65/src/api/conversation-service/agent-server-conversation-service.types.ts#L1">Contract source</a>.</p><p>During the shared deadline the UI shows New Chat. Success reveals the generated title; failure or timeout shows the first-message fallback. Manual renaming clears generation state and immediately updates both caches. Header and composer geometry remain the layout established by #19202.</p><p class="source">Before: 5b7e7e1ef7224bfaaddfffbe2db31631f10508b0 · After code: 28df7b9e7ef8281c46b5b8e2b4db122140ca4a65. The diagrams below explain code; the PR video is the live visual evidence.</p></header><section id="f1"><h2>1. The header renders shared pending state</h2><p class="source">src/components/features/conversation/conversation-name.tsx · <a href="https://github.com/OpenHands/OpenHands/blob/5b7e7e1ef7224bfaaddfffbe2db31631f10508b0/src/components/features/conversation/conversation-name.tsx#L142">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/28df7b9e7ef8281c46b5b8e2b4db122140ca4a65/src/components/features/conversation/conversation-name.tsx#L146">After source</a></p><figure><svg viewBox="0 0 820 150" role="img" aria-labelledby="t1 d1"><title id="t1">The header renders shared pending state</title><desc id="d1">Before: Shared title string. After: ConversationTitleText + pending.</desc><rect class="old" x="10" y="35" width="375" height="100" rx="6"/><rect class="new" x="435" y="35" width="375" height="100" rx="6"/><text x="25" y="22">BEFORE</text><text x="450" y="22">AFTER</text><a href="https://github.com/OpenHands/OpenHands/blob/5b7e7e1ef7224bfaaddfffbe2db31631f10508b0/src/components/features/conversation/conversation-name.tsx#L142"><text x="25" y="66">conversation-name.tsx</text><text class="detail" x="25" y="94">Shared title string</text><text class="small" x="25" y="117">Source line 142</text></a><path class="delta" d="M390 85 H428 M420 79 L428 85 L420 91"/><a href="https://github.com/OpenHands/OpenHands/blob/28df7b9e7ef8281c46b5b8e2b4db122140ca4a65/src/components/features/conversation/conversation-name.tsx#L146"><text x="450" y="66">conversation-name.tsx</text><text class="detail" x="450" y="94">ConversationTitleText + pending</text><text class="small" x="450" y="117">Source line 146</text></a></svg><figcaption>The header consumes the same resolver as the sidebar while retaining the fixed title height and menu slot from #19202.</figcaption></figure><details><summary>Review the diff (+12/−5)</summary><pre>diff --git a/src/components/features/conversation/conversation-name.tsx b/src/components/features/conversation/conversation-name.tsx
+index 1258416261..5a284d9c64 100644
+--- a/src/components/features/conversation/conversation-name.tsx
++++ b/src/components/features/conversation/conversation-name.tsx
+@@ -1,4 +1,5 @@
+-import { useConversationDisplayTitle } from &quot;#/hooks/use-conversation-display-title&quot;;
++import { ConversationTitleText } from &quot;./conversation-title-text&quot;;
++import { useConversationDisplayTitleState } from &quot;#/hooks/use-conversation-display-title&quot;;
+ import React from &quot;react&quot;;
+ import { useTranslation } from &quot;react-i18next&quot;;
+ import { useActiveConversation } from &quot;#/hooks/query/use-active-conversation&quot;;
+@@ -20,8 +21,11 @@ export function ConversationName() {
+   const { t } = useTranslation(&quot;openhands&quot;);
+   const { conversationId } = useConversationId();
+   const { data: conversation } = useActiveConversation();
+-  const getTitle = useConversationDisplayTitle();
+-  const displayTitle = getTitle(conversationId, conversation?.title);
++  const getTitle = useConversationDisplayTitleState();
++  const { title: displayTitle, pending: titlePending } = getTitle(
++    conversationId,
++    conversation?.title,
++  );
+   const { mutate: updateConversation } = useUpdateConversation();
+
+   const [titleMode, setTitleMode] = React.useState&lt;&quot;view&quot; | &quot;edit&quot;&gt;(&quot;view&quot;);
+@@ -143,7 +147,7 @@ export function ConversationName() {
+     return (
+       &lt;div className=&quot;flex items-center gap-2 h-5.5 text-base font-normal text-left pl-0 lg:pl-1 min-w-0&quot;&gt;
+         &lt;div className=&quot;text-contrast leading-5 truncate&quot; title={displayTitle}&gt;
+-          {displayTitle}
++          &lt;ConversationTitleText title={displayTitle} pending={titlePending} /&gt;
+         &lt;/div&gt;
+         &lt;div aria-hidden className=&quot;w-6 shrink-0&quot; /&gt;
+       &lt;/div&gt;
+@@ -174,7 +178,10 @@ export function ConversationName() {
+             onDoubleClick={handleDoubleClick}
+             title={displayTitle}
+           &gt;
+-            {displayTitle}
++            &lt;ConversationTitleText
++              title={displayTitle}
++              pending={titlePending}
++            /&gt;
+           &lt;/div&gt;
+         )}
+
+</pre></details></section><section id="f2"><h2>2. use-conversation-display-title.test.tsx</h2><p class="source">__tests__/hooks/use-conversation-display-title.test.tsx · <a href="https://github.com/OpenHands/OpenHands/blob/5b7e7e1ef7224bfaaddfffbe2db31631f10508b0/__tests__/hooks/use-conversation-display-title.test.tsx#L1">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/28df7b9e7ef8281c46b5b8e2b4db122140ca4a65/__tests__/hooks/use-conversation-display-title.test.tsx#L1">After source</a></p><p>Regression coverage exercises the changed behavior; see the focused assertions in the diff.</p><details><summary>Review the diff (+142/−4)</summary><pre>diff --git a/__tests__/hooks/use-conversation-display-title.test.tsx b/__tests__/hooks/use-conversation-display-title.test.tsx
+index 6f625d674d..8fb0c3e93c 100644
+--- a/__tests__/hooks/use-conversation-display-title.test.tsx
++++ b/__tests__/hooks/use-conversation-display-title.test.tsx
+@@ -1,3 +1,5 @@
++import { useUpdateConversation } from &quot;#/hooks/mutation/use-update-conversation&quot;;
++import AgentServerConversationService from &quot;#/api/conversation-service/agent-server-conversation-service.api&quot;;
+ import React from &quot;react&quot;;
+ import { act, renderHook, waitFor } from &quot;@testing-library/react&quot;;
+ import { QueryClient, QueryClientProvider } from &quot;@tanstack/react-query&quot;;
+@@ -9,7 +11,10 @@ import {
+ } from &quot;#/api/backend-registry/active-store&quot;;
+ import { NavigationProvider } from &quot;#/context/navigation-context&quot;;
+ import { useConversationLaunchStore } from &quot;#/stores/conversation-launch-store&quot;;
+-import { useConversationDisplayTitle } from &quot;#/hooks/use-conversation-display-title&quot;;
++import {
++  useConversationDisplayTitle,
++  useConversationDisplayTitleState,
++} from &quot;#/hooks/use-conversation-display-title&quot;;
+ import { CONVERSATION_QUERY_KEYS } from &quot;#/hooks/query/query-keys&quot;;
+
+ let client: QueryClient;
+@@ -75,7 +80,7 @@ it(&quot;keeps both titles through launch, task and saved metadata, then adopts gener
+     },
+     { wrapper },
+   );
+-  expect(result.current).toEqual([prompt, prompt]);
++  expect(result.current).toEqual([&quot;SIDEBAR$NEW_CHAT&quot;, &quot;SIDEBAR$NEW_CHAT&quot;]);
+   act(() =&gt;
+     useConversationLaunchStore
+       .getState()
+@@ -83,7 +88,7 @@ it(&quot;keeps both titles through launch, task and saved metadata, then adopts gener
+   );
+   routeId = &quot;task-start&quot;;
+   rerender();
+-  expect(result.current).toEqual([prompt, prompt]);
++  expect(result.current).toEqual([&quot;SIDEBAR$NEW_CHAT&quot;, &quot;SIDEBAR$NEW_CHAT&quot;]);
+   act(() =&gt;
+     useConversationLaunchStore
+       .getState()
+@@ -91,7 +96,7 @@ it(&quot;keeps both titles through launch, task and saved metadata, then adopts gener
+   );
+   routeId = id;
+   rerender();
+-  expect(result.current).toEqual([prompt, prompt]);
++  expect(result.current).toEqual([&quot;SIDEBAR$NEW_CHAT&quot;, &quot;SIDEBAR$NEW_CHAT&quot;]);
+   act(() =&gt; {
+     client.setQueryData(detailKey, metadata(&quot;Conversation 12345&quot;));
+     client.setQueryData(listKey, {
+@@ -161,3 +166,136 @@ it(&quot;does not reuse a different organization&#x27;s cached task prompt&quot;, () =&gt; {
+   expect(result.current).not.toBe(&quot;Private task prompt&quot;);
+   expect(result.current).not.toBe(prompt);
+ });
++
++it(&quot;reveals a shared early title before sandbox readiness and preserves a manual rename&quot;, async () =&gt; {
++  routeId = &quot;task-start&quot;;
++  act(() =&gt;
++    useConversationLaunchStore
++      .getState()
++      .update(launchId, { targetId: routeId }),
++  );
++  const pending = {
++    status: &quot;pending&quot;,
++    title: prompt,
++    deadline_at: new Date(Date.now() + 8000).toISOString(),
++  };
++  const taskKey = CONVERSATION_QUERY_KEYS.startTask(&quot;start&quot;);
++  client.setQueryData(taskKey, {
++    id: &quot;start&quot;,
++    status: &quot;WAITING_FOR_SANDBOX&quot;,
++    title_generation: pending,
++    request: {},
++  });
++  const { result, rerender } = renderHook(
++    () =&gt; {
++      const getTitle = useConversationDisplayTitleState();
++      return [getTitle(routeId), getTitle(launchId)];
++    },
++    { wrapper },
++  );
++  expect(result.current).toEqual([
++    { title: &quot;SIDEBAR$NEW_CHAT&quot;, pending: true },
++    { title: &quot;SIDEBAR$NEW_CHAT&quot;, pending: true },
++  ]);
++  act(() =&gt;
++    client.setQueryData(taskKey, {
++      id: &quot;start&quot;,
++      status: &quot;WAITING_FOR_SANDBOX&quot;,
++      title_generation: {
++        ...pending,
++        status: &quot;generated&quot;,
++        title: &quot;Startup explained&quot;,
++      },
++      request: {},
++    }),
++  );
++  await waitFor(() =&gt;
++    expect(result.current).toEqual([
++      { title: &quot;Startup explained&quot;, pending: false },
++      { title: &quot;Startup explained&quot;, pending: false },
++    ]),
++  );
++  act(() =&gt;
++    useConversationLaunchStore
++      .getState()
++      .update(launchId, { conversationId: id }),
++  );
++  routeId = id;
++  client.setQueryData(detailKey, {
++    ...metadata(&quot;My name&quot;),
++    title_generation: null,
++  });
++  rerender();
++  expect(result.current).toEqual([
++    { title: &quot;My name&quot;, pending: false },
++    { title: &quot;My name&quot;, pending: false },
++  ]);
++});
++
++it(&quot;ends the shimmer at the shared deadline even if the server stops responding&quot;, () =&gt; {
++  vi.useFakeTimers();
++  routeId = id;
++  client.setQueryData(detailKey, {
++    ...metadata(prompt),
++    title_generation: {
++      status: &quot;pending&quot;,
++      title: prompt,
++      deadline_at: new Date(Date.now() + 1000).toISOString(),
++    },
++  });
++  const { result } = renderHook(() =&gt; useConversationDisplayTitleState()(id), {
++    wrapper,
++  });
++  expect(result.current).toEqual({ title: &quot;SIDEBAR$NEW_CHAT&quot;, pending: true });
++  act(() =&gt; vi.advanceTimersByTime(1001));
++  expect(result.current).toEqual({ title: prompt, pending: false });
++  vi.useRealTimers();
++});
++
++it(&quot;shows a manual rename immediately and restores both titles if saving fails&quot;, async () =&gt; {
++  routeId = id;
++  const pending = {
++    ...metadata(prompt),
++    title_generation: {
++      status: &quot;pending&quot;,
++      title: prompt,
++      deadline_at: new Date(Date.now() + 8000).toISOString(),
++    },
++  };
++  client.setQueryData(detailKey, pending);
++  client.setQueryData(listKey, {
++    pages: [{ items: [pending] }],
++    pageParams: [undefined],
++  });
++  let rejectSave!: (error: Error) =&gt; void;
++  const save = vi
++    .spyOn(AgentServerConversationService, &quot;updateConversationTitle&quot;)
++    .mockImplementation(
++      () =&gt;
++        new Promise((_resolve, reject) =&gt; {
++          rejectSave = reject;
++        }),
++    );
++  const { result } = renderHook(
++    () =&gt; {
++      const getTitle = useConversationDisplayTitleState();
++      return { title: getTitle(id), rename: useUpdateConversation() };
++    },
++    { wrapper },
++  );
++  act(() =&gt;
++    result.current.rename.mutate({
++      conversationId: id,
++      newTitle: &quot;My custom name&quot;,
++    }),
++  );
++  await waitFor(() =&gt;
++    expect(result.current.title).toEqual({
++      title: &quot;My custom name&quot;,
++      pending: false,
++    }),
++  );
++  act(() =&gt; rejectSave(new Error(&quot;Save failed&quot;)));
++  await waitFor(() =&gt; expect(result.current.title.pending).toBe(true));
++  save.mockRestore();
++});
+</pre></details></section><section id="f3"><h2>3. Cloud creates opt into early titles</h2><p class="source">src/api/conversation-service/agent-server-conversation-service.api.ts · <a href="https://github.com/OpenHands/OpenHands/blob/5b7e7e1ef7224bfaaddfffbe2db31631f10508b0/src/api/conversation-service/agent-server-conversation-service.api.ts#L572">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/28df7b9e7ef8281c46b5b8e2b4db122140ca4a65/src/api/conversation-service/agent-server-conversation-service.api.ts#L572">After source</a></p><figure><svg viewBox="0 0 820 150" role="img" aria-labelledby="t3 d3"><title id="t3">Cloud creates opt into early titles</title><desc id="d3">Before: Existing Cloud request. After: generate_title_on_submit: true.</desc><rect class="old" x="10" y="35" width="375" height="100" rx="6"/><rect class="new" x="435" y="35" width="375" height="100" rx="6"/><text x="25" y="22">BEFORE</text><text x="450" y="22">AFTER</text><a href="https://github.com/OpenHands/OpenHands/blob/5b7e7e1ef7224bfaaddfffbe2db31631f10508b0/src/api/conversation-service/agent-server-conversation-service.api.ts#L572"><text x="25" y="66">agent-server-conversation-service.api.ts</text><text class="detail" x="25" y="94">Existing Cloud request</text><text class="small" x="25" y="117">Source line 572</text></a><path class="delta" d="M390 85 H428 M420 79 L428 85 L420 91"/><a href="https://github.com/OpenHands/OpenHands/blob/28df7b9e7ef8281c46b5b8e2b4db122140ca4a65/src/api/conversation-service/agent-server-conversation-service.api.ts#L572"><text x="450" y="66">agent-server-conversation-service.api.ts</text><text class="detail" x="450" y="94">generate_title_on_submit: true</text><text class="small" x="450" y="117">Source line 572</text></a></svg><figcaption>Only Cloud conversation creation sends the opt-in; Local requests and the SDK contract stay unchanged.</figcaption></figure><details><summary>Review the diff (+1/−0)</summary><pre>diff --git a/src/api/conversation-service/agent-server-conversation-service.api.ts b/src/api/conversation-service/agent-server-conversation-service.api.ts
+index fe7fc2d726..d519fec152 100644
+--- a/src/api/conversation-service/agent-server-conversation-service.api.ts
++++ b/src/api/conversation-service/agent-server-conversation-service.api.ts
+@@ -572,6 +572,7 @@ class AgentServerConversationService {
+         options.hasActiveMetaProfile ?? false,
+       );
+       const request: AppConversationStartRequest = {
++        generate_title_on_submit: true,
+         initial_message: initialUserMsg
+           ? {
+               role: &quot;user&quot;,
+</pre></details></section><section id="f4"><h2>4. agent-server-conversation-service.types.ts</h2><p class="source">src/api/conversation-service/agent-server-conversation-service.types.ts · <a href="https://github.com/OpenHands/OpenHands/blob/5b7e7e1ef7224bfaaddfffbe2db31631f10508b0/src/api/conversation-service/agent-server-conversation-service.types.ts#L64">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/28df7b9e7ef8281c46b5b8e2b4db122140ca4a65/src/api/conversation-service/agent-server-conversation-service.types.ts#L64">After source</a></p><p>Additive app-server title metadata and create opt-in; older responses omit the field.</p><details><summary>Review the diff (+9/−0)</summary><pre>diff --git a/src/api/conversation-service/agent-server-conversation-service.types.ts b/src/api/conversation-service/agent-server-conversation-service.types.ts
+index eafa3be44e..20c569e7f4 100644
+--- a/src/api/conversation-service/agent-server-conversation-service.types.ts
++++ b/src/api/conversation-service/agent-server-conversation-service.types.ts
+@@ -64,7 +64,14 @@ export interface SendMessageRequest {
+   content: MessageContent[];
+ }
+
++export interface ConversationTitleGeneration {
++  status: &quot;pending&quot; | &quot;generated&quot; | &quot;fallback&quot;;
++  title: string;
++  deadline_at: string;
++}
++
+ export interface AppConversationStartRequest {
++  generate_title_on_submit?: boolean;
+   // Re-provision an EXISTING conversation (waking a recycled sandbox) instead
+   // of minting a new one. The backend keys the rebuilt conversation on this id
+   // and, for ACP, resumes it from the durable event store with a bootstrap
+@@ -117,6 +124,7 @@ export type AppConversationStartTaskStatus =
+   | &quot;ERROR&quot;;
+
+ export interface AppConversationStartTask {
++  title_generation?: ConversationTitleGeneration | null;
+   id: string;
+   created_by_user_id: string | null;
+   status: AppConversationStartTaskStatus;
+@@ -145,6 +153,7 @@ export interface LaunchedAgentProfile {
+ }
+
+ export interface AppConversation {
++  title_generation?: ConversationTitleGeneration | null;
+   id: string;
+   created_by_user_id: string | null;
+   selected_repository: string | null;
+</pre></details></section><section id="f5"><h2>5. compact-conversation-row.tsx</h2><p class="source">src/components/features/conversation-panel/compact-conversation-row.tsx · <a href="https://github.com/OpenHands/OpenHands/blob/5b7e7e1ef7224bfaaddfffbe2db31631f10508b0/src/components/features/conversation-panel/compact-conversation-row.tsx#L1">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/28df7b9e7ef8281c46b5b8e2b4db122140ca4a65/src/components/features/conversation-panel/compact-conversation-row.tsx#L1">After source</a></p><p>Use the same shared title rendering in compact rows.</p><details><summary>Review the diff (+7/−1)</summary><pre>diff --git a/src/components/features/conversation-panel/compact-conversation-row.tsx b/src/components/features/conversation-panel/compact-conversation-row.tsx
+index debd5a5a4f..5a999b7779 100644
+--- a/src/components/features/conversation-panel/compact-conversation-row.tsx
++++ b/src/components/features/conversation-panel/compact-conversation-row.tsx
+@@ -1,3 +1,4 @@
++import { ConversationTitleText } from &quot;#/components/features/conversation/conversation-title-text&quot;;
+ import React from &quot;react&quot;;
+ import { Tooltip } from &quot;@heroui/react&quot;;
+ import { useTranslation } from &quot;react-i18next&quot;;
+@@ -16,6 +17,7 @@ import { isMissingSandboxStatus } from &quot;#/utils/conversation-archive-status&quot;;
+ interface CompactConversationRowProps {
+   conversationId: string;
+   title: string;
++  titlePending?: boolean;
+   selectedRepository: RepositorySelection | null;
+   executionStatus?: ExecutionStatus | null;
+   sandboxStatus?: SandboxStatus | null;
+@@ -48,6 +50,7 @@ interface CompactConversationRowProps {
+ export function CompactConversationRow({
+   conversationId,
+   title,
++  titlePending,
+   selectedRepository,
+   executionStatus,
+   sandboxStatus,
+@@ -84,7 +87,10 @@ export function CompactConversationRow({
+           className=&quot;text-sm font-medium text-contrast truncate&quot;
+           title={title}
+         &gt;
+-          {title || t(I18nKey.CONVERSATION$UNTITLED)}
++          &lt;ConversationTitleText
++            title={title || t(I18nKey.CONVERSATION$UNTITLED)}
++            pending={titlePending}
++          /&gt;
+         &lt;/span&gt;
+       &lt;/div&gt;
+       &lt;ConversationCardFooter
+</pre></details></section><section id="f6"><h2>6. conversation-card-header.tsx</h2><p class="source">src/components/features/conversation-panel/conversation-card/conversation-card-header.tsx · <a href="https://github.com/OpenHands/OpenHands/blob/5b7e7e1ef7224bfaaddfffbe2db31631f10508b0/src/components/features/conversation-panel/conversation-card/conversation-card-header.tsx#L6">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/28df7b9e7ef8281c46b5b8e2b4db122140ca4a65/src/components/features/conversation-panel/conversation-card/conversation-card-header.tsx#L6">After source</a></p><p>Pass titlePending to the existing title component.</p><details><summary>Review the diff (+3/−0)</summary><pre>diff --git a/src/components/features/conversation-panel/conversation-card/conversation-card-header.tsx b/src/components/features/conversation-panel/conversation-card/conversation-card-header.tsx
+index 0f8c0cb223..8f5423091f 100644
+--- a/src/components/features/conversation-panel/conversation-card/conversation-card-header.tsx
++++ b/src/components/features/conversation-panel/conversation-card/conversation-card-header.tsx
+@@ -6,6 +6,7 @@ import { ConversationStatusDot } from &quot;../conversation-status-dot&quot;;
+
+ interface ConversationCardHeaderProps {
+   title: string;
++  titlePending?: boolean;
+   titleMode: &quot;view&quot; | &quot;edit&quot;;
+   onTitleSave: (title: string) =&gt; void;
+   executionStatus?: ExecutionStatus | null;
+@@ -22,6 +23,7 @@ interface ConversationCardHeaderProps {
+
+ export function ConversationCardHeader({
+   title,
++  titlePending,
+   titleMode,
+   onTitleSave,
+   executionStatus,
+@@ -45,6 +47,7 @@ export function ConversationCardHeader({
+       )}
+       &lt;ConversationCardTitle
+         title={title}
++        titlePending={titlePending}
+         titleMode={titleMode}
+         onSave={onTitleSave}
+         isConversationArchived={archived}
+</pre></details></section><section id="f7"><h2>7. conversation-card-preview.tsx</h2><p class="source">src/components/features/conversation-panel/conversation-card/conversation-card-preview.tsx · <a href="https://github.com/OpenHands/OpenHands/blob/5b7e7e1ef7224bfaaddfffbe2db31631f10508b0/src/components/features/conversation-panel/conversation-card/conversation-card-preview.tsx#L1">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/28df7b9e7ef8281c46b5b8e2b4db122140ca4a65/src/components/features/conversation-panel/conversation-card/conversation-card-preview.tsx#L1">After source</a></p><p>Use the same shared title rendering in previews.</p><details><summary>Review the diff (+4/−1)</summary><pre>diff --git a/src/components/features/conversation-panel/conversation-card/conversation-card-preview.tsx b/src/components/features/conversation-panel/conversation-card/conversation-card-preview.tsx
+index 2149ab7442..672aba6ab0 100644
+--- a/src/components/features/conversation-panel/conversation-card/conversation-card-preview.tsx
++++ b/src/components/features/conversation-panel/conversation-card/conversation-card-preview.tsx
+@@ -1,3 +1,4 @@
++import { ConversationTitleText } from &quot;#/components/features/conversation/conversation-title-text&quot;;
+ import type { ReactNode } from &quot;react&quot;;
+ import { Folder } from &quot;lucide-react&quot;;
+ import { FaBitbucket, FaGithub, FaGitlab } from &quot;react-icons/fa6&quot;;
+@@ -20,6 +21,7 @@ import { getConversationTagIcon } from &quot;./conversation-tag-icons&quot;;
+
+ interface ConversationCardPreviewProps {
+   title: string;
++  titlePending?: boolean;
+   executionStatus?: ExecutionStatus | null;
+   sandboxStatus?: SandboxStatus | null;
+   selectedRepository: RepositorySelection | null;
+@@ -121,6 +123,7 @@ function PreviewValueWithIcon({
+
+ export function ConversationCardPreview({
+   title,
++  titlePending,
+   executionStatus,
+   sandboxStatus,
+   selectedRepository,
+@@ -168,7 +171,7 @@ export function ConversationCardPreview({
+           &lt;/span&gt;
+         ) : null}
+         &lt;span className=&quot;break-words text-sm font-medium leading-5 text-contrast&quot;&gt;
+-          {title}
++          &lt;ConversationTitleText title={title} pending={titlePending} /&gt;
+         &lt;/span&gt;
+       &lt;/div&gt;
+
+</pre></details></section><section id="f8"><h2>8. conversation-card-title.tsx</h2><p class="source">src/components/features/conversation-panel/conversation-card/conversation-card-title.tsx · <a href="https://github.com/OpenHands/OpenHands/blob/5b7e7e1ef7224bfaaddfffbe2db31631f10508b0/src/components/features/conversation-panel/conversation-card/conversation-card-title.tsx#L1">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/28df7b9e7ef8281c46b5b8e2b4db122140ca4a65/src/components/features/conversation-panel/conversation-card/conversation-card-title.tsx#L1">After source</a></p><p>Render ConversationTitleText while retaining edit controls.</p><details><summary>Review the diff (+4/−1)</summary><pre>diff --git a/src/components/features/conversation-panel/conversation-card/conversation-card-title.tsx b/src/components/features/conversation-panel/conversation-card/conversation-card-title.tsx
+index eaa2d8948a..cffa9f2400 100644
+--- a/src/components/features/conversation-panel/conversation-card/conversation-card-title.tsx
++++ b/src/components/features/conversation-panel/conversation-card/conversation-card-title.tsx
+@@ -1,3 +1,4 @@
++import { ConversationTitleText } from &quot;#/components/features/conversation/conversation-title-text&quot;;
+ import { cn } from &quot;#/utils/utils&quot;;
+
+ export type ConversationCardTitleMode = &quot;view&quot; | &quot;edit&quot;;
+@@ -5,6 +6,7 @@ export type ConversationCardTitleMode = &quot;view&quot; | &quot;edit&quot;;
+ export type ConversationCardTitleProps = {
+   titleMode: ConversationCardTitleMode;
+   title: string;
++  titlePending?: boolean;
+   onSave: (title: string) =&gt; void;
+   isConversationArchived?: boolean;
+ };
+@@ -12,6 +14,7 @@ export type ConversationCardTitleProps = {
+ export function ConversationCardTitle({
+   titleMode,
+   title,
++  titlePending,
+   onSave,
+   isConversationArchived,
+ }: ConversationCardTitleProps) {
+@@ -53,7 +56,7 @@ export function ConversationCardTitle({
+         isConversationArchived &amp;&amp; &quot;opacity-60&quot;,
+       )}
+     &gt;
+-      {title}
++      &lt;ConversationTitleText title={title} pending={titlePending} /&gt;
+     &lt;/p&gt;
+   );
+ }
+</pre></details></section><section id="f9"><h2>9. conversation-card.tsx</h2><p class="source">src/components/features/conversation-panel/conversation-card/conversation-card.tsx · <a href="https://github.com/OpenHands/OpenHands/blob/5b7e7e1ef7224bfaaddfffbe2db31631f10508b0/src/components/features/conversation-panel/conversation-card/conversation-card.tsx#L51">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/28df7b9e7ef8281c46b5b8e2b4db122140ca4a65/src/components/features/conversation-panel/conversation-card/conversation-card.tsx#L51">After source</a></p><p>Pass the optional titlePending presentation flag to the existing card header.</p><details><summary>Review the diff (+3/−0)</summary><pre>diff --git a/src/components/features/conversation-panel/conversation-card/conversation-card.tsx b/src/components/features/conversation-panel/conversation-card/conversation-card.tsx
+index ddac7a1e61..a122125206 100644
+--- a/src/components/features/conversation-panel/conversation-card/conversation-card.tsx
++++ b/src/components/features/conversation-panel/conversation-card/conversation-card.tsx
+@@ -51,6 +51,7 @@ interface ConversationCardProps {
+   onEditTags?: () =&gt; void;
+   showOptions?: boolean;
+   title: string;
++  titlePending?: boolean;
+   selectedRepository: RepositorySelection | null;
+   lastUpdatedAt: string;
+   createdAt?: string;
+@@ -95,6 +96,7 @@ export function ConversationCard({
+   onEditTags,
+   showOptions,
+   title,
++  titlePending,
+   selectedRepository,
+   lastUpdatedAt,
+   createdAt,
+@@ -299,6 +301,7 @@ export function ConversationCard({
+         &lt;div className=&quot;flex items-center gap-2 flex-1 min-w-0 overflow-hidden&quot;&gt;
+           &lt;ConversationCardHeader
+             title={title}
++            titlePending={titlePending}
+             titleMode={titleMode}
+             onTitleSave={onTitleSave}
+             executionStatus={executionStatus}
+</pre></details></section><section id="f10"><h2>10. Every sidebar row uses the same title state</h2><p class="source">src/components/features/conversation-panel/conversation-panel.tsx · <a href="https://github.com/OpenHands/OpenHands/blob/5b7e7e1ef7224bfaaddfffbe2db31631f10508b0/src/components/features/conversation-panel/conversation-panel.tsx#L1">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/28df7b9e7ef8281c46b5b8e2b4db122140ca4a65/src/components/features/conversation-panel/conversation-panel.tsx#L1">After source</a></p><figure><svg viewBox="0 0 820 150" role="img" aria-labelledby="t10 d10"><title id="t10">Every sidebar row uses the same title state</title><desc id="d10">Before: Shared title string. After: Title + pending on each row variant.</desc><rect class="old" x="10" y="35" width="375" height="100" rx="6"/><rect class="new" x="435" y="35" width="375" height="100" rx="6"/><text x="25" y="22">BEFORE</text><text x="450" y="22">AFTER</text><a href="https://github.com/OpenHands/OpenHands/blob/5b7e7e1ef7224bfaaddfffbe2db31631f10508b0/src/components/features/conversation-panel/conversation-panel.tsx#L1"><text x="25" y="66">conversation-panel.tsx</text><text class="detail" x="25" y="94">Shared title string</text><text class="small" x="25" y="117">Source line 1</text></a><path class="delta" d="M390 85 H428 M420 79 L428 85 L420 91"/><a href="https://github.com/OpenHands/OpenHands/blob/28df7b9e7ef8281c46b5b8e2b4db122140ca4a65/src/components/features/conversation-panel/conversation-panel.tsx#L1"><text x="450" y="66">conversation-panel.tsx</text><text class="detail" x="450" y="94">Title + pending on each row variant</text><text class="small" x="450" y="117">Source line 1</text></a></svg><figcaption>Launch, start-task, loaded, compact and preview rows receive the shared title and pending flag.</figcaption></figure><details><summary>Review the diff (+15/−5)</summary><pre>diff --git a/src/components/features/conversation-panel/conversation-panel.tsx b/src/components/features/conversation-panel/conversation-panel.tsx
+index 5b1b810115..02dbb63575 100644
+--- a/src/components/features/conversation-panel/conversation-panel.tsx
++++ b/src/components/features/conversation-panel/conversation-panel.tsx
+@@ -1,4 +1,4 @@
+-import { useConversationDisplayTitle } from &quot;#/hooks/use-conversation-display-title&quot;;
++import { useConversationDisplayTitleState } from &quot;#/hooks/use-conversation-display-title&quot;;
+ import { usePendingTaskAttachmentsStore } from &quot;#/stores/pending-task-attachments-store&quot;;
+ import { useConversationLaunchStore } from &quot;#/stores/conversation-launch-store&quot;;
+ import React from &quot;react&quot;;
+@@ -330,7 +330,7 @@ export function ConversationPanel({
+     unresolvedTaskIds = [],
+     failedTaskIds = [],
+   } = useStartTasks(10, listedConversationIds);
+-  const getTitle = useConversationDisplayTitle();
++  const getTitle = useConversationDisplayTitleState();
+
+   // Grouped pagination is folder-oriented. Record the first backend page for
+   // every conversation so later pages can introduce new folders without
+@@ -1075,7 +1075,10 @@ export function ConversationPanel({
+       conversation: (typeof conversations)[number],
+       options?: { inPinnedSection?: boolean },
+     ) =&gt; {
+-      const displayTitle = getTitle(conversation.id, conversation.title);
++      const { title: displayTitle, pending: titlePending } = getTitle(
++        conversation.id,
++        conversation.title,
++      );
+       const isPinned = pinnedIds.includes(conversation.id);
+       // Presentation: a row looks archived when the user archived it or its
+       // runtime is missing and non-resumable. This single predicate drives list
+@@ -1102,6 +1105,7 @@ export function ConversationPanel({
+             key={conversation.id}
+             conversationId={conversation.id}
+             title={displayTitle}
++            titlePending={titlePending}
+             selectedRepository={{
+               selected_repository: conversation.selected_repository,
+               selected_branch: conversation.selected_branch,
+@@ -1145,6 +1149,7 @@ export function ConversationPanel({
+           content={
+             &lt;ConversationCardPreview
+               title={displayTitle}
++              titlePending={titlePending}
+               executionStatus={conversation.execution_status}
+               sandboxStatus={conversation.sandbox_status}
+               selectedRepository={{
+@@ -1221,6 +1226,7 @@ export function ConversationPanel({
+                 handleConversationTitleChange(conversation.id, title)
+               }
+               title={displayTitle}
++              titlePending={titlePending}
+               selectedRepository={{
+                 selected_repository: conversation.selected_repository,
+                 selected_branch: conversation.selected_branch,
+@@ -1470,7 +1476,8 @@ export function ConversationPanel({
+                 className=&quot;block&quot;
+               &gt;
+                 &lt;ConversationCard
+-                  title={getTitle(launch.id)}
++                  title={getTitle(launch.id).title}
++                  titlePending={getTitle(launch.id).pending}
+                   isStarting
+                   selectedRepository={null}
+                   lastUpdatedAt=&quot;&quot;
+@@ -1538,7 +1545,10 @@ export function ConversationPanel({
+               &gt;
+                 &lt;StartTaskCard
+                   task={task}
+-                  title={getTitle(`task-${task.id}`, task.request.title)}
++                  title={getTitle(`task-${task.id}`, task.request.title).title}
++                  titlePending={
++                    getTitle(`task-${task.id}`, task.request.title).pending
++                  }
+                   initialMessage={
+                     pendingAttachments[task.id]?.content ||
+                     Object.values(pendingLaunches).find(
+</pre></details></section><section id="f11"><h2>11. start-task-card.tsx</h2><p class="source">src/components/features/conversation-panel/start-task-card/start-task-card.tsx · <a href="https://github.com/OpenHands/OpenHands/blob/5b7e7e1ef7224bfaaddfffbe2db31631f10508b0/src/components/features/conversation-panel/start-task-card/start-task-card.tsx#L7">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/28df7b9e7ef8281c46b5b8e2b4db122140ca4a65/src/components/features/conversation-panel/start-task-card/start-task-card.tsx#L7">After source</a></p><p>Accepts the shared display title during the task-to-saved-row handoff.</p><details><summary>Review the diff (+3/−0)</summary><pre>diff --git a/src/components/features/conversation-panel/start-task-card/start-task-card.tsx b/src/components/features/conversation-panel/start-task-card/start-task-card.tsx
+index f90297d8e8..996bc0113b 100644
+--- a/src/components/features/conversation-panel/start-task-card/start-task-card.tsx
++++ b/src/components/features/conversation-panel/start-task-card/start-task-card.tsx
+@@ -7,6 +7,7 @@ import { ConversationCard } from &quot;../conversation-card/conversation-card&quot;;
+ interface StartTaskCardProps {
+   task: AppConversationStartTask;
+   title?: string;
++  titlePending?: boolean;
+   onClick?: () =&gt; void;
+   initialMessage?: string;
+   isActive?: boolean;
+@@ -16,6 +17,7 @@ interface StartTaskCardProps {
+ export function StartTaskCard({
+   task,
+   title: displayTitle,
++  titlePending,
+   onClick,
+   initialMessage,
+   isActive,
+@@ -44,6 +46,7 @@ export function StartTaskCard({
+   return (
+     &lt;ConversationCard
+       title={displayTitle || title}
++      titlePending={titlePending}
+       onClick={onClick}
+       selectedRepository={selectedRepository}
+       createdAt={task.created_at}
+</pre></details></section><section id="f12"><h2>12. Shimmer while waiting; fade on settlement</h2><p class="source">src/components/features/conversation/conversation-title-text.tsx · New file · <a href="https://github.com/OpenHands/OpenHands/blob/28df7b9e7ef8281c46b5b8e2b4db122140ca4a65/src/components/features/conversation/conversation-title-text.tsx#L1">After source</a></p><figure><svg viewBox="0 0 820 150" role="img" aria-labelledby="t12 d12"><title id="t12">Shimmer while waiting; fade on settlement</title><desc id="d12">Before: New presentation component. After: TextShimmer or revealed title.</desc><rect class="old" x="10" y="35" width="375" height="100" rx="6"/><rect class="new" x="435" y="35" width="375" height="100" rx="6"/><text x="25" y="22">BEFORE</text><text x="450" y="22">AFTER</text><g><text x="25" y="66">conversation-title-text.tsx</text><text class="detail" x="25" y="94">New presentation component</text><text class="small" x="25" y="117">New module</text></g><path class="delta" d="M390 85 H428 M420 79 L428 85 L420 91"/><a href="https://github.com/OpenHands/OpenHands/blob/28df7b9e7ef8281c46b5b8e2b4db122140ca4a65/src/components/features/conversation/conversation-title-text.tsx#L1"><text x="450" y="66">conversation-title-text.tsx</text><text class="detail" x="450" y="94">TextShimmer or revealed title</text><text class="small" x="450" y="117">Source line 1</text></a></svg><figcaption>The pending span exposes aria-busy; settled text uses a 160 ms opacity reveal only when reduced motion is not requested.</figcaption></figure><details><summary>Review the diff (+22/−0)</summary><pre>diff --git a/src/components/features/conversation/conversation-title-text.tsx b/src/components/features/conversation/conversation-title-text.tsx
+new file mode 100644
+index 0000000000..233a1b5712
+--- /dev/null
++++ b/src/components/features/conversation/conversation-title-text.tsx
+@@ -0,0 +1,22 @@
++import { TextShimmer } from &quot;#/components/shared/text-shimmer&quot;;
++
++export function ConversationTitleText({
++  title,
++  pending = false,
++}: {
++  title: string;
++  pending?: boolean;
++}) {
++  return pending ? (
++    &lt;TextShimmer as=&quot;span&quot; aria-busy=&quot;true&quot;&gt;
++      {title}
++    &lt;/TextShimmer&gt;
++  ) : (
++    &lt;span
++      key={title}
++      className=&quot;motion-safe:animate-[conversation-title-reveal_160ms_ease-out]&quot;
++    &gt;
++      {title}
++    &lt;/span&gt;
++  );
++}
+</pre></details></section><section id="f13"><h2>13. A manual rename updates both caches</h2><p class="source">src/hooks/mutation/use-update-conversation.ts · <a href="https://github.com/OpenHands/OpenHands/blob/5b7e7e1ef7224bfaaddfffbe2db31631f10508b0/src/hooks/mutation/use-update-conversation.ts#L1">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/28df7b9e7ef8281c46b5b8e2b4db122140ca4a65/src/hooks/mutation/use-update-conversation.ts#L1">After source</a></p><figure><svg viewBox="0 0 820 150" role="img" aria-labelledby="t13 d13"><title id="t13">A manual rename updates both caches</title><desc id="d13">Before: Optimistic write uses unscoped keys. After: Update scoped list and detail caches.</desc><rect class="old" x="10" y="35" width="375" height="100" rx="6"/><rect class="new" x="435" y="35" width="375" height="100" rx="6"/><text x="25" y="22">BEFORE</text><text x="450" y="22">AFTER</text><a href="https://github.com/OpenHands/OpenHands/blob/5b7e7e1ef7224bfaaddfffbe2db31631f10508b0/src/hooks/mutation/use-update-conversation.ts#L1"><text x="25" y="66">use-update-conversation.ts</text><text class="detail" x="25" y="94">Optimistic write uses unscoped keys</text><text class="small" x="25" y="117">Source line 1</text></a><path class="delta" d="M390 85 H428 M420 79 L428 85 L420 91"/><a href="https://github.com/OpenHands/OpenHands/blob/28df7b9e7ef8281c46b5b8e2b4db122140ca4a65/src/hooks/mutation/use-update-conversation.ts#L1"><text x="450" y="66">use-update-conversation.ts</text><text class="detail" x="450" y="94">Update scoped list and detail caches</text><text class="small" x="450" y="117">Source line 1</text></a></svg><figcaption>Rename clears title_generation in the visible caches, rolls back on failure, and invalidates both after settlement. The mutation checks the active backend/org before writing.</figcaption></figure><details><summary>Review the diff (+76/−40)</summary><pre>diff --git a/src/hooks/mutation/use-update-conversation.ts b/src/hooks/mutation/use-update-conversation.ts
+index bd3977ef56..07d9751699 100644
+--- a/src/hooks/mutation/use-update-conversation.ts
++++ b/src/hooks/mutation/use-update-conversation.ts
+@@ -1,58 +1,94 @@
+-import { useMutation, useQueryClient } from &quot;@tanstack/react-query&quot;;
++import { assertActiveEnvironment } from &quot;#/utils/assert-active-environment&quot;;
++import {
++  useMutation,
++  useQueryClient,
++  type InfiniteData,
++} from &quot;@tanstack/react-query&quot;;
+ import AgentServerConversationService from &quot;#/api/conversation-service/agent-server-conversation-service.api&quot;;
++import type {
++  AppConversation,
++  AppConversationPage,
++} from &quot;#/api/conversation-service/agent-server-conversation-service.types&quot;;
++import { useActiveBackend } from &quot;#/contexts/active-backend-context&quot;;
++import {
++  CONVERSATION_QUERY_KEYS,
++  DEFAULT_CONVERSATION_PAGE_SIZE,
++} from &quot;../query/query-keys&quot;;
+
+ export const useUpdateConversation = () =&gt; {
+   const queryClient = useQueryClient();
++  const { backend, orgId } = useActiveBackend();
++  const listKey = CONVERSATION_QUERY_KEYS.paginated(
++    DEFAULT_CONVERSATION_PAGE_SIZE,
++    backend.id,
++    orgId,
++  );
++  const detailKey = (id: string) =&gt;
++    CONVERSATION_QUERY_KEYS.detail(id, backend.id, orgId);
+
+   return useMutation({
+-    mutationFn: (variables: { conversationId: string; newTitle: string }) =&gt;
+-      AgentServerConversationService.updateConversationTitle(
++    mutationFn: (variables: { conversationId: string; newTitle: string }) =&gt; {
++      assertActiveEnvironment({ backend, orgId });
++      return AgentServerConversationService.updateConversationTitle(
+         variables.conversationId,
+         variables.newTitle,
+-      ),
+-    onMutate: async (variables) =&gt; {
+-      await queryClient.cancelQueries({ queryKey: [&quot;user&quot;, &quot;conversations&quot;] });
+-      const previousConversations = queryClient.getQueryData([
+-        &quot;user&quot;,
+-        &quot;conversations&quot;,
++      );
++    },
++    onMutate: async ({ conversationId, newTitle }) =&gt; {
++      await Promise.all([
++        queryClient.cancelQueries({ queryKey: listKey, exact: true }),
++        queryClient.cancelQueries({
++          queryKey: detailKey(conversationId),
++          exact: true,
++        }),
+       ]);
+-
+-      queryClient.setQueryData(
+-        [&quot;user&quot;, &quot;conversations&quot;],
+-        (old: { id: string; title: string }[] | undefined) =&gt;
+-          old?.map((conv) =&gt;
+-            conv.id === variables.conversationId
+-              ? { ...conv, title: variables.newTitle }
+-              : conv,
+-          ),
++      const previousList =
++        queryClient.getQueryData&lt;InfiniteData&lt;AppConversationPage&gt;&gt;(listKey);
++      const previousDetail = queryClient.getQueryData&lt;AppConversation&gt;(
++        detailKey(conversationId),
+       );
+-
+-      // Also optimistically update the active conversation query
+-      queryClient.setQueryData(
+-        [&quot;user&quot;, &quot;conversation&quot;, variables.conversationId],
+-        (old: { title: string } | undefined) =&gt;
+-          old ? { ...old, title: variables.newTitle } : old,
++      const rename = (conversation: AppConversation) =&gt;
++        conversation.id === conversationId
++          ? {
++              ...conversation,
++              title: newTitle,
++              title_generation: null,
++              updated_at: new Date().toISOString(),
++            }
++          : conversation;
++      queryClient.setQueryData&lt;InfiniteData&lt;AppConversationPage&gt;&gt;(
++        listKey,
++        (old) =&gt;
++          old
++            ? {
++                ...old,
++                pages: old.pages.map((page) =&gt; ({
++                  ...page,
++                  items: page.items.map(rename),
++                })),
++              }
++            : old,
+       );
+-
+-      return { previousConversations };
++      queryClient.setQueryData&lt;AppConversation&gt;(
++        detailKey(conversationId),
++        (old) =&gt; (old ? rename(old) : old),
++      );
++      return { previousList, previousDetail };
+     },
+-    onError: (err, variables, context) =&gt; {
+-      if (context?.previousConversations) {
++    onError: (_error, variables, context) =&gt; {
++      if (context?.previousList)
++        queryClient.setQueryData(listKey, context.previousList);
++      if (context?.previousDetail)
+         queryClient.setQueryData(
+-          [&quot;user&quot;, &quot;conversations&quot;],
+-          context.previousConversations,
++          detailKey(variables.conversationId),
++          context.previousDetail,
+         );
+-      }
+     },
+-    onSettled: (data, error, variables) =&gt; {
+-      // Invalidate and refetch the conversation list to show the updated title
+-      queryClient.invalidateQueries({
+-        queryKey: [&quot;user&quot;, &quot;conversations&quot;],
+-      });
+-
+-      // Also invalidate the specific conversation query
+-      queryClient.invalidateQueries({
+-        queryKey: [&quot;user&quot;, &quot;conversation&quot;, variables.conversationId],
++    onSettled: (_data, _error, variables) =&gt; {
++      void queryClient.invalidateQueries({ queryKey: listKey, exact: true });
++      void queryClient.invalidateQueries({
++        queryKey: detailKey(variables.conversationId),
++        exact: true,
+       });
+     },
+   });
+</pre></details></section><section id="f14"><h2>14. Pending title metadata arrives promptly</h2><p class="source">src/hooks/query/use-active-conversation.ts · <a href="https://github.com/OpenHands/OpenHands/blob/5b7e7e1ef7224bfaaddfffbe2db31631f10508b0/src/hooks/query/use-active-conversation.ts#L27">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/28df7b9e7ef8281c46b5b8e2b4db122140ca4a65/src/hooks/query/use-active-conversation.ts#L27">After source</a></p><figure><svg viewBox="0 0 820 150" role="img" aria-labelledby="t14 d14"><title id="t14">Pending title metadata arrives promptly</title><desc id="d14">Before: Legacy startup checks every 3 seconds. After: Pending deadline: 500 ms checks.</desc><rect class="old" x="10" y="35" width="375" height="100" rx="6"/><rect class="new" x="435" y="35" width="375" height="100" rx="6"/><text x="25" y="22">BEFORE</text><text x="450" y="22">AFTER</text><a href="https://github.com/OpenHands/OpenHands/blob/5b7e7e1ef7224bfaaddfffbe2db31631f10508b0/src/hooks/query/use-active-conversation.ts#L27"><text x="25" y="66">use-active-conversation.ts</text><text class="detail" x="25" y="94">Legacy startup checks every 3 seconds</text><text class="small" x="25" y="117">Source line 27</text></a><path class="delta" d="M390 85 H428 M420 79 L428 85 L420 91"/><a href="https://github.com/OpenHands/OpenHands/blob/28df7b9e7ef8281c46b5b8e2b4db122140ca4a65/src/hooks/query/use-active-conversation.ts#L27"><text x="450" y="66">use-active-conversation.ts</text><text class="detail" x="450" y="94">Pending deadline: 500 ms checks</text><text class="small" x="450" y="117">Source line 27</text></a></svg><figcaption>The active conversation polls pending title metadata within its deadline. Older backends keep the existing bounded placeholder-title checks.</figcaption></figure><details><summary>Review the diff (+5/−0)</summary><pre>diff --git a/src/hooks/query/use-active-conversation.ts b/src/hooks/query/use-active-conversation.ts
+index fdb2180897..600f740aed 100644
+--- a/src/hooks/query/use-active-conversation.ts
++++ b/src/hooks/query/use-active-conversation.ts
+@@ -27,7 +27,12 @@ export const useActiveConversation = () =&gt; {
+     (query) =&gt; {
+       const data = query.state.data;
+       const age = data ? Date.now() - Date.parse(data.created_at) : Infinity;
++      const generatingTitle =
++        data?.title_generation?.status === &quot;pending&quot; &amp;&amp;
++        Date.now() &lt; Date.parse(data.title_generation.deadline_at);
++      if (generatingTitle) return 500;
+       const awaitingTitle =
++        !data?.title_generation &amp;&amp;
+         data &amp;&amp;
+         isPlaceholderConversationTitle(data.title, data.id) &amp;&amp;
+         !isExecutionErrored(data.execution_status) &amp;&amp;
+</pre></details></section><section id="f15"><h2>15. Title polling survives the saved-row handoff</h2><p class="source">src/hooks/query/use-start-tasks.ts · <a href="https://github.com/OpenHands/OpenHands/blob/5b7e7e1ef7224bfaaddfffbe2db31631f10508b0/src/hooks/query/use-start-tasks.ts#L38">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/28df7b9e7ef8281c46b5b8e2b4db122140ca4a65/src/hooks/query/use-start-tasks.ts#L38">After source</a></p><figure><svg viewBox="0 0 820 150" role="img" aria-labelledby="t15 d15"><title id="t15">Title polling survives the saved-row handoff</title><desc id="d15">Before: Stop tracking once the row is listed. After: Keep pending title task until settled.</desc><rect class="old" x="10" y="35" width="375" height="100" rx="6"/><rect class="new" x="435" y="35" width="375" height="100" rx="6"/><text x="25" y="22">BEFORE</text><text x="450" y="22">AFTER</text><a href="https://github.com/OpenHands/OpenHands/blob/5b7e7e1ef7224bfaaddfffbe2db31631f10508b0/src/hooks/query/use-start-tasks.ts#L38"><text x="25" y="66">use-start-tasks.ts</text><text class="detail" x="25" y="94">Stop tracking once the row is listed</text><text class="small" x="25" y="117">Source line 38</text></a><path class="delta" d="M390 85 H428 M420 79 L428 85 L420 91"/><a href="https://github.com/OpenHands/OpenHands/blob/28df7b9e7ef8281c46b5b8e2b4db122140ca4a65/src/hooks/query/use-start-tasks.ts#L38"><text x="450" y="66">use-start-tasks.ts</text><text class="detail" x="450" y="94">Keep pending title task until settled</text><text class="small" x="450" y="117">Source line 38</text></a></svg><figcaption>Pending titles poll every 500 ms until the server deadline; a settled READY task invalidates metadata so both surfaces receive the title.</figcaption></figure><details><summary>Review the diff (+16/−2)</summary><pre>diff --git a/src/hooks/query/use-start-tasks.ts b/src/hooks/query/use-start-tasks.ts
+index 1cfe525b0f..ca15337caa 100644
+--- a/src/hooks/query/use-start-tasks.ts
++++ b/src/hooks/query/use-start-tasks.ts
+@@ -38,7 +38,12 @@ export const useStartTasks = (
+   const ids = Object.values(launches)
+     .filter(
+       (launch) =&gt;
+-        !launch.listed &amp;&amp;
++        (!launch.listed ||
++          queryClient.getQueryData&lt;AppConversationStartTask&gt;(
++            CONVERSATION_QUERY_KEYS.startTask(
++              launch.targetId?.slice(5) ?? null,
++            ),
++          )?.title_generation?.status === &quot;pending&quot;) &amp;&amp;
+         launch.backendId === backend.id &amp;&amp;
+         launch.orgId === orgId &amp;&amp;
+         launch.targetId?.startsWith(&quot;task-&quot;),
+@@ -56,6 +61,12 @@ export const useStartTasks = (
+       meta: { disableToast: true },
+       refetchInterval: (query: Query&lt;AppConversationStartTask | null&gt;) =&gt; {
+         const task = query.state.data;
++        if (
++          task?.title_generation?.status === &quot;pending&quot; &amp;&amp;
++          Date.now() &lt; Date.parse(task.title_generation.deadline_at) &amp;&amp;
++          task.status !== &quot;ERROR&quot;
++        )
++          return 500;
+         return query.state.status === &quot;error&quot; ||
+           !task ||
+           task.status === &quot;READY&quot; ||
+@@ -67,7 +78,7 @@ export const useStartTasks = (
+   });
+   const readyIds = tasks
+     .filter((task) =&gt; task.status === &quot;READY&quot;)
+-    .map((task) =&gt; task.id)
++    .map((task) =&gt; `${task.id}:${task.title_generation?.status ?? &quot;legacy&quot;}`)
+     .join(&quot;,&quot;);
+   const seenReady = useRef(new Set&lt;string&gt;());
+   useEffect(() =&gt; {
+@@ -76,6 +87,9 @@ export const useStartTasks = (
+       void queryClient.invalidateQueries({
+         queryKey: [&quot;user&quot;, &quot;conversations&quot;],
+       });
++      void queryClient.invalidateQueries({
++        queryKey: [&quot;user&quot;, &quot;conversation&quot;],
++      });
+     }
+     seenReady.current = new Set(ready);
+   }, [readyIds, queryClient]);
+</pre></details></section><section id="f16"><h2>16. One pending title for both surfaces</h2><p class="source">src/hooks/use-conversation-display-title.ts · <a href="https://github.com/OpenHands/OpenHands/blob/5b7e7e1ef7224bfaaddfffbe2db31631f10508b0/src/hooks/use-conversation-display-title.ts#L1">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/28df7b9e7ef8281c46b5b8e2b4db122140ca4a65/src/hooks/use-conversation-display-title.ts#L1">After source</a></p><figure><svg viewBox="0 0 820 150" role="img" aria-labelledby="t16 d16"><title id="t16">One pending title for both surfaces</title><desc id="d16">Before: First-message title during startup. After: Shared {title, pending} state.</desc><rect class="old" x="10" y="35" width="375" height="100" rx="6"/><rect class="new" x="435" y="35" width="375" height="100" rx="6"/><text x="25" y="22">BEFORE</text><text x="450" y="22">AFTER</text><a href="https://github.com/OpenHands/OpenHands/blob/5b7e7e1ef7224bfaaddfffbe2db31631f10508b0/src/hooks/use-conversation-display-title.ts#L1"><text x="25" y="66">use-conversation-display-title.ts</text><text class="detail" x="25" y="94">First-message title during startup</text><text class="small" x="25" y="117">Source line 1</text></a><path class="delta" d="M390 85 H428 M420 79 L428 85 L420 91"/><a href="https://github.com/OpenHands/OpenHands/blob/28df7b9e7ef8281c46b5b8e2b4db122140ca4a65/src/hooks/use-conversation-display-title.ts#L1"><text x="450" y="66">use-conversation-display-title.ts</text><text class="detail" x="450" y="94">Shared {title, pending} state</text><text class="small" x="450" y="117">Source line 1</text></a></svg><figcaption>The existing scoped cache resolver follows the launch, task and real ID; server deadlines stop the shimmer and settled manual titles take precedence.</figcaption></figure><details><summary>Review the diff (+90/−9)</summary><pre>diff --git a/src/hooks/use-conversation-display-title.ts b/src/hooks/use-conversation-display-title.ts
+index 6cd699ab83..4f0b5a2a22 100644
+--- a/src/hooks/use-conversation-display-title.ts
++++ b/src/hooks/use-conversation-display-title.ts
+@@ -1,4 +1,10 @@
+-import { useCallback, useMemo, useSyncExternalStore } from &quot;react&quot;;
++import {
++  useCallback,
++  useMemo,
++  useSyncExternalStore,
++  useEffect,
++  useReducer,
++} from &quot;react&quot;;
+ import {
+   hashKey,
+   useQueryClient,
+@@ -21,6 +27,8 @@ import {
+   DEFAULT_CONVERSATION_PAGE_SIZE,
+ } from &quot;./query/query-keys&quot;;
+
++const OPTIMISTIC_TITLE_TIMEOUT_MS = 8000;
++
+ function useCachedQuery&lt;T&gt;(queryKey: QueryKey) {
+   const client = useQueryClient();
+   const queryHash = hashKey(queryKey);
+@@ -35,7 +43,7 @@ function useCachedQuery&lt;T&gt;(queryKey: QueryKey) {
+   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+ }
+
+-export function useConversationDisplayTitle() {
++export function useConversationDisplayTitleState() {
+   const queryClient = useQueryClient();
+   const { t } = useTranslation(&quot;openhands&quot;);
+   const { backend, orgId } = useActiveBackend();
+@@ -68,6 +76,37 @@ export function useConversationDisplayTitle() {
+     CONVERSATION_QUERY_KEYS.startTask(taskId),
+   );
+
++  const [clock, tick] = useReducer((value: number) =&gt; value + 1, 0);
++  const deadlines = [
++    task?.data?.title_generation,
++    detail?.data?.title_generation,
++    ...[...listedById.values()].map((entry) =&gt; entry.title_generation),
++  ].flatMap((generation) =&gt;
++    generation?.status === &quot;pending&quot;
++      ? [Date.parse(generation.deadline_at)]
++      : [],
++  );
++  for (const launch of Object.values(launches)) {
++    if (launch.backendId !== backend.id || launch.orgId !== orgId) continue;
++    if (launch.startedAt)
++      deadlines.push(launch.startedAt + OPTIMISTIC_TITLE_TIMEOUT_MS);
++    if (launch.targetId?.startsWith(&quot;task-&quot;)) {
++      const cached = queryClient.getQueryData&lt;AppConversationStartTask&gt;(
++        CONVERSATION_QUERY_KEYS.startTask(launch.targetId.slice(5)),
++      );
++      if (cached?.title_generation?.status === &quot;pending&quot;)
++        deadlines.push(Date.parse(cached.title_generation.deadline_at));
++    }
++  }
++  const nextDeadline = Math.min(
++    ...deadlines.filter((deadline) =&gt; deadline &gt; Date.now()),
++  );
++  useEffect(() =&gt; {
++    if (!Number.isFinite(nextDeadline)) return;
++    const timer = setTimeout(tick, Math.max(0, nextDeadline - Date.now()) + 1);
++    return () =&gt; clearTimeout(timer);
++  }, [nextDeadline, clock]);
++
+   return useCallback(
+     (id: string | null, fallback?: string | null) =&gt; {
+       const launch = Object.values(launches).find(
+@@ -81,8 +120,17 @@ export function useConversationDisplayTitle() {
+       const foreignTask =
+         !launch &amp;&amp;
+         Object.values(launches).some((entry) =&gt; entry.targetId === id);
++      const matchingTaskId = launch?.targetId?.startsWith(&quot;task-&quot;)
++        ? launch.targetId.slice(5)
++        : id?.startsWith(&quot;task-&quot;)
++          ? id.slice(5)
++          : null;
+       const activeTask =
+-        id === `task-${taskId}` &amp;&amp; !foreignTask ? task?.data : undefined;
++        !foreignTask &amp;&amp; matchingTaskId
++          ? queryClient.getQueryData&lt;AppConversationStartTask&gt;(
++              CONVERSATION_QUERY_KEYS.startTask(matchingTaskId),
++            )
++          : undefined;
+       const realId =
+         launch?.conversationId ?? activeTask?.app_conversation_id ?? id;
+       const listed = realId ? listedById.get(realId) : undefined;
+@@ -113,18 +161,42 @@ export function useConversationDisplayTitle() {
+           .filter((content) =&gt; content.type === &quot;text&quot;)
+           .map((content) =&gt; content.text)
+           .join(&quot; &quot;);
+-      return (
+-        serverTitle?.trim() ||
+-        activeTask?.request.title?.trim() ||
+-        prompt?.trim().replace(/\s+/g, &quot; &quot;) ||
+-        fallback?.trim() ||
+-        t(I18nKey.SIDEBAR$NEW_CHAT)
++      const conversation = candidates[0]?.conversation;
++      const generation =
++        conversation?.title_generation?.status === &quot;pending&quot;
++          ? (activeTask?.title_generation ?? conversation.title_generation)
++          : conversation
++            ? conversation.title_generation
++            : activeTask?.title_generation;
++      const optimisticPending =
++        backend.kind === &quot;cloud&quot; &amp;&amp;
++        launch &amp;&amp;
++        !activeTask &amp;&amp;
++        !active &amp;&amp;
++        !listed &amp;&amp;
++        !launch.error &amp;&amp;
++        Date.now() &lt; (launch.startedAt ?? 0) + OPTIMISTIC_TITLE_TIMEOUT_MS;
++      const pending = !!(
++        (generation?.status === &quot;pending&quot; &amp;&amp;
++          Date.now() &lt; Date.parse(generation.deadline_at)) ||
++        optimisticPending
+       );
++      const title = pending
++        ? t(I18nKey.SIDEBAR$NEW_CHAT)
++        : generation?.title?.trim() ||
++          serverTitle?.trim() ||
++          activeTask?.request.title?.trim() ||
++          prompt?.trim().replace(/\s+/g, &quot; &quot;) ||
++          fallback?.trim() ||
++          t(I18nKey.SIDEBAR$NEW_CHAT);
++      return { title, pending };
+     },
+     [
+       queryClient,
++      clock,
+       launches,
+       backend.id,
++      backend.kind,
+       orgId,
+       taskId,
+       task?.data,
+@@ -136,3 +208,12 @@ export function useConversationDisplayTitle() {
+     ],
+   );
+ }
++
++export function useConversationDisplayTitle() {
++  const getState = useConversationDisplayTitleState();
++  return useCallback(
++    (id: string | null, fallback?: string | null) =&gt;
++      getState(id, fallback).title,
++    [getState],
++  );
++}
+</pre></details></section><section id="f17"><h2>17. index.css</h2><p class="source">src/index.css · <a href="https://github.com/OpenHands/OpenHands/blob/5b7e7e1ef7224bfaaddfffbe2db31631f10508b0/src/index.css#L11">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/28df7b9e7ef8281c46b5b8e2b4db122140ca4a65/src/index.css#L11">After source</a></p><p>Add the 160 ms title-opacity keyframe; remaining changes are formatter normalization.</p><details><summary>Review the diff (+27/−14)</summary><pre>diff --git a/src/index.css b/src/index.css
+index bc91ecaa97..a7262ae387 100644
+--- a/src/index.css
++++ b/src/index.css
+@@ -11,7 +11,11 @@
+   --oh-bg-editor-sidebar: var(--cool-grey-925);
+   --oh-bg-editor-active: var(--cool-grey-900);
+   --oh-border-editor-sidebar: var(--cool-grey-800);
+-  --oh-bg-neutral-muted: color-mix(in srgb, var(--cool-grey-300) 20%, transparent);
++  --oh-bg-neutral-muted: color-mix(
++    in srgb,
++    var(--cool-grey-300) 20%,
++    transparent
++  );
+   --bg-dark: var(--oh-bg-dark);
+   --bg-light: var(--oh-bg-light);
+   --bg-input: var(--oh-bg-input);
+@@ -25,19 +29,19 @@
+   background-color: var(--oh-color-base) !important;
+
+   /* ── Cool Grey Scale (13 shades + 2 pure anchors: white / black) ──────── */
+-  --cool-grey-50:  #F7F9FC;
+-  --cool-grey-100: #EEF2F7;
+-  --cool-grey-200: #DCE3EE;
+-  --cool-grey-300: #C3CDDC;
+-  --cool-grey-400: #A3B0C4;
+-  --cool-grey-500: #7E8A9E;
+-  --cool-grey-600: #626D82;
+-  --cool-grey-700: #4B5468;
+-  --cool-grey-800: #383F50;
+-  --cool-grey-900: #2C313F;
+-  --cool-grey-925: #21252F;
+-  --cool-grey-950: #0B0E14; /* intentional override: preserves original app-shell depth */
+-  --cool-grey-975: #05070A;
++  --cool-grey-50: #f7f9fc;
++  --cool-grey-100: #eef2f7;
++  --cool-grey-200: #dce3ee;
++  --cool-grey-300: #c3cddc;
++  --cool-grey-400: #a3b0c4;
++  --cool-grey-500: #7e8a9e;
++  --cool-grey-600: #626d82;
++  --cool-grey-700: #4b5468;
++  --cool-grey-800: #383f50;
++  --cool-grey-900: #2c313f;
++  --cool-grey-925: #21252f;
++  --cool-grey-950: #0b0e14; /* intentional override: preserves original app-shell depth */
++  --cool-grey-975: #05070a;
+   /* ─────────────────────────────────────────────────────────────────────── */
+ }
+
+@@ -155,3 +159,12 @@ code {
+ .environment-switch-overlay &gt; div {
+   animation: environment-switch-overlay-fade 980ms ease-in-out forwards;
+ }
++
++@keyframes conversation-title-reveal {
++  from {
++    opacity: 0;
++  }
++  to {
++    opacity: 1;
++  }
++}
+</pre></details></section><section id="f18"><h2>18. conversation-launch-store.ts</h2><p class="source">src/stores/conversation-launch-store.ts · <a href="https://github.com/OpenHands/OpenHands/blob/5b7e7e1ef7224bfaaddfffbe2db31631f10508b0/src/stores/conversation-launch-store.ts#L5">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/28df7b9e7ef8281c46b5b8e2b4db122140ca4a65/src/stores/conversation-launch-store.ts#L5">After source</a></p><p>Record startedAt on the existing in-memory launch owner for the optimistic title deadline.</p><details><summary>Review the diff (+5/−1)</summary><pre>diff --git a/src/stores/conversation-launch-store.ts b/src/stores/conversation-launch-store.ts
+index 11be7d2d4f..d4f9b366d0 100644
+--- a/src/stores/conversation-launch-store.ts
++++ b/src/stores/conversation-launch-store.ts
+@@ -5,6 +5,7 @@ export const CONVERSATION_LAUNCH_PREFIX = &quot;launch-&quot;;
+
+ export interface ConversationLaunch {
+   id: string;
++  startedAt?: number;
+   backendId: string;
+   orgId: string | null;
+   message: string;
+@@ -37,7 +38,10 @@ export const useConversationLaunchStore = create&lt;LaunchState&gt;((set) =&gt; ({
+   begin: (launch) =&gt; {
+     const id = `${CONVERSATION_LAUNCH_PREFIX}${crypto.randomUUID()}`;
+     set((state) =&gt; ({
+-      launches: { ...state.launches, [id]: { ...launch, id } },
++      launches: {
++        ...state.launches,
++        [id]: { ...launch, id, startedAt: Date.now() },
++      },
+     }));
+     return id;
+   },
+</pre></details></section></main></div></body></html>
