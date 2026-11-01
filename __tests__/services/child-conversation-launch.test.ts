@@ -29,6 +29,7 @@ const {
   mockGetCachedAgentServerVersion,
   mockGetSettings,
   mockListMetaProfiles,
+  mockResolveChildAgentProfile,
   mockBatchGetAppConversations,
   mockListAgentProfiles,
   mockListLlmProfiles,
@@ -44,6 +45,7 @@ const {
   mockGetCachedAgentServerVersion: vi.fn(),
   mockGetSettings: vi.fn(),
   mockListMetaProfiles: vi.fn(),
+  mockResolveChildAgentProfile: vi.fn(),
   mockBatchGetAppConversations: vi.fn(),
   mockListAgentProfiles: vi.fn(),
   mockListLlmProfiles: vi.fn(),
@@ -122,6 +124,10 @@ vi.mock("#/api/settings-service/settings-service.api", () => ({
 
 vi.mock("#/api/meta-profiles-service/meta-profiles-service.api", () => ({
   default: { listMetaProfiles: mockListMetaProfiles },
+}));
+
+vi.mock("#/services/resolve-child-agent-profile", () => ({
+  resolveChildAgentProfile: mockResolveChildAgentProfile,
 }));
 
 const PARENT_ID = "parent-conversation-id";
@@ -363,7 +369,11 @@ describe("handleLaunchChildConversationAction", () => {
         workspace: "/Users/jane/projects/foo",
         isolation: "worktree",
         parent_link: true,
+        agent_profile_id: null,
+        model: null,
+        profile_source: "inherited",
       });
+      expect(mockResolveChildAgentProfile).not.toHaveBeenCalled();
     });
 
     // Local start requests carry no title field — only `autotitle` — so an
@@ -660,7 +670,11 @@ describe("handleLaunchChildConversationAction", () => {
         url: "https://app.all-hands.dev/canvas/conversations/cloud-child-id",
         initial_status: "READY",
         parent_link: false,
+        agent_profile_id: null,
+        model: null,
+        profile_source: "inherited",
       });
+      expect(mockResolveChildAgentProfile).not.toHaveBeenCalled();
     });
 
     // Cloud and self-hosted Enterprise serve the legacy UI at the host root and
@@ -702,6 +716,226 @@ describe("handleLaunchChildConversationAction", () => {
         'target="local"',
       );
       expect(mockCreateCloudAppConversation).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("agent profile selector", () => {
+    const fastProfile = {
+      id: "profile-fast",
+      name: "fast",
+      agentKind: "openhands" as const,
+      model: "anthropic/claude-haiku-4-5",
+      llmProfileRef: "haiku",
+      secretRefsRestricted: false,
+    };
+
+    it("launches a local child from the selected profile and reports its model", async () => {
+      seedWorktreeCapableParent();
+      mockResolveChildAgentProfile.mockResolvedValue({
+        ok: true,
+        profile: fastProfile,
+      });
+
+      await handleLaunchChildConversationAction(
+        action({ agent_profile: "fast" }),
+        PARENT_ID,
+        nextToolCallId(),
+      );
+
+      expect(mockResolveChildAgentProfile).toHaveBeenCalledWith({
+        selector: "fast",
+        target: "local",
+        cloudBackend: null,
+      });
+      expect(mockCreateConversation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agentProfileId: "profile-fast",
+          agentProfileKind: "openhands",
+          agentLlmProfileRef: "haiku",
+        }),
+      );
+      expect(reportedResult()).toMatchObject({
+        status: "launched",
+        target: "local",
+        agent_profile_id: "profile-fast",
+        agent_profile_name: "fast",
+        model: "anthropic/claude-haiku-4-5",
+        profile_source: "selected",
+        secret_scope: "unrestricted",
+      });
+    });
+
+    it("keeps a secret-scoped profile on the profile path", async () => {
+      seedWorktreeCapableParent();
+      mockResolveChildAgentProfile.mockResolvedValue({
+        ok: true,
+        profile: {
+          ...fastProfile,
+          name: "default",
+          secretRefsRestricted: true,
+        },
+      });
+
+      await handleLaunchChildConversationAction(
+        action({ agent_profile: "default" }),
+        PARENT_ID,
+        nextToolCallId(),
+      );
+
+      expect(mockCreateConversation).toHaveBeenCalledWith(
+        expect.objectContaining({ agentProfileId: "profile-fast" }),
+      );
+      const call = mockCreateConversation.mock.calls[0]?.[0] as {
+        agentProfileId?: string;
+      };
+      expect(call.agentProfileId).toBe("profile-fast");
+      expect(reportedResult()).toMatchObject({
+        status: "launched",
+        secret_scope: "restricted",
+        agent_profile_id: "profile-fast",
+      });
+    });
+
+    it("reports an invalid local profile before creating a conversation", async () => {
+      mockResolveChildAgentProfile.mockResolvedValue({
+        ok: false,
+        error: 'No saved agent profile matches "missing" on the local backend.',
+        guidance:
+          'Nothing was launched. Pass `agent_profile` as one of: "default".',
+      });
+
+      await handleLaunchChildConversationAction(
+        action({ agent_profile: "missing" }),
+        PARENT_ID,
+        nextToolCallId(),
+      );
+
+      expect(mockCreateConversation).not.toHaveBeenCalled();
+      expect(mockResolveWorkingDir).not.toHaveBeenCalled();
+      const result = reportedResult();
+      expect(result.status).toBe("error");
+      expect(result.status === "error" && result.guidance).toContain(
+        "Nothing was launched",
+      );
+    });
+
+    it("launches a cloud child with the selected profile id and model", async () => {
+      const cloudBackend = {
+        id: "cloud-1",
+        kind: "cloud" as const,
+        host: "https://app.all-hands.dev",
+        apiKey: "secret",
+        name: "Cloud",
+      };
+      mockPickCloudBackend.mockReturnValue(cloudBackend);
+      mockResolveChildAgentProfile.mockResolvedValue({
+        ok: true,
+        profile: fastProfile,
+      });
+      mockCreateCloudAppConversation.mockResolvedValue({
+        id: "start-task-id",
+        app_conversation_id: "cloud-child-id",
+        status: "READY",
+      });
+
+      await handleLaunchChildConversationAction(
+        action({ target: "cloud", agent_profile: "profile-fast" }),
+        PARENT_ID,
+        nextToolCallId(),
+      );
+
+      expect(mockResolveChildAgentProfile).toHaveBeenCalledWith({
+        selector: "profile-fast",
+        target: "cloud",
+        cloudBackend,
+      });
+      expect(mockCreateCloudAppConversation).toHaveBeenCalledWith(
+        expect.objectContaining({ agent_profile_id: "profile-fast" }),
+        cloudBackend,
+      );
+      const [request] = mockCreateCloudAppConversation.mock.calls.at(-1) as [
+        Record<string, unknown>,
+      ];
+      expect(request.agent_profile_id).toBe("profile-fast");
+      expect(request).not.toHaveProperty("agent_settings");
+      expect(reportedResult()).toMatchObject({
+        status: "launched",
+        target: "cloud",
+        agent_profile_id: "profile-fast",
+        model: "anthropic/claude-haiku-4-5",
+        profile_source: "selected",
+      });
+    });
+
+    it("reports an unconfirmed cloud model and still sends only the profile id", async () => {
+      const cloudBackend = {
+        id: "cloud-1",
+        kind: "cloud" as const,
+        host: "https://app.all-hands.dev",
+        apiKey: "secret",
+        name: "Cloud",
+      };
+      mockPickCloudBackend.mockReturnValue(cloudBackend);
+      mockResolveChildAgentProfile.mockResolvedValue({
+        ok: true,
+        profile: {
+          ...fastProfile,
+          model: null,
+          modelNote:
+            "Saved agent profile exists, but its model was not confirmed here.",
+        },
+      });
+      mockCreateCloudAppConversation.mockResolvedValue({
+        id: "start-task-id",
+        app_conversation_id: "cloud-child-id",
+        status: "READY",
+      });
+
+      await handleLaunchChildConversationAction(
+        action({ target: "cloud", agent_profile: "fast" }),
+        PARENT_ID,
+        nextToolCallId(),
+      );
+
+      const [request] = mockCreateCloudAppConversation.mock.calls.at(-1) as [
+        Record<string, unknown>,
+      ];
+      expect(request.agent_profile_id).toBe("profile-fast");
+      expect(request).not.toHaveProperty("agent_settings");
+      expect(reportedResult()).toMatchObject({
+        status: "launched",
+        target: "cloud",
+        agent_profile_id: "profile-fast",
+        model: null,
+        profile_source: "selected",
+        model_note:
+          "Saved agent profile exists, but its model was not confirmed here.",
+      });
+    });
+
+    it("does not start a cloud task when the cloud profile is invalid", async () => {
+      mockPickCloudBackend.mockReturnValue({
+        id: "cloud-1",
+        kind: "cloud" as const,
+        host: "https://app.all-hands.dev",
+        apiKey: "secret",
+        name: "Cloud",
+      });
+      mockResolveChildAgentProfile.mockResolvedValue({
+        ok: false,
+        error: 'No saved agent profile matches "missing" on the cloud backend.',
+        guidance: "Nothing was launched.",
+      });
+
+      await handleLaunchChildConversationAction(
+        action({ target: "cloud", agent_profile: "missing" }),
+        PARENT_ID,
+        nextToolCallId(),
+      );
+
+      expect(mockCreateCloudAppConversation).not.toHaveBeenCalled();
+      expect(mockGetSettings).not.toHaveBeenCalled();
+      expect(reportedResult().status).toBe("error");
     });
   });
 

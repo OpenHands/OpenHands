@@ -51,12 +51,65 @@ back with corrective guidance):
   child in this conversation's exact directory; only choose it when the child
   genuinely must see work in progress, and expect the two agents to conflict.
 
+Model and profile:
+
+* Omit "agent_profile" and the child is not pinned to a saved agent profile.
+  It keeps today's default path: a local child starts from the current agent
+  settings, and a cloud child starts without an agent profile so the cloud
+  backend applies its own default. That is the inheritance this tool already
+  uses for a new conversation.
+* Pass "agent_profile" as a saved agent profile's name or id to run the child
+  on that profile for either target. The profile pins its LLM profile and
+  therefore its model.
+* An unknown or unreadable agent_profile launches nothing and comes back
+  with corrective guidance. It does not silently use another model. A local
+  OpenHands profile whose LLM profile is missing does the same.
+* On cloud, a saved agent profile whose model cannot be confirmed from this
+  account's visible LLM profile list still launches on that profile. That
+  happens for an organization-only LLM profile while this conversation is
+  local, because confirmation then uses the per-user list. The follow-up
+  sets model to null and explains the model was not confirmed. It does not
+  switch to another model.
+* A profile with a secret allow-list runs the child with only those secrets.
+  It does not inherit this conversation's full secret set, and it does not
+  fall back to this conversation's agent settings.
+
+Child conversations vs in-conversation sub-agents:
+
+* This tool creates a new, independent conversation (its own workspace or
+  cloud sandbox) recorded as a child of this one. Use it, with agent_profile,
+  when the delegated task should run on a different model or profile.
+* In-conversation sub-agents (the task / delegate tools) stay inside THIS
+  conversation. They do not accept agent_profile and do not create a
+  separately tracked conversation. Do not use them to choose a per-task model
+  for a child conversation.
+
+Example — local child on the saved "fast" profile. Required: target, task.
+Optional here: agent_profile (name or id). repository and branch are cloud-only
+and must be omitted; isolation is local-only and defaults to "worktree":
+
+  launch_child_conversation
+    target: "local"
+    task: "Add a unit test for parseConfig. Report the file you changed."
+    agent_profile: "fast"
+
+Example — cloud child inheriting the default profile (no agent_profile).
+repository and branch are cloud-only; isolation must be omitted:
+
+  launch_child_conversation
+    target: "cloud"
+    task: "Fix the flaky checkout test and open a pull request."
+    repository: "octocat/hello-world"
+    branch: "main"
+
 What comes back: this tool is acknowledged immediately, before the conversation
 exists. The real outcome arrives moments later as a follow-up message starting
 with "${CHILD_CONVERSATION_RESULT_PREFIX.trim()}" that carries the child's
-conversation id, URL, target and initial status — or an error with guidance.
-Wait for it, then tell the user what you launched and give them the URL. If it
-reports an error, fix the parameters and call this tool again.`;
+conversation id, URL, target, the applied agent profile id and model (or that
+the default path was inherited, or that a cloud model was not confirmed), and
+initial status — or an error with guidance. Wait for it, then tell the user
+what you launched and give them the
+URL. If it reports an error, fix the parameters and call this tool again.`;
 
 export const LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL: ClientToolSpec = {
   name: LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
@@ -96,6 +149,11 @@ export const LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL: ClientToolSpec = {
         enum: [...CHILD_CONVERSATION_ISOLATIONS],
         description:
           "target='local' only. 'worktree' (default) gives the child its own git worktree and branch; 'shared' runs it in this conversation's exact directory.",
+      },
+      agent_profile: {
+        type: "string",
+        description:
+          "Optional saved agent profile name or id. Applies to both targets and pins that profile. Omit to inherit the default settings path. Unknown profiles launch nothing. On cloud, a profile whose model cannot be confirmed from the visible LLM list still launches and the result says the model was not confirmed.",
       },
     },
     required: ["target", "task"],
