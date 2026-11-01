@@ -410,17 +410,22 @@ export function buildRenameMcpConfigPatch(
   previous: MCPServer,
   edited: MCPServerConfig,
 ): MCPConfigPatch {
-  const previousSecrets =
-    previous.transport === "stdio"
-      ? previous.env
-      : { auth: previous.auth, headers: previous.headers };
-  if (hasRedactedMcpSecretLeaf(previousSecrets)) {
-    throw new Error(MCP_RENAME_CREDENTIAL_ERROR);
-  }
+  // The rename persists the merged server under the new key, so the guard must
+  // validate the credential that would be stored: a stored credential always
+  // comes back redacted, and the mask must never be written through. A rename
+  // may proceed when the edit replaces the credential with a real value or
+  // clears it, and is refused while the redacted placeholder is left in place.
   const renamedServer = applyMcpServerPatch(
     previous,
     buildMcpServerPatch(previous, edited),
   );
+  const renamedSecrets =
+    renamedServer.transport === "stdio"
+      ? renamedServer.env
+      : { auth: renamedServer.auth, headers: renamedServer.headers };
+  if (hasRedactedMcpSecretLeaf(renamedSecrets)) {
+    throw new Error(MCP_RENAME_CREDENTIAL_ERROR);
+  }
   return {
     [oldKey]: null,
     [newKey]: renamedServer,
