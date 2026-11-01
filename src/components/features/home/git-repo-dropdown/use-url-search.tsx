@@ -11,11 +11,17 @@ export function useUrlSearch(
   const [isUrlSearchLoading, setIsUrlSearchLoading] = useState(false);
 
   useEffect(() => {
+    // Set when a newer input value supersedes this run. Without it, a
+    // request that resolves after the user has edited or cleared the field
+    // still writes its results, listing a repository for text that is gone.
+    let superseded = false;
+
     const handleUrlSearch = async () => {
       // Guard against null/undefined provider to prevent sending
       // requests via the cloud proxy before providers have loaded
       if (!provider) {
         setUrlSearchResults([]);
+        setIsUrlSearchLoading(false);
         return;
       }
 
@@ -32,21 +38,33 @@ export function useUrlSearch(
               3,
             );
 
-            setUrlSearchResults(repositories.items);
+            if (!superseded) {
+              setUrlSearchResults(repositories.items);
+            }
           } catch {
-            setUrlSearchResults([]);
+            if (!superseded) {
+              setUrlSearchResults([]);
+            }
           } finally {
-            setIsUrlSearchLoading(false);
+            if (!superseded) {
+              setIsUrlSearchLoading(false);
+            }
           }
         } else {
           setUrlSearchResults([]);
+          setIsUrlSearchLoading(false);
         }
       } else {
         setUrlSearchResults([]);
+        setIsUrlSearchLoading(false);
       }
     };
 
     handleUrlSearch();
+
+    return () => {
+      superseded = true;
+    };
   }, [inputValue, provider]);
 
   return { urlSearchResults, isUrlSearchLoading };
