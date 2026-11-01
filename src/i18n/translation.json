@@ -7883,6 +7883,24 @@
     "ca": "No s'ha pogut iniciar el cicle d'objectiu",
     "id": "Gagal memulai loop tujuan"
   },
+  "CHAT_INTERFACE$RESUMING_SANDBOX": {
+    "en": "Resuming sandbox...",
+    "ja": "サンドボックスを再開しています...",
+    "zh-CN": "正在恢复沙箱...",
+    "zh-TW": "正在恢復沙箱...",
+    "ko-KR": "샌드박스를 재개하는 중...",
+    "no": "Gjenopptar sandkassen...",
+    "ar": "جارٍ استئناف بيئة الاختبار...",
+    "de": "Sandbox wird fortgesetzt...",
+    "fr": "Reprise du bac à sable...",
+    "it": "Ripresa della sandbox...",
+    "pt": "Retomando o sandbox...",
+    "es": "Reanudando el entorno aislado...",
+    "ca": "Reprenent l’entorn aïllat...",
+    "tr": "Korumalı alan sürdürülüyor...",
+    "uk": "Відновлення пісочниці...",
+    "id": "Melanjutkan sandbox..."
+  },
   "CHAT_INTERFACE$MESSAGE_SENDING": {
     "en": "Sending...",
     "ja": "送信中...",

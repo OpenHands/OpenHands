@@ -99,6 +99,7 @@ export function ChatInterface({
     useConversationStore();
   const {
     errorMessage,
+    errorType,
     errorCode,
     errorClassification,
     removeErrorMessage,
@@ -325,6 +326,29 @@ export function ChatInterface({
         : false,
     [pendingMessages, conversationId],
   );
+
+  let pendingMessageLabel: string | undefined;
+  if (activeConversation?.id === conversationId) {
+    if (sandboxStatus === "PAUSED" || sandboxStatus === "STARTING") {
+      pendingMessageLabel = t(I18nKey.CHAT_INTERFACE$RESUMING_SANDBOX);
+    } else if (
+      sandboxStatus === "RUNNING" &&
+      conversationWebSocket &&
+      conversationWebSocket.connectionState !== "OPEN"
+    ) {
+      pendingMessageLabel = t(I18nKey.CHAT_INTERFACE$CONNECTING);
+    }
+  }
+  const hideConnectionError =
+    pendingMessageLabel !== undefined &&
+    errorType === "connection" &&
+    !errorCode &&
+    errorMessage === SERVER_CONNECTION_ERROR_MESSAGE &&
+    pendingMessages.some(
+      (message) =>
+        message.conversationId === conversationId &&
+        message.status === "sending",
+    );
 
   const hasModelEntries = useModelStore((s) =>
     conversationId
@@ -674,7 +698,7 @@ export function ChatInterface({
             UserMessageEvent echoes back over the WebSocket, so this never
             double-renders alongside the real event list.
           */}
-            <PendingUserMessages />
+            <PendingUserMessages pendingLabel={pendingMessageLabel} />
             {isTask && <TaskStartupProgress />}
 
             {/* Goal-loop status sits at the end of the message flow — above the
@@ -685,7 +709,7 @@ export function ChatInterface({
           <div className="flex shrink-0 flex-col gap-1.5 pb-4">
             <SkillInstallRestartBanner conversationId={conversationId} />
             <BtwMessages conversationId={conversationId} />
-            {errorMessage && (
+            {errorMessage && !hideConnectionError && (
               <ErrorMessageBanner
                 message={errorMessage}
                 code={errorCode}

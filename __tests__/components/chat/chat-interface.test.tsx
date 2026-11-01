@@ -37,6 +37,11 @@ import { act } from "@testing-library/react";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
 import { getConversationState } from "#/utils/conversation-local-storage";
 
+import { makeDefaultLocalBackend } from "#/api/backend-registry/default-backend";
+import { NO_BACKEND } from "#/api/backend-registry/active-store";
+import { SERVER_CONNECTION_ERROR_MESSAGE } from "#/constants/server-connection-error";
+import { I18nKey } from "#/i18n/declaration";
+
 const mockSend = vi.fn();
 vi.mock("#/hooks/use-send-message", () => ({
   useSendMessage: () => ({ send: mockSend }),
@@ -340,6 +345,8 @@ describe("ChatInterface - Scroll-up loads older events", () => {
   });
 
   afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
     useEventStore.setState({
       events: [],
       eventIds: new Set(),
@@ -734,6 +741,29 @@ describe("ChatInterface - Pending message queue", () => {
       </QueryClientProvider>,
     );
   }
+
+  it("shows resume progress in place of the connection warning only while a send waits", async () => {
+    const conversationId = "test-conversation-id";
+    const queryKey = ["user", "conversation", conversationId, (makeDefaultLocalBackend() ?? NO_BACKEND).id, null];
+    queryClient.setQueryData(queryKey, { id: conversationId, sandbox_status: "PAUSED" });
+    const id = useOptimisticUserMessageStore.getState().enqueuePendingMessage({ conversationId, text: "resume my work" });
+    useErrorMessageStore.setState({ errorMessage: SERVER_CONNECTION_ERROR_MESSAGE, errorType: "connection", errorCode: null });
+    renderInterface();
+    expect(screen.getByText(I18nKey.CHAT_INTERFACE$RESUMING_SANDBOX)).toBeVisible();
+    expect(screen.queryByText(SERVER_CONNECTION_ERROR_MESSAGE)).not.toBeInTheDocument();
+
+    act(() => useErrorMessageStore.setState({ errorType: "conversation" }));
+    expect(screen.getByText(SERVER_CONNECTION_ERROR_MESSAGE)).toBeVisible();
+    act(() => useErrorMessageStore.setState({ errorMessage: "Resume permission denied" }));
+    expect(screen.getByText("Resume permission denied")).toBeVisible();
+    act(() => {
+      useErrorMessageStore.setState({ errorMessage: SERVER_CONNECTION_ERROR_MESSAGE, errorType: "connection", errorCode: null });
+      useOptimisticUserMessageStore.getState().markPendingMessageError(id, "Resume failed");
+    });
+    expect(screen.getByText(SERVER_CONNECTION_ERROR_MESSAGE)).toBeVisible();
+    expect(screen.getByTestId("chat-message-retry")).toBeVisible();
+    expect(screen.queryByText(I18nKey.CHAT_INTERFACE$RESUMING_SANDBOX)).not.toBeInTheDocument();
+  });
 
   it("shows the message in 'sending' state immediately when submitted", async () => {
     let resolveSend: ((value: unknown) => void) | undefined;
