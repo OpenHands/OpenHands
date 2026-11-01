@@ -71,6 +71,8 @@ npm install -g @openhands/agent-canvas
 agent-canvas
 ```
 
+> ✅ **Next:** open [http://localhost:8000](http://localhost:8000) in your browser to use the UI.
+
 The `agent-canvas` command starts the full local stack by default. You can also split it when you want to run pieces separately:
 
 ```sh
@@ -99,6 +101,8 @@ docker run -it --rm \
   ghcr.io/openhands/agent-canvas:1.34.0 # x-release-please-version
 ```
 
+> ✅ **Next:** open [http://localhost:8000/canvas](http://localhost:8000/canvas) in your browser (the Docker image serves the UI at `/canvas`).
+
 **Windows (PowerShell / Windows Terminal):** See [README.windows.md](./README.windows.md) for the equivalent commands.
 
 The agent will be able to access any project under `PROJECTS_PATH`.
@@ -115,6 +119,8 @@ Run each new conversation in its own Docker container, with its own Agent Server
 npm install -g @openhands/agent-canvas
 OH_CONVERSATION_RUNTIME=docker agent-canvas
 ```
+
+> ✅ **Next:** open [http://localhost:8000](http://localhost:8000) and start a new conversation.
 
 Open [http://localhost:8000](http://localhost:8000) and start a new conversation. Existing local conversations are not converted. Each container mounts its conversation's workspace and persisted state, so workspace files and conversation history survive container replacement. Conversations using the same host workspace still share those files; choose separate directories or worktrees to avoid conflicting edits.
 
@@ -140,9 +146,18 @@ npm ci
 npm run dev
 ```
 
+> ✅ **Next:** open [http://localhost:8000](http://localhost:8000) in your browser to use the UI.
+
 ---
 
-Access the UI at [http://localhost:8000](http://localhost:8000) for the npm/source launchers, or [http://localhost:8000/canvas](http://localhost:8000/canvas) for the Docker image. You can add additional backends directly from the UI.
+## Next Steps
+
+1. **Open the UI** — navigate to [http://localhost:8000](http://localhost:8000) for the npm/source launchers, or [http://localhost:8000/canvas](http://localhost:8000/canvas) for the Docker image. You can add additional backends directly from the UI.
+2. **Configure your LLM** — on first launch you'll be prompted to pick an LLM provider (OpenAI, Anthropic, etc.), enter your API key, and choose a model. See the [LLM settings docs](https://docs.openhands.dev/openhands/usage/settings/llm-settings#llm-profiles).
+3. **Start a conversation** — create a new conversation from the sidebar and ask the agent to help with a coding task.
+4. **Add backends (optional)** — connect to additional Agent Servers from **Settings → Agent Server**.
+
+For deeper configuration, see [SELF_HOSTING.md](./docs/SELF_HOSTING.md) and the [development guide](./docs/DEVELOPMENT.md).
 
 Local (`npx` / `npm run dev`) listeners bind **loopback only** (`127.0.0.1`) so the auto-injected session key is not reachable from other machines on the network. To listen on all interfaces, pass `--host 0.0.0.0` (or set `OH_BIND_HOST`); the session key is then **not** injected and the UI uses the same API-key entry screen as `--public`.
 
