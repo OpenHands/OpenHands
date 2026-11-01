@@ -4,16 +4,24 @@ import SettingsService from "#/api/settings-service/settings-service.api";
 import { MCPServerConfig } from "#/types/mcp-server";
 import {
   buildMcpServerPatch,
+  applyMcpServerPatch,
+  hasMcpConnectionChanges,
   buildRenameMcpConfigPatch,
   parseMcpConfig,
 } from "#/utils/mcp-config";
-import { SETTINGS_QUERY_KEYS } from "#/hooks/query/query-keys";
+import { getActiveBackend } from "#/api/backend-registry/active-store";
+import { renameCloudMcpServer } from "#/api/cloud/mcp-service.api";
+import {
+  AGENT_PROFILES_QUERY_KEYS,
+  SETTINGS_QUERY_KEYS,
+} from "#/hooks/query/query-keys";
 import {
   mcpServerRenamed,
   updateEveryAgentProfile,
 } from "#/hooks/mutation/sync-agent-profiles";
 import { clearMcpServerHealth } from "#/api/mcp-health/mcp-health-store";
 import { getMcpServerHealthKey } from "#/utils/mcp-server-health-key";
+import { flattenMcpConfig } from "#/utils/mcp-installed-servers";
 import { toMcpServerName } from "#/utils/mcp-server-name";
 
 // @spec MCP-001 — Sparse mutations preserve sibling servers
@@ -60,10 +68,38 @@ export function useUpdateMcpServer() {
             }),
       });
 
-      const nextKey = toMcpServerName(server.name || serverId);
+      const nextKey =
+        !server.name || server.name === serverId
+          ? serverId
+          : toMcpServerName(server.name);
       if (nextKey !== serverId) {
-        if (nextKey in currentConfig) {
+        if (
+          Object.keys(currentConfig).some(
+            (key) =>
+              key !== serverId && key.toLowerCase() === nextKey.toLowerCase(),
+          )
+        ) {
           throw new Error(`MCP server "${nextKey}" already exists.`);
+        }
+        if (getActiveBackend().backend.kind === "cloud") {
+          const changed = hasMcpConnectionChanges(
+            flattenMcpConfig({ [serverId]: previous })[0],
+            server,
+          );
+          await renameCloudMcpServer(
+            serverId,
+            nextKey,
+            changed
+              ? applyMcpServerPatch(
+                  previous,
+                  buildMcpServerPatch(previous, server),
+                )
+              : undefined,
+          );
+          queryClient.invalidateQueries({
+            queryKey: AGENT_PROFILES_QUERY_KEYS.all,
+          });
+          return previousHealthKey;
         }
         await SettingsService.patchMcpConfig(
           buildRenameMcpConfigPatch(serverId, nextKey, previous, server),

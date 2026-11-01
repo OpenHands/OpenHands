@@ -25,7 +25,10 @@ import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message"
 import { cn } from "#/utils/utils";
 import { modalTitleLgClassName } from "#/utils/modal-classes";
 import McpService from "#/api/mcp-service/mcp-service.api";
-import { MCP_RENAME_CREDENTIAL_ERROR } from "#/utils/mcp-config";
+import {
+  MCP_RENAME_CREDENTIAL_ERROR,
+  hasMcpConnectionChanges,
+} from "#/utils/mcp-config";
 
 interface CustomServerEditorProps {
   server: MCPServerConfig;
@@ -132,9 +135,22 @@ export function CustomServerEditor({
   const handleSubmit = (payload: MCPServerConfig) => {
     resetTest();
     setOauthTestResult(null);
+    if (
+      isEditing &&
+      isCloudBackend &&
+      !hasMcpConnectionChanges(server, payload)
+    ) {
+      updateMcpServer(
+        { serverId: server.id, server: payload },
+        { onSuccess: onClose, onError: handleError },
+      );
+      return;
+    }
     if (payload.auth?.strategy === "oauth2") {
       setIsOauthTesting(true);
-      void McpService.authorizeOAuth(payload)
+      void McpService.authorizeOAuth(
+        isEditing ? { ...payload, name: server.name } : payload,
+      )
         .then((result) => {
           setOauthTestResult(result);
           if (!result.ok) return;
@@ -164,7 +180,7 @@ export function CustomServerEditor({
         .finally(() => setIsOauthTesting(false));
       return;
     }
-    testServer(payload, {
+    testServer(isEditing ? { ...payload, name: server.name } : payload, {
       onSuccess: (result) => {
         if (!result.ok) {
           // Test failed — modal stays open, error shown via testMessage.
@@ -200,13 +216,15 @@ export function CustomServerEditor({
     setOauthTestResult(null);
     if (payload.auth?.strategy === "oauth2") {
       setIsOauthTesting(true);
-      void McpService.authorizeOAuth(payload)
+      void McpService.authorizeOAuth(
+        isEditing ? { ...payload, name: server.name } : payload,
+      )
         .then(setOauthTestResult)
         .catch(handleError)
         .finally(() => setIsOauthTesting(false));
       return;
     }
-    testServer(payload);
+    testServer(isEditing ? { ...payload, name: server.name } : payload);
   };
 
   const handleConfirmDelete = () => {

@@ -606,13 +606,8 @@ class SettingsService {
     // so cloud-native fields like provider_tokens_set reach the GUI's
     // useUserProviders → useAppInstallations → useGitRepositories chain.
     if (getActiveBackend().backend.kind === "cloud") {
-      try {
-        const cloud = await withRetry(() => fetchCloudSettings());
-        return syncDerivedSettings(cloud);
-      } catch (error) {
-        console.warn("Failed to fetch cloud settings, using defaults:", error);
-        return syncDerivedSettings({});
-      }
+      const cloud = await withRetry(() => fetchCloudSettings());
+      return syncDerivedSettings(cloud);
     }
 
     const backend = getActiveBackend().backend;

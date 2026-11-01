@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type {
-  MCPConfig,
-  MCPServer,
-} from "@openhands/typescript-client";
+import type { MCPConfig, MCPServer } from "@openhands/typescript-client";
 
 import {
   allocateMcpSettingsKey,
@@ -105,7 +102,10 @@ describe("hasRedactedMcpSecretLeaf", () => {
 
   it("recurses into arrays", () => {
     expect(
-      hasRedactedMcpSecretLeaf(["plain", { nested: REDACTED_MCP_SECRET_VALUE }]),
+      hasRedactedMcpSecretLeaf([
+        "plain",
+        { nested: REDACTED_MCP_SECRET_VALUE },
+      ]),
     ).toBe(true);
     expect(hasRedactedMcpSecretLeaf(["plain", "other"])).toBe(false);
   });
@@ -120,9 +120,9 @@ describe("hasRedactedMcpSecretLeaf", () => {
 
 describe("getMcpServerEnabled", () => {
   it("returns false only for an explicit disabled flag", () => {
-    expect(getMcpServerEnabled({ enabled: false } as unknown as MCPServer)).toBe(
-      false,
-    );
+    expect(
+      getMcpServerEnabled({ enabled: false } as unknown as MCPServer),
+    ).toBe(false);
   });
 
   it("returns undefined when enabled is true or absent", () => {
@@ -294,10 +294,11 @@ describe("canonical MCP configuration integration", () => {
       filesystem: { command: "npx" },
     });
 
-    expect(flattenMcpConfig(config).map(({ id }) => id).sort()).toEqual([
-      "filesystem",
-      "github",
-    ]);
+    expect(
+      flattenMcpConfig(config)
+        .map(({ id }) => id)
+        .sort(),
+    ).toEqual(["filesystem", "github"]);
   });
 });
 
@@ -426,7 +427,12 @@ describe("buildMcpServerPatch", () => {
       command: "c",
       args: ["x"],
     } as MCPServer;
-    const edited: MCPServerConfig = { id: "s", type: "stdio", command: "c" };
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "stdio",
+      command: "c",
+      env: { TOKEN: REDACTED_MCP_SECRET_VALUE },
+    };
     expect(buildMcpServerPatch(previous, edited)).toEqual({
       transport: "stdio",
       command: "c",
@@ -1103,7 +1109,12 @@ describe("buildRenameMcpConfigPatch", () => {
       command: "c",
       env: { TOKEN: REDACTED_MCP_SECRET_VALUE },
     } as MCPServer;
-    const edited: MCPServerConfig = { id: "s", type: "stdio", command: "c" };
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "stdio",
+      command: "c",
+      env: { TOKEN: REDACTED_MCP_SECRET_VALUE },
+    };
     expect(() =>
       buildRenameMcpConfigPatch("old", "new", previous, edited),
     ).toThrow(MCP_RENAME_CREDENTIAL_ERROR);
@@ -1119,6 +1130,7 @@ describe("buildRenameMcpConfigPatch", () => {
       id: "s",
       type: "shttp",
       url: "https://u.example",
+      auth: { strategy: "bearer", value: REDACTED_MCP_SECRET_VALUE },
     };
     expect(() =>
       buildRenameMcpConfigPatch("old", "new", previous, edited),
@@ -1234,4 +1246,28 @@ describe("allocateMcpSettingsKey", () => {
     const config = { tool: {} as MCPServer } satisfies MCPConfig;
     expect(allocateMcpSettingsKey(config, "tool", "stdio")).toBe("tool_1");
   });
+});
+
+it("renames locally after replacing a redacted bearer credential", () => {
+  const patch = buildRenameMcpConfigPatch(
+    "shttp",
+    "sonar",
+    {
+      transport: "http",
+      url: "https://example.com/mcp",
+      auth: { strategy: "bearer", value: REDACTED_MCP_SECRET_VALUE },
+    },
+    {
+      id: "shttp",
+      type: "shttp",
+      name: "sonar",
+      url: "https://example.com/mcp",
+      auth: { strategy: "bearer", value: "replacement-token" },
+    },
+  );
+  expect(patch.shttp).toBeNull();
+  expect(patch.sonar).toMatchObject({
+    auth: { strategy: "bearer", value: "replacement-token" },
+  });
+  expect(JSON.stringify(patch)).not.toContain(REDACTED_MCP_SECRET_VALUE);
 });

@@ -142,7 +142,8 @@ export const useSettings = (scope: SettingsScope = "personal") => {
       active.orgId,
     ],
     queryFn: () => getSettingsQueryFn(scope),
-    retry: (_, error) => getErrorStatus(error) !== 404,
+    retry: (failureCount, error) =>
+      failureCount < 2 && ![401, 403, 404].includes(getErrorStatus(error) ?? 0),
     enabled: hasBackend,
     refetchOnWindowFocus: false,
     staleTime: 1000 * 60 * 5,
