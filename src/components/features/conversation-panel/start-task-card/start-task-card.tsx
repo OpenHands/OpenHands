@@ -7,6 +7,7 @@ import { ConversationCard } from "../conversation-card/conversation-card";
 interface StartTaskCardProps {
   task: AppConversationStartTask;
   title?: string;
+  titlePending?: boolean;
   onClick?: () => void;
   initialMessage?: string;
   isActive?: boolean;
@@ -16,6 +17,7 @@ interface StartTaskCardProps {
 export function StartTaskCard({
   task,
   title: displayTitle,
+  titlePending,
   onClick,
   initialMessage,
   isActive,
@@ -44,6 +46,7 @@ export function StartTaskCard({
   return (
     <ConversationCard
       title={displayTitle || title}
+      titlePending={titlePending}
       onClick={onClick}
       selectedRepository={selectedRepository}
       createdAt={task.created_at}
