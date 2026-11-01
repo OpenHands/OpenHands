@@ -49,7 +49,7 @@ import ServerIcon from "#/icons/server.svg?react";
 import { getBackendStatusLabel } from "./backend-status-label";
 import { BackendStatusDot } from "./backend-status-dot";
 import { DeviceFlowAuth } from "./device-flow-auth";
-import { useBackendSwitchRedirect } from "./use-backend-switch-redirect";
+import { useActivateBackendAfterRedirect } from "./use-backend-switch-redirect";
 
 export type BackendFormMode = "add" | "edit";
 
@@ -1555,8 +1555,10 @@ function AddBackendConnectionOptions({
 }) {
   const { addBackend } = useActiveBackendContext();
   // @spec BM-002 — Adding a backend auto-switches the active selection to it
-  // (BM-001), so leave any detail page that belongs to the previous backend.
-  const redirectAfterAdd = useBackendSwitchRedirect();
+  // (BM-001), so leave any detail page that belongs to the previous backend
+  // before the new backend becomes active.
+  const { activate, isActivationPending } =
+    useActivateBackendAfterRedirect(onClose);
   const { trackBackendAdded } = useTracking();
   const lockedCloudHost = getLockedCloudHost();
 
@@ -1566,7 +1568,10 @@ function AddBackendConnectionOptions({
       connectionMethod: BackendConnectionMethod,
       metadata?: BackendConnectionTestMetadata,
     ) => {
-      addBackend(payload);
+      // The modal stays open until the redirect lands; a second submit in that
+      // gap must not register the backend twice.
+      if (isActivationPending) return;
+      const backend = addBackend(payload, { activate: false });
       trackBackendAdded({
         backendKind: payload.kind,
         connectionMethod,
@@ -1574,10 +1579,9 @@ function AddBackendConnectionOptions({
         source,
         agentServerVersion: metadata?.agentServerVersion,
       });
-      redirectAfterAdd();
-      onClose();
+      activate(backend.id);
     },
-    [addBackend, redirectAfterAdd, onClose, trackBackendAdded, source],
+    [addBackend, activate, isActivationPending, trackBackendAdded, source],
   );
 
   if (lockedCloudHost) {
