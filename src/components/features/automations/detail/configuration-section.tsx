@@ -28,19 +28,19 @@ interface ConfigurationSectionProps {
   runsAs?: string | null;
 }
 
-const FILTER_TRUNCATE_LENGTH = 60;
+const VALUE_TRUNCATE_LENGTH = 60;
 
-function FilterExpression({ filter }: { filter: string }) {
+function ExpandableValue({ value }: { value: string }) {
   const { t } = useTranslation("openhands");
   const [expanded, setExpanded] = useState(false);
-  const isLong = filter.length > FILTER_TRUNCATE_LENGTH;
+  const isLong = value.length > VALUE_TRUNCATE_LENGTH;
 
   return (
     <div className="flex flex-col gap-1">
-      <span className="font-mono break-all">
+      <span className="font-mono break-all whitespace-pre-wrap">
         {isLong && !expanded
-          ? `${filter.slice(0, FILTER_TRUNCATE_LENGTH)}…`
-          : filter}
+          ? `${value.slice(0, VALUE_TRUNCATE_LENGTH)}…`
+          : value}
       </span>
       {isLong && (
         <button
@@ -64,6 +64,8 @@ export function ConfigurationSection({
 }: ConfigurationSectionProps) {
   const { t } = useTranslation("openhands");
   const isEvent = automation.trigger.type === "event";
+  const plugin = automation.plugin_spec?.plugin;
+  const pluginConfig = Object.entries(automation.plugin_spec?.config ?? {});
 
   let scheduleDisplay = automation.trigger.schedule ?? "";
   if (automation.trigger.schedule_human) {
@@ -143,7 +145,7 @@ export function ConfigurationSection({
             icon={<CodeTagIcon className="size-3.5" />}
             label={t(I18nKey.AUTOMATIONS$DETAIL$EVENT_FILTER)}
           >
-            <FilterExpression filter={automation.trigger.filter} />
+            <ExpandableValue value={automation.trigger.filter} />
           </ConfigField>
         )}
 
@@ -162,6 +164,71 @@ export function ConfigurationSection({
         >
           {automation.model ?? t(I18nKey.COMMON$ACTIVE_PROFILE)}
         </ConfigField>
+
+        {automation.timeout != null && (
+          <ConfigField
+            icon={<CalendarIcon className="size-3.5" />}
+            label={t(I18nKey.AUTOMATION_SETUP$TIMEOUT_SECONDS)}
+          >
+            {automation.timeout}
+          </ConfigField>
+        )}
+
+        {plugin && (
+          <>
+            <ConfigField
+              icon={<CodeTagIcon className="size-3.5" />}
+              label={t(I18nKey.AUTOMATION_SETUP$PLUGIN_SOURCE)}
+            >
+              <span className="break-all">{plugin.source}</span>
+            </ConfigField>
+            {plugin.ref && (
+              <ConfigField
+                icon={<GitBranchIcon className="size-3.5" />}
+                label={t(I18nKey.AUTOMATION_SETUP$PLUGIN_REF)}
+              >
+                <span className="break-all">{plugin.ref}</span>
+              </ConfigField>
+            )}
+            {plugin.repo_path && (
+              <ConfigField
+                icon={<CodeTagIcon className="size-3.5" />}
+                label={t(I18nKey.SETTINGS$PLUGINS_REPO_PATH_LABEL)}
+              >
+                <span className="break-all">{plugin.repo_path}</span>
+              </ConfigField>
+            )}
+          </>
+        )}
+
+        {pluginConfig.length > 0 && (
+          <div className="col-span-2">
+            <ConfigField
+              icon={<CodeTagIcon className="size-3.5" />}
+              label={t(I18nKey.AUTOMATIONS$DETAIL$PLUGIN_CONFIG)}
+            >
+              <dl
+                data-testid="automation-plugin-config"
+                className="flex flex-col gap-3"
+              >
+                {pluginConfig.map(([key, value]) => (
+                  <div key={key}>
+                    <dt className="text-xs text-muted break-all">{key}</dt>
+                    <dd>
+                      <ExpandableValue
+                        value={
+                          typeof value === "string"
+                            ? value
+                            : (JSON.stringify(value, null, 2) ?? String(value))
+                        }
+                      />
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </ConfigField>
+          </div>
+        )}
 
         {automation.notification && (
           <ConfigField

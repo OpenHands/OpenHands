@@ -29,6 +29,13 @@ Public skills are loaded from the `@openhands/extensions` npm package at build t
 Bundled catalog skills use the persisted `enabled_skills` allow-list defaulted from `DEFAULT_ENABLED_SKILL_NAMES`. User and project skills remain enabled unless listed in `disabled_skills`. Keep this logic centralized in `src/utils/skill-enablement.ts`. The Agent Server no longer clones the extensions repository or uses `EXTENSIONS_REF` for public skills.
 
 
+## Automation bundle availability
+
+Automation details use `PLUGIN_SPEC_RUNTIME_TARBALL_PATH` for bundles generated
+at dispatch time. Skip both the file-list request and the Download Tarball menu
+item for that sentinel. Uploaded bundles retain their listing and download;
+plugin metadata alone does not disable an existing archive.
+
 ## Workspace files
 
 Local Files discovery preferences belong to `misc_settings.app_preferences.workspace_file_discovery`, keyed by working directory on the active backend. `useWorkspaceFileDiscovery` reads the settings cache and saves sparse workspace patches. Preserve default exclusions and the 2,000-file cap when no configuration exists. Fetch one extra result to distinguish truncation from an exact-size list. Cloud keeps its server-side listing contract without these controls.
