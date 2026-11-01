@@ -596,6 +596,10 @@ describe("vite library build", () => {
       expect(declarations(recipe(name))).toMatchObject(expected);
     }
 
+    // Compact type tokens must not introduce a line-height default.
+    expect(declarations(recipe("text-2xs"))).toEqual({ "font-size": "11px" });
+    expect(declarations(recipe("text-3xs"))).toEqual({ "font-size": "10px" });
+
     // `package.json` routes `require` here; stripped CSS imports must not
     // leave it unparseable.
     expect(() => new Script(file("index.cjs"))).not.toThrow();

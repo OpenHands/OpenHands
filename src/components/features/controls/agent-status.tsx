@@ -147,7 +147,7 @@ export function AgentStatus({
       )}
     >
       <span
-        className="text-[11px] text-muted font-normal leading-5 min-w-0 max-w-full truncate"
+        className="text-2xs text-muted font-normal leading-5 min-w-0 max-w-full truncate"
         title={t(statusCode)}
       >
         {t(statusCode)}
