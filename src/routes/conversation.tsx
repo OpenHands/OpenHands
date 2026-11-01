@@ -146,8 +146,16 @@ function AppContent() {
       showErrorToast: true,
     });
 
+  // The redirect below does not commit synchronously (the target route loads
+  // first), and this effect re-runs whenever a dependency changes identity in
+  // the meantime — e.g. `t` after a languageChanged event. Report each miss
+  // once, keyed by the lookup it belongs to.
+  const reportedMissRef = React.useRef<string | null>(null);
   React.useEffect(() => {
-    if (!ownerLookupMissed) return;
+    if (!ownerLookupMissed) {
+      reportedMissRef.current = null;
+      return;
+    }
     if (shouldProbeShared) {
       if (!isSharedProbeSuccessful) return;
       if (sharedConversation) {
@@ -155,6 +163,9 @@ function AppContent() {
         return;
       }
     }
+    const missKey = `${active.backend.id}|${active.orgId}|${conversationId}`;
+    if (reportedMissRef.current === missKey) return;
+    reportedMissRef.current = missKey;
     // Clear the per-backend "last selected" slot so the next switch
     // to this backend doesn't try to revisit a stale id.
     clearLastConversationId(active.backend.id, active.orgId);

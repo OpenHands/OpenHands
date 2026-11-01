@@ -2,7 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import React from "react";
 import { HttpError } from "@openhands/typescript-client";
 import { act, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router";
+import {
+  MemoryRouter,
+  Route,
+  RouterProvider,
+  Routes,
+  createMemoryRouter,
+} from "react-router";
 import type { SharedConversation } from "@openhands/typescript-client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -486,6 +492,65 @@ describe("conversation route — shared read-only fallback", () => {
     // Assert
     expect(await screen.findByTestId("conversations-home")).toBeInTheDocument();
     expect(getCloudSharedConversation).not.toHaveBeenCalled();
+    expect(displayErrorToast).toHaveBeenCalledTimes(1);
+  });
+  it("reports a missing conversation once while the redirect is still pending", async () => {
+    // Arrange — the /conversations route loads asynchronously, as route
+    // modules and loaders do in the app, so the conversation route stays
+    // mounted and keeps re-rendering (with a new `t`, as a languageChanged
+    // event gives it) until the redirect commits.
+    setActiveSelection({ backendId: localBackend.id });
+    vi.mocked(
+      AgentServerConversationService.batchGetAppConversations,
+    ).mockResolvedValue([null]);
+    let finishRedirect!: () => void;
+    const redirectLoaded = new Promise<null>((resolve) => {
+      finishRedirect = () => resolve(null);
+    });
+    const router = createMemoryRouter(
+      [
+        {
+          path: "/conversations/:conversationId",
+          element: (
+            <NavigationProvider
+              value={{
+                currentPath: `/conversations/${CLOUD_CONVERSATION_ID}`,
+                conversationId: CLOUD_CONVERSATION_ID,
+                isNavigating: false,
+                navigate: vi.fn(),
+              }}
+            >
+              <ConversationView />
+            </NavigationProvider>
+          ),
+        },
+        {
+          path: "/conversations",
+          loader: () => redirectLoaded,
+          element: <div data-testid="conversations-home" />,
+        },
+      ],
+      { initialEntries: [`/conversations/${CLOUD_CONVERSATION_ID}`] },
+    );
+    const testQueryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, retryDelay: 1 } },
+    });
+
+    // Act
+    render(
+      <QueryClientProvider client={testQueryClient}>
+        <ActiveBackendProvider>
+          <RouterProvider router={router} />
+        </ActiveBackendProvider>
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(router.state.navigation.state).toBe("loading"));
+    await act(async () => {
+      finishRedirect();
+    });
+
+    // Assert
+    expect(await screen.findByTestId("conversations-home")).toBeInTheDocument();
     expect(displayErrorToast).toHaveBeenCalledTimes(1);
   });
 });
