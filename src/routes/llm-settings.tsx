@@ -129,6 +129,7 @@ export function LlmSettingsScreen({
   suppressSuccessToast,
   onSaveControlChange,
   showProviderConnection,
+  initialView,
 }: {
   scope?: SettingsScope;
   /** Optional hook fired after a successful save (e.g. advance an onboarding step). */
@@ -151,6 +152,12 @@ export function LlmSettingsScreen({
    * one connection exists, so the form is unchanged until the user creates one.
    */
   showProviderConnection?: boolean;
+  /**
+   * Opens the form on this tab instead of inferring one from the saved
+   * settings. A new profile starts on Basic: the saved settings belong to an
+   * existing configuration, not to the blank draft.
+   */
+  initialView?: SettingsView;
 }) {
   const { t } = useTranslation("openhands");
 
@@ -211,6 +218,7 @@ export function LlmSettingsScreen({
       currentSettings: Settings,
       filteredSchema: SettingsSchema,
     ): SettingsView => {
+      if (initialView) return initialView;
       const schemaView = inferInitialView(currentSettings, filteredSchema);
       if (schemaView !== "basic") {
         return schemaView;
@@ -224,7 +232,7 @@ export function LlmSettingsScreen({
 
       return hasCustomBaseUrl ? "all" : "basic";
     },
-    [],
+    [initialView],
   );
 
   const buildHeader = React.useCallback(

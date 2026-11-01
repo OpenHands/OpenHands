@@ -10,8 +10,11 @@ import { I18nKey } from "#/i18n/declaration";
 interface SettingsDropdownInputProps {
   testId: string;
   name: string;
-  items: { key: React.Key; label: string }[];
+  /** `description` renders as a muted second line under the item's label. */
+  items: { key: React.Key; label: string; description?: string }[];
   label?: ReactNode;
+  /** Accessible name when no string `label` is shown (e.g. a section heading labels it). */
+  ariaLabel?: string;
   wrapperClassName?: string;
   placeholder?: string;
   showOptionalTag?: boolean;
@@ -33,6 +36,7 @@ interface SettingsDropdownInputProps {
 export function SettingsDropdownInput({
   testId,
   label,
+  ariaLabel,
   wrapperClassName,
   name,
   items,
@@ -65,7 +69,7 @@ export function SettingsDropdownInput({
         </div>
       )}
       <Autocomplete
-        aria-label={typeof label === "string" ? label : name}
+        aria-label={ariaLabel ?? (typeof label === "string" ? label : name)}
         data-testid={testId}
         name={name}
         defaultItems={items}
@@ -98,7 +102,14 @@ export function SettingsDropdownInput({
         startContent={startContent || null}
       >
         {(item) => (
-          <AutocompleteItem key={item.key}>{item.label}</AutocompleteItem>
+          <AutocompleteItem
+            key={item.key}
+            textValue={item.label}
+            description={item.description}
+            classNames={{ description: "text-muted" }}
+          >
+            {item.label}
+          </AutocompleteItem>
         )}
       </Autocomplete>
     </label>

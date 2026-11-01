@@ -16,10 +16,26 @@ import type {
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 vi.mock("react-i18next", () => ({
+  // Renders the `<action>` component around the profile label, like the real
+  // Trans does for "<action>{{addProfile}}</action>" in the hint.
+  Trans: ({
+    values,
+    components,
+  }: {
+    values: Record<string, string>;
+    components: { action: React.ReactElement };
+  }) => (
+    <>
+      {React.cloneElement(components.action, {}, values.addProfile)}{" "}
+      {`with ${values.customModel} on ${values.advanced}`}
+    </>
+  ),
   useTranslation: () => ({
     t: (key: string, params?: Record<string, string>) => {
       const translations: Record<string, string> = {
-        SETTINGS$ADD_MODELS_TITLE: "Add models as profiles",
+        SETTINGS$ADD_MODELS_TITLE: "Add Model Profiles",
+        SETTINGS$ADD_MODELS_DESCRIPTION:
+          "Pick models from a provider connection or an unlinked provider to create a profile for each. You can customize any of them later.",
         SETTINGS$ADD_MODELS_PROVIDER_LABEL: "Provider",
         SETTINGS$ADD_MODELS_PROVIDER_PLACEHOLDER: "Select a provider",
         SETTINGS$ADD_MODELS_CONNECTION_LABEL: "Provider connection",
@@ -36,6 +52,10 @@ vi.mock("react-i18next", () => ({
         SETTINGS$MODEL_ROW_SAVED: "Saved",
         SETTINGS$MODEL_ROW_FAILED: "Failed",
         BUTTON$CANCEL: "Cancel",
+        BUTTON$CLOSE: "Close",
+        SETTINGS$ADD_LLM_PROFILE: "Add LLM Profile",
+        SETTINGS$CUSTOM_MODEL: "Custom Model",
+        SETTINGS$ADVANCED: "Advanced",
         ERROR$GENERIC: "An error occurred",
       };
       return translations[key] || key;
@@ -204,6 +224,24 @@ describe("AddModelsModal", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("titles the dialog and explains bulk adding under the title", () => {
+    renderModal(null);
+
+    const dialog = screen.getByRole("dialog", { name: "Add Model Profiles" });
+    expect(dialog).toHaveAccessibleDescription(
+      "Pick models from a provider connection or an unlinked provider to create a profile for each. You can customize any of them later.",
+    );
+  });
+
+  it("closes from the X button in the corner", async () => {
+    const onClose = vi.fn();
+    renderModal(null, [], onClose);
+
+    await userEvent.click(screen.getByRole("button", { name: "Close" }));
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it("shows the provider preselected to the launched connection's provider", async () => {
     renderModal();
     // Preselect mode: the provider box opens on the connection's provider,
@@ -218,6 +256,47 @@ describe("AddModelsModal", () => {
     )) as HTMLSelectElement;
     expect(connectionBox.value).toBe("conn-openai");
     await screen.findByTestId("add-models-row-openai/gpt-4o");
+  });
+
+  it("points to a custom-model profile once a provider's models load", async () => {
+    renderModal(null);
+    // No provider picked yet: there is no list for the hint to explain.
+    expect(
+      screen.queryByTestId("add-models-custom-model-hint"),
+    ).not.toBeInTheDocument();
+
+    await chooseOpenAI();
+
+    expect(
+      await screen.findByTestId("add-models-custom-model-hint"),
+    ).toHaveTextContent("Add LLM Profile with Custom Model on Advanced");
+  });
+
+  it("starts a prefilled profile from the hint's Add LLM Profile link", async () => {
+    const onClose = vi.fn();
+    const onAddCustomProfile = vi.fn();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <AddModelsModal
+          isOpen
+          connections={[OPENAI_CONNECTION]}
+          initialConnectionId={OPENAI_CONNECTION.id}
+          existingNames={[]}
+          onClose={onClose}
+          onAddCustomProfile={onAddCustomProfile}
+        />
+      </QueryClientProvider>,
+    );
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Add LLM Profile" }),
+    );
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onAddCustomProfile).toHaveBeenCalledWith({
+      provider: "openai",
+      providerConnectionId: "conn-openai",
+    });
   });
 
   it("lists all models for the connection's provider with short (unprefixed) names", async () => {
