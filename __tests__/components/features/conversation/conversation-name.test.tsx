@@ -16,6 +16,7 @@ import AgentServerConversationService from "#/api/conversation-service/agent-ser
 import type { Backend } from "#/api/backend-registry/types";
 import type { Conversation } from "#/api/open-hands.types";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
+import { useArchivedConversationsStore } from "#/stores/archived-conversations-store";
 
 const localBackend: Backend = {
   id: "bundled",
@@ -765,5 +766,83 @@ describe("ConversationName public sharing", () => {
 
     expect(screen.getByText("Share Publicly")).toBeInTheDocument();
     expect(screen.queryByText("Share with Org users")).not.toBeInTheDocument();
+  });
+});
+
+type ConversationWithSandbox = Conversation &
+  Pick<AppConversation, "sandbox_status">;
+
+describe("ConversationName unarchive", () => {
+  const conversationId = "test-conversation-id";
+  const isStoredAsArchived = () =>
+    useArchivedConversationsStore
+      .getState()
+      .isArchived(localBackend.id, conversationId);
+
+  beforeEach(() => {
+    useArchivedConversationsStore.setState({ archivesByBackendId: {} });
+    useActiveBackendMock.mockReturnValue({
+      backend: localBackend,
+      orgId: null,
+    });
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: conversationId,
+        title: "Test Conversation",
+        status: "RUNNING",
+        sandbox_status: "RUNNING",
+      } as ConversationWithSandbox,
+    });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("unarchives an archived thread from its own menu without a confirmation", async () => {
+    useArchivedConversationsStore
+      .getState()
+      .archiveConversation(localBackend.id, conversationId);
+    const user = userEvent.setup();
+    renderConversationNameWithRouter();
+
+    await user.click(screen.getByTestId("ellipsis-button"));
+    await user.click(screen.getByTestId("unarchive-button"));
+
+    expect(isStoredAsArchived()).toBe(false);
+    expect(
+      screen.queryByTestId("conversation-name-context-menu"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("does not offer Unarchive for a thread that is not archived", async () => {
+    const user = userEvent.setup();
+    renderConversationNameWithRouter();
+
+    await user.click(screen.getByTestId("ellipsis-button"));
+
+    expect(screen.queryByTestId("unarchive-button")).not.toBeInTheDocument();
+  });
+
+  it("does not offer Unarchive while the thread's runtime is missing", async () => {
+    useArchivedConversationsStore
+      .getState()
+      .archiveConversation(localBackend.id, conversationId);
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: conversationId,
+        title: "Test Conversation",
+        status: "STOPPED",
+        sandbox_status: "MISSING",
+      } as ConversationWithSandbox,
+    });
+    const user = userEvent.setup();
+    renderConversationNameWithRouter();
+
+    await user.click(screen.getByTestId("ellipsis-button"));
+
+    expect(screen.queryByTestId("unarchive-button")).not.toBeInTheDocument();
+    expect(isStoredAsArchived()).toBe(true);
   });
 });
