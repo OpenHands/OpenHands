@@ -47,6 +47,7 @@ export function StartTaskCard({
       createdAt={task.created_at}
       lastUpdatedAt={task.updated_at}
       executionStatus={task.status === "ERROR" ? ExecutionStatus.ERROR : null}
+      isStarting={task.status !== "READY" && task.status !== "ERROR"}
       isActive={isActive}
       showRepositoryMetadata={showRepositoryMetadata}
     />
