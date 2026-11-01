@@ -24,12 +24,30 @@ vi.mock("#/hooks/use-tracking", () => ({
   }),
 }));
 
-vi.mock("#/contexts/active-backend-context", () => ({
-  useActiveBackend: () => ({
-    backend: { id: "default-local", kind: "local" },
+vi.mock("#/contexts/active-backend-context", () => {
+  const backend = {
+    id: "default-local",
+    name: "Default Local",
+    host: "http://localhost:8000",
+    apiKey: "k",
+    kind: "local" as const,
+  };
+  const active = {
+    backend,
     orgId: null,
-  }),
-}));
+  };
+  return {
+    useActiveBackend: () => active,
+    useActiveBackendContext: () => ({
+      backends: [backend],
+      active,
+      setActive: vi.fn(),
+      addBackend: vi.fn(),
+      updateBackend: vi.fn(),
+      removeBackend: vi.fn(),
+    }),
+  };
+});
 
 vi.mock("#/hooks/query/use-automation-detail", () => ({
   useAutomationRuns: vi.fn(),
