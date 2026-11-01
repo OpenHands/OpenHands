@@ -47,8 +47,8 @@
     "mdast-util-from-markdown": "2.0.3",
     "monaco-editor": "0.56.0",
     "posthog-js": "1.415.0",
-    "react": "19.3.0",
-    "react-dom": "19.3.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
     "react-hot-toast": "2.6.0",
     "react-i18next": "17.0.14",
     "react-icons": "5.6.0",
@@ -258,8 +258,8 @@
     "./package.json": "./package.json"
   },
   "peerDependencies": {
-    "react": "19.3.0",
-    "react-dom": "19.3.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
     "react-router": "7.18.2"
   }
 }
