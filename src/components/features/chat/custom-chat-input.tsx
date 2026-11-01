@@ -131,15 +131,22 @@ export function CustomChatInput({
     syncCanSubmit();
   }, [handleSubmit, syncCanSubmit]);
 
-  const { handleInput, handlePaste, handleKeyDown, handleBlur, handleFocus } =
-    useChatInputEvents(
-      chatInputRef as React.RefObject<HTMLDivElement | null>,
-      smartResize,
-      increaseHeightForEmptyContent,
-      checkIsContentEmpty,
-      onFocus,
-      onBlur,
-    );
+  const {
+    handleInput,
+    handlePaste,
+    handleKeyDown,
+    handleBlur,
+    handleFocus,
+    handleCompositionStart,
+    handleCompositionEnd,
+  } = useChatInputEvents(
+    chatInputRef as React.RefObject<HTMLDivElement | null>,
+    smartResize,
+    increaseHeightForEmptyContent,
+    checkIsContentEmpty,
+    onFocus,
+    onBlur,
+  );
 
   const {
     isMenuOpen: isSlashMenuOpen,
@@ -194,8 +201,8 @@ export function CustomChatInput({
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
-          onInput={() => {
-            handleInput();
+          onInput={(e) => {
+            handleInput(e);
             updateSlashMenu();
             saveDraft();
             syncCanSubmit();
@@ -211,6 +218,8 @@ export function CustomChatInput({
             closeSlashMenu();
             syncCanSubmit();
           }}
+          onCompositionStart={handleCompositionStart}
+          onCompositionEnd={handleCompositionEnd}
           isSlashMenuOpen={isSlashMenuOpen}
           slashItems={slashItems}
           slashSelectedIndex={slashSelectedIndex}
