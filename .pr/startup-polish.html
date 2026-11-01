@@ -1,0 +1,1338 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Stable conversation startup — design review</title><style> :root{--fg:#20221f;--muted:#62685f;--rule:#d9ded3;--bg:#fcfcf8;--accent:#264f8c;--soft:#eaf0fa;--warn:#b05c12;--old:#f3f3ec}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 system-ui,sans-serif}.wrap{max-width:1240px;margin:auto;display:grid;grid-template-columns:230px minmax(0,1fr);gap:40px;padding:36px 24px 80px}nav{position:sticky;top:24px;align-self:start;font-size:12px}nav ul{padding:0;list-style:none}li{margin:12px 0}small{display:block;color:var(--muted)}h1{font-size:36px;line-height:1.15}h2{font-size:21px;margin-top:38px}a{color:var(--accent)}.source,figcaption{font-size:13px;color:var(--muted);overflow-wrap:anywhere}.callout{padding:16px;background:var(--soft);border-left:4px solid var(--accent)}svg{width:100%;height:auto;background:white;border:1px solid var(--rule);border-radius:8px}svg text{font:600 13px system-ui;fill:var(--fg)}svg .detail{font-size:12px;font-weight:400}svg .small{font-size:11px;fill:var(--muted)}.old{fill:var(--old);stroke:var(--muted);stroke-dasharray:5 4}.new{fill:var(--soft);stroke:var(--accent);stroke-width:2}.delta{stroke:var(--warn);stroke-width:2;fill:none;stroke-dasharray:5 3}figure{margin:18px 0}details{border:1px solid var(--rule);padding:12px;margin:12px 0}summary{cursor:pointer}pre{font:12px/1.5 ui-monospace,monospace;overflow:auto;max-height:480px}section{border-top:1px solid var(--rule);margin-top:28px}@media(max-width:800px){.wrap{display:block}nav{position:static}nav ul{columns:2}h1{font-size:28px}}</style><body><div class="wrap"><nav><strong>Changed files</strong><ul><li><a href="#f1">conversation-launch-view.tsx</a><small>changed · +91/−71</small></li><li><a href="#f2">conversation-main.tsx</a><small>changed · +19/−8</small></li><li><a href="#f3">chat-interface-wrapper.tsx</a><small>changed · +14/−10</small></li><li><a href="#f4">chat-layout.ts</a><small>added · +7/−0</small></li><li><a href="#f5">chat-message.tsx</a><small>changed · +40/−21</small></li><li><a href="#f6">chat-interface.tsx</a><small>changed · +67/−32</small></li><li><a href="#f7">chat-progress-context.tsx</a><small>added · +5/−0</small></li><li><a href="#f8">agent-status.tsx</a><small>changed · +45/−15</small></li><li><a href="#f9">conversation-startup-progress.tsx</a><small>changed · +10/−7</small></li><li><a href="#f10">conversation-name.tsx</a><small>changed · +5/−1</small></li><li><a href="#f11">conversation-name-with-status.tsx</a><small>changed · +18/−9</small></li><li><a href="#f12">chat-message.test.tsx</a><small>changed · +34/−27</small></li><li><a href="#f13">chat-interface.test.tsx</a><small>changed · +30/−0</small></li><li><a href="#f14">conversation-launch-view.test.tsx</a><small>changed · +12/−2</small></li><li><a href="#f15">pending-user-messages.test.tsx</a><small>changed · +36/−1</small></li><li><a href="#f16">task-startup-progress.test.tsx</a><small>changed · +4/−2</small></li><li><a href="#f17">agent-status.test.tsx</a><small>changed · +52/−7</small></li><li><a href="#f18">conversation-name-with-status.test.tsx</a><small>changed · +21/−0</small></li><li><a href="#f19">pending-user-messages.tsx</a><small>changed · +6/−1</small></li><li><a href="#f20">agent-loading.tsx</a><small>changed · +1/−1</small></li><li><a href="#f21">translation.json</a><small>changed · +34/−16</small></li></ul></nav><main><header><small>CONVERSATION STARTUP & RESUME · REVIEW GUIDE</small><h1>Keep the conversation in place while it starts</h1><p>Cloud launch now occupies the same shell as a connected chat. Pending prompts keep their collapsed height, and detailed progress stays in the thread while the composer retains useful color and controls.</p><div class="callout">★ The shared layout fixes the prompt/composer jump. This is presentation work: request timing, sandbox lifecycle, event delivery and durable state are unchanged. Start with <a href="#f1">the changed files</a> and <a href="https://github.com/OpenHands/OpenHands/blob/1614965040c153138e0b28df0a1fc128b9da962a/src/components/features/chat/conversation-launch-view.tsx#L52">ConversationLaunchView</a>.</div><p>Evidence: the PR includes real Cloud before/after startup, resume and phone recordings plus a real Local model response. These diagrams explain source changes; they are not product screenshots. Existing history may still arrive during resume and move later messages.</p><figure><svg viewBox="0 0 820 220" role="img" aria-labelledby="overview-t overview-d"><title id="overview-t">One shell from launch to connected chat</title><desc id="overview-d">Before, ConversationLaunchView uses a standalone layout. After, it supplies pending content to ConversationMain and ChatInterfaceWrapper, preserving the header and composer footer.</desc><text x="25" y="25">BEFORE · standalone launch</text><rect class="old" x="15" y="40" width="370" height="150" rx="6"/><a href="https://github.com/OpenHands/OpenHands/blob/f7867ed5ca0c203b0eacc11c562bc9b317a0669b/src/components/features/chat/conversation-launch-view.tsx#L16"><text x="30" y="72">ConversationLaunchView</text><text class="detail" x="30" y="102">Prompt + progress</text><text class="detail" x="30" y="162">Composer without the normal footer</text></a><path class="delta" d="M390 112 H428 M420 106 L428 112 L420 118"/><text x="450" y="25">AFTER · shared shell</text><rect class="new" x="435" y="40" width="370" height="150" rx="6"/><a href="https://github.com/OpenHands/OpenHands/blob/1614965040c153138e0b28df0a1fc128b9da962a/src/components/features/chat/conversation-launch-view.tsx#L52"><text x="450" y="72">ConversationMain header</text><text class="detail" x="450" y="102">ChatInterfaceWrapper → pendingContent</text><text class="detail" x="450" y="132">Same expandable user-message body</text><text class="detail" x="450" y="162">Composer + repository footer</text></a></svg><figcaption>The same shell carries Cloud launch, task progress and the connected conversation. Orange marks the layout change; each side links to its source revision.</figcaption></figure><p class="source">Before: f7867ed5ca0c203b0eacc11c562bc9b317a0669b · After code: 1614965040c153138e0b28df0a1fc128b9da962a</p></header><section id="f1"><h2>1. Launch uses the normal conversation shell</h2><p class="source">src/components/features/chat/conversation-launch-view.tsx · <a href="https://github.com/OpenHands/OpenHands/blob/f7867ed5ca0c203b0eacc11c562bc9b317a0669b/src/components/features/chat/conversation-launch-view.tsx#L11">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/1614965040c153138e0b28df0a1fc128b9da962a/src/components/features/chat/conversation-launch-view.tsx#L20">After source</a></p><figure><svg viewBox="0 0 820 150" role="img" aria-labelledby="t1 d1"><title id="t1">Launch uses the normal conversation shell</title><desc id="d1">Before: Standalone thread and composer. After: ConversationMain + shared chat layout.</desc><rect class="old" x="10" y="35" width="375" height="100" rx="6"/><rect class="new" x="435" y="35" width="375" height="100" rx="6"/><text x="25" y="22">BEFORE</text><text x="450" y="22">AFTER</text><a href="https://github.com/OpenHands/OpenHands/blob/f7867ed5ca0c203b0eacc11c562bc9b317a0669b/src/components/features/chat/conversation-launch-view.tsx#L11"><text x="25" y="66">conversation-launch-view.tsx</text><text class="detail" x="25" y="94">Standalone thread and composer</text><text class="small" x="25" y="117">Source line 11</text></a><path class="delta" d="M390 85 H428 M420 79 L428 85 L420 91"/><a href="https://github.com/OpenHands/OpenHands/blob/1614965040c153138e0b28df0a1fc128b9da962a/src/components/features/chat/conversation-launch-view.tsx#L20"><text x="450" y="66">conversation-launch-view.tsx</text><text class="detail" x="450" y="94">ConversationMain + shared chat layout</text><text class="small" x="450" y="117">Source line 20</text></a></svg><figcaption>Prompt, header and footer occupy the same layout during Cloud launch and the loaded conversation.</figcaption></figure><details><summary>Review the diff (+91/−71)</summary><pre>diff --git a/src/components/features/chat/conversation-launch-view.tsx b/src/components/features/chat/conversation-launch-view.tsx
+index e98130b99a..ad814efccc 100644
+--- a/src/components/features/chat/conversation-launch-view.tsx
++++ b/src/components/features/chat/conversation-launch-view.tsx
+@@ -1,4 +1,13 @@
+-import { CustomChatInput } from &quot;./custom-chat-input&quot;;
++import { InteractiveChatBox } from &quot;./interactive-chat-box&quot;;
++import { ChatMessage } from &quot;./chat-message&quot;;
++import { ConversationMain } from &quot;../conversation/conversation-main/conversation-main&quot;;
++import { ConversationOverviewDrawerProvider } from &quot;../conversation/conversation-overview-drawer-context&quot;;
++import { ChatProgressContext } from &quot;#/context/chat-progress-context&quot;;
++import {
++  CHAT_BODY_CLASS_NAME,
++  CHAT_SCROLL_CLASS_NAME,
++  CHAT_COMPOSER_CLASS_NAME,
++} from &quot;./chat-layout&quot;;
+ import { useEffect, useRef } from &quot;react&quot;;
+ import { useTranslation } from &quot;react-i18next&quot;;
+ import { useConversationLaunchStore } from &quot;#/stores/conversation-launch-store&quot;;
+@@ -30,75 +39,86 @@ export function ConversationLaunchView({ launchId }: { launchId: string }) {
+   }, [launch?.targetId, navigate]);
+ 
+   return (
+-    &lt;div
+-      className=&quot;mx-auto flex h-full w-full max-w-200 flex-col px-8 py-4&quot;
+-      data-testid=&quot;conversation-launch-view&quot;
+-    &gt;
+-      {launch ? (
+-        &lt;&gt;
+-          &lt;div
+-            data-testid=&quot;startup-user-message&quot;
+-            className=&quot;mt-6 w-fit max-w-full self-end whitespace-pre-wrap break-words rounded-xl bg-tertiary px-4 py-2.5 text-sm leading-6&quot;
+-          &gt;
+-            {launch.message}
+-            {launch.files.length &gt; 0 &amp;&amp; (
+-              &lt;ul&gt;
+-                {launch.files.map((file, index) =&gt; (
+-                  &lt;li key={`${index}-${file.name}`}&gt;{file.name}&lt;/li&gt;
+-                ))}
+-              &lt;/ul&gt;
+-            )}
+-          &lt;/div&gt;
+-          &lt;ConversationStartupProgress
+-            key={launch.id}
+-            error={launch.error}
+-            onEdit={() =&gt; {
+-              const composer = useConversationStore.getState();
+-              composer.setMessageToSend(launch.message, &quot;home&quot;);
+-              if (launch.attachments) {
+-                composer.addImages(
+-                  launch.attachments.images.filter(
+-                    (file) =&gt; !composer.images.includes(file),
+-                  ),
+-                );
+-                composer.addFiles(
+-                  launch.attachments.files.filter(
+-                    (file) =&gt; !composer.files.includes(file),
+-                  ),
+-                );
+-                for (const name of launch.attachments
+-                  .imagesMarkedUploadAsFile) {
+-                  if (!composer.imagesMarkedUploadAsFile.includes(name))
+-                    composer.toggleImageUploadAsFile(name);
+-                }
+-              }
+-              editing.current = true;
+-              navigate(&quot;/conversations&quot;);
+-            }}
+-          /&gt;
+-        &lt;/&gt;
+-      ) : (
+-        &lt;div role=&quot;status&quot; className=&quot;flex flex-col items-start gap-4&quot;&gt;
+-          &lt;p&gt;{t(I18nKey.CONVERSATION$START_NOT_IN_TAB)}&lt;/p&gt;
+-          &lt;button
+-            type=&quot;button&quot;
+-            className=&quot;button-base rounded-md border border-border px-3 py-1.5&quot;
+-            onClick={() =&gt; navigate(&quot;/conversations&quot;)}
+-          &gt;
+-            {t(I18nKey.COMMON$BACK)}
+-          &lt;/button&gt;
+-        &lt;/div&gt;
+-      )}
+-      {launch &amp;&amp; !launch.error &amp;&amp; (
+-        &lt;div className=&quot;mt-auto pt-4&quot;&gt;
+-          &lt;CustomChatInput
+-            disabled
+-            persistDraft={false}
+-            hasStartedConversation
+-            onSubmit={() =&gt; {}}
+-          /&gt;
+-        &lt;/div&gt;
+-      )}
+-    &lt;/div&gt;
++    &lt;ConversationOverviewDrawerProvider&gt;
++      &lt;div
++        className=&quot;flex h-full min-h-0 flex-col&quot;
++        data-testid=&quot;conversation-launch-view&quot;
++      &gt;
++        &lt;ConversationMain&gt;
++          &lt;ChatProgressContext.Provider value&gt;
++            &lt;div className={CHAT_BODY_CLASS_NAME}&gt;
++              &lt;div className={CHAT_SCROLL_CLASS_NAME}&gt;
++                {launch ? (
++                  &lt;&gt;
++                    &lt;ChatMessage type=&quot;user&quot; message={launch.message}&gt;
++                      {launch.files.length &gt; 0 &amp;&amp; (
++                        &lt;ul&gt;
++                          {launch.files.map((file, index) =&gt; (
++                            &lt;li key={`${index}-${file.name}`}&gt;{file.name}&lt;/li&gt;
++                          ))}
++                        &lt;/ul&gt;
++                      )}
++                    &lt;/ChatMessage&gt;
++                    &lt;ConversationStartupProgress
++                      key={launch.id}
++                      error={launch.error}
++                      onEdit={() =&gt; {
++                        const composer = useConversationStore.getState();
++                        composer.setMessageToSend(launch.message, &quot;home&quot;);
++                        if (launch.attachments) {
++                          composer.addImages(
++                            launch.attachments.images.filter(
++                              (file) =&gt; !composer.images.includes(file),
++                            ),
++                          );
++                          composer.addFiles(
++                            launch.attachments.files.filter(
++                              (file) =&gt; !composer.files.includes(file),
++                            ),
++                          );
++                          for (const name of launch.attachments
++                            .imagesMarkedUploadAsFile) {
++                            if (
++                              !composer.imagesMarkedUploadAsFile.includes(name)
++                            )
++                              composer.toggleImageUploadAsFile(name);
++                          }
++                        }
++                        editing.current = true;
++                        navigate(&quot;/conversations&quot;);
++                      }}
++                    /&gt;
++                  &lt;/&gt;
++                ) : (
++                  &lt;div
++                    role=&quot;status&quot;
++                    className=&quot;flex flex-col items-start gap-4&quot;
++                  &gt;
++                    &lt;p&gt;{t(I18nKey.CONVERSATION$START_NOT_IN_TAB)}&lt;/p&gt;
++                    &lt;button
++                      type=&quot;button&quot;
++                      className=&quot;button-base rounded-md border border-border px-3 py-1.5&quot;
++                      onClick={() =&gt; navigate(&quot;/conversations&quot;)}
++                    &gt;
++                      {t(I18nKey.COMMON$BACK)}
++                    &lt;/button&gt;
++                  &lt;/div&gt;
++                )}
++              &lt;/div&gt;
++              {launch &amp;&amp; (
++                &lt;div className={CHAT_COMPOSER_CLASS_NAME}&gt;
++                  &lt;InteractiveChatBox
++                    disabled
++                    persistDraft={false}
++                    hasStartedConversation
++                    onSubmit={() =&gt; {}}
++                  /&gt;
++                &lt;/div&gt;
++              )}
++            &lt;/div&gt;
++          &lt;/ChatProgressContext.Provider&gt;
++        &lt;/ConversationMain&gt;
++      &lt;/div&gt;
++    &lt;/ConversationOverviewDrawerProvider&gt;
+   );
+ }
+</pre></details></section><section id="f2"><h2>2. The shell accepts pending content</h2><p class="source">src/components/features/conversation/conversation-main/conversation-main.tsx · <a href="https://github.com/OpenHands/OpenHands/blob/f7867ed5ca0c203b0eacc11c562bc9b317a0669b/src/components/features/conversation/conversation-main/conversation-main.tsx#L85">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/1614965040c153138e0b28df0a1fc128b9da962a/src/components/features/conversation/conversation-main/conversation-main.tsx#L92">After source</a></p><figure><svg viewBox="0 0 820 150" role="img" aria-labelledby="t2 d2"><title id="t2">The shell accepts pending content</title><desc id="d2">Before: Always mounts live ChatInterface. After: children → pendingContent.</desc><rect class="old" x="10" y="35" width="375" height="100" rx="6"/><rect class="new" x="435" y="35" width="375" height="100" rx="6"/><text x="25" y="22">BEFORE</text><text x="450" y="22">AFTER</text><a href="https://github.com/OpenHands/OpenHands/blob/f7867ed5ca0c203b0eacc11c562bc9b317a0669b/src/components/features/conversation/conversation-main/conversation-main.tsx#L85"><text x="25" y="66">conversation-main.tsx</text><text class="detail" x="25" y="94">Always mounts live ChatInterface</text><text class="small" x="25" y="117">Source line 85</text></a><path class="delta" d="M390 85 H428 M420 79 L428 85 L420 91"/><a href="https://github.com/OpenHands/OpenHands/blob/1614965040c153138e0b28df0a1fc128b9da962a/src/components/features/conversation/conversation-main/conversation-main.tsx#L92"><text x="450" y="66">conversation-main.tsx</text><text class="detail" x="450" y="94">children → pendingContent</text><text class="small" x="450" y="117">Source line 92</text></a></svg><figcaption>Pending content retains panel widths and header geometry while preventing live tabs and header actions from targeting a client launch ID.</figcaption></figure><details><summary>Review the diff (+19/−8)</summary><pre>diff --git a/src/components/features/conversation/conversation-main/conversation-main.tsx b/src/components/features/conversation/conversation-main/conversation-main.tsx
+index 95d05a4d5d..e7cd4b299a 100644
+--- a/src/components/features/conversation/conversation-main/conversation-main.tsx
++++ b/src/components/features/conversation/conversation-main/conversation-main.tsx
+@@ -1,4 +1,11 @@
+-import { lazy, Suspense, useEffect, useMemo, useState } from &quot;react&quot;;
++import {
++  lazy,
++  Suspense,
++  useEffect,
++  useMemo,
++  useState,
++  type ReactNode,
++} from &quot;react&quot;;
+ import { FileText, MessageSquare } from &quot;lucide-react&quot;;
+ import { useTranslation } from &quot;react-i18next&quot;;
+ import { cn } from &quot;#/utils/utils&quot;;
+@@ -82,7 +89,7 @@ function getDesktopTabPanelClass(isRightPanelShown: boolean) {
+     : &quot;w-0 translate-x-full opacity-0&quot;;
+ }
+ 
+-export function ConversationMain() {
++export function ConversationMain({ children }: { children?: ReactNode } = {}) {
+   const { t } = useTranslation(&quot;openhands&quot;);
+   const { conversationId } = useConversationId();
+   const { data: conversation } = useActiveConversation();
+@@ -94,7 +101,8 @@ export function ConversationMain() {
+     string | null
+   &gt;(null);
+   const shouldMountTabs =
+-    isRightPanelShown || openedTabConversationId === conversationId;
++    !children &amp;&amp;
++    (isRightPanelShown || openedTabConversationId === conversationId);
+ 
+   // Keep an opened panel mounted when collapsed, but defer it in the next chat.
+   useEffect(() =&gt; {
+@@ -334,13 +342,14 @@ export function ConversationMain() {
+               )}
+             &gt;
+               {isSidebarRailHidden ? &lt;SidebarMobileMenuToggle /&gt; : null}
+-              &lt;div className=&quot;min-w-0 flex-1&quot;&gt;
++              &lt;div className=&quot;min-w-0 flex-1&quot; inert={!!children}&gt;
+                 &lt;ConversationNameWithStatus /&gt;
+               &lt;/div&gt;
+             &lt;/div&gt;
+           ) : null}
+           &lt;div className=&quot;flex-1 min-h-0 flex flex-col&quot;&gt;
+             &lt;ChatInterfaceWrapper
++              pendingContent={children}
+               isRightPanelShown={!isMobile &amp;&amp; isRightPanelShown}
+               showGitControlBar={!isAutomationSetupMode}
+               showEmptyStateSuggestions={!isAutomationSetupMode}
+@@ -452,10 +461,12 @@ export function ConversationMain() {
+             &lt;/div&gt;
+           &lt;/div&gt;
+         )}
+-        &lt;ConversationOverviewDrawer
+-          isMobile={isMobile}
+-          resizeContainerRef={containerRef}
+-        /&gt;
++        {!children &amp;&amp; (
++          &lt;ConversationOverviewDrawer
++            isMobile={isMobile}
++            resizeContainerRef={containerRef}
++          /&gt;
++        )}
+       &lt;/div&gt;
+     &lt;/div&gt;
+   );
+</pre></details></section><section id="f3"><h2>3. Thread sizing has one owner</h2><p class="source">src/components/features/conversation/conversation-main/chat-interface-wrapper.tsx · <a href="https://github.com/OpenHands/OpenHands/blob/f7867ed5ca0c203b0eacc11c562bc9b317a0669b/src/components/features/conversation/conversation-main/chat-interface-wrapper.tsx#L26">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/1614965040c153138e0b28df0a1fc128b9da962a/src/components/features/conversation/conversation-main/chat-interface-wrapper.tsx#L27">After source</a></p><figure><svg viewBox="0 0 820 150" role="img" aria-labelledby="t3 d3"><title id="t3">Thread sizing has one owner</title><desc id="d3">Before: Only ChatInterface can occupy thread. After: pendingContent ?? ChatInterface.</desc><rect class="old" x="10" y="35" width="375" height="100" rx="6"/><rect class="new" x="435" y="35" width="375" height="100" rx="6"/><text x="25" y="22">BEFORE</text><text x="450" y="22">AFTER</text><a href="https://github.com/OpenHands/OpenHands/blob/f7867ed5ca0c203b0eacc11c562bc9b317a0669b/src/components/features/conversation/conversation-main/chat-interface-wrapper.tsx#L26"><text x="25" y="66">chat-interface-wrapper.tsx</text><text class="detail" x="25" y="94">Only ChatInterface can occupy thread</text><text class="small" x="25" y="117">Source line 26</text></a><path class="delta" d="M390 85 H428 M420 79 L428 85 L420 91"/><a href="https://github.com/OpenHands/OpenHands/blob/1614965040c153138e0b28df0a1fc128b9da962a/src/components/features/conversation/conversation-main/chat-interface-wrapper.tsx#L27"><text x="450" y="66">chat-interface-wrapper.tsx</text><text class="detail" x="450" y="94">pendingContent ?? ChatInterface</text><text class="small" x="450" y="117">Source line 27</text></a></svg><figcaption>Launch content inherits the existing thread width, panel allocation and breakpoint behavior.</figcaption></figure><details><summary>Review the diff (+14/−10)</summary><pre>diff --git a/src/components/features/conversation/conversation-main/chat-interface-wrapper.tsx b/src/components/features/conversation/conversation-main/chat-interface-wrapper.tsx
+index 9f2f143c1d..013eaa7484 100644
+--- a/src/components/features/conversation/conversation-main/chat-interface-wrapper.tsx
++++ b/src/components/features/conversation/conversation-main/chat-interface-wrapper.tsx
+@@ -1,4 +1,4 @@
+-import { useRef, type CSSProperties } from &quot;react&quot;;
++import { useRef, type ReactNode, type CSSProperties } from &quot;react&quot;;
+ import { AnimatePresence, motion, useReducedMotion } from &quot;framer-motion&quot;;
+ import { ChatInterface } from &quot;../../chat/chat-interface&quot;;
+ import { ConversationOverviewPanel } from &quot;../conversation-overview-panel&quot;;
+@@ -12,6 +12,7 @@ import {
+ 
+ interface ChatInterfaceWrapperProps {
+   isRightPanelShown: boolean;
++  pendingContent?: ReactNode;
+   showGitControlBar?: boolean;
+   showEmptyStateSuggestions?: boolean;
+   composerDockTarget?: HTMLElement | null;
+@@ -31,6 +32,7 @@ export function ChatInterfaceWrapper({
+   onDockedComposerSubmit,
+   minimalComposer = false,
+   composerPlaceholder,
++  pendingContent,
+ }: ChatInterfaceWrapperProps) {
+   const isMobile = useBreakpoint();
+   const reduceMotion = useReducedMotion();
+@@ -53,14 +55,16 @@ export function ChatInterfaceWrapper({
+     &gt;
+       &lt;div className=&quot;flex min-h-0 min-w-0 flex-1 justify-center overflow-hidden&quot;&gt;
+         &lt;div className={THREAD_CLASSNAME}&gt;
+-          &lt;ChatInterface
+-            showGitControlBar={showGitControlBar}
+-            showEmptyStateSuggestions={showEmptyStateSuggestions}
+-            composerDockTarget={composerDockTarget}
+-            onDockedComposerSubmit={onDockedComposerSubmit}
+-            minimalComposer={minimalComposer}
+-            composerPlaceholder={composerPlaceholder}
+-          /&gt;
++          {pendingContent ?? (
++            &lt;ChatInterface
++              showGitControlBar={showGitControlBar}
++              showEmptyStateSuggestions={showEmptyStateSuggestions}
++              composerDockTarget={composerDockTarget}
++              onDockedComposerSubmit={onDockedComposerSubmit}
++              minimalComposer={minimalComposer}
++              composerPlaceholder={composerPlaceholder}
++            /&gt;
++          )}
+         &lt;/div&gt;
+       &lt;/div&gt;
+       &lt;AnimatePresence&gt;
+@@ -87,7 +91,7 @@ export function ChatInterfaceWrapper({
+                 } as CSSProperties
+               }
+             &gt;
+-              &lt;ConversationOverviewPanel /&gt;
++              {!pendingContent &amp;&amp; &lt;ConversationOverviewPanel /&gt;}
+             &lt;/div&gt;
+           &lt;/motion.div&gt;
+         ) : null}
+</pre></details></section><section id="f4"><h2>4. chat-layout.ts</h2><p class="source">src/components/features/chat/chat-layout.ts · New file · <a href="https://github.com/OpenHands/OpenHands/blob/1614965040c153138e0b28df0a1fc128b9da962a/src/components/features/chat/chat-layout.ts#L1">After source</a></p><p>New shared body, scroll and composer class constants prevent the launch and live chat layouts from drifting.</p><details><summary>Review the diff (+7/−0)</summary><pre>diff --git a/src/components/features/chat/chat-layout.ts b/src/components/features/chat/chat-layout.ts
+new file mode 100644
+index 0000000000..ed1b27bee2
+--- /dev/null
++++ b/src/components/features/chat/chat-layout.ts
+@@ -0,0 +1,7 @@
++export const CHAT_BODY_CLASS_NAME =
++  &quot;relative flex h-full min-h-0 flex-col justify-between px-4&quot;;
++
++export const CHAT_SCROLL_CLASS_NAME =
++  &quot;custom-scrollbar-always flex min-h-0 grow flex-col gap-2 overflow-x-hidden overflow-y-auto px-0 pt-4 pb-8 md:px-4&quot;;
++
++export const CHAT_COMPOSER_CLASS_NAME = &quot;flex shrink-0 flex-col gap-1.5 pb-4&quot;;
+</pre></details></section><section id="f5"><h2>5. A pending prompt keeps its collapsed height</h2><p class="source">src/components/features/chat/chat-message.tsx · <a href="https://github.com/OpenHands/OpenHands/blob/f7867ed5ca0c203b0eacc11c562bc9b317a0669b/src/components/features/chat/chat-message.tsx#L91">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/1614965040c153138e0b28df0a1fc128b9da962a/src/components/features/chat/chat-message.tsx#L94">After source</a></p><figure><svg viewBox="0 0 820 150" role="img" aria-labelledby="t5 d5"><title id="t5">A pending prompt keeps its collapsed height</title><desc id="d5">Before: Pending body uses MarkdownRenderer. After: All user bodies use UserMessageBody.</desc><rect class="old" x="10" y="35" width="375" height="100" rx="6"/><rect class="new" x="435" y="35" width="375" height="100" rx="6"/><text x="25" y="22">BEFORE</text><text x="450" y="22">AFTER</text><a href="https://github.com/OpenHands/OpenHands/blob/f7867ed5ca0c203b0eacc11c562bc9b317a0669b/src/components/features/chat/chat-message.tsx#L91"><text x="25" y="66">chat-message.tsx</text><text class="detail" x="25" y="94">Pending body uses MarkdownRenderer</text><text class="small" x="25" y="117">Source line 91</text></a><path class="delta" d="M390 85 H428 M420 79 L428 85 L420 91"/><a href="https://github.com/OpenHands/OpenHands/blob/1614965040c153138e0b28df0a1fc128b9da962a/src/components/features/chat/chat-message.tsx#L94"><text x="450" y="66">chat-message.tsx</text><text class="detail" x="450" y="94">All user bodies use UserMessageBody</text><text class="small" x="450" y="117">Source line 94</text></a></svg><figcaption>Sending, failed and delivered user messages use the same expandable five-line body. Stop measurement remains attached to the rendered body.</figcaption></figure><details><summary>Review the diff (+40/−21)</summary><pre>diff --git a/src/components/features/chat/chat-message.tsx b/src/components/features/chat/chat-message.tsx
+index edba8ca3dc..64d90cc95b 100644
+--- a/src/components/features/chat/chat-message.tsx
++++ b/src/components/features/chat/chat-message.tsx
+@@ -1,4 +1,5 @@
+ import React from &quot;react&quot;;
++import { LoaderCircle } from &quot;lucide-react&quot;;
+ import { useTranslation } from &quot;react-i18next&quot;;
+ import { cn } from &quot;#/utils/utils&quot;;
+ import { CopyToClipboardButton } from &quot;#/components/shared/buttons/copy-to-clipboard-button&quot;;
+@@ -28,6 +29,7 @@ interface ChatMessageProps {
+   }&gt;;
+   isFromPlanningAgent?: boolean;
+   pendingStatus?: ChatMessagePendingStatus;
++  pendingLabel?: string;
+   onRetry?: () =&gt; void;
+   onDismiss?: () =&gt; void;
+   onStop?: () =&gt; void;
+@@ -43,6 +45,7 @@ export function ChatMessage({
+   actions,
+   isFromPlanningAgent = false,
+   pendingStatus,
++  pendingLabel,
+   onRetry,
+   onDismiss,
+   onStop,
+@@ -88,12 +91,12 @@ export function ChatMessage({
+     (pendingStatus === &quot;error&quot; || pendingStatus === &quot;sending&quot;);
+   const canStopPendingMessage = pendingStatus === &quot;sending&quot; &amp;&amp; onStop != null;
+   const showStopButton = canStopPendingMessage &amp;&amp; isHovering;
+-  const useTruncatedUserBody = type === &quot;user&quot; &amp;&amp; pendingStatus == null;
++  const useTruncatedUserBody = type === &quot;user&quot;;
+   const isCollapsed = useTruncatedUserBody &amp;&amp; isTruncatable &amp;&amp; !isExpanded;
+   const hasBubbleChildren = React.Children.count(children) &gt; 0;
+ 
+   React.useLayoutEffect(() =&gt; {
+-    if (!canStopPendingMessage || useTruncatedUserBody) {
++    if (!canStopPendingMessage) {
+       return undefined;
+     }
+ 
+@@ -123,12 +126,14 @@ export function ChatMessage({
+   }, [message, canStopPendingMessage, useTruncatedUserBody]);
+ 
+   const messageContent = useTruncatedUserBody ? (
+-    &lt;UserMessageBody
+-      message={message}
+-      isHovering={isHovering}
+-      isExpanded={isExpanded}
+-      onTruncatableChange={setIsTruncatable}
+-    /&gt;
++    &lt;div ref={pendingMessageContentRef} className=&quot;min-w-0&quot;&gt;
++      &lt;UserMessageBody
++        message={message}
++        isHovering={isHovering}
++        isExpanded={isExpanded}
++        onTruncatableChange={setIsTruncatable}
++      /&gt;
++    &lt;/div&gt;
+   ) : (
+     &lt;div
+       ref={pendingMessageContentRef}
+@@ -137,7 +142,7 @@ export function ChatMessage({
+       &lt;MarkdownRenderer
+         includeStandard
+         includeHeadings
+-        allowHtml={type !== &quot;user&quot;}
++        allowHtml
+         components={chatBubbleMarkdownComponents}
+         streaming={isStreaming}
+       &gt;
+@@ -305,18 +310,32 @@ export function ChatMessage({
+     return (
+       &lt;div className=&quot;flex w-full max-w-full flex-col last:mb-4&quot;&gt;
+         {messageBubbleWithTimestamp}
+-        &lt;div className=&quot;my-1 w-full py-1 text-sm&quot;&gt;
+-          &lt;TextShimmer
+-            as=&quot;p&quot;
+-            role=&quot;status&quot;
+-            aria-live=&quot;polite&quot;
+-            data-testid=&quot;chat-message-sending&quot;
+-            className=&quot;block w-full text-sm font-normal&quot;
+-            duration={1}
+-            spread={2}
+-          &gt;
+-            {t(I18nKey.CHAT_INTERFACE$MESSAGE_SENDING)}
+-          &lt;/TextShimmer&gt;
++        &lt;div className=&quot;mt-4 w-full py-1 text-sm&quot;&gt;
++          {pendingLabel ? (
++            &lt;div
++              role=&quot;status&quot;
++              aria-live=&quot;polite&quot;
++              className=&quot;flex items-center gap-2 text-muted&quot;
++            &gt;
++              &lt;span&gt;{pendingLabel}&lt;/span&gt;
++              &lt;LoaderCircle
++                aria-hidden=&quot;true&quot;
++                className=&quot;h-3.5 w-3.5 shrink-0 animate-spin motion-reduce:animate-none&quot;
++              /&gt;
++            &lt;/div&gt;
++          ) : (
++            &lt;TextShimmer
++              as=&quot;p&quot;
++              role=&quot;status&quot;
++              aria-live=&quot;polite&quot;
++              data-testid=&quot;chat-message-sending&quot;
++              className=&quot;block w-full text-sm font-normal&quot;
++              duration={1}
++              spread={2}
++            &gt;
++              {t(I18nKey.CHAT_INTERFACE$MESSAGE_SENDING)}
++            &lt;/TextShimmer&gt;
++          )}
+         &lt;/div&gt;
+       &lt;/div&gt;
+     );
+</pre></details></section><section id="f6"><h2>6. Progress detail belongs in the thread</h2><p class="source">src/components/features/chat/chat-interface.tsx · <a href="https://github.com/OpenHands/OpenHands/blob/f7867ed5ca0c203b0eacc11c562bc9b317a0669b/src/components/features/chat/chat-interface.tsx#L557">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/1614965040c153138e0b28df0a1fc128b9da962a/src/components/features/chat/chat-interface.tsx#L587">After source</a></p><figure><svg viewBox="0 0 820 150" role="img" aria-labelledby="t6 d6"><title id="t6">Progress detail belongs in the thread</title><desc id="d6">Before: Composer repeats progress text. After: ChatProgressContext around composer.</desc><rect class="old" x="10" y="35" width="375" height="100" rx="6"/><rect class="new" x="435" y="35" width="375" height="100" rx="6"/><text x="25" y="22">BEFORE</text><text x="450" y="22">AFTER</text><a href="https://github.com/OpenHands/OpenHands/blob/f7867ed5ca0c203b0eacc11c562bc9b317a0669b/src/components/features/chat/chat-interface.tsx#L557"><text x="25" y="66">chat-interface.tsx</text><text class="detail" x="25" y="94">Composer repeats progress text</text><text class="small" x="25" y="117">Source line 557</text></a><path class="delta" d="M390 85 H428 M420 79 L428 85 L420 91"/><a href="https://github.com/OpenHands/OpenHands/blob/1614965040c153138e0b28df0a1fc128b9da962a/src/components/features/chat/chat-interface.tsx#L587"><text x="450" y="66">chat-interface.tsx</text><text class="detail" x="450" y="94">ChatProgressContext around composer</text><text class="small" x="450" y="117">Source line 587</text></a></svg><figcaption>Tasks, pending messages and running agents keep the compact composer signal. The extra startup indicator is omitted while a pending message already explains the wait.</figcaption></figure><details><summary>Review the diff (+67/−32)</summary><pre>diff --git a/src/components/features/chat/chat-interface.tsx b/src/components/features/chat/chat-interface.tsx
+index 745aeb24d8..2343effc83 100644
+--- a/src/components/features/chat/chat-interface.tsx
++++ b/src/components/features/chat/chat-interface.tsx
+@@ -1,3 +1,9 @@
++import { ChatProgressContext } from &quot;#/context/chat-progress-context&quot;;
++import {
++  CHAT_BODY_CLASS_NAME,
++  CHAT_SCROLL_CLASS_NAME,
++  CHAT_COMPOSER_CLASS_NAME,
++} from &quot;./chat-layout&quot;;
+ import { TaskStartupProgress } from &quot;./task-startup-progress&quot;;
+ import React from &quot;react&quot;;
+ import { createPortal } from &quot;react-dom&quot;;
+@@ -98,6 +104,7 @@ export function ChatInterface({
+     useConversationStore();
+   const {
+     errorMessage,
++    errorType,
+     errorCode,
+     errorClassification,
+     removeErrorMessage,
+@@ -324,6 +331,29 @@ export function ChatInterface({
+     [pendingMessages, conversationId],
+   );
+ 
++  let pendingMessageLabel: string | undefined;
++  if (activeConversation?.id === conversationId) {
++    if (sandboxStatus === &quot;PAUSED&quot; || sandboxStatus === &quot;STARTING&quot;) {
++      pendingMessageLabel = t(I18nKey.CHAT_INTERFACE$RESUMING_SANDBOX);
++    } else if (
++      sandboxStatus === &quot;RUNNING&quot; &amp;&amp;
++      conversationWebSocket &amp;&amp;
++      conversationWebSocket.connectionState !== &quot;OPEN&quot;
++    ) {
++      pendingMessageLabel = t(I18nKey.CHAT_INTERFACE$CONNECTING);
++    }
++  }
++  const hideConnectionError =
++    pendingMessageLabel !== undefined &amp;&amp;
++    errorType === &quot;connection&quot; &amp;&amp;
++    !errorCode &amp;&amp;
++    errorMessage === SERVER_CONNECTION_ERROR_MESSAGE &amp;&amp;
++    pendingMessages.some(
++      (message) =&gt;
++        message.conversationId === conversationId &amp;&amp;
++        message.status === &quot;sending&quot;,
++    );
++
+   const hasModelEntries = useModelStore((s) =&gt;
+     conversationId
+       ? (s.entriesByConversation[conversationId]?.length ?? 0) &gt; 0
+@@ -555,25 +585,31 @@ export function ChatInterface({
+   const isComposerDocked = Boolean(composerDockTarget);
+   const isMinimalComposer = isComposerDocked || minimalComposer;
+   const composer = (
+-    &lt;ComposerDockedProvider
+-      enabled={isComposerDocked}
+-      minimal={isMinimalComposer}
++    &lt;ChatProgressContext.Provider
++      value={
++        isTask || hasPendingUserMessages || curAgentState === AgentState.RUNNING
++      }
+     &gt;
+-      &lt;InteractiveChatBox
+-        onSubmit={(content, images, files) =&gt; {
+-          if (isComposerDocked) onDockedComposerSubmit?.();
+-          return handleSendMessage(content, images, files);
+-        }}
+-        disabled={isTask || isNewConversationPending || llmBlocked}
+-        hasStartedConversation={hasStartedConversation}
+-        showGitControlBar={showGitControlBar}
+-        placeholder={
+-          isMinimalComposer
+-            ? t(I18nKey.AUTOMATION_SETUP$DOCKED_COMPOSER_PLACEHOLDER)
+-            : composerPlaceholder
+-        }
+-      /&gt;
+-    &lt;/ComposerDockedProvider&gt;
++      &lt;ComposerDockedProvider
++        enabled={isComposerDocked}
++        minimal={isMinimalComposer}
++      &gt;
++        &lt;InteractiveChatBox
++          onSubmit={(content, images, files) =&gt; {
++            if (isComposerDocked) onDockedComposerSubmit?.();
++            return handleSendMessage(content, images, files);
++          }}
++          disabled={isTask || isNewConversationPending || llmBlocked}
++          hasStartedConversation={hasStartedConversation}
++          showGitControlBar={showGitControlBar}
++          placeholder={
++            isMinimalComposer
++              ? t(I18nKey.AUTOMATION_SETUP$DOCKED_COMPOSER_PLACEHOLDER)
++              : composerPlaceholder
++          }
++        /&gt;
++      &lt;/ComposerDockedProvider&gt;
++    &lt;/ChatProgressContext.Provider&gt;
+   );
+   const dockedOrInlineComposer = composerDockTarget
+     ? createPortal(composer, composerDockTarget)
+@@ -582,10 +618,7 @@ export function ChatInterface({
+   return (
+     &lt;WorkspaceFilesForChatProvider&gt;
+       &lt;ScrollProvider value={scrollProviderValue}&gt;
+-        &lt;div
+-          className=&quot;relative flex h-full flex-col justify-between px-4&quot;
+-          data-testid=&quot;chat-interface&quot;
+-        &gt;
++        &lt;div className={CHAT_BODY_CLASS_NAME} data-testid=&quot;chat-interface&quot;&gt;
+           {!hasSubstantiveAgentActions &amp;&amp;
+             !hasPendingUserMessages &amp;&amp;
+             !userEventsExist &amp;&amp;
+@@ -614,7 +647,7 @@ export function ChatInterface({
+               maybeLoadOlder(e.currentTarget);
+             }}
+             onWheel={handleWheelForPagination}
+-            className=&quot;custom-scrollbar-always flex min-h-0 grow flex-col gap-2 overflow-x-hidden overflow-y-auto px-0 pt-4 pb-8 md:px-4&quot;
++            className={CHAT_SCROLL_CLASS_NAME}
+           &gt;
+             {isChatLoading &amp;&amp; isReturningToConversation &amp;&amp; (
+               &lt;ChatMessagesSkeleton /&gt;
+@@ -672,7 +705,7 @@ export function ChatInterface({
+             UserMessageEvent echoes back over the WebSocket, so this never
+             double-renders alongside the real event list.
+           */}
+-            &lt;PendingUserMessages /&gt;
++            &lt;PendingUserMessages pendingLabel={pendingMessageLabel} /&gt;
+             {isTask &amp;&amp; &lt;TaskStartupProgress /&gt;}
+ 
+             {/* Goal-loop status sits at the end of the message flow — above the
+@@ -680,10 +713,10 @@ export function ChatInterface({
+             &lt;GoalStatusBanner conversationId={conversationId} /&gt;
+           &lt;/div&gt;
+ 
+-          &lt;div className=&quot;flex shrink-0 flex-col gap-1.5 pb-4&quot;&gt;
++          &lt;div className={CHAT_COMPOSER_CLASS_NAME}&gt;
+             &lt;SkillInstallRestartBanner conversationId={conversationId} /&gt;
+             &lt;BtwMessages conversationId={conversationId} /&gt;
+-            {errorMessage &amp;&amp; (
++            {errorMessage &amp;&amp; !hideConnectionError &amp;&amp; (
+               &lt;ErrorMessageBanner
+                 message={errorMessage}
+                 code={errorCode}
+@@ -732,12 +765,14 @@ export function ChatInterface({
+                   &lt;div className=&quot;flex justify-between relative&quot;&gt;
+                     &lt;div className=&quot;flex items-end gap-1 pointer-events-auto&quot;&gt;
+                       &lt;ConfirmationModeEnabled /&gt;
+-                      {isStartingStatus &amp;&amp; !isTask &amp;&amp; (
+-                        &lt;ChatStatusIndicator
+-                          statusColor={serverStatusColor}
+-                          status={serverStatusText}
+-                        /&gt;
+-                      )}
++                      {isStartingStatus &amp;&amp;
++                        !isTask &amp;&amp;
++                        !hasPendingUserMessages &amp;&amp; (
++                          &lt;ChatStatusIndicator
++                            statusColor={serverStatusColor}
++                            status={serverStatusText}
++                          /&gt;
++                        )}
+                     &lt;/div&gt;
+ 
+                     {!hitBottom ? (
+</pre></details></section><section id="f7"><h2>7. chat-progress-context.tsx</h2><p class="source">src/context/chat-progress-context.tsx · New file · <a href="https://github.com/OpenHands/OpenHands/blob/1614965040c153138e0b28df0a1fc128b9da962a/src/context/chat-progress-context.tsx#L1">After source</a></p><p>New presentation-only context, defaulting to false, communicates whether progress detail is already in the chat.</p><details><summary>Review the diff (+5/−0)</summary><pre>diff --git a/src/context/chat-progress-context.tsx b/src/context/chat-progress-context.tsx
+new file mode 100644
+index 0000000000..7a558851c3
+--- /dev/null
++++ b/src/context/chat-progress-context.tsx
+@@ -0,0 +1,5 @@
++import { createContext, useContext } from &quot;react&quot;;
++
++export const ChatProgressContext = createContext(false);
++
++export const useChatProgress = () =&gt; useContext(ChatProgressContext);
+</pre></details></section><section id="f8"><h2>8. Keep useful color without repeated text</h2><p class="source">src/components/features/controls/agent-status.tsx · <a href="https://github.com/OpenHands/OpenHands/blob/f7867ed5ca0c203b0eacc11c562bc9b317a0669b/src/components/features/controls/agent-status.tsx#L32">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/1614965040c153138e0b28df0a1fc128b9da962a/src/components/features/controls/agent-status.tsx#L38">After source</a></p><figure><svg viewBox="0 0 820 150" role="img" aria-labelledby="t8 d8"><title id="t8">Keep useful color without repeated text</title><desc id="d8">Before: Full label beside every status icon. After: Compact icon + accessible status name.</desc><rect class="old" x="10" y="35" width="375" height="100" rx="6"/><rect class="new" x="435" y="35" width="375" height="100" rx="6"/><text x="25" y="22">BEFORE</text><text x="450" y="22">AFTER</text><a href="https://github.com/OpenHands/OpenHands/blob/f7867ed5ca0c203b0eacc11c562bc9b317a0669b/src/components/features/controls/agent-status.tsx#L32"><text x="25" y="66">agent-status.tsx</text><text class="detail" x="25" y="94">Full label beside every status icon</text><text class="small" x="25" y="117">Source line 32</text></a><path class="delta" d="M390 85 H428 M420 79 L428 85 L420 91"/><a href="https://github.com/OpenHands/OpenHands/blob/1614965040c153138e0b28df0a1fc128b9da962a/src/components/features/controls/agent-status.tsx#L38"><text x="450" y="66">agent-status.tsx</text><text class="detail" x="450" y="94">Compact icon + accessible status name</text><text class="small" x="450" y="117">Source line 38</text></a></svg><figcaption>The presentation context hides routine duplicate labels. Client launch status overrides stale agent state; errors and actionable controls remain visible.</figcaption></figure><details><summary>Review the diff (+45/−15)</summary><pre>diff --git a/src/components/features/controls/agent-status.tsx b/src/components/features/controls/agent-status.tsx
+index 77e565995e..59e4efeb07 100644
+--- a/src/components/features/controls/agent-status.tsx
++++ b/src/components/features/controls/agent-status.tsx
+@@ -1,3 +1,9 @@
++import { useOptionalConversationId } from &quot;#/hooks/use-conversation-id&quot;;
++import {
++  CONVERSATION_LAUNCH_PREFIX,
++  useConversationLaunchStore,
++} from &quot;#/stores/conversation-launch-store&quot;;
++import { useChatProgress } from &quot;#/context/chat-progress-context&quot;;
+ import { useTranslation } from &quot;react-i18next&quot;;
+ import { useEffect, useState } from &quot;react&quot;;
+ import { CircleCheck } from &quot;lucide-react&quot;;
+@@ -37,6 +43,12 @@ export function AgentStatus({
+   isPausing = false,
+ }: AgentStatusProps) {
+   const { t } = useTranslation(&quot;openhands&quot;);
++  const progressInChat = useChatProgress();
++  const { conversationId } = useOptionalConversationId();
++  const isLaunching = !!conversationId?.startsWith(CONVERSATION_LAUNCH_PREFIX);
++  const launchError = useConversationLaunchStore((state) =&gt;
++    conversationId ? state.launches[conversationId]?.error : undefined,
++  );
+   const { setShouldShownAgentLoading } = useConversationStore();
+   const { curAgentState, executionStatus } = useAgentState();
+ 
+@@ -56,13 +68,17 @@ export function AgentStatus({
+       conversation?.id || null,
+     );
+ 
+-  const statusCode = getStatusCode(
+-    webSocketStatus,
+-    executionStatus ?? null,
+-    taskStatus,
+-    subConversationTaskStatus,
+-    hasConnectedOnce,
+-  );
++  const statusCode = isLaunching
++    ? launchError
++      ? I18nKey.COMMON$ERROR
++      : I18nKey.HOME$CREATING_CONVERSATION
++    : getStatusCode(
++        webSocketStatus,
++        executionStatus ?? null,
++        taskStatus,
++        subConversationTaskStatus,
++        hasConnectedOnce,
++      );
+ 
+   const shouldShownAgentLoading =
+     curAgentState === AgentState.INIT ||
+@@ -72,23 +88,30 @@ export function AgentStatus({
+     isTaskPolling(subConversationTaskStatus);
+ 
+   // For UI rendering - includes pause state
+-  const isLoading = shouldShownAgentLoading || isPausing;
++  const isLoading = isLaunching
++    ? !launchError
++    : shouldShownAgentLoading || isPausing;
+ 
+-  const shouldShownAgentError =
+-    curAgentState === AgentState.ERROR ||
+-    curAgentState === AgentState.RATE_LIMITED ||
+-    webSocketStatus === &quot;CLOSED&quot; ||
+-    taskStatus === &quot;ERROR&quot;;
++  const shouldShownAgentError = isLaunching
++    ? !!launchError
++    : curAgentState === AgentState.ERROR ||
++      curAgentState === AgentState.RATE_LIMITED ||
++      webSocketStatus === &quot;CLOSED&quot; ||
++      taskStatus === &quot;ERROR&quot;;
+ 
+   const shouldShownAgentStop =
+-    !shouldShownAgentError &amp;&amp; curAgentState === AgentState.RUNNING;
++    !isLaunching &amp;&amp;
++    !shouldShownAgentError &amp;&amp;
++    curAgentState === AgentState.RUNNING;
+ 
+   const shouldShownAgentResume =
++    !isLaunching &amp;&amp;
+     !shouldShownAgentError &amp;&amp;
+     (curAgentState === AgentState.STOPPED ||
+       curAgentState === AgentState.PAUSED);
+   const isInteractive =
+     !isLoading &amp;&amp; (shouldShownAgentStop || shouldShownAgentResume);
++  const compactStatus = progressInChat &amp;&amp; (isLoading || shouldShownAgentStop);
+   const isDoneStatus =
+     statusCode === I18nKey.CHAT_INTERFACE$AGENT_FINISHED_MESSAGE;
+   const isReadyStatus = statusCode === I18nKey.AGENT_STATUS$WAITING_FOR_TASK;
+@@ -147,15 +170,22 @@ export function AgentStatus({
+       )}
+     &gt;
+       &lt;span
+-        className=&quot;text-[11px] text-muted font-normal leading-5 min-w-0 max-w-full truncate&quot;
++        className={cn(
++          &quot;text-[11px] text-muted font-normal leading-5 min-w-0 max-w-full truncate&quot;,
++          compactStatus &amp;&amp; &quot;sr-only&quot;,
++        )}
+         title={t(statusCode)}
+       &gt;
+         {t(statusCode)}
+       &lt;/span&gt;
+       &lt;div
++        title={compactStatus ? t(statusCode) : undefined}
+         className={cn(
+           &quot;box-border content-stretch flex flex-row gap-0.75 items-center justify-center overflow-clip px-0.5 py-1 relative rounded-[100px] shrink-0 size-6 transition-all duration-200 active:scale-95 bg-transparent text-muted hover:bg-contrast/10 hover:text-contrast&quot;,
+           isInteractive ? &quot;cursor-pointer&quot; : &quot;cursor-default&quot;,
++          isLoading &amp;&amp; &quot;text-warning&quot;,
++          !isLoading &amp;&amp; shouldShownAgentError &amp;&amp; &quot;text-status-error&quot;,
++          !isLoading &amp;&amp; isTransientCheckStatus &amp;&amp; &quot;text-status-success&quot;,
+         )}
+       &gt;
+         {isLoading &amp;&amp; &lt;AgentLoading /&gt;}
+</pre></details></section><section id="f9"><h2>9. Ready task means the connection is next</h2><p class="source">src/components/features/chat/conversation-startup-progress.tsx · <a href="https://github.com/OpenHands/OpenHands/blob/f7867ed5ca0c203b0eacc11c562bc9b317a0669b/src/components/features/chat/conversation-startup-progress.tsx#L26">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/1614965040c153138e0b28df0a1fc128b9da962a/src/components/features/chat/conversation-startup-progress.tsx#L26">After source</a></p><figure><svg viewBox="0 0 820 150" role="img" aria-labelledby="t9 d9"><title id="t9">Ready task means the connection is next</title><desc id="d9">Before: READY displays a completed status. After: READY → Connecting + spinner.</desc><rect class="old" x="10" y="35" width="375" height="100" rx="6"/><rect class="new" x="435" y="35" width="375" height="100" rx="6"/><text x="25" y="22">BEFORE</text><text x="450" y="22">AFTER</text><a href="https://github.com/OpenHands/OpenHands/blob/f7867ed5ca0c203b0eacc11c562bc9b317a0669b/src/components/features/chat/conversation-startup-progress.tsx#L26"><text x="25" y="66">conversation-startup-progress.tsx</text><text class="detail" x="25" y="94">READY displays a completed status</text><text class="small" x="25" y="117">Source line 26</text></a><path class="delta" d="M390 85 H428 M420 79 L428 85 L420 91"/><a href="https://github.com/OpenHands/OpenHands/blob/1614965040c153138e0b28df0a1fc128b9da962a/src/components/features/chat/conversation-startup-progress.tsx#L26"><text x="450" y="66">conversation-startup-progress.tsx</text><text class="detail" x="450" y="94">READY → Connecting + spinner</text><text class="small" x="450" y="117">Source line 26</text></a></svg><figcaption>Progress remains busy until the handoff completes or an error appears. Spacing aligns with pending-message feedback.</figcaption></figure><details><summary>Review the diff (+10/−7)</summary><pre>diff --git a/src/components/features/chat/conversation-startup-progress.tsx b/src/components/features/chat/conversation-startup-progress.tsx
+index 9105649400..68d59e6840 100644
+--- a/src/components/features/chat/conversation-startup-progress.tsx
++++ b/src/components/features/chat/conversation-startup-progress.tsx
+@@ -23,10 +23,13 @@ export function ConversationStartupProgress({
+   onRetry,
+ }: Props) {
+   const { t } = useTranslation(&quot;openhands&quot;);
+-  const isRunning = !error &amp;&amp; status !== &quot;READY&quot; &amp;&amp; status !== &quot;ERROR&quot;;
+-  const label = status
+-    ? getTaskStatusI18nKey(status)
+-    : I18nKey.HOME$CREATING_CONVERSATION;
++  const isRunning = !error &amp;&amp; status !== &quot;ERROR&quot;;
++  const label =
++    status === &quot;READY&quot;
++      ? I18nKey.CHAT_INTERFACE$CONNECTING
++      : status
++        ? getTaskStatusI18nKey(status)
++        : I18nKey.HOME$CREATING_CONVERSATION;
+   const [observedSteps, setObservedSteps] = useState([label]);
+   if (!observedSteps.includes(label)) {
+     setObservedSteps([...observedSteps, label]);
+@@ -43,13 +46,13 @@ export function ConversationStartupProgress({
+   const spinner = isRunning ? (
+     &lt;LoaderCircle
+       aria-hidden=&quot;true&quot;
+-      className=&quot;h-3.5 w-3.5 shrink-0 animate-spin&quot;
++      className=&quot;h-3.5 w-3.5 shrink-0 animate-spin motion-reduce:animate-none&quot;
+     /&gt;
+   ) : null;
+   return (
+-    &lt;div data-testid=&quot;conversation-startup-progress&quot;&gt;
++    &lt;div className=&quot;mt-2 w-full&quot; data-testid=&quot;conversation-startup-progress&quot;&gt;
+       &lt;div
+-        className=&quot;my-1 w-full py-1 text-sm text-muted&quot;
++        className=&quot;w-full py-1 text-sm text-muted&quot;
+         data-testid=&quot;startup-progress-group&quot;
+       &gt;
+         {expandable ? (
+</pre></details></section><section id="f10"><h2>10. The title has a stable fallback</h2><p class="source">src/components/features/conversation/conversation-name.tsx · <a href="https://github.com/OpenHands/OpenHands/blob/f7867ed5ca0c203b0eacc11c562bc9b317a0669b/src/components/features/conversation/conversation-name.tsx#L139">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/1614965040c153138e0b28df0a1fc128b9da962a/src/components/features/conversation/conversation-name.tsx#L139">After source</a></p><figure><svg viewBox="0 0 820 150" role="img" aria-labelledby="t10 d10"><title id="t10">The title has a stable fallback</title><desc id="d10">Before: No title until metadata arrives. After: New Chat in a fixed-height title slot.</desc><rect class="old" x="10" y="35" width="375" height="100" rx="6"/><rect class="new" x="435" y="35" width="375" height="100" rx="6"/><text x="25" y="22">BEFORE</text><text x="450" y="22">AFTER</text><a href="https://github.com/OpenHands/OpenHands/blob/f7867ed5ca0c203b0eacc11c562bc9b317a0669b/src/components/features/conversation/conversation-name.tsx#L139"><text x="25" y="66">conversation-name.tsx</text><text class="detail" x="25" y="94">No title until metadata arrives</text><text class="small" x="25" y="117">Source line 139</text></a><path class="delta" d="M390 85 H428 M420 79 L428 85 L420 91"/><a href="https://github.com/OpenHands/OpenHands/blob/1614965040c153138e0b28df0a1fc128b9da962a/src/components/features/conversation/conversation-name.tsx#L139"><text x="450" y="66">conversation-name.tsx</text><text class="detail" x="450" y="94">New Chat in a fixed-height title slot</text><text class="small" x="450" y="117">Source line 139</text></a></svg><figcaption>The conversation header has a predictable title before metadata and the generated title arrive.</figcaption></figure><details><summary>Review the diff (+5/−1)</summary><pre>diff --git a/src/components/features/conversation/conversation-name.tsx b/src/components/features/conversation/conversation-name.tsx
+index 3d59abac8d..d41ef2d785 100644
+--- a/src/components/features/conversation/conversation-name.tsx
++++ b/src/components/features/conversation/conversation-name.tsx
+@@ -137,7 +137,11 @@ export function ConversationName() {
+   }, [titleMode]);
+ 
+   if (!conversation) {
+-    return null;
++    return (
++      &lt;div className=&quot;h-5.5 min-w-0 truncate pl-0 text-base leading-5 text-muted lg:pl-1&quot;&gt;
++        {t(I18nKey.SIDEBAR$NEW_CHAT)}
++      &lt;/div&gt;
++    );
+   }
+ 
+   return (
+</pre></details></section><section id="f11"><h2>11. Launch status cannot inherit a prior success</h2><p class="source">src/components/features/conversation/conversation-name-with-status.tsx · <a href="https://github.com/OpenHands/OpenHands/blob/f7867ed5ca0c203b0eacc11c562bc9b317a0669b/src/components/features/conversation/conversation-name-with-status.tsx#L26">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/1614965040c153138e0b28df0a1fc128b9da962a/src/components/features/conversation/conversation-name-with-status.tsx#L28">After source</a></p><figure><svg viewBox="0 0 820 150" role="img" aria-labelledby="t11 d11"><title id="t11">Launch status cannot inherit a prior success</title><desc id="d11">Before: Previous agent can color a missing chat. After: Starting fallback; failed launch red.</desc><rect class="old" x="10" y="35" width="375" height="100" rx="6"/><rect class="new" x="435" y="35" width="375" height="100" rx="6"/><text x="25" y="22">BEFORE</text><text x="450" y="22">AFTER</text><a href="https://github.com/OpenHands/OpenHands/blob/f7867ed5ca0c203b0eacc11c562bc9b317a0669b/src/components/features/conversation/conversation-name-with-status.tsx#L26"><text x="25" y="66">conversation-name-with-status.tsx</text><text class="detail" x="25" y="94">Previous agent can color a missing chat</text><text class="small" x="25" y="117">Source line 26</text></a><path class="delta" d="M390 85 H428 M420 79 L428 85 L420 91"/><a href="https://github.com/OpenHands/OpenHands/blob/1614965040c153138e0b28df0a1fc128b9da962a/src/components/features/conversation/conversation-name-with-status.tsx#L28"><text x="450" y="66">conversation-name-with-status.tsx</text><text class="detail" x="450" y="94">Starting fallback; failed launch red</text><text class="small" x="450" y="117">Source line 28</text></a></svg><figcaption>Absent metadata shows startup status. A recorded launch failure overrides that fallback with the error color.</figcaption></figure><details><summary>Review the diff (+18/−9)</summary><pre>diff --git a/src/components/features/conversation/conversation-name-with-status.tsx b/src/components/features/conversation/conversation-name-with-status.tsx
+index 6fa3aa4fe9..61ded1d078 100644
+--- a/src/components/features/conversation/conversation-name-with-status.tsx
++++ b/src/components/features/conversation/conversation-name-with-status.tsx
+@@ -1,4 +1,6 @@
+ import React from &quot;react&quot;;
++import { useConversationLaunchStore } from &quot;#/stores/conversation-launch-store&quot;;
++import { OH_STATUS_ERROR_COLOR } from &quot;#/constants/status-colors&quot;;
+ import { useTranslation } from &quot;react-i18next&quot;;
+ import { useAgentState } from &quot;#/hooks/use-agent-state&quot;;
+ import { useTaskPolling } from &quot;#/hooks/query/use-task-polling&quot;;
+@@ -26,6 +28,9 @@ import { I18nKey } from &quot;#/i18n/declaration&quot;;
+ export function ConversationNameWithStatus() {
+   const { t } = useTranslation(&quot;openhands&quot;);
+   const { conversationId } = useConversationId();
++  const launchError = useConversationLaunchStore((state) =&gt;
++    conversationId ? state.launches[conversationId]?.error : undefined,
++  );
+   const { data: conversation } = useActiveConversation();
+   const { curAgentState } = useAgentState();
+   const { isTask, taskStatus } = useTaskPolling();
+@@ -38,17 +43,21 @@ export function ConversationNameWithStatus() {
+ 
+   const executionStatus = conversation?.execution_status ?? null;
+   const isStartingStatus =
+-    curAgentState === AgentState.LOADING || curAgentState === AgentState.INIT;
++    !conversation ||
++    curAgentState === AgentState.LOADING ||
++    curAgentState === AgentState.INIT;
+   const isStopStatus = isExecutionErrored(executionStatus);
+ 
+-  const statusColor = getStatusColor({
+-    isPausing: false,
+-    isTask,
+-    taskStatus,
+-    isStartingStatus,
+-    isStopStatus,
+-    curAgentState,
+-  });
++  const statusColor = launchError
++    ? OH_STATUS_ERROR_COLOR
++    : getStatusColor({
++        isPausing: false,
++        isTask,
++        taskStatus,
++        isStartingStatus,
++        isStopStatus,
++        curAgentState,
++      });
+ 
+   const isMenuVisible = menuOpen || hoveredOpen;
+ 
+</pre></details></section><section id="f12"><h2>12. chat-message.test.tsx</h2><p class="source">__tests__/components/chat-message.test.tsx · <a href="https://github.com/OpenHands/OpenHands/blob/f7867ed5ca0c203b0eacc11c562bc9b317a0669b/__tests__/components/chat-message.test.tsx#L226">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/1614965040c153138e0b28df0a1fc128b9da962a/__tests__/components/chat-message.test.tsx#L226">After source</a></p><p>Regression coverage exercises the changed behavior; see the focused assertions in the diff.</p><details><summary>Review the diff (+34/−27)</summary><pre>diff --git a/__tests__/components/chat-message.test.tsx b/__tests__/components/chat-message.test.tsx
+index 68136e22a4..0347f71b2e 100644
+--- a/__tests__/components/chat-message.test.tsx
++++ b/__tests__/components/chat-message.test.tsx
+@@ -226,33 +226,42 @@ describe(&quot;ChatMessage&quot;, () =&gt; {
+     expect(codeElement.closest(&quot;article&quot;)).not.toBeNull();
+   });
+ 
+-  it(&quot;truncates long sent user messages to five lines with view more on hover&quot;, async () =&gt; {
+-    const longMessage = `${&quot;Here&#x27;s a long message. &quot;.repeat(40)}`.trim();
+-    render(&lt;ChatMessage type=&quot;user&quot; message={longMessage} /&gt;);
+-
+-    expect(
+-      screen.getByText(longMessage).closest(&quot;.line-clamp-5&quot;),
+-    ).not.toBeNull();
+-    expect(
+-      screen.getByTestId(&quot;chat-message-truncation-gradient&quot;),
+-    ).toBeInTheDocument();
+-    expect(screen.getByTestId(&quot;chat-message-view-more&quot;)).toHaveClass(
+-      &quot;opacity-0&quot;,
+-    );
++  it.each([undefined, &quot;sending&quot;, &quot;error&quot;] as const)(
++    &quot;keeps long user messages expandable with status %s&quot;,
++    async (pendingStatus) =&gt; {
++      const longMessage = `${&quot;Here&#x27;s a long message. &quot;.repeat(40)}`.trim();
++      render(
++        &lt;ChatMessage
++          type=&quot;user&quot;
++          message={longMessage}
++          pendingStatus={pendingStatus}
++        /&gt;,
++      );
+ 
+-    fireEvent.mouseEnter(screen.getByTestId(&quot;user-message&quot;));
+-    expect(screen.getByTestId(&quot;chat-message-view-more&quot;)).toHaveClass(
+-      &quot;opacity-100&quot;,
+-    );
++      expect(
++        screen.getByText(longMessage).closest(&quot;.line-clamp-5&quot;),
++      ).not.toBeNull();
++      expect(
++        screen.getByTestId(&quot;chat-message-truncation-gradient&quot;),
++      ).toBeInTheDocument();
++      expect(screen.getByTestId(&quot;chat-message-view-more&quot;)).toHaveClass(
++        &quot;opacity-0&quot;,
++      );
+ 
+-    fireEvent.click(screen.getByTestId(&quot;chat-message-expand&quot;));
+-    expect(
+-      screen.queryByTestId(&quot;chat-message-truncation-gradient&quot;),
+-    ).not.toBeInTheDocument();
+-    expect(
+-      screen.queryByTestId(&quot;chat-message-view-more&quot;),
+-    ).not.toBeInTheDocument();
+-  });
++      fireEvent.mouseEnter(screen.getByTestId(&quot;user-message&quot;));
++      expect(screen.getByTestId(&quot;chat-message-view-more&quot;)).toHaveClass(
++        &quot;opacity-100&quot;,
++      );
++
++      fireEvent.click(screen.getByTestId(&quot;chat-message-expand&quot;));
++      expect(
++        screen.queryByTestId(&quot;chat-message-truncation-gradient&quot;),
++      ).not.toBeInTheDocument();
++      expect(
++        screen.queryByTestId(&quot;chat-message-view-more&quot;),
++      ).not.toBeInTheDocument();
++    },
++  );
+ 
+   it(&quot;shows a stop control for a sending user message and calls onStop when clicked&quot;, () =&gt; {
+     const onStop = vi.fn();
+@@ -313,8 +322,6 @@ describe(&quot;ChatMessage&quot;, () =&gt; {
+   });
+ 
+   it(&quot;renders literal angle-bracket text in a sending user message&quot;, () =&gt; {
+-    // The pending/sending bubble renders through a different branch than the
+-    // settled message, so it gets its own guard.
+     const { container } = render(
+       &lt;ChatMessage type=&quot;user&quot; message=&quot;&lt;something&gt;&quot; pendingStatus=&quot;sending&quot; /&gt;,
+     );
+</pre></details></section><section id="f13"><h2>13. chat-interface.test.tsx</h2><p class="source">__tests__/components/chat/chat-interface.test.tsx · <a href="https://github.com/OpenHands/OpenHands/blob/f7867ed5ca0c203b0eacc11c562bc9b317a0669b/__tests__/components/chat/chat-interface.test.tsx#L37">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/1614965040c153138e0b28df0a1fc128b9da962a/__tests__/components/chat/chat-interface.test.tsx#L37">After source</a></p><p>Regression coverage exercises the changed behavior; see the focused assertions in the diff.</p><details><summary>Review the diff (+30/−0)</summary><pre>diff --git a/__tests__/components/chat/chat-interface.test.tsx b/__tests__/components/chat/chat-interface.test.tsx
+index 90d97bfcbe..0878e64d80 100644
+--- a/__tests__/components/chat/chat-interface.test.tsx
++++ b/__tests__/components/chat/chat-interface.test.tsx
+@@ -37,6 +37,11 @@ import { act } from &quot;@testing-library/react&quot;;
+ import ProfilesService from &quot;#/api/profiles-service/profiles-service.api&quot;;
+ import { getConversationState } from &quot;#/utils/conversation-local-storage&quot;;
+ 
++import { makeDefaultLocalBackend } from &quot;#/api/backend-registry/default-backend&quot;;
++import { NO_BACKEND } from &quot;#/api/backend-registry/active-store&quot;;
++import { SERVER_CONNECTION_ERROR_MESSAGE } from &quot;#/constants/server-connection-error&quot;;
++import { I18nKey } from &quot;#/i18n/declaration&quot;;
++
+ const mockSend = vi.fn();
+ vi.mock(&quot;#/hooks/use-send-message&quot;, () =&gt; ({
+   useSendMessage: () =&gt; ({ send: mockSend }),
+@@ -340,6 +345,8 @@ describe(&quot;ChatInterface - Scroll-up loads older events&quot;, () =&gt; {
+   });
+ 
+   afterEach(() =&gt; {
++    cleanup();
++    vi.restoreAllMocks();
+     useEventStore.setState({
+       events: [],
+       eventIds: new Set(),
+@@ -735,6 +742,29 @@ describe(&quot;ChatInterface - Pending message queue&quot;, () =&gt; {
+     );
+   }
+ 
++  it(&quot;shows resume progress in place of the connection warning only while a send waits&quot;, async () =&gt; {
++    const conversationId = &quot;test-conversation-id&quot;;
++    const queryKey = [&quot;user&quot;, &quot;conversation&quot;, conversationId, (makeDefaultLocalBackend() ?? NO_BACKEND).id, null];
++    queryClient.setQueryData(queryKey, { id: conversationId, sandbox_status: &quot;PAUSED&quot; });
++    const id = useOptimisticUserMessageStore.getState().enqueuePendingMessage({ conversationId, text: &quot;resume my work&quot; });
++    useErrorMessageStore.setState({ errorMessage: SERVER_CONNECTION_ERROR_MESSAGE, errorType: &quot;connection&quot;, errorCode: null });
++    renderInterface();
++    expect(screen.getByText(I18nKey.CHAT_INTERFACE$RESUMING_SANDBOX)).toBeVisible();
++    expect(screen.queryByText(SERVER_CONNECTION_ERROR_MESSAGE)).not.toBeInTheDocument();
++
++    act(() =&gt; useErrorMessageStore.setState({ errorType: &quot;conversation&quot; }));
++    expect(screen.getByText(SERVER_CONNECTION_ERROR_MESSAGE)).toBeVisible();
++    act(() =&gt; useErrorMessageStore.setState({ errorMessage: &quot;Resume permission denied&quot; }));
++    expect(screen.getByText(&quot;Resume permission denied&quot;)).toBeVisible();
++    act(() =&gt; {
++      useErrorMessageStore.setState({ errorMessage: SERVER_CONNECTION_ERROR_MESSAGE, errorType: &quot;connection&quot;, errorCode: null });
++      useOptimisticUserMessageStore.getState().markPendingMessageError(id, &quot;Resume failed&quot;);
++    });
++    expect(screen.getByText(SERVER_CONNECTION_ERROR_MESSAGE)).toBeVisible();
++    expect(screen.getByTestId(&quot;chat-message-retry&quot;)).toBeVisible();
++    expect(screen.queryByText(I18nKey.CHAT_INTERFACE$RESUMING_SANDBOX)).not.toBeInTheDocument();
++  });
++
+   it(&quot;shows the message in &#x27;sending&#x27; state immediately when submitted&quot;, async () =&gt; {
+     let resolveSend: ((value: unknown) =&gt; void) | undefined;
+     mockSend.mockImplementation(
+</pre></details></section><section id="f14"><h2>14. conversation-launch-view.test.tsx</h2><p class="source">__tests__/components/features/chat/conversation-launch-view.test.tsx · <a href="https://github.com/OpenHands/OpenHands/blob/f7867ed5ca0c203b0eacc11c562bc9b317a0669b/__tests__/components/features/chat/conversation-launch-view.test.tsx#L11">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/1614965040c153138e0b28df0a1fc128b9da962a/__tests__/components/features/chat/conversation-launch-view.test.tsx#L11">After source</a></p><p>Regression coverage exercises the changed behavior; see the focused assertions in the diff.</p><details><summary>Review the diff (+12/−2)</summary><pre>diff --git a/__tests__/components/features/chat/conversation-launch-view.test.tsx b/__tests__/components/features/chat/conversation-launch-view.test.tsx
+index abb301bd1b..50a2c6be9c 100644
+--- a/__tests__/components/features/chat/conversation-launch-view.test.tsx
++++ b/__tests__/components/features/chat/conversation-launch-view.test.tsx
+@@ -11,10 +11,19 @@ import {
+ import { useConversationLaunchStore } from &quot;#/stores/conversation-launch-store&quot;;
+ import { useConversationStore } from &quot;#/stores/conversation-store&quot;;
+ 
+-vi.mock(&quot;#/components/features/chat/custom-chat-input&quot;, () =&gt; ({
+-  CustomChatInput: () =&gt; &lt;textarea disabled aria-label=&quot;Message&quot; /&gt;,
++vi.mock(&quot;#/components/features/chat/interactive-chat-box&quot;, () =&gt; ({
++  InteractiveChatBox: () =&gt; &lt;textarea disabled aria-label=&quot;Message&quot; /&gt;,
+ }));
+ 
++vi.mock(
++  &quot;#/components/features/conversation/conversation-main/conversation-main&quot;,
++  () =&gt; ({
++    ConversationMain: ({ children }: React.PropsWithChildren) =&gt; (
++      &lt;&gt;{children}&lt;/&gt;
++    ),
++  }),
++);
++
+ const navigate = vi.fn();
+ function view(id: string) {
+   return (
+@@ -102,6 +111,7 @@ describe(&quot;pending conversation navigation&quot;, () =&gt; {
+         .update(id, { error: &quot;Cannot start&quot; }),
+     );
+     expect(screen.getByRole(&quot;alert&quot;)).toHaveTextContent(&quot;Cannot start&quot;);
++    expect(screen.getByRole(&quot;textbox&quot;)).toBeDisabled();
+     fireEvent.click(screen.getByRole(&quot;button&quot;, { name: &quot;BUTTON$EDIT&quot; }));
+     expect(useConversationStore.getState().messageToSend).toMatchObject({
+       text: &quot;Read my notes&quot;,
+</pre></details></section><section id="f15"><h2>15. pending-user-messages.test.tsx</h2><p class="source">__tests__/components/features/chat/pending-user-messages.test.tsx · <a href="https://github.com/OpenHands/OpenHands/blob/f7867ed5ca0c203b0eacc11c562bc9b317a0669b/__tests__/components/features/chat/pending-user-messages.test.tsx#L1">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/1614965040c153138e0b28df0a1fc128b9da962a/__tests__/components/features/chat/pending-user-messages.test.tsx#L1">After source</a></p><p>Regression coverage exercises the changed behavior; see the focused assertions in the diff.</p><details><summary>Review the diff (+36/−1)</summary><pre>diff --git a/__tests__/components/features/chat/pending-user-messages.test.tsx b/__tests__/components/features/chat/pending-user-messages.test.tsx
+index 2e8747b4c5..5e70ab7479 100644
+--- a/__tests__/components/features/chat/pending-user-messages.test.tsx
++++ b/__tests__/components/features/chat/pending-user-messages.test.tsx
+@@ -1,12 +1,14 @@
+ import React from &quot;react&quot;;
+ import { afterEach, beforeEach, describe, expect, it, vi } from &quot;vitest&quot;;
+-import { render, screen, waitFor, fireEvent } from &quot;@testing-library/react&quot;;
++import { act, render, screen, waitFor, fireEvent } from &quot;@testing-library/react&quot;;
+ import userEvent from &quot;@testing-library/user-event&quot;;
+ import { renderWithProviders } from &quot;test-utils&quot;;
+ import { PendingUserMessages } from &quot;#/components/features/chat/pending-user-messages&quot;;
+ import { useOptimisticUserMessageStore } from &quot;#/stores/optimistic-user-message-store&quot;;
+ import { useConversationStore } from &quot;#/stores/conversation-store&quot;;
+ 
++import { I18nKey } from &quot;#/i18n/declaration&quot;;
++
+ let ACTIVE_CONVO = &quot;conv-active&quot;;
+ 
+ const mockSend = vi.fn();
+@@ -61,6 +63,39 @@ describe(&quot;PendingUserMessages&quot;, () =&gt; {
+     expect(screen.getAllByTestId(&quot;chat-message-sending&quot;)).toHaveLength(2);
+   });
+ 
++  it(&quot;explains sandbox resume while a message waits, then restores sending or Retry&quot;, () =&gt; {
++    const id = useOptimisticUserMessageStore.getState().enqueuePendingMessage({
++      conversationId: ACTIVE_CONVO,
++      text: &quot;continue my work&quot;,
++    });
++    const { rerender } = renderWithProviders(
++      &lt;PendingUserMessages pendingLabel={I18nKey.CHAT_INTERFACE$RESUMING_SANDBOX} /&gt;,
++    );
++    expect(screen.getByRole(&quot;status&quot;)).toHaveTextContent(I18nKey.CHAT_INTERFACE$RESUMING_SANDBOX);
++    rerender(&lt;PendingUserMessages pendingLabel={I18nKey.CHAT_INTERFACE$CONNECTING} /&gt;);
++    expect(screen.getByRole(&quot;status&quot;)).toHaveTextContent(I18nKey.CHAT_INTERFACE$CONNECTING);
++    rerender(&lt;PendingUserMessages /&gt;);
++    expect(screen.getByTestId(&quot;chat-message-sending&quot;)).toHaveTextContent(
++      I18nKey.CHAT_INTERFACE$MESSAGE_SENDING,
++    );
++
++    act(() =&gt;
++      useOptimisticUserMessageStore
++        .getState()
++        .markPendingMessageError(id, &quot;Resume failed&quot;),
++    );
++    rerender(&lt;PendingUserMessages pendingLabel={I18nKey.CHAT_INTERFACE$RESUMING_SANDBOX} /&gt;);
++    expect(screen.queryByRole(&quot;status&quot;)).not.toBeInTheDocument();
++    expect(screen.getByTestId(&quot;chat-message-retry&quot;)).toBeVisible();
++    fireEvent.click(screen.getByTestId(&quot;chat-message-retry&quot;));
++    expect(screen.getByRole(&quot;status&quot;)).toHaveTextContent(I18nKey.CHAT_INTERFACE$RESUMING_SANDBOX);
++    fireEvent.click(screen.getByTestId(&quot;chat-message-stop&quot;));
++    expect(screen.queryByRole(&quot;status&quot;)).not.toBeInTheDocument();
++    expect(useConversationStore.getState().messageRestoreIfEmpty?.text).toBe(
++      &quot;continue my work&quot;,
++    );
++  });
++
+   it(&quot;does not show a sending indicator before startup has delivered the message&quot;, () =&gt; {
+     ACTIVE_CONVO = &quot;task-starting&quot;;
+     useOptimisticUserMessageStore.getState().enqueuePendingMessage({
+</pre></details></section><section id="f16"><h2>16. task-startup-progress.test.tsx</h2><p class="source">__tests__/components/features/chat/task-startup-progress.test.tsx · <a href="https://github.com/OpenHands/OpenHands/blob/f7867ed5ca0c203b0eacc11c562bc9b317a0669b/__tests__/components/features/chat/task-startup-progress.test.tsx#L68">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/1614965040c153138e0b28df0a1fc128b9da962a/__tests__/components/features/chat/task-startup-progress.test.tsx#L68">After source</a></p><p>Regression coverage exercises the changed behavior; see the focused assertions in the diff.</p><details><summary>Review the diff (+4/−2)</summary><pre>diff --git a/__tests__/components/features/chat/task-startup-progress.test.tsx b/__tests__/components/features/chat/task-startup-progress.test.tsx
+index 9d453649be..a9c2571705 100644
+--- a/__tests__/components/features/chat/task-startup-progress.test.tsx
++++ b/__tests__/components/features/chat/task-startup-progress.test.tsx
+@@ -68,7 +68,7 @@ beforeEach(() =&gt; {
+ });
+ afterEach(() =&gt; client.clear());
+ 
+-it(&quot;announces startup as busy until the task is ready&quot;, async () =&gt; {
++it(&quot;keeps explaining connection while a ready task is handing off&quot;, async () =&gt; {
+   mount();
+   expect(screen.getByRole(&quot;status&quot;)).toHaveAttribute(&quot;aria-busy&quot;, &quot;true&quot;);
+   await waitFor(() =&gt;
+@@ -78,7 +78,9 @@ it(&quot;announces startup as busy until the task is ready&quot;, async () =&gt; {
+     client.setQueryData([&quot;start-task&quot;, &quot;123&quot;], { ...task, status: &quot;READY&quot; });
+   });
+   await waitFor(() =&gt;
+-    expect(screen.getByRole(&quot;status&quot;)).toHaveAttribute(&quot;aria-busy&quot;, &quot;false&quot;),
++    expect(screen.getByRole(&quot;status&quot;)).toHaveTextContent(
++      &quot;CHAT_INTERFACE$CONNECTING&quot;,
++    ),
+   );
+ });
+ 
+</pre></details></section><section id="f17"><h2>17. agent-status.test.tsx</h2><p class="source">__tests__/components/features/conversation/agent-status.test.tsx · <a href="https://github.com/OpenHands/OpenHands/blob/f7867ed5ca0c203b0eacc11c562bc9b317a0669b/__tests__/components/features/conversation/agent-status.test.tsx#L2">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/1614965040c153138e0b28df0a1fc128b9da962a/__tests__/components/features/conversation/agent-status.test.tsx#L2">After source</a></p><p>Regression coverage exercises the changed behavior; see the focused assertions in the diff.</p><details><summary>Review the diff (+52/−7)</summary><pre>diff --git a/__tests__/components/features/conversation/agent-status.test.tsx b/__tests__/components/features/conversation/agent-status.test.tsx
+index 026b655f6a..56a8c6ee6a 100644
+--- a/__tests__/components/features/conversation/agent-status.test.tsx
++++ b/__tests__/components/features/conversation/agent-status.test.tsx
+@@ -2,6 +2,8 @@ import type { SVGProps } from &quot;react&quot;;
+ import { act, fireEvent, render, screen } from &quot;@testing-library/react&quot;;
+ import { renderToStaticMarkup } from &quot;react-dom/server&quot;;
+ import { afterEach, describe, expect, it, vi } from &quot;vitest&quot;;
++import { NavigationProvider } from &quot;#/context/navigation-context&quot;;
++import { ChatProgressContext } from &quot;#/context/chat-progress-context&quot;;
+ import { AgentStatus } from &quot;#/components/features/controls/agent-status&quot;;
+ import { AgentState } from &quot;#/types/agent-state&quot;;
+ import { ExecutionStatus } from &quot;#/types/agent-server/core/base/common&quot;;
+@@ -63,6 +65,8 @@ vi.mock(&quot;#/icons/u-clock-three.svg?react&quot;, () =&gt; ({
+ }));
+ 
+ interface AgentStatusScenario {
++  routeConversationId?: string;
++  progressInChat?: boolean;
+   agentState?: AgentState;
+   className?: string;
+   conversationId?: string | null;
+@@ -77,6 +81,8 @@ interface AgentStatusScenario {
+ }
+ 
+ function renderAgentStatus({
++  routeConversationId,
++  progressInChat = false,
+   agentState = AgentState.AWAITING_USER_CONFIRMATION,
+   className,
+   conversationId = &quot;conversation-1&quot;,
+@@ -114,13 +120,24 @@ function renderAgentStatus({
+   );
+ 
+   const view = render(
+-    &lt;AgentStatus
+-      className={className}
+-      disabled={disabled}
+-      handleResumeAgent={handleResumeAgent}
+-      handleStop={handleStop}
+-      isPausing={isPausing}
+-    /&gt;,
++    &lt;NavigationProvider
++      value={{
++        conversationId: routeConversationId ?? null,
++        currentPath: &quot;/&quot;,
++        isNavigating: false,
++        navigate: vi.fn(),
++      }}
++    &gt;
++      &lt;ChatProgressContext.Provider value={progressInChat}&gt;
++        &lt;AgentStatus
++          className={className}
++          disabled={disabled}
++          handleResumeAgent={handleResumeAgent}
++          handleStop={handleStop}
++          isPausing={isPausing}
++        /&gt;
++      &lt;/ChatProgressContext.Provider&gt;
++    &lt;/NavigationProvider&gt;,
+   );
+ 
+   return {
+@@ -137,6 +154,34 @@ afterEach(() =&gt; {
+ });
+ 
+ describe(&quot;AgentStatus&quot;, () =&gt; {
++  it.each([AgentState.RUNNING, AgentState.STOPPED])(
++    &quot;does not control the previous agent while a new conversation launches from %s&quot;,
++    (agentState) =&gt; {
++      renderAgentStatus({
++        routeConversationId: &quot;launch-new-conversation&quot;,
++        progressInChat: true,
++        agentState,
++        executionStatus: ExecutionStatus.RUNNING,
++      });
++
++      expect(screen.getByTestId(&quot;agent-loading-spinner&quot;)).toBeInTheDocument();
++      expect(screen.queryByTestId(&quot;stop-button&quot;)).not.toBeInTheDocument();
++      expect(screen.queryByTestId(&quot;play-button&quot;)).not.toBeInTheDocument();
++    },
++  );
++
++  it(&quot;keeps Stop accessible when the conversation owns progress text&quot;, () =&gt; {
++    const { handleStop } = renderAgentStatus({
++      progressInChat: true,
++      agentState: AgentState.RUNNING,
++      executionStatus: ExecutionStatus.RUNNING,
++    });
++
++    fireEvent.click(screen.getByRole(&quot;button&quot;, { name: I18nKey.BUTTON$STOP }));
++
++    expect(handleStop).toHaveBeenCalledOnce();
++  });
++
+   it.each([
+     {
+       label: &quot;the runtime is initializing&quot;,
+</pre></details></section><section id="f18"><h2>18. conversation-name-with-status.test.tsx</h2><p class="source">__tests__/components/features/conversation/conversation-name-with-status.test.tsx · <a href="https://github.com/OpenHands/OpenHands/blob/f7867ed5ca0c203b0eacc11c562bc9b317a0669b/__tests__/components/features/conversation/conversation-name-with-status.test.tsx#L8">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/1614965040c153138e0b28df0a1fc128b9da962a/__tests__/components/features/conversation/conversation-name-with-status.test.tsx#L8">After source</a></p><p>Regression coverage exercises the changed behavior; see the focused assertions in the diff.</p><details><summary>Review the diff (+21/−0)</summary><pre>diff --git a/__tests__/components/features/conversation/conversation-name-with-status.test.tsx b/__tests__/components/features/conversation/conversation-name-with-status.test.tsx
+index 7bccc40069..0f41ed0030 100644
+--- a/__tests__/components/features/conversation/conversation-name-with-status.test.tsx
++++ b/__tests__/components/features/conversation/conversation-name-with-status.test.tsx
+@@ -8,6 +8,7 @@ import {
+ } from &quot;#/constants/status-colors&quot;;
+ import { useCloseOnEscape } from &quot;#/hooks/use-close-on-escape&quot;;
+ import { AgentState } from &quot;#/types/agent-state&quot;;
++import { useConversationLaunchStore } from &quot;#/stores/conversation-launch-store&quot;;
+ import { ExecutionStatus } from &quot;#/types/agent-server/core/base/common&quot;;
+ 
+ const mocks = vi.hoisted(() =&gt; ({
+@@ -157,6 +158,7 @@ function LayerUnderMenu({ onClose }: { onClose: () =&gt; void }) {
+ describe(&quot;conversation name status controls&quot;, () =&gt; {
+   beforeEach(() =&gt; {
+     vi.clearAllMocks();
++    useConversationLaunchStore.setState({ launches: {} });
+     mocks.conversationId = &quot;conversation-1&quot;;
+     mocks.conversation = { execution_status: ExecutionStatus.RUNNING };
+     mocks.curAgentState = AgentState.RUNNING;
+@@ -165,6 +167,25 @@ describe(&quot;conversation name status controls&quot;, () =&gt; {
+     mocks.providers = [{ name: &quot;provider-1&quot; }];
+   });
+ 
++  it(&quot;shows a failed launch instead of the previous conversation status&quot;, () =&gt; {
++    const launchId = useConversationLaunchStore.getState().begin({
++      backendId: &quot;local&quot;,
++      orgId: null,
++      message: &quot;hello&quot;,
++      files: [],
++    });
++    useConversationLaunchStore
++      .getState()
++      .update(launchId, { error: &quot;Create failed&quot; });
++    mocks.conversationId = launchId;
++    mocks.conversation = undefined;
++    renderSubject();
++    expect(screen.getByTestId(&quot;conversation-status-dot&quot;)).toHaveAttribute(
++      &quot;data-color&quot;,
++      OH_STATUS_ERROR_COLOR,
++    );
++  });
++
+   it(&quot;pauses an active conversation without triggering its parent&quot;, () =&gt; {
+     const { onParentClick } = renderSubject();
+ 
+</pre></details></section><section id="f19"><h2>19. Pending bubbles receive the resume label</h2><p class="source">src/components/features/chat/pending-user-messages.tsx · <a href="https://github.com/OpenHands/OpenHands/blob/f7867ed5ca0c203b0eacc11c562bc9b317a0669b/src/components/features/chat/pending-user-messages.tsx#L22">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/1614965040c153138e0b28df0a1fc128b9da962a/src/components/features/chat/pending-user-messages.tsx#L22">After source</a></p><figure><svg viewBox="0 0 820 150" role="img" aria-labelledby="t19 d19"><title id="t19">Pending bubbles receive the resume label</title><desc id="d19">Before: Generic sending feedback. After: pendingLabel → ChatMessage.</desc><rect class="old" x="10" y="35" width="375" height="100" rx="6"/><rect class="new" x="435" y="35" width="375" height="100" rx="6"/><text x="25" y="22">BEFORE</text><text x="450" y="22">AFTER</text><a href="https://github.com/OpenHands/OpenHands/blob/f7867ed5ca0c203b0eacc11c562bc9b317a0669b/src/components/features/chat/pending-user-messages.tsx#L22"><text x="25" y="66">pending-user-messages.tsx</text><text class="detail" x="25" y="94">Generic sending feedback</text><text class="small" x="25" y="117">Source line 22</text></a><path class="delta" d="M390 85 H428 M420 79 L428 85 L420 91"/><a href="https://github.com/OpenHands/OpenHands/blob/1614965040c153138e0b28df0a1fc128b9da962a/src/components/features/chat/pending-user-messages.tsx#L22"><text x="450" y="66">pending-user-messages.tsx</text><text class="detail" x="450" y="94">pendingLabel → ChatMessage</text><text class="small" x="450" y="117">Source line 22</text></a></svg><figcaption>Prerequisite #19187 passes the derived resume/connection label through without changing queue ownership, Retry or Stop.</figcaption></figure><details><summary>Review the diff (+6/−1)</summary><pre>diff --git a/src/components/features/chat/pending-user-messages.tsx b/src/components/features/chat/pending-user-messages.tsx
+index 70d51dcc89..af3c744dc2 100644
+--- a/src/components/features/chat/pending-user-messages.tsx
++++ b/src/components/features/chat/pending-user-messages.tsx
+@@ -22,7 +22,11 @@ import { ChatMessage } from &quot;./chat-message&quot;;
+  * active conversation, so switching conversations never carries pending
+  * bubbles over.
+  */
+-export function PendingUserMessages() {
++export function PendingUserMessages({
++  pendingLabel,
++}: {
++  pendingLabel?: string;
++} = {}) {
+   const { t } = useTranslation(&quot;openhands&quot;);
+   const { conversationId } = useOptionalConversationId();
+   const pendingMessages = useOptimisticUserMessageStore(
+@@ -113,6 +117,7 @@ export function PendingUserMessages() {
+           pendingStatus={
+             conversationId?.startsWith(&quot;task-&quot;) ? undefined : message.status
+           }
++          pendingLabel={pendingLabel}
+           onRetry={
+             message.status === &quot;error&quot;
+               ? () =&gt; handleRetry(message.id)
+</pre></details></section><section id="f20"><h2>20. agent-loading.tsx</h2><p class="source">src/components/features/controls/agent-loading.tsx · <a href="https://github.com/OpenHands/OpenHands/blob/f7867ed5ca0c203b0eacc11c562bc9b317a0669b/src/components/features/controls/agent-loading.tsx#L3">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/1614965040c153138e0b28df0a1fc128b9da962a/src/components/features/controls/agent-loading.tsx#L3">After source</a></p><p>Spinner animation now respects reduced motion.</p><details><summary>Review the diff (+1/−1)</summary><pre>diff --git a/src/components/features/controls/agent-loading.tsx b/src/components/features/controls/agent-loading.tsx
+index 3c0175d62d..a9bbb807af 100644
+--- a/src/components/features/controls/agent-loading.tsx
++++ b/src/components/features/controls/agent-loading.tsx
+@@ -3,7 +3,7 @@ import { LoaderCircle } from &quot;lucide-react&quot;;
+ export function AgentLoading() {
+   return (
+     &lt;div data-testid=&quot;agent-loading-spinner&quot;&gt;
+-      &lt;LoaderCircle className=&quot;animate-spin w-4 h-4 text-current&quot; /&gt;
++      &lt;LoaderCircle className=&quot;animate-spin motion-reduce:animate-none w-4 h-4 text-current&quot; /&gt;
+     &lt;/div&gt;
+   );
+ }
+</pre></details></section><section id="f21"><h2>21. translation.json</h2><p class="source">src/i18n/translation.json · <a href="https://github.com/OpenHands/OpenHands/blob/f7867ed5ca0c203b0eacc11c562bc9b317a0669b/src/i18n/translation.json#L7883">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/1614965040c153138e0b28df0a1fc128b9da962a/src/i18n/translation.json#L7883">After source</a></p><p>Generic Waiting becomes Waiting for sandbox in all supported locales.</p><details><summary>Review the diff (+34/−16)</summary><pre>diff --git a/src/i18n/translation.json b/src/i18n/translation.json
+index a73db630c8..01f920e449 100644
+--- a/src/i18n/translation.json
++++ b/src/i18n/translation.json
+@@ -7883,6 +7883,24 @@
+     &quot;ca&quot;: &quot;No s&#x27;ha pogut iniciar el cicle d&#x27;objectiu&quot;,
+     &quot;id&quot;: &quot;Gagal memulai loop tujuan&quot;
+   },
++  &quot;CHAT_INTERFACE$RESUMING_SANDBOX&quot;: {
++    &quot;en&quot;: &quot;Resuming sandbox...&quot;,
++    &quot;ja&quot;: &quot;サンドボックスを再開しています...&quot;,
++    &quot;zh-CN&quot;: &quot;正在恢复沙箱...&quot;,
++    &quot;zh-TW&quot;: &quot;正在恢復沙箱...&quot;,
++    &quot;ko-KR&quot;: &quot;샌드박스를 재개하는 중...&quot;,
++    &quot;no&quot;: &quot;Gjenopptar sandkassen...&quot;,
++    &quot;ar&quot;: &quot;جارٍ استئناف بيئة الاختبار...&quot;,
++    &quot;de&quot;: &quot;Sandbox wird fortgesetzt...&quot;,
++    &quot;fr&quot;: &quot;Reprise du bac à sable...&quot;,
++    &quot;it&quot;: &quot;Ripresa della sandbox...&quot;,
++    &quot;pt&quot;: &quot;Retomando o sandbox...&quot;,
++    &quot;es&quot;: &quot;Reanudando el entorno aislado...&quot;,
++    &quot;ca&quot;: &quot;Reprenent l’entorn aïllat...&quot;,
++    &quot;tr&quot;: &quot;Korumalı alan sürdürülüyor...&quot;,
++    &quot;uk&quot;: &quot;Відновлення пісочниці...&quot;,
++    &quot;id&quot;: &quot;Melanjutkan sandbox...&quot;
++  },
+   &quot;CHAT_INTERFACE$MESSAGE_SENDING&quot;: {
+     &quot;en&quot;: &quot;Sending...&quot;,
+     &quot;ja&quot;: &quot;送信中...&quot;,
+@@ -19224,22 +19242,22 @@
+     &quot;id&quot;: &quot;Selesai&quot;
+   },
+   &quot;COMMON$WAITING_FOR_SANDBOX&quot;: {
+-    &quot;en&quot;: &quot;Waiting&quot;,
+-    &quot;ja&quot;: &quot;待機中&quot;,
+-    &quot;zh-CN&quot;: &quot;等待中&quot;,
+-    &quot;zh-TW&quot;: &quot;等待中&quot;,
+-    &quot;ko-KR&quot;: &quot;대기 중&quot;,
+-    &quot;no&quot;: &quot;Venter&quot;,
+-    &quot;it&quot;: &quot;In attesa&quot;,
+-    &quot;pt&quot;: &quot;Aguardando&quot;,
+-    &quot;es&quot;: &quot;Esperando&quot;,
+-    &quot;ar&quot;: &quot;قيد الانتظار&quot;,
+-    &quot;fr&quot;: &quot;En attente&quot;,
+-    &quot;tr&quot;: &quot;Bekleniyor&quot;,
+-    &quot;de&quot;: &quot;Warten&quot;,
+-    &quot;uk&quot;: &quot;Очікування&quot;,
+-    &quot;ca&quot;: &quot;Esperant&quot;,
+-    &quot;id&quot;: &quot;Menunggu&quot;
++    &quot;en&quot;: &quot;Waiting for sandbox&quot;,
++    &quot;ja&quot;: &quot;サンドボックスを待機中&quot;,
++    &quot;zh-CN&quot;: &quot;正在等待沙盒&quot;,
++    &quot;zh-TW&quot;: &quot;正在等待沙箱&quot;,
++    &quot;ko-KR&quot;: &quot;샌드박스 대기 중&quot;,
++    &quot;no&quot;: &quot;Venter på sandkassen&quot;,
++    &quot;it&quot;: &quot;In attesa della sandbox&quot;,
++    &quot;pt&quot;: &quot;Aguardando sandbox&quot;,
++    &quot;es&quot;: &quot;Esperando el entorno aislado&quot;,
++    &quot;ar&quot;: &quot;في انتظار بيئة التشغيل المعزولة&quot;,
++    &quot;fr&quot;: &quot;En attente du bac à sable&quot;,
++    &quot;tr&quot;: &quot;Korumalı alan bekleniyor&quot;,
++    &quot;de&quot;: &quot;Warten auf die Sandbox&quot;,
++    &quot;uk&quot;: &quot;Очікування пісочниці&quot;,
++    &quot;ca&quot;: &quot;Esperant l’entorn aïllat&quot;,
++    &quot;id&quot;: &quot;Menunggu sandbox&quot;
+   },
+   &quot;COMMON$SERVER_STATUS&quot;: {
+     &quot;en&quot;: &quot;Server Status&quot;,
+</pre></details></section></main></div></body></html>
