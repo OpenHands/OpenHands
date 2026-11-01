@@ -146,8 +146,17 @@ function AppContent() {
       showErrorToast: true,
     });
 
+  // The miss is reported once per conversation id. The effect below also
+  // depends on `navigate` and `t`, whose identities can change after the
+  // toast and before the redirect lands (a lazy chunk or translation bundle
+  // finishing), and each re-run would otherwise toast the same miss again.
+  const reportedMissRef = React.useRef<string | null>(null);
+
   React.useEffect(() => {
-    if (!ownerLookupMissed) return;
+    if (!ownerLookupMissed) {
+      reportedMissRef.current = null;
+      return;
+    }
     if (shouldProbeShared) {
       if (!isSharedProbeSuccessful) return;
       if (sharedConversation) {
@@ -155,6 +164,8 @@ function AppContent() {
         return;
       }
     }
+    if (reportedMissRef.current === conversationId) return;
+    reportedMissRef.current = conversationId ?? null;
     // Clear the per-backend "last selected" slot so the next switch
     // to this backend doesn't try to revisit a stale id.
     clearLastConversationId(active.backend.id, active.orgId);

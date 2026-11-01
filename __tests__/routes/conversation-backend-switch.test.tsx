@@ -488,6 +488,31 @@ describe("conversation route — shared read-only fallback", () => {
     expect(getCloudSharedConversation).not.toHaveBeenCalled();
     expect(displayErrorToast).toHaveBeenCalledTimes(1);
   });
+
+  it("reports a missing conversation once even if the route re-renders before the redirect lands", async () => {
+    // Arrange — the route stays mounted after it navigates away, as it does
+    // when something it reads (the router, the translation function) changes
+    // identity between the toast and the redirect. A second toast throws so a
+    // regression fails here instead of looping toast -> redirect -> toast.
+    setActiveSelection({ backendId: localBackend.id });
+    vi.mocked(
+      AgentServerConversationService.batchGetAppConversations,
+    ).mockResolvedValue([null]);
+    vi.mocked(displayErrorToast)
+      .mockImplementationOnce(() => {})
+      .mockImplementation(() => {
+        throw new Error("the missing conversation was reported twice");
+      });
+
+    // Act
+    const { rerender } = renderConversation();
+    await waitFor(() => expect(displayErrorToast).toHaveBeenCalledTimes(1));
+    rerender(conversationTree(CLOUD_CONVERSATION_ID));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // Assert
+    expect(displayErrorToast).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("transient conversation failures", () => {
