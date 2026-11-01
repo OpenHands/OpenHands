@@ -255,6 +255,21 @@ describe("ConversationName", () => {
     expect(inputElement).toHaveValue("Test Conversation");
   });
 
+  it("should reset input value when title is empty and blur", async () => {
+    const user = userEvent.setup();
+    renderConversationNameWithRouter();
+
+    const titleElement = screen.getByTestId("conversation-name-title");
+    await user.dblClick(titleElement);
+
+    const inputElement = screen.getByTestId("conversation-name-input");
+    await user.clear(inputElement);
+    await user.tab();
+
+    // Should reset to original title
+    expect(inputElement).toHaveValue("Test Conversation");
+  });
+
   it("should trim whitespace from input value", async () => {
     const user = userEvent.setup();
     renderConversationNameWithRouter();
