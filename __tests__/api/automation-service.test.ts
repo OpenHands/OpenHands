@@ -19,6 +19,7 @@ const {
   mockGetActive,
   mockGetEffectiveLocal,
   mockGetTelemetryDistinctId,
+  mockDownloadBlob,
   capturedInterceptors,
 } = vi.hoisted(() => {
   const interceptors: Array<
@@ -35,6 +36,7 @@ const {
     mockGetActive: vi.fn(),
     mockGetEffectiveLocal: vi.fn(),
     mockGetTelemetryDistinctId: vi.fn(),
+    mockDownloadBlob: vi.fn(),
     capturedInterceptors: interceptors,
   };
 });
@@ -77,8 +79,14 @@ vi.mock("#/services/telemetry", () => ({
   getTelemetryDistinctId: mockGetTelemetryDistinctId,
 }));
 
+vi.mock("#/utils/utils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#/utils/utils")>()),
+  downloadBlob: mockDownloadBlob,
+}));
+
 // Import after mocking
 import AutomationService from "#/api/automation-service/automation-service.api";
+import { packTar, packTarGzip } from "#/utils/tar-gzip";
 
 const localBackend: Backend = {
   id: "local-1",
@@ -457,6 +465,42 @@ describe("AutomationService", () => {
 
       expect(mockPost).toHaveBeenCalledWith("/api/automation/v1/1/dispatch");
       expect(result).toEqual(run);
+    });
+  });
+
+  describe("downloadTarball", () => {
+    const bundle = [{ name: "main.py", content: "print('pong')\n" }];
+
+    beforeEach(() => {
+      mockDownloadBlob.mockReset();
+    });
+
+    it("names a gzip-compressed bundle .tar.gz", async () => {
+      // Arrange
+      const bytes = await packTarGzip(bundle);
+      mockGet.mockResolvedValue({ data: bytes.buffer });
+
+      // Act
+      await AutomationService.downloadTarball("1", "Test Automation");
+
+      // Assert
+      const [blob, filename] = mockDownloadBlob.mock.calls[0] as [Blob, string];
+      expect(filename).toBe("Test Automation.tar.gz");
+      expect(blob.type).toBe("application/gzip");
+    });
+
+    it("keeps the .tar name for an uncompressed bundle", async () => {
+      // Arrange
+      const bytes = packTar(bundle);
+      mockGet.mockResolvedValue({ data: bytes.buffer });
+
+      // Act
+      await AutomationService.downloadTarball("1", "Test Automation");
+
+      // Assert
+      const [blob, filename] = mockDownloadBlob.mock.calls[0] as [Blob, string];
+      expect(filename).toBe("Test Automation.tar");
+      expect(blob.type).toBe("application/x-tar");
     });
   });
 

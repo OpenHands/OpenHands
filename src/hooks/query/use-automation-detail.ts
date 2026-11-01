@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import AutomationService from "#/api/automation-service/automation-service.api";
+import { isRetryableError } from "#/api/with-retry";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import {
   AutomationRunStatus,
@@ -27,6 +28,10 @@ export function useAutomationDetail(options: UseAutomationDetailOptions) {
     queryFn: () => AutomationService.getAutomation(id),
     staleTime: 5 * 60 * 1000,
     enabled: !!id && enabled,
+    // A 4xx answer won't change on a retry, so a missing automation shows
+    // its not-found state after the first response. Server errors and lost
+    // connections keep the default retry count.
+    retry: (failureCount, error) => failureCount < 3 && isRetryableError(error),
   });
 }
 
