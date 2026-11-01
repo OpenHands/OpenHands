@@ -20,7 +20,7 @@ Source: `src/routes/conversation.tsx`, `src/components/features/conversation/`, 
 - `F07.menu-open`: the "..." menu opens under the title; Escape closes it and returns focus to "...", and so does an outside click (without the focus move).
 - `F07.menu-items-by-state`: Show Available Hooks and Stop Conversation appear only while the conversation is active.
 - `F07.skills-modal`: Show Available Skills lists the loaded skills with expandable rows and Refresh.
-- `F07.hooks-modal`: Show Available Hooks lists the workspace's `.openhands/hooks.json` hooks by event (read when it first opens for a conversation after a page load, and on Refresh; a reopen within 5 minutes of the last read shows the cached list), or "No hooks configured for this conversation."
+- `F07.hooks-modal`: Show Available Hooks lists the workspace's `.openhands/hooks.json` hooks, then the user's `~/.openhands/hooks.json` hooks (agent-servers with OpenHands/software-agent-sdk#5734), by event (read when it first opens for a conversation after a page load, and on Refresh; a reopen within 5 minutes of the last read shows the cached list), or "No hooks configured for this conversation."
 - `F07.skills-modal-project`: a workspace with `.agents/skills/<name>/SKILL.md` adds a "Project skills" section above the public ones; each row expands to its triggers and body. The list is read with the page and on Refresh; opening the dialog within 10 minutes of the last read shows the cached list.
 - `F07.agent-tools-modal`: Show Agent Tools & Metadata shows the system message and the tool list.
 - `F07.export-transcript`: Export… downloads a Markdown or HTML transcript with optional tool details and timestamps.

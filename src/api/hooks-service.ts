@@ -10,8 +10,10 @@ const HOOKS_LOAD_TIMEOUT_MS = 5000;
 
 class HooksService {
   /**
-   * Load workspace hooks from the agent-server by calling POST /api/hooks.
-   * Returns the HookConfig if the workspace has hooks, or null.
+   * Load hooks from the agent-server by calling POST /api/hooks: the
+   * workspace's `.openhands/hooks.json` merged with the user hooks file
+   * (`~/.openhands/hooks.json`) on agent-servers that read it (#5733 in
+   * OpenHands/software-agent-sdk). Returns the HookConfig, or null.
    * Gracefully returns null when no usable local backend is available
    * (cloud backend, unseeded registry, or older agent-server).
    * `projectDir` must be the workspace root: the agent-server checks
