@@ -100,6 +100,7 @@ export const useConversationHistory = (conversationId?: string) => {
           limit: INITIAL_HISTORY_PAGE_SIZE,
           sortOrder: "TIMESTAMP_DESC",
           excludeFullState: true,
+          strictPagination: true,
         },
       );
 
@@ -143,5 +144,7 @@ export const useConversationHistory = (conversationId?: string) => {
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     retry: 1,
+    // Socket recovery handles a failed preload and reports connection failures.
+    meta: { disableToast: true },
   });
 };
