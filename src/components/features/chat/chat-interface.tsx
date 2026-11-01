@@ -38,6 +38,7 @@ import { useErrorMessageStore } from "#/stores/error-message-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { SERVER_CONNECTION_ERROR_MESSAGE } from "#/constants/server-connection-error";
 import { ErrorMessageBanner } from "./error-message-banner";
+import { PluginErrorBanner } from "./plugin-error-banner";
 import { SkillInstallRestartBanner } from "./skill-install-restart-banner";
 import { LlmNotConfiguredBanner } from "#/components/features/home/llm-not-configured-banner";
 import { useLlmConfigured } from "#/hooks/use-llm-configured";
@@ -101,6 +102,7 @@ export function ChatInterface({
     errorMessage,
     errorCode,
     errorClassification,
+    pluginError,
     removeErrorMessage,
     setErrorMessage,
   } = useErrorMessageStore();
@@ -685,7 +687,13 @@ export function ChatInterface({
           <div className="flex shrink-0 flex-col gap-1.5 pb-4">
             <SkillInstallRestartBanner conversationId={conversationId} />
             <BtwMessages conversationId={conversationId} />
-            {errorMessage && (
+            {errorMessage && pluginError && (
+              <PluginErrorBanner
+                error={pluginError}
+                onDismiss={removeErrorMessage}
+              />
+            )}
+            {errorMessage && !pluginError && (
               <ErrorMessageBanner
                 message={errorMessage}
                 code={errorCode}
