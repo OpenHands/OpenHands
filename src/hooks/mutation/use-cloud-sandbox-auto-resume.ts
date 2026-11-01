@@ -15,7 +15,6 @@ import {
   useOptimisticUserMessageStore,
   type PendingUserMessage,
 } from "#/stores/optimistic-user-message-store";
-import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 const CLOUD_RESUME_RETRY_DELAY_MS =
   import.meta.env.MODE === "test" ? 10 : 10_000;
@@ -90,16 +89,14 @@ export function useCloudSandboxAutoResume({
       if (activeResumeKeyRef.current !== attempt.key) return;
       const message = t(I18nKey.CONVERSATION$FAILED_TO_START_FROM_TASK);
       const store = useOptimisticUserMessageStore.getState();
-      store.pendingMessages
-        .filter(
-          (pending) =>
-            pending.conversationId === conversationId &&
-            pending.status === "sending",
-        )
-        .forEach((pending) =>
-          store.markPendingMessageError(pending.id, message),
-        );
-      displayErrorToast(message);
+      const pending = store.pendingMessages.filter(
+        (pending) =>
+          pending.conversationId === conversationId &&
+          pending.status === "sending",
+      );
+      pending.forEach((entry) =>
+        store.markPendingMessageError(entry.id, message),
+      );
     },
     retryDelay: () => CLOUD_RESUME_RETRY_DELAY_MS,
     onSettled: (_, __, { attempt }) => {

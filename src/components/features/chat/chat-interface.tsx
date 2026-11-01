@@ -43,6 +43,7 @@ import { useErrorMessageStore } from "#/stores/error-message-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { SERVER_CONNECTION_ERROR_MESSAGE } from "#/constants/server-connection-error";
 import { ErrorMessageBanner } from "./error-message-banner";
+import { ConnectionRecoveryNotice } from "./connection-recovery-notice";
 import { SkillInstallRestartBanner } from "./skill-install-restart-banner";
 import { LlmNotConfiguredBanner } from "#/components/features/home/llm-not-configured-banner";
 import { useLlmConfigured } from "#/hooks/use-llm-configured";
@@ -153,6 +154,9 @@ export function ChatInterface({
   } = useNewConversationCommand();
 
   const { curAgentState } = useAgentState();
+  const { curAgentState: recoveryAgentState } = useAgentState(
+    conversationWebSocket?.recoveryConversationId,
+  );
   const { handleBuildPlanClick } = useHandleBuildPlanClick();
 
   // Cloud conversations whose sandbox is MISSING or ERROR are read-only:
@@ -716,6 +720,16 @@ export function ChatInterface({
           <div className={CHAT_COMPOSER_CLASS_NAME}>
             <SkillInstallRestartBanner conversationId={conversationId} />
             <BtwMessages conversationId={conversationId} />
+            {recoveryAgentState === AgentState.RUNNING &&
+              !errorMessage &&
+              !isArchivedConversation &&
+              !(pendingMessageLabel && hasPendingUserMessages) &&
+              conversationWebSocket && (
+                <ConnectionRecoveryNotice
+                  state={conversationWebSocket.recoveryState}
+                  onRetry={conversationWebSocket.reconnect}
+                />
+              )}
             {errorMessage && !hideConnectionError && (
               <ErrorMessageBanner
                 message={errorMessage}

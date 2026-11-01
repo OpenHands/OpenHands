@@ -28,6 +28,7 @@ import {
 } from "#/types/agent-server/core";
 import { useEventStore } from "#/stores/use-event-store";
 import { useAgentState } from "#/hooks/use-agent-state";
+import * as conversationWebSocket from "#/contexts/conversation-websocket-context";
 import { useLoadOlderEvents } from "#/hooks/use-load-older-events";
 import { useTaskPolling } from "#/hooks/query/use-task-polling";
 import { AgentState } from "#/types/agent-state";
@@ -744,25 +745,56 @@ describe("ChatInterface - Pending message queue", () => {
 
   it("shows resume progress in place of the connection warning only while a send waits", async () => {
     const conversationId = "test-conversation-id";
-    const queryKey = ["user", "conversation", conversationId, (makeDefaultLocalBackend() ?? NO_BACKEND).id, null];
-    queryClient.setQueryData(queryKey, { id: conversationId, sandbox_status: "PAUSED" });
-    const id = useOptimisticUserMessageStore.getState().enqueuePendingMessage({ conversationId, text: "resume my work" });
-    useErrorMessageStore.setState({ errorMessage: SERVER_CONNECTION_ERROR_MESSAGE, errorType: "connection", errorCode: null });
+    const queryKey = [
+      "user",
+      "conversation",
+      conversationId,
+      (makeDefaultLocalBackend() ?? NO_BACKEND).id,
+      null,
+    ];
+    queryClient.setQueryData(queryKey, {
+      id: conversationId,
+      sandbox_status: "PAUSED",
+    });
+    const id = useOptimisticUserMessageStore
+      .getState()
+      .enqueuePendingMessage({ conversationId, text: "resume my work" });
+    useErrorMessageStore.setState({
+      errorMessage: SERVER_CONNECTION_ERROR_MESSAGE,
+      errorType: "connection",
+      errorCode: null,
+    });
     renderInterface();
-    expect(screen.getByText(I18nKey.CHAT_INTERFACE$RESUMING_SANDBOX)).toBeVisible();
-    expect(screen.queryByText(SERVER_CONNECTION_ERROR_MESSAGE)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(I18nKey.CHAT_INTERFACE$RESUMING_SANDBOX),
+    ).toBeVisible();
+    expect(
+      screen.queryByText(SERVER_CONNECTION_ERROR_MESSAGE),
+    ).not.toBeInTheDocument();
 
     act(() => useErrorMessageStore.setState({ errorType: "conversation" }));
     expect(screen.getByText(SERVER_CONNECTION_ERROR_MESSAGE)).toBeVisible();
-    act(() => useErrorMessageStore.setState({ errorMessage: "Resume permission denied" }));
+    act(() =>
+      useErrorMessageStore.setState({
+        errorMessage: "Resume permission denied",
+      }),
+    );
     expect(screen.getByText("Resume permission denied")).toBeVisible();
     act(() => {
-      useErrorMessageStore.setState({ errorMessage: SERVER_CONNECTION_ERROR_MESSAGE, errorType: "connection", errorCode: null });
-      useOptimisticUserMessageStore.getState().markPendingMessageError(id, "Resume failed");
+      useErrorMessageStore.setState({
+        errorMessage: SERVER_CONNECTION_ERROR_MESSAGE,
+        errorType: "connection",
+        errorCode: null,
+      });
+      useOptimisticUserMessageStore
+        .getState()
+        .markPendingMessageError(id, "Resume failed");
     });
     expect(screen.getByText(SERVER_CONNECTION_ERROR_MESSAGE)).toBeVisible();
     expect(screen.getByTestId("chat-message-retry")).toBeVisible();
-    expect(screen.queryByText(I18nKey.CHAT_INTERFACE$RESUMING_SANDBOX)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(I18nKey.CHAT_INTERFACE$RESUMING_SANDBOX),
+    ).not.toBeInTheDocument();
   });
 
   it("shows the message in 'sending' state immediately when submitted", async () => {
@@ -1490,5 +1522,104 @@ describe("ChatInterface - initial attachment recovery", () => {
     expect(useErrorMessageStore.getState().errorMessage).toBeNull();
     page.unmount();
     queryClient.clear();
+  });
+});
+
+describe("ChatInterface - recovery visibility", () => {
+  beforeEach(() => {
+    (useConfig as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      data: {},
+    });
+    (
+      useUnifiedUploadFiles as unknown as ReturnType<typeof vi.fn>
+    ).mockReturnValue({ mutateAsync: vi.fn(), isLoading: false });
+    vi.spyOn(ProfilesService, "listProfiles").mockResolvedValue({
+      profiles: [],
+      active_profile: null,
+    } as Awaited<ReturnType<typeof ProfilesService.listProfiles>>);
+    useConversationStore.setState({ conversationMode: "code" });
+    useErrorMessageStore.getState().removeErrorMessage();
+    useOptimisticUserMessageStore.setState({ pendingMessages: [] });
+    vi.spyOn(conversationWebSocket, "useConversationWebSocket").mockReturnValue(
+      {
+        connectionState: "CLOSED",
+        mainConnectionState: "CLOSED",
+        recoveryState: "retryable",
+        sendMessage: vi.fn().mockResolvedValue({ queued: false }),
+        isLoadingHistory: false,
+        reconnect: vi.fn(),
+        hasConnectedOnce: true,
+      },
+    );
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  it.each([
+    AgentState.AWAITING_USER_INPUT,
+    AgentState.PAUSED,
+    AgentState.FINISHED,
+    AgentState.LOADING,
+  ])("keeps recovery silent when the selected agent is %s", (state) => {
+    vi.mocked(useAgentState).mockReturnValue({ curAgentState: state });
+    renderChatInterfaceWithRouter();
+    expect(
+      screen.queryByText(I18nKey.CHAT_INTERFACE$STILL_RECONNECTING),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows delayed feedback while running and clears it when work finishes", () => {
+    vi.mocked(useAgentState).mockReturnValue({
+      curAgentState: AgentState.RUNNING,
+    });
+    const view = renderChatInterfaceWithRouter();
+    expect(
+      screen.getByText(I18nKey.CHAT_INTERFACE$STILL_RECONNECTING),
+    ).toBeVisible();
+    vi.mocked(useAgentState).mockReturnValue({
+      curAgentState: AgentState.FINISHED,
+    });
+    view.rerender(
+      <MemoryRouter>
+        <ChatInterface />
+      </MemoryRouter>,
+    );
+    expect(
+      screen.queryByText(I18nKey.CHAT_INTERFACE$STILL_RECONNECTING),
+    ).not.toBeInTheDocument();
+  });
+
+  it("uses the planner's activity instead of the main agent in plan mode", () => {
+    useConversationStore.setState({ conversationMode: "plan" });
+    vi.mocked(useAgentState).mockReturnValue({
+      curAgentState: AgentState.RUNNING,
+    });
+    const socket = conversationWebSocket.useConversationWebSocket()!;
+    vi.mocked(conversationWebSocket.useConversationWebSocket).mockReturnValue({
+      ...socket,
+      recoveryConversationId: "planner",
+    });
+    vi.mocked(useAgentState).mockImplementation((id) => ({
+      curAgentState:
+        id === "planner" ? AgentState.AWAITING_USER_INPUT : AgentState.RUNNING,
+    }));
+    const view = renderChatInterfaceWithRouter();
+    expect(
+      screen.queryByText(I18nKey.CHAT_INTERFACE$STILL_RECONNECTING),
+    ).not.toBeInTheDocument();
+    vi.mocked(useAgentState).mockReturnValue({
+      curAgentState: AgentState.RUNNING,
+    });
+    view.rerender(
+      <MemoryRouter>
+        <ChatInterface />
+      </MemoryRouter>,
+    );
+    expect(
+      screen.getByText(I18nKey.CHAT_INTERFACE$STILL_RECONNECTING),
+    ).toBeVisible();
   });
 });

@@ -681,6 +681,14 @@ describe("Conversation websocket behavior", () => {
     );
   });
 
+  it("does not connect the planner while its parent runtime is unavailable", () => {
+    renderProvider({
+      conversationUrl: null,
+      subConversations: [makeSubConversation()],
+    });
+    expect(socketCapture.planningUrl).toBe("");
+  });
+
   it("safely ignores an empty planning conversation slot", () => {
     expect(() =>
       renderProvider({
@@ -690,7 +698,7 @@ describe("Conversation websocket behavior", () => {
     expect(socketCapture.planningUrl).toBe("");
   });
 
-  it("reports the main socket lifecycle and only surfaces errors after a successful connection", () => {
+  it("reports recovery progress separately from conversation errors", () => {
     vi.useFakeTimers();
     renderProvider();
 
@@ -709,11 +717,18 @@ describe("Conversation websocket behavior", () => {
     expect(screen.getByTestId("connection-state")).toHaveTextContent("CLOSED");
 
     act(() => mainOptions().onError?.(new Event("error")));
-    act(() => vi.advanceTimersByTime(5000));
-    expect(useErrorMessageStore.getState()).toMatchObject({
-      errorMessage: SERVER_CONNECTION_ERROR_MESSAGE,
-      errorType: "connection",
-    });
+    act(() => vi.advanceTimersByTime(30000));
+    expect(contextCapture.current?.recoveryState).toBe("reconnecting");
+    expect(useErrorMessageStore.getState().errorMessage).toBeNull();
+  });
+
+  it("shows main recovery in plan mode before a planning connection exists", () => {
+    vi.useFakeTimers();
+    renderProvider();
+    act(() => useConversationStore.setState({ conversationMode: "plan" }));
+    act(() => mainOptions().onError?.(new Event("error")));
+    act(() => vi.advanceTimersByTime(30000));
+    expect(contextCapture.current?.recoveryState).toBe("reconnecting");
   });
 
   it("merges main and planning connection lifecycles", async () => {
@@ -742,11 +757,15 @@ describe("Conversation websocket behavior", () => {
     expect(screen.getByTestId("connection-state")).toHaveTextContent("CLOSED");
 
     act(() => planningOptions().onError?.(new Event("error")));
-    act(() => vi.advanceTimersByTime(5000));
-    expect(useErrorMessageStore.getState()).toMatchObject({
-      errorMessage: SERVER_CONNECTION_ERROR_MESSAGE,
-      errorType: "connection",
-    });
+    act(() => vi.advanceTimersByTime(30000));
+    expect(contextCapture.current?.recoveryState).toBe("idle");
+    expect(contextCapture.current?.recoveryConversationId).toBe("conv-main");
+    act(() => useConversationStore.setState({ conversationMode: "plan" }));
+    expect(contextCapture.current?.recoveryConversationId).toBe(
+      "conv-planning",
+    );
+    expect(contextCapture.current?.recoveryState).toBe("reconnecting");
+    expect(useErrorMessageStore.getState().errorMessage).toBeNull();
   });
 
   for (const [label, readyState, expected] of [
@@ -2455,7 +2474,7 @@ describe("Conversation websocket — page visibility reconnect (#17894)", () => 
     act(() => setVisibility("visible"));
   });
 
-  it("still surfaces the connection-error banner for a drop that happens while visible", () => {
+  it("shows neutral recovery feedback for a sustained visible disconnect", () => {
     setUserAgent(MOBILE_USER_AGENT);
     renderProvider();
     act(() => mainOptions().onOpen?.(new Event("open")));
@@ -2463,11 +2482,9 @@ describe("Conversation websocket — page visibility reconnect (#17894)", () => 
     act(() => mainOptions().onError?.(new Event("error")));
 
     expect(useErrorMessageStore.getState().errorMessage).toBeNull();
-    act(() => vi.advanceTimersByTime(5000));
-    expect(useErrorMessageStore.getState()).toMatchObject({
-      errorMessage: SERVER_CONNECTION_ERROR_MESSAGE,
-      errorType: "connection",
-    });
+    act(() => vi.advanceTimersByTime(30000));
+    expect(contextCapture.current?.recoveryState).toBe("reconnecting");
+    expect(useErrorMessageStore.getState().errorMessage).toBeNull();
   });
 
   it.each(["main", "planning"])(
@@ -2494,12 +2511,13 @@ describe("Conversation websocket — page visibility reconnect (#17894)", () => 
     act(() => vi.advanceTimersByTime(4000));
     act(() => mainOptions().onError?.(new Event("error")));
     expect(useErrorMessageStore.getState().errorMessage).toBeNull();
-    act(() => vi.advanceTimersByTime(1000));
-    expect(useErrorMessageStore.getState().errorMessage).toBe(
-      SERVER_CONNECTION_ERROR_MESSAGE,
-    );
-    act(() => mainOptions().onOpen?.(new Event("open")));
+    act(() => vi.advanceTimersByTime(26000));
+    expect(contextCapture.current?.recoveryState).toBe("reconnecting");
+    act(() => vi.advanceTimersByTime(30_000));
+    expect(contextCapture.current?.recoveryState).toBe("retryable");
     expect(useErrorMessageStore.getState().errorMessage).toBeNull();
+    act(() => mainOptions().onOpen?.(new Event("open")));
+    expect(contextCapture.current?.recoveryState).toBe("idle");
   });
 
   it("cancels a pending disconnect warning when hidden or unmounted", () => {

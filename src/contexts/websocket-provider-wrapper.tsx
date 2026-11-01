@@ -98,6 +98,7 @@ export function WebSocketProviderWrapper({
   // persisted event history remains available through the backend API.
   const conversationUrl =
     conversation?.sandbox_status === "PAUSED" ||
+    conversation?.sandbox_status === "STARTING" ||
     isRuntimeUnavailableSandboxStatus(conversation?.sandbox_status)
       ? null
       : conversation?.conversation_url;

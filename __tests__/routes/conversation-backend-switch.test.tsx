@@ -363,12 +363,10 @@ describe("conversation route — cloud sandbox resume", () => {
     expect(resumeCloudSandbox).toHaveBeenCalledTimes(1);
 
     act(() => {
-      useOptimisticUserMessageStore
-        .getState()
-        .enqueuePendingMessage({
-          conversationId: CLOUD_CONVERSATION_ID,
-          text: "hi again",
-        });
+      useOptimisticUserMessageStore.getState().enqueuePendingMessage({
+        conversationId: CLOUD_CONVERSATION_ID,
+        text: "hi again",
+      });
     });
     await waitFor(() => expect(resumeCloudSandbox).toHaveBeenCalledTimes(2));
     setStatus("PAUSED");
@@ -404,12 +402,10 @@ describe("conversation route — cloud sandbox resume", () => {
     );
     let id!: string;
     act(() => {
-      id = useOptimisticUserMessageStore
-        .getState()
-        .enqueuePendingMessage({
-          conversationId: CLOUD_CONVERSATION_ID,
-          text: "recover me",
-        });
+      id = useOptimisticUserMessageStore.getState().enqueuePendingMessage({
+        conversationId: CLOUD_CONVERSATION_ID,
+        text: "recover me",
+      });
     });
     await waitFor(() =>
       expect(
@@ -418,7 +414,7 @@ describe("conversation route — cloud sandbox resume", () => {
           .pendingMessages.find((m) => m.id === id)?.status,
       ).toBe("error"),
     );
-    expect(displayErrorToast).toHaveBeenCalledTimes(1);
+    expect(displayErrorToast).not.toHaveBeenCalled();
 
     act(() => {
       useOptimisticUserMessageStore.getState().markPendingMessageSending(id);
@@ -627,7 +623,7 @@ describe("transient conversation failures", () => {
     { status: 403, attempts: 1 },
     { status: 503, attempts: 4 },
   ])(
-    "reports exhausted resume failure once ($status)",
+    "keeps exhausted automatic resume silent without a sent message ($status)",
     async ({ status, attempts }) => {
       setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
       vi.mocked(
@@ -642,10 +638,17 @@ describe("transient conversation failures", () => {
         new HttpError(status, "Failure", null),
       );
       renderConversation();
-      await waitFor(() => expect(displayErrorToast).toHaveBeenCalledTimes(1));
+      await waitFor(() =>
+        expect(
+          queryClient
+            .getMutationCache()
+            .getAll()
+            .some((mutation) => mutation.state.status === "error"),
+        ).toBe(true),
+      );
       await new Promise((resolve) => setTimeout(resolve, 80));
       expect(resumeCloudSandbox).toHaveBeenCalledTimes(attempts);
-      expect(displayErrorToast).toHaveBeenCalledTimes(1);
+      expect(displayErrorToast).not.toHaveBeenCalled();
     },
   );
 });
