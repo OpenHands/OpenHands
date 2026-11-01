@@ -267,8 +267,17 @@ describe("isGroupableEvent", () => {
     expect(isGroupableEvent(makeAgentErrorEvent("e1"))).toBe(false);
   });
 
-  it("does not group HookExecutionEvent", () => {
-    expect(isGroupableEvent(makeHookExecutionEvent("h1"))).toBe(false);
+  it("groups a successful hook run", () => {
+    expect(isGroupableEvent(makeHookExecutionEvent("h1"))).toBe(true);
+  });
+
+  it("keeps blocked and failed hook runs out of groups", () => {
+    expect(
+      isGroupableEvent({ ...makeHookExecutionEvent("h1"), blocked: true }),
+    ).toBe(false);
+    expect(
+      isGroupableEvent({ ...makeHookExecutionEvent("h2"), success: false }),
+    ).toBe(false);
   });
 });
 

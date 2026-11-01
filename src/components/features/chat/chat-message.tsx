@@ -7,6 +7,7 @@ import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import { I18nKey } from "#/i18n/declaration";
 import { TextShimmer } from "#/components/shared/text-shimmer";
 import { formatEventTimestamp } from "#/utils/format-event-timestamp";
+import { useTimestampHover } from "#/hooks/use-timestamp-hover";
 import { MarkdownRenderer } from "../markdown/markdown-renderer";
 import { PendingStopIcon } from "./pending-stop-icon";
 import {
@@ -50,6 +51,7 @@ export function ChatMessage({
 }: React.PropsWithChildren<ChatMessageProps>) {
   const { t, i18n } = useTranslation("openhands");
   const [isHovering, setIsHovering] = React.useState(false);
+  const timestampHover = useTimestampHover();
   const [isCopy, setIsCopy] = React.useState(false);
   const [isExpanded, setIsExpanded] = React.useState(false);
   const [isTruncatable, setIsTruncatable] = React.useState(false);
@@ -150,8 +152,14 @@ export function ChatMessage({
     <article
       data-testid={`${type}-message`}
       data-pending-status={pendingStatus}
-      onMouseEnter={() => setIsHovering(true)}
-      onMouseLeave={() => setIsHovering(false)}
+      onMouseEnter={() => {
+        setIsHovering(true);
+        timestampHover.show();
+      }}
+      onMouseLeave={() => {
+        setIsHovering(false);
+        timestampHover.hide();
+      }}
       className={cn(
         "rounded-xl relative w-fit max-w-full flex flex-col",
         hasBubbleChildren && "gap-2",
@@ -249,7 +257,8 @@ export function ChatMessage({
     <StyledTooltip
       content={<time dateTime={timestamp}>{timestampLabel}</time>}
       placement="top"
-      isOpen={isHovering}
+      isOpen={timestampHover.isVisible}
+      tooltipClassName="pointer-events-none"
     >
       {messageBubble}
     </StyledTooltip>
