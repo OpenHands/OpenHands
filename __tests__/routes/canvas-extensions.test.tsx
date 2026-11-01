@@ -141,4 +141,63 @@ describe("CanvasExtensionsScreen", () => {
     await user.keyboard(" ");
     expect(screen.getByTestId("confirmation-modal")).toBeInTheDocument();
   });
+
+  it("keeps keyboard focus inside the trust confirmation and returns it to the switch", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(CanvasExtensionsService, "listInstalled").mockResolvedValue([
+      buildExtension({ enabled: false }),
+    ]);
+    const installSpy = vi.spyOn(CanvasExtensionsService, "install");
+    renderAppsScreen();
+
+    const appSwitch = await screen.findByRole("switch");
+    appSwitch.focus();
+    await user.keyboard(" ");
+
+    const cancel = screen.getByTestId("cancel-button");
+    const confirm = screen.getByTestId("confirm-button");
+    expect(cancel).toHaveFocus();
+    await user.tab();
+    expect(confirm).toHaveFocus();
+    await user.tab();
+    expect(cancel).toHaveFocus();
+    expect(installSpy).not.toHaveBeenCalled();
+
+    await user.keyboard("{Escape}");
+    expect(screen.queryByTestId("confirmation-modal")).not.toBeInTheDocument();
+    expect(appSwitch).toHaveFocus();
+  });
+
+  it("keeps focus on the confirmation while its action is pending", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(CanvasExtensionsService, "listInstalled").mockResolvedValue([
+      buildExtension({ enabled: false }),
+    ]);
+    let finishEnable: () => void = () => {};
+    vi.spyOn(CanvasExtensionsService, "setEnabled").mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishEnable = () => resolve(buildExtension({ enabled: true }));
+        }),
+    );
+    const installSpy = vi.spyOn(CanvasExtensionsService, "install");
+    renderAppsScreen();
+
+    const appSwitch = await screen.findByRole("switch");
+    appSwitch.focus();
+    await user.keyboard(" ");
+    await user.click(screen.getByTestId("confirm-button"));
+    const confirmation = screen.getByTestId("confirmation-modal");
+    await waitFor(() => expect(confirmation).toHaveFocus());
+
+    await user.tab();
+    expect(confirmation).toHaveFocus();
+    expect(installSpy).not.toHaveBeenCalled();
+    finishEnable();
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId("confirmation-modal"),
+      ).not.toBeInTheDocument(),
+    );
+  });
 });
