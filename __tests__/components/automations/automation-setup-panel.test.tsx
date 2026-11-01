@@ -82,20 +82,20 @@ const createGitRepositoriesQueryResult = () => ({
 /** One private repository listed by another provider than GitHub. */
 const createProviderRepositoriesQueryResult = (
   provider: Provider,
-  fullName: string,
+  fullName: string | string[],
 ) => ({
   ...createGitRepositoriesQueryResult(),
   data: {
     pages: [
       {
-        items: [
-          {
-            id: `${provider}-1`,
-            full_name: fullName,
+        items: (Array.isArray(fullName) ? fullName : [fullName]).map(
+          (name, index) => ({
+            id: `${provider}-${index + 1}`,
+            full_name: name,
             git_provider: provider,
             is_public: false,
-          },
-        ],
+          }),
+        ),
         missing_token: false,
         next_page_id: null,
       },
@@ -920,13 +920,18 @@ describe("AutomationSetupPanel", () => {
     const option = await screen.findByTestId(
       "automation-setup-repository-option-OpenHands/OpenHands",
     );
-    // Long organization/project/repository names are truncated, so the full
-    // name is available on hover.
-    expect(within(option).getByTitle("OpenHands/OpenHands")).toBeVisible();
+    // Long names can be truncated; hovering reveals the complete name.
+    await user.hover(within(option).getByText("OpenHands/"));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "OpenHands/OpenHands",
+    );
     await user.click(option);
     const pill = screen.getByTestId("automation-setup-repository-value");
     expect(pill).toHaveTextContent("OpenHands/OpenHands");
-    expect(within(pill).getByTitle("OpenHands/OpenHands")).toBeVisible();
+    await user.hover(within(pill).getByText("OpenHands"));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "OpenHands/OpenHands",
+    );
 
     await user.click(screen.getByTestId("automation-setup-repository-add"));
     await user.click(screen.getByTestId("automation-setup-repository-custom"));
@@ -1349,10 +1354,10 @@ describe("AutomationSetupPanel", () => {
       isLoadingSettings: false,
     });
     mockUseGitRepositories.mockReturnValue(
-      createProviderRepositoriesQueryResult(
-        "azure_devops",
+      createProviderRepositoriesQueryResult("azure_devops", [
         "fabrikam/Fabrikam Fiber/fabrikam-web",
-      ),
+        "fabrikam/Fabrikam Fabric/fabrikam-web",
+      ]),
     );
 
     const user = userEvent.setup();
@@ -1366,11 +1371,30 @@ describe("AutomationSetupPanel", () => {
       "automation-setup-repository-option-fabrikam/Fabrikam Fiber/fabrikam-web",
     );
     expect(option).not.toBeDisabled();
+    expect(within(option).getByText("fabrikam/")).toBeInTheDocument();
+    expect(within(option).getByText("Fabrikam Fiber/")).toBeInTheDocument();
+    expect(within(option).getByText("fabrikam-web")).toBeInTheDocument();
+    const otherOption = screen.getByTestId(
+      "automation-setup-repository-option-fabrikam/Fabrikam Fabric/fabrikam-web",
+    );
+    expect(
+      within(otherOption).getByText("Fabrikam Fabric/"),
+    ).toBeInTheDocument();
+    await user.hover(within(option).getByText("fabrikam-web"));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "fabrikam/Fabrikam Fiber/fabrikam-web",
+    );
     await user.click(option);
 
     expect(
       screen.getByTestId("automation-setup-repository-value"),
     ).toHaveTextContent(
+      "https://dev.azure.com/fabrikam/Fabrikam%20Fiber/_git/fabrikam-web",
+    );
+    const pill = screen.getByTestId("automation-setup-repository-value");
+    expect(within(pill).getByText("fabrikam-web")).toBeInTheDocument();
+    await user.hover(within(pill).getByText("fabrikam-web"));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
       "https://dev.azure.com/fabrikam/Fabrikam%20Fiber/_git/fabrikam-web",
     );
 
