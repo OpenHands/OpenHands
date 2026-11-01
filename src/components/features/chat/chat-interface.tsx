@@ -1,3 +1,9 @@
+import { ChatProgressContext } from "#/context/chat-progress-context";
+import {
+  CHAT_BODY_CLASS_NAME,
+  CHAT_SCROLL_CLASS_NAME,
+  CHAT_COMPOSER_CLASS_NAME,
+} from "./chat-layout";
 import { TaskStartupProgress } from "./task-startup-progress";
 import React from "react";
 import { createPortal } from "react-dom";
@@ -98,6 +104,7 @@ export function ChatInterface({
     useConversationStore();
   const {
     errorMessage,
+    errorType,
     errorCode,
     errorClassification,
     removeErrorMessage,
@@ -323,6 +330,29 @@ export function ChatInterface({
         : false,
     [pendingMessages, conversationId],
   );
+
+  let pendingMessageLabel: string | undefined;
+  if (activeConversation?.id === conversationId) {
+    if (sandboxStatus === "PAUSED" || sandboxStatus === "STARTING") {
+      pendingMessageLabel = t(I18nKey.CHAT_INTERFACE$RESUMING_SANDBOX);
+    } else if (
+      sandboxStatus === "RUNNING" &&
+      conversationWebSocket &&
+      conversationWebSocket.connectionState !== "OPEN"
+    ) {
+      pendingMessageLabel = t(I18nKey.CHAT_INTERFACE$CONNECTING);
+    }
+  }
+  const hideConnectionError =
+    pendingMessageLabel !== undefined &&
+    errorType === "connection" &&
+    !errorCode &&
+    errorMessage === SERVER_CONNECTION_ERROR_MESSAGE &&
+    pendingMessages.some(
+      (message) =>
+        message.conversationId === conversationId &&
+        message.status === "sending",
+    );
 
   const hasModelEntries = useModelStore((s) =>
     conversationId
@@ -555,25 +585,31 @@ export function ChatInterface({
   const isComposerDocked = Boolean(composerDockTarget);
   const isMinimalComposer = isComposerDocked || minimalComposer;
   const composer = (
-    <ComposerDockedProvider
-      enabled={isComposerDocked}
-      minimal={isMinimalComposer}
+    <ChatProgressContext.Provider
+      value={
+        isTask || hasPendingUserMessages || curAgentState === AgentState.RUNNING
+      }
     >
-      <InteractiveChatBox
-        onSubmit={(content, images, files) => {
-          if (isComposerDocked) onDockedComposerSubmit?.();
-          return handleSendMessage(content, images, files);
-        }}
-        disabled={isTask || isNewConversationPending || llmBlocked}
-        hasStartedConversation={hasStartedConversation}
-        showGitControlBar={showGitControlBar}
-        placeholder={
-          isMinimalComposer
-            ? t(I18nKey.AUTOMATION_SETUP$DOCKED_COMPOSER_PLACEHOLDER)
-            : composerPlaceholder
-        }
-      />
-    </ComposerDockedProvider>
+      <ComposerDockedProvider
+        enabled={isComposerDocked}
+        minimal={isMinimalComposer}
+      >
+        <InteractiveChatBox
+          onSubmit={(content, images, files) => {
+            if (isComposerDocked) onDockedComposerSubmit?.();
+            return handleSendMessage(content, images, files);
+          }}
+          disabled={isTask || isNewConversationPending || llmBlocked}
+          hasStartedConversation={hasStartedConversation}
+          showGitControlBar={showGitControlBar}
+          placeholder={
+            isMinimalComposer
+              ? t(I18nKey.AUTOMATION_SETUP$DOCKED_COMPOSER_PLACEHOLDER)
+              : composerPlaceholder
+          }
+        />
+      </ComposerDockedProvider>
+    </ChatProgressContext.Provider>
   );
   const dockedOrInlineComposer = composerDockTarget
     ? createPortal(composer, composerDockTarget)
@@ -582,10 +618,7 @@ export function ChatInterface({
   return (
     <WorkspaceFilesForChatProvider>
       <ScrollProvider value={scrollProviderValue}>
-        <div
-          className="relative flex h-full flex-col justify-between px-4"
-          data-testid="chat-interface"
-        >
+        <div className={CHAT_BODY_CLASS_NAME} data-testid="chat-interface">
           {!hasSubstantiveAgentActions &&
             !hasPendingUserMessages &&
             !userEventsExist &&
@@ -614,7 +647,7 @@ export function ChatInterface({
               maybeLoadOlder(e.currentTarget);
             }}
             onWheel={handleWheelForPagination}
-            className="custom-scrollbar-always flex min-h-0 grow flex-col gap-2 overflow-x-hidden overflow-y-auto px-0 pt-4 pb-8 md:px-4"
+            className={CHAT_SCROLL_CLASS_NAME}
           >
             {isChatLoading && isReturningToConversation && (
               <ChatMessagesSkeleton />
@@ -672,7 +705,7 @@ export function ChatInterface({
             UserMessageEvent echoes back over the WebSocket, so this never
             double-renders alongside the real event list.
           */}
-            <PendingUserMessages />
+            <PendingUserMessages pendingLabel={pendingMessageLabel} />
             {isTask && <TaskStartupProgress />}
 
             {/* Goal-loop status sits at the end of the message flow — above the
@@ -680,10 +713,10 @@ export function ChatInterface({
             <GoalStatusBanner conversationId={conversationId} />
           </div>
 
-          <div className="flex shrink-0 flex-col gap-1.5 pb-4">
+          <div className={CHAT_COMPOSER_CLASS_NAME}>
             <SkillInstallRestartBanner conversationId={conversationId} />
             <BtwMessages conversationId={conversationId} />
-            {errorMessage && (
+            {errorMessage && !hideConnectionError && (
               <ErrorMessageBanner
                 message={errorMessage}
                 code={errorCode}
@@ -732,12 +765,14 @@ export function ChatInterface({
                   <div className="flex justify-between relative">
                     <div className="flex items-end gap-1 pointer-events-auto">
                       <ConfirmationModeEnabled />
-                      {isStartingStatus && !isTask && (
-                        <ChatStatusIndicator
-                          statusColor={serverStatusColor}
-                          status={serverStatusText}
-                        />
-                      )}
+                      {isStartingStatus &&
+                        !isTask &&
+                        !hasPendingUserMessages && (
+                          <ChatStatusIndicator
+                            statusColor={serverStatusColor}
+                            status={serverStatusText}
+                          />
+                        )}
                     </div>
 
                     {!hitBottom ? (

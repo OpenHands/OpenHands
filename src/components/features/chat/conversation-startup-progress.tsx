@@ -23,10 +23,13 @@ export function ConversationStartupProgress({
   onRetry,
 }: Props) {
   const { t } = useTranslation("openhands");
-  const isRunning = !error && status !== "READY" && status !== "ERROR";
-  const label = status
-    ? getTaskStatusI18nKey(status)
-    : I18nKey.HOME$CREATING_CONVERSATION;
+  const isRunning = !error && status !== "ERROR";
+  const label =
+    status === "READY"
+      ? I18nKey.CHAT_INTERFACE$CONNECTING
+      : status
+        ? getTaskStatusI18nKey(status)
+        : I18nKey.HOME$CREATING_CONVERSATION;
   const [observedSteps, setObservedSteps] = useState([label]);
   if (!observedSteps.includes(label)) {
     setObservedSteps([...observedSteps, label]);
@@ -43,13 +46,13 @@ export function ConversationStartupProgress({
   const spinner = isRunning ? (
     <LoaderCircle
       aria-hidden="true"
-      className="h-3.5 w-3.5 shrink-0 animate-spin"
+      className="h-3.5 w-3.5 shrink-0 animate-spin motion-reduce:animate-none"
     />
   ) : null;
   return (
-    <div data-testid="conversation-startup-progress">
+    <div className="mt-2 w-full" data-testid="conversation-startup-progress">
       <div
-        className="my-1 w-full py-1 text-sm text-muted"
+        className="w-full py-1 text-sm text-muted"
         data-testid="startup-progress-group"
       >
         {expandable ? (

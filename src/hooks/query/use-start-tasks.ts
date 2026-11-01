@@ -1,12 +1,36 @@
+import { CONVERSATION_QUERY_KEYS } from "./query-keys";
 import type { AppConversationStartTask } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { useEffect, useRef } from "react";
-import { useQueries, useQueryClient, type Query } from "@tanstack/react-query";
+import {
+  useQueries,
+  useQueryClient,
+  type Query,
+  type UseQueryResult,
+} from "@tanstack/react-query";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { isRetryableError } from "#/api/with-retry";
 
-export const useStartTasks = (limit = 10) => {
+function combineStartTaskQueries(
+  queries: UseQueryResult<AppConversationStartTask | null>[],
+) {
+  return {
+    tasks: queries.flatMap((query) => (query.data ? [query.data] : [])),
+    unresolvedIndexes: queries.flatMap((query, index) =>
+      !query.data ? [index] : [],
+    ),
+    failedIndexes: queries.flatMap((query, index) =>
+      query.isError || query.data === null ? [index] : [],
+    ),
+    isLoading: queries.some((query) => query.isLoading),
+  };
+}
+
+export const useStartTasks = (
+  limit = 10,
+  listedConversationIds: string[] = [],
+) => {
   const { backend, orgId } = useActiveBackend();
   const queryClient = useQueryClient();
   const launches = useConversationLaunchStore((state) => state.launches);
@@ -14,15 +38,17 @@ export const useStartTasks = (limit = 10) => {
   const ids = Object.values(launches)
     .filter(
       (launch) =>
+        !launch.listed &&
         launch.backendId === backend.id &&
         launch.orgId === orgId &&
         launch.targetId?.startsWith("task-"),
     )
     .slice(-limit)
     .map((launch) => launch.targetId!.slice("task-".length));
-  const queries = useQueries({
+  const { tasks, unresolvedIndexes, failedIndexes, isLoading } = useQueries({
+    combine: combineStartTaskQueries,
     queries: ids.map((taskId) => ({
-      queryKey: ["start-task", taskId],
+      queryKey: CONVERSATION_QUERY_KEYS.startTask(taskId),
       queryFn: () => AgentServerConversationService.getStartTask(taskId),
       enabled: backend.kind === "cloud",
       retry: (count: number, error: Error) =>
@@ -39,9 +65,9 @@ export const useStartTasks = (limit = 10) => {
       },
     })),
   });
-  const readyIds = queries
-    .filter((query) => query.data?.status === "READY")
-    .map((query) => query.data!.id)
+  const readyIds = tasks
+    .filter((task) => task.status === "READY")
+    .map((task) => task.id)
     .join(",");
   const seenReady = useRef(new Set<string>());
   useEffect(() => {
@@ -53,16 +79,29 @@ export const useStartTasks = (limit = 10) => {
     }
     seenReady.current = new Set(ready);
   }, [readyIds, queryClient]);
+  useEffect(() => {
+    const { update } = useConversationLaunchStore.getState();
+    for (const task of tasks) {
+      if (!task?.app_conversation_id) continue;
+      const launch = Object.values(launches).find(
+        (entry) =>
+          entry.backendId === backend.id &&
+          entry.orgId === orgId &&
+          entry.targetId === `task-${task.id}`,
+      );
+      if (launch)
+        update(launch.id, {
+          conversationId: task.app_conversation_id,
+          listed: listedConversationIds.includes(task.app_conversation_id),
+        });
+    }
+  }, [tasks, launches, backend.id, orgId, listedConversationIds]);
   return {
-    unresolvedTaskIds: queries.flatMap((query, index) =>
-      !query.data ? [ids[index]] : [],
+    unresolvedTaskIds: unresolvedIndexes.map((index) => ids[index]),
+    failedTaskIds: failedIndexes.map((index) => ids[index]),
+    data: tasks.filter(
+      (task) => !listedConversationIds.includes(task.app_conversation_id ?? ""),
     ),
-    failedTaskIds: queries.flatMap((query, index) =>
-      query.isError || query.data === null ? [ids[index]] : [],
-    ),
-    data: queries.flatMap((query) =>
-      query.data && query.data.status !== "READY" ? [query.data] : [],
-    ),
-    isLoading: queries.some((query) => query.isLoading),
+    isLoading,
   };
 };
