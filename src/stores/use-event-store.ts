@@ -68,6 +68,7 @@ export interface EventState {
    * should clear the accumulated events.
    */
   loadedConversationId: string | null;
+  loadedConversationScope: string | null;
   addEvent: (event: OHEvent) => void;
   /**
    * Bulk-insert events. Used for the initial REST history load and for
@@ -90,7 +91,10 @@ export interface EventState {
    * call-site to invoke a clear and a `loadedConversationId` setter in the
    * right order.
    */
-  clearEventsForConversation: (conversationId: string | null) => void;
+  clearEventsForConversation: (
+    conversationId: string | null,
+    scope?: string | null,
+  ) => void;
   /**
    * Streaming slots. They live only in `uiEvents`: nothing reads `events` for
    * provisional text, and keeping them out means their id — which is the id
@@ -158,6 +162,7 @@ export const useEventStore = create<EventState>()((set) => ({
   eventIds: new Set(),
   uiEvents: [],
   loadedConversationId: null,
+  loadedConversationScope: null,
   addEvent: (event: OHEvent) => set((state) => applyAddEvent(state, event)),
   addEvents: (incoming: OHEvent[]) =>
     set((state) => {
@@ -199,13 +204,15 @@ export const useEventStore = create<EventState>()((set) => ({
       eventIds: new Set(),
       uiEvents: [],
       loadedConversationId: null,
+      loadedConversationScope: null,
     })),
-  clearEventsForConversation: (conversationId: string | null) =>
+  clearEventsForConversation: (conversationId: string | null, scope = null) =>
     set(() => ({
       events: [],
       eventIds: new Set(),
       uiEvents: [],
       loadedConversationId: conversationId,
+      loadedConversationScope: scope,
     })),
   openStreamingSlot: (frame: ItemStartedFrame, meta: StreamingSlotMeta = {}) =>
     set((state) => {
