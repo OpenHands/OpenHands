@@ -65,6 +65,59 @@ describe("useSaveSettings - MCP tracking", () => {
     expect(trackMcpConfigUpdatedMock).not.toHaveBeenCalled();
   });
 
+  it("drops an empty llm api_key from the save payload instead of forwarding it", async () => {
+    const saveSettingsSpy = vi.spyOn(SettingsService, "saveSettings");
+    const { result } = renderHook(() => useSaveSettings(), {
+      wrapper: createWrapper(),
+    });
+
+    await result.current.mutateAsync({
+      agent_settings_diff: { llm: { model: "openai/gpt-4o", api_key: "" } },
+    });
+
+    await waitFor(() => {
+      expect(saveSettingsSpy).toHaveBeenCalledWith({
+        agent_settings_diff: { llm: { model: "openai/gpt-4o" } },
+      });
+    });
+  });
+
+  it("drops the llm diff entirely when api_key was the only field", async () => {
+    const saveSettingsSpy = vi.spyOn(SettingsService, "saveSettings");
+    const { result } = renderHook(() => useSaveSettings(), {
+      wrapper: createWrapper(),
+    });
+
+    await result.current.mutateAsync({
+      agent_settings_diff: { llm: { api_key: "  " } },
+    });
+
+    await waitFor(() => {
+      expect(saveSettingsSpy).toHaveBeenCalledWith({});
+    });
+  });
+
+  it("keeps a non-empty llm api_key in the save payload", async () => {
+    const saveSettingsSpy = vi.spyOn(SettingsService, "saveSettings");
+    const { result } = renderHook(() => useSaveSettings(), {
+      wrapper: createWrapper(),
+    });
+
+    await result.current.mutateAsync({
+      agent_settings_diff: {
+        llm: { model: "openai/gpt-4o", api_key: "  sk-test-key  " },
+      },
+    });
+
+    await waitFor(() => {
+      expect(saveSettingsSpy).toHaveBeenCalledWith({
+        agent_settings_diff: {
+          llm: { model: "openai/gpt-4o", api_key: "sk-test-key" },
+        },
+      });
+    });
+  });
+
   it("does not call trackMcpConfigUpdated when mcp_config reference is unchanged", async () => {
     const sharedConfig = {};
     useSettingsMock.mockReturnValue({
