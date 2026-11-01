@@ -33,20 +33,26 @@ export function useSendMessage() {
           };
         };
 
-        if (action === "message" && args?.content) {
+        const text = args?.content;
+        const imageUrls = args?.image_urls ?? [];
+
+        if (action === "message" && (text || imageUrls.length > 0)) {
           // Build agent-server message content array
-          const content: Array<MessageContent> = [
-            {
+          const content: Array<MessageContent> = [];
+
+          // An empty text block makes the model treat the message as empty and ignore the image
+          if (text) {
+            content.push({
               type: "text",
-              text: args.content,
-            },
-          ];
+              text,
+            });
+          }
 
           // Add images if present - using SDK's ImageContent format
-          if (args.image_urls && args.image_urls.length > 0) {
+          if (imageUrls.length > 0) {
             content.push({
               type: "image",
-              image_urls: args.image_urls,
+              image_urls: imageUrls,
             });
           }
 
