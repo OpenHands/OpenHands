@@ -60,10 +60,19 @@ const DEFAULT_AGENT_SERVER_TELEMETRY_POSTHOG_API_KEY =
 const DEFAULT_AGENT_SERVER_TELEMETRY_POSTHOG_HOST =
   SHARED_DEFAULTS.telemetry.posthogHost;
 const AGENT_SERVER_POSTHOG_CONSTRAINT = "posthog>=6,<7";
+// litellm 1.106.0 imports mcp 2.x-only symbols; the SDK stays on mcp 1.x
+// (OpenHands/software-agent-sdk#6088). uvx installs do not inherit the SDK
+// uv.lock, so pin litellm here until the SDK publishes a compatible cap.
+export const AGENT_SERVER_LITELLM_CONSTRAINT = "litellm<1.106.0";
 // Interpreter request passed to uvx for agent-server and automation; see
 // buildUvxPythonArgs.
 const DEFAULT_UVX_PYTHON_REQUEST = SHARED_DEFAULTS.python.uvxRequest;
 const FRONTEND_REQUIRED_BINS = ["cross-env", "react-router"];
+
+function pushAgentServerUvxConstraints(uvxArgs) {
+  uvxArgs.push("--with", AGENT_SERVER_POSTHOG_CONSTRAINT);
+  uvxArgs.push("--with", AGENT_SERVER_LITELLM_CONSTRAINT);
+}
 
 /**
  * Generate a cryptographically secure random API key.
@@ -480,10 +489,9 @@ export function buildAgentServerCommand(env = process.env) {
       path.join(localPath, "openhands-tools"),
       "--with-editable",
       path.join(localPath, "openhands-workspace"),
-      "--with",
-      AGENT_SERVER_POSTHOG_CONSTRAINT,
-      "agent-server",
     );
+    pushAgentServerUvxConstraints(uvxArgs);
+    uvxArgs.push("agent-server");
     source = `local (${localPath})`;
   } else if (gitRef) {
     // Use git ref with subdirectory syntax for uv workspace monorepo.
@@ -506,10 +514,9 @@ export function buildAgentServerCommand(env = process.env) {
       `${baseGitUrl}#subdirectory=openhands-tools`,
       "--with",
       `${baseGitUrl}#subdirectory=openhands-workspace`,
-      "--with",
-      AGENT_SERVER_POSTHOG_CONSTRAINT,
-      "agent-server",
     );
+    pushAgentServerUvxConstraints(uvxArgs);
+    uvxArgs.push("agent-server");
     source = `git (${gitRef})`;
   } else if (version) {
     // Use specific PyPI version: uvx --from openhands-agent-server==version agent-server
@@ -525,7 +532,7 @@ export function buildAgentServerCommand(env = process.env) {
       "--with",
       `openhands-workspace==${version}`,
     );
-    uvxArgs.push("--with", AGENT_SERVER_POSTHOG_CONSTRAINT);
+    pushAgentServerUvxConstraints(uvxArgs);
     uvxArgs.push("agent-server");
     source = `PyPI (${version})`;
   } else {
@@ -541,7 +548,7 @@ export function buildAgentServerCommand(env = process.env) {
       "--with",
       `openhands-workspace==${DEFAULT_AGENT_SERVER_VERSION}`,
     );
-    uvxArgs.push("--with", AGENT_SERVER_POSTHOG_CONSTRAINT);
+    pushAgentServerUvxConstraints(uvxArgs);
     uvxArgs.push("agent-server");
     source = `PyPI (${DEFAULT_AGENT_SERVER_VERSION}, default)`;
   }
