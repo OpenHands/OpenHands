@@ -134,6 +134,13 @@ export const APP_UPDATE_QUERY_KEYS = {
 } as const;
 
 export const CONVERSATION_QUERY_KEYS = {
+  user: (cid: string | null, backendId: string, orgId: string | null) => [
+    "user",
+    "conversation",
+    cid,
+    backendId,
+    orgId,
+  ],
   subConversations: ["v1", "sub-conversations"] as const,
 } as const;
 

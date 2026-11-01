@@ -1,3 +1,4 @@
+import { usePrefetchUserConversation } from "#/hooks/query/use-user-conversation";
 import { usePendingTaskAttachmentsStore } from "#/stores/pending-task-attachments-store";
 import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
 import React from "react";
@@ -100,6 +101,7 @@ export function ConversationPanel({
   const { conversationId: currentConversationId, navigate } = useNavigation();
   const { backend: activeBackend, orgId } = useActiveBackend();
   const backendScopedPath = useBackendScopedPath();
+  const prefetchConversation = usePrefetchUserConversation();
   // Click-outside is only relevant in the legacy drawer mode where an
   // onClose handler is provided. When the panel is rendered inline (e.g.
   // as the always-visible conversation list pane), clicking outside should
@@ -1170,7 +1172,19 @@ export function ConversationPanel({
         >
           <NavigationLink
             to={backendScopedPath(`/conversations/${conversation.id}`)}
-            onClick={onClose}
+            onClick={(event) => {
+              onClose?.();
+              if (
+                !event.defaultPrevented &&
+                event.button === 0 &&
+                !event.metaKey &&
+                !event.ctrlKey &&
+                !event.altKey &&
+                !event.shiftKey
+              ) {
+                void prefetchConversation(conversation.id);
+              }
+            }}
             className={cn(
               "block rounded-md transition-colors",
               openContextMenuId !== conversation.id && "hover:bg-surface",
@@ -1254,6 +1268,7 @@ export function ConversationPanel({
       );
     },
     [
+      prefetchConversation,
       activeBackend.id,
       activeBackend.kind,
       archivedIdSet,
