@@ -137,7 +137,11 @@ export function ConversationName() {
   }, [titleMode]);
 
   if (!conversation) {
-    return null;
+    return (
+      <div className="h-5.5 min-w-0 truncate pl-0 text-base leading-5 text-muted lg:pl-1">
+        {t(I18nKey.SIDEBAR$NEW_CHAT)}
+      </div>
+    );
   }
 
   return (

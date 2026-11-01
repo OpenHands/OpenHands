@@ -68,7 +68,7 @@ beforeEach(() => {
 });
 afterEach(() => client.clear());
 
-it("announces startup as busy until the task is ready", async () => {
+it("keeps explaining connection while a ready task is handing off", async () => {
   mount();
   expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true");
   await waitFor(() =>
@@ -78,7 +78,9 @@ it("announces startup as busy until the task is ready", async () => {
     client.setQueryData(["start-task", "123"], { ...task, status: "READY" });
   });
   await waitFor(() =>
-    expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "false"),
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "CHAT_INTERFACE$CONNECTING",
+    ),
   );
 });
 
