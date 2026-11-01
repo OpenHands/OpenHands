@@ -1,0 +1,81 @@
+import { test, expect } from "@playwright/test";
+import {
+  seedLocalStorage,
+  routeSessionApiKey,
+  dismissAnalyticsModal,
+  ensureMockLLMProfile,
+  setChatInput,
+  waitForPath,
+  deleteConversation,
+} from "../utils/mock-llm-helpers";
+
+test("opens a created conversation while its optional plugin lookup is pending", async ({
+  page,
+  request,
+}, testInfo) => {
+  // External fonts are irrelevant to navigation and can stall offline hosts.
+  await page.route(/^https:\/\/fonts\.(googleapis|gstatic)\.com\//, (route) =>
+    route.abort(),
+  );
+  await seedLocalStorage(page);
+  await routeSessionApiKey(page);
+  await ensureMockLLMProfile(page);
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await dismissAnalyticsModal(page);
+  await expect(page.getByTestId("home-chat-launcher")).toBeVisible();
+
+  let releaseLookup!: () => void;
+  const lookupGate = new Promise<void>((resolve) => {
+    releaseLookup = resolve;
+  });
+  let lookupHeld = false;
+  let lookupCompleted = Promise.resolve();
+  // Forward the real response unchanged. Only its delivery is held, so a
+  // successful create cannot accidentally depend on this optional request.
+  await page.route("**/api/plugins/installed", (route) => {
+    lookupCompleted = (async () => {
+      const response = await route.fetch();
+      lookupHeld = true;
+      await lookupGate;
+      await route.fulfill({ response });
+    })();
+    return lookupCompleted;
+  });
+
+  let conversationId: string | undefined;
+  try {
+    const created = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        new URL(response.url()).pathname === "/api/conversations" &&
+        response.status() === 201,
+    );
+    await setChatInput(page, "Hello, please respond briefly.");
+    await page.getByTestId("submit-button").click();
+    const response = await created;
+    conversationId = (await response.json()).id;
+    const createdAt = Date.now();
+    await expect.poll(() => lookupHeld).toBe(true);
+
+    try {
+      await waitForPath(page, /\/conversations\/.+/, 30_000);
+      await expect(page.getByTestId("home-chat-launcher")).toHaveCount(0);
+    } finally {
+      await page.screenshot({
+        path: testInfo.outputPath("plugin-lookup-pending.png"),
+      });
+      await testInfo.attach("navigation-timing", {
+        body: JSON.stringify({
+          createResponseToObservationMs: Date.now() - createdAt,
+          path: new URL(page.url()).pathname,
+          pluginResponseStillHeld: true,
+        }),
+        contentType: "application/json",
+      });
+    }
+  } finally {
+    releaseLookup();
+    await lookupCompleted;
+    if (conversationId) await deleteConversation(request, conversationId);
+  }
+});
