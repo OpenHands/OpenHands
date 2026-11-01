@@ -1,3 +1,5 @@
+import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
+import type { AppConversationPage } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { withConversationTagFlags } from "#/utils/conversation-tag-flags";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -42,6 +44,111 @@ vi.mock("#/utils/custom-toast-handlers", () => ({
 
 describe("ConversationPanel list loading", () => {
   setupConversationPanelTest();
+
+  it("keeps one prompt-titled row until the saved row arrives, including a delayed list response", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-startup" });
+    useConversationLaunchStore.setState({ launches: {} });
+    useConversationLaunchStore.getState().begin({
+      backendId: cloudBackend.id,
+      orgId: "org-startup",
+      message: "Explain startup",
+      files: [],
+      targetId: "task-startup",
+    });
+    const task = {
+      id: "startup",
+      status: "WORKING",
+      request: {},
+      app_conversation_id: null,
+    };
+    vi.spyOn(AgentServerConversationService, "getStartTask").mockResolvedValue(
+      task as never,
+    );
+    let resolveList!: (page: AppConversationPage) => void;
+    vi.mocked(AgentServerConversationService.searchConversations)
+      .mockResolvedValueOnce({ items: [], next_page_id: null })
+      .mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolveList = resolve;
+          }),
+      );
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <ActiveBackendProvider>
+          <NavigationProvider
+            value={{
+              currentPath: "/conversations/task-startup",
+              conversationId: "task-startup",
+              navigate: vi.fn(),
+              isNavigating: false,
+            }}
+          >
+            <ConversationPanel />
+          </NavigationProvider>
+        </ActiveBackendProvider>
+      </QueryClientProvider>,
+    );
+    await screen.findByText("Explain startup");
+    await waitFor(() =>
+      expect(AgentServerConversationService.getStartTask).toHaveBeenCalled(),
+    );
+    act(() =>
+      client.setQueryData(["start-task", "startup"], {
+        ...task,
+        status: "READY",
+        app_conversation_id: "12345-real",
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        AgentServerConversationService.searchConversations,
+      ).toHaveBeenCalledTimes(2),
+    );
+    expect(screen.getAllByText("Explain startup")).toHaveLength(1);
+    expect(
+      screen.queryByText("CONVERSATION$NO_CONVERSATIONS"),
+    ).not.toBeInTheDocument();
+    await act(async () =>
+      resolveList({
+        items: [
+          createMockConversation({
+            id: "12345-real",
+            title: "Conversation 12345",
+            sandbox_status: "RUNNING",
+          }),
+        ],
+        next_page_id: null,
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.getAllByText("Explain startup")).toHaveLength(1),
+    );
+    expect(screen.getAllByTestId("conversation-card")).toHaveLength(1);
+    expect(screen.queryByText("Conversation 12345")).not.toBeInTheDocument();
+    act(() =>
+      client.setQueryData(
+        [
+          "user",
+          "conversations",
+          "paginated",
+          20,
+          cloudBackend.id,
+          "org-startup",
+        ],
+        { pages: [{ items: [], next_page_id: null }], pageParams: [undefined] },
+      ),
+    );
+    await waitFor(() =>
+      expect(screen.queryByText("Explain startup")).not.toBeInTheDocument(),
+    );
+    useConversationLaunchStore.setState({ launches: {} });
+    client.clear();
+  });
 
   it("pins the active backend onto each conversation link", async () => {
     // A tab opened with cmd/ctrl-click does not reliably inherit the opener's

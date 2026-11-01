@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import EventService from "#/api/event-service/event-service.api";
 import { getActiveBackend } from "#/api/backend-registry/active-store";
 import { useUserConversation } from "#/hooks/query/use-user-conversation";
+import { isRuntimeUnavailableSandboxStatus } from "#/utils/conversation-archive-status";
 import type { OpenHandsEvent } from "#/types/agent-server/core";
 
 /**
@@ -59,6 +60,11 @@ function resumeCursor(count: number): number {
 export const useConversationHistory = (conversationId?: string) => {
   const { data: conversation } = useUserConversation(conversationId ?? null);
 
+  const runtimeUnavailable =
+    getActiveBackend().backend.kind === "cloud" &&
+    (conversation?.sandbox_status === "PAUSED" ||
+      isRuntimeUnavailableSandboxStatus(conversation?.sandbox_status));
+
   return useQuery<ConversationHistoryPage>({
     queryKey: [
       "conversation-history",
@@ -67,6 +73,7 @@ export const useConversationHistory = (conversationId?: string) => {
       // re-provisioned cloud sandbox with a new URL) re-fetches.
       conversation?.conversation_url ?? null,
       conversation?.session_api_key ?? null,
+      runtimeUnavailable,
     ],
     enabled: !!conversationId && !!conversation,
     queryFn: async () => {
@@ -79,7 +86,7 @@ export const useConversationHistory = (conversationId?: string) => {
       // deduped against this page) rather than lost.
       const conversationUrl = conversation?.conversation_url ?? null;
       let count: number | null = null;
-      if (conversationUrl) {
+      if (conversationUrl && !runtimeUnavailable) {
         try {
           count = await EventService.getEventCount(
             conversationId,
@@ -99,6 +106,7 @@ export const useConversationHistory = (conversationId?: string) => {
         {
           limit: INITIAL_HISTORY_PAGE_SIZE,
           sortOrder: "TIMESTAMP_DESC",
+          excludeFullState: true,
         },
       );
 

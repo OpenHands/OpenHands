@@ -11,6 +11,8 @@ export interface ConversationLaunch {
   files: File[];
   attachments?: PendingTaskAttachments;
   targetId?: string;
+  conversationId?: string;
+  listed?: boolean;
   error?: string;
 }
 
@@ -19,7 +21,12 @@ interface LaunchState {
   begin: (launch: Omit<ConversationLaunch, "id">) => string;
   update: (
     id: string,
-    update: Partial<Pick<ConversationLaunch, "targetId" | "error">>,
+    update: Partial<
+      Pick<
+        ConversationLaunch,
+        "targetId" | "error" | "conversationId" | "listed"
+      >
+    >,
   ) => void;
   remove: (id: string) => void;
 }
@@ -36,7 +43,11 @@ export const useConversationLaunchStore = create<LaunchState>((set) => ({
   },
   update: (id, update) =>
     set((state) =>
-      state.launches[id]
+      state.launches[id] &&
+      Object.entries(update).some(
+        ([key, value]) =>
+          state.launches[id][key as keyof ConversationLaunch] !== value,
+      )
         ? {
             launches: {
               ...state.launches,

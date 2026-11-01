@@ -226,33 +226,42 @@ describe("ChatMessage", () => {
     expect(codeElement.closest("article")).not.toBeNull();
   });
 
-  it("truncates long sent user messages to five lines with view more on hover", async () => {
-    const longMessage = `${"Here's a long message. ".repeat(40)}`.trim();
-    render(<ChatMessage type="user" message={longMessage} />);
+  it.each([undefined, "sending", "error"] as const)(
+    "keeps long user messages expandable with status %s",
+    async (pendingStatus) => {
+      const longMessage = `${"Here's a long message. ".repeat(40)}`.trim();
+      render(
+        <ChatMessage
+          type="user"
+          message={longMessage}
+          pendingStatus={pendingStatus}
+        />,
+      );
 
-    expect(
-      screen.getByText(longMessage).closest(".line-clamp-5"),
-    ).not.toBeNull();
-    expect(
-      screen.getByTestId("chat-message-truncation-gradient"),
-    ).toBeInTheDocument();
-    expect(screen.getByTestId("chat-message-view-more")).toHaveClass(
-      "opacity-0",
-    );
+      expect(
+        screen.getByText(longMessage).closest(".line-clamp-5"),
+      ).not.toBeNull();
+      expect(
+        screen.getByTestId("chat-message-truncation-gradient"),
+      ).toBeInTheDocument();
+      expect(screen.getByTestId("chat-message-view-more")).toHaveClass(
+        "opacity-0",
+      );
 
-    fireEvent.mouseEnter(screen.getByTestId("user-message"));
-    expect(screen.getByTestId("chat-message-view-more")).toHaveClass(
-      "opacity-100",
-    );
+      fireEvent.mouseEnter(screen.getByTestId("user-message"));
+      expect(screen.getByTestId("chat-message-view-more")).toHaveClass(
+        "opacity-100",
+      );
 
-    fireEvent.click(screen.getByTestId("chat-message-expand"));
-    expect(
-      screen.queryByTestId("chat-message-truncation-gradient"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByTestId("chat-message-view-more"),
-    ).not.toBeInTheDocument();
-  });
+      fireEvent.click(screen.getByTestId("chat-message-expand"));
+      expect(
+        screen.queryByTestId("chat-message-truncation-gradient"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("chat-message-view-more"),
+      ).not.toBeInTheDocument();
+    },
+  );
 
   it("shows a stop control for a sending user message and calls onStop when clicked", () => {
     const onStop = vi.fn();
@@ -313,8 +322,6 @@ describe("ChatMessage", () => {
   });
 
   it("renders literal angle-bracket text in a sending user message", () => {
-    // The pending/sending bubble renders through a different branch than the
-    // settled message, so it gets its own guard.
     const { container } = render(
       <ChatMessage type="user" message="<something>" pendingStatus="sending" />,
     );

@@ -35,7 +35,7 @@ function userConversationQueryOptions(
   active: ResolvedActiveBackend,
 ) {
   return {
-    queryKey: CONVERSATION_QUERY_KEYS.user(
+    queryKey: CONVERSATION_QUERY_KEYS.detail(
       cid,
       active.backend.id,
       active.orgId,

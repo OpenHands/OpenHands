@@ -95,7 +95,9 @@ it("shows only this organization's pending starts and refreshes conversations wh
   await waitFor(() =>
     expect(result.current.conversations).toEqual(["new-conversation"]),
   );
-  expect(result.current.tasks).toEqual([]);
+  expect(result.current.tasks).toEqual([
+    expect.objectContaining({ status: "READY" }),
+  ]);
 });
 
 it("stops polling a completed background start", async () => {
@@ -117,4 +119,21 @@ it("keeps an acknowledged start findable when its first status read fails", asyn
   const { result } = renderHook(() => useStartTasks(), { wrapper });
   await waitFor(() => expect(result.current.failedTaskIds).toEqual(["123"]));
   expect(result.current.unresolvedTaskIds).toEqual(["123"]);
+});
+
+it("retires a ready row only after the saved conversation is listed", async () => {
+  vi.mocked(AgentServerConversationService.getStartTask).mockResolvedValue({
+    ...working,
+    status: "READY",
+    app_conversation_id: "new-conversation",
+  } as never);
+  const { result, rerender } = renderHook(
+    ({ listed }) => useStartTasks(10, listed),
+    { wrapper, initialProps: { listed: [] as string[] } },
+  );
+  await waitFor(() => expect(result.current.data).toHaveLength(1));
+  rerender({ listed: ["new-conversation"] });
+  await waitFor(() => expect(result.current.data).toEqual([]));
+  rerender({ listed: [] });
+  expect(result.current.data).toEqual([]);
 });

@@ -1,3 +1,7 @@
+import { useConversationDisplayTitle } from "#/hooks/use-conversation-display-title";
+import { NavigationProvider } from "#/context/navigation-context";
+import { useActiveConversation } from "#/hooks/query/use-active-conversation";
+import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import React from "react";
 import { act, renderHook, waitFor } from "@testing-library/react";
@@ -66,14 +70,25 @@ function makeConversation(id: string): AppConversation {
   };
 }
 
-function makeWrapper() {
+function makeWrapper(conversationId?: string) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return function Wrapper({ children }: { children: React.ReactNode }) {
     return (
       <QueryClientProvider client={queryClient}>
-        <ActiveBackendProvider>{children}</ActiveBackendProvider>
+        <ActiveBackendProvider>
+          <NavigationProvider
+            value={{
+              conversationId: conversationId ?? null,
+              currentPath: `/conversations/${conversationId ?? ""}`,
+              navigate: vi.fn(),
+              isNavigating: false,
+            }}
+          >
+            {children}
+          </NavigationProvider>
+        </ActiveBackendProvider>
       </QueryClientProvider>
     );
   };
@@ -92,6 +107,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   window.localStorage.clear();
   __resetActiveStoreForTests();
 });
@@ -317,5 +333,79 @@ describe("selected conversation prefetch", () => {
     expect(
       AgentServerConversationService.batchGetAppConversations,
     ).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("active conversation title freshness", () => {
+  it.each([false, true])(
+    "shares generated titles after completion with prefetch=%s",
+    async (prefetchFirst) => {
+      vi.useFakeTimers();
+      setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+      const conversation = {
+        ...makeConversation(CLOUD_CONVERSATION_ID),
+        created_at: new Date().toISOString(),
+        title: "Conversation conv-",
+        execution_status: ExecutionStatus.FINISHED,
+      };
+      const fetchConversation = vi.mocked(
+        AgentServerConversationService.batchGetAppConversations,
+      );
+      fetchConversation
+        .mockResolvedValueOnce([conversation])
+        .mockResolvedValue([{ ...conversation, title: "Startup explained" }]);
+      const wrapper = makeWrapper(CLOUD_CONVERSATION_ID);
+      if (prefetchFirst) {
+        const { result: prefetch } = renderHook(
+          () => usePrefetchUserConversation(),
+          { wrapper },
+        );
+        await act(async () => {
+          await prefetch.current(CLOUD_CONVERSATION_ID);
+        });
+      }
+      const { result } = renderHook(
+        () => ({
+          conversation: useActiveConversation(),
+          getTitle: useConversationDisplayTitle(),
+        }),
+        { wrapper },
+      );
+      await act(async () => vi.advanceTimersByTimeAsync(10));
+      expect(result.current.conversation.data?.title).toBe(
+        "Conversation conv-",
+      );
+      expect(fetchConversation).toHaveBeenCalledTimes(1);
+      await act(async () => vi.advanceTimersByTimeAsync(3100));
+      expect(result.current.conversation.data?.title).toBe("Startup explained");
+      expect(result.current.getTitle(CLOUD_CONVERSATION_ID)).toBe(
+        "Startup explained",
+      );
+      expect(fetchConversation).toHaveBeenCalledTimes(2);
+      await act(async () => vi.advanceTimersByTimeAsync(10000));
+      expect(fetchConversation).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it("returns to slow polling when title generation stays unavailable", async () => {
+    vi.useFakeTimers();
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    const conversation = {
+      ...makeConversation(CLOUD_CONVERSATION_ID),
+      created_at: new Date(Date.now() - 55000).toISOString(),
+      title: "Conversation conv-",
+      execution_status: ExecutionStatus.FINISHED,
+    };
+    const fetchConversation = vi.mocked(
+      AgentServerConversationService.batchGetAppConversations,
+    );
+    fetchConversation.mockResolvedValue([conversation]);
+    renderHook(() => useActiveConversation(), {
+      wrapper: makeWrapper(CLOUD_CONVERSATION_ID),
+    });
+    await act(async () => vi.advanceTimersByTimeAsync(10000));
+    expect(fetchConversation).toHaveBeenCalledTimes(3);
+    await act(async () => vi.advanceTimersByTimeAsync(10000));
+    expect(fetchConversation).toHaveBeenCalledTimes(3);
   });
 });
