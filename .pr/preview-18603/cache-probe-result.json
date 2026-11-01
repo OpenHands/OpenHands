@@ -1,0 +1,56 @@
+{
+  "base": "http://127.0.0.1:18920",
+  "client": "1.58.1",
+  "firstHash": "a38a4ff7320a3d8764ac959b264f15e335360d7c1e23a0627dee7f366c95c58f",
+  "secondHash": "a38a4ff7320a3d8764ac959b264f15e335360d7c1e23a0627dee7f366c95c58f",
+  "actualNewBytesHash": "431ced6916a2a21a156e38701afe55bbd7f88969fbbfc56d7fe099d47f265460",
+  "expectedNewBytesHash": "431ced6916a2a21a156e38701afe55bbd7f88969fbbfc56d7fe099d47f265460",
+  "staleSecondRead": true,
+  "invalidKeyBrowserRead": {
+    "ok": true,
+    "oldBytesReturned": true
+  },
+  "invalidKeyUncachedStatus": 401,
+  "network": [
+    {
+      "requestId": "30568.2",
+      "status": 200,
+      "fromDiskCache": false,
+      "fromServiceWorker": false,
+      "headers": {
+        "etag": "\"02aa6674434d6c28ed5a79b07696d611\"",
+        "content-type": "application/octet-stream",
+        "content-disposition": "attachment; filename=\"cache-probe.png\"",
+        "last-modified": "Wed, 01 Jan 2020 00:00:00 GMT"
+      },
+      "servedFromCache": false
+    },
+    {
+      "requestId": "30568.3",
+      "status": 200,
+      "fromDiskCache": true,
+      "fromServiceWorker": false,
+      "headers": {
+        "etag": "\"02aa6674434d6c28ed5a79b07696d611\"",
+        "content-type": "application/octet-stream",
+        "content-disposition": "attachment; filename=\"cache-probe.png\"",
+        "last-modified": "Wed, 01 Jan 2020 00:00:00 GMT"
+      },
+      "servedFromCache": false
+    },
+    {
+      "requestId": "30568.4",
+      "status": 200,
+      "fromDiskCache": true,
+      "fromServiceWorker": false,
+      "headers": {
+        "etag": "\"02aa6674434d6c28ed5a79b07696d611\"",
+        "content-type": "application/octet-stream",
+        "content-disposition": "attachment; filename=\"cache-probe.png\"",
+        "last-modified": "Wed, 01 Jan 2020 00:00:00 GMT"
+      },
+      "servedFromCache": false
+    }
+  ],
+  "requestPolicy": "No routing, no global headers, cache left enabled; exact bundled FileClient.downloadFile in own Chromium context."
+}
