@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, it, vi, afterEach } from "vitest";
+import { act } from "@testing-library/react";
 import { useTerminal } from "#/hooks/use-terminal";
 import { Command, useCommandStore } from "#/stores/command-store";
 import { renderWithProviders } from "../../test-utils";
@@ -97,6 +98,42 @@ describe("useTerminal", () => {
 
     expect(mockTerminal.writeln).toHaveBeenNthCalledWith(1, "echo hello");
     expect(mockTerminal.writeln).toHaveBeenNthCalledWith(2, "hello");
+  });
+
+  it("gives each mounted terminal its own command index (issue #16581)", () => {
+    // Reset the module-level counter through a mount/unmount cycle (the
+    // unmount cleanup sets it to 0) so this test does not depend on
+    // execution order within the file.
+    const { unmount } = renderWithProviders(<TestTerminalComponent />);
+    unmount();
+
+    // Mount two terminals while the store is empty, then deliver commands.
+    // With a shared module-level index the first terminal's effect would
+    // advance the counter and the second would render nothing.
+    renderWithProviders(
+      <>
+        <TestTerminalComponent />
+        <TestTerminalComponent />
+      </>,
+    );
+
+    const commands: Command[] = [
+      { content: "echo one", type: "input" },
+      { content: "one", type: "output" },
+    ];
+
+    act(() => {
+      useCommandStore.setState({ commands });
+    });
+
+    // Each terminal renders both commands: 2 writeln calls per instance.
+    // (`write` is also called for the init hide-cursor sequence and the
+    // "$ " input prompts, so only `writeln` counts are asserted here.)
+    expect(mockTerminal.writeln).toHaveBeenCalledTimes(4);
+    expect(mockTerminal.writeln).toHaveBeenNthCalledWith(1, "echo one");
+    expect(mockTerminal.writeln).toHaveBeenNthCalledWith(2, "one");
+    expect(mockTerminal.writeln).toHaveBeenNthCalledWith(3, "echo one");
+    expect(mockTerminal.writeln).toHaveBeenNthCalledWith(4, "one");
   });
 
   it("should not call fit() when terminal.element is null", () => {
