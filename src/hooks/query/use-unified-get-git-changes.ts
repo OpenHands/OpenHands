@@ -56,7 +56,11 @@ export const useUnifiedGetGitChanges = () => {
     },
   });
 
-  const currentChanges: GitChange[] = result.data ?? [];
+  const currentChanges: GitChange[] = result.data
+    ? Array.isArray(result.data)
+      ? result.data
+      : [result.data]
+    : [];
   const currentByPath = new Map(
     currentChanges.map((change) => [change.path, change]),
   );
