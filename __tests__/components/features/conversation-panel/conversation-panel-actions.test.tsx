@@ -27,6 +27,7 @@ import { ExecutionStatus } from "#/types/agent-server/core";
 import { useArchivedConversationsStore } from "#/stores/archived-conversations-store";
 import { usePinnedConversationsStore } from "#/stores/pinned-conversations-store";
 import { useConversationPanelPreferencesStore } from "#/stores/conversation-panel-preferences-store";
+import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
 
 const mockStopConversationMutate = vi.fn();
 vi.mock("#/hooks/mutation/use-unified-stop-conversation", () => ({
@@ -40,6 +41,47 @@ vi.mock("#/utils/custom-toast-handlers", () => ({
 
 describe("ConversationPanel conversation actions", () => {
   setupConversationPanelTest();
+
+  it("shows startup activity on a pending launch and switches to its error indicator", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-2" });
+    const id = useConversationLaunchStore.getState().begin({
+      backendId: cloudBackend.id,
+      orgId: "org-2",
+      message: "Investigate the startup indicator",
+      files: [],
+    });
+    try {
+      renderWithProviders(
+        <ActiveBackendProvider>
+          <RouterStub />
+        </ActiveBackendProvider>,
+      );
+      expect(
+        await screen.findByRole("img", {
+          name: "CONVERSATION$STARTING_CONVERSATION",
+        }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText("Investigate the startup indicator"),
+      ).toBeInTheDocument();
+      act(() =>
+        useConversationLaunchStore
+          .getState()
+          .update(id, { error: "Start failed" }),
+      );
+      expect(
+        screen.queryByRole("img", {
+          name: "CONVERSATION$STARTING_CONVERSATION",
+        }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByTestId("conversation-status-error"),
+      ).toBeInTheDocument();
+    } finally {
+      act(() => useConversationLaunchStore.getState().remove(id));
+    }
+  });
 
   it("should cancel deleting a conversation", async () => {
     const user = userEvent.setup();

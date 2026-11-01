@@ -1466,6 +1466,7 @@ export function ConversationPanel({
               >
                 <ConversationCard
                   title={launch.message || t(I18nKey.CONVERSATION$UNTITLED)}
+                  isStarting
                   selectedRepository={null}
                   lastUpdatedAt=""
                   showRepositoryMetadata={false}
