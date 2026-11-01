@@ -40,7 +40,7 @@ export function ReactRouterNavigationProvider({
       currentPath: pathname,
       conversationId,
       isNavigating: Boolean(routerNavigation.location),
-      navigate: (to, options) => navigate(to, options),
+      navigate,
     }),
     [pathname, conversationId, routerNavigation.location, navigate],
   );

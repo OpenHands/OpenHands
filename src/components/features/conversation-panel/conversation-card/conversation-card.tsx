@@ -53,6 +53,7 @@ interface ConversationCardProps {
   title: string;
   selectedRepository: RepositorySelection | null;
   lastUpdatedAt: string;
+  timestampLabel?: string;
   createdAt?: string;
   executionStatus?: ExecutionStatus | null;
   isStarting?: boolean;
@@ -97,6 +98,7 @@ export function ConversationCard({
   title,
   selectedRepository,
   lastUpdatedAt,
+  timestampLabel,
   createdAt,
   conversationId,
   executionStatus,
@@ -333,7 +335,9 @@ export function ConversationCard({
                 hasHoverActions && hoverRevealYieldClassName(contextMenuOpen),
               )}
             >
-              <time>{formatTimeDelta(lastUpdatedAt ?? createdAt)}</time>
+              <time>
+                {timestampLabel ?? formatTimeDelta(lastUpdatedAt ?? createdAt)}
+              </time>
             </p>
           )}
 
@@ -380,7 +384,10 @@ export function ConversationCard({
                       hoverRevealPinnedTimestampClassName(contextMenuOpen),
                     )}
                   >
-                    <time>{formatTimeDelta(lastUpdatedAt ?? createdAt)}</time>
+                    <time>
+                      {timestampLabel ??
+                        formatTimeDelta(lastUpdatedAt ?? createdAt)}
+                    </time>
                   </p>
                 </div>
               ) : null}

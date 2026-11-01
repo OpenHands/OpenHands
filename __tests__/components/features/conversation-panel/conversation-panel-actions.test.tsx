@@ -1,3 +1,5 @@
+import { ConversationPanel } from "#/components/features/conversation-panel/conversation-panel";
+import { NavigationProvider } from "#/context/navigation-context";
 import { screen, waitFor, within, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -28,6 +30,15 @@ import { useArchivedConversationsStore } from "#/stores/archived-conversations-s
 import { usePinnedConversationsStore } from "#/stores/pinned-conversations-store";
 import { useConversationPanelPreferencesStore } from "#/stores/conversation-panel-preferences-store";
 import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
+
+const { translate } = vi.hoisted(() => ({ translate: (key: string) => key }));
+vi.mock("react-i18next", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-i18next")>()),
+  useTranslation: () => ({
+    t: translate,
+    i18n: { language: "en", exists: () => false },
+  }),
+}));
 
 const mockStopConversationMutate = vi.fn();
 vi.mock("#/hooks/mutation/use-unified-stop-conversation", () => ({
@@ -81,6 +92,42 @@ describe("ConversationPanel conversation actions", () => {
     } finally {
       act(() => useConversationLaunchStore.getState().remove(id));
     }
+  });
+
+  it("refreshes a retained row's relative timestamp as time passes", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const now = Date.now();
+    vi.mocked(
+      AgentServerConversationService.searchConversations,
+    ).mockResolvedValue({
+      items: [
+        createMockConversation({
+          id: "clock",
+          updated_at: new Date(now - 120000).toISOString(),
+        }),
+      ],
+      next_page_id: null,
+    });
+    const navigate = vi.fn();
+    const panel = (isNavigating: boolean) => (
+      <NavigationProvider
+        value={{
+          currentPath: "/",
+          conversationId: null,
+          isNavigating,
+          navigate,
+        }}
+      >
+        <ConversationPanel />
+      </NavigationProvider>
+    );
+    const { rerender } = renderWithProviders(panel(false));
+    const [card] = await screen.findAllByTestId("conversation-card");
+    expect(card.querySelector("time")).toHaveTextContent("2m");
+
+    vi.setSystemTime(now + 120000);
+    rerender(panel(true));
+    expect(card.querySelector("time")).toHaveTextContent("4m");
   });
 
   it("should cancel deleting a conversation", async () => {
@@ -1334,6 +1381,75 @@ describe("ConversationPanel conversation actions", () => {
       await waitFor(() => {
         expect(navigate).toHaveBeenCalledWith("/conversations/task-9f");
       });
+    });
+
+    it("uses the latest navigation guard when starting from a retained row", async () => {
+      const user = userEvent.setup();
+      const navigate = vi.fn();
+      setRegisteredBackends([cloudBackend]);
+      setActiveSelection({ backendId: cloudBackend.id, orgId: "org-2" });
+      vi.spyOn(AgentProfilesService, "listProfiles").mockResolvedValue({
+        profiles: [],
+        active_agent_profile_id: null,
+      });
+      vi.mocked(
+        AgentServerConversationService.searchConversations,
+      ).mockResolvedValue({
+        items: [
+          createMockConversation({
+            id: "guarded",
+            sandbox_id: "owned-sandbox",
+            sandbox_status: "RUNNING",
+          }),
+        ],
+        next_page_id: null,
+      });
+      const create = vi
+        .spyOn(AgentServerConversationService, "createConversation")
+        .mockResolvedValue({
+          id: "guard-task",
+          created_by_user_id: null,
+          status: "WORKING",
+          detail: null,
+          app_conversation_id: null,
+          agent_server_url: null,
+          request: {},
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+      const panel = (isNavigating: boolean) => (
+        <ActiveBackendProvider>
+          <NavigationProvider
+            value={{
+              currentPath: "/",
+              conversationId: null,
+              isNavigating,
+              navigate,
+            }}
+          >
+            <RouterStub />
+          </NavigationProvider>
+        </ActiveBackendProvider>
+      );
+      const { rerender } = renderWithProviders(panel(false));
+      const [card] = await screen.findAllByTestId("conversation-card");
+      await user.click(within(card).getByTestId("ellipsis-button"));
+
+      rerender(panel(true));
+      await user.click(
+        screen.getByTestId("new-conversation-in-sandbox-button"),
+      );
+      expect(create).not.toHaveBeenCalled();
+
+      rerender(panel(false));
+      await user.click(within(card).getByTestId("ellipsis-button"));
+      await user.click(
+        screen.getByTestId("new-conversation-in-sandbox-button"),
+      );
+      await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+      expect(create).toHaveBeenCalledWith(
+        expect.objectContaining({ sandboxId: "owned-sandbox" }),
+      );
     });
 
     it("offers no sandbox item for a conversation without a sandbox", async () => {
