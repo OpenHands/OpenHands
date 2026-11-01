@@ -23,6 +23,10 @@ vi.mock("react-i18next", () => ({
 }));
 
 const mockNavigate = vi.hoisted(() => vi.fn());
+const backendState = vi.hoisted(() => ({
+  kind: "local" as "local" | "cloud",
+  orgId: null as string | null,
+}));
 
 vi.mock("#/context/navigation-context", () => ({
   useNavigation: () => ({
@@ -40,9 +44,9 @@ vi.mock("#/contexts/active-backend-context", () => ({
       name: "Local",
       host: "http://localhost",
       apiKey: "test",
-      kind: "local" as const,
+      kind: backendState.kind,
     },
-    orgId: null,
+    orgId: backendState.orgId,
   }),
 }));
 
@@ -121,6 +125,9 @@ async function submitPrompt() {
 
 describe("HomeChatLauncher failed launch", () => {
   beforeEach(() => {
+    backendState.kind = "local";
+    backendState.orgId = null;
+    mockNavigate.mockClear();
     Object.defineProperty(HTMLElement.prototype, "innerText", {
       configurable: true,
       get() {
@@ -329,5 +336,43 @@ describe("HomeChatLauncher failed launch", () => {
     );
     expect(screen.queryByText(/dangling_mcp_server_refs/)).toBeNull();
     expect(input).toHaveTextContent(PROMPT);
+  });
+  it("does not redirect a late cloud launch after switching organizations", async () => {
+    backendState.kind = "cloud";
+    let finishCreate: (value: unknown) => void = () => {};
+    vi.spyOn(
+      AgentServerConversationService,
+      "createConversation",
+    ).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishCreate = resolve;
+        }) as never,
+    );
+    const view = renderLauncher();
+    await submitPrompt();
+    await waitFor(() =>
+      expect(
+        AgentServerConversationService.createConversation,
+      ).toHaveBeenCalledOnce(),
+    );
+    backendState.orgId = "other-org";
+    view.rerender(
+      <QueryClientProvider client={createAgentServerQueryClient()}>
+        <HomeChatLauncher />
+        <Toaster />
+      </QueryClientProvider>,
+    );
+    finishCreate({
+      id: "task-late",
+      status: "WORKING",
+      app_conversation_id: null,
+      request: {},
+    });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(mockNavigate).not.toHaveBeenCalled();
+    expect(
+      screen.queryByTestId("startup-user-message"),
+    ).not.toBeInTheDocument();
   });
 });
