@@ -716,12 +716,6 @@ export function MCPServerForm({
         </>
       )}
 
-      {mode === "edit" && (
-        <p className="text-sm text-tertiary-light">
-          {t(I18nKey.MCP$RENAME_HELP)}
-        </p>
-      )}
-
       {/* @spec MCP-004 — Form feedback follows readable theme text roles */}
       {testMessage && (
         <p
