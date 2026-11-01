@@ -51,6 +51,7 @@ interface ConversationCardProps {
   onEditTags?: () => void;
   showOptions?: boolean;
   title: string;
+  titlePending?: boolean;
   selectedRepository: RepositorySelection | null;
   lastUpdatedAt: string;
   createdAt?: string;
@@ -95,6 +96,7 @@ export function ConversationCard({
   onEditTags,
   showOptions,
   title,
+  titlePending,
   selectedRepository,
   lastUpdatedAt,
   createdAt,
@@ -299,6 +301,7 @@ export function ConversationCard({
         <div className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden">
           <ConversationCardHeader
             title={title}
+            titlePending={titlePending}
             titleMode={titleMode}
             onTitleSave={onTitleSave}
             executionStatus={executionStatus}

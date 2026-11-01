@@ -1,4 +1,5 @@
-import { useConversationDisplayTitle } from "#/hooks/use-conversation-display-title";
+import { ConversationTitleText } from "./conversation-title-text";
+import { useConversationDisplayTitleState } from "#/hooks/use-conversation-display-title";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
@@ -20,8 +21,11 @@ export function ConversationName() {
   const { t } = useTranslation("openhands");
   const { conversationId } = useConversationId();
   const { data: conversation } = useActiveConversation();
-  const getTitle = useConversationDisplayTitle();
-  const displayTitle = getTitle(conversationId, conversation?.title);
+  const getTitle = useConversationDisplayTitleState();
+  const { title: displayTitle, pending: titlePending } = getTitle(
+    conversationId,
+    conversation?.title,
+  );
   const { mutate: updateConversation } = useUpdateConversation();
 
   const [titleMode, setTitleMode] = React.useState<"view" | "edit">("view");
@@ -143,7 +147,7 @@ export function ConversationName() {
     return (
       <div className="flex items-center gap-2 h-5.5 text-base font-normal text-left pl-0 lg:pl-1 min-w-0">
         <div className="text-contrast leading-5 truncate" title={displayTitle}>
-          {displayTitle}
+          <ConversationTitleText title={displayTitle} pending={titlePending} />
         </div>
         <div aria-hidden className="w-6 shrink-0" />
       </div>
@@ -174,7 +178,10 @@ export function ConversationName() {
             onDoubleClick={handleDoubleClick}
             title={displayTitle}
           >
-            {displayTitle}
+            <ConversationTitleText
+              title={displayTitle}
+              pending={titlePending}
+            />
           </div>
         )}
 
