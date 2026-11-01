@@ -1043,6 +1043,24 @@
     "ca": "L'agent necessita un secret",
     "id": "Agen membutuhkan secret"
   },
+  "SECRETS$ORG_SHARED_BADGE": {
+    "en": "Shared",
+    "ja": "共有",
+    "zh-CN": "共享",
+    "zh-TW": "共享",
+    "ko-KR": "공유됨",
+    "no": "Delt",
+    "it": "Condiviso",
+    "pt": "Compartilhado",
+    "es": "Compartido",
+    "ar": "مشترك",
+    "fr": "Partagé",
+    "tr": "Paylaşılan",
+    "de": "Geteilt",
+    "uk": "Спільний",
+    "ca": "Compartit",
+    "id": "Dibagikan"
+  },
   "SECRETS$EDIT_SECRET": {
     "en": "Edit secret",
     "ja": "シークレットを編集",

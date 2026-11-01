@@ -188,6 +188,7 @@ export function SecretsSettingsScreen() {
                   key={secret.name}
                   title={secret.name}
                   description={secret.description}
+                  scope={secret.scope}
                   onEdit={() => {
                     setView("edit-secret-form");
                     setSelectedSecret(secret.name);
