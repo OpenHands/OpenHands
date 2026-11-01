@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import React from "react";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
@@ -94,6 +94,20 @@ afterEach(() => {
 });
 
 describe("useUserConversation — backend switch", () => {
+  it("never looks up a client-only launch ID, even on an explicit refetch", async () => {
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    const { result } = renderHook(
+      () => useUserConversation("launch-client-id"),
+      { wrapper: makeWrapper() },
+    );
+    await act(async () => {
+      await result.current.refetch();
+    });
+    expect(
+      AgentServerConversationService.batchGetAppConversations,
+    ).not.toHaveBeenCalled();
+  });
+
   it("does not load the conversation id against a different backend after switching", async () => {
     // Arrange — the conversation is opened while the cloud backend is active.
     setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
