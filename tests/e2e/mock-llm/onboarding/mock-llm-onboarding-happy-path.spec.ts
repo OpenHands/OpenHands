@@ -280,11 +280,7 @@ test.describe("onboarding happy path", () => {
     // ── Step 3: Say Hello ───────────────────────────────────────────
 
     await test.step("step 3: say hello — verify skip hidden, launch conversation", async () => {
-      // Start the conversation script after profile validation has completed.
-      // The first completion generates the title; the second is the agent's
-      // reply. Keep the title distinct from the asserted reply.
       await registerTrajectory(request, "onboarding-hello", [
-        { text: "Onboarding test" },
         { text: REPLY_TOKEN },
       ]);
       await activateTrajectory(request, "onboarding-hello");
