@@ -180,6 +180,9 @@ test.describe("Apps lifecycle", () => {
     await expect(confirmation).toContainText(
       "This app runs trusted JavaScript inside Agent Canvas",
     );
+    await expect(confirmation.getByTestId("cancel-button")).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(confirmation.getByTestId("confirm-button")).toBeFocused();
     await confirmation.getByTestId("confirm-button").click();
 
     await expect(cardToggle(page)).toHaveAttribute("aria-checked", "true");
