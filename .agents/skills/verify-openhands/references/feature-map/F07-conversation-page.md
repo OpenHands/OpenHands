@@ -44,7 +44,7 @@ Source: `src/routes/conversation.tsx`, `src/components/features/conversation/`, 
 - Direct URL `/conversations/<id>/panel`, or the header panel button, at phone width (up to 1024 px); at desktop width that URL redirects to `/conversations/<id>` with the drawer open.
 - Hovering a message in the history: **Branch from here** (local backends only).
 - Chips under the composer (git control bar) for conversations in a git workspace (home **Open Workspace**).
-- Header controls inside `testid=chat-pane-header`: the status dot (`server-status-menu-trigger`), the title (`conversation-name-title`), the "..." button (`ellipsis-button`, aria "More options"), `conversation-git-actions-toggle`, `conversation-overview-toggle`, `right-panel-toggle`.
+- Header controls inside `testid=chat-pane-header`: the status dot (`server-status-menu-trigger`), the title (`conversation-name-title`), the channel-origin indicator (`conversation-channel-origin-indicator`, when the conversation carries an origin/source tag), the "..." button (`ellipsis-button`, aria "More options"), `conversation-git-actions-toggle`, `conversation-overview-toggle`, `right-panel-toggle`.
 
 ## Driving it with control-openhands
 

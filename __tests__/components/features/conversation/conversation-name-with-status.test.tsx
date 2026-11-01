@@ -437,4 +437,65 @@ describe("conversation name status controls", () => {
       );
     },
   );
+
+  describe("channel origin indicator", () => {
+    it("renders a channel-origin indicator when conversation has an origin tag", () => {
+      mocks.conversation = {
+        execution_status: "running",
+        tags: { origin: "slack" },
+      } as any;
+
+      renderSubject();
+
+      const indicator = screen.getByTestId(
+        "conversation-channel-origin-indicator",
+      );
+      expect(indicator).toBeInTheDocument();
+      expect(indicator).toHaveTextContent("Origin: slack");
+      expect(
+        screen.getByTestId("conversation-channel-origin-icon"),
+      ).toBeInTheDocument();
+    });
+
+    it("renders a channel-origin indicator when conversation has a source tag", () => {
+      mocks.conversation = {
+        execution_status: "running",
+        tags: { source: "discord" },
+      } as any;
+
+      renderSubject();
+
+      const indicator = screen.getByTestId(
+        "conversation-channel-origin-indicator",
+      );
+      expect(indicator).toBeInTheDocument();
+      expect(indicator).toHaveTextContent("Source: discord");
+    });
+
+    it("does not render when conversation has only reserved tags or no origin/source tag", () => {
+      mocks.conversation = {
+        execution_status: "running",
+        tags: { repo: "All-Hands-AI/OpenHands", branch: "main" },
+      } as any;
+
+      renderSubject();
+
+      expect(
+        screen.queryByTestId("conversation-channel-origin-indicator"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("does not render when conversation has no tags", () => {
+      mocks.conversation = {
+        execution_status: "running",
+        tags: {},
+      } as any;
+
+      renderSubject();
+
+      expect(
+        screen.queryByTestId("conversation-channel-origin-indicator"),
+      ).not.toBeInTheDocument();
+    });
+  });
 });
