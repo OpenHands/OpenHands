@@ -1,5 +1,4 @@
 import { useQuery } from "@tanstack/react-query";
-import axios from "axios";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import { Settings, SettingsScope, SettingsValue } from "#/types/settings";
 import SettingsService from "#/api/settings-service/settings-service.api";
@@ -12,21 +11,9 @@ import {
   pickNullableString,
 } from "#/utils/settings-value-pickers";
 import { parseMcpConfig } from "#/utils/mcp-config";
+import { getErrorStatus } from "#/utils/get-error-status";
 
-export const getErrorStatus = (error: unknown): number | undefined => {
-  if (typeof error === "object" && error !== null && "status" in error) {
-    const { status } = error as { status?: unknown };
-    if (typeof status === "number") {
-      return status;
-    }
-  }
-
-  if (axios.isAxiosError(error)) {
-    return error.response?.status;
-  }
-
-  return undefined;
-};
+export { getErrorStatus };
 
 const lookupNested = (obj: Record<string, unknown>, key: string): unknown => {
   const parts = key.split(".");
