@@ -32,6 +32,7 @@ import { WebSocketProviderWrapper } from "#/contexts/websocket-provider-wrapper"
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import { I18nKey } from "#/i18n/declaration";
 import { useCloudSandboxAutoResume } from "#/hooks/mutation/use-cloud-sandbox-auto-resume";
+import { useEventStore } from "#/stores/use-event-store";
 
 function AppContent() {
   const { t } = useTranslation("openhands");
@@ -57,22 +58,35 @@ function AppContent() {
     conversationId,
     backendId: active.backend.id,
     orgId: active.orgId,
+    connectionRevision: active.backend.connectionRevision ?? 0,
   });
   const pinned = readBackendSelectionFromUrl(backends, location.search);
   // A link without `?org=` pins only the backend.
   const isPinnedToActive =
     pinned?.backendId === active.backend.id &&
     (pinned.orgId === null || pinned.orgId === active.orgId);
-  if (owner.current.conversationId !== conversationId || isPinnedToActive) {
+  const pinnedOwnerChanged =
+    owner.current.backendId !== active.backend.id ||
+    owner.current.orgId !== active.orgId;
+  if (
+    owner.current.conversationId !== conversationId ||
+    (isPinnedToActive && pinnedOwnerChanged)
+  ) {
     owner.current = {
       conversationId,
       backendId: active.backend.id,
       orgId: active.orgId,
+      connectionRevision: active.backend.connectionRevision ?? 0,
     };
   }
-  const backendChanged =
+  const ownerScopeChanged =
     owner.current.backendId !== active.backend.id ||
     owner.current.orgId !== active.orgId;
+  const connectionChanged =
+    !ownerScopeChanged &&
+    owner.current.connectionRevision !==
+      (active.backend.connectionRevision ?? 0);
+  const backendChanged = ownerScopeChanged || connectionChanged;
 
   const { data: conversation, isFetched, isSuccess } = useActiveConversation();
   const { data: isAuthed } = useIsAuthed();
@@ -88,10 +102,15 @@ function AppContent() {
     (state) => state.removeErrorMessage,
   );
 
-  // Per-conversation UI/runtime resets. The event store is cleared separately,
-  // inside ConversationWebSocketProvider, so the clear is ordered *before* the
-  // preloaded-history re-seed (see the note there) — clearing it here would run
-  // too late and wipe the freshly seeded history on a conversation switch.
+  React.useLayoutEffect(() => {
+    if (!connectionChanged) return;
+    useEventStore.getState().clearEvents();
+    navigate("/conversations", { replace: true });
+  }, [connectionChanged, navigate]);
+
+  // Per-conversation UI/runtime resets. The WebSocket provider clears the
+  // event store before it seeds history. The connection boundary above is the
+  // exception: it unmounts that provider before it clears the old events.
   React.useEffect(() => {
     clearTerminal();
     resetConversationState();

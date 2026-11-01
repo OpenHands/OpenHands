@@ -16,7 +16,7 @@ export const usePaginatedConversations = (limit: number = 20) => {
     active.backend.kind !== "cloud" || !!active.orgId;
 
   return useInfiniteQuery({
-    // Include the active backend identity so each (backend, org) pair
+    // Include the active backend identity so each connection and org pair
     // maintains its own paginated cache. Switching backends naturally
     // produces a new query and a fresh fetch — without it the previous
     // backend's conversations stay visible for staleTime.
@@ -27,6 +27,7 @@ export const usePaginatedConversations = (limit: number = 20) => {
       limit,
       active.backend.id,
       active.orgId,
+      active.backend.connectionRevision ?? 0,
     ],
     queryFn: async ({ pageParam }) => {
       const result = await AgentServerConversationService.searchConversations(

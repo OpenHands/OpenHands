@@ -31,14 +31,15 @@ export const useSubConversations = (
   return useQuery<(AppConversation | null)[]>({
     // Backend-keyed: a local→cloud→local switch must produce a fresh
     // cache identity for these per-conversation fetches, otherwise a
-    // `null` result captured while the cloud backend was active can
-    // bleed through to the next local visit. Same invariant as
+    // `null` result captured under another connection can bleed through to
+    // the next visit. Same invariant as
     // `useUserConversation` and `usePaginatedConversations`.
     queryKey: [
       ...CONVERSATION_QUERY_KEYS.subConversations,
       ids,
       active.backend.id,
       active.orgId,
+      active.backend.connectionRevision ?? 0,
     ],
     queryFn: async () => {
       if (ids.length === 0) {
