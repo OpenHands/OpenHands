@@ -923,6 +923,17 @@ export const SETTINGS_HANDLERS = [
     );
   }),
 
+  http.post("*/api/profiles/:name/validate", async ({ request }) => {
+    const body = (await request.json()) as SaveProfileRequest | null;
+    if (!body?.llm?.model) {
+      return HttpResponse.json({
+        valid: false,
+        error: { type: "invalid_model", message: "Profile requires llm.model" },
+      });
+    }
+    return HttpResponse.json({ valid: true });
+  }),
+
   http.post("*/api/profiles/:name", async ({ params, request }) => {
     const name = getProfileNameParam(params.name);
     const body = (await request.json()) as SaveProfileRequest | null;

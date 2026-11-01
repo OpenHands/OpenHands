@@ -80,13 +80,10 @@ export function ChatInputActions({
   const isCloud = backend.kind === "cloud";
   const modelState = useChatInputModelState();
   const llmProfileState = useChatInputLlmProfileState();
-  // Agent-profile switching lives in the "+" tools menu while the conversation
-  // hasn't started (OSS-5735) — the pill itself is always an LLM selector. The
-  // gate is computed here (not in the menu) so ToolsContextMenu only mounts the
-  // profile submenu when it can actually be used: pre-start, not on a task
-  // route, and only when the backend has profiles (#1571 fallback). Fetch is
-  // limited to the pre-start window.
+  // Before starting, the agent profile is the sole configuration selector.
+  // Once started, the model picker permits live LLM/model switching.
   const isPreStart = !conversationId || hasStartedConversation === false;
+  const showModelPicker = !isPreStart;
   const agentProfilesForStart = useAgentProfiles({ enabled: isPreStart });
   const showAgentProfileSwitch =
     isPreStart &&
@@ -134,7 +131,7 @@ export function ChatInputActions({
       !rowEl ||
       !rightEl ||
       !addEl ||
-      !modelEl ||
+      (showModelPicker && !modelEl) ||
       (showChangeAgentButton && !codeEl) ||
       typeof ResizeObserver === "undefined"
     ) {
@@ -145,12 +142,13 @@ export function ChatInputActions({
       const nextRowWidth = rowEl.getBoundingClientRect().width;
       const nextRightWidth = rightEl.getBoundingClientRect().width;
       const nextAddWidth = addEl.getBoundingClientRect().width;
-      const nextModelWidth = modelEl.getBoundingClientRect().width;
-
       if (nextRowWidth > 0) setActionsRowWidth(nextRowWidth);
       if (nextRightWidth > 0) setRightSectionWidth(nextRightWidth);
       if (nextAddWidth > 0) setAddFileWidth(nextAddWidth);
-      if (nextModelWidth > 0) setModelWidth(nextModelWidth);
+      if (modelEl) {
+        const nextModelWidth = modelEl.getBoundingClientRect().width;
+        if (nextModelWidth > 0) setModelWidth(nextModelWidth);
+      }
 
       if (codeEl) {
         const nextCodeWidth = codeEl.getBoundingClientRect().width;
@@ -169,7 +167,9 @@ export function ChatInputActions({
     observer.observe(rowEl);
     observer.observe(rightEl);
     observer.observe(addEl);
-    observer.observe(modelEl);
+    if (modelEl) {
+      observer.observe(modelEl);
+    }
     if (codeEl) {
       observer.observe(codeEl);
     }
@@ -180,7 +180,7 @@ export function ChatInputActions({
     syncWidths();
 
     return () => observer.disconnect();
-  }, [showChangeAgentButton, showAgentProfileSwitch]);
+  }, [showChangeAgentButton, showAgentProfileSwitch, showModelPicker]);
 
   const handlePauseAgent = () => {
     if (!conversationId) return;
@@ -213,12 +213,11 @@ export function ChatInputActions({
         remaining -= codeWidth + INLINE_GAP;
       }
 
-      if (remaining >= modelWidth) {
+      if (showModelPicker && remaining >= modelWidth) {
         next.showModelInline = true;
         remaining -= modelWidth + INLINE_GAP;
       }
 
-      // Drops first: the "+" menu also switches the agent profile.
       if (showAgentProfileSwitch && remaining >= agentProfileWidth) {
         next.showAgentProfileInline = true;
       }
@@ -229,6 +228,7 @@ export function ChatInputActions({
       showChangeAgentButton,
       codeWidth,
       modelWidth,
+      showModelPicker,
       showAgentProfileSwitch,
       agentProfileWidth,
     ],
@@ -240,7 +240,7 @@ export function ChatInputActions({
   const fitWithoutOverflow = fitOptionalItems(leftBaseWidth);
   const allOptionalFit =
     (!showChangeAgentButton || fitWithoutOverflow.showCodeInline) &&
-    fitWithoutOverflow.showModelInline;
+    (!showModelPicker || fitWithoutOverflow.showModelInline);
 
   const fitWithOverflow = allOptionalFit
     ? fitWithoutOverflow
@@ -269,7 +269,9 @@ export function ChatInputActions({
         (!llmProfileState.canSwitchProfile &&
           Boolean(llmProfileState.currentProfileName));
   const showOverflowModel =
-    !showModelInline && (getLockedCloudHost() === null || hasModelMenuRows);
+    showModelPicker &&
+    !showModelInline &&
+    (getLockedCloudHost() === null || hasModelMenuRows);
 
   const hasOverflowItems =
     !showAddFileInline ||
@@ -529,15 +531,15 @@ export function ChatInputActions({
               <ChatInputAgentProfilePicker />
             </div>
           )}
-          <div ref={modelRef} className={cn(!showModelInline && "hidden")}>
-            {/* Picker depends on backend + ACP context; see the `pickerKind`
-                cases above. */}
-            {pickerKind === "model" ? (
-              <ChatInputModel />
-            ) : (
-              <ChatInputLlmProfilePicker />
-            )}
-          </div>
+          {showModelPicker && (
+            <div ref={modelRef} className={cn(!showModelInline && "hidden")}>
+              {pickerKind === "model" ? (
+                <ChatInputModel />
+              ) : (
+                <ChatInputLlmProfilePicker />
+              )}
+            </div>
+          )}
 
           {hasOverflowItems && (
             <div className="relative shrink-0">

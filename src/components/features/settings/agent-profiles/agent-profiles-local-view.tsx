@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { ensureDefaultAgentProfileMigrated } from "#/hooks/use-migrate-default-agent-profile";
 import { useTranslation } from "react-i18next";
 import { AgentProfilesManager } from "./agent-profiles-manager";
+import { AgentFormSection } from "./agent-form-section";
 import { mergeAgentProfileSaveInput } from "./merge-agent-profile-save-input";
 import { newProfileSeed } from "./new-profile-seed";
 import { ProfileNameInput } from "#/components/features/settings/llm-profiles/profile-name-input";
+import { LlmSettingsLocalView } from "#/components/features/settings/llm-profiles/llm-settings-local-view";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
 import {
@@ -34,7 +36,6 @@ import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message"
 import { SettingsValue } from "#/types/settings";
 import { BackNavButton } from "#/components/shared/buttons/back-nav-button";
 import { Typography } from "#/ui/typography";
-import { useSettingsSectionHeader } from "#/contexts/settings-section-header-context";
 import { parseCommand } from "#/utils/acp-command";
 import { agentProfileSupportsSkills } from "#/api/agent-profiles-service/profile-field-support";
 import {
@@ -110,11 +111,10 @@ function defaultProfileOverride(
  * AgentProfilesLocalView mirrors {@link LlmSettingsLocalView}: a list of the
  * user's Agent profiles, with a create/edit view that reuses the existing Agent
  * settings form (embedded) plus a profile name and — for OpenHands profiles —
- * an LLM-profile picker. Available on local backends only.
+ * an LLM-profile picker.
  */
 export function AgentProfilesLocalView() {
   const { t } = useTranslation("openhands");
-  const { setHideSectionHeader } = useSettingsSectionHeader();
   const saveProfile = useSaveAgentProfile();
   const renameProfile = useRenameAgentProfile();
   const { data: profilesData } = useAgentProfiles();
@@ -151,14 +151,11 @@ export function AgentProfilesLocalView() {
     SettingsValue
   > | null>(null);
   const [llmProfileRef, setLlmProfileRef] = useState("");
+  const [creatingLlmProfile, setCreatingLlmProfile] = useState(false);
+  const [editingRouter, setEditingRouter] = useState(false);
   const [saveControl, setSaveControl] =
     useState<AgentSettingsSaveControl | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-
-  useEffect(() => {
-    setHideSectionHeader(viewMode !== "list");
-    return () => setHideSectionHeader(false);
-  }, [viewMode, setHideSectionHeader]);
 
   const llmProfiles = llmProfilesData?.profiles ?? [];
   const defaultLlmProfileRef =
@@ -207,6 +204,8 @@ export function AgentProfilesLocalView() {
       agent_kind: "openhands",
     });
     setLlmProfileRef(defaultLlmProfileRef);
+    setCreatingLlmProfile(false);
+    setEditingRouter(false);
     setSaveControl(null);
     setViewMode("create");
   }, [backend.kind, waitForMigration, defaultLlmProfileRef, settings]);
@@ -256,6 +255,8 @@ export function AgentProfilesLocalView() {
           setLlmProfileRef("");
         }
         setProfileName(profile.name);
+        setCreatingLlmProfile(false);
+        setEditingRouter(false);
         setSaveControl(null);
         setViewMode("edit");
       } catch (error) {
@@ -281,11 +282,13 @@ export function AgentProfilesLocalView() {
     setProfileName("");
     setNameTouched(false);
     setOverride(null);
+    setCreatingLlmProfile(false);
+    setEditingRouter(false);
     setSaveControl(null);
   }, []);
 
   const handleSave = useCallback(async () => {
-    if (!saveControl || !isNameValid) return;
+    if (!saveControl || !isNameValid || editingRouter) return;
 
     // Build the variant-specific fields from the embedded form (may throw on
     // invalid input, e.g. a bad concurrency value).
@@ -366,6 +369,7 @@ export function AgentProfilesLocalView() {
   }, [
     saveControl,
     isNameValid,
+    editingRouter,
     llmProfileRef,
     profileName,
     viewMode,
@@ -382,7 +386,13 @@ export function AgentProfilesLocalView() {
 
   if (viewMode === "list") {
     return (
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-6">
+        <header className="space-y-1">
+          <Typography.H2>{t(I18nKey.SETTINGS$NAV_AGENT)}</Typography.H2>
+          <p className="text-sm leading-5 text-tertiary-light">
+            {t(I18nKey.SETTINGS$PAGE_AGENT_PROFILES_SUBLINE)}
+          </p>
+        </header>
         <AgentProfilesManager
           onAddProfile={handleAddProfile}
           onEditProfile={handleEditProfile}
@@ -420,91 +430,113 @@ export function AgentProfilesLocalView() {
 
   // @spec FF-001 — Profile validation feedback follows the host error role
   // OpenHands profiles reference an LLM profile (required).
-  const llmPicker =
-    llmProfiles.length > 0 ? (
-      <div className="flex flex-col gap-2">
-        <SettingsDropdownInput
-          testId="agent-profile-llm-selector"
-          name="agent-profile-llm"
-          label={t(I18nKey.SETTINGS$AGENT_PROFILE_LLM_LABEL)}
-          items={llmProfiles.map((p) => ({
-            key: p.name,
-            label: p.model ? `${p.name} (${p.model})` : p.name,
-          }))}
-          selectedKey={llmProfileRef}
-          onSelectionChange={(key) => key && setLlmProfileRef(String(key))}
-        />
-        {isEditingDefault ? (
-          <p
-            data-testid="agent-profile-llm-default-note"
-            className="text-xs text-tertiary-alt"
-          >
-            {t(I18nKey.SETTINGS$AGENT_PROFILE_DEFAULT_LLM_NOTE)}
+  const llmPicker = (
+    <div className="flex flex-col gap-2">
+      {llmProfiles.length > 0 ? (
+        <div className="flex flex-col gap-2">
+          <SettingsDropdownInput
+            testId="agent-profile-llm-selector"
+            name="agent-profile-llm"
+            label={t(I18nKey.SETTINGS$AGENT_PROFILE_LLM_LABEL)}
+            items={llmProfiles.map((p) => ({
+              key: p.name,
+              label: p.model ? `${p.name} (${p.model})` : p.name,
+            }))}
+            selectedKey={llmProfileRef}
+            onSelectionChange={(key) => key && setLlmProfileRef(String(key))}
+          />
+          {isEditingDefault ? (
+            <p
+              data-testid="agent-profile-llm-default-note"
+              className="text-xs text-tertiary-alt"
+            >
+              {t(I18nKey.SETTINGS$AGENT_PROFILE_DEFAULT_LLM_NOTE)}
+            </p>
+          ) : null}
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          <p className="text-sm">
+            {t(I18nKey.SETTINGS$AGENT_PROFILE_LLM_LABEL)}
           </p>
-        ) : null}
-      </div>
-    ) : (
-      <p
-        data-testid="agent-profile-no-llm"
-        className="text-sm text-feedback-error"
+          <p
+            data-testid="agent-profile-no-llm"
+            className="text-sm text-feedback-error"
+          >
+            {t(I18nKey.SETTINGS$AGENT_PROFILE_NO_LLM)}
+          </p>
+        </div>
+      )}
+      <AgentFormSection
+        testId="agent-profile-add-llm"
+        title={t(I18nKey.SETTINGS$ADD_LLM_PROFILE)}
+        optional={false}
+        open={creatingLlmProfile}
+        onToggle={setCreatingLlmProfile}
       >
-        {t(I18nKey.SETTINGS$AGENT_PROFILE_NO_LLM)}
-      </p>
-    );
+        {creatingLlmProfile && (
+          <section data-testid="agent-inline-llm-editor">
+            <LlmSettingsLocalView
+              createInAgent
+              onSavedProfile={setLlmProfileRef}
+              onCancel={() => setCreatingLlmProfile(false)}
+            />
+          </section>
+        )}
+      </AgentFormSection>
+    </div>
+  );
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-2">
-        <BackNavButton
-          testId="back-to-agent-profiles"
-          onClick={handleBackToList}
-        >
-          {t(I18nKey.BUTTON$BACK)}
-        </BackNavButton>
-        <Typography.H2 testId="agent-profile-editor-title">
-          {editorTitle}
-        </Typography.H2>
-        <p
-          data-testid="agent-profile-editor-description"
-          className="text-sm leading-5 text-tertiary-light"
-        >
-          {editorDescription}
-        </p>
-      </div>
+      <BackNavButton testId="back-to-agent-profiles" onClick={handleBackToList}>
+        {t(I18nKey.BUTTON$BACK)}
+      </BackNavButton>
 
-      <div className="flex flex-col gap-2">
-        <ProfileNameInput
-          testId="agent-profile-name-input"
-          value={profileName}
-          onChange={(name) => {
-            setNameTouched(true);
-            setProfileName(name);
-          }}
-          // A new profile's empty name isn't an error until the user types.
-          isRequired={viewMode === "edit" || nameTouched}
-          isDisabled={isDefaultLocked}
-          error={
-            isDuplicateName
-              ? t(I18nKey.SETTINGS$AGENT_PROFILE_NAME_TAKEN)
-              : undefined
-          }
-        />
-        {isDefaultLocked ? (
-          <p
-            data-testid="agent-profile-default-locked-note"
-            className="text-xs text-tertiary-alt"
-          >
-            {t(I18nKey.SETTINGS$AGENT_PROFILE_DEFAULT_LOCKED)}
-          </p>
-        ) : null}
-      </div>
-
-      {/* Reuse the existing Agent settings form to define the agent. */}
       <AgentSettingsScreen
         key={viewMode === "edit" ? `edit-${editingProfile?.id}` : "new-profile"}
         agentSettingsOverride={override}
         onSaveControlChange={setSaveControl}
+        onRouterEditingChange={setEditingRouter}
         isDefaultProfile={isEditingDefault}
+        profileNameField={
+          <div className="flex flex-col gap-5">
+            <div className="flex flex-col gap-1">
+              <Typography.H2 testId="agent-profile-editor-title">
+                {editorTitle}
+              </Typography.H2>
+              <p
+                data-testid="agent-profile-editor-description"
+                className="text-sm leading-5 text-tertiary-light"
+              >
+                {editorDescription}
+              </p>
+            </div>
+            <ProfileNameInput
+              testId="agent-profile-name-input"
+              value={profileName}
+              onChange={(name) => {
+                setNameTouched(true);
+                setProfileName(name);
+              }}
+              isRequired={viewMode === "edit" || nameTouched}
+              isDisabled={isDefaultLocked}
+              error={
+                isDuplicateName
+                  ? t(I18nKey.SETTINGS$AGENT_PROFILE_NAME_TAKEN)
+                  : undefined
+              }
+            />
+            {isDefaultLocked && (
+              <p
+                data-testid="agent-profile-default-locked-note"
+                className="text-xs text-tertiary-alt"
+              >
+                {t(I18nKey.SETTINGS$AGENT_PROFILE_DEFAULT_LOCKED)}
+              </p>
+            )}
+          </div>
+        }
         llmPicker={llmPicker}
       />
 
@@ -525,6 +557,8 @@ export function AgentProfilesLocalView() {
           isDisabled={
             !isNameValid ||
             isSaving ||
+            creatingLlmProfile ||
+            editingRouter ||
             !saveControl?.isValid ||
             !hasUnsavedChanges
           }

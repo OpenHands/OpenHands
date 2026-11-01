@@ -47,21 +47,7 @@ export function isSettingsPageHidden(
 }
 
 export function getFirstAvailablePath(
-  featureFlags: WebClientFeatureFlags | undefined,
-): string | null {
-  // ``/settings/agents`` (the Agent Profile library — the "Agent" page) always
-  // wins: it is where the agent is defined (OpenHands / ACP, via the active
-  // profile) and is always available regardless of feature flags. Landing here
-  // keeps routing simple — every user lands where the agent is chosen, and
-  // the LLM page is one nav-click away.
-  const fallbackOrder = [
-    { path: "/settings/agents", hidden: false },
-    { path: "/settings/llm", hidden: !!featureFlags?.hide_llm_settings },
-    { path: "/settings", hidden: !!featureFlags?.hide_llm_settings },
-    { path: "/settings/app", hidden: false },
-    { path: "/settings/secrets", hidden: false },
-  ];
-
-  const firstAvailable = fallbackOrder.find((item) => !item.hidden);
-  return firstAvailable?.path ?? null;
+  _featureFlags: WebClientFeatureFlags | undefined,
+): string {
+  return "/settings/app";
 }

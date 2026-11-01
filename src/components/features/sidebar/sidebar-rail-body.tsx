@@ -31,6 +31,7 @@ import { AgentCanvasVersionTile } from "#/components/features/settings/agent-can
 import { SidebarConversationList } from "./sidebar-conversation-list";
 import { SidebarOnboardingChecklist } from "./sidebar-onboarding-checklist";
 import AutomationsIcon from "#/icons/automations.svg?react";
+import RobotIcon from "#/icons/u-robot.svg?react";
 import {
   SIDEBAR_COLLAPSE_TOGGLE_OVERLAY_CLASS,
   SIDEBAR_COLLAPSED_LOGO_WRAPPER_CLASS,
@@ -211,6 +212,17 @@ export function SidebarRailBody({
           testId="sidebar-conversations-link"
           collapsed={collapsed}
           icon={<Plus width={ICON_SIZE} height={ICON_SIZE} />}
+        />
+        <SidebarNavLink
+          to="/agents"
+          label={t(I18nKey.SETTINGS$NAV_AGENT)}
+          testId="sidebar-agents-link"
+          collapsed={collapsed}
+          icon={<RobotIcon width={ICON_SIZE} height={ICON_SIZE} />}
+          pinAction={buildPinAction(
+            "/agents",
+            "sidebar-pin-home-toggle-agents",
+          )}
         />
         <SidebarNavLink
           to={CUSTOMIZE_PATH}

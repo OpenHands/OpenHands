@@ -273,6 +273,19 @@ describe("LlmSettingsLocalView", () => {
     ).toBeInTheDocument();
   });
 
+  it("renders an inline create form without duplicating agent navigation or header", () => {
+    renderWithProviders(
+      <LlmSettingsLocalView createInAgent onCancel={vi.fn()} />,
+    );
+
+    expect(screen.getByTestId("profile-name-input")).toBeInTheDocument();
+    expect(screen.getByTestId("save-profile-btn")).toBeInTheDocument();
+    expect(screen.queryByTestId("back-to-profiles")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("profile-editor-title"),
+    ).not.toBeInTheDocument();
+  });
+
   it("returns to list view when back button clicked", async () => {
     const user = userEvent.setup();
     renderWithProviders(<LlmSettingsLocalView />);

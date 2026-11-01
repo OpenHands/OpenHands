@@ -82,10 +82,10 @@ describe("ChatInputModel", () => {
     fireEvent.click(model);
     const popover = screen.getByTestId("chat-input-llm-model-popover");
     expect(popover).toHaveTextContent("openai/gpt-4o");
-    const llmSettingsLink = screen.getByRole("link", {
-      name: /LLM Profiles|SETTINGS\$LLM_PROFILES|LLM Settings|SETTINGS\$LLM_SETTINGS/,
+    const agentSettingsLink = screen.getByRole("link", {
+      name: /Agent|SETTINGS\$NAV_AGENT/,
     });
-    expect(llmSettingsLink).toHaveAttribute("href", "/settings/llm");
+    expect(agentSettingsLink).toHaveAttribute("href", "/agents");
   });
 
   it("renders nothing when llm_model is missing", () => {
@@ -117,10 +117,7 @@ describe("ChatInputModel", () => {
     // ACP surfaces show the label the session gave the model.
     expect(model).toHaveAttribute("title", "Claude Sonnet");
     fireEvent.click(model);
-    expect(screen.getByRole("link")).toHaveAttribute(
-      "href",
-      "/settings/agents",
-    );
+    expect(screen.getByRole("link")).toHaveAttribute("href", "/agents");
   });
 
   it("does not fall back to the OpenHands settings model for active ACP conversations", () => {
@@ -203,10 +200,7 @@ describe("ChatInputModel", () => {
     const model = screen.getByTestId("chat-input-llm-model");
     expect(model).toHaveAttribute("title", "gemini-2.5-pro");
     fireEvent.click(model);
-    expect(screen.getByRole("link")).toHaveAttribute(
-      "href",
-      "/settings/agents",
-    );
+    expect(screen.getByRole("link")).toHaveAttribute("href", "/agents");
   });
 
   it("renders nothing when neither the conversation nor settings provide an llm_model", () => {
@@ -268,10 +262,7 @@ describe("ChatInputModel", () => {
     const model = screen.getByTestId("chat-input-llm-model");
     expect(model).toHaveAttribute("title", "Claude Opus (1M)");
     fireEvent.click(model);
-    expect(screen.getByRole("link")).toHaveAttribute(
-      "href",
-      "/settings/agents",
-    );
+    expect(screen.getByRole("link")).toHaveAttribute("href", "/agents");
   });
 
   it("renders the session's models as selectable rows for an ACP conversation", () => {
@@ -492,9 +483,6 @@ describe("ChatInputModel", () => {
     ).toBeInTheDocument();
     const popover = screen.getByTestId("chat-input-llm-model-popover");
     expect(popover).toHaveTextContent("Claude Sonnet");
-    expect(screen.getByRole("link")).toHaveAttribute(
-      "href",
-      "/settings/agents",
-    );
+    expect(screen.getByRole("link")).toHaveAttribute("href", "/agents");
   });
 });

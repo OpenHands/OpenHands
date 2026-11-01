@@ -1,24 +1,15 @@
 import { useTranslation } from "react-i18next";
-import { Blocks, ExternalLink } from "lucide-react";
+import { Blocks } from "lucide-react";
 import { CompactSectionNavigation } from "#/components/shared/compact-section-navigation";
 import { useNavigation } from "#/context/navigation-context";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { cn } from "#/utils/utils";
-import SkillsIcon from "#/icons/skills.svg?react";
-import ServerProcessIcon from "#/icons/server-process.svg?react";
 import { BackendSyncedSettingsBadge } from "#/components/features/settings/backend-synced-settings-badge";
 import {
   SIDEBAR_ROW_INTERACTIVE_CLASS,
   sidebarNavRowClassName,
 } from "#/components/features/sidebar/sidebar-layout";
 import { I18nKey } from "#/i18n/declaration";
-import { useActiveBackendContext } from "#/contexts/active-backend-context";
-import { isNoBackend } from "#/api/backend-registry/active-store";
-
-/** Only the Skills item points to a cloud-hosted page today. */
-const CLOUD_LINKED_EXTENSION_PATH = "/skills";
-/** Backend-installed artifacts are not available on Cloud backends yet. */
-const CLOUD_HIDDEN_EXTENSION_PATHS = new Set(["/plugins", "/apps"]);
 
 interface ExtensionNavItem {
   to: string;
@@ -29,18 +20,6 @@ interface ExtensionNavItem {
 }
 
 export const EXTENSIONS_NAV_ITEMS: ExtensionNavItem[] = [
-  {
-    to: "/mcp",
-    label: "MCP Servers",
-    icon: <ServerProcessIcon width={16} height={16} />,
-    end: true,
-  },
-  {
-    to: "/skills",
-    label: "Skills",
-    icon: <SkillsIcon width={16} height={16} aria-hidden="true" />,
-    end: true,
-  },
   {
     to: "/plugins",
     label: "Plugins",
@@ -93,59 +72,20 @@ export function ExtensionsNavigation() {
 
 function ExtensionsNavigationLinks() {
   const { t } = useTranslation("openhands");
-  const { active } = useActiveBackendContext();
-  const { backend } = active;
-  const isCloudBackend = !isNoBackend(backend) && backend.kind === "cloud";
   return (
     <div className="flex flex-col gap-0.5 pt-0.5">
-      {EXTENSIONS_NAV_ITEMS.filter(
-        (item) =>
-          !(CLOUD_HIDDEN_EXTENSION_PATHS.has(item.to) && isCloudBackend),
-      ).map((item) => {
-        const isCloudSkillsLink =
-          item.to === CLOUD_LINKED_EXTENSION_PATH && isCloudBackend;
+      {EXTENSIONS_NAV_ITEMS.map((item) => {
         const baseRow = (
           <span className="shrink-0 flex items-center justify-center">
             {item.icon}
           </span>
         );
-        const label = (
-          <span className="truncate">
-            {isCloudSkillsLink
-              ? t(I18nKey.SIDEBAR$SKILLS_AND_PLUGINS_CLOUD_LINK)
-              : item.label}
-          </span>
-        );
+        const label = <span className="truncate">{item.label}</span>;
         const comingSoonBadge = item.comingSoon && (
           <span className="ml-auto shrink-0 rounded-full border border-contrast/20 bg-contrast/5 px-1.5 py-0.5 text-[10px] font-medium text-text-dim">
             {t(I18nKey.NAV$COMING_SOON)}
           </span>
         );
-
-        if (isCloudSkillsLink) {
-          const cloudSkillsUrl = `${backend.host.replace(/\/+$/, "")}/settings/skills`;
-          return (
-            <a
-              key={item.to}
-              data-testid={`sidebar-extensions-${item.to}`}
-              href={cloudSkillsUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={cn(
-                sidebarNavRowClassName(),
-                "truncate",
-                SIDEBAR_ROW_INTERACTIVE_CLASS.idle,
-              )}
-            >
-              {baseRow}
-              {label}
-              <ExternalLink
-                className="ml-auto size-4 shrink-0 text-muted"
-                aria-hidden
-              />
-            </a>
-          );
-        }
 
         return (
           <NavigationLink

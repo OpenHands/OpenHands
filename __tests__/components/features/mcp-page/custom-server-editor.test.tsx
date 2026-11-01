@@ -1,6 +1,12 @@
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { AxiosError } from "axios";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import SettingsService from "#/api/settings-service/settings-service.api";
@@ -88,7 +94,13 @@ function EditorOnceSettingsLoaded({ onClose }: { onClose: () => void }) {
   );
 }
 
-function EditEditorOnceSettingsLoaded({ onClose }: { onClose: () => void }) {
+function EditEditorOnceSettingsLoaded({
+  onClose,
+  onDeleted,
+}: {
+  onClose: () => void;
+  onDeleted?: (serverId: string) => void;
+}) {
   const { data } = useSettings();
   if (!data) return null;
   return (
@@ -96,6 +108,7 @@ function EditEditorOnceSettingsLoaded({ onClose }: { onClose: () => void }) {
       server={EDIT_STDIO_SERVER}
       existingServers={[EDIT_STDIO_SERVER]}
       onClose={onClose}
+      onDeleted={onDeleted}
     />
   );
 }
@@ -289,16 +302,29 @@ describe("CustomServerEditor", () => {
       .mockResolvedValue(true);
 
     const onClose = vi.fn();
-    renderWith(<EditEditorOnceSettingsLoaded onClose={onClose} />);
+    const onDeleted = vi.fn();
+    renderWith(
+      <EditEditorOnceSettingsLoaded onClose={onClose} onDeleted={onDeleted} />,
+    );
     await screen.findByTestId("mcp-custom-editor");
 
     fireEvent.click(screen.getByTestId("mcp-custom-editor-delete"));
-    expect(await screen.findByTestId("confirmation-modal")).toBeInTheDocument();
-
+    expect(await screen.findByTestId("confirmation-modal")).toHaveTextContent(
+      "SETTINGS$SHARED_RESOURCE_DELETE_WARNING",
+    );
+    fireEvent.click(
+      within(screen.getByTestId("confirmation-modal")).getByTestId(
+        "cancel-button",
+      ),
+    );
+    expect(saveSpy).not.toHaveBeenCalled();
+    expect(onDeleted).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId("mcp-custom-editor-delete"));
     fireEvent.click(screen.getByTestId("confirm-button"));
 
     await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(onDeleted).toHaveBeenCalledWith("github");
   });
 
   it("calls onClose when the header close button is clicked", async () => {

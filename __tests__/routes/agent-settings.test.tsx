@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -25,6 +25,8 @@ import {
 } from "#/api/backend-registry/active-store";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { parseCommand } from "#/utils/acp-command";
+import { I18nKey } from "#/i18n/declaration";
+
 const CLAUDE_COMMAND = getClientAcpProvider("claude-code")!.default_command;
 const CODEX_COMMAND = getClientAcpProvider("codex")!.default_command;
 const OPENCODE_PROVIDER = getClientAcpProvider("opencode")!;
@@ -153,6 +155,157 @@ describe("AgentSettingsScreen", () => {
       { name: "DATADOG_API_KEY" },
       { name: "PROD_DB_URL" },
     ]);
+  });
+
+  it("adds a reusable secret inline without narrowing the agent's secret scope", async () => {
+    const user = userEvent.setup();
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: { agent_kind: "openhands", secret_refs: null },
+    });
+    await screen.findByTestId("agent-settings-screen");
+    await user.click(
+      screen.getByTestId("agent-secrets-section").querySelector("summary")!,
+    );
+    await user.click(screen.getByTestId("agent-add-secret"));
+    await user.type(screen.getByTestId("name-input"), "NEW_SECRET");
+    await user.type(screen.getByTestId("value-input"), "test-value");
+    await user.click(screen.getByTestId("submit-button"));
+
+    await waitFor(() => expect(SecretsService.createSecret).toHaveBeenCalled());
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      secret_refs: null,
+    });
+  });
+
+  it("confirms shared secret deletion, keeps it on cancel, and clears this agent's custom selection on confirm", async () => {
+    const user = userEvent.setup();
+    const deleteSecret = vi
+      .spyOn(SecretsService, "deleteSecret")
+      .mockResolvedValue();
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: {
+        agent_kind: "openhands",
+        secret_refs: ["GITHUB_TOKEN"],
+      },
+    });
+    await screen.findByTestId("agent-settings-screen");
+    await user.click(
+      screen.getByTestId("agent-secrets-section").querySelector("summary")!,
+    );
+    await user.click(
+      screen.getByTestId("agent-settings-secret-delete-GITHUB_TOKEN"),
+    );
+    expect(screen.getByTestId("confirmation-modal")).toHaveTextContent(
+      "SETTINGS$SHARED_RESOURCE_DELETE_WARNING",
+    );
+    await user.click(screen.getByTestId("cancel-button"));
+    expect(deleteSecret).not.toHaveBeenCalled();
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      secret_refs: ["GITHUB_TOKEN"],
+    });
+
+    await user.click(
+      screen.getByTestId("agent-settings-secret-delete-GITHUB_TOKEN"),
+    );
+    await user.click(screen.getByTestId("confirm-button"));
+    await waitFor(() =>
+      expect(deleteSecret).toHaveBeenCalledWith("GITHUB_TOKEN"),
+    );
+    await waitFor(() =>
+      expect(control().buildAgentProfileFields()).toMatchObject({
+        secret_refs: [],
+      }),
+    );
+    expect(
+      screen.queryByTestId("agent-settings-secret-GITHUB_TOKEN"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps the secret and current agent selection when global deletion fails", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(SecretsService, "deleteSecret").mockRejectedValue(
+      new Error("Cannot delete secret"),
+    );
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: {
+        agent_kind: "openhands",
+        secret_refs: ["GITHUB_TOKEN"],
+      },
+    });
+    await screen.findByTestId("agent-settings-screen");
+    await user.click(
+      screen.getByTestId("agent-secrets-section").querySelector("summary")!,
+    );
+    await user.click(
+      screen.getByTestId("agent-settings-secret-delete-GITHUB_TOKEN"),
+    );
+    await user.click(screen.getByTestId("confirm-button"));
+
+    await waitFor(() => expect(toastMocks.error).toHaveBeenCalled());
+    expect(screen.getByTestId("confirmation-modal")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("agent-settings-secret-GITHUB_TOKEN"),
+    ).toBeChecked();
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      secret_refs: ["GITHUB_TOKEN"],
+    });
+  });
+
+  it("offers global secret deletion even on the default agent without letting its shared scope be toggled", async () => {
+    const user = userEvent.setup();
+    renderAgentSettingsScreen({
+      isDefaultProfile: true,
+      agentSettingsOverride: { agent_kind: "openhands", secret_refs: null },
+    });
+    await screen.findByTestId("agent-settings-screen");
+    await user.click(
+      screen.getByTestId("agent-secrets-section").querySelector("summary")!,
+    );
+
+    expect(
+      screen.getByTestId("agent-settings-secret-GITHUB_TOKEN"),
+    ).toBeDisabled();
+    await user.click(
+      screen.getByTestId("agent-settings-secret-delete-GITHUB_TOKEN"),
+    );
+    expect(screen.getByTestId("confirmation-modal")).toHaveTextContent(
+      "SETTINGS$SHARED_RESOURCE_DELETE_WARNING",
+    );
+  });
+
+  it("opens MCP server setup inside the agent form", async () => {
+    const user = userEvent.setup();
+    renderAgentSettingsScreen({
+      agentSettingsOverride: { agent_kind: "openhands" },
+    });
+    await screen.findByTestId("agent-settings-screen");
+    await user.click(
+      screen.getByTestId("agent-mcp-section").querySelector("summary")!,
+    );
+    expect(screen.getByTestId("agent-mcp-setup")).toBeVisible();
+    await user.click(screen.getByTestId("agent-mcp-add-custom"));
+    expect(screen.getByTestId("mcp-custom-editor")).toBeInTheDocument();
+  });
+
+  it("includes a new secret in a custom scope before its catalog reloads", async () => {
+    const user = userEvent.setup();
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: { agent_kind: "openhands", secret_refs: [] },
+    });
+    await screen.findByTestId("agent-settings-screen");
+    await user.click(
+      screen.getByTestId("agent-secrets-section").querySelector("summary")!,
+    );
+    await user.click(screen.getByTestId("agent-add-secret"));
+    await user.type(screen.getByTestId("name-input"), "NEW_SECRET");
+    await user.type(screen.getByTestId("value-input"), "test-value");
+    await user.click(screen.getByTestId("submit-button"));
+
+    await waitFor(() =>
+      expect(control().buildAgentProfileFields()).toMatchObject({
+        secret_refs: ["NEW_SECRET"],
+      }),
+    );
   });
 
   it("builds tool_concurrency_limit from the input on the OpenHands path", async () => {
@@ -916,6 +1069,41 @@ describe("AgentSettingsScreen — MCP server scope", () => {
     });
   });
 
+  it("does not restore a globally deleted MCP server when saving an open agent form", async () => {
+    seedWithMcp(TWO_SERVERS);
+    const deleteServer = vi
+      .spyOn(SettingsService, "deleteMcpServer")
+      .mockResolvedValue(true);
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: {
+        agent_kind: "openhands",
+        mcp_server_refs: ["github", "postgres"],
+      },
+    });
+    await screen.findByTestId("agent-settings-screen");
+    const user = userEvent.setup();
+    await user.click(
+      screen.getByTestId("agent-mcp-section").querySelector("summary")!,
+    );
+    await user.click(
+      screen
+        .getByTestId("agent-mcp-setup")
+        .querySelector('[data-server-id="github"]')!,
+    );
+    await user.click(await screen.findByTestId("mcp-custom-editor-delete"));
+    expect(screen.getByTestId("confirmation-modal")).toHaveTextContent(
+      "SETTINGS$SHARED_RESOURCE_DELETE_WARNING",
+    );
+    await user.click(screen.getByTestId("confirm-button"));
+
+    await waitFor(() => expect(deleteServer).toHaveBeenCalledWith("github"));
+    await waitFor(() =>
+      expect(control().buildAgentProfileFields()).toMatchObject({
+        mcp_server_refs: ["postgres"],
+      }),
+    );
+  });
+
   it("seeds a switch to custom with every configured server", async () => {
     // Turning the control on should narrow from the default rather than cut
     // the agent off from every server at once.
@@ -1603,6 +1791,11 @@ describe("AgentSettingsScreen — skills", () => {
     const search = await screen.findByTestId("agent-settings-skills-search");
     const user = userEvent.setup();
 
+    await user.click(
+      screen
+        .getByTestId("agent-settings-skills-section")
+        .querySelector("summary")!,
+    );
     await user.type(search, "review");
     expect(screen.getByTestId("agent-settings-skills-skill-3")).toBeVisible();
     expect(
@@ -1614,7 +1807,40 @@ describe("AgentSettingsScreen — skills", () => {
     expect(screen.getByTestId("agent-settings-skills-skill-7")).toBeVisible();
   });
 
-  it("shows the LLM picker under the agent type for OpenHands only", async () => {
+  it("keeps the required fields visible while optional settings are collapsed", async () => {
+    const user = userEvent.setup();
+    renderAgentSettingsScreen({
+      agentSettingsOverride: { agent_kind: "openhands" },
+      profileNameField: (
+        <input aria-label={I18nKey.SETTINGS$PROFILE_NAME_LABEL} />
+      ),
+      llmPicker: <div data-testid="llm-picker-slot" />,
+    });
+
+    await screen.findByTestId("agent-settings-screen");
+    expect(
+      screen.getByLabelText(I18nKey.SETTINGS$PROFILE_NAME_LABEL),
+    ).toBeVisible();
+    expect(screen.getByTestId("llm-picker-slot")).toBeVisible();
+    for (const section of [
+      "agent-secrets-section",
+      "agent-mcp-section",
+      "agent-settings-skills-section",
+      "agent-behavior-section",
+    ]) {
+      expect(screen.getByTestId(section)).not.toHaveAttribute("open");
+    }
+    await user.click(
+      screen.getByTestId("agent-mcp-section").querySelector("summary")!,
+    );
+    expect(screen.getByTestId("agent-mcp-setup")).toBeVisible();
+    await user.click(
+      screen.getByTestId("agent-behavior-section").querySelector("summary")!,
+    );
+    expect(screen.getByTestId("agent-settings-tools-mode")).toBeVisible();
+  });
+
+  it("shows the LLM picker for OpenHands profiles only", async () => {
     renderAgentSettingsScreen({
       agentSettingsOverride: CLAUDE_PROFILE,
       llmPicker: <div data-testid="llm-picker-slot" />,
@@ -1623,22 +1849,23 @@ describe("AgentSettingsScreen — skills", () => {
     expect(screen.queryByTestId("llm-picker-slot")).not.toBeInTheDocument();
   });
 
-  it("puts the LLM picker right after the agent type", async () => {
+  it("shows the required LLM directly after the profile name, before optional sections", async () => {
     renderAgentSettingsScreen({
       agentSettingsOverride: { agent_kind: "openhands" },
+      profileNameField: (
+        <input aria-label={I18nKey.SETTINGS$PROFILE_NAME_LABEL} />
+      ),
       llmPicker: <div data-testid="llm-picker-slot" />,
     });
     const slot = await screen.findByTestId("llm-picker-slot");
-    const agentType = screen.getByTestId("agent-type-selector");
+    const name = screen.getByLabelText(I18nKey.SETTINGS$PROFILE_NAME_LABEL);
 
     expect(
-      agentType.compareDocumentPosition(slot) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
+      name.compareDocumentPosition(slot) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
-      slot.compareDocumentPosition(
-        screen.getByTestId("agent-settings-mcp-mode"),
-      ) & Node.DOCUMENT_POSITION_FOLLOWING,
+      slot.compareDocumentPosition(screen.getByTestId("agent-mcp-section")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });
 
@@ -1833,6 +2060,22 @@ describe("AgentSettingsScreen — Model Router", () => {
       enable_classify_and_switch_llm_tool: false,
       meta_profile_ref: null,
     });
+  });
+
+  it("manages shared routers from an optional section of the agent form", async () => {
+    renderAgentSettingsScreen({ agentSettingsOverride: WITH_ROUTER });
+    const user = userEvent.setup();
+
+    const section = await screen.findByTestId("agent-model-router-section");
+    expect(section).toBeInTheDocument();
+    await user.click(within(section).getByText("SETTINGS$NAV_META_LLM"));
+    expect(
+      await screen.findByTestId("meta-profile-row-fast-router"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("add-meta-profile")).toBeInTheDocument();
+    expect(screen.getByTestId("agent-settings-router-select")).toHaveValue(
+      "fast-router",
+    );
   });
 
   it("leaves the stored router alone when saving other changes", async () => {

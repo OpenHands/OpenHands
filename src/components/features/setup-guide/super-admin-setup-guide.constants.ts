@@ -71,8 +71,7 @@ export const SUPER_ADMIN_SETUP_STEPS: readonly SuperAdminSetupStep[] = [
     id: "add-integration",
     labelKey: I18nKey.ONBOARDING$SETUP_GUIDE_STEP_INTEGRATION,
     completion: "mcp_server",
-    // Canvas's MCP page saves to the same cloud settings the step checks.
-    destination: { kind: "canvas", path: "/mcp" },
+    destination: { kind: "canvas", path: "/agents" },
   },
   {
     id: "invite-users",

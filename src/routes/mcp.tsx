@@ -1,4 +1,5 @@
 import React from "react";
+import { Navigate } from "react-router";
 import { AxiosError } from "axios";
 import {
   ExtensionsNavigation,
@@ -39,7 +40,7 @@ import {
 // both OpenHands and ACP agents. The same editor and MCP settings storage
 // drive both kinds.
 
-export default function MCPPage() {
+export function MCPPage() {
   const { t } = useTranslation("openhands");
   const { data: settings, isLoading } = useSettings();
   const { mutate: updateMcpServer } = useUpdateMcpServer();
@@ -190,4 +191,8 @@ export default function MCPPage() {
       </main>
     </div>
   );
+}
+
+export default function MCPRoute() {
+  return <Navigate to="/agents" replace />;
 }

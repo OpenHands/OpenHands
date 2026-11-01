@@ -12,5 +12,5 @@ export default function ExtensionsHub() {
     return <ExtensionsMobileHub />;
   }
 
-  return <Navigate to="/mcp" replace />;
+  return <Navigate to="/apps" replace />;
 }

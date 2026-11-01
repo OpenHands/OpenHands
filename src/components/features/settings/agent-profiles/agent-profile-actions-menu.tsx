@@ -7,6 +7,7 @@ import {
 } from "react";
 import ReactDOM from "react-dom";
 import { useTranslation } from "react-i18next";
+import { Copy } from "lucide-react";
 import { cn } from "#/utils/utils";
 import { dropdownMenuListClassName } from "#/utils/dropdown-classes";
 import { I18nKey } from "#/i18n/declaration";
@@ -24,6 +25,7 @@ const getEnabledItems = (items: (HTMLButtonElement | null)[]) =>
 
 interface AgentProfileActionsMenuProps {
   onEdit: () => void;
+  onDuplicate: () => void;
   onSetActive: () => void;
   onDelete: () => void;
   /** Disables Delete and explains why. */
@@ -41,6 +43,7 @@ interface AgentProfileActionsMenuProps {
 
 export function AgentProfileActionsMenu({
   onEdit,
+  onDuplicate,
   onSetActive,
   onDelete,
   deleteDisabledReason,
@@ -166,6 +169,15 @@ export function AgentProfileActionsMenu({
       />
       <MenuItem
         index={1}
+        icon={<Copy aria-hidden className="size-4" strokeWidth={2} />}
+        label={t(I18nKey.BUTTON$DUPLICATE)}
+        onClick={() => handleAction(onDuplicate)}
+        onKeyDown={handleKeyDown}
+        menuItemsRef={menuItemsRef}
+        testId="agent-profile-duplicate"
+      />
+      <MenuItem
+        index={2}
         icon={<CheckCircleIcon width={16} height={16} />}
         label={t(I18nKey.SETTINGS$PROFILE_SET_ACTIVE)}
         onClick={() => handleAction(onSetActive)}
@@ -175,7 +187,7 @@ export function AgentProfileActionsMenu({
         testId="agent-profile-set-active"
       />
       <MenuItem
-        index={2}
+        index={3}
         icon={<DeleteIcon width={16} height={16} />}
         label={t(I18nKey.BUTTON$DELETE)}
         onClick={() => handleAction(onDelete)}

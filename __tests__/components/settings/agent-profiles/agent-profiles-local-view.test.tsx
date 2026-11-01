@@ -6,6 +6,7 @@ import userEvent from "@testing-library/user-event";
 import { useEffect } from "react";
 import type { AgentSettingsSaveControl } from "#/routes/agent-settings";
 import { AgentProfilesLocalView } from "#/components/features/settings/agent-profiles/agent-profiles-local-view";
+import AgentProfilesSettingsRoute from "#/routes/agent-profiles-settings";
 import AgentProfilesService from "#/api/agent-profiles-service/agent-profiles-service.api";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { ensureDefaultAgentProfileMigrated } from "#/hooks/use-migrate-default-agent-profile";
@@ -28,12 +29,16 @@ vi.mock("#/routes/agent-settings", () => {
   const MockAgentSettings = ({
     agentSettingsOverride,
     onSaveControlChange,
+    onRouterEditingChange,
     isDefaultProfile,
+    profileNameField,
     llmPicker,
   }: {
     agentSettingsOverride?: Record<string, unknown> | null;
     onSaveControlChange?: (c: AgentSettingsSaveControl) => void;
+    onRouterEditingChange?: (editing: boolean) => void;
     isDefaultProfile?: boolean;
+    profileNameField?: React.ReactNode;
     llmPicker?: React.ReactNode;
   }) => {
     useEffect(() => {
@@ -47,7 +52,18 @@ vi.mock("#/routes/agent-settings", () => {
         data-override={JSON.stringify(agentSettingsOverride)}
         data-default-profile={String(Boolean(isDefaultProfile))}
       >
+        {profileNameField}
         {emitControl?.agentType === "acp" ? null : llmPicker}
+        <button
+          type="button"
+          data-testid="test-router-edit"
+          onClick={() => onRouterEditingChange?.(true)}
+        />
+        <button
+          type="button"
+          data-testid="test-router-done"
+          onClick={() => onRouterEditingChange?.(false)}
+        />
       </div>
     );
   };
@@ -194,6 +210,29 @@ describe("AgentProfilesLocalView save mapping", () => {
     backendKind.current = "local";
   });
 
+  it("renders the Agents route as a standalone page without settings navigation", () => {
+    render(<AgentProfilesSettingsRoute />, {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={new QueryClient()}>
+          {children}
+        </QueryClientProvider>
+      ),
+    });
+
+    expect(screen.getAllByRole("main")).toHaveLength(1);
+    expect(screen.getByTestId("add-agent-profile")).toBeInTheDocument();
+    expect(screen.queryByTestId("settings-navbar-desktop")).toBeNull();
+  });
+
+  it("keeps the list focused on agent profiles rather than separate resource libraries", () => {
+    renderView();
+
+    expect(screen.getByTestId("add-agent-profile")).toBeInTheDocument();
+    expect(screen.queryByTestId("agents-llm-library")).toBeNull();
+    expect(screen.queryByTestId("agents-secrets-library")).toBeNull();
+    expect(screen.queryByTestId("agents-skills-library")).toBeNull();
+  });
+
   it("opens a new profile on the settings lists when there is no OpenHands default", async () => {
     settingsData = { enabled_skills: ["add-skill"], disabled_skills: ["mine"] };
 
@@ -210,6 +249,28 @@ describe("AgentProfilesLocalView save mapping", () => {
       public_skills: ["add-skill"],
       disabled_skills: ["mine"],
     });
+  });
+
+  it("prevents agent save until the inline router editor finishes", async () => {
+    emitControl = {
+      agentType: "openhands",
+      isValid: true,
+      isDirty: true,
+      buildAgentProfileFields: () => ({
+        agent_kind: "openhands",
+        mcp_server_refs: null,
+      }),
+      credentials: { isDirty: false, save: vi.fn(), reset: vi.fn() },
+    };
+    renderView();
+    const user = await openCreateAndName("router-agent");
+    const save = screen.getByTestId("save-agent-profile-btn");
+    expect(save).toBeEnabled();
+
+    await user.click(screen.getByTestId("test-router-edit"));
+    expect(save).toBeDisabled();
+    await user.click(screen.getByTestId("test-router-done"));
+    expect(save).toBeEnabled();
   });
 
   it("opens a new profile without a skill list on a cloud backend", async () => {
@@ -1027,6 +1088,26 @@ describe("AgentProfilesLocalView save mapping", () => {
     const user = userEvent.setup();
     await user.click(screen.getByTestId("edit-agent-profile"));
     await screen.findByTestId("mock-agent-settings");
+    expect(screen.getByTestId("save-agent-profile-btn")).toBeDisabled();
+  });
+
+  it("keeps the agent draft while creating a reusable LLM profile inline", async () => {
+    llmProfilesData = { profiles: [], active_profile: null };
+    renderView();
+    const user = await openCreateAndName("my-agent");
+
+    await user.click(
+      screen.getByTestId("agent-profile-add-llm").querySelector("summary")!,
+    );
+
+    expect(await screen.findByTestId("agent-inline-llm-editor")).toBeVisible();
+    expect(screen.queryByTestId("back-to-profiles")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("profile-editor-title"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("agent-profile-name-input")).toHaveValue(
+      "my-agent",
+    );
     expect(screen.getByTestId("save-agent-profile-btn")).toBeDisabled();
   });
 

@@ -213,7 +213,7 @@ describe("SuperAdminSetupGuide", () => {
     );
     expect(
       screen.getByTestId("super-admin-setup-guide-step-add-integration"),
-    ).toHaveAttribute("href", "/mcp");
+    ).toHaveAttribute("href", "/agents");
     expect(
       screen.getByTestId("super-admin-setup-guide-step-invite-users"),
     ).toHaveAttribute(
@@ -256,7 +256,7 @@ describe("SuperAdminSetupGuide", () => {
 
     expect(
       await screen.findByTestId("super-admin-setup-guide-start"),
-    ).toHaveAttribute("href", "/mcp");
+    ).toHaveAttribute("href", "/agents");
   });
 
   it("opens an enterprise step from Start on the guide's organization, with its tour", async () => {
@@ -304,7 +304,7 @@ describe("SuperAdminSetupGuide", () => {
       activateBackend(cloudBackend);
       let state = guideState({ org_llm: true, automation: true });
       serveSetupGuide({ setupState: () => HttpResponse.json(state) });
-      renderGuide("/mcp");
+      renderGuide("/agents");
       expect(await screen.findByText("2/4")).toBeInTheDocument();
 
       state = guideState({ org_llm: true, automation: true, mcp_server: true });
@@ -320,7 +320,7 @@ describe("SuperAdminSetupGuide", () => {
       activateBackend(cloudBackend);
       let state = guideState({ org_llm: true, automation: true });
       serveSetupGuide({ setupState: () => HttpResponse.json(state) });
-      renderGuide("/mcp");
+      renderGuide("/agents");
       expect(await screen.findByText("2/4")).toBeInTheDocument();
       await user.click(
         screen.getByRole("button", { name: I18nKey.BUTTON$CLOSE }),
@@ -430,7 +430,7 @@ describe("SuperAdminSetupGuide", () => {
     window.history.replaceState(
       null,
       "",
-      "/mcp?org=org-1&setup_tour=add-integration",
+      "/agents?org=org-1&setup_tour=add-integration",
     );
     activateBackend(cloudBackend);
     serveSetupGuide({
@@ -438,7 +438,7 @@ describe("SuperAdminSetupGuide", () => {
         HttpResponse.json(guideState({ org_llm: true, automation: true })),
     });
 
-    renderGuide("/mcp");
+    renderGuide("/agents");
 
     await waitFor(() =>
       expect(startSetupGuideTour).toHaveBeenCalledWith(
@@ -452,11 +452,11 @@ describe("SuperAdminSetupGuide", () => {
   });
 
   it("ignores a tour request for a step done in the enterprise app", async () => {
-    window.history.replaceState(null, "", "/mcp?setup_tour=invite-users");
+    window.history.replaceState(null, "", "/agents?setup_tour=invite-users");
     activateBackend(cloudBackend);
     serveSetupGuide();
 
-    renderGuide("/mcp");
+    renderGuide("/agents");
 
     await screen.findByTestId("super-admin-setup-guide-panel");
     await waitFor(() => expect(window.location.search).toBe(""));

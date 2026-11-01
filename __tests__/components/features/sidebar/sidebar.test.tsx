@@ -642,12 +642,36 @@ describe("Sidebar", () => {
 
     for (const testId of [
       "sidebar-conversations-link",
+      "sidebar-agents-link",
       "sidebar-automations-link",
       "sidebar-skills-link",
     ]) {
       const link = screen.getByTestId(testId);
       expect(link.querySelector("svg")).not.toBeNull();
     }
+  });
+
+  it("shows Agent beside Customize in desktop and mobile navigation", () => {
+    renderSidebar("/agents");
+
+    const desktop = getDesktopSidebar();
+    const agent = within(desktop).getByTestId("sidebar-agents-link");
+    const customize = within(desktop).getByTestId("sidebar-skills-link");
+    expect(agent).toHaveAttribute("href", "/agents");
+    expect(agent).toHaveTextContent("Agent");
+    expect(agent).toHaveAttribute("aria-current", "page");
+    expect(customize).not.toHaveAttribute("aria-current");
+    expect(
+      agent.compareDocumentPosition(customize) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId("sidebar-mobile-menu-toggle"));
+    const mobile = screen.getByTestId("sidebar-mobile-drawer");
+    expect(within(mobile).getByTestId("sidebar-agents-link")).toHaveAttribute(
+      "href",
+      "/agents",
+    );
   });
 
   it("renders the renamed top-level nav labels", () => {
@@ -666,7 +690,7 @@ describe("Sidebar", () => {
     );
   });
 
-  it.each(["/customize", "/mcp", "/skills", "/plugins", "/apps"])(
+  it.each(["/customize", "/plugins", "/apps"])(
     "marks the Customize row as the current page on %s",
     (path) => {
       renderSidebar(path);

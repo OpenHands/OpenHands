@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Navigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { useSettings } from "#/hooks/query/use-settings";
@@ -25,6 +26,15 @@ import {
   type ProfileToolSpec,
 } from "#/constants/profile-tools";
 import { ProfileScopeList } from "#/components/features/settings/agent-profiles/profile-scope-list";
+import { AgentMcpSetup } from "#/components/features/settings/agent-profiles/agent-mcp-setup";
+import { AgentFormSection } from "#/components/features/settings/agent-profiles/agent-form-section";
+import { MetaLlmSettingsView } from "#/components/features/settings/meta-llm-profiles/meta-llm-settings-view";
+import { SecretForm } from "#/components/features/settings/secrets-settings/secret-form";
+import { ConfirmationModal } from "#/components/shared/modals/confirmation-modal";
+import { useDeleteSecret } from "#/hooks/mutation/use-delete-secret";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import { getApiErrorMessage } from "#/utils/api-error-message";
+import { AddSkillModal } from "#/components/features/skills/add-skill-modal";
 import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
 import { formControlMultilineFieldClassName } from "#/utils/form-control-classes";
@@ -375,17 +385,24 @@ interface AgentSettingsScreenProps {
   onSaveControlChange: (control: AgentSettingsSaveControl) => void;
   /** `default` shares its MCP servers and skills with the global pages and keeps every secret. */
   isDefaultProfile?: boolean;
+  /** Required profile name, rendered beside the always-visible LLM selector. */
+  profileNameField?: React.ReactNode;
   /** Shown under the agent type for an OpenHands agent. */
   llmPicker?: React.ReactNode;
+  onRouterEditingChange?: (editing: boolean) => void;
 }
 
 export function AgentSettingsScreen({
   agentSettingsOverride = null,
   onSaveControlChange,
   isDefaultProfile = false,
+  profileNameField = null,
   llmPicker = null,
+  onRouterEditingChange,
 }: AgentSettingsScreenProps) {
   const { t } = useTranslation("openhands");
+  const queryClient = useQueryClient();
+  const deleteSecret = useDeleteSecret();
   const { data: settings, isLoading } = useSettings();
   const { data: schema } = useAgentSettingsSchema(
     settings?.agent_settings_schema,
@@ -489,6 +506,8 @@ export function AgentSettingsScreen({
   const [selectedMcpServers, setSelectedMcpServers] = useState<string[]>(
     initialMcpRefs.selected,
   );
+  const [addingSecret, setAddingSecret] = useState(false);
+  const [showAddSkillHelp, setShowAddSkillHelp] = useState(false);
   const configuredMcpNames = React.useMemo(
     () =>
       flattenMcpConfig(
@@ -615,6 +634,8 @@ export function AgentSettingsScreen({
   const [selectedSecrets, setSelectedSecrets] = useState<string[]>(
     initialSecretRefs.selected,
   );
+  const [secretToDelete, setSecretToDelete] = useState<string | null>(null);
+  const [deletedSecrets, setDeletedSecrets] = useState<string[]>([]);
   // Scoping is strict server-side — nothing is added back — so an ACP profile
   // that omits its provider credential simply fails to authenticate. Keep the
   // names selected by default rather than re-adding them behind the user's
@@ -666,23 +687,32 @@ export function AgentSettingsScreen({
   // Available provider credentials must remain visible when deselected, even
   // before their values are saved. Stored references also survive deletion.
   const secretCatalog = React.useMemo(() => {
-    const saved = (savedSecrets ?? []).map((secret) => ({
-      name: secret.name,
-      description: secret.description ?? null,
-    }));
+    const saved = (savedSecrets ?? [])
+      .filter((secret) => !deletedSecrets.includes(secret.name))
+      .map((secret) => ({
+        name: secret.name,
+        description: secret.description ?? null,
+      }));
     const known = new Set(saved.map((secret) => secret.name));
     return [
       ...saved,
       ...[
         ...new Set([
           ...initialSecretRefs.selected,
+          ...selectedSecrets,
           ...acpCredentialForm.fields.map(({ name }) => name),
         ]),
       ]
-        .filter((name) => !known.has(name))
+        .filter((name) => !known.has(name) && !deletedSecrets.includes(name))
         .map((name) => ({ name, description: null as string | null })),
     ];
-  }, [savedSecrets, initialSecretRefs, acpCredentialForm.fields]);
+  }, [
+    savedSecrets,
+    initialSecretRefs,
+    selectedSecrets,
+    deletedSecrets,
+    acpCredentialForm.fields,
+  ]);
   const orderedSelectedSecrets = React.useMemo(
     () =>
       secretCatalog
@@ -690,6 +720,21 @@ export function AgentSettingsScreen({
         .filter((name) => selectedSecrets.includes(name)),
     [secretCatalog, selectedSecrets],
   );
+
+  const handleConfirmDeleteSecret = async () => {
+    if (!secretToDelete) return;
+    try {
+      await deleteSecret.mutateAsync(secretToDelete);
+      setSelectedSecrets((current) =>
+        current.filter((name) => name !== secretToDelete),
+      );
+      setDeletedSecrets((current) => [...current, secretToDelete]);
+      void queryClient.invalidateQueries({ queryKey: ["secrets"] });
+      setSecretToDelete(null);
+    } catch (error) {
+      displayErrorToast(getApiErrorMessage(error, t(I18nKey.ERROR$GENERIC)));
+    }
+  };
 
   const [loadedSnapshot, setLoadedSnapshot] = useState<AgentSettingsSnapshot>(
     EMPTY_AGENT_SETTINGS_SNAPSHOT,
@@ -885,6 +930,7 @@ export function AgentSettingsScreen({
         : ROUTER_FIRST_KEY;
   }
   const [router, setRouter] = useState<string | null>(initialRouter);
+  const [routerSectionVisited, setRouterSectionVisited] = useState(false);
   useEffect(() => {
     setRouter(initialRouter);
   }, [initialRouter]);
@@ -1100,429 +1146,434 @@ export function AgentSettingsScreen({
   const isSaving = acpCredentialForm.isSaving;
 
   return (
-    <div
-      data-testid="agent-settings-screen"
-      className="flex flex-col gap-6 pb-8 max-w-2xl"
-    >
-      <SettingsDropdownInput
-        testId="agent-type-selector"
-        name="agent-type"
-        label={t(I18nKey.SETTINGS$NAV_AGENT)}
-        items={[
-          {
-            key: "openhands",
-            label: t(I18nKey.SETTINGS$AGENT_TYPE_OPENHANDS),
-          },
-          { key: "acp", label: t(I18nKey.SETTINGS$AGENT_TYPE_ACP) },
-        ]}
-        selectedKey={agentType}
-        onSelectionChange={(key) => {
-          if (!key) return;
-          const newType = key as AgentType;
-          setAgentType(newType);
-          if (newType === "acp" && !commandText) {
-            const preferred = acpProviders[0];
-            if (preferred) {
-              setCommandText(formatCommand(preferred.default_command));
-              setAcpModel(getAcpPreferredDefaultModel(preferred.key) ?? "");
-              setIsCustomAcpModel(false);
-              if (secretsMode === "custom") addProviderSecrets(preferred.key);
-            }
-          } else if (
-            newType === "acp" &&
-            agentType !== "acp" &&
-            secretsMode === "custom"
-          ) {
-            addProviderSecrets(selectedPreset);
-          } else if (newType === "openhands") {
-            setIsCustomAcpModel(false);
-          }
-        }}
-      />
+    <div data-testid="agent-settings-screen" className="flex flex-col gap-4">
+      <div
+        data-testid="agent-profile-required-section"
+        className="flex flex-col gap-5 rounded-xl border border-border bg-surface-raised p-5"
+      >
+        {profileNameField}
+        {isAcp ? null : llmPicker}
 
-      {isAcp ? null : llmPicker}
-
-      {!isAcp && instructionsSupported ? (
-        <div className="flex flex-col gap-2.5">
-          <Typography.Text className="text-sm">
-            {t(I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT)}
-          </Typography.Text>
-          <SettingsDropdownInput
-            testId="agent-settings-system-prompt-mode"
-            name="agent-system-prompt-mode"
-            label=""
-            items={[
-              {
-                key: "standard",
-                label: t(I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_STANDARD),
-              },
-              {
-                key: "append",
-                label: t(I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_APPEND),
-              },
-              {
-                key: "custom",
-                label: t(I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_CUSTOM),
-              },
-            ]}
-            selectedKey={systemPromptMode}
-            isDisabled={isSaving}
-            onSelectionChange={(key) => {
-              if (key) setSystemPromptMode(key as SystemPromptMode);
-            }}
-          />
-          {systemPromptMode !== "standard" ? (
-            <textarea
-              data-testid="agent-settings-system-prompt"
-              aria-label={t(I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT)}
-              className={cn(
-                formControlMultilineFieldClassName,
-                "min-h-48 font-mono placeholder:italic",
-                "disabled:bg-surface-raised disabled:border-border-subtle",
-              )}
-              value={systemPromptText}
-              maxLength={SYSTEM_PROMPT_MAX_LENGTH}
-              placeholder={t(
-                systemPromptMode === "custom"
-                  ? I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_PLACEHOLDER
-                  : I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_APPEND_PLACEHOLDER,
-              )}
-              disabled={isSaving}
-              onChange={(e) => setSystemPromptText(e.target.value)}
-            />
-          ) : null}
-          {systemPromptMissing ? (
-            <Typography.Text
-              testId="agent-settings-system-prompt-required"
-              className="text-xs text-danger"
-            >
-              {t(I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_REQUIRED)}
-            </Typography.Text>
-          ) : null}
-          <Typography.Text
-            testId="agent-settings-system-prompt-hint"
-            className="text-xs text-tertiary-alt"
-          >
-            {t(
-              {
-                standard:
-                  I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_STANDARD_HINT,
-                append:
-                  I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_APPEND_HINT,
-                custom:
-                  I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_CUSTOM_HINT,
-              }[systemPromptMode],
-            )}
-          </Typography.Text>
-        </div>
-      ) : null}
-
-      {!isAcp && routerSupported ? (
-        <div
-          className="flex flex-col gap-2.5"
-          data-testid="agent-settings-router"
-        >
-          <Typography.Text className="text-sm">
-            {t(I18nKey.SETTINGS$NAV_META_LLM)}
-          </Typography.Text>
-          <SettingsDropdownInput
-            testId="agent-settings-router-select"
-            name="agent-router"
-            label=""
-            items={[
-              {
-                key: ROUTER_OFF_KEY,
-                label: t(I18nKey.SETTINGS$AGENT_PROFILE_ROUTER_OFF),
-              },
-              ...(initialRouter === ROUTER_FIRST_KEY
-                ? [
-                    {
-                      key: ROUTER_FIRST_KEY,
-                      label: t(I18nKey.SETTINGS$AGENT_PROFILE_ROUTER_FIRST),
-                    },
-                  ]
-                : []),
-              ...[
-                ...routerNames,
-                ...(routerDangling && router ? [router] : []),
-              ].map((name) => ({ key: name, label: name })),
-            ]}
-            selectedKey={router ?? ROUTER_OFF_KEY}
-            isDisabled={isSaving}
-            onSelectionChange={(key) => {
-              if (key === null || key === undefined) return;
-              setRouter(key === ROUTER_OFF_KEY ? null : String(key));
-            }}
-          />
-          {routerDangling ? (
-            <Typography.Text
-              testId="agent-settings-router-dangling"
-              className="text-xs text-danger"
-            >
-              {t(I18nKey.SETTINGS$AGENT_PROFILE_ROUTER_DANGLING, {
-                name: router,
-              })}
-            </Typography.Text>
-          ) : null}
-          <Typography.Text className="text-xs text-tertiary-alt">
-            {t(I18nKey.SETTINGS$AGENT_PROFILE_ROUTER_HINT)}
-          </Typography.Text>
-        </div>
-      ) : null}
-      {!isAcp && toolConcurrencyField ? (
-        <SchemaField
-          field={toolConcurrencyField}
-          value={toolConcurrency}
-          isDisabled={isSaving}
-          onChange={setToolConcurrency}
-        />
-      ) : null}
-      {!isAcp && toolsSupported ? (
-        <div className="flex flex-col gap-2.5">
-          <Typography.Text className="text-sm">
-            {t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS)}
-          </Typography.Text>
-          <SettingsDropdownInput
-            testId="agent-settings-tools-mode"
-            name="agent-tools-mode"
-            label=""
-            items={[
-              {
-                key: "standard",
-                label: t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS_STANDARD),
-              },
-              {
-                key: "custom",
-                label: t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS_CHOOSE),
-              },
-            ]}
-            selectedKey={toolsMode}
-            isDisabled={isSaving || standardToolNames === undefined}
-            onSelectionChange={(key) => {
-              if (!key) return;
-              setToolsMode(key as ProfileScopeMode);
-            }}
-          />
-          {toolCatalogFailed && standardToolNames === undefined ? (
-            <div
-              className="flex items-center gap-2"
-              data-testid="agent-settings-tools-load-failed"
-            >
-              <Typography.Text className="text-xs text-feedback-error">
-                {t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS_LOAD_FAILED)}{" "}
-                {t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS_KEPT_ON_SAVE)}
-              </Typography.Text>
-              <BrandButton
-                testId="agent-settings-tools-retry"
-                type="button"
-                variant="secondary"
-                onClick={() => refetchToolCatalog()}
-              >
-                {t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS_RETRY)}
-              </BrandButton>
-            </div>
-          ) : toolsMode === "standard" ? (
-            <ProfileScopeList
-              testId="agent-settings-tool"
-              items={(standardToolNames ?? []).map((name) => ({
-                name,
-                description: toolDescriptions.get(name),
-              }))}
-              selected={standardToolNames ?? []}
-              isDisabled
-              onToggle={() => {}}
-            />
-          ) : (
-            <ProfileScopeList
-              testId="agent-settings-tool"
-              items={toolPickerCatalog}
-              selected={orderedSelectedTools}
-              isDisabled={isSaving || !toolCatalogLoaded}
-              onToggle={(name, checked) =>
-                setSelectedTools((prev) =>
-                  checked
-                    ? [...(prev ?? []), name]
-                    : (prev ?? []).filter((entry) => entry !== name),
-                )
-              }
-            />
-          )}
-          <Typography.Text className="text-xs text-tertiary-alt">
-            {t(
-              toolsMode === "custom"
-                ? I18nKey.SETTINGS$AGENT_PROFILE_TOOLS_CHOOSE_HINT
-                : I18nKey.SETTINGS$AGENT_PROFILE_TOOLS_STANDARD_HINT,
-            )}
-          </Typography.Text>
-        </div>
-      ) : null}
-
-      <div className="flex flex-col gap-2.5">
-        <Typography.Text className="text-sm">
-          {t(I18nKey.SETTINGS$AGENT_PROFILE_MCP)}
-        </Typography.Text>
         <SettingsDropdownInput
-          testId="agent-settings-mcp-mode"
-          name="agent-mcp-mode"
-          label=""
+          testId="agent-type-selector"
+          name="agent-type"
+          label={t(I18nKey.SETTINGS$NAV_AGENT)}
           items={[
             {
-              key: "standard",
-              label: t(I18nKey.SETTINGS$AGENT_PROFILE_MCP_ALL),
+              key: "openhands",
+              label: t(I18nKey.SETTINGS$AGENT_TYPE_OPENHANDS),
             },
-            {
-              key: "custom",
-              label: t(I18nKey.SETTINGS$AGENT_PROFILE_MCP_CHOOSE),
-            },
+            { key: "acp", label: t(I18nKey.SETTINGS$AGENT_TYPE_ACP) },
           ]}
-          selectedKey={mcpMode}
-          isDisabled={isSaving}
+          selectedKey={agentType}
           onSelectionChange={(key) => {
             if (!key) return;
-            const mode = key as ProfileScopeMode;
-            setMcpMode(mode);
-            // Seed a first switch to custom from the default — every
-            // configured server — so turning the control on narrows from what
-            // the agent had rather than cutting it off from all of them.
-            if (mode === "custom" && selectedMcpServers.length === 0) {
-              setSelectedMcpServers(configuredMcpNames.map(({ name }) => name));
+            const newType = key as AgentType;
+            setAgentType(newType);
+            if (newType === "acp" && !commandText) {
+              const preferred = acpProviders[0];
+              if (preferred) {
+                setCommandText(formatCommand(preferred.default_command));
+                setAcpModel(getAcpPreferredDefaultModel(preferred.key) ?? "");
+                setIsCustomAcpModel(false);
+                if (secretsMode === "custom") addProviderSecrets(preferred.key);
+              }
+            } else if (
+              newType === "acp" &&
+              agentType !== "acp" &&
+              secretsMode === "custom"
+            ) {
+              addProviderSecrets(selectedPreset);
+            } else if (newType === "openhands") {
+              setIsCustomAcpModel(false);
             }
           }}
         />
-        {mcpCatalog.length > 0 ? (
-          <ProfileScopeList
-            testId="agent-settings-mcp"
-            items={mcpCatalog}
-            selected={
-              mcpMode === "custom"
-                ? orderedSelectedMcpServers
-                : mcpCatalog.map(({ name }) => name)
-            }
-            isDisabled={isSaving || mcpMode === "standard"}
-            onToggle={(name, checked) =>
-              setSelectedMcpServers((prev) =>
-                checked
-                  ? [...prev, name]
-                  : prev.filter((entry) => entry !== name),
-              )
-            }
-          />
-        ) : (
-          <Typography.Text className="text-xs text-tertiary-alt">
-            {t(I18nKey.SETTINGS$AGENT_PROFILE_MCP_NONE)}
-          </Typography.Text>
-        )}
-        {danglingMcpRefs.length > 0 ? (
-          <Typography.Text
-            testId="agent-settings-mcp-dangling"
-            className="text-xs text-danger"
-          >
-            {t(I18nKey.SETTINGS$AGENT_PROFILE_MCP_DANGLING, {
-              names: danglingMcpRefs.join(", "),
-            })}
-          </Typography.Text>
-        ) : null}
-        <Typography.Text
-          testId={
-            sharesGlobalPages ? "agent-settings-mcp-default-note" : undefined
-          }
-          className="text-xs text-tertiary-alt"
-        >
-          {t(
-            sharesGlobalPages
-              ? I18nKey.SETTINGS$AGENT_PROFILE_DEFAULT_MCP_NOTE
-              : mcpMode === "custom"
-                ? I18nKey.SETTINGS$AGENT_PROFILE_MCP_CHOOSE_HINT
-                : I18nKey.SETTINGS$AGENT_PROFILE_MCP_ALL_HINT,
-          )}
-        </Typography.Text>
-      </div>
 
-      {!isAcp
-        ? PROFILE_BEHAVIOR_BLOCKS.map(({ section, titleKey }) => (
-            <div
-              key={section}
-              className="flex flex-col gap-2.5"
-              data-testid={`agent-settings-${section}`}
-            >
+        {isAcp && (
+          <>
+            <SettingsDropdownInput
+              testId="agent-preset-selector"
+              name="agent-preset"
+              label={t(I18nKey.SETTINGS$AGENT_PRESET)}
+              items={[
+                ...acpProviders.map((provider) => ({
+                  key: provider.key,
+                  label: provider.display_name,
+                })),
+                {
+                  key: ACP_CUSTOM_PRESET_KEY,
+                  label: t(I18nKey.SETTINGS$AGENT_PRESET_CUSTOM),
+                },
+              ]}
+              selectedKey={selectedPreset}
+              onSelectionChange={(key) => {
+                if (!key) return;
+                const preset = String(key);
+                const provider = getAcpProvider(preset);
+                if (provider) {
+                  setCommandText(formatCommand(provider.default_command));
+                  setAcpModel(getAcpPreferredDefaultModel(preset) ?? "");
+                  setIsCustomAcpModel(false);
+                  if (secretsMode === "custom" && preset !== selectedPreset) {
+                    addProviderSecrets(preset);
+                  }
+                } else if (preset === ACP_CUSTOM_PRESET_KEY) {
+                  // Clear command + model: the previous provider's default
+                  // command would otherwise make detectPreset(commandText)
+                  // re-match it on the next render and snap the dropdown back
+                  // off "Custom". Clearing model also prevents leaking e.g.
+                  // ``claude-opus-4-7`` into ``acp_model`` for an unrelated
+                  // wrapper.
+                  setCommandText("");
+                  setAcpModel("");
+                  setIsCustomAcpModel(true);
+                }
+              }}
+            />
+
+            <div className="flex flex-col gap-2.5">
               <Typography.Text className="text-sm">
-                {t(titleKey)}
+                {t(I18nKey.SETTINGS$AGENT_COMMAND)}
               </Typography.Text>
-              <SdkSectionPage
-                settingsSources={[
+              <textarea
+                data-testid="agent-command-input"
+                className="bg-tertiary border border-border-subtle rounded-sm p-2 text-sm font-mono text-contrast placeholder:text-tertiary-alt min-h-15 resize-y focus:outline-none focus:border-contrast"
+                value={commandText}
+                placeholder={commandPlaceholder}
+                onChange={(e) => {
+                  const nextCommandText = e.target.value;
+                  // Keep the model selector in sync with the command being
+                  // typed. Editing the command into a *different* provider — or
+                  // into a custom command — must drop the previous provider's
+                  // model, or Save would silently persist e.g.
+                  // ``claude-opus-4-7`` against a Codex / custom wrapper. The
+                  // preset dropdown already does this; the textarea is the other
+                  // way a user changes provider, so it needs the same
+                  // reconciliation. Gated on the *detected preset* actually
+                  // changing, so it never clobbers a model the user is editing
+                  // within the same provider.
+                  const prevPreset = detectPreset(commandText, acpProviders);
+                  const nextPreset = detectPreset(
+                    nextCommandText,
+                    acpProviders,
+                  );
+                  if (nextPreset !== prevPreset) {
+                    setAcpModel(getAcpPreferredDefaultModel(nextPreset) ?? "");
+                    setIsCustomAcpModel(false);
+                    if (secretsMode === "custom")
+                      addProviderSecrets(nextPreset);
+                  }
+                  setCommandText(nextCommandText);
+                }}
+              />
+              <Typography.Text className="text-xs text-tertiary-alt">
+                {t(I18nKey.SETTINGS$AGENT_COMMAND_HINT)}
+              </Typography.Text>
+            </div>
+          </>
+        )}
+
+        {isAcp && selectedPreset !== ACP_CUSTOM_PRESET_KEY && (
+          <>
+            <hr className="border-border-subtle" />
+            <AcpCredentialsSection
+              form={acpCredentialForm}
+              providerKey={selectedPreset}
+              loginRejected={
+                liveModels.discovery?.error?.code === "ACPAuthRequired"
+              }
+            />
+            <hr className="border-border-subtle" />
+          </>
+        )}
+
+        {isAcp && (
+          <div className="flex flex-col gap-1.5">
+            {showModelSelector && (
+              <SettingsDropdownInput
+                testId="agent-model-selector"
+                name="agent-model"
+                label={t(I18nKey.SETTINGS$AGENT_MODEL)}
+                items={[
+                  ...(offersAgentDefault
+                    ? [
+                        {
+                          key: ACP_AGENT_DEFAULT_MODEL_KEY,
+                          label: agentDefaultModelLabel
+                            ? t(I18nKey.SETTINGS$AGENT_MODEL_AGENT_DEFAULT_IS, {
+                                model: agentDefaultModelLabel,
+                              })
+                            : t(I18nKey.SETTINGS$AGENT_MODEL_AGENT_DEFAULT),
+                        },
+                      ]
+                    : []),
+                  ...modelSuggestions.map((model) => ({
+                    key: model.id,
+                    label:
+                      !offersAgentDefault &&
+                      model.id === liveModels.defaultModelId
+                        ? t(I18nKey.SETTINGS$AGENT_MODEL_IS_AGENT_DEFAULT, {
+                            model: model.label,
+                          })
+                        : model.label,
+                  })),
                   {
-                    settingsSource: "agent_settings",
-                    sectionKeys: [section],
-                    excludeKeys: GLOBAL_BEHAVIOR_FIELD_KEYS,
+                    key: ACP_CUSTOM_MODEL_KEY,
+                    label: t(I18nKey.SETTINGS$AGENT_PRESET_CUSTOM),
                   },
                 ]}
-                embedded
-                hideSaveButton
-                markInitialOverridesDirty={false}
-                initialValueOverrides={behaviorInitialValues[section]}
-                getInitialView={behaviorInitialView[section]}
-                onSaveControlChange={behaviorControlHandlers[section]}
-                testId={`agent-settings-${section}-fields`}
+                selectedKey={selectedModelKey}
+                onSelectionChange={(key) => {
+                  if (!key) return;
+                  const modelKey = String(key);
+                  if (modelKey === ACP_CUSTOM_MODEL_KEY) {
+                    setIsCustomAcpModel(true);
+                    setAcpModel("");
+                  } else if (modelKey === ACP_AGENT_DEFAULT_MODEL_KEY) {
+                    setIsCustomAcpModel(false);
+                    setAcpModel("");
+                  } else {
+                    setIsCustomAcpModel(false);
+                    setAcpModel(modelKey);
+                  }
+                }}
               />
+            )}
+            {selectedModelKey === ACP_CUSTOM_MODEL_KEY && (
+              <SettingsInput
+                testId="agent-model-input"
+                label={
+                  showModelSelector
+                    ? t(I18nKey.SETTINGS$AGENT_CUSTOM_MODEL)
+                    : t(I18nKey.SETTINGS$AGENT_MODEL)
+                }
+                type="text"
+                className="w-full"
+                value={acpModel}
+                showOptionalTag
+                onChange={(value) => {
+                  setAcpModel(value);
+                }}
+              />
+            )}
+            {liveModels.isDiscovering && selectedProvider && (
+              <Typography.Text
+                testId="agent-model-discovering"
+                className="text-xs text-tertiary-alt"
+              >
+                {t(I18nKey.SETTINGS$AGENT_MODEL_DISCOVERING, {
+                  agent: selectedProvider.display_name,
+                })}
+              </Typography.Text>
+            )}
+            {liveModels.discovery?.error?.code === "ACPAuthRequired" &&
+              selectedProvider && (
+                <Typography.Text
+                  testId="agent-model-discovery-needs-auth"
+                  className="text-xs text-tertiary-alt"
+                >
+                  {t(I18nKey.SETTINGS$AGENT_MODEL_DISCOVERY_NEEDS_AUTH, {
+                    agent: selectedProvider.display_name,
+                  })}
+                </Typography.Text>
+              )}
+            {modelListHint && selectedProvider && (
+              <Typography.Text
+                testId={modelListHint.testId}
+                className="text-xs text-tertiary-alt"
+              >
+                {t(modelListHint.key, { agent: selectedProvider.display_name })}
+              </Typography.Text>
+            )}
+            <Typography.Text className="text-xs text-tertiary-alt">
+              {t(I18nKey.SETTINGS$AGENT_MODEL_HINT)}
+            </Typography.Text>
+          </div>
+        )}
+      </div>
+
+      {secretRefsSupportedOnProfile && (
+        <AgentFormSection
+          testId="agent-secrets-section"
+          title={t(I18nKey.SETTINGS$AGENT_PROFILE_SECRETS)}
+        >
+          {sharesGlobalPages ? (
+            <div className="flex flex-col gap-2.5 pt-4">
+              <Typography.Text className="text-sm">
+                {t(I18nKey.SETTINGS$AGENT_PROFILE_SECRETS)}
+              </Typography.Text>
+              <Typography.Text
+                testId="agent-settings-secrets-default-note"
+                className="text-xs text-tertiary-alt"
+              >
+                {t(I18nKey.SETTINGS$AGENT_PROFILE_DEFAULT_SECRETS_NOTE)}
+              </Typography.Text>
+              {secretCatalog.length > 0 && (
+                <ProfileScopeList
+                  testId="agent-settings-secret"
+                  items={secretCatalog}
+                  selected={secretCatalog.map(({ name }) => name)}
+                  onDelete={setSecretToDelete}
+                  deletableNames={savedSecrets?.map(({ name }) => name)}
+                  isDeleteDisabled={isSaving || deleteSecret.isPending}
+                />
+              )}
             </div>
-          ))
-        : null}
+          ) : (
+            <div className="flex flex-col gap-2.5 pt-4">
+              <Typography.Text className="text-sm">
+                {t(I18nKey.SETTINGS$AGENT_PROFILE_SECRETS)}
+              </Typography.Text>
+              <SettingsDropdownInput
+                testId="agent-settings-secrets-mode"
+                name="agent-secrets-mode"
+                label=""
+                items={[
+                  {
+                    key: "standard",
+                    label: t(I18nKey.SETTINGS$AGENT_PROFILE_SECRETS_ALL),
+                  },
+                  {
+                    key: "custom",
+                    label: t(I18nKey.SETTINGS$AGENT_PROFILE_SECRETS_CHOOSE),
+                  },
+                ]}
+                selectedKey={secretsMode}
+                isDisabled={isSaving}
+                onSelectionChange={(key) => {
+                  if (!key) return;
+                  const mode = key as ProfileScopeMode;
+                  setSecretsMode(mode);
+                  if (mode === "custom" && isAcp)
+                    addProviderSecrets(selectedPreset);
+                }}
+              />
+              {secretCatalog.length > 0 ? (
+                <ProfileScopeList
+                  testId="agent-settings-secret"
+                  items={secretCatalog}
+                  selected={
+                    secretsMode === "custom"
+                      ? orderedSelectedSecrets
+                      : secretCatalog.map(({ name }) => name)
+                  }
+                  isDisabled={isSaving || secretsMode === "standard"}
+                  onToggle={(name, checked) =>
+                    setSelectedSecrets((prev) =>
+                      checked
+                        ? [...prev, name]
+                        : prev.filter((entry) => entry !== name),
+                    )
+                  }
+                  onDelete={setSecretToDelete}
+                  deletableNames={savedSecrets?.map(({ name }) => name)}
+                  isDeleteDisabled={isSaving || deleteSecret.isPending}
+                />
+              ) : (
+                <Typography.Text className="text-xs text-tertiary-alt">
+                  {t(I18nKey.SETTINGS$AGENT_PROFILE_SECRETS_NONE)}
+                </Typography.Text>
+              )}
+              <Typography.Text className="text-xs text-tertiary-alt">
+                {t(
+                  secretsMode === "custom"
+                    ? I18nKey.SETTINGS$AGENT_PROFILE_SECRETS_CHOOSE_HINT
+                    : I18nKey.SETTINGS$AGENT_PROFILE_SECRETS_ALL_HINT,
+                )}
+              </Typography.Text>
+            </div>
+          )}
+          {addingSecret ? (
+            <SecretForm
+              mode="add"
+              selectedSecret={null}
+              keepOpenOnError
+              onCancel={() => setAddingSecret(false)}
+              onSaved={({ name }) => {
+                setDeletedSecrets((deleted) =>
+                  deleted.filter((entry) => entry !== name),
+                );
+                if (secretsMode === "custom") {
+                  setSelectedSecrets((selected) => [
+                    ...new Set([...selected, name]),
+                  ]);
+                }
+              }}
+            />
+          ) : (
+            <BrandButton
+              type="button"
+              variant="secondary"
+              testId="agent-add-secret"
+              onClick={() => setAddingSecret(true)}
+            >
+              {t(I18nKey.SECRETS$ADD_A_SECRET)}
+            </BrandButton>
+          )}
+        </AgentFormSection>
+      )}
+      {secretToDelete && (
+        <ConfirmationModal
+          text={`${t(I18nKey.SECRETS$CONFIRM_DELETE_KEY)} ${t(I18nKey.SETTINGS$SHARED_RESOURCE_DELETE_WARNING)}`}
+          onCancel={() => setSecretToDelete(null)}
+          onConfirm={() => void handleConfirmDeleteSecret()}
+          confirmText={t(I18nKey.BUTTON$DELETE)}
+          isDestructive
+          isConfirming={deleteSecret.isPending}
+        />
+      )}
 
-      {secretRefsSupportedOnProfile && sharesGlobalPages ? (
+      <AgentFormSection
+        testId="agent-mcp-section"
+        title={t(I18nKey.SETTINGS$AGENT_PROFILE_MCP)}
+      >
         <div className="flex flex-col gap-2.5">
           <Typography.Text className="text-sm">
-            {t(I18nKey.SETTINGS$AGENT_PROFILE_SECRETS)}
-          </Typography.Text>
-          <Typography.Text
-            testId="agent-settings-secrets-default-note"
-            className="text-xs text-tertiary-alt"
-          >
-            {t(I18nKey.SETTINGS$AGENT_PROFILE_DEFAULT_SECRETS_NOTE)}
-          </Typography.Text>
-        </div>
-      ) : null}
-
-      {secretRefsSupportedOnProfile && !sharesGlobalPages ? (
-        <div className="flex flex-col gap-2.5">
-          <Typography.Text className="text-sm">
-            {t(I18nKey.SETTINGS$AGENT_PROFILE_SECRETS)}
+            {t(I18nKey.SETTINGS$AGENT_PROFILE_MCP)}
           </Typography.Text>
           <SettingsDropdownInput
-            testId="agent-settings-secrets-mode"
-            name="agent-secrets-mode"
+            testId="agent-settings-mcp-mode"
+            name="agent-mcp-mode"
             label=""
             items={[
               {
                 key: "standard",
-                label: t(I18nKey.SETTINGS$AGENT_PROFILE_SECRETS_ALL),
+                label: t(I18nKey.SETTINGS$AGENT_PROFILE_MCP_ALL),
               },
               {
                 key: "custom",
-                label: t(I18nKey.SETTINGS$AGENT_PROFILE_SECRETS_CHOOSE),
+                label: t(I18nKey.SETTINGS$AGENT_PROFILE_MCP_CHOOSE),
               },
             ]}
-            selectedKey={secretsMode}
+            selectedKey={mcpMode}
             isDisabled={isSaving}
             onSelectionChange={(key) => {
               if (!key) return;
               const mode = key as ProfileScopeMode;
-              setSecretsMode(mode);
-              if (mode === "custom" && isAcp)
-                addProviderSecrets(selectedPreset);
+              setMcpMode(mode);
+              // Seed a first switch to custom from the default — every
+              // configured server — so turning the control on narrows from what
+              // the agent had rather than cutting it off from all of them.
+              if (mode === "custom" && selectedMcpServers.length === 0) {
+                setSelectedMcpServers(
+                  configuredMcpNames.map(({ name }) => name),
+                );
+              }
             }}
           />
-          {secretCatalog.length > 0 ? (
+          {mcpCatalog.length > 0 ? (
             <ProfileScopeList
-              testId="agent-settings-secret"
-              items={secretCatalog}
+              testId="agent-settings-mcp"
+              items={mcpCatalog}
               selected={
-                secretsMode === "custom"
-                  ? orderedSelectedSecrets
-                  : secretCatalog.map(({ name }) => name)
+                mcpMode === "custom"
+                  ? orderedSelectedMcpServers
+                  : mcpCatalog.map(({ name }) => name)
               }
-              isDisabled={isSaving || secretsMode === "standard"}
+              isDisabled={isSaving || mcpMode === "standard"}
               onToggle={(name, checked) =>
-                setSelectedSecrets((prev) =>
+                setSelectedMcpServers((prev) =>
                   checked
                     ? [...prev, name]
                     : prev.filter((entry) => entry !== name),
@@ -1531,295 +1582,403 @@ export function AgentSettingsScreen({
             />
           ) : (
             <Typography.Text className="text-xs text-tertiary-alt">
-              {t(I18nKey.SETTINGS$AGENT_PROFILE_SECRETS_NONE)}
+              {t(I18nKey.SETTINGS$AGENT_PROFILE_MCP_NONE)}
             </Typography.Text>
           )}
-          <Typography.Text className="text-xs text-tertiary-alt">
-            {t(
-              secretsMode === "custom"
-                ? I18nKey.SETTINGS$AGENT_PROFILE_SECRETS_CHOOSE_HINT
-                : I18nKey.SETTINGS$AGENT_PROFILE_SECRETS_ALL_HINT,
-            )}
-          </Typography.Text>
-        </div>
-      ) : null}
-
-      {agentType === "openhands" && skillsSupported ? (
-        <div
-          className="flex flex-col gap-2.5"
-          data-testid="agent-settings-skills-section"
-        >
-          <Typography.Text className="text-sm">
-            {t(I18nKey.SETTINGS$AGENT_PROFILE_SKILLS)}
-          </Typography.Text>
-          {skillCatalog && skillCatalog.length > SKILL_SEARCH_MIN_ITEMS ? (
-            <SettingsInput
-              testId="agent-settings-skills-search"
-              label=""
-              type="search"
-              className="w-full"
-              value={skillQuery}
-              placeholder={t(I18nKey.SETTINGS$SKILLS_SEARCH_PLACEHOLDER)}
-              onChange={setSkillQuery}
-            />
-          ) : null}
-          {visibleSkills && currentSkills ? (
-            <div className="max-h-80 overflow-y-auto pr-1">
-              <ProfileScopeList
-                testId="agent-settings-skills"
-                items={visibleSkills.map((skill) => ({
-                  name: skill.name,
-                  description: t(
-                    skill.origin === "public"
-                      ? I18nKey.SETTINGS$SKILL_ORIGIN_PUBLIC
-                      : I18nKey.SETTINGS$SKILL_ORIGIN_USER,
-                  ),
-                }))}
-                selected={enabledSkillNames}
-                isDisabled={isSaving}
-                onToggle={toggleProfileSkill}
-              />
-            </div>
-          ) : null}
-          {skillCatalogFailed ? (
-            <div
-              className="flex items-center gap-2"
-              data-testid="agent-settings-skills-load-failed"
+          {danglingMcpRefs.length > 0 ? (
+            <Typography.Text
+              testId="agent-settings-mcp-dangling"
+              className="text-xs text-danger"
             >
-              <Typography.Text className="text-xs text-feedback-error">
-                {t(I18nKey.SETTINGS$AGENT_PROFILE_SKILLS_LOAD_FAILED)}
-              </Typography.Text>
-              <BrandButton
-                testId="agent-settings-skills-retry"
-                type="button"
-                variant="secondary"
-                onClick={() => refetchSkillCatalog()}
-              >
-                {t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS_RETRY)}
-              </BrandButton>
-            </div>
+              {t(I18nKey.SETTINGS$AGENT_PROFILE_MCP_DANGLING, {
+                names: danglingMcpRefs.join(", "),
+              })}
+            </Typography.Text>
           ) : null}
           <Typography.Text
             testId={
-              sharesGlobalPages
-                ? "agent-settings-skills-default-note"
-                : undefined
+              sharesGlobalPages ? "agent-settings-mcp-default-note" : undefined
             }
             className="text-xs text-tertiary-alt"
           >
             {t(
               sharesGlobalPages
-                ? I18nKey.SETTINGS$AGENT_PROFILE_DEFAULT_SKILLS_NOTE
-                : I18nKey.SETTINGS$AGENT_PROFILE_SKILLS_HINT,
+                ? I18nKey.SETTINGS$AGENT_PROFILE_DEFAULT_MCP_NOTE
+                : mcpMode === "custom"
+                  ? I18nKey.SETTINGS$AGENT_PROFILE_MCP_CHOOSE_HINT
+                  : I18nKey.SETTINGS$AGENT_PROFILE_MCP_ALL_HINT,
             )}
           </Typography.Text>
-        </div>
-      ) : null}
-
-      {isAcp && (
-        <>
-          <SettingsDropdownInput
-            testId="agent-preset-selector"
-            name="agent-preset"
-            label={t(I18nKey.SETTINGS$AGENT_PRESET)}
-            items={[
-              ...acpProviders.map((provider) => ({
-                key: provider.key,
-                label: provider.display_name,
-              })),
-              {
-                key: ACP_CUSTOM_PRESET_KEY,
-                label: t(I18nKey.SETTINGS$AGENT_PRESET_CUSTOM),
-              },
-            ]}
-            selectedKey={selectedPreset}
-            onSelectionChange={(key) => {
-              if (!key) return;
-              const preset = String(key);
-              const provider = getAcpProvider(preset);
-              if (provider) {
-                setCommandText(formatCommand(provider.default_command));
-                setAcpModel(getAcpPreferredDefaultModel(preset) ?? "");
-                setIsCustomAcpModel(false);
-                if (secretsMode === "custom" && preset !== selectedPreset) {
-                  addProviderSecrets(preset);
-                }
-              } else if (preset === ACP_CUSTOM_PRESET_KEY) {
-                // Clear command + model: the previous provider's default
-                // command would otherwise make detectPreset(commandText)
-                // re-match it on the next render and snap the dropdown back
-                // off "Custom". Clearing model also prevents leaking e.g.
-                // ``claude-opus-4-7`` into ``acp_model`` for an unrelated
-                // wrapper.
-                setCommandText("");
-                setAcpModel("");
-                setIsCustomAcpModel(true);
-              }
-            }}
-          />
-
-          <div className="flex flex-col gap-2.5">
-            <Typography.Text className="text-sm">
-              {t(I18nKey.SETTINGS$AGENT_COMMAND)}
-            </Typography.Text>
-            <textarea
-              data-testid="agent-command-input"
-              className="bg-tertiary border border-[#717888] rounded-sm p-2 text-sm font-mono text-contrast placeholder:text-[#717888] min-h-15 resize-y focus:outline-none focus:border-contrast"
-              value={commandText}
-              placeholder={commandPlaceholder}
-              onChange={(e) => {
-                const nextCommandText = e.target.value;
-                // Keep the model selector in sync with the command being
-                // typed. Editing the command into a *different* provider — or
-                // into a custom command — must drop the previous provider's
-                // model, or Save would silently persist e.g.
-                // ``claude-opus-4-7`` against a Codex / custom wrapper. The
-                // preset dropdown already does this; the textarea is the other
-                // way a user changes provider, so it needs the same
-                // reconciliation. Gated on the *detected preset* actually
-                // changing, so it never clobbers a model the user is editing
-                // within the same provider.
-                const prevPreset = detectPreset(commandText, acpProviders);
-                const nextPreset = detectPreset(nextCommandText, acpProviders);
-                if (nextPreset !== prevPreset) {
-                  setAcpModel(getAcpPreferredDefaultModel(nextPreset) ?? "");
-                  setIsCustomAcpModel(false);
-                  if (secretsMode === "custom") addProviderSecrets(nextPreset);
-                }
-                setCommandText(nextCommandText);
-              }}
-            />
-            <Typography.Text className="text-xs text-[#717888]">
-              {t(I18nKey.SETTINGS$AGENT_COMMAND_HINT)}
-            </Typography.Text>
-          </div>
-        </>
-      )}
-
-      {isAcp && selectedPreset !== ACP_CUSTOM_PRESET_KEY && (
-        <>
-          <hr className="border-[#3D4046]" />
-          <AcpCredentialsSection
-            form={acpCredentialForm}
-            providerKey={selectedPreset}
-            loginRejected={
-              liveModels.discovery?.error?.code === "ACPAuthRequired"
+          <AgentMcpSetup
+            servers={flattenMcpConfig(
+              settings?.mcp_config ??
+                parseMcpConfig(settings?.agent_settings?.mcp_config),
+            )}
+            onServerDeleted={(serverId) =>
+              setSelectedMcpServers((selected) =>
+                selected.filter((name) => name !== serverId),
+              )
             }
           />
-          <hr className="border-[#3D4046]" />
-        </>
-      )}
+        </div>
+      </AgentFormSection>
 
-      {isAcp && (
-        <div className="flex flex-col gap-1.5">
-          {showModelSelector && (
+      {agentType === "openhands" && skillsSupported ? (
+        <AgentFormSection
+          testId="agent-settings-skills-section"
+          title={t(I18nKey.SETTINGS$AGENT_PROFILE_SKILLS)}
+        >
+          <div className="flex flex-col gap-2.5">
+            {skillCatalog && skillCatalog.length > SKILL_SEARCH_MIN_ITEMS ? (
+              <SettingsInput
+                testId="agent-settings-skills-search"
+                label=""
+                type="search"
+                className="w-full"
+                value={skillQuery}
+                placeholder={t(I18nKey.SETTINGS$SKILLS_SEARCH_PLACEHOLDER)}
+                onChange={setSkillQuery}
+              />
+            ) : null}
+            {visibleSkills && currentSkills ? (
+              <div className="max-h-80 overflow-y-auto pr-1">
+                <ProfileScopeList
+                  testId="agent-settings-skills"
+                  items={visibleSkills.map((skill) => ({
+                    name: skill.name,
+                    description: t(
+                      skill.origin === "public"
+                        ? I18nKey.SETTINGS$SKILL_ORIGIN_PUBLIC
+                        : I18nKey.SETTINGS$SKILL_ORIGIN_USER,
+                    ),
+                  }))}
+                  selected={enabledSkillNames}
+                  isDisabled={isSaving}
+                  onToggle={toggleProfileSkill}
+                />
+              </div>
+            ) : null}
+            {skillCatalogFailed ? (
+              <div
+                className="flex items-center gap-2"
+                data-testid="agent-settings-skills-load-failed"
+              >
+                <Typography.Text className="text-xs text-feedback-error">
+                  {t(I18nKey.SETTINGS$AGENT_PROFILE_SKILLS_LOAD_FAILED)}
+                </Typography.Text>
+                <BrandButton
+                  testId="agent-settings-skills-retry"
+                  type="button"
+                  variant="secondary"
+                  onClick={() => refetchSkillCatalog()}
+                >
+                  {t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS_RETRY)}
+                </BrandButton>
+              </div>
+            ) : null}
+            <Typography.Text
+              testId={
+                sharesGlobalPages
+                  ? "agent-settings-skills-default-note"
+                  : undefined
+              }
+              className="text-xs text-tertiary-alt"
+            >
+              {t(
+                sharesGlobalPages
+                  ? I18nKey.SETTINGS$AGENT_PROFILE_DEFAULT_SKILLS_NOTE
+                  : I18nKey.SETTINGS$AGENT_PROFILE_SKILLS_HINT,
+              )}
+            </Typography.Text>
+            <BrandButton
+              type="button"
+              variant="secondary"
+              testId="agent-add-skill-help"
+              onClick={() => setShowAddSkillHelp(true)}
+            >
+              {t(I18nKey.SETTINGS$SKILLS_ADD_MODAL_TITLE)}
+            </BrandButton>
+            {showAddSkillHelp && (
+              <AddSkillModal onClose={() => setShowAddSkillHelp(false)} />
+            )}
+          </div>
+        </AgentFormSection>
+      ) : null}
+
+      <AgentFormSection
+        testId="agent-behavior-section"
+        title={t(I18nKey.SETTINGS$AGENT_PROFILE_BEHAVIOR)}
+      >
+        {!isAcp && instructionsSupported ? (
+          <div className="flex flex-col gap-2.5">
+            <Typography.Text className="text-sm">
+              {t(I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT)}
+            </Typography.Text>
             <SettingsDropdownInput
-              testId="agent-model-selector"
-              name="agent-model"
-              label={t(I18nKey.SETTINGS$AGENT_MODEL)}
+              testId="agent-settings-system-prompt-mode"
+              name="agent-system-prompt-mode"
+              label=""
               items={[
-                ...(offersAgentDefault
+                {
+                  key: "standard",
+                  label: t(
+                    I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_STANDARD,
+                  ),
+                },
+                {
+                  key: "append",
+                  label: t(I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_APPEND),
+                },
+                {
+                  key: "custom",
+                  label: t(I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_CUSTOM),
+                },
+              ]}
+              selectedKey={systemPromptMode}
+              isDisabled={isSaving}
+              onSelectionChange={(key) => {
+                if (key) setSystemPromptMode(key as SystemPromptMode);
+              }}
+            />
+            {systemPromptMode !== "standard" ? (
+              <textarea
+                data-testid="agent-settings-system-prompt"
+                aria-label={t(I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT)}
+                className={cn(
+                  formControlMultilineFieldClassName,
+                  "min-h-48 font-mono placeholder:italic",
+                  "disabled:bg-surface-raised disabled:border-border-subtle",
+                )}
+                value={systemPromptText}
+                maxLength={SYSTEM_PROMPT_MAX_LENGTH}
+                placeholder={t(
+                  systemPromptMode === "custom"
+                    ? I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_PLACEHOLDER
+                    : I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_APPEND_PLACEHOLDER,
+                )}
+                disabled={isSaving}
+                onChange={(e) => setSystemPromptText(e.target.value)}
+              />
+            ) : null}
+            {systemPromptMissing ? (
+              <Typography.Text
+                testId="agent-settings-system-prompt-required"
+                className="text-xs text-danger"
+              >
+                {t(I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_REQUIRED)}
+              </Typography.Text>
+            ) : null}
+            <Typography.Text
+              testId="agent-settings-system-prompt-hint"
+              className="text-xs text-tertiary-alt"
+            >
+              {t(
+                {
+                  standard:
+                    I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_STANDARD_HINT,
+                  append:
+                    I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_APPEND_HINT,
+                  custom:
+                    I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_CUSTOM_HINT,
+                }[systemPromptMode],
+              )}
+            </Typography.Text>
+          </div>
+        ) : null}
+
+        {!isAcp && toolConcurrencyField ? (
+          <SchemaField
+            field={toolConcurrencyField}
+            value={toolConcurrency}
+            isDisabled={isSaving}
+            onChange={setToolConcurrency}
+          />
+        ) : null}
+        {!isAcp && toolsSupported ? (
+          <div className="flex flex-col gap-2.5">
+            <Typography.Text className="text-sm">
+              {t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS)}
+            </Typography.Text>
+            <SettingsDropdownInput
+              testId="agent-settings-tools-mode"
+              name="agent-tools-mode"
+              label=""
+              items={[
+                {
+                  key: "standard",
+                  label: t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS_STANDARD),
+                },
+                {
+                  key: "custom",
+                  label: t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS_CHOOSE),
+                },
+              ]}
+              selectedKey={toolsMode}
+              isDisabled={isSaving || standardToolNames === undefined}
+              onSelectionChange={(key) => {
+                if (!key) return;
+                setToolsMode(key as ProfileScopeMode);
+              }}
+            />
+            {toolCatalogFailed && standardToolNames === undefined ? (
+              <div
+                className="flex items-center gap-2"
+                data-testid="agent-settings-tools-load-failed"
+              >
+                <Typography.Text className="text-xs text-feedback-error">
+                  {t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS_LOAD_FAILED)}{" "}
+                  {t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS_KEPT_ON_SAVE)}
+                </Typography.Text>
+                <BrandButton
+                  testId="agent-settings-tools-retry"
+                  type="button"
+                  variant="secondary"
+                  onClick={() => refetchToolCatalog()}
+                >
+                  {t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS_RETRY)}
+                </BrandButton>
+              </div>
+            ) : toolsMode === "standard" ? (
+              <ProfileScopeList
+                testId="agent-settings-tool"
+                items={(standardToolNames ?? []).map((name) => ({
+                  name,
+                  description: toolDescriptions.get(name),
+                }))}
+                selected={standardToolNames ?? []}
+                isDisabled
+                onToggle={() => {}}
+              />
+            ) : (
+              <ProfileScopeList
+                testId="agent-settings-tool"
+                items={toolPickerCatalog}
+                selected={orderedSelectedTools}
+                isDisabled={isSaving || !toolCatalogLoaded}
+                onToggle={(name, checked) =>
+                  setSelectedTools((prev) =>
+                    checked
+                      ? [...(prev ?? []), name]
+                      : (prev ?? []).filter((entry) => entry !== name),
+                  )
+                }
+              />
+            )}
+            <Typography.Text className="text-xs text-tertiary-alt">
+              {t(
+                toolsMode === "custom"
+                  ? I18nKey.SETTINGS$AGENT_PROFILE_TOOLS_CHOOSE_HINT
+                  : I18nKey.SETTINGS$AGENT_PROFILE_TOOLS_STANDARD_HINT,
+              )}
+            </Typography.Text>
+          </div>
+        ) : null}
+
+        {!isAcp
+          ? PROFILE_BEHAVIOR_BLOCKS.map(({ section, titleKey }) => (
+              <div
+                key={section}
+                className="flex flex-col gap-2.5"
+                data-testid={`agent-settings-${section}`}
+              >
+                <Typography.Text className="text-sm">
+                  {t(titleKey)}
+                </Typography.Text>
+                <SdkSectionPage
+                  settingsSources={[
+                    {
+                      settingsSource: "agent_settings",
+                      sectionKeys: [section],
+                      excludeKeys: GLOBAL_BEHAVIOR_FIELD_KEYS,
+                    },
+                  ]}
+                  embedded
+                  hideSaveButton
+                  markInitialOverridesDirty={false}
+                  initialValueOverrides={behaviorInitialValues[section]}
+                  getInitialView={behaviorInitialView[section]}
+                  onSaveControlChange={behaviorControlHandlers[section]}
+                  testId={`agent-settings-${section}-fields`}
+                />
+              </div>
+            ))
+          : null}
+      </AgentFormSection>
+
+      {!isAcp && routerSupported ? (
+        <AgentFormSection
+          testId="agent-model-router-section"
+          title={t(I18nKey.SETTINGS$NAV_META_LLM)}
+          onToggle={(open) => {
+            if (open) setRouterSectionVisited(true);
+          }}
+        >
+          <div
+            className="flex flex-col gap-2.5"
+            data-testid="agent-settings-router"
+          >
+            <SettingsDropdownInput
+              testId="agent-settings-router-select"
+              name="agent-router"
+              label=""
+              items={[
+                {
+                  key: ROUTER_OFF_KEY,
+                  label: t(I18nKey.SETTINGS$AGENT_PROFILE_ROUTER_OFF),
+                },
+                ...(initialRouter === ROUTER_FIRST_KEY
                   ? [
                       {
-                        key: ACP_AGENT_DEFAULT_MODEL_KEY,
-                        label: agentDefaultModelLabel
-                          ? t(I18nKey.SETTINGS$AGENT_MODEL_AGENT_DEFAULT_IS, {
-                              model: agentDefaultModelLabel,
-                            })
-                          : t(I18nKey.SETTINGS$AGENT_MODEL_AGENT_DEFAULT),
+                        key: ROUTER_FIRST_KEY,
+                        label: t(I18nKey.SETTINGS$AGENT_PROFILE_ROUTER_FIRST),
                       },
                     ]
                   : []),
-                ...modelSuggestions.map((model) => ({
-                  key: model.id,
-                  label:
-                    !offersAgentDefault &&
-                    model.id === liveModels.defaultModelId
-                      ? t(I18nKey.SETTINGS$AGENT_MODEL_IS_AGENT_DEFAULT, {
-                          model: model.label,
-                        })
-                      : model.label,
-                })),
-                {
-                  key: ACP_CUSTOM_MODEL_KEY,
-                  label: t(I18nKey.SETTINGS$AGENT_PRESET_CUSTOM),
-                },
+                ...[
+                  ...routerNames,
+                  ...(routerDangling && router ? [router] : []),
+                ].map((name) => ({ key: name, label: name })),
               ]}
-              selectedKey={selectedModelKey}
+              selectedKey={router ?? ROUTER_OFF_KEY}
+              isDisabled={isSaving}
               onSelectionChange={(key) => {
-                if (!key) return;
-                const modelKey = String(key);
-                if (modelKey === ACP_CUSTOM_MODEL_KEY) {
-                  setIsCustomAcpModel(true);
-                  setAcpModel("");
-                } else if (modelKey === ACP_AGENT_DEFAULT_MODEL_KEY) {
-                  setIsCustomAcpModel(false);
-                  setAcpModel("");
-                } else {
-                  setIsCustomAcpModel(false);
-                  setAcpModel(modelKey);
-                }
+                if (key === null || key === undefined) return;
+                setRouter(key === ROUTER_OFF_KEY ? null : String(key));
               }}
             />
-          )}
-          {selectedModelKey === ACP_CUSTOM_MODEL_KEY && (
-            <SettingsInput
-              testId="agent-model-input"
-              label={
-                showModelSelector
-                  ? t(I18nKey.SETTINGS$AGENT_CUSTOM_MODEL)
-                  : t(I18nKey.SETTINGS$AGENT_MODEL)
-              }
-              type="text"
-              className="w-full"
-              value={acpModel}
-              showOptionalTag
-              onChange={(value) => {
-                setAcpModel(value);
-              }}
-            />
-          )}
-          {liveModels.isDiscovering && selectedProvider && (
-            <Typography.Text
-              testId="agent-model-discovering"
-              className="text-xs text-[#717888]"
-            >
-              {t(I18nKey.SETTINGS$AGENT_MODEL_DISCOVERING, {
-                agent: selectedProvider.display_name,
-              })}
-            </Typography.Text>
-          )}
-          {liveModels.discovery?.error?.code === "ACPAuthRequired" &&
-            selectedProvider && (
+            {routerDangling ? (
               <Typography.Text
-                testId="agent-model-discovery-needs-auth"
-                className="text-xs text-[#717888]"
+                testId="agent-settings-router-dangling"
+                className="text-xs text-danger"
               >
-                {t(I18nKey.SETTINGS$AGENT_MODEL_DISCOVERY_NEEDS_AUTH, {
-                  agent: selectedProvider.display_name,
+                {t(I18nKey.SETTINGS$AGENT_PROFILE_ROUTER_DANGLING, {
+                  name: router,
                 })}
               </Typography.Text>
-            )}
-          {modelListHint && selectedProvider && (
-            <Typography.Text
-              testId={modelListHint.testId}
-              className="text-xs text-[#717888]"
-            >
-              {t(modelListHint.key, { agent: selectedProvider.display_name })}
+            ) : null}
+            <Typography.Text className="text-xs text-tertiary-alt">
+              {t(I18nKey.SETTINGS$AGENT_PROFILE_ROUTER_HINT)}
             </Typography.Text>
-          )}
-          <Typography.Text className="text-xs text-[#717888]">
-            {t(I18nKey.SETTINGS$AGENT_MODEL_HINT)}
-          </Typography.Text>
-        </div>
-      )}
+            {routerSectionVisited ? (
+              <MetaLlmSettingsView
+                embedded
+                onCreated={setRouter}
+                onDeleted={(name) =>
+                  setRouter((current) => (current === name ? null : current))
+                }
+                onEditingChange={onRouterEditingChange}
+              />
+            ) : null}
+          </div>
+        </AgentFormSection>
+      ) : null}
     </div>
   );
 }
 
 /**
  * Legacy `/settings/agent` route. Settings → Agent is now the Agent Profile
- * library (`/settings/agents`), whose editor reuses the named
+ * library (`/agents`), whose editor reuses the named
  * `AgentSettingsScreen` export below; this global-agent-form route is retired
  * and redirects there so old links/bookmarks keep working.
  *
@@ -1831,5 +1990,5 @@ export function AgentSettingsScreen({
  * `onSaveControlChange` never arrive. Mirrors `LlmSettingsRoute`.
  */
 export default function AgentSettingsRoute() {
-  return <Navigate to="/settings/agents" replace />;
+  return <Navigate to="/agents" replace />;
 }

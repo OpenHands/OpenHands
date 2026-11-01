@@ -2,7 +2,7 @@ import { I18nKey } from "#/i18n/declaration";
 
 const SETTINGS_PREFIX = "/settings";
 const CUSTOMIZE_HUB = "/customize";
-const EXTENSIONS_DETAIL_PATHS = ["/skills", "/mcp", "/plugins"] as const;
+const EXTENSIONS_DETAIL_PATHS = ["/plugins"] as const;
 // Exact match only: /extensions/:name/* routes are extension pages, which are
 // rail-level destinations rather than Customize details.
 const APPS_MANAGEMENT_PATH = "/apps";

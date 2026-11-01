@@ -18,7 +18,10 @@ export type SettingsNavRenderedItem =
   | { type: "divider" };
 
 // Locally each agent profile owns these settings.
-const PROFILE_OWNED_SETTINGS_PATHS = new Set(["/settings/condenser"]);
+const PROFILE_OWNED_SETTINGS_PATHS = new Set([
+  "/settings/condenser",
+  "/settings/meta-llm",
+]);
 
 export function useSettingsNavItems(): SettingsNavRenderedItem[] {
   const { data: config } = useConfig();
