@@ -35,7 +35,8 @@ interface CustomServerEditorProps {
 
 /**
  * Modal wrapper around `MCPServerForm` so users can hand-author
- * arbitrary stdio / SSE / SHTTP entries without reaching for raw JSON.
+ * arbitrary stdio / SHTTP / legacy SSE entries without reaching for raw JSON.
+ * Note: HTTP+SSE transport is deprecated by MCP 2026-07-28; new remote servers default to SHTTP.
  * An empty `server.id` means "Add new".
  */
 export function CustomServerEditor({

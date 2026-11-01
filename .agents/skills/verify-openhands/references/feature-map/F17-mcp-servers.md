@@ -4,7 +4,7 @@ Customize groups MCP Servers, Skills, Plugins and Apps behind one sidebar
 entry. From 1024 px up `/customize` goes straight to `/mcp`; below that (phones
 and tablets) it is a list hub. At tablet widths (768–1023 px), each Customize subpage also has a compact selector for switching directly between siblings. The MCP page lets a user browse a library of catalog
 integrations, install one through a modal (credentials masked, optionally also
-saved as secrets), hand-author custom SSE, Streamable HTTP or STDIO servers,
+saved as secrets), hand-author custom Streamable HTTP, STDIO or legacy SSE servers (SSE transport is deprecated by MCP 2026-07-28; new remote servers default to SHTTP),
 test connections, check each installed server's health, enable or disable,
 edit and delete servers. Enabled servers are offered to every new
 conversation's agent.

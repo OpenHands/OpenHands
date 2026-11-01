@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 480" width="960" height="480">
+  <defs>
+    <style>
+      .bg { fill: #0f172a; }
+      .card { fill: #1e293b; stroke: #334155; stroke-width: 1.5; rx: 8px; }
+      .title { font-family: ui-sans-serif, system-ui, sans-serif; font-size: 16px; font-weight: 600; fill: #f8fafc; }
+      .subtitle { font-family: ui-sans-serif, system-ui, sans-serif; font-size: 13px; font-weight: 500; fill: #94a3b8; }
+      .label { font-family: ui-sans-serif, system-ui, sans-serif; font-size: 12px; font-weight: 500; fill: #cbd5e1; }
+      .field { fill: #0f172a; stroke: #475569; stroke-width: 1; rx: 6px; }
+      .field-text { font-family: ui-sans-serif, system-ui, sans-serif; font-size: 13px; fill: #f1f5f9; }
+      .badge-deprecated { fill: #78350f; stroke: #d97706; stroke-width: 1; rx: 4px; }
+      .badge-text { font-family: ui-sans-serif, system-ui, sans-serif; font-size: 11px; font-weight: 600; fill: #fef3c7; }
+      .badge-default { fill: #064e3b; stroke: #059669; stroke-width: 1; rx: 4px; }
+      .badge-default-text { font-family: ui-sans-serif, system-ui, sans-serif; font-size: 11px; font-weight: 600; fill: #a7f3d0; }
+      .warning-box { fill: #451a03; stroke: #f59e0b; stroke-width: 1; rx: 6px; }
+      .warning-text { font-family: ui-sans-serif, system-ui, sans-serif; font-size: 12px; font-weight: 500; fill: #fde68a; }
+    </style>
+  </defs>
+
+  <rect width="960" height="480" class="bg" />
+
+  <!-- Header -->
+  <text x="40" y="44" class="title" font-size="20">MCP Server Form: SSE Deprecation &amp; SHTTP Default (Issue #18495)</text>
+  <text x="40" y="70" class="subtitle">Conforms to MCP 2026-07-28 specification (SEP-2596 deprecating HTTP+SSE)</text>
+
+  <!-- Left: Before (Legacy) -->
+  <g transform="translate(40, 95)">
+    <rect width="420" height="345" class="card" />
+    <text x="24" y="36" class="title">Before: Defaulted to Deprecated SSE</text>
+
+    <!-- Field: Server Type -->
+    <text x="24" y="75" class="label">Server Type</text>
+    <rect x="24" y="87" width="372" height="38" class="field" />
+    <text x="36" y="111" class="field-text">SSE</text>
+
+    <!-- Field: URL -->
+    <text x="24" y="155" class="label">Server URL</text>
+    <rect x="24" y="167" width="372" height="38" class="field" />
+    <text x="36" y="191" class="field-text">https://api.example.com/sse</text>
+
+    <!-- Defect callout -->
+    <rect x="24" y="235" width="372" height="80" fill="#7f1d1d" stroke="#ef4444" rx="6" />
+    <text x="36" y="260" font-family="ui-sans-serif, system-ui" font-size="12" font-weight="600" fill="#fecaca">Defect:</text>
+    <text x="36" y="280" font-family="ui-sans-serif, system-ui" font-size="11" fill="#fee2e2">• New remote servers defaulted to deprecated SSE</text>
+    <text x="36" y="298" font-family="ui-sans-serif, system-ui" font-size="11" fill="#fee2e2">• No warning or migration notice shown to users</text>
+  </g>
+
+  <!-- Right: After (Fixed) -->
+  <g transform="translate(500, 95)">
+    <rect width="420" height="345" class="card" />
+    <text x="24" y="36" class="title">After: Default to SHTTP &amp; Deprecation Signal</text>
+
+    <!-- Field: Server Type -->
+    <text x="24" y="75" class="label">Server Type</text>
+    <rect x="24" y="87" width="372" height="38" class="field" />
+    <text x="36" y="111" class="field-text">SHTTP</text>
+    <rect x="100" y="96" width="68" height="20" class="badge-default" />
+    <text x="108" y="110" class="badge-default-text">Default</text>
+
+    <!-- Dropdown Item View: SSE (Deprecated) -->
+    <rect x="220" y="96" width="160" height="20" class="badge-deprecated" />
+    <text x="228" y="110" class="badge-text">SSE (Deprecated)</text>
+
+    <!-- Deprecation notice when SSE selected -->
+    <rect x="24" y="145" width="372" height="48" class="warning-box" />
+    <text x="36" y="166" class="warning-text">⚠ HTTP+SSE is deprecated by MCP 2026-07-28.</text>
+    <text x="36" y="182" class="warning-text">Use Streamable HTTP (SHTTP) for new servers.</text>
+
+    <!-- Field: URL -->
+    <text x="24" y="222" class="label">Server URL</text>
+    <rect x="24" y="234" width="372" height="38" class="field" />
+    <text x="36" y="258" class="field-text">https://api.example.com/mcp</text>
+
+    <!-- Field: Timeout (SHTTP enabled) -->
+    <text x="24" y="295" class="label">Timeout (seconds, optional)</text>
+    <rect x="24" y="307" width="372" height="25" class="field" />
+    <text x="36" y="324" class="field-text">30</text>
+  </g>
+</svg>

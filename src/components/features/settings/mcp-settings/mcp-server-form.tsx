@@ -62,7 +62,7 @@ export function MCPServerForm({
 }: MCPServerFormProps) {
   const { t } = useTranslation("openhands");
   const [serverType, setServerType] = React.useState<MCPServerType>(
-    server?.type || "sse",
+    server?.type || "shttp",
   );
   const [authMode, setAuthMode] = React.useState<RemoteAuthMode>(() => {
     if (server?.auth?.strategy === "oauth2") return "oauth2";
@@ -85,7 +85,13 @@ export function MCPServerForm({
   const formRef = React.useRef<HTMLFormElement>(null);
 
   const serverTypeOptions = [
-    { key: "sse", label: t(I18nKey.SETTINGS$MCP_SERVER_TYPE_SSE) },
+    {
+      key: "sse",
+      label:
+        mode === "add"
+          ? t(I18nKey.SETTINGS$MCP_SERVER_TYPE_SSE_DEPRECATED)
+          : t(I18nKey.SETTINGS$MCP_SERVER_TYPE_SSE),
+    },
     { key: "stdio", label: t(I18nKey.SETTINGS$MCP_SERVER_TYPE_STDIO) },
     { key: "shttp", label: t(I18nKey.SETTINGS$MCP_SERVER_TYPE_SHTTP) },
   ];
@@ -478,6 +484,15 @@ export function MCPServerForm({
           required
           wrapperClassName="w-full min-w-0"
         />
+      )}
+
+      {serverType === "sse" && (
+        <p
+          data-testid="mcp-sse-deprecation-notice"
+          className="text-feedback-warning text-sm"
+        >
+          {t(I18nKey.SETTINGS$MCP_SERVER_TYPE_SSE_DEPRECATION_NOTICE)}
+        </p>
       )}
 
       {/* @spec MCP-004 — Form feedback follows readable theme text roles */}
