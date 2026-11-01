@@ -424,6 +424,30 @@ describe("optimistic-user-message-store", () => {
     expect(entry.errorMessage).toBe("Send timed out");
   });
 
+  it("gives each retry a fresh bounded delivery window", () => {
+    const store = useOptimisticUserMessageStore.getState();
+    const id = store.enqueuePendingMessage({
+      conversationId: CONVO,
+      text: "resume",
+    });
+    vi.advanceTimersByTime(PENDING_MESSAGE_TIMEOUT_MS - 1000);
+    store.markPendingMessageError(id);
+    store.markPendingMessageSending(id);
+    vi.advanceTimersByTime(1000);
+    expect(
+      useOptimisticUserMessageStore.getState().pendingMessages[0].status,
+    ).toBe("sending");
+    vi.advanceTimersByTime(PENDING_MESSAGE_TIMEOUT_MS - 1000);
+    expect(
+      useOptimisticUserMessageStore.getState().pendingMessages[0].status,
+    ).toBe("error");
+    store.markPendingMessageSending(id);
+    vi.advanceTimersByTime(PENDING_MESSAGE_TIMEOUT_MS);
+    expect(
+      useOptimisticUserMessageStore.getState().pendingMessages[0].status,
+    ).toBe("error");
+  });
+
   it("watchdog timeout does nothing if the echo already consumed the message", () => {
     const store = useOptimisticUserMessageStore.getState();
     store.enqueuePendingMessage({ conversationId: CONVO, text: "fast" });
