@@ -1,6 +1,7 @@
 import { ActionEvent, OpenHandsEvent } from "#/types/agent-server/core";
 import {
   isActionEvent,
+  isHookExecutionEvent,
   isObservationEvent,
   isPlanningFileEditorObservationEvent,
   isUserRejectObservation,
@@ -17,9 +18,10 @@ export const EVENT_GROUP_MIN_SIZE = 2;
  * Returns true if the given event is one of the action / observation cards
  * that we want to fold into an `EventGroup` when several appear in a row.
  *
- * Events that have their own dedicated rendering (FinishAction, ThinkAction,
- * HookExecution, AgentError, MessageEvent, PlanPreview, markdown file
- * artifacts, TaskTracker) are treated as group breakers.
+ * Successful hook runs fold into the surrounding run; blocked or failed hooks
+ * stay visible on their own. Events that have their own dedicated rendering
+ * (FinishAction, ThinkAction, AgentError, MessageEvent, PlanPreview, markdown
+ * file artifacts, TaskTracker) are treated as group breakers.
  */
 export const isGroupableEvent = (
   event: OpenHandsEvent,
@@ -49,6 +51,10 @@ export const isGroupableEvent = (
       return false;
     }
     return true;
+  }
+
+  if (isHookExecutionEvent(event)) {
+    return event.success && !event.blocked;
   }
 
   // A rejected action stays wherever the action itself was: in its run, or
