@@ -98,3 +98,72 @@ describe("useSaveSettings - MCP tracking", () => {
     });
   });
 });
+
+describe("useSaveSettings - LLM api_key handling", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useSettingsMock.mockReturnValue({ data: {} });
+  });
+
+  it("drops an empty api_key from the diff so the stored key is preserved", async () => {
+    const saveSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+    const { result } = renderHook(() => useSaveSettings(), {
+      wrapper: createWrapper(),
+    });
+
+    await result.current.mutateAsync({
+      agent_settings_diff: {
+        llm: { model: "anthropic/claude-sonnet-4-5", api_key: "" },
+      },
+    });
+
+    expect(saveSpy).toHaveBeenCalledTimes(1);
+    const sent = saveSpy.mock.calls[0][0] as Record<string, unknown>;
+    const llm = (sent.agent_settings_diff as Record<string, unknown>)
+      .llm as Record<string, unknown>;
+    expect(llm.model).toBe("anthropic/claude-sonnet-4-5");
+    expect(llm.api_key).toBeUndefined();
+  });
+
+  it("forwards a non-empty api_key (trimmed)", async () => {
+    const saveSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+    const { result } = renderHook(() => useSaveSettings(), {
+      wrapper: createWrapper(),
+    });
+
+    await result.current.mutateAsync({
+      agent_settings_diff: {
+        llm: { api_key: "  sk-real-key  " },
+      },
+    });
+
+    const llm = (
+      (saveSpy.mock.calls[0][0] as Record<string, unknown>)
+        .agent_settings_diff as Record<string, unknown>
+    ).llm as Record<string, unknown>;
+    expect(llm.api_key).toBe("sk-real-key");
+  });
+
+  it("does not touch api_key when it is absent from the diff", async () => {
+    const saveSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+    const { result } = renderHook(() => useSaveSettings(), {
+      wrapper: createWrapper(),
+    });
+
+    await result.current.mutateAsync({
+      agent_settings_diff: { llm: { model: "openai/gpt-4o" } },
+    });
+
+    const llm = (
+      (saveSpy.mock.calls[0][0] as Record<string, unknown>)
+        .agent_settings_diff as Record<string, unknown>
+    ).llm as Record<string, unknown>;
+    expect(llm.api_key).toBeUndefined();
+  });
+});
