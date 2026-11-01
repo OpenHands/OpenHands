@@ -1,3 +1,4 @@
+import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
 import { screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
@@ -145,6 +146,21 @@ describe("ConversationName", () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("uses the submitted prompt while launch metadata is unavailable", () => {
+    useActiveConversationMock.mockReturnValueOnce({ data: undefined } as never);
+    const id = useConversationLaunchStore.getState().begin({
+      backendId: localBackend.id,
+      orgId: null,
+      files: [],
+      message: "Explain the startup flow",
+    });
+    renderWithProviders(<ConversationName />, {
+      navigation: { currentPath: `/conversations/${id}`, conversationId: id },
+    });
+    expect(screen.getByText("Explain the startup flow")).toBeInTheDocument();
+    useConversationLaunchStore.setState({ launches: {} });
   });
 
   it("should render the conversation name in view mode", () => {

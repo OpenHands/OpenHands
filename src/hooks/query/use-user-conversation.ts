@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { CONVERSATION_QUERY_KEYS } from "./query-keys";
 import { useRef } from "react";
 import { CONVERSATION_LAUNCH_PREFIX } from "#/stores/conversation-launch-store";
 import { Query, useQuery } from "@tanstack/react-query";
@@ -54,7 +55,11 @@ export const useUserConversation = (
     // shared cid key, which then makes the conversation route toast
     // "conversation not available or no permission" until the user
     // hard-refreshes the page. Mirrors `usePaginatedConversations`.
-    queryKey: ["user", "conversation", cid, active.backend.id, active.orgId],
+    queryKey: CONVERSATION_QUERY_KEYS.detail(
+      cid,
+      active.backend.id,
+      active.orgId,
+    ),
     queryFn: async () => {
       if (
         !cid ||

@@ -1,3 +1,4 @@
+import { useConversationDisplayTitle } from "#/hooks/use-conversation-display-title";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
@@ -19,6 +20,8 @@ export function ConversationName() {
   const { t } = useTranslation("openhands");
   const { conversationId } = useConversationId();
   const { data: conversation } = useActiveConversation();
+  const getTitle = useConversationDisplayTitle();
+  const displayTitle = getTitle(conversationId, conversation?.title);
   const { mutate: updateConversation } = useUpdateConversation();
 
   const [titleMode, setTitleMode] = React.useState<"view" | "edit">("view");
@@ -73,7 +76,7 @@ export function ConversationName() {
   const handleBlur = () => {
     if (inputRef.current?.value && conversationId) {
       const trimmed = inputRef.current.value.trim();
-      if (trimmed !== conversation?.title) {
+      if (trimmed !== displayTitle) {
         updateConversation(
           { conversationId, newTitle: trimmed },
           {
@@ -85,7 +88,7 @@ export function ConversationName() {
       }
     } else if (inputRef.current) {
       // reset the value if it's empty
-      inputRef.current.value = conversation?.title ?? "";
+      inputRef.current.value = displayTitle;
     }
 
     setTitleMode("view");
@@ -138,8 +141,11 @@ export function ConversationName() {
 
   if (!conversation) {
     return (
-      <div className="h-5.5 min-w-0 truncate pl-0 text-base leading-5 text-muted lg:pl-1">
-        {t(I18nKey.SIDEBAR$NEW_CHAT)}
+      <div className="flex items-center gap-2 h-5.5 text-base font-normal text-left pl-0 lg:pl-1 min-w-0">
+        <div className="text-contrast leading-5 truncate" title={displayTitle}>
+          {displayTitle}
+        </div>
+        <div aria-hidden className="w-6 shrink-0" />
       </div>
     );
   }
@@ -158,7 +164,7 @@ export function ConversationName() {
             onBlur={handleBlur}
             onKeyUp={handleKeyUp}
             type="text"
-            defaultValue={conversation.title || ""}
+            defaultValue={displayTitle}
             className="text-contrast leading-5 bg-transparent border-none outline-none text-base font-normal w-fit max-w-fit field-sizing-content"
           />
         ) : (
@@ -166,9 +172,9 @@ export function ConversationName() {
             className="text-contrast leading-5 truncate"
             data-testid="conversation-name-title"
             onDoubleClick={handleDoubleClick}
-            title={conversation.title || ""}
+            title={displayTitle}
           >
-            {conversation.title}
+            {displayTitle}
           </div>
         )}
 
@@ -215,7 +221,7 @@ export function ConversationName() {
           conversationId={conversationId}
           conversationUrl={conversation.conversation_url}
           sessionApiKey={conversation.session_api_key}
-          conversationTitle={conversation.title}
+          conversationTitle={displayTitle}
           model={conversation.llm_model}
           onClose={() => setTranscriptExportModalVisible(false)}
         />
