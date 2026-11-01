@@ -73,34 +73,51 @@ function renderAndCaptureIntervalFn(): IntervalFn {
   return captured;
 }
 
+const baseConversation = {
+  id: "conv-1",
+  created_by_user_id: null,
+  selected_repository: null,
+  selected_branch: null,
+  git_provider: null,
+  title: "Test",
+  trigger: null,
+  pr_number: [],
+  llm_model: null,
+  metrics: null,
+  created_at: "2024-01-01T00:00:00Z",
+  updated_at: "2024-01-01T00:00:00Z",
+  execution_status: null,
+  conversation_url: "https://sandbox.example.com/api/conversations/conv-1",
+  session_api_key: null,
+  sandbox_id: null,
+  sub_conversation_ids: [],
+};
+
+function makeConversation(
+  data: Partial<AppConversation> | null | undefined,
+): AppConversation | null | undefined {
+  if (!data) return data as AppConversation | null | undefined;
+  return { ...baseConversation, ...data } as AppConversation;
+}
+
 function makeQuery(data: Partial<AppConversation> | null | undefined): {
   state: { data: AppConversation | null | undefined };
 } {
   if (!data) return { state: { data: data as null | undefined } };
+  return { state: { data: makeConversation(data) } };
+}
+
+function makeUseUserConversationResult(
+  data: AppConversation | null | undefined,
+  isFetched: boolean = true,
+) {
   return {
-    state: {
-      data: {
-        id: "conv-1",
-        created_by_user_id: null,
-        selected_repository: null,
-        selected_branch: null,
-        git_provider: null,
-        title: "Test",
-        trigger: null,
-        pr_number: [],
-        llm_model: null,
-        metrics: null,
-        created_at: "2024-01-01T00:00:00Z",
-        updated_at: "2024-01-01T00:00:00Z",
-        execution_status: null,
-        conversation_url:
-          "https://sandbox.example.com/api/conversations/conv-1",
-        session_api_key: null,
-        sandbox_id: null,
-        sub_conversation_ids: [],
-        ...data,
-      } as AppConversation,
-    },
+    data,
+    isLoading: false,
+    isPending: false,
+    isFetched,
+    error: null,
+    isError: false,
   };
 }
 
@@ -245,5 +262,56 @@ describe("useActiveConversation — refetchInterval callback", () => {
     );
 
     expect(result).toBe(30000);
+  });
+});
+
+describe("useActiveConversation — service synchronization", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // Regression for #17787: the synchronization effect used to depend on
+  // `data.execution_status` instead of the full `data` object, so a refetch
+  // that kept the same execution_status but changed the runtime details
+  // (sandbox URL, session API key, or workspace dir) never re-ran
+  // `ConversationService.setCurrentConversation`, leaving the service mirror
+  // a stale snapshot of the query.
+  it("updates the service mirror when a same-status refetch changes runtime details", () => {
+    mockUseUserConversation
+      .mockReturnValueOnce(
+        makeUseUserConversationResult(
+          makeConversation({
+            execution_status: ExecutionStatus.RUNNING,
+            conversation_url:
+              "https://runtime-old.example/api/conversations/conv-1",
+            session_api_key: "old-key",
+            workspace: { working_dir: "/workspace/old" },
+          }),
+        ),
+      )
+      .mockReturnValueOnce(
+        makeUseUserConversationResult(
+          makeConversation({
+            execution_status: ExecutionStatus.RUNNING,
+            conversation_url:
+              "https://runtime-new.example/api/conversations/conv-1",
+            session_api_key: "new-key",
+            workspace: { working_dir: "/workspace/new" },
+          }),
+        ),
+      );
+
+    const { rerender } = renderHook(() => useActiveConversation());
+
+    // Refetch with identical execution_status but new runtime details.
+
+    rerender();
+
+    expect(mockSetCurrentConversation).toHaveBeenCalledTimes(2);
+    expect(mockSetCurrentConversation.mock.calls[1][0]).toMatchObject({
+      conversation_url: "https://runtime-new.example/api/conversations/conv-1",
+      session_api_key: "new-key",
+      workspace: { working_dir: "/workspace/new" },
+    });
   });
 });
