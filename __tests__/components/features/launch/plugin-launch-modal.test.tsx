@@ -70,6 +70,25 @@ describe("PluginLaunchModal", () => {
       const elements = screen.getAllByText("local-plugin");
       expect(elements.length).toBeGreaterThan(0);
     });
+
+    it("does not extract a repo coordinate from a spoofed URL (#17162)", () => {
+      // An attacker embeds "github.com/" in the path of a host they control.
+      // The source display must show the full URL, not "owner/repo".
+      const attackerUrl = "https://evil.example/github.com/owner/repo";
+      renderModal([{ source: attackerUrl }]);
+
+      // The source info text must contain the full attacker URL
+      expect(screen.getByText(attackerUrl)).toBeInTheDocument();
+      // It must NOT show the misleading "owner/repo" extracted from the path
+      expect(screen.queryByText("owner/repo")).not.toBeInTheDocument();
+    });
+
+    it("extracts repo coordinate from a genuine github.com URL", () => {
+      renderModal([{ source: "https://github.com/owner/repo.git" }]);
+
+      // The source info should show "owner/repo" (without .git)
+      expect(screen.getByText("owner/repo")).toBeInTheDocument();
+    });
   });
 
   describe("Modal Title", () => {
