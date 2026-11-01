@@ -13,7 +13,7 @@
  *   .all-passed   — written only when all tests passed
  */
 
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type {
   FullResult,
@@ -46,6 +46,7 @@ interface TestRecord {
 class DoneMarkerReporter implements Reporter {
   private totalTests = 0;
   private completedTests = 0;
+  private completedTestIds = new Set<string>();
   private allPassed = true;
   private tests: TestRecord[] = [];
   private markerDirCreated = false;
@@ -55,7 +56,8 @@ class DoneMarkerReporter implements Reporter {
   }
 
   onTestEnd(test: TestCase, result: TestResult) {
-    this.completedTests++;
+    this.completedTestIds.add(test.id);
+    this.completedTests = this.completedTestIds.size;
     const passed = result.status === "passed" || result.status === "skipped";
     if (!passed) {
       this.allPassed = false;
@@ -74,17 +76,25 @@ class DoneMarkerReporter implements Reporter {
 
     // Always flush results so a mid-suite kill still leaves usable data.
     this.writeResults();
-
-    // Write completion markers only after the last test.
-    if (this.completedTests >= this.totalTests) {
+    // Preserve completion evidence before potentially hanging server teardown.
+    if (this.totalTests > 0 && this.completedTests >= this.totalTests) {
       this.writeCompletionMarkers();
     }
   }
 
-  onEnd(_result: FullResult) {
+  onEnd(result: FullResult) {
     // Fallback: if onTestEnd never fired (webServer timeout, config
     // error, etc.), treat that as a failure and write what we have.
-    if (this.totalTests === 0 || this.completedTests === 0) {
+    if (
+      result.status !== "passed" ||
+      this.totalTests === 0 ||
+      this.completedTests === 0
+    ) {
+      this.allPassed = false;
+    }
+    // If the run was truncated (globalTimeout), completed < total means
+    // not every declared test ran — never treat that as success.
+    if (this.completedTests < this.totalTests) {
       this.allPassed = false;
     }
     this.writeResults();
@@ -115,14 +125,23 @@ class DoneMarkerReporter implements Reporter {
     }
   }
 
-  /** Write .tests-done and .all-passed — only when the suite is complete. */
+  /** Write .tests-done and .all-passed — .all-passed only when truly complete. */
   private writeCompletionMarkers() {
-    const status = this.allPassed ? "passed" : "failed";
+    const isComplete =
+      this.totalTests > 0 && this.completedTests >= this.totalTests;
+    const status = isComplete && this.allPassed ? "passed" : "failed";
     try {
       this.ensureMarkerDir();
       writeFileSync(join(MARKER_DIR, ".tests-done"), status);
-      if (this.allPassed) {
-        writeFileSync(join(MARKER_DIR, ".all-passed"), "1");
+      const allPassedPath = join(MARKER_DIR, ".all-passed");
+      if (isComplete && this.allPassed) {
+        writeFileSync(allPassedPath, "1");
+      } else {
+        try {
+          unlinkSync(allPassedPath);
+        } catch {
+          // ignore if not present
+        }
       }
     } catch {
       // Don't crash Playwright if marker write fails
