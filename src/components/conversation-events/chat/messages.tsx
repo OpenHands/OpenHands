@@ -1,5 +1,10 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
+import { LoaderCircle } from "lucide-react";
 import { ActionEvent, OpenHandsEvent } from "#/types/agent-server/core";
+import { I18nKey } from "#/i18n/declaration";
+import { useAgentState, usePlanningAgentState } from "#/hooks/use-agent-state";
+import { AgentState } from "#/types/agent-state";
 import {
   isActionEvent,
   isObservationEvent,
@@ -114,10 +119,27 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     // one, identically to before. Agent thoughts attached to an action are
     // hoisted out as their own rendered item so they always show up in the
     // message pane and a thought between actions starts a fresh group.
+    // Live status sits at the end of the chat. While the agent works, the
+    // stage it is on is a group from its first step, and its header shows the
+    // running step or "Thinking"; with no group there yet, a "Thinking" line
+    // takes its place.
+    const { t } = useTranslation("openhands");
+    const { curAgentState } = useAgentState();
+    const { isPlanningAgentRunning } = usePlanningAgentState();
+    const isAgentRunning =
+      curAgentState === AgentState.RUNNING || isPlanningAgentRunning;
     const renderedItems = React.useMemo(
-      () => groupEvents(messages, undefined, allEvents),
-      [messages, allEvents],
+      () =>
+        groupEvents(
+          messages,
+          undefined,
+          allEvents,
+          isAgentRunning ? 1 : undefined,
+        ),
+      [messages, allEvents, isAgentRunning],
     );
+    const showThinkingLine =
+      isAgentRunning && renderedItems.at(-1)?.kind !== "group";
 
     const renderEventMessage = (
       event: OpenHandsEvent,
@@ -154,7 +176,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
 
     return (
       <>
-        {renderedItems.map((item) => {
+        {renderedItems.map((item, itemIndex) => {
           if (item.kind === "single") {
             return (
               <React.Fragment key={`single-${getStepKey(item.event)}`}>
@@ -190,6 +212,9 @@ export const Messages: React.FC<MessagesProps> = React.memo(
               <EventGroup
                 events={item.events}
                 allEvents={allEvents}
+                isLive={
+                  isAgentRunning && itemIndex === renderedItems.length - 1
+                }
                 open={groupOpen}
                 onOpenChange={(open) => setRowOpen(`group:${groupKey}`, open)}
               >
@@ -206,6 +231,16 @@ export const Messages: React.FC<MessagesProps> = React.memo(
             </React.Fragment>
           );
         })}
+        {showThinkingLine && (
+          <div
+            className="mt-2 flex items-center gap-2 py-1 text-sm text-muted"
+            data-testid="live-thinking"
+            role="status"
+          >
+            <span>{t(I18nKey.ACTION_MESSAGE$THINK)}</span>
+            <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+          </div>
+        )}
         {secretRequests.unanchored.map((request) => (
           <SecretRequestCard key={request.toolCallId} request={request} />
         ))}

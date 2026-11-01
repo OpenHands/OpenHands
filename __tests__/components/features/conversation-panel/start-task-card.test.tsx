@@ -28,8 +28,25 @@ describe("startup conversation rows", () => {
       screen.getByText("Explain the project structure"),
     ).toBeInTheDocument();
     expect(screen.getByTestId("conversation-card")).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: "CONVERSATION$STARTING_CONVERSATION" }),
+    ).toBeInTheDocument();
     expect(screen.queryByText("Starting")).not.toBeInTheDocument();
     expect(screen.queryByText("Waiting")).not.toBeInTheDocument();
+  });
+
+  it("replaces startup activity with the settled or failed state", () => {
+    const { rerender } = renderWithProviders(<StartTaskCard task={task} />);
+    expect(screen.getByRole("img")).toHaveAccessibleName(
+      "CONVERSATION$STARTING_CONVERSATION",
+    );
+
+    rerender(<StartTaskCard task={{ ...task, status: "READY" }} />);
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+
+    rerender(<StartTaskCard task={{ ...task, status: "ERROR" }} />);
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    expect(screen.getByTestId("conversation-status-error")).toBeInTheDocument();
   });
 
   it("keeps a queued attachment prompt visible when the request has no initial message", () => {

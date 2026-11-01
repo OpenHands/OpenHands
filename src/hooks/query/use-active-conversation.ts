@@ -3,7 +3,10 @@ import { useEffect } from "react";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useUserConversation } from "./use-user-conversation";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
-import { isExecutionActive } from "#/utils/status";
+import { isExecutionErrored } from "#/utils/status";
+import { isPlaceholderConversationTitle } from "#/utils/conversation-title";
+
+const STARTUP_TITLE_POLL_WINDOW_MS = 60_000;
 
 export const useActiveConversation = () => {
   // Optional: the chat input renders on the home page too (no conversation
@@ -20,18 +23,22 @@ export const useActiveConversation = () => {
 
   const userConversation = useUserConversation(
     actualConversationId,
-    // Fast-poll (3 s) while: the sandbox URL is absent; the sandbox is PAUSED
-    // (it keeps the stale conversation_url, so a missing-URL check alone misses
-    // the wake-up); or the agent is executing but has no title yet (the title
-    // lands asynchronously after conversation_url is already set).
+    // Keep startup/resume responsive; title-only polling stops after one minute.
     (query) => {
       const data = query.state.data;
+      const age = data ? Date.now() - Date.parse(data.created_at) : Infinity;
+      const awaitingTitle =
+        data &&
+        isPlaceholderConversationTitle(data.title, data.id) &&
+        !isExecutionErrored(data.execution_status) &&
+        age >= 0 &&
+        age < STARTUP_TITLE_POLL_WINDOW_MS;
       if (
         data &&
         (!data.conversation_url ||
           data.sandbox_status === "PAUSED" ||
           data.sandbox_status === "STARTING" ||
-          (!data.title && isExecutionActive(data.execution_status)))
+          awaitingTitle)
       ) {
         return 3000;
       }

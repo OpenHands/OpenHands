@@ -1,5 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { FaArchive } from "react-icons/fa";
+import { LoaderCircle } from "lucide-react";
+import { I18nKey } from "#/i18n/declaration";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
@@ -20,6 +22,7 @@ interface ConversationStatusDotProps {
    * tooltip doesn't intercept the hover.
    */
   showTooltip?: boolean;
+  isStarting?: boolean;
   /**
    * The row's effective archived state (explicit archive or a missing
    * runtime). When true the dot shows the archive presentation even if the
@@ -31,7 +34,14 @@ interface ConversationStatusDotProps {
   isArchived?: boolean;
 }
 
-type Visual = "check" | "working" | "active" | "paused" | "error" | "unknown";
+type Visual =
+  | "check"
+  | "working"
+  | "active"
+  | "paused"
+  | "error"
+  | "unknown"
+  | "starting";
 
 const visualFor = (status: ExecutionStatus | null | undefined): Visual => {
   switch (status) {
@@ -55,6 +65,8 @@ const visualFor = (status: ExecutionStatus | null | undefined): Visual => {
 const labelKeyFor = (visual: Visual, isArchived?: boolean): string => {
   if (isArchived) return "COMMON$ARCHIVED";
   switch (visual) {
+    case "starting":
+      return I18nKey.CONVERSATION$STARTING_CONVERSATION;
     case "check":
       return "COMMON$FINISHED";
     case "working":
@@ -71,6 +83,13 @@ const labelKeyFor = (visual: Visual, isArchived?: boolean): string => {
 
 function renderIndicator(visual: Visual) {
   switch (visual) {
+    case "starting":
+      return (
+        <LoaderCircle
+          aria-hidden="true"
+          className="size-2.5 animate-spin text-muted motion-reduce:animate-none"
+        />
+      );
     case "check":
       return (
         <svg
@@ -128,6 +147,7 @@ export function ConversationStatusDot({
   executionStatus,
   sandboxStatus,
   showTooltip = true,
+  isStarting = false,
   isArchived,
 }: ConversationStatusDotProps) {
   const { t } = useTranslation("openhands");
@@ -137,12 +157,15 @@ export function ConversationStatusDot({
   // inferred here for callers that only pass `sandboxStatus`; an unarchived
   // `ERROR` row keeps its red "Error" dot.
   const archived = isArchived ?? isMissingSandboxStatus(sandboxStatus);
+  const executionVisual = visualFor(executionStatus);
   const effectiveVisual: Visual =
     sandboxStatus === "ERROR" && !archived
       ? "error"
       : archived
         ? "paused"
-        : visualFor(executionStatus);
+        : isStarting && executionVisual !== "error"
+          ? "starting"
+          : executionVisual;
 
   const visual = effectiveVisual;
   const label = t(labelKeyFor(visual, archived));
@@ -158,7 +181,11 @@ export function ConversationStatusDot({
   );
 
   const dot = (
-    <div className="w-2.5 h-2.5 flex items-center justify-center shrink-0">
+    <div
+      className="w-2.5 h-2.5 flex items-center justify-center shrink-0"
+      role={visual === "starting" ? "img" : undefined}
+      aria-label={visual === "starting" ? label : undefined}
+    >
       {indicator}
     </div>
   );

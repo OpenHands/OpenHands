@@ -1,3 +1,9 @@
+import { ChatProgressContext } from "#/context/chat-progress-context";
+import {
+  CHAT_BODY_CLASS_NAME,
+  CHAT_SCROLL_CLASS_NAME,
+  CHAT_COMPOSER_CLASS_NAME,
+} from "./chat-layout";
 import { TaskStartupProgress } from "./task-startup-progress";
 import React from "react";
 import { createPortal } from "react-dom";
@@ -22,11 +28,10 @@ import { useLoadOlderEvents } from "#/hooks/use-load-older-events";
 import { useClampDragSelection } from "#/hooks/chat/use-clamp-drag-selection";
 import { useAutoRefreshFilesOnEdit } from "#/hooks/use-auto-refresh-files-on-edit";
 import { WorkspaceFilesForChatProvider } from "./chat-markdown-path-code";
-import { TypingIndicator } from "./typing-indicator";
 import { ChatSuggestions } from "./chat-suggestions";
 import { ScrollProvider } from "#/context/scroll-context";
 import { useSendMessage } from "#/hooks/use-send-message";
-import { useAgentState, usePlanningAgentState } from "#/hooks/use-agent-state";
+import { useAgentState } from "#/hooks/use-agent-state";
 import { useIsArchivedConversation } from "#/hooks/use-is-archived-conversation";
 import { useHandleBuildPlanClick } from "#/hooks/use-handle-build-plan-click";
 
@@ -149,7 +154,6 @@ export function ChatInterface({
   } = useNewConversationCommand();
 
   const { curAgentState } = useAgentState();
-  const { isPlanningAgentRunning } = usePlanningAgentState();
   const { curAgentState: recoveryAgentState } = useAgentState(
     conversationWebSocket?.recoveryConversationId,
   );
@@ -585,25 +589,31 @@ export function ChatInterface({
   const isComposerDocked = Boolean(composerDockTarget);
   const isMinimalComposer = isComposerDocked || minimalComposer;
   const composer = (
-    <ComposerDockedProvider
-      enabled={isComposerDocked}
-      minimal={isMinimalComposer}
+    <ChatProgressContext.Provider
+      value={
+        isTask || hasPendingUserMessages || curAgentState === AgentState.RUNNING
+      }
     >
-      <InteractiveChatBox
-        onSubmit={(content, images, files) => {
-          if (isComposerDocked) onDockedComposerSubmit?.();
-          return handleSendMessage(content, images, files);
-        }}
-        disabled={isTask || isNewConversationPending || llmBlocked}
-        hasStartedConversation={hasStartedConversation}
-        showGitControlBar={showGitControlBar}
-        placeholder={
-          isMinimalComposer
-            ? t(I18nKey.AUTOMATION_SETUP$DOCKED_COMPOSER_PLACEHOLDER)
-            : composerPlaceholder
-        }
-      />
-    </ComposerDockedProvider>
+      <ComposerDockedProvider
+        enabled={isComposerDocked}
+        minimal={isMinimalComposer}
+      >
+        <InteractiveChatBox
+          onSubmit={(content, images, files) => {
+            if (isComposerDocked) onDockedComposerSubmit?.();
+            return handleSendMessage(content, images, files);
+          }}
+          disabled={isTask || isNewConversationPending || llmBlocked}
+          hasStartedConversation={hasStartedConversation}
+          showGitControlBar={showGitControlBar}
+          placeholder={
+            isMinimalComposer
+              ? t(I18nKey.AUTOMATION_SETUP$DOCKED_COMPOSER_PLACEHOLDER)
+              : composerPlaceholder
+          }
+        />
+      </ComposerDockedProvider>
+    </ChatProgressContext.Provider>
   );
   const dockedOrInlineComposer = composerDockTarget
     ? createPortal(composer, composerDockTarget)
@@ -612,10 +622,7 @@ export function ChatInterface({
   return (
     <WorkspaceFilesForChatProvider>
       <ScrollProvider value={scrollProviderValue}>
-        <div
-          className="relative flex h-full flex-col justify-between px-4"
-          data-testid="chat-interface"
-        >
+        <div className={CHAT_BODY_CLASS_NAME} data-testid="chat-interface">
           {!hasSubstantiveAgentActions &&
             !hasPendingUserMessages &&
             !userEventsExist &&
@@ -644,7 +651,7 @@ export function ChatInterface({
               maybeLoadOlder(e.currentTarget);
             }}
             onWheel={handleWheelForPagination}
-            className="custom-scrollbar-always flex min-h-0 grow flex-col gap-2 overflow-x-hidden overflow-y-auto px-0 pt-4 pb-8 md:px-4"
+            className={CHAT_SCROLL_CLASS_NAME}
           >
             {isChatLoading && isReturningToConversation && (
               <ChatMessagesSkeleton />
@@ -710,7 +717,7 @@ export function ChatInterface({
             <GoalStatusBanner conversationId={conversationId} />
           </div>
 
-          <div className="flex shrink-0 flex-col gap-1.5 pb-4">
+          <div className={CHAT_COMPOSER_CLASS_NAME}>
             <SkillInstallRestartBanner conversationId={conversationId} />
             <BtwMessages conversationId={conversationId} />
             {recoveryAgentState === AgentState.RUNNING &&
@@ -772,26 +779,21 @@ export function ChatInterface({
                   <div className="flex justify-between relative">
                     <div className="flex items-end gap-1 pointer-events-auto">
                       <ConfirmationModeEnabled />
-                      {isStartingStatus && !isTask && (
-                        <ChatStatusIndicator
-                          statusColor={serverStatusColor}
-                          status={serverStatusText}
-                        />
-                      )}
+                      {isStartingStatus &&
+                        !isTask &&
+                        !hasPendingUserMessages && (
+                          <ChatStatusIndicator
+                            statusColor={serverStatusColor}
+                            status={serverStatusText}
+                          />
+                        )}
                     </div>
 
                     {!hitBottom ? (
                       <div className="absolute left-1/2 transform -translate-x-1/2 bottom-0 pointer-events-auto">
                         <ScrollToBottomButton onClick={scrollDomToBottom} />
                       </div>
-                    ) : (
-                      (curAgentState === AgentState.RUNNING ||
-                        isPlanningAgentRunning) && (
-                        <div className="pointer-events-none absolute inset-x-9 bottom-0 flex justify-center">
-                          <TypingIndicator events={allConversationEvents} />
-                        </div>
-                      )
-                    )}
+                    ) : null}
                   </div>
                 </div>
 

@@ -1,3 +1,4 @@
+import { useConversationDisplayTitle } from "#/hooks/use-conversation-display-title";
 import { usePendingTaskAttachmentsStore } from "#/stores/pending-task-attachments-store";
 import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
 import React from "react";
@@ -291,12 +292,6 @@ export function ConversationPanel({
   } = usePaginatedConversations();
   const { workspaces: knownWorkspaces } = useResolvedWorkspaces();
 
-  // Fetch in-progress start tasks
-  const {
-    data: startTasks,
-    unresolvedTaskIds = [],
-    failedTaskIds = [],
-  } = useStartTasks();
   const pendingLaunches = useConversationLaunchStore((state) => state.launches);
   const pendingAttachments = usePendingTaskAttachmentsStore(
     (state) => state.byTaskId,
@@ -324,6 +319,18 @@ export function ConversationPanel({
     // so the rendered count reflects real growth and React keys stay unique.
     return uniqueById(all);
   }, [data]);
+
+  const listedConversationIds = React.useMemo(
+    () => allLoadedConversations.map((conversation) => conversation.id),
+    [allLoadedConversations],
+  );
+  // Fetch in-progress start tasks
+  const {
+    data: startTasks,
+    unresolvedTaskIds = [],
+    failedTaskIds = [],
+  } = useStartTasks(10, listedConversationIds);
+  const getTitle = useConversationDisplayTitle();
 
   // Grouped pagination is folder-oriented. Record the first backend page for
   // every conversation so later pages can introduce new folders without
@@ -1068,6 +1075,7 @@ export function ConversationPanel({
       conversation: (typeof conversations)[number],
       options?: { inPinnedSection?: boolean },
     ) => {
+      const displayTitle = getTitle(conversation.id, conversation.title);
       const isPinned = pinnedIds.includes(conversation.id);
       // Presentation: a row looks archived when the user archived it or its
       // runtime is missing and non-resumable. This single predicate drives list
@@ -1093,7 +1101,7 @@ export function ConversationPanel({
           <CompactConversationRow
             key={conversation.id}
             conversationId={conversation.id}
-            title={conversation.title ?? ""}
+            title={displayTitle}
             selectedRepository={{
               selected_repository: conversation.selected_repository,
               selected_branch: conversation.selected_branch,
@@ -1136,7 +1144,7 @@ export function ConversationPanel({
           className="max-w-none overflow-visible rounded-xl border border-border bg-base-secondary p-0 text-contrast shadow-xl"
           content={
             <ConversationCardPreview
-              title={conversation.title ?? ""}
+              title={displayTitle}
               executionStatus={conversation.execution_status}
               sandboxStatus={conversation.sandbox_status}
               selectedRepository={{
@@ -1181,7 +1189,7 @@ export function ConversationPanel({
           >
             <ConversationCard
               onDelete={() =>
-                handleDeleteProject(conversation.id, conversation.title ?? "")
+                handleDeleteProject(conversation.id, displayTitle)
               }
               // Archive is offered until the row is effectively archived; the
               // reverse direction, "Unarchive", is offered only when the row is
@@ -1190,11 +1198,7 @@ export function ConversationPanel({
               onArchive={
                 isArchived
                   ? undefined
-                  : () =>
-                      handleArchiveProject(
-                        conversation.id,
-                        conversation.title ?? "",
-                      )
+                  : () => handleArchiveProject(conversation.id, displayTitle)
               }
               onUnarchive={
                 explicitlyArchived && !runtimeMissing
@@ -1216,7 +1220,7 @@ export function ConversationPanel({
               onChangeTitle={(title) =>
                 handleConversationTitleChange(conversation.id, title)
               }
-              title={conversation.title ?? ""}
+              title={displayTitle}
               selectedRepository={{
                 selected_repository: conversation.selected_repository,
                 selected_branch: conversation.selected_branch,
@@ -1254,6 +1258,7 @@ export function ConversationPanel({
       );
     },
     [
+      getTitle,
       activeBackend.id,
       activeBackend.kind,
       archivedIdSet,
@@ -1465,7 +1470,8 @@ export function ConversationPanel({
                 className="block"
               >
                 <ConversationCard
-                  title={launch.message || t(I18nKey.CONVERSATION$UNTITLED)}
+                  title={getTitle(launch.id)}
+                  isStarting
                   selectedRepository={null}
                   lastUpdatedAt=""
                   showRepositoryMetadata={false}
@@ -1532,6 +1538,7 @@ export function ConversationPanel({
               >
                 <StartTaskCard
                   task={task}
+                  title={getTitle(`task-${task.id}`, task.request.title)}
                   initialMessage={
                     pendingAttachments[task.id]?.content ||
                     Object.values(pendingLaunches).find(
@@ -1539,6 +1546,7 @@ export function ConversationPanel({
                     )?.message
                   }
                   isActive={
+                    currentConversationId === task.app_conversation_id ||
                     currentConversationId === `task-${task.id}` ||
                     Object.values(pendingLaunches).some(
                       (launch) =>

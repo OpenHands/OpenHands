@@ -11,9 +11,18 @@ import {
 import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
 import { useConversationStore } from "#/stores/conversation-store";
 
-vi.mock("#/components/features/chat/custom-chat-input", () => ({
-  CustomChatInput: () => <textarea disabled aria-label="Message" />,
+vi.mock("#/components/features/chat/interactive-chat-box", () => ({
+  InteractiveChatBox: () => <textarea disabled aria-label="Message" />,
 }));
+
+vi.mock(
+  "#/components/features/conversation/conversation-main/conversation-main",
+  () => ({
+    ConversationMain: ({ children }: React.PropsWithChildren) => (
+      <>{children}</>
+    ),
+  }),
+);
 
 const navigate = vi.fn();
 function view(id: string) {
@@ -102,6 +111,7 @@ describe("pending conversation navigation", () => {
         .update(id, { error: "Cannot start" }),
     );
     expect(screen.getByRole("alert")).toHaveTextContent("Cannot start");
+    expect(screen.getByRole("textbox")).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "BUTTON$EDIT" }));
     expect(useConversationStore.getState().messageToSend).toMatchObject({
       text: "Read my notes",

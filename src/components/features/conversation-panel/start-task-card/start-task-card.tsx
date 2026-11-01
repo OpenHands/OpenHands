@@ -6,6 +6,7 @@ import { ConversationCard } from "../conversation-card/conversation-card";
 
 interface StartTaskCardProps {
   task: AppConversationStartTask;
+  title?: string;
   onClick?: () => void;
   initialMessage?: string;
   isActive?: boolean;
@@ -14,6 +15,7 @@ interface StartTaskCardProps {
 
 export function StartTaskCard({
   task,
+  title: displayTitle,
   onClick,
   initialMessage,
   isActive,
@@ -41,12 +43,13 @@ export function StartTaskCard({
 
   return (
     <ConversationCard
-      title={title}
+      title={displayTitle || title}
       onClick={onClick}
       selectedRepository={selectedRepository}
       createdAt={task.created_at}
       lastUpdatedAt={task.updated_at}
       executionStatus={task.status === "ERROR" ? ExecutionStatus.ERROR : null}
+      isStarting={task.status !== "READY" && task.status !== "ERROR"}
       isActive={isActive}
       showRepositoryMetadata={showRepositoryMetadata}
     />

@@ -91,12 +91,12 @@ export function ChatMessage({
     (pendingStatus === "error" || pendingStatus === "sending");
   const canStopPendingMessage = pendingStatus === "sending" && onStop != null;
   const showStopButton = canStopPendingMessage && isHovering;
-  const useTruncatedUserBody = type === "user" && pendingStatus == null;
+  const useTruncatedUserBody = type === "user";
   const isCollapsed = useTruncatedUserBody && isTruncatable && !isExpanded;
   const hasBubbleChildren = React.Children.count(children) > 0;
 
   React.useLayoutEffect(() => {
-    if (!canStopPendingMessage || useTruncatedUserBody) {
+    if (!canStopPendingMessage) {
       return undefined;
     }
 
@@ -126,12 +126,14 @@ export function ChatMessage({
   }, [message, canStopPendingMessage, useTruncatedUserBody]);
 
   const messageContent = useTruncatedUserBody ? (
-    <UserMessageBody
-      message={message}
-      isHovering={isHovering}
-      isExpanded={isExpanded}
-      onTruncatableChange={setIsTruncatable}
-    />
+    <div ref={pendingMessageContentRef} className="min-w-0">
+      <UserMessageBody
+        message={message}
+        isHovering={isHovering}
+        isExpanded={isExpanded}
+        onTruncatableChange={setIsTruncatable}
+      />
+    </div>
   ) : (
     <div
       ref={pendingMessageContentRef}
@@ -140,7 +142,7 @@ export function ChatMessage({
       <MarkdownRenderer
         includeStandard
         includeHeadings
-        allowHtml={type !== "user"}
+        allowHtml
         components={chatBubbleMarkdownComponents}
         streaming={isStreaming}
       >
@@ -308,7 +310,7 @@ export function ChatMessage({
     return (
       <div className="flex w-full max-w-full flex-col last:mb-4">
         {messageBubbleWithTimestamp}
-        <div className="my-1 w-full py-1 text-sm">
+        <div className="mt-4 w-full py-1 text-sm">
           {pendingLabel ? (
             <div
               role="status"
@@ -318,7 +320,7 @@ export function ChatMessage({
               <span>{pendingLabel}</span>
               <LoaderCircle
                 aria-hidden="true"
-                className="h-3.5 w-3.5 shrink-0 animate-spin"
+                className="h-3.5 w-3.5 shrink-0 animate-spin motion-reduce:animate-none"
               />
             </div>
           ) : (
