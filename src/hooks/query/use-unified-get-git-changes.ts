@@ -10,8 +10,10 @@ import type { GitChange } from "#/api/open-hands.types";
 export const useUnifiedGetGitChanges = () => {
   const { conversationId } = useConversationId();
   const { data: conversation } = useActiveConversation();
-  const [orderedChanges, setOrderedChanges] = React.useState<GitChange[]>([]);
-  const previousDataRef = React.useRef<GitChange[] | null>(null);
+  const [order, setOrder] = React.useState<{
+    identity: string;
+    paths: string[];
+  }>({ identity: "", paths: [] });
   const runtimeIsReady = useRuntimeIsReady();
 
   const conversationUrl = conversation?.conversation_url;
@@ -24,14 +26,16 @@ export const useUnifiedGetGitChanges = () => {
     [selectedRepository, workingDir],
   );
 
+  const queryKey = [
+    "file_changes",
+    conversationId,
+    conversationUrl,
+    sessionApiKey,
+    gitPath,
+  ];
+  const identity = JSON.stringify(queryKey);
   const result = useQuery({
-    queryKey: [
-      "file_changes",
-      conversationId,
-      conversationUrl,
-      sessionApiKey,
-      gitPath,
-    ],
+    queryKey,
     queryFn: async () => {
       if (!conversationId) throw new Error("No conversation ID");
 
@@ -52,42 +56,28 @@ export const useUnifiedGetGitChanges = () => {
     },
   });
 
-  // Latest changes should be on top
-  React.useEffect(() => {
-    if (!result.isFetching && result.isSuccess && result.data) {
-      const currentData = result.data;
-
-      // If this is new data (not the same reference as before)
-      if (currentData !== previousDataRef.current) {
-        previousDataRef.current = currentData;
-
-        // Figure out new items by comparing with what we already have
-        if (Array.isArray(currentData)) {
-          const currentIds = new Set(currentData.map((item) => item.path));
-          const existingIds = new Set(orderedChanges.map((item) => item.path));
-
-          // Filter out items that already exist in orderedChanges
-          const newItems = currentData.filter(
-            (item) => !existingIds.has(item.path),
-          );
-
-          // Filter out items that no longer exist in the API response
-          const existingItems = orderedChanges.filter((item) =>
-            currentIds.has(item.path),
-          );
-
-          // Add new items to the beginning
-          setOrderedChanges([...newItems, ...existingItems]);
-        } else {
-          // If not an array, just use the data directly
-          setOrderedChanges([currentData]);
-        }
-      }
-    }
-  }, [result.isFetching, result.isSuccess, result.data]);
+  const currentChanges: GitChange[] = result.data ?? [];
+  const currentByPath = new Map(
+    currentChanges.map((change) => [change.path, change]),
+  );
+  const previousPaths = order.identity === identity ? order.paths : [];
+  const previousPathSet = new Set(previousPaths);
+  const paths = [
+    ...currentChanges
+      .filter((change) => !previousPathSet.has(change.path))
+      .map((change) => change.path),
+    ...previousPaths.filter((path) => currentByPath.has(path)),
+  ];
+  if (
+    order.identity !== identity ||
+    paths.length !== order.paths.length ||
+    paths.some((path, index) => path !== order.paths[index])
+  ) {
+    setOrder({ identity, paths });
+  }
 
   return {
-    data: orderedChanges,
+    data: paths.map((path) => currentByPath.get(path)!),
     isLoading: result.isLoading,
     isFetching: result.isFetching,
     isSuccess: result.isSuccess,
