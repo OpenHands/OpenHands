@@ -12,6 +12,7 @@ import { PluginSpec } from "#/api/conversation-service/agent-server-conversation
 import { Typography } from "#/ui/typography";
 import { cn } from "#/utils/utils";
 import { hasPluginParameters } from "#/utils/plugin-parameters";
+import { getPluginSourceLabel } from "#/utils/plugin-display";
 import { PluginLaunchPluginSection } from "./plugin-launch-plugin-section";
 
 interface PluginLaunchModalProps {
@@ -104,16 +105,10 @@ export function PluginLaunchModal({
     return source;
   };
 
-  const getPluginSourceInfo = (plugin: PluginSpec): string => {
-    const { source } = plugin;
-    if (source.startsWith("github:")) {
-      return source.replace("github:", "");
-    }
-    if (source.includes("github.com/")) {
-      return source.split("github.com/")[1]?.replace(".git", "") || source;
-    }
-    return source;
-  };
+  // The trust line names these sources, so a URL is shown whole, host included.
+  // The ref is rendered separately below.
+  const getPluginSourceInfo = (plugin: PluginSpec): string =>
+    getPluginSourceLabel({ ...plugin, ref: undefined });
 
   const getUniqueSources = (): string[] => {
     const sources = pluginConfigs.map((plugin) => getPluginSourceInfo(plugin));
