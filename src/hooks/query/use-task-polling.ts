@@ -1,3 +1,7 @@
+import {
+  sessionActivityKey,
+  useSessionActivityStore,
+} from "#/stores/session-activity-store";
 import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
 import { CONVERSATION_QUERY_KEYS } from "./query-keys";
 import { getActiveBackend } from "#/api/backend-registry/active-store";
@@ -165,6 +169,21 @@ export const useTaskPollingController = () => {
       );
     clearPendingTaskMessageLink(pendingReassign.toConversationId);
   }, [conversationId]);
+
+  useLayoutEffect(() => {
+    if (!taskId || !task) return;
+    const { backend, orgId } = getActiveBackend();
+    const key = sessionActivityKey(backend.id, orgId, `task-${taskId}`);
+    const activity = useSessionActivityStore.getState();
+    activity.begin(key, "initialize");
+    activity.observe(key, task.status);
+    if (task.status === "READY" && task.app_conversation_id) {
+      activity.transfer(
+        key,
+        sessionActivityKey(backend.id, orgId, task.app_conversation_id),
+      );
+    }
+  }, [taskId, task]);
 
   // Navigate to conversation ID when task is ready
   useEffect(() => {

@@ -1,3 +1,4 @@
+import { fireEvent, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createOtherActionEvent,
@@ -91,6 +92,7 @@ describe("Messages stable EventMessage props", () => {
       <Messages messages={messages} allEvents={messages} />,
     );
 
+    fireEvent.click(screen.getByTestId("event-group-toggle"));
     expect(latestPropsFor("observation-1").correspondingAction).toBeNull();
 
     recordEventMessage.mockClear();
