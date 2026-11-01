@@ -85,11 +85,7 @@ describe("sendMessageWithAttachments", () => {
       [image, imageFile],
       ["large.png"],
     );
-    expect(mocks.validate).toHaveBeenCalledWith([
-      image,
-      documentFile,
-      imageFile,
-    ]);
+    expect(mocks.validate).toHaveBeenCalledWith([image]);
     expect(mocks.upload).toHaveBeenCalledWith("conversation-1", [
       documentFile,
       imageFile,
