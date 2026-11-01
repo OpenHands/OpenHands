@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import {
   OpenHandsEvent,
   ActionEvent,
@@ -15,6 +16,7 @@ import {
 import {
   isACPToolCallEvent,
   isObservationEvent,
+  isUserRejectObservation,
 } from "#/types/agent-server/type-guards";
 import {
   SkillReadyEvent,
@@ -22,15 +24,18 @@ import {
   isSkillReadyEvent,
 } from "../event-content-helpers/create-skill-ready-event";
 import { getInvokeSkillItems } from "../event-content-helpers/get-invoke-skill-items";
-import { ConversationConfirmationButtons } from "#/components/shared/buttons/conversation-confirmation-buttons";
 import { SkillReadyContentList } from "./skill-ready-content-list";
 import SkillsIcon from "#/icons/skills.svg?react";
 import { isMarkdownFileEditorEvent } from "#/components/features/chat/tool-visualizers/primitives/markdown-file-preview";
+import { CollapsibleThinking, StepThinking } from "./collapsible-thinking";
+import { MarkdownRenderer } from "../../../features/markdown/markdown-renderer";
 
 interface GenericEventMessageWrapperProps {
   event: OpenHandsEvent | SkillReadyEvent;
   isLastMessage: boolean;
   correspondingAction?: ActionEvent;
+  /** The model's reasoning for this step, shown inside the step's details. */
+  reasoning?: string;
 }
 
 /**
@@ -67,9 +72,10 @@ function getSkillKnowledge(
 
 export function GenericEventMessageWrapper({
   event,
-  isLastMessage,
   correspondingAction,
+  reasoning = "",
 }: GenericEventMessageWrapperProps) {
+  const { t } = useTranslation("openhands");
   const { title, details } = getEventContent(event, correspondingAction);
 
   // TaskTrackerObservation has its own rendering
@@ -78,7 +84,12 @@ export function GenericEventMessageWrapper({
     isObservationEvent(event) &&
     event.observation.kind === "TaskTrackerObservation"
   ) {
-    return <div>{details}</div>;
+    return (
+      <>
+        <CollapsibleThinking content={reasoning} />
+        <div>{details}</div>
+      </>
+    );
   }
 
   // Determine success status
@@ -95,13 +106,25 @@ export function GenericEventMessageWrapper({
   // expandable skill-knowledge list (with the skills icon); they differ only in
   // the header label.
   const skillKnowledge = getSkillKnowledge(event);
-  const bodyDetails = skillKnowledge ? (
+  const stepDetails = skillKnowledge ? (
     <SkillReadyContentList
       items={skillKnowledge.items}
       titleKey={skillKnowledge.titleKey}
     />
   ) : (
     details
+  );
+  const bodyDetails = reasoning.trim() ? (
+    <div className="flex flex-col gap-2">
+      <StepThinking content={reasoning} />
+      {typeof stepDetails === "string" ? (
+        <MarkdownRenderer>{stepDetails}</MarkdownRenderer>
+      ) : (
+        stepDetails
+      )}
+    </div>
+  ) : (
+    stepDetails
   );
 
   // Markdown file-editor cards carry a clipped preview; expand them by
@@ -118,13 +141,22 @@ export function GenericEventMessageWrapper({
         success={success}
         initiallyExpanded={initiallyExpanded}
         timestamp={event.timestamp}
+        titleTrailing={
+          !isSkillReadyEvent(event) && isUserRejectObservation(event) ? (
+            <span
+              data-testid="rejected-indicator"
+              className="ml-2 flex-shrink-0 text-danger"
+            >
+              {t(I18nKey.EVENT$REJECTED)}
+            </span>
+          ) : undefined
+        }
         titleIcon={
           skillKnowledge ? (
-            <SkillsIcon className="h-4 w-4 stroke-[var(--oh-muted)] flex-shrink-0 mr-2" />
+            <SkillsIcon className="h-4 w-4 stroke-muted flex-shrink-0 mr-2" />
           ) : undefined
         }
       />
-      {isLastMessage && <ConversationConfirmationButtons />}
     </div>
   );
 }

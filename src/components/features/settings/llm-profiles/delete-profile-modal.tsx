@@ -10,6 +10,7 @@ import {
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
+import { getApiErrorMessage } from "#/utils/api-error-message";
 
 interface DeleteProfileModalProps {
   profile: ProfileInfo | null;
@@ -34,9 +35,7 @@ export function DeleteProfileModal({
       );
       onClose();
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : t(I18nKey.ERROR$GENERIC);
-      displayErrorToast(message);
+      displayErrorToast(getApiErrorMessage(error, t(I18nKey.ERROR$GENERIC)));
     }
   };
 

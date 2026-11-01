@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import React from "react";
-import { render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router";
+import { HttpError } from "@openhands/typescript-client";
+import { act, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter, Route, Routes } from "react-router";
+import type { SharedConversation } from "@openhands/typescript-client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
@@ -13,8 +15,19 @@ import {
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { NavigationProvider } from "#/context/navigation-context";
 import ConversationView from "#/routes/conversation";
+import { resumeCloudSandbox } from "#/api/cloud/conversation-service.api";
+import {
+  __clearCloudAutoResumeSuppressionsForTests,
+  suppressNextCloudAutoResume,
+} from "#/api/cloud/cloud-sandbox-resume-suppression";
 import type { Backend } from "#/api/backend-registry/types";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
+import { getCloudSharedConversation } from "#/api/cloud/shared-conversation-service.api";
+import { usePendingTaskAttachmentsStore } from "#/stores/pending-task-attachments-store";
+import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
+import { useConversationStore } from "#/stores/conversation-store";
+import { useErrorMessageStore } from "#/stores/error-message-store";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 // Mock the underlying service the conversation queries depend on.
 vi.mock(
@@ -61,6 +74,15 @@ vi.mock("#/hooks/query/use-is-authed", () => ({
 vi.mock("#/api/cloud/conversation-service.api", () => ({
   resumeCloudSandbox: vi.fn(),
 }));
+// Mock the cloud sharing service the read-only fallback probes.
+vi.mock("#/api/cloud/shared-conversation-service.api", () => ({
+  getCloudSharedConversation: vi.fn(),
+  searchCloudSharedEvents: vi.fn(),
+}));
+vi.mock("#/utils/custom-toast-handlers", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#/utils/custom-toast-handlers")>()),
+  displayErrorToast: vi.fn(),
+}));
 
 const localBackend: Backend = {
   id: "local-1",
@@ -80,7 +102,10 @@ const cloudBackend: Backend = {
 
 const CLOUD_CONVERSATION_ID = "conv-cloud";
 
-function makeConversation(id: string): AppConversation {
+function makeConversation(
+  id: string,
+  overrides: Partial<AppConversation> = {},
+): AppConversation {
   return {
     id,
     created_by_user_id: null,
@@ -100,21 +125,25 @@ function makeConversation(id: string): AppConversation {
     session_api_key: null,
     sandbox_id: null,
     sub_conversation_ids: [],
+    ...overrides,
   };
 }
 
-function renderConversation() {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  return render(
-    <MemoryRouter initialEntries={[`/conversations/${CLOUD_CONVERSATION_ID}`]}>
+// Shared by `conversationTree` so a `rerender` keeps the same cache; each
+// `renderConversation` starts a fresh one, like a real remount.
+let queryClient: QueryClient;
+
+function conversationTree(conversationId: string, search = "") {
+  return (
+    <MemoryRouter
+      initialEntries={[`/conversations/${conversationId}${search}`]}
+    >
       <QueryClientProvider client={queryClient}>
         <ActiveBackendProvider>
           <NavigationProvider
             value={{
-              currentPath: `/conversations/${CLOUD_CONVERSATION_ID}`,
-              conversationId: CLOUD_CONVERSATION_ID,
+              currentPath: `/conversations/${conversationId}`,
+              conversationId,
               isNavigating: false,
               navigate: vi.fn(),
             }}
@@ -123,16 +152,86 @@ function renderConversation() {
           </NavigationProvider>
         </ActiveBackendProvider>
       </QueryClientProvider>
+    </MemoryRouter>
+  );
+}
+
+function renderConversation(search = "") {
+  queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false, retryDelay: 1 } },
+  });
+  return render(conversationTree(CLOUD_CONVERSATION_ID, search));
+}
+
+function makeSharedConversation(id: string): SharedConversation {
+  return {
+    id,
+    created_by_user_id: "creator-1",
+    selected_repository: null,
+    selected_branch: null,
+    git_provider: null,
+    title: "Automated code review",
+    pr_number: [],
+    llm_model: null,
+    metrics: null,
+    parent_conversation_id: null,
+    sub_conversation_ids: [],
+    created_at: "2024-01-01T00:00:00Z",
+    updated_at: "2024-01-01T00:00:00Z",
+  };
+}
+
+// Render the route inside a router so the fallback's navigation lands on
+// observable destinations.
+function renderConversationRoute(conversationId: string) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false, retryDelay: 1 } },
+  });
+  return render(
+    <MemoryRouter initialEntries={[`/conversations/${conversationId}`]}>
+      <QueryClientProvider client={queryClient}>
+        <ActiveBackendProvider>
+          <NavigationProvider
+            value={{
+              currentPath: `/conversations/${conversationId}`,
+              conversationId,
+              isNavigating: false,
+              navigate: vi.fn(),
+            }}
+          >
+            <Routes>
+              <Route
+                path="/conversations/:conversationId"
+                element={<ConversationView />}
+              />
+              <Route
+                path="/shared/conversations/:conversationId"
+                element={<div data-testid="shared-conversation-view" />}
+              />
+              <Route
+                path="/conversations"
+                element={<div data-testid="conversations-home" />}
+              />
+            </Routes>
+          </NavigationProvider>
+        </ActiveBackendProvider>
+      </QueryClientProvider>
     </MemoryRouter>,
   );
 }
 
 beforeEach(() => {
+  useOptimisticUserMessageStore.getState().clearPendingMessages();
+  usePendingTaskAttachmentsStore.setState({ byTaskId: {} });
   window.localStorage.clear();
   __resetActiveStoreForTests();
+  vi.mocked(getCloudSharedConversation).mockReset();
+  vi.mocked(displayErrorToast).mockReset();
   vi.mocked(
     AgentServerConversationService.batchGetAppConversations,
   ).mockReset();
+  vi.mocked(resumeCloudSandbox).mockReset();
+  vi.mocked(resumeCloudSandbox).mockResolvedValue(undefined);
   vi.mocked(
     AgentServerConversationService.batchGetAppConversations,
   ).mockResolvedValue([makeConversation(CLOUD_CONVERSATION_ID)]);
@@ -140,6 +239,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
+  __clearCloudAutoResumeSuppressionsForTests();
   window.localStorage.clear();
   __resetActiveStoreForTests();
 });
@@ -147,11 +248,9 @@ afterEach(() => {
 describe("conversation route — backend switch", () => {
   it("tears down the conversation view when the active backend changes mid-conversation", async () => {
     // Arrange — the cloud conversation renders while the cloud backend is active.
-    setActiveSelection({ backendId: cloudBackend.id });
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
     renderConversation();
-    expect(
-      await screen.findByTestId("conversation-main"),
-    ).toBeInTheDocument();
+    expect(await screen.findByTestId("conversation-main")).toBeInTheDocument();
 
     // Act — switch to the local backend without leaving the conversation.
     setActiveSelection({ backendId: localBackend.id });
@@ -163,4 +262,441 @@ describe("conversation route — backend switch", () => {
       expect(screen.queryByTestId("conversation-main")).not.toBeInTheDocument();
     });
   });
+
+  it("tears down the view when the org changes away from the one the URL pins", async () => {
+    // Arrange — the link pins the conversation to org-a of the cloud backend.
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    renderConversation(`?backend=${cloudBackend.id}&org=org-a`);
+    expect(await screen.findByTestId("conversation-main")).toBeInTheDocument();
+
+    // Act — same backend, another org.
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-b" });
+
+    // Assert
+    await waitFor(() => {
+      expect(screen.queryByTestId("conversation-main")).not.toBeInTheDocument();
+    });
+  });
+
+  it("renders a conversation of the new backend reached without leaving the route", async () => {
+    // Arrange — switching DigitalOcean sessions swaps the backend and goes
+    // straight to that session's conversation, never via /conversations.
+    const LOCAL_CONVERSATION_ID = "conv-local";
+    vi.mocked(
+      AgentServerConversationService.batchGetAppConversations,
+    ).mockImplementation(async (ids) => ids.map((id) => makeConversation(id)));
+    setActiveSelection({ backendId: cloudBackend.id });
+    const { rerender } = renderConversation();
+    await screen.findByTestId("conversation-main");
+
+    // Act
+    setActiveSelection({ backendId: localBackend.id });
+    rerender(conversationTree(LOCAL_CONVERSATION_ID));
+
+    // Assert
+    expect(await screen.findByTestId("conversation-main")).toBeInTheDocument();
+  });
+});
+
+describe("conversation route — cloud sandbox resume", () => {
+  it("resumes an already-paused cloud sandbox when the conversation is opened", async () => {
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    vi.mocked(
+      AgentServerConversationService.batchGetAppConversations,
+    ).mockResolvedValue([
+      makeConversation(CLOUD_CONVERSATION_ID, {
+        sandbox_status: "PAUSED",
+        sandbox_id: "sandbox-paused-1",
+      }),
+    ]);
+
+    renderConversation();
+
+    await waitFor(() => {
+      expect(resumeCloudSandbox).toHaveBeenCalledWith("sandbox-paused-1");
+    });
+    expect(resumeCloudSandbox).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not auto-resume a cloud sandbox intentionally paused in this tab", async () => {
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    suppressNextCloudAutoResume(CLOUD_CONVERSATION_ID);
+    vi.mocked(
+      AgentServerConversationService.batchGetAppConversations,
+    ).mockResolvedValue([
+      makeConversation(CLOUD_CONVERSATION_ID, {
+        sandbox_status: "PAUSED",
+        sandbox_id: "sandbox-paused-suppressed",
+      }),
+    ]);
+
+    renderConversation();
+
+    expect(await screen.findByTestId("conversation-main")).toBeInTheDocument();
+    expect(resumeCloudSandbox).not.toHaveBeenCalled();
+  });
+
+  it("resumes again on a new send after an external pause, without idle resume loops", async () => {
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    vi.mocked(
+      AgentServerConversationService.batchGetAppConversations,
+    ).mockResolvedValue([
+      makeConversation(CLOUD_CONVERSATION_ID, {
+        sandbox_status: "PAUSED",
+        sandbox_id: "sandbox-repeat",
+      }),
+    ]);
+    renderConversation();
+    await waitFor(() => expect(resumeCloudSandbox).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const setStatus = (sandbox_status: "RUNNING" | "PAUSED") =>
+      act(() => {
+        queryClient.setQueriesData<AppConversation>(
+          { queryKey: ["user", "conversation", CLOUD_CONVERSATION_ID] },
+          (data) => data && { ...data, sandbox_status },
+        );
+      });
+    setStatus("RUNNING");
+    setStatus("PAUSED");
+    expect(resumeCloudSandbox).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      useOptimisticUserMessageStore
+        .getState()
+        .enqueuePendingMessage({
+          conversationId: CLOUD_CONVERSATION_ID,
+          text: "hi again",
+        });
+    });
+    await waitFor(() => expect(resumeCloudSandbox).toHaveBeenCalledTimes(2));
+    setStatus("PAUSED");
+    expect(resumeCloudSandbox).toHaveBeenCalledTimes(2);
+  });
+
+  it("fails queued messages when resume is rejected and allows an explicit Retry", async () => {
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    suppressNextCloudAutoResume(CLOUD_CONVERSATION_ID);
+    vi.mocked(
+      AgentServerConversationService.batchGetAppConversations,
+    ).mockResolvedValue([
+      makeConversation(CLOUD_CONVERSATION_ID, {
+        sandbox_status: "PAUSED",
+        sandbox_id: "sandbox-retry",
+      }),
+    ]);
+    renderConversation();
+    await screen.findByTestId("conversation-main");
+    await waitFor(() =>
+      expect(
+        queryClient.getQueryData<AppConversation>([
+          "user",
+          "conversation",
+          CLOUD_CONVERSATION_ID,
+          cloudBackend.id,
+          "org-a",
+        ])?.sandbox_status,
+      ).toBe("PAUSED"),
+    );
+    vi.mocked(resumeCloudSandbox).mockRejectedValueOnce(
+      new HttpError(403, "Forbidden", null),
+    );
+    let id!: string;
+    act(() => {
+      id = useOptimisticUserMessageStore
+        .getState()
+        .enqueuePendingMessage({
+          conversationId: CLOUD_CONVERSATION_ID,
+          text: "recover me",
+        });
+    });
+    await waitFor(() =>
+      expect(
+        useOptimisticUserMessageStore
+          .getState()
+          .pendingMessages.find((m) => m.id === id)?.status,
+      ).toBe("error"),
+    );
+    expect(displayErrorToast).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      useOptimisticUserMessageStore.getState().markPendingMessageSending(id);
+    });
+    await waitFor(() => expect(resumeCloudSandbox).toHaveBeenCalledTimes(2));
+    expect(
+      useOptimisticUserMessageStore
+        .getState()
+        .pendingMessages.find((m) => m.id === id)?.status,
+    ).toBe("sending");
+  });
+
+  it("clears stale suppression when the route unmounts before PAUSED is observed", async () => {
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    suppressNextCloudAutoResume(CLOUD_CONVERSATION_ID);
+    vi.mocked(
+      AgentServerConversationService.batchGetAppConversations,
+    ).mockResolvedValue([
+      makeConversation(CLOUD_CONVERSATION_ID, {
+        sandbox_status: "RUNNING",
+        sandbox_id: "sandbox-running-before-unmount",
+      }),
+    ]);
+
+    const { unmount } = renderConversation();
+
+    expect(await screen.findByTestId("conversation-main")).toBeInTheDocument();
+    expect(resumeCloudSandbox).not.toHaveBeenCalled();
+
+    unmount();
+    vi.mocked(resumeCloudSandbox).mockClear();
+    vi.mocked(
+      AgentServerConversationService.batchGetAppConversations,
+    ).mockResolvedValue([
+      makeConversation(CLOUD_CONVERSATION_ID, {
+        sandbox_status: "PAUSED",
+        sandbox_id: "sandbox-paused-after-reopen",
+      }),
+    ]);
+
+    renderConversation();
+
+    await waitFor(() => {
+      expect(resumeCloudSandbox).toHaveBeenCalledWith(
+        "sandbox-paused-after-reopen",
+      );
+    });
+  });
+
+  it("retries a failed cloud sandbox resume while the conversation remains paused", async () => {
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    vi.mocked(
+      AgentServerConversationService.batchGetAppConversations,
+    ).mockResolvedValue([
+      makeConversation(CLOUD_CONVERSATION_ID, {
+        sandbox_status: "PAUSED",
+        sandbox_id: "sandbox-paused-2",
+      }),
+    ]);
+    vi.mocked(resumeCloudSandbox)
+      .mockRejectedValueOnce(new HttpError(503, "Unavailable", null))
+      .mockResolvedValueOnce(undefined);
+
+    renderConversation();
+
+    await waitFor(() => {
+      expect(resumeCloudSandbox).toHaveBeenCalled();
+    });
+
+    await waitFor(() => {
+      expect(resumeCloudSandbox).toHaveBeenCalledTimes(2);
+    });
+    expect(resumeCloudSandbox).toHaveBeenNthCalledWith(2, "sandbox-paused-2");
+    expect(displayErrorToast).not.toHaveBeenCalled();
+  });
+
+  it("does not retry or toast when a pending cloud resume fails after unmount", async () => {
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    vi.mocked(
+      AgentServerConversationService.batchGetAppConversations,
+    ).mockResolvedValue([
+      makeConversation(CLOUD_CONVERSATION_ID, {
+        sandbox_status: "PAUSED",
+        sandbox_id: "sandbox-paused-unmounted",
+      }),
+    ]);
+    let rejectResume!: (reason?: unknown) => void;
+    vi.mocked(resumeCloudSandbox).mockReturnValueOnce(
+      new Promise<void>((_, reject) => {
+        rejectResume = reject;
+      }),
+    );
+
+    const { unmount } = renderConversation();
+
+    await waitFor(() => {
+      expect(resumeCloudSandbox).toHaveBeenCalledTimes(1);
+    });
+
+    unmount();
+    await act(async () => {
+      rejectResume(new Error("resume failed after unmount"));
+      await Promise.resolve();
+    });
+
+    expect(displayErrorToast).not.toHaveBeenCalled();
+
+    await new Promise((resolve) => {
+      window.setTimeout(resolve, 20);
+    });
+    expect(resumeCloudSandbox).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("conversation route — shared read-only fallback", () => {
+  it("sends an org member to the read-only shared view when only the shared lookup can see the conversation", async () => {
+    // Arrange — the owner lookup misses on cloud, but the conversation is
+    // shared with this user (an automation conversation from their org).
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    vi.mocked(
+      AgentServerConversationService.batchGetAppConversations,
+    ).mockResolvedValue([null]);
+    vi.mocked(getCloudSharedConversation).mockResolvedValue(
+      makeSharedConversation(CLOUD_CONVERSATION_ID),
+    );
+
+    // Act
+    renderConversationRoute(CLOUD_CONVERSATION_ID);
+
+    // Assert
+    expect(
+      await screen.findByTestId("shared-conversation-view"),
+    ).toBeInTheDocument();
+    expect(getCloudSharedConversation).toHaveBeenCalledWith(
+      CLOUD_CONVERSATION_ID,
+    );
+    expect(displayErrorToast).not.toHaveBeenCalled();
+  });
+
+  it("reports the conversation as missing when neither lookup can see it on cloud", async () => {
+    // Arrange
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    vi.mocked(
+      AgentServerConversationService.batchGetAppConversations,
+    ).mockResolvedValue([null]);
+    vi.mocked(getCloudSharedConversation).mockResolvedValue(null);
+
+    // Act
+    renderConversationRoute(CLOUD_CONVERSATION_ID);
+
+    // Assert
+    expect(await screen.findByTestId("conversations-home")).toBeInTheDocument();
+    expect(displayErrorToast).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not consult the shared lookup on a local backend", async () => {
+    // Arrange
+    setActiveSelection({ backendId: localBackend.id });
+    vi.mocked(
+      AgentServerConversationService.batchGetAppConversations,
+    ).mockResolvedValue([null]);
+
+    // Act
+    renderConversationRoute(CLOUD_CONVERSATION_ID);
+
+    // Assert
+    expect(await screen.findByTestId("conversations-home")).toBeInTheDocument();
+    expect(getCloudSharedConversation).not.toHaveBeenCalled();
+    expect(displayErrorToast).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("transient conversation failures", () => {
+  it("recovers a failed owner lookup without redirecting or probing sharing", async () => {
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    vi.mocked(AgentServerConversationService.batchGetAppConversations)
+      .mockRejectedValueOnce(new HttpError(503, "Unavailable", null))
+      .mockResolvedValue([makeConversation(CLOUD_CONVERSATION_ID)]);
+    renderConversationRoute(CLOUD_CONVERSATION_ID);
+    await waitFor(() =>
+      expect(
+        AgentServerConversationService.batchGetAppConversations,
+      ).toHaveBeenCalledTimes(2),
+    );
+    expect(screen.queryByTestId("conversations-home")).not.toBeInTheDocument();
+    expect(getCloudSharedConversation).not.toHaveBeenCalled();
+    expect(displayErrorToast).not.toHaveBeenCalled();
+  });
+
+  it("waits for a successful shared lookup before deciding a conversation is missing", async () => {
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    vi.mocked(
+      AgentServerConversationService.batchGetAppConversations,
+    ).mockResolvedValue([null]);
+    vi.mocked(getCloudSharedConversation)
+      .mockRejectedValueOnce(new HttpError(503, "Unavailable", null))
+      .mockResolvedValue(makeSharedConversation(CLOUD_CONVERSATION_ID));
+    renderConversationRoute(CLOUD_CONVERSATION_ID);
+    expect(
+      await screen.findByTestId("shared-conversation-view"),
+    ).toBeInTheDocument();
+    expect(displayErrorToast).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { status: 403, attempts: 1 },
+    { status: 503, attempts: 4 },
+  ])(
+    "reports exhausted resume failure once ($status)",
+    async ({ status, attempts }) => {
+      setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+      vi.mocked(
+        AgentServerConversationService.batchGetAppConversations,
+      ).mockResolvedValue([
+        makeConversation(CLOUD_CONVERSATION_ID, {
+          sandbox_status: "PAUSED",
+          sandbox_id: "paused",
+        }),
+      ]);
+      vi.mocked(resumeCloudSandbox).mockRejectedValue(
+        new HttpError(status, "Failure", null),
+      );
+      renderConversation();
+      await waitFor(() => expect(displayErrorToast).toHaveBeenCalledTimes(1));
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      expect(resumeCloudSandbox).toHaveBeenCalledTimes(attempts);
+      expect(displayErrorToast).toHaveBeenCalledTimes(1);
+    },
+  );
+});
+
+it("restores an upload that fails after its conversation is already open, once and only in its environment", async () => {
+  setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+  renderConversation();
+  await screen.findByTestId("conversation-main");
+  const file = new File(["notes"], "notes.txt");
+  const pending = {
+    content: "Read these notes",
+    files: [file],
+    images: [],
+    imagesMarkedUploadAsFile: [],
+    conversationId: CLOUD_CONVERSATION_ID,
+    backendId: cloudBackend.id,
+    orgId: "org-b",
+    recoverInConversation: true,
+    error: "Upload interrupted",
+  };
+  act(() =>
+    usePendingTaskAttachmentsStore
+      .getState()
+      .setPendingTaskAttachments("startup", pending),
+  );
+  expect(useConversationStore.getState().files).toEqual([]);
+  act(() =>
+    usePendingTaskAttachmentsStore
+      .getState()
+      .setPendingTaskAttachments("startup", { ...pending, orgId: "org-a" }),
+  );
+  await waitFor(() =>
+    expect(useConversationStore.getState().files).toEqual([file]),
+  );
+  expect(useConversationStore.getState().messageToSend).toMatchObject({
+    text: "Read these notes",
+    target: "conversation",
+  });
+  expect(useErrorMessageStore.getState().errorCode).toBe(
+    "StartupAttachmentUploadFailed",
+  );
+  expect(
+    usePendingTaskAttachmentsStore.getState().byTaskId.startup,
+  ).toBeUndefined();
+  act(() =>
+    usePendingTaskAttachmentsStore
+      .getState()
+      .setPendingTaskAttachments("other", {
+        ...pending,
+        conversationId: "other-conversation",
+      }),
+  );
+  expect(useConversationStore.getState().files).toEqual([file]);
 });

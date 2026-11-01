@@ -30,12 +30,15 @@ export function PluginsToolbar({
   const { t } = useTranslation("openhands");
 
   return (
-    <div data-testid="plugins-toolbar" className="flex items-stretch gap-2">
+    <div
+      data-testid="plugins-toolbar"
+      className="flex flex-col items-stretch gap-2 md:flex-row"
+    >
       <div
         className={cn(
-          "relative flex flex-1 min-w-0 items-center",
-          "rounded-lg border border-[var(--oh-border)] bg-base-secondary",
-          "focus-within:border-white/40 focus-within:ring-1 focus-within:ring-white/20",
+          "relative flex w-full min-w-0 flex-1 items-center",
+          "rounded-lg border border-border bg-base-secondary",
+          "focus-within:border-contrast/40 focus-within:ring-1 focus-within:ring-contrast/20",
           "transition-colors",
         )}
       >
@@ -61,7 +64,7 @@ export function PluginsToolbar({
             type="button"
             onClick={() => onSearchChange("")}
             aria-label={t(I18nKey.MCP$SEARCH_CLEAR)}
-            className="mr-2 p-1 rounded text-tertiary-alt hover:text-white cursor-pointer"
+            className="mr-2 p-1 rounded text-tertiary-alt hover:text-contrast cursor-pointer"
           >
             <X className="h-4 w-4" aria-hidden />
           </button>
@@ -70,7 +73,7 @@ export function PluginsToolbar({
 
       <div
         data-testid="plugins-status-filter"
-        className="flex shrink-0 items-center gap-1 rounded-lg border border-[var(--oh-border)] bg-base-secondary p-1"
+        className="flex w-full flex-wrap items-center gap-1 rounded-lg border border-border bg-base-secondary p-1 md:w-auto md:shrink-0 md:flex-nowrap"
       >
         {STATUS_FILTERS.map((filter) => (
           <button
@@ -82,8 +85,8 @@ export function PluginsToolbar({
             className={cn(
               "cursor-pointer rounded-md px-3 py-1 text-xs transition-colors",
               statusFilter === filter.value
-                ? "bg-surface-raised text-white"
-                : "text-tertiary-alt hover:text-white",
+                ? "bg-surface-raised text-contrast"
+                : "text-tertiary-alt hover:text-contrast",
             )}
           >
             {t(filter.labelKey)}

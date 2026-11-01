@@ -1,0 +1,80 @@
+{
+  "attribution": "I am an AI agent helping Engel Nyst (@enyst) with project work.",
+  "tmux_cases": [
+    {
+      "mode": "explicit-backend",
+      "healthy": true,
+      "before_explicit_exists": false,
+      "before_default_exists": false,
+      "after_explicit_exists": true,
+      "after_default_exists": false,
+      "owned_ports_closed": true
+    },
+    {
+      "mode": "default-backend",
+      "healthy": true,
+      "before_explicit_exists": false,
+      "before_default_exists": false,
+      "after_explicit_exists": false,
+      "after_default_exists": true,
+      "owned_ports_closed": true
+    },
+    {
+      "mode": "explicit-frontend",
+      "healthy": true,
+      "before_explicit_exists": false,
+      "before_default_exists": false,
+      "after_explicit_exists": false,
+      "after_default_exists": false,
+      "owned_ports_closed": true
+    }
+  ],
+  "tmux_scope": "Actual backend explicit/default directory preparation and frontend-only noncreation; no paired bug retirement or functional cross-run terminal assertion.",
+  "non_dnt": {
+    "browser_dnt": null,
+    "frontend_hard_disable": false,
+    "compile_do_not_track": false,
+    "telemetry_destination": "owned loopback sink only; bodies/query/headers discarded",
+    "opt_in_ack_200": true,
+    "opt_out_then_reopt_in_seconds": 3.563,
+    "resume_prior_false_status": 502,
+    "resume_latest_true_status": 200,
+    "final_opt_out_status": 200,
+    "final_checkbox": false,
+    "final_local_consent": "denied",
+    "own_run_and_sink_ports_closed": true,
+    "scope": "Real consent path; no model call. Initial two fixture-script parse errors corrected and fresh doctor clean; no product defect attributed."
+  },
+  "harness_tests": {
+    "passing": 73,
+    "source": "Current controller validation; previous72-test retained log predates added browser media parser test."
+  },
+  "successful_actual_models": [
+    "deepseek/deepseek-flash",
+    "deepseek/deepseek-v4-pro"
+  ],
+  "model_aliases_are_not_distinct_models": [
+    "qa-alpha",
+    "qa-zeta"
+  ],
+  "electron": {
+    "failure_splash": {
+      "genuine_dependency_resolution_failure": true,
+      "readable_failure_and_expanded_log": true,
+      "owned_cleanup_verified": true
+    },
+    "copy_quit_cdp": {
+      "actual_copy_click_and_copied_state": true,
+      "actual_quit_normal_parent_exit": true,
+      "clipboard_contents_not_read_or_exported": true,
+      "owned_cleanup_verified": true
+    },
+    "healthy_external_link": {
+      "actual_electron_clicks": 2,
+      "observed_browser_launch": false,
+      "direct_real_os_control_passed": true,
+      "classification": "unresolved integration candidate; duplicate/source intake pending, not newly filed"
+    }
+  },
+  "publication_status": "Reviewed final artifact published on the existing fork audit branch."
+}

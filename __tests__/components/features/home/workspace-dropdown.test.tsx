@@ -262,3 +262,28 @@ describe("WorkspaceDropdown grouping (#129)", () => {
     expect(option).not.toHaveAttribute("aria-label");
   });
 });
+
+describe("WorkspaceDropdown empty state", () => {
+  it.each([
+    { scenario: "there are no workspaces", workspaces: [], search: "" },
+    {
+      scenario: "the search matches no workspace",
+      workspaces: GROUPED_WORKSPACES,
+      search: "zzz",
+    },
+  ])(
+    "shows the empty state above the Add Workspace footer when $scenario",
+    async ({ workspaces, search }) => {
+      const user = userEvent.setup();
+      renderDropdown({ workspaces });
+      const menu = await openMenu(user);
+
+      if (search) await user.keyboard(search);
+
+      expect(
+        within(menu).getByTestId("workspace-dropdown-empty"),
+      ).toHaveTextContent("HOME$NO_WORKSPACES");
+      expect(screen.getByTestId("add-workspaces-button")).toBeVisible();
+    },
+  );
+});

@@ -1,0 +1,31 @@
+{
+  "aggregate_utc": "2026-10-17T22:18:33.083173+00:00",
+  "provisional": false,
+  "fail_check_denominator": 146,
+  "fail_stable_ids": 88,
+  "fail_classification_counts": {
+    "knownproductfailure": 136,
+    "harness-or-setupfailure": 2,
+    "newlyfiledproduct": 7,
+    "unresolved": 1
+  },
+  "xfail_check_denominator": 14,
+  "xfail_classification_counts": {
+    "knownproductfailure": 11,
+    "newlyfiledproduct": 3
+  },
+  "combined_failure_stable_ids": 92,
+  "mutually_exclusive_id_taxonomy": {
+    "existing_known_product_failure": 88,
+    "newly_filed_product_failure": 4
+  },
+  "id_taxonomy_priority": "newly filed > existing known > invalid measurement only; unresolved explicitly retained; actual fail and xfail included, pass/xpass not failures.",
+  "attribution": "I am an AI agent helping Engel Nyst (@enyst) with project work.",
+  "limits": [
+    "All raw outcomes retained, none relabeled pass.",
+    "Repeated rows/attempts are not additional defects.",
+    "Two initial hook-contrast measurements invalid; corrected genuine measurements reproduce the existing issue.",
+    "Taxonomy includes actual fail and xfail; report result labels remain separate."
+  ],
+  "publication_status": "Reviewed final artifact published on the existing fork audit branch."
+}

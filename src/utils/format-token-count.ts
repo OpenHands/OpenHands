@@ -13,7 +13,13 @@ export function formatCompactTokenCount(value: number): string {
     if (Number.isInteger(thousands)) {
       return `${thousands.toFixed(0)}k`;
     }
-    return `${thousands.toFixed(1)}k`;
+    const rounded = thousands.toFixed(1);
+    // Rounding can carry the value into the next unit (999_999 -> "1000.0k"),
+    // which reads as a four-digit count. Promote it to M instead.
+    if (Number(rounded) >= 1_000) {
+      return `${(Number(rounded) / 1_000).toFixed(1)}M`;
+    }
+    return `${rounded}k`;
   }
 
   return value.toLocaleString();

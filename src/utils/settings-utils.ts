@@ -15,17 +15,6 @@ const extractBasicFormData = (formData: FormData) => {
   };
 };
 
-export const parseMaxBudgetPerTask = (value: string): number | null => {
-  if (!value) {
-    return null;
-  }
-
-  const parsedValue = parseFloat(value);
-  return parsedValue && parsedValue >= 1 && Number.isFinite(parsedValue)
-    ? parsedValue
-    : null;
-};
-
 export const extractSettings = (
   formData: FormData,
 ): Partial<Settings> & Record<string, unknown> => {

@@ -16,7 +16,7 @@ export const MANAGE_AUTOMATIONS = "manage_automations";
 export interface AutomationPermissionsResult {
   /** Read-only access (list, get, list runs, capabilities, git-sync status). */
   canView: boolean;
-  /** Full write access (create, update, delete, dispatch, git-sync config). */
+  /** Full write access (update, delete, dispatch, git-sync config). */
   canManage: boolean;
   /**
    * `true` when permissions are still being resolved on cloud. Local always
@@ -99,4 +99,20 @@ export function useIsAutomationOwner(automation: Automation): boolean {
   const entry = userIds[backend.id];
   if (!entry || entry.isLoading || !entry.userId) return false;
   return automation.user_id === entry.userId;
+}
+
+/**
+ * The caller's user id when splitting automations by creator is meaningful:
+ * a cloud team workspace whose `/me` has resolved. `null` on local backends
+ * (no per-user creators) and personal workspaces (every automation is the
+ * caller's), where the "Created by" filter is hidden.
+ */
+export function useAutomationCreatorFilterUserId(): string | null {
+  const active = useActiveBackend();
+  const userIds = useCloudCurrentUserId();
+
+  if (active.backend.kind !== "cloud") return null;
+  const userId = userIds[active.backend.id]?.userId ?? null;
+  if (!userId || active.orgId === userId) return null;
+  return userId;
 }

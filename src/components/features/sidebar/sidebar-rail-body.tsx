@@ -6,10 +6,10 @@ import {
   Plus,
   Server,
   Settings,
-  PanelsTopLeft,
 } from "lucide-react";
 import { OpenHandsLogoButton } from "#/components/shared/buttons/openhands-logo-button";
 import { NavigationLink } from "#/components/shared/navigation-link";
+import { getLockedCloudHost } from "#/api/agent-server-config";
 import {
   automationListPath,
   getInterfaceCopy,
@@ -42,6 +42,7 @@ import {
   sidebarNavRowClassName,
 } from "./sidebar-layout";
 import { useCanvasExtensionsRuntime } from "#/components/features/canvas-extensions/canvas-extensions-runtime";
+import { CanvasExtensionIcon } from "#/components/features/canvas-extensions/canvas-extension-icon";
 import type { Backend } from "#/api/backend-registry/types";
 
 const ICON_SIZE = 18;
@@ -60,6 +61,7 @@ export interface SidebarRailBodyProps {
   isExtensionsActive: boolean;
   currentPath: string;
   activeBackend: Backend;
+  activeOrgId: string | null;
   activeBackendHealth: { isConnected: boolean | null } | undefined;
   collapsedBackendPopoverOpen: boolean;
   setCollapsedBackendPopoverOpen: (open: boolean) => void;
@@ -83,6 +85,7 @@ export function SidebarRailBody({
   isExtensionsActive,
   currentPath,
   activeBackend,
+  activeOrgId,
   activeBackendHealth,
   collapsedBackendPopoverOpen,
   setCollapsedBackendPopoverOpen,
@@ -95,6 +98,7 @@ export function SidebarRailBody({
   const { pages: canvasExtensionPages } = useCanvasExtensionsRuntime();
   const backendCloseTimerRef = collapsedBackendCloseTimer;
   const { isPinnedRoute, togglePinnedRoute } = usePinnedHomeRoute();
+  const [backendMenuOpen, setBackendMenuOpen] = React.useState(false);
 
   const buildPinAction = (path: string, testId: string) => {
     const pinned = isPinnedRoute(path);
@@ -109,9 +113,18 @@ export function SidebarRailBody({
   };
 
   const isCloudBackend = activeBackend.kind === "cloud";
+  // `org` is consumed by the cloud settings loader so the page opens on the
+  // org that is active here instead of the cloud's last-used org.
+  const cloudSettingsOrgQuery = activeOrgId
+    ? `?org=${encodeURIComponent(activeOrgId)}`
+    : "";
   const cloudSettingsUrl = isCloudBackend
-    ? `${activeBackend.host.replace(/\/+$/, "")}/settings`
+    ? `${activeBackend.host.replace(/\/+$/, "")}/settings${cloudSettingsOrgQuery}`
     : null;
+  // Locked-to-Cloud (SaaS / self-hosted OHE) serves the canvas at /canvas on
+  // the cloud host itself, so cloud settings open in this tab and Back
+  // returns here (OHE-3242). Standalone / Electron keep the new tab.
+  const isLockedToCloud = getLockedCloudHost() !== null;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -166,7 +179,7 @@ export function SidebarRailBody({
             className={cn(
               "hidden md:inline-flex ml-auto",
               SIDEBAR_ICON_BUTTON_CLASS,
-              "text-[var(--oh-muted)] hover:text-white hover:bg-[var(--oh-surface-raised)]",
+              "text-muted hover:text-contrast hover:bg-surface-raised",
             )}
           >
             <ChevronLeft width={14} height={14} />
@@ -181,7 +194,7 @@ export function SidebarRailBody({
             className={cn(
               "inline-flex ml-auto",
               SIDEBAR_ICON_BUTTON_CLASS,
-              "text-[var(--oh-muted)] hover:text-white hover:bg-[var(--oh-surface-raised)]",
+              "text-muted hover:text-contrast hover:bg-surface-raised",
             )}
           >
             <ChevronLeft width={14} height={14} />
@@ -259,7 +272,12 @@ export function SidebarRailBody({
             label={page.contribution.nav_label || page.contribution.title}
             testId={`sidebar-canvas-extension-${page.extension.name}-${page.contribution.id}`}
             collapsed={collapsed}
-            icon={<PanelsTopLeft width={ICON_SIZE} height={ICON_SIZE} />}
+            icon={
+              <CanvasExtensionIcon
+                extension={page.extension}
+                size={ICON_SIZE}
+              />
+            }
           />
         ))}
       </nav>
@@ -280,8 +298,8 @@ export function SidebarRailBody({
             {isCloudBackend && cloudSettingsUrl ? (
               <a
                 href={cloudSettingsUrl}
-                target="_blank"
-                rel="noopener noreferrer"
+                target={isLockedToCloud ? undefined : "_blank"}
+                rel={isLockedToCloud ? undefined : "noopener noreferrer"}
                 data-testid="collapsed-settings-link"
                 aria-label={t(I18nKey.SIDEBAR$SETTINGS)}
                 className={sidebarNavRowClassName({ collapsed: true })}
@@ -344,10 +362,10 @@ export function SidebarRailBody({
               )}
             >
               <SidebarCollapsedIconSlot active={collapsedBackendPopoverOpen}>
-                <span className="relative inline-flex size-[18px] shrink-0 items-center justify-center">
+                <span className="relative inline-flex size-4.5 shrink-0 items-center justify-center">
                   <BackendStatusDot
                     isConnected={activeBackendHealth?.isConnected ?? null}
-                    className="absolute -left-0.5 -top-0.5 z-[1] pointer-events-none"
+                    className="absolute -left-0.5 -top-0.5 z-1 pointer-events-none"
                   />
                   <Server width={ICON_SIZE} height={ICON_SIZE} />
                 </span>
@@ -358,7 +376,7 @@ export function SidebarRailBody({
             </button>
             {collapsedBackendPopoverOpen ? (
               <div
-                className="absolute bottom-[-4px] left-full pl-2.5 z-40 w-[272px]"
+                className="absolute bottom-[-4px] left-full pl-2.5 z-40 w-68"
                 onClick={(event) => event.stopPropagation()}
               >
                 <BackendSelector
@@ -378,17 +396,28 @@ export function SidebarRailBody({
 
       {!collapsed ? (
         <>
-          <div className="mb-2 shrink-0 pr-2.5">
+          {/* Keep the card's space while the backend menu covers it, so the
+              list above doesn't jump when the menu opens on hover. */}
+          <div
+            className={cn(
+              "mb-2 shrink-0 pr-2.5",
+              backendMenuOpen && "invisible",
+            )}
+          >
             <SidebarOnboardingChecklist collapsed={collapsed} />
           </div>
           <div
             className={cn(
               "flex flex-col items-stretch max-w-none box-border shrink-0 gap-2",
-              "-ml-2.5 w-[calc(100%+0.625rem)] border-t border-[var(--oh-border)] pt-2 px-2.5",
+              "-ml-2.5 w-[calc(100%+0.625rem)] border-t border-border pt-2 px-2.5",
             )}
           >
             <AgentCanvasVersionTile hideWhenUpToDate />
-            <BackendSelector sidebarCollapsed={collapsed} openUpward />
+            <BackendSelector
+              sidebarCollapsed={collapsed}
+              openUpward
+              onMenuOpenChange={setBackendMenuOpen}
+            />
           </div>
         </>
       ) : null}

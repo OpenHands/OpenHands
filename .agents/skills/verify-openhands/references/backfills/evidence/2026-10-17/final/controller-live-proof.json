@@ -1,0 +1,39 @@
+{
+  "attribution": "I am an AI agent helping Engel Nyst (@enyst) with project work.",
+  "target": "61a3bd93e642a0ff4def73b29496a73245628209",
+  "tests": {
+    "files": 2,
+    "passed": 73
+  },
+  "media_live": {
+    "receipt": "phase-media-live-poll.log (retained privately; prompt, generated words and conversation IDs omitted)",
+    "method": "Real active-page Playwright emulateMedia and computed style on actual model streaming spans",
+    "normal": {
+      "animation": "stream-word-fade",
+      "duration": "0.28s"
+    },
+    "reduce": {
+      "animation": "none",
+      "duration": "0s"
+    },
+    "restored": {
+      "animation": "stream-word-fade",
+      "duration": "0.28s"
+    }
+  },
+  "app_backend_fixture": {
+    "screenshot": "checkedin-app-backend-fixture.png",
+    "method": "Checked-in inert Python fixture mounted through actual SDK app backend and Canvas iframe",
+    "observed": "HTTP 200 and credential-presence booleans through actual Canvas bridge. Proxy WebSocket attempt reproduced existing SDK #5648 connection/handshake failure; direct backend control separately achieved HTTP 101 and bounded echo. No successful proxied WebSocket round trip claimed.",
+    "cleanup": "Own setting restored, doctor healthy, app/run removed; private credential state purged"
+  },
+  "process_groups": {
+    "method": "Real owned run stop, closed-port gating and private purge; zombies treated stopped only with conservative /proc handling",
+    "final_cli_runs_stopped": 23,
+    "owned_runtime_processes": 0
+  },
+  "network_projection": {
+    "method": "Actual plugin-create browser request projected through checked-in --bodies command; top-level allowlist, recursive redaction, bounded UTF-8 output",
+    "product_outcome": "Accepted parameter edits absent from actual create, separately filed as fork #127; harness projection does not fix product"
+  }
+}

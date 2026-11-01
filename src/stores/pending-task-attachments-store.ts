@@ -1,6 +1,12 @@
 import { create } from "zustand";
 
 export interface PendingTaskAttachments {
+  backendId?: string;
+  orgId?: string | null;
+  conversationId?: string;
+  error?: string;
+  readError?: string;
+  recoverInConversation?: boolean;
   content: string;
   images: File[];
   files: File[];

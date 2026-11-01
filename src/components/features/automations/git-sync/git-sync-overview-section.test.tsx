@@ -81,6 +81,38 @@ describe("GitSyncOverviewSection", () => {
     expect(link.getAttribute("href")).not.toContain("ghp_token");
   });
 
+  // The card is on screen and in screen shares, so the label must not show
+  // credentials either. Tokens belong in the masked Access token field.
+  it.each([
+    [
+      "https://qa-user:qa-pass@git.example.invalid/qa-org/qa-repo.git",
+      "https://git.example.invalid/qa-org/qa-repo.git",
+    ],
+    // A token alone in the username slot is still a credential over https.
+    [
+      "https://ghp_token@github.com/org/repo.git",
+      "https://github.com/org/repo.git",
+    ],
+    // The ssh user is an account name, not a secret; only the password goes.
+    [
+      "ssh://git:hunter2@git.example.com:2222/org/repo.git",
+      "ssh://git@git.example.com:2222/org/repo.git",
+    ],
+  ])("hides credentials in the label of %s", (repoUrl, label) => {
+    renderWith(repoUrl);
+
+    expect(screen.getByTestId("git-sync-repo-link").textContent).toBe(label);
+  });
+
+  // A remote with no repository path is not linked, but is still shown.
+  it("hides credentials in a remote rendered as plain text", () => {
+    renderWith("https://qa-user:qa-pass@git.example.invalid");
+
+    expect(screen.queryByTestId("git-sync-repo-link")).not.toBeInTheDocument();
+    expect(screen.getByText("https://git.example.invalid")).toBeInTheDocument();
+    expect(screen.queryByText(/qa-pass/)).not.toBeInTheDocument();
+  });
+
   // A bare repo on disk is a valid sync target but has nothing to open.
   it.each(["/tmp/git-sync-remote.git", "not a url", ""])(
     "renders %s as plain text",

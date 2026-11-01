@@ -8,6 +8,7 @@ import {
   type AutomationRun,
 } from "#/types/automation";
 import type { InterfaceListInsights } from "#/manifests/types";
+import { I18nKey } from "#/i18n/declaration";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -119,6 +120,71 @@ describe("AutomationListRow", () => {
     expect(screen.getByTestId("automation-run-now-automation-1")).toHaveClass(
       "size-8",
     );
+  });
+
+  it("keeps tags in their own box that gives way before the name", () => {
+    render(
+      <AutomationListRow
+        automation={{
+          ...automation,
+          tags: ["nightly-checks", "qa-alpha", "pending-in-input"],
+        }}
+        onToggle={vi.fn()}
+        onRunNow={vi.fn()}
+        onExport={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+
+    // jsdom has no layout, so pin the classes that give the tags only the room
+    // the name leaves and clip them, instead of squeezing the name or
+    // overflowing the row.
+    const tags = screen.getByTestId("automation-list-row-tags-automation-1");
+    expect(tags).toHaveClass("min-w-0", "flex-1", "overflow-hidden");
+    const pills = screen.getAllByTestId("automation-tag");
+    expect(pills).toHaveLength(3);
+    pills.forEach((pill) => {
+      expect(tags).toContainElement(pill);
+    });
+    expect(screen.getByTitle("nightly-checks")).toHaveTextContent(
+      "nightly-checks",
+    );
+    expect(tags).not.toContainElement(screen.getByText("GitHub PR Reviewer"));
+  });
+
+  it("renders no tag box for an automation without tags", () => {
+    render(
+      <AutomationListRow
+        automation={{ ...automation, tags: [] }}
+        onToggle={vi.fn()}
+        onRunNow={vi.fn()}
+        onExport={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("automation-list-row-tags-automation-1"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("marks draft automations separately from inactive rows", () => {
+    render(
+      <AutomationListRow
+        automation={{ ...automation, enabled: false, state: "DRAFT" }}
+        onToggle={vi.fn()}
+        onRunNow={vi.fn()}
+        onExport={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("active-status-badge-draft")).toHaveTextContent(
+      I18nKey.AUTOMATIONS$DETAIL$DRAFT,
+    );
+    expect(
+      screen.queryByTestId("active-status-badge-inactive"),
+    ).not.toBeInTheDocument();
   });
 
   it("shows last-run status, relative time, and a sparkline when insights are present", () => {

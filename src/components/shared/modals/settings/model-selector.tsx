@@ -3,7 +3,6 @@ import {
   AutocompleteItem,
   AutocompleteSection,
 } from "@heroui/react";
-import { Info } from "lucide-react";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
@@ -16,26 +15,20 @@ import { HelpLink } from "#/ui/help-link";
 import { PRODUCT_URL } from "#/utils/constants";
 import { useSearchProviders } from "#/hooks/query/use-search-providers";
 import { useProviderModels } from "#/hooks/query/use-provider-models";
-import {
-  FREE_MODEL_BADGE_LABEL,
-  FREE_OPENHANDS_MODEL_NOTE,
-  isFreeOpenHandsModel,
-} from "#/utils/format-model-name";
+import { FREE_MODEL_BADGE_LABEL } from "#/utils/format-model-name";
+import { FreeOpenHandsModelsNote } from "#/components/shared/free-models-note";
+import type { LLMProvider } from "#/api/config-service/config-service.types";
+
+// Sorts by the label the picker shows, keeping the managed OpenHands provider
+// first as the backend does.
+const compareProviderLabels = (a: LLMProvider, b: LLMProvider) =>
+  Number(b.name === "openhands") - Number(a.name === "openhands") ||
+  mapProvider(a.name).localeCompare(mapProvider(b.name), undefined, {
+    sensitivity: "base",
+  });
 
 const freeModelBadgeClassName =
   "shrink-0 rounded-full border border-warning/40 bg-warning/10 px-1.5 py-0.5 text-[10px] leading-none text-warning";
-
-function FreeOpenHandsModelsNote() {
-  return (
-    <p
-      data-testid="openhands-free-models-note"
-      className="flex items-start gap-2 text-xs text-warning"
-    >
-      <Info className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
-      <span>{FREE_OPENHANDS_MODEL_NOTE}</span>
-    </p>
-  );
-}
 
 interface ModelSelectorProps {
   isDisabled?: boolean;
@@ -71,11 +64,11 @@ export function ModelSelector({
   } = useProviderModels(selectedProvider);
 
   const verifiedProviders = React.useMemo(
-    () => providers.filter((p) => p.verified),
+    () => providers.filter((p) => p.verified).sort(compareProviderLabels),
     [providers],
   );
   const unverifiedProviders = React.useMemo(
-    () => providers.filter((p) => !p.verified),
+    () => providers.filter((p) => !p.verified).sort(compareProviderLabels),
     [providers],
   );
 
@@ -86,6 +79,17 @@ export function ModelSelector({
   const unverifiedModels = React.useMemo(
     () => providerModels.filter((m) => !m.verified),
     [providerModels],
+  );
+
+  // DB-driven set of free model names for the selected provider. Mirrors the
+  // `verified` flag: the frontend no longer hardcodes which models are free.
+  const freeModelNames = React.useMemo(
+    () => providerModels.filter((m) => m.free).map((m) => m.name),
+    [providerModels],
+  );
+  const freeModelNameSet = React.useMemo(
+    () => new Set(freeModelNames),
+    [freeModelNames],
   );
 
   React.useEffect(() => {
@@ -121,11 +125,9 @@ export function ModelSelector({
     setLitellmId(null);
   };
 
-  const selectedFullModel =
-    selectedProvider && selectedModel
-      ? `${selectedProvider}/${selectedModel}`
-      : null;
-  const isSelectedModelFree = isFreeOpenHandsModel(selectedFullModel);
+  const isSelectedModelFree = Boolean(
+    selectedModel && freeModelNameSet.has(selectedModel),
+  );
   const selectedModelMeasureRef = React.useRef<HTMLSpanElement>(null);
   const [selectedModelTextWidth, setSelectedModelTextWidth] = React.useState(0);
 
@@ -158,7 +160,7 @@ export function ModelSelector({
   return (
     <div
       className={cn(
-        "flex flex-col md:flex-row w-full min-w-0 justify-between gap-4 md:gap-[46px]",
+        "flex flex-col md:flex-row w-full min-w-0 justify-between gap-4 md:gap-11.5",
         wrapperClassName,
       )}
     >
@@ -178,11 +180,13 @@ export function ModelSelector({
             if (e?.toString()) handleChangeProvider(e.toString());
           }}
           onInputChange={(value) => !value && clear()}
+          // Select the current provider's label so typing replaces it and
+          // filters the list instead of appending to it.
+          onFocus={(e) => e.target.select()}
           defaultSelectedKey={selectedProvider ?? undefined}
           selectedKey={selectedProvider}
           classNames={{
-            popoverContent:
-              "bg-content1 rounded-xl border border-[var(--oh-border)]",
+            popoverContent: "bg-content1 rounded-xl border border-border",
             selectorButton: heroUiAutocompleteSelectorButtonClassName,
           }}
           selectorButtonProps={{ disableRipple: true }}
@@ -194,7 +198,7 @@ export function ModelSelector({
         >
           <AutocompleteSection
             title={t(I18nKey.MODEL_SELECTOR$VERIFIED)}
-            classNames={{ heading: "text-[var(--oh-muted)]" }}
+            classNames={{ heading: "text-muted" }}
           >
             {verifiedProviders.map((provider) => (
               <AutocompleteItem
@@ -208,7 +212,7 @@ export function ModelSelector({
           {unverifiedProviders.length > 0 ? (
             <AutocompleteSection
               title={t(I18nKey.MODEL_SELECTOR$OTHERS)}
-              classNames={{ heading: "text-[var(--oh-muted)]" }}
+              classNames={{ heading: "text-muted" }}
             >
               {unverifiedProviders.map((provider) => (
                 <AutocompleteItem key={provider.name}>
@@ -253,8 +257,7 @@ export function ModelSelector({
             selectedKey={selectedModel}
             defaultSelectedKey={selectedModel ?? undefined}
             classNames={{
-              popoverContent:
-                "bg-content1 rounded-xl border border-[var(--oh-border)]",
+              popoverContent: "bg-content1 rounded-xl border border-border",
               selectorButton: heroUiAutocompleteSelectorButtonClassName,
             }}
             selectorButtonProps={{ disableRipple: true }}
@@ -266,15 +269,13 @@ export function ModelSelector({
           >
             <AutocompleteSection
               title={t(I18nKey.MODEL_SELECTOR$VERIFIED)}
-              classNames={{ heading: "text-[var(--oh-muted)]" }}
+              classNames={{ heading: "text-muted" }}
             >
               {verifiedModels.map((model) => (
                 <AutocompleteItem key={model.name} textValue={model.name}>
                   <span className="flex min-w-0 items-center gap-2">
                     <span className="truncate">{model.name}</span>
-                    {isFreeOpenHandsModel(
-                      `${selectedProvider}/${model.name}`,
-                    ) ? (
+                    {model.free ? (
                       <span className={freeModelBadgeClassName}>
                         {FREE_MODEL_BADGE_LABEL}
                       </span>
@@ -286,7 +287,7 @@ export function ModelSelector({
             {unverifiedModels.length > 0 ? (
               <AutocompleteSection
                 title={t(I18nKey.MODEL_SELECTOR$OTHERS)}
-                classNames={{ heading: "text-[var(--oh-muted)]" }}
+                classNames={{ heading: "text-muted" }}
               >
                 {unverifiedModels.map((model) => (
                   <AutocompleteItem
@@ -329,7 +330,13 @@ export function ModelSelector({
             {t(I18nKey.CONFIGURATION$ERROR_FETCH_MODELS)}
           </p>
         )}
-        {selectedProvider === "openhands" ? <FreeOpenHandsModelsNote /> : null}
+        {selectedProvider === "openhands" && freeModelNames.length > 0 ? (
+          <FreeOpenHandsModelsNote
+            modelIds={freeModelNames.map(
+              (name) => `${selectedProvider}/${name}`,
+            )}
+          />
+        ) : null}
       </fieldset>
     </div>
   );

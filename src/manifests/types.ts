@@ -18,9 +18,15 @@ export type SetupFieldType =
   | "text"
   | "textarea"
   | "select"
+  | "number"
   | "cron"
   | "timezone"
-  | "repo-picker";
+  | "repo-picker"
+  | "llm-profile"
+  | "event-source"
+  | "event-type"
+  | "plugin-sources"
+  | "tarball-upload";
 
 export type SetupGitProvider = "github" | "gitlab" | "bitbucket";
 
@@ -37,6 +43,8 @@ export interface SetupFieldOption {
 export interface SetupFieldConstraints {
   minLength?: number;
   maxLength?: number;
+  min?: number;
+  max?: number;
   /**
    * A host-implemented check named from a closed set. Entries supply no regex
    * of their own, so they cannot hand the host a pathological pattern.
@@ -49,7 +57,7 @@ export interface SetupFormField {
   label: string;
   help: string;
   placeholder?: string;
-  default?: string;
+  default?: string | number | boolean | null;
   required: boolean;
   provider?: SetupGitProvider;
   /**
@@ -67,7 +75,7 @@ export type SetupFormFields = Record<string, SetupFormField>;
 
 export interface SetupForm {
   note?: string;
-  /** Inputs that decide when the automation runs, keyed by trigger kind. */
+  /** Inputs that decide when the automation runs, keyed by trigger kind. Multiple keys are selectable variants. */
   triggers?: Partial<Record<SetupTriggerKind, SetupFormFields>>;
   /** Every other input: the arguments to the automation itself. */
   args: SetupFormFields;
@@ -112,6 +120,41 @@ export interface SetupBundle {
   config: Record<string, SetupBundleConfigValue>;
 }
 
+export type SetupActionKind = "prompt" | "plugin" | "upload";
+
+export interface SetupPromptAction {
+  label: string;
+  help: string;
+  features: string[];
+  args: SetupFormFields;
+  prompt: string;
+}
+
+export interface SetupPluginAction {
+  label: string;
+  help: string;
+  features: string[];
+  args: SetupFormFields;
+  prompt: string;
+  plugins: string;
+}
+
+export interface SetupUploadAction {
+  label: string;
+  help: string;
+  features: string[];
+  args: SetupFormFields;
+  tarballPath: string;
+  entrypoint: string;
+  setupScript?: string;
+}
+
+export interface SetupActions {
+  prompt?: SetupPromptAction;
+  plugin?: SetupPluginAction;
+  upload?: SetupUploadAction;
+}
+
 export interface SetupBlock {
   version: typeof SETUP_VERSION;
   mode: SetupMode;
@@ -120,6 +163,8 @@ export interface SetupBlock {
   prompt?: string;
   /** direct only, and the alternative to `prompt`. Exactly one is present. */
   bundle?: SetupBundle;
+  /** direct only, and the alternative to `prompt` or `bundle`. */
+  actions?: SetupActions;
   /** direct only, event trigger only. Which delivered events belong to it. */
   filter?: string;
   /**
@@ -184,7 +229,7 @@ export interface SetupRequestBody {
  * string, including fields whose value is a number to the service - the
  * payload mapping is where a value stops being what was typed.
  */
-export type SetupFormValue = string | string[];
+export type SetupFormValue = string | number | boolean | null | string[] | File;
 export type SetupFormValues = Record<string, SetupFormValue>;
 
 /** `GET /v1/capabilities` — what this deployment supports. */
@@ -200,6 +245,13 @@ export interface DeploymentCapabilities {
     event?: { filterLanguage: string; filterFunctions: string[] };
   };
   features: string[];
+  /** Providers whose repositories a run clones with the user's token; older services omit it. */
+  repoProviders?: string[];
+  /**
+   * Event type patterns per event source that has a catalog; a source missing
+   * here accepts any key. Older services omit it and list GitHub's in `eventTypes`.
+   */
+  eventTypesBySource?: Record<string, string[]>;
 }
 
 /** A single problem with a draft, addressed to the field that caused it. */
@@ -215,6 +267,62 @@ export interface ValidateDraftResponse {
   valid: boolean;
   errors: DraftValidationError[];
   sampleEventMatched?: boolean | null;
+}
+
+/**
+ * The creation endpoint a server-backed draft is validated and materialized
+ * against. Mirrors the service's `DraftEndpoint` literal. `"/v1"` is the raw
+ * path an entry shipping its own tarball uses; the other two are presets.
+ */
+export type AutomationDraftEndpoint =
+  | "/v1"
+  | "/v1/preset/prompt"
+  | "/v1/preset/plugin";
+
+/** `POST /v1/drafts` — create a server-backed automation setup draft. */
+export interface CreateAutomationDraftApiRequest {
+  endpoint: AutomationDraftEndpoint;
+  /** The request body that would be sent to that endpoint. */
+  draft: SetupRequestBody;
+  name?: string;
+  /** Catalog entry or automation the draft was derived from (logged only). */
+  sourceAutomationId?: string;
+}
+
+/** `PATCH /v1/drafts/{id}` — partially update a server-backed draft. */
+export interface UpdateAutomationDraftApiRequest {
+  endpoint?: AutomationDraftEndpoint;
+  draft?: SetupRequestBody;
+  name?: string;
+}
+
+/**
+ * `GET/PATCH/POST /v1/drafts[/{id}]` — a persisted draft record.
+ *
+ * The draft row is the source of truth while editing. `dispatchable` and
+ * `validationErrors` are refreshed by the service on every create/update, so
+ * the form can show live validity without a separate validate call.
+ */
+export interface AutomationDraftApiResponse {
+  id: string;
+  endpoint: AutomationDraftEndpoint;
+  name: string | null;
+  /** The request body that would be sent to the draft's endpoint. */
+  draft: SetupRequestBody;
+  validationErrors: DraftValidationError[] | null;
+  dispatchable: boolean;
+  sourceAutomationId: string | null;
+  /** Materialized automation row used for test dispatch, if any. */
+  materializedAutomationId: string | null;
+  lastTestRunId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** `GET /v1/drafts` — paginated list of persisted drafts. */
+export interface AutomationDraftListResponse {
+  drafts: AutomationDraftApiResponse[];
+  total: number;
 }
 
 /**
@@ -286,6 +394,8 @@ export interface InterfaceEndpoints {
    */
   createBundle?: string;
   uploads?: string;
+  /** The org's tags with counts. Optional: added after the block shipped. */
+  tags?: string;
 }
 
 export type InterfaceEndpointName = keyof InterfaceEndpoints;
@@ -380,6 +490,7 @@ export interface InterfaceOverview {
 export const DASHBOARD_FILTER_VALUES = {
   status: ["all", "active", "failing", "disabled"],
   trigger: ["all", "schedule", "event"],
+  created_by: ["all", "me", "others"],
 } as const;
 
 export type DashboardFilterId = keyof typeof DASHBOARD_FILTER_VALUES;
@@ -393,6 +504,9 @@ export type DashboardStatusValue =
 
 export type DashboardTriggerValue =
   (typeof DASHBOARD_FILTER_VALUES.trigger)[number];
+
+export type DashboardCreatedByValue =
+  (typeof DASHBOARD_FILTER_VALUES.created_by)[number];
 
 export interface InterfaceStatusFilter {
   id: "status";
@@ -408,9 +522,32 @@ export interface InterfaceTriggerFilter {
   options: { value: DashboardTriggerValue; label: string }[];
 }
 
+export interface InterfaceCreatedByFilter {
+  id: "created_by";
+  /** The control's accessible name. */
+  label: string;
+  options: { value: DashboardCreatedByValue; label: string }[];
+}
+
+/**
+ * The tag filter's values are the org's tags, read from the service, so the
+ * manifest captions the control and its neutral option but declares no values.
+ */
+export const DASHBOARD_TAG_FILTER_ID = "tag";
+
+export interface InterfaceTagFilter {
+  id: typeof DASHBOARD_TAG_FILTER_ID;
+  /** The control's accessible name. */
+  label: string;
+  /** The neutral option, which shows automations with any tags or none. */
+  allLabel: string;
+}
+
 export type InterfaceDashboardFilter =
   | InterfaceStatusFilter
-  | InterfaceTriggerFilter;
+  | InterfaceTriggerFilter
+  | InterfaceCreatedByFilter
+  | InterfaceTagFilter;
 
 /** Sort values name comparators this host implements. */
 export const DASHBOARD_SORT_VALUES = ["last-run", "runs", "name"] as const;

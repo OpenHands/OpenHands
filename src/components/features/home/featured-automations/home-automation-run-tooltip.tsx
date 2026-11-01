@@ -5,8 +5,8 @@ import type { LatestAutomationRunState } from "#/hooks/query/use-latest-automati
 import { I18nKey } from "#/i18n/declaration";
 import ClockIcon from "#/icons/clock.svg?react";
 import {
+  resolveRunPhaseText,
   shouldShowRunPhase,
-  useRunPhase,
 } from "#/components/features/automations/detail/run-phase";
 import type { Automation, AutomationRun } from "#/types/automation";
 import {
@@ -21,6 +21,10 @@ import {
   getRunHealthLabelKey,
   getTriggerSummary,
 } from "./automation-run-health";
+import {
+  getDisablementReasonDisplay,
+  hasDisablementReason,
+} from "#/utils/automation-disabled-reason";
 
 export function getRunStatusLabelKey(
   runState: LatestAutomationRunState,
@@ -43,8 +47,8 @@ function PreviewRow({
 }) {
   return (
     <div className="flex items-start gap-2 text-xs">
-      <span className="w-20 shrink-0 text-[var(--oh-muted)]">{label}</span>
-      <span className="min-w-0 flex-1 break-words text-[var(--oh-foreground)]">
+      <span className="w-20 shrink-0 text-muted">{label}</span>
+      <span className="min-w-0 flex-1 break-words text-foreground">
         {children}
       </span>
     </div>
@@ -52,32 +56,19 @@ function PreviewRow({
 }
 
 /**
- * The run's phase and how long it has held it. The row that opens this
- * hovercard has to clip a long phase; here there is room to wrap, so this is
- * where the whole thing is readable — and the age is what says whether the
- * run is moving through phases or sitting in one. Only the layout differs
- * from the row's: what the phase says, and whether its age is meaningful,
- * comes from the same hook the row uses.
+ * The run's phase. The row that opens this hovercard has to clip a long
+ * phase; here there is room to wrap, so this is where the whole thing is
+ * readable. What the phase says comes from the same helper the row uses.
  */
 function PhaseRow({ run }: { run: AutomationRun | null }) {
   const { t } = useTranslation("openhands");
-  const phase = useRunPhase({
-    status: run?.status,
-    code: run?.phase_code,
-    label: run?.phase_label,
-    updatedAt: run?.phase_updated_at,
-  });
+  const text = resolveRunPhaseText(run?.current_phase);
 
-  if (!run || !shouldShowRunPhase(run.status) || !phase) return null;
-
-  const { text, age } = phase;
+  if (!run || !shouldShowRunPhase(run.status) || !text) return null;
 
   return (
     <PreviewRow label={t(I18nKey.AUTOMATIONS$DETAIL$PHASE)}>
-      <span data-testid="run-phase-row">
-        {text}
-        {age ? <span className="text-muted"> · {age}</span> : null}
-      </span>
+      <span data-testid="run-phase-row">{text}</span>
     </PreviewRow>
   );
 }
@@ -99,10 +90,13 @@ export function HomeAutomationRunTooltip({
   const TriggerIcon = automation.trigger.type === "event" ? Zap : ClockIcon;
   const health = deriveRunHealth(runState);
   const display = latestRun ? getAutomationRunDisplay(latestRun) : null;
+  const disabledReason = hasDisablementReason(automation)
+    ? getDisablementReasonDisplay(automation, t)
+    : null;
 
   return (
-    <div className="flex w-[280px] flex-col gap-3 p-3">
-      <span className="break-words text-sm font-medium text-white">
+    <div className="flex w-70 flex-col gap-3 p-3">
+      <span className="break-words text-sm font-medium text-contrast">
         {automation.name}
       </span>
 
@@ -124,6 +118,19 @@ export function HomeAutomationRunTooltip({
           </span>
         </PreviewRow>
 
+        {disabledReason ? (
+          <PreviewRow
+            label={t(I18nKey.AUTOMATIONS$DETAIL$DISABLED_REASON_HEADING)}
+          >
+            <span
+              data-testid="automation-tooltip-disabled-reason"
+              className="line-clamp-3 text-text-secondary"
+            >
+              {disabledReason.text}
+            </span>
+          </PreviewRow>
+        ) : null}
+
         <PhaseRow run={latestRun} />
 
         {timestamp ? (
@@ -134,7 +141,7 @@ export function HomeAutomationRunTooltip({
 
         {display?.summary ? (
           <PreviewRow label={t(I18nKey.AUTOMATIONS$DETAIL$TASK_LABEL)}>
-            <span className="line-clamp-3 text-[var(--oh-text-secondary)]">
+            <span className="line-clamp-3 text-text-secondary">
               {display.summary}
             </span>
           </PreviewRow>

@@ -70,6 +70,9 @@ function buildOptions(
 
   const locals = registered.filter((b) => b.kind === "local");
   const clouds = registered.filter((b) => b.kind === "cloud");
+  // With a single backend (e.g. a Canvas locked to one cloud) the backend
+  // name tells the rows nothing, so give the org name the full width.
+  const showBackendName = registered.length > 1;
 
   for (const b of locals) {
     options.push({
@@ -100,7 +103,10 @@ function buildOptions(
         const orgLabel = isPersonal ? personalWorkspaceLabel : org.name;
         options.push({
           value: makeOptionValue(b.id, org.id),
-          label: `${b.name} – ${orgLabel}`,
+          label: showBackendName ? `${b.name} – ${orgLabel}` : orgLabel,
+          // Rows list orgs under one backend heading instead of repeating
+          // the backend name; the full label stays on the trigger.
+          ...(showBackendName ? { group: b.name, groupLabel: orgLabel } : {}),
           // All org rows for the same cloud backend share that backend's
           // single connectivity verdict — there is no per-org probe.
           prefix,
@@ -137,6 +143,8 @@ interface BackendSelectorProps {
    * the expanded rail) can override the persisted desktop value.
    */
   sidebarCollapsed?: boolean;
+  /** Called whenever the options menu opens or closes. */
+  onMenuOpenChange?: (isOpen: boolean) => void;
 }
 
 export function BackendSelector({
@@ -147,6 +155,7 @@ export function BackendSelector({
   onOpenAddBackend,
   onOpenManageBackends,
   sidebarCollapsed = false,
+  onMenuOpenChange,
 }: BackendSelectorProps = {}) {
   const { t } = useTranslation("openhands");
   const { backends, active, setActive } = useActiveBackendContext();
@@ -191,6 +200,11 @@ export function BackendSelector({
     : options.find((o) => o.value === activeValue);
   const isSettingsActive = Boolean(settingsMatch || settingsSubrouteMatch);
   const settingsLabel = t(I18nKey.SIDEBAR$SETTINGS);
+  // `org` is consumed by the cloud settings loader so the page opens on the
+  // org that is active here instead of the cloud's last-used org.
+  const cloudSettingsOrgQuery = active.orgId
+    ? `?org=${encodeURIComponent(active.orgId)}`
+    : "";
   const isRightPanelShown = useConversationStore(
     (state) => state.isRightPanelShown,
   );
@@ -203,37 +217,6 @@ export function BackendSelector({
       : "left";
 
   const someCloudLoading = Object.values(cloudOrgs).some((c) => c.isLoading);
-
-  // Self-heal a malformed `(cloudBackendId, null)` selection.
-  //
-  // Once a cloud backend's orgs resolve, the dropdown only renders
-  // per-org rows for it — the `(backendId, null)` row disappears, so
-  // selecting that shape would drift from what the dropdown can render
-  // (UI says "Local", APIs hit cloud). When we detect the drift, snap
-  // the selection onto Cloud's current org first, then fall back to the
-  // personal workspace (or, lacking a /me result, the first org). The
-  // selection is recorded locally only; the cloud request scope follows
-  // from the X-Org-Id header sent by `callCloudProxy`, so the cloud UI's
-  // org choice is never mutated as a side effect.
-  React.useEffect(() => {
-    if (noBackendSelected || active.backend.kind !== "cloud" || active.orgId)
-      return;
-    const { backend } = active;
-    const entry = cloudOrgs[backend.id];
-    if (!entry || entry.orgs.length === 0) return;
-
-    const currentOrg = entry.currentOrgId
-      ? entry.orgs.find((o) => o.id === entry.currentOrgId)
-      : undefined;
-    const userId = currentUserIds[backend.id]?.userId ?? null;
-    const personal = userId
-      ? entry.orgs.find((o) => o.id === userId)
-      : undefined;
-    const target = currentOrg ?? personal ?? entry.orgs[0];
-    if (target) {
-      setActive(backend.id, target.id);
-    }
-  }, [active, cloudOrgs, currentUserIds, setActive, noBackendSelected]);
 
   const openAddBackendModal = React.useCallback(() => {
     if (onOpenAddBackend) {
@@ -381,7 +364,8 @@ export function BackendSelector({
 
   return (
     <>
-      <div className="flex items-center gap-2 w-full">
+      {/* The menu spans this whole row, including the settings button. */}
+      <div className="relative flex items-center gap-2 w-full">
         <div className="flex-1 min-w-0">
           <Dropdown
             testId="backend-selector"
@@ -397,6 +381,10 @@ export function BackendSelector({
             }
             footer={addBackendFooter}
             openUpward={openUpward}
+            matchTriggerWidth
+            anchorMenuToParent
+            tallMenu
+            onOpenChange={onMenuOpenChange}
             hideTrigger={hideTrigger}
             defaultOpen={defaultOpen}
             openOnHover={!hideTrigger}
@@ -405,11 +393,13 @@ export function BackendSelector({
               void handleSelectBackend(item.value);
             }}
             placeholder={
-              noBackendSelected ? noBackendLabel : active.backend.name
+              noBackendSelected
+                ? noBackendLabel
+                : (activeOption?.label ?? active.backend.name)
             }
             loading={someCloudLoading}
             options={options}
-            className="h-10 px-2 py-0 bg-transparent border-transparent hover:bg-[var(--oh-surface-raised)] focus-within:bg-[var(--oh-surface-raised)] focus-within:border-transparent focus-within:ring-0"
+            className="h-10 px-2 py-0 bg-transparent border-transparent hover:bg-surface-raised focus-within:bg-surface-raised focus-within:border-transparent focus-within:ring-0"
           />
         </div>
         {!hideTrigger ? (
@@ -420,13 +410,13 @@ export function BackendSelector({
           >
             {active.backend.kind === "cloud" ? (
               <a
-                href={`${active.backend.host.replace(/\/+$/, "")}/settings`}
-                target="_blank"
-                rel="noopener noreferrer"
+                href={`${active.backend.host.replace(/\/+$/, "")}/settings${cloudSettingsOrgQuery}`}
+                target={isLockedToCloud ? undefined : "_blank"}
+                rel={isLockedToCloud ? undefined : "noopener noreferrer"}
                 data-testid="backend-selector-settings-link"
                 aria-label={settingsLabel}
                 className={cn(
-                  "inline-flex items-center justify-center shrink-0 w-9 h-9 rounded-md text-[var(--oh-muted)] hover:text-white hover:bg-[var(--oh-surface-raised)] cursor-pointer",
+                  "inline-flex items-center justify-center shrink-0 w-9 h-9 rounded-md text-muted hover:text-contrast hover:bg-surface-raised cursor-pointer",
                   formControlTransitionClassName,
                 )}
               >
@@ -441,11 +431,11 @@ export function BackendSelector({
                 className={
                   isSettingsActive
                     ? cn(
-                        "inline-flex items-center justify-center shrink-0 w-9 h-9 rounded-md bg-tertiary text-white font-normal cursor-pointer",
+                        "inline-flex items-center justify-center shrink-0 w-9 h-9 rounded-md bg-tertiary text-contrast font-normal cursor-pointer",
                         formControlTransitionClassName,
                       )
                     : cn(
-                        "inline-flex items-center justify-center shrink-0 w-9 h-9 rounded-md text-[var(--oh-muted)] hover:text-white hover:bg-[var(--oh-surface-raised)] cursor-pointer",
+                        "inline-flex items-center justify-center shrink-0 w-9 h-9 rounded-md text-muted hover:text-contrast hover:bg-surface-raised cursor-pointer",
                         formControlTransitionClassName,
                       )
                 }

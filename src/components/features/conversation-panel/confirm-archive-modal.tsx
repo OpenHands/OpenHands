@@ -28,7 +28,7 @@ export function ConfirmArchiveModal({
         ns="openhands"
         i18nKey={I18nKey.CONVERSATION$ARCHIVE_WARNING_WITH_TITLE}
         values={{ title: conversationTitle }}
-        components={{ title: <span className="text-white" /> }}
+        components={{ title: <span className="text-contrast" /> }}
       />
     ) : (
       t(I18nKey.CONVERSATION$ARCHIVE_WARNING)
@@ -36,7 +36,7 @@ export function ConfirmArchiveModal({
 
   return (
     <ModalBackdrop onClose={onCancel}>
-      <ModalBody className="items-start border border-[var(--oh-border)]">
+      <ModalBody className="items-start border border-border">
         <div className="flex flex-col gap-2">
           <BaseModalTitle title={t(I18nKey.CONVERSATION$CONFIRM_ARCHIVE)} />
           <BaseModalDescription>{confirmationMessage}</BaseModalDescription>

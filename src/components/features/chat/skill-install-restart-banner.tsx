@@ -6,6 +6,7 @@ import { useCreateConversation } from "#/hooks/mutation/use-create-conversation"
 import { useIsCreatingConversation } from "#/hooks/use-is-creating-conversation";
 import { useNavigation } from "#/context/navigation-context";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
+import { getStoredConversationMetadata } from "#/api/conversation-metadata-store";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
@@ -31,8 +32,22 @@ export function SkillInstallRestartBanner({
   const { navigate } = useNavigation();
   const { data: conversation } = useActiveConversation();
 
+  // A container installs into its mount of the host folder; without one the
+  // skill sits in a private workspace a new conversation would not get.
+  const inContainer =
+    !!conversationId &&
+    getStoredConversationMetadata(conversationId)?.workspace_mode ===
+      "docker_container";
+  const hostFolder = conversation?.selected_workspace ?? undefined;
+
   // Local-only: the cloud create path ignores workingDir entirely.
-  if (backend.kind !== "local" || installs.length === 0) return null;
+  if (
+    backend.kind !== "local" ||
+    installs.length === 0 ||
+    (inContainer && !hostFolder)
+  ) {
+    return null;
+  }
 
   const latest = installs[installs.length - 1];
   const skillNames = installs
@@ -46,10 +61,10 @@ export function SkillInstallRestartBanner({
         // The agent's real install root, parsed from the fetch_skill.py
         // success line — correct even for worktree conversations where
         // selected_workspace would point elsewhere.
-        workingDir: latest.workspacePath,
+        workingDir: inContainer ? hostFolder : latest.workspacePath,
         // new_worktree would start from a fresh worktree without the
         // freshly installed .agents/skills/ directory.
-        workspaceMode: "local_repo",
+        workspaceMode: inContainer ? "docker_container" : "local_repo",
         repository:
           conversation?.selected_repository && conversation?.git_provider
             ? {
@@ -69,11 +84,11 @@ export function SkillInstallRestartBanner({
 
   return (
     <div
-      className="flex w-full items-start gap-2 rounded-lg border border-[var(--oh-border)] bg-[var(--oh-surface-raised)] p-2 text-[var(--oh-foreground)]"
+      className="flex w-full items-start gap-2 rounded-lg border border-border bg-surface-raised p-2 text-foreground"
       data-testid="skill-install-restart-banner"
     >
       <div className="min-w-0 flex-1">
-        <p className="text-sm text-[var(--oh-foreground)]">
+        <p className="text-sm text-foreground">
           {t(I18nKey.SKILLS$INSTALL_BANNER_MESSAGE, {
             skills: skillNames.join(", "),
           })}
@@ -82,7 +97,7 @@ export function SkillInstallRestartBanner({
           type="button"
           onClick={handleRestart}
           disabled={isPending || isCreatingElsewhere}
-          className="mt-2 cursor-pointer rounded-md border border-[var(--oh-border)] px-2 py-1 text-xs font-normal text-[var(--oh-foreground)] hover:bg-[var(--oh-interactive-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+          className="mt-2 cursor-pointer rounded-md border border-border px-2 py-1 text-xs font-normal text-foreground hover:bg-interactive-hover disabled:cursor-not-allowed disabled:opacity-50"
           data-testid="skill-install-restart-action"
         >
           {t(I18nKey.SKILLS$INSTALL_BANNER_ACTION)}
@@ -91,7 +106,7 @@ export function SkillInstallRestartBanner({
       <button
         type="button"
         onClick={dismissAll}
-        className="shrink-0 cursor-pointer rounded-md p-1 text-[var(--oh-muted)] hover:bg-[var(--oh-interactive-hover)] hover:text-[var(--oh-foreground)]"
+        className="shrink-0 cursor-pointer rounded-md p-1 text-muted hover:bg-interactive-hover hover:text-foreground"
         aria-label={t(I18nKey.BUTTON$CLOSE)}
         data-testid="skill-install-restart-dismiss"
       >

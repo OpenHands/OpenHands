@@ -11,7 +11,17 @@ import { cn } from "#/utils/utils";
 import { useSidebarMobileNav } from "./sidebar-mobile-nav-context";
 import { useSidebarStore } from "#/stores/sidebar-store";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
+import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { useBackendsHealth } from "#/hooks/query/use-backends-health";
+import { useResizableDrawerWidth } from "#/hooks/use-resizable-drawer-width";
+import { ResizeHandle } from "#/components/ui/resize-handle";
+import {
+  SIDEBAR_DEFAULT_WIDTH_PX,
+  SIDEBAR_MAX_WIDTH_PX,
+  SIDEBAR_MIN_WIDTH_PX,
+  SIDEBAR_RESIZE_HANDLE_TEST_ID,
+  SIDEBAR_WIDTH_STORAGE_KEY,
+} from "./sidebar-layout";
 // The LLM settings modal is only mounted when the settings query 404s and
 // LLM settings aren't hidden — keep it out of the sidebar's eager graph.
 const SettingsModal = React.lazy(() =>
@@ -35,6 +45,9 @@ const ManageBackendsModal = React.lazy(() =>
 );
 
 const MOBILE_DRAWER_TRANSITION_MS = 250;
+const MOBILE_DRAWER_TRANSITION_STYLE = {
+  "--mobile-drawer-transition-duration": `${MOBILE_DRAWER_TRANSITION_MS}ms`,
+} as React.CSSProperties;
 
 export function Sidebar() {
   const { t } = useTranslation("openhands");
@@ -74,6 +87,20 @@ export function Sidebar() {
     () => setCollapsedBackendPopoverOpen(false),
   );
   const settingsErrorStatus = getErrorStatus(settingsError);
+  const desktopSidebarRef = React.useRef<HTMLElement>(null);
+  const {
+    drawerWidth: sidebarWidth,
+    isDragging: isResizingSidebar,
+    handleMouseDown: handleSidebarResizeStart,
+  } = useResizableDrawerWidth({
+    containerRef: desktopSidebarRef,
+    defaultWidth: SIDEBAR_DEFAULT_WIDTH_PX,
+    minWidth: SIDEBAR_MIN_WIDTH_PX,
+    maxWidth: SIDEBAR_MAX_WIDTH_PX,
+    storageKey: SIDEBAR_WIDTH_STORAGE_KEY,
+    enabled: !collapsed,
+    edge: "left",
+  });
 
   React.useEffect(() => {
     closeMobileNav();
@@ -95,20 +122,8 @@ export function Sidebar() {
     return () => window.clearTimeout(timer);
   }, [isMobileNavOpen]);
 
-  React.useEffect(() => {
-    if (!isMobileNavOpen) {
-      return undefined;
-    }
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        closeMobileNav();
-      }
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [isMobileNavOpen, closeMobileNav]);
+  // A menu or the command menu opened over the drawer takes Escape first.
+  useCloseOnEscape(isMobileNavOpen, closeMobileNav);
 
   React.useEffect(() => {
     if (currentPath === "/settings") {
@@ -181,7 +196,7 @@ export function Sidebar() {
     currentPath === "/customize" ||
     currentPath.startsWith("/skills") ||
     currentPath === "/plugins" ||
-    currentPath === "/extensions" ||
+    currentPath === "/apps" ||
     currentPath === "/mcp";
 
   const railBodyProps = {
@@ -192,6 +207,7 @@ export function Sidebar() {
     isExtensionsActive,
     currentPath,
     activeBackend: active.backend,
+    activeOrgId: active.orgId,
     activeBackendHealth,
     collapsedBackendPopoverOpen,
     setCollapsedBackendPopoverOpen,
@@ -205,6 +221,7 @@ export function Sidebar() {
     <>
       {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- the aside acts as a hit-area for the collapsed rail; nested controls handle their own keyboard interactions. */}
       <aside
+        ref={desktopSidebarRef}
         aria-label={t(I18nKey.SIDEBAR$NAVIGATION_LABEL)}
         data-collapsed={collapsed ? "true" : "false"}
         onClick={handleCollapsedRailClick}
@@ -217,19 +234,33 @@ export function Sidebar() {
           setCollapsedRailHovered(false);
         }}
         className={cn(
-          "max-md:hidden flex bg-base flex-col min-h-0 transition-[width,min-width] duration-200",
-          "md:border-r md:border-[var(--oh-border)] md:h-full",
+          "max-md:hidden relative flex bg-canvas-base flex-col min-h-0 sidebar-text-scale",
+          !isResizingSidebar && "transition-[width,min-width] duration-200",
+          "md:border-r md:border-border md:h-full",
           collapsed
-            ? "md:w-[60px] md:min-w-[60px] md:px-2.5"
-            : "md:w-[300px] md:min-w-[300px] pb-2 md:pl-2.5 md:pr-0",
+            ? "md:w-15 md:min-w-15 md:px-2.5"
+            : "md:sidebar-expanded-width pb-2 md:pl-2.5 md:pr-0",
           currentPath === "/" && "md:pb-3",
         )}
+        style={
+          {
+            "--sidebar-width": `${sidebarWidth}px`,
+          } as React.CSSProperties
+        }
       >
         <SidebarRailBody
           collapsed={collapsed}
           showCollapseToggle
           {...railBodyProps}
         />
+        {collapsed ? null : (
+          <ResizeHandle
+            testId={SIDEBAR_RESIZE_HANDLE_TEST_ID}
+            className="absolute inset-y-0 -right-px"
+            onMouseDown={handleSidebarResizeStart}
+            isDragging={isResizingSidebar}
+          />
+        )}
       </aside>
 
       {mobileDrawerMounted ? (
@@ -237,12 +268,12 @@ export function Sidebar() {
           <div
             className={cn(
               "fixed inset-0 z-40 bg-black/50 md:hidden",
-              "transition-opacity ease-in-out motion-reduce:transition-none",
+              "transition-opacity duration-(--mobile-drawer-transition-duration) ease-in-out motion-reduce:transition-none",
               mobileDrawerVisible
                 ? "opacity-100"
                 : "pointer-events-none opacity-0",
             )}
-            style={{ transitionDuration: `${MOBILE_DRAWER_TRANSITION_MS}ms` }}
+            style={MOBILE_DRAWER_TRANSITION_STYLE}
             onClick={closeMobileNav}
             aria-hidden={!mobileDrawerVisible}
           />
@@ -251,12 +282,12 @@ export function Sidebar() {
             data-testid="sidebar-mobile-drawer"
             aria-hidden={!mobileDrawerVisible}
             className={cn(
-              "fixed inset-y-0 left-0 z-50 flex min-h-0 w-[min(300px,85vw)] flex-col bg-base",
-              "border-r border-[var(--oh-border)] pb-2 pl-2.5 pr-0 md:hidden",
-              "transition-transform ease-in-out motion-reduce:transition-none",
+              "fixed inset-y-0 left-0 z-50 flex min-h-0 w-[min(300px,85vw)] flex-col bg-canvas-base sidebar-text-scale",
+              "border-r border-border pb-2 pl-2.5 pr-0 md:hidden",
+              "transition-transform duration-(--mobile-drawer-transition-duration) ease-in-out motion-reduce:transition-none",
               mobileDrawerVisible ? "translate-x-0" : "-translate-x-full",
             )}
-            style={{ transitionDuration: `${MOBILE_DRAWER_TRANSITION_MS}ms` }}
+            style={MOBILE_DRAWER_TRANSITION_STYLE}
           >
             <SidebarRailBody
               collapsed={false}

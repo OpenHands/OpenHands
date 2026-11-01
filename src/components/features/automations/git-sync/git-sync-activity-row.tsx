@@ -58,8 +58,8 @@ export function GitSyncActivityRow({
       className={cn(
         "mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md px-3 py-2 text-sm",
         isRunning && "bg-tertiary text-content",
-        state === "succeeded" && "bg-green-500/10 text-green-300",
-        isFailed && "bg-red-500/10 text-red-300",
+        state === "succeeded" && "bg-status-success/10 text-feedback-success",
+        isFailed && "bg-status-error/10 text-feedback-error",
       )}
     >
       {isRunning && <RefreshCw className="size-4 animate-spin" aria-hidden />}

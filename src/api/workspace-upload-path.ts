@@ -84,7 +84,10 @@ export async function resolveConversationUploadWorkingDir(
     return stored.selected_workspace.trim();
   }
 
-  if (UUID_PATTERN.test(conversationId)) {
+  if (
+    UUID_PATTERN.test(conversationId) ||
+    /^[0-9a-f]{32}$/i.test(conversationId)
+  ) {
     return AgentServerConversationService.resolveConversationWorkingDir(
       conversationId,
     );

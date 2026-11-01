@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import { I18nKey } from "#/i18n/declaration";
 import { useCreateSecret } from "#/hooks/mutation/use-create-secret";
+import { ACP_MODEL_DISCOVERY_QUERY_KEYS } from "#/hooks/query/query-keys";
 import { type ACPProviderSecretField } from "#/constants/acp-providers";
 import {
   displayErrorToast,
@@ -64,6 +65,9 @@ export function useSaveAcpSecrets(
       }
       await queryClient.invalidateQueries({ queryKey: ["secrets-search"] });
       await queryClient.invalidateQueries({ queryKey: ["secrets"] });
+      await queryClient.invalidateQueries({
+        queryKey: ACP_MODEL_DISCOVERY_QUERY_KEYS.all,
+      });
 
       const savedOrphanedFileCredential =
         !consumesFileCredentials && toSave.some(({ field }) => field.multiline);

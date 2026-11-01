@@ -81,7 +81,17 @@ describe("Automation MSW Handlers", () => {
       // Assert
       expect({ status: res.status, body: data }).toEqual({
         status: 200,
-        body: capabilitiesFixture.responses.supported.body,
+        body: {
+          ...capabilitiesFixture.responses.supported.body,
+          features: [
+            ...(capabilitiesFixture.responses.supported.body.features ?? []),
+            "automationDrafts",
+            "repoUpdate",
+          ],
+          // Newer than the pinned fixture as well: the providers whose
+          // repositories a run clones.
+          repoProviders: ["bitbucket", "github", "gitlab"],
+        },
       });
     });
   });

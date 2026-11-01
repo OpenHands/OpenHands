@@ -21,7 +21,7 @@ export function FileTreeView({
 
   if (root.children.length === 0) {
     return (
-      <div className="px-3 py-4 text-sm text-[var(--oh-muted)]">
+      <div className="px-3 py-4 text-sm text-muted">
         {t(I18nKey.FILES$NO_FILES)}
       </div>
     );

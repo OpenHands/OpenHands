@@ -33,9 +33,9 @@ export function UncommittedChangesRow({
         onClick={onToggle}
         aria-expanded={isExpanded}
         data-testid="uncommitted-changes-row-toggle"
-        className="w-full flex h-10 items-center gap-2 px-3 border-b border-[var(--oh-border)] text-sm text-content text-left hover:cursor-pointer"
+        className="w-full flex h-10 items-center gap-2 px-3 border-b border-border text-sm text-content text-left hover:cursor-pointer"
       >
-        <code className="w-[7ch] flex-shrink-0 text-center font-mono text-xs text-[var(--oh-muted)]">
+        <code className="w-[7ch] flex-shrink-0 text-center font-mono text-xs text-muted">
           {EMPTY_COMMIT_SHA_PLACEHOLDER}
         </code>
         <strong className="flex-1 truncate font-medium">
@@ -44,21 +44,15 @@ export function UncommittedChangesRow({
         {changes.length > 0 ? (
           <span
             data-testid="uncommitted-changes-count"
-            className="text-xs text-[var(--oh-muted)] tabular-nums flex-shrink-0"
+            className="text-xs text-muted tabular-nums flex-shrink-0"
           >
             {t(UNCOMMITTED_FILE_COUNT_I18N_KEY, { count: changes.length })}
           </span>
         ) : null}
         {isExpanded ? (
-          <ChevronDown
-            className="w-4 h-4 shrink-0 text-[var(--oh-muted)]"
-            aria-hidden
-          />
+          <ChevronDown className="w-4 h-4 shrink-0 text-muted" aria-hidden />
         ) : (
-          <ChevronRight
-            className="w-4 h-4 shrink-0 text-[var(--oh-muted)]"
-            aria-hidden
-          />
+          <ChevronRight className="w-4 h-4 shrink-0 text-muted" aria-hidden />
         )}
       </button>
 

@@ -1,0 +1,114 @@
+[
+  {
+    "language": "Arabic",
+    "name": "QA_Inert_Event_Detail",
+    "layout": {
+      "ok": true,
+      "value": {
+        "dir": "rtl",
+        "viewport": 390,
+        "scrollWidth": 390,
+        "horizontalOverflow": false,
+        "switch": {
+          "x": -30.796875,
+          "y": 150,
+          "right": 9.203125,
+          "width": 40,
+          "inside": false
+        }
+      }
+    },
+    "afterSpace": {
+      "ok": true,
+      "aria-checked": "true"
+    },
+    "afterSecondSpace": {
+      "ok": true,
+      "aria-checked": "false"
+    }
+  },
+  {
+    "language": "Arabic",
+    "name": "QA",
+    "layout": {
+      "ok": true,
+      "value": {
+        "dir": "rtl",
+        "viewport": 390,
+        "scrollWidth": 390,
+        "horizontalOverflow": false,
+        "switch": {
+          "x": 64,
+          "y": 140,
+          "right": 104,
+          "width": 40,
+          "inside": true
+        }
+      }
+    },
+    "afterSpace": {
+      "ok": true,
+      "aria-checked": "true"
+    },
+    "afterSecondSpace": {
+      "ok": true,
+      "aria-checked": "false"
+    }
+  },
+  {
+    "language": "English",
+    "name": "QA_Inert_Event_Detail",
+    "layout": {
+      "ok": true,
+      "value": {
+        "dir": "ltr",
+        "viewport": 390,
+        "scrollWidth": 390,
+        "horizontalOverflow": false,
+        "switch": {
+          "x": 385.609375,
+          "y": 150,
+          "right": 425.609375,
+          "width": 40,
+          "inside": false
+        }
+      }
+    },
+    "afterSpace": {
+      "ok": true,
+      "aria-checked": "true"
+    },
+    "afterSecondSpace": {
+      "ok": true,
+      "aria-checked": "false"
+    }
+  },
+  {
+    "language": "English",
+    "name": "QA",
+    "layout": {
+      "ok": true,
+      "value": {
+        "dir": "ltr",
+        "viewport": 390,
+        "scrollWidth": 390,
+        "horizontalOverflow": false,
+        "switch": {
+          "x": 286,
+          "y": 140,
+          "right": 326,
+          "width": 40,
+          "inside": true
+        }
+      }
+    },
+    "afterSpace": {
+      "ok": true,
+      "aria-checked": "true"
+    },
+    "afterSecondSpace": {
+      "ok": true,
+      "aria-checked": "false"
+    }
+  }
+]

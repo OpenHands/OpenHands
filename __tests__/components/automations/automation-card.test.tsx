@@ -113,7 +113,26 @@ describe("AutomationCard", () => {
     const card = screen.getByTestId("automation-card-automation-1");
     expect(card.className).toContain("extension-module-card-interactive");
     expect(card.className).toContain("bg-base-secondary");
-    expect(card.className).not.toContain("border-[var(--oh-border)]");
+    expect(card.className).not.toContain("border-border");
+  });
+
+  it("marks draft automations without labeling them inactive", () => {
+    render(
+      <AutomationCard
+        automation={{ ...automation, enabled: false, state: "DRAFT" }}
+        onToggle={vi.fn()}
+        onRunNow={vi.fn()}
+        onExport={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("active-status-badge-draft")).toHaveTextContent(
+      I18nKey.AUTOMATIONS$DETAIL$DRAFT,
+    );
+    expect(
+      screen.queryByTestId("active-status-badge-inactive"),
+    ).not.toBeInTheDocument();
   });
 
   it("renders title, description, and overflow pills", () => {
@@ -344,9 +363,7 @@ describe("AutomationCard — run phase", () => {
               conversation_id: null,
               bash_command_id: null,
               error_detail: null,
-              phase_code: "running_agent",
-              phase_label: null,
-              phase_updated_at: null,
+              current_phase: "Agent is working on the task",
               started_at: "2026-01-01T09:00:00Z",
               completed_at: null,
             },
@@ -360,7 +377,7 @@ describe("AutomationCard — run phase", () => {
     renderHarness();
 
     // Assert: the phase renders ...
-    await screen.findByText(I18nKey.AUTOMATIONS$DETAIL$PHASE_RUNNING_AGENT);
+    await screen.findByText("Agent is working on the task");
     // ... and exactly one request was made — the pre-existing insights
     // fetch, not a new one just for the phase.
     expect(callCount).toBe(1);

@@ -14,8 +14,14 @@
  *       scripts/                  ← copied from repo scripts/
  *       config/                   ← copied from repo config/
  *       build/                    ← static frontend
- *     Contents/Resources/bin/     ← process.resourcesPath/bin
- *       uv  uvx                   ← bundled via extraResources
+ *     Contents/Resources/bin-<arch>/  ← process.resourcesPath/bin-<arch>
+ *       uv  uvx                        ← bundled via extraResources
+ *     Contents/Resources/bin/          ← legacy flat dir (single-arch builds)
+ *
+ *   Bundled runtimes (uv `bin`, Node `node`) prefer the arch-tagged dir
+ *   matching process.arch — under a universal binary that's the executing
+ *   slice (arm64 on Apple Silicon, x64 on Intel/Rosetta) — and fall back
+ *   to the legacy flat dir (see lib/bundled-runtime-dir.mjs).
  *
  *   Dev (npm run desktop  →  electron electron):
  *     electron/main.mjs           ← __dirname = <repo>/electron/
@@ -40,6 +46,7 @@ import {
   ipcMain,
   nativeImage,
   nativeTheme,
+  safeStorage,
   shell,
 } from "electron";
 import { chmodSync, existsSync } from "node:fs";
@@ -48,6 +55,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 
 import { isExternalBrowsableUrl, isLoopbackAppUrl } from "./lib/window-url-policy.mjs";
+import { resolveBundledRuntimeDir } from "./lib/bundled-runtime-dir.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -99,7 +107,16 @@ function injectBundledUv() {
   const isWin = process.platform === "win32";
   const uvName = isWin ? "uv.exe" : "uv";
   const uvxName = isWin ? "uvx.exe" : "uvx";
-  const binDir = join(process.resourcesPath, "bin");
+  const binDir = resolveBundledRuntimeDir(process.resourcesPath, "bin");
+  if (!binDir) {
+    console.warn(
+      "[desktop] Bundled uv not found — looked in",
+      join(process.resourcesPath, `bin-${process.arch}`),
+      "and",
+      join(process.resourcesPath, "bin"),
+    );
+    return;
+  }
   const uvPath = join(binDir, uvName);
 
   // We only probe for `uv` here — `uv` and `uvx` ship together in the
@@ -173,7 +190,16 @@ function injectBundledNode() {
   if (!app.isPackaged) return;
 
   const isWin = process.platform === "win32";
-  const nodeRoot = join(process.resourcesPath, "node");
+  const nodeRoot = resolveBundledRuntimeDir(process.resourcesPath, "node");
+  if (!nodeRoot) {
+    console.warn(
+      "[desktop] Bundled Node.js not found — looked in " +
+        `${join(process.resourcesPath, `node-${process.arch}`)} and ` +
+        `${join(process.resourcesPath, "node")} — backend scripts and stdio ` +
+        "MCP servers will fail. Run `npm run download-node` and rebuild.",
+    );
+    return;
+  }
   // POSIX Node distributions put binaries in bin/; Windows zips put node.exe
   // and the npm.cmd / npx.cmd wrappers at the distribution root.
   const binDir = isWin ? nodeRoot : join(nodeRoot, "bin");
@@ -288,6 +314,8 @@ async function waitForAgentServer(
 
 let loadingWin = null;
 let mainWin = null;
+/** MARS session bridge (port-forward tunnels, MARSOHS-1429) — created in app.whenReady(). */
+let marsTunnelBridge = null;
 
 // Collapsed splash size — loading.html's .container height must match. The
 // expanded height reveals the startup-log console below it ("Show details").
@@ -313,6 +341,7 @@ function setLoadingWindowExpanded(expanded) {
 }
 
 function createLoadingWindow() {
+  bootLogReady = false;
   loadingWin = new BrowserWindow({
     width: LOADING_WIN_WIDTH,
     // Tall enough to fit the streaming status line + the "first launch can
@@ -363,13 +392,27 @@ function createMainWindow() {
     // App-shell background (--oh-background in src/index.css) — avoids white
     // flashes during the show → maximize repaint after the splash closes.
     backgroundColor: "#0b0e14",
+    // hiddenInset hides the native title bar but keeps the traffic lights
+    // floating over the app shell; the renderer reserves a drag band for them.
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
     icon: appIconPath,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      // Desktop-shell state and the MARS tunnel bridge (see preload-main.cjs).
+      preload: join(__dirname, "preload-main.cjs"),
     },
   });
+
+  // The renderer drops its reserved traffic-light band in fullscreen, where
+  // macOS hides the buttons. Only transitions are pushed; the preload reads the
+  // current state over "window:full-screen:get" on every page load.
+  const sendFullScreenState = () => {
+    if (!mainWin || mainWin.isDestroyed()) return;
+    mainWin.webContents.send("window:full-screen", mainWin.isFullScreen());
+  };
+  mainWin.on("enter-full-screen", sendFullScreenState);
+  mainWin.on("leave-full-screen", sendFullScreenState);
 
   mainWin.loadURL("http://localhost:8000");
 
@@ -439,7 +482,7 @@ function createMainWindow() {
 // otherwise be lost) and it backs the "Copy logs" action. In a packaged app
 // this console is the only log surface — stdout/stderr go to /dev/null when
 // launched from Finder, and the winston file logger is a no-op there (see
-// AGENTS.md on the node_modules strip).
+// `.agents/skills/desktop-electron/references/guide.md` on dependency stripping).
 
 const BOOT_LOG_MAX_LINES = 2000;
 const BOOT_LOG_FLUSH_MS = 200;
@@ -540,6 +583,13 @@ ipcMain.handle("boot-log:quit", (event) => {
   app.quit();
 });
 
+// Synchronous so the preload has the state before the first render; a
+// renderer that starts with "not fullscreen" paints the band and then drops it.
+ipcMain.on("window:full-screen:get", (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  event.returnValue = win !== null && !win.isDestroyed() && win.isFullScreen();
+});
+
 // ── Backend stack ─────────────────────────────────────────────────────────────
 
 /**
@@ -635,9 +685,15 @@ async function startStack() {
     staticDir: buildDir,
     mode: "agent-canvas",
     isPublic: false,
+    // The preload provides window.marsBridge; the stack's ingress must not
+    // host a second, separate one.
+    marsWebBridge: false,
     skipNpmCheck: true,
     agentServerReadyTimeoutMs: 10 * 60_000,
     onServiceLog: handleServiceLog,
+    // main() announces the stack without waiting for the automation backend;
+    // if it then exits during startup, the services are already stopped.
+    onAutomationStartupFailure: failStartup,
   });
 
   // main() returns { config, agentServerReady } — treat a timeout as a fatal
@@ -651,6 +707,44 @@ async function startStack() {
         "Check your internet connection and try again.",
     );
   }
+}
+
+let startupFailed = false;
+
+/**
+ * Show why startup failed on the splash, keeping the full startup log
+ * readable and copyable. The automation backend can fail after the main
+ * window has opened, so the splash is reopened in its place when needed.
+ */
+function failStartup(err) {
+  if (startupFailed) return;
+  startupFailed = true;
+  const summary =
+    err.message +
+    " Ensure ports 8000, 18000, and 18001 are free, then try again.";
+  // Record the failure in the terminal and the startup-log buffer so it
+  // shows (and copies) as the final console line.
+  console.error("[desktop] Startup failed:", err);
+  appendBootLog("desktop", summary, "error");
+  if (mainWin && !mainWin.isDestroyed()) {
+    // Open the splash before closing the main window so window-all-closed
+    // does not quit the app.
+    if (!loadingWin || loadingWin.isDestroyed()) createLoadingWindow();
+    mainWin.destroy();
+  }
+  // Keep the splash open in its failure state so the full startup log can
+  // be read and copied; the app quits via the splash's Quit button (or
+  // Cmd+Q / closing the window).
+  if (showStartupFailure(summary)) return;
+  // Loading window already gone — fall back to the old dialog-and-quit.
+  const errorTail = recentServiceErrors.length
+    ? `\n\nRecent service errors:\n${recentServiceErrors.join("\n")}`
+    : "";
+  dialog.showErrorBox(
+    "OpenHands Agent Canvas failed to start",
+    summary + errorTail,
+  );
+  app.quit();
 }
 
 // ── App lifecycle ─────────────────────────────────────────────────────────────
@@ -669,6 +763,19 @@ app.whenReady().then(async () => {
 
   injectBundledUv();
   injectBundledNode();
+
+  // Registered before the window loads so the renderer's first paint can
+  // already reach the bridge (MARSOHS-1429). Independent of the agent-server
+  // stack below — MARS sessions don't need the bundled backend to be up.
+  const { createMarsTunnelBridge } = await import(
+    pathToFileURL(join(scriptsDir, "mars-tunnel-bridge.mjs")).href
+  );
+  marsTunnelBridge = createMarsTunnelBridge({
+    userDataPath: app.getPath("userData"),
+    safeStorage,
+    openExternal: (url) => shell.openExternal(url),
+  });
+  marsTunnelBridge.registerIpc(ipcMain);
 
   if (!uvxAvailable()) {
     dialog.showErrorBox(
@@ -699,26 +806,11 @@ app.whenReady().then(async () => {
     setBootPhase("Connecting to agent server…");
     await waitForAgentServer("http://localhost:8000/server_info", 60_000);
 
+    if (startupFailed) return;
     setBootPhase("Ready.");
     createMainWindow();
   } catch (err) {
-    const summary =
-      err.message +
-      " Ensure ports 8000, 18000, and 18001 are free, then try again.";
-    // Record the failure in the terminal and the startup-log buffer so it
-    // shows (and copies) as the final console line.
-    console.error("[desktop] Startup failed:", err);
-    appendBootLog("desktop", summary, "error");
-    // Keep the splash open in its failure state so the full startup log can
-    // be read and copied; the app quits via the splash's Quit button (or
-    // Cmd+Q / closing the window).
-    if (showStartupFailure(summary)) return;
-    // Loading window already gone — fall back to the old dialog-and-quit.
-    const errorTail = recentServiceErrors.length
-      ? `\n\nRecent service errors:\n${recentServiceErrors.join("\n")}`
-      : "";
-    dialog.showErrorBox("OpenHands Agent Canvas failed to start", summary + errorTail);
-    app.quit();
+    failStartup(err);
   }
 });
 
@@ -753,6 +845,14 @@ app.on("before-quit", (event) => {
 
   cleanupStarted = true;
   event.preventDefault();
+
+  // MARS connections are in-process state (tunnel listeners to close; no OS
+  // subprocess to signal and wait on), so this
+  // doesn't need the SIGTERM-based cleanup path below — just tear them down
+  // directly. Best-effort: quitting must not hang on it.
+  void marsTunnelBridge?.dispose().catch((err) => {
+    console.warn("[desktop] Failed to close MARS connections:", err);
+  });
 
   console.log("[desktop] Stopping backend services…");
   if (process.platform === "win32") {

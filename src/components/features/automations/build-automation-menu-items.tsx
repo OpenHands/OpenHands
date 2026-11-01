@@ -11,6 +11,8 @@ interface BuildAutomationMenuItemsOptions {
   automation: Automation;
   t: (key: I18nKey) => string;
   canManage: boolean;
+  /** Whether the caller may flip `enabled`; non-creators may only turn off. */
+  canToggle: boolean;
   onRunNow: (id: string) => void;
   isRunPending: boolean;
   onView: () => void;
@@ -24,6 +26,7 @@ export function buildAutomationMenuItems({
   automation,
   t,
   canManage,
+  canToggle,
   onRunNow,
   isRunPending,
   onView,
@@ -62,7 +65,7 @@ export function buildAutomationMenuItems({
           },
         ]
       : []),
-    ...(canManage
+    ...(canToggle
       ? [
           {
             label: automation.enabled
@@ -71,6 +74,10 @@ export function buildAutomationMenuItems({
             icon: <PowerIcon className="size-4" />,
             onClick: () => onToggle(automation.id, automation.enabled),
           },
+        ]
+      : []),
+    ...(canManage
+      ? [
           {
             label: t(I18nKey.AUTOMATIONS$DELETE),
             icon: <TrashIcon className="size-4" />,

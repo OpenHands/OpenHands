@@ -1,0 +1,196 @@
+{
+  "baseline": "d3a58cd1cc045bbb1b24f2c8c0d79a8404ef239b",
+  "target": "61a3bd93e642a0ff4def73b29496a73245628209",
+  "verified_fix_recipes": [
+    {
+      "id": "F28.schedule-presets",
+      "name": "preset-to-custom",
+      "issue": "18461",
+      "sha": "a81b26b6deb9f442",
+      "scope": "create preset-to-Custom only; edit consumer separate",
+      "verdict": "verified",
+      "baseline": {
+        "xfail": 2
+      },
+      "fix": {
+        "xpass": 2
+      }
+    },
+    {
+      "id": "F05.draft-persistence",
+      "name": "handled-model",
+      "issue": "18552",
+      "sha": "75f6de87fb5a093f",
+      "scope": "/model saved draft after navigation",
+      "verdict": "verified",
+      "baseline": {
+        "xfail": 2
+      },
+      "fix": {
+        "xpass": 2
+      }
+    },
+    {
+      "id": "F05.draft-persistence",
+      "name": "handled-new",
+      "issue": "18552",
+      "sha": "7f70f17c52baf5f7",
+      "scope": "/new saved source draft after return",
+      "verdict": "verified",
+      "baseline": {
+        "xfail": 2
+      },
+      "fix": {
+        "xpass": 2
+      }
+    },
+    {
+      "id": "F07.display-cost",
+      "name": "phone-menu",
+      "issue": "18536",
+      "sha": "deb227941297c705",
+      "scope": "phone conversation-menu Usage entry",
+      "verdict": "verified",
+      "baseline": {
+        "xfail": 2
+      },
+      "fix": {
+        "xpass": 2
+      }
+    },
+    {
+      "id": "F27.composer-context-meter",
+      "name": "phone-usage-row",
+      "issue": "18536",
+      "sha": "8fe114c8acddf558",
+      "scope": "phone context popover Usage row",
+      "verdict": "verified",
+      "baseline": {
+        "xfail": 2
+      },
+      "fix": {
+        "xpass": 2
+      }
+    },
+    {
+      "id": "F27.composer-context-meter",
+      "name": "phone-usage-bar",
+      "issue": "18536",
+      "sha": "429b40ffef267685",
+      "scope": "phone context popover Usage bar",
+      "verdict": "verified",
+      "baseline": {
+        "xfail": 2
+      },
+      "fix": {
+        "xpass": 2
+      }
+    },
+    {
+      "id": "F15.save-errors",
+      "name": "negative-no-retry",
+      "issue": "17932",
+      "sha": "32fb844f867ef030",
+      "scope": "real condenser 422:3 requests baseline vs1 target; generic fieldless toast remains",
+      "verdict": "verified",
+      "baseline": {
+        "xfail": 2
+      },
+      "fix": {
+        "xpass": 2
+      }
+    },
+    {
+      "id": "F16.language",
+      "name": "rtl-switch-containment",
+      "issue": "18550",
+      "sha": "913338658e73126f",
+      "scope": "checked analytics md desktop geometry",
+      "verdict": "verified",
+      "baseline": {
+        "xfail": 2
+      },
+      "fix": {
+        "xpass": 2
+      }
+    },
+    {
+      "id": "F16.language",
+      "name": "rtl-unchecked-and-checklist",
+      "issue": "18550",
+      "sha": "6745d0a1b2717729",
+      "scope": "unchecked analytics + checked checklist md desktop geometry",
+      "verdict": "verified",
+      "baseline": {
+        "xfail": 2
+      },
+      "fix": {
+        "xpass": 2
+      }
+    },
+    {
+      "id": "F06.markdown-rendering",
+      "name": "toml-chat",
+      "issue": "18541",
+      "sha": "06d1f235b2f7efb3",
+      "scope": "actual agent TOML code tokens table->inline",
+      "verdict": "verified",
+      "baseline": {
+        "xfail": 2
+      },
+      "fix": {
+        "xpass": 2
+      }
+    },
+    {
+      "id": "F08.files-rich-plain",
+      "name": "toml-file",
+      "issue": "18541",
+      "sha": "e49457dc24155ec8",
+      "scope": "actual owned TOML Files preview; superseded recipe setupfail excluded by hash",
+      "verdict": "verified",
+      "baseline": {
+        "xfail": 2
+      },
+      "fix": {
+        "xpass": 2
+      }
+    },
+    {
+      "id": "F10.edit",
+      "name": "server-save-reason",
+      "issue": "18548",
+      "sha": "b02111ffb6100c56",
+      "scope": "real rejected save minimum-window exception; SDK500 classification remains separate",
+      "verdict": "verified",
+      "baseline": {
+        "xfail": 2
+      },
+      "fix": {
+        "xpass": 2
+      }
+    },
+    {
+      "id": "F05.build-plan-shortcut",
+      "name": "focused-composer",
+      "issue": "18543",
+      "sha": "4f9d8bcfae41e78b",
+      "scope": "focused empty composer Control+Enter emits parent Execute-plan message with genuine planner-generated owned PLAN.md; nonempty/confirmation/body variants remain separate",
+      "verdict": "verified",
+      "baseline": {
+        "xfail": 2
+      },
+      "fix": {
+        "xpass": 2
+      }
+    }
+  ],
+  "limits": [
+    "13 verified recipes are narrow fix proofs, not 13 feature families or whole-map coverage.",
+    "Current known-bug blocks retain their expected behavior and notes.",
+    "Extra failed setup attempts remain in private historical evidence; they are not known reproductions.",
+    "No accepted baseline advancement."
+  ],
+  "attribution": "I am an AI agent helping Engel Nyst (@enyst) with project work.",
+  "publication_status": "Reviewed final artifact published on the existing fork audit branch."
+}

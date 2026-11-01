@@ -1,3 +1,4 @@
+import { useConversationDisplayTitle } from "#/hooks/use-conversation-display-title";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
@@ -19,6 +20,8 @@ export function ConversationName() {
   const { t } = useTranslation("openhands");
   const { conversationId } = useConversationId();
   const { data: conversation } = useActiveConversation();
+  const getTitle = useConversationDisplayTitle();
+  const displayTitle = getTitle(conversationId, conversation?.title);
   const { mutate: updateConversation } = useUpdateConversation();
 
   const [titleMode, setTitleMode] = React.useState<"view" | "edit">("view");
@@ -26,7 +29,7 @@ export function ConversationName() {
   const [transcriptExportModalVisible, setTranscriptExportModalVisible] =
     React.useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
-  const ellipsisAnchorRef = React.useRef<HTMLDivElement>(null);
+  const ellipsisAnchorRef = React.useRef<HTMLButtonElement>(null);
 
   // Use the custom hook for context menu handlers
   const {
@@ -76,7 +79,7 @@ export function ConversationName() {
     // title to the mutation. The sidebar rename path already trims first.
     const trimmed = inputRef.current?.value.trim();
     if (trimmed && conversationId) {
-      if (trimmed !== conversation?.title) {
+      if (trimmed !== displayTitle) {
         updateConversation(
           { conversationId, newTitle: trimmed },
           {
@@ -88,7 +91,7 @@ export function ConversationName() {
       }
     } else if (inputRef.current) {
       // reset the value if it is empty or only whitespace
-      inputRef.current.value = conversation?.title ?? "";
+      inputRef.current.value = displayTitle;
     }
 
     setTitleMode("view");
@@ -140,13 +143,20 @@ export function ConversationName() {
   }, [titleMode]);
 
   if (!conversation) {
-    return null;
+    return (
+      <div className="flex items-center gap-2 h-5.5 text-base font-normal text-left pl-0 lg:pl-1 min-w-0">
+        <div className="text-contrast leading-5 truncate" title={displayTitle}>
+          {displayTitle}
+        </div>
+        <div aria-hidden className="w-6 shrink-0" />
+      </div>
+    );
   }
 
   return (
     <>
       <div
-        className="flex items-center gap-2 h-[22px] text-base font-normal text-left pl-0 lg:pl-1 min-w-0"
+        className="flex items-center gap-2 h-5.5 text-base font-normal text-left pl-0 lg:pl-1 min-w-0"
         data-testid="conversation-name"
       >
         {titleMode === "edit" ? (
@@ -157,26 +167,24 @@ export function ConversationName() {
             onBlur={handleBlur}
             onKeyUp={handleKeyUp}
             type="text"
-            defaultValue={conversation.title || ""}
-            className="text-white leading-5 bg-transparent border-none outline-none text-base font-normal w-fit max-w-fit field-sizing-content"
+            defaultValue={displayTitle}
+            className="text-contrast leading-5 bg-transparent border-none outline-none text-base font-normal w-fit max-w-fit field-sizing-content"
           />
         ) : (
           <div
-            className="text-white leading-5 truncate"
+            className="text-contrast leading-5 truncate"
             data-testid="conversation-name-title"
             onDoubleClick={handleDoubleClick}
-            title={conversation.title || ""}
+            title={displayTitle}
           >
-            {conversation.title}
+            {displayTitle}
           </div>
         )}
 
         {titleMode !== "edit" && (
-          <div
-            ref={ellipsisAnchorRef}
-            className="relative flex items-center shrink-0"
-          >
+          <div className="relative flex items-center shrink-0">
             <EllipsisButton
+              ref={ellipsisAnchorRef}
               onClick={handleEllipsisClick}
               ariaLabel={t(I18nKey.COMMON$MORE_OPTIONS)}
             />
@@ -216,7 +224,7 @@ export function ConversationName() {
           conversationId={conversationId}
           conversationUrl={conversation.conversation_url}
           sessionApiKey={conversation.session_api_key}
-          conversationTitle={conversation.title}
+          conversationTitle={displayTitle}
           model={conversation.llm_model}
           onClose={() => setTranscriptExportModalVisible(false)}
         />

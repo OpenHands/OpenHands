@@ -203,8 +203,7 @@ export function ProviderConnectionModal({
             selectedKey={provider}
             onSelectionChange={(key) => setProvider(key?.toString() ?? null)}
             classNames={{
-              popoverContent:
-                "bg-content1 rounded-xl border border-[var(--oh-border)]",
+              popoverContent: "bg-content1 rounded-xl border border-border",
               selectorButton: heroUiAutocompleteSelectorButtonClassName,
             }}
             selectorButtonProps={{ disableRipple: true }}
@@ -216,7 +215,7 @@ export function ProviderConnectionModal({
           >
             <AutocompleteSection
               title={t(I18nKey.MODEL_SELECTOR$VERIFIED)}
-              classNames={{ heading: "text-[var(--oh-muted)]" }}
+              classNames={{ heading: "text-muted" }}
             >
               {verifiedProviders.map((candidate) => (
                 <AutocompleteItem
@@ -231,7 +230,7 @@ export function ProviderConnectionModal({
             {unverifiedProviders.length > 0 ? (
               <AutocompleteSection
                 title={t(I18nKey.MODEL_SELECTOR$OTHERS)}
-                classNames={{ heading: "text-[var(--oh-muted)]" }}
+                classNames={{ heading: "text-muted" }}
               >
                 {unverifiedProviders.map((candidate) => (
                   <AutocompleteItem

@@ -1,21 +1,37 @@
 import { useTranslation } from "react-i18next";
 import type { AppConversationStartTask } from "#/api/conversation-service/agent-server-conversation-service.types";
-import { cn } from "#/utils/utils";
 import { I18nKey } from "#/i18n/declaration";
-import { StartTaskCardHeader } from "./start-task-card-header";
-import { StartTaskCardFooter } from "./start-task-card-footer";
+import { ExecutionStatus } from "#/types/agent-server/core/base/common";
+import { ConversationCard } from "../conversation-card/conversation-card";
 
 interface StartTaskCardProps {
   task: AppConversationStartTask;
+  title?: string;
   onClick?: () => void;
+  initialMessage?: string;
+  isActive?: boolean;
+  showRepositoryMetadata?: boolean;
 }
 
-export function StartTaskCard({ task, onClick }: StartTaskCardProps) {
+export function StartTaskCard({
+  task,
+  title: displayTitle,
+  onClick,
+  initialMessage,
+  isActive,
+  showRepositoryMetadata = false,
+}: StartTaskCardProps) {
   const { t } = useTranslation("openhands");
+  const prompt =
+    initialMessage ||
+    task.request.initial_message?.content
+      .filter((content) => content.type === "text")
+      .map((content) => content.text)
+      .join(" ");
   const title =
-    task.request.title ||
-    task.detail ||
-    t(I18nKey.CONVERSATION$STARTING_CONVERSATION);
+    task.request.title?.trim() ||
+    prompt?.trim() ||
+    t(I18nKey.CONVERSATION$UNTITLED);
 
   const selectedRepository = task.request.selected_repository
     ? {
@@ -26,23 +42,16 @@ export function StartTaskCard({ task, onClick }: StartTaskCardProps) {
     : null;
 
   return (
-    <div
-      data-testid="start-task-card"
+    <ConversationCard
+      title={displayTitle || title}
       onClick={onClick}
-      className={cn(
-        "relative h-auto w-full p-3.5 border-b border-[var(--oh-border)] cursor-pointer",
-        "hover:bg-tertiary",
-      )}
-    >
-      <div className="flex items-center justify-between w-full">
-        <StartTaskCardHeader title={title} taskStatus={task.status} />
-      </div>
-
-      <StartTaskCardFooter
-        selectedRepository={selectedRepository}
-        createdAt={task.created_at}
-        detail={task.detail}
-      />
-    </div>
+      selectedRepository={selectedRepository}
+      createdAt={task.created_at}
+      lastUpdatedAt={task.updated_at}
+      executionStatus={task.status === "ERROR" ? ExecutionStatus.ERROR : null}
+      isStarting={task.status !== "READY" && task.status !== "ERROR"}
+      isActive={isActive}
+      showRepositoryMetadata={showRepositoryMetadata}
+    />
   );
 }

@@ -62,12 +62,6 @@ function findLastPlanningObservationInPhase(
   return null;
 }
 
-export interface PlanPreviewEventInfo {
-  eventId: string;
-  /** Index of this plan preview in the conversation (1st, 2nd, etc.) */
-  phaseIndex: number;
-}
-
 /**
  * Hook to determine which PlanningFileEditorObservation events should render PlanPreview.
  *

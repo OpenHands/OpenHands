@@ -40,7 +40,7 @@ export function SkillFiltersModal({
           {t(I18nKey.SETTINGS$SKILLS_FILTERS_MODAL_TITLE)}
         </h3>
 
-        <div className="max-h-[60vh] overflow-y-auto custom-scrollbar-always">
+        <div className="dialog-scroll-height overflow-y-auto custom-scrollbar-always">
           <SkillFacetRail groups={groups} onToggle={onToggle} />
         </div>
 

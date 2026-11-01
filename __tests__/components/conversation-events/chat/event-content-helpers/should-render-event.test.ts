@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { shouldRenderEvent } from "#/components/conversation-events/chat/event-content-helpers/should-render-event";
 import { CHILD_CONVERSATION_RESULT_PREFIX } from "#/constants/child-conversation";
+import { SECRET_REQUEST_RESULT_PREFIX } from "#/constants/secret-request";
 import {
   createPlanningFileEditorActionEvent,
   createOtherActionEvent,
@@ -279,13 +280,10 @@ describe("shouldRenderEvent - /goal loop re-prompts", () => {
     expect(shouldRenderEvent(makeUserMessage("hello"))).toBe(true);
   });
 
-  it("hides the child-conversation launch result the frontend posts back", () => {
-    expect(
-      shouldRenderEvent(
-        makeUserMessage(
-          `${CHILD_CONVERSATION_RESULT_PREFIX}{"status":"launched","target":"local"}`,
-        ),
-      ),
-    ).toBe(false);
+  it.each([
+    `${CHILD_CONVERSATION_RESULT_PREFIX}{"status":"launched","target":"local"}`,
+    `${SECRET_REQUEST_RESULT_PREFIX}{"status":"saved","name":"GITHUB_TOKEN"}`,
+  ])("hides the client tool result the frontend posts back: %s", (text) => {
+    expect(shouldRenderEvent(makeUserMessage(text))).toBe(false);
   });
 });

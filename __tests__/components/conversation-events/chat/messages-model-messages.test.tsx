@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 import { renderWithProviders } from "test-utils";
 import { Messages } from "#/components/conversation-events/chat/messages";
@@ -37,7 +37,7 @@ const makeBashAction = (id: string): ActionEvent<ExecuteBashAction> => ({
 });
 
 const makeStreamingDelta = (content: string): StreamingDeltaEvent => ({
-  id: "delta-1",
+  id: "item-1",
   timestamp: "2026-06-12T12:00:00Z",
   source: "agent",
   kind: "StreamingDeltaEvent",
@@ -62,7 +62,7 @@ describe("Messages model entries", () => {
     expect(screen.getByTestId("model-messages")).toBeInTheDocument();
   });
 
-  it("rerenders when a streaming delta is compacted under the same event id", () => {
+  it("rerenders as a streaming slot accumulates under the same event id", async () => {
     const firstDelta = makeStreamingDelta("First");
     const mergedDelta = makeStreamingDelta("First second third");
 
@@ -74,6 +74,12 @@ describe("Messages model entries", () => {
 
     rerender(<Messages messages={[mergedDelta]} allEvents={[mergedDelta]} />);
 
-    expect(screen.getByText("First second third")).toBeInTheDocument();
+    // Revealed on a clock (#15493), so the added text lands over a few frames.
+    // Streamed words are separate spans, so match the bubble's text.
+    await waitFor(() =>
+      expect(screen.getByTestId("agent-message")).toHaveTextContent(
+        "First second third",
+      ),
+    );
   });
 });

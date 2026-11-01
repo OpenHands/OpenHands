@@ -10,17 +10,22 @@ import {
 import userEvent from "@testing-library/user-event";
 import { createRoutesStub, MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { __resetActiveStoreForTests } from "#/api/backend-registry/active-store";
+import {
+  __resetActiveStoreForTests,
+  getActiveSelection,
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
 import {
   ActiveBackendProvider,
   useActiveBackendContext,
 } from "#/contexts/active-backend-context";
+import { CloudOrganizationBoundary } from "#/components/features/backends/cloud-organization-boundary";
 import { BackendSelector } from "#/components/features/backends/backend-selector";
 import {
   __resetEnvironmentSwitchOverlayForTests,
   EnvironmentSwitchOverlay,
 } from "#/components/features/backends/environment-switch-overlay";
-import { ENVIRONMENT_SWITCH_SETACTIVE_DELAY_MS } from "#/components/features/backends/environment-switch-store";
 
 import {
   ServerClient,
@@ -58,7 +63,24 @@ const SEED_CLOUD_PRODUCTION = {
   kind: "cloud" as const,
 };
 
-function renderWithProviders(ui: React.ReactElement) {
+function renderWithProviders(
+  ui: React.ReactElement,
+  resolveOrganization = false,
+) {
+  if (resolveOrganization) {
+    if (ui.type === TestSeed) {
+      const seeded = ui as React.ReactElement<{ children: React.ReactNode }>;
+      ui = React.cloneElement(
+        seeded,
+        {},
+        <CloudOrganizationBoundary>
+          {seeded.props.children}
+        </CloudOrganizationBoundary>,
+      );
+    } else {
+      ui = <CloudOrganizationBoundary>{ui}</CloudOrganizationBoundary>;
+    }
+  }
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -86,6 +108,8 @@ function TestSeed({
   return children as React.ReactElement;
 }
 
+const ACTIVE_BACKEND_STORAGE_KEY = "openhands-active-backend";
+
 async function openDropdown() {
   const user = userEvent.setup();
   const wrapper = screen.getByTestId("backend-selector");
@@ -95,6 +119,15 @@ async function openDropdown() {
   // enough to surface the menu.
   await user.hover(wrapper);
   return user;
+}
+
+/** Org rows show only the org name under a backend heading; their title keeps the full label. */
+function menuRow(fullLabel: string) {
+  return within(screen.getByRole("listbox")).getByTitle(fullLabel);
+}
+
+function queryMenuRow(fullLabel: string) {
+  return within(screen.getByRole("listbox")).queryByTitle(fullLabel);
 }
 
 beforeEach(() => {
@@ -127,7 +160,7 @@ beforeEach(() => {
   vi.mocked(ServerClient).mockReset();
   vi.mocked(ServerClient).mockImplementation(function ServerClientMock() {
     return {
-      getServerInfo: vi.fn().mockResolvedValue({ version: "1.28.0" }),
+      getServerInfo: vi.fn().mockResolvedValue({ version: "1.59.0" }),
     } as unknown as ServerClient;
   });
   vi.mocked(SettingsClient).mockReset();
@@ -138,21 +171,35 @@ beforeEach(() => {
   });
 });
 
-afterEach(async () => {
-  // When a test selects a dropdown option, BackendSelector's onChange
-  // calls `triggerEnvironmentSwitch` and then awaits a real-time
-  // `setTimeout(..., ENVIRONMENT_SWITCH_SETACTIVE_DELAY_MS)` before
-  // running `setActive`. `userEvent.click` does NOT await that async
-  // handler, so the trailing `setActive` can land AFTER the test ends,
-  // re-polluting `localStorage` during a later test. The body's
-  // `data-environment-switching` attribute is set while the switch is
-  // in flight; wait it out before clearing storage so the in-flight
-  // `setActive` writes BEFORE we wipe state.
-  if (document.body.hasAttribute("data-environment-switching")) {
-    await new Promise((resolve) => {
-      setTimeout(resolve, ENVIRONMENT_SWITCH_SETACTIVE_DELAY_MS + 20);
-    });
-  }
+/**
+ * Wait for a backend switch triggered by a dropdown click to finish.
+ *
+ * `BackendSelector.handleSelectBackend` awaits a real
+ * `ENVIRONMENT_SWITCH_SETACTIVE_DELAY_MS` timer before calling `setActive`,
+ * and `userEvent.click` does not await that async handler. Waiting for the
+ * persisted selection to change proves the trailing `setActive` landed inside
+ * the test rather than leaking into the next one.
+ *
+ * This deliberately observes the persisted selection rather than the body's
+ * `data-environment-switching` attribute: that attribute is cleared by the
+ * overlay's separate ENVIRONMENT_SWITCH_DURATION_MS timer, so it does not
+ * track when `setActive` actually ran.
+ */
+async function settleBackendSwitch(previous: string | null) {
+  await waitFor(() => {
+    expect(window.localStorage.getItem(ACTIVE_BACKEND_STORAGE_KEY)).not.toBe(
+      previous,
+    );
+  });
+}
+
+function activeBackendSnapshot() {
+  return window.localStorage.getItem(ACTIVE_BACKEND_STORAGE_KEY);
+}
+
+afterEach(() => {
+  // Each test that switches backends awaits `settleBackendSwitch`, so no
+  // trailing `setActive` is in flight here and teardown needs no delay.
   window.localStorage.clear();
   vi.unstubAllEnvs();
   __resetActiveStoreForTests();
@@ -220,11 +267,18 @@ describe("BackendSelector", () => {
     const user = await openDropdown();
 
     await waitFor(() => {
-      expect(screen.getByText("Production – Personal")).toBeInTheDocument();
+      expect(menuRow("Production – Personal")).toBeInTheDocument();
     });
-    expect(screen.getByText("Production – Acme Inc")).toBeInTheDocument();
+    // The backend name is one heading above its org rows, not a prefix on each.
+    const listbox = screen.getByRole("listbox");
+    expect(within(listbox).getAllByText("Production")).toHaveLength(1);
+    expect(menuRow("Production – Personal")).toHaveTextContent(/^Personal$/);
+    expect(menuRow("Production – Acme Inc")).toHaveTextContent(/^Acme Inc$/);
+    expect(
+      within(listbox).getByRole("option", { name: "Production – Acme Inc" }),
+    ).toBeInTheDocument();
 
-    await user.click(screen.getByText("Production – Acme Inc"));
+    await user.click(menuRow("Production – Acme Inc"));
 
     // Selecting an org row updates the active selection locally only —
     // it must never trigger the cloud-mutating /switch call that used to
@@ -281,14 +335,12 @@ describe("BackendSelector", () => {
     await openDropdown();
 
     await waitFor(() => {
-      expect(screen.getByText("ProdPersonal – Personal")).toBeInTheDocument();
+      expect(menuRow("ProdPersonal – Personal")).toBeInTheDocument();
     });
-    expect(screen.getByText("ProdAcme – Acme Inc")).toBeInTheDocument();
+    expect(menuRow("ProdAcme – Acme Inc")).toBeInTheDocument();
     // Inaccessible orgs must not appear under either backend.
-    expect(
-      screen.queryByText("ProdPersonal – Acme Inc"),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByText("ProdAcme – Personal")).not.toBeInTheDocument();
+    expect(queryMenuRow("ProdPersonal – Acme Inc")).not.toBeInTheDocument();
+    expect(queryMenuRow("ProdAcme – Personal")).not.toBeInTheDocument();
     expect(screen.queryByText(/Beta Co/)).not.toBeInTheDocument();
   });
 
@@ -319,6 +371,7 @@ describe("BackendSelector", () => {
       >
         <BackendSelector />
       </TestSeed>,
+      true,
     );
 
     await waitFor(() => {
@@ -330,12 +383,54 @@ describe("BackendSelector", () => {
     await openDropdown();
 
     await waitFor(() => {
-      expect(
-        screen.getByText("OpenHands Cloud – Personal"),
-      ).toBeInTheDocument();
+      expect(menuRow("OpenHands Cloud – Personal")).toBeInTheDocument();
     });
-    expect(screen.getByText("OpenHands Cloud – Acme Inc")).toBeInTheDocument();
+    expect(menuRow("OpenHands Cloud – Acme Inc")).toBeInTheDocument();
     expect(getCurrentCloudApiKey).not.toHaveBeenCalled();
+  });
+
+  it("labels org rows with only the org name when the cloud backend is the only backend", async () => {
+    // Arrange: a lone cloud backend (as in a Canvas locked to one cloud)
+    // whose org names differ only at the end.
+    const backend = {
+      ...SEED_CLOUD_PRODUCTION,
+      id: "cloud",
+      authMode: "cookie" as const,
+    };
+    setRegisteredBackends([backend]);
+    setActiveSelection({ backendId: backend.id, orgId: "org-sec" });
+    vi.mocked(getCloudOrganizations).mockResolvedValue({
+      items: [
+        { id: "org-eng", name: "Platform Business Unit - Engineering" },
+        { id: "org-sec", name: "Platform Business Unit - Security" },
+      ],
+      currentOrgId: "org-sec",
+    });
+
+    renderWithProviders(<BackendSelector />, true);
+    const getInput = () =>
+      screen
+        .getByTestId("backend-selector")
+        .querySelector("input") as HTMLInputElement;
+    await waitFor(() => {
+      expect(getInput().value).toBe("Platform Business Unit - Security");
+    });
+
+    // Act
+    await openDropdown();
+
+    // Assert: the open trigger still names the active org, and each row
+    // shows the org name without the backend name.
+    expect(getInput()).toHaveAttribute(
+      "placeholder",
+      "Platform Business Unit - Security",
+    );
+    expect(
+      screen.getByText("Platform Business Unit - Engineering"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Platform Business Unit - Security"),
+    ).toBeInTheDocument();
   });
 
   it("labels an org as 'Personal Workspace' when /me reports user_id === org.id", async () => {
@@ -377,13 +472,13 @@ describe("BackendSelector", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText("Production – BACKEND$PERSONAL_WORKSPACE"),
+        menuRow("Production – BACKEND$PERSONAL_WORKSPACE"),
       ).toBeInTheDocument();
     });
-    expect(screen.getByText("Production – Acme Inc")).toBeInTheDocument();
+    expect(menuRow("Production – Acme Inc")).toBeInTheDocument();
     // The auto-generated org name must NOT be rendered.
     expect(
-      screen.queryByText(`Production – user_${personalOrgId}_org`),
+      queryMenuRow(`Production – user_${personalOrgId}_org`),
     ).not.toBeInTheDocument();
   });
 
@@ -414,6 +509,7 @@ describe("BackendSelector", () => {
       >
         <BackendSelector />
       </TestSeed>,
+      true,
     );
 
     // After orgs resolve, the selector snaps the active selection onto the
@@ -426,6 +522,169 @@ describe("BackendSelector", () => {
       );
       expect(stored).toEqual({ backendId: cloudId, orgId: "org-2" });
     });
+  });
+
+  it.each(["cookie", "api-key"] as const)(
+    "recovers a persisted removed org with %s authentication",
+    async (authMode) => {
+      const backend = { ...SEED_CLOUD_PRODUCTION, id: "cloud", authMode };
+      setRegisteredBackends([backend]);
+      setActiveSelection({ backendId: backend.id, orgId: "removed-org" });
+      vi.mocked(getCloudOrganizations).mockResolvedValue({
+        items: [
+          { id: "first-org", name: "First" },
+          { id: "current-org", name: "Current" },
+        ],
+        currentOrgId: "current-org",
+      });
+
+      renderWithProviders(<BackendSelector />, true);
+
+      await waitFor(() =>
+        expect(getActiveSelection()?.orgId).toBe("current-org"),
+      );
+      expect(
+        screen.getByTestId("backend-selector-settings-link"),
+      ).toHaveAttribute("href", `${backend.host}/settings?org=current-org`);
+      expect(getCloudOrganizationMe).not.toHaveBeenCalledWith(
+        "removed-org",
+        expect.anything(),
+      );
+    },
+  );
+
+  it.each(["cookie", "api-key"] as const)(
+    "prefers a visible personal workspace before identity resolves with %s auth",
+    async (authMode) => {
+      const backend = { ...SEED_CLOUD_PRODUCTION, id: "cloud", authMode };
+      setRegisteredBackends([backend]);
+      setActiveSelection({ backendId: backend.id, orgId: "removed-org" });
+      vi.mocked(getCloudOrganizations).mockResolvedValue({
+        items: [
+          { id: "team-org", name: "Team" },
+          { id: "personal-org", name: "Personal", is_personal: true },
+        ],
+        currentOrgId: "removed-org",
+      });
+      vi.mocked(getCloudOrganizationMe).mockReturnValue(new Promise(() => {}));
+      renderWithProviders(<BackendSelector />, true);
+      await waitFor(() =>
+        expect(getActiveSelection()?.orgId).toBe("personal-org"),
+      );
+      expect(getCloudOrganizationMe).not.toHaveBeenCalledWith(
+        "removed-org",
+        expect.anything(),
+      );
+    },
+  );
+
+  it("keeps a valid persisted choice when the server current org differs", async () => {
+    const backend = { ...SEED_CLOUD_PRODUCTION, id: "cloud" };
+    setRegisteredBackends([backend]);
+    setActiveSelection({ backendId: backend.id, orgId: "chosen-org" });
+    vi.mocked(getCloudOrganizations).mockResolvedValue({
+      items: [
+        { id: "chosen-org", name: "Chosen" },
+        { id: "server-org", name: "Server" },
+      ],
+      currentOrgId: "server-org",
+    });
+    renderWithProviders(<BackendSelector />, true);
+    await waitFor(() =>
+      expect(getCloudOrganizationMe).toHaveBeenCalledWith(
+        "chosen-org",
+        expect.anything(),
+      ),
+    );
+    expect(getActiveSelection()?.orgId).toBe("chosen-org");
+  });
+
+  it("recovers only to an org allowed by the API key", async () => {
+    const backend = { ...SEED_CLOUD_PRODUCTION, id: "cloud" };
+    setRegisteredBackends([backend]);
+    setActiveSelection({ backendId: backend.id, orgId: "other-org" });
+    vi.mocked(getCloudOrganizations).mockResolvedValue({
+      items: [
+        { id: "other-org", name: "Other" },
+        { id: "bound-org", name: "Bound" },
+      ],
+      currentOrgId: "other-org",
+    });
+    vi.mocked(getCurrentCloudApiKey).mockResolvedValue({
+      orgId: "bound-org",
+      isLegacyKey: false,
+    });
+    renderWithProviders(<BackendSelector />, true);
+    await waitFor(() => expect(getActiveSelection()?.orgId).toBe("bound-org"));
+    expect(getCloudOrganizationMe).not.toHaveBeenCalledWith(
+      "other-org",
+      expect.anything(),
+    );
+  });
+
+  it("recovers from a hidden workspace without selecting it again", async () => {
+    const backend = {
+      ...SEED_CLOUD_PRODUCTION,
+      id: "cloud",
+      authMode: "cookie" as const,
+    };
+    setRegisteredBackends([backend]);
+    setActiveSelection({ backendId: backend.id, orgId: "hidden-org" });
+    vi.mocked(getCloudOrganizations).mockResolvedValue({
+      items: [
+        { id: "hidden-org", name: "Hidden", is_visible: false },
+        { id: "team-org", name: "Team" },
+      ],
+      currentOrgId: "hidden-org",
+    });
+    renderWithProviders(<BackendSelector />, true);
+    await waitFor(() => expect(getActiveSelection()?.orgId).toBe("team-org"));
+  });
+
+  it("waits for memberships before changing the persisted selection", async () => {
+    const backend = { ...SEED_CLOUD_PRODUCTION, id: "cloud" };
+    setRegisteredBackends([backend]);
+    setActiveSelection({ backendId: backend.id, orgId: "old-org" });
+    let resolve!: (
+      value: Awaited<ReturnType<typeof getCloudOrganizations>>,
+    ) => void;
+    vi.mocked(getCloudOrganizations).mockReturnValue(
+      new Promise((done) => {
+        resolve = done;
+      }),
+    );
+    renderWithProviders(<BackendSelector />, true);
+    expect(getActiveSelection()?.orgId).toBe("old-org");
+    expect(getCloudOrganizationMe).not.toHaveBeenCalled();
+    resolve({
+      items: [{ id: "new-org", name: "New" }],
+      currentOrgId: "new-org",
+    });
+    await waitFor(() => expect(getActiveSelection()?.orgId).toBe("new-org"));
+  });
+
+  it("does not interpret a failed membership request as an empty membership", async () => {
+    const backend = { ...SEED_CLOUD_PRODUCTION, id: "cloud" };
+    setRegisteredBackends([backend]);
+    setActiveSelection({ backendId: backend.id, orgId: "saved-org" });
+    vi.mocked(getCloudOrganizations).mockRejectedValue(
+      new Error("network unavailable"),
+    );
+    renderWithProviders(<BackendSelector />, true);
+    await waitFor(() => expect(getCloudOrganizations).toHaveBeenCalled());
+    expect(getActiveSelection()?.orgId).toBe("saved-org");
+    expect(getCloudOrganizationMe).not.toHaveBeenCalled();
+  });
+
+  it("clears the org selection when no authorized organizations remain", async () => {
+    const backend = { ...SEED_CLOUD_PRODUCTION, id: "cloud" };
+    setRegisteredBackends([backend]);
+    setActiveSelection({ backendId: backend.id, orgId: "removed-org" });
+    renderWithProviders(<BackendSelector />, true);
+    await waitFor(() =>
+      expect(getActiveSelection()).toEqual({ backendId: "cloud", orgId: null }),
+    );
+    expect(getCloudOrganizationMe).not.toHaveBeenCalled();
   });
 
   it("switches the active backend when an option is selected", async () => {
@@ -441,7 +700,9 @@ describe("BackendSelector", () => {
 
     // Auto-switch lands on "Local 1"; click the seeded default to switch.
     const user = await openDropdown();
+    const before = activeBackendSnapshot();
     await user.click(screen.getByText("Local"));
+    await settleBackendSwitch(before);
 
     const wrapper = screen.getByTestId("backend-selector");
     const input = wrapper.querySelector("input") as HTMLInputElement;
@@ -505,7 +766,9 @@ describe("BackendSelector", () => {
       );
 
       const user = await openDropdown();
+      const before = activeBackendSnapshot();
       await user.click(screen.getByText("Local"));
+      await settleBackendSwitch(before);
 
       if (expectRedirect) {
         expect(await screen.findByTestId("landing-route")).toBeInTheDocument();
@@ -545,6 +808,7 @@ describe("BackendSelector", () => {
     // to trigger a switch, then immediately unmount the selector (the
     // click itself would do this in production via the outside-click handler).
     const user = await openDropdown();
+    const before = activeBackendSnapshot();
     await user.click(screen.getByText("Local"));
     selectorRender.unmount();
 
@@ -553,6 +817,10 @@ describe("BackendSelector", () => {
       "data-target",
       "Local",
     );
+
+    // The switch was deliberately left in flight across the unmount; let its
+    // trailing `setActive` land here rather than during the next test.
+    await settleBackendSwitch(before);
   });
 
   it("does not open backend modals on mouse down alone", async () => {
@@ -652,6 +920,7 @@ describe("BackendSelector", () => {
       >
         <BackendSelector />
       </TestSeed>,
+      true,
     );
     await waitFor(() => {
       const wrapper = screen.getByTestId("backend-selector");
@@ -664,9 +933,7 @@ describe("BackendSelector", () => {
 
     // Assert: the org rows render, but no footer actions do.
     await waitFor(() => {
-      expect(
-        screen.getByText("OpenHands Cloud – Acme Inc"),
-      ).toBeInTheDocument();
+      expect(menuRow("OpenHands Cloud – Acme Inc")).toBeInTheDocument();
     });
     expect(
       screen.queryByTestId("manage-backends-menu-item"),
@@ -829,6 +1096,54 @@ describe("BackendSelector", () => {
       );
       expect(link).toHaveAttribute("target", "_blank");
       expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    });
+
+    it("passes the active org to the cloud settings link", () => {
+      let cloudId = "";
+      renderWithProviders(
+        <TestSeed
+          onMount={(ctx) => {
+            cloudId = ctx.addBackend(SEED_CLOUD_PRODUCTION).id;
+            ctx.setActive(cloudId, "org-2");
+          }}
+        >
+          <BackendSelector />
+        </TestSeed>,
+      );
+
+      expect(
+        screen.getByTestId("backend-selector-settings-link"),
+      ).toHaveAttribute(
+        "href",
+        `${SEED_CLOUD_PRODUCTION.host}/settings?org=org-2`,
+      );
+    });
+
+    it("renders the cloud settings link as a same-tab anchor when locked to Cloud", async () => {
+      // Arrange: an OHE/SaaS-hosted canvas locked to the active cloud host
+      vi.stubEnv("VITE_LOCK_TO_CLOUD", SEED_CLOUD_PRODUCTION.host);
+      let cloudId = "";
+
+      // Act
+      renderWithProviders(
+        <TestSeed
+          onMount={(ctx) => {
+            cloudId = ctx.addBackend(SEED_CLOUD_PRODUCTION).id;
+            ctx.setActive(cloudId, null);
+          }}
+        >
+          <BackendSelector />
+        </TestSeed>,
+      );
+
+      // Assert: same tab, so browser Back returns to the canvas
+      const link = screen.getByTestId("backend-selector-settings-link");
+      expect(link).toHaveAttribute(
+        "href",
+        `${SEED_CLOUD_PRODUCTION.host}/settings`,
+      );
+      expect(link).not.toHaveAttribute("target");
+      expect(link).not.toHaveAttribute("rel");
     });
   });
 

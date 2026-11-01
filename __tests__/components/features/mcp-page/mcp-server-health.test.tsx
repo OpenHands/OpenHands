@@ -31,6 +31,14 @@ const GITHUB_SERVER: MCPServerConfig = {
   auth: { strategy: "api_key", value: "github_pat_x" },
 };
 
+const STDIO_SERVER: MCPServerConfig = {
+  id: "local-tool",
+  type: "stdio",
+  name: "local-tool",
+  command: "npx",
+  args: ["-y", "local-tool"],
+};
+
 const OAUTH_SERVER: MCPServerConfig = {
   id: "my-oauth",
   type: "shttp",
@@ -151,7 +159,31 @@ describe("InstalledServerCard connection health", () => {
     );
   });
 
-  it("renders no health section on cloud backends", () => {
+  it.each([
+    { server: STDIO_SERVER, expectedLabel: "MCP$TEST_ERROR_STDIO_START" },
+    { server: CUSTOM_SERVER, expectedLabel: "MCP$TEST_ERROR_CONNECTION" },
+  ])(
+    "labels a $server.type connection failure with transport-specific copy",
+    async ({ server, expectedLabel }) => {
+      vi.spyOn(McpService, "testServer").mockResolvedValue({
+        ok: false,
+        error: "Client failed to connect",
+        error_kind: "connection",
+      });
+      renderCard(server);
+
+      fireEvent.click(probeButton(server.id));
+
+      // i18n keys are returned as-is in tests.
+      await waitFor(() =>
+        expect(screen.getByTestId(`mcp-health-label-${server.id}`)).toHaveTextContent(
+          expectedLabel,
+        ),
+      );
+    },
+  );
+
+  it("renders the health section for remote servers on cloud backends", () => {
     setRegisteredBackends([
       {
         id: "cloud-1",
@@ -166,7 +198,27 @@ describe("InstalledServerCard connection health", () => {
     renderCard(CUSTOM_SERVER);
 
     expect(
-      screen.queryByTestId(`mcp-server-health-${CUSTOM_SERVER.id}`),
+      screen.getByTestId(`mcp-server-health-${CUSTOM_SERVER.id}`),
+    ).toBeInTheDocument();
+    expect(probeButton(CUSTOM_SERVER.id)).toBeInTheDocument();
+  });
+
+  it("renders no health section for stdio servers on cloud backends", () => {
+    setRegisteredBackends([
+      {
+        id: "cloud-1",
+        name: "Cloud",
+        host: "https://app.all-hands.dev",
+        apiKey: "k",
+        kind: "cloud",
+      },
+    ]);
+    setActiveSelection({ backendId: "cloud-1" });
+
+    renderCard(STDIO_SERVER);
+
+    expect(
+      screen.queryByTestId(`mcp-server-health-${STDIO_SERVER.id}`),
     ).not.toBeInTheDocument();
   });
 

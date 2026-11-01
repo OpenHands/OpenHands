@@ -75,9 +75,13 @@ AUTH MODES:
 
 OPTIONS:
   -p, --port <port>     Ingress port (default: 8000)
+  -H, --host <host>     Bind address (default: 127.0.0.1). Use 0.0.0.0
+                        or :: to listen on all interfaces; the session
+                        key is then not injected into HTML.
   --public              Enable public mode (see above)
   --frontend-only       Start only the static frontend behind ingress
   --backend-only        Start only agent-server + automation behind ingress
+  --allow-lan-session-key  Inject the session key on a non-loopback bind (opt-in)
   -v, --version         Show version number
   --info                Show version and default stack configuration
   -h, --help            Show this help message
@@ -86,10 +90,12 @@ ENVIRONMENT VARIABLES:
   LOCAL_BACKEND_API_KEY        API key for the server. Required in --public
                                mode; optional otherwise (auto-generated if
                                omitted, persisted across restarts).
+  OH_BIND_HOST                 Bind address for ingress/static (default: 127.0.0.1)
   OH_SECRET_KEY                Secret key for encrypting settings
   OH_AGENT_SERVER_GIT_REF      Git ref for agent-server
   OH_AGENT_SERVER_LOCAL_PATH   Path to local SDK checkout (for development)
   OH_AGENT_SERVER_VERSION      Specific PyPI version for agent-server
+  UV_PYTHON                    Python version/range for uvx-run services
 
 Note: LLM settings are configured through the web UI settings page,
 not environment variables.
@@ -166,7 +172,7 @@ main({
   isPublic,
 }).catch((err) => {
   console.error(`Fatal error: ${err.message}`);
-  if (err.stack) {
+  if (err.stack && err.code !== "EADDRINUSE") {
     console.error(err.stack);
   }
   process.exit(1);

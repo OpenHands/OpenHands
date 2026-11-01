@@ -2,6 +2,10 @@ import { useState } from "react";
 import { useAutomationSubPageNav } from "#/components/features/automations/dashboard/use-automation-sub-page-nav";
 import { RecommendedAutomationsLauncher } from "#/components/features/automations/recommended-automations-launcher";
 import { SearchInput } from "#/components/features/automations/search-input";
+import {
+  EMPTY_TEMPLATE_FILTERS,
+  type TemplateFilters,
+} from "#/components/features/automations/template-filter-chips";
 import { ManifestSubpageLayout } from "#/components/features/manifest/manifest-subpage-layout";
 import { getTemplatesPageSpec } from "#/manifests/automation-interface";
 
@@ -19,6 +23,9 @@ export const clientLoader = () => {
 
 export default function AutomationTemplates() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [filters, setFilters] = useState<TemplateFilters>(
+    EMPTY_TEMPLATE_FILTERS,
+  );
   const spec = getTemplatesPageSpec();
   const nav = useAutomationSubPageNav();
 
@@ -37,7 +44,12 @@ export default function AutomationTemplates() {
       <div className="w-full">
         <SearchInput value={searchQuery} onChange={setSearchQuery} />
       </div>
-      <RecommendedAutomationsLauncher query={searchQuery} />
+      <RecommendedAutomationsLauncher
+        query={searchQuery}
+        onClearQuery={() => setSearchQuery("")}
+        filters={filters}
+        onFiltersChange={setFilters}
+      />
     </ManifestSubpageLayout>
   );
 }

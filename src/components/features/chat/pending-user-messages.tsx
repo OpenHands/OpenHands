@@ -22,7 +22,11 @@ import { ChatMessage } from "./chat-message";
  * active conversation, so switching conversations never carries pending
  * bubbles over.
  */
-export function PendingUserMessages() {
+export function PendingUserMessages({
+  pendingLabel,
+}: {
+  pendingLabel?: string;
+} = {}) {
   const { t } = useTranslation("openhands");
   const { conversationId } = useOptionalConversationId();
   const pendingMessages = useOptimisticUserMessageStore(
@@ -110,7 +114,10 @@ export function PendingUserMessages() {
           key={message.id}
           type="user"
           message={message.text}
-          pendingStatus={message.status}
+          pendingStatus={
+            conversationId?.startsWith("task-") ? undefined : message.status
+          }
+          pendingLabel={pendingLabel}
           onRetry={
             message.status === "error"
               ? () => handleRetry(message.id)

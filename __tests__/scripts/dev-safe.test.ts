@@ -23,18 +23,22 @@ import {
   buildAgentServerEnv,
   buildAgentServerTelemetryEnv,
   buildRuntimeServicesInfo,
+  buildUvxPythonArgs,
   formatMissingUvxGuidance,
   formatMissingFrontendDependenciesGuidance,
   getMissingFrontendDependencyBins,
+  getViteSessionApiKey,
   validateFrontendDependencies,
   validateLocalAgentServerPath,
   findFreePort,
   findFreePorts,
   getOrCreatePersistedSessionApiKey,
   resetPersistedSessionApiKeyCache,
+  resolveExtensionsDir,
 } from "../../scripts/dev-safe.mjs";
 import {
   chmodSync,
+  existsSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
@@ -385,6 +389,25 @@ describe("formatMissingUvxGuidance", () => {
 });
 
 describe("buildAgentServerTelemetryEnv", () => {
+  const agentServerConfig = {
+    cwd: "/tmp/cwd",
+    backendPort: 18000,
+    tmuxTmpDir: "/tmp/tmux",
+    stateDir: "/tmp/state",
+    conversationsPath: "/tmp/conversations",
+    workspacesPath: "/tmp/workspaces",
+    bashEventsDir: "/tmp/bash-events",
+    vscodePort: 19000,
+    vscodeBasePath: "/vscode",
+    secretKey: "secret",
+    sessionApiKey: "session",
+    backendBaseUrl: "http://127.0.0.1:18000",
+    backendHost: "127.0.0.1:18000",
+    workingDir: "/tmp/workspaces",
+    canvasToolsDir: "/tmp/tools",
+    extensionsDir: "/tmp/node_modules/@openhands/extensions",
+  };
+
   it("configures PostHog telemetry by default without seeding consent", () => {
     expect(buildAgentServerTelemetryEnv({})).toEqual({
       OH_TELEMETRY_EXPORTER: "posthog",
@@ -432,31 +455,82 @@ describe("buildAgentServerTelemetryEnv", () => {
   });
 
   it("includes telemetry defaults in the full agent-server environment", () => {
-    const env = buildAgentServerEnv(
-      {
-        cwd: "/tmp/cwd",
-        backendPort: 18000,
-        tmuxTmpDir: "/tmp/tmux",
-        stateDir: "/tmp/state",
-        conversationsPath: "/tmp/conversations",
-        workspacesPath: "/tmp/workspaces",
-        bashEventsDir: "/tmp/bash-events",
-        vscodePort: 19000,
-        vscodeBasePath: "/vscode",
-        secretKey: "secret",
-        sessionApiKey: "session",
-        backendBaseUrl: "http://127.0.0.1:18000",
-        backendHost: "127.0.0.1:18000",
-        workingDir: "/tmp/workspaces",
-        canvasToolsDir: "/tmp/tools",
-      },
-      { env: {} },
-    );
+    const env = buildAgentServerEnv(agentServerConfig, { env: {} });
 
     expect(env).toMatchObject({
       OH_TELEMETRY_EXPORTER: "posthog",
       OH_SESSION_API_KEYS_0: "session",
     });
+  });
+
+  it("forwards configured Docker conversation runtime settings", () => {
+    const configured = buildAgentServerEnv(agentServerConfig, {
+      env: {
+        OH_CONVERSATION_RUNTIME: "docker",
+        OH_CONVERSATION_IMAGE: "agent-server:test",
+        OH_CONVERSATION_IMAGE_HAS_BROWSER: "true",
+        OH_CONVERSATION_CONTAINER_MEMORY: "2g",
+        OH_CONVERSATION_CONTAINER_CPUS: "1",
+        OH_CONVERSATION_CONTAINER_PIDS_LIMIT: "256",
+        OH_CONVERSATION_CONTAINER_STARTUP_TIMEOUT: "180",
+      },
+    });
+
+    expect(configured).toMatchObject({
+      OH_CONVERSATION_RUNTIME: "docker",
+      OH_CONVERSATION_IMAGE: "agent-server:test",
+      OH_CONVERSATION_IMAGE_HAS_BROWSER: "true",
+      OH_CONVERSATION_CONTAINER_MEMORY: "2g",
+      OH_CONVERSATION_CONTAINER_CPUS: "1",
+      OH_CONVERSATION_CONTAINER_PIDS_LIMIT: "256",
+      OH_CONVERSATION_CONTAINER_STARTUP_TIMEOUT: "180",
+    });
+    expect(
+      buildAgentServerEnv(agentServerConfig, { env: {} }),
+    ).not.toHaveProperty("OH_CONVERSATION_RUNTIME");
+  });
+
+  it("turns the browser off on the agent-server when browser tools are disabled", () => {
+    expect(
+      buildAgentServerEnv(agentServerConfig, {
+        env: { VITE_ENABLE_BROWSER_TOOLS: "false" },
+      }),
+    ).toMatchObject({ OH_ENABLE_BROWSER: "false" });
+    expect(
+      buildAgentServerEnv(agentServerConfig, { env: {} }),
+    ).not.toHaveProperty("OH_ENABLE_BROWSER");
+  });
+
+  it("points the agent-server at the installed extensions package", () => {
+    expect(
+      buildAgentServerEnv(agentServerConfig, { env: {} }).EXTENSIONS_PATH,
+    ).toBe("/tmp/node_modules/@openhands/extensions");
+    expect(
+      buildAgentServerEnv(agentServerConfig, {
+        env: { EXTENSIONS_PATH: "/custom/extensions" },
+      }).EXTENSIONS_PATH,
+    ).toBe("/custom/extensions");
+    expect(
+      buildAgentServerEnv(
+        { ...agentServerConfig, extensionsDir: null },
+        { env: {} },
+      ),
+    ).not.toHaveProperty("EXTENSIONS_PATH");
+  });
+
+  it("resolves the extensions package that ships the public skills", () => {
+    const dir = resolveExtensionsDir();
+
+    expect(dir).not.toBeNull();
+    expect(existsSync(path.join(dir as string, "skills"))).toBe(true);
+  });
+
+  it("keeps an explicit OH_ENABLE_BROWSER when browser tools are disabled", () => {
+    expect(
+      buildAgentServerEnv(agentServerConfig, {
+        env: { VITE_ENABLE_BROWSER_TOOLS: "false", OH_ENABLE_BROWSER: "true" },
+      }),
+    ).toMatchObject({ OH_ENABLE_BROWSER: "true" });
   });
 });
 
@@ -467,23 +541,23 @@ describe("buildAgentServerCommand", () => {
     expect(cmd.command).toBe("uvx");
     // Defaults to the released PyPI version with all SDK packages pinned to same version
     expect(cmd.args).toEqual([
+      "--python",
+      ">=3.12,<3.15",
       "--from",
-      "openhands-agent-server==1.44.1",
+      "openhands-agent-server==1.59.0",
       "--with",
-      "openhands-sdk==1.44.1",
+      "openhands-sdk==1.59.0",
       "--with",
-      "openhands-tools==1.44.1",
+      "openhands-tools==1.59.0",
       "--with",
-      "openhands-workspace==1.44.1",
-      "--with",
-      "agent-client-protocol<0.11",
+      "openhands-workspace==1.59.0",
       "--with",
       "posthog>=6,<7",
       "agent-server",
       "--import-modules",
       "canvas_ui_tool",
     ]);
-    expect(cmd.source).toBe("PyPI (1.44.1, default)");
+    expect(cmd.source).toBe("PyPI (1.59.0, default)");
   });
 
   it("uses specific PyPI version when OH_AGENT_SERVER_VERSION is set with all packages pinned", () => {
@@ -493,6 +567,8 @@ describe("buildAgentServerCommand", () => {
     // Uses --from syntax because executable name (agent-server) differs from package name (openhands-agent-server)
     // All SDK packages are pinned to the same version
     expect(cmd.args).toEqual([
+      "--python",
+      ">=3.12,<3.15",
       "--from",
       "openhands-agent-server==1.18.0",
       "--with",
@@ -501,8 +577,6 @@ describe("buildAgentServerCommand", () => {
       "openhands-tools==1.18.0",
       "--with",
       "openhands-workspace==1.18.0",
-      "--with",
-      "agent-client-protocol<0.11",
       "--with",
       "posthog>=6,<7",
       "agent-server",
@@ -519,6 +593,8 @@ describe("buildAgentServerCommand", () => {
 
     expect(cmd.command).toBe("uvx");
     expect(cmd.args).toEqual([
+      "--python",
+      ">=3.12,<3.15",
       "--reinstall",
       "--from",
       "git+https://github.com/OpenHands/software-agent-sdk@feature-branch#subdirectory=openhands-agent-server",
@@ -542,6 +618,8 @@ describe("buildAgentServerCommand", () => {
 
     expect(cmd.command).toBe("uvx");
     expect(cmd.args).toEqual([
+      "--python",
+      ">=3.12,<3.15",
       "--reinstall",
       "--from",
       "git+https://github.com/OpenHands/software-agent-sdk@abc1234#subdirectory=openhands-agent-server",
@@ -580,6 +658,8 @@ describe("buildAgentServerCommand", () => {
 
     expect(cmd.command).toBe("uvx");
     expect(cmd.args).toEqual([
+      "--python",
+      ">=3.12,<3.15",
       "--reinstall",
       "--from",
       path.join(sdk, "openhands-agent-server"),
@@ -644,6 +724,37 @@ describe("buildAgentServerCommand", () => {
   });
 });
 
+describe("buildUvxPythonArgs", () => {
+  const defaults = JSON.parse(
+    readFileSync(
+      path.resolve(
+        path.dirname(fileURLToPath(import.meta.url)),
+        "../../config/defaults.json",
+      ),
+      "utf-8",
+    ),
+  ) as { python: { uvxRequest: string } };
+
+  it("requests the Python range from config/defaults.json by default", () => {
+    // Without it uvx downloads the newest CPython on a machine that has none,
+    // which fails until the SDK's compiled dependencies ship wheels for it
+    // (#18654).
+    expect(defaults.python.uvxRequest).toBe(">=3.12,<3.15");
+    expect(buildUvxPythonArgs({})).toEqual([
+      "--python",
+      defaults.python.uvxRequest,
+    ]);
+  });
+
+  it("leaves the interpreter choice to uv when UV_PYTHON is set", () => {
+    // An explicit --python would outrank uv's own variable.
+    expect(buildUvxPythonArgs({ UV_PYTHON: "3.13" })).toEqual([]);
+    const { args } = buildAgentServerCommand({ UV_PYTHON: "3.13" });
+    expect(args).not.toContain("--python");
+    expect(args[0]).toBe("--from");
+  });
+});
+
 describe("validateLocalAgentServerPath", () => {
   it("passes when all four workspace packages exist", () => {
     const tmp = mkdtempSync(path.join(tmpdir(), "sdk-"));
@@ -686,6 +797,20 @@ describe("validateLocalAgentServerPath", () => {
   it("throws when given a relative path", () => {
     expect(() => validateLocalAgentServerPath("./sdk")).toThrow(
       /must be an absolute path/,
+    );
+  });
+});
+
+describe("getViteSessionApiKey", () => {
+  it("only injects the key on loopback listeners", () => {
+    const config = { sessionApiKey: "local-secret" };
+
+    expect(getViteSessionApiKey(config, {})).toBe("local-secret");
+    expect(getViteSessionApiKey(config, { VITE_BIND_HOST: "127.0.0.1" })).toBe(
+      "local-secret",
+    );
+    expect(getViteSessionApiKey(config, { VITE_BIND_HOST: "0.0.0.0" })).toBe(
+      "",
     );
   });
 });

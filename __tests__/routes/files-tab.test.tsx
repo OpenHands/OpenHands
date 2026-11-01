@@ -1,12 +1,19 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { compile } from "@tailwindcss/node";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { MemoryRouter } from "react-router";
 
 import FilesTab from "#/routes/files-tab";
+import { downloadBlob } from "#/utils/utils";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { useFilesTabStore } from "#/stores/files-tab-store";
+import { useWorkspaceMutationCounter } from "#/stores/use-workspace-mutation-counter";
 import { NavigationProvider } from "#/context/navigation-context";
+import { FILES_TAB_TREE_WIDTH_STORAGE_KEY } from "#/components/features/files-tab/files-tab-tree.constants";
 import {
   LOCAL_STORAGE_KEYS,
   setConversationState,
@@ -28,6 +35,16 @@ vi.mock("#/hooks/query/use-workspace-file-content", () => ({
 
 vi.mock("#/hooks/query/use-active-conversation", () => ({
   useActiveConversation: () => useActiveConversationMock(),
+}));
+
+vi.mock("#/utils/utils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#/utils/utils")>()),
+  downloadBlob: vi.fn(),
+}));
+
+vi.mock("#/utils/custom-toast-handlers", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#/utils/custom-toast-handlers")>()),
+  displayErrorToast: vi.fn(),
 }));
 
 function renderTab(conversationId: string | null = null) {
@@ -56,6 +73,25 @@ function openFile(path: string, conversationId: string | null = null) {
   useFilesTabStore.getState().setSelectedPath(path, conversationId);
 }
 
+// Follow the rendered classes into production Tailwind CSS instead of assuming
+// the utility name or custom property that connects the reader to the writer.
+async function getTreeWidthProperty(tree: HTMLElement) {
+  const compiler = await compile(
+    await readFile(resolve("src/tailwind.css"), "utf8"),
+    { base: resolve("src"), onDependency: () => {} },
+  );
+  const css = compiler.build([...tree.classList]);
+  const declarations = [...css.matchAll(/\.((?:\\.|[\w-])+)\s*\{([^}]+)\}/g)]
+    .filter(([, selector]) =>
+      tree.classList.contains(selector.replace(/\\(.)/g, "$1")),
+    )
+    .map(([, , body]) => body)
+    .join("\n");
+  const width = /(?:^|\n)\s*width:\s*var\((--[\w-]+)\);/.exec(declarations);
+  expect(width).not.toBeNull();
+  return width![1];
+}
+
 describe("FilesTab", () => {
   beforeEach(() => {
     useFilesTabStore.setState({
@@ -63,6 +99,7 @@ describe("FilesTab", () => {
       selectedConversationId: null,
       openPaths: [],
     });
+    useWorkspaceMutationCounter.setState({ count: 0 });
     localStorage.clear();
 
     useWorkspaceFilesMock.mockReset();
@@ -102,6 +139,19 @@ describe("FilesTab", () => {
     expect(
       screen.queryByTestId("files-tab-diff-toggle"),
     ).not.toBeInTheDocument();
+  });
+
+  // @spec WFD-001 — Configurable local workspace discovery
+  it("shows an incomplete-tree message when discovery is truncated", () => {
+    useWorkspaceFilesMock.mockReturnValue({
+      data: ["a.txt", "b.txt"],
+      isLoading: false,
+      isTruncated: true,
+    });
+    renderTab();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "FILES$DISCOVERY_TRUNCATED",
+    );
   });
 
   it("does not open file tabs until a file is selected", () => {
@@ -202,31 +252,74 @@ describe("FilesTab", () => {
     expect(tab).toHaveAttribute("role", "tab");
   });
 
-  it("shows the file tree by default and collapses it via the caret", async () => {
+  it("retains resized pixel widths through clamps, collapse and remount", async () => {
+    // Arrange: the real resize hook measures the layout's left edge.
     const user = userEvent.setup();
+    openFile("README.md");
+    const view = renderTab();
+    const tree = screen.getByTestId("files-tab-tree");
+    const widthProperty = await getTreeWidthProperty(tree);
+    vi.spyOn(tree.parentElement!, "getBoundingClientRect").mockReturnValue(
+      DOMRect.fromRect({ x: 100, y: 0, width: 1000, height: 600 }),
+    );
+    const handle = screen.getByTestId("files-tab-tree-resize-handle");
 
-    renderTab();
+    // Act + Assert: pointer coordinates update pixel width and both clamps.
+    fireEvent.mouseDown(handle.firstElementChild!);
+    expect(document.querySelector("[data-panel-drag-shield]")).not.toBeNull();
+    for (const [clientX, expectedWidth] of [
+      [424, 324],
+      [1000, 480],
+      [100, 160],
+      [424, 324],
+    ]) {
+      fireEvent.mouseMove(document, { clientX });
+      expect(tree.style.getPropertyValue(widthProperty)).toBe(
+        `${expectedWidth}px`,
+      );
+    }
+    fireEvent.mouseUp(document);
+    expect(document.querySelector("[data-panel-drag-shield]")).toBeNull();
+    expect(
+      JSON.parse(localStorage.getItem(FILES_TAB_TREE_WIDTH_STORAGE_KEY)!),
+    ).toBe(324);
 
-    expect(screen.getByTestId("files-tab-tree")).toBeInTheDocument();
-
+    // Collapse/restore and a new mount retain width and the selected file.
     await user.click(screen.getByTestId("file-quick-row-tree-toggle"));
     expect(screen.queryByTestId("files-tab-tree")).not.toBeInTheDocument();
-
+    expect(
+      screen.queryByTestId("files-tab-tree-resize-handle"),
+    ).not.toBeInTheDocument();
     await user.click(screen.getByTestId("file-quick-row-tree-toggle"));
-    expect(screen.getByTestId("files-tab-tree")).toBeInTheDocument();
+    expect(
+      screen
+        .getByTestId("files-tab-tree")
+        .style.getPropertyValue(widthProperty),
+    ).toBe("324px");
+    view.unmount();
+    renderTab();
+    expect(
+      screen
+        .getByTestId("files-tab-tree")
+        .style.getPropertyValue(widthProperty),
+    ).toBe("324px");
+    expect(screen.getByRole("tab", { selected: true })).toHaveTextContent(
+      "README.md",
+    );
   });
 
-  it("exposes a grippable resize handle on the tree's right edge when expanded", () => {
-    window.localStorage.clear();
-
+  it("applies the default tree width through a compiled CSS reader", async () => {
+    // Arrange + Act
     renderTab();
+    const tree = screen.getByTestId("files-tab-tree");
+    const widthProperty = await getTreeWidthProperty(tree);
 
+    // Assert: native CSS consumes a px value without host spacing/font tokens.
+    expect(tree.style.width).toBe("");
+    expect(tree.style.getPropertyValue(widthProperty)).toBe("224px");
     expect(
       screen.getByTestId("files-tab-tree-resize-handle"),
     ).toBeInTheDocument();
-    expect(screen.getByTestId("files-tab-tree")).toHaveStyle({
-      width: "224px",
-    });
   });
 
   it("opens a tab from the file tree when a file is clicked", async () => {
@@ -334,6 +427,47 @@ describe("FilesTab", () => {
     const iframe = await screen.findByTestId("file-content-viewer-iframe");
     expect(iframe).toHaveAttribute("src", `${staticUrl}?v=0`);
     expect(iframe).toHaveAttribute("sandbox", "allow-same-origin");
+  });
+
+  it("re-requests the rich preview and the new-window link on Refresh", async () => {
+    useWorkspaceFilesMock.mockReturnValue({
+      data: ["index.html"],
+      isLoading: false,
+    });
+    const staticUrl =
+      "https://agent.example.com/api/conversations/conv-1/workspace/index.html";
+    useWorkspaceFileContentMock.mockReturnValue({
+      data: {
+        path: "index.html",
+        kind: "text",
+        text: "<!doctype html><body>hi</body>",
+        staticUrl,
+        mimeType: "text/html",
+      },
+      isLoading: false,
+      isError: false,
+    });
+    const user = userEvent.setup();
+
+    openFile("index.html");
+    renderTab();
+    const iframe = await screen.findByTestId("file-content-viewer-iframe");
+    const srcBefore = iframe.getAttribute("src");
+
+    await user.click(screen.getByTestId("files-tab-refresh"));
+
+    // A new URL is the only way to make an <iframe>/<img> skip a cached
+    // response, so Refresh must change it (#17921).
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("file-content-viewer-iframe").getAttribute("src"),
+      ).not.toBe(srcBefore);
+    });
+    expect(
+      screen.getByTestId("files-tab-open-in-new-window").getAttribute("href"),
+    ).toBe(
+      screen.getByTestId("file-content-viewer-iframe").getAttribute("src"),
+    );
   });
 
   it("switches between rich and plain content modes", async () => {
@@ -456,6 +590,116 @@ describe("FilesTab", () => {
     );
   });
 
+  // Cloud backends hand back the file as a `data:` URL, which browsers refuse
+  // to open as a top-level page (OHE-3735).
+  describe("open in new window on a Cloud backend", () => {
+    const createObjectURL = vi.fn();
+    const revokeObjectURL = vi.fn();
+
+    function cloudMarkdownFile(text: string) {
+      return {
+        data: {
+          path: "README.md",
+          kind: "text",
+          text,
+          staticUrl: `data:text/markdown;charset=utf-8;base64,${btoa(text)}`,
+          mimeType: "text/markdown",
+        },
+        isLoading: false,
+        isError: false,
+      };
+    }
+
+    beforeEach(() => {
+      let created = 0;
+      createObjectURL.mockReset().mockImplementation(() => {
+        created += 1;
+        return `blob:http://localhost/file-${created}`;
+      });
+      revokeObjectURL.mockReset();
+      // jsdom does not implement object URLs.
+      vi.stubGlobal(
+        "URL",
+        class extends URL {
+          static createObjectURL = createObjectURL;
+
+          static revokeObjectURL = revokeObjectURL;
+        },
+      );
+    });
+
+    it("opens the file's text as plain text", async () => {
+      // Arrange
+      useWorkspaceFileContentMock.mockReturnValue(
+        cloudMarkdownFile("# Hello\n\nSome **bold** text"),
+      );
+
+      // Act
+      openFile("README.md");
+      renderTab();
+
+      // Assert
+      const link = await screen.findByTestId("files-tab-open-in-new-window");
+      expect(link).toHaveAttribute("href", "blob:http://localhost/file-1");
+      const blob: Blob = createObjectURL.mock.calls[0][0];
+      expect(blob.type).toBe("text/plain;charset=utf-8");
+      await expect(blob.text()).resolves.toBe("# Hello\n\nSome **bold** text");
+    });
+
+    it("opens the current file body after Refresh", async () => {
+      // Arrange
+      useWorkspaceFileContentMock.mockReturnValue(cloudMarkdownFile("# Old"));
+      const user = userEvent.setup();
+      openFile("README.md");
+      renderTab();
+      await screen.findByTestId("files-tab-open-in-new-window");
+      useWorkspaceFileContentMock.mockReturnValue(cloudMarkdownFile("# New"));
+
+      // Act
+      await user.click(screen.getByTestId("files-tab-refresh"));
+
+      // Assert
+      await waitFor(() => {
+        expect(
+          screen.getByTestId("files-tab-open-in-new-window"),
+        ).toHaveAttribute("href", "blob:http://localhost/file-2");
+      });
+      await expect(createObjectURL.mock.calls[1][0].text()).resolves.toBe(
+        "# New",
+      );
+      expect(revokeObjectURL).toHaveBeenCalledWith(
+        "blob:http://localhost/file-1",
+      );
+    });
+
+    it("offers no link for a file without decoded text", () => {
+      // Arrange
+      useWorkspaceFileContentMock.mockReturnValue({
+        data: {
+          path: "logo.png",
+          kind: "image",
+          text: null,
+          staticUrl: "data:image/png;base64,iVBORw0KGgo=",
+          mimeType: "image/png",
+        },
+        isLoading: false,
+        isError: false,
+      });
+
+      // Act
+      openFile("logo.png");
+      renderTab();
+
+      // Assert
+      expect(
+        screen.getByTestId("files-tab-content-mode-toggle"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("files-tab-open-in-new-window"),
+      ).not.toBeInTheDocument();
+    });
+  });
+
   describe("conversation switching", () => {
     it("ignores a stale selection from another conversation", async () => {
       useFilesTabStore.setState({
@@ -544,6 +788,186 @@ describe("FilesTab", () => {
       expect(useFilesTabStore.getState().openPaths).toEqual([]);
       expect(useFilesTabStore.getState().selectedConversationId).toBe("conv-b");
       expect(useWorkspaceFileContentMock).not.toHaveBeenCalledWith("demo.html");
+    });
+  });
+
+  // Save the selected file to the user's machine (OHE-3834). Local backends
+  // download the fileserver bytes; Cloud backends only hold decoded text.
+  describe("Download", () => {
+    const fetchMock = vi.fn();
+
+    function cloudTextFile(text: string) {
+      return {
+        data: {
+          path: "docs/README.md",
+          kind: "text",
+          text,
+          staticUrl: `data:text/markdown;charset=utf-8;base64,${btoa(text)}`,
+          mimeType: "text/markdown",
+        },
+        isLoading: false,
+        isError: false,
+      };
+    }
+
+    beforeEach(() => {
+      vi.stubGlobal("fetch", fetchMock);
+      fetchMock.mockReset();
+      // jsdom does not implement object URLs, which the new-window link needs.
+      vi.stubGlobal(
+        "URL",
+        class extends URL {
+          static createObjectURL = () => "blob:http://localhost/file";
+
+          static revokeObjectURL = () => {};
+        },
+      );
+      vi.mocked(downloadBlob).mockClear();
+      vi.mocked(displayErrorToast).mockClear();
+    });
+
+    it("saves a local file's bytes from the workspace fileserver under its own name", async () => {
+      // Arrange
+      const staticUrl =
+        "http://localhost:3000/api/conversations/c1/workspace/assets/logo.png";
+      useWorkspaceFileContentMock.mockReturnValue({
+        data: {
+          path: "assets/logo.png",
+          kind: "image",
+          text: null,
+          staticUrl,
+          mimeType: "image/png",
+        },
+        isLoading: false,
+        isError: false,
+      });
+      const bytes = new Uint8Array([137, 80, 78, 71, 0, 13]);
+      fetchMock.mockResolvedValue({
+        ok: true,
+        blob: async () => new Blob([bytes], { type: "image/png" }),
+      });
+      const user = userEvent.setup();
+      openFile("assets/logo.png");
+      renderTab();
+
+      // Act
+      await user.click(screen.getByTestId("files-tab-download"));
+
+      // Assert
+      await waitFor(() => expect(downloadBlob).toHaveBeenCalledOnce());
+      expect(fetchMock).toHaveBeenCalledWith(staticUrl, {
+        credentials: "include",
+        cache: "no-cache",
+      });
+      const [blob, filename] = vi.mocked(downloadBlob).mock.calls[0];
+      expect(filename).toBe("logo.png");
+      expect(blob.type).toBe("image/png");
+      expect(new Uint8Array(await blob.arrayBuffer())).toEqual(bytes);
+    });
+
+    it("saves a Cloud text file from its decoded text with the file's MIME type", async () => {
+      // Arrange
+      useWorkspaceFileContentMock.mockReturnValue(cloudTextFile("# Hello"));
+      const user = userEvent.setup();
+      openFile("docs/README.md");
+      renderTab();
+
+      // Act
+      await user.click(screen.getByTestId("files-tab-download"));
+
+      // Assert
+      await waitFor(() => expect(downloadBlob).toHaveBeenCalledOnce());
+      expect(fetchMock).not.toHaveBeenCalled();
+      const [blob, filename] = vi.mocked(downloadBlob).mock.calls[0];
+      expect(filename).toBe("README.md");
+      expect(blob.type).toBe("text/markdown;charset=utf-8");
+      await expect(blob.text()).resolves.toBe("# Hello");
+    });
+
+    it("saves the current Cloud file body after Refresh", async () => {
+      // Arrange
+      useWorkspaceFileContentMock.mockReturnValue(cloudTextFile("# Old"));
+      const user = userEvent.setup();
+      openFile("docs/README.md");
+      renderTab();
+      useWorkspaceFileContentMock.mockReturnValue(cloudTextFile("# New"));
+
+      // Act
+      await user.click(screen.getByTestId("files-tab-refresh"));
+      await user.click(screen.getByTestId("files-tab-download"));
+
+      // Assert
+      await waitFor(() => expect(downloadBlob).toHaveBeenCalledOnce());
+      await expect(
+        vi.mocked(downloadBlob).mock.calls[0][0].text(),
+      ).resolves.toBe("# New");
+    });
+
+    it("offers no download for a Cloud file without decoded text", () => {
+      // Arrange
+      useWorkspaceFileContentMock.mockReturnValue({
+        data: {
+          path: "logo.png",
+          kind: "image",
+          text: null,
+          staticUrl: "data:image/png;base64,iVBORw0KGgo=",
+          mimeType: "image/png",
+        },
+        isLoading: false,
+        isError: false,
+      });
+
+      // Act
+      openFile("logo.png");
+      renderTab();
+
+      // Assert
+      expect(
+        screen.getByTestId("files-tab-content-mode-toggle"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("files-tab-download"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("offers no download for a file whose read failed", () => {
+      // Arrange
+      useWorkspaceFileContentMock.mockReturnValue({
+        data: undefined,
+        isLoading: false,
+        isError: true,
+        error: new Error("Failed to read README.md: 404"),
+      });
+
+      // Act
+      openFile("README.md");
+      renderTab();
+
+      // Assert
+      expect(
+        screen.getByTestId("file-content-viewer-error"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("files-tab-download"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("shows an error and saves nothing when the local download fails", async () => {
+      // Arrange: the default fixture is a local `index.html`.
+      fetchMock.mockResolvedValue({ ok: false, status: 404 });
+      const user = userEvent.setup();
+      openFile("index.html");
+      renderTab();
+
+      // Act
+      await user.click(screen.getByTestId("files-tab-download"));
+
+      // Assert
+      await waitFor(() =>
+        expect(displayErrorToast).toHaveBeenCalledWith("FILES$DOWNLOAD_ERROR"),
+      );
+      expect(downloadBlob).not.toHaveBeenCalled();
+      expect(screen.getByTestId("files-tab-download")).toBeEnabled();
     });
   });
 });

@@ -21,6 +21,7 @@ interface SkillCardProps {
   enabled: boolean;
   onOpen: () => void;
   onToggle: (enabled: boolean) => void;
+  isToggleDisabled?: boolean;
 }
 
 export function SkillCard({
@@ -28,6 +29,7 @@ export function SkillCard({
   enabled,
   onOpen,
   onToggle,
+  isToggleDisabled = false,
 }: SkillCardProps) {
   const { t } = useTranslation("openhands");
   const [sourceCopied, setSourceCopied] = React.useState(false);
@@ -82,7 +84,7 @@ export function SkillCard({
             <div className="min-w-0 flex-1">
               <h3
                 data-testid={`skill-name-${skill.name}`}
-                className="truncate text-sm font-semibold text-white"
+                className="truncate text-sm font-semibold text-contrast"
               >
                 {skill.name}
               </h3>
@@ -106,7 +108,7 @@ export function SkillCard({
                       )}
                       disabled={sourceCopied}
                       onClick={handleCopySource}
-                      className="shrink-0 cursor-pointer border-0 bg-transparent p-0.5 text-tertiary-alt hover:text-white disabled:cursor-default [&_path]:fill-current"
+                      className="shrink-0 cursor-pointer border-0 bg-transparent p-0.5 text-tertiary-alt hover:text-contrast disabled:cursor-default [&_path]:fill-current"
                     >
                       {sourceCopied ? (
                         <CheckmarkIcon width={12} height={12} />
@@ -122,6 +124,7 @@ export function SkillCard({
               testId={`skill-toggle-${skill.name}`}
               isSelected={enabled}
               onToggle={onToggle}
+              isDisabled={isToggleDisabled}
               disableTooltipKey={I18nKey.COMMON$DISABLE}
             />
           </header>

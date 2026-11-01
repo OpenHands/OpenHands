@@ -118,7 +118,6 @@ vi.mock(
       ...actual,
       useConversationOverviewDrawerOptional: () => ({
         section: null,
-        openAdd: false,
         openSection,
         closeDrawer,
       }),
@@ -149,7 +148,7 @@ describe("ConversationOverviewPanel", () => {
     localStorage.clear();
   });
 
-  it("renders workspace and git changes without MCP, secrets, skills, or automations", () => {
+  it("renders workspace and git changes but no Issues row", () => {
     renderPanel();
 
     expect(screen.getByTestId("conversation-overview-panel")).toBeInTheDocument();
@@ -158,18 +157,6 @@ describe("ConversationOverviewPanel", () => {
       screen.queryByTestId("conversation-overview-git-title"),
     ).not.toBeInTheDocument();
     expect(screen.getByTestId("conversation-overview-diffs")).toBeInTheDocument();
-    expect(
-      screen.queryByTestId("conversation-overview-mcp"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByTestId("conversation-overview-automations"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByTestId("conversation-overview-skills"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByTestId("conversation-overview-secrets"),
-    ).not.toBeInTheDocument();
     expect(
       screen.queryByTestId("conversation-overview-issues"),
     ).not.toBeInTheDocument();
@@ -212,6 +199,21 @@ describe("ConversationOverviewPanel", () => {
     expect(openSection).toHaveBeenCalledWith(
       CONVERSATION_OVERVIEW_DRAWER_SECTION.pull_requests,
     );
+  });
+
+  it("closes the overflow menu with Escape and returns focus to its trigger", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+    const trigger = screen.getByTestId("conversation-overview-ellipsis");
+
+    await user.click(trigger);
+    screen.getByTestId("conversation-overview-menu-pin-git").focus();
+    await user.keyboard("{Escape}");
+
+    expect(
+      screen.queryByTestId("conversation-overview-context-menu"),
+    ).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
   });
 
   it("lets users pin and unpin git changes from the overflow menu", async () => {

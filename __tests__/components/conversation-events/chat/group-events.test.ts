@@ -10,6 +10,7 @@ import {
   MessageEvent,
   ObservationEvent,
   SecurityRisk,
+  UserRejectObservation,
 } from "#/types/agent-server/core";
 import { TextContent } from "#/types/agent-server/core/base/common";
 import {
@@ -167,6 +168,19 @@ const makeAgentErrorEvent = (id: string): AgentErrorEvent => ({
   error: "boom",
 });
 
+const makeUserRejectObservation = (
+  id: string,
+  actionId: string,
+): UserRejectObservation => ({
+  id,
+  timestamp: new Date().toISOString(),
+  source: "environment",
+  tool_name: "execute_bash",
+  tool_call_id: `call_${actionId}`,
+  action_id: actionId,
+  rejection_reason: "User rejected the action",
+});
+
 const makeHookExecutionEvent = (id: string): HookExecutionEvent => ({
   id,
   timestamp: new Date().toISOString(),
@@ -253,8 +267,17 @@ describe("isGroupableEvent", () => {
     expect(isGroupableEvent(makeAgentErrorEvent("e1"))).toBe(false);
   });
 
-  it("does not group HookExecutionEvent", () => {
-    expect(isGroupableEvent(makeHookExecutionEvent("h1"))).toBe(false);
+  it("groups a successful hook run", () => {
+    expect(isGroupableEvent(makeHookExecutionEvent("h1"))).toBe(true);
+  });
+
+  it("keeps blocked and failed hook runs out of groups", () => {
+    expect(
+      isGroupableEvent({ ...makeHookExecutionEvent("h1"), blocked: true }),
+    ).toBe(false);
+    expect(
+      isGroupableEvent({ ...makeHookExecutionEvent("h2"), success: false }),
+    ).toBe(false);
   });
 });
 
@@ -265,6 +288,25 @@ describe("groupEvents", () => {
 
   it("requires minSize to be at least 1", () => {
     expect(() => groupEvents([], 0)).toThrow("minSize must be at least 1");
+  });
+
+  it("groups a lone trailing step when the trailing size allows it", () => {
+    const events = [
+      makeUserMessage("m1"),
+      makeBashObservation("o1", "a1"),
+      makeUserMessage("m2"),
+      makeBashAction("a2"),
+    ];
+
+    // The earlier lone step keeps the normal minimum; only the last run
+    // (the stage the agent is on) uses the trailing size.
+    const result = groupEvents(events, undefined, events, 1);
+    expect(result.map((item) => item.kind)).toEqual([
+      "single",
+      "single",
+      "single",
+      "group",
+    ]);
   });
 
   it("emits singles when there are not enough actions in a row", () => {
@@ -335,6 +377,41 @@ describe("groupEvents", () => {
     if (result[0].kind === "group") {
       expect(result[0].events).toHaveLength(3);
     }
+  });
+
+  it("keeps a rejected action in its group", () => {
+    const events = [
+      makeBashObservation("o1", "a1"),
+      makeUserRejectObservation("r2", "a2"),
+    ];
+
+    const result = groupEvents(events);
+
+    expect(result).toEqual([{ kind: "group", events, startIndex: 0 }]);
+  });
+
+  it("keeps a rejected markdown create outside the group", () => {
+    const action = makeMarkdownFileEditorAction("a2");
+    const events = [
+      makeBashObservation("o1", "a1"),
+      makeUserRejectObservation("r2", "a2"),
+    ];
+
+    const result = groupEvents(events, undefined, [action, ...events]);
+
+    expect(result.map((item) => item.kind)).toEqual(["single", "single"]);
+  });
+
+  it("hoists the thought of a rejected action", () => {
+    const action = makeBashAction("a1", [{ type: "text", text: "Let me try" }]);
+    const rejection = makeUserRejectObservation("r1", "a1");
+
+    const result = groupEvents([rejection], undefined, [action, rejection]);
+
+    expect(result).toEqual([
+      { kind: "thought", action, index: 0 },
+      { kind: "single", event: rejection, index: 0 },
+    ]);
   });
 
   it("breaks the group when a non-groupable event interrupts", () => {

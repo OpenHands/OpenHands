@@ -116,6 +116,226 @@ describe("getACPToolCallContent", () => {
     expect(content).toContain('"status": 200');
     expect(content).toContain('"body": "ok"');
   });
+
+  it("fences raw_output with a longer fence when it carries its own code fence", () => {
+    const readme = "# Demo\n\n```bash\nnpm start\n```\n\n## Links";
+    const content = getACPToolCallContent(
+      makeEvent({
+        raw_input: { command: "cat README.md" },
+        raw_output: readme,
+      }),
+    );
+
+    expect(content).toContain(`Output:\n\`\`\`\`\n${readme}\n\`\`\`\``);
+  });
+});
+
+describe("getACPToolCallContent — ACP content blocks", () => {
+  // Captured from agent-server 1.46.0 running claude-agent-acp: the diff only
+  // exists in ``content``; ``raw_output`` is the model-facing tool result.
+  const claudeEdit = makeEvent({
+    tool_call_id: "toolu_01Jw2BG94dFwH8rJazTPZUAw",
+    title: "Edit demo.py",
+    tool_kind: "edit",
+    raw_input: {
+      replace_all: false,
+      file_path: "/workspace/demo.py",
+      old_string: "port = 3000",
+      new_string: "port = 8080",
+    },
+    raw_output:
+      "The file /workspace/demo.py has been updated successfully. (file state is current in your context — no need to Read it back)",
+    content: [
+      {
+        field_meta: null,
+        new_text: "port = 8080",
+        old_text: "port = 3000",
+        path: "/workspace/demo.py",
+        type: "diff",
+      },
+    ],
+  });
+
+  it("renders a diff block under its path instead of the raw input and model-facing output", () => {
+    const content = getACPToolCallContent(claudeEdit);
+
+    expect(content).toBe(
+      "`/workspace/demo.py`\n```diff\n- port = 3000\n+ port = 8080\n```",
+    );
+  });
+
+  it("renders a full-file write (old_text null) as additions only", () => {
+    const content = getACPToolCallContent(
+      makeEvent({
+        title: "Write demo.py",
+        tool_kind: "edit",
+        raw_input: { file_path: "/workspace/demo.py", content: "a\nb\n" },
+        raw_output: "File created successfully at: /workspace/demo.py",
+        content: [
+          {
+            type: "diff",
+            path: "/workspace/demo.py",
+            old_text: null,
+            new_text: "a\nb\n",
+          },
+        ],
+      }),
+    );
+
+    expect(content).toBe("`/workspace/demo.py`\n```diff\n+ a\n+ b\n```");
+  });
+
+  it("accepts the camelCase diff fields used on the ACP wire", () => {
+    const content = getACPToolCallContent(
+      makeEvent({
+        tool_kind: "edit",
+        raw_input: null,
+        raw_output: null,
+        content: [
+          {
+            type: "diff",
+            path: "/workspace/app.ts",
+            oldText: "const port = 3000;\n",
+            newText: "const port = 8080;\n",
+          },
+        ],
+      }),
+    );
+
+    expect(content).toContain("- const port = 3000;\n+ const port = 8080;");
+    expect(content).not.toContain("OBSERVATION$COMMAND_NO_OUTPUT");
+  });
+
+  it("renders text content when raw_output is absent (Gemini CLI)", () => {
+    const content = getACPToolCallContent(
+      makeEvent({
+        title: "README.md",
+        tool_kind: "read",
+        raw_input: null,
+        raw_output: null,
+        content: [
+          {
+            type: "content",
+            content: { type: "text", text: "# Demo\n\nRun it:\n" },
+          },
+        ],
+      }),
+    );
+
+    expect(content).toBe("Output:\n```\n# Demo\n\nRun it:\n```");
+  });
+
+  it("shows the error text carried in content for a failed call", () => {
+    const content = getACPToolCallContent(
+      makeEvent({
+        status: "failed",
+        is_error: true,
+        raw_input: { command: "npm test" },
+        raw_output: null,
+        content: [
+          {
+            type: "content",
+            content: {
+              type: "text",
+              text: "Command rejected: npm is not on the allowlist",
+            },
+          },
+        ],
+      }),
+    );
+
+    expect(content).toContain(
+      "**Error:**\n```\nCommand rejected: npm is not on the allowlist\n```",
+    );
+  });
+
+  it("prefers a markdown-escaped text block over raw_output and keeps its language", () => {
+    const content = getACPToolCallContent(
+      makeEvent({
+        raw_input: { command: "ls" },
+        raw_output: "a.txt\n<system-reminder>model-only</system-reminder>",
+        content: [
+          {
+            type: "content",
+            content: { type: "text", text: "```console\na.txt\n```" },
+          },
+        ],
+      }),
+    );
+
+    expect(content).toBe("Command: `ls`\n\nOutput:\n```console\na.txt\n```");
+  });
+
+  it("re-fences a truncated markdown-escaped block so the fence stays closed", () => {
+    const content = getACPToolCallContent(
+      makeEvent({
+        raw_output: null,
+        content: [
+          {
+            type: "content",
+            content: {
+              type: "text",
+              text: `\`\`\`\n${"x".repeat(5000)}\n\`\`\``,
+            },
+          },
+        ],
+      }),
+    );
+
+    expect(content).toMatch(/```\nx{1000}\.\.\.\n```$/);
+  });
+
+  it("keeps a diff path containing backticks inside its inline code span", () => {
+    const content = getACPToolCallContent(
+      makeEvent({
+        tool_kind: "edit",
+        content: [
+          {
+            type: "diff",
+            path: "/workspace/we`ird [x](y).py",
+            old_text: null,
+            new_text: "a",
+          },
+        ],
+      }),
+    );
+
+    expect(content).toBe("``/workspace/we`ird [x](y).py``\n```diff\n+ a\n```");
+  });
+
+  it("keeps the raw_output error next to the diff of a failed edit", () => {
+    const content = getACPToolCallContent(
+      makeEvent({
+        tool_kind: "edit",
+        status: "failed",
+        is_error: true,
+        raw_output: { message: "old_string not found in file" },
+        content: [
+          {
+            type: "diff",
+            path: "/workspace/demo.py",
+            old_text: "port = 3000",
+            new_text: "port = 8080",
+          },
+        ],
+      }),
+    );
+
+    expect(content).toContain("```diff\n- port = 3000\n+ port = 8080\n```");
+    expect(content).toContain("**Error:**");
+    expect(content).toContain("old_string not found in file");
+  });
+
+  it("falls back to raw_output when content has nothing displayable", () => {
+    const content = getACPToolCallContent(
+      makeEvent({
+        raw_output: "total 0",
+        content: [{ type: "terminal", terminalId: "term-1" }],
+      }),
+    );
+
+    expect(content).toContain("Output:\n```\ntotal 0\n```");
+  });
 });
 
 describe("stripRedundantTitlePrefix", () => {

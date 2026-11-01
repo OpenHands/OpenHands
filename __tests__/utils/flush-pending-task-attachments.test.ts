@@ -53,4 +53,39 @@ describe("flushPendingTaskAttachments", () => {
       }),
     );
   });
+  it("retains files and the prompt when delivery fails", async () => {
+    const file = new File(["notes"], "notes.txt");
+    setPendingTaskAttachments("failed", {
+      content: "Read this",
+      images: [],
+      files: [file],
+      imagesMarkedUploadAsFile: [],
+    });
+    sendMessageWithAttachments.mockRejectedValueOnce(
+      new Error("Upload failed"),
+    );
+    await expect(
+      flushPendingTaskAttachments("failed", "conversation-1"),
+    ).rejects.toThrow("Upload failed");
+    expect(usePendingTaskAttachmentsStore.getState().byTaskId.failed).toEqual(
+      expect.objectContaining({ content: "Read this", files: [file] }),
+    );
+  });
+
+  it("sends only once when background delivery and the open page see READY together", async () => {
+    setPendingTaskAttachments("shared", {
+      content: "hello",
+      images: [],
+      files: [],
+      imagesMarkedUploadAsFile: [],
+    });
+    await Promise.all([
+      flushPendingTaskAttachments("shared", "conversation-1"),
+      flushPendingTaskAttachments("shared", "conversation-1"),
+    ]);
+    expect(sendMessageWithAttachments).toHaveBeenCalledTimes(1);
+    expect(
+      usePendingTaskAttachmentsStore.getState().byTaskId.shared,
+    ).toBeUndefined();
+  });
 });

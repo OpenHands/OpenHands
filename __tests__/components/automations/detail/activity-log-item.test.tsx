@@ -27,13 +27,19 @@ vi.mock("#/components/features/automations/detail/run-logs-modal", () => ({
     isOpen,
     onClose,
     bashCommandId,
+    sandboxId,
   }: {
     isOpen: boolean;
     onClose: () => void;
     bashCommandId: string | null;
+    sandboxId?: string | null;
   }) =>
     isOpen ? (
-      <div data-testid="logs-modal" data-bash-command-id={bashCommandId}>
+      <div
+        data-testid="logs-modal"
+        data-bash-command-id={bashCommandId}
+        data-sandbox-id={sandboxId ?? ""}
+      >
         <button type="button" onClick={onClose}>
           close
         </button>
@@ -352,45 +358,31 @@ describe("ActivityLogItem — run phase", () => {
     __resetActiveStoreForTests();
   });
 
-  it("shows the phase as the place of failure for a FAILED run", () => {
-    // Arrange: the run failed after reaching sandbox_provisioning — a code
-    // known to the frontend, so it renders translated (raw key in tests).
+  it("shows the current_phase as the place of failure for a FAILED run", () => {
     const run = makeRun({
       status: AutomationRunStatus.FAILED,
       conversation_id: null,
       bash_command_id: null,
-      phase_code: "sandbox_provisioning",
-      phase_label: null,
-      phase_updated_at: "2026-01-01T10:01:30Z",
+      current_phase: "Installing dependencies",
     });
 
-    // Act
     renderItem(run);
 
-    // Assert
-    expect(
-      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$PHASE_SANDBOX_PROVISIONING),
-    ).toBeInTheDocument();
+    expect(screen.getByTestId("run-phase")).toHaveTextContent(
+      "Installing dependencies",
+    );
   });
 
   it("does not display the phase for a COMPLETED run, even though it was saved", () => {
-    // Arrange: the run completed, but a phase was recorded along the way.
     const run = makeRun({
       status: AutomationRunStatus.COMPLETED,
-      phase_code: "running_agent",
-      phase_label: null,
-      phase_updated_at: "2026-01-01T10:01:30Z",
+      current_phase: "Agent is working on the task",
     });
 
-    // Act
     renderItem(run);
 
-    // Assert: the field exists on the run (saved), but nothing renders it.
-    expect(run.phase_code).toBe("running_agent");
+    expect(run.current_phase).toBe("Agent is working on the task");
     expect(screen.queryByTestId("run-phase")).not.toBeInTheDocument();
-    expect(
-      screen.queryByText(I18nKey.AUTOMATIONS$DETAIL$PHASE_RUNNING_AGENT),
-    ).not.toBeInTheDocument();
   });
 });
 
@@ -407,17 +399,15 @@ describe("ActivityLogItem — run phase absent entirely", () => {
   });
 
   it("renders a RUNNING row unchanged, without console errors, when the automation service omits phase fields entirely", () => {
-    // Arrange: an older automation service response — no phase_code,
-    // phase_label or phase_updated_at keys at all (not even null).
+    // Arrange: an older automation service response — no current_phase key
+    // at all (not even null).
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const run = makeRun({
       status: AutomationRunStatus.RUNNING,
       completed_at: null,
     });
-    delete (run as Partial<AutomationRun>).phase_code;
-    delete (run as Partial<AutomationRun>).phase_label;
-    delete (run as Partial<AutomationRun>).phase_updated_at;
+    delete (run as Partial<AutomationRun>).current_phase;
 
     // Act
     expect(() => renderItem(run)).not.toThrow();
@@ -444,7 +434,7 @@ describe("ActivityLogItem — run phase updates without reload", () => {
     __resetActiveStoreForTests();
   });
 
-  it("reflects a new phase_code from a prop update (as a poll refetch would produce), with no remount needed", () => {
+  it("reflects a new current_phase from a prop update (as a poll refetch would produce), with no remount needed", () => {
     // Arrange
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
@@ -461,31 +451,27 @@ describe("ActivityLogItem — run phase updates without reload", () => {
     const runningRun = makeRun({
       status: AutomationRunStatus.RUNNING,
       completed_at: null,
-      phase_code: "queued",
-      phase_label: null,
+      current_phase: "Preparing environment",
     });
     const { rerender } = render(buildTree(runningRun));
-    expect(
-      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$PHASE_QUEUED),
-    ).toBeInTheDocument();
+    expect(screen.getByTestId("run-phase")).toHaveTextContent(
+      "Preparing environment",
+    );
 
     // Act: same run id, new phase — what the 3s poll in
     // useAutomationRuns would hand down as a new `run` prop.
     rerender(
       buildTree({
         ...runningRun,
-        phase_code: "running_agent",
-        phase_label: null,
+        current_phase: "Agent is working on the task",
       }),
     );
 
     // Assert: the new phase is shown, the old one is gone — no reload.
-    expect(
-      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$PHASE_RUNNING_AGENT),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByText(I18nKey.AUTOMATIONS$DETAIL$PHASE_QUEUED),
-    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("run-phase")).toHaveTextContent(
+      "Agent is working on the task",
+    );
+    expect(screen.queryByText("Preparing environment")).not.toBeInTheDocument();
   });
 });
 
@@ -500,13 +486,12 @@ describe("ActivityLogItem — run phase (badge still shown)", () => {
     __resetActiveStoreForTests();
   });
 
-  it("shows only the existing status badge (not merely 'no phase') for an active run whose phase is blank on both fields", () => {
+  it("shows only the existing status badge (not merely 'no phase') for an active run whose phase is blank", () => {
     // Arrange
     const run = makeRun({
       status: AutomationRunStatus.RUNNING,
       completed_at: null,
-      phase_code: null,
-      phase_label: "",
+      current_phase: "",
     });
 
     // Act
@@ -520,21 +505,18 @@ describe("ActivityLogItem — run phase (badge still shown)", () => {
     ).toBeInTheDocument();
   });
 
-  it("keeps the status badge beside a phase reported as a bare code", () => {
-    // Arrange: the service accepts `{"code": "custom_step"}` with no label.
+  it("keeps the status badge beside a reported current_phase", () => {
     const run = makeRun({
       status: AutomationRunStatus.RUNNING,
       completed_at: null,
-      phase_code: "custom_step",
-      phase_label: "",
+      current_phase: "Checking out the branch",
     });
 
-    // Act
     renderItem(run);
 
-    // Assert: the phase reaches the row, and it is added to the badge rather
-    // than replacing it.
-    expect(screen.getByTestId("run-phase")).toHaveTextContent("custom_step");
+    expect(screen.getByTestId("run-phase")).toHaveTextContent(
+      "Checking out the branch",
+    );
     expect(
       screen.getByText(I18nKey.AUTOMATIONS$DETAIL$RUNNING),
     ).toBeInTheDocument();
@@ -556,26 +538,70 @@ describe("ActivityLogItem — run phase hidden for CANCELLED/SKIPPED", () => {
     [AutomationRunStatus.CANCELLED, I18nKey.AUTOMATIONS$DETAIL$CANCELLED],
     [AutomationRunStatus.SKIPPED, I18nKey.AUTOMATIONS$DETAIL$SKIPPED],
   ])(
-    "does not show the phase for a %s run, even with a known phase_code on record",
+    "does not show the phase for a %s run, even with a current_phase on record",
     (status, badgeKey) => {
-      // Arrange
       const run = makeRun({
         status,
-        phase_code: "running_agent",
-        phase_label: null,
+        current_phase: "Agent is working on the task",
         completed_at: "2026-01-01T10:02:00Z",
       });
 
-      // Act
       renderItem(run);
 
-      // Assert: phase hidden, but the status badge for this terminal
-      // status is still shown.
       expect(screen.queryByTestId("run-phase")).not.toBeInTheDocument();
-      expect(
-        screen.queryByText(I18nKey.AUTOMATIONS$DETAIL$PHASE_RUNNING_AGENT),
-      ).not.toBeInTheDocument();
       expect(screen.getByText(badgeKey)).toBeInTheDocument();
     },
   );
+});
+
+describe("ActivityLogItem — script runs (a command but no conversation)", () => {
+  beforeEach(() => {
+    __resetActiveStoreForTests();
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+  });
+
+  afterEach(() => {
+    __resetActiveStoreForTests();
+  });
+
+  it("explains that the run executed a script and points at the logs once it has finished", () => {
+    // Arrange: a script automation run — the bash command ran, no agent did.
+    const run = makeRun({
+      status: AutomationRunStatus.COMPLETED,
+      conversation_id: null,
+      bash_command_id: "cmd-1",
+      sandbox_id: "sb-1",
+    });
+
+    // Act
+    renderItem(run);
+
+    // Assert
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$SCRIPT_RUN_NO_CONVERSATION),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(I18nKey.AUTOMATIONS$DETAIL$NO_CONVERSATION),
+    ).not.toBeInTheDocument();
+  });
+
+  it("hands the run's sandbox id to the logs modal", () => {
+    // Arrange
+    const run = makeRun({
+      conversation_id: null,
+      bash_command_id: "cmd-1",
+      sandbox_id: "sb-1",
+    });
+    renderItem(run);
+
+    // Act
+    fireEvent.click(screen.getByRole("button", { name: LOGS_BUTTON_NAME }));
+
+    // Assert
+    expect(screen.getByTestId("logs-modal")).toHaveAttribute(
+      "data-sandbox-id",
+      "sb-1",
+    );
+  });
 });

@@ -3,13 +3,14 @@ import { useTranslation } from "react-i18next";
 import PluginsManagementService, {
   type InstallPluginRequest,
 } from "#/api/plugins-management-service";
+import { isSdkHttpStatusError } from "#/api/agent-server-compatibility";
 import { PLUGINS_QUERY_KEYS } from "#/hooks/query/query-keys";
 import { I18nKey } from "#/i18n/declaration";
 import {
+  displayApiErrorToast,
   displayErrorToast,
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
-import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
 
 /**
  * Install a plugin from a git source or local path. Installing flips a catalog
@@ -21,6 +22,8 @@ export function useInstallPlugin() {
   const { t } = useTranslation("openhands");
 
   return useMutation({
+    // This hook toasts the server's reason itself; skip the global toast.
+    meta: { disableToast: true },
     mutationFn: (request: InstallPluginRequest) =>
       PluginsManagementService.installPlugin(request),
     onSuccess: () => {
@@ -31,9 +34,13 @@ export function useInstallPlugin() {
       displaySuccessToast(t(I18nKey.SETTINGS$PLUGINS_INSTALL_SUCCESS));
     },
     onError: (error) => {
-      displayErrorToast(
-        retrieveAxiosErrorMessage(error) || t(I18nKey.ERROR$GENERIC),
-      );
+      // The server's 409 says to retry with `force=true`, which the form
+      // cannot do; Update or Uninstall in the plugin's dialog can.
+      if (isSdkHttpStatusError(error, 409)) {
+        displayErrorToast(t(I18nKey.SETTINGS$PLUGINS_ALREADY_INSTALLED));
+        return;
+      }
+      displayApiErrorToast(error, t(I18nKey.ERROR$GENERIC));
     },
   });
 }

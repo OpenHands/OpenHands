@@ -37,8 +37,6 @@ export function useHomeAutomations() {
     isError,
     isLoading: isAutomationsLoading,
   } = useAutomations({
-    limit: 50,
-    offset: 0,
     enabled: !demo && isBackendHealthy,
   });
 

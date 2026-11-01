@@ -1,8 +1,10 @@
 import { ActionEvent, OpenHandsEvent } from "#/types/agent-server/core";
 import {
   isActionEvent,
+  isHookExecutionEvent,
   isObservationEvent,
   isPlanningFileEditorObservationEvent,
+  isUserRejectObservation,
 } from "#/types/agent-server/type-guards";
 import { isMarkdownFileEditorEvent } from "#/components/features/chat/tool-visualizers/primitives/markdown-file-preview";
 import { getThoughtSourceAction } from "./event-thought-helpers";
@@ -16,9 +18,10 @@ export const EVENT_GROUP_MIN_SIZE = 2;
  * Returns true if the given event is one of the action / observation cards
  * that we want to fold into an `EventGroup` when several appear in a row.
  *
- * Events that have their own dedicated rendering (FinishAction, ThinkAction,
- * HookExecution, AgentError, MessageEvent, PlanPreview, markdown file
- * artifacts, TaskTracker) are treated as group breakers.
+ * Successful hook runs fold into the surrounding run; blocked or failed hooks
+ * stay visible on their own. Events that have their own dedicated rendering
+ * (FinishAction, ThinkAction, AgentError, MessageEvent, PlanPreview, markdown
+ * file artifacts, TaskTracker) are treated as group breakers.
  */
 export const isGroupableEvent = (
   event: OpenHandsEvent,
@@ -50,6 +53,16 @@ export const isGroupableEvent = (
     return true;
   }
 
+  if (isHookExecutionEvent(event)) {
+    return event.success && !event.blocked;
+  }
+
+  // A rejected action stays wherever the action itself was: in its run, or
+  // on its own when the action is a group breaker.
+  if (isUserRejectObservation(event)) {
+    return correspondingAction ? isGroupableEvent(correspondingAction) : true;
+  }
+
   return false;
 };
 
@@ -73,13 +86,18 @@ export type RenderedItem =
  *
  * `allEvents` should be the full event history so observations can find
  * their matching action; if omitted, it defaults to `events`.
+ *
+ * `trailingMinSize` applies to the run at the very end of `events`. While the
+ * agent is working, pass 1 so the stage it is on is a group from its first
+ * step and does not jump from a lone row into a group when a second arrives.
  */
 export const groupEvents = (
   events: OpenHandsEvent[],
   minSize: number = EVENT_GROUP_MIN_SIZE,
   allEvents: OpenHandsEvent[] = events,
+  trailingMinSize: number = minSize,
 ): RenderedItem[] => {
-  if (minSize < 1) {
+  if (minSize < 1 || trailingMinSize < 1) {
     throw new Error("minSize must be at least 1");
   }
 
@@ -87,9 +105,9 @@ export const groupEvents = (
   const emittedThoughtActionIds = new Set<string>();
   let run: { events: OpenHandsEvent[]; startIndex: number } | null = null;
 
-  const flushRun = () => {
+  const flushRun = (size = minSize) => {
     if (!run) return;
-    if (run.events.length >= minSize) {
+    if (run.events.length >= size) {
       items.push({
         kind: "group",
         events: run.events,
@@ -104,12 +122,13 @@ export const groupEvents = (
   };
 
   events.forEach((event, index) => {
-    const correspondingAction = isObservationEvent(event)
-      ? allEvents.find(
-          (candidate): candidate is ActionEvent =>
-            isActionEvent(candidate) && candidate.id === event.action_id,
-        )
-      : undefined;
+    const correspondingAction =
+      isObservationEvent(event) || isUserRejectObservation(event)
+        ? allEvents.find(
+            (candidate): candidate is ActionEvent =>
+              isActionEvent(candidate) && candidate.id === event.action_id,
+          )
+        : undefined;
     if (isGroupableEvent(event, correspondingAction)) {
       const thoughtAction = getThoughtSourceAction(event, allEvents);
       if (thoughtAction && !emittedThoughtActionIds.has(thoughtAction.id)) {
@@ -125,6 +144,6 @@ export const groupEvents = (
     }
   });
 
-  flushRun();
+  flushRun(trailingMinSize);
   return items;
 };

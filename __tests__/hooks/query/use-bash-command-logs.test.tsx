@@ -17,12 +17,17 @@ import { useBashCommandLogs } from "#/hooks/query/use-bash-command-logs";
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
-const { useUserConversationMock, useActiveBackendMock, listOutputsMock } =
-  vi.hoisted(() => ({
-    useUserConversationMock: vi.fn(),
-    useActiveBackendMock: vi.fn(),
-    listOutputsMock: vi.fn(),
-  }));
+const {
+  useUserConversationMock,
+  useActiveBackendMock,
+  listOutputsMock,
+  batchGetCloudSandboxesMock,
+} = vi.hoisted(() => ({
+  useUserConversationMock: vi.fn(),
+  useActiveBackendMock: vi.fn(),
+  listOutputsMock: vi.fn(),
+  batchGetCloudSandboxesMock: vi.fn(),
+}));
 
 vi.mock("#/hooks/query/use-user-conversation", () => ({
   useUserConversation: (...args: unknown[]) => useUserConversationMock(...args),
@@ -34,6 +39,12 @@ vi.mock("#/contexts/active-backend-context", () => ({
 
 vi.mock("#/api/bash-service/bash-service.api", () => ({
   default: { listOutputs: (...args: unknown[]) => listOutputsMock(...args) },
+}));
+
+// The sandbox lookup behind `useCloudSandbox`; the hook itself runs for real.
+vi.mock("#/api/cloud/sandbox-service.api", () => ({
+  batchGetCloudSandboxes: (...args: unknown[]) =>
+    batchGetCloudSandboxesMock(...args),
 }));
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -60,10 +71,38 @@ function setConversation(partial: Partial<AppConversation> | null) {
   });
 }
 
+/**
+ * What `useUserConversation(null)` really returns: a disabled query, pending
+ * forever and never loading. Script automation runs land here because they
+ * have no conversation id.
+ */
+function setNoConversation() {
+  useUserConversationMock.mockReturnValue({
+    data: undefined,
+    isFetched: false,
+    isPending: true,
+    isLoading: false,
+  });
+}
+
+const runningSandbox = {
+  id: "sb-1",
+  created_by_user_id: "user-1",
+  sandbox_spec_id: "spec-1",
+  status: "RUNNING" as const,
+  session_api_key: "sandbox-key",
+  exposed_urls: [
+    { name: "VSCODE", url: "https://vscode.example.com" },
+    { name: "AGENT_SERVER", url: "https://runtime.example.com" },
+  ],
+  created_at: "2026-01-01T00:00:00Z",
+};
+
 beforeEach(() => {
   useUserConversationMock.mockReset();
   useActiveBackendMock.mockReset();
   listOutputsMock.mockReset();
+  batchGetCloudSandboxesMock.mockReset();
 });
 
 afterEach(() => {
@@ -387,5 +426,255 @@ describe("useBashCommandLogs — local backend", () => {
     // typically mean the local agent-server is misconfigured, not a
     // sandbox lifecycle issue.
     expect(listOutputsMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("useBashCommandLogs — cloud runs without a conversation (script automations)", () => {
+  beforeEach(() => {
+    setActiveBackend("cloud");
+    setNoConversation();
+  });
+
+  it("resolves the agent-server through the run's sandbox and fetches the logs", async () => {
+    // Arrange
+    batchGetCloudSandboxesMock.mockResolvedValue([runningSandbox]);
+    listOutputsMock.mockResolvedValue([]);
+
+    // Act
+    const { result } = renderHook(
+      () =>
+        useBashCommandLogs({
+          conversationId: null,
+          sandboxId: "sb-1",
+          bashCommandId: "cmd-1",
+        }),
+      { wrapper },
+    );
+
+    // Assert
+    await waitFor(() => expect(listOutputsMock).toHaveBeenCalledTimes(1));
+    expect(batchGetCloudSandboxesMock).toHaveBeenCalledWith(["sb-1"]);
+    expect(listOutputsMock).toHaveBeenCalledWith(
+      "https://runtime.example.com",
+      "sandbox-key",
+      "cmd-1",
+    );
+    expect(result.current.isResolvingConversation).toBe(false);
+    expect(result.current.sandboxIssue).toBeNull();
+    expect(result.current.conversationMissing).toBe(false);
+  });
+
+  it("reports the runtime as resolving while the sandbox lookup is in flight", async () => {
+    // Arrange: a lookup that never answers.
+    batchGetCloudSandboxesMock.mockReturnValue(new Promise(() => {}));
+
+    // Act
+    const { result } = renderHook(
+      () =>
+        useBashCommandLogs({
+          conversationId: null,
+          sandboxId: "sb-1",
+          bashCommandId: "cmd-1",
+        }),
+      { wrapper },
+    );
+
+    // Assert
+    await waitFor(() =>
+      expect(result.current.isResolvingConversation).toBe(true),
+    );
+    expect(result.current.sandboxIssue).toBeNull();
+    expect(listOutputsMock).not.toHaveBeenCalled();
+  });
+
+  it("reports sandboxIssue=missing and skips the fetch when the sandbox is gone", async () => {
+    // Arrange: the lookup returns null for a deleted (or foreign) sandbox.
+    batchGetCloudSandboxesMock.mockResolvedValue([null]);
+
+    // Act
+    const { result } = renderHook(
+      () =>
+        useBashCommandLogs({
+          conversationId: null,
+          sandboxId: "sb-1",
+          bashCommandId: "cmd-1",
+        }),
+      { wrapper },
+    );
+
+    // Assert
+    await waitFor(() => expect(result.current.sandboxIssue).toBe("missing"));
+    expect(result.current.isResolvingConversation).toBe(false);
+    expect(listOutputsMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { status: "PAUSED" as const, issue: "paused" },
+    { status: "STARTING" as const, issue: "starting" },
+    { status: "ERROR" as const, issue: "errored" },
+    { status: "MISSING" as const, issue: "missing" },
+  ])(
+    "reports sandboxIssue=$issue and skips the fetch when the sandbox is $status",
+    async ({ status, issue }) => {
+      // Arrange
+      batchGetCloudSandboxesMock.mockResolvedValue([
+        { ...runningSandbox, status },
+      ]);
+
+      // Act
+      const { result } = renderHook(
+        () =>
+          useBashCommandLogs({
+            conversationId: null,
+            sandboxId: "sb-1",
+            bashCommandId: "cmd-1",
+          }),
+        { wrapper },
+      );
+
+      // Assert
+      await waitFor(() => expect(result.current.sandboxIssue).toBe(issue));
+      expect(listOutputsMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it("reports sandboxIssue=missing when the sandbox exposes no agent-server URL", async () => {
+    // Arrange
+    batchGetCloudSandboxesMock.mockResolvedValue([
+      { ...runningSandbox, exposed_urls: [] },
+    ]);
+
+    // Act
+    const { result } = renderHook(
+      () =>
+        useBashCommandLogs({
+          conversationId: null,
+          sandboxId: "sb-1",
+          bashCommandId: "cmd-1",
+        }),
+      { wrapper },
+    );
+
+    // Assert
+    await waitFor(() => expect(result.current.sandboxIssue).toBe("missing"));
+    expect(listOutputsMock).not.toHaveBeenCalled();
+  });
+
+  it("reports sandboxIssue=unreachable when the sandbox lookup itself fails", async () => {
+    // Arrange
+    batchGetCloudSandboxesMock.mockRejectedValue(new Error("boom"));
+
+    // Act
+    const { result } = renderHook(
+      () =>
+        useBashCommandLogs({
+          conversationId: null,
+          sandboxId: "sb-1",
+          bashCommandId: "cmd-1",
+        }),
+      { wrapper },
+    );
+
+    // Assert
+    await waitFor(() =>
+      expect(result.current.sandboxIssue).toBe("unreachable"),
+    );
+    expect(listOutputsMock).not.toHaveBeenCalled();
+  });
+
+  it("reports sandboxIssue=missing at once for a run with neither a conversation nor a sandbox", () => {
+    // Act
+    const { result } = renderHook(
+      () =>
+        useBashCommandLogs({
+          conversationId: null,
+          sandboxId: null,
+          bashCommandId: "cmd-1",
+        }),
+      { wrapper },
+    );
+
+    // Assert: nothing to wait for, nothing to ask.
+    expect(result.current.isResolvingConversation).toBe(false);
+    expect(result.current.sandboxIssue).toBe("missing");
+    expect(batchGetCloudSandboxesMock).not.toHaveBeenCalled();
+    expect(listOutputsMock).not.toHaveBeenCalled();
+  });
+
+  it("does not look up the sandbox while the modal is closed", () => {
+    // Act
+    const { result } = renderHook(
+      () =>
+        useBashCommandLogs({
+          conversationId: null,
+          sandboxId: "sb-1",
+          bashCommandId: "cmd-1",
+          enabled: false,
+        }),
+      { wrapper },
+    );
+
+    // Assert
+    expect(batchGetCloudSandboxesMock).not.toHaveBeenCalled();
+    expect(result.current.isResolvingConversation).toBe(false);
+    expect(result.current.sandboxIssue).toBeNull();
+  });
+
+  it("keeps the conversation as the runtime source when the run has one", async () => {
+    // Arrange
+    setConversation({
+      conversation_url: "https://runtime.example.com/api/conversations/c1",
+      session_api_key: "conversation-key",
+      sandbox_status: "RUNNING",
+    });
+    listOutputsMock.mockResolvedValue([]);
+
+    // Act
+    renderHook(
+      () =>
+        useBashCommandLogs({
+          conversationId: "conv-1",
+          sandboxId: "sb-1",
+          bashCommandId: "cmd-1",
+        }),
+      { wrapper },
+    );
+
+    // Assert
+    await waitFor(() => expect(listOutputsMock).toHaveBeenCalledTimes(1));
+    expect(listOutputsMock).toHaveBeenCalledWith(
+      "https://runtime.example.com/api/conversations/c1",
+      "conversation-key",
+      "cmd-1",
+    );
+    expect(batchGetCloudSandboxesMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("useBashCommandLogs — local runs without a conversation", () => {
+  beforeEach(() => {
+    setActiveBackend("local");
+    setNoConversation();
+  });
+
+  it("fetches through the backend host without a sandbox lookup", async () => {
+    // Arrange
+    listOutputsMock.mockResolvedValue([]);
+
+    // Act
+    renderHook(
+      () =>
+        useBashCommandLogs({
+          conversationId: null,
+          sandboxId: "sb-1",
+          bashCommandId: "cmd-1",
+        }),
+      { wrapper },
+    );
+
+    // Assert
+    await waitFor(() => expect(listOutputsMock).toHaveBeenCalledTimes(1));
+    expect(listOutputsMock).toHaveBeenCalledWith(null, null, "cmd-1");
+    expect(batchGetCloudSandboxesMock).not.toHaveBeenCalled();
   });
 });

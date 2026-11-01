@@ -57,6 +57,19 @@ describe("table (markdown)", () => {
     expect(table).not.toHaveClass("w-full");
   });
 
+  it("should cap cell width and wrap long text instead of stretching the table", () => {
+    render(<MarkdownRenderer>{GFM_TABLE}</MarkdownRenderer>);
+
+    [
+      ...screen.getAllByRole("columnheader"),
+      ...screen.getAllByRole("cell"),
+    ].forEach((cell) => {
+      expect(cell).toHaveClass("max-w-md");
+      expect(cell).toHaveClass("break-words");
+      expect(cell).not.toHaveClass("whitespace-nowrap");
+    });
+  });
+
   it("should render header cells as <th> elements with correct content", () => {
     render(<MarkdownRenderer>{GFM_TABLE}</MarkdownRenderer>);
 

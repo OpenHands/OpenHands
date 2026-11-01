@@ -91,7 +91,7 @@ export function AddAutomationMenu({
         position="none"
         alignment="none"
         spacing="none"
-        className="min-w-[10rem]"
+        className="automation-actions-menu-width"
       >
         <li>
           <ContextMenuListItem

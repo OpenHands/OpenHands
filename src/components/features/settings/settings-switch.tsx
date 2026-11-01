@@ -36,9 +36,10 @@ export function SettingsSwitch({
     onToggle?.(value);
   };
 
+  // @spec SSW-001 — Native checkbox access with visible keyboard focus.
   const input = (
     <input
-      hidden
+      className="sr-only"
       data-testid={testId}
       name={name}
       type="checkbox"
@@ -57,7 +58,7 @@ export function SettingsSwitch({
       <div className="flex items-center gap-1">
         <span className="text-sm">{children}</span>
         {isBeta && (
-          <span className="text-[11px] leading-4 text-base font-[500] tracking-tighter bg-primary px-1 rounded-full">
+          <span className="text-[11px] leading-4 text-on-primary font-[500] tracking-tighter bg-primary px-1 rounded-full">
             {t(I18nKey.BADGE$BETA)}
           </span>
         )}
@@ -67,7 +68,7 @@ export function SettingsSwitch({
   return (
     <label
       className={cn(
-        "flex items-center gap-2",
+        "flex items-center gap-2 rounded-sm has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-focus",
         togglePosition === "right" ? "w-full justify-between" : "w-fit",
         isDisabled ? "cursor-not-allowed opacity-50" : "cursor-pointer",
       )}

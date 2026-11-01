@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { useScrollToBottom } from "#/hooks/use-scroll-to-bottom";
 import type { RefObject } from "react";
@@ -121,6 +121,100 @@ describe("useScrollToBottom", () => {
         result.current.onChatBodyScroll(mock.element);
       });
       expect(result.current.autoScroll).toBe(true);
+    });
+  });
+  describe("following content that grows in place", () => {
+    let frames: Map<number, FrameRequestCallback>;
+    const tick = () => {
+      const scheduled = [...frames.values()];
+      frames.clear();
+      act(() => scheduled.forEach((callback) => callback(0)));
+    };
+
+    beforeEach(() => {
+      frames = new Map();
+      let nextHandle = 1;
+      vi.stubGlobal(
+        "requestAnimationFrame",
+        (callback: FrameRequestCallback) => {
+          const handle = nextHandle;
+          nextHandle += 1;
+          frames.set(handle, callback);
+          return handle;
+        },
+      );
+      vi.stubGlobal("cancelAnimationFrame", (handle: number) => {
+        frames.delete(handle);
+      });
+      // Pinned to the bottom: 1000 - 500.
+      mock.state.scrollTop = 500;
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it("keeps the bottom in view as the content grows", () => {
+      renderHook(() => useScrollToBottom(ref, true));
+
+      mock.state.scrollHeight = 1100;
+      tick();
+      expect(mock.state.scrollTop).toBe(600);
+    });
+
+    it("stops following as soon as the user scrolls up", () => {
+      const { result } = renderHook(() => useScrollToBottom(ref, true));
+      tick();
+
+      // The user scrolls up before React has re-rendered with autoScroll off.
+      mock.state.scrollTop = 300;
+      mock.state.scrollHeight = 1100;
+      tick();
+      expect(mock.state.scrollTop).toBe(300);
+      expect(result.current.autoScroll).toBe(false);
+
+      mock.state.scrollHeight = 1200;
+      tick();
+      expect(mock.state.scrollTop).toBe(300);
+    });
+
+    it("does not mistake the content shrinking for the user scrolling up", () => {
+      const { result } = renderHook(() => useScrollToBottom(ref, true));
+      tick();
+
+      // The browser clamps scrollTop when the content gets shorter.
+      mock.state.scrollHeight = 950;
+      mock.state.scrollTop = 450;
+      tick();
+      mock.state.scrollHeight = 1050;
+      tick();
+
+      expect(result.current.autoScroll).toBe(true);
+      expect(mock.state.scrollTop).toBe(550);
+    });
+
+    it("leaves the scroll position alone when the user is not pinned", () => {
+      const { result } = renderHook(() => useScrollToBottom(ref, true));
+      act(() => result.current.setAutoScroll(false));
+      mock.state.scrollTop = 100;
+
+      mock.state.scrollHeight = 1100;
+      tick();
+      expect(mock.state.scrollTop).toBe(100);
+    });
+
+    it("only runs while content is growing", () => {
+      const { rerender } = renderHook(
+        ({ follow }) => useScrollToBottom(ref, follow),
+        { initialProps: { follow: false } },
+      );
+      expect(frames.size).toBe(0);
+
+      rerender({ follow: true });
+      expect(frames.size).toBe(1);
+
+      rerender({ follow: false });
+      expect(frames.size).toBe(0);
     });
   });
 });

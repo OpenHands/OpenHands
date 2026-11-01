@@ -1,21 +1,29 @@
 import { getLastRenderableEventId } from "#/hooks/chat/model-command-event-anchor";
-import { useModelStore, SeededSwitch } from "#/stores/model-store";
+import {
+  useModelStore,
+  SeededSwitch,
+  ModelSwitchDetails,
+} from "#/stores/model-store";
 import {
   getStoredConversationMetadata,
   mergeStoredConversationMetadata,
 } from "#/api/conversation-metadata-store";
 import { OpenHandsEvent } from "#/types/agent-server/core";
-import { isSwitchLLMObservationEvent } from "#/types/agent-server/type-guards";
+import {
+  isClassifyAndSwitchLLMObservationEvent,
+  isSwitchLLMObservationEvent,
+} from "#/types/agent-server/type-guards";
 import { shouldRenderEvent } from "#/components/conversation-events/chat/event-content-helpers/should-render-event";
 
 export function recordModelSwitchMessage(
   conversationId: string,
   profileName: string,
   anchorEventId: string | null = getLastRenderableEventId(),
+  details?: ModelSwitchDetails,
 ) {
   useModelStore
     .getState()
-    .recordSwitch(conversationId, anchorEventId, profileName);
+    .recordSwitch(conversationId, anchorEventId, profileName, details);
 }
 
 /**
@@ -102,9 +110,33 @@ export function seedModelSwitchesFromHistory(
         id: `history-switch:${event.id}`,
         anchorEventId: lastRenderableId,
         profileName: event.observation.profile_name,
+        initiator: "agent",
+        reason: event.observation.reason,
       });
       latestSwitch = {
         profileName: event.observation.profile_name,
+        timestamp: event.timestamp,
+      };
+    } else if (
+      isClassifyAndSwitchLLMObservationEvent(event) &&
+      !event.observation.is_error &&
+      event.observation.model
+    ) {
+      // Router-driven switch: the matched LLM profile name is the
+      // observation's `model` (the SDK matched classifier output against
+      // saved profile names case-insensitively and stamped the profile name
+      // there; `active_model` is the underlying model string, not the
+      // profile name).
+      const profileName = event.observation.model;
+      switches.push({
+        id: `history-classify-switch:${event.id}`,
+        anchorEventId: lastRenderableId,
+        profileName,
+        initiator: "router",
+        reason: event.observation.chosen_class,
+      });
+      latestSwitch = {
+        profileName,
         timestamp: event.timestamp,
       };
     }

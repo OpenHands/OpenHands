@@ -22,10 +22,6 @@ const TYPE_CONFIG: Record<SkillType, { labelKey: I18nKey }> = {
   },
 };
 
-export function getSkillTypeLabelKey(type: SkillType): I18nKey {
-  return TYPE_CONFIG[type].labelKey;
-}
-
 export function SkillTypeBadge({ type }: SkillTypeBadgeProps) {
   const { t } = useTranslation("openhands");
   const config = TYPE_CONFIG[type];

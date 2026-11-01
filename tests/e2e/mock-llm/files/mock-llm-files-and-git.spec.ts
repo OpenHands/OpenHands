@@ -274,7 +274,11 @@ test.describe("files tab, conversation overview git, and browser tab", () => {
       if (await commitsTab.isVisible().catch(() => false)) {
         await commitsTab.click();
       } else {
-        await page.getByTestId("ellipsis-button").click();
+        // The sidebar card and the conversation title carry their own "⋯".
+        await page
+          .getByTestId("tabs-pane-header")
+          .getByTestId("ellipsis-button")
+          .click();
         await page.getByTestId("conversation-tabs-menu-open-commits").click();
       }
       await expect(page.getByTestId("conversation-tab-commits")).toBeVisible({
@@ -336,6 +340,7 @@ test.describe("files tab, conversation overview git, and browser tab", () => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await dismissAnalyticsModal(page);
     await waitForTestId(page, "home-chat-launcher");
+    await page.getByTestId("home-launcher-mode-code").click();
 
     // Start a brand-new conversation WITHOUT seeding any workspace metadata
     await page.evaluate(

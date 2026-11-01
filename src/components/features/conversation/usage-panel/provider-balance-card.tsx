@@ -33,14 +33,14 @@ export function ProviderBalanceCard() {
   return (
     <div
       data-testid="provider-balance-card"
-      className="rounded-md border border-[var(--oh-border)] bg-surface-raised p-3"
+      className="rounded-md border border-border bg-surface-raised p-3"
     >
       <div className="flex items-center justify-between pb-2">
         <span className="font-semibold">
           {t(I18nKey.CONVERSATION$PROVIDER_BALANCE)}
         </span>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-[var(--oh-muted)]">
+          <span className="text-xs text-muted">
             {balance.provider}
             {balance.isFreeTier
               ? ` · ${t(I18nKey.CONVERSATION$FREE_TIER)}`
@@ -52,7 +52,7 @@ export function ProviderBalanceCard() {
             aria-label={t(I18nKey.BUTTON$REFRESH)}
             disabled={isFetching}
             onClick={() => refetch()}
-            className="cursor-pointer text-[var(--oh-muted)] hover:text-[var(--oh-foreground)] disabled:cursor-default"
+            className="cursor-pointer text-muted hover:text-foreground disabled:cursor-default"
           >
             <RefreshCw
               className={cn("h-3.5 w-3.5", isFetching && "animate-spin")}
@@ -71,7 +71,7 @@ export function ProviderBalanceCard() {
           label={t(I18nKey.CONVERSATION$CREDITS_USED)}
           value={formatCredits(balance.usage)}
           valueClassName={hasCap ? "" : "font-semibold"}
-          labelClassName={hasCap ? "text-[var(--oh-muted)]" : ""}
+          labelClassName={hasCap ? "text-muted" : ""}
         />
       </div>
     </div>

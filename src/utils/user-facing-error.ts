@@ -40,10 +40,6 @@ function collectErrorMessages(error: unknown): string[] {
   return messages;
 }
 
-export function getRawErrorMessage(error: unknown): string | null {
-  return collectErrorMessages(error)[0] ?? null;
-}
-
 export function isCorsOrNetworkErrorMessage(
   message: string | null | undefined,
 ): boolean {

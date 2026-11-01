@@ -23,7 +23,7 @@ export function SettingsMobileHub({ navigationItems }: SettingsMobileHubProps) {
   return (
     <div
       data-testid="settings-mobile-hub"
-      className="flex flex-col gap-4 px-4 py-2 md:hidden"
+      className="flex flex-col gap-4 px-4 py-2 lg:hidden"
     >
       <Typography.H2>{t(I18nKey.SETTINGS$TITLE)}</Typography.H2>
       <nav className="flex flex-col gap-0.5">

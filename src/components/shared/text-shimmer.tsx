@@ -58,7 +58,7 @@ function TextShimmerComponent({
   if (reduceMotion) {
     return (
       <Component
-        className={cn("text-[var(--oh-muted)]", className)}
+        className={cn("text-muted", className)}
         style={style}
         {...rest}
       >

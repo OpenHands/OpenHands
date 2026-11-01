@@ -73,23 +73,23 @@ export function barColorClassForStatus(
   switch (status) {
     case AutomationRunStatus.COMPLETED:
     case "success":
-      return "bg-[var(--oh-status-success)]";
+      return "bg-status-success";
     case AutomationRunStatus.FAILED:
     case "failed":
-      return "bg-[var(--oh-status-error)]";
+      return "bg-status-error";
     case "blocked":
     case "partial_success":
     case "unknown":
-      return "bg-[var(--oh-warning)]";
+      return "bg-warning";
     case AutomationRunStatus.RUNNING:
-      return "bg-[var(--oh-status-success)] animate-pulse motion-reduce:animate-none";
+      return "bg-status-success animate-pulse motion-reduce:animate-none";
     case AutomationRunStatus.PENDING:
       // Grey hatch so pending reads as queued, distinct from solid cancelled/skipped.
       return "bg-[repeating-linear-gradient(-45deg,var(--oh-muted)_0_1.5px,var(--oh-border)_1.5px_3px)]";
     case AutomationRunStatus.CANCELLED:
-      return "bg-[var(--oh-muted)]";
+      return "bg-muted";
     default:
-      return "bg-[var(--oh-border)]";
+      return "bg-border";
   }
 }
 

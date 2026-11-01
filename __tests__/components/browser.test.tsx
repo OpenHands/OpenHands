@@ -1,17 +1,10 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { screen, render } from "@testing-library/react";
-import React from "react";
 
 // Mock modules before importing the component
 vi.mock("#/hooks/use-conversation-id", () => ({
   useOptionalConversationId: () => ({ conversationId: "test-conversation-id" }),
   useConversationId: () => ({ conversationId: "test-conversation-id" }),
-}));
-
-vi.mock("#/context/conversation-context", () => ({
-  useConversation: () => ({ conversationId: "test-conversation-id" }),
-  ConversationProvider: ({ children }: { children: React.ReactNode }) =>
-    children,
 }));
 
 vi.mock("react-i18next", async () => {
@@ -63,7 +56,7 @@ describe("Browser", () => {
 
     render(<BrowserPanel />);
 
-    expect(screen.getByTestId("browser-chrome-bar")).toHaveClass("min-h-[34px]");
+    expect(screen.getByTestId("browser-chrome-bar")).toHaveClass("min-h-8.5");
     expect(screen.getByTestId("browser-chrome-url")).toHaveTextContent(
       "BROWSER$URL_PLACEHOLDER",
     );

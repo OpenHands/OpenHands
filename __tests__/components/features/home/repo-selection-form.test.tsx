@@ -11,7 +11,6 @@ const mockUseUserRepositories = vi.fn();
 const mockUseCreateConversation = vi.fn();
 const mockUseIsCreatingConversation = vi.fn();
 const mockUseTranslation = vi.fn();
-const mockUseAuth = vi.fn();
 const mockUseGitRepositories = vi.fn();
 const mockUseUserProviders = vi.fn();
 const mockUseSearchRepositories = vi.fn();
@@ -62,22 +61,6 @@ mockUseSearchRepositories.mockReturnValue({
   isLoading: false,
 });
 
-mockUseAuth.mockReturnValue({
-  isAuthenticated: true,
-  isLoading: false,
-  providersAreSet: true,
-  user: {
-    id: 1,
-    login: "testuser",
-    avatar_url: "https://example.com/avatar.png",
-    name: "Test User",
-    email: "test@example.com",
-    company: "Test Company",
-  },
-  login: vi.fn(),
-  logout: vi.fn(),
-});
-
 vi.mock("#/hooks/mutation/use-create-conversation", () => ({
   useCreateConversation: () => mockUseCreateConversation(),
 }));
@@ -88,10 +71,6 @@ vi.mock("#/hooks/use-is-creating-conversation", () => ({
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => mockUseTranslation(),
-}));
-
-vi.mock("#/context/auth-context", () => ({
-  useAuth: () => mockUseAuth(),
 }));
 
 // Mock debounce to simulate proper debounced behavior

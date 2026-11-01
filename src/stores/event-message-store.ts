@@ -8,7 +8,6 @@ interface EventMessageState {
 
 interface EventMessageStore extends EventMessageState {
   addSubmittedEventId: (id: SubmittedEventId) => void;
-  removeSubmittedEventId: (id: SubmittedEventId) => void;
 }
 
 export const useEventMessageStore = create<EventMessageStore>((set) => ({
@@ -16,11 +15,5 @@ export const useEventMessageStore = create<EventMessageStore>((set) => ({
   addSubmittedEventId: (id) =>
     set((state) => ({
       submittedEventIds: [...state.submittedEventIds, id],
-    })),
-  removeSubmittedEventId: (id) =>
-    set((state) => ({
-      submittedEventIds: state.submittedEventIds.filter(
-        (eventId) => eventId !== id,
-      ),
     })),
 }));

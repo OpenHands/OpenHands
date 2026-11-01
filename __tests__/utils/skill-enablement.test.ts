@@ -9,7 +9,9 @@ import {
   isCatalogSkill,
   isRecommendedSkill,
   migrateSkillEnablement,
+  publicSkillTest,
   resolveEnabledCatalogSkills,
+  toggleSkill,
   toSkillEnablement,
 } from "#/utils/skill-enablement";
 
@@ -157,5 +159,46 @@ describe("findInvokedCatalogSkill", () => {
     expect(findInvokedCatalogSkill("   ")).toBeUndefined();
     expect(findInvokedCatalogSkill("just a message")).toBeUndefined();
     expect(findInvokedCatalogSkill("/not-a-real-skill")).toBeUndefined();
+  });
+});
+
+describe("toggleSkill", () => {
+  const isPublic = (name: string) => name !== LOCAL;
+
+  it("moves a catalog skill in the allow-list and any other in the deny-list", () => {
+    const start = { enabledSkills: [RECOMMENDED], disabledSkills: [] };
+
+    expect(toggleSkill(start, OPTIONAL, true, isPublic)).toEqual({
+      enabledSkills: [RECOMMENDED, OPTIONAL],
+      disabledSkills: [],
+    });
+    expect(toggleSkill(start, LOCAL, false, isPublic)).toEqual({
+      enabledSkills: [RECOMMENDED],
+      disabledSkills: [LOCAL],
+    });
+  });
+
+  it("drops a re-enabled catalog skill from the deny-list", () => {
+    expect(
+      toggleSkill(
+        { enabledSkills: [], disabledSkills: [OPTIONAL] },
+        OPTIONAL,
+        true,
+        isPublic,
+      ),
+    ).toEqual({ enabledSkills: [OPTIONAL], disabledSkills: [] });
+  });
+});
+
+describe("publicSkillTest", () => {
+  it("follows the server's origins, falling back to the bundled catalog", () => {
+    const fromServer = publicSkillTest([
+      { name: LOCAL, type: "knowledge", source: null, origin: "public" },
+      { name: OPTIONAL, type: "knowledge", source: null, origin: "user" },
+    ]);
+
+    expect(fromServer(LOCAL)).toBe(true);
+    expect(fromServer(OPTIONAL)).toBe(false);
+    expect(publicSkillTest(undefined)(OPTIONAL)).toBe(true);
   });
 });

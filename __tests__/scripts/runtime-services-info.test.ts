@@ -30,6 +30,24 @@ interface RuntimeServicesInfoShape {
 }
 
 describe("runtime-services-info.mjs", () => {
+  it.each([false, true])(
+    "describes only active ingress routes (frontend %s)",
+    (frontend) => {
+      const info = buildRuntimeServicesInfo({
+        agentServerPort: 18000,
+        ingressPort: 8000,
+        ...(frontend ? { frontendPort: 3001 } : {}),
+        automation: { url: "http://localhost:18001" },
+      }) as {
+        services: { ingress: { description: string }; frontend?: unknown };
+      };
+      expect(
+        info.services.ingress.description.includes("/* to the frontend"),
+      ).toBe(frontend);
+      expect(Boolean(info.services.frontend)).toBe(frontend);
+      expect(info.services.ingress.description).toContain("/api/automation/*");
+    },
+  );
   // Port-based behavior (the dev path) is covered in dev-safe.test.ts. These
   // cover the URL-override path the Docker image uses.
   describe("buildRuntimeServicesInfo — URL overrides", () => {

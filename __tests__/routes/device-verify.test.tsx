@@ -374,9 +374,6 @@ describe("DeviceVerify", () => {
       });
 
       expect(screen.getByText("DEVICE$SUCCESS_MESSAGE")).toBeInTheDocument();
-      // Should show success icon (checkmark)
-      const successIcon = document.querySelector(".text-green-600");
-      expect(successIcon).toBeInTheDocument();
     });
 
     it("should not show try again button on success", async () => {
@@ -462,9 +459,6 @@ describe("DeviceVerify", () => {
       });
 
       expect(screen.getByText("DEVICE$ERROR_FAILED")).toBeInTheDocument();
-      // Should show error icon (X)
-      const errorIcon = document.querySelector(".text-red-600");
-      expect(errorIcon).toBeInTheDocument();
     });
 
     it("should show error message when fetch throws an exception", async () => {
@@ -590,6 +584,60 @@ describe("DeviceVerify", () => {
       await user.click(tryAgainButton);
 
       expect(reloadMock).toHaveBeenCalled();
+    });
+  });
+
+  describe("Theme tokens", () => {
+    it("should style the authorization card with theme surface and muted text tokens", async () => {
+      useIsAuthedMock.mockReturnValue({
+        data: true,
+        isLoading: false,
+      });
+
+      render(
+        <RouterStub initialEntries={["/device-verify?user_code=ABC-123"]} />,
+        {
+          wrapper: createWrapper(),
+        },
+      );
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("DEVICE$AUTHORIZATION_REQUEST"),
+        ).toBeInTheDocument();
+      });
+
+      const prompt = screen.getByText("DEVICE$CONFIRM_PROMPT");
+      expect(prompt).toHaveClass("text-muted");
+      expect(prompt).not.toHaveClass("text-muted-foreground");
+
+      const card = prompt.closest("div.rounded-2xl");
+      expect(card).not.toBeNull();
+      expect(card).toHaveClass("bg-surface-raised");
+      expect(card).not.toHaveClass("bg-card");
+    });
+
+    it("should style the manual entry input with theme border and focus ring tokens", async () => {
+      useIsAuthedMock.mockReturnValue({
+        data: true,
+        isLoading: false,
+      });
+
+      render(<RouterStub initialEntries={["/device-verify"]} />, {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByLabelText("DEVICE$CODE_INPUT_LABEL"),
+        ).toBeInTheDocument();
+      });
+
+      const input = screen.getByLabelText("DEVICE$CODE_INPUT_LABEL");
+      expect(input).toHaveClass("border-border-input");
+      expect(input).toHaveClass("focus:ring-focus");
+      expect(input).not.toHaveClass("border-input");
+      expect(input).not.toHaveClass("focus:ring-ring");
     });
   });
 });

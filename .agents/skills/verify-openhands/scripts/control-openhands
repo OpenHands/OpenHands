@@ -1,0 +1,4 @@
+#!/bin/sh
+# Thin wrapper so recipes can call `control-openhands ...` once this directory
+# is on PATH. All logic lives in control-openhands.mjs.
+exec node "$(dirname "$0")/control-openhands.mjs" "$@"

@@ -1,4 +1,10 @@
-import { useEffect, useRef, useCallback, useState } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useCallback,
+  useState,
+} from "react";
 import {
   useConversationLocalStorageState,
   getConversationState,
@@ -31,10 +37,15 @@ export const HOME_PROMPT_DRAFT_KEY = "oh:home-prompt-draft";
  * under the conversation's key. When `conversationId` is undefined (home page),
  * the draft is persisted to sessionStorage under `HOME_PROMPT_DRAFT_KEY` so it
  * survives navigation within the session but is discarded on tab close.
+ *
+ * Pass `persist: false` for a composer that owns no draft, such as the
+ * automation setup composer: it then neither restores nor writes any draft,
+ * so it cannot pick up or overwrite the Home prompt.
  */
 export const useDraftPersistence = (
   conversationId: string | null | undefined,
   chatInputRef: React.RefObject<HTMLDivElement | null>,
+  { persist = true }: { persist?: boolean } = {},
 ) => {
   // Pass an empty string when conversationId is missing to keep the hook
   // call unconditional (rules of hooks). The early-return branches below
@@ -43,6 +54,12 @@ export const useDraftPersistence = (
     conversationId ?? "",
   );
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Retain the owning input so cleanup can read it after React clears the ref,
+  // including any programmatic clear performed by message submission.
+  const pendingDraftRef = useRef<{
+    conversationId: string;
+    element: HTMLDivElement;
+  } | null>(null);
   const hasRestoredRef = useRef(false);
   const [isRestored, setIsRestored] = useState(false);
 
@@ -50,18 +67,37 @@ export const useDraftPersistence = (
   const currentConversationIdRef = useRef(conversationId);
   // Track if this is the first mount to handle initial cleanup
   const isFirstMountRef = useRef(true);
-  // Tracks the latest home-page text so the unmount flush can use it safely.
-  // chatInputRef.current is null by the time async useEffect cleanup runs in
-  // React 18 (refs are cleared during the synchronous commit phase, before
-  // passive effects fire), so we can't read from the DOM there.
+  // Tracks the latest home-page text without relying on a mounted input.
   const lastHomeTextRef = useRef<string>("");
+
+  const flushPendingDraft = useCallback(() => {
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = null;
+    }
+    const pendingDraft = pendingDraftRef.current;
+    pendingDraftRef.current = null;
+    if (pendingDraft) {
+      const text = getTextContent(pendingDraft.element).trim();
+      const { draftMessage } = getConversationState(
+        pendingDraft.conversationId,
+      );
+      if (text !== (draftMessage || "")) {
+        setConversationState(pendingDraft.conversationId, {
+          draftMessage: text || null,
+        });
+      }
+    }
+  }, []);
 
   // IMPORTANT: This effect must run FIRST when conversation changes.
   // It handles three concerns:
-  // 1. Cleanup: Cancel pending saves from previous conversation
+  // 1. Cleanup: Flush pending saves from previous conversation
   // 2. Task-to-real transition: Preserve draft typed during initialization
   // 3. DOM reset: Clear stale content before restoration effect runs
   useEffect(() => {
+    // Read the previous input before clearing or restoring a different draft.
+    flushPendingDraft();
     if (!conversationId) {
       return;
     }
@@ -69,13 +105,6 @@ export const useDraftPersistence = (
     const isInitialMount = isFirstMountRef.current;
     currentConversationIdRef.current = conversationId;
     isFirstMountRef.current = false;
-
-    // --- 1. Cancel pending saves from previous conversation ---
-    // Prevents draft from being saved to wrong conversation if user switched quickly
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-      saveTimeoutRef.current = null;
-    }
 
     const element = chatInputRef.current;
 
@@ -117,12 +146,18 @@ export const useDraftPersistence = (
     // Reset restoration flag so the restoration effect will run for new conversation
     hasRestoredRef.current = false;
     setIsRestored(false);
-  }, [conversationId, chatInputRef]);
+  }, [conversationId, chatInputRef, flushPendingDraft]);
 
   // Restore draft on mount - uses sessionStorage for the home page (no conversationId)
   // and localStorage for active conversations.
   useEffect(() => {
     if (hasRestoredRef.current) {
+      return;
+    }
+
+    if (!persist) {
+      hasRestoredRef.current = true;
+      setIsRestored(true);
       return;
     }
 
@@ -167,10 +202,14 @@ export const useDraftPersistence = (
 
     hasRestoredRef.current = true;
     setIsRestored(true);
-  }, [chatInputRef, conversationId]);
+  }, [chatInputRef, conversationId, persist]);
 
   // Debounced save function - called from onInput handler
   const saveDraft = useCallback(() => {
+    if (!persist) {
+      return;
+    }
+
     // Clear any pending save
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
@@ -196,13 +235,23 @@ export const useDraftPersistence = (
       return;
     }
 
-    // Capture the conversationId at the time of input
+    const element = chatInputRef.current;
+    if (!element) {
+      return;
+    }
+
+    // Capture the input and its owner before navigation can replace either.
     const capturedConversationId = conversationId;
+    const pendingDraft = { conversationId: capturedConversationId, element };
+    pendingDraftRef.current = pendingDraft;
 
     saveTimeoutRef.current = setTimeout(() => {
       // Verify we're still on the same conversation before saving
       // This prevents saving draft to wrong conversation if user switched quickly
-      if (capturedConversationId !== currentConversationIdRef.current) {
+      if (
+        capturedConversationId !== currentConversationIdRef.current ||
+        pendingDraftRef.current !== pendingDraft
+      ) {
         return;
       }
 
@@ -211,21 +260,34 @@ export const useDraftPersistence = (
         return;
       }
 
+      pendingDraftRef.current = null;
+      saveTimeoutRef.current = null;
       const text = getTextContent(element).trim();
       // Only save if content has changed
       if (text !== (state.draftMessage || "")) {
         setDraftMessage(text || null);
       }
     }, DRAFT_SAVE_DEBOUNCE_MS);
-  }, [chatInputRef, state.draftMessage, setDraftMessage, conversationId]);
+  }, [
+    chatInputRef,
+    state.draftMessage,
+    setDraftMessage,
+    conversationId,
+    persist,
+  ]);
 
   // Clear draft - called after message delivery is confirmed
   const clearDraft = useCallback(() => {
+    if (!persist) {
+      return;
+    }
+
     // Cancel any pending save
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = null;
     }
+    pendingDraftRef.current = null;
     if (!conversationId) {
       // Home page: clear sessionStorage
       try {
@@ -236,25 +298,21 @@ export const useDraftPersistence = (
       return;
     }
     setDraftMessage(null);
-  }, [conversationId, setDraftMessage]);
+  }, [conversationId, setDraftMessage, persist]);
 
-  // Cleanup on unmount: cancel any pending debounce timer and, for the home
-  // page, flush the last-tracked text to sessionStorage. We read from
-  // lastHomeTextRef rather than chatInputRef because React clears ref.current
-  // during the synchronous commit phase — before async useEffect cleanups run
-  // — so the DOM ref is null by the time this function executes.
+  // Flush the conversation input while it is still attached: reading innerText
+  // after detachment loses line breaks between contentEditable block elements.
+  // The home page continues to flush its last-tracked text to sessionStorage.
   //
   // We only write text back if the key already exists in sessionStorage.
   // saveDraft writes synchronously on every keystroke, so the key is present
   // whenever there is unsaved text. If the key is absent it was intentionally
   // removed — most importantly by HomeChatLauncher.onSuccess after a
   // successful conversation start — and we must not restore it here.
-  useEffect(
+  useLayoutEffect(
     () => () => {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-      }
-      if (!currentConversationIdRef.current) {
+      flushPendingDraft();
+      if (persist && !currentConversationIdRef.current) {
         const text = lastHomeTextRef.current;
         try {
           if (text) {
@@ -269,7 +327,7 @@ export const useDraftPersistence = (
         }
       }
     },
-    [],
+    [flushPendingDraft, persist],
   );
 
   return {

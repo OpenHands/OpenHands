@@ -7,10 +7,12 @@ import {
   getCurrentCloudApiKey,
 } from "#/api/cloud/organization-service.api";
 import {
+  isDefinitiveLocalBackendError,
   validateLocalBackend,
   INVALID_BACKEND_API_KEY_ERROR,
 } from "#/api/agent-server-compatibility";
 import type { Backend } from "#/api/backend-registry/types";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 import {
   isCorsOrNetworkError,
   isCorsOrNetworkErrorMessage,
@@ -23,10 +25,14 @@ import {
 } from "#/api/backend-registry/health-store";
 import { MAX_CONSECUTIVE_FAILURES } from "#/api/backend-registry/health-storage";
 
-// 30s: each tick costs two sequential requests per backend (settings +
+// 30s: each local tick costs two sequential requests per backend (settings +
 // server_info), which on slow links measurably competes with conversation
 // traffic for the browser's per-origin HTTP/1.1 connection pool.
 const REFRESH_INTERVAL_MS = 30000;
+// Cloud health probes hit app-server auth/org endpoints that are shared with the
+// main UI. They do not need local-runtime-level freshness, and a slower cadence
+// avoids competing with conversation, sandbox, and repository requests.
+const CLOUD_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 const PROBE_TIMEOUT_MS = 4000;
 export { INVALID_BACKEND_API_KEY_ERROR } from "#/api/agent-server-compatibility";
 export const MISSING_BACKEND_API_KEY_ERROR = "API key required";
@@ -137,14 +143,15 @@ const PROBE_RETRY_DELAY_MS = 300;
  * Retrying at the query level instead would call `recordBackendFailure` on
  * every internal attempt and reach the disabled cap several times too fast.
  *
- * Definitive auth failures (logged out, invalid/missing key) are NOT retried:
- * they are a decided server response, not a transient miss, so retrying only
- * delays surfacing the correct "disconnected" state (and the recovery UI).
+ * Definitive failures (logged out, invalid/missing key, unsupported version)
+ * are NOT retried: they are a decided server response, not a transient miss,
+ * so retrying only delays surfacing the correct "disconnected" state (and the
+ * recovery UI).
  */
 function isRetryableProbeError(error: unknown): boolean {
   if (!(error instanceof Error)) return true;
   return (
-    error.message !== INVALID_BACKEND_API_KEY_ERROR &&
+    !isDefinitiveLocalBackendError(error) &&
     error.message !== MISSING_BACKEND_API_KEY_ERROR &&
     error.message !== CLOUD_BACKEND_LOGGED_OUT_ERROR
   );
@@ -216,11 +223,21 @@ export function useBackendsHealth(
     getHealthSnapshot,
   );
 
+  const activeBackendId = useActiveBackend().backend.id;
+
   const results = useQueries({
     queries: backends.map((b) => {
       const entry = healthMap[b.id];
       const hasMissingCloudApiKey = hasMissingBackendApiKey(b);
+      // Every probe of a MARS session travels its tunnel into the sandbox;
+      // polling sessions the user is not on would keep them from ever
+      // idle-pausing (and billing), so those are probed once on mount and
+      // only the active one is watched.
+      const isIdleMarsSession =
+        Boolean(b.marsSessionId) && b.id !== activeBackendId;
       const isDisabled = entry?.disabled === true;
+      const refreshInterval =
+        b.kind === "cloud" ? CLOUD_REFRESH_INTERVAL_MS : REFRESH_INTERVAL_MS;
       const shouldReprobeStaleCloudNetworkError =
         isDisabled &&
         b.kind === "cloud" &&
@@ -250,17 +267,25 @@ export function useBackendsHealth(
         },
         enabled: shouldProbe,
         refetchInterval:
-          isDisabled || hasMissingCloudApiKey
+          isDisabled || hasMissingCloudApiKey || isIdleMarsSession
             ? (false as const)
-            : REFRESH_INTERVAL_MS,
+            : refreshInterval,
         refetchIntervalInBackground: false,
         refetchOnMount: isDisabled && probeDisabledOnce ? "always" : true,
-        refetchOnReconnect: !isDisabled && !hasMissingCloudApiKey,
-        refetchOnWindowFocus: !isDisabled && !hasMissingCloudApiKey,
+        refetchOnReconnect:
+          b.kind !== "cloud" &&
+          !isDisabled &&
+          !hasMissingCloudApiKey &&
+          !isIdleMarsSession,
+        refetchOnWindowFocus:
+          b.kind !== "cloud" &&
+          !isDisabled &&
+          !hasMissingCloudApiKey &&
+          !isIdleMarsSession,
         retry: false,
         // Keep the previous verdict visible while the next probe is in
         // flight so the indicator doesn't flicker on routine polling.
-        staleTime: isDisabled ? 0 : REFRESH_INTERVAL_MS,
+        staleTime: isDisabled ? 0 : refreshInterval,
         meta: { disableToast: true },
       };
     }),

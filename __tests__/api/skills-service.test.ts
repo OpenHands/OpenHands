@@ -7,8 +7,9 @@ import {
 } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
 
-const { mockGetSkills, MOCK_PUBLIC_CATALOG } = vi.hoisted(() => ({
+const { mockGetSkills, mockGet, MOCK_PUBLIC_CATALOG } = vi.hoisted(() => ({
   mockGetSkills: vi.fn(),
+  mockGet: vi.fn(),
   MOCK_PUBLIC_CATALOG: [
     {
       name: "mock-public-skill",
@@ -22,6 +23,7 @@ const { mockGetSkills, MOCK_PUBLIC_CATALOG } = vi.hoisted(() => ({
       triggers: [],
       content: "more content",
       license: "MIT",
+      category: "productivity",
     },
   ],
 }));
@@ -29,6 +31,9 @@ const { mockGetSkills, MOCK_PUBLIC_CATALOG } = vi.hoisted(() => ({
 vi.mock("@openhands/typescript-client/clients", () => ({
   SkillsClient: vi.fn(function SkillsClientMock() {
     return { getSkills: mockGetSkills };
+  }),
+  AgentServerClient: vi.fn(function AgentServerClientMock() {
+    return { get: mockGet };
   }),
 }));
 
@@ -52,6 +57,7 @@ beforeEach(() => {
   setRegisteredBackends([localBackend]);
   setActiveSelection({ backendId: localBackend.id });
   mockGetSkills.mockReset();
+  mockGet.mockReset();
   vi.mocked(SkillsClient).mockClear();
 });
 
@@ -105,5 +111,69 @@ describe("SkillsService.getSkills against the agent-server backend", () => {
 
     expect(skills).toHaveLength(MOCK_PUBLIC_CATALOG.length);
     expect(skills.every((s) => s.source === "public")).toBe(true);
+  });
+});
+
+describe("SkillsService.getSkillCatalog", () => {
+  it("lists the server's catalog with the bundled display metadata", async () => {
+    mockGet.mockResolvedValue({
+      skills: [
+        { name: "another-public-skill", type: "knowledge", origin: "public" },
+        { name: "mine", type: "knowledge", origin: "user" },
+      ],
+    });
+
+    const skills = await SkillsService.getSkillCatalog();
+
+    expect(mockGet).toHaveBeenCalledWith(
+      "/api/skills/catalog",
+      expect.anything(),
+    );
+    expect(skills).toEqual([
+      expect.objectContaining({
+        name: "another-public-skill",
+        origin: "public",
+        source: "public",
+        category: "productivity",
+        license: "MIT",
+      }),
+      expect.objectContaining({ name: "mine", origin: "user" }),
+    ]);
+    expect(skills[1]).not.toHaveProperty("category");
+  });
+
+  it("falls back to the bundled catalog and user skills on an older server", async () => {
+    mockGet.mockRejectedValue(
+      Object.assign(new Error("Not Found"), { status: 404 }),
+    );
+    mockGetSkills.mockResolvedValue({
+      skills: [
+        { name: "mine", type: "knowledge", source: "user" },
+        { name: "mock-public-skill", type: "knowledge", source: "user" },
+      ],
+    });
+
+    const skills = await SkillsService.getSkillCatalog();
+
+    expect(mockGetSkills.mock.calls[0]?.[0]).toMatchObject({
+      load_public: false,
+      load_user: true,
+      load_project: false,
+    });
+    // A user skill shadows the public skill of the same name.
+    expect(skills.map((s) => [s.name, s.origin])).toEqual([
+      ["another-public-skill", "public"],
+      ["mine", "user"],
+      ["mock-public-skill", "user"],
+    ]);
+  });
+
+  it("surfaces other failures instead of guessing", async () => {
+    mockGet.mockRejectedValue(
+      Object.assign(new Error("boom"), { status: 500 }),
+    );
+
+    await expect(SkillsService.getSkillCatalog()).rejects.toThrow("boom");
+    expect(mockGetSkills).not.toHaveBeenCalled();
   });
 });

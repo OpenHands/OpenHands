@@ -34,7 +34,7 @@ export function ContextMenuIconTextWithDescription({
         iconClassName={iconClassName}
         isActive={isActive}
       />
-      <Typography.Text className="text-[var(--oh-muted)] text-[10px] font-normal whitespace-pre-wrap break-words">
+      <Typography.Text className="text-muted menu-detail-text font-normal whitespace-pre-wrap break-words">
         {description}
       </Typography.Text>
     </div>

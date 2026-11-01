@@ -96,7 +96,11 @@ export function KebabMenu({ items, triggerClassName }: KebabMenuProps) {
 
   const menu =
     open && portalStyle ? (
-      <ContextMenu ref={menuRef} theme="popover" className="min-w-[10rem]">
+      <ContextMenu
+        ref={menuRef}
+        theme="popover"
+        className="automation-actions-menu-width"
+      >
         {items.map((item) => (
           <li key={item.label}>
             <ContextMenuListItem

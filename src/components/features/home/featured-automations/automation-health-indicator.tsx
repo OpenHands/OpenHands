@@ -17,7 +17,7 @@ export function AutomationHealthIndicator({
     return (
       <svg
         viewBox="0 0 12 12"
-        className="h-2.5 w-2.5 shrink-0 stroke-[var(--oh-status-success)]"
+        className="h-2.5 w-2.5 shrink-0 stroke-status-success"
         fill="none"
         strokeWidth={2.25}
         strokeLinecap="round"
@@ -34,11 +34,11 @@ export function AutomationHealthIndicator({
       aria-hidden="true"
       className={cn(
         "h-1.5 w-1.5 shrink-0 rounded-full",
-        health === "failed" && "bg-[var(--oh-status-error)]",
-        health === "warning" && "bg-[var(--oh-warning)]",
+        health === "failed" && "bg-status-error",
+        health === "warning" && "bg-warning",
         health === "in_progress" &&
-          "animate-pulse bg-[var(--oh-status-success)] motion-reduce:animate-none",
-        (health === "none" || health === "unknown") && "bg-[var(--oh-border)]",
+          "animate-pulse bg-status-success motion-reduce:animate-none",
+        (health === "none" || health === "unknown") && "bg-border",
       )}
     />
   );

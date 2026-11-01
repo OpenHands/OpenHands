@@ -5,6 +5,7 @@ import { callCloudProxy } from "./proxy";
 import type {
   CloudApiKeyMetadata,
   CloudOrganization,
+  CloudOrganizationMember,
   CloudOrganizationsResponse,
 } from "./types";
 
@@ -123,4 +124,24 @@ export async function getCloudOrganizationMe(
     // back to a role check; a present array is the server's source of truth.
     permissions: Array.isArray(data?.permissions) ? data.permissions : null,
   };
+}
+
+/**
+ * Fetch `GET /api/organizations/{orgId}/members/{userId}`: one member of
+ * `orgId` by user id. Any org member may read it (same permission as the
+ * members list). The upstream responds 404 when `userId` is not (or no
+ * longer) a member of the org, and older app-servers that predate the route
+ * 404 as well, so callers should treat a failure as "identity unresolved".
+ */
+export async function getCloudOrganizationMember(
+  orgId: string,
+  userId: string,
+  backend?: Backend,
+): Promise<CloudOrganizationMember> {
+  const target = resolveBackend(backend);
+  return callCloudProxy<CloudOrganizationMember>({
+    backend: target,
+    method: "GET",
+    path: `/api/organizations/${encodeURIComponent(orgId)}/members/${encodeURIComponent(userId)}`,
+  });
 }

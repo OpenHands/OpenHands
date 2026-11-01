@@ -5,13 +5,18 @@ import {
   LLM_PROFILES_QUERY_KEYS,
   SETTINGS_QUERY_KEYS,
 } from "#/hooks/query/query-keys";
+import {
+  llmProfileMirrored,
+  updateDefaultAgentProfile,
+} from "#/hooks/mutation/sync-agent-profiles";
 
 export function useActivateLlmProfile() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (name: string) => ProfilesService.activateProfile(name),
-    onSuccess: async () => {
+    onSuccess: async (_data, name) => {
+      updateDefaultAgentProfile(queryClient, llmProfileMirrored(name));
       // Invalidate the SettingsService internal cache so getSettingsForConversation
       // fetches fresh settings with the newly activated profile's LLM config
       SettingsService.invalidateCache();

@@ -1,13 +1,30 @@
 import React from "react";
-import { OpenHandsEvent } from "#/types/agent-server/core";
+import { useTranslation } from "react-i18next";
+import { LoaderCircle } from "lucide-react";
+import { ActionEvent, OpenHandsEvent } from "#/types/agent-server/core";
+import { I18nKey } from "#/i18n/declaration";
+import { useAgentState, usePlanningAgentState } from "#/hooks/use-agent-state";
+import { AgentState } from "#/types/agent-state";
+import {
+  isActionEvent,
+  isObservationEvent,
+  isUserRejectObservation,
+} from "#/types/agent-server/type-guards";
 import { EventMessage } from "./event-message";
 import { usePlanPreviewEvents } from "./hooks/use-plan-preview-events";
 import { groupEvents } from "./group-events";
 import { EventGroup } from "./event-message-components/event-group";
 import { ThoughtEventMessage } from "./event-message-components/thought-event-message";
+import { getStepKey, StepDisclosureContext } from "./step-disclosure-context";
 import { useModelStore } from "#/stores/model-store";
 import { ModelMessages } from "#/components/features/chat/model-messages";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
+import { ConversationConfirmationButtons } from "#/components/shared/buttons/conversation-confirmation-buttons";
+import type { SecretRequest } from "#/stores/secret-request-store";
+import {
+  SecretRequestCard,
+  usePendingSecretRequests,
+} from "#/components/features/conversation/secret-request-card";
 
 interface MessagesProps {
   messages: OpenHandsEvent[]; // UI events (actions replaced by observations)
@@ -23,6 +40,29 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     // Get the set of event IDs that should render PlanPreview
     // This ensures only one preview per user message "phase"
     const planPreviewEventIds = usePlanPreviewEvents(allEvents);
+
+    // Which rows and groups the user has opened or closed, keyed by tool call.
+    // Rows remount when a running action is replaced by its observation or a
+    // lone step becomes part of a group, so their state lives here instead.
+    const [openRows, setOpenRows] = React.useState<
+      ReadonlyMap<string, boolean>
+    >(() => new Map());
+    React.useEffect(() => setOpenRows(new Map()), [conversationId]);
+    const setRowOpen = React.useCallback((key: string, open: boolean) => {
+      setOpenRows((prev) => new Map(prev).set(key, open));
+    }, []);
+
+    // EventMessage used to receive the complete allEvents array and the plan
+    // Set, so every append changed every historical item's shallow props.
+    // Derive the two event-specific values once and keep unchanged wrappers
+    // eligible for React.memo without removing allEvents from grouping logic.
+    const actionById = React.useMemo(() => {
+      const actions = new Map<string, ActionEvent>();
+      for (const event of allEvents) {
+        if (isActionEvent(event)) actions.set(event.id, event);
+      }
+      return actions;
+    }, [allEvents]);
 
     // Set of event ids that have a /model entry anchored to them — used to
     // avoid mounting <ModelMessages> for every event (the component would
@@ -48,44 +88,104 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       );
     };
 
+    // Pending `request_secret` forms sit right after their tool call, so what
+    // the agent writes next lands below them. A call that is not loaded falls
+    // back to the end of the chat.
+    const pendingSecretRequests = usePendingSecretRequests();
+    const secretRequests = React.useMemo(() => {
+      const unanchored = new Map(
+        pendingSecretRequests.map((request) => [request.toolCallId, request]),
+      );
+      const byAnchorId = new Map<string, SecretRequest>();
+      for (const event of messages) {
+        if (unanchored.size === 0) break;
+        if (!isActionEvent(event) && !isObservationEvent(event)) continue;
+        const request = unanchored.get(event.tool_call_id);
+        if (!request) continue;
+        unanchored.delete(event.tool_call_id);
+        byAnchorId.set(event.id, request);
+      }
+      return { byAnchorId, unanchored: [...unanchored.values()] };
+    }, [pendingSecretRequests, messages]);
+
+    const maybeRenderSecretRequest = (eventId: string | undefined) => {
+      const request = eventId && secretRequests.byAnchorId.get(eventId);
+      return request ? <SecretRequestCard request={request} /> : null;
+    };
+
     // Fold consecutive action/observation events into collapsible groups so a
     // long sequence of tool calls doesn't dominate the chat scroll. Items that
     // can't be grouped (or that fall in a short run) are still rendered one by
     // one, identically to before. Agent thoughts attached to an action are
     // hoisted out as their own rendered item so they always show up in the
     // message pane and a thought between actions starts a fresh group.
+    // Live status sits at the end of the chat. While the agent works, the
+    // stage it is on is a group from its first step, and its header shows the
+    // running step or "Thinking"; with no group there yet, a "Thinking" line
+    // takes its place.
+    const { t } = useTranslation("openhands");
+    const { curAgentState } = useAgentState();
+    const { isPlanningAgentRunning } = usePlanningAgentState();
+    const isAgentRunning =
+      curAgentState === AgentState.RUNNING || isPlanningAgentRunning;
     const renderedItems = React.useMemo(
-      () => groupEvents(messages, undefined, allEvents),
-      [messages, allEvents],
+      () =>
+        groupEvents(
+          messages,
+          undefined,
+          allEvents,
+          isAgentRunning ? 1 : undefined,
+        ),
+      [messages, allEvents, isAgentRunning],
     );
+    const showThinkingLine =
+      isAgentRunning && renderedItems.at(-1)?.kind !== "group";
 
     const renderEventMessage = (
       event: OpenHandsEvent,
       index: number,
       suppressThought: boolean,
-    ) => (
-      <EventMessage
-        key={event.id}
-        event={event}
-        messages={allEvents}
-        isLastMessage={messages.length - 1 === index}
-        isInLast10Actions={messages.length - 1 - index < 10}
-        planPreviewEventIds={planPreviewEventIds}
-        suppressThought={suppressThought}
-      />
-    );
+    ) => {
+      const stepKey = getStepKey(event);
+      return (
+        <StepDisclosureContext.Provider
+          key={stepKey}
+          value={{
+            open: openRows.get(stepKey),
+            setOpen: (open) => setRowOpen(stepKey, open),
+          }}
+        >
+          <EventMessage
+            event={event}
+            correspondingAction={
+              (isObservationEvent(event) || isUserRejectObservation(event)) &&
+              event.action_id
+                ? (actionById.get(event.action_id) ?? null)
+                : null
+            }
+            isLastMessage={messages.length - 1 === index}
+            isInLast10Actions={messages.length - 1 - index < 10}
+            showPlanPreview={
+              event.id ? planPreviewEventIds.has(event.id) : false
+            }
+            suppressThought={suppressThought}
+          />
+        </StepDisclosureContext.Provider>
+      );
+    };
 
     return (
       <>
         {renderedItems.map((item, itemIndex) => {
           if (item.kind === "single") {
             return (
-              <React.Fragment key={`single-${item.event.id}`}>
+              <React.Fragment key={`single-${getStepKey(item.event)}`}>
                 {/* Thoughts for singles are also hoisted as their own
                     "thought" item, so suppress the inline render to avoid
                     duplication. */}
                 {renderEventMessage(item.event, item.index, true)}
                 {maybeRenderModelMessages(item.event.id)}
+                {maybeRenderSecretRequest(item.event.id)}
               </React.Fragment>
             );
           }
@@ -99,18 +199,24 @@ export const Messages: React.FC<MessagesProps> = React.memo(
             );
           }
 
-          // A group is "finalized" once another rendered item appears after
-          // it, signalling the agent has moved on. While the group is still
-          // the live tail, it keeps showing the latest action title as its
-          // prominent summary.
-          const isFinalized = itemIndex < renderedItems.length - 1;
-          const groupKey = item.events[0]?.id ?? `group-${item.startIndex}`;
+          const groupKey = item.events[0]
+            ? getStepKey(item.events[0])
+            : `group-${item.startIndex}`;
+          // A group that forms around a step the user opened starts open, so
+          // that step stays visible.
+          const groupOpen =
+            openRows.get(`group:${groupKey}`) ??
+            item.events.some((event) => openRows.get(getStepKey(event)));
           return (
             <React.Fragment key={`group-${groupKey}`}>
               <EventGroup
                 events={item.events}
                 allEvents={allEvents}
-                isFinalized={isFinalized}
+                isLive={
+                  isAgentRunning && itemIndex === renderedItems.length - 1
+                }
+                open={groupOpen}
+                onOpenChange={(open) => setRowOpen(`group:${groupKey}`, open)}
               >
                 {item.events.map((event, offset) =>
                   renderEventMessage(event, item.startIndex + offset, true),
@@ -119,11 +225,26 @@ export const Messages: React.FC<MessagesProps> = React.memo(
               {item.events.map((event) => (
                 <React.Fragment key={`model-${event.id}`}>
                   {maybeRenderModelMessages(event.id)}
+                  {maybeRenderSecretRequest(event.id)}
                 </React.Fragment>
               ))}
             </React.Fragment>
           );
         })}
+        {showThinkingLine && (
+          <div
+            className="mt-2 flex items-center gap-2 py-1 text-sm text-muted"
+            data-testid="live-thinking"
+            role="status"
+          >
+            <span>{t(I18nKey.ACTION_MESSAGE$THINK)}</span>
+            <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+          </div>
+        )}
+        {secretRequests.unanchored.map((request) => (
+          <SecretRequestCard key={request.toolCallId} request={request} />
+        ))}
+        <ConversationConfirmationButtons />
       </>
     );
   },

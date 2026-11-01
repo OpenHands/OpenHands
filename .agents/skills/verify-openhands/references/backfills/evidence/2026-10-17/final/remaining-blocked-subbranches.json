@@ -1,0 +1,3036 @@
+{
+  "generated_utc": "2026-10-17T22:18:52.565167+00:00",
+  "aggregate_utc": "2026-10-17T22:18:33.083173+00:00",
+  "recorded_blocked_check_denominator": 98,
+  "classification_counts": {
+    "current_recorded_prerequisite": 85,
+    "historical_superseded_fixture": 7,
+    "blocked_by_existing_product_failure": 1,
+    "historical_prerequisite_replaced_by_current_block": 5
+  },
+  "remaining_distinct_feature_prerequisite_groups": 73,
+  "warning": "98 recorded blocked keys are not98 current remaining branches. Grouping preserves explicit missing inputs; blocked-only IDs are a different denominator. Historical rows unchanged; unresolved means exact replacement not yet established, not invented external blocker.",
+  "rows": [
+    {
+      "run": "weekly-root-remaining",
+      "feature": "F01.onboarding-cloud-login",
+      "entry": "Cloudactualaccount/deviceflowprerequisite",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:134",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Priorweekly-backendscommands203-209 actualAdvancedhostfieldtested; genuineCloudapproval requiresauthorizedCloudaccount; nativefixturecannotprovepositive",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-root-remaining",
+      "feature": "F01.bootstrap-loading",
+      "entry": "Actualownedoutagereload",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:84",
+      "classification": "historical_superseded_fixture",
+      "missing_input_or_reason": "Actual bounded pending bootstrap exercised after wrong quick502 fixture.",
+      "replacement_entries": [
+        {
+          "run": "weekly-root-remaining",
+          "entry": "CorrectAgentServerPID153307 pendingbootstrap",
+          "result": "pass"
+        }
+      ]
+    },
+    {
+      "run": "weekly-root-remaining",
+      "feature": "F01.locked-cloud-first-run",
+      "entry": "Runtimeprerequisiteinspection",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:27",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "ActualCloudlockedbuild+authorizedCloudaccountneeded",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-root-remaining",
+      "feature": "F01.cookie-auth-redirect",
+      "entry": "Runtimeprerequisiteinspection",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:28",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "OHEcookie-authdeploymentwithvalid/missingsessionsneeded",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-root-remaining",
+      "feature": "F02.super-admin-setup-guide",
+      "entry": "Localnegative desktopphone actualchecked",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:22",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "No guide/tour orsetupstate API; positive needs EnterpriseENABLE_SUPER_ADMIN firstadmin guide_org_id unfinishedsteps; unavailablelocal",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-root-remaining",
+      "feature": "F02.super-admin-setup-tour",
+      "entry": "Localnegative desktopphone actualchecked",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:23",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "No guide/tour orsetupstate API; positive needs EnterpriseENABLE_SUPER_ADMIN firstadmin guide_org_id unfinishedsteps; unavailablelocal",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-root-remaining",
+      "feature": "F02.update-tile",
+      "entry": "Actual update modal/manualcheck",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:24",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Installed1.27.1; tile0; modal opened but npm manualcheck returned Couldnotcheckforupdates. Browserregistryreachability missing; badgeabsent is recipeconditional, notproductpass.",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-root-remaining",
+      "feature": "F02.alert-banner",
+      "entry": "Runtimeprerequisiteinspection",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:25",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Actual local backendconfig publishesnoalerts; Cloudconfiguredmaintenance/faulty-model/bannerrequired",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-root-remaining",
+      "feature": "F02.settings-404-modal",
+      "entry": "Runtimeprerequisiteinspection",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:26",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "CurrentSDKsettings200; requiresgenuinecompatiblebackendsettings404, requiresseparatecompatibleolderbackendfixture",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-root-remaining",
+      "feature": "F03.open-repository-dialog",
+      "entry": "Runtimeprerequisiteinspection",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:31",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "NoauthorizedCloudGitprovider/repositoryinventory",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-root-remaining",
+      "feature": "F03.isolated-workspace-notice",
+      "entry": "Runtimeprerequisiteinspection",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:30",
+      "classification": "historical_superseded_fixture",
+      "missing_input_or_reason": "Actual Docker stale-host notice and Clear exercised desktop and phone.",
+      "replacement_entries": [
+        {
+          "run": "weekly-isolated-notice",
+          "entry": "actualDocker stalehost Clear desktop",
+          "result": "pass"
+        }
+      ]
+    },
+    {
+      "run": "weekly-root-remaining",
+      "feature": "F03.workspaces-unsupported",
+      "entry": "Runtimeprerequisiteinspection",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:29",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "CurrentSDKsupportsworkspaceAPIs; requirescompatibleolderAgentServerwithout/api/workspaces",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-root-remaining",
+      "feature": "F03.responder-cloud-option",
+      "entry": "ActualCloudexternaloption",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:94",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "ClickedactualCloudoption closesmodal andopenssecondpage; tabsafterrace showsPrivacyerror chrome-error://chromewebdata. ExternalbrowserTLS/trust prerequisite blocksintegrationspage; originalpopuprequestnetwork retained; nocloudaccountloginattempt",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-root-remaining",
+      "feature": "F03.recommended-prompt-launch",
+      "entry": "Integrationprerequisiteactualdialog",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:97",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "NoTavily/Linear/Jira credentialed integration; actualmissingdialogprovesprereq, cannotruninstalledpromptpositive",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-root-remaining",
+      "feature": "F03.home-run-outcome-health",
+      "entry": "Statuslessfinish producerboundary",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:117",
+      "classification": "historical_superseded_fixture",
+      "missing_input_or_reason": "Three supported native optional Finish callback shapes exercised actual Home row, summary/title fallback, status and pin icons desktop/phone; prior stock-schema prerequisite superseded. Existing18234 narrow summary layout failure remains.",
+      "replacement_entries": [
+        {
+          "run": "weekly-home-statusless",
+          "entry": "Statuslessfinish producerboundary",
+          "result": "pass"
+        }
+      ]
+    },
+    {
+      "run": "weekly-root-remaining",
+      "feature": "F04.hide-older",
+      "entry": "Actualcutoff1h/hide/reload",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:67",
+      "classification": "historical_superseded_fixture",
+      "missing_input_or_reason": "Actual genuinely aged row hides, persists and restores.",
+      "replacement_entries": [
+        {
+          "run": "weekly-automation",
+          "entry": "Genuinelyaged>1h own modelconversation hides/persists/restores",
+          "result": "pass"
+        }
+      ]
+    },
+    {
+      "run": "weekly-root-remaining",
+      "feature": "F04.cloud-picker",
+      "entry": "Runtimeprerequisiteinspection",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:32",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "NoauthorizedCloudconnectedgitprovider",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-root-remaining",
+      "feature": "F04.start-task-cards",
+      "entry": "Runtimeprerequisiteinspection",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:33",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "NoCloudasynchronoussandboxstart-taskruntime",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-conversations",
+      "feature": "F05.dictation",
+      "entry": "conversation UI",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-conversations/evidence/ledger.jsonl:51",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "A real accessible microphone and authorized speech-transcription input; no-microphone recovery was exercised separately.",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-intent-ui",
+      "feature": "F06.critic-result",
+      "entry": "18535 genuinepositivebuiltinattempt",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-intent-ui/evidence/ledger.jsonl:1",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "A genuine detailed/positive critic producer or authorized Cloud critic credentials. Builtin PassCritic constant is renderer-only; actual patch critic remains known SDK4554 failure.",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-conversations",
+      "feature": "F07.cloud-only",
+      "entry": "conversation UI",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-conversations/evidence/ledger.jsonl:193",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "no authenticated Cloud backend in this local run",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-conversations",
+      "feature": "F08.vscode-link",
+      "entry": "conversation UI",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-conversations/evidence/ledger.jsonl:169",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Writable supported /openhands host-service installation path. Official Editor dependency was prepared but host path creation failed read-only; container workspace is not global Editor service.",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-conversations",
+      "feature": "F08.vscode-link",
+      "entry": "running Editor positive exact host prerequisite",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-conversations/evidence/ledger.jsonl:304",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Writable supported /openhands host-service installation path. Official Editor dependency was prepared but host path creation failed read-only; container workspace is not global Editor service.",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-conversations",
+      "feature": "F08.archived-disabled",
+      "entry": "conversation UI",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-conversations/evidence/ledger.jsonl:194",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "no genuine Cloud sandbox_status archive in local backend",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-intent-ui",
+      "feature": "F08.changes-from-overview",
+      "entry": "18537 phoneOverviewentryknown16792",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-intent-ui/evidence/ledger.jsonl:36",
+      "classification": "blocked_by_existing_product_failure",
+      "missing_input_or_reason": "Phone Overview entry is prevented by existing16792 product failure; desktop and already-open panel alternatives do not exercise this entry.",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-settings",
+      "feature": "F09.locked-cloud-landing",
+      "entry": "Prerequisite review",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:31",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Unavailable in owned Local stack",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-settings-remaining",
+      "feature": "F09.locked-cloud-landing",
+      "entry": "Precise lockedhost prerequisite",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-settings-remaining/evidence/ledger.jsonl:186",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Requires canvaslockedtoCloudhost andauthorizedCloudaccount; ownedrunLocalunlocked",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-settings",
+      "feature": "F09.hidden-llm-redirect",
+      "entry": "Prerequisite review",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:33",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Unavailable in owned Local stack",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-settings-remaining",
+      "feature": "F09.hidden-llm-redirect",
+      "entry": "Precise featureflag prerequisite",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-settings-remaining/evidence/ledger.jsonl:187",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Frozenfrontendhardcodeshide_llm_settings:false; cannotenablebranchwithoutproductchange",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-settings",
+      "feature": "F09.cloud-links",
+      "entry": "Prerequisite review",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:32",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Unavailable in owned Local stack",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-settings-remaining",
+      "feature": "F09.cloud-links",
+      "entry": "Positive Cloud branch prerequisite",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-settings-remaining/evidence/ledger.jsonl:185",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "No authorizedCloudbackend/account supplied; positiveorganizationlinks branch unavailable",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-settings",
+      "feature": "F09.update-available",
+      "entry": "Prerequisite review",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:34",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Unavailable in owned Local stack",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-settings-remaining",
+      "feature": "F09.update-available",
+      "entry": "Precise genuine newerrelease prerequisite",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-settings-remaining/evidence/ledger.jsonl:190",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Needs genuine registrylatestnewerthaninstalledcurrent1.27.1; existingrealcheck reportsUp-to-date. No fake registry oroldbuild substituted",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-settings",
+      "feature": "F09.sidebar-version-tile",
+      "entry": "Prerequisite review",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:35",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Unavailable in owned Local stack",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-settings-remaining",
+      "feature": "F09.sidebar-version-tile",
+      "entry": "Positive newerrelease prerequisite",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-settings-remaining/evidence/ledger.jsonl:189",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Needs genuine registrylatestnewerthaninstalledcurrent1.27.1; currentregistry/up-to-date branch observed; no mockedregistry/oldproductbuild",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-settings",
+      "feature": "F10.cloud-provider-pagination",
+      "entry": "Unavailable prerequisite",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:157",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Requires authorized Cloud backend and paginated-provider response; local backend only",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-settings",
+      "feature": "F10.schema-unavailable",
+      "entry": "Unavailable prerequisite",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:159",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Requires real backend missing agent schema; current pinned backend supplies schema, no mocked responses used",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-settings",
+      "feature": "F10.cloud-readonly",
+      "entry": "Unavailable prerequisite",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:158",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Requires Cloud backend/account with immutable profile controls",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-settings",
+      "feature": "F11.cloud",
+      "entry": "Prerequisite review",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:36",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Unavailable in owned Local stack",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-settings",
+      "feature": "F12.unsupported",
+      "entry": "Unavailable prerequisite",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:161",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Requires older backend lacking router support; frozen run uses supported1.55.1",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-settings",
+      "feature": "F12.cloud",
+      "entry": "Unavailable prerequisite",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:160",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Requires authorized Cloud backend/account",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-settings",
+      "feature": "F13.acp-conversation",
+      "entry": "Unavailable prerequisite",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:163",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Requires separately approved and authenticated external ACP CLI/account; no credentials configured for this path",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-settings",
+      "feature": "F13.cloud-read-only",
+      "entry": "Unavailable prerequisite",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:162",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Requires authorized Cloud backend/account",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-settings",
+      "feature": "F15.schema-unavailable",
+      "entry": "Unavailable prerequisite",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:164",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Requires real backend without agent schema; pinned1.55.1 supplies schema",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-settings-remaining",
+      "feature": "F16.analytics",
+      "entry": "Non-DNT in-flight reversal",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-settings-remaining/evidence/ledger.jsonl:50",
+      "classification": "historical_superseded_fixture",
+      "missing_input_or_reason": "Separate non-DNT owned build and real loopback discard sink exercised consent reversal.",
+      "replacement_entries": [
+        {
+          "run": "weekly-telemetry",
+          "entry": "Non-DNT real loopback destination in-flight consent reversal",
+          "result": "pass"
+        }
+      ]
+    },
+    {
+      "run": "weekly-settings",
+      "feature": "F16.analytics-cloud",
+      "entry": "Unavailable prerequisite",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:165",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Requires Cloud backend/account; only local backend available",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-settings",
+      "feature": "F17.cloud-nav",
+      "entry": "Unavailable prerequisite",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:166",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Requires Cloud backend/account",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-settings",
+      "feature": "F17.install-oauth",
+      "entry": "Unavailable prerequisite",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:168",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Requires approved external OAuth account authorization; no interactive account authorization supplied",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-settings-remaining",
+      "feature": "F17.install-stdio",
+      "entry": "Initial real catalog Time setup attempt",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-settings-remaining/evidence/ledger.jsonl:104",
+      "classification": "historical_superseded_fixture",
+      "missing_input_or_reason": "Dependency preparation followed by actual Time catalog installs twice.",
+      "replacement_entries": [
+        {
+          "run": "weekly-settings-remaining",
+          "entry": "Actual catalog Time install2",
+          "result": "pass"
+        }
+      ]
+    },
+    {
+      "run": "weekly-settings-remaining",
+      "feature": "F17.custom-add-remote",
+      "entry": "Actual fullyconfigured multi-server tool afterdependencyinstall 1",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-settings-remaining/evidence/ledger.jsonl:162",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Fully configured six-server combined runtime requires successful PyPI time-package fetch/revalidation within aggregate30s timeout. Actual combined attempts timed out; isolated cached Time with per-config UV_OFFLINE and isolated HTTP tools passed, but do not replace the combined branch. Original configurations restored.",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-settings-remaining",
+      "feature": "F17.custom-add-remote",
+      "entry": "Actual fullyconfigured multi-server tool afterdependencyinstall 2",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-settings-remaining/evidence/ledger.jsonl:163",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Fully configured six-server combined runtime requires successful PyPI time-package fetch/revalidation within aggregate30s timeout. Actual combined attempts timed out; isolated cached Time with per-config UV_OFFLINE and isolated HTTP tools passed, but do not replace the combined branch. Original configurations restored.",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-settings",
+      "feature": "F17.native-git-tabs",
+      "entry": "Unavailable prerequisite",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:167",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Requires Cloud backend with git providers configured",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-settings-remaining",
+      "feature": "F18.toggle-error",
+      "entry": "Actual own browser networkoutage failedsave",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-settings-remaining/evidence/ledger.jsonl:130",
+      "classification": "historical_superseded_fixture",
+      "missing_input_or_reason": "Browser-offline setup did not create error; real owned SDK outage exercised failed-save rollback and reproduced known failure.",
+      "replacement_entries": [
+        {
+          "run": "weekly-settings-remaining",
+          "entry": "Actual own SDK loss failedsave settled",
+          "result": "fail"
+        }
+      ]
+    },
+    {
+      "run": "weekly-settings",
+      "feature": "F18.cloud-link",
+      "entry": "Unavailable prerequisite",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:169",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Requires authorized Cloud backend/account",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-automation",
+      "feature": "F20.unsupported",
+      "entry": "Cloud/no-backend/historical missing-app-API prerequisites",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-automation/evidence/ledger.jsonl:315",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Blocked: this frozen Local SDK1.55.1 exposes app APIs. No authenticated Cloud backend is configured; global backend manager preempts missing-backend route. No isolated supported historical SDK lacking these APIs is present; current pinned run cannot establish that branch. Stopping SDK yields connection failure, not unsupported.",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-automation-create",
+      "feature": "F22.template-card",
+      "entry": "Connected integration badge positive",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-automation-create/evidence/ledger.jsonl:34",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Noauthorizedauthenticatedexternalintegration supplied; dummy/offlineconfigonlyarrangeslauncherconditions andisnotConnectedpositiveproof.",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-automation-create",
+      "feature": "F22.template-mcp-install-queue",
+      "entry": "Authenticated positive completion",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-automation-create/evidence/ledger.jsonl:32",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "NoauthorizedLinear/AtlassianOAuthcredentialsforrealserver;actualrequiredinstallmodal/cancelproved. Standardconfigprecondition elsewhere isnotauthenticatedInstallproof.",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-automation-create",
+      "feature": "F22.responder-local-launch",
+      "entry": "Original unconfined Slack setup workflow",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-automation-create/evidence/ledger.jsonl:33",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "NoauthorizedSlackworkspace/token; unmodifiedsetupskillalsoopenendedandcanexplorehost/createrecurringtaskscontrarytouserboundaries. ModifiedQA-onlySendproved separately, notoriginalworkflow.",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-automation-create",
+      "feature": "F22.setup-plugin-create",
+      "entry": "Final enabled recurring Confirm and create",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-automation-create/evidence/ledger.jsonl:28",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Notclicked: actualtemplateendpointunconditionallyenablescron; userexplicitlyprohibitsenabledrecurringfixtures. Preview/Reviewbranchesproved; F28inertEventcannotreplace thisconsumer.",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-automation-create",
+      "feature": "F22.setup-plugin-create",
+      "entry": "Known16611 Cloud plugin/prompt paired runtime",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-automation-create/evidence/ledger.jsonl:35",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "MissingauthorizedCloudaccountandrealreviewedpairedCloudruntime;LocaltemplateReview/modifiedSendcannotestablishCloudconversation/eventsfailure.",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-automation-create",
+      "feature": "F22.setup-tarball-create",
+      "entry": "Final enabled recurring Confirm and create",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-automation-create/evidence/ledger.jsonl:29",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Notclicked: actualtemplateendpointunconditionallyenablescron; userexplicitlyprohibitsenabledrecurringfixtures. Preview/Reviewbranchesproved; F28inertEventcannotreplace thisconsumer.",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-automation-create",
+      "feature": "F22.setup-tarball-create",
+      "entry": "Known15509 nativeWindows upload path",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-automation-create/evidence/ledger.jsonl:36",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "CurrentactualruntimeLinux; noWindowslocalstack/eventdeliveryfixture. POSIXfilechooserdoesnotproveWindowsabsoluteuploadpath.",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-automation-create",
+      "feature": "F22.setup-review-confirm",
+      "entry": "Final enabled recurring Confirm and create",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-automation-create/evidence/ledger.jsonl:30",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Notclicked: actualtemplateendpointunconditionallyenablescron; userexplicitlyprohibitsenabledrecurringfixtures. Preview/Reviewbranchesproved; F28inertEventcannotreplace thisconsumer.",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-automation-create",
+      "feature": "F22.setup-review-confirm",
+      "entry": "Known17436 historical1.11.1/1.46.0 promptpreset",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-automation-create/evidence/ledger.jsonl:40",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Exact historical A/B unavailable: reporter corrected both artifacts as privatelypatched and did not supply their bytes/baseidentity or underlying traceback. FrozenCanvas minimumAS1.51 also rejects reported1.46 UIbackend. Stockoldpackages/currentnormalpreset are distinct controls, not historical reproduction/fixproof.",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-automation-create",
+      "feature": "F22.setup-bundle-create",
+      "entry": "Final enabled recurring Confirm and create",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-automation-create/evidence/ledger.jsonl:31",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Notclicked: actualtemplateendpointunconditionallyenablescron; userexplicitlyprohibitsenabledrecurringfixtures. Preview/Reviewbranchesproved; F28inertEventcannotreplace thisconsumer.",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-automation",
+      "feature": "F23.run-task-outcome",
+      "entry": "non-object finish response prerequisite",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-automation/evidence/ledger.jsonl:338",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "InstalledSDK1.55.1 Tool response_schema requires an object. Actual supportedcustom-schema summary-only/custom-only/numeric-status object controls passed the normal callback/UI path, but no genuine legacy/custom non-object producer is supplied or available at this pin.",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-root-remaining",
+      "feature": "F24.no-access",
+      "entry": "Local permissions inspection",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:173",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Native local SDK always grants manage_automations; exact Cloud non-admin membership and authorized account unavailable",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-root-remaining",
+      "feature": "F24.conflict",
+      "entry": "single local organization inspection",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:174",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "409 requires shared backend two authorized Cloud organizations; independent native backends do not share organization ownership records",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-backends",
+      "feature": "F25.share-publicly",
+      "entry": "Weekly backend/runtime worker documented live path",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:27",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "No approved authenticated Cloud/DO account or special deployment. Credential-free error/local contrast paths where applicable retained, no hosted success claimed.",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-backends",
+      "feature": "F25.share-publicly",
+      "entry": "Recovered audit reconciliation; no live drive",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:99",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "No approved authenticated Cloud/DO account or special deployment. Credential-free error/local contrast paths where applicable retained, no hosted success claimed.",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-backends",
+      "feature": "F25.cloud-org-rows",
+      "entry": "Weekly backend/runtime worker documented live path",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:28",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "No approved authenticated Cloud/DO account or special deployment. Credential-free error/local contrast paths where applicable retained, no hosted success claimed.",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-backends",
+      "feature": "F25.cloud-org-rows",
+      "entry": "Recovered audit reconciliation; no live drive",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:100",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "No approved authenticated Cloud/DO account or special deployment. Credential-free error/local contrast paths where applicable retained, no hosted success claimed.",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-backends",
+      "feature": "F25.cloud-log-back-in",
+      "entry": "Weekly backend/runtime worker documented live path",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:29",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "No approved authenticated Cloud/DO account or special deployment. Credential-free error/local contrast paths where applicable retained, no hosted success claimed.",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-backends",
+      "feature": "F25.cloud-log-back-in",
+      "entry": "Recovered audit reconciliation; no live drive",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:101",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "No approved authenticated Cloud/DO account or special deployment. Credential-free error/local contrast paths where applicable retained, no hosted success claimed.",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-backends",
+      "feature": "F25.cloud-settings-link",
+      "entry": "Weekly backend/runtime worker documented live path",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:30",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "No approved authenticated Cloud/DO account or special deployment. Credential-free error/local contrast paths where applicable retained, no hosted success claimed.",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-backends",
+      "feature": "F25.cloud-settings-link",
+      "entry": "Recovered audit reconciliation; no live drive",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:102",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "No approved authenticated Cloud/DO account or special deployment. Credential-free error/local contrast paths where applicable retained, no hosted success claimed.",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-backends",
+      "feature": "F25.cloud-sandbox-states",
+      "entry": "Weekly backend/runtime worker documented live path",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:31",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "No approved authenticated Cloud/DO account or special deployment. Credential-free error/local contrast paths where applicable retained, no hosted success claimed.",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-backends",
+      "feature": "F25.cloud-sandbox-states",
+      "entry": "Recovered audit reconciliation; no live drive",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:103",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "No approved authenticated Cloud/DO account or special deployment. Credential-free error/local contrast paths where applicable retained, no hosted success claimed.",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-backends",
+      "feature": "F25.cloud-org-suspended",
+      "entry": "Weekly backend/runtime worker documented live path",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:32",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "No approved authenticated Cloud/DO account or special deployment. Credential-free error/local contrast paths where applicable retained, no hosted success claimed.",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-backends",
+      "feature": "F25.cloud-org-suspended",
+      "entry": "Recovered audit reconciliation; no live drive",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:104",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "No approved authenticated Cloud/DO account or special deployment. Credential-free error/local contrast paths where applicable retained, no hosted success claimed.",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-backends",
+      "feature": "F25.digitalocean-agents",
+      "entry": "Weekly backend/runtime worker documented live path",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:35",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "No approved authenticated Cloud/DO account or special deployment. Credential-free error/local contrast paths where applicable retained, no hosted success claimed.",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-backends",
+      "feature": "F25.digitalocean-agents",
+      "entry": "Recovered audit reconciliation; no live drive",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:107",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "No approved authenticated Cloud/DO account or special deployment. Credential-free error/local contrast paths where applicable retained, no hosted success claimed.",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-backends",
+      "feature": "F25.digitalocean-backend-removal",
+      "entry": "Weekly backend/runtime worker documented live path",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:36",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "No approved authenticated Cloud/DO account or special deployment. Credential-free error/local contrast paths where applicable retained, no hosted success claimed.",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-backends",
+      "feature": "F25.digitalocean-backend-removal",
+      "entry": "Recovered audit reconciliation; no live drive",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:108",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "No approved authenticated Cloud/DO account or special deployment. Credential-free error/local contrast paths where applicable retained, no hosted success claimed.",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-backends",
+      "feature": "F25.locked-cloud",
+      "entry": "Weekly backend/runtime worker documented live path",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:37",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "No approved authenticated Cloud/DO account or special deployment. Credential-free error/local contrast paths where applicable retained, no hosted success claimed.",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-backends",
+      "feature": "F25.locked-cloud",
+      "entry": "Recovered audit reconciliation; no live drive",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:109",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "No approved authenticated Cloud/DO account or special deployment. Credential-free error/local contrast paths where applicable retained, no hosted success claimed.",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-backends",
+      "feature": "F26.runtime-services-agent-use",
+      "entry": "Weekly backend/runtime worker documented live path",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:61",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Auto-review rejected enabled recurring fixture: conflicts user no recurring tasks and no same-action cleanup. Exact recipe not executed; no fixture created.",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-backends",
+      "feature": "F26.runtime-services-agent-use",
+      "entry": "Recovered audit reconciliation; no live drive",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:133",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Auto-review rejected enabled recurring fixture: conflicts user no recurring tasks and no same-action cleanup. Exact recipe not executed; no fixture created.",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-backends",
+      "feature": "F26.docker-image",
+      "entry": "Weekly backend/runtime worker documented live path",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:65",
+      "classification": "historical_prerequisite_replaced_by_current_block",
+      "missing_input_or_reason": "Superseded historical storage/smoke rationale; current serial full-image build still capacity-blocked.",
+      "replacement_entries": [
+        {
+          "run": "weekly-backends",
+          "entry": "Current serial full Canvas packaging after ordinaryworkers released",
+          "result": "blocked"
+        }
+      ]
+    },
+    {
+      "run": "weekly-backends",
+      "feature": "F26.docker-image",
+      "entry": "Recovered audit reconciliation; no live drive",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:137",
+      "classification": "historical_prerequisite_replaced_by_current_block",
+      "missing_input_or_reason": "Superseded historical storage/smoke rationale; current serial full-image build still capacity-blocked.",
+      "replacement_entries": [
+        {
+          "run": "weekly-backends",
+          "entry": "Current serial full Canvas packaging after ordinaryworkers released",
+          "result": "blocked"
+        }
+      ]
+    },
+    {
+      "run": "weekly-backends",
+      "feature": "F26.docker-image",
+      "entry": "Current Docker prerequisite: real bounded container, not Canvas packaging",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:172",
+      "classification": "historical_prerequisite_replaced_by_current_block",
+      "missing_input_or_reason": "Superseded historical storage/smoke rationale; current serial full-image build still capacity-blocked.",
+      "replacement_entries": [
+        {
+          "run": "weekly-backends",
+          "entry": "Current serial full Canvas packaging after ordinaryworkers released",
+          "result": "blocked"
+        }
+      ]
+    },
+    {
+      "run": "weekly-backends",
+      "feature": "F26.docker-image",
+      "entry": "Current serial full Canvas packaging after ordinaryworkers released",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:171",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "More supported Docker storage capacity: actual full-base unpack crossed5GiB reserve after >11.23GB incremental use; no final Canvas image. Frontend stage passed; exact remaining peak unknown.",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-backends",
+      "feature": "F26.helm-chart",
+      "entry": "Weekly backend/runtime worker documented live path",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:67",
+      "classification": "historical_prerequisite_replaced_by_current_block",
+      "missing_input_or_reason": "Helm binary absence resolved and actual lint/template passed. Live cluster installation still requires authorized disposable Kubernetes context.",
+      "replacement_entries": [
+        {
+          "run": "weekly-backends",
+          "entry": "Live Helm install into a disposable Kubernetes context",
+          "result": "blocked"
+        }
+      ]
+    },
+    {
+      "run": "weekly-backends",
+      "feature": "F26.helm-chart",
+      "entry": "Recovered audit reconciliation; no live drive",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:139",
+      "classification": "historical_prerequisite_replaced_by_current_block",
+      "missing_input_or_reason": "Helm binary absence resolved and actual lint/template passed. Live cluster installation still requires authorized disposable Kubernetes context.",
+      "replacement_entries": [
+        {
+          "run": "weekly-backends",
+          "entry": "Live Helm install into a disposable Kubernetes context",
+          "result": "blocked"
+        }
+      ]
+    },
+    {
+      "run": "weekly-backends",
+      "feature": "F26.helm-chart",
+      "entry": "Live Helm install into a disposable Kubernetes context",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:165",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Authorized disposable Kubernetes context; actual KUBECONFIG/default/in-cluster credential-presence checks negative. Helm binary/static chart checks succeeded.",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-backends",
+      "feature": "F26.desktop-macos-titlebar",
+      "entry": "Weekly backend/runtime worker documented live path",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:70",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Actual host Linux; macOS native titlebar/Gatekeeper fixture unavailable.",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-backends",
+      "feature": "F26.desktop-macos-titlebar",
+      "entry": "Recovered audit reconciliation; no live drive",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:142",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Actual host Linux; macOS native titlebar/Gatekeeper fixture unavailable.",
+      "replacement_entries": []
+    },
+    {
+      "run": "weekly-conversations",
+      "feature": "F27.usage-empty",
+      "entry": "conversation UI",
+      "original_result": "blocked",
+      "private_evidence_reference": "runs/weekly-conversations/evidence/ledger.jsonl:231",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "A genuine missing-metrics producer/state; current new or errored conversations have zero-valued metrics, not absent metrics.",
+      "replacement_entries": []
+    }
+  ],
+  "remaining_groups": [
+    {
+      "feature": "F01.onboarding-cloud-login",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Priorweekly-backendscommands203-209 actualAdvancedhostfieldtested; genuineCloudapproval requiresauthorizedCloudaccount; nativefixturecannotprovepositive",
+      "recorded_entries": [
+        {
+          "run": "weekly-root-remaining",
+          "entry": "Cloudactualaccount/deviceflowprerequisite",
+          "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:134"
+        }
+      ]
+    },
+    {
+      "feature": "F01.locked-cloud-first-run",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "ActualCloudlockedbuild+authorizedCloudaccountneeded",
+      "recorded_entries": [
+        {
+          "run": "weekly-root-remaining",
+          "entry": "Runtimeprerequisiteinspection",
+          "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:27"
+        }
+      ]
+    },
+    {
+      "feature": "F01.cookie-auth-redirect",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "OHEcookie-authdeploymentwithvalid/missingsessionsneeded",
+      "recorded_entries": [
+        {
+          "run": "weekly-root-remaining",
+          "entry": "Runtimeprerequisiteinspection",
+          "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:28"
+        }
+      ]
+    },
+    {
+      "feature": "F02.super-admin-setup-guide",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "No guide/tour orsetupstate API; positive needs EnterpriseENABLE_SUPER_ADMIN firstadmin guide_org_id unfinishedsteps; unavailablelocal",
+      "recorded_entries": [
+        {
+          "run": "weekly-root-remaining",
+          "entry": "Localnegative desktopphone actualchecked",
+          "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:22"
+        }
+      ]
+    },
+    {
+      "feature": "F02.super-admin-setup-tour",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "No guide/tour orsetupstate API; positive needs EnterpriseENABLE_SUPER_ADMIN firstadmin guide_org_id unfinishedsteps; unavailablelocal",
+      "recorded_entries": [
+        {
+          "run": "weekly-root-remaining",
+          "entry": "Localnegative desktopphone actualchecked",
+          "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:23"
+        }
+      ]
+    },
+    {
+      "feature": "F02.update-tile",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Installed1.27.1; tile0; modal opened but npm manualcheck returned Couldnotcheckforupdates. Browserregistryreachability missing; badgeabsent is recipeconditional, notproductpass.",
+      "recorded_entries": [
+        {
+          "run": "weekly-root-remaining",
+          "entry": "Actual update modal/manualcheck",
+          "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:24"
+        }
+      ]
+    },
+    {
+      "feature": "F02.alert-banner",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Actual local backendconfig publishesnoalerts; Cloudconfiguredmaintenance/faulty-model/bannerrequired",
+      "recorded_entries": [
+        {
+          "run": "weekly-root-remaining",
+          "entry": "Runtimeprerequisiteinspection",
+          "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:25"
+        }
+      ]
+    },
+    {
+      "feature": "F02.settings-404-modal",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "CurrentSDKsettings200; requiresgenuinecompatiblebackendsettings404, requiresseparatecompatibleolderbackendfixture",
+      "recorded_entries": [
+        {
+          "run": "weekly-root-remaining",
+          "entry": "Runtimeprerequisiteinspection",
+          "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:26"
+        }
+      ]
+    },
+    {
+      "feature": "F03.open-repository-dialog",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "NoauthorizedCloudGitprovider/repositoryinventory",
+      "recorded_entries": [
+        {
+          "run": "weekly-root-remaining",
+          "entry": "Runtimeprerequisiteinspection",
+          "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:31"
+        }
+      ]
+    },
+    {
+      "feature": "F03.workspaces-unsupported",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "CurrentSDKsupportsworkspaceAPIs; requirescompatibleolderAgentServerwithout/api/workspaces",
+      "recorded_entries": [
+        {
+          "run": "weekly-root-remaining",
+          "entry": "Runtimeprerequisiteinspection",
+          "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:29"
+        }
+      ]
+    },
+    {
+      "feature": "F03.responder-cloud-option",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "ClickedactualCloudoption closesmodal andopenssecondpage; tabsafterrace showsPrivacyerror chrome-error://chromewebdata. ExternalbrowserTLS/trust prerequisite blocksintegrationspage; originalpopuprequestnetwork retained; nocloudaccountloginattempt",
+      "recorded_entries": [
+        {
+          "run": "weekly-root-remaining",
+          "entry": "ActualCloudexternaloption",
+          "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:94"
+        }
+      ]
+    },
+    {
+      "feature": "F03.recommended-prompt-launch",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "NoTavily/Linear/Jira credentialed integration; actualmissingdialogprovesprereq, cannotruninstalledpromptpositive",
+      "recorded_entries": [
+        {
+          "run": "weekly-root-remaining",
+          "entry": "Integrationprerequisiteactualdialog",
+          "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:97"
+        }
+      ]
+    },
+    {
+      "feature": "F04.cloud-picker",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "NoauthorizedCloudconnectedgitprovider",
+      "recorded_entries": [
+        {
+          "run": "weekly-root-remaining",
+          "entry": "Runtimeprerequisiteinspection",
+          "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:32"
+        }
+      ]
+    },
+    {
+      "feature": "F04.start-task-cards",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "NoCloudasynchronoussandboxstart-taskruntime",
+      "recorded_entries": [
+        {
+          "run": "weekly-root-remaining",
+          "entry": "Runtimeprerequisiteinspection",
+          "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:33"
+        }
+      ]
+    },
+    {
+      "feature": "F05.dictation",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "A real accessible microphone and authorized speech-transcription input; no-microphone recovery was exercised separately.",
+      "recorded_entries": [
+        {
+          "run": "weekly-conversations",
+          "entry": "conversation UI",
+          "private_evidence_reference": "runs/weekly-conversations/evidence/ledger.jsonl:51"
+        }
+      ]
+    },
+    {
+      "feature": "F06.critic-result",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "A genuine detailed/positive critic producer or authorized Cloud critic credentials. Builtin PassCritic constant is renderer-only; actual patch critic remains known SDK4554 failure.",
+      "recorded_entries": [
+        {
+          "run": "weekly-intent-ui",
+          "entry": "18535 genuinepositivebuiltinattempt",
+          "private_evidence_reference": "runs/weekly-intent-ui/evidence/ledger.jsonl:1"
+        }
+      ]
+    },
+    {
+      "feature": "F07.cloud-only",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "no authenticated Cloud backend in this local run",
+      "recorded_entries": [
+        {
+          "run": "weekly-conversations",
+          "entry": "conversation UI",
+          "private_evidence_reference": "runs/weekly-conversations/evidence/ledger.jsonl:193"
+        }
+      ]
+    },
+    {
+      "feature": "F08.vscode-link",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Writable supported /openhands host-service installation path. Official Editor dependency was prepared but host path creation failed read-only; container workspace is not global Editor service.",
+      "recorded_entries": [
+        {
+          "run": "weekly-conversations",
+          "entry": "conversation UI",
+          "private_evidence_reference": "runs/weekly-conversations/evidence/ledger.jsonl:169"
+        },
+        {
+          "run": "weekly-conversations",
+          "entry": "running Editor positive exact host prerequisite",
+          "private_evidence_reference": "runs/weekly-conversations/evidence/ledger.jsonl:304"
+        }
+      ]
+    },
+    {
+      "feature": "F08.archived-disabled",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "no genuine Cloud sandbox_status archive in local backend",
+      "recorded_entries": [
+        {
+          "run": "weekly-conversations",
+          "entry": "conversation UI",
+          "private_evidence_reference": "runs/weekly-conversations/evidence/ledger.jsonl:194"
+        }
+      ]
+    },
+    {
+      "feature": "F08.changes-from-overview",
+      "classification": "blocked_by_existing_product_failure",
+      "missing_input_or_reason": "Phone Overview entry is prevented by existing16792 product failure; desktop and already-open panel alternatives do not exercise this entry.",
+      "recorded_entries": [
+        {
+          "run": "weekly-intent-ui",
+          "entry": "18537 phoneOverviewentryknown16792",
+          "private_evidence_reference": "runs/weekly-intent-ui/evidence/ledger.jsonl:36"
+        }
+      ]
+    },
+    {
+      "feature": "F09.locked-cloud-landing",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Unavailable in owned Local stack",
+      "recorded_entries": [
+        {
+          "run": "weekly-settings",
+          "entry": "Prerequisite review",
+          "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:31"
+        }
+      ]
+    },
+    {
+      "feature": "F09.locked-cloud-landing",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Requires canvaslockedtoCloudhost andauthorizedCloudaccount; ownedrunLocalunlocked",
+      "recorded_entries": [
+        {
+          "run": "weekly-settings-remaining",
+          "entry": "Precise lockedhost prerequisite",
+          "private_evidence_reference": "runs/weekly-settings-remaining/evidence/ledger.jsonl:186"
+        }
+      ]
+    },
+    {
+      "feature": "F09.hidden-llm-redirect",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Unavailable in owned Local stack",
+      "recorded_entries": [
+        {
+          "run": "weekly-settings",
+          "entry": "Prerequisite review",
+          "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:33"
+        }
+      ]
+    },
+    {
+      "feature": "F09.hidden-llm-redirect",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Frozenfrontendhardcodeshide_llm_settings:false; cannotenablebranchwithoutproductchange",
+      "recorded_entries": [
+        {
+          "run": "weekly-settings-remaining",
+          "entry": "Precise featureflag prerequisite",
+          "private_evidence_reference": "runs/weekly-settings-remaining/evidence/ledger.jsonl:187"
+        }
+      ]
+    },
+    {
+      "feature": "F09.cloud-links",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Unavailable in owned Local stack",
+      "recorded_entries": [
+        {
+          "run": "weekly-settings",
+          "entry": "Prerequisite review",
+          "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:32"
+        }
+      ]
+    },
+    {
+      "feature": "F09.cloud-links",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "No authorizedCloudbackend/account supplied; positiveorganizationlinks branch unavailable",
+      "recorded_entries": [
+        {
+          "run": "weekly-settings-remaining",
+          "entry": "Positive Cloud branch prerequisite",
+          "private_evidence_reference": "runs/weekly-settings-remaining/evidence/ledger.jsonl:185"
+        }
+      ]
+    },
+    {
+      "feature": "F09.update-available",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Unavailable in owned Local stack",
+      "recorded_entries": [
+        {
+          "run": "weekly-settings",
+          "entry": "Prerequisite review",
+          "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:34"
+        }
+      ]
+    },
+    {
+      "feature": "F09.update-available",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Needs genuine registrylatestnewerthaninstalledcurrent1.27.1; existingrealcheck reportsUp-to-date. No fake registry oroldbuild substituted",
+      "recorded_entries": [
+        {
+          "run": "weekly-settings-remaining",
+          "entry": "Precise genuine newerrelease prerequisite",
+          "private_evidence_reference": "runs/weekly-settings-remaining/evidence/ledger.jsonl:190"
+        }
+      ]
+    },
+    {
+      "feature": "F09.sidebar-version-tile",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Unavailable in owned Local stack",
+      "recorded_entries": [
+        {
+          "run": "weekly-settings",
+          "entry": "Prerequisite review",
+          "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:35"
+        }
+      ]
+    },
+    {
+      "feature": "F09.sidebar-version-tile",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Needs genuine registrylatestnewerthaninstalledcurrent1.27.1; currentregistry/up-to-date branch observed; no mockedregistry/oldproductbuild",
+      "recorded_entries": [
+        {
+          "run": "weekly-settings-remaining",
+          "entry": "Positive newerrelease prerequisite",
+          "private_evidence_reference": "runs/weekly-settings-remaining/evidence/ledger.jsonl:189"
+        }
+      ]
+    },
+    {
+      "feature": "F10.cloud-provider-pagination",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Requires authorized Cloud backend and paginated-provider response; local backend only",
+      "recorded_entries": [
+        {
+          "run": "weekly-settings",
+          "entry": "Unavailable prerequisite",
+          "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:157"
+        }
+      ]
+    },
+    {
+      "feature": "F10.schema-unavailable",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Requires real backend missing agent schema; current pinned backend supplies schema, no mocked responses used",
+      "recorded_entries": [
+        {
+          "run": "weekly-settings",
+          "entry": "Unavailable prerequisite",
+          "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:159"
+        }
+      ]
+    },
+    {
+      "feature": "F10.cloud-readonly",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Requires Cloud backend/account with immutable profile controls",
+      "recorded_entries": [
+        {
+          "run": "weekly-settings",
+          "entry": "Unavailable prerequisite",
+          "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:158"
+        }
+      ]
+    },
+    {
+      "feature": "F11.cloud",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Unavailable in owned Local stack",
+      "recorded_entries": [
+        {
+          "run": "weekly-settings",
+          "entry": "Prerequisite review",
+          "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:36"
+        }
+      ]
+    },
+    {
+      "feature": "F12.unsupported",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Requires older backend lacking router support; frozen run uses supported1.55.1",
+      "recorded_entries": [
+        {
+          "run": "weekly-settings",
+          "entry": "Unavailable prerequisite",
+          "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:161"
+        }
+      ]
+    },
+    {
+      "feature": "F12.cloud",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Requires authorized Cloud backend/account",
+      "recorded_entries": [
+        {
+          "run": "weekly-settings",
+          "entry": "Unavailable prerequisite",
+          "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:160"
+        }
+      ]
+    },
+    {
+      "feature": "F13.acp-conversation",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Requires separately approved and authenticated external ACP CLI/account; no credentials configured for this path",
+      "recorded_entries": [
+        {
+          "run": "weekly-settings",
+          "entry": "Unavailable prerequisite",
+          "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:163"
+        }
+      ]
+    },
+    {
+      "feature": "F13.cloud-read-only",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Requires authorized Cloud backend/account",
+      "recorded_entries": [
+        {
+          "run": "weekly-settings",
+          "entry": "Unavailable prerequisite",
+          "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:162"
+        }
+      ]
+    },
+    {
+      "feature": "F15.schema-unavailable",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Requires real backend without agent schema; pinned1.55.1 supplies schema",
+      "recorded_entries": [
+        {
+          "run": "weekly-settings",
+          "entry": "Unavailable prerequisite",
+          "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:164"
+        }
+      ]
+    },
+    {
+      "feature": "F16.analytics-cloud",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Requires Cloud backend/account; only local backend available",
+      "recorded_entries": [
+        {
+          "run": "weekly-settings",
+          "entry": "Unavailable prerequisite",
+          "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:165"
+        }
+      ]
+    },
+    {
+      "feature": "F17.cloud-nav",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Requires Cloud backend/account",
+      "recorded_entries": [
+        {
+          "run": "weekly-settings",
+          "entry": "Unavailable prerequisite",
+          "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:166"
+        }
+      ]
+    },
+    {
+      "feature": "F17.install-oauth",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Requires approved external OAuth account authorization; no interactive account authorization supplied",
+      "recorded_entries": [
+        {
+          "run": "weekly-settings",
+          "entry": "Unavailable prerequisite",
+          "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:168"
+        }
+      ]
+    },
+    {
+      "feature": "F17.custom-add-remote",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Fully configured six-server combined runtime requires successful PyPI time-package fetch/revalidation within aggregate30s timeout. Actual combined attempts timed out; isolated cached Time with per-config UV_OFFLINE and isolated HTTP tools passed, but do not replace the combined branch. Original configurations restored.",
+      "recorded_entries": [
+        {
+          "run": "weekly-settings-remaining",
+          "entry": "Actual fullyconfigured multi-server tool afterdependencyinstall 1",
+          "private_evidence_reference": "runs/weekly-settings-remaining/evidence/ledger.jsonl:162"
+        },
+        {
+          "run": "weekly-settings-remaining",
+          "entry": "Actual fullyconfigured multi-server tool afterdependencyinstall 2",
+          "private_evidence_reference": "runs/weekly-settings-remaining/evidence/ledger.jsonl:163"
+        }
+      ]
+    },
+    {
+      "feature": "F17.native-git-tabs",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Requires Cloud backend with git providers configured",
+      "recorded_entries": [
+        {
+          "run": "weekly-settings",
+          "entry": "Unavailable prerequisite",
+          "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:167"
+        }
+      ]
+    },
+    {
+      "feature": "F18.cloud-link",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Requires authorized Cloud backend/account",
+      "recorded_entries": [
+        {
+          "run": "weekly-settings",
+          "entry": "Unavailable prerequisite",
+          "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:169"
+        }
+      ]
+    },
+    {
+      "feature": "F20.unsupported",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Blocked: this frozen Local SDK1.55.1 exposes app APIs. No authenticated Cloud backend is configured; global backend manager preempts missing-backend route. No isolated supported historical SDK lacking these APIs is present; current pinned run cannot establish that branch. Stopping SDK yields connection failure, not unsupported.",
+      "recorded_entries": [
+        {
+          "run": "weekly-automation",
+          "entry": "Cloud/no-backend/historical missing-app-API prerequisites",
+          "private_evidence_reference": "runs/weekly-automation/evidence/ledger.jsonl:315"
+        }
+      ]
+    },
+    {
+      "feature": "F22.template-card",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Noauthorizedauthenticatedexternalintegration supplied; dummy/offlineconfigonlyarrangeslauncherconditions andisnotConnectedpositiveproof.",
+      "recorded_entries": [
+        {
+          "run": "weekly-automation-create",
+          "entry": "Connected integration badge positive",
+          "private_evidence_reference": "runs/weekly-automation-create/evidence/ledger.jsonl:34"
+        }
+      ]
+    },
+    {
+      "feature": "F22.template-mcp-install-queue",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "NoauthorizedLinear/AtlassianOAuthcredentialsforrealserver;actualrequiredinstallmodal/cancelproved. Standardconfigprecondition elsewhere isnotauthenticatedInstallproof.",
+      "recorded_entries": [
+        {
+          "run": "weekly-automation-create",
+          "entry": "Authenticated positive completion",
+          "private_evidence_reference": "runs/weekly-automation-create/evidence/ledger.jsonl:32"
+        }
+      ]
+    },
+    {
+      "feature": "F22.responder-local-launch",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "NoauthorizedSlackworkspace/token; unmodifiedsetupskillalsoopenendedandcanexplorehost/createrecurringtaskscontrarytouserboundaries. ModifiedQA-onlySendproved separately, notoriginalworkflow.",
+      "recorded_entries": [
+        {
+          "run": "weekly-automation-create",
+          "entry": "Original unconfined Slack setup workflow",
+          "private_evidence_reference": "runs/weekly-automation-create/evidence/ledger.jsonl:33"
+        }
+      ]
+    },
+    {
+      "feature": "F22.setup-plugin-create",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Notclicked: actualtemplateendpointunconditionallyenablescron; userexplicitlyprohibitsenabledrecurringfixtures. Preview/Reviewbranchesproved; F28inertEventcannotreplace thisconsumer.",
+      "recorded_entries": [
+        {
+          "run": "weekly-automation-create",
+          "entry": "Final enabled recurring Confirm and create",
+          "private_evidence_reference": "runs/weekly-automation-create/evidence/ledger.jsonl:28"
+        }
+      ]
+    },
+    {
+      "feature": "F22.setup-plugin-create",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "MissingauthorizedCloudaccountandrealreviewedpairedCloudruntime;LocaltemplateReview/modifiedSendcannotestablishCloudconversation/eventsfailure.",
+      "recorded_entries": [
+        {
+          "run": "weekly-automation-create",
+          "entry": "Known16611 Cloud plugin/prompt paired runtime",
+          "private_evidence_reference": "runs/weekly-automation-create/evidence/ledger.jsonl:35"
+        }
+      ]
+    },
+    {
+      "feature": "F22.setup-tarball-create",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Notclicked: actualtemplateendpointunconditionallyenablescron; userexplicitlyprohibitsenabledrecurringfixtures. Preview/Reviewbranchesproved; F28inertEventcannotreplace thisconsumer.",
+      "recorded_entries": [
+        {
+          "run": "weekly-automation-create",
+          "entry": "Final enabled recurring Confirm and create",
+          "private_evidence_reference": "runs/weekly-automation-create/evidence/ledger.jsonl:29"
+        }
+      ]
+    },
+    {
+      "feature": "F22.setup-tarball-create",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "CurrentactualruntimeLinux; noWindowslocalstack/eventdeliveryfixture. POSIXfilechooserdoesnotproveWindowsabsoluteuploadpath.",
+      "recorded_entries": [
+        {
+          "run": "weekly-automation-create",
+          "entry": "Known15509 nativeWindows upload path",
+          "private_evidence_reference": "runs/weekly-automation-create/evidence/ledger.jsonl:36"
+        }
+      ]
+    },
+    {
+      "feature": "F22.setup-review-confirm",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Notclicked: actualtemplateendpointunconditionallyenablescron; userexplicitlyprohibitsenabledrecurringfixtures. Preview/Reviewbranchesproved; F28inertEventcannotreplace thisconsumer.",
+      "recorded_entries": [
+        {
+          "run": "weekly-automation-create",
+          "entry": "Final enabled recurring Confirm and create",
+          "private_evidence_reference": "runs/weekly-automation-create/evidence/ledger.jsonl:30"
+        }
+      ]
+    },
+    {
+      "feature": "F22.setup-review-confirm",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Exact historical A/B unavailable: reporter corrected both artifacts as privatelypatched and did not supply their bytes/baseidentity or underlying traceback. FrozenCanvas minimumAS1.51 also rejects reported1.46 UIbackend. Stockoldpackages/currentnormalpreset are distinct controls, not historical reproduction/fixproof.",
+      "recorded_entries": [
+        {
+          "run": "weekly-automation-create",
+          "entry": "Known17436 historical1.11.1/1.46.0 promptpreset",
+          "private_evidence_reference": "runs/weekly-automation-create/evidence/ledger.jsonl:40"
+        }
+      ]
+    },
+    {
+      "feature": "F22.setup-bundle-create",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Notclicked: actualtemplateendpointunconditionallyenablescron; userexplicitlyprohibitsenabledrecurringfixtures. Preview/Reviewbranchesproved; F28inertEventcannotreplace thisconsumer.",
+      "recorded_entries": [
+        {
+          "run": "weekly-automation-create",
+          "entry": "Final enabled recurring Confirm and create",
+          "private_evidence_reference": "runs/weekly-automation-create/evidence/ledger.jsonl:31"
+        }
+      ]
+    },
+    {
+      "feature": "F23.run-task-outcome",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "InstalledSDK1.55.1 Tool response_schema requires an object. Actual supportedcustom-schema summary-only/custom-only/numeric-status object controls passed the normal callback/UI path, but no genuine legacy/custom non-object producer is supplied or available at this pin.",
+      "recorded_entries": [
+        {
+          "run": "weekly-automation",
+          "entry": "non-object finish response prerequisite",
+          "private_evidence_reference": "runs/weekly-automation/evidence/ledger.jsonl:338"
+        }
+      ]
+    },
+    {
+      "feature": "F24.no-access",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Native local SDK always grants manage_automations; exact Cloud non-admin membership and authorized account unavailable",
+      "recorded_entries": [
+        {
+          "run": "weekly-root-remaining",
+          "entry": "Local permissions inspection",
+          "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:173"
+        }
+      ]
+    },
+    {
+      "feature": "F24.conflict",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "409 requires shared backend two authorized Cloud organizations; independent native backends do not share organization ownership records",
+      "recorded_entries": [
+        {
+          "run": "weekly-root-remaining",
+          "entry": "single local organization inspection",
+          "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:174"
+        }
+      ]
+    },
+    {
+      "feature": "F25.share-publicly",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "No approved authenticated Cloud/DO account or special deployment. Credential-free error/local contrast paths where applicable retained, no hosted success claimed.",
+      "recorded_entries": [
+        {
+          "run": "weekly-backends",
+          "entry": "Weekly backend/runtime worker documented live path",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:27"
+        },
+        {
+          "run": "weekly-backends",
+          "entry": "Recovered audit reconciliation; no live drive",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:99"
+        }
+      ]
+    },
+    {
+      "feature": "F25.cloud-org-rows",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "No approved authenticated Cloud/DO account or special deployment. Credential-free error/local contrast paths where applicable retained, no hosted success claimed.",
+      "recorded_entries": [
+        {
+          "run": "weekly-backends",
+          "entry": "Weekly backend/runtime worker documented live path",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:28"
+        },
+        {
+          "run": "weekly-backends",
+          "entry": "Recovered audit reconciliation; no live drive",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:100"
+        }
+      ]
+    },
+    {
+      "feature": "F25.cloud-log-back-in",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "No approved authenticated Cloud/DO account or special deployment. Credential-free error/local contrast paths where applicable retained, no hosted success claimed.",
+      "recorded_entries": [
+        {
+          "run": "weekly-backends",
+          "entry": "Weekly backend/runtime worker documented live path",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:29"
+        },
+        {
+          "run": "weekly-backends",
+          "entry": "Recovered audit reconciliation; no live drive",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:101"
+        }
+      ]
+    },
+    {
+      "feature": "F25.cloud-settings-link",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "No approved authenticated Cloud/DO account or special deployment. Credential-free error/local contrast paths where applicable retained, no hosted success claimed.",
+      "recorded_entries": [
+        {
+          "run": "weekly-backends",
+          "entry": "Weekly backend/runtime worker documented live path",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:30"
+        },
+        {
+          "run": "weekly-backends",
+          "entry": "Recovered audit reconciliation; no live drive",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:102"
+        }
+      ]
+    },
+    {
+      "feature": "F25.cloud-sandbox-states",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "No approved authenticated Cloud/DO account or special deployment. Credential-free error/local contrast paths where applicable retained, no hosted success claimed.",
+      "recorded_entries": [
+        {
+          "run": "weekly-backends",
+          "entry": "Weekly backend/runtime worker documented live path",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:31"
+        },
+        {
+          "run": "weekly-backends",
+          "entry": "Recovered audit reconciliation; no live drive",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:103"
+        }
+      ]
+    },
+    {
+      "feature": "F25.cloud-org-suspended",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "No approved authenticated Cloud/DO account or special deployment. Credential-free error/local contrast paths where applicable retained, no hosted success claimed.",
+      "recorded_entries": [
+        {
+          "run": "weekly-backends",
+          "entry": "Weekly backend/runtime worker documented live path",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:32"
+        },
+        {
+          "run": "weekly-backends",
+          "entry": "Recovered audit reconciliation; no live drive",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:104"
+        }
+      ]
+    },
+    {
+      "feature": "F25.digitalocean-agents",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "No approved authenticated Cloud/DO account or special deployment. Credential-free error/local contrast paths where applicable retained, no hosted success claimed.",
+      "recorded_entries": [
+        {
+          "run": "weekly-backends",
+          "entry": "Weekly backend/runtime worker documented live path",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:35"
+        },
+        {
+          "run": "weekly-backends",
+          "entry": "Recovered audit reconciliation; no live drive",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:107"
+        }
+      ]
+    },
+    {
+      "feature": "F25.digitalocean-backend-removal",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "No approved authenticated Cloud/DO account or special deployment. Credential-free error/local contrast paths where applicable retained, no hosted success claimed.",
+      "recorded_entries": [
+        {
+          "run": "weekly-backends",
+          "entry": "Weekly backend/runtime worker documented live path",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:36"
+        },
+        {
+          "run": "weekly-backends",
+          "entry": "Recovered audit reconciliation; no live drive",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:108"
+        }
+      ]
+    },
+    {
+      "feature": "F25.locked-cloud",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "No approved authenticated Cloud/DO account or special deployment. Credential-free error/local contrast paths where applicable retained, no hosted success claimed.",
+      "recorded_entries": [
+        {
+          "run": "weekly-backends",
+          "entry": "Weekly backend/runtime worker documented live path",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:37"
+        },
+        {
+          "run": "weekly-backends",
+          "entry": "Recovered audit reconciliation; no live drive",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:109"
+        }
+      ]
+    },
+    {
+      "feature": "F26.runtime-services-agent-use",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Auto-review rejected enabled recurring fixture: conflicts user no recurring tasks and no same-action cleanup. Exact recipe not executed; no fixture created.",
+      "recorded_entries": [
+        {
+          "run": "weekly-backends",
+          "entry": "Weekly backend/runtime worker documented live path",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:61"
+        },
+        {
+          "run": "weekly-backends",
+          "entry": "Recovered audit reconciliation; no live drive",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:133"
+        }
+      ]
+    },
+    {
+      "feature": "F26.docker-image",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "More supported Docker storage capacity: actual full-base unpack crossed5GiB reserve after >11.23GB incremental use; no final Canvas image. Frontend stage passed; exact remaining peak unknown.",
+      "recorded_entries": [
+        {
+          "run": "weekly-backends",
+          "entry": "Current serial full Canvas packaging after ordinaryworkers released",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:171"
+        }
+      ]
+    },
+    {
+      "feature": "F26.helm-chart",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Authorized disposable Kubernetes context; actual KUBECONFIG/default/in-cluster credential-presence checks negative. Helm binary/static chart checks succeeded.",
+      "recorded_entries": [
+        {
+          "run": "weekly-backends",
+          "entry": "Live Helm install into a disposable Kubernetes context",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:165"
+        }
+      ]
+    },
+    {
+      "feature": "F26.desktop-macos-titlebar",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "Actual host Linux; macOS native titlebar/Gatekeeper fixture unavailable.",
+      "recorded_entries": [
+        {
+          "run": "weekly-backends",
+          "entry": "Weekly backend/runtime worker documented live path",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:70"
+        },
+        {
+          "run": "weekly-backends",
+          "entry": "Recovered audit reconciliation; no live drive",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:142"
+        }
+      ]
+    },
+    {
+      "feature": "F27.usage-empty",
+      "classification": "current_recorded_prerequisite",
+      "missing_input_or_reason": "A genuine missing-metrics producer/state; current new or errored conversations have zero-valued metrics, not absent metrics.",
+      "recorded_entries": [
+        {
+          "run": "weekly-conversations",
+          "entry": "conversation UI",
+          "private_evidence_reference": "runs/weekly-conversations/evidence/ledger.jsonl:231"
+        }
+      ]
+    }
+  ],
+  "remaining_compact_feature_groups": [
+    {
+      "feature": "F01.onboarding-cloud-login",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "Priorweekly-backendscommands203-209 actualAdvancedhostfieldtested; genuineCloudapproval requiresauthorizedCloudaccount; nativefixturecannotprovepositive"
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-root-remaining",
+          "entry": "Cloudactualaccount/deviceflowprerequisite",
+          "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:134"
+        }
+      ]
+    },
+    {
+      "feature": "F01.locked-cloud-first-run",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "ActualCloudlockedbuild+authorizedCloudaccountneeded"
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-root-remaining",
+          "entry": "Runtimeprerequisiteinspection",
+          "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:27"
+        }
+      ]
+    },
+    {
+      "feature": "F01.cookie-auth-redirect",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "OHEcookie-authdeploymentwithvalid/missingsessionsneeded"
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-root-remaining",
+          "entry": "Runtimeprerequisiteinspection",
+          "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:28"
+        }
+      ]
+    },
+    {
+      "feature": "F02.super-admin-setup-guide",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "No guide/tour orsetupstate API; positive needs EnterpriseENABLE_SUPER_ADMIN firstadmin guide_org_id unfinishedsteps; unavailablelocal"
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-root-remaining",
+          "entry": "Localnegative desktopphone actualchecked",
+          "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:22"
+        }
+      ]
+    },
+    {
+      "feature": "F02.super-admin-setup-tour",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "No guide/tour orsetupstate API; positive needs EnterpriseENABLE_SUPER_ADMIN firstadmin guide_org_id unfinishedsteps; unavailablelocal"
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-root-remaining",
+          "entry": "Localnegative desktopphone actualchecked",
+          "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:23"
+        }
+      ]
+    },
+    {
+      "feature": "F02.update-tile",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "Installed1.27.1; tile0; modal opened but npm manualcheck returned Couldnotcheckforupdates. Browserregistryreachability missing; badgeabsent is recipeconditional, notproductpass."
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-root-remaining",
+          "entry": "Actual update modal/manualcheck",
+          "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:24"
+        }
+      ]
+    },
+    {
+      "feature": "F02.alert-banner",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "Actual local backendconfig publishesnoalerts; Cloudconfiguredmaintenance/faulty-model/bannerrequired"
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-root-remaining",
+          "entry": "Runtimeprerequisiteinspection",
+          "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:25"
+        }
+      ]
+    },
+    {
+      "feature": "F02.settings-404-modal",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "CurrentSDKsettings200; requiresgenuinecompatiblebackendsettings404, requiresseparatecompatibleolderbackendfixture"
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-root-remaining",
+          "entry": "Runtimeprerequisiteinspection",
+          "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:26"
+        }
+      ]
+    },
+    {
+      "feature": "F03.open-repository-dialog",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "NoauthorizedCloudGitprovider/repositoryinventory"
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-root-remaining",
+          "entry": "Runtimeprerequisiteinspection",
+          "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:31"
+        }
+      ]
+    },
+    {
+      "feature": "F03.workspaces-unsupported",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "CurrentSDKsupportsworkspaceAPIs; requirescompatibleolderAgentServerwithout/api/workspaces"
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-root-remaining",
+          "entry": "Runtimeprerequisiteinspection",
+          "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:29"
+        }
+      ]
+    },
+    {
+      "feature": "F03.responder-cloud-option",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "ClickedactualCloudoption closesmodal andopenssecondpage; tabsafterrace showsPrivacyerror chrome-error://chromewebdata. ExternalbrowserTLS/trust prerequisite blocksintegrationspage; originalpopuprequestnetwork retained; nocloudaccountloginattempt"
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-root-remaining",
+          "entry": "ActualCloudexternaloption",
+          "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:94"
+        }
+      ]
+    },
+    {
+      "feature": "F03.recommended-prompt-launch",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "NoTavily/Linear/Jira credentialed integration; actualmissingdialogprovesprereq, cannotruninstalledpromptpositive"
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-root-remaining",
+          "entry": "Integrationprerequisiteactualdialog",
+          "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:97"
+        }
+      ]
+    },
+    {
+      "feature": "F04.cloud-picker",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "NoauthorizedCloudconnectedgitprovider"
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-root-remaining",
+          "entry": "Runtimeprerequisiteinspection",
+          "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:32"
+        }
+      ]
+    },
+    {
+      "feature": "F04.start-task-cards",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "NoCloudasynchronoussandboxstart-taskruntime"
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-root-remaining",
+          "entry": "Runtimeprerequisiteinspection",
+          "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:33"
+        }
+      ]
+    },
+    {
+      "feature": "F05.dictation",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "A real accessible microphone and authorized speech-transcription input; no-microphone recovery was exercised separately."
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-conversations",
+          "entry": "conversation UI",
+          "private_evidence_reference": "runs/weekly-conversations/evidence/ledger.jsonl:51"
+        }
+      ]
+    },
+    {
+      "feature": "F06.critic-result",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "A genuine detailed/positive critic producer or authorized Cloud critic credentials. Builtin PassCritic constant is renderer-only; actual patch critic remains known SDK4554 failure."
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-intent-ui",
+          "entry": "18535 genuinepositivebuiltinattempt",
+          "private_evidence_reference": "runs/weekly-intent-ui/evidence/ledger.jsonl:1"
+        }
+      ]
+    },
+    {
+      "feature": "F07.cloud-only",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "no authenticated Cloud backend in this local run"
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-conversations",
+          "entry": "conversation UI",
+          "private_evidence_reference": "runs/weekly-conversations/evidence/ledger.jsonl:193"
+        }
+      ]
+    },
+    {
+      "feature": "F08.vscode-link",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "Writable supported /openhands host-service installation path. Official Editor dependency was prepared but host path creation failed read-only; container workspace is not global Editor service."
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-conversations",
+          "entry": "conversation UI",
+          "private_evidence_reference": "runs/weekly-conversations/evidence/ledger.jsonl:169"
+        },
+        {
+          "run": "weekly-conversations",
+          "entry": "running Editor positive exact host prerequisite",
+          "private_evidence_reference": "runs/weekly-conversations/evidence/ledger.jsonl:304"
+        }
+      ]
+    },
+    {
+      "feature": "F08.archived-disabled",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "no genuine Cloud sandbox_status archive in local backend"
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-conversations",
+          "entry": "conversation UI",
+          "private_evidence_reference": "runs/weekly-conversations/evidence/ledger.jsonl:194"
+        }
+      ]
+    },
+    {
+      "feature": "F08.changes-from-overview",
+      "classification": "blocked_by_existing_product_failure",
+      "missing_inputs_or_reasons": [
+        "Phone Overview entry is prevented by existing16792 product failure; desktop and already-open panel alternatives do not exercise this entry."
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-intent-ui",
+          "entry": "18537 phoneOverviewentryknown16792",
+          "private_evidence_reference": "runs/weekly-intent-ui/evidence/ledger.jsonl:36"
+        }
+      ]
+    },
+    {
+      "feature": "F09.locked-cloud-landing",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "Unavailable in owned Local stack",
+        "Requires canvaslockedtoCloudhost andauthorizedCloudaccount; ownedrunLocalunlocked"
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-settings",
+          "entry": "Prerequisite review",
+          "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:31"
+        },
+        {
+          "run": "weekly-settings-remaining",
+          "entry": "Precise lockedhost prerequisite",
+          "private_evidence_reference": "runs/weekly-settings-remaining/evidence/ledger.jsonl:186"
+        }
+      ]
+    },
+    {
+      "feature": "F09.hidden-llm-redirect",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "Unavailable in owned Local stack",
+        "Frozenfrontendhardcodeshide_llm_settings:false; cannotenablebranchwithoutproductchange"
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-settings",
+          "entry": "Prerequisite review",
+          "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:33"
+        },
+        {
+          "run": "weekly-settings-remaining",
+          "entry": "Precise featureflag prerequisite",
+          "private_evidence_reference": "runs/weekly-settings-remaining/evidence/ledger.jsonl:187"
+        }
+      ]
+    },
+    {
+      "feature": "F09.cloud-links",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "Unavailable in owned Local stack",
+        "No authorizedCloudbackend/account supplied; positiveorganizationlinks branch unavailable"
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-settings",
+          "entry": "Prerequisite review",
+          "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:32"
+        },
+        {
+          "run": "weekly-settings-remaining",
+          "entry": "Positive Cloud branch prerequisite",
+          "private_evidence_reference": "runs/weekly-settings-remaining/evidence/ledger.jsonl:185"
+        }
+      ]
+    },
+    {
+      "feature": "F09.update-available",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "Unavailable in owned Local stack",
+        "Needs genuine registrylatestnewerthaninstalledcurrent1.27.1; existingrealcheck reportsUp-to-date. No fake registry oroldbuild substituted"
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-settings",
+          "entry": "Prerequisite review",
+          "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:34"
+        },
+        {
+          "run": "weekly-settings-remaining",
+          "entry": "Precise genuine newerrelease prerequisite",
+          "private_evidence_reference": "runs/weekly-settings-remaining/evidence/ledger.jsonl:190"
+        }
+      ]
+    },
+    {
+      "feature": "F09.sidebar-version-tile",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "Unavailable in owned Local stack",
+        "Needs genuine registrylatestnewerthaninstalledcurrent1.27.1; currentregistry/up-to-date branch observed; no mockedregistry/oldproductbuild"
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-settings",
+          "entry": "Prerequisite review",
+          "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:35"
+        },
+        {
+          "run": "weekly-settings-remaining",
+          "entry": "Positive newerrelease prerequisite",
+          "private_evidence_reference": "runs/weekly-settings-remaining/evidence/ledger.jsonl:189"
+        }
+      ]
+    },
+    {
+      "feature": "F10.cloud-provider-pagination",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "Requires authorized Cloud backend and paginated-provider response; local backend only"
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-settings",
+          "entry": "Unavailable prerequisite",
+          "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:157"
+        }
+      ]
+    },
+    {
+      "feature": "F10.schema-unavailable",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "Requires real backend missing agent schema; current pinned backend supplies schema, no mocked responses used"
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-settings",
+          "entry": "Unavailable prerequisite",
+          "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:159"
+        }
+      ]
+    },
+    {
+      "feature": "F10.cloud-readonly",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "Requires Cloud backend/account with immutable profile controls"
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-settings",
+          "entry": "Unavailable prerequisite",
+          "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:158"
+        }
+      ]
+    },
+    {
+      "feature": "F11.cloud",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "Unavailable in owned Local stack"
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-settings",
+          "entry": "Prerequisite review",
+          "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:36"
+        }
+      ]
+    },
+    {
+      "feature": "F12.unsupported",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "Requires older backend lacking router support; frozen run uses supported1.55.1"
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-settings",
+          "entry": "Unavailable prerequisite",
+          "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:161"
+        }
+      ]
+    },
+    {
+      "feature": "F12.cloud",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "Requires authorized Cloud backend/account"
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-settings",
+          "entry": "Unavailable prerequisite",
+          "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:160"
+        }
+      ]
+    },
+    {
+      "feature": "F13.acp-conversation",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "Requires separately approved and authenticated external ACP CLI/account; no credentials configured for this path"
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-settings",
+          "entry": "Unavailable prerequisite",
+          "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:163"
+        }
+      ]
+    },
+    {
+      "feature": "F13.cloud-read-only",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "Requires authorized Cloud backend/account"
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-settings",
+          "entry": "Unavailable prerequisite",
+          "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:162"
+        }
+      ]
+    },
+    {
+      "feature": "F15.schema-unavailable",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "Requires real backend without agent schema; pinned1.55.1 supplies schema"
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-settings",
+          "entry": "Unavailable prerequisite",
+          "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:164"
+        }
+      ]
+    },
+    {
+      "feature": "F16.analytics-cloud",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "Requires Cloud backend/account; only local backend available"
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-settings",
+          "entry": "Unavailable prerequisite",
+          "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:165"
+        }
+      ]
+    },
+    {
+      "feature": "F17.cloud-nav",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "Requires Cloud backend/account"
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-settings",
+          "entry": "Unavailable prerequisite",
+          "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:166"
+        }
+      ]
+    },
+    {
+      "feature": "F17.install-oauth",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "Requires approved external OAuth account authorization; no interactive account authorization supplied"
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-settings",
+          "entry": "Unavailable prerequisite",
+          "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:168"
+        }
+      ]
+    },
+    {
+      "feature": "F17.custom-add-remote",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "Fully configured six-server combined runtime requires successful PyPI time-package fetch/revalidation within aggregate30s timeout. Actual combined attempts timed out; isolated cached Time with per-config UV_OFFLINE and isolated HTTP tools passed, but do not replace the combined branch. Original configurations restored."
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-settings-remaining",
+          "entry": "Actual fullyconfigured multi-server tool afterdependencyinstall 1",
+          "private_evidence_reference": "runs/weekly-settings-remaining/evidence/ledger.jsonl:162"
+        },
+        {
+          "run": "weekly-settings-remaining",
+          "entry": "Actual fullyconfigured multi-server tool afterdependencyinstall 2",
+          "private_evidence_reference": "runs/weekly-settings-remaining/evidence/ledger.jsonl:163"
+        }
+      ]
+    },
+    {
+      "feature": "F17.native-git-tabs",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "Requires Cloud backend with git providers configured"
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-settings",
+          "entry": "Unavailable prerequisite",
+          "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:167"
+        }
+      ]
+    },
+    {
+      "feature": "F18.cloud-link",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "Requires authorized Cloud backend/account"
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-settings",
+          "entry": "Unavailable prerequisite",
+          "private_evidence_reference": "runs/weekly-settings/evidence/ledger.jsonl:169"
+        }
+      ]
+    },
+    {
+      "feature": "F20.unsupported",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "Blocked: this frozen Local SDK1.55.1 exposes app APIs. No authenticated Cloud backend is configured; global backend manager preempts missing-backend route. No isolated supported historical SDK lacking these APIs is present; current pinned run cannot establish that branch. Stopping SDK yields connection failure, not unsupported."
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-automation",
+          "entry": "Cloud/no-backend/historical missing-app-API prerequisites",
+          "private_evidence_reference": "runs/weekly-automation/evidence/ledger.jsonl:315"
+        }
+      ]
+    },
+    {
+      "feature": "F22.template-card",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "Noauthorizedauthenticatedexternalintegration supplied; dummy/offlineconfigonlyarrangeslauncherconditions andisnotConnectedpositiveproof."
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-automation-create",
+          "entry": "Connected integration badge positive",
+          "private_evidence_reference": "runs/weekly-automation-create/evidence/ledger.jsonl:34"
+        }
+      ]
+    },
+    {
+      "feature": "F22.template-mcp-install-queue",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "NoauthorizedLinear/AtlassianOAuthcredentialsforrealserver;actualrequiredinstallmodal/cancelproved. Standardconfigprecondition elsewhere isnotauthenticatedInstallproof."
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-automation-create",
+          "entry": "Authenticated positive completion",
+          "private_evidence_reference": "runs/weekly-automation-create/evidence/ledger.jsonl:32"
+        }
+      ]
+    },
+    {
+      "feature": "F22.responder-local-launch",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "NoauthorizedSlackworkspace/token; unmodifiedsetupskillalsoopenendedandcanexplorehost/createrecurringtaskscontrarytouserboundaries. ModifiedQA-onlySendproved separately, notoriginalworkflow."
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-automation-create",
+          "entry": "Original unconfined Slack setup workflow",
+          "private_evidence_reference": "runs/weekly-automation-create/evidence/ledger.jsonl:33"
+        }
+      ]
+    },
+    {
+      "feature": "F22.setup-plugin-create",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "Notclicked: actualtemplateendpointunconditionallyenablescron; userexplicitlyprohibitsenabledrecurringfixtures. Preview/Reviewbranchesproved; F28inertEventcannotreplace thisconsumer.",
+        "MissingauthorizedCloudaccountandrealreviewedpairedCloudruntime;LocaltemplateReview/modifiedSendcannotestablishCloudconversation/eventsfailure."
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-automation-create",
+          "entry": "Final enabled recurring Confirm and create",
+          "private_evidence_reference": "runs/weekly-automation-create/evidence/ledger.jsonl:28"
+        },
+        {
+          "run": "weekly-automation-create",
+          "entry": "Known16611 Cloud plugin/prompt paired runtime",
+          "private_evidence_reference": "runs/weekly-automation-create/evidence/ledger.jsonl:35"
+        }
+      ]
+    },
+    {
+      "feature": "F22.setup-tarball-create",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "Notclicked: actualtemplateendpointunconditionallyenablescron; userexplicitlyprohibitsenabledrecurringfixtures. Preview/Reviewbranchesproved; F28inertEventcannotreplace thisconsumer.",
+        "CurrentactualruntimeLinux; noWindowslocalstack/eventdeliveryfixture. POSIXfilechooserdoesnotproveWindowsabsoluteuploadpath."
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-automation-create",
+          "entry": "Final enabled recurring Confirm and create",
+          "private_evidence_reference": "runs/weekly-automation-create/evidence/ledger.jsonl:29"
+        },
+        {
+          "run": "weekly-automation-create",
+          "entry": "Known15509 nativeWindows upload path",
+          "private_evidence_reference": "runs/weekly-automation-create/evidence/ledger.jsonl:36"
+        }
+      ]
+    },
+    {
+      "feature": "F22.setup-review-confirm",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "Notclicked: actualtemplateendpointunconditionallyenablescron; userexplicitlyprohibitsenabledrecurringfixtures. Preview/Reviewbranchesproved; F28inertEventcannotreplace thisconsumer.",
+        "Exact historical A/B unavailable: reporter corrected both artifacts as privatelypatched and did not supply their bytes/baseidentity or underlying traceback. FrozenCanvas minimumAS1.51 also rejects reported1.46 UIbackend. Stockoldpackages/currentnormalpreset are distinct controls, not historical reproduction/fixproof."
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-automation-create",
+          "entry": "Final enabled recurring Confirm and create",
+          "private_evidence_reference": "runs/weekly-automation-create/evidence/ledger.jsonl:30"
+        },
+        {
+          "run": "weekly-automation-create",
+          "entry": "Known17436 historical1.11.1/1.46.0 promptpreset",
+          "private_evidence_reference": "runs/weekly-automation-create/evidence/ledger.jsonl:40"
+        }
+      ]
+    },
+    {
+      "feature": "F22.setup-bundle-create",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "Notclicked: actualtemplateendpointunconditionallyenablescron; userexplicitlyprohibitsenabledrecurringfixtures. Preview/Reviewbranchesproved; F28inertEventcannotreplace thisconsumer."
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-automation-create",
+          "entry": "Final enabled recurring Confirm and create",
+          "private_evidence_reference": "runs/weekly-automation-create/evidence/ledger.jsonl:31"
+        }
+      ]
+    },
+    {
+      "feature": "F23.run-task-outcome",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "InstalledSDK1.55.1 Tool response_schema requires an object. Actual supportedcustom-schema summary-only/custom-only/numeric-status object controls passed the normal callback/UI path, but no genuine legacy/custom non-object producer is supplied or available at this pin."
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-automation",
+          "entry": "non-object finish response prerequisite",
+          "private_evidence_reference": "runs/weekly-automation/evidence/ledger.jsonl:338"
+        }
+      ]
+    },
+    {
+      "feature": "F24.no-access",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "Native local SDK always grants manage_automations; exact Cloud non-admin membership and authorized account unavailable"
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-root-remaining",
+          "entry": "Local permissions inspection",
+          "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:173"
+        }
+      ]
+    },
+    {
+      "feature": "F24.conflict",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "409 requires shared backend two authorized Cloud organizations; independent native backends do not share organization ownership records"
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-root-remaining",
+          "entry": "single local organization inspection",
+          "private_evidence_reference": "runs/weekly-root-remaining/evidence/ledger.jsonl:174"
+        }
+      ]
+    },
+    {
+      "feature": "F25.share-publicly",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "No approved authenticated Cloud/DO account or special deployment. Credential-free error/local contrast paths where applicable retained, no hosted success claimed."
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-backends",
+          "entry": "Weekly backend/runtime worker documented live path",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:27"
+        },
+        {
+          "run": "weekly-backends",
+          "entry": "Recovered audit reconciliation; no live drive",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:99"
+        }
+      ]
+    },
+    {
+      "feature": "F25.cloud-org-rows",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "No approved authenticated Cloud/DO account or special deployment. Credential-free error/local contrast paths where applicable retained, no hosted success claimed."
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-backends",
+          "entry": "Weekly backend/runtime worker documented live path",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:28"
+        },
+        {
+          "run": "weekly-backends",
+          "entry": "Recovered audit reconciliation; no live drive",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:100"
+        }
+      ]
+    },
+    {
+      "feature": "F25.cloud-log-back-in",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "No approved authenticated Cloud/DO account or special deployment. Credential-free error/local contrast paths where applicable retained, no hosted success claimed."
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-backends",
+          "entry": "Weekly backend/runtime worker documented live path",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:29"
+        },
+        {
+          "run": "weekly-backends",
+          "entry": "Recovered audit reconciliation; no live drive",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:101"
+        }
+      ]
+    },
+    {
+      "feature": "F25.cloud-settings-link",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "No approved authenticated Cloud/DO account or special deployment. Credential-free error/local contrast paths where applicable retained, no hosted success claimed."
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-backends",
+          "entry": "Weekly backend/runtime worker documented live path",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:30"
+        },
+        {
+          "run": "weekly-backends",
+          "entry": "Recovered audit reconciliation; no live drive",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:102"
+        }
+      ]
+    },
+    {
+      "feature": "F25.cloud-sandbox-states",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "No approved authenticated Cloud/DO account or special deployment. Credential-free error/local contrast paths where applicable retained, no hosted success claimed."
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-backends",
+          "entry": "Weekly backend/runtime worker documented live path",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:31"
+        },
+        {
+          "run": "weekly-backends",
+          "entry": "Recovered audit reconciliation; no live drive",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:103"
+        }
+      ]
+    },
+    {
+      "feature": "F25.cloud-org-suspended",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "No approved authenticated Cloud/DO account or special deployment. Credential-free error/local contrast paths where applicable retained, no hosted success claimed."
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-backends",
+          "entry": "Weekly backend/runtime worker documented live path",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:32"
+        },
+        {
+          "run": "weekly-backends",
+          "entry": "Recovered audit reconciliation; no live drive",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:104"
+        }
+      ]
+    },
+    {
+      "feature": "F25.digitalocean-agents",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "No approved authenticated Cloud/DO account or special deployment. Credential-free error/local contrast paths where applicable retained, no hosted success claimed."
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-backends",
+          "entry": "Weekly backend/runtime worker documented live path",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:35"
+        },
+        {
+          "run": "weekly-backends",
+          "entry": "Recovered audit reconciliation; no live drive",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:107"
+        }
+      ]
+    },
+    {
+      "feature": "F25.digitalocean-backend-removal",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "No approved authenticated Cloud/DO account or special deployment. Credential-free error/local contrast paths where applicable retained, no hosted success claimed."
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-backends",
+          "entry": "Weekly backend/runtime worker documented live path",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:36"
+        },
+        {
+          "run": "weekly-backends",
+          "entry": "Recovered audit reconciliation; no live drive",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:108"
+        }
+      ]
+    },
+    {
+      "feature": "F25.locked-cloud",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "No approved authenticated Cloud/DO account or special deployment. Credential-free error/local contrast paths where applicable retained, no hosted success claimed."
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-backends",
+          "entry": "Weekly backend/runtime worker documented live path",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:37"
+        },
+        {
+          "run": "weekly-backends",
+          "entry": "Recovered audit reconciliation; no live drive",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:109"
+        }
+      ]
+    },
+    {
+      "feature": "F26.runtime-services-agent-use",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "Auto-review rejected enabled recurring fixture: conflicts user no recurring tasks and no same-action cleanup. Exact recipe not executed; no fixture created."
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-backends",
+          "entry": "Weekly backend/runtime worker documented live path",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:61"
+        },
+        {
+          "run": "weekly-backends",
+          "entry": "Recovered audit reconciliation; no live drive",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:133"
+        }
+      ]
+    },
+    {
+      "feature": "F26.docker-image",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "More supported Docker storage capacity: actual full-base unpack crossed5GiB reserve after >11.23GB incremental use; no final Canvas image. Frontend stage passed; exact remaining peak unknown."
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-backends",
+          "entry": "Current serial full Canvas packaging after ordinaryworkers released",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:171"
+        }
+      ]
+    },
+    {
+      "feature": "F26.helm-chart",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "Authorized disposable Kubernetes context; actual KUBECONFIG/default/in-cluster credential-presence checks negative. Helm binary/static chart checks succeeded."
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-backends",
+          "entry": "Live Helm install into a disposable Kubernetes context",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:165"
+        }
+      ]
+    },
+    {
+      "feature": "F26.desktop-macos-titlebar",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "Actual host Linux; macOS native titlebar/Gatekeeper fixture unavailable."
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-backends",
+          "entry": "Weekly backend/runtime worker documented live path",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:70"
+        },
+        {
+          "run": "weekly-backends",
+          "entry": "Recovered audit reconciliation; no live drive",
+          "private_evidence_reference": "runs/weekly-backends/evidence/ledger.jsonl:142"
+        }
+      ]
+    },
+    {
+      "feature": "F27.usage-empty",
+      "classification": "current_recorded_prerequisite",
+      "missing_inputs_or_reasons": [
+        "A genuine missing-metrics producer/state; current new or errored conversations have zero-valued metrics, not absent metrics."
+      ],
+      "recorded_entries": [
+        {
+          "run": "weekly-conversations",
+          "entry": "conversation UI",
+          "private_evidence_reference": "runs/weekly-conversations/evidence/ledger.jsonl:231"
+        }
+      ]
+    }
+  ],
+  "remaining_compact_feature_group_count": 65
+}

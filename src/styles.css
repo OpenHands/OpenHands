@@ -1,0 +1,4 @@
+/* The library stylesheet entry (dist/styles.css). index.css comes first so its
+   font @imports stay at the top of the bundled file. */
+@import "./index.css";
+@import "./tailwind.css";

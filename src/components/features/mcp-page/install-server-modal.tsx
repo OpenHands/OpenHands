@@ -6,6 +6,9 @@ import { ModalCloseButton } from "#/components/shared/modals/modal-close-button"
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { SettingsInput } from "#/components/features/settings/settings-input";
 import { SaveAsSecretToggle } from "#/components/features/mcp-page/save-as-secret-toggle";
+import { NativeIntegrationPanel } from "#/components/features/mcp-page/native-integration-panel";
+import { TabButton } from "#/components/features/conversation-panel/system-message-modal/tab-button";
+import { BrandBadge } from "#/components/shared/badge";
 import { I18nKey } from "#/i18n/declaration";
 import type {
   IntegrationCatalogEntry as MarketplaceEntry,
@@ -17,11 +20,15 @@ import type { MCPAuthCredential } from "#/types/mcp-auth";
 import { seedMcpServerHealth } from "#/api/mcp-health/probe-mcp-server-health";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useAddMcpServer } from "#/hooks/mutation/use-add-mcp-server";
+import {
+  isNativeGitCandidate,
+  useNativeGitIntegrations,
+} from "#/hooks/query/use-native-git-integrations";
 import { useTestMcpServer } from "#/hooks/mutation/use-test-mcp-server";
 import { displaySuccessToast } from "#/utils/custom-toast-handlers";
 import {
   getMcpOAuthAuthenticationConfig,
-  getInstallableMcpConnectionOption,
+  getInstallableMcpConnectionOptions,
   type McpMarketplaceConnectionOption,
 } from "#/utils/mcp-marketplace-utils";
 import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
@@ -51,7 +58,7 @@ function renderHelperText(text: string): React.ReactNode {
         href={/^https?:\/\//i.test(match[2]) ? match[2] : "#"}
         target="_blank"
         rel="noreferrer"
-        className="underline hover:text-white transition-colors"
+        className="underline hover:text-contrast transition-colors"
       >
         {match[1]}
       </a>,
@@ -70,6 +77,11 @@ interface InstallServerModalProps {
   existingServers: MCPServerConfig[];
   onClose: () => void;
   onSuccess?: (entry: MarketplaceEntry) => void;
+  /**
+   * When true, an entry that has an MCP option opens on its MCP form without
+   * offering the instance's native integration. Defaults to false.
+   */
+  mcpOnly?: boolean;
 }
 
 interface FieldState {
@@ -109,10 +121,21 @@ function getRemoteHeaderFields(
   return option.transport.headerFields ?? [];
 }
 
-function makeInitialState(entry: MarketplaceEntry): FieldState {
+function getOptionLabelKey(option: McpMarketplaceConnectionOption): I18nKey {
+  if (option.auth.strategy === "oauth2") return I18nKey.MCP$OPTION_OAUTH;
+  if (["api_key", "bearer"].includes(option.auth.strategy)) {
+    return I18nKey.MCP$OPTION_API_KEY;
+  }
+  return option.transport.kind === "stdio"
+    ? I18nKey.MCP$OPTION_LOCAL
+    : I18nKey.MCP$OPTION_REMOTE;
+}
+
+function makeInitialState(
+  option: McpMarketplaceConnectionOption | undefined,
+): FieldState {
   const values: Record<string, string> = {};
   const savedAsSecret: Record<string, boolean> = {};
-  const option = getInstallableMcpConnectionOption(entry);
   const template = option?.transport;
   if (template?.kind === "stdio") {
     for (const field of template.envFields ?? []) {
@@ -151,18 +174,26 @@ export function InstallServerModal({
   existingServers,
   onClose,
   onSuccess,
+  mcpOnly = false,
 }: InstallServerModalProps) {
   const { t } = useTranslation("openhands");
   const { mutate: addMcpServer, isPending: isAdding } = useAddMcpServer();
   const { mutate: testMcpServer, isPending: isTesting } = useTestMcpServer();
   const saveFieldsAsSecrets = useSaveFieldsAsSecrets();
-  // Cloud backends get a synthetic test success (no local test endpoint);
-  // never seed card health from it.
   const { backend } = useActiveBackend();
   const isCloudBackend = backend.kind === "cloud";
 
+  // The first installable option is the entry's preferred one; entries with
+  // several let the user pick another before filling in its fields.
+  const options = React.useMemo(
+    () => getInstallableMcpConnectionOptions(entry),
+    [entry],
+  );
+  const [selectedOptionIndex, setSelectedOptionIndex] = React.useState(0);
+  const option = options[selectedOptionIndex];
+
   const [state, setState] = React.useState<FieldState>(() =>
-    makeInitialState(entry),
+    makeInitialState(option),
   );
   // Always holds the latest state so async callbacks (onSuccess) never read
   // stale closure values, even under React concurrent-mode scheduling.
@@ -172,8 +203,32 @@ export function InstallServerModal({
   const [globalError, setGlobalError] = React.useState<string | null>(null);
   const [isFinalizingInstall, setIsFinalizingInstall] = React.useState(false);
   const [isAuthorizingOAuth, setIsAuthorizingOAuth] = React.useState(false);
-  const option = getInstallableMcpConnectionOption(entry);
   const template = option?.transport;
+  // stdio servers on cloud backends get a synthetic test success (they only
+  // run inside the sandbox); never seed card health from it.
+  const isSyntheticTest = isCloudBackend && template?.kind === "stdio";
+
+  // A git entry the cloud instance can also connect natively offers that as
+  // the recommended option next to the MCP server; an entry with no MCP
+  // option (Bitbucket) offers only the native one. A caller that asked for the
+  // MCP server alone skips the native option whenever the entry has an MCP one.
+  const { getNativeIntegration, isLoading: isNativeIntegrationsLoading } =
+    useNativeGitIntegrations();
+  const skipNative = mcpOnly && !!option;
+  const native = skipNative ? null : getNativeIntegration(entry.id);
+  // Until the instance's providers are known, a git entry cannot say whether
+  // it leads with the native option; showing the MCP form meanwhile would swap
+  // it out from under the user once the answer arrives.
+  const isResolvingNative =
+    !skipNative &&
+    isNativeIntegrationsLoading &&
+    isNativeGitCandidate(entry.id);
+  const [selectedConnection, setSelectedConnection] = React.useState<
+    "native" | "mcp"
+  >("native");
+  const showConnectionTabs = !!native && !!option;
+  const isNativeSelected =
+    !!native && (!option || selectedConnection === "native");
 
   const isPending =
     isTesting || isAuthorizingOAuth || isAdding || isFinalizingInstall;
@@ -184,6 +239,12 @@ export function InstallServerModal({
       values: { ...prev.values, [key]: value },
       errors: { ...prev.errors, [key]: null },
     }));
+    setGlobalError(null);
+  };
+
+  const selectOption = (index: number) => {
+    setSelectedOptionIndex(index);
+    setState(makeInitialState(options[index]));
     setGlobalError(null);
   };
 
@@ -242,7 +303,12 @@ export function InstallServerModal({
         .then((result) => {
           if (!result.ok) {
             setGlobalError(
-              makeMcpTestErrorMessage(t, result.error_kind, result.error),
+              makeMcpTestErrorMessage(
+                t,
+                result.error_kind,
+                result.error,
+                payload.type,
+              ),
             );
             return;
           }
@@ -254,7 +320,7 @@ export function InstallServerModal({
             : payload;
           addMcpServer(serverToSave, {
             onSuccess: () => {
-              if (!isCloudBackend) {
+              if (!isSyntheticTest) {
                 seedMcpServerHealth(serverToSave, result, existingServers);
               }
               displaySuccessToast(t(I18nKey.MCP$INSTALL_SUCCESS));
@@ -285,7 +351,12 @@ export function InstallServerModal({
       onSuccess: (result) => {
         if (!result.ok) {
           setGlobalError(
-            makeMcpTestErrorMessage(t, result.error_kind, result.error),
+            makeMcpTestErrorMessage(
+              t,
+              result.error_kind,
+              result.error,
+              payload.type,
+            ),
           );
           // Modal stays open — do NOT call onClose.
           return;
@@ -299,7 +370,7 @@ export function InstallServerModal({
             : payload;
         addMcpServer(serverToSave, {
           onSuccess: () => {
-            if (!isCloudBackend) {
+            if (!isSyntheticTest) {
               seedMcpServerHealth(serverToSave, result, existingServers);
             }
             displaySuccessToast(t(I18nKey.MCP$INSTALL_SUCCESS));
@@ -473,9 +544,16 @@ export function InstallServerModal({
     if (template?.kind === "shttp" || template?.kind === "sse") {
       return handleHttpServerSubmit();
     }
-    return handleStdioSubmit();
+    if (template?.kind === "stdio") {
+      return handleStdioSubmit();
+    }
+    // @spec MCP-006 — Library installs never dead-end
+    return setGlobalError(
+      t(I18nKey.MCP$INSTALL_UNAVAILABLE, { name: entry.name }),
+    );
   };
 
+  // @spec MCP-004 — Form feedback follows readable theme text roles
   const renderFields = () => {
     if (template?.kind === "shttp" || template?.kind === "sse") {
       const oauthMode = isOAuthOption(option);
@@ -496,7 +574,7 @@ export function InstallServerModal({
             className="w-full"
           />
           {state.errors.url && (
-            <p className="text-xs text-red-500">{state.errors.url}</p>
+            <p className="text-xs text-feedback-error">{state.errors.url}</p>
           )}
           {headerFields.map((field) => (
             <div key={field.key} className="flex flex-col gap-1">
@@ -518,7 +596,7 @@ export function InstallServerModal({
                 </p>
               )}
               {state.errors[field.key] && (
-                <p className="text-xs text-red-500">
+                <p className="text-xs text-feedback-error">
                   {state.errors[field.key]}
                 </p>
               )}
@@ -534,9 +612,9 @@ export function InstallServerModal({
           {oauthMode ? (
             <div
               data-testid="mcp-install-oauth-info"
-              className="flex flex-col gap-2 p-3 rounded-lg border border-[var(--oh-border)] bg-base-tertiary"
+              className="flex flex-col gap-2 p-3 rounded-lg border border-border bg-tertiary"
             >
-              <p className="text-sm text-secondary-light">
+              <p className="text-sm text-text-secondary">
                 {t(I18nKey.MCP$OAUTH_CONNECT_INFO)}
               </p>
               <p className="text-xs text-tertiary-alt">
@@ -569,7 +647,9 @@ export function InstallServerModal({
                 </p>
               )}
               {state.errors.api_key && (
-                <p className="text-xs text-red-500">{state.errors.api_key}</p>
+                <p className="text-xs text-feedback-error">
+                  {state.errors.api_key}
+                </p>
               )}
               {credentialSecretName && (
                 <SaveAsSecretToggle
@@ -618,7 +698,9 @@ export function InstallServerModal({
               </p>
             )}
             {state.errors[field.key] && (
-              <p className="text-xs text-red-500">{state.errors[field.key]}</p>
+              <p className="text-xs text-feedback-error">
+                {state.errors[field.key]}
+              </p>
             )}
             {field.key in state.savedAsSecret && (
               <SaveAsSecretToggle
@@ -651,7 +733,9 @@ export function InstallServerModal({
               </p>
             )}
             {state.errors[field.key] && (
-              <p className="text-xs text-red-500">{state.errors[field.key]}</p>
+              <p className="text-xs text-feedback-error">
+                {state.errors[field.key]}
+              </p>
             )}
           </div>
         ))}
@@ -665,7 +749,7 @@ export function InstallServerModal({
         data-testid="mcp-install-modal"
         data-marketplace-id={entry.id}
         onSubmit={handleSubmit}
-        className="relative bg-base-secondary p-6 rounded-xl flex flex-col gap-4 border border-[var(--oh-border)] w-[520px] max-w-[90vw] max-h-[85vh] overflow-y-auto custom-scrollbar"
+        className="relative bg-base-secondary p-6 rounded-xl flex flex-col gap-4 border border-border w-130 extension-dialog-viewport overflow-y-auto custom-scrollbar"
       >
         <ModalCloseButton
           onClose={onClose}
@@ -680,55 +764,154 @@ export function InstallServerModal({
           </div>
         </div>
 
-        {entry.installHint && (
-          <p className="text-xs text-tertiary-light">{entry.installHint}</p>
-        )}
-
-        {entry.docsUrl && (
-          <a
-            href={entry.docsUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="text-xs text-[var(--oh-muted)] hover:text-white hover:underline self-start transition-colors"
-          >
-            {t(I18nKey.MCP$VIEW_DOCS)}
-          </a>
-        )}
-
-        <div className="flex flex-col gap-3">{renderFields()}</div>
-
-        {globalError && (
+        {isResolvingNative && (
           <p
-            data-testid="mcp-install-modal-error"
-            className="text-sm text-red-500 whitespace-pre-wrap"
+            data-testid="mcp-install-resolving"
+            className="text-xs text-tertiary-light"
           >
-            {globalError}
+            {t(I18nKey.HOME$LOADING)}
           </p>
         )}
 
-        <div className="flex justify-end gap-2 mt-2">
-          <BrandButton
-            type="button"
-            variant="secondary"
-            onClick={onClose}
-            testId="mcp-install-cancel"
-            isDisabled={isPending}
-          >
-            {t(I18nKey.BUTTON$CANCEL)}
-          </BrandButton>
-          <BrandButton
-            type="submit"
-            variant="primary"
-            isDisabled={isPending}
-            testId="mcp-install-submit"
-          >
-            {isTesting || isAuthorizingOAuth
-              ? t(I18nKey.MCP$VERIFYING)
-              : isAdding || isFinalizingInstall
-                ? t(I18nKey.SETTINGS$SAVING)
-                : t(I18nKey.MCP$INSTALL_BUTTON)}
-          </BrandButton>
-        </div>
+        {showConnectionTabs && (
+          <div role="tablist" className="flex border-b border-border">
+            <TabButton
+              isActive={selectedConnection === "native"}
+              onClick={() => setSelectedConnection("native")}
+              disabled={isPending}
+              className="flex items-center gap-2"
+            >
+              <span data-testid="mcp-install-tab-native">
+                {t(I18nKey.MCP$NATIVE_TAB, { name: entry.name })}
+              </span>
+              <BrandBadge className="shrink-0 whitespace-nowrap px-2.5 py-1 text-xs">
+                {t(I18nKey.SETTINGS$SKILLS_RECOMMENDED)}
+              </BrandBadge>
+            </TabButton>
+            <TabButton
+              isActive={selectedConnection === "mcp"}
+              onClick={() => setSelectedConnection("mcp")}
+            >
+              <span data-testid="mcp-install-tab-mcp">
+                {t(I18nKey.MCP$MCP_TAB, { name: entry.name })}
+              </span>
+            </TabButton>
+          </div>
+        )}
+
+        {!isResolvingNative &&
+          (isNativeSelected && native ? (
+            <NativeIntegrationPanel
+              entry={entry}
+              native={native}
+              onConnected={() => {
+                onSuccess?.(entry);
+                onClose();
+              }}
+            />
+          ) : (
+            <>
+              {showConnectionTabs && (
+                <div className="flex flex-col gap-1">
+                  <h3 className="text-sm font-semibold text-contrast">
+                    {t(I18nKey.MCP$MCP_TAB, { name: entry.name })}
+                  </h3>
+                  <p className="text-xs text-tertiary-light">
+                    {t(I18nKey.MCP$MCP_DESCRIPTION, { name: entry.name })}
+                  </p>
+                </div>
+              )}
+
+              {/* The entry's hint and documentation describe its MCP server, so
+                they belong to the MCP option rather than above both. */}
+              {entry.installHint && (
+                <p className="text-xs text-tertiary-light">
+                  {entry.installHint}
+                </p>
+              )}
+
+              {entry.docsUrl && (
+                <a
+                  href={entry.docsUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs text-muted hover:text-contrast hover:underline self-start transition-colors"
+                >
+                  {t(I18nKey.MCP$VIEW_DOCS)}
+                </a>
+              )}
+
+              {options.length > 1 && (
+                <div
+                  role="tablist"
+                  aria-label={t(I18nKey.MCP$CONNECTION_METHOD)}
+                  data-testid="mcp-install-options"
+                  className="flex flex-wrap border-b border-border"
+                >
+                  {options.map((candidate, index) => (
+                    <TabButton
+                      key={candidate.id}
+                      isActive={index === selectedOptionIndex}
+                      onClick={() => selectOption(index)}
+                      disabled={isPending}
+                    >
+                      <span data-testid={`mcp-install-option-${candidate.id}`}>
+                        {t(getOptionLabelKey(candidate))}
+                      </span>
+                    </TabButton>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex flex-col gap-3">{renderFields()}</div>
+
+              {/* @spec MCP-006 — Library installs never dead-end */}
+              {!option && (
+                <div
+                  data-testid="mcp-install-unavailable"
+                  className="flex flex-col gap-2 p-3 rounded-lg border border-border bg-tertiary"
+                >
+                  <p className="text-sm text-text-secondary">
+                    {t(I18nKey.MCP$INSTALL_UNAVAILABLE, { name: entry.name })}
+                  </p>
+                </div>
+              )}
+
+              {/* @spec MCP-004 — Form feedback follows readable theme text roles */}
+              {globalError && (
+                <p
+                  data-testid="mcp-install-modal-error"
+                  className="text-sm text-feedback-error whitespace-pre-wrap"
+                >
+                  {globalError}
+                </p>
+              )}
+
+              <div className="flex justify-end gap-2 mt-2">
+                <BrandButton
+                  type="button"
+                  variant="secondary"
+                  onClick={onClose}
+                  testId="mcp-install-cancel"
+                  isDisabled={isPending}
+                >
+                  {t(I18nKey.BUTTON$CANCEL)}
+                </BrandButton>
+                <BrandButton
+                  type="submit"
+                  variant="primary"
+                  isDisabled={isPending || !option}
+                  testId="mcp-install-submit"
+                >
+                  {isTesting || isAuthorizingOAuth
+                    ? t(I18nKey.MCP$VERIFYING)
+                    : isAdding || isFinalizingInstall
+                      ? t(I18nKey.SETTINGS$SAVING)
+                      : t(I18nKey.MCP$INSTALL_BUTTON)}
+                </BrandButton>
+              </div>
+            </>
+          ))}
       </form>
     </ModalBackdrop>
   );

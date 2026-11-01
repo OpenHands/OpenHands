@@ -55,15 +55,15 @@ function ConnectionBanner({
         role="status"
         data-testid="onboarding-backend-connected"
         className={cn(
-          "flex items-start gap-3 rounded-xl border border-green-500/40 bg-green-500/10 px-4 py-3",
+          "flex items-start gap-3 rounded-xl border border-status-success/40 bg-status-success/5 px-4 py-3",
         )}
       >
-        <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-green-400" />
+        <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-status-success" />
         <div className="flex flex-col gap-1">
-          <span className="text-sm font-medium text-green-200">
+          <span className="text-sm font-medium text-feedback-success">
             {t(I18nKey.ONBOARDING$BACKEND_CONNECTED_TITLE)}
           </span>
-          <span className="text-xs text-green-200/80">
+          <span className="text-xs text-feedback-success">
             {t(I18nKey.ONBOARDING$BACKEND_CONNECTED_BODY)}
           </span>
         </div>
@@ -80,14 +80,14 @@ function ConnectionBanner({
       <div
         role="alert"
         data-testid="onboarding-backend-disconnected"
-        className="flex items-start gap-3 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3"
+        className="flex items-start gap-3 rounded-xl border border-status-error/40 bg-status-error/5 px-4 py-3"
       >
-        <AlertCircle className="mt-0.5 size-5 shrink-0 text-red-400" />
+        <AlertCircle className="mt-0.5 size-5 shrink-0 text-status-error" />
         <div className="flex flex-col gap-1">
-          <span className="text-sm font-medium text-red-200">
+          <span className="text-sm font-medium text-feedback-error">
             {statusLabel}
           </span>
-          <span className="text-xs text-red-200/80">
+          <span className="text-xs text-feedback-error">
             {t(I18nKey.ONBOARDING$BACKEND_DISCONNECTED_BODY)}
           </span>
         </div>
@@ -99,10 +99,10 @@ function ConnectionBanner({
     <div
       role="status"
       data-testid="onboarding-backend-checking"
-      className="flex items-start gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3"
+      className="flex items-start gap-3 rounded-xl border border-contrast/10 bg-contrast/5 px-4 py-3"
     >
-      <Loader2 className="mt-0.5 size-5 shrink-0 animate-spin text-[var(--oh-text-tertiary)]" />
-      <span className="text-sm text-[var(--oh-text-tertiary)]">
+      <Loader2 className="mt-0.5 size-5 shrink-0 animate-spin text-text-tertiary" />
+      <span className="text-sm text-text-tertiary">
         {t(I18nKey.ONBOARDING$BACKEND_CHECKING)}
       </span>
     </div>
@@ -239,11 +239,11 @@ export function CheckBackendStep({
       className="flex flex-col gap-6"
     >
       <header className="flex flex-col gap-2">
-        <h2 className="text-2xl font-medium text-white">{t(titleKey)}</h2>
+        <h2 className="text-2xl font-medium text-contrast">{t(titleKey)}</h2>
         {treatAsNoBackend ? null : (
           <p
             data-testid="onboarding-backend-subtitle"
-            className="text-sm text-[var(--oh-muted)]"
+            className="text-sm text-muted"
           >
             {t(I18nKey.ONBOARDING$BACKEND_SUBTITLE)}
           </p>
@@ -264,7 +264,7 @@ export function CheckBackendStep({
           onClick={() => setConfigurationOpen((open) => !open)}
           aria-expanded={configurationOpen}
           data-testid="onboarding-backend-show-configuration"
-          className="flex w-full cursor-pointer items-center justify-center gap-1 text-center text-xs text-[var(--oh-muted)] transition-colors hover:text-content-2"
+          className="flex w-full cursor-pointer items-center justify-center gap-1 text-center text-xs text-muted transition-colors hover:text-content-2"
         >
           <span>
             {configurationOpen

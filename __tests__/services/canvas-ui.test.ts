@@ -6,11 +6,19 @@ import {
   CANVAS_UI_CLIENT_TOOL_NAME,
   LEGACY_CANVAS_UI_TOOL_NAME,
 } from "#/constants/canvas-ui";
-import { handleCanvasUIAction, openWorkspaceFile } from "#/services/canvas-ui";
+import {
+  handleCanvasUIAction,
+  openWorkspaceFile,
+  subscribeToPanelReveal,
+} from "#/services/canvas-ui";
 import { useConversationStore } from "#/stores/conversation-store";
 import { useFilesTabStore } from "#/stores/files-tab-store";
 import type { CanvasUIAction } from "#/types/agent-server/core";
 import { isCanvasUIActionEvent } from "#/types/agent-server/type-guards";
+import {
+  getConversationState,
+  setConversationState,
+} from "#/utils/conversation-local-storage";
 
 // Helper: build a CanvasUIAction without repeating the literal `kind`
 // discriminator in every test case.
@@ -20,6 +28,7 @@ function action(overrides: Partial<CanvasUIAction>): CanvasUIAction {
 
 describe("handleCanvasUIAction", () => {
   beforeEach(() => {
+    localStorage.clear();
     ConversationService.setCurrentConversation(null);
     useConversationStore.setState({
       selectedTab: null,
@@ -63,7 +72,36 @@ describe("handleCanvasUIAction", () => {
     expect(useFilesTabStore.getState().selectedPath).toBeNull();
   });
 
+  it("open_tab persists the agent's tab for the conversation, as a user tab click does", () => {
+    handleCanvasUIAction(
+      action({ command: "open_tab", tab: "terminal" }),
+      "conv-1",
+    );
+
+    expect(getConversationState("conv-1").selectedTab).toBe("terminal");
+  });
+
+  it("asks panel-reveal subscribers to show the drawer until they unsubscribe", () => {
+    const onReveal = vi.fn();
+    const unsubscribe = subscribeToPanelReveal(onReveal);
+
+    handleCanvasUIAction(
+      action({ command: "open_tab", tab: "terminal" }),
+      "conv-1",
+    );
+    expect(onReveal).toHaveBeenCalledTimes(1);
+
+    unsubscribe();
+    handleCanvasUIAction(
+      action({ command: "navigate_to_file", path: "src/calc.py" }),
+      "conv-1",
+    );
+    expect(onReveal).toHaveBeenCalledTimes(1);
+  });
+
   it("open_tab ignores unknown tab values and surfaces a warning for debuggability", () => {
+    const onReveal = vi.fn();
+    const unsubscribe = subscribeToPanelReveal(onReveal);
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
     try {
@@ -74,8 +112,10 @@ describe("handleCanvasUIAction", () => {
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining("not_a_tab"),
       );
+      expect(onReveal).not.toHaveBeenCalled();
     } finally {
       warnSpy.mockRestore();
+      unsubscribe();
     }
   });
 
@@ -133,6 +173,7 @@ describe("handleCanvasUIAction", () => {
 
 describe("openWorkspaceFile", () => {
   beforeEach(() => {
+    localStorage.clear();
     ConversationService.setCurrentConversation(null);
     useConversationStore.setState({
       selectedTab: null,
@@ -151,6 +192,7 @@ describe("openWorkspaceFile", () => {
       id: "conv-1",
       workspace: { working_dir: "/Users/me/project" },
     } as never);
+    setConversationState("conv-1", { selectedTab: "terminal" });
 
     openWorkspaceFile("/Users/me/project/test.md");
 
@@ -159,6 +201,7 @@ describe("openWorkspaceFile", () => {
     expect(useFilesTabStore.getState().selectedPath).toBe("test.md");
     expect(useFilesTabStore.getState().selectedConversationId).toBe("conv-1");
     expect(useFilesTabStore.getState().openPaths).toEqual(["test.md"]);
+    expect(getConversationState("conv-1").selectedTab).toBe("files");
   });
 });
 
