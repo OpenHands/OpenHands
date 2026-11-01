@@ -67,6 +67,8 @@
 #                          Override in production when the external URL differs.
 #   AUTOMATION_WORKSPACE_BASE – Directory for automation run workspaces
 #                          (default: ~/.openhands/workspaces)
+#   XDG_CONFIG_HOME     – Browser-tool configuration directory
+#                          (default: $HOME/.config; must be writable)
 #   Any agent-server or automation env vars are passed through.
 # ═══════════════════════════════════════════════════════════════════════════════
 set -uo pipefail
@@ -191,6 +193,85 @@ fi
 # <<< docker-browser-tools
 export OH_CONVERSATIONS_PATH="${OH_CONVERSATIONS_PATH:-${OPENHANDS_DIR}/${CONFIG_CONVERSATIONS:-agent-canvas/conversations}}"
 export OH_BASH_EVENTS_DIR="${OH_BASH_EVENTS_DIR:-${OPENHANDS_DIR}/${CONFIG_BASH_EVENTS:-agent-canvas/bash_events}}"
+
+# ── Preflight: persistence dirs must be writable ───────────────────────────
+# A host bind mount the container cannot write to leaves the backend
+# half-dead (frontend serves, APIs 502). Fail fast with an actionable message.
+# Report a preflight failure from the *actual* OS error instead of always
+# assuming a uid mismatch. The cause can also be a read-only mount, a full
+# disk, or a quota, none of which a chmod would fix.
+report_unwritable() {
+  local label="$1" dir="$2" err="$3" host_hint="$4"
+  log_error "$label is not writable: $dir"
+  if [ -n "$err" ]; then
+    log_error "Underlying error: $err"
+  fi
+  case "$err" in
+    *"Permission denied"*|*"permission denied"*|*"Operation not permitted"*|*"operation not permitted"*)
+      if [ "$label" = "Browser config directory" ]; then
+        log_error "Browser tools need a config directory writable by uid $(id -u)."
+        log_error "Set XDG_CONFIG_HOME to a writable directory, or keep the default openhands user."
+        return
+      fi
+      log_error "The container runs as uid $(id -u); the bind-mounted host dir"
+      log_error "must be writable by that uid. Run ON THE HOST (dirs only):"
+      log_error "  find $host_hint -type d -exec chmod a+rwX {} +"
+      if [ "$label" = "Workspace directory" ]; then
+        log_error "Existing project files also need read/write access. Run ON THE HOST:"
+        log_error "  find $host_hint -type f -exec chmod a+rw {} +"
+        log_error "This grants all host users read/write access to project files; executable bits stay unchanged."
+        log_error "Keep the workspace separate from ~/.openhands so secret-file modes stay private."
+      else
+        log_error "This grants all host users directory write access; existing file modes stay unchanged."
+      fi
+      log_error "Use your actual host bind-mount path if different from the example."
+      log_error "If Docker created root-owned dirs, use sudo find ... for the same command."
+      log_error "Create host dirs with mkdir -p before starting Docker to avoid root-owned mounts."
+      ;;
+    *"Read-only file system"*|*"read-only file system"*)
+      log_error "The mount is read-only. Drop the ':ro' suffix from its -v flag"
+      log_error "(or remount it read-write), then retry."
+      ;;
+    *)
+      log_error "Resolve the filesystem error above, then retry."
+      ;;
+  esac
+}
+
+# Probe the effective paths (not just $OPENHANDS_DIR): OH_PERSISTENCE_DIR /
+# OH_CONVERSATIONS_PATH / OH_BASH_EVENTS_DIR can be overridden by the user,
+# and $OPENHANDS_DIR itself still hosts the persisted secret-key/api-key files.
+for dir in "$OPENHANDS_DIR" "$OH_PERSISTENCE_DIR" "$OH_CONVERSATIONS_PATH" "$OH_BASH_EVENTS_DIR"; do
+  # Capture stderr from *both* commands: if `mkdir -p` fails the touch never
+  # runs, and without this its raw, unprefixed error would leak to the console.
+  if ! err=$(mkdir -p "$dir" 2>&1 && touch "$dir/.write-test" 2>&1); then
+    report_unwritable "Persistence directory" "$dir" "$err" "~/.openhands"
+    exit 1
+  fi
+  rm -f "$dir/.write-test"
+done
+
+# ── Preflight: /projects workspace mount must be writable ──────────────────
+# Optional — only probed when the user actually mounted a workspace dir
+# (e.g. -v "$PROJECTS_PATH:/projects"). A uid-mismatched or read-only mount
+# here breaks the agent's file access the same way, so fail fast too. We
+# deliberately don't mkdir: an absent /projects just means no workspace mount.
+if [ -d /projects ]; then
+  if ! err=$(touch /projects/.write-test 2>&1); then
+    report_unwritable "Workspace directory" "/projects" "$err" "~/projects"
+    exit 1
+  fi
+  rm -f /projects/.write-test
+fi
+
+# Browser tools create configuration under XDG_CONFIG_HOME (or $HOME/.config).
+# Catch an inaccessible config path before the backends start with broken tools.
+BROWSER_CONFIG_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}"
+if ! err=$(mkdir -p "$BROWSER_CONFIG_DIR" 2>&1 && touch "$BROWSER_CONFIG_DIR/.write-test" 2>&1); then
+  report_unwritable "Browser config directory" "$BROWSER_CONFIG_DIR" "$err" "~/.config"
+  exit 1
+fi
+rm -f "$BROWSER_CONFIG_DIR/.write-test"
 
 # OH_SECRET_KEY is required for settings/secrets encryption. Without it the
 # agent-server refuses to return encrypted secrets → conversation creation
