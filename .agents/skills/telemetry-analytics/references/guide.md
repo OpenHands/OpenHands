@@ -33,7 +33,7 @@ events per destination.
 Properties (all values controlled enums or booleans — never raw destination
 URLs, query params, or link text; `current_url` is the standard app-page common
 property, not a destination):
-- `link_id` (`OnboardingLinkId`): `configure_llm` | `start_conversation` |
+- `link_id` (`OnboardingLinkId`): `configure_llm` | `configure_subscription_agent` | `start_conversation` |
   `schedule_task` | `customize_agent` | `connect_mcp` | `join_slack` |
   `open_docs`
 - `destination_type` (`OnboardingLinkDestinationType`): `community` |
@@ -51,6 +51,7 @@ preview action CTA intentionally share one `link_id` — same destination):
 | Checklist item | Row + preview action | Preview docs link |
 |---|---|---|
 | Add LLM API key | `configure_llm` / `settings` / internal | `open_docs` / `documentation` / external |
+| Configure a subscription agent | `configure_subscription_agent` / `settings` / internal | `open_docs` / `documentation` / external |
 | Start your first chat | `start_conversation` / `conversation` / internal | `open_docs` |
 | Schedule a task | `schedule_task` / `automation` / internal | `open_docs` |
 | Customize your agent | `customize_agent` / `settings` / internal | `open_docs` |
