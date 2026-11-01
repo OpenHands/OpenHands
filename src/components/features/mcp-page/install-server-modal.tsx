@@ -881,7 +881,7 @@ export function InstallServerModal({
               {globalError && (
                 <p
                   data-testid="mcp-install-modal-error"
-                  className="text-sm text-feedback-error whitespace-pre-wrap"
+                  className="text-sm text-feedback-error whitespace-pre-wrap break-words"
                 >
                   {globalError}
                 </p>
