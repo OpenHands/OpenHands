@@ -2,15 +2,13 @@ import React from "react";
 import { ExternalLink } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { GitProviderItemsService } from "#/api/git-provider-items-service";
-import {
-  useRepositoryIssues,
-  useRepositoryPullRequests,
-} from "#/hooks/query/use-repository-git-items";
+import { useRepositoryIssues } from "#/hooks/query/use-repository-git-items";
 import { useConversationPrimaryRepository } from "#/hooks/use-conversation-primary-repository";
 import { I18nKey } from "#/i18n/declaration";
 import { cn, getProviderName } from "#/utils/utils";
 import { extensionModuleEmptyStateClassName } from "#/utils/extension-module-card-classes";
 import { CONVERSATION_OVERVIEW_DRAWER_SECTION } from "./conversation-overview-drawer.types";
+import { ConversationOverviewPullRequestsPanel } from "./conversation-overview-pull-requests-panel";
 
 interface ConversationOverviewGitItemsPanelProps {
   kind: "pull_requests" | "issues";
@@ -71,13 +69,12 @@ export function ConversationOverviewGitItemsPanel({
   const { repository, provider, isConnected } =
     useConversationPrimaryRepository();
 
-  const pullRequestsQuery = useRepositoryPullRequests(repository, provider);
-  const issuesQuery = useRepositoryIssues(repository, provider);
-
-  const query =
-    kind === CONVERSATION_OVERVIEW_DRAWER_SECTION.pull_requests
-      ? pullRequestsQuery
-      : issuesQuery;
+  const isPullRequests =
+    kind === CONVERSATION_OVERVIEW_DRAWER_SECTION.pull_requests;
+  const query = useRepositoryIssues(
+    isPullRequests ? null : repository,
+    isPullRequests ? null : provider,
+  );
 
   if (!isConnected || !repository || !provider) {
     return (
@@ -91,6 +88,10 @@ export function ConversationOverviewGitItemsPanel({
         {t(I18nKey.CONVERSATION$OVERVIEW_GIT_UNAVAILABLE)}
       </p>
     );
+  }
+
+  if (isPullRequests) {
+    return <ConversationOverviewPullRequestsPanel provider={provider} />;
   }
 
   return (
@@ -148,9 +149,7 @@ export function ConversationOverviewGitItemsPanel({
             "px-2 py-6 text-center text-sm",
           )}
         >
-          {kind === CONVERSATION_OVERVIEW_DRAWER_SECTION.pull_requests
-            ? t(I18nKey.CONVERSATION$OVERVIEW_PULL_REQUESTS_EMPTY)
-            : t(I18nKey.CONVERSATION$OVERVIEW_ISSUES_EMPTY)}
+          {t(I18nKey.CONVERSATION$OVERVIEW_ISSUES_EMPTY)}
         </p>
       )}
     </div>

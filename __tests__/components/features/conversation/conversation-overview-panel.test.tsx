@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -5,6 +6,7 @@ import { ConversationOverviewPanel } from "#/components/features/conversation/co
 import { NavigationProvider } from "#/context/navigation-context";
 import { ConversationOverviewDrawerProvider } from "#/components/features/conversation/conversation-overview-drawer-context";
 import { CONVERSATION_OVERVIEW_DRAWER_SECTION } from "#/components/features/conversation/conversation-overview-drawer.types";
+import { GitProviderPullRequestStatusService } from "#/api/git-provider-pull-request-status-service";
 
 const openSection = vi.fn();
 const closeDrawer = vi.fn();
@@ -38,8 +40,13 @@ vi.mock("#/hooks/query/use-active-conversation", () => ({
       id: "conv-1",
       selected_workspace: "/workspace/project/demo",
       llm_model: "openhands/test-model",
+      pr_number: [10],
     },
   }),
+}));
+
+vi.mock("#/hooks/query/use-local-git-info", () => ({
+  useLocalGitInfo: () => ({ data: undefined }),
 }));
 
 vi.mock("#/hooks/query/use-settings", () => ({
@@ -81,20 +88,6 @@ vi.mock("#/hooks/query/use-unified-git-commits", () => ({
 }));
 
 vi.mock("#/hooks/query/use-repository-git-items", () => ({
-  useRepositoryPullRequests: () => ({
-    data: [
-      {
-        id: 1,
-        number: 10,
-        title: "Fix overview",
-        url: "https://github.com/openhands/agent-canvas/pull/10",
-        authorLogin: "dev",
-        updatedAt: null,
-      },
-    ],
-    isLoading: false,
-    isError: false,
-  }),
   useRepositoryIssues: () => ({
     data: [],
     isLoading: false,
@@ -111,9 +104,10 @@ vi.mock("#/api/conversation-metadata-store", () => ({
 vi.mock(
   "#/components/features/conversation/conversation-overview-drawer-context",
   async (importOriginal) => {
-    const actual = await importOriginal<
-      typeof import("#/components/features/conversation/conversation-overview-drawer-context")
-    >();
+    const actual =
+      await importOriginal<
+        typeof import("#/components/features/conversation/conversation-overview-drawer-context")
+      >();
     return {
       ...actual,
       useConversationOverviewDrawerOptional: () => ({
@@ -125,20 +119,30 @@ vi.mock(
   },
 );
 
+const getConversationPullRequestsSpy = vi.spyOn(
+  GitProviderPullRequestStatusService,
+  "getConversationPullRequests",
+);
+
 function renderPanel() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   return render(
-    <NavigationProvider
-      value={{
-        currentPath: "/conversations/conv-1",
-        conversationId: "conv-1",
-        isNavigating: false,
-        navigate: vi.fn(),
-      }}
-    >
-      <ConversationOverviewDrawerProvider>
-        <ConversationOverviewPanel />
-      </ConversationOverviewDrawerProvider>
-    </NavigationProvider>,
+    <QueryClientProvider client={queryClient}>
+      <NavigationProvider
+        value={{
+          currentPath: "/conversations/conv-1",
+          conversationId: "conv-1",
+          isNavigating: false,
+          navigate: vi.fn(),
+        }}
+      >
+        <ConversationOverviewDrawerProvider>
+          <ConversationOverviewPanel />
+        </ConversationOverviewDrawerProvider>
+      </NavigationProvider>
+    </QueryClientProvider>,
   );
 }
 
@@ -146,17 +150,42 @@ describe("ConversationOverviewPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    getConversationPullRequestsSpy.mockResolvedValue({
+      status: "ok",
+      source: "tracked",
+      omittedCount: 0,
+      pullRequests: [
+        {
+          repository: "openhands/agent-canvas",
+          number: 10,
+          title: "Fix overview",
+          url: "https://github.com/openhands/agent-canvas/pull/10",
+          lifecycle: "open",
+          checks: "passing",
+          review: "none",
+          mergeable: "clean",
+          updatedAt: null,
+          unavailableReason: null,
+        },
+      ],
+    });
   });
 
   it("renders workspace and git changes but no Issues row", () => {
     renderPanel();
 
-    expect(screen.getByTestId("conversation-overview-panel")).toBeInTheDocument();
-    expect(screen.getByTestId("conversation-overview-workspace")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("conversation-overview-panel"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("conversation-overview-workspace"),
+    ).toBeInTheDocument();
     expect(
       screen.queryByTestId("conversation-overview-git-title"),
     ).not.toBeInTheDocument();
-    expect(screen.getByTestId("conversation-overview-diffs")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("conversation-overview-diffs"),
+    ).toBeInTheDocument();
     expect(
       screen.queryByTestId("conversation-overview-issues"),
     ).not.toBeInTheDocument();
@@ -188,9 +217,16 @@ describe("ConversationOverviewPanel", () => {
     expect(
       screen.getByTestId("conversation-overview-commits-count"),
     ).toHaveTextContent("3");
+    // Counts the conversation's own PRs, not every open PR in the repo.
     expect(
-      screen.getByTestId("conversation-overview-pull-requests-count"),
+      await screen.findByTestId("conversation-overview-pull-requests-count"),
     ).toHaveTextContent("1");
+    expect(getConversationPullRequestsSpy).toHaveBeenCalledWith({
+      repository: "openhands/agent-canvas",
+      provider: "github",
+      branch: "main",
+      prNumbers: [10],
+    });
 
     await user.click(screen.getByTestId("conversation-overview-commits"));
     expect(navigateToCommits).toHaveBeenCalled();
@@ -199,6 +235,26 @@ describe("ConversationOverviewPanel", () => {
     expect(openSection).toHaveBeenCalledWith(
       CONVERSATION_OVERVIEW_DRAWER_SECTION.pull_requests,
     );
+  });
+
+  it("shows the pull request count as unknown when the provider can't be read", async () => {
+    // Arrange
+    getConversationPullRequestsSpy.mockResolvedValue({
+      status: "unavailable",
+      reason: "rate_limited",
+    });
+
+    // Act
+    renderPanel();
+
+    // Assert: unknown, not "-", which would claim there are no PRs.
+    const count = await screen.findByTestId(
+      "conversation-overview-pull-requests-count",
+    );
+    expect(count).toHaveTextContent("?");
+    expect(
+      screen.getByTestId("conversation-overview-pull-requests"),
+    ).toHaveAccessibleName(/CONVERSATION\$OVERVIEW_PULL_REQUESTS_UNKNOWN/);
   });
 
   it("closes the overflow menu with Escape and returns focus to its trigger", async () => {
@@ -220,7 +276,9 @@ describe("ConversationOverviewPanel", () => {
     const user = userEvent.setup();
     renderPanel();
 
-    expect(screen.getByTestId("conversation-overview-diffs")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("conversation-overview-diffs"),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByTestId("conversation-overview-ellipsis"));
     expect(
@@ -248,7 +306,9 @@ describe("ConversationOverviewPanel", () => {
       screen.getByTestId("conversation-overview-menu-pin-git-changes"),
     );
 
-    expect(screen.getByTestId("conversation-overview-diffs")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("conversation-overview-diffs"),
+    ).toBeInTheDocument();
     expect(
       screen.getByTestId("conversation-overview-menu-pin-git-changes"),
     ).toHaveAttribute("aria-pressed", "true");

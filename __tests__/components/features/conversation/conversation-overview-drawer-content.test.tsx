@@ -7,6 +7,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  GitProviderPullRequestStatusService,
+  type ConversationPullRequest,
+} from "#/api/git-provider-pull-request-status-service";
 import { ConversationOverviewDrawer } from "#/components/features/conversation/conversation-overview-drawer";
 import { CONVERSATION_OVERVIEW_DRAWER_WIDTH_STORAGE_KEY } from "#/components/features/conversation/conversation-overview-drawer.constants";
 import { ConversationOverviewDrawerContent } from "#/components/features/conversation/conversation-overview-drawer-content";
@@ -32,12 +36,15 @@ vi.mock("#/hooks/use-conversation-primary-repository", () => ({
   }),
 }));
 
+vi.mock("#/hooks/query/use-active-conversation", () => ({
+  useActiveConversation: () => ({ data: { id: "conv-1", pr_number: [] } }),
+}));
+
+vi.mock("#/hooks/query/use-local-git-info", () => ({
+  useLocalGitInfo: () => ({ data: undefined }),
+}));
+
 vi.mock("#/hooks/query/use-repository-git-items", () => ({
-  useRepositoryPullRequests: () => ({
-    data: [],
-    isLoading: false,
-    isError: false,
-  }),
   useRepositoryIssues: () => ({
     data: [],
     isLoading: false,
@@ -104,6 +111,172 @@ function renderDrawer(
     },
   );
 }
+
+const getConversationPullRequestsSpy = vi.spyOn(
+  GitProviderPullRequestStatusService,
+  "getConversationPullRequests",
+);
+
+beforeEach(() => {
+  getConversationPullRequestsSpy.mockReset();
+  getConversationPullRequestsSpy.mockResolvedValue({
+    status: "ok",
+    source: "none",
+    omittedCount: 0,
+    pullRequests: [],
+  });
+});
+
+function pullRequest(
+  overrides: Partial<ConversationPullRequest>,
+): ConversationPullRequest {
+  return {
+    repository: "openhands/agent-canvas",
+    number: 10,
+    title: "Fix overview",
+    url: "https://github.com/openhands/agent-canvas/pull/10",
+    lifecycle: "open",
+    checks: "passing",
+    review: "none",
+    mergeable: "clean",
+    updatedAt: null,
+    unavailableReason: null,
+    ...overrides,
+  };
+}
+
+async function openPullRequests() {
+  renderDrawer(CONVERSATION_OVERVIEW_DRAWER_SECTION.pull_requests);
+  await userEvent.setup().click(screen.getByTestId("open-drawer-section"));
+}
+
+describe("ConversationOverviewDrawerContent pull requests", () => {
+  it("shows each PR's repository, lifecycle, checks, review and conflicts as text", async () => {
+    // Arrange
+    getConversationPullRequestsSpy.mockResolvedValue({
+      status: "ok",
+      source: "tracked",
+      omittedCount: 0,
+      pullRequests: [
+        pullRequest({
+          checks: "failing",
+          review: "approved",
+          mergeable: "conflicting",
+        }),
+        pullRequest({
+          number: 11,
+          url: "https://github.com/openhands/agent-canvas/pull/11",
+          lifecycle: "merged",
+          checks: "none",
+          mergeable: "not_applicable",
+        }),
+      ],
+    });
+
+    // Act
+    await openPullRequests();
+
+    // Assert
+    const open = await screen.findByTestId("conversation-pull-request-10");
+    expect(within(open).getByRole("link")).toHaveAttribute(
+      "href",
+      "https://github.com/openhands/agent-canvas/pull/10",
+    );
+    expect(open).toHaveTextContent("openhands/agent-canvas");
+    for (const label of [
+      "CONVERSATION$PR_LIFECYCLE_OPEN",
+      "CONVERSATION$PR_CHECKS_FAILING",
+      "CONVERSATION$PR_REVIEW_APPROVED",
+      "CONVERSATION$PR_MERGE_CONFLICTING",
+    ]) {
+      expect(within(open).getByText(label)).toBeInTheDocument();
+    }
+    // A merged PR is not described as conflicting or clean.
+    const merged = screen.getByTestId("conversation-pull-request-11");
+    expect(
+      within(merged).getByText("CONVERSATION$PR_LIFECYCLE_MERGED"),
+    ).toBeInTheDocument();
+    expect(merged).not.toHaveTextContent("CONVERSATION$PR_MERGE_");
+  });
+
+  it("explains a PR it could not read instead of guessing its state", async () => {
+    // Arrange
+    getConversationPullRequestsSpy.mockResolvedValue({
+      status: "ok",
+      source: "tracked",
+      omittedCount: 0,
+      pullRequests: [
+        pullRequest({
+          title: null,
+          lifecycle: "unknown",
+          checks: "unknown",
+          review: "unknown",
+          mergeable: "unknown",
+          unavailableReason: "not_found",
+        }),
+      ],
+    });
+
+    // Act
+    await openPullRequests();
+
+    // Assert
+    const row = await screen.findByTestId("conversation-pull-request-10");
+    expect(row).toHaveTextContent("CONVERSATION$PR_UNAVAILABLE_NOT_FOUND");
+    expect(row).not.toHaveTextContent("CONVERSATION$PR_CHECKS_");
+  });
+
+  it("says when PRs were matched by branch and how many were left out", async () => {
+    // Arrange
+    getConversationPullRequestsSpy.mockResolvedValue({
+      status: "ok",
+      source: "branch",
+      omittedCount: 2,
+      pullRequests: [pullRequest({})],
+    });
+
+    // Act
+    await openPullRequests();
+
+    // Assert
+    expect(
+      await screen.findByText("CONVERSATION$PR_FROM_BRANCH"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("CONVERSATION$PR_OMITTED")).toBeInTheDocument();
+  });
+
+  it.each([
+    [
+      { status: "unsupported_provider" as const },
+      "CONVERSATION$PR_STATUS_UNSUPPORTED",
+    ],
+    [
+      { status: "unavailable" as const, reason: "auth_failed" as const },
+      "CONVERSATION$PR_UNAVAILABLE_AUTH_FAILED",
+    ],
+    [
+      {
+        status: "ok" as const,
+        source: "none" as const,
+        omittedCount: 0,
+        pullRequests: [],
+      },
+      "CONVERSATION$PR_NONE_FOR_CONVERSATION",
+    ],
+  ])(
+    "shows an explicit state instead of an empty list (%o)",
+    async (result, label) => {
+      // Arrange
+      getConversationPullRequestsSpy.mockResolvedValue(result);
+
+      // Act
+      await openPullRequests();
+
+      // Assert
+      expect(await screen.findByText(label)).toBeInTheDocument();
+    },
+  );
+});
 
 describe("ConversationOverviewDrawerContent", () => {
   it("places the close button left of the title", async () => {
