@@ -437,8 +437,6 @@ export default [
           // Typography, menus, and Pre need a separate design audit.
           componentImports: [
             "^#/ui/(divider|toggle-switch|combobox-caret)$",
-            // Match the existing re-export path explicitly too.
-            "^#/components/features/automations/toggle-switch$",
           ],
           allow: ["layout"],
           contracts: [
