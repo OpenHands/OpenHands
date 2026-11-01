@@ -1,3 +1,7 @@
+import { useSessionActivities } from "#/hooks/use-session-activities";
+import { useSessionActivityStore } from "#/stores/session-activity-store";
+import { SessionActivityDetails } from "./event-message-components/session-activity";
+import { CollapsibleThinking } from "./event-message-components/collapsible-thinking";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { LoaderCircle } from "lucide-react";
@@ -8,6 +12,7 @@ import { AgentState } from "#/types/agent-state";
 import {
   isActionEvent,
   isObservationEvent,
+  isStreamingDeltaEvent,
   isUserRejectObservation,
 } from "#/types/agent-server/type-guards";
 import { EventMessage } from "./event-message";
@@ -29,14 +34,27 @@ import {
 interface MessagesProps {
   messages: OpenHandsEvent[]; // UI events (actions replaced by observations)
   allEvents: OpenHandsEvent[]; // Full event history (for action lookup)
+  hasOlderEvents?: boolean;
 }
 
 const getLastEventId = (events: OpenHandsEvent[]) => events.at(-1)?.id;
 const getLastEvent = (events: OpenHandsEvent[]) => events.at(-1);
 
 export const Messages: React.FC<MessagesProps> = React.memo(
-  ({ messages, allEvents }) => {
+  ({ messages, allEvents, hasOlderEvents = false }) => {
     const { conversationId } = useOptionalConversationId();
+    const { key: sessionKey, sessions } = useSessionActivities(conversationId);
+    const visibleSessions = React.useMemo(
+      () =>
+        sessions.filter(
+          (session) =>
+            !hasOlderEvents ||
+            (session.kind === "resume" &&
+              (messages.some((event) => event.id === session.afterEventId) ||
+                session.startedAt >= Date.parse(messages[0]?.timestamp ?? ""))),
+        ),
+      [sessions, hasOlderEvents, messages],
+    );
     // Get the set of event IDs that should render PlanPreview
     // This ensures only one preview per user message "phase"
     const planPreviewEventIds = usePlanPreviewEvents(allEvents);
@@ -113,33 +131,33 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       return request ? <SecretRequestCard request={request} /> : null;
     };
 
-    // Fold consecutive action/observation events into collapsible groups so a
-    // long sequence of tool calls doesn't dominate the chat scroll. Items that
-    // can't be grouped (or that fall in a short run) are still rendered one by
-    // one, identically to before. Agent thoughts attached to an action are
-    // hoisted out as their own rendered item so they always show up in the
-    // message pane and a thought between actions starts a fresh group.
-    // Live status sits at the end of the chat. While the agent works, the
-    // stage it is on is a group from its first step, and its header shows the
-    // running step or "Thinking"; with no group there yet, a "Thinking" line
-    // takes its place.
+    // One activity group lasts until visible agent text or an actionable event.
     const { t } = useTranslation("openhands");
     const { curAgentState } = useAgentState();
     const { isPlanningAgentRunning } = usePlanningAgentState();
     const isAgentRunning =
       curAgentState === AgentState.RUNNING || isPlanningAgentRunning;
     const renderedItems = React.useMemo(
-      () =>
-        groupEvents(
-          messages,
-          undefined,
-          allEvents,
-          isAgentRunning ? 1 : undefined,
-        ),
-      [messages, allEvents, isAgentRunning],
+      () => groupEvents(messages, 1, allEvents, 1, visibleSessions),
+      [messages, allEvents, visibleSessions],
+    );
+    const eventIndexes = React.useMemo(
+      () => new Map(messages.map((event, index) => [event, index])),
+      [messages],
+    );
+    const groupedReasoningIds = new Set(
+      renderedItems.flatMap((item) =>
+        item.kind === "group"
+          ? (item.reasoning ?? []).map((reasoning) => reasoning.id)
+          : [],
+      ),
     );
     const showThinkingLine =
-      isAgentRunning && renderedItems.at(-1)?.kind !== "group";
+      isAgentRunning &&
+      renderedItems.at(-1)?.kind !== "group" &&
+      !(
+        messages.length && isStreamingDeltaEvent(messages[messages.length - 1])
+      );
 
     const renderEventMessage = (
       event: OpenHandsEvent,
@@ -169,6 +187,11 @@ export const Messages: React.FC<MessagesProps> = React.memo(
               event.id ? planPreviewEventIds.has(event.id) : false
             }
             suppressThought={suppressThought}
+            suppressReasoning={groupedReasoningIds.has(
+              isObservationEvent(event) || isUserRejectObservation(event)
+                ? event.action_id
+                : (event.id ?? ""),
+            )}
           />
         </StepDisclosureContext.Provider>
       );
@@ -199,28 +222,67 @@ export const Messages: React.FC<MessagesProps> = React.memo(
             );
           }
 
-          const groupKey = item.events[0]
-            ? getStepKey(item.events[0])
-            : `group-${item.startIndex}`;
+          const groupKey =
+            item.session?.id ??
+            (item.reasoning?.[0] && item.reasoning[0].index <= item.startIndex
+              ? item.reasoning[0].id
+              : item.events[0]
+                ? isObservationEvent(item.events[0]) ||
+                  isUserRejectObservation(item.events[0])
+                  ? item.events[0].action_id
+                  : item.events[0].id
+                : `group-${item.startIndex}`);
           // A group that forms around a step the user opened starts open, so
           // that step stays visible.
           const groupOpen =
+            item.session?.open ??
             openRows.get(`group:${groupKey}`) ??
             item.events.some((event) => openRows.get(getStepKey(event)));
           return (
             <React.Fragment key={`group-${groupKey}`}>
               <EventGroup
                 events={item.events}
+                session={item.session}
+                hasReasoning={!!item.reasoning?.length}
                 allEvents={allEvents}
                 isLive={
                   isAgentRunning && itemIndex === renderedItems.length - 1
                 }
                 open={groupOpen}
-                onOpenChange={(open) => setRowOpen(`group:${groupKey}`, open)}
+                onOpenChange={(open) =>
+                  item.session
+                    ? useSessionActivityStore
+                        .getState()
+                        .setOpen(sessionKey, item.session.id, open)
+                    : setRowOpen(`group:${groupKey}`, open)
+                }
               >
-                {item.events.map((event, offset) =>
-                  renderEventMessage(event, item.startIndex + offset, true),
+                {item.session && (
+                  <SessionActivityDetails session={item.session} />
                 )}
+                {[
+                  ...item.events.map((event) => ({
+                    index: eventIndexes.get(event)!,
+                    order: 1,
+                    node: renderEventMessage(
+                      event,
+                      eventIndexes.get(event)!,
+                      true,
+                    ),
+                  })),
+                  ...(item.reasoning ?? []).map((reasoning) => ({
+                    index: reasoning.index,
+                    order: 0,
+                    node: (
+                      <CollapsibleThinking
+                        key={`reasoning-${reasoning.id}`}
+                        content={reasoning.text}
+                      />
+                    ),
+                  })),
+                ]
+                  .sort((a, b) => a.index - b.index || a.order - b.order)
+                  .map((entry) => entry.node)}
               </EventGroup>
               {item.events.map((event) => (
                 <React.Fragment key={`model-${event.id}`}>
@@ -249,6 +311,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     );
   },
   (prevProps, nextProps) =>
+    prevProps.hasOlderEvents === nextProps.hasOlderEvents &&
     prevProps.messages.length === nextProps.messages.length &&
     prevProps.allEvents.length === nextProps.allEvents.length &&
     getLastEventId(prevProps.messages) === getLastEventId(nextProps.messages) &&

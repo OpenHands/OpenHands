@@ -1,3 +1,8 @@
+import { useOptionalConversationId } from "#/hooks/use-conversation-id";
+import { useSessionActivities } from "#/hooks/use-session-activities";
+import { useSessionActivityStore } from "#/stores/session-activity-store";
+import { EventGroup } from "#/components/conversation-events/chat/event-message-components/event-group";
+import { SessionActivityDetails } from "#/components/conversation-events/chat/event-message-components/session-activity";
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LoaderCircle } from "lucide-react";
@@ -23,6 +28,9 @@ export function ConversationStartupProgress({
   onRetry,
 }: Props) {
   const { t } = useTranslation("openhands");
+  const { conversationId } = useOptionalConversationId();
+  const { key: sessionKey, sessions } = useSessionActivities(conversationId);
+  const session = sessions.at(-1);
   const isRunning = !error && status !== "ERROR";
   const label =
     status === "READY"
@@ -50,48 +58,66 @@ export function ConversationStartupProgress({
     />
   ) : null;
   return (
-    <div className="mt-2 w-full" data-testid="conversation-startup-progress">
-      <div
-        className="w-full py-1 text-sm text-muted"
-        data-testid="startup-progress-group"
-      >
-        {expandable ? (
-          <button
-            id={buttonId}
-            type="button"
-            onClick={() => setExpanded((previous) => !previous)}
-            aria-controls={contentId}
-            aria-expanded={expanded}
-            aria-label={t(
-              expanded ? I18nKey.BUTTON$COLLAPSE : I18nKey.BUTTON$EXPAND,
-            )}
-            className="flex max-w-full items-center gap-2 text-left cursor-pointer"
-          >
-            {title}
-            <DisclosureCaret open={expanded} />
-            {spinner}
-          </button>
-        ) : (
-          <div className="flex items-center gap-2">
-            {title}
-            {spinner}
-          </div>
-        )}
-        {expandable && expanded && (
-          <div
-            id={contentId}
-            role="region"
-            aria-labelledby={buttonId}
-            className="mt-1.5 flex flex-col divide-y divide-border-subtle/50 rounded-lg border border-border-subtle/50"
-          >
-            {observedSteps.map((step) => (
-              <div key={step} className="px-3 py-2">
-                {t(step)}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+    <div
+      className={session ? "w-full" : "mt-2 w-full"}
+      data-testid="conversation-startup-progress"
+    >
+      {session ? (
+        <EventGroup
+          events={[]}
+          session={error ? { ...session, phase: "failed" } : session}
+          open={session.open}
+          onOpenChange={(open) =>
+            useSessionActivityStore
+              .getState()
+              .setOpen(sessionKey, session.id, open)
+          }
+        >
+          <SessionActivityDetails session={session} />
+        </EventGroup>
+      ) : (
+        <div
+          className="w-full py-1 text-sm text-muted"
+          data-testid="startup-progress-group"
+        >
+          {expandable ? (
+            <button
+              id={buttonId}
+              type="button"
+              onClick={() => setExpanded((previous) => !previous)}
+              aria-controls={contentId}
+              aria-expanded={expanded}
+              aria-label={t(
+                expanded ? I18nKey.BUTTON$COLLAPSE : I18nKey.BUTTON$EXPAND,
+              )}
+              className="flex max-w-full items-center gap-2 text-left cursor-pointer"
+            >
+              {title}
+              <DisclosureCaret open={expanded} />
+              {spinner}
+            </button>
+          ) : (
+            <div className="flex items-center gap-2">
+              {title}
+              {spinner}
+            </div>
+          )}
+          {expandable && expanded && (
+            <div
+              id={contentId}
+              role="region"
+              aria-labelledby={buttonId}
+              className="mt-1.5 flex flex-col divide-y divide-border-subtle/50 rounded-lg border border-border-subtle/50"
+            >
+              {observedSteps.map((step) => (
+                <div key={step} className="px-3 py-2">
+                  {t(step)}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       {error && (
         <p
           role="alert"

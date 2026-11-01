@@ -219,8 +219,8 @@ describe("isGroupableEvent", () => {
     expect(isGroupableEvent(makeFinishAction("a1"))).toBe(false);
   });
 
-  it("does not group ThinkAction", () => {
-    expect(isGroupableEvent(makeThinkAction("a1"))).toBe(false);
+  it("groups reasoning with the surrounding activity", () => {
+    expect(isGroupableEvent(makeThinkAction("a1"))).toBe(true);
   });
 
   it("does not group PlanningFileEditorObservation", () => {
@@ -560,13 +560,118 @@ describe("groupEvents", () => {
 
     const result = groupEvents(events);
 
-    // ThinkAction breaks the run as a single (it isn't groupable), but no
-    // additional "thought" item should be emitted for it because the
-    // ThinkAction's body already renders the thought.
-    expect(result.map((item) => item.kind)).toEqual([
-      "group",
-      "single",
-      "group",
-    ]);
+    expect(result.map((item) => item.kind)).toEqual(["group"]);
+    expect(result[0]).toMatchObject({ events });
   });
+});
+
+it("keeps initialization and commands together until an agent message", () => {
+  const user = makeUserMessage("user");
+  const command = makeBashAction("command");
+  const reply = { ...makeUserMessage("reply"), source: "agent" as const };
+  const later = makeBashAction("later");
+  const session = {
+    id: "startup",
+    kind: "initialize" as const,
+    startedAt: 0,
+    phase: "complete" as const,
+    steps: [],
+    open: true,
+  };
+  const items = groupEvents([user, command, reply, later], 1, undefined, 1, [
+    session,
+  ]);
+  expect(items.map((item) => item.kind)).toEqual([
+    "single",
+    "group",
+    "single",
+    "group",
+  ]);
+  expect(items[1]).toMatchObject({ session, events: [command] });
+  expect(items[3]).toMatchObject({ events: [later] });
+  expect(items[3]).not.toHaveProperty("session");
+});
+
+it("keeps streamed and finalized reasoning in the same startup group before the reply", () => {
+  const user = makeUserMessage("user");
+  const session = {
+    id: "startup",
+    kind: "initialize" as const,
+    startedAt: 0,
+    phase: "complete" as const,
+    steps: [],
+    open: true,
+  };
+  const slot = {
+    id: "reply",
+    kind: "StreamingDeltaEvent" as const,
+    source: "agent" as const,
+    timestamp: user.timestamp,
+    content: "",
+    reasoning_content: "Considering the answer",
+  };
+  const live = groupEvents([user, slot], 1, undefined, 1, [session]);
+  expect(live).toHaveLength(2);
+  expect(live[1]).toMatchObject({
+    kind: "group",
+    session,
+    reasoning: [{ id: "reply", text: "Considering the answer" }],
+  });
+  const reply = {
+    ...makeUserMessage("reply"),
+    source: "agent" as const,
+    llm_message: {
+      role: "assistant" as const,
+      content: [{ type: "text" as const, text: "Hello" }],
+      reasoning_content: "Considering the answer",
+    },
+  };
+  const settled = groupEvents([user, reply], 1, undefined, 1, [session]);
+  expect(settled).toHaveLength(3);
+  expect(settled[1]).toMatchObject({
+    kind: "group",
+    session,
+    reasoning: [{ id: "reply", text: "Considering the answer" }],
+  });
+});
+
+it("anchors an actual resume after old history and before the next tools", () => {
+  const oldReply = { ...makeUserMessage("old"), source: "agent" as const };
+  const user = makeUserMessage("new-user");
+  const command = makeBashAction("command");
+  const session = {
+    id: "resume",
+    kind: "resume" as const,
+    startedAt: Date.now() + 60_000,
+    phase: "complete" as const,
+    steps: [],
+    open: false,
+    afterEventId: oldReply.id,
+  };
+  const items = groupEvents([oldReply, user, command], 1, undefined, 1, [
+    session,
+  ]);
+  expect(items.map((item) => item.kind)).toEqual(["single", "single", "group"]);
+  expect(items[2]).toMatchObject({ session, events: [command] });
+});
+
+it("keeps image-only replies visible after their grouped reasoning", () => {
+  const reply: MessageEvent = {
+    ...makeUserMessage("image-reply"),
+    source: "agent",
+    llm_message: {
+      role: "assistant",
+      content: [
+        { type: "image", image_urls: ["https://example.com/result.png"] },
+      ],
+      reasoning_content: "Inspecting the result",
+    },
+  };
+  const items = groupEvents([reply], 1);
+  expect(items).toHaveLength(2);
+  expect(items[0]).toMatchObject({
+    kind: "group",
+    reasoning: [{ text: "Inspecting the result" }],
+  });
+  expect(items[1]).toEqual({ kind: "single", event: reply, index: 0 });
 });

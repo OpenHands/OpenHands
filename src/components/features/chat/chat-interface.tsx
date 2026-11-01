@@ -696,6 +696,7 @@ export function ChatInterface({
 
             {showConversationMessages && renderableEvents.length > 0 && (
               <Messages
+                hasOlderEvents={hasMoreOlderEvents}
                 messages={renderableEvents}
                 allEvents={allConversationEvents}
               />
@@ -711,6 +712,9 @@ export function ChatInterface({
           */}
             <PendingUserMessages pendingLabel={pendingMessageLabel} />
             {isTask && <TaskStartupProgress />}
+            {!isTask && renderableEvents.length === 0 && (
+              <Messages messages={[]} allEvents={allConversationEvents} />
+            )}
 
             {/* Goal-loop status sits at the end of the message flow — above the
               composer and its typing indicator — so progress stays in view. */}

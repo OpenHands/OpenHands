@@ -1,9 +1,12 @@
+import type { SessionActivity } from "#/stores/session-activity-store";
+import { sessionActivityTitle } from "./session-activity";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { LoaderCircle } from "lucide-react";
-import { ActionEvent, OpenHandsEvent } from "#/types/agent-server/core";
+import { OpenHandsEvent } from "#/types/agent-server/core";
 import {
   isActionEvent,
+  isACPToolCallEvent,
   isAgentErrorEvent,
 } from "#/types/agent-server/type-guards";
 import { I18nKey } from "#/i18n/declaration";
@@ -16,6 +19,8 @@ import { PathInteractiveContext } from "../../../features/chat/path-component";
 interface EventGroupProps {
   /** The events represented by this group. Used to compute the summary. */
   events: OpenHandsEvent[];
+  session?: SessionActivity;
+  hasReasoning?: boolean;
   /**
    * Full event history. Used to resolve the action behind each observation so
    * the summary counts it as the right kind of step. Falls back to `events`
@@ -52,6 +57,8 @@ interface EventGroupProps {
  */
 export function EventGroup({
   events,
+  session,
+  hasReasoning = false,
   allEvents,
   isLive = false,
   open,
@@ -66,7 +73,7 @@ export function EventGroup({
   const contentId = React.useId();
   const buttonId = `${contentId}-toggle`;
 
-  if (events.length === 0) {
+  if (events.length === 0 && !session && !hasReasoning) {
     return null;
   }
 
@@ -75,6 +82,10 @@ export function EventGroup({
     .map(({ key, count }) => t(key, { count }))
     .join(" · ");
 
+  summary ||= t(
+    session ? sessionActivityTitle(session) : I18nKey.THINKING$TITLE,
+  );
+
   if (isLive) {
     // An action still in the UI events is in flight, unless an AgentErrorEvent
     // resolved it (that event renders on its own and never replaces it).
@@ -82,8 +93,10 @@ export function EventGroup({
       lookupSource.filter(isAgentErrorEvent).map((e) => e.tool_call_id),
     );
     const running = events.find(
-      (e): e is ActionEvent =>
-        isActionEvent(e) && !erroredToolCallIds.has(e.tool_call_id),
+      (event) =>
+        (isActionEvent(event) && !erroredToolCallIds.has(event.tool_call_id)) ||
+        (isACPToolCallEvent(event) &&
+          (event.status === "pending" || event.status === "in_progress")),
     );
     summary = running ? (
       <PathInteractiveContext.Provider value={false}>
@@ -93,6 +106,11 @@ export function EventGroup({
       t(I18nKey.ACTION_MESSAGE$THINK)
     );
   }
+
+  if (session && session.phase !== "complete")
+    summary = t(sessionActivityTitle(session));
+  const busy =
+    session?.phase === "pending" || (session?.phase !== "failed" && isLive);
 
   return (
     // Agent text carries a large top margin for paragraph spacing; trim it
@@ -107,7 +125,7 @@ export function EventGroup({
         aria-live="polite"
         aria-atomic="true"
       >
-        {isLive ? summary : null}
+        {busy ? summary : null}
       </span>
       <button
         id={buttonId}
@@ -125,10 +143,10 @@ export function EventGroup({
       >
         <span className="truncate">{summary}</span>
         <DisclosureCaret open={expanded} />
-        {isLive && (
+        {busy && (
           <LoaderCircle
             data-testid="spinner-icon"
-            className="h-3.5 w-3.5 flex-shrink-0 animate-spin text-muted"
+            className="h-3.5 w-3.5 flex-shrink-0 animate-spin text-muted motion-reduce:animate-none"
           />
         )}
       </button>

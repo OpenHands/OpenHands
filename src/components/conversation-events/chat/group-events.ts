@@ -1,13 +1,22 @@
 import { ActionEvent, OpenHandsEvent } from "#/types/agent-server/core";
 import {
   isActionEvent,
+  isACPToolCallEvent,
+  isMessageEvent,
+  isStreamingDeltaEvent,
   isHookExecutionEvent,
   isObservationEvent,
   isPlanningFileEditorObservationEvent,
   isUserRejectObservation,
 } from "#/types/agent-server/type-guards";
 import { isMarkdownFileEditorEvent } from "#/components/features/chat/tool-visualizers/primitives/markdown-file-preview";
-import { getThoughtSourceAction } from "./event-thought-helpers";
+import type { SessionActivity } from "#/stores/session-activity-store";
+import { parseMessageFromEvent } from "./event-content-helpers/parse-message-from-event";
+import {
+  getReasoningContent,
+  splitInlineThink,
+  getThoughtSourceAction,
+} from "./event-thought-helpers";
 
 /** Minimum run-length before consecutive actions get folded into a single
  *  collapsible group. Even pairs are folded so the chat scroll stays compact
@@ -20,7 +29,7 @@ export const EVENT_GROUP_MIN_SIZE = 2;
  *
  * Successful hook runs fold into the surrounding run; blocked or failed hooks
  * stay visible on their own. Events that have their own dedicated rendering
- * (FinishAction, ThinkAction, AgentError, MessageEvent, PlanPreview, markdown
+ * (FinishAction, AgentError, MessageEvent, PlanPreview, markdown
  * file artifacts, TaskTracker) are treated as group breakers.
  */
 export const isGroupableEvent = (
@@ -29,7 +38,7 @@ export const isGroupableEvent = (
 ): boolean => {
   if (isActionEvent(event)) {
     const { kind } = event.action;
-    if (kind === "FinishAction" || kind === "ThinkAction") {
+    if (kind === "FinishAction") {
       return false;
     }
     // Keep markdown *create* artifact cards outside collapsed groups so their
@@ -53,6 +62,8 @@ export const isGroupableEvent = (
     return true;
   }
 
+  if (isACPToolCallEvent(event)) return event.status !== "failed";
+
   if (isHookExecutionEvent(event)) {
     return event.success && !event.blocked;
   }
@@ -69,7 +80,13 @@ export const isGroupableEvent = (
 export type RenderedItem =
   | { kind: "single"; event: OpenHandsEvent; index: number }
   | { kind: "thought"; action: ActionEvent; index: number }
-  | { kind: "group"; events: OpenHandsEvent[]; startIndex: number };
+  | {
+      kind: "group";
+      events: OpenHandsEvent[];
+      startIndex: number;
+      session?: SessionActivity;
+      reasoning?: { id: string; text: string; index: number }[];
+    };
 
 /**
  * Walk a list of UI events and bucket consecutive groupable events into
@@ -96,6 +113,7 @@ export const groupEvents = (
   minSize: number = EVENT_GROUP_MIN_SIZE,
   allEvents: OpenHandsEvent[] = events,
   trailingMinSize: number = minSize,
+  sessions: readonly SessionActivity[] = [],
 ): RenderedItem[] => {
   if (minSize < 1 || trailingMinSize < 1) {
     throw new Error("minSize must be at least 1");
@@ -103,15 +121,39 @@ export const groupEvents = (
 
   const items: RenderedItem[] = [];
   const emittedThoughtActionIds = new Set<string>();
-  let run: { events: OpenHandsEvent[]; startIndex: number } | null = null;
+  let run: Omit<Extract<RenderedItem, { kind: "group" }>, "kind"> | null = null;
+  const startRun = (index: number) => {
+    if (!run) run = { events: [], startIndex: index };
+    return run;
+  };
+  const insertions = new Map<number, SessionActivity[]>();
+  for (const session of sessions) {
+    let index: number;
+    if (session.kind === "initialize") {
+      const userIndex = events.findIndex((event) => event.source === "user");
+      index = userIndex < 0 ? 0 : userIndex + 1;
+    } else {
+      const anchor = session.afterEventId
+        ? events.findIndex((event) => event.id === session.afterEventId)
+        : -1;
+      index =
+        anchor >= 0
+          ? anchor + 1
+          : events.findIndex(
+              (event) => Date.parse(event.timestamp ?? "") >= session.startedAt,
+            );
+      if (index < 0) index = events.length;
+      if (events[index]?.source === "user") index += 1;
+    }
+    insertions.set(index, [...(insertions.get(index) ?? []), session]);
+  }
 
   const flushRun = (size = minSize) => {
     if (!run) return;
-    if (run.events.length >= size) {
+    if (run.session || run.reasoning?.length || run.events.length >= size) {
       items.push({
         kind: "group",
-        events: run.events,
-        startIndex: run.startIndex,
+        ...run,
       });
     } else {
       run.events.forEach((event, offset) => {
@@ -121,7 +163,50 @@ export const groupEvents = (
     run = null;
   };
 
+  const insertSessions = (index: number) => {
+    for (const session of insertions.get(index) ?? []) {
+      flushRun();
+      startRun(index).session = session;
+    }
+  };
+
   events.forEach((event, index) => {
+    insertSessions(index);
+    if (
+      (isMessageEvent(event) && event.source === "agent") ||
+      isStreamingDeltaEvent(event)
+    ) {
+      const streaming = isStreamingDeltaEvent(event);
+      const { reasoning: inline, message } = splitInlineThink(
+        streaming ? (event.content ?? "") : parseMessageFromEvent(event),
+        { streaming },
+      );
+      const reasoning = [
+        streaming
+          ? event.reasoning_content
+          : getReasoningContent(event.llm_message),
+        inline,
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+      if (reasoning) {
+        const current = startRun(index);
+        current.reasoning = [
+          ...(current.reasoning ?? []),
+          { id: event.id, text: reasoning, index },
+        ];
+      }
+      const hasVisiblePayload =
+        isMessageEvent(event) &&
+        (event.critic_result != null ||
+          (Array.isArray(event.llm_message.content) &&
+            event.llm_message.content.some(
+              (content) =>
+                content.type === "image" && content.image_urls.length > 0,
+            )));
+      if (!message.trim() && !hasVisiblePayload && (streaming || reasoning))
+        return;
+    }
     const correspondingAction =
       isObservationEvent(event) || isUserRejectObservation(event)
         ? allEvents.find(
@@ -130,6 +215,23 @@ export const groupEvents = (
           )
         : undefined;
     if (isGroupableEvent(event, correspondingAction)) {
+      const reasoningAction = isActionEvent(event)
+        ? event
+        : correspondingAction;
+      const reasoning = reasoningAction
+        ? getReasoningContent(reasoningAction)
+        : "";
+      if (reasoning && reasoningAction) {
+        const current = startRun(index);
+        if (
+          !current.reasoning?.some((entry) => entry.id === reasoningAction.id)
+        ) {
+          current.reasoning = [
+            ...(current.reasoning ?? []),
+            { id: reasoningAction.id, text: reasoning, index },
+          ];
+        }
+      }
       const thoughtAction = getThoughtSourceAction(event, allEvents);
       if (thoughtAction && !emittedThoughtActionIds.has(thoughtAction.id)) {
         flushRun();
@@ -144,6 +246,7 @@ export const groupEvents = (
     }
   });
 
+  insertSessions(events.length);
   flushRun(trailingMinSize);
   return items;
 };
