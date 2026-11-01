@@ -11,7 +11,7 @@ a top bar or the chat header. A user can pin Customize or Automate as the page
 `/` opens. A Ctrl/Cmd+K command menu searches pages, settings and actions.
 Failed requests show error toasts.
 
-Source: `src/components/features/sidebar/`, `src/components/features/command-menu/`, `src/stores/sidebar-store.ts`, `src/stores/command-menu-store.ts`, `src/hooks/use-pinned-home-route.ts`, `src/routes/index-home.tsx`, `src/utils/mobile-section-nav.ts`, `src/components/features/settings/agent-canvas-version-tile.tsx`, `src/components/features/alerts/alert-banner.tsx`, `src/utils/custom-toast-handlers.tsx`, `src/components/features/setup-guide/`, `src/api/cloud/setup-state-service.api.ts`.
+Source: `src/components/features/sidebar/`, `src/components/features/command-menu/`, `src/stores/sidebar-store.ts`, `src/stores/command-menu-store.ts`, `src/hooks/use-pinned-home-route.ts`, `src/routes/index-home.tsx`, `src/utils/mobile-section-nav.ts`, `src/components/features/settings/agent-canvas-version-tile.tsx`, `src/components/features/alerts/alert-banner.tsx`, `src/utils/custom-toast-handlers.tsx`, `src/components/features/setup-guide/`, `src/api/cloud/setup-state-service.api.ts`, `src/query-client-config.ts`.
 
 ## Sub-features
 
