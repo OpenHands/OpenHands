@@ -11,7 +11,7 @@ import type {
   AppConversationPage,
   AppConversationStartTask,
 } from "#/api/conversation-service/agent-server-conversation-service.types";
-import { getDefaultConversationTitle } from "#/api/agent-server-adapter";
+import { isPlaceholderConversationTitle } from "#/utils/conversation-title";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
 import { I18nKey } from "#/i18n/declaration";
@@ -91,8 +91,7 @@ export function useConversationDisplayTitle() {
         { conversation: listed, fetchedAt: list?.dataUpdatedAt ?? 0 },
       ].filter(
         ({ conversation }) =>
-          conversation?.title?.trim() &&
-          conversation.title !== getDefaultConversationTitle(realId ?? ""),
+          !isPlaceholderConversationTitle(conversation?.title, realId ?? ""),
       );
       candidates.sort(
         (a, b) =>
@@ -101,7 +100,7 @@ export function useConversationDisplayTitle() {
       );
       const serverTitle =
         candidates[0]?.conversation?.title ||
-        (fallback !== getDefaultConversationTitle(realId ?? "")
+        (!isPlaceholderConversationTitle(fallback, realId ?? "")
           ? fallback
           : undefined);
       const prompt =
