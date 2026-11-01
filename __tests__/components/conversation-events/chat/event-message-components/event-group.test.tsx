@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import i18next from "i18next";
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "test-utils";
 import { EventGroup } from "#/components/conversation-events/chat/event-message-components/event-group";
@@ -144,6 +144,50 @@ describe("EventGroup", () => {
     expect(screen.queryByTestId("spinner-icon")).not.toBeInTheDocument();
   });
 
+  it("announces live status changes without moving focus or announcing settled history", async () => {
+    const user = userEvent.setup();
+    const action = {
+      ...makeBashAction("a1", "npm test"),
+      summary: "Checking tests",
+    };
+    const observation = makeBashObservation("o1", "a1", "npm test");
+    const { rerender } = renderWithProviders(
+      <EventGroup events={[action]}>
+        <div>child</div>
+      </EventGroup>,
+    );
+    const status = screen.getByRole("status");
+    expect(status).toBeEmptyDOMElement();
+    expect(status).toHaveAttribute("aria-live", "polite");
+    expect(status).toHaveAttribute("aria-atomic", "true");
+
+    rerender(
+      <EventGroup events={[action]} isLive>
+        <div>child</div>
+      </EventGroup>,
+    );
+    expect(status).toHaveTextContent("Checking tests");
+    const toggle = screen.getByRole("button");
+    await user.click(toggle);
+    expect(toggle).toHaveFocus();
+    expect(within(toggle).queryByRole("status")).not.toBeInTheDocument();
+
+    rerender(
+      <EventGroup events={[observation]} isLive>
+        <div>child</div>
+      </EventGroup>,
+    );
+    expect(status).toHaveTextContent("ACTION_MESSAGE$THINK");
+    expect(toggle).toHaveFocus();
+
+    rerender(
+      <EventGroup events={[observation]}>
+        <div>child</div>
+      </EventGroup>,
+    );
+    expect(status).toBeEmptyDOMElement();
+  });
+
   it("shows the running step with a spinner while it is the live stage", () => {
     const events = [
       makeBashObservation("o1", "a1", "ls"),
@@ -156,7 +200,9 @@ describe("EventGroup", () => {
       </EventGroup>,
     );
 
-    expect(screen.getByText(/ACTION_MESSAGE\$RUN/)).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("button")).getByText(/ACTION_MESSAGE\$RUN/),
+    ).toBeInTheDocument();
     expect(
       screen.queryByText("EVENT_GROUP$RAN_COMMANDS"),
     ).not.toBeInTheDocument();
@@ -175,7 +221,9 @@ describe("EventGroup", () => {
       </EventGroup>,
     );
 
-    expect(screen.getByText("ACTION_MESSAGE$THINK")).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("button")).getByText("ACTION_MESSAGE$THINK"),
+    ).toBeInTheDocument();
     expect(screen.getByTestId("spinner-icon")).toBeInTheDocument();
   });
 
@@ -192,7 +240,9 @@ describe("EventGroup", () => {
       </EventGroup>,
     );
 
-    expect(screen.getByText("ACTION_MESSAGE$THINK")).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("button")).getByText("ACTION_MESSAGE$THINK"),
+    ).toBeInTheDocument();
   });
 
   it("lists each kind of step in order of first appearance", () => {

@@ -101,6 +101,14 @@ export function EventGroup({
       className="mt-2 w-full py-1 text-sm [&+article]:mt-2"
       data-testid="event-group"
     >
+      <span
+        className="sr-only"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        {isLive ? summary : null}
+      </span>
       <button
         id={buttonId}
         type="button"
