@@ -1,3 +1,4 @@
+import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useTaskPolling } from "#/hooks/query/use-task-polling";
@@ -44,6 +45,10 @@ export function TaskStartupProgress() {
         });
       navigate(`/conversations/${attachmentFailure.conversationId}`);
       return;
+    }
+    const launches = useConversationLaunchStore.getState();
+    for (const launch of Object.values(launches.launches)) {
+      if (launch.targetId === `task-${taskId}`) launches.remove(launch.id);
     }
     const attachments = consumePendingTaskAttachments(taskId);
     const messages = useOptimisticUserMessageStore.getState();

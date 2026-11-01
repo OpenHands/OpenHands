@@ -1,3 +1,4 @@
+import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { readFileSync } from "node:fs";
@@ -392,6 +393,7 @@ const cloudBackend = {
 
 describe("HomeChatLauncher", () => {
   beforeEach(() => {
+    useConversationLaunchStore.setState({ launches: {} });
     vi.restoreAllMocks();
     vi.clearAllMocks();
     mockImages = [];
@@ -958,7 +960,9 @@ describe("HomeChatLauncher", () => {
       }),
     );
     await waitFor(() =>
-      expect(mockNavigate).toHaveBeenCalledWith("/conversations/conv-repo"),
+      expect(
+        Object.values(useConversationLaunchStore.getState().launches),
+      ).toEqual([expect.objectContaining({ targetId: "conv-repo" })]),
     );
   });
 
@@ -1197,9 +1201,9 @@ describe("HomeChatLauncher", () => {
       }),
     );
     await waitFor(() =>
-      expect(mockNavigate).toHaveBeenCalledWith(
-        "/conversations/task-start-task-1",
-      ),
+      expect(
+        Object.values(useConversationLaunchStore.getState().launches),
+      ).toEqual([expect.objectContaining({ targetId: "task-start-task-1" })]),
     );
   });
 
@@ -1261,9 +1265,9 @@ describe("HomeChatLauncher", () => {
       }),
     );
     await waitFor(() =>
-      expect(mockNavigate).toHaveBeenCalledWith(
-        "/conversations/task-start-task-2",
-      ),
+      expect(
+        Object.values(useConversationLaunchStore.getState().launches),
+      ).toEqual([expect.objectContaining({ targetId: "task-start-task-2" })]),
     );
   });
 
