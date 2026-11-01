@@ -363,12 +363,10 @@ describe("conversation route — cloud sandbox resume", () => {
     expect(resumeCloudSandbox).toHaveBeenCalledTimes(1);
 
     act(() => {
-      useOptimisticUserMessageStore
-        .getState()
-        .enqueuePendingMessage({
-          conversationId: CLOUD_CONVERSATION_ID,
-          text: "hi again",
-        });
+      useOptimisticUserMessageStore.getState().enqueuePendingMessage({
+        conversationId: CLOUD_CONVERSATION_ID,
+        text: "hi again",
+      });
     });
     await waitFor(() => expect(resumeCloudSandbox).toHaveBeenCalledTimes(2));
     setStatus("PAUSED");
@@ -404,12 +402,10 @@ describe("conversation route — cloud sandbox resume", () => {
     );
     let id!: string;
     act(() => {
-      id = useOptimisticUserMessageStore
-        .getState()
-        .enqueuePendingMessage({
-          conversationId: CLOUD_CONVERSATION_ID,
-          text: "recover me",
-        });
+      id = useOptimisticUserMessageStore.getState().enqueuePendingMessage({
+        conversationId: CLOUD_CONVERSATION_ID,
+        text: "recover me",
+      });
     });
     await waitFor(() =>
       expect(
@@ -418,7 +414,7 @@ describe("conversation route — cloud sandbox resume", () => {
           .pendingMessages.find((m) => m.id === id)?.status,
       ).toBe("error"),
     );
-    expect(displayErrorToast).toHaveBeenCalledTimes(1);
+    expect(displayErrorToast).not.toHaveBeenCalled();
 
     act(() => {
       useOptimisticUserMessageStore.getState().markPendingMessageSending(id);

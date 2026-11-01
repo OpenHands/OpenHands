@@ -13,7 +13,10 @@ import { ConversationClient } from "@openhands/typescript-client/clients";
 import { useQueryClient } from "@tanstack/react-query";
 import { useWebSocket, WebSocketHookOptions } from "#/hooks/use-websocket";
 import { usePageVisibilityReconnect } from "#/hooks/use-page-visibility-reconnect";
-import { useConnectionErrorGracePeriod } from "#/hooks/use-connection-error-grace-period";
+import {
+  useConnectionErrorGracePeriod,
+  type ConnectionRecoveryState,
+} from "#/hooks/use-connection-error-grace-period";
 import { useEventStore } from "#/stores/use-event-store";
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
@@ -116,6 +119,7 @@ interface SendMessageResult {
 
 interface ConversationWebSocketContextType {
   connectionState: WebSocketConnectionState;
+  recoveryState: ConnectionRecoveryState;
   /**
    * The main connection's own state, unmerged with the planning connection —
    * see `useMainWebSocketStatus`.
@@ -232,7 +236,6 @@ export function ConversationWebSocketProvider({
     useState<WebSocketConnectionState>("CONNECTING");
 
   // Track if we've ever successfully connected for each connection
-  // Don't show errors until after first successful connection
   const hasConnectedRefMain = React.useRef(false);
   const hasConnectedRefPlanning = React.useRef(false);
 
@@ -506,7 +509,7 @@ export function ConversationWebSocketProvider({
   );
 
   const planningAgentWsUrl = useMemo(() => {
-    if (!subConversations?.length) {
+    if (!conversationUrl || !subConversations?.length) {
       return null;
     }
 
@@ -524,7 +527,7 @@ export function ConversationWebSocketProvider({
       planningAgentConversation.id,
       planningAgentConversation.conversation_url,
     );
-  }, [subConversations]);
+  }, [conversationUrl, subConversations]);
 
   // Merged connection state - reflects combined status of both connections
   const connectionState = useMemo<WebSocketConnectionState>(() => {
@@ -1187,7 +1190,7 @@ export function ConversationWebSocketProvider({
       },
       onError: () => {
         setMainConnectionState("CLOSED");
-        if (hasConnectedRefMain.current) mainConnectionError.report();
+        mainConnectionError.report();
       },
       onMessage: handleMainMessage,
     };
@@ -1255,7 +1258,7 @@ export function ConversationWebSocketProvider({
       },
       onError: () => {
         setPlanningConnectionState("CLOSED");
-        if (hasConnectedRefPlanning.current) planningConnectionError.report();
+        planningConnectionError.report();
       },
       onMessage: handlePlanningMessage,
     };
@@ -1350,6 +1353,8 @@ export function ConversationWebSocketProvider({
 
   const reconnect = useCallback(() => {
     removeErrorMessage();
+    mainConnectionError.cancel();
+    planningConnectionError.cancel();
     const currentMode = useConversationStore.getState().conversationMode;
     if (currentMode === "plan" && planningAgentWsUrl) {
       reconnectPlanning();
@@ -1361,6 +1366,8 @@ export function ConversationWebSocketProvider({
     reconnectMain,
     reconnectPlanning,
     removeErrorMessage,
+    mainConnectionError,
+    planningConnectionError,
   ]);
 
   // Mobile browsers freeze and discard backgrounded tabs, silently killing
@@ -1572,9 +1579,16 @@ export function ConversationWebSocketProvider({
     }
   }, [planningAgentSocket, planningAgentWsUrl]);
 
+  const activeMode = useConversationStore((state) => state.conversationMode);
+  const recoveryState =
+    activeMode === "plan" && planningAgentWsUrl
+      ? planningConnectionError.state
+      : mainConnectionError.state;
+
   const contextValue = useMemo(
     () => ({
       connectionState,
+      recoveryState,
       mainConnectionState,
       sendMessage,
       isLoadingHistory,
@@ -1584,6 +1598,7 @@ export function ConversationWebSocketProvider({
     }),
     [
       connectionState,
+      recoveryState,
       mainConnectionState,
       planningConnectionState,
       sendMessage,

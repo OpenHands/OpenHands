@@ -8297,6 +8297,24 @@
     "ca": "Reconnectant...",
     "id": "Menghubungkan kembali..."
   },
+  "CHAT_INTERFACE$STILL_RECONNECTING": {
+    "en": "Still reconnecting. Your agent may still be running.",
+    "ja": "再接続を試みています。エージェントはまだ実行中の可能性があります。",
+    "zh-CN": "仍在重新连接。你的智能体可能仍在运行。",
+    "zh-TW": "仍在重新連線。你的代理可能仍在執行。",
+    "ko-KR": "계속 다시 연결하고 있습니다. 에이전트가 아직 실행 중일 수 있습니다.",
+    "no": "Kobler fortsatt til. Agenten din kjører kanskje fortsatt.",
+    "it": "Riconnessione in corso. L’agente potrebbe essere ancora in esecuzione.",
+    "pt": "Ainda reconectando. Seu agente pode continuar em execução.",
+    "es": "Seguimos reconectando. Tu agente podría seguir ejecutándose.",
+    "ar": "لا نزال نحاول إعادة الاتصال. قد يكون وكيلك لا يزال يعمل.",
+    "fr": "Reconnexion toujours en cours. Votre agent est peut-être encore actif.",
+    "tr": "Yeniden bağlanmaya çalışılıyor. Ajanınız hâlâ çalışıyor olabilir.",
+    "de": "Verbindung wird weiterhin hergestellt. Dein Agent läuft möglicherweise noch.",
+    "uk": "Повторне підключення триває. Ваш агент може ще працювати.",
+    "ca": "Encara s’està reconnectant. El teu agent podria continuar executant-se.",
+    "id": "Masih menghubungkan kembali. Agen Anda mungkin masih berjalan."
+  },
   "CHAT_INTERFACE$STOPPED": {
     "en": "Stopped",
     "ja": "停止しました",

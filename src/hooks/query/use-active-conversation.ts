@@ -30,6 +30,7 @@ export const useActiveConversation = () => {
         data &&
         (!data.conversation_url ||
           data.sandbox_status === "PAUSED" ||
+          data.sandbox_status === "STARTING" ||
           (!data.title && isExecutionActive(data.execution_status)))
       ) {
         return 3000;

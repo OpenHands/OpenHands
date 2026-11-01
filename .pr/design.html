@@ -1,0 +1,321 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Quiet connection recovery</title><style>:root{--fg:#1a1a1a;--muted:#5a5a5a;--bg:#fdfdfb;--rule:#ddd;--accent:#2b4eaa;--change:#ad550d}*{box-sizing:border-box}body{margin:0;color:var(--fg);background:var(--bg);font:16px/1.6 system-ui}main{max-width:1050px;margin:auto;padding:36px 24px}h1{font-size:36px}h2{margin-top:42px}a{color:var(--accent)}nav{display:flex;flex-wrap:wrap;gap:16px}section{border-top:1px solid var(--rule);padding-top:8px}.pair{display:grid;grid-template-columns:1fr 1fr;gap:20px}.after{border-left:3px solid var(--change);padding-left:16px}code,pre{font:13px/1.5 ui-monospace,monospace}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f3f1ec;padding:16px}svg{width:100%;height:auto}table{border-collapse:collapse;width:100%}td,th{padding:10px;text-align:left;border-bottom:1px solid var(--rule)}@media(max-width:650px){.pair{grid-template-columns:1fr}h1{font-size:28px}}</style><main><header><p>Canvas · transport and resume feedback</p><h1>Let reconnection recover quietly</h1><p>A lost WebSocket means the browser lost contact. It does not establish that the agent failed. Keep automatic reconnection and show progress separately from actionable conversation errors.</p></header><nav><a href="#flow">Timing</a><a href="#code">Code changes</a><a href="#compatibility">Compatibility</a><a href="#proof">Evidence</a></nav><section id="flow"><h2>Before and after</h2><svg viewBox="0 0 960 250" role="img" aria-labelledby="title desc"><title id="title">Transport failure feedback timeline</title><desc id="desc">Before, a five-second disconnect becomes an error. After, five seconds shows neutral progress and thirty seconds adds Retry; recovery clears the status.</desc><g fill="none" stroke="var(--rule)" stroke-width="2"><rect x="10" y="45" width="940" height="65" rx="8" stroke-dasharray="5 4"/><rect x="10" y="155" width="940" height="65" rx="8" stroke="var(--change)"/></g><g fill="var(--fg)" font-family="system-ui" font-size="17"><text x="30" y="28">Before · useConnectionErrorGracePeriod</text><text x="30" y="83">Disconnect → 5 seconds → Unable to connect to server</text><text x="30" y="140">After · useConnectionErrorGracePeriod → ConnectionRecoveryNotice</text><text x="30" y="193">Disconnect → 5 seconds: Reconnecting → 30 seconds: status + Retry</text><text x="30" y="245">Successful connection clears feedback automatically; existing retry/backoff remains in control.</text></g></svg></section><section id="code"><h2>Changes by owner</h2><article><h3>Transport progress has its own state</h3><p><code>src/hooks/use-connection-error-grace-period.ts</code> · <a href="https://github.com/OpenHands/OpenHands/blob/1ac12a69cdbb8688ef6ff8fb08f51a82f76e848b/src/hooks/use-connection-error-grace-period.ts">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/alona/quiet-connection-recovery/src/hooks/use-connection-error-grace-period.ts">After source</a></p><div class="pair"><div><strong>Before</strong><p>A sustained failure writes a global connection error after five seconds.</p></div><div class="after"><strong>After</strong><p>Five seconds starts neutral progress; thirty seconds offers Retry. Repeated failures retain the original timer. Opening, changing URL or hiding the page cancels feedback.</p></div></div><details><summary>Diff</summary><pre>diff --git a/src/hooks/use-connection-error-grace-period.ts b/src/hooks/use-connection-error-grace-period.ts
+index aeecd09fd0..7e4f23ce19 100644
+--- a/src/hooks/use-connection-error-grace-period.ts
++++ b/src/hooks/use-connection-error-grace-period.ts
+@@ -1,40 +1,57 @@
+-import { useCallback, useEffect, useMemo, useRef } from &quot;react&quot;;
+-import { SERVER_CONNECTION_ERROR_MESSAGE } from &quot;#/constants/server-connection-error&quot;;
++import { useCallback, useEffect, useMemo, useRef, useState } from &quot;react&quot;;
+ import { useErrorMessageStore } from &quot;#/stores/error-message-store&quot;;
+
+-const CONNECTION_ERROR_GRACE_MS = 5_000;
++const RECOVERY_PROGRESS_DELAY_MS = 5_000;
++const RECOVERY_RETRY_DELAY_MS = 30_000;
++export type ConnectionRecoveryState = &quot;idle&quot; | &quot;reconnecting&quot; | &quot;retryable&quot;;
+
+ export function useConnectionErrorGracePeriod(identity: string | null) {
+-  const timer = useRef&lt;ReturnType&lt;typeof setTimeout&gt; | null&gt;(null);
++  const timers = useRef&lt;ReturnType&lt;typeof setTimeout&gt;[]&gt;([]);
++  const [feedback, setFeedback] = useState&lt;{
++    identity: string | null;
++    state: ConnectionRecoveryState;
++  }&gt;({ identity, state: &quot;idle&quot; });
+   const cancel = useCallback(() =&gt; {
+-    if (timer.current !== null) clearTimeout(timer.current);
+-    timer.current = null;
+-  }, []);
++    timers.current.forEach(clearTimeout);
++    timers.current = [];
++    setFeedback({ identity, state: &quot;idle&quot; });
++    useErrorMessageStore.getState().clearConnectionError();
++  }, [identity]);
+
+   const report = useCallback(() =&gt; {
+-    // Repeated retry failures must not postpone an ongoing outage forever.
+-    if (timer.current !== null || document.visibilityState === &quot;hidden&quot;) return;
+-    timer.current = setTimeout(() =&gt; {
+-      const store = useErrorMessageStore.getState();
+-      if (
+-        document.visibilityState !== &quot;hidden&quot; &amp;&amp;
+-        store.errorType !== &quot;conversation&quot;
+-      ) {
+-        store.setErrorMessage(SERVER_CONNECTION_ERROR_MESSAGE, &quot;connection&quot;);
+-      }
+-    }, CONNECTION_ERROR_GRACE_MS);
+-  }, []);
++    if (
++      !identity ||
++      timers.current.length ||
++      document.visibilityState === &quot;hidden&quot;
++    )
++      return;
++    useErrorMessageStore.getState().clearConnectionError();
++    // Lost transport is not evidence that the agent failed. Keep retrying.
++    timers.current = [
++      setTimeout(
++        () =&gt; setFeedback({ identity, state: &quot;reconnecting&quot; }),
++        RECOVERY_PROGRESS_DELAY_MS,
++      ),
++      setTimeout(
++        () =&gt; setFeedback({ identity, state: &quot;retryable&quot; }),
++        RECOVERY_RETRY_DELAY_MS,
++      ),
++    ];
++  }, [identity]);
+
+   useEffect(() =&gt; {
++    cancel();
+     const onVisibilityChange = () =&gt; {
+       if (document.visibilityState === &quot;hidden&quot;) cancel();
+     };
+     document.addEventListener(&quot;visibilitychange&quot;, onVisibilityChange);
+     return () =&gt; {
+-      cancel();
++      timers.current.forEach(clearTimeout);
++      timers.current = [];
+       document.removeEventListener(&quot;visibilitychange&quot;, onVisibilityChange);
+     };
+-  }, [identity, cancel]);
++  }, [cancel]);
+
+-  return useMemo(() =&gt; ({ report, cancel }), [report, cancel]);
++  const state = feedback.identity === identity ? feedback.state : &quot;idle&quot;;
++  return useMemo(() =&gt; ({ report, cancel, state }), [report, cancel, state]);
+ }
+</pre></details></article><article><h3>Each socket owns its recovery state</h3><p><code>src/contexts/conversation-websocket-context.tsx</code> · <a href="https://github.com/OpenHands/OpenHands/blob/1ac12a69cdbb8688ef6ff8fb08f51a82f76e848b/src/contexts/conversation-websocket-context.tsx">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/alona/quiet-connection-recovery/src/contexts/conversation-websocket-context.tsx">After source</a></p><div class="pair"><div><strong>Before</strong><p>Main and planning transport failures share the error store.</p></div><div class="after"><strong>After</strong><p>The active mode selects recovery feedback, falling back to main before a planner exists. A missing parent runtime URL also suppresses the planner socket.</p></div></div><details><summary>Diff</summary><pre>diff --git a/src/contexts/conversation-websocket-context.tsx b/src/contexts/conversation-websocket-context.tsx
+index 876ceb7d29..bb50ef16f2 100644
+--- a/src/contexts/conversation-websocket-context.tsx
++++ b/src/contexts/conversation-websocket-context.tsx
+@@ -13,7 +13,10 @@ import { ConversationClient } from &quot;@openhands/typescript-client/clients&quot;;
+ import { useQueryClient } from &quot;@tanstack/react-query&quot;;
+ import { useWebSocket, WebSocketHookOptions } from &quot;#/hooks/use-websocket&quot;;
+ import { usePageVisibilityReconnect } from &quot;#/hooks/use-page-visibility-reconnect&quot;;
+-import { useConnectionErrorGracePeriod } from &quot;#/hooks/use-connection-error-grace-period&quot;;
++import {
++  useConnectionErrorGracePeriod,
++  type ConnectionRecoveryState,
++} from &quot;#/hooks/use-connection-error-grace-period&quot;;
+ import { useEventStore } from &quot;#/stores/use-event-store&quot;;
+ import { useErrorMessageStore } from &quot;#/stores/error-message-store&quot;;
+ import { useOptimisticUserMessageStore } from &quot;#/stores/optimistic-user-message-store&quot;;
+@@ -116,6 +119,7 @@ interface SendMessageResult {
+
+ interface ConversationWebSocketContextType {
+   connectionState: WebSocketConnectionState;
++  recoveryState: ConnectionRecoveryState;
+   /**
+    * The main connection&#x27;s own state, unmerged with the planning connection —
+    * see `useMainWebSocketStatus`.
+@@ -232,7 +236,6 @@ export function ConversationWebSocketProvider({
+     useState&lt;WebSocketConnectionState&gt;(&quot;CONNECTING&quot;);
+
+   // Track if we&#x27;ve ever successfully connected for each connection
+-  // Don&#x27;t show errors until after first successful connection
+   const hasConnectedRefMain = React.useRef(false);
+   const hasConnectedRefPlanning = React.useRef(false);
+
+@@ -506,7 +509,7 @@ export function ConversationWebSocketProvider({
+   );
+
+   const planningAgentWsUrl = useMemo(() =&gt; {
+-    if (!subConversations?.length) {
++    if (!conversationUrl || !subConversations?.length) {
+       return null;
+     }
+
+@@ -524,7 +527,7 @@ export function ConversationWebSocketProvider({
+       planningAgentConversation.id,
+       planningAgentConversation.conversation_url,
+     );
+-  }, [subConversations]);
++  }, [conversationUrl, subConversations]);
+
+   // Merged connection state - reflects combined status of both connections
+   const connectionState = useMemo&lt;WebSocketConnectionState&gt;(() =&gt; {
+@@ -1187,7 +1190,7 @@ export function ConversationWebSocketProvider({
+       },
+       onError: () =&gt; {
+         setMainConnectionState(&quot;CLOSED&quot;);
+-        if (hasConnectedRefMain.current) mainConnectionError.report();
++        mainConnectionError.report();
+       },
+       onMessage: handleMainMessage,
+     };
+@@ -1255,7 +1258,7 @@ export function ConversationWebSocketProvider({
+       },
+       onError: () =&gt; {
+         setPlanningConnectionState(&quot;CLOSED&quot;);
+-        if (hasConnectedRefPlanning.current) planningConnectionError.report();
++        planningConnectionError.report();
+       },
+       onMessage: handlePlanningMessage,
+     };
+@@ -1350,6 +1353,8 @@ export function ConversationWebSocketProvider({
+
+   const reconnect = useCallback(() =&gt; {
+     removeErrorMessage();
++    mainConnectionError.cancel();
++    planningConnectionError.cancel();
+     const currentMode = useConversationStore.getState().conversationMode;
+     if (currentMode === &quot;plan&quot; &amp;&amp; planningAgentWsUrl) {
+       reconnectPlanning();
+@@ -1361,6 +1366,8 @@ export function ConversationWebSocketProvider({
+     reconnectMain,
+     reconnectPlanning,
+     removeErrorMessage,
++    mainConnectionError,
++    planningConnectionError,
+   ]);
+
+   // Mobile browsers freeze and discard backgrounded tabs, silently killing
+@@ -1572,9 +1579,16 @@ export function ConversationWebSocketProvider({
+     }
+   }, [planningAgentSocket, planningAgentWsUrl]);
+
++  const activeMode = useConversationStore((state) =&gt; state.conversationMode);
++  const recoveryState =
++    activeMode === &quot;plan&quot; &amp;&amp; planningAgentWsUrl
++      ? planningConnectionError.state
++      : mainConnectionError.state;
++
+   const contextValue = useMemo(
+     () =&gt; ({
+       connectionState,
++      recoveryState,
+       mainConnectionState,
+       sendMessage,
+       isLoadingHistory,
+@@ -1584,6 +1598,7 @@ export function ConversationWebSocketProvider({
+     }),
+     [
+       connectionState,
++      recoveryState,
+       mainConnectionState,
+       planningConnectionState,
+       sendMessage,
+</pre></details></article><article><h3>Wait for runtime startup</h3><p><code>src/contexts/websocket-provider-wrapper.tsx</code> · <a href="https://github.com/OpenHands/OpenHands/blob/1ac12a69cdbb8688ef6ff8fb08f51a82f76e848b/src/contexts/websocket-provider-wrapper.tsx">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/alona/quiet-connection-recovery/src/contexts/websocket-provider-wrapper.tsx">After source</a></p><div class="pair"><div><strong>Before</strong><p>PAUSED and unavailable runtimes suppress the socket. STARTING can retain a stale URL.</p></div><div class="after"><strong>After</strong><p>STARTING also suppresses socket attempts until metadata reports the runtime ready.</p></div></div><details><summary>Diff</summary><pre>diff --git a/src/contexts/websocket-provider-wrapper.tsx b/src/contexts/websocket-provider-wrapper.tsx
+index e0b284ed6e..11e621c8e1 100644
+--- a/src/contexts/websocket-provider-wrapper.tsx
++++ b/src/contexts/websocket-provider-wrapper.tsx
+@@ -98,6 +98,7 @@ export function WebSocketProviderWrapper({
+   // persisted event history remains available through the backend API.
+   const conversationUrl =
+     conversation?.sandbox_status === &quot;PAUSED&quot; ||
++    conversation?.sandbox_status === &quot;STARTING&quot; ||
+     isRuntimeUnavailableSandboxStatus(conversation?.sandbox_status)
+       ? null
+       : conversation?.conversation_url;
+</pre></details></article><article><h3>Observe startup through existing polling</h3><p><code>src/hooks/query/use-active-conversation.ts</code> · <a href="https://github.com/OpenHands/OpenHands/blob/1ac12a69cdbb8688ef6ff8fb08f51a82f76e848b/src/hooks/query/use-active-conversation.ts">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/alona/quiet-connection-recovery/src/hooks/query/use-active-conversation.ts">After source</a></p><div class="pair"><div><strong>Before</strong><p>A populated URL on STARTING can use the normal thirty-second interval.</p></div><div class="after"><strong>After</strong><p>STARTING uses the existing three-second metadata polling interval.</p></div></div><details><summary>Diff</summary><pre>diff --git a/src/hooks/query/use-active-conversation.ts b/src/hooks/query/use-active-conversation.ts
+index 507f3ad895..c6f26c74a7 100644
+--- a/src/hooks/query/use-active-conversation.ts
++++ b/src/hooks/query/use-active-conversation.ts
+@@ -30,6 +30,7 @@ export const useActiveConversation = () =&gt; {
+         data &amp;&amp;
+         (!data.conversation_url ||
+           data.sandbox_status === &quot;PAUSED&quot; ||
++          data.sandbox_status === &quot;STARTING&quot; ||
+           (!data.title &amp;&amp; isExecutionActive(data.execution_status)))
+       ) {
+         return 3000;
+</pre></details></article><article><h3>Show one relevant status</h3><p><code>src/components/features/chat/chat-interface.tsx</code> · <a href="https://github.com/OpenHands/OpenHands/blob/1ac12a69cdbb8688ef6ff8fb08f51a82f76e848b/src/components/features/chat/chat-interface.tsx">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/alona/quiet-connection-recovery/src/components/features/chat/chat-interface.tsx">After source</a></p><div class="pair"><div><strong>Before</strong><p>Connection failure appears through the generic error banner.</p></div><div class="after"><strong>After</strong><p>Render neutral recovery status unless an actionable error, archived conversation or pending resume message already owns feedback.</p></div></div><details><summary>Diff</summary><pre>diff --git a/src/components/features/chat/chat-interface.tsx b/src/components/features/chat/chat-interface.tsx
+index 267193be6b..98bfab390c 100644
+--- a/src/components/features/chat/chat-interface.tsx
++++ b/src/components/features/chat/chat-interface.tsx
+@@ -38,6 +38,7 @@ import { useErrorMessageStore } from &quot;#/stores/error-message-store&quot;;
+ import { useOptimisticUserMessageStore } from &quot;#/stores/optimistic-user-message-store&quot;;
+ import { SERVER_CONNECTION_ERROR_MESSAGE } from &quot;#/constants/server-connection-error&quot;;
+ import { ErrorMessageBanner } from &quot;./error-message-banner&quot;;
++import { ConnectionRecoveryNotice } from &quot;./connection-recovery-notice&quot;;
+ import { SkillInstallRestartBanner } from &quot;./skill-install-restart-banner&quot;;
+ import { LlmNotConfiguredBanner } from &quot;#/components/features/home/llm-not-configured-banner&quot;;
+ import { useLlmConfigured } from &quot;#/hooks/use-llm-configured&quot;;
+@@ -709,6 +710,15 @@ export function ChatInterface({
+           &lt;div className=&quot;flex shrink-0 flex-col gap-1.5 pb-4&quot;&gt;
+             &lt;SkillInstallRestartBanner conversationId={conversationId} /&gt;
+             &lt;BtwMessages conversationId={conversationId} /&gt;
++            {!errorMessage &amp;&amp;
++              !isArchivedConversation &amp;&amp;
++              !(pendingMessageLabel &amp;&amp; hasPendingUserMessages) &amp;&amp;
++              conversationWebSocket &amp;&amp; (
++                &lt;ConnectionRecoveryNotice
++                  state={conversationWebSocket.recoveryState}
++                  onRetry={conversationWebSocket.reconnect}
++                /&gt;
++              )}
+             {errorMessage &amp;&amp; !hideConnectionError &amp;&amp; (
+               &lt;ErrorMessageBanner
+                 message={errorMessage}
+</pre></details></article><article><h3>A longer wait offers an action</h3><p><code>src/components/features/chat/connection-recovery-notice.tsx</code> · <a href="https://github.com/OpenHands/OpenHands/blob/1ac12a69cdbb8688ef6ff8fb08f51a82f76e848b/src/components/features/chat/connection-recovery-notice.tsx">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/alona/quiet-connection-recovery/src/components/features/chat/connection-recovery-notice.tsx">After source</a></p><div class="pair"><div><strong>Before</strong><p>No separate recovery component.</p></div><div class="after"><strong>After</strong><p>A polite status region shows Reconnecting, then Still reconnecting. Your agent may still be running. Retry uses the existing reconnect callback. Its positioned layer keeps the button clickable above empty-chat suggestions on phones.</p></div></div><details><summary>Diff</summary><pre>diff --git a/src/components/features/chat/connection-recovery-notice.tsx b/src/components/features/chat/connection-recovery-notice.tsx
+new file mode 100644
+index 0000000000..0c5fe3d3d9
+--- /dev/null
++++ b/src/components/features/chat/connection-recovery-notice.tsx
+@@ -0,0 +1,37 @@
++import { useTranslation } from &quot;react-i18next&quot;;
++import { I18nKey } from &quot;#/i18n/declaration&quot;;
++import type { ConnectionRecoveryState } from &quot;#/hooks/use-connection-error-grace-period&quot;;
++
++export function ConnectionRecoveryNotice({
++  state,
++  onRetry,
++}: {
++  state: ConnectionRecoveryState;
++  onRetry: () =&gt; void;
++}) {
++  const { t } = useTranslation(&quot;openhands&quot;);
++  if (state === &quot;idle&quot;) return null;
++  return (
++    &lt;div
++      role=&quot;status&quot;
++      className=&quot;relative z-10 flex items-center justify-between gap-3 rounded-lg border border-border bg-surface-raised p-2 text-sm text-muted&quot;
++    &gt;
++      &lt;span&gt;
++        {t(
++          state === &quot;retryable&quot;
++            ? I18nKey.CHAT_INTERFACE$STILL_RECONNECTING
++            : I18nKey.CHAT_INTERFACE$RECONNECTING,
++        )}
++      &lt;/span&gt;
++      {state === &quot;retryable&quot; &amp;&amp; (
++        &lt;button
++          type=&quot;button&quot;
++          onClick={onRetry}
++          className=&quot;shrink-0 rounded px-2 py-1 text-foreground hover:bg-white/5&quot;
++        &gt;
++          {t(I18nKey.CHAT_INTERFACE$MESSAGE_RETRY)}
++        &lt;/button&gt;
++      )}
++    &lt;/div&gt;
++  );
++}
+</pre></details></article><article><h3>Avoid duplicate failed-send feedback</h3><p><code>src/hooks/mutation/use-cloud-sandbox-auto-resume.ts</code> · <a href="https://github.com/OpenHands/OpenHands/blob/1ac12a69cdbb8688ef6ff8fb08f51a82f76e848b/src/hooks/mutation/use-cloud-sandbox-auto-resume.ts">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/alona/quiet-connection-recovery/src/hooks/mutation/use-cloud-sandbox-auto-resume.ts">After source</a></p><div class="pair"><div><strong>Before</strong><p>An exhausted resume attempt marks pending messages failed and also displays a toast.</p></div><div class="after"><strong>After</strong><p>The failed message owns feedback when one exists. Without a pending message, the exhausted resume still shows a toast.</p></div></div><details><summary>Diff</summary><pre>diff --git a/src/hooks/mutation/use-cloud-sandbox-auto-resume.ts b/src/hooks/mutation/use-cloud-sandbox-auto-resume.ts
+index b4d28d9710..203b508bf7 100644
+--- a/src/hooks/mutation/use-cloud-sandbox-auto-resume.ts
++++ b/src/hooks/mutation/use-cloud-sandbox-auto-resume.ts
+@@ -90,16 +90,15 @@ export function useCloudSandboxAutoResume({
+       if (activeResumeKeyRef.current !== attempt.key) return;
+       const message = t(I18nKey.CONVERSATION$FAILED_TO_START_FROM_TASK);
+       const store = useOptimisticUserMessageStore.getState();
+-      store.pendingMessages
+-        .filter(
+-          (pending) =&gt;
+-            pending.conversationId === conversationId &amp;&amp;
+-            pending.status === &quot;sending&quot;,
+-        )
+-        .forEach((pending) =&gt;
+-          store.markPendingMessageError(pending.id, message),
+-        );
+-      displayErrorToast(message);
++      const pending = store.pendingMessages.filter(
++        (pending) =&gt;
++          pending.conversationId === conversationId &amp;&amp;
++          pending.status === &quot;sending&quot;,
++      );
++      pending.forEach((entry) =&gt;
++        store.markPendingMessageError(entry.id, message),
++      );
++      if (pending.length === 0) displayErrorToast(message);
+     },
+     retryDelay: () =&gt; CLOUD_RESUME_RETRY_DELAY_MS,
+     onSettled: (_, __, { attempt }) =&gt; {
+</pre></details></article><p>Mechanical changes: localized long-wait copy in all 16 locale blocks; focused regression tests for timing, active socket selection, lifecycle gating and failed-message ownership.</p></section><section><h2>Background refreshes retain their cached result</h2><p><a href="https://github.com/OpenHands/OpenHands/blob/alona/quiet-connection-recovery/src/query-client-config.ts">query-client-config.ts</a>: previously, a transient failure after retry exhaustion could toast even when the page retained useful data. Now the query still exposes its error, but cached refresh failures classified by isTransientRequestError omit the global toast. Initial loads, nontransient errors and mutations keep their existing feedback. This applies across backend modes; it does not change retry schedules or claim stale data is current. The shared transient classifier also recognizes the SDK wrapper whose cause is the original fetch TypeError, preserving the existing finite retry budget.</p><p>Tests exercise cached 503 recovery, an initial 503, cached 403 and existing mutation/authentication handling. The local server-stop recording also exercises real polling failures.</p></section><section id="compatibility"><h2>Compatibility and limits</h2><table><tr><th>Path</th><th>Effect</th></tr><tr><td>Local / Cloud</td><td>Both use shared transport feedback. STARTING/PAUSED gating and resume toast ownership concern Cloud metadata.</td></tr><tr><td>Code / Plan / delegated</td><td>Main and planning socket progress are independent. Delegated conversations opened as a conversation use the same provider. No change to background child execution.</td></tr><tr><td>OpenHands / ACP</td><td>Transport presentation is shared. Agent error classification and authentication actions remain unchanged.</td></tr><tr><td>Standalone / embedded</td><td>Shared React components and theme tokens. App and library builds are required.</td></tr><tr><td>Backend and storage</td><td>No new endpoint, wire field, SDK minimum, migration or persisted setting. Existing retry/backoff and event replay remain unchanged. Retry reconnects; it does not resubmit messages.</td></tr></table><p>Stacked on #19187 for explicit pending-message resume status. That status owns the conversation feedback while a message waits for the sandbox.</p></section><section id="proof"><h2>Evidence and scope</h2><p>The PR description links the inspected before/after recordings and exact test results. Real local Agent Server 1.59.0; an idle conversation with a dummy profile and no model execution. Stop the owned server, observe the loaded conversation, restart the same state, and verify automatic recovery without reloading.</p><p>This proves local transport presentation and recovery. Cloud provisioning, active LLM execution, expired credentials and the original customer's idle duration are not established by this run. Cloud startup, planning and duplicate failed-send paths have focused regression coverage; further deployed OHE acceptance remains separate.</p></section></main></html>

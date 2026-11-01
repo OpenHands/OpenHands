@@ -38,6 +38,7 @@ import { useErrorMessageStore } from "#/stores/error-message-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { SERVER_CONNECTION_ERROR_MESSAGE } from "#/constants/server-connection-error";
 import { ErrorMessageBanner } from "./error-message-banner";
+import { ConnectionRecoveryNotice } from "./connection-recovery-notice";
 import { SkillInstallRestartBanner } from "./skill-install-restart-banner";
 import { LlmNotConfiguredBanner } from "#/components/features/home/llm-not-configured-banner";
 import { useLlmConfigured } from "#/hooks/use-llm-configured";
@@ -709,6 +710,15 @@ export function ChatInterface({
           <div className="flex shrink-0 flex-col gap-1.5 pb-4">
             <SkillInstallRestartBanner conversationId={conversationId} />
             <BtwMessages conversationId={conversationId} />
+            {!errorMessage &&
+              !isArchivedConversation &&
+              !(pendingMessageLabel && hasPendingUserMessages) &&
+              conversationWebSocket && (
+                <ConnectionRecoveryNotice
+                  state={conversationWebSocket.recoveryState}
+                  onRetry={conversationWebSocket.reconnect}
+                />
+              )}
             {errorMessage && !hideConnectionError && (
               <ErrorMessageBanner
                 message={errorMessage}
