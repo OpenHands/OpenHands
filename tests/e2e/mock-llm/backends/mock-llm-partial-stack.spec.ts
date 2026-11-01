@@ -22,12 +22,21 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  releaseHeldPorts,
+  reholdPorts,
+} from "../utils/allocate-mock-llm-ports";
+import {
   FRONTEND_ONLY_INGRESS_PORT,
   FRONTEND_ONLY_URL,
   BACKEND_ONLY_INGRESS_PORT,
   BACKEND_ONLY_URL,
   seedLocalStorage,
 } from "../utils/mock-llm-helpers";
+
+const CONFLICT_PORT = Number(process.env.MOCK_LLM_CONFLICT_PORT ?? "18330");
+const CONFLICT_FREE_PORT = Number(
+  process.env.MOCK_LLM_CONFLICT_FREE_PORT ?? "18340",
+);
 
 // ── Paths ──────────────────────────────────────────────────────────────
 const PROJECT_ROOT = resolve(
@@ -129,6 +138,8 @@ function createIsolatedEnv(
       OH_CANVAS_SAFE_BACKEND_PORT: String(parseInt(ingressPort) + 1),
       OH_CANVAS_SAFE_AUTOMATION_PORT: String(parseInt(ingressPort) + 2),
       OH_CANVAS_SAFE_VITE_PORT: String(parseInt(ingressPort) + 3),
+      // Profiles and secrets follow the unique state dir, not the shared temp parent.
+      OH_PERSISTENCE_DIR: stateDir,
       // Isolated key file so we don't touch ~/.openhands
       OH_SESSION_API_KEY_PATH: join(stateDir, "session-key.txt"),
       ...extra,
@@ -178,6 +189,7 @@ test.describe("partial stack: --frontend-only", () => {
   test.afterEach(async () => {
     if (child) await killChild(child);
     if (stateDir) rmSync(stateDir, { recursive: true, force: true });
+    await reholdPorts(["feOnly"]);
   });
 
   test("serves the frontend but returns 503 for backend routes", async ({
@@ -193,6 +205,7 @@ test.describe("partial stack: --frontend-only", () => {
       "build/index.html missing — skipped (run `npm run build:app` or use the npm e2e config)",
     );
 
+    await releaseHeldPorts(["feOnly"]);
     const isolated = createIsolatedEnv(FRONTEND_ONLY_INGRESS_PORT);
     stateDir = isolated.stateDir;
     const output = collectOutput(
@@ -240,9 +253,9 @@ test.describe("partial stack: --frontend-only", () => {
 
     // The app should detect the missing backend and show the manage-backends
     // modal or an equivalent unavailable notice.
-    await expect(
-      page.getByTestId("manage-backends-modal"),
-    ).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("manage-backends-modal")).toBeVisible({
+      timeout: 15_000,
+    });
   });
 });
 
@@ -257,6 +270,7 @@ test.describe("partial stack: --backend-only", () => {
   test.afterEach(async () => {
     if (child) await killChild(child);
     if (stateDir) rmSync(stateDir, { recursive: true, force: true });
+    await reholdPorts(["beOnly"]);
   });
 
   test("serves backend APIs but returns 503 for the frontend root", async ({
@@ -265,6 +279,7 @@ test.describe("partial stack: --backend-only", () => {
     // Backend-only needs uvx → agent-server + automation startup: allow 3 min
     test.setTimeout(180_000);
 
+    await releaseHeldPorts(["beOnly"]);
     const isolated = createIsolatedEnv(BACKEND_ONLY_INGRESS_PORT);
     stateDir = isolated.stateDir;
     const sessionKey = isolated.env.LOCAL_BACKEND_API_KEY;
@@ -294,21 +309,16 @@ test.describe("partial stack: --backend-only", () => {
     ).not.toBeNull();
 
     // Verify: /server_info returns 200 (agent-server running)
-    const serverInfoResp = await request.get(
-      `${BACKEND_ONLY_URL}/server_info`,
-    );
+    const serverInfoResp = await request.get(`${BACKEND_ONLY_URL}/server_info`);
     expect(serverInfoResp.status()).toBe(200);
     const serverInfo = await serverInfoResp.json();
     expect(serverInfo).toHaveProperty("version");
 
     // Verify: /api/settings is reachable (may return 401 without key, but not 503)
-    const settingsResp = await request.get(
-      `${BACKEND_ONLY_URL}/api/settings`,
-      {
-        headers: { "X-Session-API-Key": sessionKey },
-        failOnStatusCode: false,
-      },
-    );
+    const settingsResp = await request.get(`${BACKEND_ONLY_URL}/api/settings`, {
+      headers: { "X-Session-API-Key": sessionKey },
+      failOnStatusCode: false,
+    });
     expect(settingsResp.status()).not.toBe(503);
 
     // Verify: automation backend is also running and reachable
@@ -325,10 +335,9 @@ test.describe("partial stack: --backend-only", () => {
     expect(rootResp.status()).toBe(503);
 
     // Verify: a random static-asset-like path also returns 503
-    const assetResp = await request.get(
-      `${BACKEND_ONLY_URL}/assets/index.js`,
-      { failOnStatusCode: false },
-    );
+    const assetResp = await request.get(`${BACKEND_ONLY_URL}/assets/index.js`, {
+      failOnStatusCode: false,
+    });
     expect(assetResp.status()).toBe(503);
   });
 });
@@ -349,6 +358,7 @@ test.describe("partial stack: port conflict", () => {
       blocker = null;
     }
     if (stateDir) rmSync(stateDir, { recursive: true, force: true });
+    await reholdPorts(["conflict", "conflictFree"]);
   });
 
   test("fails with a clear error when the ingress port is occupied", async () => {
@@ -359,9 +369,10 @@ test.describe("partial stack: port conflict", () => {
       "build/index.html missing — skipped (run `npm run build:app` or use the npm e2e config)",
     );
 
-    const conflictPort = 18330;
+    const conflictPort = CONFLICT_PORT;
 
-    // Block the port with a dummy TCP server
+    // Drop the runner's hold, then block the ingress so the stack must fail.
+    await releaseHeldPorts(["conflict"]);
     blocker = await blockPort(conflictPort);
 
     const isolated = createIsolatedEnv(String(conflictPort));
@@ -373,17 +384,22 @@ test.describe("partial stack: port conflict", () => {
     // The process should exit non-zero because the port is busy
     const result = await waitForExit(child, 20_000);
 
-    expect(result.timedOut, "Process should exit promptly on port conflict").toBe(
-      false,
-    );
-    expect(result.code, "Process should exit non-zero on port conflict").not.toBe(
-      0,
-    );
+    expect(
+      result.timedOut,
+      "Process should exit promptly on port conflict",
+    ).toBe(false);
+    expect(
+      result.code,
+      "Process should exit non-zero on port conflict",
+    ).not.toBe(0);
 
     // The error message should mention the blocked port
     const text = output.get();
     expect(text).toMatch(
-      new RegExp(`(port\\s+${conflictPort}|${conflictPort}.*in use|EADDRINUSE)`, "i"),
+      new RegExp(
+        `(port\\s+${conflictPort}|${conflictPort}.*in use|EADDRINUSE)`,
+        "i",
+      ),
     );
   });
 
@@ -392,14 +408,14 @@ test.describe("partial stack: port conflict", () => {
   }) => {
     test.setTimeout(60_000);
 
-    // Use a port that is NOT blocked — frontend-only starts fast (no uvx)
-    const freePort = 18331;
-
     test.skip(
       !existsSync(join(PROJECT_ROOT, "build/index.html")),
       "build/index.html missing — skipped (run `npm run build:app` or use the npm e2e config)",
     );
 
+    // Use a port that is NOT blocked — frontend-only starts fast (no uvx)
+    const freePort = CONFLICT_FREE_PORT;
+    await releaseHeldPorts(["conflictFree"]);
     const isolated = createIsolatedEnv(String(freePort));
     stateDir = isolated.stateDir;
     const output = collectOutput(
