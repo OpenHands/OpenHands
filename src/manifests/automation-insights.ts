@@ -47,6 +47,13 @@ export interface AutomationRunSummary {
    * and the count is null — unknowable, never guessed — otherwise.
    */
   completedTotal: number | null;
+  /**
+   * Lifetime PENDING (queued, not yet dispatched) run count, with the same
+   * provenance as {@link completedTotal}: from `status_counts` when the
+   * service reports it, from the sample exactly when it holds the whole
+   * history, and null — unknowable, never guessed — otherwise.
+   */
+  pendingTotal: number | null;
   latestRun: AutomationRun | null;
   /** Newest-first sample used by the list sparkline (same page as the summary). */
   recentRuns: AutomationRun[];
@@ -95,12 +102,18 @@ export function summarizeAutomationRuns(
   const completed = terminal.filter(isTaskSuccessful).length;
 
   let completedTotal: number | null;
+  let pendingTotal: number | null;
   if (response.status_counts) {
     completedTotal = response.status_counts[AutomationRunStatus.COMPLETED] ?? 0;
+    pendingTotal = response.status_counts[AutomationRunStatus.PENDING] ?? 0;
   } else if (response.total <= response.runs.length) {
     completedTotal = completed;
+    pendingTotal = response.runs.filter(
+      (run) => run.status === AutomationRunStatus.PENDING,
+    ).length;
   } else {
     completedTotal = null;
+    pendingTotal = null;
   }
 
   const durations = terminal.flatMap((run) => {
@@ -113,6 +126,7 @@ export function summarizeAutomationRuns(
   return {
     total: response.total,
     completedTotal,
+    pendingTotal,
     latestRun: response.runs[0] ?? null,
     recentRuns: response.runs,
     recentSuccessRate:
