@@ -94,10 +94,8 @@ export const useLoadOlderEvents = (
     if (isTaskConversation || !isInitialHistoryFetched || !initialHistory) {
       return;
     }
-    if (!initialHistory.hasMore) {
-      hasMoreRef.current = false;
-      setHasMore(false);
-    }
+    hasMoreRef.current = initialHistory.hasMore;
+    setHasMore(initialHistory.hasMore);
   }, [
     isTaskConversation,
     isInitialHistoryFetched,
