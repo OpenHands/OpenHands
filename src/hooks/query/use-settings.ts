@@ -129,6 +129,13 @@ export const getSettingsQueryFn = async (
   return normalizeSettingsResponse(settings);
 };
 
+const SETTINGS_STALE_TIME_MS = 1000 * 60 * 5;
+/** How often to retry reading settings while only display defaults are held. */
+const FALLBACK_SETTINGS_REFETCH_MS = 5000;
+
+const isFallbackData = (query: { state: { data?: Settings } }) =>
+  query.state.data?.is_fallback === true;
+
 export const useSettings = (scope: SettingsScope = "personal") => {
   const active = useActiveBackend();
   const hasBackend = !isNoBackend(active.backend);
@@ -145,7 +152,11 @@ export const useSettings = (scope: SettingsScope = "personal") => {
     retry: (_, error) => getErrorStatus(error) !== 404,
     enabled: hasBackend,
     refetchOnWindowFocus: false,
-    staleTime: 1000 * 60 * 5,
+    // Defaults returned because the backend could not be read are not the
+    // user's settings: keep them stale and poll until the backend answers.
+    staleTime: (query) => (isFallbackData(query) ? 0 : SETTINGS_STALE_TIME_MS),
+    refetchInterval: (query) =>
+      isFallbackData(query) ? FALLBACK_SETTINGS_REFETCH_MS : false,
     gcTime: 1000 * 60 * 15,
     meta: {
       disableToast: true,

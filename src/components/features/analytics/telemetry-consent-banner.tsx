@@ -40,9 +40,12 @@ function LocalTelemetryConsentBanner({
     setHasSubmittedChoice(false);
   }, [backend.id]);
 
+  // Only a consent the backend actually reported as unanswered counts;
+  // fallback defaults after a failed read say nothing about the user's choice.
   const shouldShow =
     isBackendConnected &&
     hasLoadedSettings &&
+    settings?.is_fallback !== true &&
     settings?.user_consents_to_analytics === null &&
     !hasSubmittedChoice;
 
