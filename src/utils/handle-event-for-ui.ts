@@ -15,11 +15,14 @@ import type {
 /**
  * An event as held by the UI list. `seq` is the log index a `durable` frame
  * carried; slots and transient events have none, which is what makes "has a
- * seq" mean "is resumable".
+ * seq" mean "is resumable". `isTransient` marks a `transient` frame's event
+ * (e.g. the `full_state` snapshot sent on connect), which the server never
+ * persists, so it never comes back in REST history.
  */
 export type UIEvent = OpenHandsEvent & {
   isFromPlanningAgent?: boolean;
   seq?: number;
+  isTransient?: boolean;
 };
 
 export interface StreamingSlotMeta {
