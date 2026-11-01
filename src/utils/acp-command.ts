@@ -48,8 +48,9 @@ const { quote } = shellQuote;
  *   - whitespace separates tokens
  *   - single quotes: literal until the next ``'`` (no escapes inside,
  *     matching POSIX shell)
- *   - double quotes: literal until the next ``"`` (with ``\\"`` and
- *     ``\\\\`` honored as escapes; no $-expansion)
+ *   - double quotes: literal until the next ``"`` (``\\"``, ``\\\\``,
+ *     ``\\$``, backtick, and ``\\!`` honored as escapes — the exact
+ *     set ``shell-quote.quote`` produces; no $-expansion)
  *   - backslash outside quotes: escapes the next character (whitespace,
  *     quote, or anything else — turns it into a literal)
  *   - explicit empty quoted segments (``""`` / ``''``) produce an
@@ -83,7 +84,9 @@ export function parseCommand(value: string): string[] {
 
     if (ch === "'") {
       // Single-quoted segment: literal until the next single quote.
-      // No escapes inside (POSIX shell semantics).
+      // No escapes inside (POSIX shell semantics — and
+      // ``shell-quote.quote`` never emits escapes inside single
+      // quotes either, so this stays an exact inverse).
       inToken = true;
       i += 1;
       while (i < value.length && value[i] !== "'") {
@@ -109,7 +112,16 @@ export function parseCommand(value: string): string[] {
       while (i < value.length && value[i] !== '"') {
         if (value[i] === "\\" && i + 1 < value.length) {
           const next = value[i + 1];
-          if (next === '"' || next === "\\") {
+          // ``shell-quote.quote`` escapes exactly this set inside
+          // double quotes; unescape the same set so the round trip
+          // is lossless. Other backslash sequences stay literal.
+          if (
+            next === '"' ||
+            next === "\\" ||
+            next === "$" ||
+            next === "`" ||
+            next === "!"
+          ) {
             current += next;
             i += 2;
             continue;
