@@ -3,6 +3,8 @@ import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useConversationStateStore } from "#/stores/conversation-state-store";
 import { useConversationStore } from "#/stores/conversation-store";
+import { useEventStore } from "#/stores/use-event-store";
+import { latestExecutionStatusFromEvents } from "#/utils/status";
 import { AgentState } from "#/types/agent-state";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 
@@ -60,6 +62,20 @@ export function useAgentState(conversationId?: string): UseAgentStateResult {
       ? (state.executionStatusByConversation[targetConversationId] ?? null)
       : null,
   );
+  // Intermediate source: the event store's `ConversationStateUpdateEvent`s,
+  // which include the REST-preloaded history tail (`useConversationHistory`
+  // seeds the store before the WebSocket connects; the socket resumes from
+  // `after_seq` past that tail and never replays it). A run that reached
+  // `running` before connect is therefore invisible to the live store until a
+  // *later* update arrives — the "first ACP prompt shows no Thinking chip"
+  // symptom — so read the latest update here between the live store and the
+  // REST fallback. Gated on the store actually holding this conversation's
+  // events (a plan helper's updates are ignored by the helper itself).
+  const preloadedExecutionStatus = useEventStore((state) =>
+    state.loadedConversationId === targetConversationId
+      ? latestExecutionStatusFromEvents(state.events)
+      : null,
+  );
   // The REST fallback only ever describes the route's own conversation, so it
   // only applies when no other conversation was explicitly requested.
   const routeConversationExecutionStatus =
@@ -68,7 +84,8 @@ export function useAgentState(conversationId?: string): UseAgentStateResult {
     ? routeConversationExecutionStatus
     : null;
 
-  const executionStatus = liveExecutionStatus ?? fallbackExecutionStatus;
+  const executionStatus =
+    liveExecutionStatus ?? preloadedExecutionStatus ?? fallbackExecutionStatus;
   const curAgentState = useMemo(
     () => mapExecutionStatusToAgentState(executionStatus),
     [executionStatus],
