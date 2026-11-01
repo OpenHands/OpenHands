@@ -354,10 +354,13 @@ Canvas actually ran or the capture proves before/after behavior. Reviewers enfor
 the functional-change evidence rule above even when a PR is labeled as a chore;
 do not fabricate media or relabel a functional change to avoid evidence.
 
-Follow the test routing in `AGENTS.md`. Mock-LLM, Docker mock-LLM, and live
-LLM-backed E2E suites run after changes reach `main`, not from PR labels. For
-risky pre-merge changes, recommend manually dispatching the relevant workflow
-against the PR branch. Never broaden secret exposure for convenience.
+Follow the test routing in `AGENTS.md` and the e2e-testing skill. Mock-LLM E2E
+runs on relevant mock-test/config/workflow PR changes at the exact head SHA,
+after pushes reach `main`, and on manual dispatch, without LLM credentials.
+Docker mock-LLM and live LLM-backed suites retain their main/manual triggers,
+not PR-label triggers. For risky pre-merge changes outside automatic coverage,
+recommend manually dispatching the relevant workflow against the PR branch.
+Never broaden secret exposure for convenience.
 
 ## Final Context and Comment Discipline
 
