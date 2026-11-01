@@ -141,9 +141,24 @@ localAutomationAxios.interceptors.request.use(async (config) => {
     config.headers.set(name, value);
   });
 
+  const backend = getEffectiveLocalBackend();
+  const apiKey = backend?.apiKey?.trim();
+
   // Import uses an explicit baseURL/header pair so its POST, PATCH, and
   // cleanup stay pinned to the backend selected when the mutation started.
-  if (config.baseURL) return config;
+  if (config.baseURL) {
+    const hasSessionKey =
+      typeof config.headers?.has === "function"
+        ? config.headers.has("X-Session-API-Key")
+        : Boolean(
+            config.headers?.get?.("X-Session-API-Key") ??
+            config.headers?.["X-Session-API-Key"],
+          );
+    if (apiKey && !hasSessionKey) {
+      config.headers.set("X-Session-API-Key", apiKey);
+    }
+    return config;
+  }
 
   // Resolve the local backend on every call so it tracks the
   // currently-active local backend (and any host/key edits made via the
@@ -153,12 +168,10 @@ localAutomationAxios.interceptors.request.use(async (config) => {
   // env var) ensures the published npm package picks up the runtime-injected
   // session key that scripts/static-server.mjs seeds into localStorage, fixing
   // the 401 errors reported in issue #829.
-  const backend = getEffectiveLocalBackend();
   if (!backend) throw new NoBackendAvailableError();
   // eslint-disable-next-line no-param-reassign
   config.baseURL = backend.host;
 
-  const apiKey = backend.apiKey?.trim();
   if (apiKey) {
     config.headers.set("X-Session-API-Key", apiKey);
   }
