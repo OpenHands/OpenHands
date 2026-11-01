@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 380" width="100%" height="100%">
+  <defs>
+    <style>
+      .title { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 18px; font-weight: 600; fill: #1e293b; }
+      .subtitle { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 13px; fill: #64748b; }
+      .header-dark { font-family: "Segoe UI", Tahoma, sans-serif; font-size: 12px; fill: #94a3b8; }
+      .header-light { font-family: "Segoe UI", Tahoma, sans-serif; font-size: 12px; fill: #334155; }
+      .card-title { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 14px; font-weight: 600; }
+      .badge-fail { fill: #ef4444; font-size: 11px; font-weight: bold; }
+      .badge-pass { fill: #10b981; font-size: 11px; font-weight: bold; }
+      .menu-text-dark { font-family: "Segoe UI", sans-serif; font-size: 11px; fill: #cbd5e1; }
+      .menu-text-light { font-family: "Segoe UI", sans-serif; font-size: 11px; fill: #334155; }
+    </style>
+  </defs>
+
+  <rect width="880" height="380" fill="#f8fafc" rx="12" />
+
+  <text x="30" y="36" class="title">Issue #18547 Verification: Windows/Linux Desktop Title Bar &amp; Menu Appearance</text>
+  <text x="30" y="58" class="subtitle">Ensuring native window title bar and application menu sync with the active Canvas color theme</text>
+
+  <!-- Left: Before Fix -->
+  <g transform="translate(30, 80)">
+    <rect width="395" height="260" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5" />
+    <rect x="0" y="0" width="395" height="28" rx="8" fill="#18181b" />
+    <rect x="0" y="24" width="395" height="4" fill="#18181b" />
+    <text x="12" y="18" class="header-dark">OpenHands — Windows Desktop (Light+ Selected)</text>
+
+    <!-- Dark window control buttons -->
+    <rect x="330" y="0" width="65" height="28" fill="#27272a" />
+    <text x="342" y="18" fill="#a1a1aa" font-family="sans-serif" font-size="12">─</text>
+    <text x="360" y="18" fill="#a1a1aa" font-family="sans-serif" font-size="12">□</text>
+    <text x="378" y="18" fill="#a1a1aa" font-family="sans-serif" font-size="12">✕</text>
+
+    <!-- Menu bar: Stuck in Dark -->
+    <rect x="0" y="28" width="395" height="24" fill="#27272a" stroke="#3f3f46" stroke-width="0.5" />
+    <text x="14" y="44" class="menu-text-dark">File   Edit   View   Window   Help</text>
+
+    <!-- App Content: Light+ Theme -->
+    <rect x="0" y="52" width="395" height="208" rx="0" fill="#f1f5f9" />
+    <rect x="15" y="70" width="365" height="170" rx="6" fill="#ffffff" stroke="#e2e8f0" />
+    <text x="30" y="100" class="card-title" fill="#0f172a">BEFORE (Issue #18547)</text>
+    <text x="30" y="125" font-family="sans-serif" font-size="12" fill="#ef4444">❌ Title bar &amp; menu bar remain dark</text>
+    <text x="30" y="145" font-family="sans-serif" font-size="12" fill="#64748b">• nativeTheme.themeSource hardcoded to "dark"</text>
+    <text x="30" y="165" font-family="sans-serif" font-size="12" fill="#64748b">• No IPC appearance propagation from renderer</text>
+    <text x="30" y="185" font-family="sans-serif" font-size="12" fill="#64748b">• Unpleasant contrast seam between window chrome and app</text>
+  </g>
+
+  <!-- Right: After Fix -->
+  <g transform="translate(455, 80)">
+    <rect width="395" height="260" rx="8" fill="#ffffff" stroke="#10b981" stroke-width="2" />
+    <!-- Native Title Bar: Light -->
+    <rect x="0" y="0" width="395" height="28" rx="8" fill="#e2e8f0" />
+    <rect x="0" y="24" width="395" height="4" fill="#e2e8f0" />
+    <text x="12" y="18" class="header-light">OpenHands — Windows Desktop (Light+ Selected)</text>
+
+    <!-- Light window control buttons -->
+    <rect x="330" y="0" width="65" height="28" fill="#cbd5e1" />
+    <text x="342" y="18" fill="#475569" font-family="sans-serif" font-size="12">─</text>
+    <text x="360" y="18" fill="#475569" font-family="sans-serif" font-size="12">□</text>
+    <text x="378" y="18" fill="#475569" font-family="sans-serif" font-size="12">✕</text>
+
+    <!-- Menu bar: Light -->
+    <rect x="0" y="28" width="395" height="24" fill="#f1f5f9" stroke="#e2e8f0" stroke-width="0.5" />
+    <text x="14" y="44" class="menu-text-light">File   Edit   View   Window   Help</text>
+
+    <!-- App Content: Light+ Theme -->
+    <rect x="0" y="52" width="395" height="208" rx="0" fill="#f8fafc" />
+    <rect x="15" y="70" width="365" height="170" rx="6" fill="#ffffff" stroke="#e2e8f0" />
+    <text x="30" y="100" class="card-title" fill="#0f172a">AFTER (Synced Native Appearance)</text>
+    <text x="30" y="125" font-family="sans-serif" font-size="12" fill="#10b981">✅ Title bar &amp; menu bar follow theme</text>
+    <text x="30" y="145" font-family="sans-serif" font-size="12" fill="#334155">• IPC: theme:appearance:set updates nativeTheme</text>
+    <text x="30" y="165" font-family="sans-serif" font-size="12" fill="#334155">• Persisted to userData: restored on desktop restart</text>
+    <text x="30" y="185" font-family="sans-serif" font-size="12" fill="#334155">• Clean, coherent appearance across Windows/Linux</text>
+  </g>
+</svg>
