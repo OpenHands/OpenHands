@@ -74,8 +74,11 @@ export function ConversationName() {
   };
 
   const handleBlur = () => {
-    if (inputRef.current?.value && conversationId) {
-      const trimmed = inputRef.current.value.trim();
+    // Trim before the emptiness check, not after it. A whitespace-only value
+    // is truthy but trims to "", so testing the raw value here sent an empty
+    // title to the mutation. The sidebar rename path already trims first.
+    const trimmed = inputRef.current?.value.trim();
+    if (trimmed && conversationId) {
       if (trimmed !== displayTitle) {
         updateConversation(
           { conversationId, newTitle: trimmed },
@@ -87,7 +90,7 @@ export function ConversationName() {
         );
       }
     } else if (inputRef.current) {
-      // reset the value if it's empty
+      // reset the value if it is empty or only whitespace
       inputRef.current.value = displayTitle;
     }
 
