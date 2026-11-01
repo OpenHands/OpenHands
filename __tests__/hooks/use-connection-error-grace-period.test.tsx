@@ -15,12 +15,12 @@ describe("connection recovery feedback", () => {
       useConnectionErrorGracePeriod("runtime"),
     );
     act(() => result.current.report());
-    act(() => vi.advanceTimersByTime(4999));
+    act(() => vi.advanceTimersByTime(29999));
     expect(result.current.state).toBe("idle");
     act(() => vi.advanceTimersByTime(1));
     expect(result.current.state).toBe("reconnecting");
     act(() => result.current.report());
-    act(() => vi.advanceTimersByTime(25000));
+    act(() => vi.advanceTimersByTime(30000));
     expect(result.current.state).toBe("retryable");
     expect(useErrorMessageStore.getState().errorMessage).toBeNull();
   });
@@ -33,7 +33,7 @@ describe("connection recovery feedback", () => {
       },
     );
     act(() => view.result.current.report());
-    act(() => vi.advanceTimersByTime(5000));
+    act(() => vi.advanceTimersByTime(30000));
     act(() =>
       useErrorMessageStore
         .getState()

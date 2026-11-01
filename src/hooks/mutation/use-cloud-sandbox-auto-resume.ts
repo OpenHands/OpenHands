@@ -15,7 +15,6 @@ import {
   useOptimisticUserMessageStore,
   type PendingUserMessage,
 } from "#/stores/optimistic-user-message-store";
-import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 const CLOUD_RESUME_RETRY_DELAY_MS =
   import.meta.env.MODE === "test" ? 10 : 10_000;
@@ -98,7 +97,6 @@ export function useCloudSandboxAutoResume({
       pending.forEach((entry) =>
         store.markPendingMessageError(entry.id, message),
       );
-      if (pending.length === 0) displayErrorToast(message);
     },
     retryDelay: () => CLOUD_RESUME_RETRY_DELAY_MS,
     onSettled: (_, __, { attempt }) => {

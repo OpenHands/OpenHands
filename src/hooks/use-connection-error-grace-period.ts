@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useErrorMessageStore } from "#/stores/error-message-store";
 
-const RECOVERY_PROGRESS_DELAY_MS = 5_000;
-const RECOVERY_RETRY_DELAY_MS = 30_000;
+const RECOVERY_PROGRESS_DELAY_MS = 30_000;
+const RECOVERY_RETRY_DELAY_MS = 60_000;
 export type ConnectionRecoveryState = "idle" | "reconnecting" | "retryable";
 
 export function useConnectionErrorGracePeriod(identity: string | null) {

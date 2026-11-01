@@ -150,6 +150,9 @@ export function ChatInterface({
 
   const { curAgentState } = useAgentState();
   const { isPlanningAgentRunning } = usePlanningAgentState();
+  const { curAgentState: recoveryAgentState } = useAgentState(
+    conversationWebSocket?.recoveryConversationId,
+  );
   const { handleBuildPlanClick } = useHandleBuildPlanClick();
 
   // Cloud conversations whose sandbox is MISSING or ERROR are read-only:
@@ -710,7 +713,8 @@ export function ChatInterface({
           <div className="flex shrink-0 flex-col gap-1.5 pb-4">
             <SkillInstallRestartBanner conversationId={conversationId} />
             <BtwMessages conversationId={conversationId} />
-            {!errorMessage &&
+            {recoveryAgentState === AgentState.RUNNING &&
+              !errorMessage &&
               !isArchivedConversation &&
               !(pendingMessageLabel && hasPendingUserMessages) &&
               conversationWebSocket && (

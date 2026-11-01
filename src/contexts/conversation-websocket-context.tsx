@@ -120,6 +120,7 @@ interface SendMessageResult {
 interface ConversationWebSocketContextType {
   connectionState: WebSocketConnectionState;
   recoveryState: ConnectionRecoveryState;
+  recoveryConversationId?: string;
   /**
    * The main connection's own state, unmerged with the planning connection —
    * see `useMainWebSocketStatus`.
@@ -1580,6 +1581,10 @@ export function ConversationWebSocketProvider({
   }, [planningAgentSocket, planningAgentWsUrl]);
 
   const activeMode = useConversationStore((state) => state.conversationMode);
+  const recoveryConversationId =
+    activeMode === "plan" && planningAgentWsUrl
+      ? subConversations?.[0]?.id
+      : conversationId;
   const recoveryState =
     activeMode === "plan" && planningAgentWsUrl
       ? planningConnectionError.state
@@ -1589,6 +1594,7 @@ export function ConversationWebSocketProvider({
     () => ({
       connectionState,
       recoveryState,
+      recoveryConversationId,
       mainConnectionState,
       sendMessage,
       isLoadingHistory,
@@ -1599,6 +1605,7 @@ export function ConversationWebSocketProvider({
     [
       connectionState,
       recoveryState,
+      recoveryConversationId,
       mainConnectionState,
       planningConnectionState,
       sendMessage,

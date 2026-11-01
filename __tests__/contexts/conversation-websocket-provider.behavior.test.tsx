@@ -717,7 +717,7 @@ describe("Conversation websocket behavior", () => {
     expect(screen.getByTestId("connection-state")).toHaveTextContent("CLOSED");
 
     act(() => mainOptions().onError?.(new Event("error")));
-    act(() => vi.advanceTimersByTime(5000));
+    act(() => vi.advanceTimersByTime(30000));
     expect(contextCapture.current?.recoveryState).toBe("reconnecting");
     expect(useErrorMessageStore.getState().errorMessage).toBeNull();
   });
@@ -727,7 +727,7 @@ describe("Conversation websocket behavior", () => {
     renderProvider();
     act(() => useConversationStore.setState({ conversationMode: "plan" }));
     act(() => mainOptions().onError?.(new Event("error")));
-    act(() => vi.advanceTimersByTime(5000));
+    act(() => vi.advanceTimersByTime(30000));
     expect(contextCapture.current?.recoveryState).toBe("reconnecting");
   });
 
@@ -757,9 +757,13 @@ describe("Conversation websocket behavior", () => {
     expect(screen.getByTestId("connection-state")).toHaveTextContent("CLOSED");
 
     act(() => planningOptions().onError?.(new Event("error")));
-    act(() => vi.advanceTimersByTime(5000));
+    act(() => vi.advanceTimersByTime(30000));
     expect(contextCapture.current?.recoveryState).toBe("idle");
+    expect(contextCapture.current?.recoveryConversationId).toBe("conv-main");
     act(() => useConversationStore.setState({ conversationMode: "plan" }));
+    expect(contextCapture.current?.recoveryConversationId).toBe(
+      "conv-planning",
+    );
     expect(contextCapture.current?.recoveryState).toBe("reconnecting");
     expect(useErrorMessageStore.getState().errorMessage).toBeNull();
   });
@@ -2478,7 +2482,7 @@ describe("Conversation websocket — page visibility reconnect (#17894)", () => 
     act(() => mainOptions().onError?.(new Event("error")));
 
     expect(useErrorMessageStore.getState().errorMessage).toBeNull();
-    act(() => vi.advanceTimersByTime(5000));
+    act(() => vi.advanceTimersByTime(30000));
     expect(contextCapture.current?.recoveryState).toBe("reconnecting");
     expect(useErrorMessageStore.getState().errorMessage).toBeNull();
   });
@@ -2507,9 +2511,9 @@ describe("Conversation websocket — page visibility reconnect (#17894)", () => 
     act(() => vi.advanceTimersByTime(4000));
     act(() => mainOptions().onError?.(new Event("error")));
     expect(useErrorMessageStore.getState().errorMessage).toBeNull();
-    act(() => vi.advanceTimersByTime(1000));
+    act(() => vi.advanceTimersByTime(26000));
     expect(contextCapture.current?.recoveryState).toBe("reconnecting");
-    act(() => vi.advanceTimersByTime(25_000));
+    act(() => vi.advanceTimersByTime(30_000));
     expect(contextCapture.current?.recoveryState).toBe("retryable");
     expect(useErrorMessageStore.getState().errorMessage).toBeNull();
     act(() => mainOptions().onOpen?.(new Event("open")));

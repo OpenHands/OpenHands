@@ -623,7 +623,7 @@ describe("transient conversation failures", () => {
     { status: 403, attempts: 1 },
     { status: 503, attempts: 4 },
   ])(
-    "reports exhausted resume failure once ($status)",
+    "keeps exhausted automatic resume silent without a sent message ($status)",
     async ({ status, attempts }) => {
       setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
       vi.mocked(
@@ -638,10 +638,17 @@ describe("transient conversation failures", () => {
         new HttpError(status, "Failure", null),
       );
       renderConversation();
-      await waitFor(() => expect(displayErrorToast).toHaveBeenCalledTimes(1));
+      await waitFor(() =>
+        expect(
+          queryClient
+            .getMutationCache()
+            .getAll()
+            .some((mutation) => mutation.state.status === "error"),
+        ).toBe(true),
+      );
       await new Promise((resolve) => setTimeout(resolve, 80));
       expect(resumeCloudSandbox).toHaveBeenCalledTimes(attempts);
-      expect(displayErrorToast).toHaveBeenCalledTimes(1);
+      expect(displayErrorToast).not.toHaveBeenCalled();
     },
   );
 });
