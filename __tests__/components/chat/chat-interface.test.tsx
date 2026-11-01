@@ -1046,7 +1046,7 @@ describe("ChatInterface - Auto-scroll on submit (issue #817)", () => {
 });
 
 describe("ChatInterface - Status Indicator", () => {
-  it("shows the unresolved terminal action while the agent is running", () => {
+  it("shows the running step as the last line of the chat instead of a chip", () => {
     const terminalAction: ActionEvent = {
       id: "action-running-terminal",
       timestamp: "2026-07-27T18:00:00Z",
@@ -1084,9 +1084,10 @@ describe("ChatInterface - Status Indicator", () => {
 
     renderChatInterfaceWithRouter();
 
-    const chip = screen.getByTestId("live-activity-chip");
-    expect(chip).toHaveTextContent("ACTION_MESSAGE$RUN");
-    expect(chip.parentElement).toHaveClass("inset-x-9");
+    expect(screen.queryByTestId("live-activity-chip")).not.toBeInTheDocument();
+    const live = screen.getByTestId("event-group-toggle");
+    expect(live).toHaveTextContent("ACTION_MESSAGE$RUN");
+    expect(live.querySelector('[data-testid="spinner-icon"]')).not.toBeNull();
   });
 
   it("hides the live activity chip when the agent is no longer running", () => {
@@ -1391,5 +1392,73 @@ describe("ChatInterface - Build plan keyboard shortcut", () => {
     fireEvent.keyDown(composer, { key: "Enter", ctrlKey: true });
 
     expect(sentBuildPrompt()).toBe(false);
+  });
+});
+
+describe("ChatInterface - initial attachment recovery", () => {
+  it("keeps a second failed upload unsent and clears the error after a successful retry", async () => {
+    localStorage.clear();
+    sessionStorage.clear();
+    useConversationStore.getState().resetConversationState();
+    useConversationStore.getState().clearMessageToSend();
+    const file = new File(["notes"], "notes.txt");
+    const upload = vi
+      .fn()
+      .mockResolvedValueOnce({
+        skipped_files: [{ name: file.name, reason: "Interrupted" }],
+        uploaded_files: [],
+      })
+      .mockResolvedValueOnce({
+        skipped_files: [],
+        uploaded_files: [file.name],
+      });
+    vi.mocked(useUnifiedUploadFiles).mockReturnValue({
+      mutateAsync: upload,
+      isLoading: false,
+    } as never);
+    vi.mocked(useConfig).mockReturnValue({ data: {} } as never);
+    mockSend.mockReset();
+    mockSend.mockResolvedValue({ queued: false });
+    useEventStore.setState({ events: [], eventIds: new Set(), uiEvents: [] });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
+    useConversationStore.getState().clearAllFiles();
+    useConversationStore.getState().addFiles([file]);
+    useErrorMessageStore
+      .getState()
+      .setErrorMessage(
+        "Upload failed",
+        "conversation",
+        "StartupAttachmentUploadFailed",
+      );
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const page = renderWithQueryClient(<ChatInterface />, queryClient);
+    const input = screen.getByTestId("chat-input");
+    Object.defineProperty(input, "innerText", {
+      configurable: true,
+      get() {
+        return this.textContent ?? "";
+      },
+    });
+    input.textContent = "Read my notes";
+    fireEvent.input(input);
+    await waitFor(() =>
+      expect(getConversationState("test-conversation-id").draftMessage).toBe(
+        "Read my notes",
+      ),
+    );
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(upload).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(useConversationStore.getState().files).toEqual([file]),
+    );
+    expect(mockSend).not.toHaveBeenCalled();
+    await waitFor(() => expect(input).toHaveTextContent("Read my notes"));
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(mockSend).toHaveBeenCalledTimes(1));
+    expect(useErrorMessageStore.getState().errorMessage).toBeNull();
+    page.unmount();
+    queryClient.clear();
   });
 });
