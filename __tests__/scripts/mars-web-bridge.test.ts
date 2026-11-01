@@ -23,7 +23,7 @@ import WebSocket, { WebSocketServer } from "ws";
 
 import { server as mswServer } from "#/mocks/node";
 
-import { MARS_TUNNEL_IPC } from "../../scripts/mars-tunnel-bridge.mjs";
+import { createMarsTunnelBridge } from "../../scripts/mars-tunnel-bridge.mjs";
 import {
   RPC_METHODS,
   createMarsWebBridge,
@@ -245,11 +245,16 @@ describe("rewriteAgentServerUrls", () => {
 });
 
 describe("RPC_METHODS", () => {
-  it("is a subset of the desktop IPC surface and leaves OAuth out", () => {
+  it("names only bridge methods, and leaves out the desktop's own sign-in", async () => {
+    const bridge = createMarsTunnelBridge({ env: {} }) as unknown as Record<
+      string,
+      unknown
+    >;
     for (const method of RPC_METHODS) {
-      expect(Object.keys(MARS_TUNNEL_IPC)).toContain(method);
+      expect(typeof bridge[method]).toBe("function");
     }
     expect(RPC_METHODS.has("signInWithOAuth")).toBe(false);
+    await (bridge.dispose as () => Promise<void>)();
   });
 });
 
@@ -295,12 +300,12 @@ describe("createMarsWebBridge", () => {
     expect(bridge.getAuthState).not.toHaveBeenCalled();
   });
 
-  it("exposes the bridge over POST /mars/rpc and never offers OAuth", async () => {
+  it("exposes the bridge over POST /mars/rpc, but not the desktop's own sign-in", async () => {
     const same = await rpc(web.origin, "getAuthState", [], {
       headers: { Origin: web.origin },
     });
     expect(same.status).toBe(200);
-    expect(same.body.result).toMatchObject({ canUseOAuth: false });
+    expect(same.body.result).toMatchObject({ canUseOAuth: true });
 
     expect((await rpc(web.origin, "signInWithOAuth")).status).toBe(404);
     expect((await rpc(web.origin, "nope")).status).toBe(404);
@@ -885,5 +890,142 @@ describe("createMarsWebBridge sign-in storage", () => {
       storage: { kind: "encrypted-file" },
     });
     expect(JSON.stringify(body)).not.toContain(TOKEN);
+  });
+});
+
+describe("createMarsWebBridge sign-in with DigitalOcean", () => {
+  const KEY = "canvas-key";
+
+  function signInBridge() {
+    return {
+      getAuthState: vi.fn(() => ({ connections: [], active: null })),
+      beginSignIn: vi.fn(({ redirectUri }: { redirectUri: string }) => ({
+        attemptId: "attempt-1",
+        authorizeUrl: `https://cloud.digitalocean.com/v1/oauth/authorize?redirect_uri=${encodeURIComponent(redirectUri)}`,
+      })),
+      completeSignIn: vi.fn(async () => ({
+        active: { teamName: "My Team" },
+      })),
+      getTunnel: vi.fn(() => undefined),
+      dispose: vi.fn(async () => {}),
+    };
+  }
+
+  async function start(host: string) {
+    const bridge = signInBridge();
+    const marsWeb = createMarsWebBridge({
+      bridge: bridge as never,
+      env: {},
+      host,
+      key: KEY,
+      log: () => {},
+    });
+    const web = await startWebServer(marsWeb);
+    return {
+      bridge,
+      web,
+      close: async () => {
+        await marsWeb.dispose();
+        web.close();
+      },
+    };
+  }
+
+  /** A keyed RPC sent with a chosen Host header, which fetch cannot set. */
+  function rpcAs(origin: string, hostHeader: string, method: string) {
+    return new Promise<{ status: number; body: { result?: unknown } }>(
+      (resolve, reject) => {
+        const req = httpRequest(
+          `${origin}/mars/rpc/${method}`,
+          {
+            method: "POST",
+            headers: {
+              Host: hostHeader,
+              "Content-Type": "application/json",
+              "X-Session-API-Key": KEY,
+            },
+          },
+          (res) => {
+            let text = "";
+            res.on("data", (chunk) => {
+              text += chunk;
+            });
+            res.on("end", () =>
+              resolve({ status: res.statusCode ?? 0, body: JSON.parse(text) }),
+            );
+          },
+        );
+        req.on("error", reject);
+        req.end(JSON.stringify({ args: [] }));
+      },
+    );
+  }
+
+  it("sends a browser on this machine back to the page's own origin", async () => {
+    const { bridge, web, close } = await start("127.0.0.1");
+
+    const { status, body } = await rpc(web.origin, "beginSignIn", [], {
+      headers: { "X-Session-API-Key": KEY },
+    });
+
+    expect(status).toBe(200);
+    expect(bridge.beginSignIn).toHaveBeenCalledWith({
+      redirectUri: `${web.origin}/mars/oauth/callback`,
+    });
+    expect(body.result).toMatchObject({
+      attemptId: "attempt-1",
+      returnsHere: true,
+    });
+    await close();
+  });
+
+  it("sends a browser on another device to loopback, and says it will not come back by itself", async () => {
+    const { bridge, web, close } = await start("0.0.0.0");
+    const port = new URL(web.origin).port;
+
+    const { status, body } = await rpcAs(
+      web.origin,
+      `192.168.1.5:${port}`,
+      "beginSignIn",
+    );
+
+    expect(status).toBe(200);
+    expect(bridge.beginSignIn).toHaveBeenCalledWith({
+      redirectUri: `http://127.0.0.1:${port}/mars/oauth/callback`,
+    });
+    expect(body.result).toMatchObject({ returnsHere: false });
+    await close();
+  });
+
+  it("finishes a sign-in at the return address without the key, naming the team only", async () => {
+    const { bridge, web, close } = await start("127.0.0.1");
+
+    const response = await fetch(
+      `${web.origin}/mars/oauth/callback?code=c1&state=s1`,
+    );
+
+    expect(response.status).toBe(200);
+    expect(bridge.completeSignIn).toHaveBeenCalledWith(
+      "/mars/oauth/callback?code=c1&state=s1",
+    );
+    const page = await response.text();
+    expect(page).toContain("Signed in to DigitalOcean (My Team)");
+    expect(response.headers.get("set-cookie")).toBeNull();
+    await close();
+  });
+
+  it("explains a return that does not belong to an open sign-in", async () => {
+    const { bridge, web, close } = await start("127.0.0.1");
+    bridge.completeSignIn.mockRejectedValueOnce(
+      new Error("This sign-in is no longer open. Start again."),
+    );
+
+    const response = await fetch(
+      `${web.origin}/mars/oauth/callback?code=c1&state=replayed`,
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.text()).toContain("no longer open");
+    await close();
   });
 });

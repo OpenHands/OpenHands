@@ -137,14 +137,15 @@ export function createMarsWebBridge(
       rpc<T>(baseUrl, method, args, fetchImpl);
   return {
     getAuthState: call("getAuthState"),
-    // The web server never offers OAuth (no trusted loopback redirect); the
-    // auth state it returns says so, and the UI hides the button.
+    // A page signs in with beginSignIn and the calls after it; this one is
+    // the desktop's, which opens a browser on the host.
     signInWithOAuth: async () => {
-      throw new MarsWebBridgeError(
-        "OAuth sign-in is only available in the desktop app; use a personal access token.",
-        400,
-      );
+      throw new MarsWebBridgeError("Use beginSignIn in the browser.", 400);
     },
+    beginSignIn: call("beginSignIn"),
+    awaitSignIn: call("awaitSignIn"),
+    completeSignIn: call("completeSignIn"),
+    cancelSignIn: call("cancelSignIn"),
     savePat: call("savePat"),
     setActiveConnection: call("setActiveConnection"),
     signOut: call("signOut"),
