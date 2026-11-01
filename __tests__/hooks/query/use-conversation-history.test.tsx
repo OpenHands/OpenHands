@@ -10,6 +10,7 @@ import {
 import {
   INITIAL_HISTORY_PAGE_SIZE,
   useConversationHistory,
+  usePersistedConversationHistory,
 } from "#/hooks/query/use-conversation-history";
 import EventService from "#/api/event-service/event-service.api";
 import {
@@ -110,6 +111,7 @@ describe("useConversationHistory", () => {
       {
         limit: INITIAL_HISTORY_PAGE_SIZE,
         sortOrder: "TIMESTAMP_DESC",
+        strictPagination: true,
       },
     );
   });
@@ -590,5 +592,89 @@ describe("useConversationHistory cache key stability", () => {
         );
       });
     });
+  });
+});
+
+describe("persisted Cloud transcript", () => {
+  let client: QueryClient;
+  const backend = {
+    id: "history-cloud",
+    kind: "cloud" as const,
+    name: "Cloud",
+    host: "https://history.test",
+    apiKey: "test-key",
+    connectionRevision: 0,
+  };
+  const cloudWrapper = ({ children }: { children: React.ReactNode }) => (
+    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  );
+  beforeEach(() => {
+    client = new QueryClient({
+      defaultOptions: { queries: { retryDelay: 0 } },
+    });
+    setRegisteredBackends([backend]);
+    setActiveSelection({ backendId: backend.id, orgId: "org-a" });
+    vi.mocked(useUserConversation).mockReturnValue({
+      data: {
+        conversation_url: "https://runtime-a.test/api",
+        session_api_key: "runtime-a",
+      },
+    } as any);
+  });
+  afterEach(() => {
+    client.clear();
+    vi.clearAllMocks();
+    window.localStorage.clear();
+    __resetActiveStoreForTests();
+  });
+  it("keeps readable data through runtime rotation and isolates org and connection changes", async () => {
+    vi.mocked(EventService.searchEvents).mockResolvedValueOnce(
+      makePage([makeEvent("org-a-message")]),
+    );
+    const { result, rerender } = renderHook(
+      () => usePersistedConversationHistory("same-id"),
+      { wrapper: cloudWrapper },
+    );
+    await waitFor(() =>
+      expect(result.current.data?.events[0].id).toBe("org-a-message"),
+    );
+    vi.mocked(useUserConversation).mockReturnValue({
+      data: {
+        conversation_url: "https://runtime-b.test/api",
+        session_api_key: "runtime-b",
+      },
+    } as any);
+    rerender();
+    expect(result.current.data?.events[0].id).toBe("org-a-message");
+    expect(EventService.searchEvents).toHaveBeenCalledTimes(1);
+    vi.mocked(EventService.searchEvents).mockImplementation(
+      () => new Promise(() => {}),
+    );
+    act(() => setActiveSelection({ backendId: backend.id, orgId: "org-b" }));
+    rerender();
+    expect(result.current.data).toBeUndefined();
+    act(() => setActiveSelection({ backendId: backend.id, orgId: "org-a" }));
+    rerender();
+    expect(result.current.data?.events[0].id).toBe("org-a-message");
+    act(() => setRegisteredBackends([{ ...backend, connectionRevision: 1 }]));
+    rerender();
+    expect(result.current.data).toBeUndefined();
+  });
+  it("retries a history failure and never turns it into an empty success", async () => {
+    const failure = new Error("History unavailable");
+    vi.mocked(EventService.searchEvents).mockRejectedValue(failure);
+    const { result } = renderHook(
+      () => usePersistedConversationHistory("failed-history"),
+      { wrapper: cloudWrapper },
+    );
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.data).toBeUndefined();
+    expect(EventService.searchEvents).toHaveBeenCalledTimes(2);
+    expect(EventService.searchEvents).toHaveBeenCalledWith(
+      "failed-history",
+      null,
+      null,
+      expect.objectContaining({ strictPagination: true }),
+    );
   });
 });

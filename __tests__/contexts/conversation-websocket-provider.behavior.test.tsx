@@ -97,6 +97,8 @@ vi.mock("#/hooks/use-websocket", () => ({
 
 vi.mock("#/hooks/query/use-conversation-history", () => ({
   useConversationHistory: () => historyCapture.result,
+  usePersistedConversationHistory: () => ({ data: undefined }),
+  getConversationHistoryScope: () => "test-scope",
 }));
 
 vi.mock("#/hooks/mutation/use-read-conversation-file", () => ({
