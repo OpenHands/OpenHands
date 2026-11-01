@@ -1,3 +1,4 @@
+import { CONVERSATION_LAUNCH_PREFIX } from "#/stores/conversation-launch-store";
 import { useEffect } from "react";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useUserConversation } from "./use-user-conversation";
@@ -10,7 +11,10 @@ export const useActiveConversation = () => {
   const { conversationId } = useOptionalConversationId();
 
   // Task polling is handled by useTaskPolling hook
-  const isTaskId = !!conversationId && conversationId.startsWith("task-");
+  const isTaskId =
+    !!conversationId &&
+    (conversationId.startsWith("task-") ||
+      conversationId.startsWith(CONVERSATION_LAUNCH_PREFIX));
   const actualConversationId =
     !conversationId || isTaskId ? null : conversationId;
 

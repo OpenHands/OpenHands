@@ -1,4 +1,10 @@
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import {
+  act,
+  render,
+  screen,
+  waitFor,
+  fireEvent,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
 import util from "util";
@@ -28,6 +34,35 @@ describe("ChatMessage", () => {
       );
     },
   );
+
+  it("waits for a resting pointer before showing the timestamp", () => {
+    vi.useFakeTimers();
+    try {
+      render(
+        <ChatMessage
+          type="agent"
+          message="Hello"
+          timestamp="2026-04-16T19:32:29.828Z"
+        />,
+      );
+
+      fireEvent.mouseEnter(screen.getByTestId("agent-message"));
+      act(() => {
+        vi.advanceTimersByTime(300);
+      });
+      expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+
+      act(() => {
+        vi.advanceTimersByTime(500);
+      });
+      expect(screen.getByRole("tooltip")).toBeInTheDocument();
+
+      fireEvent.mouseLeave(screen.getByTestId("agent-message"));
+      expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   it("does not fabricate a timestamp for an invalid value", () => {
     render(<ChatMessage type="user" message="Hello" timestamp="not-a-date" />);

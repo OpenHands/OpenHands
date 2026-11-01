@@ -1,3 +1,5 @@
+import { usePendingTaskAttachmentsStore } from "#/stores/pending-task-attachments-store";
+import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
 import React from "react";
 import { Tooltip } from "@heroui/react";
 import { useTranslation } from "react-i18next";
@@ -95,7 +97,7 @@ export function ConversationPanel({
 }: ConversationPanelProps) {
   const { t } = useTranslation("openhands");
   const { conversationId: currentConversationId, navigate } = useNavigation();
-  const { backend: activeBackend } = useActiveBackend();
+  const { backend: activeBackend, orgId } = useActiveBackend();
   const backendScopedPath = useBackendScopedPath();
   // Click-outside is only relevant in the legacy drawer mode where an
   // onClose handler is provided. When the panel is rendered inline (e.g.
@@ -289,7 +291,15 @@ export function ConversationPanel({
   const { workspaces: knownWorkspaces } = useResolvedWorkspaces();
 
   // Fetch in-progress start tasks
-  const { data: startTasks } = useStartTasks();
+  const {
+    data: startTasks,
+    unresolvedTaskIds = [],
+    failedTaskIds = [],
+  } = useStartTasks();
+  const pendingLaunches = useConversationLaunchStore((state) => state.launches);
+  const pendingAttachments = usePendingTaskAttachmentsStore(
+    (state) => state.byTaskId,
+  );
   // The hovercard names the launched agent profile: one cached list lookup
   // (shared with the chat input), never a fetch per hover.
   const { data: agentProfilesData } = useAgentProfiles();
@@ -1433,19 +1443,85 @@ export function ConversationPanel({
           />
         ) : null}
 
+        {!compact &&
+          Object.values(pendingLaunches)
+            .filter(
+              (launch) =>
+                (!launch.targetId ||
+                  (launch.targetId.startsWith("task-") &&
+                    unresolvedTaskIds.includes(launch.targetId.slice(5)) &&
+                    !pendingAttachments[launch.targetId.slice(5)]?.error &&
+                    !pendingAttachments[launch.targetId.slice(5)]
+                      ?.readError)) &&
+                launch.backendId === activeBackend.id &&
+                launch.orgId === orgId,
+            )
+            .map((launch) => (
+              <NavigationLink
+                key={launch.id}
+                to={backendScopedPath(`/conversations/${launch.id}`)}
+                onClick={onClose}
+                className="block rounded-lg border border-border p-3 text-sm"
+              >
+                <p className="truncate">
+                  {launch.message || t(I18nKey.HOME$CREATING_CONVERSATION)}
+                </p>
+                <p className="text-xs text-text-secondary">
+                  {launch.error ||
+                  (launch.targetId?.startsWith("task-") &&
+                    failedTaskIds.includes(launch.targetId.slice(5)))
+                    ? t(I18nKey.COMMON$ERROR)
+                    : t(I18nKey.HOME$CREATING_CONVERSATION)}
+                </p>
+              </NavigationLink>
+            ))}
+
+        {!compact &&
+          Object.entries(pendingAttachments)
+            .filter(
+              ([, pending]) =>
+                (pending.error || pending.readError) &&
+                pending.backendId === activeBackend.id &&
+                pending.orgId === orgId,
+            )
+            .map(([taskId, pending]) => (
+              <NavigationLink
+                key={taskId}
+                to={backendScopedPath(
+                  `/conversations/${pending.error && pending.conversationId ? pending.conversationId : `task-${taskId}`}`,
+                )}
+                onClick={onClose}
+                className="block rounded-lg border border-border p-3 text-sm"
+              >
+                <p className="truncate">
+                  {pending.content ||
+                    t(I18nKey.CONVERSATION$STARTING_CONVERSATION)}
+                </p>
+                <p className="text-xs text-status-error">
+                  {t(I18nKey.COMMON$ERROR)}
+                </p>
+              </NavigationLink>
+            ))}
+
         {/* Render in-progress start tasks first (skipped in compact mode —
             their rich card layout doesn't fit in the icon rail). */}
         {!compact &&
-          startTasks?.map((task) => (
-            <NavigationLink
-              key={task.id}
-              to={backendScopedPath(`/conversations/task-${task.id}`)}
-              onClick={onClose}
-              className="block"
-            >
-              <StartTaskCard task={task} />
-            </NavigationLink>
-          ))}
+          startTasks
+            ?.filter(
+              (task) =>
+                !pendingAttachments[task.id]?.error &&
+                !pendingAttachments[task.id]?.readError,
+            )
+            .map((task) => (
+              <NavigationLink
+                key={task.id}
+                to={backendScopedPath(`/conversations/task-${task.id}`)}
+                onClick={onClose}
+                className="block"
+              >
+                <StartTaskCard task={task} />
+              </NavigationLink>
+            ))}
 
         {!showInitialSkeleton && compact
           ? compactVisibleConversations.map((conversation) =>

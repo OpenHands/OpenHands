@@ -1,3 +1,6 @@
+import { getActiveBackend } from "#/api/backend-registry/active-store";
+import { usePendingTaskAttachmentsStore } from "#/stores/pending-task-attachments-store";
+import { assertActiveEnvironment } from "#/utils/assert-active-environment";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
@@ -98,6 +101,7 @@ export const useTaskPolling = () => {
         : SLOW_POLL_INTERVAL_MS;
     },
     retry: retryTransientRequest,
+    meta: { disableToast: true },
   });
 
   return {
@@ -127,6 +131,15 @@ export const useTaskPollingController = () => {
   const backendScopedPath = useBackendScopedPath();
   const queryClient = useQueryClient();
   const handledReadyTaskIdRef = useRef<string | null>(null);
+  const visibleConversationId = useRef(conversationId);
+  visibleConversationId.current = conversationId;
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   // Reassign optimistic pending messages before paint on the real conversation
   // route. Doing this in the ready handler before navigate leaves a frame where
@@ -174,8 +187,35 @@ export const useTaskPollingController = () => {
     queryClient.invalidateQueries({ queryKey: ["user", "conversations"] });
     queryClient.invalidateQueries({ queryKey: ["start-tasks"] });
 
+    const environment = getActiveBackend();
     void (async () => {
-      await flushPendingTaskAttachments(taskId, appConversationId);
+      try {
+        await flushPendingTaskAttachments(taskId, appConversationId);
+        assertActiveEnvironment(environment);
+      } catch {
+        const pending =
+          usePendingTaskAttachmentsStore.getState().byTaskId[taskId];
+        if (
+          !pending?.recoverInConversation ||
+          !mounted.current ||
+          visibleConversationId.current !== `task-${taskId}`
+        )
+          return;
+        try {
+          assertActiveEnvironment(environment);
+        } catch {
+          return;
+        }
+        navigate(backendScopedPath(`/conversations/${appConversationId}`), {
+          replace: true,
+        });
+        return;
+      }
+      if (
+        !mounted.current ||
+        visibleConversationId.current !== `task-${taskId}`
+      )
+        return;
 
       const taskConversationId = `task-${taskId}`;
       linkPendingTaskMessages(appConversationId, taskConversationId);

@@ -1,3 +1,7 @@
+import { usePendingTaskAttachmentsStore } from "#/stores/pending-task-attachments-store";
+import { restoreStartupAttachmentDraft } from "#/utils/restore-startup-attachment-draft";
+import { CONVERSATION_LAUNCH_PREFIX } from "#/stores/conversation-launch-store";
+import { ConversationLaunchView } from "#/components/features/chat/conversation-launch-view";
 import React from "react";
 import { useNavigate, useLocation } from "react-router";
 import { useTranslation } from "react-i18next";
@@ -88,11 +92,26 @@ function AppContent() {
     (state) => state.removeErrorMessage,
   );
 
+  const recoverableDraft = usePendingTaskAttachmentsStore((state) =>
+    Object.values(state.byTaskId).find(
+      (payload) =>
+        payload.recoverInConversation &&
+        payload.conversationId === conversationId &&
+        (!payload.backendId ||
+          (payload.backendId === active.backend.id &&
+            payload.orgId === active.orgId)),
+    ),
+  );
+
+  const resetForConversation = React.useRef<string | null>(null);
+
   // Per-conversation UI/runtime resets. The event store is cleared separately,
   // inside ConversationWebSocketProvider, so the clear is ordered *before* the
   // preloaded-history re-seed (see the note there) — clearing it here would run
   // too late and wipe the freshly seeded history on a conversation switch.
   React.useEffect(() => {
+    if (resetForConversation.current === conversationId) return;
+    resetForConversation.current = conversationId;
     clearTerminal();
     resetConversationState();
     resetConversationRuntimeState();
@@ -108,19 +127,21 @@ function AppContent() {
   ]);
 
   React.useEffect(() => {
+    if (recoverableDraft && !backendChanged) {
+      restoreStartupAttachmentDraft(conversationId);
+    }
+  }, [conversationId, recoverableDraft, backendChanged]);
+
+  React.useEffect(() => {
     if (isTask && taskStatus === "ERROR") {
-      displayErrorToast(
-        taskDetail || t(I18nKey.CONVERSATION$FAILED_TO_START_FROM_TASK),
-      );
-      // Navigate back to the original conversation when a resume task fails so
-      // the user isn't stranded at the dead task-{id} URL. The resume effect's
-      // ref prevents it from immediately retrying once we land there.
       const resumedFrom = (location.state as Record<string, unknown> | null)
         ?.resumedFromConversationId as string | undefined;
-      navigate(
-        resumedFrom ? `/conversations/${resumedFrom}` : "/conversations",
-        { replace: true },
-      );
+      if (resumedFrom) {
+        displayErrorToast(
+          taskDetail || t(I18nKey.CONVERSATION$FAILED_TO_START_FROM_TASK),
+        );
+        navigate(`/conversations/${resumedFrom}`, { replace: true });
+      }
     }
   }, [isTask, taskStatus, taskDetail, t, navigate, location.state]);
 
@@ -232,6 +253,9 @@ function AppContent() {
 }
 
 export function ConversationView() {
+  const { conversationId } = useConversationId();
+  if (conversationId.startsWith(CONVERSATION_LAUNCH_PREFIX))
+    return <ConversationLaunchView launchId={conversationId} />;
   return <AppContent />;
 }
 

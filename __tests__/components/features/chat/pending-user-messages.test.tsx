@@ -7,7 +7,7 @@ import { PendingUserMessages } from "#/components/features/chat/pending-user-mes
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { useConversationStore } from "#/stores/conversation-store";
 
-const ACTIVE_CONVO = "conv-active";
+let ACTIVE_CONVO = "conv-active";
 
 const mockSend = vi.fn();
 vi.mock("#/hooks/use-send-message", () => ({
@@ -21,6 +21,7 @@ vi.mock("#/hooks/use-conversation-id", () => ({
 
 describe("PendingUserMessages", () => {
   beforeEach(() => {
+    ACTIVE_CONVO = "conv-active";
     mockSend.mockReset();
     useOptimisticUserMessageStore.getState().clearPendingMessages();
     useConversationStore.setState({
@@ -58,6 +59,19 @@ describe("PendingUserMessages", () => {
       expect(message).toHaveAttribute("data-pending-status", "sending");
     });
     expect(screen.getAllByTestId("chat-message-sending")).toHaveLength(2);
+  });
+
+  it("does not show a sending indicator before startup has delivered the message", () => {
+    ACTIVE_CONVO = "task-starting";
+    useOptimisticUserMessageStore.getState().enqueuePendingMessage({
+      conversationId: ACTIVE_CONVO,
+      text: "Read my file",
+    });
+    renderWithProviders(<PendingUserMessages />);
+    expect(screen.getByText("Read my file")).toBeVisible();
+    expect(
+      screen.queryByTestId("chat-message-sending"),
+    ).not.toBeInTheDocument();
   });
 
   it("ignores pending entries belonging to a different conversation", () => {
