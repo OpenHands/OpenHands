@@ -31,6 +31,7 @@ import { BackendStatusDot } from "./backend-status-dot";
 import { ManageBackendsModal } from "./manage-backends-modal";
 import { cn } from "#/utils/utils";
 import { formControlTransitionClassName } from "#/utils/form-control-classes";
+import { useFeaturePolicy } from "#/feature-policy/feature-policy-context";
 import {
   dropdownFooterActionClassName,
   dropdownMenuListClassName,
@@ -159,6 +160,7 @@ export function BackendSelector({
 }: BackendSelectorProps = {}) {
   const { t } = useTranslation("openhands");
   const { backends, active, setActive } = useActiveBackendContext();
+  const featurePolicy = useFeaturePolicy();
   const cloudOrgs = useAllCloudOrganizations();
   const currentUserIds = useCloudCurrentUserId();
   // Probe each registered backend every 10s.
@@ -241,6 +243,9 @@ export function BackendSelector({
   // reconnect — its single locked backend is owned by the main-app session.
   const hideBackendFooter =
     isLockedToCloud && active.backend.authMode === "cookie";
+  // The operator's `backends.add` policy hides Add Backend; Manage stays.
+  const showAddBackend =
+    !isLockedToCloud && featurePolicy.isEnabled("backends.add");
 
   const preventDropdownMenuClose = React.useCallback(
     (event: React.SyntheticEvent<HTMLButtonElement>) => {
@@ -284,7 +289,7 @@ export function BackendSelector({
 
   const addBackendFooter = hideBackendFooter ? undefined : (
     <div className={dropdownMenuListClassName}>
-      {isLockedToCloud ? null : (
+      {showAddBackend && (
         <button
           type="button"
           data-testid="add-backend-menu-item"
