@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useMutation } from "@tanstack/react-query";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useTranslation } from "react-i18next";
 import { resumeCloudSandbox } from "#/api/cloud/conversation-service.api";
 import {
@@ -10,17 +11,25 @@ import type { AppConversation } from "#/api/conversation-service/agent-server-co
 import type { BackendKind } from "#/api/backend-registry/types";
 import { I18nKey } from "#/i18n/declaration";
 import { retryTransientRequest } from "#/utils/transient-error-retry";
+import {
+  useOptimisticUserMessageStore,
+  type PendingUserMessage,
+} from "#/stores/optimistic-user-message-store";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 const CLOUD_RESUME_RETRY_DELAY_MS =
   import.meta.env.MODE === "test" ? 10 : 10_000;
 
-type ResumeVariables = {
-  resumeKey: string;
-  sandboxId: string;
+type ResumeAttempt = {
+  key: string;
+  state: "pending" | "settled";
+  message: PendingUserMessage | undefined;
 };
 
-type ResumeAttemptState = "pending" | "succeeded";
+type ResumeVariables = {
+  attempt: ResumeAttempt;
+  sandboxId: string;
+};
 
 type UseCloudSandboxAutoResumeOptions = {
   backendChanged: boolean;
@@ -38,35 +47,64 @@ export function useCloudSandboxAutoResume({
   isFetched,
 }: UseCloudSandboxAutoResumeOptions): void {
   const { t } = useTranslation("openhands");
+  const active = useActiveBackend();
+  const scope = `${active.backend.id}:${active.orgId}:${conversationId}`;
   const activeResumeKeyRef = useRef<string | null>(null);
-  const resumeAttemptRef = useRef<{
-    key: string;
-    state: ResumeAttemptState;
-  } | null>(null);
+  const resumeAttemptRef = useRef<ResumeAttempt | null>(null);
+  const sendingMessage = useOptimisticUserMessageStore((state) =>
+    state.pendingMessages.find(
+      (message) =>
+        message.conversationId === conversationId &&
+        message.status === "sending",
+    ),
+  );
+  const resumeKey =
+    !backendChanged &&
+    isFetched &&
+    backendKind === "cloud" &&
+    conversation?.id === conversationId &&
+    conversation.sandbox_status === "PAUSED" &&
+    conversation.sandbox_id
+      ? `${scope}:${conversation.sandbox_id}`
+      : null;
+
+  useEffect(() => {
+    activeResumeKeyRef.current = resumeKey;
+    return () => {
+      activeResumeKeyRef.current = null;
+    };
+  }, [resumeKey]);
 
   // TanStack can schedule a retry after the route has moved on; keep the
   // mutation function as the final guard so stale retries become no-ops.
   const { mutate: resumeSandbox } = useMutation({
-    mutationFn: async ({ resumeKey, sandboxId }: ResumeVariables) => {
-      if (activeResumeKeyRef.current !== resumeKey) return;
+    mutationFn: async ({ attempt, sandboxId }: ResumeVariables) => {
+      if (activeResumeKeyRef.current !== attempt.key) return;
 
       await resumeCloudSandbox(sandboxId);
     },
     retry: (failureCount, error) =>
       activeResumeKeyRef.current !== null &&
       retryTransientRequest(failureCount, error),
-    onError: (_error, variables) => {
-      if (activeResumeKeyRef.current === variables.resumeKey) {
-        displayErrorToast(t(I18nKey.CONVERSATION$FAILED_TO_START_FROM_TASK));
-      }
+    onError: (_error, { attempt }) => {
+      if (activeResumeKeyRef.current !== attempt.key) return;
+      const message = t(I18nKey.CONVERSATION$FAILED_TO_START_FROM_TASK);
+      const store = useOptimisticUserMessageStore.getState();
+      store.pendingMessages
+        .filter(
+          (pending) =>
+            pending.conversationId === conversationId &&
+            pending.status === "sending",
+        )
+        .forEach((pending) =>
+          store.markPendingMessageError(pending.id, message),
+        );
+      displayErrorToast(message);
     },
     retryDelay: () => CLOUD_RESUME_RETRY_DELAY_MS,
-    onSuccess: (_, variables) => {
-      if (activeResumeKeyRef.current === variables.resumeKey) {
-        resumeAttemptRef.current = {
-          key: variables.resumeKey,
-          state: "succeeded",
-        };
+    onSettled: (_, __, { attempt }) => {
+      if (resumeAttemptRef.current === attempt) {
+        resumeAttemptRef.current = { ...attempt, state: "settled" };
       }
     },
     meta: { disableToast: true },
@@ -75,61 +113,45 @@ export function useCloudSandboxAutoResume({
   useEffect(
     () => () => {
       clearCloudAutoResumeSuppression(conversationId);
+      resumeAttemptRef.current = null;
     },
-    [conversationId],
+    [conversationId, scope],
   );
 
   useEffect(() => {
+    if (!resumeKey || !conversation?.sandbox_id) return;
+
+    if (consumeCloudAutoResumeSuppression(conversationId)) {
+      resumeAttemptRef.current = {
+        key: resumeKey,
+        state: "settled",
+        message: sendingMessage,
+      };
+      return;
+    }
+
+    const previous = resumeAttemptRef.current;
+    // Repeated pauses need a new send/retry intent, not another idle-tab wake-up.
     if (
-      backendChanged ||
-      !isFetched ||
-      !conversation ||
-      backendKind !== "cloud" ||
-      conversation.sandbox_status !== "PAUSED" ||
-      !conversation.sandbox_id
-    ) {
-      activeResumeKeyRef.current = null;
+      previous?.key === resumeKey &&
+      (previous.state === "pending" ||
+        !sendingMessage ||
+        previous.message === sendingMessage)
+    )
       return;
-    }
 
-    if (consumeCloudAutoResumeSuppression(conversation.id)) {
-      activeResumeKeyRef.current = null;
-      return;
-    }
-
-    const resumeKey = `${conversation.id}:${conversation.sandbox_id}`;
-    activeResumeKeyRef.current = resumeKey;
-
-    const currentAttempt = resumeAttemptRef.current;
-    if (
-      currentAttempt?.key === resumeKey &&
-      (currentAttempt.state === "pending" ||
-        currentAttempt.state === "succeeded")
-    ) {
-      return;
-    }
-
-    resumeAttemptRef.current = { key: resumeKey, state: "pending" };
-    resumeSandbox({ resumeKey, sandboxId: conversation.sandbox_id });
-
-    return () => {
-      if (activeResumeKeyRef.current === resumeKey) {
-        activeResumeKeyRef.current = null;
-      }
-      if (
-        resumeAttemptRef.current?.key === resumeKey &&
-        resumeAttemptRef.current.state !== "succeeded"
-      ) {
-        resumeAttemptRef.current = null;
-      }
+    const attempt: ResumeAttempt = {
+      key: resumeKey,
+      state: "pending",
+      message: sendingMessage,
     };
+    resumeAttemptRef.current = attempt;
+    resumeSandbox({ attempt, sandboxId: conversation.sandbox_id });
   }, [
-    backendChanged,
-    backendKind,
-    conversation?.id,
-    conversation?.sandbox_status,
+    resumeKey,
+    conversationId,
     conversation?.sandbox_id,
-    isFetched,
+    sendingMessage,
     resumeSandbox,
   ]);
 }

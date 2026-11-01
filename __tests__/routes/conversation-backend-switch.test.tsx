@@ -24,6 +24,7 @@ import type { Backend } from "#/api/backend-registry/types";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { getCloudSharedConversation } from "#/api/cloud/shared-conversation-service.api";
 import { usePendingTaskAttachmentsStore } from "#/stores/pending-task-attachments-store";
+import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { useConversationStore } from "#/stores/conversation-store";
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
@@ -220,6 +221,7 @@ function renderConversationRoute(conversationId: string) {
 }
 
 beforeEach(() => {
+  useOptimisticUserMessageStore.getState().clearPendingMessages();
   usePendingTaskAttachmentsStore.setState({ byTaskId: {} });
   window.localStorage.clear();
   __resetActiveStoreForTests();
@@ -332,6 +334,101 @@ describe("conversation route — cloud sandbox resume", () => {
 
     expect(await screen.findByTestId("conversation-main")).toBeInTheDocument();
     expect(resumeCloudSandbox).not.toHaveBeenCalled();
+  });
+
+  it("resumes again on a new send after an external pause, without idle resume loops", async () => {
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    vi.mocked(
+      AgentServerConversationService.batchGetAppConversations,
+    ).mockResolvedValue([
+      makeConversation(CLOUD_CONVERSATION_ID, {
+        sandbox_status: "PAUSED",
+        sandbox_id: "sandbox-repeat",
+      }),
+    ]);
+    renderConversation();
+    await waitFor(() => expect(resumeCloudSandbox).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const setStatus = (sandbox_status: "RUNNING" | "PAUSED") =>
+      act(() => {
+        queryClient.setQueriesData<AppConversation>(
+          { queryKey: ["user", "conversation", CLOUD_CONVERSATION_ID] },
+          (data) => data && { ...data, sandbox_status },
+        );
+      });
+    setStatus("RUNNING");
+    setStatus("PAUSED");
+    expect(resumeCloudSandbox).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      useOptimisticUserMessageStore
+        .getState()
+        .enqueuePendingMessage({
+          conversationId: CLOUD_CONVERSATION_ID,
+          text: "hi again",
+        });
+    });
+    await waitFor(() => expect(resumeCloudSandbox).toHaveBeenCalledTimes(2));
+    setStatus("PAUSED");
+    expect(resumeCloudSandbox).toHaveBeenCalledTimes(2);
+  });
+
+  it("fails queued messages when resume is rejected and allows an explicit Retry", async () => {
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    suppressNextCloudAutoResume(CLOUD_CONVERSATION_ID);
+    vi.mocked(
+      AgentServerConversationService.batchGetAppConversations,
+    ).mockResolvedValue([
+      makeConversation(CLOUD_CONVERSATION_ID, {
+        sandbox_status: "PAUSED",
+        sandbox_id: "sandbox-retry",
+      }),
+    ]);
+    renderConversation();
+    await screen.findByTestId("conversation-main");
+    await waitFor(() =>
+      expect(
+        queryClient.getQueryData<AppConversation>([
+          "user",
+          "conversation",
+          CLOUD_CONVERSATION_ID,
+          cloudBackend.id,
+          "org-a",
+        ])?.sandbox_status,
+      ).toBe("PAUSED"),
+    );
+    vi.mocked(resumeCloudSandbox).mockRejectedValueOnce(
+      new HttpError(403, "Forbidden", null),
+    );
+    let id!: string;
+    act(() => {
+      id = useOptimisticUserMessageStore
+        .getState()
+        .enqueuePendingMessage({
+          conversationId: CLOUD_CONVERSATION_ID,
+          text: "recover me",
+        });
+    });
+    await waitFor(() =>
+      expect(
+        useOptimisticUserMessageStore
+          .getState()
+          .pendingMessages.find((m) => m.id === id)?.status,
+      ).toBe("error"),
+    );
+    expect(displayErrorToast).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      useOptimisticUserMessageStore.getState().markPendingMessageSending(id);
+    });
+    await waitFor(() => expect(resumeCloudSandbox).toHaveBeenCalledTimes(2));
+    expect(
+      useOptimisticUserMessageStore
+        .getState()
+        .pendingMessages.find((m) => m.id === id)?.status,
+    ).toBe("sending");
   });
 
   it("clears stale suppression when the route unmounts before PAUSED is observed", async () => {
