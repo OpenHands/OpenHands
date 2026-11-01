@@ -1,6 +1,5 @@
 import type {
   MetricsSnapshot,
-  RuntimeConversationInfo,
   RuntimeConversationStats,
   TokenUsage,
 } from "#/api/conversation-service/agent-server-conversation-service.types";
@@ -70,10 +69,4 @@ export function combineUsageMetrics(
     max_budget_per_task: maxBudgetPerTask,
     accumulated_token_usage: combinedTokenUsage,
   };
-}
-
-export function getCombinedMetrics(
-  conversationInfo: RuntimeConversationInfo,
-): MetricsSnapshot {
-  return combineUsageMetrics(conversationInfo.stats);
 }
