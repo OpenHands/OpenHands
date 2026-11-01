@@ -74,21 +74,6 @@ cheaper than the next and catches a different kind of rot.
    links an issue that closed since `BASE` (check each linked issue's state)
    is re-driven too, its row recorded and its note updated. A fix that landed
    in the Agent Server or the automation service shows up only this way.
-   It also re-drives what `main`'s own e2e run says is broken. Read the
-   latest completed `Mock-LLM E2E Tests` run on `main` (its failed-job log
-   lists the failing tests). For each failing test, find the bullet that
-   asserts the same user behavior (search the map for the spec's test ids
-   and its assertion) and drive it, model half included within the LLM
-   budget. A fail is a product defect, triaged as below. A pass puts the
-   cause in the mock harness (the mock LLM server, its scripted replies or
-   a test helper), which no recipe drives: record the pass, and name the
-   test, the run and "harness" in the report so a person routes it to the
-   suite. A failing test with no matching bullet is a map gap. On
-   2026-10-11 both readings showed up at once: the onboarding test failed
-   because of a product bug that `F01.onboarding-repeat-endpoint` also
-   fails on, while conversation step 3 failed only because the mock answered
-   the SDK's title request with the agent's scripted terminal call. This
-   part does not gate the baseline.
 3. **Smoke (every family, cheaply).** For each family not already driven in
    tier 2: open its first entry point, run the family's `errors --app-only`
    sweep, and drive the one bullet that proves the page's main state (a list

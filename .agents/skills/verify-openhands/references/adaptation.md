@@ -46,9 +46,6 @@ OpenHands-specific decisions:
   The Playwright suites under `tests/e2e/` are not referenced from the map
   (they run differently and prove a commit, not this run); the behaviors they
   assert are mapped as sub-features with their own live recipes instead.
-  The daily pass reads `main`'s latest Mock-LLM run only to choose which of
-  those rows to drive, so each red test is classified as a product defect or
-  a harness failure.
 - Not imported: Cursor plugin configuration, model routing,
   `disable-model-invocation`, autonomous shipping or merge authority, and the
   zero-pixel-difference rule (deliberate weekly product changes are expected).
