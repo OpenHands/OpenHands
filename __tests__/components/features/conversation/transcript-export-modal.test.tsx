@@ -1,4 +1,5 @@
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { renderWithProviders } from "test-utils";
 import { TranscriptExportModal } from "#/components/features/conversation/transcript-export-modal";
@@ -16,6 +17,7 @@ const {
   eventsToMarkdownMock,
   getEventCountMock,
   loadCompleteTranscriptEventsMock,
+  loadBoundedTranscriptEventsMock,
   searchEventsMock,
   trackConversationExportedMock,
   useTranslationMock,
@@ -30,6 +32,7 @@ const {
   eventsToMarkdownMock: vi.fn(),
   getEventCountMock: vi.fn(),
   loadCompleteTranscriptEventsMock: vi.fn(),
+  loadBoundedTranscriptEventsMock: vi.fn(),
   searchEventsMock: vi.fn(),
   trackConversationExportedMock: vi.fn(),
   useTranslationMock: vi.fn(),
@@ -73,10 +76,18 @@ vi.mock("#/api/event-service/event-service.api", () => ({
   },
 }));
 
-vi.mock("#/utils/transcript-export/load-complete-events", () => ({
-  loadCompleteTranscriptEvents: (...args: unknown[]) =>
-    loadCompleteTranscriptEventsMock(...args),
-}));
+vi.mock("#/utils/transcript-export/load-complete-events", async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import("#/utils/transcript-export/load-complete-events")
+  >();
+  return {
+    ...actual,
+    loadCompleteTranscriptEvents: (...args: unknown[]) =>
+      loadCompleteTranscriptEventsMock(...args),
+    loadBoundedTranscriptEvents: (...args: unknown[]) =>
+      loadBoundedTranscriptEventsMock(...args),
+  };
+});
 
 vi.mock("#/utils/custom-toast-handlers", () => ({
   displayErrorToast: (...args: unknown[]) => displayErrorToastMock(...args),
@@ -129,6 +140,8 @@ interface RenderExportModalOptions {
   sessionApiKey?: string | null;
   conversationTitle?: string | null;
   model?: string | null;
+  eventCount?: number;
+  countUnavailable?: boolean;
 }
 
 function renderExportModal({
@@ -138,6 +151,8 @@ function renderExportModal({
   sessionApiKey = null,
   conversationTitle = null,
   model = null,
+  eventCount = 1,
+  countUnavailable = false,
 }: RenderExportModalOptions = {}) {
   [
     displayErrorToastMock,
@@ -146,6 +161,7 @@ function renderExportModal({
     eventsToMarkdownMock,
     getEventCountMock,
     loadCompleteTranscriptEventsMock,
+    loadBoundedTranscriptEventsMock,
     searchEventsMock,
     trackConversationExportedMock,
     useTranslationMock,
@@ -154,9 +170,17 @@ function renderExportModal({
   eventStoreState.loadedConversationId = loadedConversationId;
   eventStoreState.events = loadedEvents;
   const completeEvents = [makeEvent("complete-event")];
-  getEventCountMock.mockResolvedValue(1);
+  if (countUnavailable) {
+    getEventCountMock.mockRejectedValue(new Error("count unavailable"));
+  } else {
+    getEventCountMock.mockResolvedValue(eventCount);
+  }
   searchEventsMock.mockResolvedValue({ items: [], next_page_id: null });
   loadCompleteTranscriptEventsMock.mockResolvedValue(completeEvents);
+  loadBoundedTranscriptEventsMock.mockResolvedValue({
+    events: completeEvents,
+    truncation: { omittedCount: 42, headEventCount: 1 },
+  });
   eventsToMarkdownMock.mockReturnValue("# Markdown transcript");
   eventsToHtmlMock.mockReturnValue("<html>HTML transcript</html>");
   const onClose = vi.fn();
@@ -200,10 +224,15 @@ describe("transcript export modal", () => {
     ).toBeChecked();
     expect(useTranslationMock).toHaveBeenNthCalledWith(1, "openhands");
 
+    // The export button stays disabled until the on-mount size check resolves.
+    await waitFor(() =>
+      expect(screen.getByTestId("confirm-transcript-export")).toBeEnabled(),
+    );
     fireEvent.click(screen.getByTestId("confirm-transcript-export"));
 
     await waitFor(() => expect(downloadBlobMock).toHaveBeenCalledOnce());
     expect(getEventCountMock).toHaveBeenCalledWith("conversation-1", "", null);
+    expect(loadBoundedTranscriptEventsMock).not.toHaveBeenCalled();
     expect(loadCompleteTranscriptEventsMock).toHaveBeenCalledWith(
       scenario.loadedEvents,
       expect.any(Function),
@@ -214,6 +243,7 @@ describe("transcript export modal", () => {
       includeTimestamps: true,
       title: null,
       model: null,
+      truncation: undefined,
     });
     expect(eventsToHtmlMock).not.toHaveBeenCalled();
     const [blob, filename] = downloadBlobMock.mock.calls[0] as [Blob, string];
@@ -268,6 +298,9 @@ describe("transcript export modal", () => {
         name: I18nKey.TRANSCRIPT_EXPORT$INCLUDE_TIMESTAMPS,
       }),
     );
+    await waitFor(() =>
+      expect(screen.getByTestId("confirm-transcript-export")).toBeEnabled(),
+    );
     fireEvent.click(screen.getByTestId("confirm-transcript-export"));
 
     await waitFor(() => expect(downloadBlobMock).toHaveBeenCalledOnce());
@@ -287,6 +320,7 @@ describe("transcript export modal", () => {
       includeTimestamps: false,
       title: "Incident review",
       model: "model-v2",
+      truncation: undefined,
     });
     expect(eventsToMarkdownMock).not.toHaveBeenCalled();
     const [blob, filename] = downloadBlobMock.mock.calls[0] as [Blob, string];
@@ -298,9 +332,11 @@ describe("transcript export modal", () => {
   });
 
   it("continues without an expected count when that endpoint is unavailable", async () => {
-    const scenario = renderExportModal();
-    getEventCountMock.mockRejectedValue(new Error("count unavailable"));
+    const scenario = renderExportModal({ countUnavailable: true });
 
+    await waitFor(() =>
+      expect(screen.getByTestId("confirm-transcript-export")).toBeEnabled(),
+    );
     fireEvent.click(screen.getByTestId("confirm-transcript-export"));
 
     await waitFor(() => expect(downloadBlobMock).toHaveBeenCalledOnce());
@@ -309,7 +345,79 @@ describe("transcript export modal", () => {
       expect.any(Function),
       undefined,
     );
+    expect(loadBoundedTranscriptEventsMock).not.toHaveBeenCalled();
     expect(displayErrorToastMock).not.toHaveBeenCalled();
+  });
+
+  it("offers partial and whole downloads, with partial selected by default, for a large conversation", async () => {
+    renderExportModal({ eventCount: 10_001 });
+
+    const partial = await screen.findByTestId(
+      "transcript-export-scope-partial",
+    );
+    const whole = screen.getByTestId("transcript-export-scope-whole");
+
+    expect(partial).toBeChecked();
+    expect(whole).not.toBeChecked();
+    expect(
+      screen.getByText("TRANSCRIPT_EXPORT$SCOPE_WHOLE_WARNING"),
+    ).toBeInTheDocument();
+  });
+
+  it("exports the bounded head+tail window by default for a large conversation", async () => {
+    const scenario = renderExportModal({ eventCount: 10_001 });
+
+    await screen.findByTestId("transcript-export-scope");
+    fireEvent.click(screen.getByTestId("confirm-transcript-export"));
+
+    await waitFor(() => expect(downloadBlobMock).toHaveBeenCalledOnce());
+    expect(loadBoundedTranscriptEventsMock).toHaveBeenCalledWith(
+      scenario.loadedEvents,
+      expect.any(Function),
+      10_001,
+    );
+    expect(loadCompleteTranscriptEventsMock).not.toHaveBeenCalled();
+    expect(eventsToMarkdownMock).toHaveBeenCalledWith(scenario.completeEvents, {
+      includeToolDetails: true,
+      includeTimestamps: true,
+      title: null,
+      model: null,
+      truncation: { omittedCount: 42, headEventCount: 1 },
+    });
+    expect(scenario.onClose).toHaveBeenCalledOnce();
+  });
+
+  it("exports the entire history when the user chooses the whole conversation", async () => {
+    const scenario = renderExportModal({ eventCount: 10_001 });
+
+    await screen.findByTestId("transcript-export-scope");
+    await userEvent.click(screen.getByTestId("transcript-export-scope-whole"));
+    await userEvent.click(screen.getByTestId("confirm-transcript-export"));
+
+    await waitFor(() => expect(downloadBlobMock).toHaveBeenCalledOnce());
+    expect(loadCompleteTranscriptEventsMock).toHaveBeenCalledWith(
+      scenario.loadedEvents,
+      expect.any(Function),
+      10_001,
+    );
+    expect(loadBoundedTranscriptEventsMock).not.toHaveBeenCalled();
+    expect(scenario.onClose).toHaveBeenCalledOnce();
+  });
+
+  it("exports everything without a scope choice when the conversation is within the threshold", async () => {
+    const scenario = renderExportModal({ eventCount: 10_000 });
+
+    await waitFor(() =>
+      expect(screen.getByTestId("confirm-transcript-export")).toBeEnabled(),
+    );
+    expect(screen.queryByTestId("transcript-export-scope")).toBeNull();
+
+    fireEvent.click(screen.getByTestId("confirm-transcript-export"));
+
+    await waitFor(() => expect(downloadBlobMock).toHaveBeenCalledOnce());
+    expect(loadCompleteTranscriptEventsMock).toHaveBeenCalled();
+    expect(loadBoundedTranscriptEventsMock).not.toHaveBeenCalled();
+    expect(scenario.onClose).toHaveBeenCalledOnce();
   });
 
   it("reports an export error, restores the form, and permits a retry", async () => {
@@ -319,6 +427,7 @@ describe("transcript export modal", () => {
     );
     const exportButton = screen.getByTestId("confirm-transcript-export");
 
+    await waitFor(() => expect(exportButton).toBeEnabled());
     fireEvent.click(exportButton);
 
     await waitFor(() =>
@@ -332,41 +441,9 @@ describe("transcript export modal", () => {
     fireEvent.click(exportButton);
 
     await waitFor(() => expect(downloadBlobMock).toHaveBeenCalledOnce());
-    expect(getEventCountMock).toHaveBeenCalledTimes(2);
     expect(loadCompleteTranscriptEventsMock).toHaveBeenCalledTimes(2);
     expect(trackConversationExportedMock).toHaveBeenCalledWith("markdown");
     expect(scenario.onClose).toHaveBeenCalledOnce();
-  });
-
-  it("cancels before loading history when closed during the count request", async () => {
-    const scenario = renderExportModal();
-    const count = createDeferred<number>();
-    getEventCountMock.mockReturnValue(count.promise);
-    const exportButton = screen.getByTestId("confirm-transcript-export");
-
-    fireEvent.click(exportButton);
-
-    expect(exportButton).toBeDisabled();
-    expect(exportButton).toHaveAttribute("aria-busy", "true");
-    expect(
-      screen.getByRole("radio", {
-        name: I18nKey.TRANSCRIPT_EXPORT$MARKDOWN,
-      }),
-    ).toBeDisabled();
-    expect(
-      screen.getByRole("checkbox", {
-        name: I18nKey.TRANSCRIPT_EXPORT$INCLUDE_TOOL_DETAILS,
-      }),
-    ).toBeDisabled();
-
-    fireEvent.click(screen.getByTestId("cancel-transcript-export"));
-    expect(scenario.onClose).toHaveBeenCalledOnce();
-    await act(async () => count.resolve(1));
-
-    expect(loadCompleteTranscriptEventsMock).not.toHaveBeenCalled();
-    expect(downloadBlobMock).not.toHaveBeenCalled();
-    expect(displayErrorToastMock).not.toHaveBeenCalled();
-    await waitFor(() => expect(exportButton).not.toBeDisabled());
   });
 
   it("cancels after history loading without creating a download", async () => {
@@ -374,6 +451,9 @@ describe("transcript export modal", () => {
     const history = createDeferred<OpenHandsEvent[]>();
     loadCompleteTranscriptEventsMock.mockReturnValue(history.promise);
 
+    await waitFor(() =>
+      expect(screen.getByTestId("confirm-transcript-export")).toBeEnabled(),
+    );
     fireEvent.click(screen.getByTestId("confirm-transcript-export"));
     await waitFor(() =>
       expect(loadCompleteTranscriptEventsMock).toHaveBeenCalledOnce(),
@@ -392,6 +472,9 @@ describe("transcript export modal", () => {
     const history = createDeferred<OpenHandsEvent[]>();
     loadCompleteTranscriptEventsMock.mockReturnValue(history.promise);
 
+    await waitFor(() =>
+      expect(screen.getByTestId("confirm-transcript-export")).toBeEnabled(),
+    );
     fireEvent.click(screen.getByTestId("confirm-transcript-export"));
     await waitFor(() =>
       expect(loadCompleteTranscriptEventsMock).toHaveBeenCalledOnce(),
@@ -406,18 +489,19 @@ describe("transcript export modal", () => {
 
   it("ignores a second export request while the first is running", async () => {
     const scenario = renderExportModal();
-    const count = createDeferred<number>();
-    getEventCountMock.mockReturnValue(count.promise);
+    const history = createDeferred<OpenHandsEvent[]>();
+    loadCompleteTranscriptEventsMock.mockReturnValue(history.promise);
     const exportButton = screen.getByTestId("confirm-transcript-export");
 
+    await waitFor(() => expect(exportButton).toBeEnabled());
     act(() => {
       exportButton.click();
       exportButton.click();
     });
-    expect(getEventCountMock).toHaveBeenCalledOnce();
-    await act(async () => count.resolve(1));
+    await act(async () => history.resolve(scenario.completeEvents));
 
     await waitFor(() => expect(downloadBlobMock).toHaveBeenCalledOnce());
+    expect(loadCompleteTranscriptEventsMock).toHaveBeenCalledOnce();
     expect(trackConversationExportedMock).toHaveBeenCalledOnce();
     expect(scenario.onClose).toHaveBeenCalledOnce();
   });
@@ -428,6 +512,7 @@ describe("transcript export modal", () => {
     fireEvent.click(screen.getByTestId("close-transcript-export-modal"));
 
     expect(scenario.onClose).toHaveBeenCalledOnce();
-    expect(getEventCountMock).not.toHaveBeenCalled();
+    expect(loadCompleteTranscriptEventsMock).not.toHaveBeenCalled();
+    expect(loadBoundedTranscriptEventsMock).not.toHaveBeenCalled();
   });
 });
