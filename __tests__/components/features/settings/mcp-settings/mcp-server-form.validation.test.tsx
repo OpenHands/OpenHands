@@ -432,4 +432,135 @@ describe("MCPServerForm validation", () => {
 
     r2.unmount();
   });
+
+  it("rejects a remote server name that duplicates any existing server", () => {
+    const onSubmit = vi.fn();
+
+    render(
+      <MCPServerForm
+        mode="add"
+        server={{ id: "tmp", type: "shttp" }}
+        existingServers={[
+          { id: "stdio-0", type: "stdio", name: "github", command: "npx" },
+        ]}
+        onSubmit={onSubmit}
+        onCancel={noop}
+      />,
+    );
+
+    fireEvent.change(screen.getByTestId("server-name-input"), {
+      target: { value: "github" },
+    });
+    fireEvent.change(screen.getByTestId("url-input"), {
+      target: { value: "https://api.example.com" },
+    });
+    fireEvent.click(screen.getByTestId("submit-button"));
+
+    // The typed name becomes the mcp_config key regardless of transport, so a
+    // remote name colliding with a stdio server is rejected instead of being
+    // silently saved under a suffixed key.
+    expect(
+      screen.getByText("SETTINGS$MCP_ERROR_NAME_DUPLICATE"),
+    ).toBeInTheDocument();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("rejects duplicate names case-insensitively across server types", () => {
+    const onSubmit = vi.fn();
+
+    render(
+      <MCPServerForm
+        mode="add"
+        server={{ id: "tmp", type: "sse" }}
+        existingServers={[
+          { id: "shttp-0", type: "shttp", name: "github", url: "https://x.example.com" },
+        ]}
+        onSubmit={onSubmit}
+        onCancel={noop}
+      />,
+    );
+
+    fireEvent.change(screen.getByTestId("server-name-input"), {
+      target: { value: "GITHUB" },
+    });
+    fireEvent.change(screen.getByTestId("url-input"), {
+      target: { value: "https://api.example.com" },
+    });
+    fireEvent.click(screen.getByTestId("submit-button"));
+
+    expect(
+      screen.getByText("SETTINGS$MCP_ERROR_NAME_DUPLICATE"),
+    ).toBeInTheDocument();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("accepts a remote server's own unchanged name when editing", () => {
+    const onSubmit = vi.fn();
+
+    render(
+      <MCPServerForm
+        mode="edit"
+        server={{
+          id: "github",
+          type: "shttp",
+          name: "github",
+          url: "https://api.example.com/mcp",
+        }}
+        existingServers={[
+          {
+            id: "github",
+            type: "shttp",
+            name: "github",
+            url: "https://api.example.com/mcp",
+          },
+        ]}
+        onSubmit={onSubmit}
+        onCancel={noop}
+      />,
+    );
+
+    fireEvent.change(screen.getByTestId("url-input"), {
+      target: { value: "https://api.example.com/v2/mcp" },
+    });
+    fireEvent.click(screen.getByTestId("submit-button"));
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects renaming a server to another server's name", () => {
+    const onSubmit = vi.fn();
+
+    render(
+      <MCPServerForm
+        mode="edit"
+        server={{
+          id: "docs",
+          type: "sse",
+          name: "docs",
+          url: "https://docs.example.com/mcp",
+        }}
+        existingServers={[
+          {
+            id: "docs",
+            type: "sse",
+            name: "docs",
+            url: "https://docs.example.com/mcp",
+          },
+          { id: "stdio-0", type: "stdio", name: "github", command: "npx" },
+        ]}
+        onSubmit={onSubmit}
+        onCancel={noop}
+      />,
+    );
+
+    fireEvent.change(screen.getByTestId("server-name-input"), {
+      target: { value: "github" },
+    });
+    fireEvent.click(screen.getByTestId("submit-button"));
+
+    expect(
+      screen.getByText("SETTINGS$MCP_ERROR_NAME_DUPLICATE"),
+    ).toBeInTheDocument();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
 });
