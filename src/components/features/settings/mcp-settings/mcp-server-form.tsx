@@ -127,7 +127,10 @@ export function MCPServerForm({
 
   const validateName = (name: string): string | null => {
     if (!name) return t(I18nKey.SETTINGS$MCP_ERROR_NAME_REQUIRED);
-    if (!isValidMcpServerName(name)) {
+    if (
+      !(mode === "edit" && name === server?.name) &&
+      !isValidMcpServerName(name)
+    ) {
       return t(I18nKey.SETTINGS$MCP_ERROR_NAME_INVALID);
     }
     return null;
@@ -139,11 +142,13 @@ export function MCPServerForm({
       mode === "add" || (mode === "edit" && server?.name !== name);
     if (!shouldCheckUniqueness) return null;
 
-    const existingStdioNames = existingServers
-      .filter((s) => s.type === "stdio")
-      .map((s) => s.name)
-      .filter(Boolean);
-    if (existingStdioNames.includes(name)) {
+    if (
+      existingServers.some(
+        (existing) =>
+          existing.id !== server?.id &&
+          existing.name?.toLowerCase() === name.toLowerCase(),
+      )
+    ) {
       return t(I18nKey.SETTINGS$MCP_ERROR_NAME_DUPLICATE);
     }
     return null;
@@ -260,8 +265,9 @@ export function MCPServerForm({
       // key (and the reference used in mcp_server_refs), so hold it to the
       // same safe-identifier rule as stdio names.
       const name = formData.get("name")?.toString().trim() || "";
-      if (name && !isValidMcpServerName(name)) {
-        return t(I18nKey.SETTINGS$MCP_ERROR_NAME_INVALID);
+      if (name) {
+        const nameError = validateName(name) || validateNameUniqueness(name);
+        if (nameError) return nameError;
       }
 
       // Validate timeout for SHTTP servers only
@@ -478,6 +484,12 @@ export function MCPServerForm({
           required
           wrapperClassName="w-full min-w-0"
         />
+      )}
+
+      {mode === "edit" && (
+        <p className="text-sm text-tertiary-light">
+          {t(I18nKey.MCP$RENAME_HELP)}
+        </p>
       )}
 
       {/* @spec MCP-004 — Form feedback follows readable theme text roles */}

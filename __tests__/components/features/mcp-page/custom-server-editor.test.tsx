@@ -4,6 +4,7 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { AxiosError } from "axios";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import SettingsService from "#/api/settings-service/settings-service.api";
+import * as cloudMcp from "#/api/cloud/mcp-service.api";
 import McpService from "#/api/mcp-service/mcp-service.api";
 import {
   __resetActiveStoreForTests,
@@ -385,6 +386,9 @@ describe("CustomServerEditor", () => {
     await screen.findByTestId("mcp-custom-editor");
 
     // Act
+    fireEvent.change(screen.getByTestId("server-name-input"), {
+      target: { value: "renamed_jira" },
+    });
     fireEvent.click(screen.getByTestId("mcp-test-connection"));
 
     // Assert
@@ -394,7 +398,11 @@ describe("CustomServerEditor", () => {
       ),
     );
     expect(testSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "shttp", url: EDIT_REMOTE_SERVER.url }),
+      expect.objectContaining({
+        type: "shttp",
+        url: EDIT_REMOTE_SERVER.url,
+        name: EDIT_REMOTE_SERVER.name,
+      }),
     );
   });
 
@@ -545,3 +553,51 @@ describe("CustomServerEditor", () => {
     });
   });
 });
+
+it.each([EDIT_REMOTE_SERVER, EDIT_OAUTH_SERVER])(
+  "renames $name on cloud without a probe or authorization",
+  async (server) => {
+    setRegisteredBackends([
+      {
+        id: "cloud-rename",
+        name: "Cloud",
+        host: "https://app.example.com",
+        apiKey: "k",
+        kind: "cloud",
+      },
+    ]);
+    setActiveSelection({ backendId: "cloud-rename", orgId: "team" });
+    const { toCanonicalMcpServer } = await import("#/utils/mcp-config");
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettingsWithMcp({
+        agent_settings: {
+          mcp_config: JSON.parse(
+            JSON.stringify({ [server.id]: toCanonicalMcpServer(server) }),
+          ),
+        },
+      }),
+    );
+    const rename = vi
+      .spyOn(cloudMcp, "renameCloudMcpServer")
+      .mockResolvedValue();
+    const probe = vi.spyOn(McpService, "testServer");
+    const oauth = vi.spyOn(McpService, "authorizeOAuth");
+    const onClose = vi.fn();
+    renderWith(
+      server.auth?.strategy === "oauth2" ? (
+        <EditOAuthEditorOnceSettingsLoaded onClose={onClose} />
+      ) : (
+        <EditRemoteEditorOnceSettingsLoaded onClose={onClose} />
+      ),
+    );
+    await screen.findByTestId("mcp-custom-editor");
+    fireEvent.change(screen.getByTestId("server-name-input"), {
+      target: { value: "sonarqube" },
+    });
+    fireEvent.click(screen.getByTestId("submit-button"));
+    await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
+    expect(rename).toHaveBeenCalledWith(server.id, "sonarqube", undefined);
+    expect(probe).not.toHaveBeenCalled();
+    expect(oauth).not.toHaveBeenCalled();
+  },
+);

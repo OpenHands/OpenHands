@@ -414,3 +414,40 @@ describe("MCPPage", () => {
     });
   });
 });
+
+it("offers retry after a failed read without offering an empty editable catalog", async () => {
+  const getSettings = vi
+    .spyOn(SettingsService, "getSettings")
+    .mockRejectedValue(Object.assign(new Error("Forbidden"), { status: 403 }));
+  renderPage();
+  const alert = await screen.findByRole("alert");
+  expect(screen.queryByTestId("mcp-add-custom-server")).not.toBeInTheDocument();
+  expect(screen.queryByTestId("mcp-installed-empty")).not.toBeInTheDocument();
+  getSettings.mockResolvedValue(
+    buildSettings({
+      agent_settings: {
+        mcp_config: {
+          shttp: {
+            transport: "http",
+            url: "https://sonar.example/mcp",
+            enabled: false,
+          },
+        },
+      },
+    }),
+  );
+  fireEvent.click(within(alert).getByRole("button"));
+  await screen.findByTestId("mcp-add-custom-server");
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  expect(screen.getByText("shttp")).toBeInTheDocument();
+});
+
+it("allows first-time MCP setup when settings do not exist yet", async () => {
+  vi.spyOn(SettingsService, "getSettings").mockRejectedValue(
+    Object.assign(new Error("Settings not found"), { status: 404 }),
+  );
+  renderPage();
+  await screen.findByTestId("mcp-installed-empty");
+  expect(screen.getByTestId("mcp-marketplace-grid")).toBeInTheDocument();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});

@@ -7,7 +7,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { BrandButton } from "#/components/features/settings/brand-button";
-import { useSettings } from "#/hooks/query/use-settings";
+import { getErrorStatus, useSettings } from "#/hooks/query/use-settings";
 import { useUpdateMcpServer } from "#/hooks/mutation/use-update-mcp-server";
 import { parseMcpConfig } from "#/utils/mcp-config";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
@@ -41,7 +41,7 @@ import {
 
 export default function MCPPage() {
   const { t } = useTranslation("openhands");
-  const { data: settings, isLoading } = useSettings();
+  const { data: settings, isLoading, isError, error, refetch } = useSettings();
   const { mutate: updateMcpServer } = useUpdateMcpServer();
 
   const [installEntry, setInstallEntry] =
@@ -93,6 +93,30 @@ export default function MCPPage() {
       },
     );
   };
+
+  if (isError && getErrorStatus(error) !== 404) {
+    return (
+      <div
+        data-testid="mcp-page"
+        className="flex h-full gap-4 lg:gap-10 lg:pl-10"
+      >
+        <ExtensionsNavigation />
+        <div
+          role="alert"
+          className="flex flex-col items-center justify-center gap-4 p-6"
+        >
+          <p>{t(I18nKey.ERROR$GENERIC)}</p>
+          <BrandButton
+            type="button"
+            variant="secondary"
+            onClick={() => void refetch()}
+          >
+            {t(I18nKey.MCP$HEALTH_RETRY)}
+          </BrandButton>
+        </div>
+      </div>
+    );
+  }
 
   if (isLoading || !settings) {
     return (

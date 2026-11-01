@@ -410,17 +410,17 @@ export function buildRenameMcpConfigPatch(
   previous: MCPServer,
   edited: MCPServerConfig,
 ): MCPConfigPatch {
-  const previousSecrets =
-    previous.transport === "stdio"
-      ? previous.env
-      : { auth: previous.auth, headers: previous.headers };
-  if (hasRedactedMcpSecretLeaf(previousSecrets)) {
-    throw new Error(MCP_RENAME_CREDENTIAL_ERROR);
-  }
   const renamedServer = applyMcpServerPatch(
     previous,
     buildMcpServerPatch(previous, edited),
   );
+  const secrets =
+    renamedServer.transport === "stdio"
+      ? renamedServer.env
+      : { auth: renamedServer.auth, headers: renamedServer.headers };
+  if (hasRedactedMcpSecretLeaf(secrets)) {
+    throw new Error(MCP_RENAME_CREDENTIAL_ERROR);
+  }
   return {
     [oldKey]: null,
     [newKey]: renamedServer,
@@ -437,4 +437,15 @@ export function allocateMcpSettingsKey(
   let suffix = 1;
   while (`${base}_${suffix}` in config) suffix += 1;
   return `${base}_${suffix}`;
+}
+
+export function hasMcpConnectionChanges(
+  previous: MCPServerConfig,
+  edited: MCPServerConfig,
+): boolean {
+  const canonical = toCanonicalMcpServer(previous);
+  return (
+    JSON.stringify(buildMcpServerPatch(canonical, previous)) !==
+    JSON.stringify(buildMcpServerPatch(canonical, edited))
+  );
 }

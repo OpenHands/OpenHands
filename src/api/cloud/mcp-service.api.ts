@@ -1,4 +1,7 @@
-import type { AgentServerMCPTestRequest } from "@openhands/typescript-client";
+import type {
+  AgentServerMCPTestRequest,
+  MCPServer,
+} from "@openhands/typescript-client";
 import { getActiveBackend } from "../backend-registry/active-store";
 import type { Backend } from "../backend-registry/types";
 import type {
@@ -70,5 +73,18 @@ export async function getCloudMcpOAuthStatus(
     backend,
     method: "GET",
     path: `/api/v1/mcp/oauth/status/${encodeURIComponent(jobId)}`,
+  });
+}
+
+export async function renameCloudMcpServer(
+  name: string,
+  newName: string,
+  server?: MCPServer,
+): Promise<void> {
+  await callCloudProxy({
+    backend: getActiveCloudBackend(),
+    method: "POST",
+    path: `/api/v1/mcp/servers/${encodeURIComponent(name)}/rename`,
+    body: { new_name: newName, ...(server ? { server } : {}) },
   });
 }

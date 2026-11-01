@@ -6,6 +6,7 @@ import {
 } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
 import {
+  renameCloudMcpServer,
   getCloudMcpOAuthStatus,
   startCloudMcpOAuth,
   testCloudMcpServer,
@@ -144,4 +145,15 @@ describe("getCloudMcpOAuthStatus", () => {
       callback_ready: true,
     });
   });
+});
+
+it("renames a server without fetching its stored credentials", async () => {
+  fetchMock.mockResolvedValue(mockJsonResponse({ name: "sonarqube" }));
+  setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+  await renameCloudMcpServer("shttp", "sonarqube");
+  const [url, init] = getFetchCall(fetchMock);
+  expect(url).toBe(`${cloudBackend.host}/api/v1/mcp/servers/shttp/rename`);
+  expect(init.headers).toMatchObject({ "X-Org-Id": "org-a" });
+  expect(getJsonBody(init)).toEqual({ new_name: "sonarqube" });
+  expect(fetchMock).toHaveBeenCalledTimes(1);
 });

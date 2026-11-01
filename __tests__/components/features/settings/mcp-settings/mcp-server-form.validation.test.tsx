@@ -433,3 +433,55 @@ describe("MCPServerForm validation", () => {
     r2.unmount();
   });
 });
+
+it("rejects a remote name already used by another transport, regardless of case", () => {
+  const onSubmit = vi.fn();
+  render(
+    <MCPServerForm
+      mode="add"
+      server={{ id: "", type: "shttp" }}
+      existingServers={[
+        { id: "docs", name: "Docs", type: "stdio", command: "npx" },
+      ]}
+      onSubmit={onSubmit}
+      onCancel={() => {}}
+    />,
+  );
+  fireEvent.change(screen.getByTestId("server-name-input"), {
+    target: { value: "docs" },
+  });
+  fireEvent.change(screen.getByTestId("url-input"), {
+    target: { value: "https://example.com/mcp" },
+  });
+  fireEvent.click(screen.getByTestId("submit-button"));
+  expect(onSubmit).not.toHaveBeenCalled();
+  expect(
+    screen.getByText("SETTINGS$MCP_ERROR_NAME_DUPLICATE"),
+  ).toBeInTheDocument();
+});
+
+it("preserves a legacy name when editing connection settings", () => {
+  const onSubmit = vi.fn();
+  const server = {
+    id: "Legacy name",
+    name: "Legacy name",
+    type: "shttp" as const,
+    url: "https://example.com/mcp",
+  };
+  render(
+    <MCPServerForm
+      mode="edit"
+      server={server}
+      existingServers={[server]}
+      onSubmit={onSubmit}
+      onCancel={() => {}}
+    />,
+  );
+  fireEvent.change(screen.getByTestId("timeout-input"), {
+    target: { value: "45" },
+  });
+  fireEvent.click(screen.getByTestId("submit-button"));
+  expect(onSubmit).toHaveBeenCalledWith(
+    expect.objectContaining({ name: "Legacy name", timeout: 45 }),
+  );
+});
