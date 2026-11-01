@@ -8,7 +8,7 @@ jobs:
   release-ready:
     permissions:
       actions: write
-      contents: read
+      contents: write
       issues: write
       pull-requests: write
     secrets: inherit
