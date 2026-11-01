@@ -3,7 +3,9 @@
  * answered with a non-2xx status). Matches on shape rather than `instanceof`
  * so it also recognizes errors from another copy of the client.
  */
-export function isSdkHttpError(error: unknown) {
+export function isSdkHttpError(
+  error: unknown,
+): error is Error & { status: number } {
   return (
     error instanceof Error &&
     error.name === "HttpError" &&
