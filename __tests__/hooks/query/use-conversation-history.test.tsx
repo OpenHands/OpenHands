@@ -114,6 +114,7 @@ describe("useConversationHistory", () => {
         limit: INITIAL_HISTORY_PAGE_SIZE,
         sortOrder: "TIMESTAMP_DESC",
         strictPagination: true,
+        excludeFullState: true,
       },
     );
   });
@@ -468,6 +469,63 @@ describe("useConversationHistory cache key stability", () => {
     expect(queries[0].options.gcTime).toBeGreaterThanOrEqual(30 * 60 * 1000);
   });
 
+  it.each(["PAUSED", "MISSING", "ERROR"])(
+    "loads saved Cloud history without contacting a %s runtime",
+    async (sandbox_status) => {
+      setRegisteredBackends([
+        {
+          id: "paused-cloud",
+          kind: "cloud",
+          name: "Cloud",
+          host: "https://cloud.test",
+          apiKey: "test",
+        },
+      ]);
+      setActiveSelection({ backendId: "paused-cloud", orgId: "org-a" });
+      vi.mocked(useUserConversation).mockReturnValue({
+        data: {
+          conversation_url: "https://old-runtime.test/api",
+          session_api_key: "old-key",
+          sandbox_status,
+        },
+      } as any);
+      vi.mocked(EventService.getEventCount).mockReturnValue(
+        new Promise(() => {}),
+      );
+      vi.mocked(EventService.searchEvents).mockResolvedValue(
+        makePage([makeEvent("saved-message")]),
+      );
+      const view = renderHook(() => useConversationHistory("paused-history"), {
+        wrapper: localWrapper,
+      });
+      try {
+        await waitFor(() =>
+          expect(view.result.current.data?.events[0].id).toBe("saved-message"),
+        );
+        expect(EventService.getEventCount).not.toHaveBeenCalled();
+        expect(EventService.searchEvents).toHaveBeenCalledTimes(1);
+        expect(view.result.current.data?.afterSeq).toBeNull();
+        vi.mocked(EventService.getEventCount).mockResolvedValue(80);
+        vi.mocked(useUserConversation).mockReturnValue({
+          data: {
+            conversation_url: "https://old-runtime.test/api",
+            session_api_key: "old-key",
+            sandbox_status: "RUNNING",
+          },
+        } as any);
+        view.rerender();
+        await waitFor(() =>
+          expect(view.result.current.data?.afterSeq).toBe(29),
+        );
+        expect(EventService.getEventCount).toHaveBeenCalledTimes(1);
+      } finally {
+        view.unmount();
+        window.localStorage.clear();
+        __resetActiveStoreForTests();
+      }
+    },
+  );
+
   describe("session-socket resume cursor (afterSeq)", () => {
     const withUrl = () =>
       vi.mocked(useUserConversation).mockReturnValue({
@@ -697,6 +755,11 @@ describe("persisted Cloud transcript", () => {
     expect(useEventStore.getState().events.map((event) => event.id)).toContain(
       "older",
     );
+    expect(EventService.searchEvents).toHaveBeenCalledTimes(3);
+    for (const [, , , options] of vi.mocked(EventService.searchEvents).mock
+      .calls) {
+      expect(options?.excludeFullState).toBe(true);
+    }
   });
 
   it("retries a history failure and never turns it into an empty success", async () => {

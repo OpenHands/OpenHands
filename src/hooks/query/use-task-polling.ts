@@ -1,3 +1,5 @@
+import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
+import { CONVERSATION_QUERY_KEYS } from "./query-keys";
 import { getActiveBackend } from "#/api/backend-registry/active-store";
 import { usePendingTaskAttachmentsStore } from "#/stores/pending-task-attachments-store";
 import { assertActiveEnvironment } from "#/utils/assert-active-environment";
@@ -78,7 +80,7 @@ export const useTaskPolling = () => {
 
   // Poll the task if this is a task ID
   const taskQuery = useQuery({
-    queryKey: ["start-task", taskId],
+    queryKey: CONVERSATION_QUERY_KEYS.startTask(taskId),
     queryFn: async () => {
       if (!taskId) return null;
       return AgentServerConversationService.getStartTask(taskId);
@@ -188,6 +190,14 @@ export const useTaskPollingController = () => {
     queryClient.invalidateQueries({ queryKey: ["start-tasks"] });
 
     const environment = getActiveBackend();
+    const { launches, update } = useConversationLaunchStore.getState();
+    const launch = Object.values(launches).find(
+      (entry) =>
+        entry.targetId === `task-${taskId}` &&
+        entry.backendId === environment.backend.id &&
+        entry.orgId === environment.orgId,
+    );
+    if (launch) update(launch.id, { conversationId: appConversationId });
     void (async () => {
       try {
         await flushPendingTaskAttachments(taskId, appConversationId);
