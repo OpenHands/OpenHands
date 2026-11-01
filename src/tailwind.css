@@ -74,7 +74,7 @@
   --color-warning: var(--oh-warning);
 
   /* Cool Grey scale */
-  --color-cool-grey-50:  var(--cool-grey-50);
+  --color-cool-grey-50: var(--cool-grey-50);
   --color-cool-grey-100: var(--cool-grey-100);
   --color-cool-grey-200: var(--cool-grey-200);
   --color-cool-grey-300: var(--cool-grey-300);
@@ -100,11 +100,11 @@
   /* Small feedback text has its own contrast contract, separate from controls. */
   --oh-feedback-error: var(--oh-color-danger);
   --oh-feedback-success: var(--oh-color-success);
-  --oh-markdown-alert-note: #8EC5FF;
-  --oh-markdown-alert-tip: #5EE9B5;
-  --oh-markdown-alert-important: #D8B4FE;
-  --oh-markdown-alert-warning: #FFE02A;
-  --oh-markdown-alert-caution: #FFB3BF;
+  --oh-markdown-alert-note: #8ec5ff;
+  --oh-markdown-alert-tip: #5ee9b5;
+  --oh-markdown-alert-important: #d8b4fe;
+  --oh-markdown-alert-warning: #ffe02a;
+  --oh-markdown-alert-caution: #ffb3bf;
   --oh-color-basic: var(--cool-grey-400);
   --oh-color-tertiary: var(--cool-grey-800);
   --oh-color-tertiary-light: var(--cool-grey-300);
@@ -116,24 +116,36 @@
   --oh-contrast-foreground: #000000;
   --oh-surface: var(--cool-grey-925);
   --oh-surface-foreground: var(--cool-grey-100);
-  --oh-surface-raised: var(--cool-grey-900);  /* elevated within a panel */
-  --oh-surface-deep: var(--cool-grey-975);    /* deep inset, context menus */
+  --oh-surface-raised: var(--cool-grey-900); /* elevated within a panel */
+  --oh-surface-deep: var(--cool-grey-975); /* deep inset, context menus */
   --oh-overlay: var(--cool-grey-925);
   --oh-overlay-foreground: var(--cool-grey-100);
   --oh-modal-title-foreground: #ffffff;
   --oh-muted: var(--cool-grey-400);
-  --oh-text-secondary: var(--cool-grey-300);  /* readable secondary text */
-  --oh-text-tertiary: var(--cool-grey-200);   /* tertiary, slightly dimmer */
-  --oh-text-dim: var(--cool-grey-500);        /* placeholders, very muted */
-  --oh-text-subtle: var(--cool-grey-600);     /* subtle labels, breadcrumbs */
-  --oh-interactive-hover: var(--cool-grey-700);      /* hover on mid surfaces (800 bg) */
-  --oh-interactive-hover-low: var(--cool-grey-900);  /* hover on dark base (950 bg) */
-  --oh-interactive-active: var(--cool-grey-800);     /* selected/active on dark base */
-  --oh-interactive-selected: var(--cool-grey-600);   /* selected within a panel (on 800/925 bg) */
+  --oh-text-secondary: var(--cool-grey-300); /* readable secondary text */
+  --oh-text-tertiary: var(--cool-grey-200); /* tertiary, slightly dimmer */
+  --oh-text-dim: var(--cool-grey-500); /* placeholders, very muted */
+  --oh-text-subtle: var(--cool-grey-600); /* subtle labels, breadcrumbs */
+  --oh-interactive-hover: var(
+    --cool-grey-700
+  ); /* hover on mid surfaces (800 bg) */
+  --oh-interactive-hover-low: var(
+    --cool-grey-900
+  ); /* hover on dark base (950 bg) */
+  --oh-interactive-active: var(
+    --cool-grey-800
+  ); /* selected/active on dark base */
+  --oh-interactive-selected: var(
+    --cool-grey-600
+  ); /* selected within a panel (on 800/925 bg) */
   --oh-context-window-foreground: var(--oh-foreground);
   --oh-context-window-track-weight: 42%;
   --oh-scrollbar: color-mix(in srgb, var(--cool-grey-400) 30%, transparent);
-  --oh-scrollbar-hover: color-mix(in srgb, var(--cool-grey-400) 50%, transparent);
+  --oh-scrollbar-hover: color-mix(
+    in srgb,
+    var(--cool-grey-400) 50%,
+    transparent
+  );
   --oh-default: var(--cool-grey-800);
   --oh-default-foreground: var(--cool-grey-100);
   --oh-accent: #c9b974;
@@ -151,12 +163,16 @@
   --oh-border-width: 1px;
   --oh-field-border-width: 1px;
   --oh-border: var(--cool-grey-700);
-  --oh-border-input: var(--cool-grey-700);   /* unified with --oh-border; same stroke weight everywhere */
-  --oh-border-subtle: var(--cool-grey-800);  /* within-panel separators, list dividers */
+  --oh-border-input: var(
+    --cool-grey-700
+  ); /* unified with --oh-border; same stroke weight everywhere */
+  --oh-border-subtle: var(
+    --cool-grey-800
+  ); /* within-panel separators, list dividers */
   --oh-separator: rgba(113, 120, 136, 0.5);
   --oh-focus: #ffffff;
-  --oh-status-success: #1FBD53;
-  --oh-status-error: #FF684E;
+  --oh-status-success: #1fbd53;
+  --oh-status-error: #ff684e;
   --oh-link: var(--cool-grey-100);
   --oh-radius: 8px;
   --oh-field-radius: 8px;
@@ -627,7 +643,11 @@ code .token {
 }
 
 .git-external-link-icon {
-  background: linear-gradient(90deg, rgba(69, 69, 69, 0) 0.35%, var(--cool-grey-800) 41.39%);
+  background: linear-gradient(
+    90deg,
+    rgba(69, 69, 69, 0) 0.35%,
+    var(--cool-grey-800) 41.39%
+  );
 }
 
 .api-configuration-modal {
@@ -710,6 +730,18 @@ code .token {
   --add-backend-panel-height: auto;
   height: var(--add-backend-panel-height);
   transition-property: height;
+}
+
+/* Dragged sidebar width, never more than 40% of the window so the main view stays usable. */
+@utility sidebar-expanded-width {
+  width: min(var(--sidebar-width), 40vw);
+  min-width: min(var(--sidebar-width), 40vw);
+}
+
+/* Sidebar text reads one step larger than the default small sizes. */
+@utility sidebar-text-scale {
+  --text-xs: 0.8125rem;
+  --text-sm: 0.9375rem;
 }
 
 /* Keep content fixed while the desktop Overview drawer opens or closes. */
@@ -891,4 +923,135 @@ code .token {
 
 @utility backend-chooser-edit-dialog {
   max-height: 92dvh;
+}
+
+/* Workspace picker geometry preserves its original mixed rem/px tracks. */
+@utility workspace-folder-columns {
+  grid-template-columns: minmax(0, 1fr) 4rem;
+}
+
+@utility workspace-folder-columns-desktop {
+  grid-template-columns: 1fr 120px;
+}
+
+@utility workspace-section-label {
+  font-size: 11px;
+}
+
+@utility workspace-manager-dialog {
+  max-height: 70vh;
+}
+
+@utility home-dropdown-sticky-list {
+  max-height: calc(15rem - 3rem);
+}
+
+@utility context-menu-icon-stroke {
+  stroke-width: 1.75;
+}
+
+/* Menu geometry keeps its existing pixel, rem and viewport units. */
+@utility tools-menu-offset {
+  left: -16px;
+}
+
+@utility tools-submenu-offset {
+  top: -4px;
+}
+
+@utility tools-git-submenu-offset {
+  top: -6px;
+}
+
+@utility profile-menu-height {
+  max-height: 60vh;
+}
+
+@utility new-conversation-menu-height {
+  max-height: 40vh;
+}
+
+@utility menu-caption-text {
+  font-size: 11px;
+}
+
+@utility menu-detail-text {
+  font-size: 10px;
+}
+
+@utility conversation-meta-text {
+  font-size: 10px;
+}
+
+@utility conversation-card-menu-width {
+  max-width: min(280px, 100vw - 16px);
+}
+
+@utility conversation-tag-popover-width {
+  min-width: 10rem;
+  max-width: 16rem;
+}
+
+@utility conversation-tag-popover-columns {
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+}
+
+@utility skill-pill-popover-width {
+  max-width: 20rem;
+}
+
+@utility conversation-git-actions-width {
+  min-width: 8rem;
+}
+
+@utility automation-actions-menu-width {
+  min-width: 10rem;
+}
+
+@utility dropdown-menu-width {
+  max-width: min(26rem, calc(100vw - 2rem));
+}
+
+@utility dropdown-menu-viewport-height {
+  max-height: min(60vh, calc(100dvh - 5rem));
+}
+
+@utility dialog-viewport-width {
+  max-width: 90vw;
+}
+
+@utility onboarding-viewport-height {
+  max-height: 90vh;
+}
+
+@utility dialog-content-height {
+  max-height: 80vh;
+}
+
+@utility setup-dialog-height {
+  max-height: 85vh;
+}
+
+@utility setup-dialog-width {
+  width: 92vw;
+}
+
+@utility automation-import-width {
+  width: min(36rem, calc(100vw - 2rem));
+}
+
+@utility dialog-scroll-height {
+  max-height: 60vh;
+}
+
+@utility automation-log-min-height {
+  min-height: 12rem;
+}
+
+@utility conversation-dialog-reading-height {
+  height: 60vh;
+}
+
+@utility conversation-options-bleed-width {
+  width: calc(100% + 3rem);
 }

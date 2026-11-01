@@ -68,7 +68,7 @@ export function MenuRow({
       <span className="min-w-0 flex-1">
         <span className="block truncate">{label}</span>
         {sublabel ? (
-          <span className="block truncate text-[10px] text-muted/70">
+          <span className="block truncate menu-detail-text text-muted/70">
             {sublabel}
           </span>
         ) : null}

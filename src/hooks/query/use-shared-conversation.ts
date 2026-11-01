@@ -1,3 +1,4 @@
+import { retryTransientRequest } from "#/utils/transient-error-retry";
 import { useQuery } from "@tanstack/react-query";
 import { SharedClient } from "@openhands/typescript-client/clients";
 import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
@@ -6,6 +7,7 @@ import { getCloudSharedConversation } from "#/api/cloud/shared-conversation-serv
 
 interface UseSharedConversationOptions {
   enabled?: boolean;
+  showErrorToast?: boolean;
 }
 
 export const useSharedConversation = (
@@ -26,8 +28,8 @@ export const useSharedConversation = (
       ).getSharedConversation(conversationId);
     },
     enabled: !!conversationId && (options.enabled ?? true),
-    retry: false, // Don't retry for shared conversations
+    retry: retryTransientRequest,
     // The shared page renders its own not-found state, and the conversation
     // route uses this query as a silent probe before reporting a miss.
-    meta: { disableToast: true },
+    meta: { disableToast: !options.showErrorToast },
   });

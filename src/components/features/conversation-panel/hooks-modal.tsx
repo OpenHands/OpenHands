@@ -47,7 +47,7 @@ export function HooksModal({ onClose }: HooksModalProps) {
       <ModalBody
         width="lg"
         className={cn(
-          "relative max-h-[80vh] flex flex-col items-start border border-border",
+          "relative dialog-content-height flex flex-col items-start border border-border",
           MODAL_MAX_WIDTH_VIEWPORT,
         )}
         testID="hooks-modal"
@@ -59,7 +59,7 @@ export function HooksModal({ onClose }: HooksModalProps) {
           onClose={onClose}
         />
 
-        <div className="w-full h-[60vh] overflow-auto rounded-md border border-border bg-surface-raised custom-scrollbar-always">
+        <div className="w-full conversation-dialog-reading-height overflow-auto rounded-md border border-border bg-surface-raised custom-scrollbar-always">
           {!isAgentReady ? (
             <RuntimeWaitingState testId="hooks-runtime-waiting" />
           ) : isLoading ? (

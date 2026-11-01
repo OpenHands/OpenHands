@@ -14,6 +14,7 @@ import PluginsManagementService, {
 import { PLUGINS_QUERY_KEYS } from "#/hooks/query/query-keys";
 import { launchConversation } from "#/hooks/mutation/resolve-conversation-launch";
 import { pluginReferenceKey } from "#/utils/plugin-display";
+import { useModelStore } from "#/stores/model-store";
 import {
   mergeStoredConversationMetadata,
   toPluginCoordinates,
@@ -111,6 +112,17 @@ export const useCreateConversation = ({
         sandboxId,
       } = variables;
 
+      // A home-page model pick (LLM profile or ACP model) made before the
+      // first message is an explicit choice the router shouldn't override on
+      // turn 1 — suppress the suffix for this single launch without touching
+      // the global setting. The flag is set at the UI pick handlers (the
+      // single chokepoint) and read here. It is cleared in `onSuccess` (not
+      // here) so a rejected launch doesn't consume it — a retry after a
+      // failed launch still suppresses, and the flag can't leak to an
+      // unrelated launch because a successful launch always clears it.
+      const suppressRouterAtStart =
+        useModelStore.getState().homeManualModelPick;
+
       // The active AgentProfile is the default launch profile for new
       // conversations (#3727), on both local and cloud.
       const conversation = await launchConversation(
@@ -145,12 +157,19 @@ export const useCreateConversation = ({
           // e2e snapshot tests that assert the exact createConversation
           // payload stay stable. The active meta-profile gates the suffix:
           // no router attached means no route-at-start instruction.
-          ...(settings?.run_router_at_conversation_start
+          ...(settings?.run_router_at_conversation_start &&
+          !suppressRouterAtStart
             ? {
                 runRouterAtConversationStart: true,
                 hasActiveMetaProfile: !!metaProfiles?.active_meta_profile,
               }
             : {}),
+          // Local: the builder gates the route-at-start suffix on this rather
+          // than reading the store, so child/`/new` launches (which don't pass
+          // it) are unaffected by a pending home pick. Only threaded when a
+          // pick was made so the payload-snapshot tests stay byte-identical
+          // otherwise.
+          ...(suppressRouterAtStart ? { suppressRouterAtStart } : {}),
         },
       );
 
@@ -217,6 +236,10 @@ export const useCreateConversation = ({
       };
     },
     onSuccess: async (data, variables) => {
+      // The home-manual-pick flag was read (not cleared) in the mutation fn
+      // so a rejected launch wouldn't consume it. Now that the launch
+      // succeeded, clear it so it can't leak to a later, unrelated launch.
+      useModelStore.getState().setHomeManualModelPick(false);
       trackConversationCreated({
         conversationId: data.conversation_id,
         taskId: data.task_id,

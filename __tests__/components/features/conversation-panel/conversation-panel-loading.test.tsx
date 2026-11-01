@@ -1,3 +1,4 @@
+import { withConversationTagFlags } from "#/utils/conversation-tag-flags";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createRoutesStub } from "react-router";
@@ -21,8 +22,6 @@ import {
 } from "./conversation-panel-test-utils";
 import { ConversationPanel } from "#/components/features/conversation-panel/conversation-panel";
 import { useConversationPanelPreferencesStore } from "#/stores/conversation-panel-preferences-store";
-import { useArchivedConversationsStore } from "#/stores/archived-conversations-store";
-import { usePinnedConversationsStore } from "#/stores/pinned-conversations-store";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { ExecutionStatus } from "#/types/agent-server/core";
 import {
@@ -238,8 +237,16 @@ describe("ConversationPanel list loading", () => {
     // fetching the next page must surface the unarchived conversation.
     const user = userEvent.setup();
     const page1 = [
-      createMockConversation({ id: "archived-1", title: "Archived 1" }),
-      createMockConversation({ id: "archived-2", title: "Archived 2" }),
+      createMockConversation({
+        id: "archived-1",
+        title: "Archived 1",
+        tags: { archived: "true" },
+      }),
+      createMockConversation({
+        id: "archived-2",
+        title: "Archived 2",
+        tags: { archived: "true" },
+      }),
     ];
     const page2 = [
       createMockConversation({
@@ -257,11 +264,6 @@ describe("ConversationPanel list loading", () => {
       return { items: page1, next_page_id: "page-2" };
     });
 
-    useArchivedConversationsStore.setState({
-      archivesByBackendId: {
-        "default-local": ["archived-1", "archived-2"],
-      },
-    });
     useConversationPanelPreferencesStore.setState({
       showArchivedConversations: false,
     });
@@ -647,9 +649,17 @@ describe("ConversationPanel list loading", () => {
 
   describe("pinned conversations", () => {
     it("shows a pinned section above the conversations list when pins exist", async () => {
-      usePinnedConversationsStore
-        .getState()
-        .pinConversation("default-local", "2");
+      vi.spyOn(
+        AgentServerConversationService,
+        "searchConversations",
+      ).mockResolvedValue({
+        items: mockConversations.map((conversation) =>
+          conversation.id === "2"
+            ? { ...conversation, tags: { pinned: "true" } }
+            : conversation,
+        ),
+        next_page_id: null,
+      });
 
       renderConversationPanel();
 
@@ -668,9 +678,17 @@ describe("ConversationPanel list loading", () => {
     });
 
     it("renders pinned conversations only in the pinned section in chronological mode", async () => {
-      usePinnedConversationsStore
-        .getState()
-        .pinConversation("default-local", "2");
+      vi.spyOn(
+        AgentServerConversationService,
+        "searchConversations",
+      ).mockResolvedValue({
+        items: mockConversations.map((conversation) =>
+          conversation.id === "2"
+            ? { ...conversation, tags: { pinned: "true" } }
+            : conversation,
+        ),
+        next_page_id: null,
+      });
 
       renderConversationPanel();
 
@@ -688,9 +706,17 @@ describe("ConversationPanel list loading", () => {
       useConversationPanelPreferencesStore.setState({
         organizeMode: "grouped",
       });
-      usePinnedConversationsStore
-        .getState()
-        .pinConversation("default-local", "2");
+      vi.spyOn(
+        AgentServerConversationService,
+        "searchConversations",
+      ).mockResolvedValue({
+        items: mockConversations.map((conversation) =>
+          conversation.id === "2"
+            ? { ...conversation, tags: { pinned: "true" } }
+            : conversation,
+        ),
+        next_page_id: null,
+      });
 
       renderConversationPanel();
 
@@ -705,9 +731,30 @@ describe("ConversationPanel list loading", () => {
     });
 
     it("hides the pinned section after the last pin is removed", async () => {
-      usePinnedConversationsStore
-        .getState()
-        .pinConversation("default-local", "2");
+      const items = mockConversations.map((conversation) =>
+        conversation.id === "2"
+          ? { ...conversation, tags: { pinned: "true" } }
+          : { ...conversation },
+      );
+      vi.spyOn(
+        AgentServerConversationService,
+        "searchConversations",
+      ).mockResolvedValue({
+        items,
+        next_page_id: null,
+      });
+      // Stateful fake: tag-flag writes update what later searches return,
+      // mirroring the server round-trip the settle-invalidation performs.
+      vi.spyOn(
+        AgentServerConversationService,
+        "updateConversationTagFlags",
+      ).mockImplementation(async (conversationId, _currentTags, changes) => {
+        const target = items.find(
+          (conversation) => conversation.id === conversationId,
+        )!;
+        target.tags = withConversationTagFlags(target.tags, changes);
+        return target;
+      });
 
       const user = userEvent.setup();
       renderConversationPanel();
@@ -739,14 +786,12 @@ describe("ConversationPanel list loading", () => {
         AgentServerConversationService,
         "searchConversations",
       ).mockResolvedValue({
-        items: manyConversations,
+        items: manyConversations.map((conversation) => ({
+          ...conversation,
+          tags: { pinned: "true" },
+        })),
         next_page_id: null,
       });
-      for (const conversation of manyConversations) {
-        usePinnedConversationsStore
-          .getState()
-          .pinConversation("default-local", conversation.id);
-      }
 
       renderConversationPanel();
 
