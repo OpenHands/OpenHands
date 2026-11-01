@@ -12,7 +12,7 @@
  *
  *   1. **Key rotation (non-public):** The stack runs with key A, but
  *      localStorage still holds a stale key B from a previous session.
- *      Verifies that `syncLauncherDefaultLocalBackend()` and the
+ *      Verifies that `syncLauncherLocalBackends()` and the
  *      static-server's localStorage overwrite clear the stale key so the
  *      app loads and can talk to the backend.
  *
@@ -23,7 +23,7 @@
  *        - Submitting the correct key lets the app through.
  *        - Submitting a wrong key shows an inline error.
  *
- * @spec BM-002 — Key rotation recovery via syncLauncherDefaultLocalBackend
+ * @spec BM-002 — Key rotation recovery via syncLauncherLocalBackends
  */
 
 import { test, expect, type Page } from "@playwright/test";
@@ -161,9 +161,9 @@ test.describe("auth mode: non-public key rotation", () => {
       { staleKey: STALE_KEY },
     );
 
-    // The loopback launcher replaces stale browser state with its injected
-    // key. Docker stays key-free, so route test traffic with the known key
-    // without exposing or persisting it in the browser.
+    // Loopback launcher / static-server inject the live session key.
+    // `syncLauncherLocalBackends()` overwrites stale apiKey on same-origin
+    // local registry entries on boot so this route uses the correct key.
     await routeSessionApiKey(page);
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await dismissAnalyticsModal(page);
