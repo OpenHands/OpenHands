@@ -10,7 +10,7 @@ import { NavigationProvider } from "#/context/navigation-context";
 import { I18nKey } from "#/i18n/declaration";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { renderWithProviders } from "test-utils";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   setupConversationPanelTest,
   createMockConversation,
@@ -806,6 +806,44 @@ describe("ConversationPanel list loading", () => {
           "conversation-panel-pinned-view-more",
         ),
       ).toHaveTextContent("CONVERSATION_PANEL$MORE");
+    });
+  });
+
+  describe("hover preview placement", () => {
+    const originalInnerWidth = window.innerWidth;
+
+    afterEach(() => {
+      window.innerWidth = originalInnerWidth;
+    });
+
+    const openPreview = async () => {
+      const user = userEvent.setup();
+      renderConversationPanel();
+      const [card] = await screen.findAllByTestId("conversation-card");
+      // Enter the page before the card so the card gets a pointer-enter from
+      // inside the document; the very first hover of a fresh pointer does not
+      // open the tooltip in jsdom.
+      await user.hover(document.body);
+      await user.hover(card);
+      return screen.findByRole("tooltip", {}, { timeout: 3000 });
+    };
+
+    it("opens the preview below the card in the phone-width drawer so it stays on screen", async () => {
+      // The drawer spans nearly the whole phone viewport; a preview beside
+      // the card would run past the right edge.
+      window.innerWidth = 390;
+
+      const preview = await openPreview();
+
+      expect(preview).toHaveAttribute("data-placement", "bottom-start");
+    });
+
+    it("keeps the preview beside the card next to the desktop rail", async () => {
+      window.innerWidth = 1440;
+
+      const preview = await openPreview();
+
+      expect(preview).toHaveAttribute("data-placement", "right-start");
     });
   });
 });
