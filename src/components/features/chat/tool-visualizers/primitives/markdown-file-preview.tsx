@@ -12,6 +12,7 @@ import FileIcon from "#/icons/file.svg?react";
 import { I18nKey } from "#/i18n/declaration";
 import { MarkdownRenderer } from "#/components/features/markdown/markdown-renderer";
 import { planComponents } from "#/components/features/markdown/plan-components";
+import { CopyableContentWrapper } from "#/components/shared/buttons/copyable-content-wrapper";
 import { Typography } from "#/ui/typography";
 import { isMarkdownFilePath } from "#/utils/is-markdown-file-path";
 import type {
@@ -162,45 +163,47 @@ export function MarkdownFilePreview({
   const fileName = path.split("/").pop() || path;
 
   return (
-    <div
-      className="w-full overflow-hidden rounded-xl border border-border bg-surface"
-      data-testid="markdown-file-preview"
-    >
+    <CopyableContentWrapper text={content}>
       <div
-        data-testid="markdown-file-preview-content"
-        className="max-h-40 overflow-y-auto px-4 py-3 text-contrast custom-scrollbar-always [--oh-scroll-fade-from:var(--oh-surface)]"
+        className="w-full overflow-hidden rounded-xl border border-border bg-surface"
+        data-testid="markdown-file-preview"
       >
-        {/* Deliberately compact: the clipped in-stream card reuses the plan
+        <div
+          data-testid="markdown-file-preview-content"
+          className="max-h-40 overflow-y-auto px-4 py-3 text-contrast custom-scrollbar-always [--oh-scroll-fade-from:var(--oh-surface)]"
+        >
+          {/* Deliberately compact: the clipped in-stream card reuses the plan
             preview's small typography; the Files drawer renders the same
             artifact full-size with the default components. */}
-        <MarkdownRenderer
-          content={content}
-          includeStandard
-          includeHeadings
-          components={planComponents}
-        />
-      </div>
-      <div className="flex h-10 items-center justify-between gap-2 border-t border-border px-3">
-        <div className="flex min-w-0 items-center gap-1.5">
-          <FileIcon className="h-3.5 w-3.5 flex-shrink-0 text-muted" />
-          <Typography.Text className="truncate font-mono text-[11px] leading-4 tracking-[0.11px] text-muted">
-            {fileName}
-          </Typography.Text>
+          <MarkdownRenderer
+            content={content}
+            includeStandard
+            includeHeadings
+            components={planComponents}
+          />
         </div>
-        {onView ? (
-          <button
-            type="button"
-            onClick={onView}
-            className="flex shrink-0 cursor-pointer items-center gap-1 transition-opacity hover:opacity-80"
-            data-testid="markdown-file-preview-view"
-          >
-            <Typography.Text className="text-[11px] leading-4 tracking-[0.11px] text-contrast">
-              {t(I18nKey.COMMON$VIEW)}
+        <div className="flex h-10 items-center justify-between gap-2 border-t border-border px-3">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <FileIcon className="h-3.5 w-3.5 flex-shrink-0 text-muted" />
+            <Typography.Text className="truncate font-mono text-[11px] leading-4 tracking-[0.11px] text-muted">
+              {fileName}
             </Typography.Text>
-            <ArrowUpRight className="text-contrast" size={16} />
-          </button>
-        ) : null}
+          </div>
+          {onView ? (
+            <button
+              type="button"
+              onClick={onView}
+              className="flex shrink-0 cursor-pointer items-center gap-1 transition-opacity hover:opacity-80"
+              data-testid="markdown-file-preview-view"
+            >
+              <Typography.Text className="text-[11px] leading-4 tracking-[0.11px] text-contrast">
+                {t(I18nKey.COMMON$VIEW)}
+              </Typography.Text>
+              <ArrowUpRight className="text-contrast" size={16} />
+            </button>
+          ) : null}
+        </div>
       </div>
-    </div>
+    </CopyableContentWrapper>
   );
 }
