@@ -23,6 +23,9 @@ import {
 import type { Backend } from "#/api/backend-registry/types";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { getCloudSharedConversation } from "#/api/cloud/shared-conversation-service.api";
+import { usePendingTaskAttachmentsStore } from "#/stores/pending-task-attachments-store";
+import { useConversationStore } from "#/stores/conversation-store";
+import { useErrorMessageStore } from "#/stores/error-message-store";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 // Mock the underlying service the conversation queries depend on.
@@ -217,6 +220,7 @@ function renderConversationRoute(conversationId: string) {
 }
 
 beforeEach(() => {
+  usePendingTaskAttachmentsStore.setState({ byTaskId: {} });
   window.localStorage.clear();
   __resetActiveStoreForTests();
   vi.mocked(getCloudSharedConversation).mockReset();
@@ -547,4 +551,55 @@ describe("transient conversation failures", () => {
       expect(displayErrorToast).toHaveBeenCalledTimes(1);
     },
   );
+});
+
+it("restores an upload that fails after its conversation is already open, once and only in its environment", async () => {
+  setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+  renderConversation();
+  await screen.findByTestId("conversation-main");
+  const file = new File(["notes"], "notes.txt");
+  const pending = {
+    content: "Read these notes",
+    files: [file],
+    images: [],
+    imagesMarkedUploadAsFile: [],
+    conversationId: CLOUD_CONVERSATION_ID,
+    backendId: cloudBackend.id,
+    orgId: "org-b",
+    recoverInConversation: true,
+    error: "Upload interrupted",
+  };
+  act(() =>
+    usePendingTaskAttachmentsStore
+      .getState()
+      .setPendingTaskAttachments("startup", pending),
+  );
+  expect(useConversationStore.getState().files).toEqual([]);
+  act(() =>
+    usePendingTaskAttachmentsStore
+      .getState()
+      .setPendingTaskAttachments("startup", { ...pending, orgId: "org-a" }),
+  );
+  await waitFor(() =>
+    expect(useConversationStore.getState().files).toEqual([file]),
+  );
+  expect(useConversationStore.getState().messageToSend).toMatchObject({
+    text: "Read these notes",
+    target: "conversation",
+  });
+  expect(useErrorMessageStore.getState().errorCode).toBe(
+    "StartupAttachmentUploadFailed",
+  );
+  expect(
+    usePendingTaskAttachmentsStore.getState().byTaskId.startup,
+  ).toBeUndefined();
+  act(() =>
+    usePendingTaskAttachmentsStore
+      .getState()
+      .setPendingTaskAttachments("other", {
+        ...pending,
+        conversationId: "other-conversation",
+      }),
+  );
+  expect(useConversationStore.getState().files).toEqual([file]);
 });

@@ -1,3 +1,4 @@
+import { usePendingTaskAttachmentsStore } from "#/stores/pending-task-attachments-store";
 import { restoreStartupAttachmentDraft } from "#/utils/restore-startup-attachment-draft";
 import React from "react";
 import { useNavigate, useLocation } from "react-router";
@@ -89,6 +90,17 @@ function AppContent() {
     (state) => state.removeErrorMessage,
   );
 
+  const recoverableDraft = usePendingTaskAttachmentsStore((state) =>
+    Object.values(state.byTaskId).find(
+      (payload) =>
+        payload.recoverInConversation &&
+        payload.conversationId === conversationId &&
+        (!payload.backendId ||
+          (payload.backendId === active.backend.id &&
+            payload.orgId === active.orgId)),
+    ),
+  );
+
   const resetForConversation = React.useRef<string | null>(null);
 
   // Per-conversation UI/runtime resets. The event store is cleared separately,
@@ -103,7 +115,6 @@ function AppContent() {
     resetConversationRuntimeState();
     setCurrentAgentState(AgentState.LOADING);
     removeErrorMessage();
-    restoreStartupAttachmentDraft(conversationId);
   }, [
     conversationId,
     clearTerminal,
@@ -112,6 +123,12 @@ function AppContent() {
     setCurrentAgentState,
     removeErrorMessage,
   ]);
+
+  React.useEffect(() => {
+    if (recoverableDraft && !backendChanged) {
+      restoreStartupAttachmentDraft(conversationId);
+    }
+  }, [conversationId, recoverableDraft, backendChanged]);
 
   React.useEffect(() => {
     if (isTask && taskStatus === "ERROR") {
