@@ -21,8 +21,11 @@
 
 import { test, expect } from "@playwright/test";
 import {
+  BASH_COMMAND,
   BASH_TOKEN,
   REPLY_TOKEN,
+  registerTrajectory,
+  activateTrajectory,
   waitForAgentMessageContaining,
   MOCK_LLM_AGENT_URL,
   BACKEND_URL,
@@ -269,10 +272,22 @@ test.describe("mock-LLM agent-server conversation", () => {
     page,
     request,
   }) => {
-    // Reset the mock LLM to its default trajectory. Other test suites
-    // (e.g. automation tests) may have activated a different trajectory
-    // that wasn't fully consumed due to earlier failures.
+    // Reset the mock LLM. Other test suites (e.g. automation tests) may
+    // have activated a different trajectory that wasn't fully consumed due
+    // to earlier failures.
     await resetMockLLM(request);
+
+    // Turn 0 is padding for the agent-server's internal LLM call (title
+    // generation) before the agent's first step; without it that call takes
+    // the terminal turn and the agent never runs a command. Same pattern as
+    // mock-llm-model-switch.spec.ts. BASH_COMMAND uses `echo`, which works in
+    // both bash and the agent-server's PowerShell terminal on Windows.
+    await registerTrajectory(request, "conversation", [
+      { text: "" },
+      { tool_call: { name: "terminal", arguments: { command: BASH_COMMAND } } },
+      { text: REPLY_TOKEN },
+    ]);
+    await activateTrajectory(request, "conversation");
 
     // Steps 1+2 already configured and verified the profile via the UI
     // (including the "Active" badge check). No API pre-check needed.

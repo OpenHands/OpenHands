@@ -258,6 +258,9 @@ export async function waitForSuccessfulBashObservation(
           return false;
         }
         const body = (await resp.json()) as { items?: unknown[] };
+        const kinds = (body.items ?? []).map(
+          (e: any) => `${e.kind}${e.tool_name ? `:${e.tool_name}` : ""}`,
+        );
         const terminal = (body.items ?? []).filter(
           (e: any) => e.kind === "ObservationEvent" && e.tool_name === "terminal",
         );
@@ -266,7 +269,7 @@ export async function waitForSuccessfulBashObservation(
             .map((c: any) => (typeof c.text === "string" ? c.text : ""))
             .join(""),
         );
-        lastDiag = `${terminal.length} terminal observations: ${JSON.stringify(texts).slice(0, 500)}`;
+        lastDiag = `${terminal.length} terminal observations: ${JSON.stringify(texts).slice(0, 500)}; events: ${kinds.join(", ")}`;
         return terminal.some(
           (e: any, i) => !e.observation?.is_error && texts[i].includes(BASH_TOKEN),
         );

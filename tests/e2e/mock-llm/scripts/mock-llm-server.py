@@ -52,9 +52,7 @@ ERROR_MAP: dict[type, tuple[int, str]] = {
 def build_trajectory() -> list[Message | Exception]:
     """Build the scripted trajectory for the E2E test.
 
-    Turn 1: Agent calls the terminal tool with an echo command. `echo`
-            prints the token in both bash and PowerShell (the agent-server's
-            Windows terminal), so the same trajectory runs on Windows.
+    Turn 1: Agent calls the terminal tool with a printf command.
     Turn 2: Agent replies with the expected token and finishes.
     """
     return [
@@ -66,7 +64,7 @@ def build_trajectory() -> list[Message | Exception]:
                     id="call_mock_001",
                     name="terminal",
                     arguments=json.dumps(
-                        {"command": f"echo {BASH_TOKEN}"}
+                        {"command": f"printf '{BASH_TOKEN}\\n'"}
                     ),
                     origin="completion",
                 )
