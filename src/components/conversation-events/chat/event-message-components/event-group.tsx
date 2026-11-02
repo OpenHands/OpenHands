@@ -1,5 +1,8 @@
 import type { SessionActivity } from "#/stores/session-activity-store";
-import { sessionActivityTitle } from "./session-activity";
+import {
+  sessionActivityTitle,
+  sessionActivityLiveTitle,
+} from "./session-activity";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { LoaderCircle } from "lucide-react";
@@ -108,7 +111,7 @@ export function EventGroup({
   }
 
   if (session && session.phase !== "complete")
-    summary = t(sessionActivityTitle(session));
+    summary = t(sessionActivityLiveTitle(session));
   const busy =
     session?.phase === "pending" ||
     session?.phase === "connecting" ||
