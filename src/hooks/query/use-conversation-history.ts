@@ -121,7 +121,6 @@ export const useConversationHistory = (conversationId?: string) => {
           sortOrder: "TIMESTAMP_DESC",
           strictPagination: true,
           excludeFullState: true,
-          strictPagination: true,
         },
       );
 
