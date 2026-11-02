@@ -42,8 +42,10 @@ COPY . .
 # VITE_BASE_PATH is baked into React Router/Vite so the Docker image serves
 # Canvas under the Cloud subpath instead of a dedicated hostname.
 ARG VITE_POSTHOG_API_KEY=""
+ARG VITE_POSTHOG_SURVEY_ID=""
 ARG VITE_BASE_PATH="/canvas"
 ENV VITE_POSTHOG_API_KEY=${VITE_POSTHOG_API_KEY}
+ENV VITE_POSTHOG_SURVEY_ID=${VITE_POSTHOG_SURVEY_ID}
 ENV VITE_BASE_PATH=${VITE_BASE_PATH}
 RUN npm run build
 

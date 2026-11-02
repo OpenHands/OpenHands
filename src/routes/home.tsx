@@ -1,4 +1,5 @@
 import { PrefetchPageLinks, useLocation } from "react-router";
+import { FeedbackButton } from "#/components/features/feedback/feedback-button";
 import { HomeChatLauncher } from "#/components/features/home/home-chat-launcher";
 import { LlmNotConfiguredBanner } from "#/components/features/home/llm-not-configured-banner";
 import {
@@ -17,6 +18,9 @@ function HomeScreen() {
       data-testid="home-screen"
       className="custom-scrollbar-always h-full overflow-y-auto rounded-xl bg-transparent px-4 md:px-0 lg:px-10.5"
     >
+      <div className="flex justify-end">
+        <FeedbackButton />
+      </div>
       <div className="md:px-4 lg:px-0">
         <LlmNotConfiguredBanner />
       </div>

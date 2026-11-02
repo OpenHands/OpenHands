@@ -901,6 +901,69 @@ export async function trackEvent(
   posthog.capture(eventName, properties);
 }
 
+/** Submit only the feedback the user explicitly chose to send. */
+export async function submitPrivateFeedback(message: string): Promise<void> {
+  if (
+    isTelemetryHardDisabled() ||
+    import.meta.env.VITE_DO_NOT_TRACK === "1" ||
+    (typeof process !== "undefined" && process.env?.DO_NOT_TRACK === "1")
+  ) {
+    throw new Error("Feedback unavailable");
+  }
+  const surveyId = import.meta.env.VITE_POSTHOG_SURVEY_ID as string | undefined;
+  if (!surveyId) throw new Error("Feedback survey not configured");
+  const apiKey = telemetryConfig.apiKey || DEFAULT_POSTHOG_API_KEY;
+  const apiHost = telemetryConfig.apiHost || DEFAULT_POSTHOG_HOST;
+  const host = apiHost.replace(/\/+$/, "");
+  // This is PostHog's public survey endpoint, not an Agent Server API.
+  // eslint-disable-next-line local/no-direct-agent-server-fetch
+  const surveyResponse = await fetch(
+    `${host}/api/surveys/?token=${encodeURIComponent(apiKey)}`,
+    { credentials: "omit", referrerPolicy: "no-referrer" },
+  );
+  if (!surveyResponse.ok) throw new Error("Feedback survey unavailable");
+  const data = (await surveyResponse.json()) as {
+    surveys?: Array<{
+      id: string;
+      questions?: Array<{ id?: string; question?: string }>;
+    }>;
+  };
+  const survey = data.surveys?.find((item) => item.id === surveyId);
+  const question = survey?.questions?.[0];
+  if (
+    survey?.questions?.length !== 1 ||
+    !question?.id ||
+    !question.question ||
+    isTelemetryHardDisabled()
+  ) {
+    throw new Error("Feedback survey unavailable");
+  }
+
+  const response = await fetch(`${host}/i/v0/e/`, {
+    method: "POST",
+    credentials: "omit",
+    referrerPolicy: "no-referrer",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      api_key: apiKey,
+      event: "survey sent",
+      distinct_id: crypto.randomUUID(),
+      properties: {
+        $survey_id: surveyId,
+        $survey_questions: [{ id: question.id, question: question.question }],
+        $survey_response: message,
+        $survey_completed: true,
+        $process_person_profile: false,
+        feedback_source: "agent_canvas",
+      },
+      ip: false,
+    }),
+  });
+  if (!response.ok) throw new Error("Feedback submission failed");
+  const result = (await response.json()) as { quota_limited?: string[] };
+  if (result.quota_limited?.length) throw new Error("Feedback quota exceeded");
+}
+
 /**
  * Clear all telemetry data (for privacy/GDPR requests)
  */

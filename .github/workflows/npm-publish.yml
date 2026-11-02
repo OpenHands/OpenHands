@@ -63,6 +63,7 @@ jobs:
         env:
           # Public client key baked into the packaged production app.
           VITE_POSTHOG_API_KEY: ${{ vars.POSTHOG_PROD_KEY }}
+          VITE_POSTHOG_SURVEY_ID: ${{ vars.POSTHOG_SURVEY_ID }}
         run: npm run build
 
       - name: Build library
@@ -70,6 +71,7 @@ jobs:
           # The precompiled library keeps the production default; embedded
           # consumers can still override it through runtime analytics config.
           VITE_POSTHOG_API_KEY: ${{ vars.POSTHOG_PROD_KEY }}
+          VITE_POSTHOG_SURVEY_ID: ${{ vars.POSTHOG_SURVEY_ID }}
         run: npm run build:lib
 
       - name: Bake package telemetry defaults
