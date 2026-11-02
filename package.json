@@ -200,6 +200,10 @@
       "@electron/get": {
         "global-agent": "4.1.3"
       }
+    },
+    "@vercel/react-router": {
+      "@react-router/dev": "$@react-router/dev",
+      "@react-router/node": "$@react-router/node"
     }
   },
   "main": "./dist/index.cjs",
