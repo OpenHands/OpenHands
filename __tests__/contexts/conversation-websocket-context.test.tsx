@@ -14,7 +14,7 @@ import { useEventStore } from "#/stores/use-event-store";
 import useMetricsStore from "#/stores/metrics-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { useBrowserStore } from "#/stores/browser-store";
-import { useCommandStore } from "#/stores/command-store";
+import { getTerminalCommands } from "#/utils/terminal-commands";
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import { useConversationStateStore } from "#/stores/conversation-state-store";
 import { useGoalStore } from "#/stores/goal-store";
@@ -173,7 +173,6 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
     useOptimisticUserMessageStore.getState().clearPendingMessages();
     useBrowserStore.getState().reset();
     useMetricsStore.getState().resetMetrics();
-    useCommandStore.setState({ commands: [] });
     useErrorMessageStore.getState().removeErrorMessage();
     useConversationStateStore.getState().reset();
     useGoalStore.setState({ statusByConversation: {} });
@@ -766,7 +765,7 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
       deliver(action);
       deliver(observation);
 
-      expect(useCommandStore.getState().commands).toEqual([
+      expect(getTerminalCommands(useEventStore.getState().events)).toEqual([
         { content: "echo hi", type: "input" },
         { content: "hi\n", type: "output" },
       ]);

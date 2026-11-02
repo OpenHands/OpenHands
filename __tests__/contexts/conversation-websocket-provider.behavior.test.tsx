@@ -15,7 +15,7 @@ import { useErrorMessageStore } from "#/stores/error-message-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { useConversationStateStore } from "#/stores/conversation-state-store";
 import { useConversationStore } from "#/stores/conversation-store";
-import { useCommandStore } from "#/stores/command-store";
+import { getTerminalCommands } from "#/utils/terminal-commands";
 import { useBrowserStore } from "#/stores/browser-store";
 import { useGoalStore } from "#/stores/goal-store";
 import { useModelStore } from "#/stores/model-store";
@@ -381,7 +381,6 @@ describe("Conversation websocket behavior", () => {
       conversationMode: "code",
       planContent: null,
     });
-    useCommandStore.getState().clearTerminal();
     useBrowserStore.getState().reset();
     useGoalStore.setState({ statusByConversation: {} });
     useModelStore.getState().clearAll();
@@ -1187,10 +1186,12 @@ describe("Conversation websocket behavior", () => {
         reset: false,
       }),
     );
-    expect(useCommandStore.getState().commands).toContainEqual({
-      type: "input",
-      content: "pwd",
-    });
+    expect(getTerminalCommands(useEventStore.getState().events)).toContainEqual(
+      {
+        type: "input",
+        content: "pwd",
+      },
+    );
     expect(invalidateQueries).toHaveBeenCalledWith(
       { queryKey: ["file_changes", "conv-main"] },
       { cancelRefetch: false },
@@ -1303,10 +1304,12 @@ describe("Conversation websocket behavior", () => {
         ],
       }),
     );
-    expect(useCommandStore.getState().commands).toContainEqual({
-      type: "output",
-      content: "line one\nline two",
-    });
+    expect(getTerminalCommands(useEventStore.getState().events)).toContainEqual(
+      {
+        type: "output",
+        content: "line one\nline two",
+      },
+    );
 
     dispatchMain(
       makeObservationEvent(
@@ -2106,10 +2109,12 @@ describe("Conversation websocket behavior", () => {
         reset: false,
       }),
     );
-    expect(useCommandStore.getState().commands).toContainEqual({
-      type: "input",
-      content: "cat PLAN.md",
-    });
+    expect(getTerminalCommands(useEventStore.getState().events)).toContainEqual(
+      {
+        type: "input",
+        content: "cat PLAN.md",
+      },
+    );
     expect(invalidateQueries).toHaveBeenCalledWith(
       { queryKey: ["file_changes", "conv-planning"] },
       { cancelRefetch: false },
@@ -2179,10 +2184,12 @@ describe("Conversation websocket behavior", () => {
         ],
       }),
     );
-    expect(useCommandStore.getState().commands).toContainEqual({
-      type: "output",
-      content: "plan output\nsecond line",
-    });
+    expect(getTerminalCommands(useEventStore.getState().events)).toContainEqual(
+      {
+        type: "output",
+        content: "plan output\nsecond line",
+      },
+    );
 
     dispatchPlanning(
       makeObservationEvent(
