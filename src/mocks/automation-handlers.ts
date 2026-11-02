@@ -1,4 +1,5 @@
-import { http, HttpResponse, delay } from "msw";
+import { networkDelay } from "./network-delay";
+import { http, HttpResponse } from "msw";
 import capabilitiesFixture from "@openhands/extensions/testing/automations/capabilities.json";
 import type {
   AutomationDraftApiResponse,
@@ -186,13 +187,13 @@ export const resetAutomationMockData = () => {
 export const AUTOMATION_HANDLERS = [
   // GET /api/automation/health — Health check
   http.get("*/api/automation/health", async () => {
-    await delay(100);
+    await networkDelay(100);
     return HttpResponse.json({ status: "ok" });
   }),
 
   // GET /api/automation/v1 — List automations
   http.get("*/api/automation/v1", async ({ request }) => {
-    await delay(300);
+    await networkDelay(300);
 
     const url = new URL(request.url);
     const limit = Number(url.searchParams.get("limit") ?? "50");
@@ -215,7 +216,7 @@ export const AUTOMATION_HANDLERS = [
   // GET /api/automation/v1/tags — The org's tags with counts. Registered
   // before /v1/:id so "tags" is not read as an automation id.
   http.get("*/api/automation/v1/tags", async () => {
-    await delay(100);
+    await networkDelay(100);
     const counts = new Map<string, number>();
     automations.forEach((automation) =>
       automation.tags?.forEach((tag) =>
@@ -229,13 +230,13 @@ export const AUTOMATION_HANDLERS = [
 
   // GET /api/automation/v1/capabilities — What this deployment supports
   http.get("*/api/automation/v1/capabilities", async () => {
-    await delay(200);
+    await networkDelay(200);
     return HttpResponse.json(CAPABILITIES);
   }),
 
   // POST /api/automation/v1/validate — Preflight a draft without creating it
   http.post("*/api/automation/v1/validate", async ({ request }) => {
-    await delay(200);
+    await networkDelay(200);
 
     const body = (await request.clone().json()) as {
       automationId?: string;
@@ -254,7 +255,7 @@ export const AUTOMATION_HANDLERS = [
 
   // POST /api/automation/v1/uploads — Upload custom automation tarball
   http.post("*/api/automation/v1/uploads", async ({ request }) => {
-    await delay(200);
+    await networkDelay(200);
     const url = new URL(request.url);
     const name = url.searchParams.get("name") || "automation";
     return HttpResponse.json({
@@ -264,7 +265,7 @@ export const AUTOMATION_HANDLERS = [
 
   // POST /api/automation/v1 — Create an automation from uploaded tarball
   http.post("*/api/automation/v1", async ({ request }) => {
-    await delay(200);
+    await networkDelay(200);
 
     const body = (await request.clone().json()) as {
       name: string;
@@ -300,7 +301,7 @@ export const AUTOMATION_HANDLERS = [
 
   // POST /api/automation/v1/drafts — Create a persisted draft
   http.post("*/api/automation/v1/drafts", async ({ request }) => {
-    await delay(200);
+    await networkDelay(200);
     const body = (await request.clone().json()) as {
       endpoint?: string;
       draft?: Record<string, unknown>;
@@ -330,7 +331,7 @@ export const AUTOMATION_HANDLERS = [
 
   // GET /api/automation/v1/drafts — List persisted drafts
   http.get("*/api/automation/v1/drafts", async ({ request }) => {
-    await delay(200);
+    await networkDelay(200);
     const url = new URL(request.url);
     const limit = Number(url.searchParams.get("limit") ?? "50");
     const offset = Number(url.searchParams.get("offset") ?? "0");
@@ -347,7 +348,7 @@ export const AUTOMATION_HANDLERS = [
 
   // GET /api/automation/v1/drafts/{id} — Get a draft
   http.get("*/api/automation/v1/drafts/:id", async ({ params }) => {
-    await delay(200);
+    await networkDelay(200);
     const draft = drafts.get(params.id as string);
     if (!draft) {
       return HttpResponse.json(
@@ -360,7 +361,7 @@ export const AUTOMATION_HANDLERS = [
 
   // PATCH /api/automation/v1/drafts/{id} — Update a draft
   http.patch("*/api/automation/v1/drafts/:id", async ({ params, request }) => {
-    await delay(200);
+    await networkDelay(200);
     const draft = drafts.get(params.id as string);
     if (!draft) {
       return HttpResponse.json(
@@ -385,7 +386,7 @@ export const AUTOMATION_HANDLERS = [
 
   // DELETE /api/automation/v1/drafts/{id} — Delete a draft
   http.delete("*/api/automation/v1/drafts/:id", async ({ params }) => {
-    await delay(200);
+    await networkDelay(200);
     const existed = drafts.delete(params.id as string);
     if (!existed) {
       return HttpResponse.json(
@@ -398,7 +399,7 @@ export const AUTOMATION_HANDLERS = [
 
   // POST /api/automation/v1/drafts/{id}/dispatch — Test-dispatch a draft
   http.post("*/api/automation/v1/drafts/:id/dispatch", async ({ params }) => {
-    await delay(200);
+    await networkDelay(200);
     const draft = drafts.get(params.id as string);
     if (!draft) {
       return HttpResponse.json(
@@ -433,7 +434,7 @@ export const AUTOMATION_HANDLERS = [
 
   // POST /api/automation/v1/preset/:kind — Create a prompt/plugin automation
   http.post("*/api/automation/v1/preset/:kind", async ({ params, request }) => {
-    await delay(200);
+    await networkDelay(200);
 
     const body = (await request.clone().json()) as {
       name: string;
@@ -484,7 +485,7 @@ export const AUTOMATION_HANDLERS = [
 
   // GET /api/automation/v1/:id/runs — List automation runs
   http.get("*/api/automation/v1/:id/runs", async ({ params, request }) => {
-    await delay(200);
+    await networkDelay(200);
 
     const id = params.id as string;
     if (!automations.has(id)) {
@@ -515,7 +516,7 @@ export const AUTOMATION_HANDLERS = [
 
   // GET /api/automation/v1/:id — Get automation detail
   http.get("*/api/automation/v1/:id", async ({ params }) => {
-    await delay(200);
+    await networkDelay(200);
 
     const automation = automations.get(params.id as string);
     if (!automation) {
@@ -530,7 +531,7 @@ export const AUTOMATION_HANDLERS = [
 
   // PATCH /api/automation/v1/:id — Update automation (toggle enabled)
   http.patch("*/api/automation/v1/:id", async ({ params, request }) => {
-    await delay(200);
+    await networkDelay(200);
 
     const id = params.id as string;
     // Clone the request before reading the body to avoid "Body has already been read" errors
@@ -565,7 +566,7 @@ export const AUTOMATION_HANDLERS = [
 
   // POST /api/automation/v1/:id/dispatch — Manually trigger a run
   http.post("*/api/automation/v1/:id/dispatch", async ({ params }) => {
-    await delay(200);
+    await networkDelay(200);
 
     const id = params.id as string;
     const automation = automations.get(id);
@@ -594,7 +595,7 @@ export const AUTOMATION_HANDLERS = [
 
   // DELETE /api/automation/v1/:id — Delete automation
   http.delete("*/api/automation/v1/:id", async ({ params }) => {
-    await delay(200);
+    await networkDelay(200);
 
     const id = params.id as string;
     if (!automations.has(id)) {

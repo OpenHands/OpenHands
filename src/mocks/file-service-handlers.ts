@@ -1,4 +1,5 @@
-import { delay, http, HttpResponse } from "msw";
+import { networkDelay } from "./network-delay";
+import { http, HttpResponse } from "msw";
 
 export const FILE_VARIANTS_1 = ["file1.txt", "file2.txt", "file3.txt"];
 export const FILE_VARIANTS_2 = [
@@ -76,7 +77,7 @@ export const FILE_SERVICE_HANDLERS = [
   http.get(
     "/api/conversations/:conversationId/list-files",
     async ({ params }) => {
-      await delay();
+      await networkDelay();
 
       const cid = params.conversationId?.toString();
       if (!cid) return HttpResponse.json(null, { status: 400 });
@@ -90,7 +91,7 @@ export const FILE_SERVICE_HANDLERS = [
   http.get(
     "/api/conversations/:conversationId/select-file",
     async ({ request }) => {
-      await delay();
+      await networkDelay();
 
       const url = new URL(request.url);
       const file = url.searchParams.get("file")?.toString();

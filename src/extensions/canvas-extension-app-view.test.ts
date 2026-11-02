@@ -185,6 +185,7 @@ describe("mountCanvasExtensionAppView", () => {
 
     await vi.waitFor(() => expect(createSession).toHaveBeenCalledTimes(2));
     expect(createSession.mock.calls[1][0].signal.aborted).toBe(false);
+    mounted.dispose();
   });
 
   it("aborts a pending mount and revokes a late session on disposal", async () => {

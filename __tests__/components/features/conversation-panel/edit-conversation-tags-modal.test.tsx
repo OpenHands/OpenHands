@@ -1,8 +1,62 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import {
+  Briefcase,
+  CircleUserRound,
+  CloudCog,
+  Folder,
+  FolderGit2,
+  FolderKey,
+  GitBranch,
+  House,
+  Layers,
+  Tag,
+  Waypoints,
+  Wrench,
+} from "lucide-react";
+import { FaGithub } from "react-icons/fa6";
+import SlackIcon from "#/icons/slack.svg?react";
+import { getConversationTagIcon } from "#/components/features/conversation-panel/conversation-card/conversation-tag-icons";
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "test-utils";
 import { EditConversationTagsModal } from "#/components/features/conversation-panel/edit-conversation-tags-modal";
+import { StartTaskStatusBadge } from "#/components/features/conversation-panel/start-task-card/start-task-status-badge";
+import { I18nKey } from "#/i18n/declaration";
+
+describe("getConversationTagIcon", () => {
+  it("maps known keys to related icons", () => {
+    expect(getConversationTagIcon("owner", "alice")).toBe(CircleUserRound);
+    expect(getConversationTagIcon("env", "prod")).toBe(CloudCog);
+    expect(getConversationTagIcon("repo_name", "org/repo")).toBe(FolderGit2);
+    expect(getConversationTagIcon("selected_branch", "main")).toBe(GitBranch);
+    expect(
+      getConversationTagIcon("archiveworkspacepath", "/workspace/project"),
+    ).toBe(Folder);
+    expect(getConversationTagIcon("worktools", "browser")).toBe(Wrench);
+    expect(
+      getConversationTagIcon("Workwsid", "cad8995a71e54b12b156d1d153be062f"),
+    ).toBe(FolderKey);
+  });
+
+  it("uses mode-specific icons for Appmode values", () => {
+    expect(getConversationTagIcon("Appmode", "work")).toBe(Briefcase);
+    expect(getConversationTagIcon("app_mode", "personal")).toBe(House);
+    expect(getConversationTagIcon("mode", "custom")).toBe(Layers);
+  });
+
+  it("prefers source brand icons for origin and git_provider values", () => {
+    expect(getConversationTagIcon("origin", "slack")).toBe(SlackIcon);
+    expect(getConversationTagIcon("git_provider", "GitHub")).toBe(FaGithub);
+  });
+
+  it("falls back to the key icon for unknown sources", () => {
+    expect(getConversationTagIcon("origin", "custom-bot")).toBe(Waypoints);
+  });
+
+  it("falls back to Tag for unrecognized keys", () => {
+    expect(getConversationTagIcon("mystery", "value")).toBe(Tag);
+  });
+});
 
 describe("EditConversationTagsModal", () => {
   it("renders the current user-facing tags as rows and hides reserved keys", () => {
@@ -311,5 +365,30 @@ describe("EditConversationTagsModal", () => {
     await user.click(screen.getByTestId("confirm-button"));
 
     expect(onConfirm).toHaveBeenCalledWith({ origin: "slack" });
+  });
+});
+
+describe("StartTaskStatusBadge", () => {
+  // react-i18next is globally mocked so `t` echoes the key; asserting the key
+  // proves the label is resolved through i18n rather than a raw enum transform.
+  it.each([
+    ["STARTING_CONVERSATION", I18nKey.CONVERSATION$STARTING_CONVERSATION],
+    ["READY", I18nKey.CONVERSATION$READY],
+    ["ERROR", I18nKey.COMMON$ERROR],
+  ] as const)(
+    "localizes the label for the %s status",
+    (taskStatus, expectedKey) => {
+      renderWithProviders(<StartTaskStatusBadge taskStatus={taskStatus} />);
+
+      expect(screen.getByText(expectedKey)).toBeInTheDocument();
+    },
+  );
+
+  it("renders nothing for the WORKING status", () => {
+    const { container } = renderWithProviders(
+      <StartTaskStatusBadge taskStatus="WORKING" />,
+    );
+
+    expect(container).toBeEmptyDOMElement();
   });
 });
