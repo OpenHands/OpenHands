@@ -177,8 +177,10 @@ const routeSessionFrame = (
   batcher: StreamingDeltaBatcher | null,
   /** Report a durable frame's `seq` to this socket's resume cursor. */
   advanceCursor: (seq: number) => void,
+  replayThroughSeq: number | null,
+  onSync: (throughSeq: number | null) => void,
   slotMeta: { isFromPlanningAgent?: boolean } = {},
-): unknown | null => {
+): { event: unknown; isReplay: boolean } | null => {
   const frame: SessionFrame | null = asSessionFrame(raw);
   if (!frame) {
     return null;
@@ -193,6 +195,9 @@ const routeSessionFrame = (
   batcher?.flush();
 
   switch (frame.type) {
+    case "sync":
+      onSync(frame.from_seq == null ? null : (frame.through_seq ?? null));
+      return null;
     case "item_started":
       useEventStore.getState().openStreamingSlot(frame, slotMeta);
       return null;
@@ -202,9 +207,12 @@ const routeSessionFrame = (
       return null;
     case "durable":
       advanceCursor(frame.seq);
-      return { ...frame.event, seq: frame.seq };
+      return {
+        event: { ...frame.event, seq: frame.seq },
+        isReplay: replayThroughSeq !== null && frame.seq <= replayThroughSeq,
+      };
     case "transient":
-      return frame.event;
+      return { event: frame.event, isReplay: false };
     case "error":
       // The server answers a rejected inbound message with an ErrorFrame and
       // keeps the socket open ("not worth dropping over"), so there is no
@@ -214,7 +222,6 @@ const routeSessionFrame = (
         .setErrorMessage(frame.detail, "conversation", frame.code);
       return null;
     default:
-      // `sync` needs nothing: the cursor advances on durable frames.
       return null;
   }
 };
@@ -283,6 +290,8 @@ export function ConversationWebSocketProvider({
   // `queryParams` below) and advanced per durable frame without re-rendering.
   const mainCursorRef = useRef<SeqCursor>(createSeqCursor());
   const planningCursorRef = useRef<SeqCursor>(createSeqCursor());
+  const mainReplayThroughSeqRef = useRef<number | null>(null);
+  const planningReplayThroughSeqRef = useRef<number | null>(null);
 
   // History loading state.
   // - Main conversation history is now loaded via REST (`useConversationHistory`),
@@ -676,11 +685,17 @@ export function ConversationWebSocketProvider({
   const handleMainMessage = useCallback(
     (messageEvent: MessageEvent) => {
       try {
-        const event = routeSessionFrame(
+        const routed = routeSessionFrame(
           JSON.parse(messageEvent.data),
           mainDeltaBatcherRef.current,
           mainCursorRef.current.observe,
+          mainReplayThroughSeqRef.current,
+          (throughSeq) => {
+            mainReplayThroughSeqRef.current = throughSeq;
+          },
         );
+        if (!routed) return;
+        const { event, isReplay } = routed;
 
         // History loading for the main conversation is REST-driven now;
         // every durable frame is a new event we add to the store.
@@ -768,15 +783,17 @@ export function ConversationWebSocketProvider({
             );
           }
 
-          // Handle conversation state updates
+          // Replayed status describes past work, not the current execution.
           if (isConversationStateUpdateEvent(event)) {
             if (
+              !isReplay &&
               isFullStateConversationStateUpdateEvent(event) &&
               conversationId
             ) {
               setExecutionStatus(conversationId, event.value.execution_status);
             }
             if (
+              !isReplay &&
               isAgentStatusConversationStateUpdateEvent(event) &&
               conversationId
             ) {
@@ -960,15 +977,18 @@ export function ConversationWebSocketProvider({
   const handlePlanningMessage = useCallback(
     (messageEvent: MessageEvent) => {
       try {
-        const event = routeSessionFrame(
+        const routed = routeSessionFrame(
           JSON.parse(messageEvent.data),
           planningDeltaBatcherRef.current,
           planningCursorRef.current.observe,
+          planningReplayThroughSeqRef.current,
+          (throughSeq) => {
+            planningReplayThroughSeqRef.current = throughSeq;
+          },
           { isFromPlanningAgent: true },
         );
-        if (event === null) {
-          return;
-        }
+        if (!routed) return;
+        const { event, isReplay } = routed;
 
         // Track received events for history loading. Only events count:
         // progress frames are not part of the replayed log.
@@ -1069,13 +1089,14 @@ export function ConversationWebSocketProvider({
             }
           }
 
-          // Handle conversation state updates
+          // Replayed status describes past work, not the current execution.
           if (isConversationStateUpdateEvent(event)) {
             // Scope to the planning agent's own conversation id, not the main
             // `conversationId` — this socket reports the planning helper
             // conversation's run/idle transitions, which must never overwrite
             // the main conversation's status in the shared store.
             if (
+              !isReplay &&
               isFullStateConversationStateUpdateEvent(event) &&
               planningConversationId
             ) {
@@ -1085,6 +1106,7 @@ export function ConversationWebSocketProvider({
               );
             }
             if (
+              !isReplay &&
               isAgentStatusConversationStateUpdateEvent(event) &&
               planningConversationId
             ) {
@@ -1199,6 +1221,7 @@ export function ConversationWebSocketProvider({
       sessionApiKey,
       reconnect: { enabled: true },
       onOpen: () => {
+        mainReplayThroughSeqRef.current = null;
         mainConnectionError.cancel();
         setMainConnectionState("OPEN");
         hasConnectedRefMain.current = true; // Mark that we've successfully connected
@@ -1246,6 +1269,7 @@ export function ConversationWebSocketProvider({
       sessionApiKey: planningApiKey,
       reconnect: { enabled: true },
       onOpen: async () => {
+        planningReplayThroughSeqRef.current = null;
         planningConnectionError.cancel();
         setPlanningConnectionState("OPEN");
         hasConnectedRefPlanning.current = true; // Mark that we've successfully connected
