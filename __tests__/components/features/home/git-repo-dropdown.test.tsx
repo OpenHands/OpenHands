@@ -183,7 +183,7 @@ describe("GitRepoDropdown", () => {
         "text-sm",
         "font-normal",
         "leading-5",
-        "placeholder:text-[var(--oh-muted)]",
+        "placeholder:text-muted",
         "disabled:cursor-not-allowed",
         "disabled:opacity-60",
       );
@@ -489,10 +489,10 @@ describe("GitRepoDropdown", () => {
         screen.getByTestId("git-repo-dropdown-menu"),
       ).getByRole("option", { name: "user/repo-two" });
       expect(selectedOption).toHaveAttribute("aria-selected", "true");
-      expect(selectedOption).toHaveClass("bg-[var(--oh-interactive-selected)]");
+      expect(selectedOption).toHaveClass("bg-interactive-selected");
       expect(unselectedOption).toHaveAttribute("aria-selected", "false");
       expect(unselectedOption).toHaveClass(
-        "hover:bg-[var(--oh-interactive-hover)]",
+        "hover:bg-interactive-hover",
       );
     });
 

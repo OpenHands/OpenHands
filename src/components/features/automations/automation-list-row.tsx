@@ -21,6 +21,7 @@ import { automationIconActionButtonClassName } from "./automation-action-button-
 import { buildAutomationMenuItems } from "./build-automation-menu-items";
 import { automationActivityRowClassName } from "./automation-view-mode";
 import { RunStatusBadge } from "./detail/run-status-badge";
+import { ActiveStatusBadge } from "./detail/active-status-badge";
 import { AutomationRunActivitySparkline } from "#/components/features/home/featured-automations/automation-run-activity-sparkline";
 import { AutomationHealthIndicator } from "#/components/features/home/featured-automations/automation-health-indicator";
 import {
@@ -37,7 +38,9 @@ import {
 } from "#/components/features/home/featured-automations/automation-run-health";
 import type { AutomationInsightsProps } from "./automation-card";
 import { toLatestRunState } from "./to-latest-run-state";
+import { AutomationTagPill } from "./automation-tag-pill";
 import { resolveAutomationImpactStatement } from "#/utils/automation-catalog";
+import { isDraftAutomation } from "#/utils/automation-state";
 
 interface AutomationListRowProps {
   automation: Automation;
@@ -66,8 +69,10 @@ export function AutomationListRow({
   const isOwner = useIsAutomationOwner(automation);
   // Write actions on a specific automation: manage OR creator (escape hatch).
   const canManage = hasManagePermission || isOwner;
-  // Non-creators may turn an automation off but not back on.
-  const canToggle = automation.enabled ? canManage : isOwner;
+  const isDraft = isDraftAutomation(automation);
+  // Non-creators may turn an automation off but not back on. Draft test
+  // artifacts are finalized through the draft setup flow, not this toggle.
+  const canToggle = isDraft ? false : automation.enabled ? canManage : isOwner;
 
   const handleView = () => {
     navigate?.(`/automations/${automation.id}`);
@@ -115,6 +120,7 @@ export function AutomationListRow({
   const detailHref = `/automations/${encodeURIComponent(automation.id)}`;
   const statusLabelKey = getRunStatusLabelKey(runState);
   const disableAnimation = import.meta.env.MODE === "test";
+  const showDraftBadge = isDraft;
 
   return (
     <li
@@ -131,12 +137,12 @@ export function AutomationListRow({
         placement="top-start"
         closeDelay={100}
         disableAnimation={disableAnimation}
-        className="rounded-xl border border-[var(--oh-border)] bg-base-secondary p-0 text-white shadow-xl"
+        className="rounded-xl border border-border bg-base-secondary p-0 text-contrast shadow-xl"
       >
         <NavigationLink
           to={detailHref}
           aria-label={`${automation.name} ${t(statusLabelKey)}`}
-          className="flex min-w-0 flex-1 items-center justify-between gap-3 px-3 py-2.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--oh-focus)]"
+          className="flex min-w-0 flex-1 items-center justify-between gap-3 px-3 py-2.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus"
         >
           <div className="grid min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)] gap-x-2">
             <span
@@ -145,11 +151,33 @@ export function AutomationListRow({
             >
               <AutomationHealthIndicator health={health} />
             </span>
-            <span className="truncate text-sm font-medium leading-5 text-[var(--oh-foreground)]">
-              {automation.name}
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="truncate text-sm font-medium leading-5 text-foreground">
+                {automation.name}
+              </span>
+              {showDraftBadge ? (
+                <ActiveStatusBadge automation={automation} compact />
+              ) : null}
+              {automation.tags?.length ? (
+                // Tags take only the room the name leaves (zero flex basis)
+                // and clip whole pills, so they never squeeze the name or run
+                // under the row's actions.
+                <span
+                  data-testid={`automation-list-row-tags-${automation.id}`}
+                  className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden"
+                >
+                  {automation.tags.map((tag) => (
+                    <AutomationTagPill
+                      key={tag}
+                      tag={tag}
+                      className="px-1.5 py-0 text-text-secondary"
+                    />
+                  ))}
+                </span>
+              ) : null}
             </span>
             {hasMeta ? (
-              <span className="col-start-2 mt-0.5 flex min-w-0 items-center gap-1.5 text-xs leading-4 text-[var(--oh-text-secondary)]">
+              <span className="col-start-2 mt-0.5 flex min-w-0 items-center gap-1.5 text-xs leading-4 text-text-secondary">
                 <TriggerIcon className="size-3 shrink-0" aria-hidden="true" />
                 {triggerEventLabel ? (
                   <span className="truncate">{triggerEventLabel}</span>
@@ -161,7 +189,7 @@ export function AutomationListRow({
                   <span
                     className={cn(
                       extensionModuleCardPillClassName,
-                      "shrink-0 px-1.5 py-0 text-[var(--oh-text-secondary)]",
+                      "shrink-0 px-1.5 py-0 text-text-secondary",
                     )}
                   >
                     {formatTriggerSourceLabel(triggerSource)}

@@ -44,7 +44,7 @@ export function UsagePanel() {
       className="h-full overflow-y-auto custom-scrollbar-always flex flex-col gap-3 p-3"
     >
       {usage !== null && (
-        <div className="rounded-md border border-[var(--oh-border)] bg-surface-raised p-3">
+        <div className="rounded-md border border-border bg-surface-raised p-3">
           <div className="grid gap-3">
             <ContextMeter
               perTurnToken={usage.per_turn_token}
@@ -61,7 +61,7 @@ export function UsagePanel() {
         </div>
       )}
 
-      <div className="rounded-md border border-[var(--oh-border)] bg-surface-raised p-3">
+      <div className="rounded-md border border-border bg-surface-raised p-3">
         <div className="grid gap-3">
           <div className="flex justify-between items-center pb-2">
             <span className="text-lg font-semibold">
@@ -69,7 +69,7 @@ export function UsagePanel() {
             </span>
           </div>
           {isAcp && (
-            <span className="text-xs text-[var(--oh-muted)]">
+            <span className="text-xs text-muted">
               {t(I18nKey.CONVERSATION$PLAN_USAGE_NOTE)}
             </span>
           )}

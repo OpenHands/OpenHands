@@ -99,13 +99,16 @@ test.describe("auth mode: fresh install with runtime-injected key", () => {
     });
     expect(settingsResp.ok()).toBe(true);
 
-    // Sanity check: the runtime key landed on the window global.
+    // Docker's externally reachable listener must not expose the key. The
+    // loopback-only npm launcher injects it for the local first-run path.
     const injected = await page.evaluate(
       () =>
         (window as unknown as Record<string, unknown>)
           .__AGENT_CANVAS_SESSION_API_KEY__,
     );
-    expect(injected).toBe(SESSION_API_KEY);
+    expect(injected).toBe(
+      process.env.MOCK_LLM_DOCKER_MODE ? undefined : SESSION_API_KEY,
+    );
   });
 });
 
@@ -158,11 +161,9 @@ test.describe("auth mode: non-public key rotation", () => {
       { staleKey: STALE_KEY },
     );
 
-    // The runtime session key (injected by static-server) should be the
-    // CORRECT key. `syncLauncherDefaultLocalBackend()` overwrites the
-    // stale apiKey on the registry's default-local entry on boot, and the
-    // static-server's localStorage write overwrites the legacy stored
-    // sessionApiKey so the next read produces the live key.
+    // The loopback launcher replaces stale browser state with its injected
+    // key. Docker stays key-free, so route test traffic with the known key
+    // without exposing or persisting it in the browser.
     await routeSessionApiKey(page);
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await dismissAnalyticsModal(page);
@@ -182,13 +183,15 @@ test.describe("auth mode: non-public key rotation", () => {
       `GET /api/settings should succeed but returned ${settingsResp.status()}`,
     ).toBe(true);
 
-    // Verify localStorage was updated: the stale key should have been
-    // replaced by the baked key.
     const storedConfig = await page.evaluate(() => {
       const raw = window.localStorage.getItem("openhands-agent-server-config");
       return raw ? JSON.parse(raw) : null;
     });
-    expect(storedConfig?.sessionApiKey).not.toBe(STALE_KEY);
+    if (process.env.MOCK_LLM_DOCKER_MODE) {
+      expect(storedConfig?.sessionApiKey).toBe(STALE_KEY);
+    } else {
+      expect(storedConfig?.sessionApiKey).not.toBe(STALE_KEY);
+    }
   });
 });
 
@@ -228,6 +231,37 @@ test.describe("auth mode: public gate", () => {
     // The main app UI should NOT be visible.
     const homeLauncher = page.getByTestId("home-chat-launcher");
     await expect(homeLauncher).not.toBeVisible({ timeout: 2_000 });
+  });
+
+  // Regression for #17901: the global free-models query ran with no backend
+  // and toasted "No backend is configured." over first-run onboarding and
+  // the API-key screen.
+  test("shows no missing-backend error toast on first run or the API-key screen", async ({
+    page,
+  }) => {
+    // The unguarded query failed right after first paint, so a toast that
+    // has not shown up within this window is not coming.
+    const expectNoMissingBackendToast = async () => {
+      const toastAppeared = await page
+        .getByText("No backend is configured.")
+        .first()
+        .waitFor({ state: "visible", timeout: 6_000 })
+        .then(
+          () => true,
+          () => false,
+        );
+      expect(toastAppeared).toBe(false);
+    };
+
+    await page.goto(PUBLIC_MODE_URL, { waitUntil: "domcontentloaded" });
+    await waitForTestId(page, "onboarding-step-check-backend");
+    await expectNoMissingBackendToast();
+
+    await page.getByTestId("onboarding-skip").click();
+    await waitForTestId(page, "api-key-entry-screen");
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await waitForTestId(page, "api-key-entry-screen");
+    await expectNoMissingBackendToast();
   });
 
   test("rejects an incorrect key with an inline error", async ({ page }) => {

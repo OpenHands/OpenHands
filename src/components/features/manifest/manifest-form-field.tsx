@@ -3,6 +3,7 @@ import { SettingsInput } from "#/components/features/settings/settings-input";
 import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
 import { GitRepoDropdown } from "#/components/features/home/git-repo-dropdown";
 import { useActiveBackend } from "#/contexts/active-backend-context";
+import { useUserProviders } from "#/hooks/use-user-providers";
 import { I18nKey } from "#/i18n/declaration";
 import {
   formControlMultilineFieldClassName,
@@ -61,14 +62,18 @@ export function SetupFormField({
 }: SetupFormFieldProps) {
   const { t } = useTranslation("openhands");
   const { backend } = useActiveBackend();
+  const { providers: connectedProviders } = useUserProviders();
   const testId = `setup-field-${name}`;
-  const help = <p className="text-xs text-[var(--oh-muted)]">{field.help}</p>;
+  const help = <p className="text-xs text-muted">{field.help}</p>;
 
   // Listing a user's repositories is a cloud-backend capability: `GitService`
   // answers with an empty page on any other backend, so the picker would offer
-  // a source that can never respond. Recommended automations are themselves
-  // local-only, which makes that the common case rather than the edge one.
-  const canListRepositories = backend.kind === "cloud";
+  // a source that can never respond. On a cloud backend it lists through the
+  // instance's native integration for the field's provider, which a user who
+  // connected that provider through an MCP server instead does not have.
+  const canListRepositories =
+    backend.kind === "cloud" &&
+    connectedProviders.includes(field.provider ?? "github");
 
   // The format hint is host copy: a manifest states the format of everything it
   // declares except a repository, whose shape the host derives.
@@ -177,7 +182,7 @@ export function SetupFormField({
           onBlur={onBlur}
           className={cn(
             formControlMultilineFieldClassName,
-            error && "border-red-500",
+            error && "border-semantic-danger",
           )}
         />
         <FieldError testId={testId} error={error} />
@@ -203,12 +208,12 @@ export function SetupFormField({
           }}
           className={cn(
             formControlSettingsFieldClassName,
-            "file:mr-3 file:rounded-md file:border-0 file:bg-neutral-700 file:px-3 file:py-1.5 file:text-sm file:text-white",
-            error && "border-red-500",
+            "file:mr-3 file:rounded-md file:border-0 file:bg-interactive-hover file:px-3 file:py-1.5 file:text-sm file:text-contrast",
+            error && "border-semantic-danger",
           )}
         />
         {fieldText(value) && (
-          <p className="text-xs text-[var(--oh-muted)]">{fieldText(value)}</p>
+          <p className="text-xs text-muted">{fieldText(value)}</p>
         )}
         <FieldError testId={testId} error={error} />
         {help}
@@ -232,7 +237,7 @@ export function SetupFormField({
           onBlur={onBlur}
           className={cn(
             formControlMultilineFieldClassName,
-            error && "border-red-500",
+            error && "border-semantic-danger",
           )}
         />
         <FieldError testId={testId} error={error} />
@@ -276,7 +281,7 @@ function FieldLabelText({ field }: { field: SetupFormFieldDefinition }) {
     <span className="flex items-center gap-2 text-sm">
       {field.label}
       {field.required && (
-        <span className="text-sm leading-none text-red-400" aria-hidden>
+        <span className="text-sm leading-none text-feedback-error" aria-hidden>
           *
         </span>
       )}
@@ -292,13 +297,14 @@ function FieldLabel({ field }: { field: SetupFormFieldDefinition }) {
   );
 }
 
+// @spec FF-001 — Manifest validation feedback follows the host error role
 function FieldError({ testId, error }: { testId: string; error?: string }) {
   if (!error) return null;
   return (
     <p
       role="alert"
       data-testid={`${testId}-error`}
-      className="-mt-1 text-xs text-red-400"
+      className="-mt-1 text-xs text-feedback-error"
     >
       {error}
     </p>

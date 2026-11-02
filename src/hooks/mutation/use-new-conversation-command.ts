@@ -2,7 +2,6 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
 import { I18nKey } from "#/i18n/declaration";
-import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import {
   displayErrorToast,
   displaySuccessToast,
@@ -10,14 +9,21 @@ import {
 } from "#/utils/custom-toast-handlers";
 import { useNavigation } from "#/context/navigation-context";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
+import { useSettings } from "#/hooks/query/use-settings";
+import { useMetaProfiles } from "#/hooks/query/use-meta-profiles";
 import { useTracking } from "#/hooks/use-tracking";
+import { useActiveBackend } from "#/contexts/active-backend-context";
+import { launchConversation } from "#/hooks/mutation/resolve-conversation-launch";
 
 export const useNewConversationCommand = () => {
   const queryClient = useQueryClient();
   const { navigate } = useNavigation();
   const { t } = useTranslation("openhands");
   const { data: conversation } = useActiveConversation();
+  const { data: settings } = useSettings();
+  const { data: metaProfiles } = useMetaProfiles();
   const { trackConversationCreated } = useTracking();
+  const { backend, orgId } = useActiveBackend();
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -28,9 +34,25 @@ export const useNewConversationCommand = () => {
       // /new reuses the parent conversation's sandbox (matches OpenHands
       // cloud behavior); it is NOT a sub-conversation, so parent_conversation_id
       // and agent_type stay undefined.
-      const startTask = await AgentServerConversationService.createConversation(
+      const startTask = await launchConversation(
+        {
+          queryClient,
+          backendId: backend.id,
+          orgId,
+          isCloud: backend.kind === "cloud",
+        },
         {
           sandboxId: conversation.sandbox_id ?? undefined,
+          // Cloud only; a local launch reads the toggle itself and gates it
+          // on the launched profile's router. The active meta-profile gates
+          // the suffix: no router attached means no route-at-start
+          // instruction.
+          ...(settings?.run_router_at_conversation_start
+            ? {
+                runRouterAtConversationStart: true,
+                hasActiveMetaProfile: !!metaProfiles?.active_meta_profile,
+              }
+            : {}),
         },
       );
 

@@ -60,11 +60,7 @@ export function HideOlderConversationsRow() {
           toggleShowOlderConversations();
         }
       }}
-      className={cn(
-        "group",
-        dropdownMenuRowClassName,
-        "text-[var(--oh-foreground)]",
-      )}
+      className={cn("group", dropdownMenuRowClassName, "text-foreground")}
     >
       <EyeOff
         className={cn("h-3.5 w-3.5", dropdownMenuRowIconClassName)}
@@ -88,7 +84,7 @@ export function HideOlderConversationsRow() {
           emphasizeNonDefault={false}
           triggerClassName={cn(
             "h-7 gap-1 rounded py-0 pl-2 pr-1.5 font-normal",
-            "text-[var(--oh-foreground)] [&_svg]:h-3 [&_svg]:w-3 [&_svg]:text-[var(--oh-muted)]",
+            "text-foreground [&_svg]:h-3 [&_svg]:w-3 [&_svg]:text-muted",
           )}
         />
       </div>

@@ -1,3 +1,3 @@
 export function SubtextSkeleton() {
-  return <div className="w-[250px] h-[20px] skeleton" />;
+  return <div className="w-62.5 h-5 skeleton" />;
 }

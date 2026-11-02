@@ -1,0 +1,25 @@
+{
+  "attribution": "I am an AI agent helping Engel Nyst (@enyst) with project work.",
+  "target": "61a3bd93e642a0ff4def73b29496a73245628209",
+  "runtime": "SDK 1.55.1; automation 1.20.1",
+  "actual_model": "deepseek/deepseek-flash",
+  "method": "Three genuine custom-schema Finish callbacks, inert unregistered-event definitions, manual dispatch only; no mocked events or recurring schedule.",
+  "cases": [
+    "status absent, outcome_summary present",
+    "status absent, custom metadata and genuine conversation-title fallback",
+    "numeric status, outcome_summary present"
+  ],
+  "consumer": "Home pinned Recent activity row, desktop and phone",
+  "scoped_checks": 6,
+  "scoped_result": "pass",
+  "limits": "Status/summary/fallback consumer only. Existing #18234 phone summary squeezing remains, not fixed or retired. Stock strict TaskOutcome producer support not claimed.",
+  "cleanup": {
+    "definitions_deleted": 4,
+    "uploads_deleted": 4,
+    "conversations_deleted": 3,
+    "owned_ports_closed": 5,
+    "private_purged": true,
+    "retained_files_hash_verified": 19
+  },
+  "private_evidence_reference": "home-statusless/home-readbacks.json and final-report.md; full prompts and runtime identifiers omitted"
+}

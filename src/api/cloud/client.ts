@@ -25,15 +25,19 @@ function requireCloudBackend(backend?: Backend): Backend {
  * backend's orgId across an unrelated API key, which the cloud backend
  * rejects when api_key_org_id and X-Org-Id disagree.
  */
-function activeOrgForBackend(backend: Backend): string | null {
+export function activeOrgForBackend(backend: Backend): string | null {
   const active = getActiveBackend();
   return active.backend.id === backend.id ? active.orgId : null;
 }
 
 export function createCloudClient(backend?: Backend): CloudClient {
   const target = requireCloudBackend(backend);
-  const proxyBaseUrl = getAgentServerBaseUrl();
-  const proxyHeaders = proxyBaseUrl ? getAgentServerHeaders() : {};
+  const agentServerProxyBaseUrl = getAgentServerBaseUrl();
+  // Standalone Canvas uses its local Agent Server as the runtime proxy. The
+  // SaaS Canvas is frontend-only, so fall back to the selected Cloud host,
+  // which exposes the same /api/cloud-proxy endpoint.
+  const proxyBaseUrl = agentServerProxyBaseUrl ?? target.host;
+  const proxyHeaders = agentServerProxyBaseUrl ? getAgentServerHeaders() : {};
 
   return new CloudClient({
     host: target.host,
@@ -43,14 +47,10 @@ export function createCloudClient(backend?: Backend): CloudClient {
     // transport used for direct and proxied calls. Per-request
     // `timeoutSeconds` still overrides it for direct calls.
     timeout: 30_000,
-    ...(proxyBaseUrl
-      ? {
-          proxy: {
-            host: proxyBaseUrl,
-            headers: proxyHeaders,
-          },
-        }
-      : {}),
+    proxy: {
+      host: proxyBaseUrl,
+      headers: proxyHeaders,
+    },
   });
 }
 

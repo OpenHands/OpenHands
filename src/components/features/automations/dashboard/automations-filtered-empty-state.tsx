@@ -3,29 +3,32 @@ import { I18nKey } from "#/i18n/declaration";
 
 interface AutomationsFilteredEmptyStateProps {
   onClear: () => void;
+  /** Replaces the default "no automations match" message. */
+  message?: string;
 }
 
 /**
- * Automations exist but the active search/filters match none. Chrome copy, so
- * it stays the host's translations rather than manifest copy.
+ * The active search or filters match no automations. Chrome copy, so it stays
+ * the host's translations rather than manifest copy.
  */
 export function AutomationsFilteredEmptyState({
   onClear,
+  message,
 }: AutomationsFilteredEmptyStateProps) {
   const { t } = useTranslation("openhands");
   return (
     <div
       data-testid="automations-filtered-empty"
-      className="rounded-xl border border-dashed border-[var(--oh-border)] p-8 text-center"
+      className="rounded-xl border border-dashed border-border p-8 text-center"
     >
       <p className="text-sm text-muted">
-        {t(I18nKey.AUTOMATIONS$NO_FILTER_MATCHES)}
+        {message ?? t(I18nKey.AUTOMATIONS$NO_FILTER_MATCHES)}
       </p>
       <button
         type="button"
         data-testid="automations-clear-filters"
         onClick={onClear}
-        className="mt-2 text-sm text-white underline-offset-2 hover:underline"
+        className="mt-2 text-sm text-contrast underline-offset-2 hover:underline"
       >
         {t(I18nKey.AUTOMATIONS$CLEAR_FILTERS)}
       </button>

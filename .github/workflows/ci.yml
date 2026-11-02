@@ -49,6 +49,20 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
 
+      - name: Reject temporary artifacts in release PRs
+        if: >-
+          matrix.full_checks &&
+          github.event_name == 'pull_request' &&
+          startsWith(github.head_ref, 'release-please--')
+        run: |
+          set -euo pipefail
+          artifacts="$(git ls-tree -r --name-only HEAD -- .pr)"
+          if [ -n "$artifacts" ]; then
+            echo "::error::Release PR contains temporary .pr artifacts. Merge the cleanup PR and let release-please update this PR before merging."
+            printf '%s\n' "$artifacts"
+            exit 1
+          fi
+
       - name: Set up Node.js with npm cache
         uses: actions/setup-node@v7
         with:
@@ -57,6 +71,9 @@ jobs:
           # < 1.60.0. Remove this pin after upgrading to Playwright >= 1.60.0.
           node-version: "24.15"
           cache: npm
+
+      - name: Use pinned npm
+        run: npm install --global npm@11.12.1 --ignore-scripts --no-audit --no-fund
 
       - name: Install dependencies
         run: npm ci
@@ -338,7 +355,7 @@ jobs:
           {
             echo "# PR Artifacts"
             echo
-            echo "This directory contains generated PR-only QA artifacts. The PR Artifacts workflow removes it after approval so these files do not enter the final squash merge."
+            echo "This directory contains generated PR-only QA artifacts. After the PR merges to main, the PR Artifacts workflow opens or updates a cleanup PR that removes this directory from main."
           } > .pr/README.md
 
           if [ -n "$SCREENSHOT_PATH" ]; then

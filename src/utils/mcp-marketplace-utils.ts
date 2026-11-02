@@ -50,10 +50,10 @@ function isLocallyInstallableMcpOption(
   const oauth = option.auth.oauth;
   if (!oauth) return false;
 
-  // Local agent-server installs only support OAuth flows initiated by the MCP
-  // server itself through fastmcp. Catalog entries that specify provider OAuth
-  // endpoints still need the hosted integration-auth flow and should not be
-  // exposed as locally installable static MCP configs.
+  // Both backends only run OAuth flows initiated by the MCP server itself
+  // through fastmcp. Provider OAuth endpoints in the catalog describe a hosted
+  // integration-auth flow, so prefer the entry's other options for these
+  // entries; `getDiscoveryOAuthOption` is the fallback when there are none.
   return (
     !oauth.authorizationUrl &&
     !oauth.tokenUrl &&
@@ -63,10 +63,41 @@ function isLocallyInstallableMcpOption(
   );
 }
 
+/**
+ * Connects a remote OAuth option through the MCP server's own OAuth
+ * discovery and dynamic client registration. The catalog's provider
+ * endpoints, scopes and client authentication belong to the hosted flow and
+ * are dropped. A server without dynamic registration reports that from the
+ * authorization attempt instead of leaving Install without an action.
+ */
+function getDiscoveryOAuthOption(
+  option: McpMarketplaceConnectionOption,
+): McpMarketplaceConnectionOption | undefined {
+  if (option.auth.strategy !== "oauth2" || option.transport.kind === "stdio") {
+    return undefined;
+  }
+  return { ...option, auth: { strategy: "oauth2" } };
+}
+
+/**
+ * The options the install dialog can offer, in catalog order. The first one
+ * is the entry's preferred option and the dialog's default.
+ */
+export function getInstallableMcpConnectionOptions(
+  entry: MarketplaceEntry,
+): McpMarketplaceConnectionOption[] {
+  const options = getMcpConnectionOptions(entry);
+  const installable = options.filter(isLocallyInstallableMcpOption);
+  if (installable.length > 0) return installable;
+  // @spec MCP-006 — Library installs never dead-end
+  const fallback = options.map(getDiscoveryOAuthOption).find(Boolean);
+  return fallback ? [fallback] : [];
+}
+
 export function getInstallableMcpConnectionOption(
   entry: MarketplaceEntry,
 ): McpMarketplaceConnectionOption | undefined {
-  return getMcpConnectionOptions(entry).find(isLocallyInstallableMcpOption);
+  return getInstallableMcpConnectionOptions(entry)[0];
 }
 
 export function getDefaultMcpTransport(
@@ -201,8 +232,17 @@ function transportMatchesServer(
     );
   }
 
-  // stdio: match on the registered server name.
-  return server.type === "stdio" && server.name === transport.serverName;
+  // stdio: match on what the server runs, not its settings key. A repeated
+  // library install is stored under a suffixed key (`time_1`) and users can
+  // rename a copy, but both keep the catalog command and leading args;
+  // `argFields` tokens (paths, `--repository <path>`) are appended after them.
+  const serverArgs = server.args ?? [];
+  return (
+    server.type === "stdio" &&
+    server.command === transport.command &&
+    transport.args.length <= serverArgs.length &&
+    transport.args.every((arg, index) => serverArgs[index] === arg)
+  );
 }
 
 function normalize(query: string): string {

@@ -17,7 +17,7 @@ const SKILL_TYPE_LABEL: Record<SkillInfo["type"], string> = {
 };
 
 const SKILL_PILL_CLASS =
-  "inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[11px] font-medium leading-4 border border-[var(--oh-border)] bg-[var(--oh-surface)] text-tertiary-light";
+  "inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[11px] font-medium leading-4 border border-border bg-surface text-tertiary-light";
 
 export function SkillItem({ skill, isExpanded, onToggle }: SkillItemProps) {
   return (
@@ -36,7 +36,7 @@ export function SkillItem({ skill, isExpanded, onToggle }: SkillItemProps) {
           <span className={SKILL_PILL_CLASS}>
             {SKILL_TYPE_LABEL[skill.type]}
           </span>
-          <Typography.Text className="text-[var(--oh-text-tertiary)]">
+          <Typography.Text className="text-text-tertiary">
             {isExpanded ? (
               <ChevronDown size={18} />
             ) : (
@@ -47,7 +47,7 @@ export function SkillItem({ skill, isExpanded, onToggle }: SkillItemProps) {
       </button>
 
       {isExpanded && (
-        <div className="px-3 pb-3 pt-1 border-t border-[var(--oh-border)]">
+        <div className="px-3 pb-3 pt-1 border-t border-border">
           <SkillTriggers triggers={skill.triggers ?? []} />
           <SkillContent content={skill.content ?? ""} />
         </div>

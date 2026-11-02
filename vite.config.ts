@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { readFile } from "node:fs/promises";
 import { resolve, dirname, relative, isAbsolute } from "node:path";
-import { defineConfig, loadEnv } from "vite";
+import { defineConfig, esmExternalRequirePlugin, loadEnv } from "vite";
 import svgr from "vite-plugin-svgr";
 import { reactRouter } from "@react-router/dev/vite";
 import { configDefaults } from "vitest/config";
@@ -22,8 +22,22 @@ const LIB_EXTERNALS = [
   "react/jsx-runtime",
   "react/jsx-dev-runtime",
   "react-router",
+  // Preserve Motion's guarded optional-peer require at runtime.
+  "framer-motion",
 ];
 const APP_CHUNK_MAX_BYTES = 450 * 1024;
+
+// Suites verified to be DOM-free: they import pure functions only, touch no
+// DOM, Web Storage, timers or network, and therefore need neither the jsdom
+// environment nor the shared `vitest.setup.ts`. They run in a separate Node
+// project instead, which is measurably faster. See docs/DEVELOPMENT.md →
+// "Unit test environments" for the classification rules a suite must meet
+// before it is added here, and for how to roll the pilot back.
+const NODE_ENV_PILOT_TESTS = [
+  "__tests__/utils/file-language.test.ts",
+  "__tests__/utils/format-model-name.test.ts",
+  "__tests__/utils/parse-terminal-output.test.ts",
+];
 
 const normalizeBasePath = (value?: string) => {
   const raw = value?.trim();
@@ -93,16 +107,11 @@ export default defineConfig(({ mode }) => {
     VITE_BACKEND_HOST = "127.0.0.1:8000",
     VITE_USE_TLS = "false",
     VITE_FRONTEND_PORT = "3001",
+    VITE_BIND_HOST = "127.0.0.1",
     VITE_INSECURE_SKIP_VERIFY = "false",
     VITE_BASE_PATH,
     VITE_VSCODE_BASE_PATH,
     VITE_VSCODE_TARGET,
-    // Runtime-services metadata for the dev server, passed by launchers that
-    // run the Vite dev server directly (e.g. dev:minimal). Unlike
-    // ingress/static-server, the Vite proxy cannot post-process the upstream
-    // /server_info response, so the launcher serializes the info here and the
-    // middleware below merges it into the proxied response.
-    VITE_RUNTIME_SERVICES_INFO,
   } = loadEnv(mode, process.cwd());
 
   const isLibraryBuild = process.env.BUILD_LIB === "true";
@@ -185,6 +194,9 @@ export default defineConfig(({ mode }) => {
           });
         },
       },
+      // Let this plugin own externalization so CJS requires become ESM
+      // imports. Top-level external entries bypass its resolve hook.
+      isLibraryBuild && esmExternalRequirePlugin({ external: LIB_EXTERNALS }),
       !process.env.VITEST && !isLibraryBuild && reactRouter(),
       svgr(),
       tailwindcss(),
@@ -220,9 +232,10 @@ export default defineConfig(({ mode }) => {
           lib: {
             entry: LIB_ENTRY,
             formats: ["es"],
+            // Exported as @openhands/agent-canvas/styles.css.
+            cssFileName: "styles",
           },
           rollupOptions: {
-            external: LIB_EXTERNALS,
             output: [
               {
                 format: "es",
@@ -230,7 +243,6 @@ export default defineConfig(({ mode }) => {
                 preserveModulesRoot: "src",
                 entryFileNames: "[name].js",
                 chunkFileNames: "chunks/[name]-[hash].js",
-                assetFileNames: "assets/[name]-[hash][extname]",
               },
               {
                 format: "cjs",
@@ -238,7 +250,6 @@ export default defineConfig(({ mode }) => {
                 preserveModulesRoot: "src",
                 entryFileNames: "[name].cjs",
                 chunkFileNames: "chunks/[name]-[hash].cjs",
-                assetFileNames: "assets/[name]-[hash][extname]",
                 exports: "named",
               },
             ],
@@ -282,7 +293,6 @@ export default defineConfig(({ mode }) => {
         "@heroui/react",
         "lucide-react",
         "@microlink/react-json-view",
-        "socket.io-client",
         // These are discovered when launching conversations:
         "react-icons/vsc",
         "react-icons/lu",
@@ -292,6 +302,7 @@ export default defineConfig(({ mode }) => {
         "@monaco-editor/react",
         "react-textarea-autosize",
         "react-markdown",
+        "mdast-util-from-markdown",
         "remark-gfm",
         "remark-breaks",
         "react-syntax-highlighter",
@@ -390,7 +401,7 @@ export default defineConfig(({ mode }) => {
     server: {
       port: FE_PORT,
       strictPort: true, // Fail if port is busy (dynamic allocation handles fallback)
-      host: true,
+      host: VITE_BIND_HOST,
       allowedHosts: true,
       proxy: {
         "/api": {
@@ -471,9 +482,34 @@ export default defineConfig(({ mode }) => {
     },
     clearScreen: false,
     test: {
-      environment: "jsdom",
-      setupFiles: ["vitest.setup.ts"],
-      exclude: [...configDefaults.exclude, "tests"],
+      projects: [
+        {
+          extends: true,
+          test: {
+            name: "jsdom",
+            environment: "jsdom",
+            setupFiles: ["vitest.setup.ts"],
+            // The pilot suites are excluded here so they run exactly once,
+            // in the Node project below.
+            exclude: [
+              ...configDefaults.exclude,
+              "tests",
+              ...NODE_ENV_PILOT_TESTS,
+            ],
+          },
+        },
+        {
+          extends: true,
+          test: {
+            name: "node",
+            environment: "node",
+            include: [...NODE_ENV_PILOT_TESTS],
+            // These suites exercise pure functions, so they need none of the
+            // jsdom / Testing Library / MSW wiring in vitest.setup.ts.
+            setupFiles: [],
+          },
+        },
+      ],
       // The full suite runs many DOM-heavy tests in parallel, which can
       // push individual `userEvent`-driven tests past Vitest's 5000ms
       // default on busy machines (the skills-settings and i18n

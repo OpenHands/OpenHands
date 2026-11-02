@@ -5,7 +5,10 @@ import {
   setStoredConversationMetadata,
 } from "#/api/conversation-metadata-store";
 import { OpenHandsEvent } from "#/types/agent-server/core";
-import { seedModelSwitchesFromHistory } from "./record-model-switch-message";
+import {
+  recordModelSwitchMessage,
+  seedModelSwitchesFromHistory,
+} from "./record-model-switch-message";
 
 const userMessage = (id: string): OpenHandsEvent =>
   ({
@@ -36,6 +39,31 @@ const switchObservation = (
     },
   }) as unknown as OpenHandsEvent;
 
+// Router-driven switch. Per the SDK wire contract, `model` is the activated
+// saved profile name and `active_model` is the underlying model string — the
+// seed must stamp/profile off `model`, not `active_model`.
+const classifySwitchObservation = (
+  id: string,
+  profileName: string,
+  activeModel = "openhands/kimi-k2.6",
+  isError = false,
+  timestamp = "2024-01-01T00:00:00Z",
+): OpenHandsEvent =>
+  ({
+    id,
+    timestamp,
+    source: "environment",
+    action_id: `action-${id}`,
+    observation: {
+      kind: "ClassifyAndSwitchLLMObservation",
+      content: [],
+      is_error: isError,
+      chosen_class: `model: ${profileName}`,
+      model: profileName,
+      active_model: activeModel,
+    },
+  }) as unknown as OpenHandsEvent;
+
 // An agent action event. `ThinkAction` is renderable (shown as a thinking
 // block); `PlanningFileEditorAction` is hidden by `shouldRenderEvent`.
 const agentAction = (id: string, kind: string): OpenHandsEvent =>
@@ -61,6 +89,36 @@ describe("seedModelSwitchesFromHistory", () => {
   beforeEach(() => {
     useModelStore.getState().clearAll();
     window.localStorage.clear();
+  });
+
+  it("preserves attribution and reason when live events are replayed", () => {
+    const observation = switchObservation("o1", "astra");
+    if ("observation" in observation) {
+      Object.assign(observation.observation, {
+        reason: "Careful evidence tracking",
+      });
+    }
+    recordModelSwitchMessage("c1", "astra", "u1", {
+      id: "history-switch:o1",
+      initiator: "agent",
+      reason: "Careful evidence tracking",
+    });
+    seedModelSwitchesFromHistory("c1", [userMessage("u1"), observation]);
+    expect(entriesFor("c1")).toHaveLength(1);
+    expect(entriesFor("c1")[0]).toMatchObject({
+      initiator: "agent",
+      reason: "Careful evidence tracking",
+    });
+    useModelStore.getState().clearAll();
+    seedModelSwitchesFromHistory("c1", [userMessage("u1"), observation]);
+    expect(entriesFor("c1")[0]).toMatchObject({
+      initiator: "agent",
+      reason: "Careful evidence tracking",
+    });
+    seedModelSwitchesFromHistory("c1", [
+      classifySwitchObservation("o2", "fast"),
+    ]);
+    expect(entriesFor("c1")[1]).toMatchObject({ initiator: "router" });
   });
 
   it("seeds a successful switch anchored to the prior renderable event", () => {
@@ -328,5 +386,54 @@ describe("seedModelSwitchesFromHistory", () => {
     expect(getStoredConversationMetadata("c1")?.stamped_at).toBe(
       "2024-01-01T00:00:00Z",
     );
+  });
+
+  describe("router-driven ClassifyAndSwitchLLMObservation", () => {
+    it("records the inline switch and stamps the profile from `model`, not `active_model`", () => {
+      // `active_model` is the underlying model string ("openhands/kimi-k2.6");
+      // the stamp and inline message must use the saved profile name in `model`.
+      seedModelSwitchesFromHistory("c1", [
+        userMessage("u1"),
+        classifySwitchObservation("o1", "kimi-k2.6", "openhands/kimi-k2.6"),
+      ]);
+
+      const entries = entriesFor("c1");
+      expect(entries).toHaveLength(1);
+      expect(entries[0]).toMatchObject({
+        switchedTo: "kimi-k2.6",
+        anchorEventId: "u1",
+        initiator: "router",
+        // The classifier's `chosen_class` is surfaced as the switch reason.
+        reason: "model: kimi-k2.6",
+      });
+      expect(activeProfileFor("c1")).toBe("kimi-k2.6");
+      expect(stampedProfileFor("c1")).toBe("kimi-k2.6");
+    });
+
+    it("ignores a router switch that has no `model` even if `active_model` is present", () => {
+      seedModelSwitchesFromHistory("c1", [
+        userMessage("u1"),
+        classifySwitchObservation("o1", "", "openhands/kimi-k2.6"),
+      ]);
+
+      expect(entriesFor("c1")).toHaveLength(0);
+      expect(activeProfileFor("c1")).toBeUndefined();
+      expect(stampedProfileFor("c1")).toBeUndefined();
+    });
+
+    it("does not stamp from a failed router switch", () => {
+      seedModelSwitchesFromHistory("c1", [
+        userMessage("u1"),
+        classifySwitchObservation(
+          "e1",
+          "kimi-k2.6",
+          "openhands/kimi-k2.6",
+          true,
+        ),
+      ]);
+
+      expect(activeProfileFor("c1")).toBeUndefined();
+      expect(stampedProfileFor("c1")).toBeUndefined();
+    });
   });
 });

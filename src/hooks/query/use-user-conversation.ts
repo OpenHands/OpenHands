@@ -1,10 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { CONVERSATION_QUERY_KEYS } from "./query-keys";
 import { useRef } from "react";
+import { CONVERSATION_LAUNCH_PREFIX } from "#/stores/conversation-launch-store";
 import { Query, useQuery } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { useActiveBackend } from "#/contexts/active-backend-context";
+import { retryTransientRequest } from "#/utils/transient-error-retry";
 
 const FIVE_MINUTES = 1000 * 60 * 5;
 const FIFTEEN_MINUTES = 1000 * 60 * 15;
@@ -23,6 +26,8 @@ export const useUserConversation = (
   refetchInterval?: RefetchInterval,
 ) => {
   const active = useActiveBackend();
+  const isPendingId =
+    cid?.startsWith("task-") || cid?.startsWith(CONVERSATION_LAUNCH_PREFIX);
 
   // The cid belongs to whichever backend was active when the user opened this
   // conversation. If they switch to a *different* backend (e.g. cloud → local)
@@ -39,6 +44,8 @@ export const useUserConversation = (
     origin.current = { cid, backendId: active.backend.id };
   }
   const backendChanged = origin.current.backendId !== active.backend.id;
+  const hasConversationScope =
+    active.backend.kind !== "cloud" || !!active.orgId;
 
   return useQuery({
     // Include the active backend identity so each (backend, org) pair
@@ -48,17 +55,32 @@ export const useUserConversation = (
     // shared cid key, which then makes the conversation route toast
     // "conversation not available or no permission" until the user
     // hard-refreshes the page. Mirrors `usePaginatedConversations`.
-    queryKey: ["user", "conversation", cid, active.backend.id, active.orgId],
+    queryKey: CONVERSATION_QUERY_KEYS.detail(
+      cid,
+      active.backend.id,
+      active.orgId,
+    ),
     queryFn: async () => {
-      if (!cid) return null;
+      if (
+        !cid ||
+        cid.startsWith("task-") ||
+        cid.startsWith(CONVERSATION_LAUNCH_PREFIX)
+      )
+        return null;
 
       // Use the V1 batch API endpoint to get a single conversation
       const results =
         await AgentServerConversationService.batchGetAppConversations([cid]);
       return results[0] ?? null;
     },
-    enabled: !!cid && !cid.startsWith("task-") && !backendChanged,
-    retry: false,
+    enabled: !!cid && !isPendingId && !backendChanged && hasConversationScope,
+    retry: retryTransientRequest,
+    // Freshness while it matters is already covered by `refetchInterval`
+    // above. Refetching on every window focus too means every open
+    // conversation tab/browser tab fires a request the instant it regains
+    // focus — a burst that's a prime way to trip a rate limiter when
+    // several tabs are open.
+    refetchOnWindowFocus: false,
     refetchInterval,
     staleTime: FIVE_MINUTES,
     gcTime: FIFTEEN_MINUTES,

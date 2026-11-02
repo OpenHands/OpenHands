@@ -108,6 +108,150 @@ describe("getStatusText", () => {
     expect(result).toBe(t(I18nKey.CONVERSATION$READY));
   });
 
+  it("returns the READY translation even when a task detail is present", () => {
+    // READY is handled before the generic `taskDetail || …` fallthrough, so a
+    // detail that is still attached to the task must not leak into the label.
+    // Removing the READY branch returns "Sandbox ready" here, so the mutation
+    // is observable rather than equivalent.
+    const result = getStatusText({
+      isPausing: false,
+      isTask: true,
+      taskStatus: "READY",
+      taskDetail: "Sandbox ready",
+      isStartingStatus: false,
+      isStopStatus: false,
+      curAgentState: AgentState.RUNNING,
+      t,
+    });
+
+    expect(result).toBe(t(I18nKey.CONVERSATION$READY));
+  });
+
+  it("prefers the pausing label over any task status", () => {
+    const result = getStatusText({
+      isPausing: true,
+      isTask: true,
+      taskStatus: "READY",
+      taskDetail: "Sandbox ready",
+      isStartingStatus: true,
+      isStopStatus: true,
+      curAgentState: AgentState.ERROR,
+      errorMessage: "Something broke",
+      t,
+    });
+
+    expect(result).toBe(t(I18nKey.COMMON$STOPPING));
+  });
+
+  it("prefers a polled task status over starting and stopped", () => {
+    const result = getStatusText({
+      isPausing: false,
+      isTask: true,
+      taskStatus: "PREPARING_REPOSITORY",
+      taskDetail: null,
+      isStartingStatus: true,
+      isStopStatus: true,
+      curAgentState: AgentState.ERROR,
+      t,
+    });
+
+    expect(result).toBe(t(I18nKey.CONVERSATION$STARTING_CONVERSATION));
+  });
+
+  it.each([null, undefined, ""] as const)(
+    "ignores the task branch when isTask is true but status is %j",
+    (taskStatus) => {
+      const result = getStatusText({
+        isPausing: false,
+        isTask: true,
+        taskStatus: taskStatus as never,
+        taskDetail: "ignored detail",
+        isStartingStatus: false,
+        isStopStatus: false,
+        curAgentState: AgentState.RUNNING,
+        t,
+      });
+
+      expect(result).toBe(t(I18nKey.COMMON$RUNNING));
+    },
+  );
+
+  it("ignores a task status when isTask is false", () => {
+    const result = getStatusText({
+      isPausing: false,
+      isTask: false,
+      taskStatus: "PREPARING_REPOSITORY",
+      taskDetail: "ignored detail",
+      isStartingStatus: false,
+      isStopStatus: false,
+      curAgentState: AgentState.RUNNING,
+      t,
+    });
+
+    expect(result).toBe(t(I18nKey.COMMON$RUNNING));
+  });
+
+  it("returns an empty task detail as the ERROR fallback translation", () => {
+    const result = getStatusText({
+      isPausing: false,
+      isTask: true,
+      taskStatus: "ERROR",
+      taskDetail: "",
+      isStartingStatus: false,
+      isStopStatus: false,
+      curAgentState: AgentState.RUNNING,
+      t,
+    });
+
+    expect(result).toBe(t(I18nKey.CONVERSATION$ERROR_STARTING_CONVERSATION));
+  });
+
+  it("prefers the stopped label over an errored agent", () => {
+    const result = getStatusText({
+      isPausing: false,
+      isTask: false,
+      taskStatus: null,
+      taskDetail: null,
+      isStartingStatus: false,
+      isStopStatus: true,
+      curAgentState: AgentState.ERROR,
+      errorMessage: "Something broke",
+      t,
+    });
+
+    expect(result).toBe(t(I18nKey.COMMON$SERVER_STOPPED));
+  });
+
+  it("falls back to the ERROR translation when no error message is given", () => {
+    const result = getStatusText({
+      isPausing: false,
+      isTask: false,
+      taskStatus: null,
+      taskDetail: null,
+      isStartingStatus: false,
+      isStopStatus: false,
+      curAgentState: AgentState.ERROR,
+      errorMessage: null,
+      t,
+    });
+
+    expect(result).toBe(t(I18nKey.COMMON$ERROR));
+  });
+
+  it("defaults isPausing to false when omitted", () => {
+    const result = getStatusText({
+      isTask: false,
+      taskStatus: null,
+      taskDetail: null,
+      isStartingStatus: false,
+      isStopStatus: false,
+      curAgentState: AgentState.RUNNING,
+      t,
+    } as Parameters<typeof getStatusText>[0]);
+
+    expect(result).toBe(t(I18nKey.COMMON$RUNNING));
+  });
+
   it("returns STARTING when starting status is true", () => {
     const result = getStatusText({
       isPausing: false,

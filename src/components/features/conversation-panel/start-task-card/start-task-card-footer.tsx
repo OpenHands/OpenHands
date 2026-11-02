@@ -29,7 +29,7 @@ export function StartTaskCardFooter({
           <NoRepository />
         )}
         {createdAt && (
-          <p className="text-xs text-[var(--oh-muted)] flex-1 text-right">
+          <p className="text-xs text-muted flex-1 text-right">
             <time>
               {`${formatTimeDelta(createdAt)} ${t(I18nKey.CONVERSATION$AGO)}`}
             </time>
@@ -39,9 +39,7 @@ export function StartTaskCardFooter({
 
       {/* Task Detail */}
       {detail && (
-        <div className="text-xs text-[var(--oh-text-subtle)] truncate">
-          {detail}
-        </div>
+        <div className="text-xs text-text-subtle truncate">{detail}</div>
       )}
     </div>
   );

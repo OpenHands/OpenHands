@@ -38,7 +38,7 @@ export function OpenLauncherButton({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "flex flex-row items-center gap-2 rounded-full px-2.5 py-1 text-white",
+        "flex flex-row items-center gap-2 rounded-full px-2.5 py-1 text-contrast",
         formControlBorderClassName,
         formControlSurfaceClassName,
         formControlTransitionClassName,

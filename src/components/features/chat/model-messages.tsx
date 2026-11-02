@@ -19,25 +19,25 @@ function ProfileRow({ profile }: ProfileRowProps) {
   const displayModel = formatModelNameForDisplay(profile.model, freeModels);
 
   return (
-    <div className="border border-neutral-700 rounded-md overflow-hidden">
+    <div className="border border-border rounded-md overflow-hidden">
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
         aria-expanded={expanded}
         aria-label={`Toggle details for ${profile.name}`}
-        className="w-full py-1.5 px-2 text-left flex items-center gap-2 hover:bg-neutral-700 transition-colors cursor-pointer"
+        className="w-full py-1.5 px-2 text-left flex items-center gap-2 hover:bg-interactive-hover-low transition-colors cursor-pointer"
       >
-        <span className="text-neutral-300">
+        <span className="text-text-tertiary">
           {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         </span>
-        <span className="font-normal text-neutral-200 text-sm">
+        <span className="font-normal text-contrast text-sm">
           {profile.name}
         </span>
       </button>
       {expanded && (
         <>
-          <hr className="border-neutral-700" />
-          <div className="px-3 py-2 text-xs text-neutral-300 font-mono whitespace-pre-wrap">
+          <hr className="border-border" />
+          <div className="px-3 py-2 text-xs text-text-tertiary font-mono whitespace-pre-wrap">
             {`model:    ${displayModel ?? "—"}\n` +
               `base_url: ${profile.base_url ?? "—"}\n` +
               // eslint-disable-next-line i18next/no-literal-string -- diagnostic readout; field labels are intentionally untranslated
@@ -72,30 +72,54 @@ export function ModelMessages({
     <div data-testid="model-messages" className="flex flex-col w-full">
       {entries.map((entry) => {
         if (entry.switchedTo) {
+          const switchKey =
+            entry.initiator === "agent"
+              ? I18nKey.MODEL$AGENT_SWITCHED
+              : entry.initiator === "router"
+                ? I18nKey.MODEL$ROUTER_SWITCHED
+                : entry.initiator === "user"
+                  ? I18nKey.MODEL$USER_SWITCHED
+                  : I18nKey.MODEL$SWITCHED_TO_PROFILE;
           return (
-            <GenericEventMessage
-              key={entry.id}
-              title={
-                <span className="inline-flex items-center gap-1.5">
-                  <InfoCircleIcon
-                    width={14}
-                    height={14}
-                    className="shrink-0 text-neutral-400"
-                    aria-hidden
-                  />
-                  <Trans
-                    i18nKey={I18nKey.MODEL$SWITCHED_TO_PROFILE}
-                    values={{ name: entry.switchedTo }}
-                    components={{
-                      cmd: (
-                        <span className="font-mono text-neutral-200 bg-neutral-800 px-1 rounded" />
-                      ),
-                    }}
-                  />
-                </span>
-              }
-              details=""
-            />
+            <div key={entry.id}>
+              <GenericEventMessage
+                title={
+                  <span className="inline-flex items-center gap-1.5 text-contrast">
+                    <InfoCircleIcon
+                      width={14}
+                      height={14}
+                      className="shrink-0 text-text-tertiary"
+                      aria-hidden
+                    />
+                    <Trans
+                      i18nKey={switchKey}
+                      values={{ name: entry.switchedTo }}
+                      components={{
+                        cmd: (
+                          <span className="font-mono text-contrast bg-surface-raised px-1 rounded" />
+                        ),
+                      }}
+                    />
+                  </span>
+                }
+                details=""
+              />
+              {(entry.initiator === "agent" || entry.initiator === "router") &&
+                entry.reason?.trim() && (
+                  <p className="text-sm text-muted whitespace-pre-wrap break-words pl-5">
+                    <span className="font-medium">
+                      <Trans
+                        i18nKey={
+                          entry.initiator === "router"
+                            ? I18nKey.MODEL$ROUTER_SWITCH_REASON
+                            : I18nKey.MODEL$AGENT_SWITCH_REASON
+                        }
+                      />
+                    </span>{" "}
+                    {entry.reason}
+                  </p>
+                )}
+            </div>
           );
         }
 
@@ -104,7 +128,7 @@ export function ModelMessages({
           <GenericEventMessage
             key={entry.id}
             title={
-              <span>
+              <span className="text-contrast">
                 {isEmpty ? (
                   <Trans i18nKey={I18nKey.MODEL$NO_SAVED_PROFILES} />
                 ) : (
@@ -117,7 +141,7 @@ export function ModelMessages({
             }
             details={
               isEmpty ? (
-                <span className="text-neutral-300 text-sm px-2 py-1 block">
+                <span className="text-text-tertiary text-sm px-2 py-1 block">
                   <Trans i18nKey={I18nKey.MODEL$NO_PROFILES_HINT} />
                 </span>
               ) : (

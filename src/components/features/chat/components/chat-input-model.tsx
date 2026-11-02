@@ -4,6 +4,7 @@ import {
   type ChatInputModelState,
 } from "#/hooks/use-chat-input-model-state";
 import { useSwitchAcpModel } from "#/hooks/mutation/use-switch-acp-model";
+import { useModelStore } from "#/stores/model-store";
 import { ComboboxCaretInline } from "#/ui/combobox-caret";
 import SettingsGearIcon from "#/icons/settings-gear.svg?react";
 import CheckIcon from "#/icons/checkmark.svg?react";
@@ -15,6 +16,7 @@ import { Divider } from "#/ui/divider";
 import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
+import { getLockedCloudHost } from "#/api/agent-server-config";
 import { chatInputPillButtonClassName } from "#/utils/form-control-classes";
 import React from "react";
 
@@ -52,9 +54,18 @@ export function ChatInputModelMenuContent({
   const { t } = useTranslation("openhands");
   const switchAcpModel = useSwitchAcpModel();
   const hasModelRows = model.showAcpPicker || Boolean(model.displayModel);
+  // Locked-to-Cloud blocks the Canvas settings pages this links to (OHE-3457).
+  const showSettingsLink = getLockedCloudHost() === null;
 
-  const handleSelectAcpModel = (modelId: string) => {
-    if (modelId !== model.currentModelId) {
+  const handleSelectAcpModel = (modelId: string | null) => {
+    if (modelId !== model.selectedModelId) {
+      // A home-page ACP model pick (no conversation) is an explicit model
+      // choice made before the first message: mark it so the next home launch
+      // suppresses "Run on first message" routing for that one conversation.
+      // `useCreateConversation` reads-and-clears it.
+      if (!model.switchConversationId) {
+        useModelStore.getState().setHomeManualModelPick(true);
+      }
       switchAcpModel.mutate({
         conversationId: model.switchConversationId,
         model: modelId,
@@ -71,16 +82,21 @@ export function ChatInputModelMenuContent({
               ContextMenu <ul> without exposing the section label as a
               selectable menu item (the label text is still announced). */}
           <li role="presentation" className="px-2 pt-1 pb-0.5">
-            <Typography.Text className="text-[11px] font-medium text-[var(--oh-text-dim)] uppercase tracking-wide leading-4">
+            <Typography.Text className="text-[11px] font-medium text-text-dim uppercase tracking-wide leading-4">
               {t(I18nKey.MODEL$AVAILABLE_MODELS)}
             </Typography.Text>
           </li>
-          {model.availableAcpModels.map((option) => {
-            const isSelected = option.id === model.currentModelId;
+          {[
+            ...(model.agentDefaultLabel
+              ? [{ id: null, label: model.agentDefaultLabel }]
+              : []),
+            ...model.availableAcpModels,
+          ].map((option) => {
+            const isSelected = option.id === model.selectedModelId;
             return (
               <ContextMenuListItem
-                key={option.id}
-                testId={`chat-input-acp-model-option-${option.id}`}
+                key={option.id ?? ""}
+                testId={`chat-input-acp-model-option-${option.id ?? "agent-default"}`}
                 onClick={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
@@ -88,7 +104,7 @@ export function ChatInputModelMenuContent({
                 }}
                 className={cn(
                   "flex items-center gap-2",
-                  isSelected && "bg-[var(--oh-interactive-hover)]",
+                  isSelected && "bg-interactive-hover",
                 )}
               >
                 <span
@@ -111,30 +127,32 @@ export function ChatInputModelMenuContent({
         </>
       ) : model.displayModel ? (
         <li className="text-sm">
-          <div className="p-2 leading-5 text-[var(--oh-foreground)] break-all">
+          <div className="p-2 leading-5 text-foreground break-all">
             {model.displayModel}
           </div>
         </li>
       ) : null}
-      {hasModelRows && <Divider inset={dividerInset} />}
-      <li className="text-sm">
-        <NavigationLink
-          to={model.destinationPath}
-          onClick={onClose}
-          className={cn(
-            "flex h-[30px] items-center gap-2 rounded p-2 leading-5 text-[var(--oh-foreground)] hover:bg-[var(--oh-interactive-hover)] transition-colors",
-            settingsLinkClassName,
-          )}
-        >
-          <SettingsGearIcon
-            width={16}
-            height={16}
-            className={cn("shrink-0", settingsIconClassName)}
-            aria-hidden
-          />
-          <span>{model.destinationLabel}</span>
-        </NavigationLink>
-      </li>
+      {showSettingsLink && hasModelRows && <Divider inset={dividerInset} />}
+      {showSettingsLink && (
+        <li className="text-sm">
+          <NavigationLink
+            to={model.destinationPath}
+            onClick={onClose}
+            className={cn(
+              "flex h-7.5 items-center gap-2 rounded p-2 leading-5 text-foreground hover:bg-interactive-hover transition-colors",
+              settingsLinkClassName,
+            )}
+          >
+            <SettingsGearIcon
+              width={16}
+              height={16}
+              className={cn("shrink-0", settingsIconClassName)}
+              aria-hidden
+            />
+            <span>{model.destinationLabel}</span>
+          </NavigationLink>
+        </li>
+      )}
     </>
   );
 }
@@ -184,7 +202,7 @@ export function ChatInputModel() {
           position="top"
           alignment="left"
           spacing="none"
-          className="z-[60] mb-2 min-w-[200px] max-w-[320px] max-h-[60vh] overflow-y-auto"
+          className="z-[60] mb-2 min-w-50 max-w-80 max-h-[60vh] overflow-y-auto"
         >
           <ChatInputModelMenuContent
             model={model}

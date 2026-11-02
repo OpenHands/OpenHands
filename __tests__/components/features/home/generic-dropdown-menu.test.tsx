@@ -68,3 +68,35 @@ describe("GenericDropdownMenu list structure", () => {
     expect(divider).toHaveAttribute("aria-hidden", "true");
   });
 });
+
+describe("GenericDropdownMenu empty state", () => {
+  const stickyTopItem = <li data-testid="sticky-top">Most recent</li>;
+  const stickyFooterItem = (
+    <button type="button" data-testid="sticky-footer">
+      Add
+    </button>
+  );
+  const renderEmptyState = () => <li data-testid="empty-state">Empty</li>;
+
+  it("renders the empty state, and keeps the sticky footer, when no item matches", () => {
+    renderMenu({
+      filteredItems: [],
+      renderEmptyState,
+      stickyTopItem,
+      stickyFooterItem,
+    });
+
+    expect(screen.getByTestId("empty-state")).toBeInTheDocument();
+    expect(screen.queryByTestId("sticky-top")).not.toBeInTheDocument();
+    expect(screen.getByTestId("sticky-footer")).toBeInTheDocument();
+  });
+
+  it("renders the sticky items and options, without the empty state, when items match", () => {
+    renderMenu({ renderEmptyState, stickyTopItem, stickyFooterItem });
+
+    expect(screen.getByTestId("sticky-top")).toBeInTheDocument();
+    expect(screen.getAllByRole("option")).toHaveLength(ITEMS.length);
+    expect(screen.queryByTestId("empty-state")).not.toBeInTheDocument();
+    expect(screen.getByTestId("sticky-footer")).toBeInTheDocument();
+  });
+});

@@ -1,7 +1,11 @@
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AgentProfileActionsMenu } from "./agent-profile-actions-menu";
-import { type AgentProfileSummary } from "#/api/agent-profiles-service/agent-profiles-service.api";
+import {
+  WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME,
+  type AgentProfileSummary,
+} from "#/api/agent-profiles-service/agent-profiles-service.api";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 import { I18nKey } from "#/i18n/declaration";
 import { EllipsisButton } from "#/components/features/conversation-panel/ellipsis-button";
 import { BrandBadge } from "#/components/shared/badge";
@@ -32,6 +36,12 @@ export function AgentProfileRow({
   isActivating,
 }: AgentProfileRowProps) {
   const { t } = useTranslation("openhands");
+  const { backend } = useActiveBackend();
+  // The server reseeds a deleted `default`, which would reset what it shares
+  // with the global pages.
+  const isProtected =
+    backend.kind === "local" &&
+    profile.name === WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME;
   const [menuOpen, setMenuOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
@@ -48,14 +58,14 @@ export function AgentProfileRow({
     >
       <div className="flex min-w-0 flex-1 items-center gap-3">
         <span
-          className="min-w-0 max-w-full truncate text-sm font-medium text-white"
+          className="min-w-0 max-w-full truncate text-sm font-medium text-contrast"
           title={profile.name}
         >
           {profile.name}
         </span>
         {secondary ? (
           <span
-            className="min-w-0 max-w-full truncate text-sm text-[var(--oh-muted)]"
+            className="min-w-0 max-w-full truncate text-sm text-muted"
             title={secondary}
           >
             {secondary}
@@ -66,7 +76,7 @@ export function AgentProfileRow({
             className="shrink-0 whitespace-nowrap px-2.5 py-1 text-xs"
             data-testid="agent-profile-active-badge"
           >
-            {t(I18nKey.SETTINGS$PROFILE_DEFAULT)}
+            {t(I18nKey.SETTINGS$PROFILE_ACTIVE)}
           </BrandBadge>
         )}
       </div>
@@ -85,6 +95,11 @@ export function AgentProfileRow({
               onEdit={() => onEdit(profile)}
               onSetActive={() => onActivate(profile)}
               onDelete={() => onDelete(profile)}
+              deleteDisabledReason={
+                isProtected
+                  ? t(I18nKey.SETTINGS$AGENT_PROFILE_DEFAULT_LOCKED)
+                  : undefined
+              }
               isActive={isActive}
               isActivating={isActivating}
               onClose={() => setMenuOpen(false)}

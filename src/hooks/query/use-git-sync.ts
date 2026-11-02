@@ -56,9 +56,8 @@ export function useUpdateGitSyncConfig() {
       queryClient.setQueryData(queryKey, data);
       trackGitSyncConfigUpdated({ backendKind: active.backend.kind });
     },
-    // The form maps failures to its own message (the 409 "restart with the env
-    // var set" case in particular), so the global mutation toast would stack a
-    // raw one on top.
+    // The form reports failures itself, so the global mutation toast would
+    // stack a raw one on top.
     meta: { disableToast: true },
   });
 }

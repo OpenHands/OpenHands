@@ -35,7 +35,7 @@ export function ConfirmationModal({
     >
       <div
         data-testid="confirmation-modal"
-        className="bg-base-secondary p-4 rounded-xl flex flex-col gap-4 border border-[var(--oh-border)]"
+        className="bg-base-secondary p-4 rounded-xl flex flex-col gap-4 border border-border"
       >
         <p>{text}</p>
         <div className="w-full flex justify-end gap-2">

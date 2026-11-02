@@ -22,10 +22,6 @@ export default {
           button: "#737373",
           text: "#A3A3A3",
         },
-        border: {
-          DEFAULT: "#242424",
-          hover: "#3a3a3a",
-        },
         content: {
           DEFAULT: "#fafafa",
           muted: "#8c8c8c",

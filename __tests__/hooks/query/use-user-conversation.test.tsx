@@ -1,6 +1,9 @@
+import { NavigationProvider } from "#/context/navigation-context";
+import { useActiveConversation } from "#/hooks/query/use-active-conversation";
+import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import React from "react";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
@@ -63,14 +66,25 @@ function makeConversation(id: string): AppConversation {
   };
 }
 
-function makeWrapper() {
+function makeWrapper(conversationId?: string) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return function Wrapper({ children }: { children: React.ReactNode }) {
     return (
       <QueryClientProvider client={queryClient}>
-        <ActiveBackendProvider>{children}</ActiveBackendProvider>
+        <ActiveBackendProvider>
+          <NavigationProvider
+            value={{
+              conversationId: conversationId ?? null,
+              currentPath: `/conversations/${conversationId ?? ""}`,
+              navigate: vi.fn(),
+              isNavigating: false,
+            }}
+          >
+            {children}
+          </NavigationProvider>
+        </ActiveBackendProvider>
       </QueryClientProvider>
     );
   };
@@ -89,14 +103,29 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   window.localStorage.clear();
   __resetActiveStoreForTests();
 });
 
 describe("useUserConversation — backend switch", () => {
+  it("never looks up a client-only launch ID, even on an explicit refetch", async () => {
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    const { result } = renderHook(
+      () => useUserConversation("launch-client-id"),
+      { wrapper: makeWrapper() },
+    );
+    await act(async () => {
+      await result.current.refetch();
+    });
+    expect(
+      AgentServerConversationService.batchGetAppConversations,
+    ).not.toHaveBeenCalled();
+  });
+
   it("does not load the conversation id against a different backend after switching", async () => {
     // Arrange — the conversation is opened while the cloud backend is active.
-    setActiveSelection({ backendId: cloudBackend.id });
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
     const { result } = renderHook(
       () => useUserConversation(CLOUD_CONVERSATION_ID),
       { wrapper: makeWrapper() },
@@ -140,5 +169,83 @@ describe("useUserConversation — backend switch", () => {
         AgentServerConversationService.batchGetAppConversations,
       ).toHaveBeenCalledTimes(2),
     );
+  });
+
+  it("waits for a Cloud org before loading a conversation", async () => {
+    // Arrange — locked-cloud bootstraps with the backend selected before its
+    // organization boundary has resolved the concrete workspace.
+    setActiveSelection({ backendId: cloudBackend.id });
+    const { result } = renderHook(
+      () => useUserConversation(CLOUD_CONVERSATION_ID),
+      { wrapper: makeWrapper() },
+    );
+
+    // Assert — the detail lookup does not fall back to the server's mutable
+    // current_org_id while Canvas still has no explicit org scope.
+    expect(result.current.fetchStatus).toBe("idle");
+    expect(
+      AgentServerConversationService.batchGetAppConversations,
+    ).not.toHaveBeenCalled();
+
+    // Act — once the Cloud organization boundary resolves the workspace, the
+    // query can run under the org-scoped key.
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+
+    await waitFor(() =>
+      expect(
+        AgentServerConversationService.batchGetAppConversations,
+      ).toHaveBeenCalledTimes(1),
+    );
+  });
+});
+
+describe("active conversation title freshness", () => {
+  it("picks up a generated title after the agent finishes without waiting for the slow poll", async () => {
+    vi.useFakeTimers();
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    const conversation = {
+      ...makeConversation(CLOUD_CONVERSATION_ID),
+      created_at: new Date().toISOString(),
+      title: "Conversation conv-",
+      execution_status: ExecutionStatus.FINISHED,
+    };
+    const fetchConversation = vi.mocked(
+      AgentServerConversationService.batchGetAppConversations,
+    );
+    fetchConversation
+      .mockResolvedValueOnce([conversation])
+      .mockResolvedValue([{ ...conversation, title: "Startup explained" }]);
+    const { result } = renderHook(() => useActiveConversation(), {
+      wrapper: makeWrapper(CLOUD_CONVERSATION_ID),
+    });
+    await act(async () => vi.advanceTimersByTimeAsync(10));
+    expect(result.current.data?.title).toBe("Conversation conv-");
+    await act(async () => vi.advanceTimersByTimeAsync(3100));
+    expect(result.current.data?.title).toBe("Startup explained");
+    expect(fetchConversation).toHaveBeenCalledTimes(2);
+    await act(async () => vi.advanceTimersByTimeAsync(10000));
+    expect(fetchConversation).toHaveBeenCalledTimes(2);
+  });
+
+  it("returns to slow polling when title generation stays unavailable", async () => {
+    vi.useFakeTimers();
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    const conversation = {
+      ...makeConversation(CLOUD_CONVERSATION_ID),
+      created_at: new Date(Date.now() - 55000).toISOString(),
+      title: "Conversation conv-",
+      execution_status: ExecutionStatus.FINISHED,
+    };
+    const fetchConversation = vi.mocked(
+      AgentServerConversationService.batchGetAppConversations,
+    );
+    fetchConversation.mockResolvedValue([conversation]);
+    renderHook(() => useActiveConversation(), {
+      wrapper: makeWrapper(CLOUD_CONVERSATION_ID),
+    });
+    await act(async () => vi.advanceTimersByTimeAsync(10000));
+    expect(fetchConversation).toHaveBeenCalledTimes(3);
+    await act(async () => vi.advanceTimersByTimeAsync(10000));
+    expect(fetchConversation).toHaveBeenCalledTimes(3);
   });
 });

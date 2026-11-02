@@ -7,6 +7,7 @@ export * from "../components/terminal";
 export {
   AgentServerUIProviders,
   AgentServerUIRoot,
+  CloudOrganizationBoundary,
   DEFAULT_AGENT_SERVER_ANALYTICS,
   type AgentServerUIAnalyticsConfig,
   type AgentServerUIPostHogAnalyticsConfig,
@@ -43,6 +44,8 @@ export {
   CANVAS_EXTENSION_HOST_API_VERSION,
   CANVAS_EXTENSION_MANIFEST_SCHEMA_VERSION,
   type CanvasExtensionAgentServerRequest,
+  type CanvasExtensionAppBackendViewHost,
+  type CanvasExtensionAppBackendViewMountOptions,
   type CanvasExtensionContributions,
   type CanvasExtensionDispose,
   type CanvasExtensionHost,

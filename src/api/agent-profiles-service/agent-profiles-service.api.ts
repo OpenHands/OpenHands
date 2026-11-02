@@ -43,9 +43,7 @@ function isCloud(): boolean {
 /**
  * The seeded, well-known baseline agent profile. The backend lazily seeds it to
  * mirror the user's global config (#3719), and onboarding configures it from the
- * user's choice. It stands in for global `agent_settings`, so the home-launch
- * path treats it as the enriched baseline rather than a deliberate profile
- * selection (see `useCreateConversation`).
+ * user's choice. It launches like any other profile.
  */
 export const WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME = "default";
 

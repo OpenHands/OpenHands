@@ -1,10 +1,12 @@
 import { lazy, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { TabWrapper } from "./tab-wrapper";
 import { TabContainer } from "./tab-container";
 import { TabContentArea } from "./tab-content-area";
 import { ConversationTabContentCrossfade } from "./conversation-tab-content-crossfade";
 import { useConversationStore } from "#/stores/conversation-store";
 import { useConversationId } from "#/hooks/use-conversation-id";
+import { CONVERSATION_TAB_LABEL_KEYS } from "../conversation-tab-ids";
 
 // Lazy load all tab components, including the terminal — xterm + addon-fit +
 // xterm.css are large enough that we don't want them in the conversation
@@ -28,6 +30,7 @@ const TAB_CONFIG = {
 };
 
 export function ConversationTabContent() {
+  const { t } = useTranslation("openhands");
   const { selectedTab, shouldShownAgentLoading } = useConversationStore();
   const { conversationId } = useConversationId();
 
@@ -45,7 +48,9 @@ export function ConversationTabContent() {
       : (selectedTab ?? "files");
 
   return (
-    <TabContainer>
+    <TabContainer
+      label={t(CONVERSATION_TAB_LABEL_KEYS[selectedTab ?? "files"])}
+    >
       <TabContentArea>
         <ConversationTabContentCrossfade
           showAgentLoading={shouldShownAgentLoading}

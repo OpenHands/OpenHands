@@ -39,6 +39,12 @@ interface MCPServerFormProps {
   onTest?: (server: MCPServerConfig) => void;
   isTestPending?: boolean;
   testMessage?: TestMessage | null;
+  /**
+   * Hide the Test button while the form describes a stdio server. Cloud
+   * backends can only probe remote servers; the type is live form state in
+   * add mode, so the form owns this decision.
+   */
+  isStdioTestUnavailable?: boolean;
 }
 
 export function MCPServerForm({
@@ -52,6 +58,7 @@ export function MCPServerForm({
   onTest,
   isTestPending = false,
   testMessage = null,
+  isStdioTestUnavailable = false,
 }: MCPServerFormProps) {
   const { t } = useTranslation("openhands");
   const [serverType, setServerType] = React.useState<MCPServerType>(
@@ -163,16 +170,19 @@ export function MCPServerForm({
     return null;
   };
 
-  const validateEnvFormat = (envString: string): string | null => {
+  const validateEnvFormat = (
+    envString: string,
+    errorKey: I18nKey = I18nKey.SETTINGS$MCP_ERROR_ENV_INVALID_FORMAT,
+  ): string | null => {
     if (!envString.trim()) return null;
     const lines = envString.split("\n");
     for (let i = 0; i < lines.length; i += 1) {
       const trimmed = lines[i].trim();
       if (trimmed) {
         const eq = trimmed.indexOf("=");
-        if (eq === -1) return t(I18nKey.SETTINGS$MCP_ERROR_ENV_INVALID_FORMAT);
+        if (eq === -1) return t(errorKey);
         const key = trimmed.substring(0, eq).trim();
-        if (!key) return t(I18nKey.SETTINGS$MCP_ERROR_ENV_INVALID_FORMAT);
+        if (!key) return t(errorKey);
       }
     }
     return null;
@@ -183,7 +193,10 @@ export function MCPServerForm({
       const headerString = formData.get("headers")?.toString() || "";
       if (!headerString.trim())
         return t(I18nKey.SETTINGS$MCP_ERROR_HEADER_REQUIRED);
-      return validateEnvFormat(headerString);
+      return validateEnvFormat(
+        headerString,
+        I18nKey.SETTINGS$MCP_ERROR_HEADER_INVALID_FORMAT,
+      );
     }
     if (authMode === "oauth2") {
       const clientId = formData.get("oauth_client_id")?.toString().trim();
@@ -467,7 +480,8 @@ export function MCPServerForm({
         />
       )}
 
-      {error && <p className="text-red-500 text-sm">{error}</p>}
+      {/* @spec MCP-004 — Form feedback follows readable theme text roles */}
+      {error && <p className="text-feedback-error text-sm">{error}</p>}
 
       {(serverType === "sse" || serverType === "shttp") && (
         <>
@@ -534,7 +548,7 @@ export function MCPServerForm({
                 className={cn(
                   formControlMultilineFieldClassName,
                   "resize-none placeholder:italic",
-                  "disabled:bg-[var(--oh-surface-raised)] disabled:border-[var(--oh-border-subtle)]",
+                  "disabled:bg-surface-raised disabled:border-border-subtle",
                 )}
               />
             </label>
@@ -658,7 +672,7 @@ export function MCPServerForm({
               className={cn(
                 formControlMultilineFieldClassName,
                 "resize-none placeholder:italic",
-                "disabled:bg-[var(--oh-surface-raised)] disabled:border-[var(--oh-border-subtle)]",
+                "disabled:bg-surface-raised disabled:border-border-subtle",
               )}
             />
             <p className="text-xs text-tertiary-alt">
@@ -683,20 +697,21 @@ export function MCPServerForm({
               className={cn(
                 formControlMultilineFieldClassName,
                 "resize-none placeholder:italic",
-                "disabled:bg-[var(--oh-surface-raised)] disabled:border-[var(--oh-border-subtle)]",
+                "disabled:bg-surface-raised disabled:border-border-subtle",
               )}
             />
           </label>
         </>
       )}
 
+      {/* @spec MCP-004 — Form feedback follows readable theme text roles */}
       {testMessage && (
         <p
           data-testid="mcp-test-message"
           className={
             testMessage.ok
-              ? "text-sm text-green-500 whitespace-pre-wrap"
-              : "text-sm text-red-500 whitespace-pre-wrap"
+              ? "text-sm text-feedback-success whitespace-pre-wrap"
+              : "text-sm text-feedback-error whitespace-pre-wrap"
           }
         >
           {testMessage.text}
@@ -705,7 +720,7 @@ export function MCPServerForm({
 
       <div
         className={cn(
-          "flex w-full items-center gap-2",
+          "flex w-full flex-wrap items-center gap-2",
           onDelete ? "justify-between" : "justify-end",
         )}
       >
@@ -723,7 +738,7 @@ export function MCPServerForm({
             {t(I18nKey.BUTTON$DELETE)}
           </BrandButton>
         ) : null}
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 [&_button]:whitespace-nowrap">
           <BrandButton
             testId="cancel-button"
             type="button"
@@ -733,7 +748,7 @@ export function MCPServerForm({
           >
             {t(I18nKey.BUTTON$CANCEL)}
           </BrandButton>
-          {onTest && (
+          {onTest && !(isStdioTestUnavailable && serverType === "stdio") && (
             <BrandButton
               testId="mcp-test-connection"
               type="button"

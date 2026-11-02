@@ -28,7 +28,7 @@ export function UserAvatar({ avatarUrl, isLoading }: UserAvatarProps) {
           aria-label={t(I18nKey.USER$AVATAR_PLACEHOLDER)}
           width={28}
           height={28}
-          className="text-[var(--oh-muted)]"
+          className="text-muted"
         />
       )}
       {isLoading && <LoadingSpinner size="small" />}

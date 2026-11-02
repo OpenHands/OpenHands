@@ -1,34 +1,34 @@
 import { describe, expect, it } from "vitest";
 import {
-  readProfileMcpRefs,
+  readProfileScope,
   sameScopeSelection,
 } from "#/constants/profile-scope";
 
-describe("readProfileMcpRefs", () => {
+describe("readProfileScope", () => {
   it("reads an absent field as the server default", () => {
-    expect(readProfileMcpRefs(undefined)).toEqual({
+    expect(readProfileScope(undefined)).toEqual({
       mode: "standard",
       selected: [],
     });
-    expect(readProfileMcpRefs(null)).toEqual({
+    expect(readProfileScope(null)).toEqual({
       mode: "standard",
       selected: [],
     });
   });
 
   it("reads an empty array as an explicit no-servers scope", () => {
-    expect(readProfileMcpRefs([])).toEqual({ mode: "custom", selected: [] });
+    expect(readProfileScope([])).toEqual({ mode: "custom", selected: [] });
   });
 
   it("reads a list as the selection", () => {
-    expect(readProfileMcpRefs(["github", "postgres"])).toEqual({
+    expect(readProfileScope(["github", "postgres"])).toEqual({
       mode: "custom",
       selected: ["github", "postgres"],
     });
   });
 
   it("drops non-string entries rather than failing the editor", () => {
-    expect(readProfileMcpRefs(["github", 7, null])).toEqual({
+    expect(readProfileScope(["github", 7, null])).toEqual({
       mode: "custom",
       selected: ["github"],
     });

@@ -9,7 +9,7 @@
  * parseDateAsUTC("2025-12-01T11:53:37.273886Z"); // Already has timezone, parsed correctly
  * parseDateAsUTC("2025-12-01T11:53:37+00:00"); // Already has timezone, parsed correctly
  */
-const parseDateAsUTC = (dateString: string): Date => {
+export const parseDateAsUTC = (dateString: string): Date => {
   // Check if the string already has a timezone indicator
   // Look for 'Z' (UTC), '+' (positive offset), or '-' after the time part (negative offset)
   const hasTimezone =

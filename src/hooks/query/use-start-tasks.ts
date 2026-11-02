@@ -1,23 +1,107 @@
-import { useQuery } from "@tanstack/react-query";
+import { CONVERSATION_QUERY_KEYS } from "./query-keys";
 import type { AppConversationStartTask } from "#/api/conversation-service/agent-server-conversation-service.types";
+import { useEffect, useRef } from "react";
+import {
+  useQueries,
+  useQueryClient,
+  type Query,
+  type UseQueryResult,
+} from "@tanstack/react-query";
+import { useActiveBackend } from "#/contexts/active-backend-context";
+import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
+import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import { isRetryableError } from "#/api/with-retry";
 
-/**
- * Hook to fetch in-progress conversation start tasks
- *
- * Use case: Show tasks that are provisioning sandboxes, cloning repos, etc.
- * These are conversations that started but haven't reached READY or ERROR status yet.
- *
- * Note: Filters out READY and ERROR status tasks client-side since backend doesn't support status filtering.
- *
- * @param limit Maximum number of tasks to return (max 100)
- * @returns Query result with array of in-progress start tasks
- */
-export const useStartTasks = (limit = 10) =>
-  useQuery({
-    queryKey: ["start-tasks", "search", limit],
-    queryFn: (): AppConversationStartTask[] => [],
-    select: (tasks) =>
-      tasks.filter(
-        (task) => task.status !== "READY" && task.status !== "ERROR",
-      ),
+function combineStartTaskQueries(
+  queries: UseQueryResult<AppConversationStartTask | null>[],
+) {
+  return {
+    tasks: queries.flatMap((query) => (query.data ? [query.data] : [])),
+    unresolvedIndexes: queries.flatMap((query, index) =>
+      !query.data ? [index] : [],
+    ),
+    failedIndexes: queries.flatMap((query, index) =>
+      query.isError || query.data === null ? [index] : [],
+    ),
+    isLoading: queries.some((query) => query.isLoading),
+  };
+}
+
+export const useStartTasks = (
+  limit = 10,
+  listedConversationIds: string[] = [],
+) => {
+  const { backend, orgId } = useActiveBackend();
+  const queryClient = useQueryClient();
+  const launches = useConversationLaunchStore((state) => state.launches);
+  // Only this tab knows the owning organization of an unready start task.
+  const ids = Object.values(launches)
+    .filter(
+      (launch) =>
+        !launch.listed &&
+        launch.backendId === backend.id &&
+        launch.orgId === orgId &&
+        launch.targetId?.startsWith("task-"),
+    )
+    .slice(-limit)
+    .map((launch) => launch.targetId!.slice("task-".length));
+  const { tasks, unresolvedIndexes, failedIndexes, isLoading } = useQueries({
+    combine: combineStartTaskQueries,
+    queries: ids.map((taskId) => ({
+      queryKey: CONVERSATION_QUERY_KEYS.startTask(taskId),
+      queryFn: () => AgentServerConversationService.getStartTask(taskId),
+      enabled: backend.kind === "cloud",
+      retry: (count: number, error: Error) =>
+        count < 3 && isRetryableError(error),
+      meta: { disableToast: true },
+      refetchInterval: (query: Query<AppConversationStartTask | null>) => {
+        const task = query.state.data;
+        return query.state.status === "error" ||
+          !task ||
+          task.status === "READY" ||
+          task.status === "ERROR"
+          ? false
+          : 3000;
+      },
+    })),
   });
+  const readyIds = tasks
+    .filter((task) => task.status === "READY")
+    .map((task) => task.id)
+    .join(",");
+  const seenReady = useRef(new Set<string>());
+  useEffect(() => {
+    const ready = readyIds.split(",").filter(Boolean);
+    if (ready.some((id) => !seenReady.current.has(id))) {
+      void queryClient.invalidateQueries({
+        queryKey: ["user", "conversations"],
+      });
+    }
+    seenReady.current = new Set(ready);
+  }, [readyIds, queryClient]);
+  useEffect(() => {
+    const { update } = useConversationLaunchStore.getState();
+    for (const task of tasks) {
+      if (!task?.app_conversation_id) continue;
+      const launch = Object.values(launches).find(
+        (entry) =>
+          entry.backendId === backend.id &&
+          entry.orgId === orgId &&
+          entry.targetId === `task-${task.id}`,
+      );
+      if (launch)
+        update(launch.id, {
+          conversationId: task.app_conversation_id,
+          listed: listedConversationIds.includes(task.app_conversation_id),
+        });
+    }
+  }, [tasks, launches, backend.id, orgId, listedConversationIds]);
+  return {
+    unresolvedTaskIds: unresolvedIndexes.map((index) => ids[index]),
+    failedTaskIds: failedIndexes.map((index) => ids[index]),
+    data: tasks.filter(
+      (task) => !listedConversationIds.includes(task.app_conversation_id ?? ""),
+    ),
+    isLoading,
+  };
+};

@@ -97,6 +97,14 @@ describe("WebSocketProviderWrapper — conversationUrl gating", () => {
     mockUseSubConversations.mockReturnValue({ data: [] });
   });
 
+  it("withholds a stale URL while the sandbox starts", () => {
+    mockUseActiveConversation.mockReturnValue({
+      data: makeConversation({ sandbox_status: "STARTING" }),
+    });
+    renderWrapper();
+    expect(capturedUrlPerRender.at(-1)).toBeNull();
+  });
+
   it("passes conversation_url through when sandbox_status is null (local backend)", () => {
     mockUseActiveConversation.mockReturnValue({
       data: makeConversation({ sandbox_status: null }),
@@ -135,6 +143,19 @@ describe("WebSocketProviderWrapper — conversationUrl gating", () => {
 
     expect(capturedUrlPerRender.at(-1)).toBeNull();
   });
+
+  it.each(["MISSING", "ERROR"] as const)(
+    "suppresses conversation_url when sandbox_status is %s",
+    (sandboxStatus) => {
+      mockUseActiveConversation.mockReturnValue({
+        data: makeConversation({ sandbox_status: sandboxStatus }),
+      });
+
+      renderWrapper();
+
+      expect(capturedUrlPerRender.at(-1)).toBeNull();
+    },
+  );
 
   it("passes null through when conversation data has no url (sandbox still starting)", () => {
     mockUseActiveConversation.mockReturnValue({

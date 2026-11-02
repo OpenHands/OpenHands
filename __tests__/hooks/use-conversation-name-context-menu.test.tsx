@@ -393,6 +393,25 @@ describe("useConversationNameContextMenu", () => {
     expect(harness.navigate).toHaveBeenCalledWith("/conversations");
   });
 
+  it("closes the menu without rethrowing when the download fails", async () => {
+    harness.downloadConversation.mockRejectedValue(
+      new Error("HTTP request failed (502 Bad Gateway)"),
+    );
+    const onContextMenuToggle = vi.fn();
+    const { result } = renderHook(() =>
+      useConversationNameContextMenu({
+        conversationId: "conv-active",
+        onContextMenuToggle,
+      }),
+    );
+
+    await act(async () =>
+      result.current.handleDownloadConversation(clickEvent().event),
+    );
+
+    expect(onContextMenuToggle).toHaveBeenCalledWith(false);
+  });
+
   it("does not navigate after deleting a conversation that is not currently open", () => {
     harness.currentConversationId = "conv-current";
     const { result } = renderHook(() =>
@@ -435,6 +454,23 @@ describe("useConversationNameContextMenu", () => {
     expect(result.current.shareUrl).toBe(
       "https://app.example.com/shared/conversations/conv-next",
     );
+  });
+
+  it("keeps the Canvas base path on share links", () => {
+    // A bare `/shared/conversations/...` link resolves against the origin root,
+    // which on the cloud host serves the enterprise app and reports the
+    // conversation as missing.
+    vi.stubEnv("VITE_BASE_PATH", "/canvas");
+
+    const { result } = renderHook(() =>
+      useConversationNameContextMenu({ conversationId: "conv-shared" }),
+    );
+
+    expect(result.current.shareUrl).toBe(
+      `${window.location.origin}/canvas/shared/conversations/conv-shared`,
+    );
+
+    vi.unstubAllEnvs();
   });
 
   it("keeps populated agent metadata hidden while options are closed", () => {

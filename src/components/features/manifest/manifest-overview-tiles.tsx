@@ -37,10 +37,7 @@ export function ManifestOverviewTiles({
         >
           <div className="flex items-center justify-between gap-2">
             <span className="truncate text-xs text-muted">{tile.label}</span>
-            <tile.Icon
-              className="size-4 shrink-0 text-[var(--oh-muted)]"
-              aria-hidden
-            />
+            <tile.Icon className="size-4 shrink-0 text-muted" aria-hidden />
           </div>
           <div className="mt-2 text-xl font-semibold text-content">
             {tile.value}

@@ -1,13 +1,15 @@
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { act, render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "test-utils";
 import { PendingUserMessages } from "#/components/features/chat/pending-user-messages";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { useConversationStore } from "#/stores/conversation-store";
 
-const ACTIVE_CONVO = "conv-active";
+import { I18nKey } from "#/i18n/declaration";
+
+let ACTIVE_CONVO = "conv-active";
 
 const mockSend = vi.fn();
 vi.mock("#/hooks/use-send-message", () => ({
@@ -21,8 +23,9 @@ vi.mock("#/hooks/use-conversation-id", () => ({
 
 describe("PendingUserMessages", () => {
   beforeEach(() => {
+    ACTIVE_CONVO = "conv-active";
     mockSend.mockReset();
-    useOptimisticUserMessageStore.setState({ pendingMessages: [] });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
     useConversationStore.setState({
       messageRestoreIfEmpty: null,
       messageToSend: null,
@@ -30,7 +33,7 @@ describe("PendingUserMessages", () => {
   });
 
   afterEach(() => {
-    useOptimisticUserMessageStore.setState({ pendingMessages: [] });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
   });
 
   it("renders nothing when the queue is empty", () => {
@@ -58,6 +61,52 @@ describe("PendingUserMessages", () => {
       expect(message).toHaveAttribute("data-pending-status", "sending");
     });
     expect(screen.getAllByTestId("chat-message-sending")).toHaveLength(2);
+  });
+
+  it("explains sandbox resume while a message waits, then restores sending or Retry", () => {
+    const id = useOptimisticUserMessageStore.getState().enqueuePendingMessage({
+      conversationId: ACTIVE_CONVO,
+      text: "continue my work",
+    });
+    const { rerender } = renderWithProviders(
+      <PendingUserMessages pendingLabel={I18nKey.CHAT_INTERFACE$RESUMING_SANDBOX} />,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(I18nKey.CHAT_INTERFACE$RESUMING_SANDBOX);
+    rerender(<PendingUserMessages pendingLabel={I18nKey.CHAT_INTERFACE$CONNECTING} />);
+    expect(screen.getByRole("status")).toHaveTextContent(I18nKey.CHAT_INTERFACE$CONNECTING);
+    rerender(<PendingUserMessages />);
+    expect(screen.getByTestId("chat-message-sending")).toHaveTextContent(
+      I18nKey.CHAT_INTERFACE$MESSAGE_SENDING,
+    );
+
+    act(() =>
+      useOptimisticUserMessageStore
+        .getState()
+        .markPendingMessageError(id, "Resume failed"),
+    );
+    rerender(<PendingUserMessages pendingLabel={I18nKey.CHAT_INTERFACE$RESUMING_SANDBOX} />);
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.getByTestId("chat-message-retry")).toBeVisible();
+    fireEvent.click(screen.getByTestId("chat-message-retry"));
+    expect(screen.getByRole("status")).toHaveTextContent(I18nKey.CHAT_INTERFACE$RESUMING_SANDBOX);
+    fireEvent.click(screen.getByTestId("chat-message-stop"));
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(useConversationStore.getState().messageRestoreIfEmpty?.text).toBe(
+      "continue my work",
+    );
+  });
+
+  it("does not show a sending indicator before startup has delivered the message", () => {
+    ACTIVE_CONVO = "task-starting";
+    useOptimisticUserMessageStore.getState().enqueuePendingMessage({
+      conversationId: ACTIVE_CONVO,
+      text: "Read my file",
+    });
+    renderWithProviders(<PendingUserMessages />);
+    expect(screen.getByText("Read my file")).toBeVisible();
+    expect(
+      screen.queryByTestId("chat-message-sending"),
+    ).not.toBeInTheDocument();
   });
 
   it("ignores pending entries belonging to a different conversation", () => {

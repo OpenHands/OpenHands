@@ -1,3 +1,7 @@
+import {
+  CONVERSATION_QUERY_KEYS,
+  DEFAULT_CONVERSATION_PAGE_SIZE,
+} from "./query-keys";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { useIsAuthed } from "./use-is-authed";
@@ -7,25 +11,26 @@ import { useActiveBackend } from "#/contexts/active-backend-context";
 import { isAutomationsRoute } from "#/manifests/automation-interface";
 import { AppConversationPage } from "#/api/conversation-service/agent-server-conversation-service.types";
 
-export const usePaginatedConversations = (limit: number = 20) => {
+export const usePaginatedConversations = (
+  limit: number = DEFAULT_CONVERSATION_PAGE_SIZE,
+) => {
   const { data: userIsAuthenticated } = useIsAuthed();
   const active = useActiveBackend();
   const { currentPath } = useNavigation();
   const hasBackend = !isNoBackend(active.backend);
+  const hasConversationScope =
+    active.backend.kind !== "cloud" || !!active.orgId;
 
   return useInfiniteQuery({
     // Include the active backend identity so each (backend, org) pair
     // maintains its own paginated cache. Switching backends naturally
     // produces a new query and a fresh fetch — without it the previous
     // backend's conversations stay visible for staleTime.
-    queryKey: [
-      "user",
-      "conversations",
-      "paginated",
+    queryKey: CONVERSATION_QUERY_KEYS.paginated(
       limit,
       active.backend.id,
       active.orgId,
-    ],
+    ),
     queryFn: async ({ pageParam }) => {
       const result = await AgentServerConversationService.searchConversations(
         limit,
@@ -34,7 +39,7 @@ export const usePaginatedConversations = (limit: number = 20) => {
 
       return result;
     },
-    enabled: !!userIsAuthenticated && hasBackend,
+    enabled: !!userIsAuthenticated && hasBackend && hasConversationScope,
     getNextPageParam: (lastPage: AppConversationPage) => lastPage.next_page_id,
     initialPageParam: undefined as string | undefined,
     // Poll every 30s so titles, execution status, and timestamps stay fresh

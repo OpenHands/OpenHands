@@ -192,8 +192,11 @@ test.describe("active profile deletion + reconciliation", () => {
       await waitForTestId(page, "profile-actions-menu");
       await page.getByTestId("profile-delete").click();
 
-      // Confirm in the delete modal.
-      await page.getByTestId("delete-profile-confirm").click();
+      // Confirm in the delete modal, and let the delete finish: it first moves
+      // the `default` agent profile off this LLM profile.
+      const confirm = page.getByTestId("delete-profile-confirm");
+      await confirm.click();
+      await expect(confirm).toBeHidden({ timeout: 30_000 });
 
       // useEnsureActiveProfile re-activates the only remaining profile. Poll
       // with reload — the delete + activate mutations may take a moment on CI.
@@ -308,6 +311,9 @@ test.describe("same-model profile identity", () => {
       model: SHARED_MODEL,
     });
     await activateProfileViaUI(page, PROFILE_BETA);
+    // A launch from the named agent profile runs its llm_profile_ref, not the
+    // standalone active LLM profile, so point it at BETA too.
+    await ensureMockLLMAgentProfile(page.request, PROFILE_BETA);
 
     // Register a trajectory for the conversation.
     // Turn 0 is padding: the agent-server makes an internal LLM call

@@ -41,6 +41,7 @@ import {
 import { TOAST_OPTIONS } from "#/utils/custom-toast-handlers";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { useConfig } from "#/hooks/query/use-config";
+import { useRestoreMarsTunnels } from "#/hooks/use-mars-tunnel-backend";
 import { QUERY_KEYS } from "#/hooks/query/query-keys";
 import { AgentServerUIRoot } from "#/components/providers";
 import { TelemetryConsentBanner } from "#/components/features/analytics/telemetry-consent-banner";
@@ -49,12 +50,13 @@ import { useOnboardingCompletion } from "#/components/features/onboarding/use-on
 import { NavigationProvider } from "#/context/navigation-context";
 import {
   applyColorTheme,
+  COLOR_THEME_BOOTSTRAP_SCRIPT,
   readPersistedColorTheme,
 } from "#/themes/color-themes";
 
-/** Applies the persisted color-theme palette to document.body on mount. */
+/** Applies the persisted palette before paint; useEffect lands a frame late. */
 function ColorThemeApplier() {
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     applyColorTheme(readPersistedColorTheme());
   }, []);
   return null;
@@ -91,12 +93,15 @@ const BackendFormModal = React.lazy(() =>
 
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <Meta />
         <Links />
+        <script
+          dangerouslySetInnerHTML={{ __html: COLOR_THEME_BOOTSTRAP_SCRIPT }}
+        />
       </head>
       <body data-agent-server-ui="" className="m-0">
         <AgentServerUIRoot contentClassName="min-h-screen">
@@ -114,9 +119,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
 function AgentServerBootstrapLoading() {
   return (
-    <main className="min-h-screen bg-base px-6 py-10 text-white">
+    <main className="min-h-screen bg-canvas-base px-6 py-10 text-contrast">
       <div className="mx-auto flex min-h-screen max-w-6xl items-center justify-center">
-        <div className="rounded-3xl border border-white/10 bg-base/80 px-8 py-10 shadow-2xl">
+        <div className="rounded-3xl border border-contrast/10 bg-canvas-base/80 px-8 py-10 shadow-2xl">
           <LoadingSpinner size="large" />
         </div>
       </div>
@@ -149,7 +154,7 @@ function MissingAgentServerScreen() {
   return (
     <main
       data-testid="agent-server-onboarding-screen"
-      className="min-h-screen bg-base"
+      className="min-h-screen bg-canvas-base"
     >
       <React.Suspense fallback={null}>
         <ManageBackendsModal onClose={handleClose} recoveryMode />
@@ -185,7 +190,7 @@ function FirstRunOnboardingScreen({ onClose }: { onClose: () => void }) {
     return (
       <main
         data-testid="first-run-onboarding-screen"
-        className="min-h-screen bg-base"
+        className="min-h-screen bg-canvas-base"
       >
         <React.Suspense fallback={<AgentServerBootstrapLoading />}>
           <BackendFormModal
@@ -202,7 +207,7 @@ function FirstRunOnboardingScreen({ onClose }: { onClose: () => void }) {
   return (
     <main
       data-testid="first-run-onboarding-screen"
-      className="min-h-screen bg-base"
+      className="min-h-screen bg-canvas-base"
     >
       <NavigationProvider value={navigationValue}>
         <React.Suspense fallback={<AgentServerBootstrapLoading />}>
@@ -238,10 +243,26 @@ export default function App() {
   // reload the baked key is still null, but the registry has the key.
   // So: skip the instant gate when a registered backend already carries
   // an API key — let the normal /server_info probe validate it instead.
+  const { active } = useActiveBackendContext();
   const bakedKeyMissing = isAuthRequiredAndMissing();
   const hasRegisteredKey = Boolean(getEffectiveLocalBackend()?.apiKey);
-  const authMissing = bakedKeyMissing && !hasRegisteredKey;
-  const { active } = useActiveBackendContext();
+  // When the active backend is cloud, local session-key auth is irrelevant —
+  // the cloud backend uses its own bearer token. Skip the API-key entry screen
+  // in that case so Docker/public mode doesn't block cloud-only sessions.
+  const isActiveCloudBackend = active.backend.kind === "cloud";
+  // A DigitalOcean MARS session is registered as an ordinary `kind: "local"`
+  // backend whose guest key is intentionally empty (the in-guest agent-server
+  // key is set by the sandbox template, not us; the DigitalOcean token is the
+  // authorization boundary). On a page with no baked session key it must not
+  // be mistaken for an unkeyed local backend: the same-origin `/mars/sessions/*`
+  // proxy is authenticated by the bridge cookie, not by a per-backend key.
+  const isActiveMarsSession = Boolean(active.backend.marsSessionId);
+  const authMissing =
+    bakedKeyMissing &&
+    !hasRegisteredKey &&
+    !isActiveCloudBackend &&
+    !isActiveMarsSession;
+  const restoringMarsTunnel = useRestoreMarsTunnels();
   const queryClient = useQueryClient();
   // In locked-to-Cloud mode the only valid backend is a Cloud backend whose
   // host matches the configured locked Cloud host. A missing backend, a stale
@@ -316,6 +337,7 @@ export default function App() {
     enabled:
       !authMissing &&
       !showFirstRunOnboarding &&
+      !restoringMarsTunnel &&
       mainAppAuthAllowsBackendQueries,
   });
   const activeCloudHealth = useBackendsHealth(
@@ -362,6 +384,7 @@ export default function App() {
   if (
     waitingForMainAppAuth ||
     redirectingToMainAppLogin ||
+    restoringMarsTunnel ||
     (cookieSessionMaybeExpired && mainAppAuth.isFetching)
   ) {
     return <AgentServerBootstrapLoading />;

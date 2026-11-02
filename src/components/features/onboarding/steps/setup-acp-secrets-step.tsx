@@ -55,6 +55,7 @@ interface SetupAcpSecretsStepProps {
  * already exists shows an "already saved" placeholder and is left untouched
  * unless the user types a replacement.
  */
+// @spec WN-001 — Required-secret warning uses theme-aware warning feedback
 export function SetupAcpSecretsStep({
   providerKey,
   isActive,
@@ -140,10 +141,10 @@ export function SetupAcpSecretsStep({
       className="flex flex-col gap-6"
     >
       <header className="flex flex-col gap-2">
-        <h2 className="text-2xl font-medium text-white">
+        <h2 className="text-2xl font-medium text-contrast">
           {t(I18nKey.ONBOARDING$ACP_SECRETS_TITLE)}
         </h2>
-        <p className="text-sm text-[var(--oh-muted)]">
+        <p className="text-sm text-muted">
           {t(I18nKey.ONBOARDING$ACP_SECRETS_SUBTITLE, {
             provider: providerName,
           })}
@@ -151,7 +152,7 @@ export function SetupAcpSecretsStep({
         {required && !isAuthenticated ? (
           <p
             data-testid="onboarding-acp-secrets-required-note"
-            className="text-sm text-[var(--oh-muted)]"
+            className="text-sm text-muted"
           >
             {t(I18nKey.ONBOARDING$ACP_SECRETS_REQUIRED_NOTE, {
               provider: providerName,
@@ -161,7 +162,7 @@ export function SetupAcpSecretsStep({
           authStatus !== "authenticated" && (
             // When already signed in, the success banner below already says to
             // leave the fields blank, so this general reminder would be redundant.
-            <p className="text-sm text-[var(--oh-muted)]">
+            <p className="text-sm text-muted">
               {t(I18nKey.ONBOARDING$ACP_SECRETS_SUBSCRIPTION_NOTE)}
             </p>
           )
@@ -195,7 +196,7 @@ export function SetupAcpSecretsStep({
       {blockNext ? (
         <p
           data-testid="onboarding-acp-secrets-blocked"
-          className="text-sm text-amber-300"
+          className="text-sm text-feedback-warning"
         >
           {t(I18nKey.ONBOARDING$ACP_SECRETS_REQUIRED_BLOCKED)}
         </p>

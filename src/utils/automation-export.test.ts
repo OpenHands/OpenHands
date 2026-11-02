@@ -5,6 +5,7 @@ import {
   parseAutomationFile,
   serializeAutomation,
 } from "./automation-export";
+import { withPresetSources } from "./automation-preset-sources";
 
 const cronAutomation: Automation = {
   id: "automation-1",
@@ -52,6 +53,31 @@ describe("automation export files", () => {
     expect(exported.spec).not.toHaveProperty("created_at");
     expect(exported.spec).not.toHaveProperty("updated_at");
     expect(exported.spec).not.toHaveProperty("last_triggered_at");
+  });
+
+  it("exports the repository, ref and plugins read from preset_metadata", () => {
+    const exported = serializeAutomation(
+      withPresetSources({
+        ...cronAutomation,
+        repository: undefined,
+        branch: undefined,
+        plugins: undefined,
+        preset_metadata: {
+          repos: [
+            { url: "https://github.com/qa-example/qa-repo", ref: "main" },
+          ],
+          plugins: [{ source: "github:qa-example/qa-plugin" }],
+        },
+      }),
+    );
+
+    expect(exported.spec).toMatchObject({
+      repository: "https://github.com/qa-example/qa-repo",
+      branch: "main",
+      plugins: ["github:qa-example/qa-plugin"],
+    });
+    expect(exported.spec).not.toHaveProperty("repositories");
+    expect(parseAutomationFile(exported)).toEqual(exported.spec);
   });
 
   it("round-trips event trigger fields", () => {

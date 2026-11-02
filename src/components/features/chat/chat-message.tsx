@@ -1,4 +1,5 @@
 import React from "react";
+import { LoaderCircle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "#/utils/utils";
 import { CopyToClipboardButton } from "#/components/shared/buttons/copy-to-clipboard-button";
@@ -7,6 +8,7 @@ import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import { I18nKey } from "#/i18n/declaration";
 import { TextShimmer } from "#/components/shared/text-shimmer";
 import { formatEventTimestamp } from "#/utils/format-event-timestamp";
+import { useTimestampHover } from "#/hooks/use-timestamp-hover";
 import { MarkdownRenderer } from "../markdown/markdown-renderer";
 import { PendingStopIcon } from "./pending-stop-icon";
 import {
@@ -27,10 +29,13 @@ interface ChatMessageProps {
   }>;
   isFromPlanningAgent?: boolean;
   pendingStatus?: ChatMessagePendingStatus;
+  pendingLabel?: string;
   onRetry?: () => void;
   onDismiss?: () => void;
   onStop?: () => void;
   timestamp?: string;
+  /** The message is a reply still being streamed in. */
+  isStreaming?: boolean;
 }
 
 export function ChatMessage({
@@ -40,13 +45,16 @@ export function ChatMessage({
   actions,
   isFromPlanningAgent = false,
   pendingStatus,
+  pendingLabel,
   onRetry,
   onDismiss,
   onStop,
   timestamp,
+  isStreaming = false,
 }: React.PropsWithChildren<ChatMessageProps>) {
   const { t, i18n } = useTranslation("openhands");
   const [isHovering, setIsHovering] = React.useState(false);
+  const timestampHover = useTimestampHover();
   const [isCopy, setIsCopy] = React.useState(false);
   const [isExpanded, setIsExpanded] = React.useState(false);
   const [isTruncatable, setIsTruncatable] = React.useState(false);
@@ -83,12 +91,12 @@ export function ChatMessage({
     (pendingStatus === "error" || pendingStatus === "sending");
   const canStopPendingMessage = pendingStatus === "sending" && onStop != null;
   const showStopButton = canStopPendingMessage && isHovering;
-  const useTruncatedUserBody = type === "user" && pendingStatus == null;
+  const useTruncatedUserBody = type === "user";
   const isCollapsed = useTruncatedUserBody && isTruncatable && !isExpanded;
   const hasBubbleChildren = React.Children.count(children) > 0;
 
   React.useLayoutEffect(() => {
-    if (!canStopPendingMessage || useTruncatedUserBody) {
+    if (!canStopPendingMessage) {
       return undefined;
     }
 
@@ -118,12 +126,14 @@ export function ChatMessage({
   }, [message, canStopPendingMessage, useTruncatedUserBody]);
 
   const messageContent = useTruncatedUserBody ? (
-    <UserMessageBody
-      message={message}
-      isHovering={isHovering}
-      isExpanded={isExpanded}
-      onTruncatableChange={setIsTruncatable}
-    />
+    <div ref={pendingMessageContentRef} className="min-w-0">
+      <UserMessageBody
+        message={message}
+        isHovering={isHovering}
+        isExpanded={isExpanded}
+        onTruncatableChange={setIsTruncatable}
+      />
+    </div>
   ) : (
     <div
       ref={pendingMessageContentRef}
@@ -132,8 +142,9 @@ export function ChatMessage({
       <MarkdownRenderer
         includeStandard
         includeHeadings
-        allowHtml={type !== "user"}
+        allowHtml
         components={chatBubbleMarkdownComponents}
+        streaming={isStreaming}
       >
         {message}
       </MarkdownRenderer>
@@ -146,8 +157,14 @@ export function ChatMessage({
     <article
       data-testid={`${type}-message`}
       data-pending-status={pendingStatus}
-      onMouseEnter={() => setIsHovering(true)}
-      onMouseLeave={() => setIsHovering(false)}
+      onMouseEnter={() => {
+        setIsHovering(true);
+        timestampHover.show();
+      }}
+      onMouseLeave={() => {
+        setIsHovering(false);
+        timestampHover.hide();
+      }}
       className={cn(
         "rounded-xl relative w-fit max-w-full flex flex-col",
         hasBubbleChildren && "gap-2",
@@ -156,8 +173,7 @@ export function ChatMessage({
         isFromPlanningAgent &&
           type === "agent" &&
           "border border-[#597ff4] bg-tertiary p-4 mt-2",
-        pendingStatus === "error" &&
-          "border border-[var(--oh-status-error)]/40",
+        pendingStatus === "error" && "border border-status-error/40",
         !isPendingUserMessage && "last:mb-4",
       )}
     >
@@ -216,7 +232,7 @@ export function ChatMessage({
           aria-hidden={!showStopButton}
           tabIndex={showStopButton ? 0 : -1}
           className={cn(
-            "group absolute z-10 inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-full bg-[var(--oh-color-tertiary)] text-[var(--oh-foreground)] transition-opacity duration-150",
+            "group absolute z-10 inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-full bg-tertiary text-foreground transition-opacity duration-150",
             isSingleLinePendingMessage
               ? "right-3 top-1/2 -translate-y-1/2"
               : "right-3 bottom-2.5",
@@ -246,7 +262,8 @@ export function ChatMessage({
     <StyledTooltip
       content={<time dateTime={timestamp}>{timestampLabel}</time>}
       placement="top"
-      isOpen={isHovering}
+      isOpen={timestampHover.isVisible}
+      tooltipClassName="pointer-events-none"
     >
       {messageBubble}
     </StyledTooltip>
@@ -261,14 +278,14 @@ export function ChatMessage({
         <div
           role="alert"
           data-testid="chat-message-error"
-          className="flex items-center gap-2 text-xs text-[var(--oh-status-error)]"
+          className="flex items-center gap-2 text-xs text-status-error"
         >
           <span>{t(I18nKey.CHAT_INTERFACE$MESSAGE_SEND_FAILED)}</span>
           {onRetry ? (
             <button
               type="button"
               onClick={onRetry}
-              className="cursor-pointer rounded-md border border-[var(--oh-border)] px-2 py-1 text-xs font-normal text-[var(--oh-foreground)] hover:bg-[var(--oh-interactive-hover)]"
+              className="cursor-pointer rounded-md border border-border px-2 py-1 text-xs font-normal text-foreground hover:bg-interactive-hover"
               data-testid="chat-message-retry"
             >
               {t(I18nKey.CHAT_INTERFACE$MESSAGE_RETRY)}
@@ -278,7 +295,7 @@ export function ChatMessage({
             <button
               type="button"
               onClick={onDismiss}
-              className="cursor-pointer rounded-md border border-[var(--oh-border)] px-2 py-1 text-xs font-normal text-[var(--oh-foreground)] hover:bg-[var(--oh-interactive-hover)]"
+              className="cursor-pointer rounded-md border border-border px-2 py-1 text-xs font-normal text-foreground hover:bg-interactive-hover"
               data-testid="chat-message-dismiss"
             >
               {t(I18nKey.CHAT_INTERFACE$MESSAGE_DISMISS)}
@@ -293,18 +310,32 @@ export function ChatMessage({
     return (
       <div className="flex w-full max-w-full flex-col last:mb-4">
         {messageBubbleWithTimestamp}
-        <div className="my-1 w-full py-1 text-sm">
-          <TextShimmer
-            as="p"
-            role="status"
-            aria-live="polite"
-            data-testid="chat-message-sending"
-            className="block w-full text-sm font-normal"
-            duration={1}
-            spread={2}
-          >
-            {t(I18nKey.CHAT_INTERFACE$MESSAGE_SENDING)}
-          </TextShimmer>
+        <div className="mt-4 w-full py-1 text-sm">
+          {pendingLabel ? (
+            <div
+              role="status"
+              aria-live="polite"
+              className="flex items-center gap-2 text-muted"
+            >
+              <span>{pendingLabel}</span>
+              <LoaderCircle
+                aria-hidden="true"
+                className="h-3.5 w-3.5 shrink-0 animate-spin motion-reduce:animate-none"
+              />
+            </div>
+          ) : (
+            <TextShimmer
+              as="p"
+              role="status"
+              aria-live="polite"
+              data-testid="chat-message-sending"
+              className="block w-full text-sm font-normal"
+              duration={1}
+              spread={2}
+            >
+              {t(I18nKey.CHAT_INTERFACE$MESSAGE_SENDING)}
+            </TextShimmer>
+          )}
         </div>
       </div>
     );

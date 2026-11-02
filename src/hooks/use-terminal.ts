@@ -1,6 +1,8 @@
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import React from "react";
+import { useColorTheme } from "#/hooks/use-color-theme";
+import { getTerminalTheme } from "#/themes/terminal-themes";
 import { Command, useCommandStore } from "#/stores/command-store";
 import { parseTerminalOutput } from "#/utils/parse-terminal-output";
 
@@ -90,6 +92,7 @@ function resolveTerminalForeground(host: HTMLElement): string {
 const persistentLastCommandIndex = { current: 0 };
 
 export const useTerminal = () => {
+  const colorTheme = useColorTheme();
   const commands = useCommandStore((state) => state.commands);
   const terminal = React.useRef<Terminal | null>(null);
   const fitAddon = React.useRef<FitAddon | null>(null);
@@ -108,10 +111,7 @@ export const useTerminal = () => {
       // Canvas fillStyle does not resolve CSS variables; use transparency so
       // the host / panel background shows through (`allowTransparency` required).
       allowTransparency: true,
-      theme: {
-        background: "rgba(0, 0, 0, 0)",
-        foreground: resolveTerminalForeground(host),
-      },
+      theme: getTerminalTheme(colorTheme, resolveTerminalForeground(host)),
     });
 
   const fitTerminalSafely = React.useCallback(() => {
@@ -170,6 +170,15 @@ export const useTerminal = () => {
       lastCommandIndex.current = 0;
     };
   }, []);
+
+  React.useEffect(() => {
+    const host = ref.current;
+    if (!terminal.current?.options || !host) return;
+    terminal.current.options.theme = getTerminalTheme(
+      colorTheme,
+      resolveTerminalForeground(host),
+    );
+  }, [colorTheme]);
 
   React.useEffect(() => {
     if (

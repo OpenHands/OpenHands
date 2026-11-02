@@ -3,7 +3,6 @@ import { ExternalLink } from "lucide-react";
 import { useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { buildAutomationMetadataPills } from "#/components/features/automations/build-automation-pills";
-import { EditAutomationModal } from "#/components/features/automations/detail/edit-automation-modal";
 import {
   RunPhase,
   shouldShowRunPhase,
@@ -195,7 +194,7 @@ export function PinnedAutomationCard({
             role="link"
             tabIndex={0}
             title={t(I18nKey.FEATURED_AUTOMATIONS$VIEW_DETAILS)}
-            className="h-8 min-w-0 flex-1 cursor-pointer truncate text-sm font-semibold leading-8 text-[var(--oh-foreground)] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--oh-focus)]"
+            className="h-8 min-w-0 flex-1 cursor-pointer truncate text-sm font-semibold leading-8 text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
             onClick={() => actions.viewDetails()}
             onKeyDown={(event) => {
               if (event.key === "Enter" || event.key === " ") {
@@ -220,7 +219,7 @@ export function PinnedAutomationCard({
           </div>
         </div>
         {automation.prompt ? (
-          <p className="line-clamp-2 text-xs leading-relaxed text-[var(--oh-text-secondary)]">
+          <p className="line-clamp-2 text-xs leading-relaxed text-text-secondary">
             {automation.prompt}
           </p>
         ) : null}
@@ -261,13 +260,13 @@ export function PinnedAutomationCard({
           ) : null}
 
           {!isLoading && isError ? (
-            <p className="truncate text-[var(--oh-text-secondary)]">
+            <p className="truncate text-text-secondary">
               {t(I18nKey.FEATURED_AUTOMATIONS$STATUS_UNAVAILABLE)}
             </p>
           ) : null}
 
           {!isLoading && !isError && !latestRun ? (
-            <p className="truncate text-[var(--oh-text-secondary)]">
+            <p className="truncate text-text-secondary">
               {t(I18nKey.AUTOMATIONS$DETAIL$NO_RUNS)}
             </p>
           ) : null}
@@ -286,12 +285,7 @@ export function PinnedAutomationCard({
               />
 
               {showPhase ? (
-                <RunPhase
-                  status={latestRun.status}
-                  code={latestRun.phase_code}
-                  label={latestRun.phase_label}
-                  updatedAt={latestRun.phase_updated_at}
-                />
+                <RunPhase currentPhase={latestRun.current_phase} />
               ) : null}
 
               {shortSummary ? (
@@ -305,14 +299,14 @@ export function PinnedAutomationCard({
                     placement="top"
                     closeDelay={100}
                     disableAnimation={disableAnimation}
-                    className="rounded-xl border border-[var(--oh-border)] bg-base-secondary p-0 text-white shadow-xl"
+                    className="rounded-xl border border-border bg-base-secondary p-0 text-contrast shadow-xl"
                   >
-                    <span className="min-w-0 flex-1 cursor-default truncate text-[var(--oh-text-secondary)]">
+                    <span className="min-w-0 flex-1 cursor-default truncate text-text-secondary">
                       {shortSummary}
                     </span>
                   </Tooltip>
                 ) : (
-                  <p className="min-w-0 flex-1 truncate text-[var(--oh-text-secondary)]">
+                  <p className="min-w-0 flex-1 truncate text-text-secondary">
                     {shortSummary}
                   </p>
                 )
@@ -323,7 +317,7 @@ export function PinnedAutomationCard({
                   to={`/conversations/${conversationId}`}
                   aria-label={conversationTitle}
                   title={conversationTitle}
-                  className="group/conversation inline-flex min-w-0 items-center gap-1 text-[var(--oh-foreground)] hover:text-[var(--oh-text-secondary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--oh-focus)]"
+                  className="group/conversation inline-flex min-w-0 items-center gap-1 text-foreground hover:text-text-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                 >
                   <span className="truncate">{conversationTitle}</span>
                   <ExternalLink
@@ -334,7 +328,7 @@ export function PinnedAutomationCard({
               ) : null}
 
               {!conversationId && isTerminal ? (
-                <p className="min-w-0 truncate text-[var(--oh-text-secondary)]">
+                <p className="min-w-0 truncate text-text-secondary">
                   {t(I18nKey.AUTOMATIONS$DETAIL$NO_CONVERSATION)}
                 </p>
               ) : null}
@@ -343,7 +337,7 @@ export function PinnedAutomationCard({
         </div>
 
         {timestamp ? (
-          <span className="shrink-0 text-[var(--oh-text-secondary)]">
+          <span className="shrink-0 text-text-secondary">
             {formatRelativeTime(timestamp, i18n.language, t)}
           </span>
         ) : null}
@@ -356,14 +350,6 @@ export function PinnedAutomationCard({
             copy={insights.stats}
           />
         </div>
-      ) : null}
-
-      {actions.editOpen ? (
-        <EditAutomationModal
-          automation={automation}
-          isOpen={actions.editOpen}
-          onClose={() => actions.setEditOpen(false)}
-        />
       ) : null}
 
       <TurnOffConfirmationModal

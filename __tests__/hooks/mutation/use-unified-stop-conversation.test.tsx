@@ -100,7 +100,7 @@ beforeEach(() => {
 });
 
 describe("useUnifiedPauseConversation", () => {
-  it("pauses the active conversation, patches both paused statuses, and navigates home", async () => {
+  it("pauses the active conversation, clears its runtime URL, and navigates home", async () => {
     const previousConversations = {
       pages: [{ items: [{ id: "conversation-1" }] }],
     };
@@ -137,7 +137,7 @@ describe("useUnifiedPauseConversation", () => {
       "conversation-1",
       {
         execution_status: ExecutionStatus.PAUSED,
-        sandbox_status: "PAUSED",
+        conversation_url: null,
       },
     );
     expect(navigateMock).toHaveBeenCalledWith("/conversations");
@@ -160,7 +160,7 @@ describe("useUnifiedPauseConversation", () => {
       "conversation-1",
       {
         execution_status: ExecutionStatus.PAUSED,
-        sandbox_status: "PAUSED",
+        conversation_url: null,
       },
     );
     expect(navigateMock).not.toHaveBeenCalled();

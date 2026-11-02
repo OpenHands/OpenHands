@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createCommandMenuItems } from "#/components/features/command-menu/command-menu-items";
+import { OSS_NAV_ITEMS } from "#/constants/settings-nav";
 
 /**
  * The automation entry's title, description, and keywords are the interface
@@ -46,11 +47,29 @@ describe("the command menu settings group", () => {
       "settings",
       "agent-settings",
       "llm-settings",
-      "condenser-settings",
+      "meta-llm-settings",
+      "agent-context-settings",
       "verification-settings",
+      "runtime-settings",
       "app-settings",
       "secrets-settings",
     ]);
+  });
+
+  it("offers an entry for every page the settings nav lists", () => {
+    // Act
+    const routes = createCommandMenuItems({ toggleSidebar: vi.fn() }).map(
+      (item) => item.to,
+    );
+
+    // Assert — Condenser is per agent profile on the default local backend.
+    expect(routes).toEqual(
+      expect.arrayContaining(
+        OSS_NAV_ITEMS.map((navItem) => navItem.to).filter(
+          (to) => to !== "/settings/condenser",
+        ),
+      ),
+    );
   });
 
   it("keeps only Settings and Application when locked to a Cloud host", () => {

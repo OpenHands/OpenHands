@@ -34,6 +34,21 @@ function renderHeader(
   );
 }
 
+describe("DetailHeader — status badge", () => {
+  it("labels draft automations as draft instead of inactive", () => {
+    renderHeader({
+      automation: { ...disabledAutomation, state: "DRAFT" },
+    });
+
+    expect(screen.getByTestId("active-status-badge-draft")).toHaveTextContent(
+      I18nKey.AUTOMATIONS$DETAIL$DRAFT,
+    );
+    expect(
+      screen.queryByTestId("active-status-badge-inactive"),
+    ).not.toBeInTheDocument();
+  });
+});
+
 describe("DetailHeader — enabled toggle gating", () => {
   it("hides the switch and Turn on when canToggle is false but keeps Delete", async () => {
     // Arrange — a manager who did not create this disabled automation.

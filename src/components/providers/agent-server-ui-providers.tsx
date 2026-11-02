@@ -1,3 +1,4 @@
+import { PendingTaskAttachmentDelivery } from "#/components/features/chat/pending-task-attachment-delivery";
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { I18nextProvider } from "react-i18next";
@@ -14,6 +15,7 @@ import {
   setI18n,
 } from "#/i18n";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
+import { CloudOrganizationBoundary } from "#/components/features/backends/cloud-organization-boundary";
 import { useHydrateFreeModels } from "#/hooks/query/use-free-models";
 import type { TelemetryConfig } from "#/services/telemetry";
 import { TelemetryProvider } from "./telemetry-provider";
@@ -44,6 +46,8 @@ export interface AgentServerUIProvidersProps extends Pick<
   analytics?: AgentServerUIAnalyticsConfig;
   i18n?: I18nInstance;
   withStyleRoot?: boolean;
+  /** Opt in only after authentication; otherwise mount CloudOrganizationBoundary after the host auth gate. */
+  resolveCloudOrganization?: boolean;
 }
 
 /**
@@ -67,6 +71,7 @@ export function AgentServerUIProviders({
   styleOverrides,
   theme,
   withStyleRoot = true,
+  resolveCloudOrganization = false,
 }: AgentServerUIProvidersProps) {
   const resolvedQueryClient = React.useMemo(
     () => queryClient ?? getDefaultQueryClient(),
@@ -109,7 +114,11 @@ export function AgentServerUIProviders({
   const content = (
     <TelemetryProvider config={posthogConfig}>
       <FreeModelsHydrator />
-      {children}
+      {resolveCloudOrganization ? (
+        <CloudOrganizationBoundary>{children}</CloudOrganizationBoundary>
+      ) : (
+        children
+      )}
     </TelemetryProvider>
   );
 
@@ -130,7 +139,10 @@ export function AgentServerUIProviders({
   return (
     <I18nextProvider i18n={resolvedI18n} defaultNS={OPENHANDS_I18N_NAMESPACE}>
       <QueryClientProvider client={resolvedQueryClient}>
-        <ActiveBackendProvider>{wrappedContent}</ActiveBackendProvider>
+        <ActiveBackendProvider>
+          <PendingTaskAttachmentDelivery />
+          {wrappedContent}
+        </ActiveBackendProvider>
       </QueryClientProvider>
     </I18nextProvider>
   );

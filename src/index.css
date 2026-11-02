@@ -93,6 +93,27 @@ code {
   scroll-timeline: 100ms;
 }
 
+/* Words of a streamed reply fade in as they are revealed. The duration must
+   match STREAM_WORD_FADE_MS in rehype-fade-in-words.ts. */
+@keyframes stream-word-fade {
+  from {
+    opacity: 0.15;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.stream-word-fade {
+  animation: stream-word-fade 280ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stream-word-fade {
+    animation: none;
+  }
+}
+
 @keyframes environment-switch-content-refresh {
   0% {
     opacity: 1;

@@ -1,3 +1,4 @@
+import { AutomationAgentProfileSelector } from "#/components/features/automations/agent-profile-selector";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
@@ -11,8 +12,10 @@ import { cn } from "#/utils/utils";
 import { modalTitleLgClassName } from "#/utils/modal-classes";
 import { getApiErrorBody } from "#/utils/api-error-message";
 import { useTracking } from "#/hooks/use-tracking";
+import { notifySuperAdminSetupStep } from "#/components/features/setup-guide/super-admin-setup-step-event";
 import { useSetupCapabilities } from "#/hooks/query/use-manifest-capabilities";
 import { useSetupPrerequisites } from "#/hooks/query/use-manifest-prerequisites";
+import { useNativeGitIntegrations } from "#/hooks/query/use-native-git-integrations";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useSetupPreflight } from "#/hooks/use-manifest-preflight";
 import { useSetupAction } from "#/manifests/manifest-actions";
@@ -24,6 +27,7 @@ import {
   buildCreatePayload,
   deriveErrorMap,
   missingCreateEndpoints,
+  supportsAgentProfile,
 } from "#/manifests/automation-setup";
 import {
   actionKinds,
@@ -46,6 +50,7 @@ import {
 import { automationDetailPath } from "#/manifests/automation-interface";
 import { findAutomationCommand } from "#/utils/automation-catalog";
 import type { GitRepository } from "#/types/git";
+import type { Provider } from "#/types/settings";
 import type {
   SetupEntry,
   SetupFormValue,
@@ -65,6 +70,18 @@ const PREFLIGHT_DEBOUNCE_MS = 400;
 const NO_SERVICE_ERRORS: MappedManifestErrors = {
   fieldErrors: {},
   formErrors: [],
+};
+
+/**
+ * Fields naming the secret a bundle reads only when the user has not connected
+ * the provider under Settings > Integrations; once connected, the bundle uses
+ * that account's token. On an OpenHands Enterprise instance (`self_hosted`)
+ * the field therefore has nothing to ask and is not shown while the provider
+ * is connected. It keeps its default, so the config still names a secret.
+ * OpenHands Cloud and local backends show it as declared.
+ */
+const CONNECTED_PROVIDER_SECRET_FIELDS: Record<string, Provider> = {
+  githubTokenSecret: "github",
 };
 
 function hasAnyError(errors: MappedManifestErrors): boolean {
@@ -103,6 +120,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
   const prerequisites = useSetupPrerequisites(entry);
   const runPreflight = useSetupPreflight(entry);
   const runAction = useSetupAction();
+  const { getNativeIntegration, deploymentMode } = useNativeGitIntegrations();
   const {
     trackAutomationSetupOpened,
     trackAutomationSetupValidated,
@@ -165,6 +183,21 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     () => collectFields(entry.setup, selectedTrigger, selectedAction),
     [entry, selectedTrigger, selectedAction],
   );
+  const hidesConnectedProviderSecrets = deploymentMode === "self_hosted";
+  const visibleFields = Object.fromEntries(
+    Object.entries(fields).filter(([name, field]) => {
+      if (values.agent_profile_id && field.type === "llm-profile") return false;
+      if (!hidesConnectedProviderSecrets) return true;
+      if (!Object.hasOwn(CONNECTED_PROVIDER_SECRET_FIELDS, name)) return true;
+      return (
+        getNativeIntegration(CONNECTED_PROVIDER_SECRET_FIELDS[name])
+          ?.isConnected !== true
+      );
+    }),
+  );
+  const canSelectAgentProfile =
+    capabilities.capabilities?.features.includes("agentProfiles") === true &&
+    supportsAgentProfile(entry, selectedAction);
   const hasLlmProfileField = useMemo(
     () => Object.values(fields).some((field) => field.type === "llm-profile"),
     [fields],
@@ -261,7 +294,11 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
   const setActionValue = (kind: string) => {
     setSelectedAction(kind);
     const defaults = getInitialFormValues(entry.setup, selectedTrigger, kind);
-    valuesRef.current = { ...defaults, ...valuesRef.current };
+    valuesRef.current = {
+      ...defaults,
+      ...valuesRef.current,
+      ...(supportsAgentProfile(entry, kind) ? {} : { agent_profile_id: "" }),
+    };
     setValues(valuesRef.current);
     setLocalErrors({});
     setServiceErrors(NO_SERVICE_ERRORS);
@@ -365,6 +402,8 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
         automationId: entry.id,
         setupMode,
       });
+      // An assisted setup only starts the conversation that creates it.
+      if (setupMode === "direct") notifySuperAdminSetupStep("first-automation");
       const destination = getDestination(response);
       if (destination) navigate(destination, { replace: true });
       else onClose();
@@ -422,7 +461,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     <ModalBackdrop onClose={onClose} aria-label={entry.name}>
       <div
         data-testid="setup-dialog"
-        className="relative flex max-h-[85vh] w-[92vw] max-w-lg flex-col rounded-xl border border-[var(--oh-border)] bg-base-secondary"
+        className="relative flex setup-dialog-height setup-dialog-width max-w-lg flex-col rounded-xl border border-border bg-base-secondary"
       >
         <ModalCloseButton
           onClose={onClose}
@@ -442,7 +481,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
 
           {!isLoading && isUnsupported && (
             <div className="flex flex-col gap-2">
-              <p className="text-sm text-[var(--oh-muted)]">
+              <p className="text-sm text-muted">
                 {t(I18nKey.SETUP$UNSUPPORTED_MESSAGE)}
               </p>
               {/* The unmet requirements are the names both sides of the
@@ -453,7 +492,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
               {unmet.length > 0 && (
                 <p
                   data-testid="setup-unmet-requirements"
-                  className="text-sm text-[var(--oh-muted)]"
+                  className="text-sm text-muted"
                 >
                   {unmet.join(", ")}
                 </p>
@@ -467,13 +506,9 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
 
           {!isLoading && !isUnsupported && currentStep === "form" && (
             <div className="flex flex-col gap-5">
-              <p className="text-sm text-[var(--oh-muted)]">
-                {entry.description}
-              </p>
+              <p className="text-sm text-muted">{entry.description}</p>
               {entry.setup.form.note && (
-                <p className="text-sm text-[var(--oh-muted)]">
-                  {entry.setup.form.note}
-                </p>
+                <p className="text-sm text-muted">{entry.setup.form.note}</p>
               )}
               {allActionOptions.length > 1 && actionOptions.length > 1 && (
                 <div className="flex w-full flex-col gap-2.5">
@@ -499,7 +534,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
                     entry.setup.actions?.[
                       selectedAction as keyof typeof entry.setup.actions
                     ] && (
-                      <p className="text-xs text-[var(--oh-muted)]">
+                      <p className="text-xs text-muted">
                         {
                           entry.setup.actions[
                             selectedAction as keyof typeof entry.setup.actions
@@ -526,12 +561,27 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
                       if (key !== null) setTriggerValue(String(key));
                     }}
                   />
-                  <p className="text-xs text-[var(--oh-muted)]">
+                  <p className="text-xs text-muted">
                     {t(I18nKey.SETUP$TRIGGER_HELP)}
                   </p>
                 </div>
               )}
-              {Object.entries(fields).map(([name, field]) => (
+              {canSelectAgentProfile && (
+                <AutomationAgentProfileSelector
+                  // The form stores "no profile" as "", but the selector only
+                  // reads null/undefined as Default; "" would render it blank.
+                  value={
+                    typeof values.agent_profile_id === "string" &&
+                    values.agent_profile_id !== ""
+                      ? values.agent_profile_id
+                      : null
+                  }
+                  onChange={(value) =>
+                    setFieldValue("agent_profile_id", value ?? "")
+                  }
+                />
+              )}
+              {Object.entries(visibleFields).map(([name, field]) => (
                 <SetupFormField
                   key={name}
                   name={name}
@@ -560,8 +610,8 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
           {!isLoading && !isUnsupported && currentStep === "review" && (
             <SetupReviewStep
               setup={entry.setup}
+              fields={visibleFields}
               values={values}
-              selectedTrigger={selectedTrigger}
               selectedAction={selectedAction}
             />
           )}
@@ -571,7 +621,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
               key={message}
               role="alert"
               data-testid="setup-form-error"
-              className="pt-4 text-sm text-red-400"
+              className="pt-4 text-sm text-feedback-error"
             >
               {message}
             </p>

@@ -4,6 +4,8 @@ import {
   isAxiosErrorWithMessageField,
 } from "./type-guards";
 import { getUserFacingConnectionErrorMessage } from "./user-facing-error";
+import { getApiErrorMessage } from "./api-error-message";
+import { isSdkHttpError } from "./sdk-http-error";
 
 function isAxiosError(error: unknown): error is AxiosError {
   return (
@@ -15,10 +17,17 @@ function isAxiosError(error: unknown): error is AxiosError {
 }
 
 /**
- * Retrieve the error message from an Axios error
+ * Retrieve the error message from an Axios error, an SDK `HttpError`, a plain
+ * `Error` or a string
  * @param error The error to render a toast for
  */
 export const retrieveAxiosErrorMessage = (error: unknown): string => {
+  // The shared TypeScript client's HttpError means the server answered. Its
+  // `message` is the raw `HTTP request failed (status): {json}` text, so read
+  // the server's message from the parsed body instead; an unusable body gives
+  // "" and the caller shows its own fallback.
+  if (isSdkHttpError(error)) return getApiErrorMessage(error, "");
+
   let errorMessage: string | null = null;
   let shouldPreferExtractedMessage = false;
 

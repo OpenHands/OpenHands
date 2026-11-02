@@ -11,28 +11,6 @@ import {
 } from "./query-keys";
 
 /**
- * Cache key for one profile's full detail. Lives under the agent-profiles
- * prefix on purpose: activate/save/delete invalidate that prefix, so the
- * detail refetches for free. (`useActivateAgentProfile.onMutate` also
- * `setQueriesData`s the prefix, writing a stray `active_agent_profile_id`
- * onto this entry — benign, consumers only read `.profile`.) Shared with
- * `useSwitchAcpModel`, which `ensureQueryData`s the same entry.
- */
-export function agentProfileDetailQueryKey(
-  backendId: string,
-  orgId: string | null | undefined,
-  name: string,
-) {
-  return [
-    ...AGENT_PROFILES_QUERY_KEYS.all,
-    backendId,
-    orgId,
-    "detail",
-    name,
-  ] as const;
-}
-
-/**
  * Full detail of the active AgentProfile when it is ACP and no conversation is
  * open. `AgentProfileSummary` carries no `acp_server`/`acp_model`, and profile
  * activation never writes `settings.agent_settings` — so the home-page ACP
@@ -51,7 +29,7 @@ export function useActiveAcpProfileDetail(): ACPAgentProfile | null {
     activeProfile?.agent_kind === "acp" ? activeProfile.name : null;
 
   const { data } = useQuery({
-    queryKey: agentProfileDetailQueryKey(
+    queryKey: AGENT_PROFILES_QUERY_KEYS.detail(
       backend.id,
       orgId,
       activeAcpProfileName ?? "",

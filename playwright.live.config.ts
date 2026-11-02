@@ -18,6 +18,10 @@ try {
 const liveE2EFrontendURL = `http://localhost:${liveE2EFrontendPort}/`;
 const liveE2EVideoMode =
   process.env.LIVE_E2E_RECORD_VIDEO === "on" ? "on" : "retain-on-failure";
+// tmux binds <TMUX_TMPDIR>/tmux-<uid>/openhands-<32 hex>. Under this
+// checkout's .tmp state dir that exceeds the 104/108-byte Unix socket path
+// limit on CI runners, and every conversation then fails to start its terminal.
+const liveE2ETmuxTmpDir = `/tmp/oh-live-e2e-tmux-${process.getuid?.() ?? 0}`;
 
 function shellQuote(value: string) {
   return `'${value.replaceAll("'", "'\\''")}'`;
@@ -60,6 +64,7 @@ export default defineConfig({
       "node -e \"const fs=require('node:fs'); for (const p of ['.tmp/live-e2e-state','node_modules/.vite']) fs.rmSync(p,{recursive:true,force:true});\" && " +
       [
         "OH_CANVAS_SAFE_STATE_DIR=.tmp/live-e2e-state",
+        envAssignment("TMUX_TMPDIR", liveE2ETmuxTmpDir),
         envAssignment("LOCAL_BACKEND_API_KEY", liveE2ESessionApiKey),
         envAssignment("OH_CANVAS_SAFE_BACKEND_PORT", liveE2EBackendPort),
         "VITE_DO_NOT_TRACK=1",
@@ -70,5 +75,10 @@ export default defineConfig({
     url: liveE2EFrontendURL,
     timeout: 120_000,
     reuseExistingServer: false,
+    // Playwright's default teardown SIGKILLs the shell's process group, but
+    // dev-safe.mjs spawns the Agent Server detached, so it survives holding
+    // the webServer's stdout and Playwright waits on it until the CI job
+    // times out. SIGTERM lets dev-safe.mjs stop its services first.
+    gracefulShutdown: { signal: "SIGTERM", timeout: 15_000 },
   },
 });

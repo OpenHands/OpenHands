@@ -173,4 +173,43 @@ describe("useLlmConfigured", () => {
     // Detail is fetched because the profile is local + active + key-less.
     expect(mockGetProfile).toHaveBeenCalledWith("gpt-5.5");
   });
+
+  it("treats a keyed active cloud LLM profile as configured without settings key", async () => {
+    const cloudBackend: Backend = {
+      id: "test-cloud",
+      name: "Test Cloud",
+      host: "https://app.example.com",
+      apiKey: "cloud-token",
+      kind: "cloud",
+    };
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
+    mockGetSettings.mockResolvedValue({
+      ...DEFAULT_SETTINGS,
+      llm_api_key_set: false,
+      agent_settings: {
+        ...(DEFAULT_SETTINGS.agent_settings ?? {}),
+        agent_kind: "openhands",
+      },
+    });
+    mockListProfiles.mockResolvedValue({
+      active_profile: "GPT-5.4",
+      profiles: [
+        {
+          name: "GPT-5.4",
+          model: "openhands/GPT-5.4",
+          base_url: null,
+          api_key_set: true,
+          provider_connection_id: "conn-openhands",
+        },
+      ],
+    });
+
+    const { result } = renderLlmConfiguredHook();
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.isConfigured).toBe(true);
+    expect(mockGetProfile).not.toHaveBeenCalled();
+  });
 });

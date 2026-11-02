@@ -377,7 +377,7 @@ export function buildMcpServerPatch(
   return patch;
 }
 
-const applyMcpServerPatch = (
+export const applyMcpServerPatch = (
   previous: MCPServer,
   patch: MCPServerPatch,
 ): MCPServer => {

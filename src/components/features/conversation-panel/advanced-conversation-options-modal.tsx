@@ -110,7 +110,7 @@ export function AdvancedConversationOptionsModal({
       <ModalBody
         width="md"
         className={cn(
-          "relative items-start overflow-hidden border border-[var(--oh-border)]",
+          "relative items-start overflow-hidden border border-border",
           MODAL_MAX_WIDTH_VIEWPORT,
         )}
         testID="advanced-conversation-options-modal"
@@ -128,13 +128,13 @@ export function AdvancedConversationOptionsModal({
           </BaseModalDescription>
         </div>
 
-        <div className="relative -mx-6 w-[calc(100%+3rem)] min-h-0">
+        <div className="relative -mx-6 conversation-options-bleed-width min-h-0">
           <div
             aria-hidden
             data-testid="advanced-options-scroll-edge-top"
             data-visible={scrollEdges.top ? "true" : "false"}
             className={cn(
-              "pointer-events-none absolute inset-x-0 top-0 z-10 h-px bg-[var(--oh-border)]",
+              "pointer-events-none absolute inset-x-0 top-0 z-10 h-px bg-border",
               scrollEdges.top ? "opacity-100" : "opacity-0",
             )}
           />
@@ -147,7 +147,7 @@ export function AdvancedConversationOptionsModal({
             // out of the natural Tab order (the rows are tabbable buttons).
             tabIndex={-1}
             data-testid="advanced-options-scroll"
-            className="custom-scrollbar-always flex max-h-[60vh] w-full flex-col overflow-y-auto px-6"
+            className="custom-scrollbar-always flex dialog-scroll-height w-full flex-col overflow-y-auto px-6"
             onClick={(event) => event.stopPropagation()}
             onScroll={updateScrollEdges}
           >
@@ -304,7 +304,7 @@ export function AdvancedConversationOptionsModal({
             data-testid="advanced-options-scroll-edge-bottom"
             data-visible={scrollEdges.bottom ? "true" : "false"}
             className={cn(
-              "pointer-events-none absolute inset-x-0 bottom-0 z-10 h-px bg-[var(--oh-border)]",
+              "pointer-events-none absolute inset-x-0 bottom-0 z-10 h-px bg-border",
               scrollEdges.bottom ? "opacity-100" : "opacity-0",
             )}
           />

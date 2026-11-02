@@ -12,8 +12,7 @@ export function LoadingSpinner({
   className,
   outerClassName,
 }: LoadingSpinnerProps) {
-  const sizeStyle =
-    size === "small" ? "w-[25px] h-[25px]" : "w-[50px] h-[50px]";
+  const sizeStyle = size === "small" ? "w-6.25 h-6.25" : "w-12.5 h-12.5";
 
   return (
     <div

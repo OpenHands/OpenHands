@@ -20,6 +20,7 @@ export const MOCK_AUTOMATIONS_RESPONSE: AutomationsResponse = {
     {
       id: "a1000000-0000-0000-0000-000000000001",
       name: "PR Triage Digest",
+      tags: ["software-factory"],
       trigger: {
         type: "cron",
         schedule: "0 9 * * 1-5",
@@ -42,6 +43,7 @@ export const MOCK_AUTOMATIONS_RESPONSE: AutomationsResponse = {
     {
       id: "a1000000-0000-0000-0000-000000000002",
       name: "Nightly Security Pass",
+      tags: [],
       trigger: {
         type: "cron",
         schedule: "30 1 * * *",
@@ -64,6 +66,7 @@ export const MOCK_AUTOMATIONS_RESPONSE: AutomationsResponse = {
     {
       id: "a1000000-0000-0000-0000-000000000003",
       name: "Docs Sync on Push",
+      tags: [],
       trigger: {
         type: "cron",
         schedule: "*/5 * * * *",
@@ -85,6 +88,7 @@ export const MOCK_AUTOMATIONS_RESPONSE: AutomationsResponse = {
     {
       id: "a1000000-0000-0000-0000-000000000004",
       name: "Release Readiness Review",
+      tags: [],
       trigger: {
         type: "cron",
         schedule: "0 11 * * 5",
@@ -106,6 +110,7 @@ export const MOCK_AUTOMATIONS_RESPONSE: AutomationsResponse = {
     {
       id: "a1000000-0000-0000-0000-000000000005",
       name: "Incident Webhook Summary",
+      tags: [],
       trigger: {
         type: "cron",
         schedule: "0 */2 * * *",
@@ -127,6 +132,7 @@ export const MOCK_AUTOMATIONS_RESPONSE: AutomationsResponse = {
     {
       id: "a1000000-0000-0000-0000-000000000006",
       name: "PR Review on Open",
+      tags: ["software-factory", "code-review"],
       trigger: {
         type: "event",
         source: "github",
@@ -154,6 +160,7 @@ export const MOCK_AUTOMATIONS_RESPONSE: AutomationsResponse = {
     {
       id: "a1000000-0000-0000-0000-000000000007",
       name: "Release Notes Generator",
+      tags: [],
       trigger: {
         type: "event",
         source: "github",
