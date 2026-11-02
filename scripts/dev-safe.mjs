@@ -331,6 +331,51 @@ export async function findFreePorts(portConfigs, host = "127.0.0.1") {
   return result;
 }
 
+/**
+ * Resolve the internal frontend (Vite / static-server) port.
+ *
+ * Users reach the frontend through the ingress, so a taken preferred port is
+ * not fatal: fall back to a free OS-assigned port instead. A port is taken
+ * when another launcher service owns it, when it cannot be bound on the host
+ * the frontend binds, or when anything answers on 127.0.0.1 or ::1. The
+ * ingress proxies to `localhost`, which can resolve to either, and a bind
+ * probe alone misses `::1` and (on macOS) wildcard listeners, which would then
+ * serve another app in place of Canvas.
+ *
+ * @param {number} preferredPort - The port to try first
+ * @param {{bindHost?: string, reservedPorts?: number[]}} [options]
+ *   bindHost: the host the frontend binds; reservedPorts: ports owned by other
+ *   launcher services
+ * @returns {Promise<number>} The port the frontend should bind
+ */
+export async function resolveFrontendPort(
+  preferredPort,
+  { bindHost = "127.0.0.1", reservedPorts = [] } = {},
+) {
+  const answersOnLoopback = async (port) =>
+    (
+      await Promise.all([
+        isPortBusy(port, "127.0.0.1"),
+        isPortBusy(port, "::1"),
+      ])
+    ).includes(true);
+  const isUsable = async (port) =>
+    !reservedPorts.includes(port) &&
+    (await tryPort(port, bindHost)) &&
+    !(await answersOnLoopback(port));
+
+  if (await isUsable(preferredPort)) return preferredPort;
+
+  const maxAttempts = 100;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const port = await findFreePort(0, bindHost);
+    if (await isUsable(port)) return port;
+  }
+  throw new Error(
+    `Could not allocate a frontend port after ${maxAttempts} attempts`,
+  );
+}
+
 export function formatMissingUvxGuidance(cwd = process.cwd()) {
   const readmePath = path.join(cwd, "README.md");
 

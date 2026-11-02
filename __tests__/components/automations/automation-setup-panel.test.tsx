@@ -3095,6 +3095,46 @@ describe("AutomationSetupPanel", () => {
     );
   });
 
+  it("keeps an event trigger's destination when saving an existing automation", async () => {
+    vi.mocked(AutomationService.updateAutomation).mockResolvedValue({
+      id: "auto-1",
+    } as never);
+
+    const user = userEvent.setup();
+    renderPanel(
+      setupDraftFromAutomation({
+        id: "auto-1",
+        name: "Follow-ups",
+        prompt: "Continue the thread",
+        enabled: false,
+        created_at: "2026-01-01T00:00:00.000Z",
+        updated_at: "2026-01-01T00:00:00.000Z",
+        trigger: {
+          type: "event",
+          source: "github",
+          on: "issues.opened",
+          destination: "continue_conversation",
+        },
+      }),
+    );
+
+    await user.click(screen.getByTestId("automation-setup-save"));
+
+    await waitFor(() =>
+      expect(AutomationService.updateAutomation).toHaveBeenCalledWith(
+        "auto-1",
+        expect.objectContaining({
+          trigger: {
+            type: "event",
+            source: "github",
+            on: "issues.opened",
+            destination: "continue_conversation",
+          },
+        }),
+      ),
+    );
+  });
+
   it("explains existing event automation tests use the backend payload", async () => {
     vi.mocked(AutomationService.updateAutomation).mockResolvedValue({
       id: "auto-1",
