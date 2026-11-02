@@ -798,4 +798,59 @@ describe("AutomationDetail — keep sandbox alive", () => {
       ).not.toBeInTheDocument();
     },
   );
+
+  it("leaves the item out for a manager who did not create a user-owned automation", async () => {
+    // Arrange — the service lets only the creator change keep_alive here.
+    permissionMocks.isOwner = false;
+    permissionMocks.canManage = true;
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+      ...automation,
+      user_id: "another-member",
+      run_as_kind: "user",
+      keep_alive: false,
+    });
+    const user = userEvent.setup();
+    renderDetail();
+
+    // Act
+    await user.click(
+      await screen.findByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU),
+    );
+
+    // Assert
+    expect(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$DELETE }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", {
+        name: I18nKey.AUTOMATIONS$KEEP_SANDBOX_ALIVE,
+      }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("offers the item to a manager of an automation that runs as a service account", async () => {
+    // Arrange — managers may edit an automation that runs as a service account.
+    permissionMocks.isOwner = false;
+    permissionMocks.canManage = true;
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+      ...automation,
+      user_id: "service-account-id",
+      run_as_kind: "service",
+      keep_alive: false,
+    });
+    const user = userEvent.setup();
+    renderDetail();
+
+    // Act
+    await user.click(
+      await screen.findByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU),
+    );
+
+    // Assert
+    expect(
+      screen.getByRole("button", {
+        name: I18nKey.AUTOMATIONS$KEEP_SANDBOX_ALIVE,
+      }),
+    ).toBeInTheDocument();
+  });
 });
