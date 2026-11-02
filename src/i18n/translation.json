@@ -1,4 +1,22 @@
 {
+  "CHAT_INTERFACE$TIMESTAMP_JUST_NOW": {
+    "en": "Just now",
+    "ja": "たった今",
+    "zh-CN": "刚刚",
+    "zh-TW": "剛剛",
+    "ko-KR": "방금",
+    "no": "Akkurat nå",
+    "it": "Proprio ora",
+    "pt": "Agora mesmo",
+    "es": "Ahora mismo",
+    "ar": "الآن",
+    "fr": "À l'instant",
+    "tr": "Az önce",
+    "de": "Gerade eben",
+    "uk": "Щойно",
+    "ca": "Ara mateix",
+    "id": "Baru saja"
+  },
   "FILES$DISCOVERY_SETTINGS": {
     "en": "File discovery",
     "ja": "ファイル探索",
