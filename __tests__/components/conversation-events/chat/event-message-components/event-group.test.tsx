@@ -1,4 +1,8 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+import { I18nextProvider } from "react-i18next";
+import { translationResources } from "#/i18n/resources";
+
+vi.unmock("react-i18next");
 import i18next from "i18next";
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -97,6 +101,22 @@ const makeAgentErrorEvent = (
   tool_call_id: `call_${actionId}`,
   error: "boom",
 });
+
+const createTranslations = async (lng = "en") => {
+  const instance = i18next.createInstance();
+  await instance.init({
+    lng,
+    fallbackLng: "en",
+    defaultNS: "openhands",
+    resources: Object.fromEntries(
+      Object.entries(translationResources).map(([language, values]) => [
+        language,
+        { openhands: values },
+      ]),
+    ),
+  });
+  return instance;
+};
 
 describe("EventGroup", () => {
   it("returns null for an empty events array", () => {
@@ -281,7 +301,8 @@ describe("EventGroup", () => {
     ).toBeInTheDocument();
   });
 
-  it("lists each kind of step in order of first appearance", () => {
+  it("lists each kind of step as a sentence in order of first appearance", async () => {
+    const translations = await createTranslations();
     const view: ActionEvent<FileEditorAction> = {
       ...makeBashAction("a3", "unused"),
       action: {
@@ -303,17 +324,19 @@ describe("EventGroup", () => {
     ];
 
     renderWithProviders(
-      <EventGroup events={events} allEvents={[view, ...events]}>
-        <div>child</div>
-      </EventGroup>,
+      <I18nextProvider i18n={translations}>
+        <EventGroup events={events} allEvents={[view, ...events]}>
+          <div>child</div>
+        </EventGroup>
+      </I18nextProvider>,
     );
 
-    expect(
-      screen.getByText("EVENT_GROUP$RAN_COMMANDS · EVENT_GROUP$READ_FILES"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Ran 2 commands, read a file")).toBeInTheDocument();
   });
 
-  it("counts hook runs in the summary", () => {
+  it("keeps natural singular summaries while a group grows and is opened", async () => {
+    const translations = await createTranslations();
+    const user = userEvent.setup();
     const hook = {
       id: "h1",
       timestamp: new Date().toISOString(),
@@ -336,15 +359,21 @@ describe("EventGroup", () => {
     } as HookExecutionEvent;
     const events = [makeBashObservation("o1", "a1", "ls"), hook];
 
-    renderWithProviders(
-      <EventGroup events={events}>
-        <div>child</div>
-      </EventGroup>,
+    const group = (items: typeof events) => (
+      <I18nextProvider i18n={translations}>
+        <EventGroup events={items}>
+          <div>Hook details</div>
+        </EventGroup>
+      </I18nextProvider>
     );
-
-    expect(
-      screen.getByText("EVENT_GROUP$RAN_COMMANDS · EVENT_GROUP$RAN_HOOKS"),
-    ).toBeInTheDocument();
+    const { rerender } = renderWithProviders(group(events));
+    const toggle = screen.getByTestId("event-group-toggle");
+    expect(toggle).toHaveTextContent(/^Ran a command, ran a hook$/);
+    await user.click(toggle);
+    rerender(group([...events, { ...hook, id: "h2" }, { ...hook, id: "h3" }]));
+    expect(toggle).toHaveTextContent(/^Ran a command, ran 3 hooks$/);
+    expect(screen.getByText("Hook details")).toBeVisible();
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
   });
 
   it("counts a rejected action as the kind of step it was", () => {
@@ -474,6 +503,26 @@ describe("EventGroup summary plurals", () => {
     "EVENT_GROUP$USED_TOOLS",
   ];
 
+  it("uses natural English singulars and lowercase continuation for each activity type", async () => {
+    const translations = await createTranslations();
+    const expected = [
+      "Ran a command",
+      "Read a file",
+      "Made an edit",
+      "Ran a search",
+      "Ran a hook",
+      "Used a tool",
+    ];
+    groupKeys.forEach((key, index) => {
+      expect(translations.t(key, { count: 1, context: "single" })).toBe(
+        expected[index],
+      );
+      expect(
+        translations.t(key, { count: 1, context: "single_continuation" }),
+      ).toBe(expected[index].toLowerCase());
+    });
+  });
+
   it.each(["uk", "ar"])(
     "renders %s summaries in that language for multi-step counts",
     async (lng) => {
@@ -497,10 +546,15 @@ describe("EventGroup summary plurals", () => {
       });
 
       for (const key of groupKeys) {
-        for (const count of [2, 5, 11]) {
+        for (const count of [2, 5, 11, 21]) {
           const text = i18n.t(key, { count });
           expect(text).toContain(String(count));
           expect(text).not.toBe(i18n.t(key, { count, lng: "en" }));
+          const continuation = i18n.t(key, { count, context: "continuation" });
+          expect(continuation).toContain(String(count));
+          expect(continuation).not.toBe(
+            i18n.t(key, { count, context: "continuation", lng: "en" }),
+          );
         }
       }
     },

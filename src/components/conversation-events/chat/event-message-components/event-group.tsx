@@ -62,7 +62,7 @@ interface EventGroupProps {
  * "Thinking" between steps, with a spinner. Hook runs never take over the
  * title; they are quick and fire between steps.
  *
- * Collapsed otherwise: what the steps did, e.g. "Ran 3 commands · Read 1 file".
+ * Collapsed otherwise: what the steps did, e.g. "Ran 3 commands, read a file".
  *
  * Expanded: one tool reveals its details directly; multiple tools keep their
  * individual disclosures in a bordered list.
@@ -91,8 +91,16 @@ export function EventGroup({
 
   const lookupSource = allEvents ?? events;
   let summary: React.ReactNode = getEventGroupSummaryParts(events, lookupSource)
-    .map(({ key, count }) => t(key, { count }))
-    .join(" · ");
+    .map(({ key, count }, index) => {
+      const context = [
+        count === 1 ? "single" : "",
+        index > 0 ? "continuation" : "",
+      ]
+        .filter(Boolean)
+        .join("_");
+      return t(key, { count, context: context || undefined });
+    })
+    .join(t(I18nKey.EVENT_GROUP$SUMMARY_SEPARATOR));
 
   summary ||= t(
     session ? sessionActivityTitle(session) : I18nKey.THINKING$TITLE,
