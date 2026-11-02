@@ -12,6 +12,7 @@ import { displayErrorToast } from "./utils/custom-toast-handlers";
 import { getActiveBackend } from "#/api/backend-registry/active-store";
 import { recordBackendSuccess } from "#/api/backend-registry/health-store";
 import { getQueryRetryDelay } from "./utils/rate-limit-retry";
+import { isTransientRequestError } from "./utils/transient-error-retry";
 
 const handle401Error = (error: AxiosError, client: QueryClient) => {
   if (error?.response?.status === 401 || error?.status === 401) {
@@ -65,6 +66,11 @@ export const createAgentServerQueryClient = () => {
 
         const disableToast =
           query.meta?.disableToast ?? query.options.meta?.disableToast;
+
+        // Keep cached content during a transient refresh failure; the query
+        // still exposes its error, and the next successful fetch clears it.
+        if (query.state.data !== undefined && isTransientRequestError(error))
+          return;
 
         if (!disableToast && !isActiveCloudBackendAuthError(error)) {
           const errorMessage = retrieveAxiosErrorMessage(error);

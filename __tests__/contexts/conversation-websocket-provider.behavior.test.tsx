@@ -9,13 +9,16 @@ import {
 import type { WebSocketHookOptions } from "#/hooks/use-websocket";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import type { MessageEvent as AgentMessageEvent } from "#/types/agent-server/core/events/message-event";
-import type { OpenHandsEvent } from "#/types/agent-server/core";
+import {
+  ExecutionStatus,
+  type OpenHandsEvent,
+} from "#/types/agent-server/core";
 import { useEventStore } from "#/stores/use-event-store";
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { useConversationStateStore } from "#/stores/conversation-state-store";
 import { useConversationStore } from "#/stores/conversation-store";
-import { useCommandStore } from "#/stores/command-store";
+import { getTerminalCommands } from "#/utils/terminal-commands";
 import { useBrowserStore } from "#/stores/browser-store";
 import { useGoalStore } from "#/stores/goal-store";
 import { useModelStore } from "#/stores/model-store";
@@ -97,6 +100,8 @@ vi.mock("#/hooks/use-websocket", () => ({
 
 vi.mock("#/hooks/query/use-conversation-history", () => ({
   useConversationHistory: () => historyCapture.result,
+  usePersistedConversationHistory: () => ({ data: undefined }),
+  getConversationHistoryScope: () => "test-scope",
 }));
 
 vi.mock("#/hooks/mutation/use-read-conversation-file", () => ({
@@ -379,7 +384,6 @@ describe("Conversation websocket behavior", () => {
       conversationMode: "code",
       planContent: null,
     });
-    useCommandStore.getState().clearTerminal();
     useBrowserStore.getState().reset();
     useGoalStore.setState({ statusByConversation: {} });
     useModelStore.getState().clearAll();
@@ -398,6 +402,109 @@ describe("Conversation websocket behavior", () => {
     vi.useRealTimers();
     vi.restoreAllMocks();
     window.localStorage.clear();
+  });
+
+  it.each(["main", "planning"] as const)(
+    "keeps %s replay out of live execution status, including after reconnect",
+    async (target) => {
+      renderProvider({
+        subConversations: [makeSubConversation()],
+        subConversationIds: ["conv-planning"],
+      });
+      const dispatch =
+        target === "main" ? dispatchMainFrame : dispatchPlanningFrame;
+      const options = target === "main" ? mainOptions : planningOptions;
+      const id = target === "main" ? "conv-main" : "conv-planning";
+      const status = () =>
+        useConversationStateStore.getState().executionStatusByConversation[id];
+      act(() =>
+        useConversationStateStore
+          .getState()
+          .setExecutionStatus(id, ExecutionStatus.FINISHED),
+      );
+      const oldFinished = makeStateEvent(
+        "replayed-finished",
+        "execution_status",
+        "finished",
+      );
+      act(() => useEventStore.getState().addEvent(oldFinished));
+
+      dispatch({ type: "sync", from_seq: 49, through_seq: 100 });
+      dispatch({
+        type: "durable",
+        seq: 53,
+        event: makeStateEvent("old-running", "execution_status", "running"),
+      });
+      expect(status()).toBe("finished");
+      dispatch({
+        type: "durable",
+        seq: 99,
+        event: makeStateEvent("old-snapshot", "full_state", {
+          execution_status: "running",
+        }),
+      });
+      dispatch({ type: "durable", seq: 100, event: oldFinished });
+      expect(status()).toBe("finished");
+      expect(useEventStore.getState().eventIds.has("old-running")).toBe(true);
+      expect(useEventStore.getState().eventIds.has("old-snapshot")).toBe(true);
+
+      dispatch({
+        type: "transient",
+        event: makeStateEvent("current-snapshot", "full_state", {
+          execution_status: "running",
+        }),
+      });
+      expect(status()).toBe("running");
+      dispatch({
+        type: "durable",
+        seq: 101,
+        event: makeStateEvent("live-finished", "execution_status", "finished"),
+      });
+      expect(status()).toBe("finished");
+
+      await act(async () => options().onOpen?.(new Event("open")));
+      dispatch({ type: "sync", from_seq: 101, through_seq: 104 });
+      dispatch({
+        type: "durable",
+        seq: 102,
+        event: makeStateEvent("offline-running", "execution_status", "running"),
+      });
+      expect(status()).toBe("finished");
+      dispatch({
+        type: "transient",
+        event: makeStateEvent("reconnected-snapshot", "full_state", {
+          execution_status: "finished",
+        }),
+      });
+      dispatch({
+        type: "durable",
+        seq: 105,
+        event: makeStateEvent("new-running", "execution_status", "running"),
+      });
+      expect(status()).toBe("running");
+    },
+  );
+
+  it("keeps the main and planning replay boundaries independent", () => {
+    renderProvider({
+      subConversations: [makeSubConversation()],
+      subConversationIds: ["conv-planning"],
+    });
+    dispatchMainFrame({ type: "sync", from_seq: -1, through_seq: 100 });
+    dispatchPlanningFrame({ type: "sync", from_seq: -1, through_seq: null });
+    dispatchPlanningFrame({
+      type: "durable",
+      seq: 0,
+      event: makeStateEvent("planner-running", "execution_status", "running"),
+    });
+    dispatchMainFrame({
+      type: "durable",
+      seq: 0,
+      event: makeStateEvent("main-old-running", "execution_status", "running"),
+    });
+    expect(
+      useConversationStateStore.getState().executionStatusByConversation,
+    ).toEqual({ "conv-planning": "running" });
   });
 
   it("retains a newer failed identical prompt when old history reloads", () => {
@@ -681,6 +788,14 @@ describe("Conversation websocket behavior", () => {
     );
   });
 
+  it("does not connect the planner while its parent runtime is unavailable", () => {
+    renderProvider({
+      conversationUrl: null,
+      subConversations: [makeSubConversation()],
+    });
+    expect(socketCapture.planningUrl).toBe("");
+  });
+
   it("safely ignores an empty planning conversation slot", () => {
     expect(() =>
       renderProvider({
@@ -690,7 +805,7 @@ describe("Conversation websocket behavior", () => {
     expect(socketCapture.planningUrl).toBe("");
   });
 
-  it("reports the main socket lifecycle and only surfaces errors after a successful connection", () => {
+  it("reports recovery progress separately from conversation errors", () => {
     vi.useFakeTimers();
     renderProvider();
 
@@ -709,11 +824,18 @@ describe("Conversation websocket behavior", () => {
     expect(screen.getByTestId("connection-state")).toHaveTextContent("CLOSED");
 
     act(() => mainOptions().onError?.(new Event("error")));
-    act(() => vi.advanceTimersByTime(5000));
-    expect(useErrorMessageStore.getState()).toMatchObject({
-      errorMessage: SERVER_CONNECTION_ERROR_MESSAGE,
-      errorType: "connection",
-    });
+    act(() => vi.advanceTimersByTime(30000));
+    expect(contextCapture.current?.recoveryState).toBe("reconnecting");
+    expect(useErrorMessageStore.getState().errorMessage).toBeNull();
+  });
+
+  it("shows main recovery in plan mode before a planning connection exists", () => {
+    vi.useFakeTimers();
+    renderProvider();
+    act(() => useConversationStore.setState({ conversationMode: "plan" }));
+    act(() => mainOptions().onError?.(new Event("error")));
+    act(() => vi.advanceTimersByTime(30000));
+    expect(contextCapture.current?.recoveryState).toBe("reconnecting");
   });
 
   it("merges main and planning connection lifecycles", async () => {
@@ -742,11 +864,15 @@ describe("Conversation websocket behavior", () => {
     expect(screen.getByTestId("connection-state")).toHaveTextContent("CLOSED");
 
     act(() => planningOptions().onError?.(new Event("error")));
-    act(() => vi.advanceTimersByTime(5000));
-    expect(useErrorMessageStore.getState()).toMatchObject({
-      errorMessage: SERVER_CONNECTION_ERROR_MESSAGE,
-      errorType: "connection",
-    });
+    act(() => vi.advanceTimersByTime(30000));
+    expect(contextCapture.current?.recoveryState).toBe("idle");
+    expect(contextCapture.current?.recoveryConversationId).toBe("conv-main");
+    act(() => useConversationStore.setState({ conversationMode: "plan" }));
+    expect(contextCapture.current?.recoveryConversationId).toBe(
+      "conv-planning",
+    );
+    expect(contextCapture.current?.recoveryState).toBe("reconnecting");
+    expect(useErrorMessageStore.getState().errorMessage).toBeNull();
   });
 
   for (const [label, readyState, expected] of [
@@ -1166,10 +1292,12 @@ describe("Conversation websocket behavior", () => {
         reset: false,
       }),
     );
-    expect(useCommandStore.getState().commands).toContainEqual({
-      type: "input",
-      content: "pwd",
-    });
+    expect(getTerminalCommands(useEventStore.getState().events)).toContainEqual(
+      {
+        type: "input",
+        content: "pwd",
+      },
+    );
     expect(invalidateQueries).toHaveBeenCalledWith(
       { queryKey: ["file_changes", "conv-main"] },
       { cancelRefetch: false },
@@ -1282,10 +1410,12 @@ describe("Conversation websocket behavior", () => {
         ],
       }),
     );
-    expect(useCommandStore.getState().commands).toContainEqual({
-      type: "output",
-      content: "line one\nline two",
-    });
+    expect(getTerminalCommands(useEventStore.getState().events)).toContainEqual(
+      {
+        type: "output",
+        content: "line one\nline two",
+      },
+    );
 
     dispatchMain(
       makeObservationEvent(
@@ -2085,10 +2215,12 @@ describe("Conversation websocket behavior", () => {
         reset: false,
       }),
     );
-    expect(useCommandStore.getState().commands).toContainEqual({
-      type: "input",
-      content: "cat PLAN.md",
-    });
+    expect(getTerminalCommands(useEventStore.getState().events)).toContainEqual(
+      {
+        type: "input",
+        content: "cat PLAN.md",
+      },
+    );
     expect(invalidateQueries).toHaveBeenCalledWith(
       { queryKey: ["file_changes", "conv-planning"] },
       { cancelRefetch: false },
@@ -2158,10 +2290,12 @@ describe("Conversation websocket behavior", () => {
         ],
       }),
     );
-    expect(useCommandStore.getState().commands).toContainEqual({
-      type: "output",
-      content: "plan output\nsecond line",
-    });
+    expect(getTerminalCommands(useEventStore.getState().events)).toContainEqual(
+      {
+        type: "output",
+        content: "plan output\nsecond line",
+      },
+    );
 
     dispatchPlanning(
       makeObservationEvent(
@@ -2455,7 +2589,7 @@ describe("Conversation websocket — page visibility reconnect (#17894)", () => 
     act(() => setVisibility("visible"));
   });
 
-  it("still surfaces the connection-error banner for a drop that happens while visible", () => {
+  it("shows neutral recovery feedback for a sustained visible disconnect", () => {
     setUserAgent(MOBILE_USER_AGENT);
     renderProvider();
     act(() => mainOptions().onOpen?.(new Event("open")));
@@ -2463,11 +2597,9 @@ describe("Conversation websocket — page visibility reconnect (#17894)", () => 
     act(() => mainOptions().onError?.(new Event("error")));
 
     expect(useErrorMessageStore.getState().errorMessage).toBeNull();
-    act(() => vi.advanceTimersByTime(5000));
-    expect(useErrorMessageStore.getState()).toMatchObject({
-      errorMessage: SERVER_CONNECTION_ERROR_MESSAGE,
-      errorType: "connection",
-    });
+    act(() => vi.advanceTimersByTime(30000));
+    expect(contextCapture.current?.recoveryState).toBe("reconnecting");
+    expect(useErrorMessageStore.getState().errorMessage).toBeNull();
   });
 
   it.each(["main", "planning"])(
@@ -2494,12 +2626,13 @@ describe("Conversation websocket — page visibility reconnect (#17894)", () => 
     act(() => vi.advanceTimersByTime(4000));
     act(() => mainOptions().onError?.(new Event("error")));
     expect(useErrorMessageStore.getState().errorMessage).toBeNull();
-    act(() => vi.advanceTimersByTime(1000));
-    expect(useErrorMessageStore.getState().errorMessage).toBe(
-      SERVER_CONNECTION_ERROR_MESSAGE,
-    );
-    act(() => mainOptions().onOpen?.(new Event("open")));
+    act(() => vi.advanceTimersByTime(26000));
+    expect(contextCapture.current?.recoveryState).toBe("reconnecting");
+    act(() => vi.advanceTimersByTime(30_000));
+    expect(contextCapture.current?.recoveryState).toBe("retryable");
     expect(useErrorMessageStore.getState().errorMessage).toBeNull();
+    act(() => mainOptions().onOpen?.(new Event("open")));
+    expect(contextCapture.current?.recoveryState).toBe("idle");
   });
 
   it("cancels a pending disconnect warning when hidden or unmounted", () => {

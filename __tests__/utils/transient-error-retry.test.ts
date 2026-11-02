@@ -23,6 +23,9 @@ describe("transient request retry", () => {
   );
   it.each([
     new TypeError("Failed to fetch"),
+    new Error("Request failed: Failed to fetch", {
+      cause: new TypeError("Failed to fetch"),
+    }),
     new AxiosError("offline", "ERR_NETWORK"),
     new AxiosError("timeout", "ECONNABORTED"),
     new AxiosError("unavailable", undefined, undefined, undefined, {

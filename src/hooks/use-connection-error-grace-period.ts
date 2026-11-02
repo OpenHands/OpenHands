@@ -1,40 +1,57 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
-import { SERVER_CONNECTION_ERROR_MESSAGE } from "#/constants/server-connection-error";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useErrorMessageStore } from "#/stores/error-message-store";
 
-const CONNECTION_ERROR_GRACE_MS = 5_000;
+const RECOVERY_PROGRESS_DELAY_MS = 30_000;
+const RECOVERY_RETRY_DELAY_MS = 60_000;
+export type ConnectionRecoveryState = "idle" | "reconnecting" | "retryable";
 
 export function useConnectionErrorGracePeriod(identity: string | null) {
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const [feedback, setFeedback] = useState<{
+    identity: string | null;
+    state: ConnectionRecoveryState;
+  }>({ identity, state: "idle" });
   const cancel = useCallback(() => {
-    if (timer.current !== null) clearTimeout(timer.current);
-    timer.current = null;
-  }, []);
+    timers.current.forEach(clearTimeout);
+    timers.current = [];
+    setFeedback({ identity, state: "idle" });
+    useErrorMessageStore.getState().clearConnectionError();
+  }, [identity]);
 
   const report = useCallback(() => {
-    // Repeated retry failures must not postpone an ongoing outage forever.
-    if (timer.current !== null || document.visibilityState === "hidden") return;
-    timer.current = setTimeout(() => {
-      const store = useErrorMessageStore.getState();
-      if (
-        document.visibilityState !== "hidden" &&
-        store.errorType !== "conversation"
-      ) {
-        store.setErrorMessage(SERVER_CONNECTION_ERROR_MESSAGE, "connection");
-      }
-    }, CONNECTION_ERROR_GRACE_MS);
-  }, []);
+    if (
+      !identity ||
+      timers.current.length ||
+      document.visibilityState === "hidden"
+    )
+      return;
+    useErrorMessageStore.getState().clearConnectionError();
+    // Lost transport is not evidence that the agent failed. Keep retrying.
+    timers.current = [
+      setTimeout(
+        () => setFeedback({ identity, state: "reconnecting" }),
+        RECOVERY_PROGRESS_DELAY_MS,
+      ),
+      setTimeout(
+        () => setFeedback({ identity, state: "retryable" }),
+        RECOVERY_RETRY_DELAY_MS,
+      ),
+    ];
+  }, [identity]);
 
   useEffect(() => {
+    cancel();
     const onVisibilityChange = () => {
       if (document.visibilityState === "hidden") cancel();
     };
     document.addEventListener("visibilitychange", onVisibilityChange);
     return () => {
-      cancel();
+      timers.current.forEach(clearTimeout);
+      timers.current = [];
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [identity, cancel]);
+  }, [cancel]);
 
-  return useMemo(() => ({ report, cancel }), [report, cancel]);
+  const state = feedback.identity === identity ? feedback.state : "idle";
+  return useMemo(() => ({ report, cancel, state }), [report, cancel, state]);
 }

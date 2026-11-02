@@ -1,4 +1,4 @@
-import { useRef, type CSSProperties } from "react";
+import { useRef, type ReactNode, type CSSProperties } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ChatInterface } from "../../chat/chat-interface";
 import { ConversationOverviewPanel } from "../conversation-overview-panel";
@@ -12,6 +12,7 @@ import {
 
 interface ChatInterfaceWrapperProps {
   isRightPanelShown: boolean;
+  pendingContent?: ReactNode;
   showGitControlBar?: boolean;
   showEmptyStateSuggestions?: boolean;
   composerDockTarget?: HTMLElement | null;
@@ -31,6 +32,7 @@ export function ChatInterfaceWrapper({
   onDockedComposerSubmit,
   minimalComposer = false,
   composerPlaceholder,
+  pendingContent,
 }: ChatInterfaceWrapperProps) {
   const isMobile = useBreakpoint();
   const reduceMotion = useReducedMotion();
@@ -53,14 +55,16 @@ export function ChatInterfaceWrapper({
     >
       <div className="flex min-h-0 min-w-0 flex-1 justify-center overflow-hidden">
         <div className={THREAD_CLASSNAME}>
-          <ChatInterface
-            showGitControlBar={showGitControlBar}
-            showEmptyStateSuggestions={showEmptyStateSuggestions}
-            composerDockTarget={composerDockTarget}
-            onDockedComposerSubmit={onDockedComposerSubmit}
-            minimalComposer={minimalComposer}
-            composerPlaceholder={composerPlaceholder}
-          />
+          {pendingContent ?? (
+            <ChatInterface
+              showGitControlBar={showGitControlBar}
+              showEmptyStateSuggestions={showEmptyStateSuggestions}
+              composerDockTarget={composerDockTarget}
+              onDockedComposerSubmit={onDockedComposerSubmit}
+              minimalComposer={minimalComposer}
+              composerPlaceholder={composerPlaceholder}
+            />
+          )}
         </div>
       </div>
       <AnimatePresence>
@@ -87,7 +91,7 @@ export function ChatInterfaceWrapper({
                 } as CSSProperties
               }
             >
-              <ConversationOverviewPanel />
+              {!pendingContent && <ConversationOverviewPanel />}
             </div>
           </motion.div>
         ) : null}

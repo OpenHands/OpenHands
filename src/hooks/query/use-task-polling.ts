@@ -1,3 +1,12 @@
+import {
+  sessionActivityKey,
+  useSessionActivityStore,
+} from "#/stores/session-activity-store";
+import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
+import { CONVERSATION_QUERY_KEYS } from "./query-keys";
+import { getActiveBackend } from "#/api/backend-registry/active-store";
+import { usePendingTaskAttachmentsStore } from "#/stores/pending-task-attachments-store";
+import { assertActiveEnvironment } from "#/utils/assert-active-environment";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
@@ -75,7 +84,7 @@ export const useTaskPolling = () => {
 
   // Poll the task if this is a task ID
   const taskQuery = useQuery({
-    queryKey: ["start-task", taskId],
+    queryKey: CONVERSATION_QUERY_KEYS.startTask(taskId),
     queryFn: async () => {
       if (!taskId) return null;
       return AgentServerConversationService.getStartTask(taskId);
@@ -98,6 +107,7 @@ export const useTaskPolling = () => {
         : SLOW_POLL_INTERVAL_MS;
     },
     retry: retryTransientRequest,
+    meta: { disableToast: true },
   });
 
   return {
@@ -127,6 +137,15 @@ export const useTaskPollingController = () => {
   const backendScopedPath = useBackendScopedPath();
   const queryClient = useQueryClient();
   const handledReadyTaskIdRef = useRef<string | null>(null);
+  const visibleConversationId = useRef(conversationId);
+  visibleConversationId.current = conversationId;
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   // Reassign optimistic pending messages before paint on the real conversation
   // route. Doing this in the ready handler before navigate leaves a frame where
@@ -151,6 +170,21 @@ export const useTaskPollingController = () => {
     clearPendingTaskMessageLink(pendingReassign.toConversationId);
   }, [conversationId]);
 
+  useLayoutEffect(() => {
+    if (!taskId || !task) return;
+    const { backend, orgId } = getActiveBackend();
+    const key = sessionActivityKey(backend.id, orgId, `task-${taskId}`);
+    const activity = useSessionActivityStore.getState();
+    activity.begin(key, "initialize");
+    activity.observe(key, task.status);
+    if (task.status === "READY" && task.app_conversation_id) {
+      activity.transfer(
+        key,
+        sessionActivityKey(backend.id, orgId, task.app_conversation_id),
+      );
+    }
+  }, [taskId, task]);
+
   // Navigate to conversation ID when task is ready
   useEffect(() => {
     const appConversationId = task?.app_conversation_id;
@@ -174,8 +208,43 @@ export const useTaskPollingController = () => {
     queryClient.invalidateQueries({ queryKey: ["user", "conversations"] });
     queryClient.invalidateQueries({ queryKey: ["start-tasks"] });
 
+    const environment = getActiveBackend();
+    const { launches, update } = useConversationLaunchStore.getState();
+    const launch = Object.values(launches).find(
+      (entry) =>
+        entry.targetId === `task-${taskId}` &&
+        entry.backendId === environment.backend.id &&
+        entry.orgId === environment.orgId,
+    );
+    if (launch) update(launch.id, { conversationId: appConversationId });
     void (async () => {
-      await flushPendingTaskAttachments(taskId, appConversationId);
+      try {
+        await flushPendingTaskAttachments(taskId, appConversationId);
+        assertActiveEnvironment(environment);
+      } catch {
+        const pending =
+          usePendingTaskAttachmentsStore.getState().byTaskId[taskId];
+        if (
+          !pending?.recoverInConversation ||
+          !mounted.current ||
+          visibleConversationId.current !== `task-${taskId}`
+        )
+          return;
+        try {
+          assertActiveEnvironment(environment);
+        } catch {
+          return;
+        }
+        navigate(backendScopedPath(`/conversations/${appConversationId}`), {
+          replace: true,
+        });
+        return;
+      }
+      if (
+        !mounted.current ||
+        visibleConversationId.current !== `task-${taskId}`
+      )
+        return;
 
       const taskConversationId = `task-${taskId}`;
       linkPendingTaskMessages(appConversationId, taskConversationId);
