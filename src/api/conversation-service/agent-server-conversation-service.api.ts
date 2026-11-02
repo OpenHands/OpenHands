@@ -572,6 +572,7 @@ class AgentServerConversationService {
         options.hasActiveMetaProfile ?? false,
       );
       const request: AppConversationStartRequest = {
+        generate_title_on_submit: true,
         initial_message: initialUserMsg
           ? {
               role: "user",

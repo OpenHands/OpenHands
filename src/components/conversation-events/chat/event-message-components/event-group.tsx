@@ -110,7 +110,9 @@ export function EventGroup({
   if (session && session.phase !== "complete")
     summary = t(sessionActivityTitle(session));
   const busy =
-    session?.phase === "pending" || (session?.phase !== "failed" && isLive);
+    session?.phase === "pending" ||
+    session?.phase === "connecting" ||
+    (session?.phase !== "failed" && isLive);
 
   return (
     // Agent text carries a large top margin for paragraph spacing; trim it

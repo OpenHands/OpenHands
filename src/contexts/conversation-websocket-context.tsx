@@ -76,7 +76,11 @@ import { trackError } from "#/utils/error-handler";
 import { matchesPendingConversationId } from "#/utils/pending-task-message-link";
 import { useReadConversationFile } from "#/hooks/mutation/use-read-conversation-file";
 import useMetricsStore, { type MetricsState } from "#/stores/metrics-store";
-import { useConversationHistory } from "#/hooks/query/use-conversation-history";
+import {
+  useConversationHistory,
+  usePersistedConversationHistory,
+  getConversationHistoryScope,
+} from "#/hooks/query/use-conversation-history";
 import { setConversationState } from "#/utils/conversation-local-storage";
 import {
   recordModelSwitchMessage,
@@ -380,12 +384,25 @@ export function ConversationWebSocketProvider({
   const { data: preloadedHistory, isPending: isPreloadingHistory } =
     useConversationHistory(conversationId);
 
+  const historyScope = getConversationHistoryScope();
+  const { data: persistedHistory } =
+    usePersistedConversationHistory(conversationId);
+  const visibleHistory = useMemo(() => {
+    if (!persistedHistory) return preloadedHistory;
+    if (!preloadedHistory) return persistedHistory;
+    return {
+      ...preloadedHistory,
+      events: [...persistedHistory.events, ...preloadedHistory.events],
+    };
+  }, [persistedHistory, preloadedHistory]);
+
   // Skeleton only on the genuine first load (no cached data yet). On return the
   // cached page is present, so `isPending` is false and we render the
   // last-known discussion immediately while the tail refetch runs in the
   // background — the socket gate below also keys on `isPending`, so that
   // refetch never drops a live socket.
-  const isLoadingHistoryMain = !!conversationId && isPreloadingHistory;
+  const isLoadingHistoryMain =
+    !!conversationId && isPreloadingHistory && !persistedHistory;
 
   // First-connect cursor from the REST page (see `afterSeq`). Read lazily by
   // the socket's `queryParams`; after the first connect the socket's own
@@ -413,26 +430,34 @@ export function ConversationWebSocketProvider({
   // a no-op, so the store survives navigating away to Settings and back.
   useLayoutEffect(() => {
     const nextId = conversationId ?? null;
-    if (useEventStore.getState().loadedConversationId === nextId) {
+    if (
+      useEventStore.getState().loadedConversationId === nextId &&
+      useEventStore.getState().loadedConversationScope === historyScope
+    ) {
       return;
     }
     // Single atomic action: clears the previous conversation's events and
     // records the new loaded id in one `set`, so no subscriber can observe a
     // half-applied state (events gone but the old id still reported).
-    clearEventsForConversation(nextId);
+    clearEventsForConversation(nextId, historyScope);
     resetBrowserStore();
     // The metrics store is conversation-scoped state too: without a reset the
     // previous conversation's usage/cost keeps rendering in the new
     // conversation's meter until fresh WS stats arrive — and a brand-new
     // conversation sends none, so the stale figure stuck indefinitely.
     useMetricsStore.getState().resetMetrics();
-  }, [conversationId, clearEventsForConversation, resetBrowserStore]);
+  }, [
+    conversationId,
+    historyScope,
+    clearEventsForConversation,
+    resetBrowserStore,
+  ]);
 
   useLayoutEffect(() => {
-    if (!preloadedHistory || preloadedHistory.events.length === 0) {
+    if (!visibleHistory || visibleHistory.events.length === 0) {
       return;
     }
-    addEvents(preloadedHistory.events);
+    addEvents(visibleHistory.events);
 
     // The first user message of a cloud start-task conversation is persisted
     // server-side and reaches us via this REST preload, not over the WebSocket
@@ -451,7 +476,7 @@ export function ConversationWebSocketProvider({
         useEventStore.getState().uiEvents,
       );
 
-      for (const event of preloadedHistory.events) {
+      for (const event of visibleHistory.events) {
         if (isUserMessageEvent(event)) {
           consumeMatchingPendingMessage(
             conversationId,
@@ -462,7 +487,7 @@ export function ConversationWebSocketProvider({
       }
     }
   }, [
-    preloadedHistory,
+    visibleHistory,
     addEvents,
     conversationId,
     consumeMatchingPendingMessage,
@@ -624,7 +649,7 @@ export function ConversationWebSocketProvider({
     mainCursorRef.current.clear();
     // Reset the tracked event ref when conversation changes
     latestPlanningFileEventRef.current = null;
-  }, [conversationId]);
+  }, [conversationId, historyScope]);
 
   // Drop buffered deltas on conversation switch/unmount: the store is cleared on
   // switch, so flushing them would leak into the next conversation.
