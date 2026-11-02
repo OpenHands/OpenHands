@@ -47,7 +47,6 @@ describe("EventMessage - ACPToolCallEvent dispatch", () => {
     renderWithProviders(
       <EventMessage
         event={makeEvent()}
-        messages={[]}
         isLastMessage={false}
         isInLast10Actions={false}
       />,
@@ -67,7 +66,6 @@ describe("EventMessage - ACPToolCallEvent dispatch", () => {
     renderWithProviders(
       <EventMessage
         event={event}
-        messages={[]}
         isLastMessage={false}
         isInLast10Actions={false}
       />,
@@ -90,7 +88,6 @@ describe("EventMessage - ACPToolCallEvent dispatch", () => {
     renderWithProviders(
       <EventMessage
         event={event}
-        messages={[]}
         isLastMessage={false}
         isInLast10Actions={false}
       />,
@@ -107,7 +104,6 @@ describe("EventMessage - ACPToolCallEvent dispatch", () => {
     renderWithProviders(
       <EventMessage
         event={makeEvent()}
-        messages={[]}
         isLastMessage={false}
         isInLast10Actions={false}
       />,
@@ -120,7 +116,6 @@ describe("EventMessage - ACPToolCallEvent dispatch", () => {
     renderWithProviders(
       <EventMessage
         event={makeEvent({ status: "in_progress", raw_output: null })}
-        messages={[]}
         isLastMessage={false}
         isInLast10Actions={false}
       />,
@@ -136,7 +131,6 @@ describe("EventMessage - ACPToolCallEvent dispatch", () => {
     renderWithProviders(
       <EventMessage
         event={makeEvent()}
-        messages={[]}
         isLastMessage={false}
         isInLast10Actions={false}
       />,
@@ -172,7 +166,6 @@ describe("EventMessage - ACPToolCallEvent dispatch", () => {
             },
           ],
         })}
-        messages={[]}
         isLastMessage={false}
         isInLast10Actions={false}
       />,
@@ -193,7 +186,6 @@ describe("EventMessage - ACPToolCallEvent dispatch", () => {
     renderWithProviders(
       <EventMessage
         event={makeEvent()}
-        messages={[]}
         isLastMessage={false}
         isInLast10Actions={false}
       />,

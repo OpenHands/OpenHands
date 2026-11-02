@@ -8,6 +8,7 @@ import {
 } from "#/constants/status-colors";
 import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { AgentState } from "#/types/agent-state";
+import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 
 const mocks = vi.hoisted(() => ({
@@ -157,12 +158,32 @@ function LayerUnderMenu({ onClose }: { onClose: () => void }) {
 describe("conversation name status controls", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useConversationLaunchStore.setState({ launches: {} });
     mocks.conversationId = "conversation-1";
     mocks.conversation = { execution_status: ExecutionStatus.RUNNING };
     mocks.curAgentState = AgentState.RUNNING;
     mocks.isTask = false;
     mocks.taskStatus = null;
     mocks.providers = [{ name: "provider-1" }];
+  });
+
+  it("shows a failed launch instead of the previous conversation status", () => {
+    const launchId = useConversationLaunchStore.getState().begin({
+      backendId: "local",
+      orgId: null,
+      message: "hello",
+      files: [],
+    });
+    useConversationLaunchStore
+      .getState()
+      .update(launchId, { error: "Create failed" });
+    mocks.conversationId = launchId;
+    mocks.conversation = undefined;
+    renderSubject();
+    expect(screen.getByTestId("conversation-status-dot")).toHaveAttribute(
+      "data-color",
+      OH_STATUS_ERROR_COLOR,
+    );
   });
 
   it("pauses an active conversation without triggering its parent", () => {

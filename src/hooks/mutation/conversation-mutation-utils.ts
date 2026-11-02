@@ -1,3 +1,8 @@
+import { useEventStore } from "#/stores/use-event-store";
+import {
+  sessionActivityKey,
+  useSessionActivityStore,
+} from "#/stores/session-activity-store";
 import { QueryClient } from "@tanstack/react-query";
 import { ConversationClient } from "@openhands/typescript-client/clients";
 import type { StartGoalRequest } from "@openhands/typescript-client";
@@ -150,16 +155,33 @@ export const updateConversationSecrets = async (
  * - Otherwise: resume the agent through the conversation's runtime.
  */
 export const resumeConversation = async (conversationId: string) => {
+  const { backend, orgId } = getActiveBackend();
   const { conversationUrl, sessionApiKey, sandboxId } =
     await fetchConversationData(conversationId);
 
-  if (!conversationUrl && getActiveBackend().backend.kind === "cloud") {
+  if (!conversationUrl && backend.kind === "cloud") {
     if (!sandboxId) {
       throw new Error(
         `Cannot resume: cloud conversation ${conversationId} has no sandbox_id.`,
       );
     }
-    await resumeCloudSandbox(sandboxId);
+    const key = sessionActivityKey(backend.id, orgId, conversationId);
+    const history = useEventStore.getState();
+    useSessionActivityStore
+      .getState()
+      .begin(
+        key,
+        "resume",
+        history.loadedConversationId === conversationId
+          ? history.uiEvents.at(-1)?.id
+          : undefined,
+      );
+    try {
+      await resumeCloudSandbox(sandboxId);
+    } catch (error) {
+      useSessionActivityStore.getState().observe(key, "ERROR");
+      throw error;
+    }
     return { success: true };
   }
 

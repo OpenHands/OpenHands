@@ -26,14 +26,15 @@ export interface ChatInputLlmProfileState {
   isSwitching: boolean;
   /**
    * Whether picking a profile here would actually land. False on a cloud
-   * start-task route and for a cloud member on the home page; the surfaces
-   * still name the active profile, they just drop the selectable rows.
+   * start-task route; the surfaces still name the active profile, they just
+   * drop the selectable rows.
    */
   canSwitchProfile: boolean;
   /**
    * Switch the LLM profile: live via `/switch_profile` inside a conversation.
-   * On the home page it becomes the active agent profile's LLM, which for
-   * `default` means activating it (see {@link useSwitchLlmProfile}).
+   * On the home page it becomes the active agent profile's LLM, which for a
+   * local `default` means activating it (see {@link useSwitchLlmProfile}). A
+   * cloud member's home pick is held for the next home launch instead.
    */
   selectProfile: (profileName: string) => void;
 }
@@ -52,7 +53,7 @@ export function useChatInputLlmProfileState(): ChatInputLlmProfileState {
   const queryClient = useQueryClient();
   const { backend } = useActiveBackend();
   const { data: agentProfiles } = useAgentProfiles({
-    enabled: !conversationId && backend.kind === "local",
+    enabled: !conversationId,
   });
   const canManageOrgProfiles = useCanManageOrgProfiles();
   const { switchAndLog } = useSwitchLlmProfileAndLog();
@@ -67,17 +68,31 @@ export function useChatInputLlmProfileState(): ChatInputLlmProfileState {
   const optimisticActiveProfile = useModelStore((s) =>
     conversationId ? s.activeProfileByConversation[conversationId] : undefined,
   );
+  const homeLlmProfile = useModelStore((s) => s.homeLlmProfile);
+  const setHomeLlmProfile = useModelStore((s) => s.setHomeLlmProfile);
 
   const profiles = data?.profiles ?? [];
   const conversationModel = conversation?.llm_model ?? null;
+  // A cloud `task-…` route has no real conversation id yet, so the
+  // per-conversation /switch_profile would 404.
+  const isTaskRoute = conversationId?.startsWith("task-") ?? false;
+  // A cloud member's home pick names the profile the home launch (and its
+  // start-task route) runs, until that profile is gone.
+  const homePick =
+    (!conversationId || isTaskRoute) &&
+    homeLlmProfile &&
+    profiles.some((p) => p.name === homeLlmProfile)
+      ? homeLlmProfile
+      : null;
 
   // Resolution priority (mirrors the former SwitchProfileButton):
   //   1. Optimistic (just-clicked) — instant feedback before the refetch.
   //   2. Profile stamped on the conversation, validated against the live list
   //      so a since-deleted/renamed profile falls through.
   //   3. Profile whose model matches the running llm_model.
-  //   4. Before the first message, the active agent profile's own LLM, which
-  //      the launch runs, else the user-level active_profile.
+  //   4. Before the first message, a cloud member's home pick, else the
+  //      active agent profile's own LLM, which the launch runs, else the
+  //      user-level active_profile.
   const stampedProfile = conversation?.active_profile ?? null;
   const conversationProfile =
     stampedProfile && profiles.some((p) => p.name === stampedProfile)
@@ -93,49 +108,67 @@ export function useChatInputLlmProfileState(): ChatInputLlmProfileState {
     profiles.some((p) => p.name === activeAgentProfile.llm_profile_ref)
       ? activeAgentProfile.llm_profile_ref
       : null;
-  // `default` runs the active LLM profile, so a home pick activates it; any
-  // other profile keeps the pick as its own LLM.
+  // A local `default` runs the active LLM profile, so a home pick activates
+  // it; any other profile keeps the pick as its own LLM.
   const ownsHomeLlm =
     !conversationId &&
     agentLlmProfile !== null &&
-    activeAgentProfile?.name !== WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME;
+    !(
+      backend.kind === "local" &&
+      activeAgentProfile?.name === WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME
+    );
   const currentProfileName =
     optimisticActiveProfile ??
     conversationProfile ??
     (conversationModel
       ? (profiles.find((p) => p.model === conversationModel)?.name ?? null)
-      : (agentLlmProfile ?? data?.active_profile ?? null));
+      : (homePick ?? agentLlmProfile ?? data?.active_profile ?? null));
   const currentProfileModel =
     profiles.find((p) => p.name === currentProfileName)?.model ??
     conversationModel ??
     null;
 
-  // A home pick activates the profile account-wide — on cloud that's the
-  // org-gated activate endpoint a member can only 403 on. A cloud `task-…`
-  // route has no real conversation id yet, so the per-conversation
-  // /switch_profile would 404. Either way the pill still names the active
-  // profile; only the selectable rows drop out.
-  const isTaskRoute = conversationId?.startsWith("task-") ?? false;
-  const canSwitchProfile =
-    !isTaskRoute && (!!conversationId || canManageOrgProfiles);
+  // On a start-task route the pill still names the active profile; only the
+  // selectable rows drop out.
+  const canSwitchProfile = !isTaskRoute;
 
   const selectProfile = useCallback(
     (profileName: string) => {
       if (!canSwitchProfile || profileName === currentProfileName) return;
-      if (ownsHomeLlm && activeAgentProfile) {
-        updateAgentProfile(
-          queryClient,
-          activeAgentProfile.name,
-          llmProfileMirrored(profileName),
-        );
-        return;
+      if (!conversationId) {
+        // A home-page pick is an explicit model choice made before the first
+        // message: mark it so the next home launch suppresses "Run on first
+        // message" routing for that one conversation. Set here — the single
+        // chokepoint — so every pick path is covered: a cloud member's held
+        // pick, an agent-profile-owned LLM pick, and a global activate all
+        // flow through here. `useCreateConversation` reads-and-clears it.
+        useModelStore.getState().setHomeManualModelPick(true);
+        // A home pick edits the org's agent profile or activates the LLM
+        // profile org-wide, both of which a cloud member can only 403 on.
+        // Hold a member's pick for the next home launch (sent as
+        // `llm_profile`).
+        if (!canManageOrgProfiles) {
+          setHomeLlmProfile(profileName);
+          return;
+        }
+        setHomeLlmProfile(null);
+        if (ownsHomeLlm && activeAgentProfile) {
+          updateAgentProfile(
+            queryClient,
+            activeAgentProfile.name,
+            llmProfileMirrored(profileName),
+          );
+          return;
+        }
       }
       switchAndLog(conversationId, profileName);
     },
     [
+      canManageOrgProfiles,
       canSwitchProfile,
       conversationId,
       currentProfileName,
+      setHomeLlmProfile,
       switchAndLog,
       ownsHomeLlm,
       activeAgentProfile,

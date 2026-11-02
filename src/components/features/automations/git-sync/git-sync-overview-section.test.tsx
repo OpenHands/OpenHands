@@ -51,6 +51,20 @@ describe("GitSyncOverviewSection", () => {
     );
   });
 
+  // Azure's SSH remote has no `_git` segment, but its web page needs one.
+  it.each([
+    "git@ssh.dev.azure.com:v3/qa-org/Web%20Apps/qa-repo",
+    "ssh://git@ssh.dev.azure.com/v3/qa-org/Web%20Apps/qa-repo",
+    "https://dev.azure.com/qa-org/Web%20Apps/_git/qa-repo",
+  ])("links the Azure DevOps remote %s to its _git page", (repoUrl) => {
+    renderWith(repoUrl);
+
+    expect(screen.getByTestId("git-sync-repo-link")).toHaveAttribute(
+      "href",
+      "https://dev.azure.com/qa-org/Web%20Apps/_git/qa-repo",
+    );
+  });
+
   it("keeps a self-hosted forge's port and forge-specific path", () => {
     renderWith("https://git.example.com:8443/org/team/_git/repo.git");
 

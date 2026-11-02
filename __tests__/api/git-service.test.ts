@@ -4,11 +4,7 @@ import * as cloudGitService from "#/api/cloud/git-service.api";
 import * as activeStore from "#/api/backend-registry/active-store";
 
 const workspaceMocks = vi.hoisted(() => ({
-  gitChanges: vi.fn(),
-  gitDiff: vi.fn(),
-  resolveWorkingDir: vi.fn(),
   clientOptions: vi.fn(),
-  mapStatus: vi.fn(),
   searchRepositories: vi.fn(),
   closeGitClient: vi.fn(),
 }));
@@ -32,30 +28,8 @@ vi.mock("@openhands/typescript-client/clients", () => ({
   }),
 }));
 
-vi.mock("@openhands/typescript-client/workspace/remote-workspace", () => ({
-  RemoteWorkspace: vi.fn(function RemoteWorkspaceMock() {
-    return {
-      gitChanges: workspaceMocks.gitChanges,
-      gitDiff: workspaceMocks.gitDiff,
-    };
-  }),
-}));
-
-vi.mock(
-  "#/api/conversation-service/agent-server-conversation-service.api",
-  () => ({
-    default: {
-      resolveConversationWorkingDir: workspaceMocks.resolveWorkingDir,
-    },
-  }),
-);
-
 vi.mock("#/api/agent-server-client-options", () => ({
   getAgentServerClientOptions: workspaceMocks.clientOptions,
-}));
-
-vi.mock("#/utils/git-status-mapper", () => ({
-  mapAnyGitStatusToClientStatus: workspaceMocks.mapStatus,
 }));
 
 const mockSearchCloudRepositories = vi.mocked(
@@ -96,9 +70,7 @@ const localActive = () =>
 describe("GitService", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    workspaceMocks.resolveWorkingDir.mockResolvedValue("/workspace/project");
     workspaceMocks.clientOptions.mockReturnValue({ host: "http://localhost" });
-    workspaceMocks.mapStatus.mockImplementation((status) => `mapped:${status}`);
     workspaceMocks.searchRepositories.mockResolvedValue({
       items: [],
       next_page_id: null,
@@ -407,43 +379,6 @@ describe("GitService", () => {
         next_page_id: null,
       });
     });
-
-    it("maps workspace git changes using the SDK default revision", async () => {
-      workspaceMocks.gitChanges.mockResolvedValue([
-        { path: "src/a.ts", status: "M" },
-        { path: "src/b.ts", status: 7 },
-      ]);
-      await expect(GitService.getGitChanges("conversation-1")).resolves.toEqual(
-        [
-          { path: "src/a.ts", status: "mapped:M" },
-          { path: "src/b.ts", status: "mapped:7" },
-        ],
-      );
-      expect(workspaceMocks.clientOptions).toHaveBeenCalledWith({
-        conversationId: "conversation-1",
-        workingDir: "/workspace/project",
-      });
-      expect(workspaceMocks.gitChanges).toHaveBeenCalledWith(
-        "/workspace/project",
-      );
-    });
-
-    it.each([
-      [
-        { modified: "new", original: "old" },
-        { modified: "new", original: "old" },
-      ],
-      [{}, { modified: "", original: "" }],
-    ])(
-      "normalizes workspace diff content using the SDK default revision",
-      async (diff, expected) => {
-        workspaceMocks.gitDiff.mockResolvedValue(diff);
-        await expect(
-          GitService.getGitChangeDiff("ignored", "src/a.ts"),
-        ).resolves.toEqual(expected);
-        expect(workspaceMocks.gitDiff).toHaveBeenCalledWith("src/a.ts");
-      },
-    );
 
     it("initializes fresh provider guards and empty result pages", async () => {
       vi.resetModules();

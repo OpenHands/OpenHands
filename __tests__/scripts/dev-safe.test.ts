@@ -23,6 +23,7 @@ import {
   buildAgentServerEnv,
   buildAgentServerTelemetryEnv,
   buildRuntimeServicesInfo,
+  buildUvxPythonArgs,
   formatMissingUvxGuidance,
   formatMissingFrontendDependenciesGuidance,
   getMissingFrontendDependencyBins,
@@ -540,21 +541,23 @@ describe("buildAgentServerCommand", () => {
     expect(cmd.command).toBe("uvx");
     // Defaults to the released PyPI version with all SDK packages pinned to same version
     expect(cmd.args).toEqual([
+      "--python",
+      ">=3.12,<3.15",
       "--from",
-      "openhands-agent-server==1.56.0",
+      "openhands-agent-server==1.59.0",
       "--with",
-      "openhands-sdk==1.56.0",
+      "openhands-sdk==1.59.0",
       "--with",
-      "openhands-tools==1.56.0",
+      "openhands-tools==1.59.0",
       "--with",
-      "openhands-workspace==1.56.0",
+      "openhands-workspace==1.59.0",
       "--with",
       "posthog>=6,<7",
       "agent-server",
       "--import-modules",
       "canvas_ui_tool",
     ]);
-    expect(cmd.source).toBe("PyPI (1.56.0, default)");
+    expect(cmd.source).toBe("PyPI (1.59.0, default)");
   });
 
   it("uses specific PyPI version when OH_AGENT_SERVER_VERSION is set with all packages pinned", () => {
@@ -564,6 +567,8 @@ describe("buildAgentServerCommand", () => {
     // Uses --from syntax because executable name (agent-server) differs from package name (openhands-agent-server)
     // All SDK packages are pinned to the same version
     expect(cmd.args).toEqual([
+      "--python",
+      ">=3.12,<3.15",
       "--from",
       "openhands-agent-server==1.18.0",
       "--with",
@@ -588,6 +593,8 @@ describe("buildAgentServerCommand", () => {
 
     expect(cmd.command).toBe("uvx");
     expect(cmd.args).toEqual([
+      "--python",
+      ">=3.12,<3.15",
       "--reinstall",
       "--from",
       "git+https://github.com/OpenHands/software-agent-sdk@feature-branch#subdirectory=openhands-agent-server",
@@ -611,6 +618,8 @@ describe("buildAgentServerCommand", () => {
 
     expect(cmd.command).toBe("uvx");
     expect(cmd.args).toEqual([
+      "--python",
+      ">=3.12,<3.15",
       "--reinstall",
       "--from",
       "git+https://github.com/OpenHands/software-agent-sdk@abc1234#subdirectory=openhands-agent-server",
@@ -649,6 +658,8 @@ describe("buildAgentServerCommand", () => {
 
     expect(cmd.command).toBe("uvx");
     expect(cmd.args).toEqual([
+      "--python",
+      ">=3.12,<3.15",
       "--reinstall",
       "--from",
       path.join(sdk, "openhands-agent-server"),
@@ -710,6 +721,37 @@ describe("buildAgentServerCommand", () => {
         OH_AGENT_SERVER_LOCAL_PATH: "./software-agent-sdk",
       }),
     ).toThrow(/must be an absolute path/);
+  });
+});
+
+describe("buildUvxPythonArgs", () => {
+  const defaults = JSON.parse(
+    readFileSync(
+      path.resolve(
+        path.dirname(fileURLToPath(import.meta.url)),
+        "../../config/defaults.json",
+      ),
+      "utf-8",
+    ),
+  ) as { python: { uvxRequest: string } };
+
+  it("requests the Python range from config/defaults.json by default", () => {
+    // Without it uvx downloads the newest CPython on a machine that has none,
+    // which fails until the SDK's compiled dependencies ship wheels for it
+    // (#18654).
+    expect(defaults.python.uvxRequest).toBe(">=3.12,<3.15");
+    expect(buildUvxPythonArgs({})).toEqual([
+      "--python",
+      defaults.python.uvxRequest,
+    ]);
+  });
+
+  it("leaves the interpreter choice to uv when UV_PYTHON is set", () => {
+    // An explicit --python would outrank uv's own variable.
+    expect(buildUvxPythonArgs({ UV_PYTHON: "3.13" })).toEqual([]);
+    const { args } = buildAgentServerCommand({ UV_PYTHON: "3.13" });
+    expect(args).not.toContain("--python");
+    expect(args[0]).toBe("--from");
   });
 });
 

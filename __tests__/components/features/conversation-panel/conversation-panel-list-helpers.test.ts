@@ -831,6 +831,54 @@ describe("conversation-panel-list-helpers", () => {
       ).map((c) => c.id),
     ).toEqual(["untagged", "slack", "alice", "both"]);
   });
+
+  it("recovers a legacy local_repo conversation by matching working_dir to a known workspace (#17386)", () => {
+    // No selected_workspace (localStorage was cleared / another browser), but
+    // the runtime working_dir equals a registered workspace folder.
+    const legacy: AppConversation = {
+      ...base,
+      id: "legacy-local-repo",
+      title: "legacy",
+      selected_workspace: null,
+      workspace: { working_dir: "/Users/jane/projects/openhands/" },
+    };
+    // A worktree conversation's working_dir is unique and matches nothing, so
+    // it stays under "No workspace" until its server tag regroups it.
+    const worktree: AppConversation = {
+      ...base,
+      id: "legacy-worktree",
+      title: "worktree",
+      selected_workspace: null,
+      workspace: { working_dir: "/Users/jane/projects/openhands/wt-abc" },
+    };
+
+    const groups = groupConversations(
+      [legacy, worktree],
+      "local",
+      "updated",
+      { emptyWorkspace: "No workspace", emptyRepository: "No repository" },
+      [
+        {
+          id: "ws1",
+          name: "openhands",
+          path: "/Users/jane/projects/openhands",
+        },
+      ],
+    );
+
+    const byId = new Map(groups.map((g) => [g.id, g]));
+    expect(byId.get("ws:/Users/jane/projects/openhands")?.label).toBe(
+      "openhands",
+    );
+    expect(
+      byId
+        .get("ws:/Users/jane/projects/openhands")
+        ?.conversations.map((c) => c.id),
+    ).toEqual(["legacy-local-repo"]);
+    expect(
+      byId.get("__none_workspace")?.conversations.map((c) => c.id),
+    ).toEqual(["legacy-worktree"]);
+  });
 });
 
 describe("partitionByCutoff", () => {

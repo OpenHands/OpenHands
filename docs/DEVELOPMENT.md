@@ -77,6 +77,7 @@ directory before starting the Agent Server and preserve an explicit override.
 | `OH_AUTOMATION_LOCAL_PATH`   | Absolute `automation` checkout         | unset                          |
 | `OH_AUTOMATION_GIT_REF`      | Git ref for automation backend         | unset (`config/defaults.json`) |
 | `OH_AUTOMATION_VERSION`      | PyPI version for automation            | unset (`config/defaults.json`) |
+| `UV_PYTHON`                  | Python version/range for uvx services  | unset (`config/defaults.json`) |
 
 ### Alternative: Minimal Mode (without Automation)
 

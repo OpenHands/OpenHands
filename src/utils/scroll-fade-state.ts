@@ -1,4 +1,4 @@
-const SCROLL_EDGE_THRESHOLD_PX = 1;
+export const SCROLL_EDGE_THRESHOLD_PX = 1;
 
 export interface ScrollFadeState {
   left: boolean;

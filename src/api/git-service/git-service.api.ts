@@ -1,11 +1,7 @@
 import { GitClient } from "@openhands/typescript-client/clients";
-import { RemoteWorkspace } from "@openhands/typescript-client/workspace/remote-workspace";
 import { RepositoryPage, BranchPage, InstallationPage } from "#/types/git";
 import { Provider } from "#/types/settings";
-import { GitChange, GitChangeDiff } from "../open-hands.types";
-import AgentServerConversationService from "../conversation-service/agent-server-conversation-service.api";
 import { getAgentServerClientOptions } from "../agent-server-client-options";
-import { mapAnyGitStatusToClientStatus } from "#/utils/git-status-mapper";
 import { getActiveBackend } from "../backend-registry/active-store";
 import {
   getCloudInstallations,
@@ -180,39 +176,6 @@ class GitService {
       pageId,
       limit,
     });
-  }
-
-  static async getGitChanges(conversationId: string): Promise<GitChange[]> {
-    const workingDir =
-      await AgentServerConversationService.resolveConversationWorkingDir(
-        conversationId,
-      );
-    const changes = await new RemoteWorkspace(
-      getAgentServerClientOptions({ workingDir, conversationId }),
-    ).gitChanges(workingDir);
-
-    return changes.map((change) => ({
-      path: change.path,
-      status: mapAnyGitStatusToClientStatus(
-        String(change.status) as Parameters<
-          typeof mapAnyGitStatusToClientStatus
-        >[0],
-      ),
-    }));
-  }
-
-  static async getGitChangeDiff(
-    conversationId: string,
-    path: string,
-  ): Promise<GitChangeDiff> {
-    const diff = await new RemoteWorkspace(
-      getAgentServerClientOptions({ conversationId }),
-    ).gitDiff(path);
-
-    return {
-      modified: diff.modified ?? "",
-      original: diff.original ?? "",
-    };
   }
 }
 

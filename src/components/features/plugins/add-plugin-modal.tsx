@@ -52,7 +52,7 @@ export function AddPluginModal({ onClose, onInstalled }: AddPluginModalProps) {
       <form
         onSubmit={handleSubmit}
         data-testid="add-plugin-modal"
-        className="relative flex w-130 max-w-[90vw] max-h-[85vh] flex-col rounded-xl border border-border bg-base-secondary"
+        className="relative flex w-130 extension-dialog-viewport flex-col rounded-xl border border-border bg-base-secondary"
       >
         <ModalCloseButton onClose={onClose} testId="add-plugin-modal-close" />
 

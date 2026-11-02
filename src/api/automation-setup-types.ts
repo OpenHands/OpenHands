@@ -1,3 +1,5 @@
+import type { AutomationRepository } from "#/types/automation";
+
 export type AutomationSetupKind = "prompt" | "plugin" | "custom";
 export type AutomationSetupTriggerKind = "cron" | "event";
 export type AutomationSetupFrequency =
@@ -60,6 +62,10 @@ export interface AutomationSetupDraft {
   serverDraftId?: string;
   materializedAutomationId?: string | null;
   existingCustomTarballPath?: string;
+  /** Repositories the edited automation clones, as the service stores them. */
+  existingRepositories?: AutomationRepository[];
+  /** Whether the edited automation's repositories can be changed in place. */
+  canUpdateRepositories?: boolean;
   form?: AutomationSetupFormPatch;
   fieldMetadata?: Partial<
     Record<AutomationSetupField, AutomationSetupFieldMetadata>

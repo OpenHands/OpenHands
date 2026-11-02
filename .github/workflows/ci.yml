@@ -72,6 +72,9 @@ jobs:
           node-version: "24.15"
           cache: npm
 
+      - name: Use pinned npm
+        run: npm install --global npm@11.12.1 --ignore-scripts --no-audit --no-fund
+
       - name: Install dependencies
         run: npm ci
 

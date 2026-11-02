@@ -31,7 +31,11 @@ export interface MCPServerConfig {
 export type MCPTestToolCall = AgentServerMCPToolCall;
 export type MCPTestToolResult = AgentServerMCPToolCallResult;
 
-export type ExtendedMCPTestFailureKind = MCPTestFailureKind | "credentials";
+// `authorization`: the user did not finish an OAuth sign-in in time.
+export type ExtendedMCPTestFailureKind =
+  | MCPTestFailureKind
+  | "credentials"
+  | "authorization";
 
 type GeneratedMCPTestSuccess = Extract<
   AgentServerMCPTestResponse,

@@ -98,6 +98,7 @@ export function SidebarRailBody({
   const { pages: canvasExtensionPages } = useCanvasExtensionsRuntime();
   const backendCloseTimerRef = collapsedBackendCloseTimer;
   const { isPinnedRoute, togglePinnedRoute } = usePinnedHomeRoute();
+  const [backendMenuOpen, setBackendMenuOpen] = React.useState(false);
 
   const buildPinAction = (path: string, testId: string) => {
     const pinned = isPinnedRoute(path);
@@ -364,7 +365,7 @@ export function SidebarRailBody({
                 <span className="relative inline-flex size-4.5 shrink-0 items-center justify-center">
                   <BackendStatusDot
                     isConnected={activeBackendHealth?.isConnected ?? null}
-                    className="absolute -left-0.5 -top-0.5 z-[1] pointer-events-none"
+                    className="absolute -left-0.5 -top-0.5 z-1 pointer-events-none"
                   />
                   <Server width={ICON_SIZE} height={ICON_SIZE} />
                 </span>
@@ -395,7 +396,14 @@ export function SidebarRailBody({
 
       {!collapsed ? (
         <>
-          <div className="mb-2 shrink-0 pr-2.5">
+          {/* Keep the card's space while the backend menu covers it, so the
+              list above doesn't jump when the menu opens on hover. */}
+          <div
+            className={cn(
+              "mb-2 shrink-0 pr-2.5",
+              backendMenuOpen && "invisible",
+            )}
+          >
             <SidebarOnboardingChecklist collapsed={collapsed} />
           </div>
           <div
@@ -405,7 +413,11 @@ export function SidebarRailBody({
             )}
           >
             <AgentCanvasVersionTile hideWhenUpToDate />
-            <BackendSelector sidebarCollapsed={collapsed} openUpward />
+            <BackendSelector
+              sidebarCollapsed={collapsed}
+              openUpward
+              onMenuOpenChange={setBackendMenuOpen}
+            />
           </div>
         </>
       ) : null}

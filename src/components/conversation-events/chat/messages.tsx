@@ -1,8 +1,18 @@
+import { useSessionActivities } from "#/hooks/use-session-activities";
+import { useSessionActivityStore } from "#/stores/session-activity-store";
+import { SessionActivityDetails } from "./event-message-components/session-activity";
+import { CollapsibleThinking } from "./event-message-components/collapsible-thinking";
 import React from "react";
+import { useTranslation } from "react-i18next";
+import { LoaderCircle } from "lucide-react";
 import { ActionEvent, OpenHandsEvent } from "#/types/agent-server/core";
+import { I18nKey } from "#/i18n/declaration";
+import { useAgentState, usePlanningAgentState } from "#/hooks/use-agent-state";
+import { AgentState } from "#/types/agent-state";
 import {
   isActionEvent,
   isObservationEvent,
+  isStreamingDeltaEvent,
   isUserRejectObservation,
 } from "#/types/agent-server/type-guards";
 import { EventMessage } from "./event-message";
@@ -10,6 +20,7 @@ import { usePlanPreviewEvents } from "./hooks/use-plan-preview-events";
 import { groupEvents } from "./group-events";
 import { EventGroup } from "./event-message-components/event-group";
 import { ThoughtEventMessage } from "./event-message-components/thought-event-message";
+import { getStepKey, StepDisclosureContext } from "./step-disclosure-context";
 import { useModelStore } from "#/stores/model-store";
 import { ModelMessages } from "#/components/features/chat/model-messages";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
@@ -23,17 +34,51 @@ import {
 interface MessagesProps {
   messages: OpenHandsEvent[]; // UI events (actions replaced by observations)
   allEvents: OpenHandsEvent[]; // Full event history (for action lookup)
+  hasOlderEvents?: boolean;
+  pendingMessages?: React.ReactNode;
+  pendingSessionId?: string;
 }
 
 const getLastEventId = (events: OpenHandsEvent[]) => events.at(-1)?.id;
 const getLastEvent = (events: OpenHandsEvent[]) => events.at(-1);
 
 export const Messages: React.FC<MessagesProps> = React.memo(
-  ({ messages, allEvents }) => {
+  ({
+    messages,
+    allEvents,
+    hasOlderEvents = false,
+    pendingMessages,
+    pendingSessionId,
+  }) => {
     const { conversationId } = useOptionalConversationId();
+    const { key: sessionKey, sessions } = useSessionActivities(conversationId);
+    const visibleSessions = React.useMemo(
+      () =>
+        sessions.filter(
+          (session) =>
+            session.phase === "pending" ||
+            session.phase === "connecting" ||
+            !hasOlderEvents ||
+            (session.kind === "resume" &&
+              (messages.some((event) => event.id === session.afterEventId) ||
+                session.startedAt >= Date.parse(messages[0]?.timestamp ?? ""))),
+        ),
+      [sessions, hasOlderEvents, messages],
+    );
     // Get the set of event IDs that should render PlanPreview
     // This ensures only one preview per user message "phase"
     const planPreviewEventIds = usePlanPreviewEvents(allEvents);
+
+    // Which rows and groups the user has opened or closed, keyed by tool call.
+    // Rows remount when a running action is replaced by its observation or a
+    // lone step becomes part of a group, so their state lives here instead.
+    const [openRows, setOpenRows] = React.useState<
+      ReadonlyMap<string, boolean>
+    >(() => new Map());
+    React.useEffect(() => setOpenRows(new Map()), [conversationId]);
+    const setRowOpen = React.useCallback((key: string, open: boolean) => {
+      setOpenRows((prev) => new Map(prev).set(key, open));
+    }, []);
 
     // EventMessage used to receive the complete allEvents array and the plan
     // Set, so every append changed every historical item's shallow props.
@@ -96,44 +141,78 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       return request ? <SecretRequestCard request={request} /> : null;
     };
 
-    // Fold consecutive action/observation events into collapsible groups so a
-    // long sequence of tool calls doesn't dominate the chat scroll. Items that
-    // can't be grouped (or that fall in a short run) are still rendered one by
-    // one, identically to before. Agent thoughts attached to an action are
-    // hoisted out as their own rendered item so they always show up in the
-    // message pane and a thought between actions starts a fresh group.
+    // One activity group lasts until visible agent text or an actionable event.
+    const { t } = useTranslation("openhands");
+    const { curAgentState } = useAgentState();
+    const { isPlanningAgentRunning } = usePlanningAgentState();
+    const isAgentRunning =
+      curAgentState === AgentState.RUNNING || isPlanningAgentRunning;
     const renderedItems = React.useMemo(
-      () => groupEvents(messages, undefined, allEvents),
-      [messages, allEvents],
+      () => groupEvents(messages, 1, allEvents, 1, visibleSessions),
+      [messages, allEvents, visibleSessions],
     );
+    const eventIndexes = React.useMemo(
+      () => new Map(messages.map((event, index) => [event, index])),
+      [messages],
+    );
+    const groupedReasoningIds = new Set(
+      renderedItems.flatMap((item) =>
+        item.kind === "group"
+          ? (item.reasoning ?? []).map((reasoning) => reasoning.id)
+          : [],
+      ),
+    );
+    const showThinkingLine =
+      isAgentRunning &&
+      renderedItems.at(-1)?.kind !== "group" &&
+      !(
+        messages.length && isStreamingDeltaEvent(messages[messages.length - 1])
+      );
 
     const renderEventMessage = (
       event: OpenHandsEvent,
       index: number,
       suppressThought: boolean,
-    ) => (
-      <EventMessage
-        key={event.id}
-        event={event}
-        correspondingAction={
-          (isObservationEvent(event) || isUserRejectObservation(event)) &&
-          event.action_id
-            ? (actionById.get(event.action_id) ?? null)
-            : null
-        }
-        isLastMessage={messages.length - 1 === index}
-        isInLast10Actions={messages.length - 1 - index < 10}
-        showPlanPreview={event.id ? planPreviewEventIds.has(event.id) : false}
-        suppressThought={suppressThought}
-      />
-    );
+    ) => {
+      const stepKey = getStepKey(event);
+      return (
+        <StepDisclosureContext.Provider
+          key={stepKey}
+          value={{
+            open: openRows.get(stepKey),
+            setOpen: (open) => setRowOpen(stepKey, open),
+          }}
+        >
+          <EventMessage
+            event={event}
+            correspondingAction={
+              (isObservationEvent(event) || isUserRejectObservation(event)) &&
+              event.action_id
+                ? (actionById.get(event.action_id) ?? null)
+                : null
+            }
+            isLastMessage={messages.length - 1 === index}
+            isInLast10Actions={messages.length - 1 - index < 10}
+            showPlanPreview={
+              event.id ? planPreviewEventIds.has(event.id) : false
+            }
+            suppressThought={suppressThought}
+            suppressReasoning={groupedReasoningIds.has(
+              isObservationEvent(event) || isUserRejectObservation(event)
+                ? event.action_id
+                : (event.id ?? ""),
+            )}
+          />
+        </StepDisclosureContext.Provider>
+      );
+    };
 
     return (
       <>
         {renderedItems.map((item, itemIndex) => {
           if (item.kind === "single") {
             return (
-              <React.Fragment key={`single-${item.event.id}`}>
+              <React.Fragment key={`single-${getStepKey(item.event)}`}>
                 {/* Thoughts for singles are also hoisted as their own
                     "thought" item, so suppress the inline render to avoid
                     duplication. */}
@@ -153,22 +232,70 @@ export const Messages: React.FC<MessagesProps> = React.memo(
             );
           }
 
-          // A group is "finalized" once another rendered item appears after
-          // it, signalling the agent has moved on. While the group is still
-          // the live tail, it keeps showing the latest action title as its
-          // prominent summary.
-          const isFinalized = itemIndex < renderedItems.length - 1;
-          const groupKey = item.events[0]?.id ?? `group-${item.startIndex}`;
+          const groupKey =
+            item.session?.id ??
+            (item.reasoning?.[0] && item.reasoning[0].index <= item.startIndex
+              ? item.reasoning[0].id
+              : item.events[0]
+                ? isObservationEvent(item.events[0]) ||
+                  isUserRejectObservation(item.events[0])
+                  ? item.events[0].action_id
+                  : item.events[0].id
+                : `group-${item.startIndex}`);
+          // A group that forms around a step the user opened starts open, so
+          // that step stays visible.
+          const groupOpen =
+            item.session?.open ??
+            openRows.get(`group:${groupKey}`) ??
+            item.events.some((event) => openRows.get(getStepKey(event)));
           return (
             <React.Fragment key={`group-${groupKey}`}>
+              {pendingSessionId &&
+                item.session?.id === pendingSessionId &&
+                pendingMessages}
               <EventGroup
                 events={item.events}
+                session={item.session}
+                hasReasoning={!!item.reasoning?.length}
                 allEvents={allEvents}
-                isFinalized={isFinalized}
+                isLive={
+                  isAgentRunning && itemIndex === renderedItems.length - 1
+                }
+                open={groupOpen}
+                onOpenChange={(open) =>
+                  item.session
+                    ? useSessionActivityStore
+                        .getState()
+                        .setOpen(sessionKey, item.session.id, open)
+                    : setRowOpen(`group:${groupKey}`, open)
+                }
               >
-                {item.events.map((event, offset) =>
-                  renderEventMessage(event, item.startIndex + offset, true),
+                {item.session && (
+                  <SessionActivityDetails session={item.session} />
                 )}
+                {[
+                  ...item.events.map((event) => ({
+                    index: eventIndexes.get(event)!,
+                    order: 1,
+                    node: renderEventMessage(
+                      event,
+                      eventIndexes.get(event)!,
+                      true,
+                    ),
+                  })),
+                  ...(item.reasoning ?? []).map((reasoning) => ({
+                    index: reasoning.index,
+                    order: 0,
+                    node: (
+                      <CollapsibleThinking
+                        key={`reasoning-${reasoning.id}`}
+                        content={reasoning.text}
+                      />
+                    ),
+                  })),
+                ]
+                  .sort((a, b) => a.index - b.index || a.order - b.order)
+                  .map((entry) => entry.node)}
               </EventGroup>
               {item.events.map((event) => (
                 <React.Fragment key={`model-${event.id}`}>
@@ -179,6 +306,23 @@ export const Messages: React.FC<MessagesProps> = React.memo(
             </React.Fragment>
           );
         })}
+        {!(
+          pendingSessionId &&
+          renderedItems.some(
+            (item) =>
+              item.kind === "group" && item.session?.id === pendingSessionId,
+          )
+        ) && pendingMessages}
+        {showThinkingLine && (
+          <div
+            className="mt-2 flex items-center gap-2 py-1 text-sm text-muted"
+            data-testid="live-thinking"
+            role="status"
+          >
+            <span>{t(I18nKey.ACTION_MESSAGE$THINK)}</span>
+            <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+          </div>
+        )}
         {secretRequests.unanchored.map((request) => (
           <SecretRequestCard key={request.toolCallId} request={request} />
         ))}
@@ -187,6 +331,9 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     );
   },
   (prevProps, nextProps) =>
+    prevProps.pendingMessages === nextProps.pendingMessages &&
+    prevProps.pendingSessionId === nextProps.pendingSessionId &&
+    prevProps.hasOlderEvents === nextProps.hasOlderEvents &&
     prevProps.messages.length === nextProps.messages.length &&
     prevProps.allEvents.length === nextProps.allEvents.length &&
     getLastEventId(prevProps.messages) === getLastEventId(nextProps.messages) &&

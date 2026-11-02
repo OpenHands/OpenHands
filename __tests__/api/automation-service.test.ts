@@ -301,7 +301,7 @@ describe("AutomationService", () => {
 
       expect(result.repositories).toEqual([
         { url: "https://github.com/qa-example/qa-repo", ref: "main" },
-        { url: "qa-example/docs" },
+        { url: "qa-example/docs", provider: "github" },
       ]);
       expect(result.plugins).toEqual([
         "github:qa-example/qa-plugin",

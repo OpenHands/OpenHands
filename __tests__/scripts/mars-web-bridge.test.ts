@@ -5,7 +5,10 @@ import {
   type IncomingMessage,
   type Server,
 } from "node:http";
+import { mkdtempSync } from "node:fs";
 import net from "node:net";
+import { homedir, tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   afterAll,
   afterEach,
@@ -24,10 +27,15 @@ import { MARS_TUNNEL_IPC } from "../../scripts/mars-tunnel-bridge.mjs";
 import {
   RPC_METHODS,
   createMarsWebBridge,
-  isMarsWebDisabled,
   mountMarsWebBridge,
   rewriteAgentServerUrls,
 } from "../../scripts/mars-web-bridge.mjs";
+
+// Lets a test take the home folder away; every other call is the real one.
+vi.mock("node:os", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:os")>();
+  return { ...actual, homedir: vi.fn(actual.homedir) };
+});
 
 const SESSION_ID = "sess_a";
 
@@ -599,6 +607,33 @@ describe("createMarsWebBridge with a session key", () => {
     ).toBe(200);
   });
 
+  it("keeps a browser's cookie valid across a restart, and not across a key rotation", async () => {
+    const first = await fetch(`${web.origin}/mars/rpc/getAuthState`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Session-API-Key": KEY },
+      body: JSON.stringify({ args: [] }),
+    });
+    const cookiePair = (first.headers.get("set-cookie") ?? "").split(";")[0];
+    const statusAfterRestartWith = async (key: string) => {
+      const restarted = createMarsWebBridge({
+        bridge: fakeBridge(upstream.origin) as never,
+        env: {},
+        key,
+        log: () => {},
+      });
+      const restartedWeb = await startWebServer(restarted);
+      const { status } = await rpc(restartedWeb.origin, "getAuthState", [], {
+        headers: { "Content-Type": "application/json", Cookie: cookiePair },
+      });
+      await restarted.dispose();
+      restartedWeb.close();
+      return status;
+    };
+
+    expect(await statusAfterRestartWith(KEY)).toBe(200);
+    expect(await statusAfterRestartWith("rotated-key")).toBe(401);
+  });
+
   it("neither the key header nor the cookie reaches the session host", async () => {
     await rpc(web.origin, "openTunnel", [{ sessionId: SESSION_ID }], {
       headers: { "X-Session-API-Key": KEY },
@@ -661,11 +696,58 @@ describe("createMarsWebBridge with a session key", () => {
 });
 
 describe("mountMarsWebBridge", () => {
-  it("mounts by default on a loopback bind, even without a key", async () => {
+  // A mounted bridge reads its state directory; keep it off the developer's.
+  const STATE = { MARS_STATE_DIR: mkdtempSync(join(tmpdir(), "mars-mount-")) };
+
+  // Launchers set MARS_WEB=0 on servers that inherit MARS_TOKEN, so an
+  // explicit 0 stays quiet even then.
+  it.each([
+    {},
+    { MARS_WEB_KEY: "k" },
+    { MARS_WEB: "" },
+    { MARS_WEB: "0", MARS_TOKEN: "dop_v1_test" },
+  ])("stays off quietly without MARS_WEB=1: %j", (env) => {
+    const log = vi.fn();
+    const mounted = mountMarsWebBridge({
+      env,
+      host: "127.0.0.1",
+      sessionApiKey: "stack-key",
+      log,
+      debug: log,
+    });
+    expect(mounted).toBeNull();
+    expect(log).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [{ MARS_WEB: "true" }, /MARS_WEB="true" is not "1"/],
+    [{ MARS_WEB: "1 " }, /MARS_WEB="1 " is not "1"/],
+    [{ MARS_WEB: '"1"' }, /MARS_WEB="\\"1\\"" is not "1"/],
+    [
+      { MARS_TOKEN: "dop_v1_test" },
+      /MARS_TOKEN is set but MARS_WEB is not "1"/,
+    ],
+  ])("stays off but warns when it looks meant to be on: %j", (env, message) => {
     const warnings: string[] = [];
     const debugs: string[] = [];
     const mounted = mountMarsWebBridge({
-      env: {},
+      env,
+      host: "127.0.0.1",
+      sessionApiKey: "stack-key",
+      log: (m) => warnings.push(m),
+      debug: (m) => debugs.push(m),
+    });
+    expect(mounted).toBeNull();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(message);
+    expect(debugs).toEqual([]);
+  });
+
+  it("mounts with MARS_WEB=1 on a loopback bind, even without a key", async () => {
+    const warnings: string[] = [];
+    const debugs: string[] = [];
+    const mounted = mountMarsWebBridge({
+      env: { ...STATE, MARS_WEB: "1" },
       host: "127.0.0.1",
       log: (m) => warnings.push(m),
       debug: (m) => debugs.push(m),
@@ -676,93 +758,132 @@ describe("mountMarsWebBridge", () => {
     await mounted!.dispose();
   });
 
-  it("is off with MARS_WEB=0 and its synonyms, silently", () => {
-    for (const value of ["0", "false", "off", "no", "OFF", " 0 "]) {
-      const logs: string[] = [];
-      expect(
-        mountMarsWebBridge({
-          env: { MARS_WEB: value, MARS_WEB_KEY: "k" },
-          host: "127.0.0.1",
-          log: (m) => logs.push(m),
-          debug: (m) => logs.push(m),
-        }),
-      ).toBeNull();
-      expect(logs).toEqual([]);
-    }
-  });
-
-  it("stays on for the old MARS_WEB=1 opt-in, and warns once about a typo", async () => {
-    for (const value of ["1", "true", "on", "yes"]) {
-      const logs: string[] = [];
-      expect(isMarsWebDisabled({ MARS_WEB: value }, (m) => logs.push(m))).toBe(
-        false,
-      );
-      expect(logs).toEqual([]);
-    }
-    const logs: string[] = [];
-    expect(isMarsWebDisabled({ MARS_WEB: "nope" }, (m) => logs.push(m))).toBe(
-      false,
-    );
-    expect(logs[0]).toMatch(/not recognised/);
-    const mounted = mountMarsWebBridge({
-      env: { MARS_WEB: "nope" },
-      host: "127.0.0.1",
-      log: () => {},
-      debug: () => {},
+  it("still starts without a home folder, keeping sign-ins off disk", async () => {
+    // HOME unset and no passwd entry, as with `docker run --user <uid>`.
+    const realHomedir = vi.mocked(homedir).getMockImplementation()!;
+    vi.mocked(homedir).mockImplementation(() => {
+      throw new Error("uv_os_homedir returned ENOENT");
     });
-    expect(mounted).not.toBeNull();
-    await mounted!.dispose();
-  });
+    try {
+      const mounted = mountMarsWebBridge({
+        env: { MARS_WEB: "1" },
+        host: "127.0.0.1",
+        log: () => {},
+        debug: () => {},
+      });
 
-  it("only warns about an unmountable LAN bind when someone opted in", () => {
-    const warnings: string[] = [];
-    const debugs: string[] = [];
-    // Nobody asked for DigitalOcean: a Docker public-mode instance must not
-    // see a warning on every start.
-    expect(
-      mountMarsWebBridge({
-        env: {},
-        host: "::",
-        log: (m) => warnings.push(m),
-        debug: (m) => debugs.push(m),
-      }),
-    ).toBeNull();
-    expect(warnings).toEqual([]);
-    expect(debugs[0]).toMatch(/not loopback/);
-    // MARS_TOKEN, or the old MARS_WEB=1 opt-in, says they meant to use it, so
-    // the refusal is worth a warning.
-    for (const env of [{ MARS_TOKEN: "dop_v1_x" }, { MARS_WEB: "1" }]) {
-      const warned: string[] = [];
-      expect(
-        mountMarsWebBridge({
-          env,
-          host: "::",
-          log: (m) => warned.push(m),
-          debug: () => {},
-        }),
-      ).toBeNull();
-      expect(warned[0]).toMatch(/not loopback/);
+      expect(mounted).not.toBeNull();
+      expect(mounted!.bridge.getAuthState().storage.kind).not.toBe("file");
+      await mounted!.dispose();
+    } finally {
+      vi.mocked(homedir).mockImplementation(realHomedir);
     }
   });
 
   it("refuses a non-loopback bind without a key, and mounts with one", async () => {
-    const logs: string[] = [];
+    // A warning, not a debug line: the operator opted in and DigitalOcean
+    // will be missing.
+    const warnings: string[] = [];
+    const debugs: string[] = [];
     expect(
       mountMarsWebBridge({
-        env: {},
+        env: { MARS_WEB: "1" },
         host: "0.0.0.0",
-        log: (m) => logs.push(m),
-        debug: (m) => logs.push(m),
+        log: (m) => warnings.push(m),
+        debug: (m) => debugs.push(m),
       }),
     ).toBeNull();
-    expect(logs[0]).toMatch(/not loopback/);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/not loopback/);
+    expect(debugs).toEqual([]);
 
     const mounted = mountMarsWebBridge({
-      env: { MARS_WEB_KEY: "k" },
+      env: { ...STATE, MARS_WEB: "1", MARS_WEB_KEY: "k" },
       host: "0.0.0.0",
       log: () => {},
     });
     expect(mounted).not.toBeNull();
     await mounted!.dispose();
+  });
+});
+
+describe("createMarsWebBridge sign-in storage", () => {
+  const KEY = "sk-test-key";
+  const TOKEN = `dop_v1_${"e".repeat(64)}`;
+  let harness: Server;
+  let apiUrl: string;
+
+  // Stands in for harness-api and the account endpoint.
+  beforeEach(async () => {
+    harness = createServer((req, res) => {
+      res.setHeader("Content-Type", "application/json");
+      if (req.url?.startsWith("/v2/agents/sessions")) {
+        res.end(JSON.stringify({ sessions: [], next_page_token: "" }));
+      } else if (req.url === "/v2/account") {
+        res.end(
+          JSON.stringify({
+            account: {
+              email: "you@example.com",
+              team: { uuid: "team-1", name: "My Team" },
+            },
+          }),
+        );
+      } else {
+        res.writeHead(404).end("{}");
+      }
+    });
+    apiUrl = await listen(harness);
+  });
+
+  afterEach(() => closeServer(harness));
+
+  async function startCanvas(stateDir: string) {
+    const marsWeb = createMarsWebBridge({
+      env: {
+        MARS_API_BASE_URL: apiUrl,
+        OH_SECRET_KEY: "host-key",
+        OH_CANVAS_SECRET_STORE: "file",
+      },
+      key: KEY,
+      stateDir,
+      log: () => {},
+    });
+    const web = await startWebServer(marsWeb);
+    const call = (method: string, args: unknown[] = []) =>
+      rpc(web.origin, method, args, {
+        headers: {
+          "Content-Type": "application/json",
+          "X-Session-API-Key": KEY,
+        },
+      });
+    return {
+      call,
+      stop: async () => {
+        await marsWeb.dispose();
+        web.close();
+      },
+    };
+  }
+
+  it("keeps the DigitalOcean sign-in, named after its team, across a restart", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "mars-canvas-"));
+    const before = await startCanvas(stateDir);
+    const signedIn = await before.call("savePat", [{ token: TOKEN }]);
+    await before.stop();
+
+    const after = await startCanvas(stateDir);
+    const { body } = await after.call("getAuthState");
+    await after.stop();
+
+    expect(signedIn.body.result.active).toMatchObject({ teamName: "My Team" });
+    expect(body.result).toMatchObject({
+      active: {
+        teamName: "My Team",
+        email: "you@example.com",
+        isExpired: false,
+      },
+      storage: { kind: "encrypted-file" },
+    });
+    expect(JSON.stringify(body)).not.toContain(TOKEN);
   });
 });

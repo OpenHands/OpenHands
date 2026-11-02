@@ -121,16 +121,40 @@ export function editorOffset(repoRoot, env) {
 
 /**
  * A run's ports from its block base: ingress P, agent-server P+1, automation
- * P+2, static frontend P+3, and the editor only when the launcher serves it.
+ * P+2, static frontend P+3, the locked-to-Cloud page P+4 when the run serves
+ * one (`launch --lock-to-cloud`), and the editor only when the launcher
+ * serves it.
  */
-export function runPorts(base, offset) {
+export function runPorts(base, offset, { lockedCloud = false } = {}) {
   return {
     ingress: base,
     agentServer: base + 1,
     automation: base + 2,
     frontend: base + 3,
+    ...(lockedCloud ? { lockedCloud: base + 4 } : {}),
     ...(offset === null ? {} : { vscode: base + 1 + offset }),
   };
+}
+
+/**
+ * The Cloud host a `launch --lock-to-cloud` page is locked to: an http(s)
+ * origin, as `scripts/static-server.mjs --lock-to-cloud` takes it.
+ * @returns {string} the origin, without a trailing slash
+ */
+export function lockedCloudOrigin(value) {
+  let url;
+  try {
+    url = new URL(String(value));
+  } catch {
+    throw new Error(
+      `--lock-to-cloud needs a Cloud URL, got ${JSON.stringify(value)}`,
+    );
+  }
+  if (!["http:", "https:"].includes(url.protocol))
+    throw new Error(
+      `--lock-to-cloud needs an http(s) URL, got ${url.protocol}`,
+    );
+  return url.origin;
 }
 
 /**
@@ -147,7 +171,9 @@ export function portsAfterRestart(previous, editor) {
       ports: previous,
       warning: `Could not ask scripts/dev-with-automation.mjs whether it serves VS Code (${editor.reason}); keeping this run's ports.`,
     };
-  const ports = runPorts(previous.ingress, editor.offset);
+  const ports = runPorts(previous.ingress, editor.offset, {
+    lockedCloud: previous.lockedCloud !== undefined,
+  });
   if (ports.vscode === previous.vscode) return { ports };
   if (ports.vscode === undefined)
     return {

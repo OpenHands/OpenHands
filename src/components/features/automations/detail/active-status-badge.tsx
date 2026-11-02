@@ -29,7 +29,7 @@ const STATUS_DISPLAY: Record<
   draft: {
     testId: "active-status-badge-draft",
     label: I18nKey.AUTOMATIONS$DETAIL$DRAFT,
-    className: "bg-[var(--oh-warning)]/15 text-[var(--oh-warning)]",
+    className: "bg-warning/15 text-warning",
   },
 };
 
@@ -45,7 +45,7 @@ export function ActiveStatusBadge({
       data-testid={display.testId}
       className={cn(
         "inline-flex items-center rounded-full font-medium",
-        compact ? "px-2 py-0.5 text-[10px]" : "px-3 py-1 text-xs",
+        compact ? "px-2 py-0.5 text-3xs" : "px-3 py-1 text-xs",
         display.className,
       )}
     >
