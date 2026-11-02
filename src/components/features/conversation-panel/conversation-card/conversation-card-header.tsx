@@ -9,6 +9,7 @@ interface ConversationCardHeaderProps {
   titleMode: "view" | "edit";
   onTitleSave: (title: string) => void;
   executionStatus?: ExecutionStatus | null;
+  isStarting?: boolean;
   sandboxStatus?: SandboxStatus | null;
   /**
    * The row's effective archived state (explicit archive or missing runtime).
@@ -24,16 +25,18 @@ export function ConversationCardHeader({
   titleMode,
   onTitleSave,
   executionStatus,
+  isStarting,
   sandboxStatus,
   isArchived,
 }: ConversationCardHeaderProps) {
   const archived = isArchived ?? isMissingSandboxStatus(sandboxStatus);
   return (
     <div className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden">
-      {executionStatus !== undefined && (
+      {(executionStatus !== undefined || isStarting) && (
         <div className="flex w-4.5 shrink-0 items-center justify-center">
           <ConversationStatusDot
             executionStatus={executionStatus}
+            isStarting={isStarting}
             sandboxStatus={sandboxStatus}
             isArchived={archived}
             showTooltip={false}

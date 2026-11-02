@@ -112,6 +112,10 @@ const loadFreshConversationMutationUtils = async () => {
 const prepareRuntimeConversation = (
   overrides: Partial<AppConversation> = {},
 ) => {
+  mocks.getActiveBackend.mockReturnValue({
+    backend: { id: "local", kind: "local" },
+    orgId: null,
+  });
   const conversation = makeConversation(overrides);
   mocks.batchGetAppConversations.mockResolvedValueOnce([conversation]);
   mocks.getAgentServerClientOptions.mockReturnValue(CLIENT_OPTIONS);

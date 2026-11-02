@@ -144,9 +144,10 @@ const scheduleSendTimeout = (
   get: () => OptimisticUserMessageStore,
   id: string,
 ): void => {
+  const attempt = get().pendingMessages.find((message) => message.id === id);
   setTimeout(() => {
     const current = get().pendingMessages.find((m) => m.id === id);
-    if (current?.status === "sending") {
+    if (current === attempt && current?.status === "sending") {
       get().markPendingMessageError(id, "Send timed out");
     }
   }, PENDING_MESSAGE_TIMEOUT_MS);
@@ -191,7 +192,7 @@ export const useOptimisticUserMessageStore = create<OptimisticUserMessageStore>(
         ),
       })),
 
-    markPendingMessageSending: (id) =>
+    markPendingMessageSending: (id) => {
       set((state) => ({
         pendingMessages: state.pendingMessages.map((message) =>
           message.id === id
@@ -203,7 +204,10 @@ export const useOptimisticUserMessageStore = create<OptimisticUserMessageStore>(
               }
             : message,
         ),
-      })),
+      }));
+
+      scheduleSendTimeout(get, id);
+    },
 
     removePendingMessage: (id) =>
       set((state) => ({

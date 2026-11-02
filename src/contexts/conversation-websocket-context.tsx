@@ -13,7 +13,10 @@ import { ConversationClient } from "@openhands/typescript-client/clients";
 import { useQueryClient } from "@tanstack/react-query";
 import { useWebSocket, WebSocketHookOptions } from "#/hooks/use-websocket";
 import { usePageVisibilityReconnect } from "#/hooks/use-page-visibility-reconnect";
-import { SERVER_CONNECTION_ERROR_MESSAGE } from "#/constants/server-connection-error";
+import {
+  useConnectionErrorGracePeriod,
+  type ConnectionRecoveryState,
+} from "#/hooks/use-connection-error-grace-period";
 import { useEventStore } from "#/stores/use-event-store";
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
@@ -116,6 +119,8 @@ interface SendMessageResult {
 
 interface ConversationWebSocketContextType {
   connectionState: WebSocketConnectionState;
+  recoveryState: ConnectionRecoveryState;
+  recoveryConversationId?: string;
   /**
    * The main connection's own state, unmerged with the planning connection —
    * see `useMainWebSocketStatus`.
@@ -232,7 +237,6 @@ export function ConversationWebSocketProvider({
     useState<WebSocketConnectionState>("CONNECTING");
 
   // Track if we've ever successfully connected for each connection
-  // Don't show errors until after first successful connection
   const hasConnectedRefMain = React.useRef(false);
   const hasConnectedRefPlanning = React.useRef(false);
 
@@ -506,7 +510,7 @@ export function ConversationWebSocketProvider({
   );
 
   const planningAgentWsUrl = useMemo(() => {
-    if (!subConversations?.length) {
+    if (!conversationUrl || !subConversations?.length) {
       return null;
     }
 
@@ -524,7 +528,7 @@ export function ConversationWebSocketProvider({
       planningAgentConversation.id,
       planningAgentConversation.conversation_url,
     );
-  }, [subConversations]);
+  }, [conversationUrl, subConversations]);
 
   // Merged connection state - reflects combined status of both connections
   const connectionState = useMemo<WebSocketConnectionState>(() => {
@@ -1147,6 +1151,10 @@ export function ConversationWebSocketProvider({
     ],
   );
 
+  const mainConnectionError = useConnectionErrorGracePeriod(wsUrl);
+  const planningConnectionError =
+    useConnectionErrorGracePeriod(planningAgentWsUrl);
+
   // Separate WebSocket options for main connection
   const mainWebsocketOptions: WebSocketHookOptions = useMemo(() => {
     // `after_seq` replaces the legacy resend_mode/after_timestamp pair, which
@@ -1166,6 +1174,7 @@ export function ConversationWebSocketProvider({
       sessionApiKey,
       reconnect: { enabled: true },
       onOpen: () => {
+        mainConnectionError.cancel();
         setMainConnectionState("OPEN");
         hasConnectedRefMain.current = true; // Mark that we've successfully connected
         clearConnectionError(); // Clear a previous connection error; keep sticky conversation errors
@@ -1182,23 +1191,16 @@ export function ConversationWebSocketProvider({
       },
       onError: () => {
         setMainConnectionState("CLOSED");
-        // Only show an error if we've previously connected successfully, and
-        // the page is actually visible: a hidden tab is never watching this
-        // banner, and a background-caused drop (mobile freezing the tab) is
-        // about to be cleaned up and silently retried by
-        // `usePageVisibilityReconnect` the moment the tab is foregrounded —
-        // surfacing "Unable to connect" for it would just be a stale flash
-        // the user sees on return instead of "Reconnecting".
-        if (
-          hasConnectedRefMain.current &&
-          document.visibilityState !== "hidden"
-        ) {
-          setErrorMessage(SERVER_CONNECTION_ERROR_MESSAGE, "connection");
-        }
+        mainConnectionError.report();
       },
       onMessage: handleMainMessage,
     };
-  }, [handleMainMessage, setErrorMessage, clearConnectionError, sessionApiKey]);
+  }, [
+    handleMainMessage,
+    mainConnectionError,
+    clearConnectionError,
+    sessionApiKey,
+  ]);
 
   // Separate WebSocket options for planning agent connection
   const planningWebsocketOptions: WebSocketHookOptions = useMemo(() => {
@@ -1219,6 +1221,7 @@ export function ConversationWebSocketProvider({
       sessionApiKey: planningApiKey,
       reconnect: { enabled: true },
       onOpen: async () => {
+        planningConnectionError.cancel();
         setPlanningConnectionState("OPEN");
         hasConnectedRefPlanning.current = true; // Mark that we've successfully connected
         clearConnectionError(); // Clear a previous connection error; keep sticky conversation errors
@@ -1256,20 +1259,13 @@ export function ConversationWebSocketProvider({
       },
       onError: () => {
         setPlanningConnectionState("CLOSED");
-        // See the main socket's onError: skip the banner for a hidden-tab
-        // drop, which is about to be silently retried on foreground.
-        if (
-          hasConnectedRefPlanning.current &&
-          document.visibilityState !== "hidden"
-        ) {
-          setErrorMessage(SERVER_CONNECTION_ERROR_MESSAGE, "connection");
-        }
+        planningConnectionError.report();
       },
       onMessage: handlePlanningMessage,
     };
   }, [
     handlePlanningMessage,
-    setErrorMessage,
+    planningConnectionError,
     clearConnectionError,
     sessionApiKey,
     subConversations,
@@ -1358,6 +1354,8 @@ export function ConversationWebSocketProvider({
 
   const reconnect = useCallback(() => {
     removeErrorMessage();
+    mainConnectionError.cancel();
+    planningConnectionError.cancel();
     const currentMode = useConversationStore.getState().conversationMode;
     if (currentMode === "plan" && planningAgentWsUrl) {
       reconnectPlanning();
@@ -1369,6 +1367,8 @@ export function ConversationWebSocketProvider({
     reconnectMain,
     reconnectPlanning,
     removeErrorMessage,
+    mainConnectionError,
+    planningConnectionError,
   ]);
 
   // Mobile browsers freeze and discard backgrounded tabs, silently killing
@@ -1580,9 +1580,21 @@ export function ConversationWebSocketProvider({
     }
   }, [planningAgentSocket, planningAgentWsUrl]);
 
+  const activeMode = useConversationStore((state) => state.conversationMode);
+  const recoveryConversationId =
+    activeMode === "plan" && planningAgentWsUrl
+      ? subConversations?.[0]?.id
+      : conversationId;
+  const recoveryState =
+    activeMode === "plan" && planningAgentWsUrl
+      ? planningConnectionError.state
+      : mainConnectionError.state;
+
   const contextValue = useMemo(
     () => ({
       connectionState,
+      recoveryState,
+      recoveryConversationId,
       mainConnectionState,
       sendMessage,
       isLoadingHistory,
@@ -1592,6 +1604,8 @@ export function ConversationWebSocketProvider({
     }),
     [
       connectionState,
+      recoveryState,
+      recoveryConversationId,
       mainConnectionState,
       planningConnectionState,
       sendMessage,

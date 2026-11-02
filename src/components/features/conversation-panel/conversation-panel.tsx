@@ -1,3 +1,6 @@
+import { useConversationDisplayTitle } from "#/hooks/use-conversation-display-title";
+import { usePendingTaskAttachmentsStore } from "#/stores/pending-task-attachments-store";
+import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
 import React from "react";
 import { Tooltip } from "@heroui/react";
 import { useTranslation } from "react-i18next";
@@ -30,6 +33,7 @@ import { isExecutionActive } from "#/utils/status";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
 import { useIsCreatingConversation } from "#/hooks/use-is-creating-conversation";
 import { ConversationCard } from "./conversation-card/conversation-card";
+import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import { ConversationCardPreview } from "./conversation-card/conversation-card-preview";
 import { StartTaskCard } from "./start-task-card/start-task-card";
 import { ConversationCardSkeleton } from "./conversation-card/conversation-card-skeleton";
@@ -95,7 +99,7 @@ export function ConversationPanel({
 }: ConversationPanelProps) {
   const { t } = useTranslation("openhands");
   const { conversationId: currentConversationId, navigate } = useNavigation();
-  const { backend: activeBackend } = useActiveBackend();
+  const { backend: activeBackend, orgId } = useActiveBackend();
   const backendScopedPath = useBackendScopedPath();
   // Click-outside is only relevant in the legacy drawer mode where an
   // onClose handler is provided. When the panel is rendered inline (e.g.
@@ -288,8 +292,10 @@ export function ConversationPanel({
   } = usePaginatedConversations();
   const { workspaces: knownWorkspaces } = useResolvedWorkspaces();
 
-  // Fetch in-progress start tasks
-  const { data: startTasks } = useStartTasks();
+  const pendingLaunches = useConversationLaunchStore((state) => state.launches);
+  const pendingAttachments = usePendingTaskAttachmentsStore(
+    (state) => state.byTaskId,
+  );
   // The hovercard names the launched agent profile: one cached list lookup
   // (shared with the chat input), never a fetch per hover.
   const { data: agentProfilesData } = useAgentProfiles();
@@ -313,6 +319,18 @@ export function ConversationPanel({
     // so the rendered count reflects real growth and React keys stay unique.
     return uniqueById(all);
   }, [data]);
+
+  const listedConversationIds = React.useMemo(
+    () => allLoadedConversations.map((conversation) => conversation.id),
+    [allLoadedConversations],
+  );
+  // Fetch in-progress start tasks
+  const {
+    data: startTasks,
+    unresolvedTaskIds = [],
+    failedTaskIds = [],
+  } = useStartTasks(10, listedConversationIds);
+  const getTitle = useConversationDisplayTitle();
 
   // Grouped pagination is folder-oriented. Record the first backend page for
   // every conversation so later pages can introduce new folders without
@@ -1057,6 +1075,7 @@ export function ConversationPanel({
       conversation: (typeof conversations)[number],
       options?: { inPinnedSection?: boolean },
     ) => {
+      const displayTitle = getTitle(conversation.id, conversation.title);
       const isPinned = pinnedIds.includes(conversation.id);
       // Presentation: a row looks archived when the user archived it or its
       // runtime is missing and non-resumable. This single predicate drives list
@@ -1082,7 +1101,7 @@ export function ConversationPanel({
           <CompactConversationRow
             key={conversation.id}
             conversationId={conversation.id}
-            title={conversation.title ?? ""}
+            title={displayTitle}
             selectedRepository={{
               selected_repository: conversation.selected_repository,
               selected_branch: conversation.selected_branch,
@@ -1125,7 +1144,7 @@ export function ConversationPanel({
           className="max-w-none overflow-visible rounded-xl border border-border bg-base-secondary p-0 text-contrast shadow-xl"
           content={
             <ConversationCardPreview
-              title={conversation.title ?? ""}
+              title={displayTitle}
               executionStatus={conversation.execution_status}
               sandboxStatus={conversation.sandbox_status}
               selectedRepository={{
@@ -1170,7 +1189,7 @@ export function ConversationPanel({
           >
             <ConversationCard
               onDelete={() =>
-                handleDeleteProject(conversation.id, conversation.title ?? "")
+                handleDeleteProject(conversation.id, displayTitle)
               }
               // Archive is offered until the row is effectively archived; the
               // reverse direction, "Unarchive", is offered only when the row is
@@ -1179,11 +1198,7 @@ export function ConversationPanel({
               onArchive={
                 isArchived
                   ? undefined
-                  : () =>
-                      handleArchiveProject(
-                        conversation.id,
-                        conversation.title ?? "",
-                      )
+                  : () => handleArchiveProject(conversation.id, displayTitle)
               }
               onUnarchive={
                 explicitlyArchived && !runtimeMissing
@@ -1205,7 +1220,7 @@ export function ConversationPanel({
               onChangeTitle={(title) =>
                 handleConversationTitleChange(conversation.id, title)
               }
-              title={conversation.title ?? ""}
+              title={displayTitle}
               selectedRepository={{
                 selected_repository: conversation.selected_repository,
                 selected_branch: conversation.selected_branch,
@@ -1243,6 +1258,7 @@ export function ConversationPanel({
       );
     },
     [
+      getTitle,
       activeBackend.id,
       activeBackend.kind,
       archivedIdSet,
@@ -1433,19 +1449,115 @@ export function ConversationPanel({
           />
         ) : null}
 
-        {/* Render in-progress start tasks first (skipped in compact mode —
-            their rich card layout doesn't fit in the icon rail). */}
         {!compact &&
-          startTasks?.map((task) => (
-            <NavigationLink
-              key={task.id}
-              to={backendScopedPath(`/conversations/task-${task.id}`)}
-              onClick={onClose}
-              className="block"
-            >
-              <StartTaskCard task={task} />
-            </NavigationLink>
-          ))}
+          Object.values(pendingLaunches)
+            .filter(
+              (launch) =>
+                (!launch.targetId ||
+                  (launch.targetId.startsWith("task-") &&
+                    unresolvedTaskIds.includes(launch.targetId.slice(5)) &&
+                    !pendingAttachments[launch.targetId.slice(5)]?.error &&
+                    !pendingAttachments[launch.targetId.slice(5)]
+                      ?.readError)) &&
+                launch.backendId === activeBackend.id &&
+                launch.orgId === orgId,
+            )
+            .map((launch) => (
+              <NavigationLink
+                key={launch.id}
+                to={backendScopedPath(`/conversations/${launch.id}`)}
+                onClick={onClose}
+                className="block"
+              >
+                <ConversationCard
+                  title={getTitle(launch.id)}
+                  isStarting
+                  selectedRepository={null}
+                  lastUpdatedAt=""
+                  showRepositoryMetadata={false}
+                  isActive={
+                    currentConversationId === launch.id ||
+                    currentConversationId === launch.targetId
+                  }
+                  executionStatus={
+                    launch.error ||
+                    (launch.targetId?.startsWith("task-") &&
+                      failedTaskIds.includes(launch.targetId.slice(5)))
+                      ? ExecutionStatus.ERROR
+                      : null
+                  }
+                />
+              </NavigationLink>
+            ))}
+
+        {!compact &&
+          Object.entries(pendingAttachments)
+            .filter(
+              ([, pending]) =>
+                (pending.error || pending.readError) &&
+                pending.backendId === activeBackend.id &&
+                pending.orgId === orgId,
+            )
+            .map(([taskId, pending]) => (
+              <NavigationLink
+                key={taskId}
+                to={backendScopedPath(
+                  `/conversations/${pending.error && pending.conversationId ? pending.conversationId : `task-${taskId}`}`,
+                )}
+                onClick={onClose}
+                className="block"
+              >
+                <ConversationCard
+                  title={pending.content || t(I18nKey.CONVERSATION$UNTITLED)}
+                  selectedRepository={null}
+                  lastUpdatedAt=""
+                  showRepositoryMetadata={false}
+                  isActive={
+                    currentConversationId === `task-${taskId}` ||
+                    currentConversationId === pending.conversationId
+                  }
+                  executionStatus={ExecutionStatus.ERROR}
+                />
+              </NavigationLink>
+            ))}
+
+        {/* Keep pending conversations available while their sandboxes start. */}
+        {!compact &&
+          startTasks
+            ?.filter(
+              (task) =>
+                !pendingAttachments[task.id]?.error &&
+                !pendingAttachments[task.id]?.readError,
+            )
+            .map((task) => (
+              <NavigationLink
+                key={task.id}
+                to={backendScopedPath(`/conversations/task-${task.id}`)}
+                onClick={onClose}
+                className="block"
+              >
+                <StartTaskCard
+                  task={task}
+                  title={getTitle(`task-${task.id}`, task.request.title)}
+                  initialMessage={
+                    pendingAttachments[task.id]?.content ||
+                    Object.values(pendingLaunches).find(
+                      (launch) => launch.targetId === `task-${task.id}`,
+                    )?.message
+                  }
+                  isActive={
+                    currentConversationId === task.app_conversation_id ||
+                    currentConversationId === `task-${task.id}` ||
+                    Object.values(pendingLaunches).some(
+                      (launch) =>
+                        launch.id === currentConversationId &&
+                        launch.targetId === `task-${task.id}`,
+                    )
+                  }
+                  showRepositoryMetadata={showRepoBranchMetadata}
+                />
+              </NavigationLink>
+            ))}
 
         {!showInitialSkeleton && compact
           ? compactVisibleConversations.map((conversation) =>

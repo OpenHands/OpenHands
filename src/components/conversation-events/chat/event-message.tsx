@@ -65,6 +65,7 @@ interface EventMessageProps {
    * Has no effect on `ThinkAction`, whose thought IS its action body.
    */
   suppressThought?: boolean;
+  suppressReasoning?: boolean;
 }
 
 const getActivatedSkills = (event: MessageEvent): string[] =>
@@ -183,6 +184,7 @@ function EventMessageComponent({
   planPreviewEventIds,
   showPlanPreview,
   suppressThought = false,
+  suppressReasoning = false,
 }: EventMessageProps) {
   const { data: config } = useConfig();
   const planContent = useConversationStore((state) => state.planContent);
@@ -255,7 +257,9 @@ function EventMessageComponent({
       .join("\n\n");
     return (
       <>
-        {reasoningContent && <CollapsibleThinking content={reasoningContent} />}
+        {!suppressReasoning && reasoningContent && (
+          <CollapsibleThinking content={reasoningContent} />
+        )}
         {message && (
           <ChatMessage
             type="agent"
@@ -296,7 +300,6 @@ function EventMessageComponent({
     const reasoningContent = getReasoningContent(event);
     return (
       <>
-        {reasoningContent && <CollapsibleThinking content={reasoningContent} />}
         {!suppressThought && (
           <ThoughtEventMessage
             event={event}
@@ -306,6 +309,7 @@ function EventMessageComponent({
         <GenericEventMessageWrapper
           event={event}
           isLastMessage={isLastMessage}
+          reasoning={suppressReasoning ? "" : reasoningContent}
         />
       </>
     );
@@ -353,7 +357,6 @@ function EventMessageComponent({
 
     return (
       <>
-        {reasoningContent && <CollapsibleThinking content={reasoningContent} />}
         {shouldShowThought && (
           <ThoughtEventMessage
             event={correspondingAction}
@@ -363,6 +366,7 @@ function EventMessageComponent({
         <GenericEventMessageWrapper
           event={event}
           isLastMessage={isLastMessage}
+          reasoning={suppressReasoning ? "" : reasoningContent}
           correspondingAction={
             correspondingAction && isActionEvent(correspondingAction)
               ? correspondingAction
@@ -382,7 +386,6 @@ function EventMessageComponent({
 
     return (
       <>
-        {reasoningContent && <CollapsibleThinking content={reasoningContent} />}
         {!suppressThought && correspondingAction && (
           <ThoughtEventMessage
             event={correspondingAction}
@@ -392,6 +395,7 @@ function EventMessageComponent({
         <GenericEventMessageWrapper
           event={event}
           isLastMessage={isLastMessage}
+          reasoning={suppressReasoning ? "" : reasoningContent}
           correspondingAction={correspondingAction}
         />
       </>
@@ -419,6 +423,7 @@ function EventMessageComponent({
     return (
       <UserAssistantEventMessage
         event={messageEvent}
+        suppressReasoning={suppressReasoning}
         {...commonProps}
         isLastMessage={isLastMessage}
       />

@@ -2,6 +2,8 @@ import type { SVGProps } from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { NavigationProvider } from "#/context/navigation-context";
+import { ChatProgressContext } from "#/context/chat-progress-context";
 import { AgentStatus } from "#/components/features/controls/agent-status";
 import { AgentState } from "#/types/agent-state";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
@@ -63,6 +65,8 @@ vi.mock("#/icons/u-clock-three.svg?react", () => ({
 }));
 
 interface AgentStatusScenario {
+  routeConversationId?: string;
+  progressInChat?: boolean;
   agentState?: AgentState;
   className?: string;
   conversationId?: string | null;
@@ -77,6 +81,8 @@ interface AgentStatusScenario {
 }
 
 function renderAgentStatus({
+  routeConversationId,
+  progressInChat = false,
   agentState = AgentState.AWAITING_USER_CONFIRMATION,
   className,
   conversationId = "conversation-1",
@@ -114,13 +120,24 @@ function renderAgentStatus({
   );
 
   const view = render(
-    <AgentStatus
-      className={className}
-      disabled={disabled}
-      handleResumeAgent={handleResumeAgent}
-      handleStop={handleStop}
-      isPausing={isPausing}
-    />,
+    <NavigationProvider
+      value={{
+        conversationId: routeConversationId ?? null,
+        currentPath: "/",
+        isNavigating: false,
+        navigate: vi.fn(),
+      }}
+    >
+      <ChatProgressContext.Provider value={progressInChat}>
+        <AgentStatus
+          className={className}
+          disabled={disabled}
+          handleResumeAgent={handleResumeAgent}
+          handleStop={handleStop}
+          isPausing={isPausing}
+        />
+      </ChatProgressContext.Provider>
+    </NavigationProvider>,
   );
 
   return {
@@ -137,6 +154,34 @@ afterEach(() => {
 });
 
 describe("AgentStatus", () => {
+  it.each([AgentState.RUNNING, AgentState.STOPPED])(
+    "does not control the previous agent while a new conversation launches from %s",
+    (agentState) => {
+      renderAgentStatus({
+        routeConversationId: "launch-new-conversation",
+        progressInChat: true,
+        agentState,
+        executionStatus: ExecutionStatus.RUNNING,
+      });
+
+      expect(screen.getByTestId("agent-loading-spinner")).toBeInTheDocument();
+      expect(screen.queryByTestId("stop-button")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("play-button")).not.toBeInTheDocument();
+    },
+  );
+
+  it("keeps Stop accessible when the conversation owns progress text", () => {
+    const { handleStop } = renderAgentStatus({
+      progressInChat: true,
+      agentState: AgentState.RUNNING,
+      executionStatus: ExecutionStatus.RUNNING,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: I18nKey.BUTTON$STOP }));
+
+    expect(handleStop).toHaveBeenCalledOnce();
+  });
+
   it.each([
     {
       label: "the runtime is initializing",

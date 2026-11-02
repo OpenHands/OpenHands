@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import React from "react";
+import { HttpError } from "@openhands/typescript-client";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import type { SharedConversation } from "@openhands/typescript-client";
@@ -22,6 +23,10 @@ import {
 import type { Backend } from "#/api/backend-registry/types";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { getCloudSharedConversation } from "#/api/cloud/shared-conversation-service.api";
+import { usePendingTaskAttachmentsStore } from "#/stores/pending-task-attachments-store";
+import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
+import { useConversationStore } from "#/stores/conversation-store";
+import { useErrorMessageStore } from "#/stores/error-message-store";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 // Mock the underlying service the conversation queries depend on.
@@ -153,7 +158,7 @@ function conversationTree(conversationId: string, search = "") {
 
 function renderConversation(search = "") {
   queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+    defaultOptions: { queries: { retry: false, retryDelay: 1 } },
   });
   return render(conversationTree(CLOUD_CONVERSATION_ID, search));
 }
@@ -180,7 +185,7 @@ function makeSharedConversation(id: string): SharedConversation {
 // observable destinations.
 function renderConversationRoute(conversationId: string) {
   const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+    defaultOptions: { queries: { retry: false, retryDelay: 1 } },
   });
   return render(
     <MemoryRouter initialEntries={[`/conversations/${conversationId}`]}>
@@ -216,6 +221,8 @@ function renderConversationRoute(conversationId: string) {
 }
 
 beforeEach(() => {
+  useOptimisticUserMessageStore.getState().clearPendingMessages();
+  usePendingTaskAttachmentsStore.setState({ byTaskId: {} });
   window.localStorage.clear();
   __resetActiveStoreForTests();
   vi.mocked(getCloudSharedConversation).mockReset();
@@ -329,6 +336,97 @@ describe("conversation route — cloud sandbox resume", () => {
     expect(resumeCloudSandbox).not.toHaveBeenCalled();
   });
 
+  it("resumes again on a new send after an external pause, without idle resume loops", async () => {
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    vi.mocked(
+      AgentServerConversationService.batchGetAppConversations,
+    ).mockResolvedValue([
+      makeConversation(CLOUD_CONVERSATION_ID, {
+        sandbox_status: "PAUSED",
+        sandbox_id: "sandbox-repeat",
+      }),
+    ]);
+    renderConversation();
+    await waitFor(() => expect(resumeCloudSandbox).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const setStatus = (sandbox_status: "RUNNING" | "PAUSED") =>
+      act(() => {
+        queryClient.setQueriesData<AppConversation>(
+          { queryKey: ["user", "conversation", CLOUD_CONVERSATION_ID] },
+          (data) => data && { ...data, sandbox_status },
+        );
+      });
+    setStatus("RUNNING");
+    setStatus("PAUSED");
+    expect(resumeCloudSandbox).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      useOptimisticUserMessageStore.getState().enqueuePendingMessage({
+        conversationId: CLOUD_CONVERSATION_ID,
+        text: "hi again",
+      });
+    });
+    await waitFor(() => expect(resumeCloudSandbox).toHaveBeenCalledTimes(2));
+    setStatus("PAUSED");
+    expect(resumeCloudSandbox).toHaveBeenCalledTimes(2);
+  });
+
+  it("fails queued messages when resume is rejected and allows an explicit Retry", async () => {
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    suppressNextCloudAutoResume(CLOUD_CONVERSATION_ID);
+    vi.mocked(
+      AgentServerConversationService.batchGetAppConversations,
+    ).mockResolvedValue([
+      makeConversation(CLOUD_CONVERSATION_ID, {
+        sandbox_status: "PAUSED",
+        sandbox_id: "sandbox-retry",
+      }),
+    ]);
+    renderConversation();
+    await screen.findByTestId("conversation-main");
+    await waitFor(() =>
+      expect(
+        queryClient.getQueryData<AppConversation>([
+          "user",
+          "conversation",
+          CLOUD_CONVERSATION_ID,
+          cloudBackend.id,
+          "org-a",
+        ])?.sandbox_status,
+      ).toBe("PAUSED"),
+    );
+    vi.mocked(resumeCloudSandbox).mockRejectedValueOnce(
+      new HttpError(403, "Forbidden", null),
+    );
+    let id!: string;
+    act(() => {
+      id = useOptimisticUserMessageStore.getState().enqueuePendingMessage({
+        conversationId: CLOUD_CONVERSATION_ID,
+        text: "recover me",
+      });
+    });
+    await waitFor(() =>
+      expect(
+        useOptimisticUserMessageStore
+          .getState()
+          .pendingMessages.find((m) => m.id === id)?.status,
+      ).toBe("error"),
+    );
+    expect(displayErrorToast).not.toHaveBeenCalled();
+
+    act(() => {
+      useOptimisticUserMessageStore.getState().markPendingMessageSending(id);
+    });
+    await waitFor(() => expect(resumeCloudSandbox).toHaveBeenCalledTimes(2));
+    expect(
+      useOptimisticUserMessageStore
+        .getState()
+        .pendingMessages.find((m) => m.id === id)?.status,
+    ).toBe("sending");
+  });
+
   it("clears stale suppression when the route unmounts before PAUSED is observed", async () => {
     setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
     suppressNextCloudAutoResume(CLOUD_CONVERSATION_ID);
@@ -377,7 +475,7 @@ describe("conversation route — cloud sandbox resume", () => {
       }),
     ]);
     vi.mocked(resumeCloudSandbox)
-      .mockRejectedValueOnce(new Error("resume failed"))
+      .mockRejectedValueOnce(new HttpError(503, "Unavailable", null))
       .mockResolvedValueOnce(undefined);
 
     renderConversation();
@@ -390,6 +488,7 @@ describe("conversation route — cloud sandbox resume", () => {
       expect(resumeCloudSandbox).toHaveBeenCalledTimes(2);
     });
     expect(resumeCloudSandbox).toHaveBeenNthCalledWith(2, "sandbox-paused-2");
+    expect(displayErrorToast).not.toHaveBeenCalled();
   });
 
   it("does not retry or toast when a pending cloud resume fails after unmount", async () => {
@@ -486,4 +585,121 @@ describe("conversation route — shared read-only fallback", () => {
     expect(getCloudSharedConversation).not.toHaveBeenCalled();
     expect(displayErrorToast).toHaveBeenCalledTimes(1);
   });
+});
+
+describe("transient conversation failures", () => {
+  it("recovers a failed owner lookup without redirecting or probing sharing", async () => {
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    vi.mocked(AgentServerConversationService.batchGetAppConversations)
+      .mockRejectedValueOnce(new HttpError(503, "Unavailable", null))
+      .mockResolvedValue([makeConversation(CLOUD_CONVERSATION_ID)]);
+    renderConversationRoute(CLOUD_CONVERSATION_ID);
+    await waitFor(() =>
+      expect(
+        AgentServerConversationService.batchGetAppConversations,
+      ).toHaveBeenCalledTimes(2),
+    );
+    expect(screen.queryByTestId("conversations-home")).not.toBeInTheDocument();
+    expect(getCloudSharedConversation).not.toHaveBeenCalled();
+    expect(displayErrorToast).not.toHaveBeenCalled();
+  });
+
+  it("waits for a successful shared lookup before deciding a conversation is missing", async () => {
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    vi.mocked(
+      AgentServerConversationService.batchGetAppConversations,
+    ).mockResolvedValue([null]);
+    vi.mocked(getCloudSharedConversation)
+      .mockRejectedValueOnce(new HttpError(503, "Unavailable", null))
+      .mockResolvedValue(makeSharedConversation(CLOUD_CONVERSATION_ID));
+    renderConversationRoute(CLOUD_CONVERSATION_ID);
+    expect(
+      await screen.findByTestId("shared-conversation-view"),
+    ).toBeInTheDocument();
+    expect(displayErrorToast).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { status: 403, attempts: 1 },
+    { status: 503, attempts: 4 },
+  ])(
+    "keeps exhausted automatic resume silent without a sent message ($status)",
+    async ({ status, attempts }) => {
+      setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+      vi.mocked(
+        AgentServerConversationService.batchGetAppConversations,
+      ).mockResolvedValue([
+        makeConversation(CLOUD_CONVERSATION_ID, {
+          sandbox_status: "PAUSED",
+          sandbox_id: "paused",
+        }),
+      ]);
+      vi.mocked(resumeCloudSandbox).mockRejectedValue(
+        new HttpError(status, "Failure", null),
+      );
+      renderConversation();
+      await waitFor(() =>
+        expect(
+          queryClient
+            .getMutationCache()
+            .getAll()
+            .some((mutation) => mutation.state.status === "error"),
+        ).toBe(true),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      expect(resumeCloudSandbox).toHaveBeenCalledTimes(attempts);
+      expect(displayErrorToast).not.toHaveBeenCalled();
+    },
+  );
+});
+
+it("restores an upload that fails after its conversation is already open, once and only in its environment", async () => {
+  setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+  renderConversation();
+  await screen.findByTestId("conversation-main");
+  const file = new File(["notes"], "notes.txt");
+  const pending = {
+    content: "Read these notes",
+    files: [file],
+    images: [],
+    imagesMarkedUploadAsFile: [],
+    conversationId: CLOUD_CONVERSATION_ID,
+    backendId: cloudBackend.id,
+    orgId: "org-b",
+    recoverInConversation: true,
+    error: "Upload interrupted",
+  };
+  act(() =>
+    usePendingTaskAttachmentsStore
+      .getState()
+      .setPendingTaskAttachments("startup", pending),
+  );
+  expect(useConversationStore.getState().files).toEqual([]);
+  act(() =>
+    usePendingTaskAttachmentsStore
+      .getState()
+      .setPendingTaskAttachments("startup", { ...pending, orgId: "org-a" }),
+  );
+  await waitFor(() =>
+    expect(useConversationStore.getState().files).toEqual([file]),
+  );
+  expect(useConversationStore.getState().messageToSend).toMatchObject({
+    text: "Read these notes",
+    target: "conversation",
+  });
+  expect(useErrorMessageStore.getState().errorCode).toBe(
+    "StartupAttachmentUploadFailed",
+  );
+  expect(
+    usePendingTaskAttachmentsStore.getState().byTaskId.startup,
+  ).toBeUndefined();
+  act(() =>
+    usePendingTaskAttachmentsStore
+      .getState()
+      .setPendingTaskAttachments("other", {
+        ...pending,
+        conversationId: "other-conversation",
+      }),
+  );
+  expect(useConversationStore.getState().files).toEqual([file]);
 });

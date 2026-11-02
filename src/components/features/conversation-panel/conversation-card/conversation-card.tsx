@@ -55,6 +55,7 @@ interface ConversationCardProps {
   lastUpdatedAt: string;
   createdAt?: string;
   executionStatus?: ExecutionStatus | null;
+  isStarting?: boolean;
   sandboxStatus?: SandboxStatus | null;
   conversationId?: string;
   contextMenuOpen?: boolean;
@@ -99,6 +100,7 @@ export function ConversationCard({
   createdAt,
   conversationId,
   executionStatus,
+  isStarting,
   sandboxStatus,
   contextMenuOpen = false,
   onContextMenuToggle,
@@ -300,6 +302,7 @@ export function ConversationCard({
             titleMode={titleMode}
             onTitleSave={onTitleSave}
             executionStatus={executionStatus}
+            isStarting={isStarting}
             sandboxStatus={sandboxStatus}
             isArchived={effectiveArchived}
           />

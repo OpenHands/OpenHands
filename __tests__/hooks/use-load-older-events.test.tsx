@@ -214,6 +214,7 @@ describe("useLoadOlderEvents", () => {
       {
         limit: INITIAL_HISTORY_PAGE_SIZE,
         sortOrder: "TIMESTAMP_DESC",
+        excludeFullState: true,
         timestampLt: "2024-06-01T00:00:00Z",
       },
     );
