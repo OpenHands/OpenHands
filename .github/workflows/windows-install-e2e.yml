@@ -63,7 +63,7 @@ jobs:
   windows-install-e2e:
     name: windows-install-e2e (${{ matrix.suite }})
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -136,6 +136,9 @@ jobs:
       # One step on purpose: the Windows runner kills processes a step started
       # when that step ends, so agent-canvas must live in the step that tests it.
       - name: Start agent-canvas like a user and run the ${{ matrix.suite }} specs
+        # Below the job timeout, so a hang fails this step and the upload
+        # below still runs (15 min stack wait + 25 min Playwright cap).
+        timeout-minutes: 42
         env:
           SPECS: ${{ matrix.specs }}
           MOCK_LLM_BACKEND_URL: http://127.0.0.1:8000

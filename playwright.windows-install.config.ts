@@ -43,6 +43,9 @@ export default defineConfig({
   workers: 1,
   // Windows runners start conversations more slowly than Linux ones.
   timeout: 120_000,
+  // Stop and report before the workflow's step timeout, so a hang still
+  // leaves a report and logs in the artifact.
+  globalTimeout: 25 * 60_000,
   reporter: [
     ["line"],
     // Records why each expected failure failed, so a known-bug test that
