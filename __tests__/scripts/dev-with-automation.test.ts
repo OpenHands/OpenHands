@@ -605,13 +605,44 @@ describe("buildConfig", () => {
     );
 
     expect(config.vitePort).not.toBe(busyPort);
+    // Every consumer follows the resolved port.
     expect(getFrontendBackend(config)).toBe(
+      `http://localhost:${config.vitePort}`,
+    );
+    expect(buildViteFrontendEnv(config).VITE_FRONTEND_PORT).toBe(
+      String(config.vitePort),
+    );
+    const info = buildAutomationRuntimeServicesInfo(
+      config,
+      {},
+    ) as RuntimeServicesInfo;
+    expect(info.services.frontend.url_from_agent).toBe(
       `http://localhost:${config.vitePort}`,
     );
     expect(buildAutomationCorsOrigins(config)).toBe(
       `http://localhost:19902,http://127.0.0.1:19902,` +
         `http://localhost:${config.vitePort},http://127.0.0.1:${config.vitePort}`,
     );
+  });
+
+  // Only the frontend falls back: the other services keep failing hard so a
+  // second agent-canvas instance is still detected (#16904).
+  it.each([
+    ["agent-server", "OH_CANVAS_SAFE_BACKEND_PORT"],
+    ["automation", "OH_CANVAS_SAFE_AUTOMATION_PORT"],
+  ])("still throws when the %s port is busy", async (service, envKey) => {
+    const server = net.createServer();
+    const busyPort = await new Promise<number>((resolve, reject) => {
+      server.listen(0, "127.0.0.1", () => {
+        servers.push(server);
+        resolve((server.address() as net.AddressInfo).port);
+      });
+      server.on("error", reject);
+    });
+
+    await expect(
+      buildConfig({}, envWithIsolatedKeyPath({ [envKey]: String(busyPort) })),
+    ).rejects.toThrow(new RegExp(`${service}.*port ${busyPort}`, "i"));
   });
 
   it.each([

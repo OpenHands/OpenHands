@@ -149,10 +149,32 @@ describe("resolveFrontendPort", () => {
   it("never returns a port reserved for another launcher service", async () => {
     const reserved = await findFreePort(0);
 
-    const port = await resolveFrontendPort(reserved, [reserved]);
+    const port = await resolveFrontendPort(reserved, {
+      reservedPorts: [reserved],
+    });
 
     expect(port).not.toBe(reserved);
     expect(port).toBeGreaterThan(0);
+  });
+
+  // On Linux a wildcard bind (docker runtime mode, --host 0.0.0.0) fails while
+  // another app holds the port on any single address, so the probe has to use
+  // the host the frontend really binds.
+  it("returns a port the frontend can bind on its bind host", async ({
+    skip,
+  }) => {
+    const taken = await holdPort("127.0.0.2");
+    if (taken === null) return skip("no 127.0.0.2 on this host");
+
+    const port = await resolveFrontendPort(taken, { bindHost: "0.0.0.0" });
+
+    const server = net.createServer();
+    servers.push(server);
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(port, "0.0.0.0", resolve);
+    });
+    expect(server.listening).toBe(true);
   });
 });
 

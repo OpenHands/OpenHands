@@ -496,23 +496,6 @@ async function buildConfig(args, env = process.env) {
 
   const vscodePort = preferredBackendPort + 1000;
 
-  // The frontend is internal (browsers reach it through the ingress), so a
-  // taken preferred port falls back to a free one instead of failing (#17546).
-  let vitePort = preferredVitePort;
-  if (launchFrontend) {
-    vitePort = await resolveFrontendPort(preferredVitePort, [
-      ...requiredPorts.map(({ port }) => port),
-      ...(launchAgentServer ? [vscodePort] : []),
-    ]);
-    if (vitePort !== preferredVitePort) {
-      logService(
-        "ports",
-        `Frontend port ${preferredVitePort} is taken — using ${vitePort}`,
-        c.yellow,
-      );
-    }
-  }
-
   // API key — shared by both agent-server and automation backend.
   // Both validate it via the `X-Session-API-Key` header.
   // LOCAL_BACKEND_API_KEY is the single user-facing env var: if set it's
@@ -557,6 +540,26 @@ async function buildConfig(args, env = process.env) {
       `Bind host ${bindHost} is not loopback — session key will not be injected into HTML`,
       c.yellow,
     );
+  }
+
+  // The frontend is internal (browsers reach it through the ingress), so a
+  // taken preferred port falls back to a free one instead of failing (#17546).
+  let vitePort = preferredVitePort;
+  if (launchFrontend) {
+    vitePort = await resolveFrontendPort(preferredVitePort, {
+      bindHost,
+      reservedPorts: [
+        ...requiredPorts.map(({ port }) => port),
+        ...(launchAgentServer ? [vscodePort] : []),
+      ],
+    });
+    if (vitePort !== preferredVitePort) {
+      logService(
+        "ports",
+        `Frontend port ${preferredVitePort} is taken — using ${vitePort}`,
+        c.yellow,
+      );
+    }
   }
 
   return {
