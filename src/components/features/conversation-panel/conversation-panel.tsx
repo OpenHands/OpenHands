@@ -20,6 +20,10 @@ import { ConfirmStopModal } from "./confirm-stop-modal";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { ExitConversationModal } from "./exit-conversation-modal";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
+import {
+  SIDEBAR_RAIL_COLLAPSE_MAX_WIDTH,
+  useBreakpoint,
+} from "#/hooks/use-breakpoint";
 import { Provider } from "#/types/settings";
 import type { LocalWorkspace } from "#/types/workspace";
 import { useUpdateConversation } from "#/hooks/mutation/use-update-conversation";
@@ -141,6 +145,11 @@ export function ConversationPanel({
   const showHoverMetadata = useConversationPanelPreferencesStore(
     (state) => state.showHoverMetadata,
   );
+  // Below the rail breakpoint the list only renders in the mobile drawer,
+  // which spans nearly the whole viewport, so a preview beside a card has no
+  // room and would run off screen. Open it below the card instead, where the
+  // overlay positioning keeps it inside the viewport.
+  const isInMobileDrawer = useBreakpoint(SIDEBAR_RAIL_COLLAPSE_MAX_WIDTH);
   const organizeMode = useConversationPanelPreferencesStore(
     (state) => state.organizeMode,
   );
@@ -1132,9 +1141,9 @@ export function ConversationPanel({
       return (
         <Tooltip
           key={conversation.id}
-          placement="right-start"
+          placement={isInMobileDrawer ? "bottom-start" : "right-start"}
           // Clear the sidebar's resize handle so the preview never covers it.
-          offset={20}
+          offset={isInMobileDrawer ? undefined : 20}
           delay={1000}
           closeDelay={100}
           isDisabled={
@@ -1280,6 +1289,7 @@ export function ConversationPanel({
       showLlmProfiles,
       showTagsMetadata,
       showHoverMetadata,
+      isInMobileDrawer,
     ],
   );
 
