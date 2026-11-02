@@ -36,7 +36,10 @@ export default defineConfig({
   ],
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
-  retries: 0,
+  // The conversation spec's "Active" badge poll races profile
+  // reconciliation (see its comments) and hit 2 of 4 Windows runs. One
+  // retry keeps the job usable; Playwright still reports such runs as flaky.
+  retries: 1,
   workers: 1,
   // Windows runners start conversations more slowly than Linux ones.
   timeout: 120_000,
