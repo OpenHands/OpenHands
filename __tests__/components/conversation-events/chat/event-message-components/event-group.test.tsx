@@ -107,6 +107,40 @@ describe("EventGroup", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
+  it("keeps reasoning-only groups on their existing summary", () => {
+    const thought: ActionEvent = {
+      ...makeBashAction("thinking", "unused"),
+      action: { kind: "ThinkAction", thought: "Review the approach" },
+    };
+    renderWithProviders(
+      <EventGroup events={[thought]}>
+        <div>Reasoning</div>
+      </EventGroup>,
+    );
+    expect(screen.getByTestId("event-group-toggle")).toHaveTextContent(
+      "THINKING$TITLE",
+    );
+  });
+
+  it("does not count a thinking action against a single command's descriptive title", () => {
+    const thought: ActionEvent = {
+      ...makeBashAction("thinking", "unused"),
+      action: { kind: "ThinkAction", thought: "Review the approach" },
+    };
+    const command = {
+      ...makeBashAction("command", "ls"),
+      summary: "Inspecting the workspace",
+    };
+    renderWithProviders(
+      <EventGroup events={[thought, command]}>
+        <div>Content</div>
+      </EventGroup>,
+    );
+    expect(screen.getByTestId("event-group-toggle")).toHaveTextContent(
+      "Inspecting the workspace",
+    );
+  });
+
   it("summarizes a settled group by what its steps did", () => {
     const events = [
       makeBashObservation("o1", "a1", "ls"),

@@ -39,6 +39,12 @@ export function GenericEventMessage({
   timestamp,
 }: GenericEventMessageProps) {
   const { t, i18n } = useTranslation("openhands");
+  const disclosure = React.useContext(StepDisclosureContext);
+  const detailsOnly = disclosure?.detailsOnly;
+  React.useEffect(() => {
+    // Keep revealed output open when another tool restores individual rows.
+    if (detailsOnly && disclosure.open !== true) disclosure.setOpen(true);
+  }, [detailsOnly, disclosure]);
   const [showDetails, toggleDetails] = useStepDisclosure(initiallyExpanded);
   const [hasFocusWithin, setHasFocusWithin] = React.useState(false);
   const timestampLabel = formatEventTimestamp(timestamp, i18n?.language);
@@ -131,9 +137,14 @@ export function GenericEventMessage({
 
   return (
     <div className="flex flex-col gap-1.5 my-1 py-1 text-sm w-full">
-      {titleRow}
-      {showDetails && (
-        <div className="ml-1 flex flex-col gap-1.5 border-l border-border-subtle pl-3">
+      {!detailsOnly && titleRow}
+      {(detailsOnly || showDetails) && (
+        <div
+          className={cn(
+            "flex flex-col gap-1.5",
+            !detailsOnly && "ml-1 border-l border-border-subtle pl-3",
+          )}
+        >
           {/* The row's shared state belongs to this message, not to anything
               nested in its details. */}
           <StepDisclosureContext.Provider value={null}>
