@@ -236,6 +236,8 @@ export interface CloudIntegrationsConfig {
   providersConfigured: Provider[];
   /** Whether the built-in Jira Cloud integration is enabled. */
   isJiraEnabled: boolean;
+  /** Whether the built-in Jira Data Center integration is enabled. */
+  isJiraDcEnabled: boolean;
   /** Whether the built-in Linear integration is enabled. */
   isLinearEnabled: boolean;
   /** Whether the built-in Slack integration is enabled. */
@@ -254,6 +256,7 @@ export async function fetchCloudIntegrationsConfig(): Promise<CloudIntegrationsC
     slack_enabled?: boolean;
     feature_flags?: {
       enable_jira?: boolean;
+      enable_jira_dc?: boolean;
       enable_linear?: boolean;
       deployment_mode?: string;
     };
@@ -265,6 +268,7 @@ export async function fetchCloudIntegrationsConfig(): Promise<CloudIntegrationsC
   return {
     providersConfigured: config.providers_configured ?? [],
     isJiraEnabled: config.feature_flags?.enable_jira === true,
+    isJiraDcEnabled: config.feature_flags?.enable_jira_dc === true,
     isLinearEnabled: config.feature_flags?.enable_linear === true,
     isSlackEnabled: config.slack_enabled === true,
     deploymentMode: config.feature_flags?.deployment_mode ?? null,

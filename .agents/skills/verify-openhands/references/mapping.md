@@ -182,6 +182,13 @@ will run them that way:
   option click otherwise goes unnoticed until a later step.
 - Assert deterministic text (what the UI sent, a file the agent wrote, a tool
   observation), not the model's wording.
+- A claim about how many ("the only toast", "once", "exactly one", "no
+  duplicate", "a single request") names a command that counts, and the
+  number it must give: the entries of `browser toasts --history` (cleared
+  before the action) with that text, `browser count`, a `browser network`
+  `total`. Checking that one other text is absent proves only that it is
+  absent: write it as its own check, never as the proof of "only". A
+  duplicate of the expected item passes a presence or absence check.
 - Secret and credential checks assert the tool's output, not the model's
   reply: models refuse to echo secrets. Compare inside the command
   (`test "$QA_SECRET" = expected && echo match`) and read the observation

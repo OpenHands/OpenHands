@@ -61,7 +61,7 @@ export function ChatInputProfileMenuContent({
           {/* role="presentation" keeps this a valid <li> child of the
               ContextMenu <ul> without exposing the label as a menu item. */}
           <li role="presentation" className="px-2 pt-1 pb-0.5">
-            <Typography.Text className="text-[11px] font-medium text-text-dim uppercase tracking-wide leading-4">
+            <Typography.Text className="menu-caption-text font-medium text-text-dim uppercase tracking-wide leading-4">
               {t(I18nKey.SETTINGS$AVAILABLE_PROFILES)}
             </Typography.Text>
           </li>
@@ -106,7 +106,7 @@ export function ChatInputProfileMenuContent({
           })}
           {isInConversation && (
             <li role="presentation" className="px-2 pt-0.5 pb-1">
-              <Typography.Text className="text-[11px] text-text-dim leading-4">
+              <Typography.Text className="menu-caption-text text-text-dim leading-4">
                 {t(I18nKey.CHAT$START_NEW_WITH_PROFILE_HINT)}
               </Typography.Text>
             </li>
@@ -143,7 +143,7 @@ export function ChatInputProfileMenuContent({
 /** Names the agent profile a new conversation will run, and switches it. */
 export function ChatInputAgentProfilePicker() {
   const { t } = useTranslation("openhands");
-  const { currentProfileName, isLoading, isSwitching } =
+  const { profiles, currentProfileName, isLoading, isSwitching } =
     useChatInputProfileState();
   const [isOpen, setIsOpen] = React.useState(false);
   const triggerRef = React.useRef<HTMLButtonElement>(null);
@@ -152,7 +152,11 @@ export function ChatInputAgentProfilePicker() {
     triggerRef,
   );
 
-  if (isLoading || !currentProfileName) return null;
+  // No profiles yet: stay out of the way, like the LLM picker. With profiles
+  // but nothing selected, the pill still renders so the user can pick one.
+  if (isLoading || profiles.length === 0) return null;
+
+  const label = currentProfileName ?? t(I18nKey.CHAT$AGENT_PROFILE_PLACEHOLDER);
 
   return (
     <div className="relative min-w-0">
@@ -161,7 +165,7 @@ export function ChatInputAgentProfilePicker() {
         type="button"
         className={cn(chatInputPillButtonClassName, "max-w-40")}
         title={t(I18nKey.CHAT$SWITCH_AGENT_PROFILE)}
-        aria-label={`${t(I18nKey.CHAT$SWITCH_AGENT_PROFILE)}: ${currentProfileName}`}
+        aria-label={`${t(I18nKey.CHAT$SWITCH_AGENT_PROFILE)}: ${label}`}
         data-testid="chat-input-agent-profile"
         aria-expanded={isOpen}
         aria-haspopup="dialog"
@@ -174,7 +178,7 @@ export function ChatInputAgentProfilePicker() {
         }}
       >
         <RobotIcon width={14} height={14} className="shrink-0" aria-hidden />
-        <span className="truncate">{currentProfileName}</span>
+        <span className="truncate">{label}</span>
         <ComboboxCaretInline isOpen={isOpen} />
       </button>
       {isOpen && (
@@ -184,7 +188,7 @@ export function ChatInputAgentProfilePicker() {
           position="top"
           alignment="left"
           spacing="none"
-          className="z-[60] mb-2 min-w-50 max-w-80 max-h-[60vh] overflow-y-auto"
+          className="z-60 mb-2 min-w-50 max-w-80 profile-menu-height overflow-y-auto"
         >
           <ChatInputProfileMenuContent onClose={() => setIsOpen(false)} />
         </ContextMenu>

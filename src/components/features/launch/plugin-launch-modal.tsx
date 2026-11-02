@@ -140,7 +140,7 @@ export function PluginLaunchModal({
       <div
         data-testid="plugin-launch-modal"
         className={cn(
-          "relative bg-base-secondary p-6 rounded-xl flex flex-col gap-4 border border-border max-h-[80vh]",
+          "relative bg-base-secondary p-6 rounded-xl flex flex-col gap-4 border border-border dialog-content-height",
           modalWidthClassName("md"),
           MODAL_MAX_WIDTH_VIEWPORT,
         )}

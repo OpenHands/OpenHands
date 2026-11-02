@@ -52,13 +52,18 @@ export const MARKDOWN_SANITIZE_SCHEMA: Schema = {
   attributes: {
     ...defaultSchema.attributes,
     "*": [...(defaultSchema.attributes?.["*"] ?? []), "className", "id"],
-    // `["rel", "noopener", "noreferrer", "nofollow"]` (rehype-sanitize's
-    // "[attrName, ...allowed-values]" form) requires `rel` to be EXACTLY
-    // one of those tokens — it would strip the standard, space-separated
-    // `rel="noopener noreferrer"` and reintroduce a reverse-tabnabbing
-    // vector on `target="_blank"` links. None of the `rel` keywords
-    // execute code or navigate, so allowing any rel value is safe.
-    a: ["href", "title", "target", "rel"],
+    // Call sites without `includeStandard` skip the `anchor` component, so
+    // this schema alone guards `rel`/`target` on untrusted markdown.
+    // `rel`: drop the `opener` token (it hands the opened page
+    // `window.opener`). A regexp, not a value list, because sanitize tests it
+    // per token on an array `rel` but against the whole value on a string.
+    // `target`: only `_blank`/`_self`, so links can't retarget the app frame.
+    a: [
+      "href",
+      "title",
+      ["target", "_blank", "_self"],
+      ["rel", /^(?!.*(?:^|\s)opener(?:\s|$))/i],
+    ],
     img: [
       ...(defaultSchema.attributes?.img ?? []),
       "src",

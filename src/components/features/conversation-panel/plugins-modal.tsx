@@ -37,7 +37,7 @@ export function PluginsModal({ onClose }: PluginsModalProps) {
       <ModalBody
         width="lg"
         className={cn(
-          "relative flex max-h-[80vh] flex-col items-start border border-border",
+          "relative flex dialog-content-height flex-col items-start border border-border",
           MODAL_MAX_WIDTH_VIEWPORT,
         )}
         testID="plugins-modal"

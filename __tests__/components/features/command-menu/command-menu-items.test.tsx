@@ -50,6 +50,7 @@ describe("the command menu settings group", () => {
       "meta-llm-settings",
       "agent-context-settings",
       "verification-settings",
+      "runtime-settings",
       "app-settings",
       "secrets-settings",
     ]);

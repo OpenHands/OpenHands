@@ -56,7 +56,7 @@ describe("parseImplicitGrant", () => {
   it("surfaces the provider's error description when access is declined", () => {
     expect(() =>
       parseImplicitGrant(
-        "error=access_denied&error_description=The+user+denied+access",
+        `error=access_denied&error_description=The+user+denied+access&state=${STATE}`,
         STATE,
       ),
     ).toThrow("The user denied access");
@@ -110,6 +110,58 @@ describe("signInWithDigitalOcean", () => {
 
     expect(oversized).toBeInstanceOf(Error);
     expect(grant.accessToken).toBe("tok-3");
+  });
+
+  it("keeps waiting after a wrong-state relay and accepts the real one", async () => {
+    let invalidStatus: number | undefined;
+    const openExternal = vi.fn(async (authorizeUrl) => {
+      const state = new URL(authorizeUrl).searchParams.get("state");
+      const relay = `http://127.0.0.1:${OAUTH_REDIRECT_PORT}/callback-token`;
+
+      const invalid = await fetch(relay, {
+        method: "POST",
+        headers: {
+          "Content-Type": "text/plain",
+          Origin: "https://attacker.example",
+        },
+        body: "access_token=forged&state=wrong-state",
+      });
+      invalidStatus = invalid.status;
+      await fetch(relay, {
+        method: "POST",
+        body: `access_token=tok-4&token_type=bearer&state=${state}`,
+      });
+    });
+
+    const grant = await signInWithDigitalOcean({
+      clientId: "client-1",
+      openExternal,
+    });
+
+    expect(invalidStatus).toBe(400);
+    expect(grant.accessToken).toBe("tok-4");
+  });
+
+  it("stops when a matching relay reports a provider error", async () => {
+    const openExternal = vi.fn(async (authorizeUrl) => {
+      const state = new URL(authorizeUrl).searchParams.get("state");
+      const relay = `http://127.0.0.1:${OAUTH_REDIRECT_PORT}/callback-token`;
+
+      setTimeout(() => {
+        void fetch(relay, {
+          method: "POST",
+          body: `error=access_denied&error_description=The+user+denied+access&state=${state}`,
+        });
+      }, 0);
+    });
+
+    await expect(
+      signInWithDigitalOcean({
+        clientId: "client-1",
+        openExternal,
+        timeoutMs: 100,
+      }),
+    ).rejects.toThrow("The user denied access");
   });
 
   it("explains a busy redirect port and leaves no rejection behind", async () => {

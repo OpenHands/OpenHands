@@ -37,7 +37,7 @@ import {
 } from "./use-session-meta";
 
 const PANEL_CLASS =
-  "flex min-h-[13.5rem] w-full flex-col rounded-xl border border-border";
+  "flex backend-chooser-cloud-panel w-full flex-col rounded-xl border border-border";
 const ICON_BUTTON_CLASS =
   "inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted hover:bg-interactive-hover hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300 disabled:cursor-not-allowed disabled:opacity-40";
 
