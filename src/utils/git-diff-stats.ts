@@ -57,6 +57,20 @@ function countTextDiffStats(
     return { additions: 0, deletions: originalLines.length };
   }
 
+  // Counts of the original lines the walker has not consumed yet, so it always
+  // equals `originalLines[originalIndex:]`. Membership becomes O(1) instead of
+  // the O(n) suffix scan that made this quadratic in the number of lines.
+  const remaining = new Map<string, number>();
+  for (const line of originalLines) {
+    remaining.set(line, (remaining.get(line) ?? 0) + 1);
+  }
+
+  const hasRemaining = (line: string) => (remaining.get(line) ?? 0) > 0;
+  const consumeOriginal = (line: string) => {
+    const count = remaining.get(line) ?? 0;
+    if (count > 0) remaining.set(line, count - 1);
+  };
+
   let additions = 0;
   let deletions = 0;
   let originalIndex = 0;
@@ -74,6 +88,7 @@ function countTextDiffStats(
       modifiedIndex < modifiedLines.length &&
       originalLine === modifiedLine
     ) {
+      consumeOriginal(originalLine);
       originalIndex += 1;
       modifiedIndex += 1;
       continue;
@@ -81,8 +96,7 @@ function countTextDiffStats(
 
     if (
       modifiedIndex < modifiedLines.length &&
-      (originalIndex >= originalLines.length ||
-        !originalLines.slice(originalIndex).includes(modifiedLine))
+      (originalIndex >= originalLines.length || !hasRemaining(modifiedLine))
     ) {
       additions += 1;
       modifiedIndex += 1;
@@ -90,6 +104,7 @@ function countTextDiffStats(
     }
 
     if (originalIndex < originalLines.length) {
+      consumeOriginal(originalLine);
       deletions += 1;
       originalIndex += 1;
     }
