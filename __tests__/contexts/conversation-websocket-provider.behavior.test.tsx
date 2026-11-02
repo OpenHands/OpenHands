@@ -9,7 +9,10 @@ import {
 import type { WebSocketHookOptions } from "#/hooks/use-websocket";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import type { MessageEvent as AgentMessageEvent } from "#/types/agent-server/core/events/message-event";
-import type { OpenHandsEvent } from "#/types/agent-server/core";
+import {
+  ExecutionStatus,
+  type OpenHandsEvent,
+} from "#/types/agent-server/core";
 import { useEventStore } from "#/stores/use-event-store";
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
@@ -399,6 +402,109 @@ describe("Conversation websocket behavior", () => {
     vi.useRealTimers();
     vi.restoreAllMocks();
     window.localStorage.clear();
+  });
+
+  it.each(["main", "planning"] as const)(
+    "keeps %s replay out of live execution status, including after reconnect",
+    async (target) => {
+      renderProvider({
+        subConversations: [makeSubConversation()],
+        subConversationIds: ["conv-planning"],
+      });
+      const dispatch =
+        target === "main" ? dispatchMainFrame : dispatchPlanningFrame;
+      const options = target === "main" ? mainOptions : planningOptions;
+      const id = target === "main" ? "conv-main" : "conv-planning";
+      const status = () =>
+        useConversationStateStore.getState().executionStatusByConversation[id];
+      act(() =>
+        useConversationStateStore
+          .getState()
+          .setExecutionStatus(id, ExecutionStatus.FINISHED),
+      );
+      const oldFinished = makeStateEvent(
+        "replayed-finished",
+        "execution_status",
+        "finished",
+      );
+      act(() => useEventStore.getState().addEvent(oldFinished));
+
+      dispatch({ type: "sync", from_seq: 49, through_seq: 100 });
+      dispatch({
+        type: "durable",
+        seq: 53,
+        event: makeStateEvent("old-running", "execution_status", "running"),
+      });
+      expect(status()).toBe("finished");
+      dispatch({
+        type: "durable",
+        seq: 99,
+        event: makeStateEvent("old-snapshot", "full_state", {
+          execution_status: "running",
+        }),
+      });
+      dispatch({ type: "durable", seq: 100, event: oldFinished });
+      expect(status()).toBe("finished");
+      expect(useEventStore.getState().eventIds.has("old-running")).toBe(true);
+      expect(useEventStore.getState().eventIds.has("old-snapshot")).toBe(true);
+
+      dispatch({
+        type: "transient",
+        event: makeStateEvent("current-snapshot", "full_state", {
+          execution_status: "running",
+        }),
+      });
+      expect(status()).toBe("running");
+      dispatch({
+        type: "durable",
+        seq: 101,
+        event: makeStateEvent("live-finished", "execution_status", "finished"),
+      });
+      expect(status()).toBe("finished");
+
+      await act(async () => options().onOpen?.(new Event("open")));
+      dispatch({ type: "sync", from_seq: 101, through_seq: 104 });
+      dispatch({
+        type: "durable",
+        seq: 102,
+        event: makeStateEvent("offline-running", "execution_status", "running"),
+      });
+      expect(status()).toBe("finished");
+      dispatch({
+        type: "transient",
+        event: makeStateEvent("reconnected-snapshot", "full_state", {
+          execution_status: "finished",
+        }),
+      });
+      dispatch({
+        type: "durable",
+        seq: 105,
+        event: makeStateEvent("new-running", "execution_status", "running"),
+      });
+      expect(status()).toBe("running");
+    },
+  );
+
+  it("keeps the main and planning replay boundaries independent", () => {
+    renderProvider({
+      subConversations: [makeSubConversation()],
+      subConversationIds: ["conv-planning"],
+    });
+    dispatchMainFrame({ type: "sync", from_seq: -1, through_seq: 100 });
+    dispatchPlanningFrame({ type: "sync", from_seq: -1, through_seq: null });
+    dispatchPlanningFrame({
+      type: "durable",
+      seq: 0,
+      event: makeStateEvent("planner-running", "execution_status", "running"),
+    });
+    dispatchMainFrame({
+      type: "durable",
+      seq: 0,
+      event: makeStateEvent("main-old-running", "execution_status", "running"),
+    });
+    expect(
+      useConversationStateStore.getState().executionStatusByConversation,
+    ).toEqual({ "conv-planning": "running" });
   });
 
   it("retains a newer failed identical prompt when old history reloads", () => {
