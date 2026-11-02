@@ -353,12 +353,12 @@ describe("seedModelSwitchesFromHistory", () => {
     ]);
 
     expect(stampedProfileFor("c1")).toBe("fast");
-    expect(getStoredConversationMetadata("c1")?.stamped_at).toBe(
-      "2024-01-01T00:00:00Z",
+    expect(getStoredConversationMetadata("c1")?.stamped_after_event_id).toBe(
+      "o1",
     );
   });
 
-  it("re-stamps when the latest observation is newer than the stored stamp", () => {
+  it("re-stamps when the latest observation is newer than a legacy timed stamp", () => {
     setStoredConversationMetadata("c1", {
       selected_repository: null,
       selected_branch: null,
@@ -373,19 +373,111 @@ describe("seedModelSwitchesFromHistory", () => {
     ]);
 
     expect(stampedProfileFor("c1")).toBe("fast");
-    expect(getStoredConversationMetadata("c1")?.stamped_at).toBe(
-      "2024-01-01T00:00:00Z",
+    expect(getStoredConversationMetadata("c1")?.stamped_after_event_id).toBe(
+      "o1",
     );
   });
 
-  it("stamps with the observation timestamp so re-seeding the same history is a no-op", () => {
+  it("anchors the stamp on the observation so re-seeding the same history is a no-op", () => {
     const events = [userMessage("u1"), switchObservation("o1", "fast")];
     seedModelSwitchesFromHistory("c1", events);
     seedModelSwitchesFromHistory("c1", events);
 
-    expect(getStoredConversationMetadata("c1")?.stamped_at).toBe(
-      "2024-01-01T00:00:00Z",
+    expect(getStoredConversationMetadata("c1")?.stamped_after_event_id).toBe(
+      "o1",
     );
+  });
+
+  describe("with a stamp anchored on an event", () => {
+    const stampManualSwitch = (anchorEventId: string | null) =>
+      setStoredConversationMetadata("c1", {
+        selected_repository: null,
+        selected_branch: null,
+        git_provider: null,
+        active_profile: "architect",
+        stamped_after_event_id: anchorEventId,
+      });
+
+    it("keeps a manual switch made after the latest agent switch", () => {
+      stampManualSwitch("u2");
+
+      seedModelSwitchesFromHistory("c1", [
+        userMessage("u1"),
+        switchObservation("o1", "fast"),
+        userMessage("u2"),
+      ]);
+
+      expect(stampedProfileFor("c1")).toBe("architect");
+      expect(activeProfileFor("c1")).toBeUndefined();
+    });
+
+    it("re-stamps from an agent switch made after the manual switch", () => {
+      stampManualSwitch("u1");
+
+      seedModelSwitchesFromHistory("c1", [
+        userMessage("u1"),
+        switchObservation("o1", "fast"),
+      ]);
+
+      expect(stampedProfileFor("c1")).toBe("fast");
+    });
+
+    it("re-stamps when the anchor is older than the loaded history", () => {
+      stampManualSwitch("u0");
+
+      seedModelSwitchesFromHistory("c1", [
+        userMessage("u1"),
+        switchObservation("o1", "fast"),
+      ]);
+
+      expect(stampedProfileFor("c1")).toBe("fast");
+    });
+
+    it("finds an anchor that the UI projection replaced", () => {
+      // The manual switch was anchored on an action whose observation later
+      // replaced it in `uiEvents`; the raw `events` still place it last.
+      stampManualSwitch("a2");
+      const switchEvent = switchObservation("o1", "fast");
+      const uiEvents = [userMessage("u1"), switchEvent, agentAction("o2", "X")];
+      const events = [
+        userMessage("u1"),
+        switchEvent,
+        agentAction("a2", "ThinkAction"),
+        agentAction("o2", "X"),
+      ];
+
+      seedModelSwitchesFromHistory("c1", uiEvents, events);
+
+      expect(stampedProfileFor("c1")).toBe("architect");
+    });
+
+    it("ignores the clocks: a local agent-server writes offset-less local times", () => {
+      // Real capture from an agent-server at UTC-4: the agent switched at
+      // 00:14:53 local (04:14:53 UTC), 14s after the user's /model switch
+      // the client stamped at 04:14:39 UTC. Read in a UTC browser the
+      // observation looks four hours older; the event order says it is newer.
+      const originalTz = process.env.TZ;
+      process.env.TZ = "UTC";
+      try {
+        setStoredConversationMetadata("c1", {
+          selected_repository: null,
+          selected_branch: null,
+          git_provider: null,
+          active_profile: "architect",
+          stamped_at: "2026-10-30T04:14:39.634Z",
+          stamped_after_event_id: "u1",
+        });
+
+        seedModelSwitchesFromHistory("c1", [
+          userMessage("u1"),
+          switchObservation("o1", "fast", false, "2026-10-30T00:14:53.858013"),
+        ]);
+
+        expect(stampedProfileFor("c1")).toBe("fast");
+      } finally {
+        process.env.TZ = originalTz;
+      }
+    });
   });
 
   describe("router-driven ClassifyAndSwitchLLMObservation", () => {

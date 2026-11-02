@@ -16,6 +16,7 @@ import {
   setStoredConversationMetadata,
 } from "#/api/conversation-metadata-store";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import { type OHEvent, useEventStore } from "#/stores/use-event-store";
 import {
   BACKEND_REQUEST_TIMEOUT_MESSAGE,
   CORS_OR_NETWORK_ERROR_MESSAGE,
@@ -316,6 +317,27 @@ describe("useSwitchLlmProfile", () => {
       selected_branch: "main",
       git_provider: "github",
     });
+    useEventStore.getState().clearEventsForConversation("conv-1");
+    useEventStore.getState().addEvents([
+      {
+        id: "evt-1",
+        timestamp: "2026-10-30T00:14:00.000000",
+        source: "user",
+      } as unknown as OHEvent,
+      {
+        id: "evt-2",
+        timestamp: "2026-10-30T00:14:30.000000",
+        source: "agent",
+      } as unknown as OHEvent,
+      // The `full_state` snapshot the socket sends on connect is never
+      // persisted, so a reload could not find it as an anchor.
+      {
+        id: "evt-state",
+        timestamp: "2026-10-30T00:15:00.000000",
+        source: "environment",
+        isTransient: true,
+      } as unknown as OHEvent,
+    ]);
 
     const { result } = renderSwitchHook();
     result.current.mutate({
@@ -332,8 +354,9 @@ describe("useSwitchLlmProfile", () => {
       selected_branch: "main",
       git_provider: "github",
       active_profile: "claude-sonnet-4.6",
-      // Client-clock ISO timestamp; the mutation path has no event timestamp.
-      stamped_at: expect.any(String),
+      // The mutation path has no event of its own, so it anchors on the
+      // newest persisted event the conversation has loaded.
+      stamped_after_event_id: "evt-2",
     });
   });
 
