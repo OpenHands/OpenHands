@@ -299,7 +299,9 @@ test.describe("Windows known issues", () => {
       process.env.MOCK_LLM_BROWSER_TOOLS !== "1",
       "browser tools are disabled for this stack",
     );
-    test.fail(IS_WINDOWS, "OpenHands/OpenHands#16551");
+    // Not marked test.fail: #16551 did not reproduce on windows-latest (the
+    // browser started in about 25 s, under browser_use's 30 s limit), so this
+    // guards the Windows browser path directly.
     test.setTimeout(240_000);
 
     await resetMockLLM(request);
