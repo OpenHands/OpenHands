@@ -178,6 +178,8 @@ export function ProviderConnectionModal({
       }
       footer={footer}
       onClose={handleClose}
+      showCloseButton
+      isCloseDisabled={isPending}
       initialFocusRef={firstFieldRef}
     >
       <div
