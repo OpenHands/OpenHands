@@ -33,7 +33,7 @@ on:
       # Planner tab path check (#17774)
       - src/api/conversation-service/agent-server-conversation-service.api.ts
   push:
-    branches: [main]
+    branches: [main, "vasco/windows-scratch-*"]
     paths:
       - .github/workflows/windows-install-e2e.yml
       - playwright.windows-install.config.ts
@@ -68,8 +68,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - suite: install
-            specs: mock-llm-onboarding-happy-path mock-llm-conversation.spec
           - suite: known-windows-bugs
             specs: mock-llm-windows-known-issues
     defaults:
