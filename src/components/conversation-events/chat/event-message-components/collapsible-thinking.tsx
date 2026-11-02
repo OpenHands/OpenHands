@@ -1,8 +1,7 @@
+import LightbulbIcon from "#/icons/lightbulb.svg?react";
 import React from "react";
 import { useTranslation } from "react-i18next";
-import ArrowDown from "#/icons/angle-down-solid.svg?react";
-import ArrowUp from "#/icons/angle-up-solid.svg?react";
-import LightbulbIcon from "#/icons/lightbulb.svg?react";
+import { DisclosureCaret } from "#/components/shared/disclosure-caret";
 import { I18nKey } from "#/i18n/declaration";
 import { MarkdownRenderer } from "../../../features/markdown/markdown-renderer";
 
@@ -24,8 +23,6 @@ export function CollapsibleThinking({ content }: CollapsibleThinkingProps) {
     return null;
   }
 
-  const Chevron = expanded ? ArrowUp : ArrowDown;
-
   return (
     <div
       className="my-1 w-full py-1 text-sm"
@@ -41,11 +38,10 @@ export function CollapsibleThinking({ content }: CollapsibleThinkingProps) {
         data-testid="collapsible-thinking-toggle"
         className="w-full flex items-center gap-2 text-left cursor-pointer"
       >
-        <Chevron className="h-4 w-4 fill-muted flex-shrink-0" />
-        <LightbulbIcon className="h-4 w-4 fill-muted flex-shrink-0" />
         <span className="font-normal text-muted">
           {t(I18nKey.THINKING$TITLE)}
         </span>
+        <DisclosureCaret open={expanded} />
       </button>
 
       {expanded && (

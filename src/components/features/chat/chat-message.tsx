@@ -30,6 +30,7 @@ interface ChatMessageProps {
   isFromPlanningAgent?: boolean;
   pendingStatus?: ChatMessagePendingStatus;
   pendingLabel?: string;
+  showPendingStatus?: boolean;
   onRetry?: () => void;
   onDismiss?: () => void;
   onStop?: () => void;
@@ -46,6 +47,7 @@ export function ChatMessage({
   isFromPlanningAgent = false,
   pendingStatus,
   pendingLabel,
+  showPendingStatus = true,
   onRetry,
   onDismiss,
   onStop,
@@ -306,7 +308,7 @@ export function ChatMessage({
     );
   }
 
-  if (type === "user" && pendingStatus === "sending") {
+  if (type === "user" && pendingStatus === "sending" && showPendingStatus) {
     return (
       <div className="flex w-full max-w-full flex-col last:mb-4">
         {messageBubbleWithTimestamp}

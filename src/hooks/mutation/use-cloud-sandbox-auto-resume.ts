@@ -1,3 +1,8 @@
+import { useEventStore } from "#/stores/use-event-store";
+import {
+  sessionActivityKey,
+  useSessionActivityStore,
+} from "#/stores/session-activity-store";
 import { useEffect, useRef } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useActiveBackend } from "#/contexts/active-backend-context";
@@ -47,6 +52,11 @@ export function useCloudSandboxAutoResume({
 }: UseCloudSandboxAutoResumeOptions): void {
   const { t } = useTranslation("openhands");
   const active = useActiveBackend();
+  const activityKey = sessionActivityKey(
+    active.backend.id,
+    active.orgId,
+    conversationId,
+  );
   const scope = `${active.backend.id}:${active.orgId}:${conversationId}`;
   const activeResumeKeyRef = useRef<string | null>(null);
   const resumeAttemptRef = useRef<ResumeAttempt | null>(null);
@@ -80,6 +90,16 @@ export function useCloudSandboxAutoResume({
     mutationFn: async ({ attempt, sandboxId }: ResumeVariables) => {
       if (activeResumeKeyRef.current !== attempt.key) return;
 
+      const history = useEventStore.getState();
+      useSessionActivityStore
+        .getState()
+        .begin(
+          activityKey,
+          "resume",
+          history.loadedConversationId === conversationId
+            ? history.uiEvents.at(-1)?.id
+            : undefined,
+        );
       await resumeCloudSandbox(sandboxId);
     },
     retry: (failureCount, error) =>
@@ -87,6 +107,7 @@ export function useCloudSandboxAutoResume({
       retryTransientRequest(failureCount, error),
     onError: (_error, { attempt }) => {
       if (activeResumeKeyRef.current !== attempt.key) return;
+      useSessionActivityStore.getState().observe(activityKey, "ERROR");
       const message = t(I18nKey.CONVERSATION$FAILED_TO_START_FROM_TASK);
       const store = useOptimisticUserMessageStore.getState();
       const pending = store.pendingMessages.filter(
@@ -106,6 +127,19 @@ export function useCloudSandboxAutoResume({
     },
     meta: { disableToast: true },
   });
+
+  useEffect(() => {
+    if (
+      !backendChanged &&
+      conversation?.id === conversationId &&
+      conversation.sandbox_status === "RUNNING"
+    ) {
+      const activity = useSessionActivityStore.getState();
+      const last = activity.entries[activityKey]?.at(-1);
+      if (last?.kind === "resume" && last.phase === "pending")
+        activity.observe(activityKey, "READY");
+    }
+  }, [backendChanged, conversation, conversationId, activityKey]);
 
   useEffect(
     () => () => {

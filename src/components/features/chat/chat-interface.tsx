@@ -1,3 +1,5 @@
+import { useSessionActivities } from "#/hooks/use-session-activities";
+import { useSessionActivityStore } from "#/stores/session-activity-store";
 import { ChatProgressContext } from "#/context/chat-progress-context";
 import {
   CHAT_BODY_CLASS_NAME,
@@ -335,6 +337,32 @@ export function ChatInterface({
     [pendingMessages, conversationId],
   );
 
+  const { key: sessionKey, sessions } = useSessionActivities(conversationId);
+  const session = sessions.at(-1);
+  const isSessionStarting =
+    session?.phase === "pending" || session?.phase === "connecting";
+  const hasSendingMessages = pendingMessages.some(
+    (message) =>
+      message.status === "sending" &&
+      conversationId &&
+      matchesPendingConversationId(conversationId, message.conversationId),
+  );
+  React.useLayoutEffect(() => {
+    if (
+      session?.phase === "connecting" &&
+      conversationWebSocket?.connectionState === "OPEN" &&
+      !hasSendingMessages
+    ) {
+      useSessionActivityStore.getState().complete(sessionKey, session.id);
+    }
+  }, [
+    sessionKey,
+    session?.id,
+    session?.phase,
+    conversationWebSocket?.connectionState,
+    hasSendingMessages,
+  ]);
+
   let pendingMessageLabel: string | undefined;
   if (activeConversation?.id === conversationId) {
     if (sandboxStatus === "PAUSED" || sandboxStatus === "STARTING") {
@@ -586,6 +614,15 @@ export function ChatInterface({
     t,
   });
 
+  const pendingUserMessages = React.useMemo(
+    () => (
+      <PendingUserMessages
+        pendingLabel={pendingMessageLabel}
+        showPendingStatus={!isSessionStarting}
+      />
+    ),
+    [pendingMessageLabel, isSessionStarting],
+  );
   const isComposerDocked = Boolean(composerDockTarget);
   const isMinimalComposer = isComposerDocked || minimalComposer;
   const composer = (
@@ -623,7 +660,8 @@ export function ChatInterface({
     <WorkspaceFilesForChatProvider>
       <ScrollProvider value={scrollProviderValue}>
         <div className={CHAT_BODY_CLASS_NAME} data-testid="chat-interface">
-          {!hasSubstantiveAgentActions &&
+          {sessions.length === 0 &&
+            !hasSubstantiveAgentActions &&
             !hasPendingUserMessages &&
             !userEventsExist &&
             !hasModelEntries &&
@@ -694,23 +732,21 @@ export function ChatInterface({
               anchorEventId={null}
             />
 
-            {showConversationMessages && renderableEvents.length > 0 && (
+            {!isTask && showConversationMessages && (
               <Messages
+                hasOlderEvents={hasMoreOlderEvents}
                 messages={renderableEvents}
                 allEvents={allConversationEvents}
+                pendingMessages={pendingUserMessages}
+                pendingSessionId={isSessionStarting ? session?.id : undefined}
               />
             )}
-
-            {/*
-            Render the local pending-message queue independently so messages
-            the user just submitted show up immediately (with a faded "sending"
-            treatment) even before any real conversation event has come back
-            from the server. Entries drain (FIFO) when the matching
-            UserMessageEvent echoes back over the WebSocket, so this never
-            double-renders alongside the real event list.
-          */}
-            <PendingUserMessages pendingLabel={pendingMessageLabel} />
-            {isTask && <TaskStartupProgress />}
+            {isTask && (
+              <>
+                {pendingUserMessages}
+                <TaskStartupProgress />
+              </>
+            )}
 
             {/* Goal-loop status sits at the end of the message flow — above the
               composer and its typing indicator — so progress stays in view. */}

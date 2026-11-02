@@ -1,5 +1,6 @@
 import { formatTimeDelta } from "#/utils/format-time-delta";
-import { useConversationDisplayTitle } from "#/hooks/use-conversation-display-title";
+import { usePrefetchUserConversation } from "#/hooks/query/use-user-conversation";
+import { useConversationDisplayTitleState } from "#/hooks/use-conversation-display-title";
 import { usePendingTaskAttachmentsStore } from "#/stores/pending-task-attachments-store";
 import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
 import React from "react";
@@ -97,6 +98,7 @@ export function ConversationPanel({
   const { conversationId: currentConversationId, navigate } = useNavigation();
   const { backend: activeBackend, orgId } = useActiveBackend();
   const backendScopedPath = useBackendScopedPath();
+  const prefetchConversation = usePrefetchUserConversation();
   // Click-outside is only relevant in the legacy drawer mode where an
   // onClose handler is provided. When the panel is rendered inline (e.g.
   // as the always-visible conversation list pane), clicking outside should
@@ -326,7 +328,7 @@ export function ConversationPanel({
     unresolvedTaskIds = [],
     failedTaskIds = [],
   } = useStartTasks(10, listedConversationIds);
-  const getTitle = useConversationDisplayTitle();
+  const getTitle = useConversationDisplayTitleState();
 
   // Grouped pagination is folder-oriented. Record the first backend page for
   // every conversation so later pages can introduce new folders without
@@ -1076,7 +1078,10 @@ export function ConversationPanel({
       conversation: (typeof conversations)[number],
       options?: { inPinnedSection?: boolean },
     ) => {
-      const displayTitle = getTitle(conversation.id, conversation.title);
+      const { title: displayTitle, pending: titlePending } = getTitle(
+        conversation.id,
+        conversation.title,
+      );
       const isPinned = pinnedIds.includes(conversation.id);
       // Presentation: a row looks archived when the user archived it or its
       // runtime is missing and non-resumable. This single predicate drives list
@@ -1099,6 +1104,7 @@ export function ConversationPanel({
             key={conversation.id}
             conversationId={conversation.id}
             title={displayTitle}
+            titlePending={titlePending}
             selectedRepository={{
               selected_repository: conversation.selected_repository,
               selected_branch: conversation.selected_branch,
@@ -1131,6 +1137,7 @@ export function ConversationPanel({
           key={conversation.id}
           conversation={conversation}
           displayTitle={displayTitle}
+          titlePending={titlePending}
           timestampLabel={formatTimeDelta(
             conversation.updated_at ?? conversation.created_at,
           )}
@@ -1154,6 +1161,7 @@ export function ConversationPanel({
               : undefined
           }
           onClose={onClose}
+          prefetchConversation={prefetchConversation}
           handleDeleteProject={handleDeleteProject}
           handleArchiveProject={handleArchiveProject}
           handleUnarchiveProject={handleUnarchiveProject}
@@ -1167,6 +1175,7 @@ export function ConversationPanel({
       );
     },
     [
+      prefetchConversation,
       getTitle,
       agentProfilesData,
       agentProfileNames,
@@ -1382,7 +1391,8 @@ export function ConversationPanel({
                 className="block"
               >
                 <ConversationCard
-                  title={getTitle(launch.id)}
+                  title={getTitle(launch.id).title}
+                  titlePending={getTitle(launch.id).pending}
                   isStarting
                   selectedRepository={null}
                   lastUpdatedAt=""
@@ -1450,7 +1460,10 @@ export function ConversationPanel({
               >
                 <StartTaskCard
                   task={task}
-                  title={getTitle(`task-${task.id}`, task.request.title)}
+                  title={getTitle(`task-${task.id}`, task.request.title).title}
+                  titlePending={
+                    getTitle(`task-${task.id}`, task.request.title).pending
+                  }
                   initialMessage={
                     pendingAttachments[task.id]?.content ||
                     Object.values(pendingLaunches).find(

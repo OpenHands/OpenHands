@@ -6,6 +6,7 @@ import { ConversationStatusDot } from "../conversation-status-dot";
 
 interface ConversationCardHeaderProps {
   title: string;
+  titlePending?: boolean;
   titleMode: "view" | "edit";
   onTitleSave: (title: string) => void;
   executionStatus?: ExecutionStatus | null;
@@ -22,6 +23,7 @@ interface ConversationCardHeaderProps {
 
 export function ConversationCardHeader({
   title,
+  titlePending,
   titleMode,
   onTitleSave,
   executionStatus,
@@ -45,6 +47,7 @@ export function ConversationCardHeader({
       )}
       <ConversationCardTitle
         title={title}
+        titlePending={titlePending}
         titleMode={titleMode}
         onSave={onTitleSave}
         isConversationArchived={archived}

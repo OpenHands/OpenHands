@@ -14,6 +14,7 @@ import { ConversationCardPreview } from "./conversation-card/conversation-card-p
 interface ConversationPanelRowProps {
   conversation: AppConversation;
   displayTitle: string;
+  titlePending: boolean;
   timestampLabel: string;
   href: string;
   isActive: boolean;
@@ -29,6 +30,7 @@ interface ConversationPanelRowProps {
   showTagsMetadata: boolean;
   agentProfileName: string | null | undefined;
   onClose?: () => void;
+  prefetchConversation: (id: string) => Promise<void>;
   handleDeleteProject: (id: string, title: string) => void;
   handleArchiveProject: (id: string, title: string) => void;
   handleUnarchiveProject: (id: string) => void;
@@ -43,6 +45,7 @@ interface ConversationPanelRowProps {
 export const ConversationPanelRow = React.memo(function ConversationPanelRow({
   conversation,
   displayTitle,
+  titlePending,
   timestampLabel,
   href,
   isActive,
@@ -58,6 +61,7 @@ export const ConversationPanelRow = React.memo(function ConversationPanelRow({
   showTagsMetadata,
   agentProfileName,
   onClose,
+  prefetchConversation,
   handleDeleteProject,
   handleArchiveProject,
   handleUnarchiveProject,
@@ -83,6 +87,7 @@ export const ConversationPanelRow = React.memo(function ConversationPanelRow({
       content={
         <ConversationCardPreview
           title={displayTitle}
+          titlePending={titlePending}
           executionStatus={conversation.execution_status}
           sandboxStatus={conversation.sandbox_status}
           selectedRepository={{
@@ -109,7 +114,19 @@ export const ConversationPanelRow = React.memo(function ConversationPanelRow({
     >
       <NavigationLink
         to={href}
-        onClick={onClose}
+        onClick={(event) => {
+          onClose?.();
+          if (
+            !event.defaultPrevented &&
+            event.button === 0 &&
+            !event.metaKey &&
+            !event.ctrlKey &&
+            !event.altKey &&
+            !event.shiftKey
+          ) {
+            void prefetchConversation(conversation.id);
+          }
+        }}
         className={cn(
           "block rounded-md transition-colors",
           !contextMenuOpen && "hover:bg-surface",
@@ -146,6 +163,7 @@ export const ConversationPanelRow = React.memo(function ConversationPanelRow({
             handleConversationTitleChange(conversation.id, title)
           }
           title={displayTitle}
+          titlePending={titlePending}
           selectedRepository={{
             selected_repository: conversation.selected_repository,
             selected_branch: conversation.selected_branch,

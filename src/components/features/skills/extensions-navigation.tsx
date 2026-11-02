@@ -117,7 +117,7 @@ function ExtensionsNavigationLinks() {
           </span>
         );
         const comingSoonBadge = item.comingSoon && (
-          <span className="ml-auto shrink-0 rounded-full border border-contrast/20 bg-contrast/5 px-1.5 py-0.5 text-[10px] font-medium text-text-dim">
+          <span className="ml-auto shrink-0 rounded-full border border-contrast/20 bg-contrast/5 px-1.5 py-0.5 text-3xs font-medium text-text-dim">
             {t(I18nKey.NAV$COMING_SOON)}
           </span>
         );

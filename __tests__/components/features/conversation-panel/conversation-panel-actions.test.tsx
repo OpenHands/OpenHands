@@ -1,6 +1,18 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  CONVERSATION_QUERY_KEYS,
+  DEFAULT_CONVERSATION_PAGE_SIZE,
+} from "#/hooks/query/query-keys";
 import { ConversationPanel } from "#/components/features/conversation-panel/conversation-panel";
 import { NavigationProvider } from "#/context/navigation-context";
-import { screen, waitFor, within, act } from "@testing-library/react";
+import {
+  screen,
+  waitFor,
+  within,
+  act,
+  fireEvent,
+} from "@testing-library/react";
+
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -53,6 +65,34 @@ vi.mock("#/utils/custom-toast-handlers", () => ({
 describe("ConversationPanel conversation actions", () => {
   setupConversationPanelTest();
 
+  it("starts the selected Cloud metadata request on navigation, but not a modified click", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-2" });
+    renderWithProviders(
+      <ActiveBackendProvider>
+        <RouterStub />
+      </ActiveBackendProvider>,
+    );
+    const cards = await screen.findAllByTestId("conversation-card");
+    const link = cards[0].closest("a")!;
+    const cid = link
+      .getAttribute("href")!
+      .split("/conversations/")[1]
+      .split("?")[0];
+    vi.spyOn(
+      AgentServerConversationService,
+      "batchGetAppConversations",
+    ).mockResolvedValue([]);
+    fireEvent.click(link, { ctrlKey: true });
+    expect(
+      AgentServerConversationService.batchGetAppConversations,
+    ).not.toHaveBeenCalled();
+    fireEvent.click(link);
+    expect(
+      AgentServerConversationService.batchGetAppConversations,
+    ).toHaveBeenCalledWith([cid]);
+  });
+
   it("shows startup activity on a pending launch and switches to its error indicator", async () => {
     setRegisteredBackends([cloudBackend]);
     setActiveSelection({ backendId: cloudBackend.id, orgId: "org-2" });
@@ -73,9 +113,10 @@ describe("ConversationPanel conversation actions", () => {
           name: "CONVERSATION$STARTING_CONVERSATION",
         }),
       ).toBeInTheDocument();
-      expect(
-        screen.getByText("Investigate the startup indicator"),
-      ).toBeInTheDocument();
+      expect(screen.getByText("SIDEBAR$NEW_CHAT")).toHaveAttribute(
+        "aria-busy",
+        "true",
+      );
       act(() =>
         useConversationLaunchStore
           .getState()
@@ -89,9 +130,78 @@ describe("ConversationPanel conversation actions", () => {
       expect(
         screen.getByTestId("conversation-status-error"),
       ).toBeInTheDocument();
+      expect(
+        screen.getByText("Investigate the startup indicator"),
+      ).not.toHaveAttribute("aria-busy");
     } finally {
       act(() => useConversationLaunchStore.getState().remove(id));
     }
+  });
+
+  it("keeps pending titles in retained cards until generation finishes", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-2" });
+    const conversation = createMockConversation({
+      id: "title-transition",
+      title: "Review the login flow",
+      title_generation: {
+        status: "pending",
+        title: "Review the login flow",
+        deadline_at: new Date(Date.now() + 60000).toISOString(),
+      },
+    });
+    vi.mocked(
+      AgentServerConversationService.searchConversations,
+    ).mockResolvedValue({
+      items: [conversation],
+      next_page_id: null,
+    });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    renderWithProviders(
+      <QueryClientProvider client={client}>
+        <ActiveBackendProvider>
+          <ConversationPanel />
+        </ActiveBackendProvider>
+      </QueryClientProvider>,
+    );
+    const card = await screen.findByTestId("conversation-card");
+    expect(within(card).getByText("SIDEBAR$NEW_CHAT")).toHaveAttribute(
+      "aria-busy",
+      "true",
+    );
+    act(() =>
+      client.setQueryData(
+        CONVERSATION_QUERY_KEYS.paginated(
+          DEFAULT_CONVERSATION_PAGE_SIZE,
+          cloudBackend.id,
+          "org-2",
+        ),
+        {
+          pages: [
+            {
+              items: [
+                {
+                  ...conversation,
+                  title: "Login flow review",
+                  title_generation: {
+                    ...conversation.title_generation,
+                    status: "generated",
+                    title: "Login flow review",
+                  },
+                },
+              ],
+              next_page_id: null,
+            },
+          ],
+          pageParams: [null],
+        },
+      ),
+    );
+    expect(
+      await within(card).findByText("Login flow review"),
+    ).not.toHaveAttribute("aria-busy");
   });
 
   it("refreshes a retained row's relative timestamp as time passes", async () => {
