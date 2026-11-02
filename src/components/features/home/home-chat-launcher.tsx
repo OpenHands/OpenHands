@@ -15,6 +15,10 @@ import { HOME_PROMPT_DRAFT_KEY } from "#/hooks/chat/use-draft-persistence";
 import { useChatAttachmentUpload } from "#/hooks/chat/use-chat-attachment-upload";
 import { useConversationStore } from "#/stores/conversation-store";
 import { useModelStore } from "#/stores/model-store";
+import {
+  clearPendingHomeModelPick,
+  hasPendingHomeModelPick,
+} from "#/hooks/use-chat-input-llm-profile-state";
 import type { WorkspaceMode } from "#/api/conversation-metadata-store";
 import { setPendingTaskAttachments } from "#/stores/pending-task-attachments-store";
 import { enqueueHomeTaskPendingMessage } from "#/utils/enqueue-home-task-pending-message";
@@ -213,10 +217,12 @@ export function HomeChatLauncher() {
     // When attachments are present the first user message is sent afterward
     // via sendMessageWithAttachments / flushPendingTaskAttachments. Passing
     // query here would create a duplicate text-only initial_message.
+    const suppressRouterAtStart = hasPendingHomeModelPick(backend.id, orgId);
     let variables: Parameters<typeof createConversation>[0] = {
       query: hasAttachments ? undefined : trimmed || undefined,
       automationSetup: isAutomateMode,
       entryPoint: "home_chat_launcher",
+      ...(suppressRouterAtStart ? { suppressRouterAtStart: true } : {}),
     };
     // An isolated backend owns its workspace, so a host selection left over
     // from a non-isolated session must not be forwarded: the server rejects it
@@ -298,6 +304,9 @@ export function HomeChatLauncher() {
       try {
         const data = await createConversation(variables);
         isCreated = true;
+        if (suppressRouterAtStart) {
+          clearPendingHomeModelPick(backend.id, orgId);
+        }
         dismissCreatingToast();
         try {
           if (sessionStorage.getItem(HOME_PROMPT_DRAFT_KEY) === message)

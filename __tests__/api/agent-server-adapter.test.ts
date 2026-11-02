@@ -32,7 +32,6 @@ import { SKILLS_CATALOG } from "@openhands/extensions/skills";
 import type { HookConfig } from "@openhands/typescript-client";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import type { SettingsValue } from "#/types/settings";
-import { useModelStore } from "#/stores/model-store";
 
 const {
   mockGetAgentServerWorkingDir,
@@ -132,7 +131,6 @@ beforeEach(() => {
     apiKey: "session-key",
     kind: "local",
   });
-  useModelStore.getState().setHomeManualModelPick(false);
 });
 
 const PROFILE = {
