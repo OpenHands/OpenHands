@@ -24,6 +24,7 @@ import { describe, expect, it, afterEach } from "vitest";
 import {
   buildAgentServerAutomationEnv,
   buildAutomationCommand,
+  buildAutomationCorsOrigins,
   buildAutomationLogArgs,
   buildAutomationTelemetryEnv,
   buildAutomationRuntimeServicesInfo,
@@ -586,6 +587,73 @@ describe("buildConfig", () => {
     await expect(
       buildConfig({ port: busyPort }, envWithIsolatedKeyPath()),
     ).rejects.toThrow(new RegExp(`ingress.*port ${busyPort}`, "i"));
+  });
+
+  it("serves the frontend on a free port when the preferred one is taken", async () => {
+    const server = net.createServer();
+    const busyPort = await new Promise<number>((resolve, reject) => {
+      server.listen(0, "127.0.0.1", () => {
+        servers.push(server);
+        resolve((server.address() as net.AddressInfo).port);
+      });
+      server.on("error", reject);
+    });
+
+    const config = await buildConfig(
+      {},
+      envWithIsolatedKeyPath({ OH_CANVAS_SAFE_VITE_PORT: String(busyPort) }),
+    );
+
+    expect(config.vitePort).not.toBe(busyPort);
+    expect(getFrontendBackend(config)).toBe(
+      `http://localhost:${config.vitePort}`,
+    );
+    expect(buildAutomationCorsOrigins(config)).toBe(
+      `http://localhost:19902,http://127.0.0.1:19902,` +
+        `http://localhost:${config.vitePort},http://127.0.0.1:${config.vitePort}`,
+    );
+  });
+
+  it.each([
+    ["ingress", "19902"],
+    ["agent-server", "19900"],
+    ["automation", "19901"],
+    ["vscode", "20900"],
+  ])("keeps the frontend off the %s port", async (_service, servicePort) => {
+    const config = await buildConfig(
+      {},
+      envWithIsolatedKeyPath({ OH_CANVAS_SAFE_VITE_PORT: servicePort }),
+    );
+
+    expect(config.vitePort).not.toBe(Number(servicePort));
+    expect(
+      new Set([
+        config.ingressPort,
+        config.agentServerPort,
+        config.autoBackendPort,
+        config.vscodePort,
+        config.vitePort,
+      ]).size,
+    ).toBe(5);
+  });
+
+  it("leaves the frontend port alone when no frontend is launched", async () => {
+    const server = net.createServer();
+    const busyPort = await new Promise<number>((resolve, reject) => {
+      server.listen(0, "127.0.0.1", () => {
+        servers.push(server);
+        resolve((server.address() as net.AddressInfo).port);
+      });
+      server.on("error", reject);
+    });
+
+    const config = await buildConfig(
+      { backendOnly: true },
+      envWithIsolatedKeyPath({ OH_CANVAS_SAFE_VITE_PORT: String(busyPort) }),
+    );
+
+    expect(config.launchFrontend).toBe(false);
+    expect(config.vitePort).toBe(busyPort);
   });
 
   it("allocates valid ports for all services", async () => {
