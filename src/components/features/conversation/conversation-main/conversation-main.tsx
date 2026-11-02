@@ -193,7 +193,7 @@ export function ConversationMain({ children }: { children?: ReactNode } = {}) {
         <header
           data-testid="automation-setup-topbar"
           className={cn(
-            "flex shrink-0 border-b border-[var(--oh-border)] bg-canvas-base",
+            "flex shrink-0 border-b border-border bg-canvas-base",
             isMobile
               ? "flex-col"
               : "h-10 min-h-10 items-center justify-between gap-2 px-3",
@@ -219,7 +219,7 @@ export function ConversationMain({ children }: { children?: ReactNode } = {}) {
               <div
                 role="group"
                 aria-label={`${t(I18nKey.AUTOMATION_SETUP$VIEW_FORM)} / ${t(I18nKey.AUTOMATION_SETUP$VIEW_CONVERSATION)}`}
-                className="flex shrink-0 overflow-hidden rounded-lg border border-[var(--oh-border)]"
+                className="flex shrink-0 overflow-hidden rounded-lg border border-border"
               >
                 {MOBILE_AUTOMATION_VIEW_OPTIONS.map(
                   ({ view, labelKey, Icon }) => {
@@ -237,7 +237,7 @@ export function ConversationMain({ children }: { children?: ReactNode } = {}) {
                           "inline-flex size-7 items-center justify-center",
                           mobileAutomationView === view
                             ? "bg-tertiary text-content"
-                            : "text-[var(--oh-muted)]",
+                            : "text-muted",
                         )}
                       >
                         <Icon className="size-4" aria-hidden />
