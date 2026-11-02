@@ -82,6 +82,8 @@ interface ConversationCardProps {
   onTogglePin?: () => void;
   /** When true and pinned, keep the pin icon visible without hovering. */
   alwaysShowPinIcon?: boolean;
+  /** PRs the conversation tracks (`pr_number`). */
+  prNumbers?: readonly number[] | null;
 }
 
 export function ConversationCard({
@@ -118,6 +120,7 @@ export function ConversationCard({
   isPinned = false,
   onTogglePin,
   alwaysShowPinIcon = false,
+  prNumbers = null,
 }: ConversationCardProps) {
   const { t } = useTranslation("openhands");
   const { trackDownloadVsCodeButtonClicked } = useTracking();
@@ -426,6 +429,7 @@ export function ConversationCard({
           tags={tags}
           showTags={showTagChipRow}
           isArchived={effectiveArchived}
+          prNumbers={prNumbers}
         />
       )}
     </div>

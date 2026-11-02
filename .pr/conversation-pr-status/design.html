@@ -1,0 +1,289 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Conversation PR status (#19030)</title>
+<style>
+  :root{
+    --fg:#1a1a1a; --muted:#5a5a5a; --subtle:#8a8a82;
+    --bg:#fdfdfb; --card:#ffffff; --elevated:#f7f6f1;
+    --accent:#2b4eaa; --accent-soft:#e6ecfa;
+    --rule:#e2e2dc; --rule-strong:#bdbcb4;
+    --code-bg:#f3f1ec; --warn:#b25b0e; --ok:#2f7a3a; --crit:#a02020;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box} html,body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans)}
+  body{line-height:1.6;font-size:16px}
+  .wrap{display:grid;grid-template-columns:240px minmax(0,1fr);gap:48px;max-width:1180px;margin:0 auto;padding:32px 28px 96px}
+  nav.toc{position:sticky;top:24px;align-self:start;font-size:13px}
+  nav.toc h2{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+  nav.toc ol{list-style:none;padding:0;margin:0;counter-reset:toc}
+  nav.toc li{counter-increment:toc;margin:4px 0}
+  nav.toc li::before{content:counter(toc) ". ";color:var(--muted)}
+  nav.toc a{color:var(--fg);text-decoration:none} nav.toc a:hover{color:var(--accent)}
+  nav.toc .files{margin-top:18px;font-family:var(--mono);font-size:11.5px;color:var(--muted);line-height:1.7}
+  header.title{border-bottom:1px solid var(--rule);padding-bottom:22px;margin-bottom:28px}
+  header.title .eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700}
+  header.title h1{font-size:32px;margin:6px 0 4px;letter-spacing:-.01em}
+  header.title .sub{color:var(--muted);max-width:760px}
+  header.title .stats{font-size:13px;color:var(--subtle);margin-top:8px}
+  h2{font-size:22px;margin:44px 0 10px} h2 .num{color:var(--muted);font-weight:500;margin-right:8px}
+  h3{font-size:16px;margin:22px 0 8px}
+  code{font-family:var(--mono);font-size:.88em;background:var(--code-bg);padding:1px 5px;border-radius:3px}
+  pre{font-family:var(--mono);font-size:12.5px;background:var(--code-bg);padding:14px 16px;border-radius:6px;overflow-x:auto;border:1px solid var(--rule);line-height:1.5}
+  pre code{background:transparent;padding:0}
+  .kw{color:#7048a8}.str{color:var(--ok)}.com{color:var(--subtle);font-style:italic}
+  table{border-collapse:collapse;width:100%;font-size:14px;margin:12px 0}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--rule);vertical-align:top}
+  th{font-weight:600;background:var(--code-bg)}
+  .callout{border-left:3px solid var(--accent);background:var(--accent-soft);padding:10px 14px;margin:14px 0;border-radius:0 4px 4px 0;font-size:14.5px}
+  .callout.warn{border-color:var(--warn);background:#fbf1e6} .callout.note{border-color:var(--muted);background:#f3f1ec}
+  .fig{margin:18px 0 22px}
+  .fig svg{display:block;max-width:100%;height:auto;background:#fff;border:1px solid var(--rule);border-radius:6px}
+  .fig figcaption{font-size:13px;color:var(--muted);margin-top:6px;text-align:center}
+  a.src{font-family:var(--mono);font-size:12px;color:var(--accent);text-decoration:none;border-bottom:1px dotted var(--accent)}
+  details{border:1px solid var(--rule);border-radius:6px;margin:12px 0}
+  details>summary{cursor:pointer;padding:8px 12px;color:var(--muted);font-size:13px;list-style:none}
+  details>summary::-webkit-details-marker{display:none}
+  details>summary::before{content:"▸ "} details[open]>summary::before{content:"▾ "}
+  details>div{padding:4px 14px 12px}
+  .ba{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+  .tag{font-family:var(--mono);font-size:11px;padding:0 5px;border-radius:3px;background:var(--elevated);border:1px solid var(--rule);margin-right:6px}
+  .card{border:1px solid var(--rule);border-radius:8px;padding:6px 18px 12px;margin:16px 0;background:var(--card)}
+  .card h3{margin-top:14px}
+  .card .sum{color:var(--muted);font-size:14.5px;margin:4px 0 8px}
+  @media(max-width:760px){.wrap{grid-template-columns:1fr}.ba{grid-template-columns:1fr}nav.toc{position:static}}
+</style></head><body>
+<div class="wrap">
+  <nav class="toc"><h2>Contents</h2><ol>
+    <li><a href="#what">The count was the repo's, not the conversation's</a></li>
+    <li><a href="#api">New service; repo-wide PR list removed</a></li>
+    <li><a href="#assoc">A PR belongs to a conversation by number or branch, never by text</a></li>
+    <li><a href="#states">Four states, each read from GitHub</a></li>
+    <li><a href="#unknown">Unknown is always shown, never hidden</a></li>
+    <li><a href="#files">Per-file changes</a></li>
+    <li><a href="#evidence">Evidence</a></li>
+    <li><a href="#risk">Risks and follow-ups</a></li>
+  </ol>
+  <div class="files">
+    🟢 git-provider-pull-request-status-service.ts<br>
+    🟢 use-conversation-pull-requests.ts<br>
+    🟢 use-active-conversation-pull-requests.ts<br>
+    🟢 conversation-overview-pull-requests-panel.tsx<br>
+    🟢 conversation-pull-request-indicator.tsx<br>
+    🟢 pull-request-status-labels.ts<br>
+    ✏️ conversation-overview-git-section.tsx<br>
+    ✏️ conversation-overview-git-items-panel.tsx<br>
+    ✏️ git-provider-items-service.ts<br>
+    ✏️ conversation-card-footer.tsx<br>
+    ⚙️ conversation-card.tsx · compact-conversation-row.tsx · conversation-panel.tsx<br>
+    ⚙️ query-keys.ts · use-repository-git-items.ts<br>
+    ⚙️ translation.json (31 keys × 16 locales)
+  </div></nav>
+  <main>
+    <header class="title"><div class="eyebrow">Design doc · Issue #19030</div>
+      <h1>Show the PRs a conversation produced, and their real state</h1>
+      <p class="sub">The conversation overview's "Pull Requests" row counted the repository's first 30 open PRs, whatever the conversation did. This PR replaces that with the conversation's own PRs, read from GitHub with lifecycle, checks, review and conflict state kept separate, and adds a delivery badge to conversation-list rows. Every outcome the provider can't answer is shown as an explicit "unknown" state.</p>
+      <p class="stats">Frontend only · no Agent Server or SDK contract change · GitHub supported, other providers explicitly "unsupported"</p>
+    </header>
+
+    <section id="what"><h2><span class="num">1</span>The count was the repo's, not the conversation's</h2>
+      <div class="callout">★ Before, <code>useRepositoryPullRequests</code> listed <code>pulls?state=open&amp;per_page=30</code> for the whole repository (<a class="src" href="https://github.com/OpenHands/OpenHands/blob/e4765e2c5b31a1d80f3d7b0ba6d46940ced299da/src/api/git-provider-items-service.ts#L274">git-provider-items-service.ts:274</a>), and the overview showed its length (<a class="src" href="https://github.com/OpenHands/OpenHands/blob/e4765e2c5b31a1d80f3d7b0ba6d46940ced299da/src/components/features/conversation/conversation-overview-git-section.tsx#L84">conversation-overview-git-section.tsx:84</a>). On a real backend, a conversation whose branch has one PR showed <b>30</b>. Now it shows <b>1</b>, with that PR's status. Start review at <a class="src" href="https://github.com/FazeelUsmani/OpenHands/blob/e698f2e9910482e8a434b4737c41998cdf4232e5/src/api/git-provider-pull-request-status-service.ts#L305">getConversationPullRequests</a>.</div>
+
+      <figure class="fig">
+      <svg viewBox="0 0 960 400" role="img" aria-labelledby="f1-t f1-d">
+       <title id="f1-t">Overview pull-request data path, before and after</title>
+       <desc id="f1-d">Before, the overview listed open PRs for the whole repository. After, it resolves the conversation's own PRs and reads each PR's state from GitHub.</desc>
+       <defs>
+        <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="var(--subtle)"/></marker>
+        <marker id="arr-chg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="var(--warn)"/></marker>
+        <linearGradient id="subj" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--accent)" stop-opacity=".10"/><stop offset="1" stop-color="var(--accent)" stop-opacity=".02"/></linearGradient>
+        <style>
+          .existing{fill:var(--code-bg);stroke:var(--subtle);stroke-width:1.4;stroke-dasharray:5 3}
+          .ex-title{font:700 13px var(--sans);fill:var(--muted)} .ex-detail{font:11px var(--mono);fill:var(--subtle)}
+          .new{fill:var(--accent-soft);stroke:var(--accent);stroke-width:2} .subj{fill:url(#subj);stroke:var(--accent);stroke-width:2}
+          .new-title{font:800 13px var(--sans);fill:var(--accent)} .detail{font:11px var(--mono);fill:var(--fg)}
+          .edge{stroke:var(--subtle);stroke-width:1.5;stroke-dasharray:5 3;fill:none}
+          .edge-chg{stroke:var(--warn);stroke-width:1.8;fill:none;stroke-dasharray:5 3}
+          .band{font:700 11px var(--sans);fill:var(--muted);letter-spacing:.12em}
+          .gap{font:700 11px var(--mono);fill:var(--warn)}
+        </style>
+       </defs>
+       <!-- BEFORE -->
+       <text class="band" x="30" y="30">BEFORE</text>
+       <g>
+        <rect class="existing" x="30" y="45" width="250" height="70" rx="6"/>
+        <text class="ex-title" x="155" y="73" text-anchor="middle">ConversationOverviewGitSection</text>
+        <text class="ex-detail" x="155" y="94" text-anchor="middle">count = data.length · :84</text>
+        <rect class="existing" x="350" y="45" width="250" height="70" rx="6"/>
+        <text class="ex-title" x="475" y="73" text-anchor="middle">useRepositoryPullRequests</text>
+        <text class="ex-detail" x="475" y="94" text-anchor="middle">use-repository-git-items.ts:5</text>
+        <rect class="existing" x="670" y="45" width="260" height="70" rx="6"/>
+        <text class="ex-title" x="800" y="73" text-anchor="middle">GET pulls?state=open&amp;per_page=30</text>
+        <text class="ex-detail" x="800" y="94" text-anchor="middle">whole repo · items-service.ts:274</text>
+        <path class="edge" d="M280,80 L350,80" marker-end="url(#arr)"/>
+        <path class="edge" d="M600,80 L670,80" marker-end="url(#arr)"/>
+       </g>
+       <!-- AFTER -->
+       <text class="band" x="30" y="170">AFTER</text>
+       <g>
+        <rect class="new" x="30" y="185" width="250" height="70" rx="6"/>
+        <text class="new-title" x="155" y="213" text-anchor="middle">ConversationOverviewGitSection</text>
+        <text class="detail" x="155" y="234" text-anchor="middle">count or "?" (unknown) · :86</text>
+        <rect class="new" x="350" y="185" width="250" height="70" rx="6"/>
+        <text class="new-title" x="475" y="213" text-anchor="middle">useActiveConversationPullRequests</text>
+        <text class="detail" x="475" y="234" text-anchor="middle">pr_number + checked-out branch</text>
+        <rect class="subj" x="670" y="185" width="260" height="70" rx="6"/>
+        <text class="new-title" x="800" y="213" text-anchor="middle">getConversationPullRequests</text>
+        <text class="detail" x="800" y="234" text-anchor="middle">status-service.ts:305</text>
+        <path class="edge-chg" d="M280,220 L350,220" marker-end="url(#arr-chg)"/>
+        <path class="edge-chg" d="M600,220 L670,220" marker-end="url(#arr-chg)"/>
+        <!-- per-PR fan-out -->
+        <rect class="new" x="560" y="300" width="175" height="62" rx="6"/>
+        <text class="new-title" x="647" y="326" text-anchor="middle">GET pulls/{n}</text>
+        <text class="detail" x="647" y="346" text-anchor="middle">lifecycle · conflicts</text>
+        <rect class="new" x="755" y="300" width="175" height="62" rx="6"/>
+        <text class="new-title" x="842" y="322" text-anchor="middle">check-runs · status</text>
+        <text class="new-title" x="842" y="340" text-anchor="middle">· reviews</text>
+        <text class="detail" x="842" y="356" text-anchor="middle">checks · review</text>
+        <path class="edge-chg" d="M760,255 L660,300" marker-end="url(#arr-chg)"/>
+        <path class="edge-chg" d="M840,255 L842,300" marker-end="url(#arr-chg)"/>
+        <rect x="380" y="318" width="160" height="22" rx="5" fill="var(--elevated)" stroke="var(--rule)"/>
+        <text class="gap" x="460" y="333" text-anchor="middle">≤10 PRs · 60s cache</text>
+       </g>
+      </svg>
+      <figcaption>Fig 1 · The overview stops asking "what is open in this repo" and asks "which PRs are this conversation's, and what state is each in".</figcaption>
+      </figure>
+      <div class="callout note">ⓘ The drawer opened from that row (<a class="src" href="https://github.com/FazeelUsmani/OpenHands/blob/e698f2e9910482e8a434b4737c41998cdf4232e5/src/components/features/conversation/conversation-overview-pull-requests-panel.tsx#L120">ConversationOverviewPullRequestsPanel</a>) and the list badge (<a class="src" href="https://github.com/FazeelUsmani/OpenHands/blob/e698f2e9910482e8a434b4737c41998cdf4232e5/src/components/features/conversation-panel/conversation-card/conversation-pull-request-indicator.tsx#L32">ConversationPullRequestIndicator</a>) read the same service through the same query hook, so all three surfaces agree.</div>
+    </section>
+
+    <section id="api"><h2><span class="num">2</span>New service; repo-wide PR list removed</h2>
+      <p>The change is additive inside Canvas, apart from one internal method whose only callers this PR replaces. No Agent Server field or endpoint is added or required, so <code>compatibility.minimumAgentServer</code> is unchanged.</p>
+      <div class="ba">
+        <div><h3>Before</h3>
+<pre><code><span class="com">// git-provider-items-service.ts:221</span>
+<span class="kw">static async</span> listPullRequests(
+  repository: string, provider: Provider,
+): Promise&lt;GitProviderItem[]&gt;
+<span class="com">// open PRs in the repo, max 30</span>
+
+<span class="com">// use-repository-git-items.ts:5</span>
+useRepositoryPullRequests(repo, provider)</code></pre></div>
+        <div><h3>After</h3>
+<pre><code><span class="com">// git-provider-pull-request-status-service.ts:305</span>
+<span class="kw">static async</span> getConversationPullRequests({
+  repository, provider, branch, prNumbers,
+}): Promise&lt;ConversationPullRequestsResult&gt;
+
+<span class="kw">type</span> ConversationPullRequestsResult =
+  | { status: <span class="str">"ok"</span>; source: <span class="str">"tracked"</span>|<span class="str">"branch"</span>|<span class="str">"none"</span>;
+      pullRequests; omittedCount }
+  | { status: <span class="str">"unsupported_provider"</span> }
+  | { status: <span class="str">"unavailable"</span>; reason }
+
+<span class="com">// use-conversation-pull-requests.ts:18</span>
+useConversationPullRequests({ repository,
+  provider, branch, prNumbers })</code></pre></div>
+      </div>
+      <p>Per-PR shape (<a class="src" href="https://github.com/FazeelUsmani/OpenHands/blob/e698f2e9910482e8a434b4737c41998cdf4232e5/src/api/git-provider-pull-request-status-service.ts#L49">:49</a>): <code>lifecycle</code>, <code>checks</code>, <code>review</code>, <code>mergeable</code> and <code>unavailableReason</code> are separate fields, never collapsed into one "status".</p>
+      <div class="callout warn">⚠ Removed: <code>GitProviderItemsService.listPullRequests</code> and <code>useRepositoryPullRequests</code>. Their only callers were the overview row and drawer that this PR rewires. Side effect: GitLab and Forgejo conversations, which used to see the repo's open-PR list in the drawer, now see "Pull request status isn't available for {provider} yet". The drawer's "View on {provider}" link to the repo's PR page is unchanged.</div>
+      <p><code>fetchGithubJson</code> now throws <code>GitProviderRequestError</code> with <code>status</code> and <code>rateLimited</code> (<a class="src" href="https://github.com/FazeelUsmani/OpenHands/blob/e698f2e9910482e8a434b4737c41998cdf4232e5/src/api/git-provider-items-service.ts#L112">:112</a>); the message text is unchanged, so existing callers behave the same.</p>
+    </section>
+
+    <section id="assoc"><h2><span class="num">3</span>A PR belongs to a conversation by number or branch, never by text</h2>
+      <table>
+        <tr><th>Source</th><th>When</th><th>Rule</th><th>Code</th></tr>
+        <tr><td><b>tracked</b></td><td>Conversation has <code>pr_number</code> (Cloud)</td><td>Fetch those numbers in the conversation's repository; de-duplicate; first 10, rest counted in <code>omittedCount</code>.</td><td><a class="src" href="https://github.com/FazeelUsmani/OpenHands/blob/e698f2e9910482e8a434b4737c41998cdf4232e5/src/api/git-provider-pull-request-status-service.ts#L305">:305</a></td></tr>
+        <tr><td><b>branch</b></td><td>No <code>pr_number</code> (always the case on Local, see <a class="src" href="https://github.com/OpenHands/OpenHands/blob/e4765e2c5b31a1d80f3d7b0ba6d46940ced299da/src/api/agent-server-adapter.ts#L428">agent-server-adapter.ts:428</a>)</td><td><code>pulls?state=all&amp;head=owner:branch</code>. A PR whose head is the repo's default branch is skipped: working on <code>main</code> is not evidence of authorship.</td><td><a class="src" href="https://github.com/FazeelUsmani/OpenHands/blob/e698f2e9910482e8a434b4737c41998cdf4232e5/src/api/git-provider-pull-request-status-service.ts#L295">:295</a></td></tr>
+        <tr><td><b>none</b></td><td>Neither</td><td>No request at all.</td><td>—</td></tr>
+      </table>
+      <p>The branch is the workspace's checked-out branch when the local git probe sees the same repository, else the branch picked at start; a detached <code>HEAD</code> is ignored (<a class="src" href="https://github.com/FazeelUsmani/OpenHands/blob/e698f2e9910482e8a434b4737c41998cdf4232e5/src/hooks/use-active-conversation-pull-requests.ts#L20">use-active-conversation-pull-requests.ts:20</a>). The agent usually works on a branch it created, so the start branch alone would miss its PR.</p>
+      <div class="callout note">ⓘ Every PR is confirmed by a provider read. A PR number that GitHub cannot return stays in the list as "unknown" with the reason, rather than being trusted or dropped. Nothing is parsed from agent messages, per the triage criteria.</div>
+    </section>
+
+    <section id="states"><h2><span class="num">4</span>Four states, each read from GitHub</h2>
+      <table>
+        <tr><th>Field</th><th>Source</th><th>Rule</th><th>Code</th></tr>
+        <tr><td>lifecycle</td><td><code>pulls/{n}</code></td><td><code>merged_at</code> → merged; closed → closed (without merging); else draft / open.</td><td><a class="src" href="https://github.com/FazeelUsmani/OpenHands/blob/e698f2e9910482e8a434b4737c41998cdf4232e5/src/api/git-provider-pull-request-status-service.ts#L182">:182</a></td></tr>
+        <tr><td>checks</td><td>check-runs + commit statuses for the head SHA</td><td>Any failure → failing (certain). Else any unreadable or <b>unfetched</b> result → unknown. Else any running → pending. Else passing, or none if there are no checks at all.</td><td><a class="src" href="https://github.com/FazeelUsmani/OpenHands/blob/e698f2e9910482e8a434b4737c41998cdf4232e5/src/api/git-provider-pull-request-status-service.ts#L155">:155</a></td></tr>
+        <tr><td>review</td><td><code>pulls/{n}/reviews</code></td><td>Each reviewer's latest approve / request-changes decision; dismissals clear it, comments don't count. Any changes-requested wins.</td><td><a class="src" href="https://github.com/FazeelUsmani/OpenHands/blob/e698f2e9910482e8a434b4737c41998cdf4232e5/src/api/git-provider-pull-request-status-service.ts#L166">:166</a></td></tr>
+        <tr><td>conflicts</td><td><code>mergeable</code>, <code>mergeable_state</code></td><td>Only for open PRs; <code>null</code> (GitHub still computing) → unknown; merged / closed → not applicable and not rendered.</td><td><a class="src" href="https://github.com/FazeelUsmani/OpenHands/blob/e698f2e9910482e8a434b4737c41998cdf4232e5/src/api/git-provider-pull-request-status-service.ts#L188">:188</a></td></tr>
+      </table>
+      <div class="callout">★ "Passing" is never inferred from a partial read. If GitHub reports more check runs than one page holds and none of the fetched ones failed, the answer is "unknown", because an unfetched run could still fail.</div>
+    </section>
+
+    <section id="unknown"><h2><span class="num">5</span>Unknown is always shown, never hidden</h2>
+      <table>
+        <tr><th>Situation</th><th>Overview row</th><th>Drawer</th><th>List badge</th></tr>
+        <tr><td>No associated PR</td><td><code>-</code></td><td>"No pull requests for this conversation"</td><td>no badge, no request</td></tr>
+        <tr><td>Branch lookup failed (401 / 403 / 404 / rate limit)</td><td><code>?</code> + screen-reader text "Pull request status unknown"</td><td>the specific reason</td><td>"PR status unknown" + reason in tooltip</td></tr>
+        <tr><td>One PR unreadable</td><td>counted</td><td>row kept, reason instead of chips</td><td>"PR status unknown" if none readable</td></tr>
+        <tr><td>Provider not GitHub</td><td><code>?</code></td><td>"isn't available for {provider} yet"</td><td>"PR status unknown"</td></tr>
+        <tr><td>More than 10 PRs</td><td>full count</td><td>"N more not shown"</td><td>"N PRs", tooltip notes the rest</td></tr>
+      </table>
+      <p>Access problems are classified in <a class="src" href="https://github.com/FazeelUsmani/OpenHands/blob/e698f2e9910482e8a434b4737c41998cdf4232e5/src/api/git-provider-pull-request-status-service.ts#L197">accessProblemOf</a>: rate-limited (403/429 with <code>x-ratelimit-remaining: 0</code>), auth failed (401), forbidden (403), not found or not visible (404, which is how GitHub answers for private repos the token can't see), or error.</p>
+      <p>The list badge stays separate from the run-status dot, so a finished conversation with an open PR whose checks fail shows both. Failing and pending checks get their own icon beside the lifecycle text, so the state never depends on colour alone (<a class="src" href="https://github.com/FazeelUsmani/OpenHands/blob/e698f2e9910482e8a434b4737c41998cdf4232e5/src/components/features/conversation-panel/conversation-card/conversation-pull-request-indicator.tsx#L95">:95</a>).</p>
+    </section>
+
+    <section id="files"><h2><span class="num">6</span>Per-file changes</h2>
+      <div class="card"><h3><span class="tag">🟢 added</span>git-provider-pull-request-status-service.ts — the only place PR state is derived</h3>
+        <p class="sum">Association, per-PR fan-out (detail first, then checks, statuses and reviews in parallel with <code>Promise.allSettled</code>, so one failing sub-request degrades only its own field), and the rules in §4.</p></div>
+      <div class="card"><h3><span class="tag">🟢 added</span>use-conversation-pull-requests.ts · use-active-conversation-pull-requests.ts — one query, two entry points</h3>
+        <p class="sum">The query key sorts PR numbers so cache entries are order-independent (<a class="src" href="https://github.com/FazeelUsmani/OpenHands/blob/e698f2e9910482e8a434b4737c41998cdf4232e5/src/hooks/query/query-keys.ts">query-keys.ts</a>). 60 s stale time, toast disabled, as the existing git-item queries do. The active-conversation hook adds the branch choice from §3.</p></div>
+      <div class="card"><h3><span class="tag">✏️ changed</span>conversation-overview-git-section.tsx — count is the conversation's, and unknown is not zero</h3>
+        <div class="ba">
+<pre><code><span class="com">// before :84</span>
+<span class="kw">const</span> pullRequestsCount =
+  pullRequestsQuery.data?.length ?? <span class="kw">null</span>;
+<span class="com">// null rendered as "-" (zero)</span></code></pre>
+<pre><code><span class="com">// after :86</span>
+<span class="kw">const</span> pullRequestsCount =
+  result?.status === <span class="str">"ok"</span>
+    ? result.pullRequests.length + result.omittedCount
+    : <span class="kw">null</span>;
+<span class="com">// null rendered as "?" + sr-only label</span></code></pre></div>
+        <p class="sum">Still honours the <code>pull_requests</code> pin: the hook is disabled when the part is unpinned.</p></div>
+      <div class="card"><h3><span class="tag">🟢 added</span><span class="tag">✏️ changed</span>overview drawer — per-PR rows</h3>
+        <p class="sum"><code>ConversationOverviewGitItemsPanel</code> hands the pull-requests kind to the new panel (<a class="src" href="https://github.com/FazeelUsmani/OpenHands/blob/e698f2e9910482e8a434b4737c41998cdf4232e5/src/components/features/conversation/conversation-overview-git-items-panel.tsx#L93">:93</a>); the issues kind is unchanged. Each row: number, title, repository, and text chips for lifecycle, checks, review and conflicts, reusing the conversation-card meta-chip class. Labels live in one shared map (<code>pull-request-status-labels.ts</code>) used by the drawer and the badge.</p></div>
+      <div class="card"><h3><span class="tag">🟢 added</span><span class="tag">✏️ changed</span>conversation list — delivery badge</h3>
+        <p class="sum">Rendered by <code>ConversationCardFooter</code> next to the repo chip, so it appears on full cards and in the collapsed sidebar's hover preview. Only tracked PRs are used; rows without <code>pr_number</code> mount the component but its query stays disabled.</p>
+        <table><tr><th>File</th><th>Change</th></tr>
+          <tr><td>conversation-card.tsx, compact-conversation-row.tsx</td><td>new optional <code>prNumbers</code> prop, passed to the footer</td></tr>
+          <tr><td>conversation-panel.tsx</td><td><code>prNumbers={conversation.pr_number}</code> at both row sites</td></tr></table></div>
+      <div class="card"><h3><span class="tag">⚙️ mechanical</span>i18n</h3>
+        <p class="sum">31 new keys, each in all 16 locales; <code>CONVERSATION$OVERVIEW_PULL_REQUESTS_EMPTY</code> removed (no remaining user). <code>check-translation-completeness.cjs</code> passes.</p></div>
+    </section>
+
+    <section id="evidence"><h2><span class="num">7</span>Evidence</h2>
+      <h3>Real backend, before and after</h3>
+      <p>Setup: <code>npm run dev</code> (Agent Server 1.58.1 via uvx, automation, ingress), one local conversation created through the Agent Server API on a workspace cloned at <code>alona/automation-event-trigger-copy</code>, the head of PR #19029. No LLM: nothing here depends on model output, so no message was sent. GitHub calls were real and unauthenticated (public repo). Same server, conversation and workspace for both runs; only the frontend differs.</p>
+      <table>
+        <tr><th></th><th>main</th><th>this branch</th></tr>
+        <tr><td>Overview row</td><td>Pull Requests <b>30</b></td><td>Pull Requests <b>1</b></td></tr>
+        <tr><td>Drawer</td><td>30 newest open PRs in the repo, no state</td><td>#19029: Open · Checks failing · Approved · No conflicts, with the "found by branch" note</td></tr>
+        <tr><td>Screenshots</td><td><code>main-real-backend-*.png</code></td><td><code>fix-real-backend-*.png</code></td></tr>
+      </table>
+      <p>Cross-check with <code>gh pr view 19029</code> at capture time: OPEN, reviewDecision APPROVED, MERGEABLE, failing "Validate PR description" checks.</p>
+      <div class="callout warn">⚠ The list badge needs <code>pr_number</code>, which only Cloud sends, so it was captured against a <b>mocked Cloud backend and mocked GitHub responses</b> (<code>fix-mocked-cloud-list-badges.png</code>). That image is regression coverage, not live evidence.</div>
+      <h3>Tests</h3>
+      <table>
+        <tr><th>Suite</th><th>Covers</th></tr>
+        <tr><td>git-provider-pull-request-status-service.test.ts (10)</td><td>separate states, latest review per reviewer, merged vs closed, partial check pages, unreadable PRs kept with reason, cap + de-dup, branch fallback with default-branch skip, no-request cases, unsupported provider, unavailable branch lookup</td></tr>
+        <tr><td>conversation-overview-panel / drawer-content tests (+8)</td><td>count is the conversation's, "?" when unknown, per-PR chips, unreadable rows, branch note and omitted count, explicit empty / unsupported / unavailable states</td></tr>
+        <tr><td>conversation-pull-request-indicator.test.tsx (6), conversation-card.test.tsx (+1)</td><td>no badge and no request without PRs, single / multi summary, failing marker, unknown states, separate from the run-status dot</td></tr>
+        <tr><td>hook tests (5)</td><td>query wiring, idle without repo, checked-out branch preference</td></tr>
+      </table>
+      <p>Each behaviour was mutation-checked: deliberately breaking it made a test fail (one case, conflicts on a merged PR, is caught by <code>tsc</code> because the label map has no <code>not_applicable</code> entry). <code>npm run lint</code>, <code>npm run build</code>, <code>npm run build:lib</code> pass.</p>
+    </section>
+
+    <section id="risk"><h2><span class="num">8</span>Risks and follow-ups</h2>
+      <ol>
+        <li><b>GitHub rate limit.</b> Four requests per PR, at most 10 PRs per conversation, cached 60 s and shared between the overview, drawer and badge. Unauthenticated GitHub allows 60 requests an hour; a rate-limited answer is shown as such, not as "no PRs". Local backends use a <code>GITHUB_TOKEN</code> secret when one exists, as the issue list already did.</li>
+        <li><b>Local rows get no list badge.</b> The local adapter always sends an empty <code>pr_number</code>; recording PRs for local conversations would be an Agent Server change, out of scope here.</li>
+        <li><b>Not shown yet:</b> "pushed without a PR" and "uncommitted changes" as row states. They can't be told apart reliably from list data; proposed as a follow-up rather than guessed.</li>
+        <li><b>GitLab, Forgejo, Bitbucket:</b> explicit "unsupported" until their status APIs are added; the service's result type already allows it per provider.</li>
+        <li><b>Narrow rows:</b> the badge takes space from the repo and branch chips, which then truncate. Moving it to its own line, like the model chip, is an easy change if reviewers prefer it.</li>
+        <li><b>Automation runs:</b> out of scope per the triage section; <code>AutomationRun</code> carries no run → PR link.</li>
+      </ol>
+    </section>
+  </main>
+</div></body></html>

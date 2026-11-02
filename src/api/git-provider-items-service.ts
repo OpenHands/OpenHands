@@ -3,7 +3,7 @@ import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
 import { SecretsService } from "#/api/secrets-service";
 import { getActiveBackend } from "#/api/backend-registry/active-store";
 import type { Provider } from "#/types/settings";
-import { constructPullRequestUrl, getGitProviderBaseUrl } from "#/utils/utils";
+import { getGitProviderBaseUrl } from "#/utils/utils";
 
 export interface GitProviderItem {
   id: number;
@@ -23,7 +23,7 @@ const PROVIDER_TOKEN_SECRET_CANDIDATES: Partial<Record<Provider, string[]>> = {
 
 const LIST_LIMIT = 30;
 
-async function resolveProviderToken(
+export async function resolveProviderToken(
   provider: Provider,
 ): Promise<string | null> {
   // Cloud backends keep provider tokens server-side; browser-side secret
@@ -108,7 +108,19 @@ function constructPullRequestsListUrl(
   }
 }
 
-async function fetchGithubJson<T>(
+/** A provider REST call that answered with a non-2xx status. */
+export class GitProviderRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly rateLimited: boolean,
+  ) {
+    super(message);
+    this.name = "GitProviderRequestError";
+  }
+}
+
+export async function fetchGithubJson<T>(
   path: string,
   token: string | null,
 ): Promise<T> {
@@ -122,7 +134,17 @@ async function fetchGithubJson<T>(
 
   const response = await fetch(`https://api.github.com${path}`, { headers });
   if (!response.ok) {
-    throw new Error(`GitHub API ${response.status}`);
+    // GitHub signals an exhausted quota with 403 (or 429) and a zero
+    // remaining count; a plain 403 means the token lacks access.
+    const rateLimited =
+      response.status === 429 ||
+      (response.status === 403 &&
+        response.headers.get("x-ratelimit-remaining") === "0");
+    throw new GitProviderRequestError(
+      `GitHub API ${response.status}`,
+      response.status,
+      rateLimited,
+    );
   }
   return response.json() as Promise<T>;
 }
@@ -188,15 +210,6 @@ type GithubIssueOrPr = {
   pull_request?: unknown;
 };
 
-type GitlabMergeRequest = {
-  id: number;
-  iid: number;
-  title: string;
-  web_url: string;
-  author?: { username?: string } | null;
-  updated_at?: string | null;
-};
-
 type GitlabIssue = {
   id: number;
   iid: number;
@@ -207,8 +220,8 @@ type GitlabIssue = {
 };
 
 /**
- * Lists open pull requests / merge requests and issues for a connected
- * repository by calling the provider's public REST API from the browser.
+ * Lists open issues for a connected repository by calling the provider's
+ * public REST API from the browser.
  * When a matching token secret exists locally (e.g. `GITHUB_TOKEN`), it is
  * used for auth so private repos work; otherwise public-repo unauthenticated
  * requests are attempted.
@@ -217,75 +230,6 @@ export class GitProviderItemsService {
   static constructIssuesListUrl = constructIssuesListUrl;
 
   static constructPullRequestsListUrl = constructPullRequestsListUrl;
-
-  static async listPullRequests(
-    repository: string,
-    provider: Provider,
-  ): Promise<GitProviderItem[]> {
-    const token = await resolveProviderToken(provider);
-
-    if (provider === "gitlab") {
-      const encoded = encodeURIComponent(repository);
-      const items = await fetchGitlabJson<GitlabMergeRequest[]>(
-        `/projects/${encoded}/merge_requests?state=opened&per_page=${LIST_LIMIT}`,
-        token,
-      );
-      return items.map((item) => ({
-        id: item.id,
-        number: item.iid,
-        title: item.title,
-        url: item.web_url,
-        authorLogin: item.author?.username ?? null,
-        updatedAt: item.updated_at ?? null,
-      }));
-    }
-
-    if (provider === "forgejo") {
-      const [forgejoOwner, forgejoRepo] = repository.split("/");
-      if (!forgejoOwner || !forgejoRepo) {
-        return [];
-      }
-      const items = await fetchForgejoJson<GithubIssueOrPr[]>(
-        `/repos/${forgejoOwner}/${forgejoRepo}/pulls?state=open&limit=${LIST_LIMIT}`,
-        token,
-      );
-      return items.map((item) => ({
-        id: item.id,
-        number: item.number,
-        title: item.title,
-        url:
-          item.html_url ||
-          constructPullRequestUrl(item.number, provider, repository),
-        authorLogin: item.user?.login ?? null,
-        updatedAt: item.updated_at ?? null,
-      }));
-    }
-
-    if (provider !== "github") {
-      return [];
-    }
-
-    const [owner, repo] = repository.split("/");
-    if (!owner || !repo) {
-      return [];
-    }
-
-    const items = await fetchGithubJson<GithubIssueOrPr[]>(
-      `/repos/${owner}/${repo}/pulls?state=open&per_page=${LIST_LIMIT}`,
-      token,
-    );
-
-    return items.map((item) => ({
-      id: item.id,
-      number: item.number,
-      title: item.title,
-      url:
-        item.html_url ||
-        constructPullRequestUrl(item.number, provider, repository),
-      authorLogin: item.user?.login ?? null,
-      updatedAt: item.updated_at ?? null,
-    }));
-  }
 
   static async listIssues(
     repository: string,

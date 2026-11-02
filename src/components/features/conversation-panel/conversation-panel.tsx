@@ -1126,6 +1126,7 @@ export function ConversationPanel({
             tags={conversation.tags}
             showTags={showTagsMetadata}
             isArchived={isArchived}
+            prNumbers={conversation.pr_number}
           />
         );
       }
@@ -1249,6 +1250,7 @@ export function ConversationPanel({
               tags={conversation.tags}
               showTags={showTagsMetadata}
               isArchived={isArchived}
+              prNumbers={conversation.pr_number}
               isPinned={isPinned}
               onTogglePin={() => handleTogglePin(conversation)}
               alwaysShowPinIcon={isPinned && !options?.inPinnedSection}

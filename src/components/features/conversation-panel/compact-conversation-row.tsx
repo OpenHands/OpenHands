@@ -38,6 +38,8 @@ interface CompactConversationRowProps {
    * explicit value so the chip and dot agree with the full card.
    */
   isArchived?: boolean;
+  /** PRs the conversation tracks (`pr_number`). */
+  prNumbers?: readonly number[] | null;
 }
 
 /**
@@ -65,6 +67,7 @@ export function CompactConversationRow({
   tags = null,
   showTags = false,
   isArchived,
+  prNumbers = null,
 }: CompactConversationRowProps) {
   const { t } = useTranslation("openhands");
   const backendScopedPath = useBackendScopedPath();
@@ -102,6 +105,7 @@ export function CompactConversationRow({
         tags={tags}
         showTags={showTags}
         isArchived={effectiveArchived}
+        prNumbers={prNumbers}
       />
     </div>
   );

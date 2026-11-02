@@ -25,6 +25,7 @@ import type { Backend } from "#/api/backend-registry/types";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { useFreeModelsStore } from "#/stores/free-models-store";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import { GitProviderPullRequestStatusService } from "#/api/git-provider-pull-request-status-service";
 
 // We'll use the actual i18next implementation but override the translation function
 
@@ -713,6 +714,57 @@ describe("ConversationCard", () => {
     );
 
     expect(screen.queryByTestId("ellipsis-button")).not.toBeInTheDocument();
+  });
+
+  it("keeps the PR badge separate from the execution status of a finished conversation", async () => {
+    // Arrange: the conversation is done, but its PR is open with failing checks.
+    vi.spyOn(
+      GitProviderPullRequestStatusService,
+      "getConversationPullRequests",
+    ).mockResolvedValue({
+      status: "ok",
+      source: "tracked",
+      omittedCount: 0,
+      pullRequests: [
+        {
+          repository: "org/selectedRepository",
+          number: 7,
+          title: "Fix login",
+          url: "https://github.com/org/selectedRepository/pull/7",
+          lifecycle: "open",
+          checks: "failing",
+          review: "none",
+          mergeable: "clean",
+          updatedAt: null,
+          unavailableReason: null,
+        },
+      ],
+    });
+
+    // Act
+    renderWithProviders(
+      <ConversationCard
+        title="Conversation 1"
+        selectedRepository={{
+          selected_repository: "org/selectedRepository",
+          selected_branch: "main",
+          git_provider: "github",
+        }}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        executionStatus={ExecutionStatus.FINISHED}
+        prNumbers={[7]}
+      />,
+    );
+
+    // Assert
+    const badge = await screen.findByTestId("conversation-card-pull-requests");
+    expect(badge).toHaveTextContent("CONVERSATION$PR_LIFECYCLE_OPEN");
+    expect(
+      screen.getByTestId("conversation-card-pull-requests-checks-failing"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("conversation-status-check"),
+    ).toBeInTheDocument();
   });
 
   it("renders the status dot in the header when executionStatus is provided", () => {

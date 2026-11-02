@@ -20,6 +20,7 @@ import {
 } from "#/components/shared/agent-brand-icon";
 import { getDisplayConversationTags } from "#/api/agent-server-adapter";
 import { ConversationRepoLink } from "./conversation-repo-link";
+import { ConversationPullRequestIndicator } from "./conversation-pull-request-indicator";
 import { NoRepository } from "./no-repository";
 import { ConversationTagChips } from "./conversation-tag-chips";
 import { CONVERSATION_CARD_META_CHIP_CLASSNAME } from "./conversation-card-meta-chip";
@@ -73,6 +74,8 @@ interface ConversationCardFooterProps {
    * the user why an otherwise ordinary row is visible.
    */
   isArchived?: boolean;
+  /** PRs the conversation tracks (`pr_number`); drives the delivery badge. */
+  prNumbers?: readonly number[] | null;
 }
 
 export function ConversationCardFooter({
@@ -91,6 +94,7 @@ export function ConversationCardFooter({
   tags = null,
   showTags = false,
   isArchived = false,
+  prNumbers = null,
 }: ConversationCardFooterProps) {
   const { t } = useTranslation("openhands");
   const freeModels = useFreeModels();
@@ -158,7 +162,14 @@ export function ConversationCardFooter({
       >
         {showRepositoryMetadata &&
           (selectedRepository?.selected_repository ? (
-            <ConversationRepoLink selectedRepository={selectedRepository} />
+            <>
+              <ConversationRepoLink selectedRepository={selectedRepository} />
+              <ConversationPullRequestIndicator
+                repository={selectedRepository.selected_repository}
+                provider={selectedRepository.git_provider}
+                prNumbers={prNumbers}
+              />
+            </>
           ) : (
             <NoRepository workspaceWorkingDir={workspaceWorkingDir} />
           ))}
