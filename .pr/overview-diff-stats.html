@@ -1,0 +1,180 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Overview diff stats: quadratic → linear</title>
+<style>
+  :root{
+    --fg:#1a1a1a; --muted:#5a5a5a; --subtle:#8a8a82;
+    --bg:#fdfdfb; --card:#ffffff; --elevated:#f7f6f1;
+    --accent:#2b4eaa; --accent-soft:#e6ecfa;
+    --rule:#e2e2dc; --rule-strong:#bdbcb4;
+    --code-bg:#f3f1ec; --warn:#b25b0e; --ok:#2f7a3a; --crit:#a02020;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box} html,body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans)}
+  body{line-height:1.6;font-size:16px}
+  .wrap{display:grid;grid-template-columns:240px minmax(0,1fr);gap:48px;max-width:1180px;margin:0 auto;padding:32px 28px 96px}
+  nav.toc{position:sticky;top:24px;align-self:start;font-size:13px}
+  nav.toc h2{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+  nav.toc ol{list-style:none;padding:0;margin:0;counter-reset:toc}
+  nav.toc li{counter-increment:toc;margin:4px 0}
+  nav.toc li::before{content:counter(toc) ". ";color:var(--muted)}
+  nav.toc a{color:var(--fg);text-decoration:none} nav.toc a:hover{color:var(--accent)}
+  header.title{border-bottom:1px solid var(--rule);padding-bottom:22px;margin-bottom:28px}
+  header.title .eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700}
+  header.title h1{font-size:34px;margin:6px 0 4px;letter-spacing:-.01em}
+  header.title .sub{color:var(--muted);max-width:740px}
+  h2{font-size:22px;margin:44px 0 10px} h2 .num{color:var(--muted);font-weight:500;margin-right:8px}
+  h3{font-size:16px;margin:22px 0 8px}
+  code{font-family:var(--mono);font-size:.88em;background:var(--code-bg);padding:1px 5px;border-radius:3px}
+  pre{font-family:var(--mono);font-size:13px;background:var(--code-bg);padding:14px 16px;border-radius:6px;overflow-x:auto;border:1px solid var(--rule)}
+  pre code{background:transparent;padding:0}
+  .kw{color:#7048a8}.str{color:var(--ok)}.com{color:var(--subtle);font-style:italic}
+  table{border-collapse:collapse;width:100%;font-size:14px;margin:12px 0}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--rule);vertical-align:top}
+  th{font-weight:600;background:var(--code-bg)}
+  .callout{border-left:3px solid var(--accent);background:var(--accent-soft);padding:10px 14px;margin:14px 0;border-radius:0 4px 4px 0;font-size:14.5px}
+  .callout.warn{border-color:var(--warn);background:#fbf1e6} .callout.note{border-color:var(--muted);background:#f3f1ec}
+  .fig{margin:18px 0 22px}
+  .fig svg{display:block;max-width:100%;height:auto;background:#fff;border:1px solid var(--rule);border-radius:6px}
+  .fig figcaption{font-size:13px;color:var(--muted);margin-top:6px;text-align:center}
+  a.src{font-family:var(--mono);font-size:12px;color:var(--accent);text-decoration:none;border-bottom:1px dotted var(--accent)}
+  details{border:1px solid var(--rule);border-radius:6px;margin:12px 0}
+  details>summary{cursor:pointer;padding:8px 12px;color:var(--muted);font-size:13px;list-style:none}
+  details>summary::-webkit-details-marker{display:none}
+  details>summary::before{content:"▸ "} details[open]>summary::before{content:"▾ "}
+  .ba{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+  .ok{color:var(--ok);font-weight:600}.bad{color:var(--crit);font-weight:600}
+  @media(max-width:760px){.wrap{grid-template-columns:1fr}.ba{grid-template-columns:1fr}}
+</style></head><body>
+<div class="wrap">
+  <nav class="toc"><h2>Contents</h2><ol>
+    <li><a href="#sec1">The bug in one picture</a></li>
+    <li><a href="#sec2">Code before / after</a></li>
+    <li><a href="#sec3">Why the counts stay identical</a></li>
+    <li><a href="#sec4">Measured result</a></li>
+    <li><a href="#sec5">Verification</a></li>
+  </ol></nav>
+  <main>
+    <header class="title"><div class="eyebrow">Bug fix · perf</div>
+      <h1>Conversation overview diff stats: quadratic → linear</h1>
+      <p class="sub">The conversation overview computes per-file line counts by
+      walking the original and modified text. The walk asked "does this modified
+      line still appear later in the original?" with
+      <code>originalLines.slice(originalIndex).includes(line)</code> — which copies
+      the suffix array and scans it on every step. On a 20 921-line file that is
+      ~0.9&nbsp;s of blocking work per file; on the reported lockfile-sized diffs it
+      froze the UI. This PR replaces the suffix scan with a decrementing multiset of
+      the lines the walker has not consumed, making membership O(1) while returning
+      byte-identical counts.</p></header>
+
+    <section id="sec1"><h2><span class="num">1</span>The bug in one picture</h2>
+      <div class="fig">
+        <svg viewBox="0 0 900 260" role="img" aria-label="Left: per-step suffix scan. Right: O(1) multiset lookup.">
+          <rect x="0" y="0" width="900" height="260" fill="#fff"/>
+          <text x="24" y="30" font-family="monospace" font-size="14" fill="#a02020" font-weight="700">BEFORE — per step: slice + linear includes()</text>
+          <g font-family="monospace" font-size="12" fill="#1a1a1a">
+            <rect x="24" y="48" width="250" height="26" fill="#f3f1ec" stroke="#bdbcb4"/>
+            <text x="34" y="66">originalLines</text>
+            <rect x="24" y="86" width="60" height="24" fill="#f7f6f1" stroke="#bdbcb4"/>
+            <rect x="84" y="86" width="60" height="24" fill="#f7f6f1" stroke="#bdbcb4"/>
+            <rect x="144" y="86" width="60" height="24" fill="#e6ecfa" stroke="#2b4eaa"/>
+            <rect x="204" y="86" width="70" height="24" fill="#f7f6f1" stroke="#bdbcb4"/>
+            <text x="34" y="102">a</text><text x="94" y="102">b</text><text x="154" y="102">c</text><text x="214" y="102">…</text>
+            <text x="24" y="140" fill="#5a5a5a">↑ slice(originalIndex) copies the whole suffix, then scans it — O(n) each step ⇒ O(n²) total</text>
+          </g>
+          <line x1="450" y1="20" x2="450" y2="240" stroke="#e2e2dc"/>
+          <text x="490" y="30" font-family="monospace" font-size="14" fill="#2f7a3a" font-weight="700">AFTER — per step: Map lookup</text>
+          <g font-family="monospace" font-size="12" fill="#1a1a1a">
+            <rect x="490" y="48" width="250" height="26" fill="#f3f1ec" stroke="#bdbcb4"/>
+            <text x="500" y="66">remaining: Map&lt;line, count&gt;</text>
+            <rect x="490" y="86" width="250" height="60" fill="#fff" stroke="#2f7a3a"/>
+            <text x="500" y="106">"a" → 1     "b" → 1</text>
+            <text x="500" y="126">"c" → 1     …</text>
+            <text x="500" y="170" fill="#5a5a5a">remaining.get(line) — O(1), no allocation, counts equal the unconsumed suffix</text>
+          </g>
+        </svg>
+        <figcaption>The membership test is the only thing that changed; the walk order is untouched.</figcaption>
+      </div>
+      <p>Reached from the overview panel through
+      <code>useConversationOverviewGitDiffStats</code> →
+      <code>countGitChangeDiffStats()</code> →
+      <code>countTextDiffStats()</code>, once per changed file.
+      <a class="src" href="https://github.com/OpenHands/OpenHands/blob/172d7f180096cfe06f1a875d2fcbbcb1fae2b6bb/src/utils/git-diff-stats.ts#L42-L58">src/utils/git-diff-stats.ts:42</a></p>
+    </section>
+
+    <section id="sec2"><h2><span class="num">2</span>Code before / after</h2>
+      <div class="ba">
+        <div>
+          <h3 class="bad">before (main)</h3>
+          <pre><code><span class="com">// membership = copy the suffix + scan</span>
+<span class="kw">if</span> (
+  modifiedIndex &lt; modifiedLines.length &amp;&amp;
+  (originalIndex &gt;= originalLines.length ||
+    !originalLines.slice(originalIndex).includes(modifiedLine))
+) {
+  additions += 1;
+  modifiedIndex += 1;
+  <span class="kw">continue</span>;
+}</code></pre>
+        </div>
+        <div>
+          <h3 class="ok">after (this PR)</h3>
+          <pre><code><span class="com">// counts of lines not consumed yet</span>
+<span class="kw">const</span> remaining = <span class="kw">new</span> Map&lt;string, number&gt;();
+<span class="kw">for</span> (<span class="kw">const</span> line <span class="kw">of</span> originalLines) {
+  remaining.set(line, (remaining.get(line) ?? 0) + 1);
+}
+<span class="kw">const</span> hasRemaining = (line: string) =&gt;
+  (remaining.get(line) ?? 0) &gt; 0;</code></pre>
+        </div>
+      </div>
+      <p>The two branches that consume an original line now decrement the map:</p>
+      <pre><code><span class="com">// equal-line branch and deletion branch both call:</span>
+consumeOriginal(originalLine);</code></pre>
+      <p><a class="src" href="https://github.com/OpenHands/OpenHands/blob/ea7678a0d8ef2faacf12bdeb176056f3b9f4895a/src/utils/git-diff-stats.ts#L60-L120">src/utils/git-diff-stats.ts (head)</a></p>
+    </section>
+
+    <section id="sec3"><h2><span class="num">3</span>Why the counts stay identical</h2>
+      <p>The old test was <code>originalLines.slice(originalIndex).includes(x)</code>.
+      That is exactly <code>count of x in originalLines[originalIndex:] &gt; 0</code>.
+      The map is seeded with the full multiset and decremented on every step that
+      advances <code>originalIndex</code>, so at the top of each iteration it holds
+      exactly the multiset of <code>originalLines[originalIndex:]</code>. The two
+      membership tests are therefore equivalent for every input, and the walk visits
+      the same branches in the same order.</p>
+      <div class="callout"><strong>No output change.</strong> Duplicate lines are the
+      only place a naive "seen before" set would diverge; a counting multiset matches
+      the suffix scan even when the same line appears many times.</div>
+    </section>
+
+    <section id="sec4"><h2><span class="num">4</span>Measured result</h2>
+      <p>Both revisions of the shipped module were loaded in the running dev stack and
+      timed on the real conversation diff (20 921 lines, +10 461 / −10 461), 5 runs
+      each after warm-up:</p>
+      <table>
+        <tr><th>Input</th><th>before (main)</th><th>after (this PR)</th><th>speedup</th></tr>
+        <tr><td>209 lines changed (1%)</td><td>11.7 ms</td><td>6.0 ms</td><td>1.9×</td></tr>
+        <tr><td>1 046 lines changed (5%)</td><td>38.8 ms</td><td>6.1 ms</td><td>6.4×</td></tr>
+        <tr><td>4 184 lines changed (20%)</td><td>347 ms</td><td>7.2 ms</td><td>48×</td></tr>
+        <tr><td>10 461 lines changed (50%)</td><td>460 ms</td><td>7.7 ms</td><td>60×</td></tr>
+        <tr><td>real diff, full file</td><td>869 ms</td><td>2.3 ms</td><td>378×</td></tr>
+      </table>
+      <p>On the live UI, opening the overview blocked the main thread for up to
+      <strong>1 770 ms</strong> before the fix (largest gap between animation frames)
+      and <strong>64 ms</strong> after; stats became visible in 2 265 ms vs 247 ms.</p>
+    </section>
+
+    <section id="sec5"><h2><span class="num">5</span>Verification</h2>
+      <ul>
+        <li>Behavioral oracle: the pre-optimization algorithm is kept verbatim in the
+        test file and asserted equal on randomized inputs and on 200 heavily-duplicated
+        cases. <a class="src" href="https://github.com/OpenHands/OpenHands/blob/ea7678a0d8ef2faacf12bdeb176056f3b9f4895a/__tests__/utils/git-diff-stats.test.ts#L65-L165">__tests__/utils/git-diff-stats.test.ts</a></li>
+        <li>Regression test asserts a 20 000-line / 50% diff stays under 400 ms and
+        returns the exact counts.</li>
+        <li><code>npx vitest run __tests__/utils/git-diff-stats.test.ts</code> → 6 passed.</li>
+        <li>Before/after screen recordings of the live overview are attached in the PR.</li>
+      </ul>
+    </section>
+  </main>
+</div></body></html>
