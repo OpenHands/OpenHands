@@ -338,9 +338,9 @@ test.describe("mock-LLM agent-server conversation", () => {
       ).toBe(true);
     });
 
-    // ── Verify: bash tool was executed (via bash events API) ──
+    // ── Verify: the agent's terminal call ran (via conversation events API) ──
 
-    await test.step("verify bash tool execution via bash events API", async () => {
+    await test.step("verify terminal tool execution via conversation events API", async () => {
       await waitForSuccessfulBashObservation(request, conversationId);
     });
 
