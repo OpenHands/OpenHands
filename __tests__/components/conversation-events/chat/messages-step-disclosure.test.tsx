@@ -6,6 +6,7 @@ import { AgentState } from "#/types/agent-state";
 import {
   ACPToolCallEvent,
   ActionEvent,
+  HookExecutionEvent,
   ObservationEvent,
   OpenHandsEvent,
   SecurityRisk,
@@ -361,4 +362,89 @@ it("keeps the command collapsed alongside reasoning, while retaining its descrip
     ),
   );
   expect(document.body.textContent).toContain("output of ls");
+});
+
+const blockedHook = (): HookExecutionEvent => ({
+  id: "blocked-hook",
+  timestamp: new Date().toISOString(),
+  kind: "HookExecutionEvent",
+  source: "hook",
+  hook_event_type: "PreToolUse",
+  hook_command: "check-protected-branch",
+  success: false,
+  blocked: true,
+  exit_code: 2,
+  reason: "Push a branch instead of main",
+  tool_name: "terminal",
+  action_id: "blocked-action",
+  message_id: null,
+  stdout: "",
+  stderr: "",
+  error: null,
+  additional_context: null,
+  hook_input: null,
+});
+
+it("keeps a blocked hook inside a clean group heading and reveals its reason on demand", async () => {
+  const user = userEvent.setup();
+  const a = action("check", "git status");
+  const hook = blockedHook();
+  renderChat([observation(a), hook], [a, observation(a), hook]);
+
+  expect(screen.queryByText("blocked")).not.toBeInTheDocument();
+  await user.click(screen.getByTestId("event-group-toggle"));
+  const group = screen.getByTestId("event-group-content");
+  expect(within(group).getByText("blocked")).toBeVisible();
+  expect(screen.queryByText(hook.reason!)).not.toBeInTheDocument();
+  await user.click(within(group).getByText(/PreToolUse/));
+  expect(within(group).getByText(hook.reason!)).toBeVisible();
+});
+
+it("keeps an explicitly opened hook visible as a group grows and reopens", async () => {
+  const user = userEvent.setup();
+  const a = action("check", "git status");
+  const hook = blockedHook();
+  const { rerender } = renderChat([a], [a]);
+  await user.click(screen.getByTestId("event-group-toggle"));
+  rerender(
+    <Messages
+      messages={[observation(a), hook]}
+      allEvents={[a, observation(a), hook]}
+    />,
+  );
+  expect(screen.getByTestId("event-group-content")).toHaveTextContent(
+    "output of git status",
+  );
+  await user.click(screen.getByText(/PreToolUse/));
+
+  const next = action("next", "git diff");
+  rerender(
+    <Messages
+      messages={[observation(a), hook, next]}
+      allEvents={[a, observation(a), hook, next]}
+    />,
+  );
+  expect(screen.getByText(hook.reason!)).toBeVisible();
+  await user.click(screen.getByTestId("event-group-toggle"));
+  await user.click(screen.getByTestId("event-group-toggle"));
+  expect(screen.getByText(hook.reason!)).toBeVisible();
+});
+
+it("opens a lone blocked hook directly and preserves it when another tool joins", async () => {
+  const user = userEvent.setup();
+  const hook = blockedHook();
+  const { rerender } = renderChat([hook], [hook]);
+  expect(screen.queryByTestId("event-group-toggle")).not.toBeInTheDocument();
+  await user.click(screen.getByText(/PreToolUse/));
+  expect(screen.getByText(hook.reason!)).toBeVisible();
+
+  const next = action("next", "git diff");
+  rerender(<Messages messages={[hook, next]} allEvents={[hook, next]} />);
+  expect(screen.getByTestId("event-group-toggle")).toHaveAttribute(
+    "aria-expanded",
+    "true",
+  );
+  expect(
+    within(screen.getByTestId("event-group-content")).getByText(hook.reason!),
+  ).toBeVisible();
 });
