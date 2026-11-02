@@ -46,6 +46,14 @@ vi.mock("#/contexts/active-backend-context", () => {
       updateBackend: vi.fn(),
       removeBackend: vi.fn(),
     }),
+    useOptionalActiveBackendContext: () => ({
+      backends: [backend],
+      active,
+      setActive: vi.fn(),
+      addBackend: vi.fn(),
+      updateBackend: vi.fn(),
+      removeBackend: vi.fn(),
+    }),
   };
 });
 
