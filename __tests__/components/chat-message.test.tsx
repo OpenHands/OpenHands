@@ -24,7 +24,7 @@ describe("ChatMessage", () => {
       await user.hover(screen.getByTestId(`${type}-message`));
       expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
       const label = screen.getByRole("button", { name: expected });
-      expect(label).toHaveTextContent("30 min. ago");
+      expect(label).toHaveTextContent("30 minutes ago");
       await user.hover(label);
       expect(await screen.findByRole("tooltip")).toHaveTextContent(expected);
     },
@@ -44,13 +44,13 @@ describe("ChatMessage", () => {
       const message = screen.getByTestId("agent-message");
       fireEvent.mouseEnter(message);
       expect(screen.getByTestId("message-timestamp")).toHaveTextContent(
-        "30 min. ago",
+        "30 minutes ago",
       );
       act(() => {
         vi.advanceTimersByTime(60_000);
       });
       expect(screen.getByTestId("message-timestamp")).toHaveTextContent(
-        "31 min. ago",
+        "31 minutes ago",
       );
       fireEvent.mouseLeave(message);
       act(() => {
@@ -58,7 +58,7 @@ describe("ChatMessage", () => {
       });
       fireEvent.mouseEnter(message);
       expect(screen.getByTestId("message-timestamp")).toHaveTextContent(
-        "1 hr. ago",
+        "1 hour ago",
       );
     } finally {
       vi.useRealTimers();

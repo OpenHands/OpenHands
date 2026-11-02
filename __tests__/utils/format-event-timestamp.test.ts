@@ -27,10 +27,11 @@ describe("formatRelativeEventTimestamp", () => {
   it.each([
     [0, "Just now"],
     [59, "Just now"],
-    [60, "1 min. ago"],
-    [1800, "30 min. ago"],
-    [3600, "1 hr. ago"],
-    [86399, "23 hr. ago"],
+    [60, "1 minute ago"],
+    [1800, "30 minutes ago"],
+    [3600, "1 hour ago"],
+    [18000, "5 hours ago"],
+    [86399, "23 hours ago"],
     [86400, "1 day ago"],
     [604799, "6 days ago"],
     [604800, "Oct 26"],
@@ -53,7 +54,7 @@ describe("formatRelativeEventTimestamp", () => {
         "À l'instant",
         now,
       ),
-    ).toBe("il y a 30\u00a0min");
+    ).toBe("il y a 30 minutes");
     expect(
       formatRelativeEventTimestamp(
         new Date(2025, 9, 22, 12).toISOString(),
@@ -73,7 +74,7 @@ describe("formatRelativeEventTimestamp", () => {
         "Just now",
         utcNow,
       ),
-    ).toBe("30 min. ago");
+    ).toBe("30 minutes ago");
     expect(
       formatRelativeEventTimestamp(
         "2026-11-02T14:00:00+02:00",
@@ -81,7 +82,7 @@ describe("formatRelativeEventTimestamp", () => {
         "Just now",
         utcNow,
       ),
-    ).toBe("30 min. ago");
+    ).toBe("30 minutes ago");
     for (const value of [undefined, "not-a-date"])
       expect(
         formatRelativeEventTimestamp(value, "en", "Just now", now),

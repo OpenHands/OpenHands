@@ -51,6 +51,6 @@ export function formatRelativeEventTimestamp(
     unit === "minute" ? MINUTE_MS : unit === "hour" ? HOUR_MS : DAY_MS;
   return new Intl.RelativeTimeFormat(locale, {
     numeric: "always",
-    style: "short",
+    style: "long",
   }).format(-Math.floor(elapsed / divisor), unit);
 }
