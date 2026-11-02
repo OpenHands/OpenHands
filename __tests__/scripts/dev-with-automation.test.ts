@@ -20,7 +20,7 @@ import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { describe, expect, it, afterEach } from "vitest";
+import { describe, expect, it, afterEach, vi } from "vitest";
 import {
   buildAgentServerAutomationEnv,
   buildAutomationCommand,
@@ -39,6 +39,7 @@ import {
   resolveAutomationKvSecret,
   setServiceLogListener,
   spawnService,
+  superviseService,
   validateLocalAutomationPath,
   DEFAULT_AUTOMATION_REPO,
   DEFAULT_AUTOMATION_PACKAGE,
@@ -1234,6 +1235,70 @@ describe("setServiceLogListener", () => {
     const [code] = await once(proc, "exit");
     expect(code).toBe(0);
   });
+});
+
+describe("superviseService", () => {
+  const exitWith = (code: number) => ["-e", `process.exit(${code})`];
+  const stayUp = ["-e", "setInterval(() => {}, 1_000)"];
+
+  it("restarts a service that exits on its own", async () => {
+    // Arrange: the first run crashes, the replacement stays up.
+    const procs: ReturnType<typeof spawnService>[] = [];
+    const onFailure = vi.fn();
+
+    // Act
+    superviseService(
+      "supervise-restart-test",
+      (hooks: object) => {
+        const args = procs.length === 0 ? exitWith(7) : stayUp;
+        const proc = spawnService(
+          "supervise-restart-test",
+          process.execPath,
+          args,
+          hooks,
+        );
+        procs.push(proc);
+        return proc;
+      },
+      { onFailure, restartDelayMs: 0 },
+    );
+
+    // Assert
+    await vi.waitFor(() => expect(procs).toHaveLength(2));
+    await delay(200);
+    expect(procs).toHaveLength(2);
+    expect(procs[1].exitCode).toBeNull();
+    expect(onFailure).not.toHaveBeenCalled();
+    procs[1].kill();
+  });
+
+  it("stops the stack and reports once the service keeps exiting", async () => {
+    // Arrange
+    let starts = 0;
+    const failure = new Promise<Error>((resolve) => {
+      // Act
+      superviseService(
+        "supervise-give-up-test",
+        (hooks: object) => {
+          starts += 1;
+          return spawnService(
+            "supervise-give-up-test",
+            process.execPath,
+            exitWith(3),
+            hooks,
+          );
+        },
+        { onFailure: resolve, maxRestarts: 2, restartDelayMs: 0 },
+      );
+    });
+
+    // Assert
+    const error = await failure;
+    expect(starts).toBe(3);
+    expect(error.message).toContain(
+      "The supervise-give-up-test exited 3 times (last: 3)",
+    );
+  }, 15_000);
 });
 
 describe("dev-with-automation CLI", () => {
