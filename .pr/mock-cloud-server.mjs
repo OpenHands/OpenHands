@@ -129,7 +129,7 @@ const json = (res, status, body) => {
     "Content-Type": "application/json",
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET,POST,PATCH,DELETE,OPTIONS",
-    "Access-Control-Allow-Headers": "Authorization,Content-Type,X-Org-Id,X-Expose-Secrets,X-Session-API-Key",
+    "Access-Control-Allow-Headers": "Authorization,Content-Type,X-Org-Id,X-Expose-Secrets,X-Session-API-Key,X-OpenHands-Client,X-OpenHands-Client-Version",
   });
   res.end(JSON.stringify(body));
 };

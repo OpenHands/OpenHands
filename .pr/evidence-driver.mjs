@@ -12,7 +12,7 @@
 // server's JSONL log records every settings write and the launch-time kind.
 
 import { chromium } from "@playwright/test";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
 const args = Object.fromEntries(
@@ -24,8 +24,35 @@ const args = Object.fromEntries(
 const LABEL = args.label ?? "run";
 const OUT = args.out ?? join(".pr", "evidence", LABEL);
 const FRONTEND = args.frontend ?? "http://127.0.0.1:18300";
-const CLOUD = args.cloud ?? "http://127.0.0.1:18901";
-const TOKEN = "mock-cloud-key";
+
+// Real-cloud session from `.pr/device-flow-login.mjs`, when present;
+// otherwise fall back to the mock cloud defaults below.
+let CLOUD = "http://127.0.0.1:18901";
+let TOKEN = "mock-cloud-key";
+let ORG_ID = "org-personal-1";
+let BACKEND_ID = "cloud-mock";
+let BACKEND_NAME = "Mock Cloud";
+const SESSION_FILE = join(".pr", "cloud-session.json");
+if (existsSync(SESSION_FILE)) {
+  try {
+    const session = JSON.parse(readFileSync(SESSION_FILE, "utf8"));
+    CLOUD = args.cloud ?? session.host ?? CLOUD;
+    TOKEN = args["cloud-key"] ?? session.apiKey ?? TOKEN;
+    ORG_ID = args["cloud-org"] ?? session.orgId ?? ORG_ID;
+    BACKEND_ID = "cloud-real";
+    BACKEND_NAME = session.name ?? "OpenHands Cloud";
+    console.log(`[${LABEL}] real cloud: ${CLOUD} (org ${ORG_ID})`);
+  } catch {
+    console.warn("[evidence] cloud-session.json unreadable; using mock defaults");
+  }
+} else {
+  CLOUD = args.cloud ?? CLOUD;
+  TOKEN = args["cloud-key"] ?? TOKEN;
+  ORG_ID = args["cloud-org"] ?? ORG_ID;
+}
+// Profile names the onboarding seeded; override per-run if they differ.
+const OPENHANDS_PROFILE = args["profile-openhands"] ?? "default";
+const ACP_PROFILE = args["profile-acp"] ?? "codex";
 
 mkdirSync(OUT, { recursive: true });
 const evidence = { label: LABEL, frontend: FRONTEND, cloud: CLOUD, steps: {} };
@@ -39,7 +66,7 @@ const step = (name, data) => {
 const browser = await chromium.launch();
 const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
 
-// Register the mock cloud backend + select it before any app script runs.
+// Register the cloud backend + select it before any app script runs.
 await context.addInitScript(
   ({ backends, selection }) => {
     window.localStorage.setItem("openhands-onboarded", "true");
@@ -52,30 +79,33 @@ await context.addInitScript(
   {
     backends: [
       {
-        id: "cloud-mock",
-        name: "Mock Cloud",
+        id: BACKEND_ID,
+        name: BACKEND_NAME,
         host: CLOUD,
         apiKey: TOKEN,
         kind: "cloud",
         connectionRevision: 1,
       },
     ],
-    selection: { backendId: "cloud-mock", orgId: "org-personal-1" },
+    selection: { backendId: BACKEND_ID, orgId: ORG_ID },
   },
 );
 
 const page = await context.newPage();
 const readSettingsKind = async () =>
-  page.evaluate(async (cloud) => {
-    const res = await fetch(`${cloud}/api/v1/settings`, {
-      headers: { Authorization: "Bearer mock-cloud-key" },
-    });
-    const body = await res.json();
-    return {
-      agent_kind: body?.agent_settings?.agent_kind ?? null,
-      acp_server: body?.agent_settings?.acp_server ?? null,
-    };
-  }, CLOUD);
+  page.evaluate(
+    async ({ cloud, token }) => {
+      const res = await fetch(`${cloud}/api/v1/settings`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const body = await res.json();
+      return {
+        agent_kind: body?.agent_settings?.agent_kind ?? null,
+        acp_server: body?.agent_settings?.acp_server ?? null,
+      };
+    },
+    { cloud: CLOUD, token: TOKEN },
+  );
 
 // Show a fetched JSON blob on the page so the screenshot carries the state.
 const showJson = async (title, value) => {
@@ -110,8 +140,10 @@ await page.getByTestId("agent-profile-row").first().waitFor({ timeout: 30000 });
 await page.waitForTimeout(1200);
 await shot(page, "agents-1-before");
 
-// 3. Activate the OpenHands profile "default" — the sync trigger under test.
-const defaultRow = page.locator("[data-testid=agent-profile-row]", { hasText: "default" }).first();
+// 3. Activate the OpenHands profile — the sync trigger under test.
+const defaultRow = page
+  .locator("[data-testid=agent-profile-row]", { hasText: OPENHANDS_PROFILE })
+  .first();
 await defaultRow.hover();
 await defaultRow.getByTestId("agent-profile-menu-trigger").click({ timeout: 15000 });
 await page.getByTestId("agent-profile-actions-menu").waitFor({ timeout: 10000 });
@@ -143,10 +175,16 @@ await shot(page, "home-2-no-active-profile");
 step("home-after-delete", await homePill(page));
 
 // 6. Launch a conversation — the server composes from the recorded kind.
-await page.getByTestId("chat-input").fill("Reply with exactly: QA_18883. Do not run any tools.");
-await page.getByTestId("submit-button").click().catch(() => {});
-await page.keyboard.press("Enter");
-await page.waitForURL(/\/conversations\//, { timeout: 30000 }).catch(() => {});
+// The composer is a contentEditable div, so `fill` never fires its onInput;
+// type real key events instead and let Playwright wait for the send button to
+// enable before clicking it (no swallowed .catch — a failed launch must fail
+// the run, not silently pass).
+const chatInput = page.getByTestId("chat-input");
+await chatInput.click();
+await page.keyboard.type("Reply with exactly: QA_18883. Do not run any tools.");
+await page.waitForTimeout(500);
+await page.getByTestId("submit-button").click({ timeout: 15000 });
+await page.waitForURL(/\/conversations\//, { timeout: 30000 });
 await page.waitForTimeout(3000);
 await shot(page, "home-3-after-launch");
 step("launched-url", { url: page.url() });
