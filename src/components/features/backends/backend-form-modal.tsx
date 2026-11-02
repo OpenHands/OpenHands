@@ -1059,8 +1059,10 @@ function CloudLoginColumn({
                   `inert` keeps the collapsed field out of the tab order. */}
               <div
                 className={cn(
-                  "grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none",
-                  advancedOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+                  "grid backend-chooser-disclosure duration-200 ease-out motion-reduce:transition-none",
+                  advancedOpen
+                    ? "backend-chooser-disclosure-open"
+                    : "backend-chooser-disclosure-closed",
                 )}
               >
                 <div className="overflow-hidden">
@@ -1291,8 +1293,10 @@ function AgentServerGuidance({ location }: { location: AgentServerLocation }) {
           required so `1fr` measures the content while `0fr` fully collapses. */}
       <div
         className={cn(
-          "grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none",
-          isExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+          "grid backend-chooser-disclosure duration-200 ease-out motion-reduce:transition-none",
+          isExpanded
+            ? "backend-chooser-disclosure-open"
+            : "backend-chooser-disclosure-closed",
         )}
       >
         <div className="overflow-hidden">
@@ -1408,11 +1412,11 @@ function AddBackendChooser({
       <div
         data-testid="add-backend-cloud-panel"
         className={cn(
-          "relative isolate flex min-h-[13.5rem] w-full items-center justify-center rounded-xl border border-border px-5 py-6",
+          "relative isolate flex backend-chooser-cloud-panel w-full items-center justify-center rounded-xl border border-border px-5 py-6",
           // A soft greyscale halo sits behind the CTA; -z-10 keeps it under the
           // content rather than washing over it.
           "before:pointer-events-none before:absolute before:inset-0 before:-z-10 before:rounded-xl",
-          "before:bg-[radial-gradient(75%_75%_at_50%_50%,rgba(255,255,255,0.1)_0%,rgba(255,255,255,0)_70%)]",
+          "before:backend-chooser-cloud-halo",
         )}
       >
         <CloudLoginColumn
@@ -1656,7 +1660,7 @@ function AddBackendAddModeBody({
                 >
                   {t(I18nKey.CTA$LEARN_MORE)}
                   <ExternalLinkIcon
-                    className="ml-1 inline size-3.5 align-[-0.125em]"
+                    className="ml-1 inline size-3.5 backend-chooser-learn-more-icon"
                     aria-hidden
                   />
                 </a>
@@ -1738,7 +1742,7 @@ export function BackendFormModal({
             hideCloseButton ? "onboarding-modal" : "add-backend-modal"
           }
           className={cn(
-            "relative max-h-[92vh] w-180 overflow-x-hidden overflow-y-auto rounded-xl border border-border bg-base-secondary p-6",
+            "relative backend-chooser-add-dialog w-180 overflow-x-hidden overflow-y-auto rounded-xl border border-border bg-base-secondary p-6",
             MODAL_MAX_WIDTH_VIEWPORT,
           )}
         >
@@ -1766,7 +1770,7 @@ export function BackendFormModal({
       <div
         data-testid={`${testIdRoot}-modal`}
         className={cn(
-          "relative max-h-[92dvh] bg-base-secondary p-6 rounded-xl flex flex-col gap-4 border border-border",
+          "relative backend-chooser-edit-dialog bg-base-secondary p-6 rounded-xl flex flex-col gap-4 border border-border",
           modalWidthClassName("md"),
           MODAL_MAX_WIDTH_VIEWPORT,
         )}

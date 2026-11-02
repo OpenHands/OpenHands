@@ -244,9 +244,28 @@ describe("ChatInputAgentProfilePicker", () => {
     expect(activateProfileMutate).toHaveBeenCalledWith("id-codex");
   });
 
-  it("stays hidden without an active profile", () => {
+  it("shows a placeholder pill without an active profile", async () => {
     useAgentProfilesMock.mockReturnValue({
       data: { profiles: PROFILES, active_agent_profile_id: null },
+      isLoading: false,
+    });
+    renderWithProviders(<ChatInputAgentProfilePicker />, {
+      navigation: { conversationId: null },
+    });
+
+    const pill = screen.getByTestId("chat-input-agent-profile");
+    expect(pill).toHaveTextContent("CHAT$AGENT_PROFILE_PLACEHOLDER");
+    fireEvent.click(pill);
+    fireEvent.click(
+      await screen.findByTestId("chat-input-agent-profile-option-Codex"),
+    );
+
+    expect(activateProfileMutate).toHaveBeenCalledWith("id-codex");
+  });
+
+  it("stays hidden when the backend has no profiles", () => {
+    useAgentProfilesMock.mockReturnValue({
+      data: { profiles: [], active_agent_profile_id: null },
       isLoading: false,
     });
     renderWithProviders(<ChatInputAgentProfilePicker />, {

@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import EventService from "#/api/event-service/event-service.api";
 import { getActiveBackend } from "#/api/backend-registry/active-store";
 import { useUserConversation } from "#/hooks/query/use-user-conversation";
+import { isRuntimeUnavailableSandboxStatus } from "#/utils/conversation-archive-status";
 import type { OpenHandsEvent } from "#/types/agent-server/core";
 
 /**
@@ -9,6 +10,16 @@ import type { OpenHandsEvent } from "#/types/agent-server/core";
  * subsequent "scroll-up" page. The agent server caps `limit` at 100.
  */
 export const INITIAL_HISTORY_PAGE_SIZE = 50;
+
+export function getConversationHistoryScope(): string {
+  const { backend, orgId } = getActiveBackend();
+  return JSON.stringify([
+    backend.id,
+    backend.host,
+    backend.connectionRevision ?? 0,
+    orgId,
+  ]);
+}
 
 export interface ConversationHistoryPage {
   /** Events in chronological (oldest → newest) order. */
@@ -59,6 +70,12 @@ function resumeCursor(count: number): number {
 export const useConversationHistory = (conversationId?: string) => {
   const { data: conversation } = useUserConversation(conversationId ?? null);
 
+  const scope = getConversationHistoryScope();
+  const runtimeUnavailable =
+    getActiveBackend().backend.kind === "cloud" &&
+    (conversation?.sandbox_status === "PAUSED" ||
+      isRuntimeUnavailableSandboxStatus(conversation?.sandbox_status));
+
   return useQuery<ConversationHistoryPage>({
     queryKey: [
       "conversation-history",
@@ -67,9 +84,11 @@ export const useConversationHistory = (conversationId?: string) => {
       // re-provisioned cloud sandbox with a new URL) re-fetches.
       conversation?.conversation_url ?? null,
       conversation?.session_api_key ?? null,
+      scope,
+      runtimeUnavailable,
     ],
     enabled: !!conversationId && !!conversation,
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       if (!conversationId) {
         return { events: [], hasMore: false, nextPageId: null, afterSeq: null };
       }
@@ -79,7 +98,7 @@ export const useConversationHistory = (conversationId?: string) => {
       // deduped against this page) rather than lost.
       const conversationUrl = conversation?.conversation_url ?? null;
       let count: number | null = null;
-      if (conversationUrl) {
+      if (conversationUrl && !runtimeUnavailable) {
         try {
           count = await EventService.getEventCount(
             conversationId,
@@ -92,6 +111,7 @@ export const useConversationHistory = (conversationId?: string) => {
         }
       }
 
+      signal.throwIfAborted();
       const page = await EventService.searchEvents(
         conversationId,
         conversation?.conversation_url ?? null,
@@ -99,6 +119,8 @@ export const useConversationHistory = (conversationId?: string) => {
         {
           limit: INITIAL_HISTORY_PAGE_SIZE,
           sortOrder: "TIMESTAMP_DESC",
+          strictPagination: true,
+          excludeFullState: true,
         },
       );
 
@@ -142,5 +164,66 @@ export const useConversationHistory = (conversationId?: string) => {
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     retry: 1,
+    // Socket recovery handles a failed preload and reports connection failures.
+    meta: { disableToast: true },
+  });
+};
+
+/** Display-only Cloud history; the runtime cursor still comes from the ordered preload. */
+export const usePersistedConversationHistory = (
+  conversationId?: string,
+  enabled = true,
+) => {
+  const { data: conversation } = useUserConversation(conversationId ?? null);
+  const { backend, orgId } = getActiveBackend();
+
+  return useQuery<ConversationHistoryPage>({
+    queryKey: [
+      "persisted-conversation-history",
+      backend.id,
+      backend.host,
+      backend.connectionRevision ?? 0,
+      orgId,
+      conversationId,
+    ],
+    enabled:
+      enabled &&
+      backend.kind === "cloud" &&
+      !!orgId &&
+      !!conversationId &&
+      !!conversation,
+    queryFn: async () => {
+      const page = await EventService.searchEvents(
+        conversationId!,
+        null,
+        null,
+        {
+          limit: INITIAL_HISTORY_PAGE_SIZE,
+          sortOrder: "TIMESTAMP_DESC",
+          strictPagination: true,
+          excludeFullState: true,
+        },
+      );
+      if (!Array.isArray(page.items)) {
+        throw new Error(
+          "Invalid conversation history response: expected page.items to be an array.",
+        );
+      }
+      return {
+        events: [...page.items].reverse(),
+        hasMore:
+          !!page.next_page_id || page.items.length >= INITIAL_HISTORY_PAGE_SIZE,
+        nextPageId: page.next_page_id ?? null,
+        afterSeq: null,
+      };
+    },
+    staleTime: 0,
+    gcTime: 30 * 60 * 1000,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: 1,
+    // The ordered preload owns failure reporting; do not toast twice.
+    meta: { disableToast: true },
   });
 };

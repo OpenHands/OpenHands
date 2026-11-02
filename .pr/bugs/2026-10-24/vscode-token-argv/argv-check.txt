@@ -1,6 +1,0 @@
-2026-10-24T08:42:23Z
-proc_mount=proc /proc proc rw,relatime 0 0
-key_length=64 key_nonempty=true
-pid=6892 argv0=sh in_container=true connection_token_flag=true connection_token_file_flag=false key_literal_in_argv=true cmdline_mode='444 -r--r--r--' uid=10001 nobody_grep_count_connection_token=1 nobody_key_literal_lines=1
-pid=6896 argv0=node in_container=true connection_token_flag=true connection_token_file_flag=false key_literal_in_argv=true cmdline_mode='444 -r--r--r--' uid=10001 nobody_grep_count_connection_token=1 nobody_key_literal_lines=1
-host_user_nobody=uid=65534(nobody) gid=65534(nogroup) groups=65534(nogroup)

@@ -69,7 +69,7 @@ function stopMenuKeyPropagation(event: ReactKeyboardEvent) {
   if (event.key !== "Escape") event.stopPropagation();
 }
 
-function SetupModelPill({
+export function SetupModelPill({
   value,
   onChange,
 }: {
@@ -621,29 +621,42 @@ export function AutomationSetupPromptStack({
                           <LoadingSpinner size="small" />
                         </div>
                       ) : (
-                        visibleRepositoryNames.map((name) => (
-                          <ContextMenuListItem
-                            key={name}
-                            testId={`automation-setup-repository-option-${name}`}
-                            onClick={(event) => {
-                              event.preventDefault();
-                              event.stopPropagation();
-                              const address = addressFor(name);
-                              if (address && !repositories.includes(address)) {
-                                writeRepositories([...repositories, address]);
-                              }
-                              setIsRepositoryMenuOpen(false);
-                            }}
-                            isDisabled={isRepositoryProviderUnsupported}
-                            className="flex w-full items-center text-wrap"
-                          >
-                            {/* Organization/project/repository names can be
-                                long; wrap them so every option reads in full. */}
-                            <span className="min-w-0 break-all" title={name}>
-                              {name}
-                            </span>
-                          </ContextMenuListItem>
-                        ))
+                        visibleRepositoryNames.map((name) => {
+                          // Organization/project/repository names can be
+                          // long; each option stays on one line and shortens
+                          // the organization/project part first, so the
+                          // repository name stays visible.
+                          const nameStart = Math.max(name.lastIndexOf("/"), 0);
+                          return (
+                            <ContextMenuListItem
+                              key={name}
+                              testId={`automation-setup-repository-option-${name}`}
+                              onClick={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                const address = addressFor(name);
+                                if (
+                                  address &&
+                                  !repositories.includes(address)
+                                ) {
+                                  writeRepositories([...repositories, address]);
+                                }
+                                setIsRepositoryMenuOpen(false);
+                              }}
+                              isDisabled={isRepositoryProviderUnsupported}
+                              className="flex w-full items-center"
+                            >
+                              <span className="flex min-w-0" title={name}>
+                                <span className="min-w-0 truncate">
+                                  {name.slice(0, nameStart)}
+                                </span>
+                                <span className="max-w-full shrink-0 truncate">
+                                  {name.slice(nameStart)}
+                                </span>
+                              </span>
+                            </ContextMenuListItem>
+                          );
+                        })
                       )}
                       {repositorySearchText &&
                       !isRepositoryListLoading &&

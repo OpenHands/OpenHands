@@ -18,6 +18,7 @@ import {
   DASHBOARD_FILTER_IDS,
   DASHBOARD_FILTER_VALUES,
   DASHBOARD_SORT_VALUES,
+  DASHBOARD_TAG_FILTER_ID,
   INTERFACE_ICON_SLUGS,
   INTERFACE_SUB_PAGE_IDS,
   INTERFACE_VERSION,
@@ -70,7 +71,11 @@ const PLAIN_ENDPOINT_NAMES = [
 // pinning an older package - so they are checked only when present, and a
 // bundle entry, which is the only thing that needs them, fails on its own if
 // its manifest predates them.
-const OPTIONAL_PLAIN_ENDPOINT_NAMES = ["createBundle", "uploads"] as const;
+const OPTIONAL_PLAIN_ENDPOINT_NAMES = [
+  "createBundle",
+  "uploads",
+  "tags",
+] as const;
 const ID_ENDPOINT_NAMES = ["detail", "dispatch", "runs", "tarball"] as const;
 
 export interface InterfaceValidationContext {
@@ -329,6 +334,11 @@ function checkTileCopy(
   }
 }
 
+const HOST_FILTER_IDS = [
+  ...DASHBOARD_FILTER_IDS,
+  DASHBOARD_TAG_FILTER_ID,
+] as const;
+
 function checkFilters(check: InterfaceChecker, filters: unknown): void {
   const path = "pages.list.filters";
   if (!Array.isArray(filters) || filters.length === 0) {
@@ -348,11 +358,18 @@ function checkFilter(
   path: string,
 ): void {
   if (!check.record(filter, path)) return;
-  check.closed(filter, ["id", "label", "options"], path);
-
   const { id, label, options } = filter;
+  // The tag filter's values come from the service, so it declares only the
+  // caption of its neutral option.
+  const isTagFilter = id === DASHBOARD_TAG_FILTER_ID;
+  check.closed(
+    filter,
+    isTagFilter ? ["id", "label", "allLabel"] : ["id", "label", "options"],
+    path,
+  );
+
   check.copy(label, `${path}.label`);
-  if (!isOneOf(id, DASHBOARD_FILTER_IDS)) {
+  if (!isOneOf(id, HOST_FILTER_IDS)) {
     check.fail(`${path}.id`, "is not a filter this host implements");
     return;
   }
@@ -360,6 +377,10 @@ function checkFilter(
     check.fail(`${path}.id`, "repeats a filter");
   } else {
     seen.add(id);
+  }
+  if (id === DASHBOARD_TAG_FILTER_ID) {
+    check.copy(filter.allLabel, `${path}.allLabel`);
+    return;
   }
   checkFilterOptions(
     check,

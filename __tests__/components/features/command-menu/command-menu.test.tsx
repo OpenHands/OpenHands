@@ -480,7 +480,7 @@ describe("CommandMenu", () => {
       name: SEARCH_LABEL_KEY,
     });
     expect(reopenedInput).toHaveValue("");
-    expect(screen.getAllByRole("option")).toHaveLength(13);
+    expect(screen.getAllByRole("option")).toHaveLength(14);
     expect(screen.getAllByRole("option")[0]).toHaveAttribute(
       "aria-selected",
       "true",

@@ -220,6 +220,28 @@ export async function updateCloudConversationPublicFlag(
 }
 
 /**
+ * Apply a tag merge patch to a cloud v1 app-conversation:
+ * `PATCH /api/v1/app-conversations/{id}` with `{ tags: patch }`, where a
+ * `null` value deletes the key and unmentioned keys are left untouched.
+ * Server-managed keys (`acpserver`, `archiveworkspacepath`,
+ * `agentprofileid`, `agentprofilerevision`) are rejected by the app-server,
+ * so callers must only send caller-owned keys.
+ */
+export async function updateCloudConversationTags(
+  conversationId: string,
+  patch: Record<string, string | null>,
+): Promise<AppConversation> {
+  const backend = getActiveCloudBackend();
+  const data = await callCloudProxy<AppConversation>({
+    backend,
+    method: "PATCH",
+    path: `/api/v1/app-conversations/${conversationId}`,
+    body: { tags: patch },
+  });
+  return overlayStoredRepoSelection(data) as AppConversation;
+}
+
+/**
  * Rename a cloud v1 app-conversation. The title belongs to the Cloud
  * app-conversation resource, so updating a runtime Agent Server would not
  * persist it in the Cloud conversation list.

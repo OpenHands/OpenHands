@@ -6,6 +6,10 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import AutomationService from "#/api/automation-service/automation-service.api";
+import {
+  getAutomationEndpoint,
+  hasAutomationInterface,
+} from "#/manifests/automation-interface";
 import { useDeploymentCapabilities } from "#/hooks/query/use-manifest-capabilities";
 import { isSdkHttpStatusError } from "#/api/agent-server-compatibility";
 import { useActiveBackend } from "#/contexts/active-backend-context";
@@ -14,6 +18,7 @@ import { uniqueById } from "#/utils/unique-by-id";
 import type {
   AutomationCreatedByFilter,
   AutomationSpec,
+  AutomationTagCount,
   AutomationsResponse,
 } from "#/types/automation";
 import type { AutomationDraftListResponse } from "#/manifests/types";
@@ -24,6 +29,7 @@ import {
 
 export const AUTOMATIONS_QUERY_KEY = ["automations"] as const;
 export const AUTOMATION_DRAFTS_QUERY_KEY = ["automation-drafts"] as const;
+export const AUTOMATION_TAGS_QUERY_KEY = ["automation-tags"] as const;
 
 function getResponseStatus(error: unknown): number | null {
   if (!error || typeof error !== "object") return null;
@@ -33,7 +39,7 @@ function getResponseStatus(error: unknown): number | null {
   return typeof status === "number" ? status : null;
 }
 
-function isDraftEndpointUnavailable(error: unknown): boolean {
+function isEndpointUnavailable(error: unknown): boolean {
   const status = getResponseStatus(error);
   return (
     status === 404 ||
@@ -62,6 +68,7 @@ interface UseAutomationsOptions {
   /** Automations per request; at most 100. A count-only caller passes 1. */
   pageSize?: number;
   createdBy?: AutomationCreatedByFilter;
+  tag?: string;
   enabled?: boolean;
 }
 
@@ -92,7 +99,7 @@ export function useAutomationDrafts(options: UseAutomationDraftsOptions = {}) {
       try {
         return await AutomationService.listServerDrafts({ limit, offset });
       } catch (error) {
-        if (isDraftEndpointUnavailable(error)) {
+        if (isEndpointUnavailable(error)) {
           return { drafts: [], total: 0 };
         }
         throw error;
@@ -113,18 +120,19 @@ export function useAutomations(options: UseAutomationsOptions = {}) {
   const {
     pageSize = AUTOMATIONS_PAGE_SIZE,
     createdBy,
+    tag,
     enabled = true,
   } = options;
   const active = useActiveBackend();
   return useInfiniteQuery({
     queryKey: [
       ...AUTOMATIONS_QUERY_KEY,
-      { pageSize, createdBy },
+      { pageSize, createdBy, tag },
       active.backend.id,
       active.orgId,
     ],
     queryFn: ({ pageParam }) =>
-      AutomationService.getAutomations(pageSize, pageParam, createdBy),
+      AutomationService.getAutomations(pageSize, pageParam, createdBy, tag),
     initialPageParam: 0,
     getNextPageParam: (lastPage, _pages, lastOffset) => {
       const nextOffset = lastOffset + lastPage.automations.length;
@@ -141,6 +149,45 @@ export function useAutomations(options: UseAutomationsOptions = {}) {
         : undefined;
     },
     enabled,
+  });
+}
+
+/**
+ * The org's tags with counts, or null when this deployment has no tags: the
+ * manifest declares no tags endpoint, or the service predates it.
+ */
+export function useAutomationTags({ enabled = true } = {}) {
+  const active = useActiveBackend();
+  // The tags endpoint is optional in the manifest, which omits it before the
+  // service supports tags.
+  const supportsTags =
+    hasAutomationInterface() && getAutomationEndpoint("tags") !== "";
+  return useQuery<AutomationTagCount[] | null>({
+    queryKey: [...AUTOMATION_TAGS_QUERY_KEY, active.backend.id, active.orgId],
+    queryFn: async () => {
+      try {
+        return await AutomationService.listAutomationTags();
+      } catch (error) {
+        if (isEndpointUnavailable(error)) return null;
+        throw error;
+      }
+    },
+    staleTime: 0,
+    enabled: enabled && supportsTags,
+  });
+}
+
+/** Replace an automation's tags; the service lets only its creator do so. */
+export function useUpdateAutomationTags() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, tags }: { id: string; tags: string[] }) =>
+      AutomationService.updateAutomation(id, { tags }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: AUTOMATIONS_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: AUTOMATION_DETAIL_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: AUTOMATION_TAGS_QUERY_KEY });
+    },
   });
 }
 

@@ -68,7 +68,7 @@ export const dropdownFilterTriggerClassName = cn(
  */
 export const dropdownMenuViewportScrollClassName = cn(
   "overflow-y-auto custom-scrollbar",
-  "max-h-[min(60vh,calc(100dvh-5rem))]",
+  "dropdown-menu-viewport-height",
 );
 
 /** Footer action row inside a dropdown panel. */
