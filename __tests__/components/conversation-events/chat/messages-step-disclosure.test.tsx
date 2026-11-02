@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { screen } from "@testing-library/react";
+import { act, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Messages } from "#/components/conversation-events/chat/messages";
 import { AgentState } from "#/types/agent-state";
 import {
+  ACPToolCallEvent,
   ActionEvent,
   ObservationEvent,
   OpenHandsEvent,
@@ -97,8 +98,9 @@ describe("Messages: opened steps and groups survive live updates", () => {
 
     // While the agent works, its stage is a group from the first step.
     await user.click(screen.getByTestId("event-group-toggle"));
-    await user.click(screen.getByRole("button", { name: "BUTTON$EXPAND" }));
-    expect(openSteps()).toHaveLength(1);
+    expect(
+      screen.queryByTestId("generic-event-message-title"),
+    ).not.toBeInTheDocument();
 
     // The running action is replaced by its observation.
     rerender(
@@ -108,7 +110,9 @@ describe("Messages: opened steps and groups survive live updates", () => {
       />,
     );
 
-    expect(openSteps()).toHaveLength(1);
+    expect(
+      screen.queryByTestId("generic-event-message-title"),
+    ).not.toBeInTheDocument();
     // The finished step's output is what the open row now shows.
     expect(document.body.textContent).toContain("output of ls");
   });
@@ -116,12 +120,15 @@ describe("Messages: opened steps and groups survive live updates", () => {
   it("keeps an idle group and its opened step expanded as tools arrive", async () => {
     agent.state = AgentState.AWAITING_USER_INPUT;
     const user = userEvent.setup();
-    const a1 = action("a1", "ls");
+    const a1 = { ...action("a1", "ls"), summary: "Inspecting the workspace" };
     const a2 = action("a2", "pwd");
     const { rerender } = renderChat([observation(a1)], [a1, observation(a1)]);
 
+    expect(screen.getByTestId("event-group-toggle")).toHaveTextContent(
+      "Inspecting the workspace",
+    );
     await user.click(screen.getByTestId("event-group-toggle"));
-    await user.click(screen.getByRole("button", { name: "BUTTON$EXPAND" }));
+    expect(document.body.textContent).toContain("output of ls");
 
     // A second step arrives, so the first one becomes part of a group.
     rerender(
@@ -228,4 +235,130 @@ describe("Messages: live status at the end of the chat", () => {
     expect(screen.getByTestId("event-group-toggle")).toBeInTheDocument();
     expect(screen.queryByTestId("spinner-icon")).not.toBeInTheDocument();
   });
+});
+
+it("preserves a failed ACP command's revealed output outside the group", async () => {
+  const user = userEvent.setup();
+  const event: ACPToolCallEvent = {
+    kind: "ACPToolCallEvent",
+    id: "acp-1",
+    timestamp: new Date().toISOString(),
+    source: "agent",
+    tool_call_id: "acp-call",
+    title: "Check layout",
+    tool_kind: "execute",
+    status: "in_progress",
+    raw_input: { command: "check-layout" },
+    raw_output: "Checking layout",
+    content: null,
+    is_error: false,
+  };
+  const { rerender } = renderChat([event], [event]);
+  await user.click(screen.getByTestId("event-group-toggle"));
+  expect(document.body.textContent).toContain("Checking layout");
+  const failed = {
+    ...event,
+    status: "failed" as const,
+    is_error: true,
+    raw_output: "Layout check failed",
+  };
+  rerender(<Messages messages={[failed]} allEvents={[failed]} />);
+  expect(screen.queryByTestId("event-group-toggle")).not.toBeInTheDocument();
+  expect(document.body.textContent).toContain("Layout check failed");
+});
+
+it("keeps commands collapsed in a pre-opened session until explicitly opened", async () => {
+  const { getActiveBackend } =
+    await import("#/api/backend-registry/active-store");
+  const { sessionActivityKey, useSessionActivityStore } =
+    await import("#/stores/session-activity-store");
+  const { backend, orgId } = getActiveBackend();
+  const key = sessionActivityKey(backend.id, orgId, "test-conversation-id");
+  const store = useSessionActivityStore.getState();
+  store.begin(key, "initialize");
+  store.observe(key, "WAITING_FOR_SANDBOX");
+  store.observe(key, "READY");
+  const session = useSessionActivityStore.getState().entries[key][0];
+  store.complete(key, session.id);
+  store.setOpen(key, session.id, true);
+  const { rerender } = renderChat([], []);
+  const header = screen.getByTestId("event-group-toggle");
+  const a1 = action("first", "ls");
+  const o1 = observation(a1);
+  rerender(<Messages messages={[o1]} allEvents={[a1, o1]} />);
+  expect(document.body.textContent).not.toContain("output of ls");
+  await userEvent.click(
+    within(screen.getByTestId("generic-event-message-title")).getByRole(
+      "button",
+      { name: "BUTTON$EXPAND" },
+    ),
+  );
+  expect(document.body.textContent).toContain("output of ls");
+  const a2 = action("second", "pwd");
+  rerender(<Messages messages={[o1, a2]} allEvents={[a1, o1, a2]} />);
+  expect(screen.getByTestId("event-group-toggle")).toBe(header);
+  expect(document.body.textContent).toContain("output of ls");
+  expect(
+    within(screen.getByTestId("session-activity-details")).getByRole("button"),
+  ).toBeVisible();
+  await userEvent.click(header);
+  expect(document.body.textContent).not.toContain("output of ls");
+  await userEvent.click(header);
+  expect(document.body.textContent).toContain("output of ls");
+  act(() => useSessionActivityStore.setState({ entries: {} }));
+});
+
+it("keeps a single tool's timeout visible on its group heading", async () => {
+  agent.state = AgentState.AWAITING_USER_INPUT;
+  const a1 = action("timeout", "slow-check");
+  const done = observation(a1);
+  done.observation.timeout = true;
+  done.observation.exit_code = -1;
+  renderChat([done], [a1, done]);
+  const heading = screen.getByTestId("event-group-toggle");
+  expect(within(heading).getByTestId("status-icon")).toBeVisible();
+  await userEvent.click(heading);
+  expect(screen.getAllByTestId("status-icon")).toHaveLength(1);
+  expect(document.body.textContent).toContain("output of slow-check");
+});
+
+it("keeps rejection visible when the single command is collapsed", () => {
+  agent.state = AgentState.AWAITING_USER_INPUT;
+  const a1 = action("rejected", "ls");
+  const rejected = {
+    id: "rejection",
+    timestamp: new Date().toISOString(),
+    source: "environment" as const,
+    tool_name: a1.tool_name,
+    tool_call_id: a1.tool_call_id,
+    action_id: a1.id,
+    rejection_reason: "User rejected the action",
+  };
+  renderChat([rejected], [a1, rejected]);
+  expect(screen.getByTestId("event-group-toggle")).toHaveTextContent(
+    "EVENT$REJECTED",
+  );
+});
+
+it("keeps the command collapsed alongside reasoning, while retaining its descriptive group title", async () => {
+  agent.state = AgentState.AWAITING_USER_INPUT;
+  const a1 = {
+    ...action("reasoned", "ls"),
+    summary: "Inspecting the workspace",
+    reasoning_content: "Review the layout first",
+  };
+  const done = observation(a1);
+  renderChat([done], [a1, done]);
+  const heading = screen.getByTestId("event-group-toggle");
+  expect(heading).toHaveTextContent("Inspecting the workspace");
+  await userEvent.click(heading);
+  expect(screen.getByTestId("collapsible-thinking")).toBeVisible();
+  expect(document.body.textContent).not.toContain("output of ls");
+  await userEvent.click(
+    within(screen.getByTestId("generic-event-message-title")).getByRole(
+      "button",
+      { name: "BUTTON$EXPAND" },
+    ),
+  );
+  expect(document.body.textContent).toContain("output of ls");
 });
