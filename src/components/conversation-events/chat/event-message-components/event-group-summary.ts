@@ -77,6 +77,14 @@ export const getEventGroupSummaryParts = (
 ): { key: string; count: number }[] => {
   const counts = new Map<StepKind, number>();
   events.forEach((event) => {
+    const action = isObservationEvent(event)
+      ? lookupSource.find(
+          (candidate) =>
+            isActionEvent(candidate) && candidate.id === event.action_id,
+        )
+      : event;
+    if (action && isActionEvent(action) && action.action.kind === "ThinkAction")
+      return;
     const kind = getStepKind(event, lookupSource);
     counts.set(kind, (counts.get(kind) ?? 0) + 1);
   });

@@ -5,6 +5,8 @@ import { useEventStore } from "#/stores/use-event-store";
 import {
   INITIAL_HISTORY_PAGE_SIZE,
   useConversationHistory,
+  usePersistedConversationHistory,
+  getConversationHistoryScope,
 } from "#/hooks/query/use-conversation-history";
 import { isTaskConversationId } from "#/utils/conversation-local-storage";
 import { seedModelSwitchesFromHistory } from "#/hooks/chat/record-model-switch-message";
@@ -44,13 +46,20 @@ interface UseLoadOlderEventsResult {
 export const useLoadOlderEvents = (
   conversationId?: string | null,
 ): UseLoadOlderEventsResult => {
+  const historyScope = getConversationHistoryScope();
   const isTaskConversation =
     !!conversationId && isTaskConversationId(conversationId);
   const realConversationId = isTaskConversation ? undefined : conversationId;
 
   const { data: conversation } = useUserConversation(conversationId ?? null);
-  const { data: initialHistory, isFetched: isInitialHistoryFetched } =
-    useConversationHistory(realConversationId ?? undefined);
+  const replayHistory = useConversationHistory(realConversationId ?? undefined);
+  const persistedHistory = usePersistedConversationHistory(
+    realConversationId ?? undefined,
+    false,
+  );
+  const initialHistory = replayHistory.data ?? persistedHistory.data;
+  const isInitialHistoryFetched =
+    replayHistory.isFetched || persistedHistory.isFetched;
   const addEvents = useEventStore((state) => state.addEvents);
 
   const [isLoading, setIsLoading] = React.useState(false);
@@ -63,7 +72,7 @@ export const useLoadOlderEvents = (
     return () => {
       activeLoadMarkerRef.current = null;
     };
-  }, [conversationId]);
+  }, [conversationId, historyScope]);
 
   React.useEffect(() => {
     isLoadingRef.current = false;
@@ -77,7 +86,7 @@ export const useLoadOlderEvents = (
 
     hasMoreRef.current = true;
     setHasMore(true);
-  }, [conversationId, isTaskConversation]);
+  }, [conversationId, historyScope, isTaskConversation]);
 
   // Mirror the initial REST page: if the tail fetch already returned
   // everything, don't auto-trigger an older-events request on short chats.
@@ -85,10 +94,8 @@ export const useLoadOlderEvents = (
     if (isTaskConversation || !isInitialHistoryFetched || !initialHistory) {
       return;
     }
-    if (!initialHistory.hasMore) {
-      hasMoreRef.current = false;
-      setHasMore(false);
-    }
+    hasMoreRef.current = initialHistory.hasMore;
+    setHasMore(initialHistory.hasMore);
   }, [
     isTaskConversation,
     isInitialHistoryFetched,
@@ -134,6 +141,7 @@ export const useLoadOlderEvents = (
     const loadMarker = {};
     activeLoadMarkerRef.current = loadMarker;
     const isActiveLoad = () =>
+      getConversationHistoryScope() === historyScope &&
       activeLoadMarkerRef.current === loadMarker &&
       useEventStore.getState().loadedConversationId === conversationId;
 
@@ -201,6 +209,7 @@ export const useLoadOlderEvents = (
     }
   }, [
     conversationId,
+    historyScope,
     conversation,
     conversation?.conversation_url,
     conversation?.session_api_key,

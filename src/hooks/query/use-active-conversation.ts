@@ -27,7 +27,12 @@ export const useActiveConversation = () => {
     (query) => {
       const data = query.state.data;
       const age = data ? Date.now() - Date.parse(data.created_at) : Infinity;
+      const generatingTitle =
+        data?.title_generation?.status === "pending" &&
+        Date.now() < Date.parse(data.title_generation.deadline_at);
+      if (generatingTitle) return 500;
       const awaitingTitle =
+        !data?.title_generation &&
         data &&
         isPlaceholderConversationTitle(data.title, data.id) &&
         !isExecutionErrored(data.execution_status) &&
@@ -37,6 +42,7 @@ export const useActiveConversation = () => {
         data &&
         (!data.conversation_url ||
           data.sandbox_status === "PAUSED" ||
+          data.sandbox_status === "STARTING" ||
           awaitingTitle)
       ) {
         return 3000;

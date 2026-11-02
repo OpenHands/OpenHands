@@ -587,8 +587,8 @@ it("reports a repeated polling failure once until a successful response", async 
     .mockImplementation(() => "toast");
   const client = createAgentServerQueryClient();
   const error = createAxiosError({
-    status: 503,
-    message: "polling unavailable",
+    status: 403,
+    message: "polling forbidden",
   });
   await expect(executeFailingQuery(client, error)).rejects.toBe(error);
   await vi.advanceTimersByTimeAsync(4000);

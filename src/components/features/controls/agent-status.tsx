@@ -171,7 +171,7 @@ export function AgentStatus({
     >
       <span
         className={cn(
-          "text-[11px] text-muted font-normal leading-5 min-w-0 max-w-full truncate",
+          "text-2xs text-muted font-normal leading-5 min-w-0 max-w-full truncate",
           compactStatus && "sr-only",
         )}
         title={t(statusCode)}

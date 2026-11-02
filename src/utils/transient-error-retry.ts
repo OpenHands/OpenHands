@@ -12,9 +12,10 @@ export function isTransientRequestError(error: unknown): boolean {
     return [408, 429, 500, 502, 503, 504].includes(status);
   }
 
-  // Fetch rejects with TypeError; Axios identifies network failures separately.
+  // The SDK wraps fetch failures with their original TypeError as cause.
   return (
     error instanceof TypeError ||
+    (error instanceof Error && error.cause instanceof TypeError) ||
     (error instanceof AxiosError &&
       ["ERR_NETWORK", "ECONNABORTED", "ETIMEDOUT"].includes(error.code ?? ""))
   );

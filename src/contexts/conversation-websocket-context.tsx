@@ -13,7 +13,10 @@ import { ConversationClient } from "@openhands/typescript-client/clients";
 import { useQueryClient } from "@tanstack/react-query";
 import { useWebSocket, WebSocketHookOptions } from "#/hooks/use-websocket";
 import { usePageVisibilityReconnect } from "#/hooks/use-page-visibility-reconnect";
-import { useConnectionErrorGracePeriod } from "#/hooks/use-connection-error-grace-period";
+import {
+  useConnectionErrorGracePeriod,
+  type ConnectionRecoveryState,
+} from "#/hooks/use-connection-error-grace-period";
 import { useEventStore } from "#/stores/use-event-store";
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
@@ -76,7 +79,11 @@ import { trackError } from "#/utils/error-handler";
 import { matchesPendingConversationId } from "#/utils/pending-task-message-link";
 import { useReadConversationFile } from "#/hooks/mutation/use-read-conversation-file";
 import useMetricsStore, { type MetricsState } from "#/stores/metrics-store";
-import { useConversationHistory } from "#/hooks/query/use-conversation-history";
+import {
+  useConversationHistory,
+  usePersistedConversationHistory,
+  getConversationHistoryScope,
+} from "#/hooks/query/use-conversation-history";
 import { setConversationState } from "#/utils/conversation-local-storage";
 import {
   recordModelSwitchMessage,
@@ -116,6 +123,8 @@ interface SendMessageResult {
 
 interface ConversationWebSocketContextType {
   connectionState: WebSocketConnectionState;
+  recoveryState: ConnectionRecoveryState;
+  recoveryConversationId?: string;
   /**
    * The main connection's own state, unmerged with the planning connection —
    * see `useMainWebSocketStatus`.
@@ -232,7 +241,6 @@ export function ConversationWebSocketProvider({
     useState<WebSocketConnectionState>("CONNECTING");
 
   // Track if we've ever successfully connected for each connection
-  // Don't show errors until after first successful connection
   const hasConnectedRefMain = React.useRef(false);
   const hasConnectedRefPlanning = React.useRef(false);
 
@@ -380,12 +388,25 @@ export function ConversationWebSocketProvider({
   const { data: preloadedHistory, isPending: isPreloadingHistory } =
     useConversationHistory(conversationId);
 
+  const historyScope = getConversationHistoryScope();
+  const { data: persistedHistory } =
+    usePersistedConversationHistory(conversationId);
+  const visibleHistory = useMemo(() => {
+    if (!persistedHistory) return preloadedHistory;
+    if (!preloadedHistory) return persistedHistory;
+    return {
+      ...preloadedHistory,
+      events: [...persistedHistory.events, ...preloadedHistory.events],
+    };
+  }, [persistedHistory, preloadedHistory]);
+
   // Skeleton only on the genuine first load (no cached data yet). On return the
   // cached page is present, so `isPending` is false and we render the
   // last-known discussion immediately while the tail refetch runs in the
   // background — the socket gate below also keys on `isPending`, so that
   // refetch never drops a live socket.
-  const isLoadingHistoryMain = !!conversationId && isPreloadingHistory;
+  const isLoadingHistoryMain =
+    !!conversationId && isPreloadingHistory && !persistedHistory;
 
   // First-connect cursor from the REST page (see `afterSeq`). Read lazily by
   // the socket's `queryParams`; after the first connect the socket's own
@@ -413,26 +434,34 @@ export function ConversationWebSocketProvider({
   // a no-op, so the store survives navigating away to Settings and back.
   useLayoutEffect(() => {
     const nextId = conversationId ?? null;
-    if (useEventStore.getState().loadedConversationId === nextId) {
+    if (
+      useEventStore.getState().loadedConversationId === nextId &&
+      useEventStore.getState().loadedConversationScope === historyScope
+    ) {
       return;
     }
     // Single atomic action: clears the previous conversation's events and
     // records the new loaded id in one `set`, so no subscriber can observe a
     // half-applied state (events gone but the old id still reported).
-    clearEventsForConversation(nextId);
+    clearEventsForConversation(nextId, historyScope);
     resetBrowserStore();
     // The metrics store is conversation-scoped state too: without a reset the
     // previous conversation's usage/cost keeps rendering in the new
     // conversation's meter until fresh WS stats arrive — and a brand-new
     // conversation sends none, so the stale figure stuck indefinitely.
     useMetricsStore.getState().resetMetrics();
-  }, [conversationId, clearEventsForConversation, resetBrowserStore]);
+  }, [
+    conversationId,
+    historyScope,
+    clearEventsForConversation,
+    resetBrowserStore,
+  ]);
 
   useLayoutEffect(() => {
-    if (!preloadedHistory || preloadedHistory.events.length === 0) {
+    if (!visibleHistory || visibleHistory.events.length === 0) {
       return;
     }
-    addEvents(preloadedHistory.events);
+    addEvents(visibleHistory.events);
 
     // The first user message of a cloud start-task conversation is persisted
     // server-side and reaches us via this REST preload, not over the WebSocket
@@ -451,7 +480,7 @@ export function ConversationWebSocketProvider({
         useEventStore.getState().uiEvents,
       );
 
-      for (const event of preloadedHistory.events) {
+      for (const event of visibleHistory.events) {
         if (isUserMessageEvent(event)) {
           consumeMatchingPendingMessage(
             conversationId,
@@ -462,7 +491,7 @@ export function ConversationWebSocketProvider({
       }
     }
   }, [
-    preloadedHistory,
+    visibleHistory,
     addEvents,
     conversationId,
     consumeMatchingPendingMessage,
@@ -506,7 +535,7 @@ export function ConversationWebSocketProvider({
   );
 
   const planningAgentWsUrl = useMemo(() => {
-    if (!subConversations?.length) {
+    if (!conversationUrl || !subConversations?.length) {
       return null;
     }
 
@@ -524,7 +553,7 @@ export function ConversationWebSocketProvider({
       planningAgentConversation.id,
       planningAgentConversation.conversation_url,
     );
-  }, [subConversations]);
+  }, [conversationUrl, subConversations]);
 
   // Merged connection state - reflects combined status of both connections
   const connectionState = useMemo<WebSocketConnectionState>(() => {
@@ -624,7 +653,7 @@ export function ConversationWebSocketProvider({
     mainCursorRef.current.clear();
     // Reset the tracked event ref when conversation changes
     latestPlanningFileEventRef.current = null;
-  }, [conversationId]);
+  }, [conversationId, historyScope]);
 
   // Drop buffered deltas on conversation switch/unmount: the store is cleared on
   // switch, so flushing them would leak into the next conversation.
@@ -1187,7 +1216,7 @@ export function ConversationWebSocketProvider({
       },
       onError: () => {
         setMainConnectionState("CLOSED");
-        if (hasConnectedRefMain.current) mainConnectionError.report();
+        mainConnectionError.report();
       },
       onMessage: handleMainMessage,
     };
@@ -1255,7 +1284,7 @@ export function ConversationWebSocketProvider({
       },
       onError: () => {
         setPlanningConnectionState("CLOSED");
-        if (hasConnectedRefPlanning.current) planningConnectionError.report();
+        planningConnectionError.report();
       },
       onMessage: handlePlanningMessage,
     };
@@ -1350,6 +1379,8 @@ export function ConversationWebSocketProvider({
 
   const reconnect = useCallback(() => {
     removeErrorMessage();
+    mainConnectionError.cancel();
+    planningConnectionError.cancel();
     const currentMode = useConversationStore.getState().conversationMode;
     if (currentMode === "plan" && planningAgentWsUrl) {
       reconnectPlanning();
@@ -1361,6 +1392,8 @@ export function ConversationWebSocketProvider({
     reconnectMain,
     reconnectPlanning,
     removeErrorMessage,
+    mainConnectionError,
+    planningConnectionError,
   ]);
 
   // Mobile browsers freeze and discard backgrounded tabs, silently killing
@@ -1572,9 +1605,21 @@ export function ConversationWebSocketProvider({
     }
   }, [planningAgentSocket, planningAgentWsUrl]);
 
+  const activeMode = useConversationStore((state) => state.conversationMode);
+  const recoveryConversationId =
+    activeMode === "plan" && planningAgentWsUrl
+      ? subConversations?.[0]?.id
+      : conversationId;
+  const recoveryState =
+    activeMode === "plan" && planningAgentWsUrl
+      ? planningConnectionError.state
+      : mainConnectionError.state;
+
   const contextValue = useMemo(
     () => ({
       connectionState,
+      recoveryState,
+      recoveryConversationId,
       mainConnectionState,
       sendMessage,
       isLoadingHistory,
@@ -1584,6 +1629,8 @@ export function ConversationWebSocketProvider({
     }),
     [
       connectionState,
+      recoveryState,
+      recoveryConversationId,
       mainConnectionState,
       planningConnectionState,
       sendMessage,

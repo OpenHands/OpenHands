@@ -113,15 +113,14 @@ describe("Messages: opened steps and groups survive live updates", () => {
     expect(document.body.textContent).toContain("output of ls");
   });
 
-  it("opens the group that forms around a step the user opened", async () => {
-    // Lone steps only exist while the agent is idle; a running stage is
-    // already a group.
+  it("keeps an idle group and its opened step expanded as tools arrive", async () => {
     agent.state = AgentState.AWAITING_USER_INPUT;
     const user = userEvent.setup();
     const a1 = action("a1", "ls");
     const a2 = action("a2", "pwd");
     const { rerender } = renderChat([observation(a1)], [a1, observation(a1)]);
 
+    await user.click(screen.getByTestId("event-group-toggle"));
     await user.click(screen.getByRole("button", { name: "BUTTON$EXPAND" }));
 
     // A second step arrives, so the first one becomes part of a group.
@@ -226,6 +225,7 @@ describe("Messages: live status at the end of the chat", () => {
     renderChat(done, [message, a1, observation(a1)]);
 
     expect(screen.queryByTestId("live-thinking")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("event-group-toggle")).not.toBeInTheDocument();
+    expect(screen.getByTestId("event-group-toggle")).toBeInTheDocument();
+    expect(screen.queryByTestId("spinner-icon")).not.toBeInTheDocument();
   });
 });

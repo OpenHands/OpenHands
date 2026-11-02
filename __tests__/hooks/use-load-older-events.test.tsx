@@ -18,6 +18,11 @@ vi.mock("#/api/event-service/event-service.api");
 vi.mock("#/hooks/query/use-user-conversation");
 vi.mock("#/hooks/query/use-conversation-history", () => ({
   INITIAL_HISTORY_PAGE_SIZE: 50,
+  getConversationHistoryScope: () => "test-scope",
+  usePersistedConversationHistory: vi.fn(() => ({
+    data: undefined,
+    isFetched: false,
+  })),
   useConversationHistory: vi.fn(() => ({
     data: undefined,
     isFetched: false,
