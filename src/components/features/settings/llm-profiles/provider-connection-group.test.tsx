@@ -10,6 +10,7 @@ import ProviderConnectionsService, {
 } from "#/api/provider-connections-service/provider-connections-service.api";
 import { I18nKey } from "#/i18n/declaration";
 import { LlmProfilesManager } from "./llm-profiles-manager";
+import { ProfilesBody } from "./profiles-body";
 
 const displayErrorToast = vi.hoisted(() => vi.fn());
 const displaySuccessToast = vi.hoisted(() => vi.fn());
@@ -307,5 +308,57 @@ describe("Provider connection groups", () => {
       );
     });
     expect(deleteSpy).toHaveBeenCalledWith("conn-1");
+  });
+
+  it("explains connections when adding one, but not when editing one", async () => {
+    const user = userEvent.setup();
+    renderManager();
+    const description = I18nKey.SETTINGS$PROVIDER_CONNECTION_ADD_DESCRIPTION;
+
+    await user.click(await screen.findByTestId("add-provider-connection"));
+    expect(screen.getByText(description)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "BUTTON$CANCEL" }));
+
+    await user.click(screen.getByTestId("provider-connection-menu-trigger"));
+    await user.click(screen.getByTestId("provider-connection-edit"));
+    expect(screen.getByTestId("provider-connection-modal")).toBeInTheDocument();
+    expect(screen.queryByText(description)).not.toBeInTheDocument();
+  });
+
+  it("does not offer a first connection while connections are still loading", async () => {
+    vi.spyOn(ProviderConnectionsService, "list").mockReturnValue(
+      new Promise(() => {}),
+    );
+    const listProfiles = vi
+      .spyOn(ProfilesService, "listProfiles")
+      .mockResolvedValue({ profiles: [], active_profile: null });
+    renderWithProviders(<LlmProfilesManager onEditProfile={vi.fn()} />);
+
+    await waitFor(() => expect(listProfiles).toHaveBeenCalled());
+    await screen.findByTestId("add-provider-connection");
+    expect(screen.queryByTestId("profiles-empty")).not.toBeInTheDocument();
+  });
+
+  it("keeps the plain empty message when connections can't be added", () => {
+    renderWithProviders(
+      <ProfilesBody
+        isLoading={false}
+        loadError={null}
+        profiles={[]}
+        active={null}
+        canManage={false}
+        connections={[]}
+        onActivate={vi.fn()}
+        onEdit={vi.fn()}
+        onRename={vi.fn()}
+        onDuplicate={vi.fn()}
+        onDelete={vi.fn()}
+        isActivating={false}
+      />,
+    );
+
+    expect(screen.getByTestId("profiles-empty")).toHaveTextContent(
+      I18nKey.SETTINGS$PROFILES_EMPTY,
+    );
   });
 });

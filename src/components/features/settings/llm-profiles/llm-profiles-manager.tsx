@@ -81,10 +81,12 @@ export function LlmProfilesManager({
   const connectionList = useMemo(() => connections ?? [], [connections]);
   // Linked profiles can't be placed under their connection until the list
   // arrives; wait for it rather than flash raw connection ids as group names.
+  // With no profiles, wait too: the empty state offers a first connection.
   const isWaitingForLinkedConnections =
     supportsConnections &&
     isLoadingConnections &&
-    profiles.some((profile) => profile.provider_connection_id);
+    ((data && profiles.length === 0) ||
+      profiles.some((profile) => profile.provider_connection_id));
 
   const handleActivate = async (name: string) => {
     try {
@@ -212,6 +214,11 @@ export function LlmProfilesManager({
           onRename={setProfileToRename}
           onDuplicate={handleDuplicate}
           onDelete={setProfileToDelete}
+          onAddConnection={
+            canManage && supportsConnections
+              ? () => setIsCreatingConnection(true)
+              : undefined
+          }
           onAddModels={(connection) => setAddModelsConnectionId(connection.id)}
           onEditConnection={setConnectionToEdit}
           onDeleteConnection={setConnectionToDelete}

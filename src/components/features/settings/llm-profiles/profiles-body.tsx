@@ -1,4 +1,4 @@
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { ProfileRow } from "./profile-row";
 import { ProviderConnectionGroup } from "./provider-connection-group";
@@ -30,6 +30,8 @@ interface ProfilesBodyProps {
   onRename: (profile: ProfileInfo) => void;
   onDuplicate: (profile: ProfileInfo) => void;
   onDelete: (profile: ProfileInfo) => void;
+  /** Offered from the empty state; omit when connections can't be added. */
+  onAddConnection?: () => void;
   onAddModels?: (connection: ProviderConnection) => void;
   onEditConnection?: (connection: ProviderConnection) => void;
   onDeleteConnection?: (connection: ProviderConnection) => void;
@@ -111,6 +113,7 @@ export function ProfilesBody({
   onRename,
   onDuplicate,
   onDelete,
+  onAddConnection,
   onAddModels,
   onEditConnection,
   onDeleteConnection,
@@ -165,7 +168,26 @@ export function ProfilesBody({
         className={extensionModuleEmptyStateClassName}
       >
         <p className="text-sm text-muted">
-          {t(I18nKey.SETTINGS$PROFILES_EMPTY)}
+          {onAddConnection ? (
+            <Trans
+              ns="openhands"
+              i18nKey={I18nKey.SETTINGS$PROVIDER_CONNECTION_EMPTY_CTA}
+              // "action", not "link": <link> is a void HTML element, so the
+              // Trans parser would drop the label it wraps.
+              components={{
+                action: (
+                  <button
+                    type="button"
+                    data-testid="profiles-empty-add-connection"
+                    onClick={onAddConnection}
+                    className="cursor-pointer text-contrast underline hover:no-underline"
+                  />
+                ),
+              }}
+            />
+          ) : (
+            t(I18nKey.SETTINGS$PROFILES_EMPTY)
+          )}
         </p>
       </div>
     );

@@ -17,7 +17,8 @@ import {
 
 // Only the "openhands" namespace holds these keys, so a component asking for
 // any other namespace must fall through to the raw key.
-vi.mock("react-i18next", () => ({
+vi.mock("react-i18next", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-i18next")>()),
   useTranslation: (namespace: string) => ({
     t: (key: string, params?: Record<string, string | number>) => {
       if (namespace !== "openhands") return key;
@@ -452,7 +453,7 @@ describe("LlmProfilesManager", () => {
       active_profile: null,
     });
 
-    renderManager();
+    renderManager({}, { canManage: false });
 
     await screen.findByText("No profiles saved yet");
   });

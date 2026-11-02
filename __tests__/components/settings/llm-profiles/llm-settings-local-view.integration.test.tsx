@@ -295,4 +295,31 @@ describe("LLM profile creation with the real embedded form", () => {
       ),
     );
   });
+
+  it("opens the add-connection modal from the empty state's link", async () => {
+    // Arrange: no profiles or connections. The link only exists inside the
+    // translated sentence, so load the real English string.
+    i18n.addResourceBundle(
+      "en",
+      "openhands",
+      {
+        SETTINGS$PROVIDER_CONNECTION_EMPTY_CTA:
+          translations.SETTINGS$PROVIDER_CONNECTION_EMPTY_CTA.en,
+      },
+      true,
+      true,
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<LlmSettingsLocalView />);
+
+    // Act
+    const link = await screen.findByTestId("profiles-empty-add-connection");
+    expect(link).toHaveTextContent("Add your first Provider Connection");
+    await user.click(link);
+
+    // Assert
+    expect(
+      await screen.findByTestId("provider-connection-modal"),
+    ).toBeInTheDocument();
+  });
 });
