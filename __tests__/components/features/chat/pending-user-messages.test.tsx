@@ -6,10 +6,12 @@ import {
   screen,
   waitFor,
   fireEvent,
+  within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "test-utils";
 import { PendingUserMessages } from "#/components/features/chat/pending-user-messages";
+import { RowExpansionContext } from "#/components/features/chat/row-expansion-context";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { useConversationStore } from "#/stores/conversation-store";
 
@@ -216,6 +218,37 @@ describe("PendingUserMessages", () => {
     renderWithProviders(<PendingUserMessages />);
 
     expect(screen.getByTestId("chat-message-stop")).toHaveClass("opacity-0");
+  });
+
+  it("expands only the pending bubble that was clicked", () => {
+    // Two pending bubbles share the enclosing session group's row. Without a
+    // per-message expansion key they resolve to one `<row>::truncation` entry,
+    // so expanding one expands both.
+    const long = "Here's a long message. ".repeat(40).trim();
+    useOptimisticUserMessageStore.getState().enqueuePendingMessage({
+      conversationId: ACTIVE_CONVO,
+      text: long,
+    });
+    useOptimisticUserMessageStore.getState().enqueuePendingMessage({
+      conversationId: ACTIVE_CONVO,
+      text: long,
+    });
+
+    renderWithProviders(
+      <RowExpansionContext.Provider value="group-session-1">
+        <PendingUserMessages />
+      </RowExpansionContext.Provider>,
+    );
+
+    const bubbles = screen.getAllByTestId("user-message");
+    fireEvent.click(within(bubbles[0]).getByTestId("chat-message-expand"));
+
+    expect(
+      within(bubbles[0]).queryByTestId("chat-message-expand"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(bubbles[1]).queryByTestId("chat-message-expand"),
+    ).toBeInTheDocument();
   });
 
   it("shows an error state with a retry link when the message is in 'error'", () => {

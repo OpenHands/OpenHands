@@ -7,7 +7,12 @@ import {
   createPlanningObservationEvent,
   renderWithProviders,
 } from "test-utils";
-import type { OpenHandsEvent } from "#/types/agent-server/core";
+import {
+  type OpenHandsEvent,
+  SecurityRisk,
+  type ActionEvent,
+} from "#/types/agent-server/core";
+import type { ExecuteBashAction } from "#/types/agent-server/core/base/action";
 import { useMessageExpansionStore } from "#/stores/message-expansion-store";
 
 // Each row renders an expander whose state is persisted by row key, so the
@@ -157,6 +162,61 @@ describe("Messages virtualization", () => {
     expect(
       screen.getAllByTestId("virtualized-message-row").length,
     ).toBeLessThan(100);
+  });
+
+  it("toggles one reasoning entry at a time inside a virtualized group", () => {
+    // Two reasoning-bearing actions form one group at the top of a list long
+    // enough to virtualize, so the group is inside the mounted window and its
+    // row-scoped expansion context is in effect.
+    const withReasoning = (
+      id: string,
+      text: string,
+    ): ActionEvent<ExecuteBashAction> => ({
+      id,
+      timestamp: new Date().toISOString(),
+      source: "agent",
+      thought: [],
+      thinking_blocks: [],
+      reasoning_content: text,
+      action: {
+        kind: "ExecuteBashAction",
+        command: `echo ${id}`,
+        is_input: false,
+        timeout: null,
+        reset: false,
+      },
+      tool_name: "execute_bash",
+      tool_call_id: `call_${id}`,
+      tool_call: {
+        id: `call_${id}`,
+        type: "function",
+        function: {
+          name: "execute_bash",
+          arguments: JSON.stringify({ command: `echo ${id}` }),
+        },
+      },
+      llm_response_id: `response_${id}`,
+      security_risk: SecurityRisk.UNKNOWN,
+    });
+    const events: OpenHandsEvent[] = [
+      withReasoning("a1", "first reasoning"),
+      withReasoning("a2", "second reasoning"),
+      ...buildEvents(149),
+    ];
+
+    renderMessages(events);
+
+    expect(screen.getByTestId("virtualized-message-list")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("event-group-toggle"));
+    const toggles = screen.getAllByTestId("collapsible-thinking-toggle");
+    expect(toggles).toHaveLength(2);
+
+    fireEvent.click(toggles[0]);
+
+    // Both entries used to key on the row alone, so opening one opened both.
+    const contents = screen.getAllByTestId("collapsible-thinking-content");
+    expect(contents).toHaveLength(1);
+    expect(contents[0]).toHaveTextContent("first reasoning");
   });
 
   it("restores a row's expanded state after it scrolls out and back", () => {

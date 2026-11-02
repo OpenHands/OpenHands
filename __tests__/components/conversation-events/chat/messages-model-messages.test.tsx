@@ -1,5 +1,6 @@
 import React from "react";
-import { screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createPlanningObservationEvent,
@@ -8,6 +9,7 @@ import {
 } from "test-utils";
 import { Messages } from "#/components/conversation-events/chat/messages";
 import { useModelStore } from "#/stores/model-store";
+import type { ProfileInfo } from "#/api/profiles-service/profiles-service.api";
 import {
   ActionEvent,
   OpenHandsEvent,
@@ -17,6 +19,15 @@ import { ExecuteBashAction } from "#/types/agent-server/core/base/action";
 import { StreamingDeltaEvent } from "#/types/agent-server/core/events/streaming-delta-event";
 
 const CONVERSATION_ID = "test-conversation-id";
+
+const profiles: ProfileInfo[] = [
+  {
+    name: "haiku",
+    model: "anthropic/claude-haiku-4-5",
+    base_url: "https://llm.example.test",
+    api_key_set: true,
+  },
+];
 
 // PlanPreview needs the chat's ScrollProvider, which this isolated mount does
 // not supply; the regression below only cares whether the row survives.
@@ -156,6 +167,42 @@ describe("Messages model entries", () => {
     // Row 1 (plan-obs-1) is in the initial window and carries the entry even
     // though its own event content renders nothing.
     expect(screen.getByTestId("model-messages")).toBeInTheDocument();
+  });
+
+  it("keeps a /model listing expanded after its virtualized row remounts", async () => {
+    const user = userEvent.setup();
+    // The /model entry anchors to the first row, with enough padding after it
+    // to virtualize. Scrolling away unmounts that row entirely.
+    const action = makeBashAction("action-1");
+    const events: OpenHandsEvent[] = [
+      action,
+      ...Array.from({ length: 200 }, (_, index) =>
+        createUserMessageEvent(`padding-${index}`),
+      ),
+    ];
+    useModelStore.getState().show(CONVERSATION_ID, action.id, profiles);
+
+    renderWithProviders(<Harness events={events} />);
+
+    expect(screen.getByTestId("virtualized-message-list")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "BUTTON$EXPAND" }));
+    // The expanded listing shows its profile rows.
+    expect(
+      screen.getByRole("button", { name: "Toggle details for haiku" }),
+    ).toBeInTheDocument();
+
+    // Scroll to the bottom: the listing's row leaves the window.
+    const scrollParent = screen.getByTestId("scroll-parent");
+    scrollParent.scrollTop = 200 * 608;
+    fireEvent.scroll(scrollParent);
+    expect(screen.queryByTestId("model-messages")).toBeNull();
+
+    // Scroll back: the remounted row must remember the listing was open.
+    scrollParent.scrollTop = 0;
+    fireEvent.scroll(scrollParent);
+    expect(
+      screen.getByRole("button", { name: "Toggle details for haiku" }),
+    ).toBeInTheDocument();
   });
 });
 

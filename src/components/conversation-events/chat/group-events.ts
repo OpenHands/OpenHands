@@ -90,15 +90,39 @@ export type RenderedItem =
     };
 
 /**
+ * Stable key for a group item, shared by React keys and the expansion store.
+ *
+ * An action and the observation that replaces it in place must resolve to the
+ * same key: `handleEventForUI` swaps a finished action for its observation, so
+ * keying on `events[0].id` would rename (and remount) the live group the moment
+ * its first observation lands, dropping the state the user had opened. The
+ * paired action's id is used instead. A reasoning-only group is keyed by its
+ * reasoning id, which does not shift when older events are prepended, rather
+ * than by its position.
+ */
+export const getGroupKey = (
+  item: Extract<RenderedItem, { kind: "group" }>,
+): string => {
+  if (item.session) return item.session.id;
+  const reasoning = item.reasoning?.[0];
+  if (reasoning && reasoning.index <= item.startIndex) return reasoning.id;
+  const first = item.events[0];
+  const eventKey =
+    first &&
+    (isObservationEvent(first) || isUserRejectObservation(first)
+      ? (first.action_id ?? first.id)
+      : first.id);
+  return eventKey ?? `group-${item.startIndex}`;
+};
+
+/**
  * Stable identity for a rendered item. Shared by the plain and virtualized
  * lists so React keys and virtualizer item keys agree.
  */
 export const renderedItemKey = (item: RenderedItem): string => {
   if (item.kind === "single") return `single-${item.event.id}`;
   if (item.kind === "thought") return `thought-${item.action.id}`;
-  const groupKey =
-    item.session?.id ?? item.events[0]?.id ?? `group-${item.startIndex}`;
-  return `group-${groupKey}`;
+  return `group-${getGroupKey(item)}`;
 };
 
 /**

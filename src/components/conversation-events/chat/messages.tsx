@@ -20,7 +20,12 @@ import {
 import { cn } from "#/utils/utils";
 import { EventMessage } from "./event-message";
 import { usePlanPreviewEvents } from "./hooks/use-plan-preview-events";
-import { groupEvents, renderedItemKey, RenderedItem } from "./group-events";
+import {
+  getGroupKey,
+  groupEvents,
+  renderedItemKey,
+  RenderedItem,
+} from "./group-events";
 import { buildActionById } from "./event-thought-helpers";
 import { EventGroup } from "./event-message-components/event-group";
 import { ThoughtEventMessage } from "./event-message-components/thought-event-message";
@@ -256,9 +261,20 @@ export const Messages: React.FC<MessagesProps> = React.memo(
           : [],
       ),
     );
+    // Whether a group is still the live tail is decided from `plainItems` in
+    // both modes. Filtering a non-preview planning observation (above) makes the
+    // virtualized row set shorter, so reading the tail off `renderedItems` makes
+    // the two modes disagree about the last group: a group followed only by a
+    // hidden planning observation is finalized in the plain list but reads as
+    // live in the virtualized one. The hidden row renders nothing, so it cannot
+    // be "after" the group.
+    const tailItemKey = plainItems.length
+      ? renderedItemKey(plainItems[plainItems.length - 1])
+      : undefined;
+
     const showThinkingLine =
       isAgentRunning &&
-      renderedItems.at(-1)?.kind !== "group" &&
+      plainItems.at(-1)?.kind !== "group" &&
       !(
         messages.length && isStreamingDeltaEvent(messages[messages.length - 1])
       );
@@ -306,7 +322,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       );
     };
 
-    const renderItem = (item: RenderedItem, itemIndex: number) => {
+    const renderItem = (item: RenderedItem) => {
       if (item.kind === "single") {
         return (
           <React.Fragment key={`single-${getStepKey(item.event)}`}>
@@ -329,16 +345,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
         );
       }
 
-      const groupKey =
-        item.session?.id ??
-        (item.reasoning?.[0] && item.reasoning[0].index <= item.startIndex
-          ? item.reasoning[0].id
-          : item.events[0]
-            ? isObservationEvent(item.events[0]) ||
-              isUserRejectObservation(item.events[0])
-              ? item.events[0].action_id
-              : item.events[0].id
-            : `group-${item.startIndex}`);
+      const groupKey = getGroupKey(item);
       // A group that forms around a step the user opened starts open, so
       // that step stays visible.
       const groupOpen =
@@ -355,7 +362,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
             session={item.session}
             hasReasoning={!!item.reasoning?.length}
             allEvents={allEvents}
-            isLive={isAgentRunning && itemIndex === renderedItems.length - 1}
+            isLive={isAgentRunning && renderedItemKey(item) === tailItemKey}
             open={groupOpen}
             onOpenChange={(open) =>
               item.session
@@ -379,6 +386,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
                   <CollapsibleThinking
                     key={`reasoning-${reasoning.id}`}
                     content={reasoning.text}
+                    expansionId={`reasoning-${reasoning.id}`}
                   />
                 ),
               })),
@@ -721,16 +729,16 @@ export const Messages: React.FC<MessagesProps> = React.memo(
             ref={plainListRef}
             className={cn("contents", PLAIN_ROW_MARGIN_RESET_CLASSNAME)}
           >
-            {renderedItems.map((item, itemIndex) => {
+            {renderedItems.map((item) => {
               const itemKey = renderedItemKey(item);
               return (
                 <div key={itemKey} data-row-key={itemKey} className="contents">
                   {persistExpansion ? (
                     <RowExpansionContext.Provider value={itemKey}>
-                      {renderItem(item, itemIndex)}
+                      {renderItem(item)}
                     </RowExpansionContext.Provider>
                   ) : (
-                    renderItem(item, itemIndex)
+                    renderItem(item)
                   )}
                 </div>
               );
@@ -797,7 +805,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
                 {/* Remounted rows read their expansion state back from the
                     store instead of starting collapsed. */}
                 <RowExpansionContext.Provider value={renderedItemKey(item)}>
-                  {renderItem(item, virtualRow.index)}
+                  {renderItem(item)}
                 </RowExpansionContext.Provider>
               </div>
             );

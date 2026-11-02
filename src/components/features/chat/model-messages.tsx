@@ -138,6 +138,7 @@ export function ModelMessages({
         return (
           <GenericEventMessage
             key={entry.id}
+            disclosureId={`model-${entry.id}`}
             title={
               <span className="text-contrast">
                 {isEmpty ? (
