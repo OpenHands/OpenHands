@@ -13,7 +13,16 @@ import {
   type ActionEvent,
 } from "#/types/agent-server/core";
 import type { ExecuteBashAction } from "#/types/agent-server/core/base/action";
+import { AgentState } from "#/types/agent-state";
 import { useMessageExpansionStore } from "#/stores/message-expansion-store";
+
+// The last-group parity cases run the agent, so the hook is faked; the rest of
+// the file is unaffected because a non-running state is the default.
+const agentState = vi.hoisted(() => ({ current: "loading" as AgentState }));
+vi.mock("#/hooks/use-agent-state", () => ({
+  useAgentState: () => ({ curAgentState: agentState.current }),
+  usePlanningAgentState: () => ({ isPlanningAgentRunning: false }),
+}));
 
 // Each row renders an expander whose state is persisted by row key, so the
 // scroll-out/scroll-back cases below can observe whether the state survived.
@@ -851,10 +860,9 @@ describe("Messages virtualization", () => {
 
   it("agrees with the plain list about the last group's summary", () => {
     // A group followed only by a planning observation that is not the phase's
-    // PLAN.md preview renders nothing in the virtualized list. The tail used to
-    // be read off that (shorter) row set, so the group looked live above the
-    // threshold (showing the latest action title) and finalized below it. Both
-    // modes must agree: the hidden row cannot be "after" the group.
+    // PLAN.md preview renders nothing in the virtualized list. The tail must be
+    // read off the rows the user can see, so both modes agree: the hidden row
+    // cannot be "after" the group.
     const makeBashObservation = (id: string, actionId: string) => ({
       id,
       timestamp: new Date().toISOString(),
@@ -904,5 +912,66 @@ describe("Messages virtualization", () => {
       });
     }
     expect(groupHeader().textContent).toBe(plainText);
+  });
+
+  it("keeps the last group live behind a hidden planning observation", () => {
+    // Same shape as above, but with the agent running: the hidden row renders
+    // nothing, so the group is still the visible tail and must stay live. Both
+    // modes used to finalize it and add a separate Thinking line.
+    const makeBashObservation = (id: string, actionId: string) => ({
+      id,
+      timestamp: new Date().toISOString(),
+      source: "environment" as const,
+      tool_name: "execute_bash",
+      tool_call_id: `call-${actionId}`,
+      action_id: actionId,
+      observation: {
+        kind: "ExecuteBashObservation" as const,
+        content: [{ type: "text" as const, text: "ok" }],
+        command: `echo ${actionId}`,
+        exit_code: 0,
+        error: false,
+        timeout: false,
+        metadata: {},
+      },
+    });
+    const trailingPlan = createPlanningObservationEvent("plan-1", "act-1");
+    trailingPlan.observation.path = "/workspace/notes.md";
+
+    const events = [
+      ...buildEvents(150),
+      makeBashObservation("obs-1", "act-1"),
+      makeBashObservation("obs-2", "act-2"),
+      trailingPlan,
+    ] as OpenHandsEvent[];
+    const groupHeader = () =>
+      screen.getAllByTestId("event-group-toggle").at(-1) as HTMLElement;
+    const scrollToTail = () => {
+      const scrollParent = screen.getByTestId("scroll-parent");
+      for (let top = 0; top <= 160 * 608; top += 2000) {
+        act(() => {
+          scrollParent.scrollTop = top;
+          fireEvent.scroll(scrollParent);
+        });
+      }
+    };
+
+    agentState.current = AgentState.RUNNING;
+    try {
+      const { unmount } = renderMessages(events, false);
+      const plainText = groupHeader().textContent;
+      expect(screen.queryByTestId("live-thinking")).toBeNull();
+      unmount();
+
+      renderMessages(events);
+      expect(
+        screen.getByTestId("virtualized-message-list"),
+      ).toBeInTheDocument();
+      scrollToTail();
+      expect(groupHeader().textContent).toBe(plainText);
+      expect(screen.queryByTestId("live-thinking")).toBeNull();
+    } finally {
+      agentState.current = AgentState.LOADING;
+    }
   });
 });

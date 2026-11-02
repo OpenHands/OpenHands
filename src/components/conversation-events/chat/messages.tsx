@@ -236,18 +236,21 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     // anchors those to a planning observation. Dropping such a row would take
     // the entry with it, so rows that anchor one are kept: their event content
     // still renders null (exactly as in the plain list) while the entry shows.
+    const isHiddenPlanningObservation = React.useCallback(
+      (item: RenderedItem) =>
+        item.kind === "single" &&
+        isPlanningFileEditorObservationEvent(item.event) &&
+        !(!!item.event.id && planPreviewEventIds.has(item.event.id)) &&
+        !(!!item.event.id && modelAnchorIds?.has(item.event.id)),
+      [planPreviewEventIds, modelAnchorIds],
+    );
+
     const renderedItems = React.useMemo(
       () =>
         shouldVirtualize
-          ? plainItems.filter(
-              (item) =>
-                item.kind !== "single" ||
-                !isPlanningFileEditorObservationEvent(item.event) ||
-                (!!item.event.id && planPreviewEventIds.has(item.event.id)) ||
-                (!!item.event.id && modelAnchorIds?.has(item.event.id)),
-            )
+          ? plainItems.filter((item) => !isHiddenPlanningObservation(item))
           : plainItems,
-      [plainItems, shouldVirtualize, planPreviewEventIds, modelAnchorIds],
+      [plainItems, shouldVirtualize, isHiddenPlanningObservation],
     );
 
     const eventIndexes = React.useMemo(
@@ -261,20 +264,28 @@ export const Messages: React.FC<MessagesProps> = React.memo(
           : [],
       ),
     );
-    // Whether a group is still the live tail is decided from `plainItems` in
-    // both modes. Filtering a non-preview planning observation (above) makes the
-    // virtualized row set shorter, so reading the tail off `renderedItems` makes
-    // the two modes disagree about the last group: a group followed only by a
-    // hidden planning observation is finalized in the plain list but reads as
-    // live in the virtualized one. The hidden row renders nothing, so it cannot
-    // be "after" the group.
-    const tailItemKey = plainItems.length
-      ? renderedItemKey(plainItems[plainItems.length - 1])
+    // Whether a group is still the live tail is decided from the last row the
+    // user can actually see, in both modes. A hidden planning observation
+    // renders nothing, so a group followed only by one is still the visible
+    // tail: it stays live and no separate Thinking line appears. The plain path
+    // keeps the hidden row in `renderedItems`, so the tail is the last
+    // non-hidden item; the virtualized path has already dropped it.
+    const visibleTailItem = React.useMemo(() => {
+      for (let index = renderedItems.length - 1; index >= 0; index -= 1) {
+        if (!isHiddenPlanningObservation(renderedItems[index])) {
+          return renderedItems[index];
+        }
+      }
+      return undefined;
+    }, [renderedItems, isHiddenPlanningObservation]);
+
+    const tailItemKey = visibleTailItem
+      ? renderedItemKey(visibleTailItem)
       : undefined;
 
     const showThinkingLine =
       isAgentRunning &&
-      plainItems.at(-1)?.kind !== "group" &&
+      visibleTailItem?.kind !== "group" &&
       !(
         messages.length && isStreamingDeltaEvent(messages[messages.length - 1])
       );
