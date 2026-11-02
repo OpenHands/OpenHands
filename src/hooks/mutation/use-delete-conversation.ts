@@ -1,3 +1,8 @@
+import { getActiveBackend } from "#/api/backend-registry/active-store";
+import {
+  sessionActivityKey,
+  useSessionActivityStore,
+} from "#/stores/session-activity-store";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { clearConversationLocalStorage } from "#/utils/conversation-local-storage";
@@ -6,10 +11,18 @@ export const useDeleteConversation = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (variables: { conversationId: string }) =>
-      AgentServerConversationService.deleteConversation(
+    mutationFn: async (variables: { conversationId: string }) => {
+      const { backend, orgId } = getActiveBackend();
+      const result = await AgentServerConversationService.deleteConversation(
         variables.conversationId,
-      ),
+      );
+      useSessionActivityStore
+        .getState()
+        .remove(
+          sessionActivityKey(backend.id, orgId, variables.conversationId),
+        );
+      return result;
+    },
     onMutate: async (variables) => {
       await queryClient.cancelQueries({ queryKey: ["user", "conversations"] });
       const previousConversations = queryClient.getQueryData([

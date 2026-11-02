@@ -1,3 +1,5 @@
+import { assertActiveEnvironment } from "#/utils/assert-active-environment";
+import { getActiveBackend } from "#/api/backend-registry/active-store";
 import type { QueryClient } from "@tanstack/react-query";
 import type { AgentKind } from "@openhands/typescript-client";
 import AgentProfilesService, {
@@ -209,6 +211,7 @@ export async function launchConversation(
   { agentProfileId, llmProfile, ...context }: ResolveConversationLaunchOptions,
   options: CreateConversationOptions,
 ): Promise<AppConversationStartTask> {
+  const requestedEnvironment = getActiveBackend();
   const launch = await resolveConversationLaunch({
     ...context,
     agentProfileId,
@@ -217,6 +220,7 @@ export async function launchConversation(
   if (!context.isCloud && launch.llmProfile) {
     await assertLaunchLlmReady(launch.llmProfile);
   }
+  assertActiveEnvironment(requestedEnvironment);
   const task = await AgentServerConversationService.createConversation({
     ...options,
     ...launchProfileOptions(launch),

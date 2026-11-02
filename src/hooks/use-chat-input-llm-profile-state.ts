@@ -136,6 +136,13 @@ export function useChatInputLlmProfileState(): ChatInputLlmProfileState {
     (profileName: string) => {
       if (!canSwitchProfile || profileName === currentProfileName) return;
       if (!conversationId) {
+        // A home-page pick is an explicit model choice made before the first
+        // message: mark it so the next home launch suppresses "Run on first
+        // message" routing for that one conversation. Set here — the single
+        // chokepoint — so every pick path is covered: a cloud member's held
+        // pick, an agent-profile-owned LLM pick, and a global activate all
+        // flow through here. `useCreateConversation` reads-and-clears it.
+        useModelStore.getState().setHomeManualModelPick(true);
         // A home pick edits the org's agent profile or activates the LLM
         // profile org-wide, both of which a cloud member can only 403 on.
         // Hold a member's pick for the next home launch (sent as

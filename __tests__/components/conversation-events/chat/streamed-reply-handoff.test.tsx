@@ -57,23 +57,22 @@ describe("a streamed reply finishing", () => {
     vi.restoreAllMocks();
   });
 
-  it("keeps revealing where the slot left off instead of jumping", () => {
+  it("shows the completed reply immediately while a live reveal is pending", () => {
     const text = `Hello${" world".repeat(30)}`;
     const { rerender } = renderWithProviders(
       <Messages messages={[slot("Hello")]} allEvents={[slot("Hello")]} />,
     );
 
     rerender(
+      <Messages messages={[slot(text)]} allEvents={[slot(text)]} />,
+    );
+    tick(2);
+    const bubble = () => screen.getByTestId("agent-message");
+    expect(bubble().textContent).not.toContain(text);
+
+    rerender(
       <Messages messages={[finished(text)]} allEvents={[finished(text)]} />,
     );
-    tick(10);
-    const bubble = () => screen.getByTestId("agent-message");
-    const shown = bubble().textContent ?? "";
-    expect(shown).toContain("Hello world");
-    expect(shown).not.toContain(text);
-
-    // ~185 characters at the reveal pace, then the finished message renders.
-    tick(240);
     expect(bubble()).toHaveTextContent(text);
     expect(bubble().querySelector("[data-stream-word]")).toBeNull();
   });

@@ -94,7 +94,6 @@ export function ModelMessages({
           return (
             <div key={entry.id}>
               <GenericEventMessage
-                expansionId={`model-switch-${entry.id}`}
                 title={
                   <span className="inline-flex items-center gap-1.5 text-contrast">
                     <InfoCircleIcon
@@ -139,7 +138,6 @@ export function ModelMessages({
         return (
           <GenericEventMessage
             key={entry.id}
-            expansionId={`model-${entry.id}`}
             title={
               <span className="text-contrast">
                 {isEmpty ? (

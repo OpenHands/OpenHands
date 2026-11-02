@@ -1,0 +1,350 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Independent Cloud history display</title><style>:root{--ink:#202020;--line:#ccc;--accent:#ad5b13}body{margin:0;background:#faf9f6;color:var(--ink);font:16px/1.6 system-ui}main{max-width:1000px;margin:32px auto;padding:0 24px}nav{display:flex;gap:20px;flex-wrap:wrap}h1{font-size:34px}h2{margin-top:40px}a{color:#254b93}code,pre{font:13px/1.5 monospace}pre{background:#eee;padding:16px;overflow:auto}section{border-top:1px solid var(--line);margin-top:28px;padding-top:10px}.callout{border-left:4px solid var(--accent);background:#fff0dd;padding:14px}svg{width:100%;margin:12px 0}.old{fill:#eee;stroke:#777;stroke-dasharray:5 4}.new{fill:#fff0dd;stroke:var(--accent);stroke-width:2}.arrow{stroke:var(--accent);stroke-width:2;fill:none}svg text{font:15px system-ui}table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:10px;border-bottom:1px solid var(--line)}summary{cursor:pointer}</style><main><h1>Read saved messages while the runtime connects</h1><p>This alternative gives persisted Cloud history its own display query. The ordered runtime-count → App-page query still prepares the socket cursor. Early messages enter the existing event store; they never establish a sequence cursor.</p><p class="callout">This removes a dependency on runtime latency, at the cost of an additional history read. It is a draft comparison, not a demonstrated healthy-runtime speedup. The PR body contains measured timings and real-browser videos.</p><nav><a href="#query">Saved history gains a separate display query</a><a href="#provider">Readable messages precede live readiness</a><a href="#pagination">Short chats avoid a redundant older-page read</a><a href="#store">Backend and organization changes clear the transcript</a></nav><section id="query"><h2>Saved history gains a separate display query</h2><p><a href="https://github.com/OpenHands/OpenHands/blob/c2a513f16467f35e725e020a72767dbc1c1bf2b3/src/hooks/query/use-conversation-history.ts#L59">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/678d0642c37b6bfb3d6ba496203dba45d5fe604d/src/hooks/query/use-conversation-history.ts#L69">After source: src/hooks/query/use-conversation-history.ts</a></p><svg viewBox="0 0 760 122" role="img" aria-label="Before and after"><rect x="4" y="4" width="752" height="46" class="old"/><text x="18" y="32">Before: count → App page → result</text><path d="M380 50v20" class="arrow"/><rect x="4" y="72" width="752" height="46" class="new"/><text x="18" y="101">After: App display page ∥ ordered preload</text></svg><details><summary>Exact diff</summary><pre>diff --git a/src/hooks/query/use-conversation-history.ts b/src/hooks/query/use-conversation-history.ts
+index 41ce540e59..f4a6dbb269 100644
+--- a/src/hooks/query/use-conversation-history.ts
++++ b/src/hooks/query/use-conversation-history.ts
+@@ -10,6 +10,16 @@ import type { OpenHandsEvent } from &quot;#/types/agent-server/core&quot;;
+  */
+ export const INITIAL_HISTORY_PAGE_SIZE = 50;
+ 
++export function getConversationHistoryScope(): string {
++  const { backend, orgId } = getActiveBackend();
++  return JSON.stringify([
++    backend.id,
++    backend.host,
++    backend.connectionRevision ?? 0,
++    orgId,
++  ]);
++}
++
+ export interface ConversationHistoryPage {
+   /** Events in chronological (oldest → newest) order. */
+   events: OpenHandsEvent[];
+@@ -59,6 +69,7 @@ function resumeCursor(count: number): number {
+ export const useConversationHistory = (conversationId?: string) =&gt; {
+   const { data: conversation } = useUserConversation(conversationId ?? null);
+ 
++  const scope = getConversationHistoryScope();
+   return useQuery&lt;ConversationHistoryPage&gt;({
+     queryKey: [
+       &quot;conversation-history&quot;,
+@@ -67,9 +78,10 @@ export const useConversationHistory = (conversationId?: string) =&gt; {
+       // re-provisioned cloud sandbox with a new URL) re-fetches.
+       conversation?.conversation_url ?? null,
+       conversation?.session_api_key ?? null,
++      scope,
+     ],
+     enabled: !!conversationId &amp;&amp; !!conversation,
+-    queryFn: async () =&gt; {
++    queryFn: async ({ signal }) =&gt; {
+       if (!conversationId) {
+         return { events: [], hasMore: false, nextPageId: null, afterSeq: null };
+       }
+@@ -92,6 +104,7 @@ export const useConversationHistory = (conversationId?: string) =&gt; {
+         }
+       }
+ 
++      signal.throwIfAborted();
+       const page = await EventService.searchEvents(
+         conversationId,
+         conversation?.conversation_url ?? null,
+@@ -99,6 +112,7 @@ export const useConversationHistory = (conversationId?: string) =&gt; {
+         {
+           limit: INITIAL_HISTORY_PAGE_SIZE,
+           sortOrder: &quot;TIMESTAMP_DESC&quot;,
++          strictPagination: true,
+         },
+       );
+ 
+@@ -144,3 +158,61 @@ export const useConversationHistory = (conversationId?: string) =&gt; {
+     retry: 1,
+   });
+ };
++
++/** Display-only Cloud history; the runtime cursor still comes from the ordered preload. */
++export const usePersistedConversationHistory = (
++  conversationId?: string,
++  enabled = true,
++) =&gt; {
++  const { data: conversation } = useUserConversation(conversationId ?? null);
++  const { backend, orgId } = getActiveBackend();
++
++  return useQuery&lt;ConversationHistoryPage&gt;({
++    queryKey: [
++      &quot;persisted-conversation-history&quot;,
++      backend.id,
++      backend.host,
++      backend.connectionRevision ?? 0,
++      orgId,
++      conversationId,
++    ],
++    enabled:
++      enabled &amp;&amp;
++      backend.kind === &quot;cloud&quot; &amp;&amp;
++      !!orgId &amp;&amp;
++      !!conversationId &amp;&amp;
++      !!conversation,
++    queryFn: async () =&gt; {
++      const page = await EventService.searchEvents(
++        conversationId!,
++        null,
++        null,
++        {
++          limit: INITIAL_HISTORY_PAGE_SIZE,
++          sortOrder: &quot;TIMESTAMP_DESC&quot;,
++          strictPagination: true,
++        },
++      );
++      if (!Array.isArray(page.items)) {
++        throw new Error(
++          &quot;Invalid conversation history response: expected page.items to be an array.&quot;,
++        );
++      }
++      return {
++        events: [...page.items].reverse(),
++        hasMore:
++          !!page.next_page_id || page.items.length &gt;= INITIAL_HISTORY_PAGE_SIZE,
++        nextPageId: page.next_page_id ?? null,
++        afterSeq: null,
++      };
++    },
++    staleTime: 0,
++    gcTime: 30 * 60 * 1000,
++    refetchOnMount: &quot;always&quot;,
++    refetchOnWindowFocus: false,
++    refetchOnReconnect: false,
++    retry: 1,
++    // The ordered preload owns failure reporting; do not toast twice.
++    meta: { disableToast: true },
++  });
++};
+</pre></details></section><section id="provider"><h2>Readable messages precede live readiness</h2><p><a href="https://github.com/OpenHands/OpenHands/blob/c2a513f16467f35e725e020a72767dbc1c1bf2b3/src/contexts/conversation-websocket-context.tsx#L1">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/678d0642c37b6bfb3d6ba496203dba45d5fe604d/src/contexts/conversation-websocket-context.tsx#L390">After source: src/contexts/conversation-websocket-context.tsx</a></p><svg viewBox="0 0 760 122" role="img" aria-label="Before and after"><rect x="4" y="4" width="752" height="46" class="old"/><text x="18" y="32">Before: ordered page → store + socket</text><path d="M380 50v20" class="arrow"/><rect x="4" y="72" width="752" height="46" class="new"/><text x="18" y="101">After: early page → store; ordered page → socket</text></svg><details><summary>Exact diff</summary><pre>diff --git a/src/contexts/conversation-websocket-context.tsx b/src/contexts/conversation-websocket-context.tsx
+index 876ceb7d29..ad29d725ca 100644
+--- a/src/contexts/conversation-websocket-context.tsx
++++ b/src/contexts/conversation-websocket-context.tsx
+@@ -76,7 +76,11 @@ import { trackError } from &quot;#/utils/error-handler&quot;;
+ import { matchesPendingConversationId } from &quot;#/utils/pending-task-message-link&quot;;
+ import { useReadConversationFile } from &quot;#/hooks/mutation/use-read-conversation-file&quot;;
+ import useMetricsStore, { type MetricsState } from &quot;#/stores/metrics-store&quot;;
+-import { useConversationHistory } from &quot;#/hooks/query/use-conversation-history&quot;;
++import {
++  useConversationHistory,
++  usePersistedConversationHistory,
++  getConversationHistoryScope,
++} from &quot;#/hooks/query/use-conversation-history&quot;;
+ import { setConversationState } from &quot;#/utils/conversation-local-storage&quot;;
+ import {
+   recordModelSwitchMessage,
+@@ -380,12 +384,25 @@ export function ConversationWebSocketProvider({
+   const { data: preloadedHistory, isPending: isPreloadingHistory } =
+     useConversationHistory(conversationId);
+ 
++  const historyScope = getConversationHistoryScope();
++  const { data: persistedHistory } =
++    usePersistedConversationHistory(conversationId);
++  const visibleHistory = useMemo(() =&gt; {
++    if (!persistedHistory) return preloadedHistory;
++    if (!preloadedHistory) return persistedHistory;
++    return {
++      ...preloadedHistory,
++      events: [...persistedHistory.events, ...preloadedHistory.events],
++    };
++  }, [persistedHistory, preloadedHistory]);
++
+   // Skeleton only on the genuine first load (no cached data yet). On return the
+   // cached page is present, so `isPending` is false and we render the
+   // last-known discussion immediately while the tail refetch runs in the
+   // background — the socket gate below also keys on `isPending`, so that
+   // refetch never drops a live socket.
+-  const isLoadingHistoryMain = !!conversationId &amp;&amp; isPreloadingHistory;
++  const isLoadingHistoryMain =
++    !!conversationId &amp;&amp; isPreloadingHistory &amp;&amp; !persistedHistory;
+ 
+   // First-connect cursor from the REST page (see `afterSeq`). Read lazily by
+   // the socket&#x27;s `queryParams`; after the first connect the socket&#x27;s own
+@@ -413,26 +430,34 @@ export function ConversationWebSocketProvider({
+   // a no-op, so the store survives navigating away to Settings and back.
+   useLayoutEffect(() =&gt; {
+     const nextId = conversationId ?? null;
+-    if (useEventStore.getState().loadedConversationId === nextId) {
++    if (
++      useEventStore.getState().loadedConversationId === nextId &amp;&amp;
++      useEventStore.getState().loadedConversationScope === historyScope
++    ) {
+       return;
+     }
+     // Single atomic action: clears the previous conversation&#x27;s events and
+     // records the new loaded id in one `set`, so no subscriber can observe a
+     // half-applied state (events gone but the old id still reported).
+-    clearEventsForConversation(nextId);
++    clearEventsForConversation(nextId, historyScope);
+     resetBrowserStore();
+     // The metrics store is conversation-scoped state too: without a reset the
+     // previous conversation&#x27;s usage/cost keeps rendering in the new
+     // conversation&#x27;s meter until fresh WS stats arrive — and a brand-new
+     // conversation sends none, so the stale figure stuck indefinitely.
+     useMetricsStore.getState().resetMetrics();
+-  }, [conversationId, clearEventsForConversation, resetBrowserStore]);
++  }, [
++    conversationId,
++    historyScope,
++    clearEventsForConversation,
++    resetBrowserStore,
++  ]);
+ 
+   useLayoutEffect(() =&gt; {
+-    if (!preloadedHistory || preloadedHistory.events.length === 0) {
++    if (!visibleHistory || visibleHistory.events.length === 0) {
+       return;
+     }
+-    addEvents(preloadedHistory.events);
++    addEvents(visibleHistory.events);
+ 
+     // The first user message of a cloud start-task conversation is persisted
+     // server-side and reaches us via this REST preload, not over the WebSocket
+@@ -451,7 +476,7 @@ export function ConversationWebSocketProvider({
+         useEventStore.getState().uiEvents,
+       );
+ 
+-      for (const event of preloadedHistory.events) {
++      for (const event of visibleHistory.events) {
+         if (isUserMessageEvent(event)) {
+           consumeMatchingPendingMessage(
+             conversationId,
+@@ -462,7 +487,7 @@ export function ConversationWebSocketProvider({
+       }
+     }
+   }, [
+-    preloadedHistory,
++    visibleHistory,
+     addEvents,
+     conversationId,
+     consumeMatchingPendingMessage,
+@@ -624,7 +649,7 @@ export function ConversationWebSocketProvider({
+     mainCursorRef.current.clear();
+     // Reset the tracked event ref when conversation changes
+     latestPlanningFileEventRef.current = null;
+-  }, [conversationId]);
++  }, [conversationId, historyScope]);
+ 
+   // Drop buffered deltas on conversation switch/unmount: the store is cleared on
+   // switch, so flushing them would leak into the next conversation.
+</pre></details></section><section id="pagination"><h2>Short chats avoid a redundant older-page read</h2><p><a href="https://github.com/OpenHands/OpenHands/blob/c2a513f16467f35e725e020a72767dbc1c1bf2b3/src/hooks/use-load-older-events.ts#L44">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/678d0642c37b6bfb3d6ba496203dba45d5fe604d/src/hooks/use-load-older-events.ts#L46">After source: src/hooks/use-load-older-events.ts</a></p><svg viewBox="0 0 760 122" role="img" aria-label="Before and after"><rect x="4" y="4" width="752" height="46" class="old"/><text x="18" y="32">Before: ordered page → hasMore</text><path d="M380 50v20" class="arrow"/><rect x="4" y="72" width="752" height="46" class="new"/><text x="18" y="101">After: early-page observer → hasMore</text></svg><details><summary>Exact diff</summary><pre>diff --git a/src/hooks/use-load-older-events.ts b/src/hooks/use-load-older-events.ts
+index 9f3e38a38a..bbe471624e 100644
+--- a/src/hooks/use-load-older-events.ts
++++ b/src/hooks/use-load-older-events.ts
+@@ -5,6 +5,8 @@ import { useEventStore } from &quot;#/stores/use-event-store&quot;;
+ import {
+   INITIAL_HISTORY_PAGE_SIZE,
+   useConversationHistory,
++  usePersistedConversationHistory,
++  getConversationHistoryScope,
+ } from &quot;#/hooks/query/use-conversation-history&quot;;
+ import { isTaskConversationId } from &quot;#/utils/conversation-local-storage&quot;;
+ import { seedModelSwitchesFromHistory } from &quot;#/hooks/chat/record-model-switch-message&quot;;
+@@ -44,13 +46,20 @@ interface UseLoadOlderEventsResult {
+ export const useLoadOlderEvents = (
+   conversationId?: string | null,
+ ): UseLoadOlderEventsResult =&gt; {
++  const historyScope = getConversationHistoryScope();
+   const isTaskConversation =
+     !!conversationId &amp;&amp; isTaskConversationId(conversationId);
+   const realConversationId = isTaskConversation ? undefined : conversationId;
+ 
+   const { data: conversation } = useUserConversation(conversationId ?? null);
+-  const { data: initialHistory, isFetched: isInitialHistoryFetched } =
+-    useConversationHistory(realConversationId ?? undefined);
++  const replayHistory = useConversationHistory(realConversationId ?? undefined);
++  const persistedHistory = usePersistedConversationHistory(
++    realConversationId ?? undefined,
++    false,
++  );
++  const initialHistory = replayHistory.data ?? persistedHistory.data;
++  const isInitialHistoryFetched =
++    replayHistory.isFetched || persistedHistory.isFetched;
+   const addEvents = useEventStore((state) =&gt; state.addEvents);
+ 
+   const [isLoading, setIsLoading] = React.useState(false);
+@@ -63,7 +72,7 @@ export const useLoadOlderEvents = (
+     return () =&gt; {
+       activeLoadMarkerRef.current = null;
+     };
+-  }, [conversationId]);
++  }, [conversationId, historyScope]);
+ 
+   React.useEffect(() =&gt; {
+     isLoadingRef.current = false;
+@@ -77,7 +86,7 @@ export const useLoadOlderEvents = (
+ 
+     hasMoreRef.current = true;
+     setHasMore(true);
+-  }, [conversationId, isTaskConversation]);
++  }, [conversationId, historyScope, isTaskConversation]);
+ 
+   // Mirror the initial REST page: if the tail fetch already returned
+   // everything, don&#x27;t auto-trigger an older-events request on short chats.
+@@ -134,6 +143,7 @@ export const useLoadOlderEvents = (
+     const loadMarker = {};
+     activeLoadMarkerRef.current = loadMarker;
+     const isActiveLoad = () =&gt;
++      getConversationHistoryScope() === historyScope &amp;&amp;
+       activeLoadMarkerRef.current === loadMarker &amp;&amp;
+       useEventStore.getState().loadedConversationId === conversationId;
+ 
+@@ -200,6 +210,7 @@ export const useLoadOlderEvents = (
+     }
+   }, [
+     conversationId,
++    historyScope,
+     conversation,
+     conversation?.conversation_url,
+     conversation?.session_api_key,
+</pre></details></section><section id="store"><h2>Backend and organization changes clear the transcript</h2><p><a href="https://github.com/OpenHands/OpenHands/blob/c2a513f16467f35e725e020a72767dbc1c1bf2b3/src/stores/use-event-store.ts#L1">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/678d0642c37b6bfb3d6ba496203dba45d5fe604d/src/stores/use-event-store.ts#L71">After source: src/stores/use-event-store.ts</a></p><svg viewBox="0 0 760 122" role="img" aria-label="Before and after"><rect x="4" y="4" width="752" height="46" class="old"/><text x="18" y="32">Before: owner = conversation ID</text><path d="M380 50v20" class="arrow"/><rect x="4" y="72" width="752" height="46" class="new"/><text x="18" y="101">After: owner = scope + conversation ID</text></svg><details><summary>Exact diff</summary><pre>diff --git a/src/stores/use-event-store.ts b/src/stores/use-event-store.ts
+index ba9ce88c3b..707ea30308 100644
+--- a/src/stores/use-event-store.ts
++++ b/src/stores/use-event-store.ts
+@@ -68,6 +68,7 @@ export interface EventState {
+    * should clear the accumulated events.
+    */
+   loadedConversationId: string | null;
++  loadedConversationScope: string | null;
+   addEvent: (event: OHEvent) =&gt; void;
+   /**
+    * Bulk-insert events. Used for the initial REST history load and for
+@@ -90,7 +91,10 @@ export interface EventState {
+    * call-site to invoke a clear and a `loadedConversationId` setter in the
+    * right order.
+    */
+-  clearEventsForConversation: (conversationId: string | null) =&gt; void;
++  clearEventsForConversation: (
++    conversationId: string | null,
++    scope?: string | null,
++  ) =&gt; void;
+   /**
+    * Streaming slots. They live only in `uiEvents`: nothing reads `events` for
+    * provisional text, and keeping them out means their id — which is the id
+@@ -158,6 +162,7 @@ export const useEventStore = create&lt;EventState&gt;()((set) =&gt; ({
+   eventIds: new Set(),
+   uiEvents: [],
+   loadedConversationId: null,
++  loadedConversationScope: null,
+   addEvent: (event: OHEvent) =&gt; set((state) =&gt; applyAddEvent(state, event)),
+   addEvents: (incoming: OHEvent[]) =&gt;
+     set((state) =&gt; {
+@@ -199,13 +204,15 @@ export const useEventStore = create&lt;EventState&gt;()((set) =&gt; ({
+       eventIds: new Set(),
+       uiEvents: [],
+       loadedConversationId: null,
++      loadedConversationScope: null,
+     })),
+-  clearEventsForConversation: (conversationId: string | null) =&gt;
++  clearEventsForConversation: (conversationId: string | null, scope = null) =&gt;
+     set(() =&gt; ({
+       events: [],
+       eventIds: new Set(),
+       uiEvents: [],
+       loadedConversationId: conversationId,
++      loadedConversationScope: scope,
+     })),
+   openStreamingSlot: (frame: ItemStartedFrame, meta: StreamingSlotMeta = {}) =&gt;
+     set((state) =&gt; {
+</pre></details></section><section><h2>State and compatibility boundaries</h2><table><tr><th>Owner</th><th>Responsibility</th></tr><tr><td>usePersistedConversationHistory</td><td>In-memory Cloud display page, keyed by backend, host, connection revision, organization and conversation. Runtime URL/key rotation does not discard it.</td></tr><tr><td>useConversationHistory</td><td>Count-before-page ordering and first-connect afterSeq. Initial failures use strictPagination and query retries.</td></tr><tr><td>ConversationWebSocketProvider</td><td>Bulk insertion, event-ID deduplication, optimistic-message/model-switch reconciliation, and socket gating.</td></tr><tr><td>useLoadOlderEvents</td><td>Observes the early page without fetching; ignores results from an abandoned backend/org scope.</td></tr></table><p>No new wire contract or Agent Server version requirement. Local and ACP retain the existing fetch path. Cloud standalone and embedded Canvas share the changed provider. Planner loading behavior remains as before. This cache lives only in the current document session; no localStorage transcript is introduced.</p><h2>Limits and alternatives</h2><p>The existing 50-event replay overlap remains a bounded-lag workaround. This does not establish a same-log cursor, repair missing webhooks, or compact full-state events. The smaller alternative only skips count for known unavailable Cloud sandboxes. It adds no display query, but cannot help a slow runtime still reported RUNNING.</p><h2>Evidence</h2><p>Focused tests cover readable history while count is unresolved, the closed-socket gate, later cursor/reconciliation, short-history pagination, runtime rotation, organization isolation and failed history reads. R01 uses real stored history and runtime responses. The slow-count recording delays only that request by 3 seconds; ordinary timing trials have no video or CPU-profiler overhead. Consult the PR's Why section for the comparison and measurement limits.</p></section></main></html>

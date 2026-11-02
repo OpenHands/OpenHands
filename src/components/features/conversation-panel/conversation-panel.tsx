@@ -1,5 +1,9 @@
+import { formatTimeDelta } from "#/utils/format-time-delta";
+import { usePrefetchUserConversation } from "#/hooks/query/use-user-conversation";
+import { useConversationDisplayTitleState } from "#/hooks/use-conversation-display-title";
+import { usePendingTaskAttachmentsStore } from "#/stores/pending-task-attachments-store";
+import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
 import React from "react";
-import { Tooltip } from "@heroui/react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { useNavigation } from "#/context/navigation-context";
@@ -30,7 +34,8 @@ import { isExecutionActive } from "#/utils/status";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
 import { useIsCreatingConversation } from "#/hooks/use-is-creating-conversation";
 import { ConversationCard } from "./conversation-card/conversation-card";
-import { ConversationCardPreview } from "./conversation-card/conversation-card-preview";
+import { ExecutionStatus } from "#/types/agent-server/core/base/common";
+import { ConversationPanelRow } from "./conversation-panel-row";
 import { StartTaskCard } from "./start-task-card/start-task-card";
 import { ConversationCardSkeleton } from "./conversation-card/conversation-card-skeleton";
 import { CompactConversationRow } from "./compact-conversation-row";
@@ -68,11 +73,7 @@ import {
   PINNED_CONVERSATION_TAG_KEY,
 } from "#/utils/conversation-tag-flags";
 import { uniqueById } from "#/utils/unique-by-id";
-import {
-  isEffectivelyArchivedConversation,
-  isMissingSandboxStatus,
-  isRuntimeUnavailableSandboxStatus,
-} from "#/utils/conversation-archive-status";
+import { isEffectivelyArchivedConversation } from "#/utils/conversation-archive-status";
 import type { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
 
 interface ConversationPanelProps {
@@ -95,8 +96,9 @@ export function ConversationPanel({
 }: ConversationPanelProps) {
   const { t } = useTranslation("openhands");
   const { conversationId: currentConversationId, navigate } = useNavigation();
-  const { backend: activeBackend } = useActiveBackend();
+  const { backend: activeBackend, orgId } = useActiveBackend();
   const backendScopedPath = useBackendScopedPath();
+  const prefetchConversation = usePrefetchUserConversation();
   // Click-outside is only relevant in the legacy drawer mode where an
   // onClose handler is provided. When the panel is rendered inline (e.g.
   // as the always-visible conversation list pane), clicking outside should
@@ -288,8 +290,10 @@ export function ConversationPanel({
   } = usePaginatedConversations();
   const { workspaces: knownWorkspaces } = useResolvedWorkspaces();
 
-  // Fetch in-progress start tasks
-  const { data: startTasks } = useStartTasks();
+  const pendingLaunches = useConversationLaunchStore((state) => state.launches);
+  const pendingAttachments = usePendingTaskAttachmentsStore(
+    (state) => state.byTaskId,
+  );
   // The hovercard names the launched agent profile: one cached list lookup
   // (shared with the chat input), never a fetch per hover.
   const { data: agentProfilesData } = useAgentProfiles();
@@ -313,6 +317,18 @@ export function ConversationPanel({
     // so the rendered count reflects real growth and React keys stay unique.
     return uniqueById(all);
   }, [data]);
+
+  const listedConversationIds = React.useMemo(
+    () => allLoadedConversations.map((conversation) => conversation.id),
+    [allLoadedConversations],
+  );
+  // Fetch in-progress start tasks
+  const {
+    data: startTasks,
+    unresolvedTaskIds = [],
+    failedTaskIds = [],
+  } = useStartTasks(10, listedConversationIds);
+  const getTitle = useConversationDisplayTitleState();
 
   // Grouped pagination is folder-oriented. Record the first backend page for
   // every conversation so later pages can introduce new folders without
@@ -823,6 +839,11 @@ export function ConversationPanel({
 
   const { mutate: createConversation } = useCreateConversation();
   const isCreatingConversationFlow = useIsCreatingConversation();
+  // Keep row actions stable while still checking the latest navigation/mutation state.
+  const isCreatingConversationRef = React.useRef(isCreatingConversationFlow);
+  React.useLayoutEffect(() => {
+    isCreatingConversationRef.current = isCreatingConversationFlow;
+  }, [isCreatingConversationFlow]);
 
   const launchFromGroup = React.useCallback(
     (launch: ConversationGroupLaunch) => {
@@ -848,7 +869,7 @@ export function ConversationPanel({
   // repository, so the backend doesn't touch the shared working tree's branch.
   const handleNewConversationInSandbox = React.useCallback(
     (sandboxId: string) => {
-      if (isCreatingConversationFlow) return;
+      if (isCreatingConversationRef.current) return;
       createConversation(
         {
           sandboxId,
@@ -861,7 +882,7 @@ export function ConversationPanel({
         },
       );
     },
-    [createConversation, isCreatingConversationFlow, navigate],
+    [createConversation, navigate],
   );
 
   const handleDeleteProject = React.useCallback(
@@ -1057,6 +1078,10 @@ export function ConversationPanel({
       conversation: (typeof conversations)[number],
       options?: { inPinnedSection?: boolean },
     ) => {
+      const { title: displayTitle, pending: titlePending } = getTitle(
+        conversation.id,
+        conversation.title,
+      );
       const isPinned = pinnedIds.includes(conversation.id);
       // Presentation: a row looks archived when the user archived it or its
       // runtime is missing and non-resumable. This single predicate drives list
@@ -1069,20 +1094,17 @@ export function ConversationPanel({
       // runtime cannot be restored from this menu, so such a row offers neither
       // "Archive" nor "Unarchive", even when a stored archive flag is set.
       const explicitlyArchived = archivedIdSet.has(conversation.id);
-      const runtimeMissing = isMissingSandboxStatus(
-        conversation.sandbox_status,
-      );
       // "New Conversation in Sandbox" needs a sandbox the backend can start a
       // conversation in: Cloud rows only (the local adapter carries no sandbox
       // id), and not one whose runtime is MISSING or ERROR, which the start
       // task rejects. A PAUSED sandbox is resumed by the backend.
-      const sandboxId = conversation.sandbox_id;
       if (compact) {
         return (
           <CompactConversationRow
             key={conversation.id}
             conversationId={conversation.id}
-            title={conversation.title ?? ""}
+            title={displayTitle}
+            titlePending={titlePending}
             selectedRepository={{
               selected_repository: conversation.selected_repository,
               selected_branch: conversation.selected_branch,
@@ -1111,138 +1133,53 @@ export function ConversationPanel({
         );
       }
       return (
-        <Tooltip
+        <ConversationPanelRow
           key={conversation.id}
-          placement="right-start"
-          // Clear the sidebar's resize handle so the preview never covers it.
-          offset={20}
-          delay={1000}
-          closeDelay={100}
-          isDisabled={
-            !showHoverMetadata || openContextMenuId === conversation.id
+          conversation={conversation}
+          displayTitle={displayTitle}
+          titlePending={titlePending}
+          timestampLabel={formatTimeDelta(
+            conversation.updated_at ?? conversation.created_at,
+          )}
+          href={backendScopedPath(`/conversations/${conversation.id}`)}
+          isActive={conversation.id === currentConversationId}
+          isPinned={isPinned}
+          isArchived={isArchived}
+          explicitlyArchived={explicitlyArchived}
+          contextMenuOpen={openContextMenuId === conversation.id}
+          inPinnedSection={!!options?.inPinnedSection}
+          allowEditTags={activeBackend.kind === "local"}
+          showHoverMetadata={showHoverMetadata}
+          showRepoBranchMetadata={showRepoBranchMetadata}
+          showLlmProfiles={showLlmProfiles}
+          showTagsMetadata={showTagsMetadata}
+          agentProfileName={
+            agentProfilesData
+              ? (agentProfileNames.get(
+                  conversation.launched_agent_profile?.agent_profile_id ?? "",
+                ) ?? null)
+              : undefined
           }
-          disableAnimation={import.meta.env.MODE === "test"}
-          className="max-w-none overflow-visible rounded-xl border border-border bg-base-secondary p-0 text-contrast shadow-xl"
-          content={
-            <ConversationCardPreview
-              title={conversation.title ?? ""}
-              executionStatus={conversation.execution_status}
-              sandboxStatus={conversation.sandbox_status}
-              selectedRepository={{
-                selected_repository: conversation.selected_repository,
-                selected_branch: conversation.selected_branch,
-                git_provider: conversation.git_provider as Provider,
-              }}
-              workspaceWorkingDir={
-                conversation.selected_workspace ??
-                conversation.workspace?.working_dir
-              }
-              llmModel={conversation.llm_model}
-              agentKind={conversation.agent_kind}
-              acpServer={conversation.acp_server}
-              createdAt={conversation.created_at}
-              agentProfileId={
-                conversation.launched_agent_profile?.agent_profile_id ?? null
-              }
-              agentProfileName={
-                agentProfilesData
-                  ? (agentProfileNames.get(
-                      conversation.launched_agent_profile?.agent_profile_id ??
-                        "",
-                    ) ?? null)
-                  : undefined
-              }
-              tags={conversation.tags}
-              isArchived={isArchived}
-            />
-          }
-        >
-          <NavigationLink
-            to={backendScopedPath(`/conversations/${conversation.id}`)}
-            onClick={onClose}
-            className={cn(
-              "block rounded-md transition-colors",
-              openContextMenuId !== conversation.id && "hover:bg-surface",
-              (conversation.id === currentConversationId ||
-                openContextMenuId === conversation.id) &&
-                "bg-surface",
-            )}
-          >
-            <ConversationCard
-              onDelete={() =>
-                handleDeleteProject(conversation.id, conversation.title ?? "")
-              }
-              // Archive is offered until the row is effectively archived; the
-              // reverse direction, "Unarchive", is offered only when the row is
-              // explicitly archived and its runtime is not missing. A
-              // missing-runtime row offers neither.
-              onArchive={
-                isArchived
-                  ? undefined
-                  : () =>
-                      handleArchiveProject(
-                        conversation.id,
-                        conversation.title ?? "",
-                      )
-              }
-              onUnarchive={
-                explicitlyArchived && !runtimeMissing
-                  ? () => handleUnarchiveProject(conversation.id)
-                  : undefined
-              }
-              onStop={() => handleStopConversation(conversation.id)}
-              onNewConversationInSandbox={
-                sandboxId &&
-                !isRuntimeUnavailableSandboxStatus(conversation.sandbox_status)
-                  ? () => handleNewConversationInSandbox(sandboxId)
-                  : undefined
-              }
-              onEditTags={
-                activeBackend.kind === "local"
-                  ? () => handleEditTags(conversation.id)
-                  : undefined
-              }
-              onChangeTitle={(title) =>
-                handleConversationTitleChange(conversation.id, title)
-              }
-              title={conversation.title ?? ""}
-              selectedRepository={{
-                selected_repository: conversation.selected_repository,
-                selected_branch: conversation.selected_branch,
-                git_provider: conversation.git_provider as Provider,
-              }}
-              lastUpdatedAt={conversation.updated_at}
-              createdAt={conversation.created_at}
-              executionStatus={conversation.execution_status}
-              sandboxStatus={conversation.sandbox_status}
-              conversationId={conversation.id}
-              contextMenuOpen={openContextMenuId === conversation.id}
-              onContextMenuToggle={(isOpen) =>
-                setOpenContextMenuId(isOpen ? conversation.id : null)
-              }
-              isActive={conversation.id === currentConversationId}
-              workspaceWorkingDir={
-                conversation.selected_workspace ??
-                conversation.workspace?.working_dir
-              }
-              showRepositoryMetadata={showRepoBranchMetadata}
-              llmModel={conversation.llm_model}
-              showLlmProfiles={showLlmProfiles}
-              agentKind={conversation.agent_kind}
-              acpServer={conversation.acp_server}
-              acpModels={conversation.acp_available_models}
-              tags={conversation.tags}
-              showTags={showTagsMetadata}
-              isArchived={isArchived}
-              isPinned={isPinned}
-              onTogglePin={() => handleTogglePin(conversation)}
-              alwaysShowPinIcon={isPinned && !options?.inPinnedSection}
-            />
-          </NavigationLink>
-        </Tooltip>
+          onClose={onClose}
+          prefetchConversation={prefetchConversation}
+          handleDeleteProject={handleDeleteProject}
+          handleArchiveProject={handleArchiveProject}
+          handleUnarchiveProject={handleUnarchiveProject}
+          handleStopConversation={handleStopConversation}
+          handleNewConversationInSandbox={handleNewConversationInSandbox}
+          handleEditTags={handleEditTags}
+          handleConversationTitleChange={handleConversationTitleChange}
+          handleTogglePin={handleTogglePin}
+          setOpenContextMenuId={setOpenContextMenuId}
+        />
       );
     },
     [
+      prefetchConversation,
+      getTitle,
+      agentProfilesData,
+      agentProfileNames,
+      backendScopedPath,
       activeBackend.id,
       activeBackend.kind,
       archivedIdSet,
@@ -1433,19 +1370,119 @@ export function ConversationPanel({
           />
         ) : null}
 
-        {/* Render in-progress start tasks first (skipped in compact mode —
-            their rich card layout doesn't fit in the icon rail). */}
         {!compact &&
-          startTasks?.map((task) => (
-            <NavigationLink
-              key={task.id}
-              to={backendScopedPath(`/conversations/task-${task.id}`)}
-              onClick={onClose}
-              className="block"
-            >
-              <StartTaskCard task={task} />
-            </NavigationLink>
-          ))}
+          Object.values(pendingLaunches)
+            .filter(
+              (launch) =>
+                (!launch.targetId ||
+                  (launch.targetId.startsWith("task-") &&
+                    unresolvedTaskIds.includes(launch.targetId.slice(5)) &&
+                    !pendingAttachments[launch.targetId.slice(5)]?.error &&
+                    !pendingAttachments[launch.targetId.slice(5)]
+                      ?.readError)) &&
+                launch.backendId === activeBackend.id &&
+                launch.orgId === orgId,
+            )
+            .map((launch) => (
+              <NavigationLink
+                key={launch.id}
+                to={backendScopedPath(`/conversations/${launch.id}`)}
+                onClick={onClose}
+                className="block"
+              >
+                <ConversationCard
+                  title={getTitle(launch.id).title}
+                  titlePending={getTitle(launch.id).pending}
+                  isStarting
+                  selectedRepository={null}
+                  lastUpdatedAt=""
+                  showRepositoryMetadata={false}
+                  isActive={
+                    currentConversationId === launch.id ||
+                    currentConversationId === launch.targetId
+                  }
+                  executionStatus={
+                    launch.error ||
+                    (launch.targetId?.startsWith("task-") &&
+                      failedTaskIds.includes(launch.targetId.slice(5)))
+                      ? ExecutionStatus.ERROR
+                      : null
+                  }
+                />
+              </NavigationLink>
+            ))}
+
+        {!compact &&
+          Object.entries(pendingAttachments)
+            .filter(
+              ([, pending]) =>
+                (pending.error || pending.readError) &&
+                pending.backendId === activeBackend.id &&
+                pending.orgId === orgId,
+            )
+            .map(([taskId, pending]) => (
+              <NavigationLink
+                key={taskId}
+                to={backendScopedPath(
+                  `/conversations/${pending.error && pending.conversationId ? pending.conversationId : `task-${taskId}`}`,
+                )}
+                onClick={onClose}
+                className="block"
+              >
+                <ConversationCard
+                  title={pending.content || t(I18nKey.CONVERSATION$UNTITLED)}
+                  selectedRepository={null}
+                  lastUpdatedAt=""
+                  showRepositoryMetadata={false}
+                  isActive={
+                    currentConversationId === `task-${taskId}` ||
+                    currentConversationId === pending.conversationId
+                  }
+                  executionStatus={ExecutionStatus.ERROR}
+                />
+              </NavigationLink>
+            ))}
+
+        {/* Keep pending conversations available while their sandboxes start. */}
+        {!compact &&
+          startTasks
+            ?.filter(
+              (task) =>
+                !pendingAttachments[task.id]?.error &&
+                !pendingAttachments[task.id]?.readError,
+            )
+            .map((task) => (
+              <NavigationLink
+                key={task.id}
+                to={backendScopedPath(`/conversations/task-${task.id}`)}
+                onClick={onClose}
+                className="block"
+              >
+                <StartTaskCard
+                  task={task}
+                  title={getTitle(`task-${task.id}`, task.request.title).title}
+                  titlePending={
+                    getTitle(`task-${task.id}`, task.request.title).pending
+                  }
+                  initialMessage={
+                    pendingAttachments[task.id]?.content ||
+                    Object.values(pendingLaunches).find(
+                      (launch) => launch.targetId === `task-${task.id}`,
+                    )?.message
+                  }
+                  isActive={
+                    currentConversationId === task.app_conversation_id ||
+                    currentConversationId === `task-${task.id}` ||
+                    Object.values(pendingLaunches).some(
+                      (launch) =>
+                        launch.id === currentConversationId &&
+                        launch.targetId === `task-${task.id}`,
+                    )
+                  }
+                  showRepositoryMetadata={showRepoBranchMetadata}
+                />
+              </NavigationLink>
+            ))}
 
         {!showInitialSkeleton && compact
           ? compactVisibleConversations.map((conversation) =>

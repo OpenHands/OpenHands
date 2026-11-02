@@ -65,6 +65,7 @@ interface EventMessageProps {
    * Has no effect on `ThinkAction`, whose thought IS its action body.
    */
   suppressThought?: boolean;
+  suppressReasoning?: boolean;
 }
 
 const getActivatedSkills = (event: MessageEvent): string[] =>
@@ -125,7 +126,6 @@ const renderUserMessageWithSkillReady = (
         <GenericEventMessageWrapper
           event={skillReadyEvent}
           isLastMessage={isLastMessage}
-          expansionId={`skill-ready-${String(skillReadyEvent.id ?? "")}`}
         />
       </>
     );
@@ -184,6 +184,7 @@ function EventMessageComponent({
   planPreviewEventIds,
   showPlanPreview,
   suppressThought = false,
+  suppressReasoning = false,
 }: EventMessageProps) {
   const { data: config } = useConfig();
   const planContent = useConversationStore((state) => state.planContent);
@@ -198,18 +199,14 @@ function EventMessageComponent({
   // Read isFromPlanningAgent directly from the event object
   const isFromPlanningAgent = event.isFromPlanningAgent || false;
 
-  // Streaming slots render on a clock rather than at the granularity the
-  // network delivered (#15493). Unconditional: hooks cannot be nested in the
-  // per-kind branches below. A finished agent message is fed through it too:
-  // it replaces its slot in place, so the reveal carries on from where the
-  // slot left off instead of the unrevealed rest appearing at once. Any other
-  // message mounts complete and is shown as is.
+  // Smooth live deltas, then show the complete durable reply immediately.
   const finishedReply =
     isMessageEvent(event) && event.source === "agent"
       ? parseMessageFromEvent(event)
       : "";
   const streamedContent = useStreamedText(
     isStreamingDeltaEvent(event) ? (event.content ?? "") : finishedReply,
+    isStreamingDeltaEvent(event),
   );
 
   // Common props for components that need them
@@ -245,11 +242,7 @@ function EventMessageComponent({
   // the card shape, success indicator and markdown rendering all match.
   if (isACPToolCallEvent(event)) {
     return (
-      <GenericEventMessageWrapper
-        event={event}
-        isLastMessage={isLastMessage}
-        expansionId={`event-${String(event.id ?? "")}`}
-      />
+      <GenericEventMessageWrapper event={event} isLastMessage={isLastMessage} />
     );
   }
 
@@ -264,11 +257,8 @@ function EventMessageComponent({
       .join("\n\n");
     return (
       <>
-        {reasoningContent && (
-          <CollapsibleThinking
-            content={reasoningContent}
-            expansionId={`reasoning-${event.id}`}
-          />
+        {!suppressReasoning && reasoningContent && (
+          <CollapsibleThinking content={reasoningContent} />
         )}
         {message && (
           <ChatMessage
@@ -287,11 +277,6 @@ function EventMessageComponent({
     return renderStreamingReply(event.reasoning_content ?? "");
   }
 
-  // The finished reply is still being revealed: keep the streaming bubble.
-  if (isMessageEvent(event) && streamedContent.length < finishedReply.length) {
-    return renderStreamingReply(getReasoningContent(event.llm_message));
-  }
-
   // Finish actions
   if (isActionEvent(event) && event.action.kind === "FinishAction") {
     return (
@@ -307,12 +292,7 @@ function EventMessageComponent({
   // (usually English) differs from the conversation language.
   if (isActionEvent(event) && event.action.kind === "ThinkAction") {
     const thinkAction = event as ActionEvent<ThinkAction>;
-    return (
-      <CollapsibleThinking
-        content={thinkAction.action.thought}
-        expansionId={`reasoning-${event.id}`}
-      />
-    );
+    return <CollapsibleThinking content={thinkAction.action.thought} />;
   }
 
   // Action events - render thought + action (will be replaced by thought + observation)
@@ -320,12 +300,6 @@ function EventMessageComponent({
     const reasoningContent = getReasoningContent(event);
     return (
       <>
-        {reasoningContent && (
-          <CollapsibleThinking
-            content={reasoningContent}
-            expansionId={`reasoning-${event.id}`}
-          />
-        )}
         {!suppressThought && (
           <ThoughtEventMessage
             event={event}
@@ -335,7 +309,7 @@ function EventMessageComponent({
         <GenericEventMessageWrapper
           event={event}
           isLastMessage={isLastMessage}
-          expansionId={`event-${String(event.id ?? "")}`}
+          reasoning={suppressReasoning ? "" : reasoningContent}
         />
       </>
     );
@@ -383,12 +357,6 @@ function EventMessageComponent({
 
     return (
       <>
-        {reasoningContent && (
-          <CollapsibleThinking
-            content={reasoningContent}
-            expansionId={`reasoning-${event.id}`}
-          />
-        )}
         {shouldShowThought && (
           <ThoughtEventMessage
             event={correspondingAction}
@@ -398,7 +366,7 @@ function EventMessageComponent({
         <GenericEventMessageWrapper
           event={event}
           isLastMessage={isLastMessage}
-          expansionId={`event-${String(event.id ?? "")}`}
+          reasoning={suppressReasoning ? "" : reasoningContent}
           correspondingAction={
             correspondingAction && isActionEvent(correspondingAction)
               ? correspondingAction
@@ -418,12 +386,6 @@ function EventMessageComponent({
 
     return (
       <>
-        {reasoningContent && (
-          <CollapsibleThinking
-            content={reasoningContent}
-            expansionId={`reasoning-${event.id}`}
-          />
-        )}
         {!suppressThought && correspondingAction && (
           <ThoughtEventMessage
             event={correspondingAction}
@@ -433,8 +395,8 @@ function EventMessageComponent({
         <GenericEventMessageWrapper
           event={event}
           isLastMessage={isLastMessage}
+          reasoning={suppressReasoning ? "" : reasoningContent}
           correspondingAction={correspondingAction}
-          expansionId={`reject-${String(event.id ?? "")}`}
         />
       </>
     );
@@ -461,6 +423,7 @@ function EventMessageComponent({
     return (
       <UserAssistantEventMessage
         event={messageEvent}
+        suppressReasoning={suppressReasoning}
         {...commonProps}
         isLastMessage={isLastMessage}
       />
@@ -469,11 +432,7 @@ function EventMessageComponent({
 
   // Generic fallback for all other events
   return (
-    <GenericEventMessageWrapper
-      event={event}
-      isLastMessage={isLastMessage}
-      expansionId={`event-${String(event.id ?? "")}`}
-    />
+    <GenericEventMessageWrapper event={event} isLastMessage={isLastMessage} />
   );
 }
 

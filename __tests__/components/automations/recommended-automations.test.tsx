@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useState } from "react";
 import {
   act,
   fireEvent,
@@ -38,6 +39,7 @@ import {
   type RecommendedAutomation,
 } from "@openhands/extensions/automations";
 import { INTEGRATION_CATALOG } from "@openhands/extensions/integrations";
+import type { TemplateFilters } from "#/components/features/automations/template-filter-chips";
 
 const {
   mockCreateConversationMutate,
@@ -364,6 +366,46 @@ describe("recommended automations", () => {
     expect(
       screen.queryByTestId("recommended-automation-card-github-pr-reviewer"),
     ).not.toBeInTheDocument();
+  });
+
+  it("keeps the filter rail mounted when filters empty and refill the templates", () => {
+    function FilterableTemplates() {
+      const [filters, setFilters] = useState<TemplateFilters>({
+        integrationId: "tavily",
+        trigger: null,
+      });
+
+      return (
+        <RecommendedAutomationsSection
+          backendKind="local"
+          installedServers={[]}
+          filters={filters}
+          onFiltersChange={setFilters}
+          onSelect={vi.fn()}
+          scrollableGrid
+        />
+      );
+    }
+
+    render(<FilterableTemplates />);
+    const filterRail = screen.getByTestId("template-filters");
+    expect(
+      screen.queryByTestId("automations-filtered-empty"),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("template-filter-trigger-event"));
+
+    expect(screen.getByTestId("automations-filtered-empty")).toHaveTextContent(
+      I18nKey.RECOMMENDED_AUTOMATIONS$NO_MATCHING_TEMPLATES,
+    );
+    expect(screen.getByTestId("template-filters")).toBe(filterRail);
+
+    fireEvent.click(screen.getByTestId("template-filter-trigger-event"));
+
+    expect(
+      screen.queryByTestId("automations-filtered-empty"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("template-filters")).toBe(filterRail);
   });
 
   it("shows a left-aligned MCP icon stack on each card", () => {

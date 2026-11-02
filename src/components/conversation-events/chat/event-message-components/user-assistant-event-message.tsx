@@ -23,12 +23,14 @@ import { useIsMutating } from "@tanstack/react-query";
 
 interface UserAssistantEventMessageProps {
   event: MessageEvent;
+  suppressReasoning?: boolean;
   isLastMessage: boolean;
   isFromPlanningAgent: boolean;
 }
 
 function UserAssistantEventMessageComponent({
   event,
+  suppressReasoning = false,
   isFromPlanningAgent,
 }: UserAssistantEventMessageProps) {
   const { t } = useTranslation("openhands");
@@ -118,7 +120,7 @@ function UserAssistantEventMessageComponent({
 
   return (
     <>
-      {reasoning && (
+      {!suppressReasoning && reasoning && (
         <CollapsibleThinking
           content={reasoning}
           expansionId={`reasoning-${event.id}`}

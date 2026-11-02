@@ -195,6 +195,9 @@ describe("Messages virtualization", () => {
       },
     };
     renderMessages(events);
+    // The agent reply and its reasoning fold into one group, so the thinking
+    // section is reachable only once the group is open.
+    fireEvent.click(screen.getByTestId("event-group-toggle"));
     fireEvent.click(screen.getByTestId("collapsible-thinking-toggle"));
     expect(
       screen.getByTestId("collapsible-thinking-content"),
@@ -786,7 +789,7 @@ describe("Messages virtualization", () => {
     expect(topOffsets).not.toContain(0);
   });
 
-  it("agrees with the plain list about the last group being finalized", () => {
+  it("agrees with the plain list about the last group's summary", () => {
     // A group followed only by a planning observation that is not the phase's
     // PLAN.md preview renders nothing in the virtualized list. The tail used to
     // be read off that (shorter) row set, so the group looked live above the
@@ -827,7 +830,7 @@ describe("Messages virtualization", () => {
 
     const { unmount } = renderMessages(events, false);
     const plainText = groupHeader().textContent;
-    expect(plainText).toContain("EVENT_GROUP$ACTIONS_COMPLETED");
+    expect(plainText).toContain("EVENT_GROUP$RAN_COMMANDS");
     unmount();
 
     renderMessages(events);

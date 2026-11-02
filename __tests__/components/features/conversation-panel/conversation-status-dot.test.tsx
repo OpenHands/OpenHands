@@ -21,6 +21,20 @@ vi.mock("#/components/shared/buttons/styled-tooltip", () => ({
 }));
 
 describe("ConversationStatusDot", () => {
+  it("exposes startup activity without adding a tooltip", () => {
+    renderWithProviders(
+      <ConversationStatusDot
+        executionStatus={null}
+        isStarting
+        showTooltip={false}
+      />,
+    );
+    expect(screen.getByRole("img")).toHaveAccessibleName(
+      "CONVERSATION$STARTING_CONVERSATION",
+    );
+    expect(screen.queryByTestId("styled-tooltip")).not.toBeInTheDocument();
+  });
+
   it.each([
     [ExecutionStatus.FINISHED, "conversation-status-check", "COMMON$FINISHED"],
     [ExecutionStatus.RUNNING, "conversation-status-working", "COMMON$WORKING"],
@@ -77,10 +91,12 @@ describe("ConversationStatusDot", () => {
       <ConversationStatusDot
         executionStatus={ExecutionStatus.FINISHED}
         sandboxStatus="ERROR"
+        isStarting
       />,
     );
 
     expect(screen.getByTestId("conversation-status-error")).toBeInTheDocument();
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
     expect(
       screen.queryByTestId("conversation-status-archived"),
     ).not.toBeInTheDocument();

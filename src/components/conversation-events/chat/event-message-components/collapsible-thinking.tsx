@@ -1,8 +1,6 @@
-import React from "react";
-import { useTranslation } from "react-i18next";
-import ArrowDown from "#/icons/angle-down-solid.svg?react";
-import ArrowUp from "#/icons/angle-up-solid.svg?react";
 import LightbulbIcon from "#/icons/lightbulb.svg?react";
+import { useTranslation } from "react-i18next";
+import { DisclosureCaret } from "#/components/shared/disclosure-caret";
 import { useRowExpansionKey } from "#/components/features/chat/row-expansion-context";
 import { usePersistentExpansion } from "#/stores/message-expansion-store";
 import { I18nKey } from "#/i18n/declaration";
@@ -34,8 +32,6 @@ export function CollapsibleThinking({
     return null;
   }
 
-  const Chevron = expanded ? ArrowUp : ArrowDown;
-
   return (
     <div
       className="my-1 w-full py-1 text-sm"
@@ -51,11 +47,10 @@ export function CollapsibleThinking({
         data-testid="collapsible-thinking-toggle"
         className="w-full flex items-center gap-2 text-left cursor-pointer"
       >
-        <Chevron className="h-4 w-4 fill-muted flex-shrink-0" />
-        <LightbulbIcon className="h-4 w-4 fill-muted flex-shrink-0" />
         <span className="font-normal text-muted">
           {t(I18nKey.THINKING$TITLE)}
         </span>
+        <DisclosureCaret open={expanded} />
       </button>
 
       {expanded && (
@@ -63,6 +58,30 @@ export function CollapsibleThinking({
           <MarkdownRenderer>{content}</MarkdownRenderer>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Reasoning shown at the top of a tool step's own details, so it is one click
+ * away on the step instead of a separate dropdown above it.
+ */
+export function StepThinking({ content }: CollapsibleThinkingProps) {
+  const { t } = useTranslation("openhands");
+
+  if (!content.trim()) {
+    return null;
+  }
+
+  return (
+    <div className="flex flex-col gap-0.5 text-xs" data-testid="step-thinking">
+      <span className="flex items-center gap-2 font-normal text-muted">
+        <LightbulbIcon className="h-4 w-4 fill-muted flex-shrink-0" />
+        {t(I18nKey.THINKING$TITLE)}
+      </span>
+      <div className="pl-6 text-muted">
+        <MarkdownRenderer>{content}</MarkdownRenderer>
+      </div>
     </div>
   );
 }
