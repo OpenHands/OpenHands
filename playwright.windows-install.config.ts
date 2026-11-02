@@ -31,7 +31,7 @@ export default defineConfig({
   testMatch: [
     /onboarding[\\/]mock-llm-onboarding-happy-path\.spec\.ts$/,
     /conversations[\\/]mock-llm-conversation\.spec\.ts$/,
-    // Known Windows bugs, marked `test.fail` on win32 until they are fixed.
+    // Open Windows bugs; these fail on Windows until each issue is fixed.
     /windows[\\/]mock-llm-windows-known-issues\.spec\.ts$/,
   ],
   fullyParallel: false,

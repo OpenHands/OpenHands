@@ -2,17 +2,22 @@
  * Mock-LLM E2E: behaviour that is known to break on a Windows host.
  *
  * Every test asserts the correct, platform-independent behaviour, so it
- * passes on Linux and macOS. On Windows each one is marked with `test.fail`
- * and the issue that tracks it: the Windows npm-install job
- * (.github/workflows/windows-install-e2e.yml) stays green while the bug is
- * open, and turns red with "expected to fail, but passed" once it is fixed.
- * Remove the marker then, and the test becomes a regression guard.
+ * passes on Linux and macOS and fails on Windows until its issue is fixed.
+ * The Windows npm-install workflow runs this file as its own job
+ * (`known-windows-bugs` in .github/workflows/windows-install-e2e.yml): a fix
+ * PR shows its test going from red to green there.
  *
- * Commands given to the agent must run in both bash and PowerShell (the
+ * Tests are independent (no serial mode), so one failure does not skip the
+ * rest. Commands given to the agent must run in both bash and PowerShell (the
  * agent-server's Windows terminal), so they only use `mkdir`, `echo` and `>`.
  */
 
-import { test, expect, type APIRequestContext } from "@playwright/test";
+import {
+  test,
+  expect,
+  type APIRequestContext,
+  type Page,
+} from "@playwright/test";
 import {
   BACKEND_URL,
   SESSION_API_KEY,
@@ -31,7 +36,6 @@ import {
   setChatInput,
 } from "../utils/mock-llm-helpers";
 
-const IS_WINDOWS = process.platform === "win32";
 const REPLY_TOKEN = "WINDOWS_KNOWN_ISSUES_REPLY_OK";
 const FILE_NAME = "windows-check.txt";
 const PLAN_HEADING = "Windows plan check";
@@ -78,95 +82,95 @@ function observationText(observation: { content?: { text?: string }[] }) {
   return (observation.content ?? []).map((c) => c.text ?? "").join("");
 }
 
-test.describe.configure({ mode: "serial" });
+const conversationIds = new Set<string>();
+
+async function startConversation(page: Page, message: string) {
+  await routeSessionApiKey(page);
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await dismissAnalyticsModal(page);
+  await waitForTestId(page, "home-chat-launcher");
+  await setChatInput(page, message);
+  await page.getByTestId("submit-button").click();
+  await waitForPath(page, /\/conversations\/.+/, 30_000);
+  const id = getConversationIdFromURL(page);
+  conversationIds.add(id);
+  return id;
+}
+
+/**
+ * Start a conversation whose agent writes FILE_NAME and .agents_tmp/PLAN.md
+ * into its workspace, and wait until the command has run.
+ */
+async function createWorkspaceConversation(
+  page: Page,
+  request: APIRequestContext,
+) {
+  await ensureMockLLMProfile(page);
+  await resetMockLLM(request);
+  // Turn 0 pads the title-generation call (see mock-llm-conversation.spec.ts).
+  await registerTrajectory(request, "windows-workspace", [
+    { text: "" },
+    {
+      tool_call: {
+        name: "terminal",
+        arguments: { command: WORKSPACE_COMMAND },
+      },
+    },
+    { text: REPLY_TOKEN },
+  ]);
+  await activateTrajectory(request, "windows-workspace");
+
+  const id = await startConversation(page, "Create a file and a plan.");
+  const observation = await waitForToolObservation(
+    request,
+    id,
+    "terminal",
+    90_000,
+  );
+  expect(observation.is_error, observationText(observation)).toBeFalsy();
+  await waitForAgentMessageContaining(request, id, REPLY_TOKEN, 60_000);
+  return id;
+}
+
+async function openConversationPanel(page: Page, conversationId: string) {
+  await routeSessionApiKey(page);
+  await page.goto(`/conversations/${conversationId}`, {
+    waitUntil: "domcontentloaded",
+  });
+  await dismissAnalyticsModal(page);
+  await waitForTestId(page, "chat-interface", 30_000);
+  const toggle = page.getByTestId("right-panel-toggle");
+  await expect(toggle).toBeVisible({ timeout: 10_000 });
+  await toggle.click();
+  await expect(page.getByTestId("conversation-tab-files")).toBeVisible({
+    timeout: 10_000,
+  });
+}
 
 test.describe("Windows known issues", () => {
-  const conversationIds = new Set<string>();
-  let workspaceConversationId: string | null = null;
+  // The bugs are deterministic: retrying a failure only doubles the time.
+  test.describe.configure({ retries: 0 });
 
   test.beforeEach(async ({ page }) => {
     await seedLocalStorage(page);
   });
 
-  test.afterAll(async ({ request }) => {
+  test.afterEach(async ({ request }) => {
     for (const id of conversationIds) {
       await deleteConversation(request, id).catch(() => {});
+      conversationIds.delete(id);
     }
     await resetMockLLM(request).catch(() => {});
   });
 
-  async function startConversation(
-    page: import("@playwright/test").Page,
-    message: string,
-  ) {
-    await routeSessionApiKey(page);
-    await page.goto("/", { waitUntil: "domcontentloaded" });
-    await dismissAnalyticsModal(page);
-    await waitForTestId(page, "home-chat-launcher");
-    await setChatInput(page, message);
-    await page.getByTestId("submit-button").click();
-    await waitForPath(page, /\/conversations\/.+/, 30_000);
-    const id = getConversationIdFromURL(page);
-    conversationIds.add(id);
-    return id;
-  }
-
-  async function openConversationPanel(
-    page: import("@playwright/test").Page,
-    conversationId: string,
-  ) {
-    await routeSessionApiKey(page);
-    await page.goto(`/conversations/${conversationId}`, {
-      waitUntil: "domcontentloaded",
-    });
-    await dismissAnalyticsModal(page);
-    await waitForTestId(page, "chat-interface", 30_000);
-    const toggle = page.getByTestId("right-panel-toggle");
-    await expect(toggle).toBeVisible({ timeout: 10_000 });
-    await toggle.click();
-    await expect(page.getByTestId("conversation-tab-files")).toBeVisible({
-      timeout: 10_000,
-    });
-  }
-
-  test("setup: the agent writes a file and a plan into its workspace", async ({
+  test("Files tab lists files the agent created (#17773)", async ({
     page,
     request,
   }) => {
-    test.setTimeout(180_000);
-    await ensureMockLLMProfile(page);
-    await resetMockLLM(request);
-    // Turn 0 pads the title-generation call (see mock-llm-conversation.spec.ts).
-    await registerTrajectory(request, "windows-workspace", [
-      { text: "" },
-      {
-        tool_call: {
-          name: "terminal",
-          arguments: { command: WORKSPACE_COMMAND },
-        },
-      },
-      { text: REPLY_TOKEN },
-    ]);
-    await activateTrajectory(request, "windows-workspace");
+    test.setTimeout(240_000);
+    const id = await createWorkspaceConversation(page, request);
 
-    const id = await startConversation(page, "Create a file and a plan.");
-    const observation = await waitForToolObservation(
-      request,
-      id,
-      "terminal",
-      90_000,
-    );
-    expect(observation.is_error, observationText(observation)).toBeFalsy();
-    await waitForAgentMessageContaining(request, id, REPLY_TOKEN, 60_000);
-    workspaceConversationId = id;
-  });
-
-  test("Files tab lists files the agent created (#17773)", async ({ page }) => {
-    test.fail(IS_WINDOWS, "OpenHands/OpenHands#17773");
-    test.skip(!workspaceConversationId, "setup must pass first");
-    test.setTimeout(90_000);
-
-    await openConversationPanel(page, workspaceConversationId!);
+    await openConversationPanel(page, id);
     if (!(await page.getByTestId("files-tab").isVisible())) {
       await page.getByTestId("conversation-tab-files").click();
     }
@@ -180,12 +184,14 @@ test.describe("Windows known issues", () => {
     });
   });
 
-  test("Planner tab shows the workspace PLAN.md (#17774)", async ({ page }) => {
-    test.fail(IS_WINDOWS, "OpenHands/OpenHands#17774");
-    test.skip(!workspaceConversationId, "setup must pass first");
-    test.setTimeout(90_000);
+  test("Planner tab shows the workspace PLAN.md (#17774)", async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(240_000);
+    const id = await createWorkspaceConversation(page, request);
 
-    await openConversationPanel(page, workspaceConversationId!);
+    await openConversationPanel(page, id);
     const plannerTab = page.getByTestId("conversation-tab-planner");
     if (await plannerTab.isVisible()) {
       await plannerTab.click();
@@ -201,9 +207,9 @@ test.describe("Windows known issues", () => {
     ).toBeVisible({ timeout: 20_000 });
   });
 
-  test("an automation run completes (#15509)", async ({ request }) => {
-    test.fail(IS_WINDOWS, "OpenHands/OpenHands#15509");
-    test.setTimeout(240_000);
+  test("an automation run completes (#15509)", async ({ page, request }) => {
+    test.setTimeout(300_000);
+    await ensureMockLLMProfile(page);
 
     // The run's conversation: padding, the finish tool that
     // openhands-automation requires, a final reply and a safety blank
@@ -299,10 +305,11 @@ test.describe("Windows known issues", () => {
       process.env.MOCK_LLM_BROWSER_TOOLS !== "1",
       "browser tools are disabled for this stack",
     );
-    // Not marked test.fail: #16551 did not reproduce on windows-latest (the
-    // browser started in about 25 s, under browser_use's 30 s limit), so this
-    // guards the Windows browser path directly.
+    // #16551 did not reproduce on windows-latest (the browser started in
+    // about 25 s, under browser_use's 30 s limit), so this passes there and
+    // guards the Windows browser path.
     test.setTimeout(240_000);
+    await ensureMockLLMProfile(page);
 
     await resetMockLLM(request);
     await registerTrajectory(request, "windows-browser", [

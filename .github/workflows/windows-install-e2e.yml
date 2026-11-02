@@ -5,6 +5,12 @@ name: Windows npm install E2E
 # using a tarball packed from this commit, and checks that a first-time user
 # can finish onboarding and run a conversation. The LLM is the scripted mock
 # server, so no credentials are needed. See OpenHands/OpenHands#19119.
+#
+# Two jobs run in parallel:
+#   install             onboarding + conversation; must stay green.
+#   known-windows-bugs  one test per open Windows issue; red until each is
+#                       fixed, so a fix PR shows its test turn green.
+# The paths below include the source files those fixes are expected to touch.
 
 on:
   pull_request:
@@ -20,6 +26,12 @@ on:
       - scripts/static-server.mjs
       - scripts/runtime-services-info.mjs
       - tools/**
+      - tests/e2e/mock-llm/**
+      # Files tab listing (#17773)
+      - src/hooks/query/use-workspace-files.ts
+      - src/utils/workspace-file-discovery.ts
+      # Planner tab path check (#17774)
+      - src/api/conversation-service/agent-server-conversation-service.api.ts
   push:
     branches: [main]
     paths:
@@ -34,6 +46,10 @@ on:
       - scripts/static-server.mjs
       - scripts/runtime-services-info.mjs
       - tools/**
+      - tests/e2e/mock-llm/**
+      - src/hooks/query/use-workspace-files.ts
+      - src/utils/workspace-file-discovery.ts
+      - src/api/conversation-service/agent-server-conversation-service.api.ts
   workflow_dispatch:
 
 concurrency:
@@ -45,8 +61,17 @@ permissions:
 
 jobs:
   windows-install-e2e:
+    name: windows-install-e2e (${{ matrix.suite }})
     runs-on: windows-latest
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: install
+            specs: mock-llm-onboarding-happy-path mock-llm-conversation.spec
+          - suite: known-windows-bugs
+            specs: mock-llm-windows-known-issues
     defaults:
       run:
         shell: pwsh
@@ -110,8 +135,9 @@ jobs:
 
       # One step on purpose: the Windows runner kills processes a step started
       # when that step ends, so agent-canvas must live in the step that tests it.
-      - name: Start agent-canvas like a user and run onboarding and conversation specs
+      - name: Start agent-canvas like a user and run the ${{ matrix.suite }} specs
         env:
+          SPECS: ${{ matrix.specs }}
           MOCK_LLM_BACKEND_URL: http://127.0.0.1:8000
           MOCK_LLM_PYTHON: ${{ github.workspace }}\.mock-llm-venv\Scripts\python.exe
           # agent-canvas starts with its default browser tools on.
@@ -155,7 +181,7 @@ jobs:
             Write-Host "::add-mask::$key"
             $env:MOCK_LLM_SESSION_API_KEY = $key
 
-            npx playwright test --config=playwright.windows-install.config.ts
+            npx playwright test --config=playwright.windows-install.config.ts $env:SPECS.Split(" ")
             if ($LASTEXITCODE -ne 0) { throw "Playwright exited with code $LASTEXITCODE" }
           } finally {
             taskkill /PID $proc.Id /T /F 2>$null | Out-Null
@@ -167,7 +193,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: windows-install-e2e
+          name: windows-install-e2e-${{ matrix.suite }}
           if-no-files-found: ignore
           retention-days: 14
           path: |
