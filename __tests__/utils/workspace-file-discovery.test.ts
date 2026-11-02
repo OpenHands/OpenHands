@@ -10,8 +10,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  buildWindowsWorkspaceFileListCommand,
   buildWorkspaceFileListCommand,
   DEFAULT_FILE_DISCOVERY,
+  parseWindowsWorkspaceFileList,
   parseWorkspaceFileList,
 } from "#/utils/workspace-file-discovery";
 
@@ -81,5 +83,65 @@ describe("workspace file discovery", () => {
       maxFiles: unlimited.paths.length,
     });
     expect(exact).toEqual(unlimited);
+  });
+});
+
+describe("Windows workspace discovery", () => {
+  const options = {
+    ...DEFAULT_FILE_DISCOVERY,
+    excludedPatterns: ["node_modules", ".git", "src/generated"],
+    maxFiles: 3,
+  };
+
+  it("builds a cmd.exe command with no POSIX-only tools", () => {
+    const command = buildWindowsWorkspaceFileListCommand(
+      options,
+      "C:\\Users\\me\\proj",
+    );
+    expect(command).toBe(
+      'dir /b /s /a:-d 2>nul | findstr /v /i /c:"\\node_modules\\" /c:"\\.git\\" /c:"\\src\\generated\\" | sort',
+    );
+    expect(command).not.toMatch(/head|\/dev\/null|^find /);
+  });
+
+  it("skips an exclusion that already appears in the workspace root", () => {
+    const command = buildWindowsWorkspaceFileListCommand(
+      options,
+      "C:\\build\\node_modules\\proj",
+    );
+    expect(command).not.toContain("node_modules");
+    expect(command).toContain('/c:"\\.git\\"');
+  });
+
+  it("drops patterns that cmd.exe could misread", () => {
+    const command = buildWindowsWorkspaceFileListCommand(
+      { ...options, excludedPatterns: ['a"b', "50%", "ok"] },
+      "C:\\proj",
+    );
+    expect(command).toBe(
+      'dir /b /s /a:-d 2>nul | findstr /v /i /c:"\\ok\\" | sort',
+    );
+  });
+
+  it("returns forward-slash paths relative to the working dir", () => {
+    const stdout = [
+      "C:\\proj\\README.md",
+      "C:\\proj\\src\\index.ts",
+      "C:\\proj\\node_modules\\x\\a.js",
+      "",
+    ].join("\r\n");
+    expect(parseWindowsWorkspaceFileList(stdout, "C:/proj/", options)).toEqual({
+      paths: ["README.md", "src/index.ts"],
+      isTruncated: false,
+    });
+  });
+
+  it("caps the list and reports truncation", () => {
+    const stdout = ["a", "b", "c", "d"]
+      .map((name) => `C:\\proj\\${name}.txt`)
+      .join("\n");
+    const result = parseWindowsWorkspaceFileList(stdout, "C:\\proj", options);
+    expect(result.paths).toEqual(["a.txt", "b.txt", "c.txt"]);
+    expect(result.isTruncated).toBe(true);
   });
 });

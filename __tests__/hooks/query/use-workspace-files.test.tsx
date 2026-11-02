@@ -122,6 +122,83 @@ describe("useWorkspaceFiles — local backend", () => {
     storeBackendKind = "local";
   });
 
+  it("lists files with a cmd.exe command when the agent-server working dir is a Windows path", async () => {
+    // Browser OS is deliberately macOS: only the server's path should matter.
+    const userAgent = vi
+      .spyOn(window.navigator, "userAgent", "get")
+      .mockReturnValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)");
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        ...conversation,
+        workspace: { working_dir: "C:\\Users\\me\\proj" },
+      },
+    });
+    executeCommandSpy.mockResolvedValue({
+      exit_code: 0,
+      stdout: "C:\\Users\\me\\proj\\src\\index.ts\r\n",
+      stderr: "",
+    });
+
+    const { result } = renderHook(() => useWorkspaceFiles(), {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.data).toEqual(["src/index.ts"]));
+    const command = executeCommandSpy.mock.calls[0][2] as string;
+    expect(command).toMatch(/^dir \/b \/s/);
+    expect(command).not.toMatch(/head|\/dev\/null/);
+    userAgent.mockRestore();
+  });
+
+  it("keeps the POSIX command for a Linux agent-server behind a Windows browser (Docker Desktop)", async () => {
+    const userAgent = vi
+      .spyOn(window.navigator, "userAgent", "get")
+      .mockReturnValue("Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        ...conversation,
+        workspace: { working_dir: "/workspace/project" },
+      },
+    });
+    executeCommandSpy.mockResolvedValue({
+      exit_code: 0,
+      stdout: "./src/index.ts\n",
+      stderr: "",
+    });
+
+    const { result } = renderHook(() => useWorkspaceFiles(), {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.data).toEqual(["src/index.ts"]));
+    expect(executeCommandSpy.mock.calls[0][2] as string).toMatch(/^find \./);
+    userAgent.mockRestore();
+  });
+
+  it("lists files when the Windows workspace sits under an excluded-name folder", async () => {
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        ...conversation,
+        workspace: { working_dir: "C:\\build\\project" },
+      },
+    });
+    executeCommandSpy.mockResolvedValue({
+      exit_code: 0,
+      stdout:
+        "C:\\build\\project\\src\\a.ts\r\nC:\\build\\project\\node_modules\\x\\b.js\r\nC:\\build\\project\\dist\\c.js\r\n",
+      stderr: "",
+    });
+
+    const { result } = renderHook(() => useWorkspaceFiles(), {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.data).toEqual(["src/a.ts"]));
+    const command = executeCommandSpy.mock.calls[0][2] as string;
+    expect(command).not.toContain('/c:"\\build\\"');
+    expect(command).toContain('/c:"\\node_modules\\"');
+  });
+
   // @spec WFD-002 — Workspace-scoped server persistence
   it("uses persisted limits for the active workspace and changes them on navigation", async () => {
     vi.mocked(SettingsService.getSettings).mockResolvedValue({
