@@ -1,4 +1,10 @@
-import { screen, waitFor, within, act } from "@testing-library/react";
+import {
+  screen,
+  waitFor,
+  within,
+  act,
+  fireEvent,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -41,6 +47,34 @@ vi.mock("#/utils/custom-toast-handlers", () => ({
 
 describe("ConversationPanel conversation actions", () => {
   setupConversationPanelTest();
+
+  it("starts the selected Cloud metadata request on navigation, but not a modified click", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-2" });
+    renderWithProviders(
+      <ActiveBackendProvider>
+        <RouterStub />
+      </ActiveBackendProvider>,
+    );
+    const cards = await screen.findAllByTestId("conversation-card");
+    const link = cards[0].closest("a")!;
+    const cid = link
+      .getAttribute("href")!
+      .split("/conversations/")[1]
+      .split("?")[0];
+    vi.spyOn(
+      AgentServerConversationService,
+      "batchGetAppConversations",
+    ).mockResolvedValue([]);
+    fireEvent.click(link, { ctrlKey: true });
+    expect(
+      AgentServerConversationService.batchGetAppConversations,
+    ).not.toHaveBeenCalled();
+    fireEvent.click(link);
+    expect(
+      AgentServerConversationService.batchGetAppConversations,
+    ).toHaveBeenCalledWith([cid]);
+  });
 
   it("shows startup activity on a pending launch and switches to its error indicator", async () => {
     setRegisteredBackends([cloudBackend]);

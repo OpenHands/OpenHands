@@ -115,7 +115,6 @@ describe("useConversationHistory", () => {
         sortOrder: "TIMESTAMP_DESC",
         strictPagination: true,
         excludeFullState: true,
-        strictPagination: true,
       },
     );
   });
