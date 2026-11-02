@@ -22,7 +22,7 @@ it("retains observed steps and disclosure state across launch, task and conversa
   ).toMatchObject({
     id: storeEntry().id,
     steps: ["WAITING_FOR_SANDBOX", "READY"],
-    phase: "complete",
+    phase: "connecting",
     open: true,
   });
   expect(
@@ -39,6 +39,10 @@ it("deduplicates an active resume but retains a later real resume", () => {
   expect(storeEntry().kind).toBe("resume");
   expect(useSessionActivityStore.getState().entries[key]).toHaveLength(1);
   store.observe(key, "READY");
+  store.begin(key, "resume");
+  expect(useSessionActivityStore.getState().entries[key]).toHaveLength(1);
+  store.complete(key, storeEntry().id);
+  expect(storeEntry().phase).toBe("complete");
   store.begin(key, "resume");
   expect(useSessionActivityStore.getState().entries[key]).toHaveLength(2);
   store.remove(key);

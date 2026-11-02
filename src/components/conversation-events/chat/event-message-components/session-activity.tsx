@@ -9,7 +9,7 @@ import { getTaskStatusI18nKey } from "#/utils/status";
 
 export function sessionActivityTitle(session: SessionActivity): I18nKey {
   if (session.phase === "failed") return I18nKey.COMMON$ERROR;
-  if (session.phase === "pending")
+  if (session.phase === "pending" || session.phase === "connecting")
     return session.kind === "resume"
       ? I18nKey.EVENT_GROUP$SESSION_RESUMING
       : I18nKey.EVENT_GROUP$SESSION_INITIALIZING;
