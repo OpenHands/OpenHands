@@ -27,37 +27,36 @@ import {
   parseSkillContent,
   styleImportantTags,
 } from "#/components/conversation-events/chat/event-message-components/skill-item-expanded";
-import { I18nKey } from "#/i18n/declaration";
 import { SkillReadyContentList } from "#/components/conversation-events/chat/event-message-components/skill-ready-content-list";
 import { SkillReadyItem } from "#/components/conversation-events/chat/event-content-helpers/create-skill-ready-event";
+import { I18nKey } from "#/i18n/declaration";
 
-describe("event-group", () => {
-  const makeBashAction = (
-    id: string,
-    command: string,
-  ): ActionEvent<ExecuteBashAction> => ({
-    id,
-    timestamp: new Date().toISOString(),
-    source: "agent",
-    thought: [],
-    thinking_blocks: [],
-    action: {
-      kind: "ExecuteBashAction",
-      command,
-      is_input: false,
-      timeout: null,
-      reset: false,
+const makeBashAction = (
+  id: string,
+  command: string,
+): ActionEvent<ExecuteBashAction> => ({
+  id,
+  timestamp: new Date().toISOString(),
+  source: "agent",
+  thought: [],
+  thinking_blocks: [],
+  action: {
+    kind: "ExecuteBashAction",
+    command,
+    is_input: false,
+    timeout: null,
+    reset: false,
+  },
+  tool_name: "execute_bash",
+  tool_call_id: `call_${id}`,
+  tool_call: {
+    id: `call_${id}`,
+    type: "function",
+    function: {
+      name: "execute_bash",
+      arguments: JSON.stringify({ command }),
     },
-    tool_name: "execute_bash",
-    tool_call_id: `call_${id}`,
-    tool_call: {
-      id: `call_${id}`,
-      type: "function",
-      function: {
-        name: "execute_bash",
-        arguments: JSON.stringify({ command }),
-      },
-    },
+  },
   llm_response_id: `response_${id}`,
   security_risk: SecurityRisk.UNKNOWN,
 });
@@ -470,310 +469,188 @@ describe("EventGroup", () => {
         insert_line: null,
         view_range: null,
       },
-    },
-    llm_response_id: `response_${id}`,
-    security_risk: SecurityRisk.UNKNOWN,
-  });
-
-  const makeBashObservation = (
-    id: string,
-    actionId: string,
-    command: string,
-  ): ObservationEvent<ExecuteBashObservation> => ({
-    id,
-    timestamp: new Date().toISOString(),
-    source: "environment",
-    tool_name: "execute_bash",
-    tool_call_id: `call_${actionId}`,
-    action_id: actionId,
-    observation: {
-      kind: "ExecuteBashObservation",
-      content: [{ type: "text", text: "ok" }],
-      command,
-      exit_code: 0,
-      error: false,
-      timeout: false,
-      metadata: {} as never,
-    },
-  });
-
-  const makeUserRejectObservation = (
-    id: string,
-    actionId: string,
-  ): UserRejectObservation => ({
-    id,
-    timestamp: new Date().toISOString(),
-    source: "environment",
-    tool_name: "execute_bash",
-    tool_call_id: `call_${actionId}`,
-    action_id: actionId,
-    rejection_reason: "User rejected the action",
-  });
-
-  const makeAgentErrorEvent = (
-    id: string,
-    actionId: string,
-  ): AgentErrorEvent => ({
-    id,
-    timestamp: new Date().toISOString(),
-    kind: "AgentErrorEvent",
-    source: "agent",
-    tool_name: "execute_bash",
-    tool_call_id: `call_${actionId}`,
-    error: "boom",
-  });
-
-  describe("EventGroup", () => {
-    it("returns null for an empty events array", () => {
-      const { container } = renderWithProviders(
-        <EventGroup events={[]}>
-          <div>child</div>
-        </EventGroup>,
-      );
-
-      expect(container).toBeEmptyDOMElement();
-    });
-
-    it("renders a 'completed' summary when all events are observations", () => {
-      const events = [
-        makeBashObservation("o1", "a1", "ls"),
-        makeBashObservation("o2", "a2", "pwd"),
-        makeBashObservation("o3", "a3", "whoami"),
-      ];
-
-      renderWithProviders(
-        <EventGroup events={events}>
-          <div data-testid="child">child content</div>
-        </EventGroup>,
-      );
-
-      expect(
-        screen.getByText("EVENT_GROUP$ACTIONS_COMPLETED"),
-      ).toBeInTheDocument();
-      // Children should not be visible in the collapsed state.
-      expect(screen.queryByTestId("child")).not.toBeInTheDocument();
-    });
-
-    it("renders a progress summary and the running action title while in flight", () => {
-      const events = [
-        makeBashObservation("o1", "a1", "ls"),
-        makeBashObservation("o2", "a2", "pwd"),
-        // Last action has NOT been replaced by an observation -> still running.
-        makeBashAction("a3", "echo hello"),
-      ];
-
-      renderWithProviders(
-        <EventGroup events={events}>
-          <div>child</div>
-        </EventGroup>,
-      );
-
-      expect(
-        screen.getByText("EVENT_GROUP$ACTIONS_PROGRESS"),
-      ).toBeInTheDocument();
-      // The running action's title is rendered next to the summary. Translations
-      // aren't loaded in tests, so we just verify the action's translation key
-      // shows up (the localized version would interpolate the command).
-      expect(screen.getByText(/ACTION_MESSAGE\$RUN/)).toBeInTheDocument();
-    });
-
-    it("keeps showing the latest completed action's title while the group is still the live tail", () => {
-      // All observations -> nothing in flight, but the group has not been
-      // "moved past" yet, so we expect the latest observation's title to keep
-      // showing as the prominent summary alongside the completed count.
-      const events = [
-        makeBashObservation("o1", "a1", "ls"),
-        makeBashObservation("o2", "a2", "pwd"),
-        makeBashObservation("o3", "a3", "whoami"),
-      ];
-
-      renderWithProviders(
-        <EventGroup events={events}>
-          <div>child</div>
-        </EventGroup>,
-      );
-
-      // Latest observation's title is still in the summary line.
-      expect(screen.getByText(/OBSERVATION_MESSAGE\$RUN/)).toBeInTheDocument();
-      // ...next to the completed count.
-      expect(
-        screen.getByText("EVENT_GROUP$ACTIONS_COMPLETED"),
-      ).toBeInTheDocument();
-    });
-
-    it("hides the latest action title once the group is finalized", () => {
-      const events = [
-        makeBashObservation("o1", "a1", "ls"),
-        makeBashObservation("o2", "a2", "pwd"),
-        makeBashObservation("o3", "a3", "whoami"),
-      ];
-
-      renderWithProviders(
-        <EventGroup events={events} isFinalized>
-          <div>child</div>
-        </EventGroup>,
-      );
-
-      expect(
-        screen.getByText("EVENT_GROUP$ACTIONS_COMPLETED"),
-      ).toBeInTheDocument();
-      // Once moved past, we collapse to just the count — the per-action title
-      // and the success check both go away.
-      expect(
-        screen.queryByText(/OBSERVATION_MESSAGE\$RUN/),
-      ).not.toBeInTheDocument();
-      expect(screen.queryByTestId("status-icon")).not.toBeInTheDocument();
-    });
-
-    it("shows a spinner while running and no status icon when done", () => {
-      const running = [
-        makeBashObservation("o1", "a1", "ls"),
-        makeBashAction("a2", "pwd"),
-      ];
-
-      const { rerender } = renderWithProviders(
-        <EventGroup events={running}>
-          <div>child</div>
-        </EventGroup>,
-      );
-      expect(screen.getByTestId("spinner-icon")).toBeInTheDocument();
-      expect(screen.queryByTestId("status-icon")).not.toBeInTheDocument();
-
-      const done = [
-        makeBashObservation("o1", "a1", "ls"),
-        makeBashObservation("o2", "a2", "pwd"),
-      ];
-      rerender(
-        <EventGroup events={done}>
-          <div>child</div>
-        </EventGroup>,
-      );
-      expect(screen.queryByTestId("spinner-icon")).not.toBeInTheDocument();
-      expect(screen.queryByTestId("status-icon")).not.toBeInTheDocument();
-    });
-
-    it("titles a settled group after its rejected action", () => {
-      const events = [
-        makeBashObservation("o1", "a1", "ls"),
-        makeUserRejectObservation("r2", "a2"),
-      ];
-      const allEvents = [makeBashAction("a2", "pwd"), ...events];
-
-      renderWithProviders(
-        <EventGroup events={events} allEvents={allEvents}>
-          <div>child</div>
-        </EventGroup>,
-      );
-
-      expect(screen.getByText(/ACTION_MESSAGE\$RUN/)).toBeInTheDocument();
-      expect(
-        screen.getByText("EVENT_GROUP$ACTIONS_COMPLETED"),
-      ).toBeInTheDocument();
-    });
-
-    it("counts an action resolved by an AgentErrorEvent as resolved instead of running", () => {
-      const events = [
-        makeBashObservation("o1", "a1", "ls"),
-        makeBashAction("a2", "pwd"),
-      ];
-      const allEvents = [...events, makeAgentErrorEvent("e2", "a2")];
-
-      renderWithProviders(
-        <EventGroup events={events} allEvents={allEvents}>
-          <div>child</div>
-        </EventGroup>,
-      );
-
-      expect(screen.queryByTestId("spinner-icon")).not.toBeInTheDocument();
-      expect(
-        screen.getByText("EVENT_GROUP$ACTIONS_COMPLETED"),
-      ).toBeInTheDocument();
-    });
-
-    it("updates accessibility state while toggling the group", async () => {
-      const events = [
-        makeBashObservation("o1", "a1", "ls"),
-        makeBashObservation("o2", "a2", "pwd"),
-        makeBashObservation("o3", "a3", "whoami"),
-      ];
-      const user = userEvent.setup();
-
-      renderWithProviders(
-        <EventGroup events={events}>
-          <div data-testid="child">child content</div>
-        </EventGroup>,
-      );
-
-      const toggle = screen.getByTestId("event-group-toggle");
-      expect(toggle).toHaveAttribute("aria-expanded", "false");
-      expect(toggle).toHaveAttribute("aria-label", "EVENT_GROUP$EXPAND");
-      expect(screen.queryByRole("region")).not.toBeInTheDocument();
-      expect(screen.queryByTestId("child")).not.toBeInTheDocument();
-
-      await user.click(toggle);
-
-      const content = screen.getByRole("region");
-      expect(toggle).toHaveAttribute("aria-expanded", "true");
-      expect(toggle).toHaveAttribute("aria-label", "EVENT_GROUP$COLLAPSE");
-      expect(toggle).toHaveAttribute("aria-controls", content.id);
-      expect(content).toHaveAttribute("aria-labelledby", toggle.id);
-      expect(screen.getByTestId("child")).toBeInTheDocument();
-
-      await user.click(toggle);
-
-      expect(toggle).toHaveAttribute("aria-expanded", "false");
-      expect(toggle).toHaveAttribute("aria-label", "EVENT_GROUP$EXPAND");
-      expect(screen.queryByRole("region")).not.toBeInTheDocument();
-      expect(screen.queryByTestId("child")).not.toBeInTheDocument();
-    });
-
-    it("keeps grouped file-action titles non-interactive inside the toggle", () => {
-      const fileAction: ActionEvent<FileEditorAction> = {
-        id: "a-file",
-        timestamp: new Date().toISOString(),
-        source: "agent",
-        thought: [],
-        thinking_blocks: [],
-        action: {
-          kind: "FileEditorAction",
-          command: "str_replace",
-          path: "src/app.ts",
-          file_text: null,
-          old_str: "a",
-          new_str: "b",
-          insert_line: null,
-          view_range: null,
+      tool_name: "file_editor",
+      tool_call_id: "call_a-file",
+      tool_call: {
+        id: "call_a-file",
+        type: "function",
+        function: {
+          name: "file_editor",
+          arguments: JSON.stringify({
+            command: "str_replace",
+            path: "src/app.ts",
+          }),
         },
-        tool_name: "file_editor",
-        tool_call_id: "call_a-file",
-        tool_call: {
-          id: "call_a-file",
-          type: "function",
-          function: {
-            name: "file_editor",
-            arguments: JSON.stringify({
-              command: "str_replace",
-              path: "src/app.ts",
-            }),
-          },
-        },
-        llm_response_id: "response_a-file",
-        security_risk: SecurityRisk.UNKNOWN,
-      };
+      },
+      llm_response_id: "response_a-file",
+      security_risk: SecurityRisk.UNKNOWN,
+    };
 
-      renderWithProviders(
-        <EventGroup events={[fileAction]}>
-          <div>child</div>
-        </EventGroup>,
+    renderWithProviders(
+      <EventGroup events={[fileAction]}>
+        <div>child</div>
+      </EventGroup>,
+    );
+
+    const toggle = screen.getByTestId("event-group-toggle");
+    expect(
+      toggle.querySelector('[data-testid="path-component-link"]'),
+    ).toBeNull();
+    expect(toggle.querySelectorAll("button")).toHaveLength(0);
+  });
+});
+
+describe("EventGroup summary plurals", () => {
+  const groupKeys = [
+    "EVENT_GROUP$RAN_COMMANDS",
+    "EVENT_GROUP$READ_FILES",
+    "EVENT_GROUP$MADE_EDITS",
+    "EVENT_GROUP$RAN_SEARCHES",
+    "EVENT_GROUP$RAN_HOOKS",
+    "EVENT_GROUP$USED_TOOLS",
+  ];
+
+  it("uses natural English singulars and lowercase continuation for each activity type", async () => {
+    const translations = await createTranslations();
+    const expected = [
+      "Ran a command",
+      "Read a file",
+      "Made an edit",
+      "Ran a search",
+      "Ran a hook",
+      "Used a tool",
+    ];
+    groupKeys.forEach((key, index) => {
+      expect(translations.t(key, { count: 1, context: "single" })).toBe(
+        expected[index],
       );
-
-      const toggle = screen.getByTestId("event-group-toggle");
       expect(
-        toggle.querySelector('[data-testid="path-component-link"]'),
-      ).toBeNull();
-      expect(toggle.querySelectorAll("button")).toHaveLength(0);
+        translations.t(key, { count: 1, context: "single_continuation" }),
+      ).toBe(expected[index].toLowerCase());
     });
   });
+
+  it.each(["uk", "ar"])(
+    "renders %s summaries in that language for multi-step counts",
+    async (lng) => {
+      const translations = (await import("#/i18n/translation.json"))
+        .default as Record<string, Record<string, string>>;
+      const toResources = (language: string) =>
+        Object.fromEntries(
+          Object.entries(translations).map(([key, values]) => [
+            key,
+            values[language],
+          ]),
+        );
+      const i18n = i18next.createInstance();
+      await i18n.init({
+        lng,
+        fallbackLng: "en",
+        resources: {
+          en: { translation: toResources("en") },
+          [lng]: { translation: toResources(lng) },
+        },
+      });
+
+      for (const key of groupKeys) {
+        for (const count of [2, 5, 11, 21]) {
+          const text = i18n.t(key, { count });
+          expect(text).toContain(String(count));
+          expect(text).not.toBe(i18n.t(key, { count, lng: "en" }));
+          const continuation = i18n.t(key, { count, context: "continuation" });
+          expect(continuation).toContain(String(count));
+          expect(continuation).not.toBe(
+            i18n.t(key, { count, context: "continuation", lng: "en" }),
+          );
+        }
+      }
+    },
+  );
+});
+
+it("shows the current startup phase, then flat observed details after completion", () => {
+  const session: SessionActivity = {
+    id: "startup",
+    kind: "initialize",
+    startedAt: Date.now(),
+    phase: "pending",
+    open: true,
+    steps: ["WAITING_FOR_SANDBOX", "PREPARING_REPOSITORY"],
+  };
+  const renderSession = (value: SessionActivity) => (
+    <EventGroup events={[]} session={value} open>
+      <SessionActivityDetails session={value} nested={false} />
+    </EventGroup>
+  );
+  const { rerender } = renderWithProviders(renderSession(session));
+  expect(screen.getByTestId("event-group-toggle")).toHaveTextContent(
+    "EVENT_GROUP$PREPARING_WORKSPACE",
+  );
+  expect(screen.getByRole("list")).toHaveTextContent(
+    "EVENT_GROUP$WORKSPACE_PREPARATION",
+  );
+  expect(screen.getAllByRole("button")).toHaveLength(1);
+  rerender(
+    renderSession({
+      ...session,
+      phase: "connecting",
+      steps: [...session.steps, "READY"],
+    }),
+  );
+  expect(screen.getByTestId("event-group-toggle")).toHaveTextContent(
+    "EVENT_GROUP$CONNECTING_AGENT",
+  );
+  rerender(renderSession({ ...session, phase: "complete" }));
+  expect(screen.getByTestId("event-group-toggle")).toHaveTextContent(
+    "EVENT_GROUP$SESSION_INITIALIZED",
+  );
+  expect(screen.queryByTestId("spinner-icon")).not.toBeInTheDocument();
+  rerender(renderSession({ ...session, kind: "resume", phase: "complete" }));
+  expect(screen.getByTestId("event-group-toggle")).toHaveTextContent(
+    "EVENT_GROUP$SESSION_RESUMED",
+  );
+  rerender(renderSession({ ...session, phase: "failed" }));
+  expect(screen.getByTestId("event-group-toggle")).toHaveTextContent(
+    "COMMON$ERROR",
+  );
+  expect(screen.getByRole("list")).toBeVisible();
+});
+
+it("uses the session state while setup details are not yet available", () => {
+  const session: SessionActivity = {
+    id: "startup-without-details",
+    kind: "initialize",
+    startedAt: Date.now(),
+    phase: "pending",
+    open: true,
+    steps: ["WORKING"],
+  };
+  const { rerender } = renderWithProviders(
+    <SessionActivityDetails session={session} nested={false} />,
+  );
+  const details = screen.getByTestId("session-activity-details");
+  expect(details).toHaveTextContent("EVENT_GROUP$SESSION_INITIALIZING");
+  rerender(
+    <SessionActivityDetails
+      session={{ ...session, kind: "resume" }}
+      nested={false}
+    />,
+  );
+  expect(details).toHaveTextContent("EVENT_GROUP$SESSION_RESUMING");
+  rerender(
+    <SessionActivityDetails
+      session={{ ...session, phase: "connecting" }}
+      nested={false}
+    />,
+  );
+  expect(details).toHaveTextContent("EVENT_GROUP$CONNECTING_AGENT");
+  rerender(
+    <SessionActivityDetails
+      session={{ ...session, phase: "complete" }}
+      nested={false}
+    />,
+  );
+  expect(details).toHaveTextContent("EVENT_GROUP$SESSION_INITIALIZED");
 });
 
 describe("skill-item-expanded", () => {
@@ -1015,157 +892,4 @@ describe("skill-ready-content-list", () => {
       ).not.toBeInTheDocument();
     });
   });
-});
-
-describe("EventGroup summary plurals", () => {
-  const groupKeys = [
-    "EVENT_GROUP$RAN_COMMANDS",
-    "EVENT_GROUP$READ_FILES",
-    "EVENT_GROUP$MADE_EDITS",
-    "EVENT_GROUP$RAN_SEARCHES",
-    "EVENT_GROUP$RAN_HOOKS",
-    "EVENT_GROUP$USED_TOOLS",
-  ];
-
-  it("uses natural English singulars and lowercase continuation for each activity type", async () => {
-    const translations = await createTranslations();
-    const expected = [
-      "Ran a command",
-      "Read a file",
-      "Made an edit",
-      "Ran a search",
-      "Ran a hook",
-      "Used a tool",
-    ];
-    groupKeys.forEach((key, index) => {
-      expect(translations.t(key, { count: 1, context: "single" })).toBe(
-        expected[index],
-      );
-      expect(
-        translations.t(key, { count: 1, context: "single_continuation" }),
-      ).toBe(expected[index].toLowerCase());
-    });
-  });
-
-  it.each(["uk", "ar"])(
-    "renders %s summaries in that language for multi-step counts",
-    async (lng) => {
-      const translations = (await import("#/i18n/translation.json"))
-        .default as Record<string, Record<string, string>>;
-      const toResources = (language: string) =>
-        Object.fromEntries(
-          Object.entries(translations).map(([key, values]) => [
-            key,
-            values[language],
-          ]),
-        );
-      const i18n = i18next.createInstance();
-      await i18n.init({
-        lng,
-        fallbackLng: "en",
-        resources: {
-          en: { translation: toResources("en") },
-          [lng]: { translation: toResources(lng) },
-        },
-      });
-
-      for (const key of groupKeys) {
-        for (const count of [2, 5, 11, 21]) {
-          const text = i18n.t(key, { count });
-          expect(text).toContain(String(count));
-          expect(text).not.toBe(i18n.t(key, { count, lng: "en" }));
-          const continuation = i18n.t(key, { count, context: "continuation" });
-          expect(continuation).toContain(String(count));
-          expect(continuation).not.toBe(
-            i18n.t(key, { count, context: "continuation", lng: "en" }),
-          );
-        }
-      }
-    },
-  );
-});
-
-it("shows the current startup phase, then flat observed details after completion", () => {
-  const session: SessionActivity = {
-    id: "startup",
-    kind: "initialize",
-    startedAt: Date.now(),
-    phase: "pending",
-    open: true,
-    steps: ["WAITING_FOR_SANDBOX", "PREPARING_REPOSITORY"],
-  };
-  const renderSession = (value: SessionActivity) => (
-    <EventGroup events={[]} session={value} open>
-      <SessionActivityDetails session={value} nested={false} />
-    </EventGroup>
-  );
-  const { rerender } = renderWithProviders(renderSession(session));
-  expect(screen.getByTestId("event-group-toggle")).toHaveTextContent(
-    "EVENT_GROUP$PREPARING_WORKSPACE",
-  );
-  expect(screen.getByRole("list")).toHaveTextContent(
-    "EVENT_GROUP$WORKSPACE_PREPARATION",
-  );
-  expect(screen.getAllByRole("button")).toHaveLength(1);
-  rerender(
-    renderSession({
-      ...session,
-      phase: "connecting",
-      steps: [...session.steps, "READY"],
-    }),
-  );
-  expect(screen.getByTestId("event-group-toggle")).toHaveTextContent(
-    "EVENT_GROUP$CONNECTING_AGENT",
-  );
-  rerender(renderSession({ ...session, phase: "complete" }));
-  expect(screen.getByTestId("event-group-toggle")).toHaveTextContent(
-    "EVENT_GROUP$SESSION_INITIALIZED",
-  );
-  expect(screen.queryByTestId("spinner-icon")).not.toBeInTheDocument();
-  rerender(renderSession({ ...session, kind: "resume", phase: "complete" }));
-  expect(screen.getByTestId("event-group-toggle")).toHaveTextContent(
-    "EVENT_GROUP$SESSION_RESUMED",
-  );
-  rerender(renderSession({ ...session, phase: "failed" }));
-  expect(screen.getByTestId("event-group-toggle")).toHaveTextContent(
-    "COMMON$ERROR",
-  );
-  expect(screen.getByRole("list")).toBeVisible();
-});
-
-it("uses the session state while setup details are not yet available", () => {
-  const session: SessionActivity = {
-    id: "startup-without-details",
-    kind: "initialize",
-    startedAt: Date.now(),
-    phase: "pending",
-    open: true,
-    steps: ["WORKING"],
-  };
-  const { rerender } = renderWithProviders(
-    <SessionActivityDetails session={session} nested={false} />,
-  );
-  const details = screen.getByTestId("session-activity-details");
-  expect(details).toHaveTextContent("EVENT_GROUP$SESSION_INITIALIZING");
-  rerender(
-    <SessionActivityDetails
-      session={{ ...session, kind: "resume" }}
-      nested={false}
-    />,
-  );
-  expect(details).toHaveTextContent("EVENT_GROUP$SESSION_RESUMING");
-  rerender(
-    <SessionActivityDetails
-      session={{ ...session, phase: "connecting" }}
-      nested={false}
-    />,
-  );
-  expect(details).toHaveTextContent("EVENT_GROUP$CONNECTING_AGENT");
-  rerender(
-    <SessionActivityDetails
-      session={{ ...session, phase: "complete" }}
-      nested={false}
-    />,
-  );
-  expect(details).toHaveTextContent("EVENT_GROUP$SESSION_INITIALIZED");
 });

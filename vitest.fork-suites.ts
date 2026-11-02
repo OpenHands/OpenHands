@@ -75,4 +75,10 @@ export const FORK_TEST_SUITES = [
   "__tests__/utils/hover-reveal-classes.test.ts",
   "__tests__/utils/workspace-file-discovery.test.ts",
   "__tests__/vite-config.test.ts",
+  "__tests__/components/automations/detail/run-logs-modal.test.tsx",
+  "__tests__/components/ui/dropdown.test.tsx",
+  "__tests__/components/context-menu/tools-context-menu.test.tsx",
+  "__tests__/components/features/conversation-panel/conversation-lg-modals-viewport.test.tsx",
+  "__tests__/components/features/home/workspace-selection-form.test.tsx",
+  "__tests__/components/features/chat/change-agent-button.test.tsx",
 ];

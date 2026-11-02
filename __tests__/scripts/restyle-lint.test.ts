@@ -155,7 +155,7 @@ export function Probe({ tone }: { tone: keyof typeof toneClasses }) {
         ),
       ).toEqual([
         expect.objectContaining({
-          severity: 1,
+          severity: 2,
           messageId: expect.stringMatching(/^paletteClass/),
         }),
       ]);
