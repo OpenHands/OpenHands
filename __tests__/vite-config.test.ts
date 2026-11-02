@@ -568,6 +568,46 @@ describe("vite library build", () => {
       expect(declarations(recipe(name))).toMatchObject(expected);
     }
 
+    const dialogContracts = {
+      "dialog-viewport-width": {
+        "max-width": "90vw",
+      },
+      "onboarding-viewport-height": {
+        "max-height": "90vh",
+      },
+      "dialog-content-height": {
+        "max-height": "80vh",
+      },
+      "setup-dialog-height": {
+        "max-height": "85vh",
+      },
+      "setup-dialog-width": {
+        width: "92vw",
+      },
+      "automation-import-width": {
+        width: "min(36rem,100vw - 2rem)",
+      },
+      "dialog-scroll-height": {
+        "max-height": "60vh",
+      },
+      "automation-log-min-height": {
+        "min-height": "12rem",
+      },
+      "conversation-dialog-reading-height": {
+        height: "60vh",
+      },
+      "conversation-options-bleed-width": {
+        width: "calc(100% + 3rem)",
+      },
+    };
+    for (const [name, expected] of Object.entries(dialogContracts)) {
+      expect(declarations(recipe(name))).toMatchObject(expected);
+    }
+
+    // Compact type tokens must not introduce a line-height default.
+    expect(declarations(recipe("text-2xs"))).toEqual({ "font-size": "11px" });
+    expect(declarations(recipe("text-3xs"))).toEqual({ "font-size": "10px" });
+
     // `package.json` routes `require` here; stripped CSS imports must not
     // leave it unparseable.
     expect(() => new Script(file("index.cjs"))).not.toThrow();

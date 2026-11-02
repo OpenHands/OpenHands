@@ -97,8 +97,10 @@ describe("color themes", () => {
       expect(alert.tintWeight).toBeLessThan(1);
       expect(alert.body).toBe("var(--oh-contrast)");
       // The public embedding defaults describe the actual shipped stylesheet.
-      expect(AGENT_SERVER_UI_DEFAULT_CSS_VARIABLES[token]).toBe(
-        stylesheet.match(new RegExp(`^\\s*${token}:\\s*([^;]+);`, "m"))?.[1],
+      expect(AGENT_SERVER_UI_DEFAULT_CSS_VARIABLES[token].toLowerCase()).toBe(
+        stylesheet
+          .match(new RegExp(`^\\s*${token}:\\s*([^;]+);`, "m"))?.[1]
+          ?.toLowerCase(),
       );
     }
   });

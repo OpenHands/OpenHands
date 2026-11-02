@@ -1,3 +1,7 @@
+import {
+  sessionActivityKey,
+  useSessionActivityStore,
+} from "#/stores/session-activity-store";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { PluginSpec } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { SuggestedTask } from "#/utils/types";
@@ -227,6 +231,12 @@ export const useCreateConversation = ({
       const conversationId = conversation.app_conversation_id
         ? conversation.app_conversation_id
         : `task-${conversation.id}`;
+
+      const activity = useSessionActivityStore.getState();
+      const activityKey = sessionActivityKey(backend.id, orgId, conversationId);
+      activity.begin(activityKey, "initialize");
+      if (conversation.app_conversation_id)
+        activity.observe(activityKey, "READY");
 
       return {
         conversation_id: conversationId,

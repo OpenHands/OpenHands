@@ -5,7 +5,7 @@ of Agent Canvas. Read this index before driving the app, then open the matching
 feature file and run its recipe with `control-openhands`. The map is not a claim
 that every row passes today; the run's evidence ledger is.
 
-Maintenance baseline: main@073024546a5b47da3ff1a25eb49febfbb24062d3 (2026-10-31). The next maintenance pass starts from this commit; a pass proposes the next baseline in its PR, and merging that PR accepts it.
+Maintenance baseline: main@974ea6ae96945b4c0baffe71a748e491c1316f43 (2026-11-02). The next maintenance pass starts from this commit; a pass proposes the next baseline in its PR, and merging that PR accepts it.
 
 ## Baseline preconditions
 
@@ -235,8 +235,8 @@ How to write and prove new entries: [../mapping.md](../mapping.md).
 | F03 | [Home and starting work](F03-home.md) | home composer, workspace picker, plugin picker, recommended automations rail, no-LLM banner | `/`, **New Chat**, command menu | runs before and after `llm preset`; fixture repo | 46 |
 | F04 | [Conversation list and folders](F04-conversation-list.md) | sidebar list, View presets, workspace folders, tags, rename/pin/archive/delete, load more | sidebar on every page | several conversations; fixture repos | 43 |
 | F05 | [Composer, slash commands and plan mode](F05-composer.md) | send, drafts, attachments, model pill, slash commands, `/goal`, plan mode, dictation | home and conversation composer | LLM | 26 |
-| F06 | [Agent activity](F06-agent-activity.md) | messages, tool events, thinking, empty state, confirmation mode, stop/resume, errors, branching | `/conversations/<id>` | LLM | 37 |
-| F07 | [Conversation page, header and menu](F07-conversation-page.md) | title rename, status menu, ⋯ menu (skills, hooks, tools, export, download, cost, stop, delete), git bar, overview | sidebar row, URL, `/panel` | LLM; fixture repo; Cloud items blocked | 25 |
+| F06 | [Agent activity](F06-agent-activity.md) | messages, tool events, thinking, empty state, confirmation mode, stop/resume, errors, branching | `/conversations/<id>` | LLM | 39 |
+| F07 | [Conversation page, header and menu](F07-conversation-page.md) | title rename, status menu, ⋯ menu (skills, hooks, tools, export, download, cost, stop, delete), git bar, overview | sidebar row, URL, `/panel` | LLM; fixture repo; Cloud items blocked | 26 |
 | F08 | [Workspace drawer: files and changes](F08-workspace-files-and-changes.md) | Files tab, Commits and uncommitted changes, diff viewer, file links in chat | panel toggle, file links | LLM; fixture repo | 35 |
 | F09 | [Settings shell and navigation](F09-settings-shell.md) | settings navigation, phone hub, deep links, update card, backend note | gear, command menu, URLs | baseline; deep links before `llm preset` | 26 |
 | F10 | [LLM profiles](F10-llm-profiles.md) | list, add, edit, rename, duplicate, delete, default, advanced fields, validation | `/settings/llm` | fresh run; DeepSeek key | 34 |
@@ -252,14 +252,14 @@ How to write and prove new entries: [../mapping.md](../mapping.md).
 | F20 | [Canvas apps](F20-canvas-apps.md) | install from path or git, enable, update, uninstall, extension pages | `/apps` | none | 24 |
 | F21 | [Automations dashboard and actions](F21-automations-dashboard.md) | cards and list, filters, sort, Run now, enable, export, import, delete, pin | `/automations` | LLM; automation service | 37 |
 | F22 | [Creating automations](F22-automation-creation.md) | templates, setup dialog, custom automations, import | `/automations/templates`, `/automations/new/<id>` | LLM | 31 |
-| F23 | [Automation detail, runs and editing](F23-automation-detail.md) | detail page, runs, logs, edit dialog, triggers, debug | `/automations/<id>` | LLM; runs | 43 |
+| F23 | [Automation detail, runs and editing](F23-automation-detail.md) | detail page, runs, logs, edit dialog, triggers, debug | `/automations/<id>` | LLM; runs | 44 |
 | F24 | [Automation Git Sync](F24-git-sync.md) | configure, sync cycles, encryption, status | `/automations/git-sync` | `fixture git-repo` | 26 |
 | F25 | [Backends, Cloud and sharing](F25-backends-and-cloud.md) | add, edit, remove and switch backends, per-backend consent, Cloud login, shared pages | backend selector | a second stack; Cloud account (blocked) | 33 |
 | F26 | [Launcher modes, Docker, desktop and library](F26-runtime-variants.md) | launcher flags, partial stacks, LAN bind, Docker, Electron, embeddable library | a terminal | Docker/Electron where available | 35 |
 | F27 | [Workspace tools](F27-workspace-tools.md) | terminal, browser, planner, task list, usage, `canvas_ui_control` | drawer tabs | LLM | 31 |
 | F28 | [Automation setup page](F28-automation-setup-page.md) | blank form, kind toggle, schedule presets, event fields, timeout, draft save and validation, draft Test, Create | **Add Automation → Create Automation**, `/automations/setup`, draft Resume, kebab Edit | automation service; no LLM | 16 |
 
-28 families, 811 sub-features. `control-openhands map ids` lists every ID with its file.
+28 families, 815 sub-features. `control-openhands map ids` lists every ID with its file.
 
 ### Neighbouring families
 

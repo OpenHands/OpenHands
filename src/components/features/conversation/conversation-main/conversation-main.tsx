@@ -1,4 +1,11 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { FileText, MessageSquare } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "#/utils/utils";
@@ -82,7 +89,7 @@ function getDesktopTabPanelClass(isRightPanelShown: boolean) {
     : "w-0 translate-x-full opacity-0";
 }
 
-export function ConversationMain() {
+export function ConversationMain({ children }: { children?: ReactNode } = {}) {
   const { t } = useTranslation("openhands");
   const { conversationId } = useConversationId();
   const { data: conversation } = useActiveConversation();
@@ -94,7 +101,8 @@ export function ConversationMain() {
     string | null
   >(null);
   const shouldMountTabs =
-    isRightPanelShown || openedTabConversationId === conversationId;
+    !children &&
+    (isRightPanelShown || openedTabConversationId === conversationId);
 
   // Keep an opened panel mounted when collapsed, but defer it in the next chat.
   useEffect(() => {
@@ -185,7 +193,7 @@ export function ConversationMain() {
         <header
           data-testid="automation-setup-topbar"
           className={cn(
-            "flex shrink-0 border-b border-[var(--oh-border)] bg-canvas-base",
+            "flex shrink-0 border-b border-border bg-canvas-base",
             isMobile
               ? "flex-col"
               : "h-10 min-h-10 items-center justify-between gap-2 px-3",
@@ -211,7 +219,7 @@ export function ConversationMain() {
               <div
                 role="group"
                 aria-label={`${t(I18nKey.AUTOMATION_SETUP$VIEW_FORM)} / ${t(I18nKey.AUTOMATION_SETUP$VIEW_CONVERSATION)}`}
-                className="flex shrink-0 overflow-hidden rounded-lg border border-[var(--oh-border)]"
+                className="flex shrink-0 overflow-hidden rounded-lg border border-border"
               >
                 {MOBILE_AUTOMATION_VIEW_OPTIONS.map(
                   ({ view, labelKey, Icon }) => {
@@ -229,7 +237,7 @@ export function ConversationMain() {
                           "inline-flex size-7 items-center justify-center",
                           mobileAutomationView === view
                             ? "bg-tertiary text-content"
-                            : "text-[var(--oh-muted)]",
+                            : "text-muted",
                         )}
                       >
                         <Icon className="size-4" aria-hidden />
@@ -334,13 +342,14 @@ export function ConversationMain() {
               )}
             >
               {isSidebarRailHidden ? <SidebarMobileMenuToggle /> : null}
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0 flex-1" inert={!!children}>
                 <ConversationNameWithStatus />
               </div>
             </div>
           ) : null}
           <div className="flex-1 min-h-0 flex flex-col">
             <ChatInterfaceWrapper
+              pendingContent={children}
               isRightPanelShown={!isMobile && isRightPanelShown}
               showGitControlBar={!isAutomationSetupMode}
               showEmptyStateSuggestions={!isAutomationSetupMode}
@@ -452,10 +461,12 @@ export function ConversationMain() {
             </div>
           </div>
         )}
-        <ConversationOverviewDrawer
-          isMobile={isMobile}
-          resizeContainerRef={containerRef}
-        />
+        {!children && (
+          <ConversationOverviewDrawer
+            isMobile={isMobile}
+            resizeContainerRef={containerRef}
+          />
+        )}
       </div>
     </div>
   );
