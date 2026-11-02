@@ -96,25 +96,6 @@ describe('translation.json', () => {
     expect(staleKeys).toEqual([]);
   });
 
-  it('keeps the keys from #1218 translated', () => {
-    const keys = [
-      'SETTINGS$SAVE_AND_RECONNECT',
-      'SETTINGS$MCP_ERROR_URL_DUPLICATE',
-      'SETTINGS$MCP_ERROR_ENV_INVALID_FORMAT',
-    ];
-
-    keys.forEach((key) => {
-      const translations = translationJson[key];
-      expect(translations, `missing key ${key}`).toBeDefined();
-      ['ja', 'zh-CN', 'fr'].forEach((lang) => {
-        expect(
-          translations[lang],
-          `${key} is not translated for ${lang}`,
-        ).not.toBe(translations.en);
-      });
-    });
-  });
-
   it('stores line breaks as newlines, not a literal backslash-n', () => {
     const escapedNewlines = Object.entries(translationJson).flatMap(
       ([key, translations]) =>

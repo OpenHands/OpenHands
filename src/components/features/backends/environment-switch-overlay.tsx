@@ -7,14 +7,12 @@ import {
   subscribeEnvironmentSwitch,
 } from "./environment-switch-store";
 
-// Re-export the store API so existing call sites and tests that import from
-// this module keep working unchanged.
+// Keep the store API on the overlay module's existing public surface.
 export {
   ENVIRONMENT_SWITCH_DURATION_MS,
   ENVIRONMENT_SWITCH_SETACTIVE_DELAY_MS,
   triggerEnvironmentSwitch,
   dismissEnvironmentSwitch,
-  __resetEnvironmentSwitchOverlayForTests,
 } from "./environment-switch-store";
 
 function EnvironmentSwitchIcon({ className }: { className?: string }) {

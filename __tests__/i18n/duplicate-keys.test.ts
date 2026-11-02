@@ -37,40 +37,4 @@ describe('translation.json', () => {
     // Expect no duplicates (this will pass if we reach here)
     expect(uniqueDuplicates).toHaveLength(0);
   });
-
-  it('should have consistent translations for each key', () => {
-    // Read the translation.json file
-    const translationPath = path.join(__dirname, '../../src/i18n/translation.json');
-    const translationContent = fs.readFileSync(translationPath, 'utf-8');
-    const translations = JSON.parse(translationContent);
-
-    // Create a map to store English translations for each key
-    const englishTranslations = new Map<string, string>();
-    const inconsistentKeys: string[] = [];
-
-    // Check each key's English translation
-    Object.entries(translations).forEach(([key, value]: [string, any]) => {
-      if (typeof value === 'object' && value.en !== undefined) {
-        const currentEn = value.en.toLowerCase();
-        const existingEn = englishTranslations.get(key)?.toLowerCase();
-
-        if (existingEn !== undefined && existingEn !== currentEn) {
-          inconsistentKeys.push(key);
-        } else {
-          englishTranslations.set(key, value.en);
-        }
-      }
-    });
-
-    // If there are inconsistencies, create a helpful error message
-    if (inconsistentKeys.length > 0) {
-      const errorMessage = `Found inconsistent translations for keys:\n${inconsistentKeys
-        .map((key) => `  - "${key}" has multiple different English translations`)
-        .join('\n')}`;
-      throw new Error(errorMessage);
-    }
-
-    // Expect no inconsistencies
-    expect(inconsistentKeys).toHaveLength(0);
-  });
 });

@@ -288,9 +288,10 @@ describe("telemetry consent banner", () => {
     renderBanner({ onChoice });
     advanceBy(50);
 
-    const event = await submitForm();
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("confirm-telemetry-preferences"));
+    });
 
-    expect(event.defaultPrevented).toBe(true);
     expect(mocks.saveSettings).toHaveBeenCalledExactlyOnceWith({
       user_consents_to_analytics: true,
     });

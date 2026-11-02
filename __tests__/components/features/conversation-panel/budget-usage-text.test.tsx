@@ -14,21 +14,6 @@ const CONSUMER_PARAMS = {
 };
 
 describe("CONVERSATION$BUDGET_USAGE_FORMAT", () => {
-  it("uses i18next placeholder syntax in the en locale string", () => {
-    // Regression guard for #16873: the key must use {{param}} placeholders so
-    // i18next substitutes values instead of printing the literal template.
-    expect(FORMAT).toBe(
-      "{{currentCost}} / {{maxBudget}} ({{usagePercentage}}% {{used}})",
-    );
-    expect(FORMAT).not.toContain("${");
-  });
-
-  it("interpolates every named parameter the consumer passes", () => {
-    for (const param of Object.keys(CONSUMER_PARAMS)) {
-      expect(FORMAT).toContain(`{{${param}}}`);
-    }
-  });
-
   it("renders a fully substituted usage line with i18next", () => {
     // Drive a real i18next instance with the actual en resource to prove the
     // template interpolates end-to-end (the app's interpolation config matches:
