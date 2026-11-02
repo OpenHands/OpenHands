@@ -15,6 +15,7 @@
 // they exercise the branch logic rather than a copy of it.
 import { spawnSync } from "node:child_process";
 import {
+  chmodSync,
   existsSync,
   mkdtempSync,
   readFileSync,
@@ -79,6 +80,8 @@ function runScript(body: string, env: NodeJS.ProcessEnv = {}) {
       OH_PERSISTENCE_DIR: writable,
       OH_CONVERSATIONS_PATH: writable,
       OH_BASH_EVENTS_DIR: writable,
+      LOCAL_STORAGE_PATH: writable,
+      AUTOMATION_WORKSPACE_BASE: writable,
       ...env,
     },
   });
@@ -217,6 +220,37 @@ describe("docker/entrypoint.sh startup preflight", () => {
       expect(result.stderr).toContain("No space left on device");
       expect(result.stderr).not.toContain("chmod a+rwX");
       expect(result.stderr).not.toContain("--user");
+    },
+  );
+
+  it.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
+    "rejects an existing inaccessible automation database before startup",
+    () => {
+      const db = path.join(scratch, "locked.db");
+      writeFileSync(db, "existing state");
+      chmodSync(db, 0o400);
+      const result = runScript("printf STARTED_BACKENDS", {
+        AUTOMATION_DB_FILE: db,
+      });
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain(
+        "Existing automation database is not readable and writable",
+      );
+      expect(result.stdout).not.toContain("STARTED_BACKENDS");
+    },
+  );
+
+  it.skipIf(process.platform === "win32")(
+    "checks overridden automation storage before startup",
+    () => {
+      const blocker = path.join(scratch, "storage-blocker");
+      writeFileSync(blocker, "");
+      const result = runScript("printf STARTED_BACKENDS", {
+        LOCAL_STORAGE_PATH: path.join(blocker, "storage"),
+      });
+      expect(result.status).toBe(1);
+      expect(result.stdout).not.toContain("STARTED_BACKENDS");
+      expect(result.stderr).toContain("storage-blocker");
     },
   );
 

@@ -67,6 +67,11 @@ STATE_DIR="${OPENHANDS_DIR}/${CONFIG_STATE_SUBDIR:-agent-canvas}"
 export OH_PERSISTENCE_DIR="${OH_PERSISTENCE_DIR:-${OPENHANDS_DIR}}"
 export OH_CONVERSATIONS_PATH="${OH_CONVERSATIONS_PATH:-${OPENHANDS_DIR}/${CONFIG_CONVERSATIONS:-agent-canvas/conversations}}"
 export OH_BASH_EVENTS_DIR="${OH_BASH_EVENTS_DIR:-${OPENHANDS_DIR}/${CONFIG_BASH_EVENTS:-agent-canvas/bash_events}}"
+export LOCAL_STORAGE_PATH="${LOCAL_STORAGE_PATH:-${OPENHANDS_DIR}/storage}"
+export AUTOMATION_WORKSPACE_BASE="${AUTOMATION_WORKSPACE_BASE:-${OPENHANDS_DIR}/workspaces}"
+if [ -z "${AUTOMATION_DB_URL:-}" ]; then
+  AUTOMATION_DB_FILE="${OPENHANDS_DIR}/${CONFIG_AUTOMATION_DB:-automation/automations.db}"
+fi
 
 # ── Preflight: persistence dirs must be writable ───────────────────────────
 # A host bind mount the container cannot write to leaves the backend
@@ -101,9 +106,11 @@ report_unwritable() {
       log_error "Use your actual host bind-mount path if different from the example."
       log_error "If Docker created root-owned dirs, use sudo find ... for the same command."
       log_error "Create host dirs with mkdir -p before starting Docker to avoid root-owned mounts."
+      log_error "On SELinux hosts, check bind-mount labels (Docker :z or :Z)."
       ;;
     *"Read-only file system"*|*"read-only file system"*)
       log_error "The mount is read-only. Drop the ':ro' suffix from its -v flag"
+      [ "$label" != "Browser config directory" ] || log_error "For a read-only root filesystem, set XDG_CONFIG_HOME to a writable mount."
       log_error "(or remount it read-write), then retry."
       ;;
     *)
@@ -115,7 +122,7 @@ report_unwritable() {
 # Probe the effective paths (not just $OPENHANDS_DIR): OH_PERSISTENCE_DIR /
 # OH_CONVERSATIONS_PATH / OH_BASH_EVENTS_DIR can be overridden by the user,
 # and $OPENHANDS_DIR itself still hosts the persisted secret-key/api-key files.
-for dir in "$OPENHANDS_DIR" "$OH_PERSISTENCE_DIR" "$OH_CONVERSATIONS_PATH" "$OH_BASH_EVENTS_DIR"; do
+for dir in "$OPENHANDS_DIR" "$OH_PERSISTENCE_DIR" "$OH_CONVERSATIONS_PATH" "$OH_BASH_EVENTS_DIR" "$LOCAL_STORAGE_PATH" "$AUTOMATION_WORKSPACE_BASE" ${AUTOMATION_DB_FILE:+"$(dirname "$AUTOMATION_DB_FILE")"}; do
   # Capture stderr from *both* commands: if `mkdir -p` fails the touch never
   # runs, and without this its raw, unprefixed error would leak to the console.
   if ! err=$(mkdir -p "$dir" 2>&1 && touch "$dir/.write-test" 2>&1); then
@@ -133,7 +140,10 @@ done
 if [ -d /projects ]; then
   if ! err=$(touch /projects/.write-test 2>&1); then
     report_unwritable "Workspace directory" "/projects" "$err" "~/projects"
-    exit 1
+    case "$err" in
+      *"Read-only file system"*|*"read-only file system"*) log "WARNING: /projects is read-only; existing files cannot be edited." ;;
+      *) exit 1 ;;
+    esac
   fi
   rm -f /projects/.write-test
 fi
@@ -147,6 +157,17 @@ if ! err=$(mkdir -p "$BROWSER_CONFIG_DIR" 2>&1 && touch "$BROWSER_CONFIG_DIR/.wr
 fi
 rm -f "$BROWSER_CONFIG_DIR/.write-test"
 
+# Existing databases must be writable as well as their parent directories.
+if [ -n "${AUTOMATION_DB_FILE:-}" ]; then
+  for db_file in "$AUTOMATION_DB_FILE" "${AUTOMATION_DB_FILE}-wal" "${AUTOMATION_DB_FILE}-shm" "${AUTOMATION_DB_FILE}-journal"; do
+    if [ -e "$db_file" ] && { [ ! -r "$db_file" ] || [ ! -w "$db_file" ]; }; then
+      log_error "Existing automation database is not readable and writable: $db_file"
+      log_error "Grant uid $(id -u) access to this file without exposing private state."
+      exit 1
+    fi
+  done
+fi
+
 # OH_SECRET_KEY is required for settings/secrets encryption. Without it the
 # agent-server refuses to return encrypted secrets → conversation creation
 # fails with a 503.  Auto-generate and persist (just like the session API key)
@@ -154,7 +175,10 @@ rm -f "$BROWSER_CONFIG_DIR/.write-test"
 SECRET_KEY_FILE="${STATE_DIR}/secret-key.txt"
 if [ -z "${OH_SECRET_KEY:-}" ]; then
   if [ -f "$SECRET_KEY_FILE" ]; then
-    OH_SECRET_KEY="$(cat "$SECRET_KEY_FILE")"
+    if ! OH_SECRET_KEY="$(cat "$SECRET_KEY_FILE" 2>&1)"; then
+      log_error "Cannot read persisted secret key: $SECRET_KEY_FILE (uid $(id -u)). Check ownership and permissions; keep the key private."
+      exit 1
+    fi
   else
     OH_SECRET_KEY="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
     mkdir -p "$(dirname "$SECRET_KEY_FILE")"
@@ -172,7 +196,10 @@ API_KEY_FILE="${STATE_DIR}/api-key.txt"
 
 if [ -z "${LOCAL_BACKEND_API_KEY:-}" ] && [ -z "${OH_SESSION_API_KEYS_0:-}" ]; then
   if [ -f "$API_KEY_FILE" ]; then
-    LOCAL_BACKEND_API_KEY="$(cat "$API_KEY_FILE")"
+    if ! LOCAL_BACKEND_API_KEY="$(cat "$API_KEY_FILE" 2>&1)"; then
+      log_error "Cannot read persisted session key: $API_KEY_FILE (uid $(id -u)). Check ownership and permissions; keep the key private."
+      exit 1
+    fi
   else
     LOCAL_BACKEND_API_KEY="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
     mkdir -p "$(dirname "$API_KEY_FILE")"

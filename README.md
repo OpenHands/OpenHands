@@ -113,7 +113,10 @@ existing project files, so uid 10001 can save edits as well as create files.
 Existing executable permissions are preserved. Files under `~/.openhands`
 keep their permissions, including the `600` secret files; keep `PROJECTS_PATH`
 separate from that state directory. Use only a workspace you are comfortable
-sharing with other host users. Docker Desktop on macOS/Windows handles
+sharing with other host users. Anyone who can traverse your home directory can
+replace files in the writable state directories, including the session key.
+Existing host-owned keys and databases may also be inaccessible to uid 10001;
+grant that uid access without making secret keys world-readable. Docker Desktop on macOS/Windows handles
 bind-mount permissions, so you can skip these commands there.
 
 **2. Start Agent Canvas**
@@ -132,7 +135,8 @@ Open [http://localhost:8000/canvas](http://localhost:8000/canvas).
 <summary>Linux permission troubleshooting</summary>
 
 If startup reports `Permission denied`, check the host directory named in the
-error. If Docker created it owned by root, run the commands with
+error. On SELinux hosts, check whether the bind mount needs a `:z` or `:Z` label.
+If Docker created it owned by root, run the commands with
 `sudo` on the host:
 
 ```sh
