@@ -31,6 +31,8 @@ export default defineConfig({
   testMatch: [
     /onboarding[\\/]mock-llm-onboarding-happy-path\.spec\.ts$/,
     /conversations[\\/]mock-llm-conversation\.spec\.ts$/,
+    // Known Windows bugs, marked `test.fail` on win32 until they are fixed.
+    /windows[\\/]mock-llm-windows-known-issues\.spec\.ts$/,
   ],
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
@@ -40,6 +42,9 @@ export default defineConfig({
   timeout: 120_000,
   reporter: [
     ["line"],
+    // Records why each expected failure failed, so a known-bug test that
+    // breaks for an unrelated reason can be spotted in the artifact.
+    ["json", { outputFile: "test-results-windows-install/results.json" }],
     [
       "html",
       { outputFolder: "playwright-report-windows-install", open: "never" },

@@ -114,6 +114,8 @@ jobs:
         env:
           MOCK_LLM_BACKEND_URL: http://127.0.0.1:8000
           MOCK_LLM_PYTHON: ${{ github.workspace }}\.mock-llm-venv\Scripts\python.exe
+          # agent-canvas starts with its default browser tools on.
+          MOCK_LLM_BROWSER_TOOLS: "1"
         run: |
           $userDir = "$env:RUNNER_TEMP\canvas-user"
           $logs = "$env:RUNNER_TEMP\agent-canvas.out.log", "$env:RUNNER_TEMP\agent-canvas.err.log"
