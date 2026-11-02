@@ -811,6 +811,9 @@ export function AutomationSetupPanel({
   const [existingRepositories, setExistingRepositories] = useState(
     draft.existingRepositories ?? [],
   );
+  const [existingEventTrigger, setExistingEventTrigger] = useState(
+    draft.existingEventTrigger,
+  );
   const [canUpdateRepositories, setCanUpdateRepositories] = useState(
     draft.canUpdateRepositories ?? false,
   );
@@ -851,7 +854,12 @@ export function AutomationSetupPanel({
   useEffect(() => {
     setExistingRepositories(draft.existingRepositories ?? []);
     setCanUpdateRepositories(draft.canUpdateRepositories ?? false);
-  }, [draft.existingRepositories, draft.canUpdateRepositories]);
+    setExistingEventTrigger(draft.existingEventTrigger);
+  }, [
+    draft.existingRepositories,
+    draft.canUpdateRepositories,
+    draft.existingEventTrigger,
+  ]);
 
   const updateConversationTags = useCallback(
     async (
@@ -950,6 +958,7 @@ export function AutomationSetupPanel({
         setExistingCustomTarballPath(next.existingCustomTarballPath ?? "");
         setExistingRepositories(next.existingRepositories ?? []);
         setCanUpdateRepositories(next.canUpdateRepositories ?? false);
+        setExistingEventTrigger(next.existingEventTrigger);
         setForm(nextForm);
       })
       .catch((error: unknown) => {
@@ -1296,6 +1305,9 @@ export function AutomationSetupPanel({
   const buildTrigger = () =>
     triggerKind === "event"
       ? {
+          // Fields the form does not edit, such as `destination`, keep the
+          // values the edited automation already has.
+          ...(isEditingExisting ? existingEventTrigger : {}),
           type: "event",
           source: eventSource.trim() || DEFAULT_EVENT_SOURCE,
           on: eventKeyPayload(eventKey),
