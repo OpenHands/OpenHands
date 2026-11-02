@@ -3,6 +3,8 @@ import i18next from "i18next";
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "test-utils";
+import { SessionActivityDetails } from "#/components/conversation-events/chat/event-message-components/session-activity";
+import type { SessionActivity } from "#/stores/session-activity-store";
 import { EventGroup } from "#/components/conversation-events/chat/event-message-components/event-group";
 import {
   ActionEvent,
@@ -503,4 +505,89 @@ describe("EventGroup summary plurals", () => {
       }
     },
   );
+});
+
+it("shows the current startup phase, then flat observed details after completion", () => {
+  const session: SessionActivity = {
+    id: "startup",
+    kind: "initialize",
+    startedAt: Date.now(),
+    phase: "pending",
+    open: true,
+    steps: ["WAITING_FOR_SANDBOX", "PREPARING_REPOSITORY"],
+  };
+  const renderSession = (value: SessionActivity) => (
+    <EventGroup events={[]} session={value} open>
+      <SessionActivityDetails session={value} nested={false} />
+    </EventGroup>
+  );
+  const { rerender } = renderWithProviders(renderSession(session));
+  expect(screen.getByTestId("event-group-toggle")).toHaveTextContent(
+    "EVENT_GROUP$PREPARING_WORKSPACE",
+  );
+  expect(screen.getByRole("list")).toHaveTextContent(
+    "EVENT_GROUP$WORKSPACE_PREPARATION",
+  );
+  expect(screen.getAllByRole("button")).toHaveLength(1);
+  rerender(
+    renderSession({
+      ...session,
+      phase: "connecting",
+      steps: [...session.steps, "READY"],
+    }),
+  );
+  expect(screen.getByTestId("event-group-toggle")).toHaveTextContent(
+    "EVENT_GROUP$CONNECTING_AGENT",
+  );
+  rerender(renderSession({ ...session, phase: "complete" }));
+  expect(screen.getByTestId("event-group-toggle")).toHaveTextContent(
+    "EVENT_GROUP$SESSION_INITIALIZED",
+  );
+  expect(screen.queryByTestId("spinner-icon")).not.toBeInTheDocument();
+  rerender(renderSession({ ...session, kind: "resume", phase: "complete" }));
+  expect(screen.getByTestId("event-group-toggle")).toHaveTextContent(
+    "EVENT_GROUP$SESSION_RESUMED",
+  );
+  rerender(renderSession({ ...session, phase: "failed" }));
+  expect(screen.getByTestId("event-group-toggle")).toHaveTextContent(
+    "COMMON$ERROR",
+  );
+  expect(screen.getByRole("list")).toBeVisible();
+});
+
+it("uses the session state while setup details are not yet available", () => {
+  const session: SessionActivity = {
+    id: "startup-without-details",
+    kind: "initialize",
+    startedAt: Date.now(),
+    phase: "pending",
+    open: true,
+    steps: ["WORKING"],
+  };
+  const { rerender } = renderWithProviders(
+    <SessionActivityDetails session={session} nested={false} />,
+  );
+  const details = screen.getByTestId("session-activity-details");
+  expect(details).toHaveTextContent("EVENT_GROUP$SESSION_INITIALIZING");
+  rerender(
+    <SessionActivityDetails
+      session={{ ...session, kind: "resume" }}
+      nested={false}
+    />,
+  );
+  expect(details).toHaveTextContent("EVENT_GROUP$SESSION_RESUMING");
+  rerender(
+    <SessionActivityDetails
+      session={{ ...session, phase: "connecting" }}
+      nested={false}
+    />,
+  );
+  expect(details).toHaveTextContent("EVENT_GROUP$CONNECTING_AGENT");
+  rerender(
+    <SessionActivityDetails
+      session={{ ...session, phase: "complete" }}
+      nested={false}
+    />,
+  );
+  expect(details).toHaveTextContent("EVENT_GROUP$SESSION_INITIALIZED");
 });

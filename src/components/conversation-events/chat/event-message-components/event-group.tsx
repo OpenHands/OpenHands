@@ -1,5 +1,8 @@
 import type { SessionActivity } from "#/stores/session-activity-store";
-import { sessionActivityTitle } from "./session-activity";
+import {
+  sessionActivityTitle,
+  sessionActivityLiveTitle,
+} from "./session-activity";
 import React from "react";
 import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import { SuccessIndicator } from "#/components/features/chat/success-indicator";
@@ -138,7 +141,7 @@ export function EventGroup({
   }
 
   if (session && session.phase !== "complete")
-    summary = t(sessionActivityTitle(session));
+    summary = t(sessionActivityLiveTitle(session));
   const timestampLabel = formatEventTimestamp(
     singleTool?.timestamp,
     i18n?.language,

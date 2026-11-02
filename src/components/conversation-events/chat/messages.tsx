@@ -279,7 +279,10 @@ export const Messages: React.FC<MessagesProps> = React.memo(
                 }}
               >
                 {item.session && (
-                  <SessionActivityDetails session={item.session} />
+                  <SessionActivityDetails
+                    session={item.session}
+                    nested={item.events.length > 0}
+                  />
                 )}
                 {[
                   ...item.events.map((event) => ({
