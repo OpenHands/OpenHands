@@ -11,7 +11,7 @@ import { expect, type APIRequestContext, type Page } from "@playwright/test";
 // Tokens that the mock LLM server uses — must match mock-llm-server.py.
 export const BASH_TOKEN = "MOCK_LLM_E2E_BASH_OK";
 export const REPLY_TOKEN = "MOCK_LLM_E2E_REPLY_OK";
-export const BASH_COMMAND = `printf '${BASH_TOKEN}\\n'`;
+export const BASH_COMMAND = `echo ${BASH_TOKEN}`;
 
 /** Reply token used by the image-upload test trajectory. */
 export const IMAGE_REPLY_TOKEN = "MOCK_LLM_IMAGE_OK";

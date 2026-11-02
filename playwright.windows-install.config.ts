@@ -1,0 +1,69 @@
+/**
+ * Playwright config for the Windows npm-install E2E job
+ * (.github/workflows/windows-install-e2e.yml).
+ *
+ * Unlike playwright.mock-llm.config.ts, this config does not start Agent
+ * Canvas. The workflow installs the packed npm tarball globally and runs the
+ * `agent-canvas` command the way a Windows user does (README Option 1), then
+ * points these specs at that stack. Only the mock LLM server starts here.
+ *
+ * Required environment:
+ *   MOCK_LLM_BACKEND_URL      URL of the running Agent Canvas ingress
+ *   MOCK_LLM_SESSION_API_KEY  the key the launcher persisted on first run
+ *   MOCK_LLM_PYTHON           Python with openhands-sdk installed
+ */
+
+import { defineConfig, devices } from "@playwright/test";
+
+const MOCK_LLM_PORT = process.env.MOCK_LLM_PORT ?? "9999";
+const CANVAS_URL = process.env.MOCK_LLM_BACKEND_URL ?? "http://127.0.0.1:8000";
+const MOCK_LLM_PYTHON = process.env.MOCK_LLM_PYTHON ?? "python";
+
+// The shared helpers read these at import time.
+process.env.MOCK_LLM_BACKEND_URL = CANVAS_URL;
+process.env.MOCK_LLM_PORT = MOCK_LLM_PORT;
+
+export default defineConfig({
+  testDir: "./tests/e2e/mock-llm",
+  // First-run onboarding plus a conversation that runs a terminal command:
+  // the path a new Windows user takes. Separators are matched either way so
+  // the patterns also work on POSIX hosts.
+  testMatch: [
+    /onboarding[\\/]mock-llm-onboarding-happy-path\.spec\.ts$/,
+    /conversations[\\/]mock-llm-conversation\.spec\.ts$/,
+  ],
+  fullyParallel: false,
+  forbidOnly: !!process.env.CI,
+  retries: 0,
+  workers: 1,
+  // Windows runners start conversations more slowly than Linux ones.
+  timeout: 120_000,
+  reporter: [
+    ["line"],
+    [
+      "html",
+      { outputFolder: "playwright-report-windows-install", open: "never" },
+    ],
+  ],
+  outputDir: "test-results-windows-install",
+  use: {
+    baseURL: `${CANVAS_URL}/`,
+    screenshot: "only-on-failure",
+    video: "retain-on-failure",
+  },
+  projects: [
+    {
+      name: "chromium",
+      use: { ...devices["Desktop Chrome"] },
+    },
+  ],
+  webServer: {
+    command: `"${MOCK_LLM_PYTHON}" tests/e2e/mock-llm/scripts/mock-llm-server.py --port ${MOCK_LLM_PORT}`,
+    url: `http://127.0.0.1:${MOCK_LLM_PORT}`,
+    // The openhands-sdk import is slow on a cold Windows runner.
+    timeout: 120_000,
+    reuseExistingServer: !process.env.CI,
+    stdout: "pipe",
+    stderr: "pipe",
+  },
+});

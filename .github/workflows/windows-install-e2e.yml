@@ -1,0 +1,177 @@
+name: Windows npm install E2E
+
+# Installs Agent Canvas on a Windows runner the way README Option 1 tells a
+# user to (`npm install -g @openhands/agent-canvas`, then `agent-canvas`),
+# using a tarball packed from this commit, and checks that a first-time user
+# can finish onboarding and run a conversation. The LLM is the scripted mock
+# server, so no credentials are needed. See OpenHands/OpenHands#19119.
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/windows-install-e2e.yml
+      - playwright.windows-install.config.ts
+      - bin/**
+      - config/defaults.json
+      - package.json
+      - package-lock.json
+      - scripts/dev-*.mjs
+      - scripts/ingress.mjs
+      - scripts/static-server.mjs
+      - scripts/runtime-services-info.mjs
+      - tools/**
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/windows-install-e2e.yml
+      - playwright.windows-install.config.ts
+      - bin/**
+      - config/defaults.json
+      - package.json
+      - package-lock.json
+      - scripts/dev-*.mjs
+      - scripts/ingress.mjs
+      - scripts/static-server.mjs
+      - scripts/runtime-services-info.mjs
+      - tools/**
+  workflow_dispatch:
+
+concurrency:
+  group: windows-install-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  windows-install-e2e:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          # Same pin as ci.yml (nodejs/node#63487).
+          node-version: "24.15"
+          cache: npm
+
+      - name: Use pinned npm
+        run: npm install --global npm@11.12.1 --ignore-scripts --no-audit --no-fund
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build and pack the npm package
+        run: |
+          npm run build
+          New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\pkg" | Out-Null
+          npm pack --pack-destination "$env:RUNNER_TEMP\pkg"
+          $tarball = (Get-ChildItem "$env:RUNNER_TEMP\pkg\*.tgz").FullName
+          $version = node -p "require('./package.json').version"
+          "CANVAS_TARBALL=$tarball" >> $env:GITHUB_ENV
+          "CANVAS_VERSION=$version" >> $env:GITHUB_ENV
+
+      # The documented Windows installer for uv, as a user would run it.
+      - name: Install uv
+        run: |
+          powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+          "$env:USERPROFILE\.local\bin" >> $env:GITHUB_PATH
+
+      - name: Install Agent Canvas globally from the tarball
+        working-directory: ${{ runner.temp }}
+        run: |
+          npm install --global "$env:CANVAS_TARBALL" --no-audit --no-fund
+          $installed = agent-canvas --version
+          Write-Host "agent-canvas --version: $installed (expected $env:CANVAS_VERSION)"
+          if ($installed -ne $env:CANVAS_VERSION) { throw "Installed version $installed does not match $env:CANVAS_VERSION" }
+
+      - name: Start agent-canvas like a user
+        run: |
+          $userDir = "$env:RUNNER_TEMP\canvas-user"
+          New-Item -ItemType Directory -Force $userDir | Out-Null
+          $shim = (Get-Command agent-canvas.cmd).Source
+          $proc = Start-Process -FilePath $shim -WorkingDirectory $userDir -PassThru -NoNewWindow `
+            -RedirectStandardOutput "$env:RUNNER_TEMP\agent-canvas.out.log" `
+            -RedirectStandardError "$env:RUNNER_TEMP\agent-canvas.err.log"
+          "CANVAS_PID=$($proc.Id)" >> $env:GITHUB_ENV
+
+      - name: Wait for the full stack
+        run: |
+          # The first launch resolves agent-server and automation through
+          # uvx, which can take several minutes on a cold Windows runner.
+          $deadline = (Get-Date).AddMinutes(15)
+          $urls = @(
+            "http://127.0.0.1:8000/",
+            "http://127.0.0.1:8000/server_info",
+            "http://127.0.0.1:8000/api/automation/health"
+          )
+          $start = Get-Date
+          while ($true) {
+            if (-not (Get-Process -Id $env:CANVAS_PID -ErrorAction SilentlyContinue)) {
+              Get-Content "$env:RUNNER_TEMP\agent-canvas.out.log", "$env:RUNNER_TEMP\agent-canvas.err.log" -ErrorAction SilentlyContinue
+              throw "agent-canvas exited before the stack was ready"
+            }
+            $down = @($urls | Where-Object {
+              try { (Invoke-WebRequest $_ -UseBasicParsing -TimeoutSec 5).StatusCode -ne 200 } catch { $true }
+            })
+            if ($down.Count -eq 0) { break }
+            if ((Get-Date) -gt $deadline) {
+              Get-Content "$env:RUNNER_TEMP\agent-canvas.out.log", "$env:RUNNER_TEMP\agent-canvas.err.log" -ErrorAction SilentlyContinue
+              throw "Stack not ready after 15 minutes; still down: $($down -join ', ')"
+            }
+            Start-Sleep -Seconds 5
+          }
+          Write-Host "Stack ready after $([int]((Get-Date) - $start).TotalSeconds)s"
+
+      - name: Read the persisted session key
+        run: |
+          $key = (Get-Content "$env:USERPROFILE\.openhands\agent-canvas\api-key.txt" -Raw).Trim()
+          Write-Host "::add-mask::$key"
+          "MOCK_LLM_SESSION_API_KEY=$key" >> $env:GITHUB_ENV
+
+      - name: Read defaults from config/defaults.json
+        id: defaults
+        run: |
+          $version = node -p "require('./config/defaults.json').versions.agentServer"
+          "agent_server_version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Install openhands-sdk (for mock LLM server)
+        env:
+          AGENT_SERVER_VERSION: ${{ steps.defaults.outputs.agent_server_version }}
+        run: |
+          uv venv .mock-llm-venv --python ">=3.12,<3.15"
+          uv pip install -p .mock-llm-venv "openhands-sdk==$env:AGENT_SERVER_VERSION"
+
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium
+
+      - name: Run onboarding and conversation specs
+        env:
+          MOCK_LLM_BACKEND_URL: http://127.0.0.1:8000
+          MOCK_LLM_PYTHON: ${{ github.workspace }}\.mock-llm-venv\Scripts\python.exe
+        run: npx playwright test --config=playwright.windows-install.config.ts
+
+      - name: Stop agent-canvas
+        if: always()
+        run: |
+          if ($env:CANVAS_PID) { taskkill /PID $env:CANVAS_PID /T /F 2>$null }
+          exit 0
+
+      - name: Upload logs and report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-install-e2e
+          if-no-files-found: ignore
+          retention-days: 14
+          path: |
+            ${{ runner.temp }}/agent-canvas.*.log
+            playwright-report-windows-install/
+            test-results-windows-install/

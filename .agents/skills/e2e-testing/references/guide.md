@@ -28,7 +28,7 @@
 - **Session API key**: A random key is generated per test run and passed to the stack via `SESSION_API_KEY` / `OH_SESSION_API_KEYS_0` / `VITE_SESSION_API_KEY`. The static server injects it into `index.html` at serve time so the frontend authenticates automatically.
 - **User skill fixtures**: The npm launcher sets `OH_PERSISTENCE_DIR` to `dirname(STATE_DIR)`, so `skill-test-helpers.ts` writes user skills to `.tmp/skills/`. Keep this aligned with the launcher's persistence root. `MOCK_LLM_USER_SKILLS_HOST_DIR` still overrides the host path for Docker's volume mount.
 - **Mock LLM server** (`tests/e2e/mock-llm/scripts/mock-llm-server.py`): Python HTTP server using openhands-sdk's `TestLLM` to return scripted tool-call + text trajectories. Supports admin API endpoints for dynamic trajectory management:
-  - `POST /admin/reset` — reset to the default trajectory (terminal printf + text reply); also clears the stored completion-request history
+  - `POST /admin/reset` — reset to the default trajectory (terminal `echo` + text reply; `echo` rather than `printf` so it also runs in the PowerShell terminal the agent-server uses on Windows); also clears the stored completion-request history
   - `POST /admin/trajectory/register` — register a named trajectory (JSON body: `{name, turns}` where each turn is `{tool_call: {name, arguments}}` or `{text: "..."}`)
   - `POST /admin/trajectory/activate` — activate a previously registered trajectory
   - `GET /admin/requests` — return the list of all `/v1/chat/completions` request bodies captured since the last reset (used by the image-upload test to verify the image was forwarded to the LLM)
@@ -69,6 +69,12 @@
 - **State isolation**: The Docker container uses its internal state directory (no host mount needed for tests). Each test run starts a fresh container.
 - **Skill test volume mounts**: Tests that create files the agent-server needs to read (skill repos, user skills) require Docker volume mounts because the container has an isolated filesystem. The Docker config mounts `.tmp/mock-llm-skill-repos/` → `/tmp/mock-llm-skill-repos/` for project skills and `.tmp/mock-llm-user-skills/` → `/home/openhands/.openhands/skills/` for user skills. Env vars `MOCK_LLM_SKILL_REPOS_CONTAINER_DIR` and `MOCK_LLM_USER_SKILLS_HOST_DIR` tell `skill-test-helpers.ts` which paths to use for agent-server API registration vs. host-side file operations.
 - CI workflow: `.github/workflows/mock-llm-docker-e2e.yml` has two triggers, both using an already-built image from GHCR: (1) `workflow_run` fires automatically after a successful `Docker` workflow on `main`; (2) `workflow_dispatch` accepts a custom `docker_image` input. It does not run on pull-request events. The default image tag is derived from the tested commit SHA (`ghcr.io/openhands/agent-canvas:sha-<short>-amd64`). Report artifacts go to `test-results-mock-llm-docker/` and `playwright-report-mock-llm-docker/`.
+
+### Windows npm Install (Shared Specs)
+
+- `.github/workflows/windows-install-e2e.yml` checks README Option 1 on `windows-latest`. It builds and `npm pack`s the commit, runs `npm install --global <tarball>` from an empty directory, installs uv with Astral's PowerShell installer, and runs `agent-canvas` with no extra environment. It then waits up to 15 minutes for `/`, `/server_info` and `/api/automation/health` on port 8000, and reads the session key from `%USERPROFILE%\.openhands\agent-canvas\api-key.txt`.
+- `playwright.windows-install.config.ts` does not start Agent Canvas; it starts only the mock LLM server and runs the onboarding happy path and the conversation spec against the already-running stack. Keep any spec it runs free of POSIX-only shell commands, because the agent-server's Windows terminal is PowerShell.
+- Triggers: pull requests and `main` pushes that touch the launcher, ingress/static server, `config/defaults.json`, `tools/`, package manifests or the job itself, plus `workflow_dispatch`. Logs and the Playwright report upload as the `windows-install-e2e` artifact.
 
 ## Debugging E2E Test Failures
 
