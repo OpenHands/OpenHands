@@ -294,6 +294,7 @@ export function Sidebar() {
               showCollapseToggle={false}
               showMobileCloseButton
               onCloseMobile={closeMobileNav}
+              isDrawer
               {...railBodyProps}
             />
           </aside>

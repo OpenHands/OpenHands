@@ -21,6 +21,10 @@ import { ConfirmStopModal } from "./confirm-stop-modal";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { ExitConversationModal } from "./exit-conversation-modal";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
+import {
+  SIDEBAR_RAIL_COLLAPSE_MAX_WIDTH,
+  useBreakpoint,
+} from "#/hooks/use-breakpoint";
 import { Provider } from "#/types/settings";
 import type { LocalWorkspace } from "#/types/workspace";
 import { useUpdateConversation } from "#/hooks/mutation/use-update-conversation";
@@ -84,6 +88,11 @@ interface ConversationPanelProps {
    * containing the full card content.
    */
   compact?: boolean;
+  /**
+   * Whether the panel is rendering inside a mobile/phone drawer.
+   * If omitted, falls back to checking `useBreakpoint(SIDEBAR_RAIL_COLLAPSE_MAX_WIDTH)`.
+   */
+  isDrawer?: boolean;
 }
 
 const noop = () => {};
@@ -93,7 +102,10 @@ const EMPTY_PINNED_CONVERSATION_IDS: readonly string[] = [];
 export function ConversationPanel({
   onClose,
   compact = false,
+  isDrawer: isDrawerProp,
 }: ConversationPanelProps) {
+  const isMobileDrawer = useBreakpoint(SIDEBAR_RAIL_COLLAPSE_MAX_WIDTH);
+  const isDrawer = isDrawerProp ?? isMobileDrawer;
   const { t } = useTranslation("openhands");
   const { conversationId: currentConversationId, navigate } = useNavigation();
   const { backend: activeBackend, orgId } = useActiveBackend();
@@ -1160,6 +1172,7 @@ export function ConversationPanel({
                 ) ?? null)
               : undefined
           }
+          isDrawer={isDrawer}
           onClose={onClose}
           prefetchConversation={prefetchConversation}
           handleDeleteProject={handleDeleteProject}
@@ -1201,6 +1214,7 @@ export function ConversationPanel({
       showLlmProfiles,
       showTagsMetadata,
       showHoverMetadata,
+      isDrawer,
     ],
   );
 
