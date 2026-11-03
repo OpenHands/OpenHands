@@ -160,16 +160,6 @@ export const BUILT_IN_INTEGRATION_NAMES: Readonly<Record<string, string>> = {
   slack: "Slack",
 };
 
-/** Built-in integrations, by provider name, as one localized phrase. */
-export function formatBuiltInIntegrations(
-  ids: readonly string[],
-  language: string,
-): string {
-  return new Intl.ListFormat(language, { type: "conjunction" }).format(
-    ids.map((id) => BUILT_IN_INTEGRATION_NAMES[id] ?? id),
-  );
-}
-
 /** What the active backend says about the integrations built into it. */
 export interface InstanceIntegrations {
   /** The cloud web-client config's `feature_flags.deployment_mode`. */
