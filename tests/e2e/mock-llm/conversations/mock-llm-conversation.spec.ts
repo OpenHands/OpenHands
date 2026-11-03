@@ -160,23 +160,19 @@ test.describe("mock-LLM agent-server conversation", () => {
     await dismissAnalyticsModal(page);
     await waitForTestId(page, "add-llm-profile");
 
-    // Find the profile row containing our profile name
-    const profileRows = page.getByTestId("profile-row");
-    const rowCount = await profileRows.count();
-    let targetRow: ReturnType<typeof profileRows.nth> | null = null;
-
-    for (let i = 0; i < rowCount; i++) {
-      const row = profileRows.nth(i);
-      const text = await row.textContent();
-      if (text?.includes(PROFILE_NAME)) {
-        targetRow = row;
-        break;
-      }
-    }
-    expect(targetRow, `Could not find profile row for "${PROFILE_NAME}"`).not.toBeNull();
+    // Find the profile row containing our profile name. `add-llm-profile` is
+    // in the header and renders before the profile list has loaded, so wait
+    // for the row itself rather than counting rows right away.
+    const targetRow = page
+      .getByTestId("profile-row")
+      .filter({ hasText: PROFILE_NAME });
+    await expect(
+      targetRow,
+      `Could not find profile row for "${PROFILE_NAME}"`,
+    ).toBeVisible({ timeout: 15_000 });
 
     // Open the actions menu for this profile
-    await targetRow!.getByTestId("profile-menu-trigger").click();
+    await targetRow.getByTestId("profile-menu-trigger").click();
     await waitForTestId(page, "profile-actions-menu");
 
     // Click "Set as active" — with client-side reconciliation
@@ -201,29 +197,27 @@ test.describe("mock-LLM agent-server conversation", () => {
       .poll(
         async () => {
           await page.goto("/settings/llm", { waitUntil: "domcontentloaded" });
-          await waitForTestId(page, "add-llm-profile");
-          const rows = page.getByTestId("profile-row");
-          const count = await rows.count();
-          for (let i = 0; i < count; i++) {
-            const row = rows.nth(i);
-            const text = await row.textContent();
-            if (text?.includes(PROFILE_NAME)) {
-              if (
-                (await row.getByTestId("profile-active-badge").count()) > 0
-              ) {
-                return true;
-              }
-              // Badge absent — re-attempt activation before the next poll.
-              await row.getByTestId("profile-menu-trigger").click();
-              await waitForTestId(page, "profile-actions-menu");
-              const retrySetActive = page.getByTestId("profile-set-active");
-              if (await retrySetActive.isEnabled()) {
-                await retrySetActive.click();
-              } else {
-                await page.keyboard.press("Escape");
-              }
-              return false;
-            }
+          // Wait for the row: the header (add-llm-profile) renders before the
+          // profile list loads, and counting rows then finds none.
+          const row = page
+            .getByTestId("profile-row")
+            .filter({ hasText: PROFILE_NAME });
+          try {
+            await row.waitFor({ state: "visible", timeout: 10_000 });
+          } catch {
+            return false;
+          }
+          if ((await row.getByTestId("profile-active-badge").count()) > 0) {
+            return true;
+          }
+          // Badge absent — re-attempt activation before the next poll.
+          await row.getByTestId("profile-menu-trigger").click();
+          await waitForTestId(page, "profile-actions-menu");
+          const retrySetActive = page.getByTestId("profile-set-active");
+          if (await retrySetActive.isEnabled()) {
+            await retrySetActive.click();
+          } else {
+            await page.keyboard.press("Escape");
           }
           return false;
         },
