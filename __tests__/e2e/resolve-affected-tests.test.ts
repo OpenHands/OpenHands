@@ -80,12 +80,17 @@ describe("mock-LLM E2E affected test resolver", () => {
     expect(resolveAffectedTests([file])).toEqual(["__ALL__"]);
   });
 
-  it("runs browser mock E2E after main updates or manual dispatch", () => {
+  it("runs browser mock E2E on exact relevant PR heads, main updates or manual dispatch", () => {
     const workflow = readFileSync(workflowPath, "utf-8");
 
     expect(workflow).toContain("push:\n    branches: [main]");
     expect(workflow).toContain("workflow_dispatch:");
-    expect(workflow).not.toContain("pull_request:");
+    expect(workflow).toContain("pull_request:\n    paths:");
+    expect(workflow).toContain(
+      "ref: ${{ github.event.pull_request.head.sha || github.sha }}",
+    );
+    expect(workflow).toContain("contents: read");
+    expect(workflow).not.toContain("pull_request_target:");
     expect(workflow).not.toContain("detect-pr-changes:");
     expect(workflow).toContain("npm run test:e2e:mock-llm &");
   });

@@ -1,6 +1,11 @@
 name: Mock-LLM E2E Tests
 
 on:
+  pull_request:
+    paths:
+      - "tests/e2e/mock-llm/**"
+      - "playwright.mock-llm.config.ts"
+      - ".github/workflows/mock-llm-e2e.yml"
   push:
     branches: [main]
   workflow_dispatch:
@@ -28,6 +33,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Read defaults from config/defaults.json
         id: defaults
@@ -200,7 +207,7 @@ jobs:
             --results "test-results-mock-llm/results.json" \
             --output "$MOCK_LLM_REPORT_PATH" \
             --workflow-url "$MOCK_LLM_WORKFLOW_URL" \
-            --commit "${{ github.sha }}" \
+            --commit "${{ github.event.pull_request.head.sha || github.sha }}" \
             --artifact-url "${{ steps.upload_artifacts.outputs.artifact-url || '' }}" \
             --exit-code "${{ steps.run_tests.outputs.exit_code }}"
           cat "$MOCK_LLM_REPORT_PATH" >> "$GITHUB_STEP_SUMMARY"

@@ -38,8 +38,9 @@ export const SKILL_REPOS_AGENT_DIR =
   process.env.MOCK_LLM_SKILL_REPOS_CONTAINER_DIR ?? SKILL_REPOS_DIR;
 
 /**
- * User-level skills directory on the host (for file creation/removal).
- * The npm launcher sets OH_PERSISTENCE_DIR to the parent of STATE_DIR.
+ * User-level skills directory — HOST-side (for file creation/removal).
+ * npm launchers set OH_PERSISTENCE_DIR to dirname(STATE_DIR); mirror that
+ * here so the real Agent Server loads the fixture without touching user files.
  * In Docker mode, we use a local temp dir that is volume-mounted into the
  * container at the agent-server's expected `~/.openhands/skills/` path.
  */

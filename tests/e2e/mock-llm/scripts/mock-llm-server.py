@@ -184,6 +184,18 @@ class MockLLMHandler(BaseHTTPRequestHandler):
                 self._send_json(200, raw)
             return
 
+        # Automatic titles run concurrently with the agent loop. They must
+        # not consume that conversation's scripted tool calls or reply tokens.
+        if _is_title_request(body):
+            raw = _preflight_pong(body.get("model"))
+            raw["id"] = "chatcmpl-mock-title"
+            raw["choices"][0]["message"]["content"] = "Mock conversation"
+            if body.get("stream"):
+                self._send_streaming(raw)
+            else:
+                self._send_json(200, raw)
+            return
+
         # Append to request history for test verification.
         # Tests can GET /admin/requests to confirm image content was included.
         with self._lock:
@@ -360,6 +372,25 @@ class MockLLMHandler(BaseHTTPRequestHandler):
         print(f"[mock-llm] {args[0]}", file=sys.stderr, flush=True)
 
 
+def _is_title_request(body: dict) -> bool:
+    """Match SDK conversation/title_utils.py, never an agent tool turn."""
+    messages = body.get("messages")
+    if body.get("tools") or not isinstance(messages, list) or len(messages) != 2:
+        return False
+    system, user = messages
+    if not isinstance(system, dict) or not isinstance(user, dict):
+        return False
+    return (
+        system.get("role") == "system"
+        and _message_text(system).startswith(
+            "You are a helpful assistant that generates concise, "
+            "descriptive titles for conversations with OpenHands."
+        )
+        and user.get("role") == "user"
+        and _message_text(user).startswith("Generate a title (maximum ")
+    )
+
+
 def _is_preflight_ping(body: dict) -> bool:
     """Match the agent-server's profile pre-flight check.
 
@@ -389,7 +420,7 @@ def _is_preflight_ping(body: dict) -> bool:
     return _message_text(message) == PREFLIGHT_PING_TEXT
 
 
-def _message_text(message: dict) -> str | None:
+def _message_text(message: dict) -> str:
     content = message.get("content")
     if isinstance(content, list):
         content = "".join(
@@ -397,7 +428,7 @@ def _message_text(message: dict) -> str | None:
             for part in content
             if isinstance(part, dict) and part.get("type") == "text"
         )
-    return content.strip() if isinstance(content, str) else None
+    return content.strip() if isinstance(content, str) else ""
 
 
 def _preflight_pong(model: str | None) -> dict:

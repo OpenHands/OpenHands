@@ -4,6 +4,8 @@ import importlib.util
 import json
 from pathlib import Path
 import threading
+import unittest
+from http.server import HTTPServer
 from urllib.request import Request, urlopen
 
 import pytest
@@ -76,3 +78,66 @@ def test_one_token_conversation_is_not_mistaken_for_validation(url):
 
     assert "tool_calls" in complete(url, messages, max_tokens=1)
     assert recorded(url)[0]["messages"] == messages
+
+
+class TitleIsolationTest(unittest.TestCase):
+    def test_titles_do_not_consume_conversation_trajectory(self):
+        httpd = HTTPServer(("127.0.0.1", 0), server.MockLLMHandler)
+        thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(httpd.server_close)
+        self.addCleanup(thread.join)
+        self.addCleanup(httpd.shutdown)
+        url = f"http://127.0.0.1:{httpd.server_port}"
+
+        def post(path, body):
+            with urlopen(
+                Request(url + path, json.dumps(body).encode(), {"Content-Type": "application/json"})
+            ) as response:
+                return response.read().decode()
+
+        post("/admin/reset", {})
+        post(
+            "/admin/trajectory/register",
+            {"name": "owned", "turns": [{"text": "FIRST_AGENT_REPLY"}, {"text": "SECOND_AGENT_REPLY"}]},
+        )
+        post("/admin/trajectory/activate", {"name": "owned"})
+        title = {
+            "model": "mock",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "You are a helpful assistant that generates concise, "
+                            "descriptive titles for conversations with OpenHands.",
+                        }
+                    ],
+                },
+                {"role": "user", "content": "Generate a title (maximum 50 characters) for this message"},
+            ],
+        }
+        self.assertEqual(
+            json.loads(post("/v1/chat/completions", title))["choices"][0]["message"]["content"], "Mock conversation"
+        )
+        reply = json.loads(post("/v1/chat/completions", {"messages": [{"role": "user", "content": "Please respond"}]}))
+        self.assertEqual(reply["choices"][0]["message"]["content"], "FIRST_AGENT_REPLY")
+        self.assertIn("Mock conversation", post("/v1/chat/completions", {**title, "stream": True}))
+        # The same words inside a normal agent/tool request are not housekeeping.
+        reply = json.loads(post("/v1/chat/completions", {**title, "tools": [{"type": "function"}]}))
+        self.assertEqual(reply["choices"][0]["message"]["content"], "SECOND_AGENT_REPLY")
+        with urlopen(url + "/admin/requests") as response:
+            self.assertEqual(len(json.load(response)["requests"]), 2)
+
+
+@pytest.mark.parametrize("content", [None, [], [{"type": "image_url", "image_url": {"url": "unused"}}]])
+@pytest.mark.parametrize("message_index", [0, 1], ids=["system", "user"])
+def test_title_detection_rejects_missing_text(content, message_index):
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant that generates concise, descriptive titles for conversations with OpenHands."},
+        {"role": "user", "content": "Generate a title (maximum 50 characters) for this message"},
+    ]
+    messages[message_index]["content"] = content
+
+    assert server._is_title_request({"messages": messages}) is False

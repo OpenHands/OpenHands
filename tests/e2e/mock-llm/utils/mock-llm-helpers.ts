@@ -228,54 +228,60 @@ export async function waitForNonUserMessageText(
     .toBe(true);
 }
 
-/**
- * Poll the bash events API for a BashOutput containing BASH_TOKEN.
- *
- * The agent-server keeps tool executions in a separate bash event stream
- * (`/api/bash/bash_events/search`), not the conversation events API.
- * Conversation events only contain high-level MessageEvents.
- */
+/** Verify the owning conversation actually executed the scripted terminal command. */
 export async function waitForSuccessfulBashObservation(
   request: APIRequestContext,
-  _conversationId: string,
+  conversationId: string,
   timeout = 30_000,
 ) {
-  let lastDiag = "no polls yet";
   await expect
     .poll(
       async () => {
-        const resp = await request.get(
-          `${BACKEND_URL}/api/bash/bash_events/search`,
+        const response = await request.get(
+          `${BACKEND_URL}/api/conversations/${encodeURIComponent(conversationId)}/events/search`,
           {
             headers: { "X-Session-API-Key": SESSION_API_KEY },
-            params: { limit: "50", kind__eq: "BashOutput" },
+            params: { limit: "100", sort_order: "TIMESTAMP_DESC" },
           },
         );
-        if (!resp.ok()) {
-          lastDiag = `bash events API returned ${resp.status()}`;
-          return false;
-        }
-        const body = (await resp.json()) as { items?: unknown[] };
-        const items = body.items ?? [];
-        lastDiag = `${items.length} BashOutput events`;
-        // Success: any BashOutput with exit_code 0 proves our command ran.
-        // The agent-server may return stdout as null for the completion
-        // event, so we accept null stdout when exit_code is 0.
-        return items.some((e: any) => {
-          if (e.kind !== "BashOutput" || e.exit_code !== 0) return false;
-          const stdout = typeof e.stdout === "string" ? e.stdout : "";
-          return stdout.includes(BASH_TOKEN) || e.stdout === null;
+        if (!response.ok()) return false;
+        const body = (await response.json()) as {
+          items?: Array<{
+            observation?: {
+              kind?: string;
+              command?: string;
+              exit_code?: number;
+              error?: boolean;
+              is_error?: boolean;
+              timeout?: boolean;
+              content?: Array<{ text?: string }>;
+            };
+          }>;
+        };
+        return (body.items ?? []).some(({ observation }) => {
+          if (!observation) return false;
+          const output = (observation.content ?? [])
+            .map((item) => item.text ?? "")
+            .join("\n");
+          return (
+            ["ExecuteBashObservation", "TerminalObservation"].includes(
+              observation.kind ?? "",
+            ) &&
+            observation.command?.includes(BASH_TOKEN) &&
+            output.includes(BASH_TOKEN) &&
+            observation.exit_code === 0 &&
+            !observation.error &&
+            !observation.is_error &&
+            !observation.timeout
+          );
         });
       },
-      { timeout },
+      {
+        timeout,
+        message: `successful scripted terminal execution in ${conversationId}`,
+      },
     )
-    .toBe(true)
-    .catch((err) => {
-      throw new Error(
-        `No successful bash execution after ${timeout}ms. ${lastDiag}`,
-        { cause: err },
-      );
-    });
+    .toBe(true);
 }
 
 /**
@@ -809,7 +815,8 @@ export async function openAgentProfileEditor(page: Page, profileName: string) {
   await expect(row).toBeVisible({ timeout: 10_000 });
   await row.getByTestId("agent-profile-menu-trigger").click();
   await waitForTestId(page, "agent-profile-actions-menu");
-  await page.getByTestId("agent-profile-edit").click();
+  // Activate the focused menu item without a pointer hit during portal layout.
+  await page.getByTestId("agent-profile-edit").press("Enter");
   await waitForTestId(page, "agent-settings-screen");
 }
 

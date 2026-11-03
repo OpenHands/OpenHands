@@ -493,6 +493,7 @@ export default defineConfig(({ mode }) => {
             // in the Node project below.
             exclude: [
               ...configDefaults.exclude,
+              "**/.tmp/**",
               "tests",
               ...NODE_ENV_PILOT_TESTS,
             ],
