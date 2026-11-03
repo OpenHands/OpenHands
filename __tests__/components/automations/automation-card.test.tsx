@@ -32,14 +32,20 @@ vi.mock("#/context/navigation-context", () => ({
   useNavigation: () => ({ navigate: vi.fn(), currentPath: "/" }),
 }));
 
+const permissionMocks = vi.hoisted(() => ({ canManage: true, isOwner: true }));
 vi.mock("#/hooks/use-automation-permissions", () => ({
   useAutomationPermissions: () => ({
     canView: true,
-    canManage: true,
+    canManage: permissionMocks.canManage,
     isLoading: false,
   }),
-  useIsAutomationOwner: () => true,
+  useIsAutomationOwner: () => permissionMocks.isOwner,
 }));
+
+afterEach(() => {
+  permissionMocks.canManage = true;
+  permissionMocks.isOwner = true;
+});
 
 // The pinned package predates the `impact` field, so an entry carrying one is
 // appended to the real catalog.
@@ -184,6 +190,40 @@ describe("AutomationCard", () => {
     expect(screen.getByText("COMMON$VIEW")).toBeInTheDocument();
     expect(screen.getByText("AUTOMATIONS$RUN_NOW")).toBeInTheDocument();
   });
+
+  it.each([
+    { caller: "an admin or owner", canManage: true, offered: true },
+    { caller: "a member", canManage: false, offered: false },
+  ])(
+    "offers Turn on for another user's automation to $caller: $offered",
+    async ({ canManage, offered }) => {
+      // Arrange — a disabled automation the caller did not create.
+      permissionMocks.canManage = canManage;
+      permissionMocks.isOwner = false;
+      const user = userEvent.setup();
+      render(
+        <AutomationCard
+          automation={{ ...automation, enabled: false }}
+          onToggle={vi.fn()}
+          onRunNow={vi.fn()}
+          onExport={vi.fn()}
+          onEdit={vi.fn()}
+          onDelete={vi.fn()}
+        />,
+      );
+
+      // Act
+      await user.click(
+        screen.getByRole("button", { name: "AUTOMATIONS$ACTIONS_MENU" }),
+      );
+
+      // Assert
+      for (const label of ["AUTOMATIONS$TURN_ON", "AUTOMATIONS$EDIT"]) {
+        if (offered) expect(screen.getByText(label)).toBeInTheDocument();
+        else expect(screen.queryByText(label)).not.toBeInTheDocument();
+      }
+    },
+  );
 
   it("shows a status strip and sparkline when insights are present", () => {
     const latestRun = createRun({

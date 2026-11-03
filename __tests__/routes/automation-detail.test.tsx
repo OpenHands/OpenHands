@@ -51,13 +51,14 @@ vi.mock("#/utils/custom-toast-handlers", async (importOriginal) => ({
 }));
 
 // Mock permission hooks so cloud-backend tests don't need a real /me endpoint.
+const permissionMocks = vi.hoisted(() => ({ canManage: true, isOwner: true }));
 vi.mock("#/hooks/use-automation-permissions", () => ({
   useAutomationPermissions: () => ({
     canView: true,
-    canManage: true,
+    canManage: permissionMocks.canManage,
     isLoading: false,
   }),
-  useIsAutomationOwner: () => true,
+  useIsAutomationOwner: () => permissionMocks.isOwner,
 }));
 
 // Mock only the member lookup the "Automation Runs As" field depends on; the
@@ -167,6 +168,8 @@ beforeEach(() => {
   });
   detailMocks.createConversationMutate.mockReset();
   detailMocks.navigate.mockReset();
+  permissionMocks.canManage = true;
+  permissionMocks.isOwner = true;
   setRegisteredBackends([localBackend, cloudBackend]);
   setActiveSelection({ backendId: localBackend.id });
 });
@@ -222,6 +225,87 @@ describe("AutomationDetail — Edit in the kebab menu", () => {
     expect(
       screen.queryByTestId("edit-automation-name"),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("AutomationDetail — another user's automation", () => {
+  const disabledAutomation: Automation = {
+    ...automation,
+    enabled: false,
+    tags: ["qa"],
+  };
+
+  async function renderAndOpenMenu() {
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue(
+      disabledAutomation,
+    );
+    setActiveSelection({ backendId: cloudBackend.id });
+    const user = userEvent.setup();
+    renderDetail();
+    await user.click(
+      await screen.findByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU),
+    );
+  }
+
+  it("lets an admin or owner edit, tag, turn on and delete it", async () => {
+    // Arrange — manage permission, but not the creator.
+    permissionMocks.canManage = true;
+    permissionMocks.isOwner = false;
+
+    // Act
+    await renderAndOpenMenu();
+
+    // Assert
+    expect(
+      screen.getByRole("switch", { name: I18nKey.AUTOMATIONS$TURN_ON }),
+    ).toBeInTheDocument();
+    for (const name of [
+      I18nKey.AUTOMATIONS$EDIT,
+      I18nKey.AUTOMATIONS$TURN_ON,
+      I18nKey.AUTOMATIONS$DELETE,
+    ]) {
+      expect(screen.getByRole("button", { name })).toBeInTheDocument();
+    }
+    expect(screen.getByTestId("automation-tags-edit")).toBeInTheDocument();
+  });
+
+  it("offers a member no write actions", async () => {
+    // Arrange — view only, and not the creator.
+    permissionMocks.canManage = false;
+    permissionMocks.isOwner = false;
+
+    // Act
+    await renderAndOpenMenu();
+
+    // Assert
+    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+    for (const name of [
+      I18nKey.AUTOMATIONS$EDIT,
+      I18nKey.AUTOMATIONS$TURN_ON,
+      I18nKey.AUTOMATIONS$DELETE,
+    ]) {
+      expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+    }
+    expect(
+      screen.queryByTestId("automation-tags-edit"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("lets a member who created it turn it back on", async () => {
+    // Arrange — view only, but the creator (escape hatch).
+    permissionMocks.canManage = false;
+    permissionMocks.isOwner = true;
+
+    // Act
+    await renderAndOpenMenu();
+
+    // Assert
+    expect(
+      screen.getByRole("switch", { name: I18nKey.AUTOMATIONS$TURN_ON }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
+    ).toBeInTheDocument();
   });
 });
 
