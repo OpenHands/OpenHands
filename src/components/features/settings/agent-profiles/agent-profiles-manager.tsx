@@ -11,6 +11,7 @@ import { useAgentProfiles } from "#/hooks/query/use-agent-profiles";
 import { useActivateAgentProfile } from "#/hooks/mutation/use-activate-agent-profile";
 import { useSaveAgentProfile } from "#/hooks/mutation/use-save-agent-profile";
 import { useCanManageOrgProfiles } from "#/hooks/use-can-manage-org-profiles";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 import {
   displayErrorToast,
   displaySuccessToast,
@@ -32,7 +33,9 @@ export function AgentProfilesManager({
   const saveProfile = useSaveAgentProfile();
   // Cloud members are view-only; only owners/admins (and all local users) may
   // manage agent profiles, as with LLM profiles.
-  const canManage = useCanManageOrgProfiles();
+  const canManageOrgProfiles = useCanManageOrgProfiles();
+  const { backend } = useActiveBackend();
+  const canManage = backend.kind === "cloud" ? true : canManageOrgProfiles;
   const [profileToDelete, setProfileToDelete] =
     useState<AgentProfileSummary | null>(null);
 
