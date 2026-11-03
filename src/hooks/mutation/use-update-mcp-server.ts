@@ -8,6 +8,10 @@ import {
   parseMcpConfig,
 } from "#/utils/mcp-config";
 import { SETTINGS_QUERY_KEYS } from "#/hooks/query/query-keys";
+import {
+  mcpServerRenamed,
+  updateEveryAgentProfile,
+} from "#/hooks/mutation/sync-agent-profiles";
 import { clearMcpServerHealth } from "#/api/mcp-health/mcp-health-store";
 import { getMcpServerHealthKey } from "#/utils/mcp-server-health-key";
 import { toMcpServerName } from "#/utils/mcp-server-name";
@@ -18,6 +22,8 @@ export function useUpdateMcpServer() {
   const { data: settings } = useSettings();
 
   return useMutation({
+    // Every caller reports a failure itself; skip the global error toast.
+    meta: { disableToast: true },
     mutationFn: async ({
       serverId,
       server,
@@ -61,6 +67,10 @@ export function useUpdateMcpServer() {
         }
         await SettingsService.patchMcpConfig(
           buildRenameMcpConfigPatch(serverId, nextKey, previous, server),
+        );
+        await updateEveryAgentProfile(
+          queryClient,
+          mcpServerRenamed(serverId, nextKey),
         );
         return previousHealthKey;
       }

@@ -25,6 +25,7 @@ import ProviderConnectionsService, {
   type ProviderConnection,
 } from "#/api/provider-connections-service/provider-connections-service.api";
 import type { SdkSectionSaveControl } from "#/components/features/settings/sdk-settings/sdk-section-page";
+import { I18nKey } from "#/i18n/declaration";
 
 vi.mock("#/hooks/query/use-llm-profiles");
 // The profile manager gates mutate controls on this hook; default to a user
@@ -331,6 +332,46 @@ describe("LlmSettingsScreen", () => {
 
     expect(screen.getByTestId("llm-auth-type-input")).toBeDisabled();
     expect(screen.getByTestId("llm-subscription-model-input")).toBeDisabled();
+  });
+
+  it("throws translated error when saving subscription profile before models load", async () => {
+    vi.spyOn(LLMSubscriptionService, "getOpenAIStatus").mockResolvedValue({
+      vendor: "openai",
+      connected: true,
+      accountEmail: "graham@example.com",
+      expiresAt: null,
+    });
+    vi.spyOn(LLMSubscriptionService, "getOpenAIModels").mockReturnValue(
+      new Promise(() => {}),
+    );
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        llm_model: "gpt-5.6-luna",
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          llm: {
+            model: "gpt-5.6-luna",
+            auth_type: "subscription",
+            subscription_vendor: "openai",
+          },
+        },
+      }),
+    );
+    const saveControlRef: { current: SdkSectionSaveControl | null } = {
+      current: null,
+    };
+
+    renderLlmSettingsScreen({
+      onSaveControlChange: (control) => {
+        saveControlRef.current = control;
+      },
+    });
+
+    await screen.findByTestId("llm-subscription-settings");
+    await waitFor(() => expect(saveControlRef.current).not.toBeNull());
+    expect(() => saveControlRef.current?.getSavePayload()).toThrow(
+      I18nKey.SETTINGS$SUBSCRIPTION_MODELS_NOT_LOADED,
+    );
   });
 
   it("auto-polls the ChatGPT subscription device login after opening verification", async () => {

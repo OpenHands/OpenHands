@@ -25,7 +25,7 @@ const DOT_CLASS_BY_STATUS: Record<McpServerHealth["status"], string> = {
   unchecked: "bg-text-tertiary",
   checking: "bg-interactive-selected animate-pulse",
   healthy: "bg-status-success",
-  failed: "bg-red-500",
+  failed: "bg-status-error",
 };
 
 const actionClassName =
@@ -139,7 +139,7 @@ export function McpServerHealthSection({
           data-testid={`mcp-health-label-${server.id}`}
           className={cn(
             "line-clamp-2 break-words text-xs",
-            isFailed ? "text-red-500" : "text-tertiary-alt",
+            isFailed ? "text-feedback-error" : "text-tertiary-alt",
           )}
           title={label}
         >

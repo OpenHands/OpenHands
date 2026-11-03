@@ -15,6 +15,10 @@ import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { getApiOrConnectionErrorMessage } from "#/utils/api-error-message";
 import { I18nKey } from "#/i18n/declaration";
 import { invalidateConversationQueries } from "./conversation-mutation-utils";
+import {
+  llmProfileMirrored,
+  updateDefaultAgentProfile,
+} from "./sync-agent-profiles";
 
 interface SwitchLlmProfileVars {
   /**
@@ -91,6 +95,7 @@ export const useSwitchLlmProfile = () => {
         queryClient.invalidateQueries({
           queryKey: SETTINGS_QUERY_KEYS.personal(),
         });
+        updateDefaultAgentProfile(queryClient, llmProfileMirrored(profileName));
       }
     },
   });

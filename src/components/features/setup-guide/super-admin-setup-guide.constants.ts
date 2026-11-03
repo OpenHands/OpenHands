@@ -90,7 +90,7 @@ export const SUPER_ADMIN_SETUP_STEPS: readonly SuperAdminSetupStep[] = [
     completion: "optional",
     destination: {
       kind: "cloud",
-      path: "/super-admin/instance",
+      path: "/super-admin/auth-providers",
       withOrg: false,
     },
   },

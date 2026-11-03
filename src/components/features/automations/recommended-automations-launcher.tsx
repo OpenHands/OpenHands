@@ -30,20 +30,33 @@ import {
 } from "#/manifests/automation-interface";
 import { SETUP_REGISTRY } from "#/manifests/manifest-sources";
 import {
+  getAutomationAvailability,
   getAutomationLaunchPrompt,
   getRequiredIntegrationIds,
 } from "#/utils/automation-catalog";
 import { isResponderAutomation } from "#/utils/responder-deployment";
+import { useAutomationHealth } from "#/hooks/query/use-automation-health";
 import { useAutomations } from "#/hooks/query/use-automations";
+import { useBuiltInIntegrationConnections } from "#/hooks/query/use-built-in-integration-connections";
 import { useNativeGitIntegrations } from "#/hooks/query/use-native-git-integrations";
 import { cloudIntegrationsUrl } from "#/utils/cloud-integrations-url";
-import { BuiltInIntegrationChoiceModal } from "./built-in-integration-choice-modal";
+import {
+  BuiltInIntegrationChoiceModal,
+  type BuiltInIntegrationState,
+} from "./built-in-integration-choice-modal";
 import { RecommendedAutomationsRail } from "./recommended-automations-rail";
 import { RecommendedAutomationsSection } from "./recommended-automations-section";
 import { ResponderDeploymentModal } from "./responder-deployment-modal";
+import { UnlikelyIntegrationNoticeModal } from "./unlikely-integration-notice-modal";
+import type { TemplateFilters } from "./template-filter-chips";
 
 interface RecommendedAutomationsLauncherProps {
   query?: string;
+  /** Resets the search from the catalog's no-match state. */
+  onClearQuery?: () => void;
+  /** The templates page's integration and trigger filters. */
+  filters?: TemplateFilters;
+  onFiltersChange?: (next: TemplateFilters) => void;
   onLaunched?: () => void;
   /** When true, only the automation card grid scrolls inside its section. */
   scrollableGrid?: boolean;
@@ -53,6 +66,8 @@ interface RecommendedAutomationsLauncherProps {
    */
   variant?: "catalog" | "rail";
   className?: string;
+  dismissible?: boolean;
+  onDismiss?: () => void;
 }
 
 /**
@@ -67,11 +82,12 @@ function getRequiredEntries(automation: RecommendedAutomation) {
 }
 
 /**
- * The 'Issue to PR' automations a built-in integration (Settings >
- * Integrations) already provides out of the box, keyed to that integration's
- * catalog entry.
+ * The automations a built-in integration (Settings > Integrations) already
+ * provides out of the box — the 'Issue to PR' workflows and the Slack
+ * responder — keyed to that integration's catalog entry.
  */
 const BUILT_IN_INTEGRATION_ID_BY_AUTOMATION_ID: Record<string, string> = {
+  "slack-channel-monitor": "slack",
   "github-issue-to-pr": "github",
   "gitlab-issue-to-mr": "gitlab",
   "jira-issue-to-pr": "jira",
@@ -84,10 +100,15 @@ const BUILT_IN_INTEGRATION_ID_BY_AUTOMATION_ID: Record<string, string> = {
 
 export function RecommendedAutomationsLauncher({
   query,
+  onClearQuery,
+  filters,
+  onFiltersChange,
   onLaunched,
   scrollableGrid = false,
   variant = "catalog",
   className,
+  dismissible,
+  onDismiss,
 }: RecommendedAutomationsLauncherProps) {
   const activeBackend = useActiveBackend();
   const { navigate } = useNavigation();
@@ -106,6 +127,7 @@ export function RecommendedAutomationsLauncher({
   const [builtInChoice, setBuiltInChoice] = useState<{
     automation: RecommendedAutomation;
     integration: MarketplaceEntry;
+    state: BuiltInIntegrationState;
   } | null>(null);
   const [installQueue, setInstallQueue] = useState<MarketplaceEntry[]>([]);
   const completedInstallRef = useRef(false);
@@ -114,14 +136,37 @@ export function RecommendedAutomationsLauncher({
   const [isPreparingLocalResponder, setIsPreparingLocalResponder] =
     useState(false);
   const isRail = variant === "rail";
+  // Backends without an automation service (remote agent-servers such as a
+  // DigitalOcean sandbox) 404 the list, which would surface as an error toast.
+  const { data: automationHealth } = useAutomationHealth();
   const { data: automationsData, isLoading: isAutomationsLoading } =
-    useAutomations({ enabled: isRail });
+    useAutomations({ enabled: isRail && automationHealth?.status === "ok" });
   const {
     getNativeIntegration,
+    builtInIntegrations,
     isJiraEnabled,
     isLinearEnabled,
+    isSlackEnabled,
+    deploymentMode,
     isLoading: isNativeIntegrationsLoading,
   } = useNativeGitIntegrations();
+  const {
+    hidden: hiddenAutomationIds,
+    unlikely: unlikelyAutomations,
+    suggested: suggestedAutomations,
+  } = useMemo(
+    () => getAutomationAvailability({ deploymentMode, builtInIntegrations }),
+    [deploymentMode, builtInIntegrations],
+  );
+  const [unlikelyNotice, setUnlikelyNotice] = useState<{
+    automation: RecommendedAutomation;
+    missing: readonly string[];
+  } | null>(null);
+  const { isSlackConnected, isJiraConnected } =
+    useBuiltInIntegrationConnections({
+      slackEnabled: isSlackEnabled,
+      jiraEnabled: isJiraEnabled,
+    });
 
   const installedMcpConfig = useMemo(
     () =>
@@ -221,9 +266,20 @@ export function RecommendedAutomationsLauncher({
   };
 
   const isBuiltInIntegrationEnabled = (entryId: string) => {
+    if (entryId === "slack") return isSlackEnabled;
     if (entryId === "jira") return isJiraEnabled;
     if (entryId === "linear") return isLinearEnabled;
     return getNativeIntegration(entryId) !== null;
+  };
+
+  // Whether the current user has connected the built-in integration. Linear
+  // has no connection lookup on the cloud backend, so it is never known to be
+  // connected and the modal keeps offering to connect it.
+  const isBuiltInIntegrationConnected = (entryId: string) => {
+    if (entryId === "slack") return isSlackConnected;
+    if (entryId === "jira") return isJiraConnected;
+    if (entryId === "linear") return false;
+    return getNativeIntegration(entryId)?.isConnected === true;
   };
 
   // The built-in integration that already gives the user this automation's
@@ -241,11 +297,30 @@ export function RecommendedAutomationsLauncher({
       isCreatingConversation ||
       installQueue.length > 0 ||
       deploymentChoiceAutomation !== null ||
-      builtInChoice !== null
+      builtInChoice !== null ||
+      unlikelyNotice !== null
     ) {
       return;
     }
 
+    // The instance does not appear to have an integration this template
+    // needs. Say so once, and let the user continue: the report is a hint.
+    const missing = unlikelyAutomations.get(automation.id);
+    if (missing) {
+      setUnlikelyNotice({ automation, missing });
+      return;
+    }
+
+    selectAutomation(automation);
+  };
+
+  const handleUnlikelyNoticeContinue = () => {
+    const automation = unlikelyNotice?.automation;
+    setUnlikelyNotice(null);
+    if (automation) selectAutomation(automation);
+  };
+
+  const selectAutomation = (automation: RecommendedAutomation) => {
     // GitHub/Slack responders poll continuously; let the user choose where the
     // responder runs before committing to the local setup flow. On a cloud
     // backend the responder already runs in the cloud, so there is no choice.
@@ -257,11 +332,18 @@ export function RecommendedAutomationsLauncher({
       return;
     }
 
-    // A built-in integration already covers this workflow; let the user choose
-    // between connecting it and setting up the polling automation.
+    // A built-in integration already covers this workflow: show how to use it
+    // when the user has connected it, or offer to connect it, with the polling
+    // automation as the alternative either way.
     const builtInIntegration = getBuiltInIntegration(automation);
     if (builtInIntegration) {
-      setBuiltInChoice({ automation, integration: builtInIntegration });
+      setBuiltInChoice({
+        automation,
+        integration: builtInIntegration,
+        state: isBuiltInIntegrationConnected(builtInIntegration.id)
+          ? "connected"
+          : "connect",
+      });
       return;
     }
 
@@ -361,14 +443,25 @@ export function RecommendedAutomationsLauncher({
         <RecommendedAutomationsRail
           className={className}
           installedAutomations={automationsData?.automations ?? []}
+          hiddenAutomationIds={hiddenAutomationIds}
+          unlikelyAutomations={unlikelyAutomations}
+          suggestedAutomations={suggestedAutomations}
           onSelect={handleSelectAutomation}
+          dismissible={dismissible}
+          onDismiss={onDismiss}
         />
       ) : (
         <RecommendedAutomationsSection
           backendKind={activeBackend.backend.kind}
           installedServers={installedMcpConfig}
+          hiddenAutomationIds={hiddenAutomationIds}
+          unlikelyAutomations={unlikelyAutomations}
+          suggestedAutomations={suggestedAutomations}
           getNativeIntegration={getNativeIntegration}
           query={query}
+          onClearQuery={onClearQuery}
+          filters={filters}
+          onFiltersChange={onFiltersChange}
           onSelect={handleSelectAutomation}
           scrollableGrid={scrollableGrid}
         />
@@ -385,9 +478,19 @@ export function RecommendedAutomationsLauncher({
         />
       )}
 
+      {unlikelyNotice && (
+        <UnlikelyIntegrationNoticeModal
+          automationName={unlikelyNotice.automation.name}
+          missing={unlikelyNotice.missing}
+          onContinue={handleUnlikelyNoticeContinue}
+          onCancel={() => setUnlikelyNotice(null)}
+        />
+      )}
+
       {builtInChoice && (
         <BuiltInIntegrationChoiceModal
           integration={builtInChoice.integration}
+          state={builtInChoice.state}
           onClose={handleBuiltInChoiceClose}
           onUseBuiltIn={handleUseBuiltInIntegration}
           onContinuePolling={handleContinuePollingSetup}

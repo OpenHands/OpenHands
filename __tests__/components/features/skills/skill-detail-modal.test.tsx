@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { render, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -107,6 +108,43 @@ describe("SkillDetailModal", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("closes the tag popover before closing the detail modal on Escape", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    const skill = buildSkill({
+      name: "overflow-test",
+      triggers: ["one", "two", "three", "four", "five"],
+    });
+
+    render(
+      <SkillDetailModal
+        skill={skill}
+        enabled
+        onToggle={vi.fn()}
+        onClose={onClose}
+      />,
+    );
+
+    const trigger = screen.getByTestId(
+      `skill-modal-pills-${skill.name}-overflow`,
+    );
+    await user.click(trigger);
+    expect(
+      screen.getByTestId(`skill-modal-pills-${skill.name}-overflow-popover`),
+    ).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+
+    expect(
+      screen.queryByTestId(`skill-modal-pills-${skill.name}-overflow-popover`),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("skill-detail-modal")).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+
+    await user.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it("opens a new chat with the add-skill command from the detail modal", async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
@@ -141,18 +179,26 @@ describe("SkillDetailModal", () => {
     sessionStorage.setItem(HOME_PROMPT_DRAFT_KEY, "earlier home draft");
     useConversationStore.getState().setMessageToSend("for a conversation");
     const skill = buildSkill({ name: "docker" });
+    // The modal really closes, as on the Skills page; an open modal would keep
+    // focus inside itself rather than let the composer behind it take it.
+    function SkillsPageWithComposer() {
+      const [isOpen, setIsOpen] = useState(true);
+      return (
+        <>
+          <CustomChatInput onSubmit={vi.fn()} />
+          {isOpen ? (
+            <SkillDetailModal
+              skill={skill}
+              enabled
+              onToggle={vi.fn()}
+              onClose={() => setIsOpen(false)}
+            />
+          ) : null}
+        </>
+      );
+    }
 
-    renderWithProviders(
-      <>
-        <CustomChatInput onSubmit={vi.fn()} />
-        <SkillDetailModal
-          skill={skill}
-          enabled
-          onToggle={vi.fn()}
-          onClose={vi.fn()}
-        />
-      </>,
-    );
+    renderWithProviders(<SkillsPageWithComposer />);
     const composer = screen.getByTestId("chat-input");
     expect(composer).toHaveTextContent("earlier home draft");
 

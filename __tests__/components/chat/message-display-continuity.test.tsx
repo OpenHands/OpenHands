@@ -70,13 +70,6 @@ vi.mock("#/components/shared/buttons/scroll-to-bottom-button", () => ({
   ScrollToBottomButton: () => <button type="button">Scroll to bottom</button>,
 }));
 
-vi.mock("#/components/conversation-events/chat", async (importOriginal) => ({
-  ...(await importOriginal<
-    typeof import("#/components/conversation-events/chat")
-  >()),
-  Messages: () => <div data-testid="conversation-messages" />,
-}));
-
 // Helper to render with QueryClient and route params
 const renderWithQueryClient = (
   ui: React.ReactElement,
@@ -147,6 +140,7 @@ describe("ChatInterface – message display continuity (spec 3.1)", () => {
         isLoadingHistory: true,
         connectionState: "OPEN",
         mainConnectionState: "OPEN",
+      recoveryState: "idle",
         sendMessage: vi.fn(),
         reconnect: vi.fn(),
         hasConnectedOnce: true,
@@ -167,10 +161,7 @@ describe("ChatInterface – message display continuity (spec 3.1)", () => {
       expect(
         screen.queryByTestId("chat-messages-skeleton"),
       ).not.toBeInTheDocument();
-      expect(
-        screen.queryByTestId("conversation-messages") ??
-          screen.queryByTestId("user-message"),
-      ).not.toBeNull();
+      expect(screen.getByTestId("user-message")).toBeInTheDocument();
     });
 
     it("shows skeleton when store is empty and loading", () => {
@@ -179,6 +170,7 @@ describe("ChatInterface – message display continuity (spec 3.1)", () => {
         isLoadingHistory: true,
         connectionState: "OPEN",
         mainConnectionState: "OPEN",
+      recoveryState: "idle",
         sendMessage: vi.fn(),
         reconnect: vi.fn(),
         hasConnectedOnce: true,
@@ -202,6 +194,7 @@ describe("ChatInterface – message display continuity (spec 3.1)", () => {
         isLoadingHistory: true,
         connectionState: "OPEN",
         mainConnectionState: "OPEN",
+      recoveryState: "idle",
         sendMessage: vi.fn(),
         reconnect: vi.fn(),
         hasConnectedOnce: true,
@@ -234,6 +227,7 @@ describe("ChatInterface – message display continuity (spec 3.1)", () => {
         isLoadingHistory: false,
         connectionState: "OPEN",
         mainConnectionState: "OPEN",
+      recoveryState: "idle",
         sendMessage: vi.fn(),
         reconnect: vi.fn(),
         hasConnectedOnce: true,
@@ -253,10 +247,7 @@ describe("ChatInterface – message display continuity (spec 3.1)", () => {
       expect(
         screen.queryByTestId("chat-messages-skeleton"),
       ).not.toBeInTheDocument();
-      expect(
-        screen.queryByTestId("conversation-messages") ??
-          screen.queryByTestId("user-message"),
-      ).not.toBeNull();
+      expect(screen.getByTestId("user-message")).toBeInTheDocument();
     });
   });
 });

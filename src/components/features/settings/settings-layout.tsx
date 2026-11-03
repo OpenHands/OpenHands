@@ -1,4 +1,7 @@
-import { SettingsDesktopSidebar } from "./settings-desktop-sidebar";
+import {
+  SettingsDesktopSidebar,
+  SettingsCompactNavigation,
+} from "./settings-desktop-sidebar";
 import { SettingsNavRenderedItem } from "#/hooks/use-settings-nav-items";
 import { settingsLayoutMainScrollClassName } from "#/utils/settings-like-page-layout-classes";
 
@@ -21,7 +24,10 @@ export function SettingsLayout({
       <div className="flex min-h-0 flex-1 gap-10 lg:items-start">
         <SettingsDesktopSidebar navigationItems={navigationItems} />
         <main className={settingsLayoutMainScrollClassName}>
-          <div className="mx-auto w-full min-w-0 max-w-200">{children}</div>
+          <div className="mx-auto flex w-full min-w-0 max-w-200 flex-col gap-6">
+            <SettingsCompactNavigation navigationItems={navigationItems} />
+            {children}
+          </div>
         </main>
       </div>
     </div>

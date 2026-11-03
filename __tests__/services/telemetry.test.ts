@@ -9,7 +9,6 @@ let latestPostHogConfig:
 const mockPosthog = {
   init: vi.fn(),
   capture: vi.fn(),
-  captureException: vi.fn(),
   opt_in_capturing: vi.fn(),
   opt_out_capturing: vi.fn(),
   has_opted_out_capturing: vi.fn(() => false),
@@ -55,7 +54,6 @@ import {
   setTelemetryIdentity,
   subscribeTelemetryConsent,
   trackEvent,
-  trackException,
   trackInstall,
   trackSessionStart,
 } from "#/services/telemetry";
@@ -620,19 +618,6 @@ describe("Telemetry Service", () => {
         "canvas_new_session",
         expect.any(Object),
       );
-    });
-  });
-
-  describe("trackException", () => {
-    it("uses the consent-aware boundary", async () => {
-      await setTelemetryConsent("granted");
-      const error = new Error("failure");
-
-      await trackException(error, { error_source: "test" });
-
-      expect(mockPosthog.captureException).toHaveBeenCalledWith(error, {
-        error_source: "test",
-      });
     });
   });
 

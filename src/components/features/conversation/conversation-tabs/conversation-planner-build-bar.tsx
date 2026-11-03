@@ -52,7 +52,7 @@ export function ConversationPlannerBuildBar({
         )}
         data-testid="planner-tab-build-button"
       >
-        <Typography.Text className="text-[11px] font-normal leading-5 text-contrast-foreground">
+        <Typography.Text className="text-2xs font-normal leading-5 text-contrast-foreground">
           {/* eslint-disable-next-line i18next/no-literal-string */}
           {t(I18nKey.COMMON$BUILD)} ⌘↩
         </Typography.Text>

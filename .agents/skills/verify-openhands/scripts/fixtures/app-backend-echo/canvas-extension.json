@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "name": "qa-bridge-echo",
+  "display_name": "QA owned bridge echo",
+  "version": "0.0.1",
+  "description": "Owned no-model HTTP/WS session bridge fixture; no environment/credential output.",
+  "entrypoint": "extension.js",
+  "contributes": {
+    "pages": [
+      {
+        "id": "echo",
+        "title": "QA owned bridge echo",
+        "path": "/echo"
+      }
+    ]
+  },
+  "backend": {
+    "schema_version": 1,
+    "artifacts": {
+      "linux-amd64": {
+        "path": "backend-linux-amd64.tar.gz",
+        "sha256": "b2d871184fd93318a8e8f1b1bfd29b2f90f17784689c5b684204879b357b14e6"
+      }
+    },
+    "argv": [
+      "{artifact_dir}/backend.py",
+      "{port}",
+      "{data_dir}"
+    ],
+    "health": {
+      "path": "/health",
+      "timeout_seconds": 10,
+      "interval_seconds": 0.1
+    },
+    "inherit_environment": []
+  }
+}

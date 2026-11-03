@@ -1,4 +1,7 @@
+import { getMarsBridge } from "#/api/mars/mars-tunnel-backend";
 import { ConversationPanel } from "#/components/features/conversation-panel/conversation-panel";
+import { useActiveBackend } from "#/contexts/active-backend-context";
+import { MarsSessionPanel } from "./mars-session-panel";
 
 interface SidebarConversationListProps {
   /**
@@ -23,9 +26,16 @@ interface SidebarConversationListProps {
 export function SidebarConversationList({
   collapsed,
 }: SidebarConversationListProps) {
+  const { backend } = useActiveBackend();
+
   if (collapsed) {
     return null;
   }
+
+  // A Managed Agents session's unit of work is the session, so its agent's
+  // sessions replace the list, with this session's conversations nested.
+  const showMarsSessions =
+    Boolean(backend.marsSessionId) && getMarsBridge() !== null;
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
@@ -34,7 +44,11 @@ export function SidebarConversationList({
           the aside; clipping would inset the border. Scroll stays on the inner
           list. */}
       <div className="flex min-h-0 w-full flex-1 flex-col">
-        <ConversationPanel />
+        {showMarsSessions ? (
+          <MarsSessionPanel backend={backend} />
+        ) : (
+          <ConversationPanel />
+        )}
       </div>
     </div>
   );

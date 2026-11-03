@@ -16,14 +16,16 @@ function readNonEmptyString(value: unknown): string | undefined {
     : undefined;
 }
 
-function readPresetRepositories(
-  metadata: UnknownRecord,
+/** The repository entries in `value` that name a URL. */
+export function readAutomationRepositories(
+  value: unknown,
 ): AutomationRepository[] {
-  return readRecords(metadata.repos).flatMap((repo) => {
+  return readRecords(value).flatMap((repo) => {
     const url = readNonEmptyString(repo.url);
     if (!url) return [];
     const ref = readNonEmptyString(repo.ref);
-    return [{ url, ...(ref && { ref }) }];
+    const provider = readNonEmptyString(repo.provider);
+    return [{ url, ...(ref && { ref }), ...(provider && { provider }) }];
   });
 }
 
@@ -48,7 +50,7 @@ export function withPresetSources(automation: Automation): Automation {
     ? automation.preset_metadata
     : {};
 
-  const presetRepositories = readPresetRepositories(metadata);
+  const presetRepositories = readAutomationRepositories(metadata.repos);
   const legacyRepositories: AutomationRepository[] = automation.repository
     ? [
         {

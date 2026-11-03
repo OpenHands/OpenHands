@@ -17,6 +17,7 @@ import { getLockedCloudHost } from "#/api/agent-server-config";
  * configured; the settings query refetches after a key is saved, so the banner
  * unmounts on its own.
  */
+// @spec WN-001 — Home no-LLM warning icon uses theme-aware warning feedback
 export function LlmNotConfiguredBanner() {
   const { t } = useTranslation("openhands");
   const { navigate } = useNavigation();
@@ -34,7 +35,7 @@ export function LlmNotConfiguredBanner() {
     >
       <div className="flex min-w-0 items-start sm:items-center">
         <div className="flex-shrink-0">
-          <FaTriangleExclamation className="align-middle text-yellow-400" />
+          <FaTriangleExclamation className="align-middle text-feedback-warning" />
         </div>
         <Typography.Text className="ml-3 text-sm font-medium">
           {t(I18nKey.HOME$LLM_NOT_CONFIGURED_MESSAGE)}

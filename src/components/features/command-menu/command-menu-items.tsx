@@ -2,6 +2,7 @@ import React from "react";
 import {
   Bot,
   Brain,
+  Container,
   Home,
   Keyboard,
   KeyRound,
@@ -22,6 +23,7 @@ import {
   hasAutomationInterface,
 } from "#/manifests/automation-interface";
 import { getLockedCloudHost } from "#/api/agent-server-config";
+import { getActiveBackend } from "#/api/backend-registry/active-store";
 import { LOCKED_CLOUD_SETTINGS_NAV_PATH } from "#/constants/settings-nav";
 import { isApplePlatform } from "#/utils/utils";
 
@@ -39,6 +41,7 @@ export const COMMAND_MENU_ROUTE = {
   condenserSettings: "/settings/condenser",
   agentContextSettings: "/settings/agent-context",
   verificationSettings: "/settings/verification",
+  runtimeSettings: "/settings/runtime",
   appSettings: "/settings/app",
   secretsSettings: "/settings/secrets",
 } as const;
@@ -56,6 +59,7 @@ export type CommandMenuItemId =
   | "condenser-settings"
   | "agent-context-settings"
   | "verification-settings"
+  | "runtime-settings"
   | "app-settings"
   | "secrets-settings"
   | "toggle-sidebar";
@@ -223,6 +227,15 @@ export const createCommandMenuItems = ({
       to: COMMAND_MENU_ROUTE.verificationSettings,
     },
     {
+      id: "runtime-settings",
+      group: "settings",
+      titleKey: I18nKey.SETTINGS$NAV_RUNTIME,
+      descriptionKey: I18nKey.SETTINGS$PAGE_RUNTIME_SUBLINE,
+      keywordsKey: I18nKey.COMMAND_MENU$RUNTIME_SETTINGS_KEYWORDS,
+      icon: <Container size={ICON_SIZE} />,
+      to: COMMAND_MENU_ROUTE.runtimeSettings,
+    },
+    {
       id: "app-settings",
       group: "settings",
       titleKey: I18nKey.COMMAND_MENU$APP_SETTINGS_TITLE,
@@ -254,12 +267,15 @@ export const createCommandMenuItems = ({
   // Locked-to-Cloud (SaaS / self-hosted OHE) lists only the Application page;
   // the OHE settings shell owns the rest (OHE-3168).
   const isLockedToCloud = getLockedCloudHost() !== null;
+  // Locally each agent profile has its own condenser.
+  const isCloud = getActiveBackend().backend.kind === "cloud";
 
   return items.filter(
     (item) =>
-      !isLockedToCloud ||
-      item.group !== "settings" ||
-      item.to === COMMAND_MENU_ROUTE.settings ||
-      item.to === LOCKED_CLOUD_SETTINGS_NAV_PATH,
+      (isCloud || item.to !== COMMAND_MENU_ROUTE.condenserSettings) &&
+      (!isLockedToCloud ||
+        item.group !== "settings" ||
+        item.to === COMMAND_MENU_ROUTE.settings ||
+        item.to === LOCKED_CLOUD_SETTINGS_NAV_PATH),
   );
 };

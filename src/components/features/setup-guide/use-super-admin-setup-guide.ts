@@ -1,6 +1,9 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getCloudOrganizationMe } from "#/api/cloud/organization-service.api";
-import { getCloudSetupState } from "#/api/cloud/setup-state-service.api";
+import {
+  dismissCloudSetupGuide,
+  getCloudSetupState,
+} from "#/api/cloud/setup-state-service.api";
 import type { CloudSetupGuideSteps } from "#/api/cloud/types";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import {
@@ -46,8 +49,13 @@ export function getNextSetupStep(
  * an organization and is not dismissed. Local backends never see it.
  */
 export function useSuperAdminSetupGuide() {
+  const queryClient = useQueryClient();
   const { backend, orgId } = useActiveBackend();
   const isCloud = backend.kind === "cloud";
+  const setupStateQueryKey = SUPER_ADMIN_SETUP_QUERY_KEYS.state(
+    backend.id,
+    backend.connectionRevision ?? 0,
+  );
 
   // Same query as `useAutomationPermissions`, so no extra request is issued.
   // eslint-disable-next-line @tanstack/query/exhaustive-deps
@@ -70,15 +78,19 @@ export function useSuperAdminSetupGuide() {
 
   // eslint-disable-next-line @tanstack/query/exhaustive-deps
   const setupStateQuery = useQuery({
-    queryKey: SUPER_ADMIN_SETUP_QUERY_KEYS.state(
-      backend.id,
-      backend.connectionRevision ?? 0,
-    ),
+    queryKey: setupStateQueryKey,
     queryFn: () => getCloudSetupState(backend),
     enabled: isCloud && isSuperAdmin,
     ...CONFIG_CACHE_OPTIONS,
     retry: false,
     meta: { disableToast: true },
+  });
+
+  const dismissMutation = useMutation({
+    mutationFn: () => dismissCloudSetupGuide(backend),
+    onSuccess: (state) => {
+      queryClient.setQueryData(setupStateQueryKey, state);
+    },
   });
 
   const setupState = isSuperAdmin ? setupStateQuery.data : undefined;
@@ -103,5 +115,6 @@ export function useSuperAdminSetupGuide() {
     visible: active && nextStep !== null,
     isLoading: meQuery.isLoading || setupStateQuery.isLoading,
     refetch: setupStateQuery.refetch,
+    dismiss: dismissMutation.mutate,
   };
 }

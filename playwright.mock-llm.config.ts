@@ -181,7 +181,11 @@ export default defineConfig({
     //    for agent-server, 18001 for automation).
     {
       command: [
-        "exec node scripts/static-server.mjs",
+        // No DigitalOcean bridge on the e2e public-mode server: nothing here
+        // uses it, and the Providers entry must not appear in these specs.
+        "exec env",
+        envAssignment("MARS_WEB", "0"),
+        "node scripts/static-server.mjs",
         "--dir build",
         `--port ${PUBLIC_MODE_PORT}`,
         "--host 127.0.0.1",

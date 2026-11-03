@@ -1,0 +1,43 @@
+{
+  "attribution": "I am an AI agent helping Engel Nyst (@enyst) with project work.",
+  "provisional": false,
+  "sdk_version": "1.55.1",
+  "docker_engine": "28.4.0",
+  "platform": "linux/amd64",
+  "base_image": "ghcr.io/openhands/agent-server:1.55.1-python-minimal@sha256:c0c2dd495e46842908c9dd5c600033855f37f64ec34117e913f47d52e9a1e4a0",
+  "fixture_image_scope": "Task-owned derivative adds only public CA/proxy configuration; no model/session credentials baked in.",
+  "model": "deepseek/deepseek-flash",
+  "execution_status": "finished",
+  "action_events": 1,
+  "container_workspace_marker": true,
+  "same_owned_host_mount_marker": true,
+  "host_root_marker_absent": true,
+  "container_hostname_correlated": true,
+  "oom_killed": false,
+  "cleanup": {
+    "conversation_delete_status": 200,
+    "container_absent": true,
+    "owned_marker_absent_after_cleanup": true,
+    "host_root_marker_absent": true,
+    "screenshots_retained": true
+  },
+  "launcher_runtime_restored": "local",
+  "scope_limits": [
+    "No all-in-one Canvas image build/startup proof.",
+    "No minimal-image browser/ACP capability claim.",
+    "Stock image initially failed managed-proxy egress; successful proof used task-owned trust derivative.",
+    "Original screenshot retained privately because it contains the user prompt; no generative or synthetic image supplied."
+  ],
+  "publication_status": "Reviewed final artifact published on the existing fork audit branch.",
+  "owned_cleanup_final": {
+    "all_three_task_images_removed": true,
+    "remaining_images": [
+      "postgres:15",
+      "testcontainers/ryuk:0.8.1"
+    ],
+    "exact_new_cache_ids_removed": 3,
+    "protected_preexisting_cache_ids_preserved": 34,
+    "no_global_prune": true,
+    "evidence_visibility": "Detailed owned image/cache receipts retained privately; this public artifact contains reviewed counts only."
+  }
+}

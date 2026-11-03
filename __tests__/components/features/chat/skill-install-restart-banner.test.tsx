@@ -6,6 +6,10 @@ import { SkillInstallRestartBanner } from "#/components/features/chat/skill-inst
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { useEventStore } from "#/stores/use-event-store";
 import {
+  mergeStoredConversationMetadata,
+  removeStoredConversationMetadata,
+} from "#/api/conversation-metadata-store";
+import {
   __resetActiveStoreForTests,
   setActiveSelection,
   setRegisteredBackends,
@@ -18,16 +22,35 @@ import type {
 } from "#/types/agent-server/core";
 
 // The restart mutation resolves the launch profile through these services
-// before creating the conversation; stub them so it deterministically takes
-// the legacy agent_settings path (no active agent profile).
+// before creating the conversation; stub them with the seeded `default`.
+vi.mock(
+  "#/hooks/use-migrate-default-agent-profile",
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import("#/hooks/use-migrate-default-agent-profile")
+    >()),
+    ensureDefaultAgentProfileMigrated: vi.fn().mockResolvedValue(true),
+  }),
+);
+
 vi.mock("#/api/agent-profiles-service/agent-profiles-service.api", () => ({
   __esModule: true,
   default: {
-    listProfiles: vi
-      .fn()
-      .mockResolvedValue({ profiles: [], active_agent_profile_id: null }),
+    listProfiles: vi.fn().mockResolvedValue({
+      profiles: [
+        {
+          id: "profile-default",
+          name: "default",
+          agent_kind: "openhands",
+          revision: 1,
+          llm_profile_ref: "default",
+          mcp_server_refs: null,
+        },
+      ],
+      active_agent_profile_id: "profile-default",
+    }),
+    getProfile: vi.fn().mockRejectedValue(new Error("not needed")),
   },
-  WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME: "default",
 }));
 vi.mock("#/api/profiles-service/profiles-service.api", () => ({
   __esModule: true,
@@ -133,6 +156,23 @@ describe("SkillInstallRestartBanner", () => {
     expect(
       await screen.findByTestId("skill-install-restart-banner"),
     ).toBeInTheDocument();
+  });
+
+  it("renders nothing for a docker conversation without a host folder", async () => {
+    // Its skill lives in a private workspace a new conversation would not get.
+    mergeStoredConversationMetadata(CONVERSATION_ID, {
+      workspace_mode: "docker_container",
+    });
+    renderBanner();
+    addInstallEvent("evt-1");
+
+    await waitFor(() =>
+      expect(useEventStore.getState().events.length).toBeGreaterThan(0),
+    );
+    expect(
+      screen.queryByTestId("skill-install-restart-banner"),
+    ).not.toBeInTheDocument();
+    removeStoredConversationMetadata(CONVERSATION_ID);
   });
 
   it("renders nothing on a cloud backend", () => {

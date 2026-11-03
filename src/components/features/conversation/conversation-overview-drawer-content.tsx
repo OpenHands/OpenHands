@@ -1,6 +1,5 @@
 import { useTranslation } from "react-i18next";
 import XMarkIcon from "#/icons/x-mark.svg?react";
-import { BrandButton } from "#/components/features/settings/brand-button";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
 import { useConversationOverviewDrawer } from "./conversation-overview-drawer-context";
@@ -8,10 +7,6 @@ import {
   CONVERSATION_OVERVIEW_DRAWER_SECTION,
   type ConversationOverviewDrawerSection,
 } from "./conversation-overview-drawer.types";
-import { ConversationOverviewAutomationsPanel } from "./conversation-overview-automations-panel";
-import { ConversationOverviewSkillsPanel } from "./conversation-overview-skills-panel";
-import { ConversationOverviewMcpPanel } from "./conversation-overview-mcp-panel";
-import { ConversationOverviewSecretsPanel } from "./conversation-overview-secrets-panel";
 import {
   ConversationOverviewGitItemsHeaderLink,
   ConversationOverviewGitItemsPanel,
@@ -20,7 +15,6 @@ import { useConversationOverviewStats } from "#/hooks/use-conversation-overview-
 import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import {
   CONVERSATION_SECONDARY_DRAWER_CLOSE_BUTTON_CLASSNAME,
-  CONVERSATION_SECONDARY_DRAWER_HEADER_ACTION_CLASSNAME,
   CONVERSATION_SECONDARY_DRAWER_HEADER_CLASSNAME,
 } from "./conversation-secondary-drawer.classes";
 
@@ -30,14 +24,6 @@ interface ConversationOverviewDrawerContentProps {
 
 function getSectionTitleKey(section: ConversationOverviewDrawerSection) {
   switch (section) {
-    case CONVERSATION_OVERVIEW_DRAWER_SECTION.automations:
-      return I18nKey.CONVERSATION_PANEL$AUTOMATIONS;
-    case CONVERSATION_OVERVIEW_DRAWER_SECTION.skills:
-      return I18nKey.SETTINGS$NAV_SKILLS;
-    case CONVERSATION_OVERVIEW_DRAWER_SECTION.mcp:
-      return I18nKey.CONVERSATION$OVERVIEW_MCP;
-    case CONVERSATION_OVERVIEW_DRAWER_SECTION.secrets:
-      return I18nKey.SETTINGS$NAV_SECRETS;
     case CONVERSATION_OVERVIEW_DRAWER_SECTION.pull_requests:
       return I18nKey.CONVERSATION$OVERVIEW_PULL_REQUESTS;
     case CONVERSATION_OVERVIEW_DRAWER_SECTION.issues:
@@ -49,104 +35,11 @@ function getSectionTitleKey(section: ConversationOverviewDrawerSection) {
   }
 }
 
-function ConversationOverviewDrawerHeaderAddAction({
-  section,
-}: {
-  section: ConversationOverviewDrawerSection;
-}) {
-  const { t } = useTranslation("openhands");
-  const { requestAdd } = useConversationOverviewDrawer();
-
-  switch (section) {
-    case CONVERSATION_OVERVIEW_DRAWER_SECTION.automations:
-      return (
-        <BrandButton
-          type="button"
-          variant="primary"
-          testId="conversation-overview-automations-add"
-          className={CONVERSATION_SECONDARY_DRAWER_HEADER_ACTION_CLASSNAME}
-          onClick={requestAdd}
-        >
-          {t(I18nKey.AUTOMATIONS$ADD_AUTOMATION)}
-        </BrandButton>
-      );
-    case CONVERSATION_OVERVIEW_DRAWER_SECTION.skills:
-      return (
-        <BrandButton
-          type="button"
-          variant="primary"
-          testId="conversation-overview-skills-add-skill-button"
-          className={CONVERSATION_SECONDARY_DRAWER_HEADER_ACTION_CLASSNAME}
-          onClick={requestAdd}
-        >
-          {t(I18nKey.SETTINGS$SKILLS_ADD_BUTTON)}
-        </BrandButton>
-      );
-    case CONVERSATION_OVERVIEW_DRAWER_SECTION.mcp:
-      return (
-        <BrandButton
-          type="button"
-          variant="secondary"
-          testId="conversation-overview-mcp-add-server"
-          className={CONVERSATION_SECONDARY_DRAWER_HEADER_ACTION_CLASSNAME}
-          onClick={requestAdd}
-        >
-          {t(I18nKey.MCP$ADD_CUSTOM)}
-        </BrandButton>
-      );
-    case CONVERSATION_OVERVIEW_DRAWER_SECTION.secrets:
-      return (
-        <BrandButton
-          type="button"
-          variant="primary"
-          testId="conversation-overview-secrets-add-button"
-          className={CONVERSATION_SECONDARY_DRAWER_HEADER_ACTION_CLASSNAME}
-          onClick={requestAdd}
-        >
-          {t(I18nKey.SECRETS$ADD_NEW_SECRET)}
-        </BrandButton>
-      );
-    case CONVERSATION_OVERVIEW_DRAWER_SECTION.pull_requests:
-      return <ConversationOverviewGitItemsHeaderLink kind="pull_requests" />;
-    case CONVERSATION_OVERVIEW_DRAWER_SECTION.issues:
-      return <ConversationOverviewGitItemsHeaderLink kind="issues" />;
-    default:
-      return null;
-  }
-}
-
-function ConversationOverviewDrawerBody({
-  section,
-  openAdd,
-}: {
-  section: ConversationOverviewDrawerSection;
-  openAdd: boolean;
-}) {
-  switch (section) {
-    case CONVERSATION_OVERVIEW_DRAWER_SECTION.automations:
-      return <ConversationOverviewAutomationsPanel openAdd={openAdd} />;
-    case CONVERSATION_OVERVIEW_DRAWER_SECTION.skills:
-      return <ConversationOverviewSkillsPanel openAdd={openAdd} />;
-    case CONVERSATION_OVERVIEW_DRAWER_SECTION.mcp:
-      return <ConversationOverviewMcpPanel openAdd={openAdd} />;
-    case CONVERSATION_OVERVIEW_DRAWER_SECTION.secrets:
-      return <ConversationOverviewSecretsPanel openAdd={openAdd} />;
-    case CONVERSATION_OVERVIEW_DRAWER_SECTION.pull_requests:
-      return <ConversationOverviewGitItemsPanel kind="pull_requests" />;
-    case CONVERSATION_OVERVIEW_DRAWER_SECTION.issues:
-      return <ConversationOverviewGitItemsPanel kind="issues" />;
-    default: {
-      const _exhaustive: never = section;
-      return _exhaustive;
-    }
-  }
-}
-
 export function ConversationOverviewDrawerContent({
   className,
 }: ConversationOverviewDrawerContentProps) {
   const { t } = useTranslation("openhands");
-  const { section, openAdd, closeDrawer } = useConversationOverviewDrawer();
+  const { section, closeDrawer } = useConversationOverviewDrawer();
   const { workspaceName } = useConversationOverviewStats();
 
   // A menu opened after the drawer (such as the Overview ⋯ menu) takes
@@ -156,11 +49,6 @@ export function ConversationOverviewDrawerContent({
   if (!section) {
     return null;
   }
-
-  const isFullBleedBody =
-    section === CONVERSATION_OVERVIEW_DRAWER_SECTION.pull_requests ||
-    section === CONVERSATION_OVERVIEW_DRAWER_SECTION.issues ||
-    section === CONVERSATION_OVERVIEW_DRAWER_SECTION.secrets;
 
   return (
     <aside
@@ -195,19 +83,12 @@ export function ConversationOverviewDrawerContent({
           ) : null}
         </div>
         <div className="shrink-0">
-          <ConversationOverviewDrawerHeaderAddAction section={section} />
+          <ConversationOverviewGitItemsHeaderLink kind={section} />
         </div>
       </header>
 
-      <div
-        className={cn(
-          "min-h-0 flex-1 custom-scrollbar-always",
-          isFullBleedBody
-            ? "flex flex-col overflow-hidden"
-            : "overflow-y-auto px-4 py-4",
-        )}
-      >
-        <ConversationOverviewDrawerBody section={section} openAdd={openAdd} />
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden custom-scrollbar-always">
+        <ConversationOverviewGitItemsPanel kind={section} />
       </div>
     </aside>
   );

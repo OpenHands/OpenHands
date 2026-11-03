@@ -8,8 +8,12 @@ import {
   type WorkspaceFileDiscovery,
 } from "#/utils/workspace-file-discovery";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
-import { ModalBody } from "#/components/shared/modals/modal-body";
+import {
+  MODAL_MAX_WIDTH_VIEWPORT,
+  ModalBody,
+} from "#/components/shared/modals/modal-body";
 import { BrandButton } from "#/components/features/settings/brand-button";
+import { cn } from "#/utils/utils";
 
 function DiscoveryForm({
   options,
@@ -53,8 +57,12 @@ function DiscoveryForm({
       closeOnBackdropClick={!isSaving}
     >
       <ModalBody
+        testID="file-discovery-settings-modal"
         width="md"
-        className="items-stretch max-h-[90vh] overflow-y-auto"
+        className={cn(
+          "items-stretch max-h-[90vh] overflow-y-auto",
+          MODAL_MAX_WIDTH_VIEWPORT,
+        )}
       >
         <h2 className="text-lg font-semibold">
           {t(I18nKey.FILES$DISCOVERY_SETTINGS)}
@@ -82,7 +90,7 @@ function DiscoveryForm({
               onChange={(event) => setPatterns(event.target.value)}
               rows={5}
               disabled={isSaving}
-              className="rounded-md border border-border bg-base px-3 py-2 font-mono"
+              className="rounded-md border border-border bg-canvas-base px-3 py-2 font-mono"
             />
             <span className="text-xs text-muted">
               {t(I18nKey.FILES$DISCOVERY_PATTERN_HELP)}
@@ -99,7 +107,7 @@ function DiscoveryForm({
               value={limit}
               disabled={isSaving}
               onChange={(event) => setLimit(event.target.value)}
-              className="rounded-md border border-border bg-base px-3 py-2"
+              className="rounded-md border border-border bg-canvas-base px-3 py-2"
             />
           </label>
           <label className="flex items-center gap-2 text-sm">

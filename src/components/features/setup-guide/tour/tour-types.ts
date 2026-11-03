@@ -14,8 +14,6 @@ export interface GuidedTourStop {
   title: string;
   body: string;
   side?: GuidedTourSide;
-  /** Next clicks the anchor first, e.g. to open a form from its button. */
-  nextClicksAnchor?: boolean;
   /**
    * Hide Next; move on when the admin clicks an element matching this
    * selector inside the anchor, such as one template card in a list.
@@ -28,6 +26,11 @@ export interface GuidedTourStop {
    * anchor (such as a dropdown's option list) still take clicks.
    */
   interactive?: boolean;
+  /**
+   * Hide the popover's footer (Back and the step count), such as on a first
+   * stop that only waits for the admin's click.
+   */
+  hideFooter?: boolean;
 }
 
 export interface GuidedTour {

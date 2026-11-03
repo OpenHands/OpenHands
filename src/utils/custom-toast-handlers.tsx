@@ -1,7 +1,6 @@
 import React, { CSSProperties, ReactNode } from "react";
 import { CircleX } from "lucide-react";
 import toast, { ToastOptions } from "react-hot-toast";
-import { OH_STATUS_ERROR_COLOR } from "#/constants/status-colors";
 import { calculateToastDuration } from "./toast-duration";
 import { cn } from "#/utils/utils";
 import i18n from "#/i18n";
@@ -17,10 +16,11 @@ import {
 } from "./api-error-message";
 
 // react-hot-toast accepts only CSSProperties via the style option — cannot use className
+// @spec TN-001 — Every toast uses the theme's high-emphasis ink on its surface
 const TOAST_STYLE: CSSProperties = {
   background: "var(--oh-color-tertiary)",
   border: "1px solid var(--oh-border-input)",
-  color: "#fff",
+  color: "var(--oh-contrast)",
   borderRadius: "var(--oh-radius)",
   maxWidth: "400px",
   wordBreak: "break-word",
@@ -31,11 +31,6 @@ const TOAST_STYLE: CSSProperties = {
 export const TOAST_OPTIONS: ToastOptions = {
   position: "top-right",
   style: TOAST_STYLE,
-};
-
-const ERROR_TOAST_STYLE: CSSProperties = {
-  ...TOAST_STYLE,
-  color: "var(--oh-muted)",
 };
 
 /** Icon + message row; center icon for single-line text, top-align when wrapped. */
@@ -78,9 +73,8 @@ export function ErrorToastContent({ message }: { message: ReactNode }) {
     >
       <CircleX
         aria-hidden
-        className="h-4 w-4 shrink-0"
+        className="h-4 w-4 shrink-0 text-status-error"
         strokeWidth={2}
-        style={{ color: OH_STATUS_ERROR_COLOR }}
       />
       <span
         ref={contentRef}
@@ -95,7 +89,6 @@ export function ErrorToastContent({ message }: { message: ReactNode }) {
 export const ERROR_TOAST_OPTIONS: ToastOptions = {
   ...TOAST_OPTIONS,
   icon: null,
-  style: ERROR_TOAST_STYLE,
 };
 
 function showErrorToast(message: string) {

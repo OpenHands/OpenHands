@@ -1,4 +1,6 @@
+import { assertActiveEnvironment } from "#/utils/assert-active-environment";
 import { RemoteWorkspace } from "@openhands/typescript-client/workspace/remote-workspace";
+import { ConversationClient } from "@openhands/typescript-client/clients";
 import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
 import { getActiveBackend } from "#/api/backend-registry/active-store";
 import { batchGetCloudConversations } from "#/api/cloud/conversation-service.api";
@@ -74,15 +76,13 @@ export async function uploadFilesToConversation(
   files: File[],
   currentConversation?: AppConversation | null,
 ): Promise<FileUploadSuccessResponse> {
-  const workingDir = await resolveConversationUploadWorkingDir(
-    conversationId,
-    currentConversation,
-  );
+  const environment = getActiveBackend();
   const runtime = await resolveConversationRuntime(
     conversationId,
     currentConversation,
   );
-  const isCloud = getActiveBackend().backend.kind === "cloud";
+  assertActiveEnvironment(environment);
+  const isCloud = environment.backend.kind === "cloud";
 
   const sessionApiKey =
     currentConversation?.id === conversationId
@@ -98,15 +98,34 @@ export async function uploadFilesToConversation(
       conversationUrl,
       sessionApiKey,
     });
+    const conversation = await new ConversationClient(
+      getAgentServerClientOptions({ conversationId, ...cloudRuntime }),
+    ).getConversation(conversationId);
+    assertActiveEnvironment(environment);
+    const workspace = conversation.workspace;
+    if (
+      !workspace ||
+      typeof workspace !== "object" ||
+      !("working_dir" in workspace) ||
+      typeof workspace.working_dir !== "string" ||
+      !workspace.working_dir.trim()
+    ) {
+      throw new Error("Conversation workspace is unavailable.");
+    }
     return uploadFilesToRuntime({
       conversationId,
       files,
-      workingDir,
+      workingDir: workspace.working_dir,
       conversationUrl: cloudRuntime.conversationUrl,
       sessionApiKey: cloudRuntime.sessionApiKey,
     });
   }
 
+  const workingDir = await resolveConversationUploadWorkingDir(
+    conversationId,
+    currentConversation,
+  );
+  assertActiveEnvironment(environment);
   return uploadFilesToRuntime({
     conversationId,
     files,
@@ -124,6 +143,7 @@ async function uploadFilesToRuntime(options: {
   sessionApiKey: string | null;
 }): Promise<FileUploadSuccessResponse> {
   const { files, workingDir, conversationUrl, sessionApiKey } = options;
+  const environment = getActiveBackend();
   const workspace = new RemoteWorkspace(
     getAgentServerClientOptions({
       conversationId: options.conversationId,
@@ -146,6 +166,7 @@ async function uploadFilesToRuntime(options: {
         conversationUrl,
         sessionApiKey,
       });
+      assertActiveEnvironment(environment);
       await workspace.fileUpload(file, uploadPath);
       return { uploadedFile: safeName, skippedFile: null };
     } catch (error) {

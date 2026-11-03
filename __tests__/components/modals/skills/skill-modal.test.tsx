@@ -6,6 +6,12 @@ import { SkillsModal } from "#/components/features/conversation-panel/skills-mod
 import SkillsService from "#/api/skills-service";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
+import AgentProfilesService from "#/api/agent-profiles-service/agent-profiles-service.api";
+import { useActiveConversation } from "#/hooks/query/use-active-conversation";
+
+vi.mock("#/hooks/query/use-active-conversation", () => ({
+  useActiveConversation: vi.fn(() => ({ data: undefined })),
+}));
 
 describe("SkillsModal", () => {
   const mockOnClose = vi.fn();
@@ -70,6 +76,43 @@ describe("SkillsModal", () => {
 
       expect(await screen.findByText(CATALOG_ON)).toBeInTheDocument();
       expect(screen.queryByText(CATALOG_OFF)).not.toBeInTheDocument();
+    });
+
+    it("lists what the conversation's agent profile selects, not the Skills page", async () => {
+      vi.spyOn(SkillsService, "getSkills").mockResolvedValue([
+        catalogSkill(CATALOG_ON),
+        catalogSkill(CATALOG_OFF),
+      ]);
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
+        ...MOCK_DEFAULT_USER_SETTINGS,
+        enabled_skills: [CATALOG_ON],
+        disabled_skills: [],
+      });
+      vi.mocked(useActiveConversation).mockReturnValue({
+        data: { launched_agent_profile: { agent_profile_id: "p-reviewer" } },
+      } as never);
+      vi.spyOn(AgentProfilesService, "listProfiles").mockResolvedValue({
+        profiles: [
+          { id: "p-reviewer", name: "reviewer", agent_kind: "openhands" },
+        ],
+        active_agent_profile_id: null,
+      } as never);
+      vi.spyOn(AgentProfilesService, "getProfile").mockResolvedValue({
+        name: "reviewer",
+        profile: {
+          id: "p-reviewer",
+          name: "reviewer",
+          revision: 1,
+          agent_kind: "openhands",
+          public_skills: [CATALOG_OFF],
+          disabled_skills: [],
+        },
+      } as never);
+
+      renderWithProviders(<SkillsModal {...defaultProps} />);
+
+      expect(await screen.findByText(CATALOG_OFF)).toBeInTheDocument();
+      expect(screen.queryByText(CATALOG_ON)).not.toBeInTheDocument();
     });
   });
 

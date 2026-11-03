@@ -23,6 +23,8 @@ const SETUP_GUIDE_TOUR_STOPS: Partial<
       id: "choose-template",
       anchor: '[data-testid="recommended-automations-section"]',
       advanceOnClick: '[data-testid^="recommended-automation-card-"]',
+      // Next is hidden while it waits for a card, and Back has nowhere to go.
+      hideFooter: true,
       title: I18nKey.ONBOARDING$SETUP_GUIDE_TOUR_TEMPLATE_TITLE,
       body: I18nKey.ONBOARDING$SETUP_GUIDE_TOUR_TEMPLATE_BODY,
       side: "top",
@@ -39,16 +41,18 @@ const SETUP_GUIDE_TOUR_STOPS: Partial<
   ],
   "add-integration": [
     {
-      id: "add-custom-server",
-      anchor: '[data-testid="mcp-add-custom-server"]',
-      nextClicksAnchor: true,
+      id: "pick-server",
+      anchor: '[data-testid="mcp-marketplace-section"]',
+      // A card and its add button both open the server's install dialog.
+      advanceOnClick: '[data-testid^="mcp-marketplace-card-"]',
+      hideFooter: true,
       title: I18nKey.ONBOARDING$SETUP_GUIDE_TOUR_MCP_ADD_TITLE,
       body: I18nKey.ONBOARDING$SETUP_GUIDE_TOUR_MCP_ADD_BODY,
-      side: "bottom",
+      side: "top",
     },
     {
       id: "connect-server",
-      anchor: '[data-testid="mcp-custom-editor"]',
+      anchor: '[data-testid="mcp-install-modal"]',
       waitForComplete: "add-integration",
       interactive: true,
       title: I18nKey.ONBOARDING$SETUP_GUIDE_TOUR_MCP_FORM_TITLE,

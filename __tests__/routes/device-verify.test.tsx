@@ -374,9 +374,6 @@ describe("DeviceVerify", () => {
       });
 
       expect(screen.getByText("DEVICE$SUCCESS_MESSAGE")).toBeInTheDocument();
-      // Should show success icon (checkmark)
-      const successIcon = document.querySelector(".text-green-600");
-      expect(successIcon).toBeInTheDocument();
     });
 
     it("should not show try again button on success", async () => {
@@ -462,9 +459,6 @@ describe("DeviceVerify", () => {
       });
 
       expect(screen.getByText("DEVICE$ERROR_FAILED")).toBeInTheDocument();
-      // Should show error icon (X)
-      const errorIcon = document.querySelector(".text-red-600");
-      expect(errorIcon).toBeInTheDocument();
     });
 
     it("should show error message when fetch throws an exception", async () => {

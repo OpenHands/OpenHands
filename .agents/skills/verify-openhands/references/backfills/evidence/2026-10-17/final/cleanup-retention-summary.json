@@ -1,0 +1,45 @@
+{
+  "at": "2026-10-17T22:18:46.732852+00:00",
+  "run_count": 23,
+  "regular_files": 2111,
+  "bytes": 115184960,
+  "suffix_counts": {
+    ".png": 1110,
+    ".jsonl": 36,
+    ".py": 48,
+    ".json": 717,
+    ".md": 16,
+    ".jpg": 2,
+    ".txt": 130,
+    ".gz": 9,
+    ".csv": 1,
+    ".tar": 1,
+    ".log": 29,
+    ".gif": 2,
+    ".mp4": 6,
+    ".bin": 3,
+    ".bundle": 1
+  },
+  "attribution": "I am an AI agent helping Engel Nyst (@enyst) with project work.",
+  "final_status": {
+    "owned_cli_runs_stopped": 23,
+    "private_run_directories_present": 0,
+    "open_owned_ports": 0,
+    "owned_runtime_processes": 0,
+    "docker_containers": 0,
+    "remaining_images": [
+      "postgres:15",
+      "testcontainers/ryuk:0.8.1"
+    ],
+    "protected_preexisting_cache_records": 34,
+    "removed_owned_image_tags": 3,
+    "removed_exact_owned_new_cache_ids": 3
+  },
+  "private_evidence_policy": "Run credential state purged; protected sanitized evidence remains retained, not all evidence publicly released.",
+  "retained_private_receipt_sha256": {
+    "all-evidence-files-final-sha256.json": "85b86638ad271cb26af9f1c5ddc586fe9dee23adfc89c18c729b6c9b3c64477a",
+    "cleanup-retention-final.json": "9a7b8c047b61a5aad53c9f09c92344feb244fa4f75ee8a78b30cc66397d89d38",
+    "manual-runtime-disposition.json": "5e8edf65e9a6eb9100071d7027902e67de2cb880785a9c0601e3b51f108d81bf",
+    "owned-resource-final-readback.json": "d37d68e898a7dfc751c384f58b853d1baf7a68fe98b204f9025812af800f3a61"
+  }
+}

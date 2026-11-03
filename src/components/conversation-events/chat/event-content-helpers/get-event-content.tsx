@@ -2,6 +2,7 @@ import { Trans } from "react-i18next";
 import React from "react";
 import { CANVAS_UI_CLIENT_TOOL_NAME } from "#/constants/canvas-ui";
 import { LAUNCH_CHILD_CONVERSATION_TOOL_NAME } from "#/constants/child-conversation";
+import { REQUEST_SECRET_TOOL_NAME } from "#/constants/secret-request";
 import {
   OpenHandsEvent,
   ObservationEvent,
@@ -12,6 +13,7 @@ import {
   isObservationEvent,
   isACPToolCallEvent,
   isCanvasUIActionEvent,
+  isUserRejectObservation,
 } from "#/types/agent-server/type-guards";
 import { MonoComponent } from "../../../features/chat/mono-component";
 import { PathComponent } from "../../../features/chat/path-component";
@@ -229,6 +231,10 @@ const getObservationEventTitle = (
         observationKey = "OBSERVATION_MESSAGE$LAUNCH_CHILD_CONVERSATION";
         break;
       }
+      if (event.tool_name === REQUEST_SECRET_TOOL_NAME) {
+        observationKey = "OBSERVATION_MESSAGE$REQUEST_SECRET";
+        break;
+      }
       return observationType.replace("Observation", "").toUpperCase();
     case "SwitchLLMObservation":
       observationKey = event.observation.is_error
@@ -342,6 +348,18 @@ export const getEventContent = (
         getCanvasUIClientObservationContent(event, correspondingAction) ??
         resolveVisualizerBody(event, correspondingAction) ??
         getObservationContent(event);
+    }
+  } else if (isUserRejectObservation(event)) {
+    // A rejected action never ran, so there is no result to show: keep the
+    // action's own title and body, and let the card mark it as rejected.
+    if (correspondingAction) {
+      title = getActionEventTitle(correspondingAction);
+      details =
+        resolveVisualizerBody(correspondingAction) ??
+        getActionContent(correspondingAction);
+    } else {
+      title = event.tool_name;
+      details = event.rejection_reason;
     }
   } else if (isACPToolCallEvent(event)) {
     // ACP sub-agent tool calls reuse the same card shape as observations:

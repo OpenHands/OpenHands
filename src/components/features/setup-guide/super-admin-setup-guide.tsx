@@ -10,6 +10,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { ArrowUpRight, Check, ClipboardList, X } from "lucide-react";
 import { getLockedCloudHost } from "#/api/agent-server-config";
+import { ConfirmationModal } from "#/components/shared/modals/confirmation-modal";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { useNavigation } from "#/context/navigation-context";
 import { useActiveBackend } from "#/contexts/active-backend-context";
@@ -88,8 +89,10 @@ export default function SuperAdminSetupGuide() {
     guideOrgId,
     visible,
     refetch,
+    dismiss,
   } = useSuperAdminSetupGuide();
   const [open, setOpen] = useState(true);
+  const [confirmDismiss, setConfirmDismiss] = useState(false);
   const tourActive = useSyncExternalStore(
     subscribeGuidedTourActive,
     isGuidedTourActive,
@@ -216,8 +219,30 @@ export default function SuperAdminSetupGuide() {
     withOrg: boolean,
     tourStepId?: SuperAdminSetupStepId,
   ) => cloudPageUrl(cloudHost, path, withOrg ? guideOrgId : null, tourStepId);
-  // A step row and Start open the same page for a step; Start also asks the
-  // enterprise guide for the step's tour.
+  // A plain click on a Canvas step that has a tour runs the tour, which opens
+  // the step's page itself; a modified click still follows the link.
+  const startStepTour = (
+    step: SuperAdminSetupStep,
+    event: MouseEvent<HTMLAnchorElement>,
+  ) => {
+    const plainClick =
+      event.button === 0 &&
+      !event.metaKey &&
+      !event.ctrlKey &&
+      !event.shiftKey &&
+      !event.altKey;
+    if (
+      plainClick &&
+      step.destination.kind === "canvas" &&
+      hasSetupGuideTour(step.id)
+    ) {
+      event.preventDefault();
+      setOpen(false);
+      startTour(step.id);
+    }
+  };
+  // A step row and Start open the same page for a step, with the step's tour
+  // for a Canvas step. Start also asks the enterprise guide for its tour.
   const renderStepLink = (
     step: SuperAdminSetupStep,
     testId: string,
@@ -286,7 +311,12 @@ export default function SuperAdminSetupGuide() {
                 type="button"
                 aria-label={t(I18nKey.BUTTON$CLOSE)}
                 className={ICON_BUTTON_CLASS}
-                onClick={() => setOpen(false)}
+                // Closing asks whether to turn the guide off for good;
+                // cancelling leaves it closed to the pill.
+                onClick={() => {
+                  setOpen(false);
+                  setConfirmDismiss(true);
+                }}
               >
                 <X className="size-4" strokeWidth={2} aria-hidden />
               </button>
@@ -346,7 +376,9 @@ export default function SuperAdminSetupGuide() {
               );
               return (
                 <li key={step.id}>
-                  {renderStepLink(step, testId, rowClassName, label)}
+                  {renderStepLink(step, testId, rowClassName, label, (event) =>
+                    startStepTour(step, event),
+                  )}
                 </li>
               );
             })}
@@ -364,8 +396,7 @@ export default function SuperAdminSetupGuide() {
               </p>
               {/* Like the enterprise Start, close the panel before opening
                   the step, so Start does something even when the admin is
-                  already on that step's page. A Canvas step's tour opens
-                  the page itself; a modified click still follows the link. */}
+                  already on that step's page. */}
               {renderStepLink(
                 nextStep,
                 START_TEST_ID,
@@ -373,20 +404,7 @@ export default function SuperAdminSetupGuide() {
                 t(I18nKey.ONBOARDING$SETUP_GUIDE_START),
                 (event) => {
                   setOpen(false);
-                  const plainClick =
-                    event.button === 0 &&
-                    !event.metaKey &&
-                    !event.ctrlKey &&
-                    !event.shiftKey &&
-                    !event.altKey;
-                  if (
-                    plainClick &&
-                    nextStep.destination.kind === "canvas" &&
-                    hasSetupGuideTour(nextStep.id)
-                  ) {
-                    event.preventDefault();
-                    startTour(nextStep.id);
-                  }
+                  startStepTour(nextStep, event);
                 },
                 true,
               )}
@@ -410,6 +428,17 @@ export default function SuperAdminSetupGuide() {
         <ClipboardList className="size-4" strokeWidth={2} aria-hidden />
         {title}
       </button>
+
+      {confirmDismiss ? (
+        <ConfirmationModal
+          text={t(I18nKey.ONBOARDING$SETUP_GUIDE_DISMISS_CONFIRM)}
+          onConfirm={() => {
+            setConfirmDismiss(false);
+            dismiss();
+          }}
+          onCancel={() => setConfirmDismiss(false)}
+        />
+      ) : null}
     </div>
   );
 }

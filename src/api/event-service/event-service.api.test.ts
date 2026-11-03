@@ -213,6 +213,33 @@ describe("EventService", () => {
   });
 
   describe("searchEvents", () => {
+    it("requests compact Cloud history without altering the returned event page", async () => {
+      const events = [
+        { id: "goal", kind: "ConversationStateUpdateEvent", key: "goal" },
+        {
+          id: "snapshot",
+          kind: "ConversationStateUpdateEvent",
+          key: "full_state",
+        },
+      ];
+      callCloudProxyMock.mockResolvedValue({
+        items: events,
+        next_page_id: "next",
+      });
+
+      await expect(
+        EventService.searchEvents("conversation-cloud", null, null, {
+          excludeFullState: true,
+        }),
+      ).resolves.toEqual({ items: events, next_page_id: "next" });
+
+      expect(callCloudProxyMock).toHaveBeenCalledWith({
+        backend: cloudBackend,
+        method: "GET",
+        path: "/api/v1/conversation/conversation-cloud/events/search?limit=100&exclude_full_state=true",
+      });
+    });
+
     it("caps cloud limits and forwards every supported history filter", async () => {
       const event = { id: "event-1" };
       callCloudProxyMock.mockResolvedValue({
@@ -363,6 +390,7 @@ describe("EventService", () => {
           "session-key",
           {
             limit: 40,
+            excludeFullState: true,
             pageId: "local-page-1",
             sortOrder: "TIMESTAMP",
             timestampGte: "2026-07-11T00:00:00.000Z",

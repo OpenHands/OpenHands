@@ -299,8 +299,8 @@ Example shape:
 `https://htmlpreview.github.io/?https://github.com/FORK_OWNER/REPO/blob/DOC_COMMIT_SHA/.pr/design.html`
 
 Point the URL at the **PR head repository and full commit SHA containing the document**.
-A branch-based link breaks when `.pr/` is removed after approval; a commit-pinned link
-continues to reference the document before cleanup. Refresh the document and its link when
+A branch-based link can break after post-merge cleanup or branch deletion; a commit-pinned
+link continues to reference the document before cleanup. Refresh the document and its link when
 substantive changes affect the design.
 
 For public repositories, anyone can open the rendered page without a download or local server.
