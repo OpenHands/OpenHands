@@ -1,6 +1,7 @@
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { useIsMutating, useQueryClient } from "@tanstack/react-query";
 import { WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME } from "#/api/agent-profiles-service/agent-profiles-service.api";
+import { mergeStoredConversationMetadata } from "#/api/conversation-metadata-store";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import {
   llmProfileMirrored,
@@ -103,7 +104,7 @@ export function useChatInputLlmProfileState(): ChatInputLlmProfileState {
   // Written by useSwitchLlmProfile's onSuccess -> recordModelSwitchMessage ->
   // recordSwitch on a successful switch, so the label/check update before the
   // conversation refetch lands the new llm_model.
-  const optimisticActiveProfile = useModelStore((s) =>
+  const rawOptimistic = useModelStore((s) =>
     conversationId ? s.activeProfileByConversation[conversationId] : undefined,
   );
   const homeLlmProfile = useModelStore((s) => s.homeLlmProfile);
@@ -123,19 +124,79 @@ export function useChatInputLlmProfileState(): ChatInputLlmProfileState {
       ? homeLlmProfile
       : null;
 
+  // An in-flight switch's optimistic entry wins during the pending switch window.
+  // Outside that window, a stale optimistic entry that conflicts with confirmed
+  // conversation data does not override the confirmed resolution.
+  const optimisticProfileObj = rawOptimistic
+    ? profiles.find((p) => p.name === rawOptimistic)
+    : undefined;
+  const isOptimisticConflicting =
+    !isSwitching &&
+    Boolean(
+      conversationModel &&
+      optimisticProfileObj &&
+      optimisticProfileObj.model !== conversationModel,
+    );
+  const optimisticActiveProfile = isOptimisticConflicting
+    ? undefined
+    : rawOptimistic;
+
   // Resolution priority (mirrors the former SwitchProfileButton):
-  //   1. Optimistic (just-clicked) — instant feedback before the refetch.
+  //   1. Optimistic (just-clicked) — during an in-flight switch, or if not
+  //      conflicting with confirmed conversation data.
   //   2. Profile stamped on the conversation, validated against the live list
-  //      so a since-deleted/renamed profile falls through.
+  //      AND confirmed to match the conversation's running llm_model. A stale
+  //      browser stamp whose model disagrees with backend llm_model falls through
+  //      to model matching.
   //   3. Profile whose model matches the running llm_model.
   //   4. Before the first message, a cloud member's home pick, else the
   //      active agent profile's own LLM, which the launch runs, else the
   //      user-level active_profile.
   const stampedProfile = conversation?.active_profile ?? null;
+  const stampedProfileObj = stampedProfile
+    ? profiles.find((p) => p.name === stampedProfile)
+    : undefined;
+  const isStampConflicting = Boolean(
+    stampedProfileObj &&
+    conversationModel &&
+    stampedProfileObj.model !== conversationModel,
+  );
   const conversationProfile =
-    stampedProfile && profiles.some((p) => p.name === stampedProfile)
-      ? stampedProfile
-      : null;
+    stampedProfileObj && !isStampConflicting ? stampedProfile : null;
+
+  // When a confirmed fetch disagrees with browser metadata, repair or clear the
+  // stored stamp without dropping other metadata fields.
+  useEffect(() => {
+    if (!conversationId || !conversationModel) return;
+    if (stampedProfile) {
+      const stamped = profiles.find((p) => p.name === stampedProfile);
+      if (stamped && stamped.model !== conversationModel) {
+        const repaired =
+          profiles.find((p) => p.model === conversationModel)?.name ?? null;
+        mergeStoredConversationMetadata(conversationId, {
+          active_profile: repaired,
+          stamped_at: new Date().toISOString(),
+        });
+      }
+    }
+    if (!isSwitching) {
+      const opt =
+        useModelStore.getState().activeProfileByConversation[conversationId];
+      if (opt) {
+        const optProfile = profiles.find((p) => p.name === opt);
+        if (optProfile && optProfile.model !== conversationModel) {
+          useModelStore.getState().clearActiveProfile(conversationId);
+        }
+      }
+    }
+  }, [
+    conversationId,
+    conversationModel,
+    stampedProfile,
+    profiles,
+    isSwitching,
+  ]);
+
   const activeAgentProfile = agentProfiles?.profiles?.find(
     (profile) =>
       profile.id != null &&
@@ -172,7 +233,19 @@ export function useChatInputLlmProfileState(): ChatInputLlmProfileState {
 
   const selectProfile = useCallback(
     (profileName: string) => {
-      if (!canSwitchProfile || profileName === currentProfileName) return;
+      if (!canSwitchProfile) return;
+      const selectedProfile = profiles.find((p) => p.name === profileName);
+      const isAlreadyRunningInConversation =
+        conversationId &&
+        conversationModel &&
+        selectedProfile?.model === conversationModel &&
+        profileName === currentProfileName;
+      if (
+        profileName === currentProfileName &&
+        (isAlreadyRunningInConversation || !conversationId)
+      ) {
+        return;
+      }
       if (!conversationId) {
         // A home-page LLM profile pick is an explicit model choice made before
         // the first message: mark it for this (backend, org) so the next home
@@ -206,7 +279,9 @@ export function useChatInputLlmProfileState(): ChatInputLlmProfileState {
       canManageOrgProfiles,
       canSwitchProfile,
       conversationId,
+      conversationModel,
       currentProfileName,
+      profiles,
       setHomeLlmProfile,
       switchAndLog,
       ownsHomeLlm,
