@@ -245,7 +245,6 @@ describe("ChangeAgentButton mode selection", () => {
     expect(button).toHaveClass(
       "flex",
       "items-center",
-      "rounded-[100px]",
       "border",
       "border-transparent",
       "text-muted",

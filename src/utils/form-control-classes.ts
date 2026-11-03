@@ -47,7 +47,7 @@ export const formControlMutedHoverClassName =
 
 /** Text/icon pill triggers in the chat input actions row. */
 export const chatInputPillButtonClassName = cn(
-  "inline-flex items-center gap-1 rounded-[100px] border border-transparent px-1.5",
+  "inline-flex items-center gap-1 rounded-pill border border-transparent px-1.5",
   "text-sm font-normal leading-5 text-muted whitespace-nowrap min-w-0 cursor-pointer",
   formControlTransitionClassName,
   formControlMutedHoverClassName,

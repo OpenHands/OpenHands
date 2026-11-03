@@ -428,3 +428,15 @@ describe("compact font-size composition", () => {
     },
   );
 });
+
+describe("named radius composition", () => {
+  it.each(["pill", "composer", "file-action", "facet-control"])(
+    "lets callers override the %s radius while preserving directional overrides",
+    (name) => {
+      const radius = `rounded-${name}`;
+      expect(cn("rounded-xl", radius)).toBe(radius);
+      expect(cn(radius, "rounded-lg")).toBe("rounded-lg");
+      expect(cn(radius, "rounded-t-none")).toBe(`${radius} rounded-t-none`);
+    },
+  );
+});

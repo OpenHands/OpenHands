@@ -600,6 +600,16 @@ describe("vite library build", () => {
     expect(declarations(recipe("text-2xs"))).toEqual({ "font-size": "11px" });
     expect(declarations(recipe("text-3xs"))).toEqual({ "font-size": "10px" });
 
+    const radiusContracts = {
+      "rounded-pill": "100px",
+      "rounded-composer": "15px",
+      "rounded-file-action": "7px",
+      "rounded-facet-control": "3px",
+    };
+    for (const [name, radius] of Object.entries(radiusContracts)) {
+      expect(declarations(recipe(name))).toEqual({ "border-radius": radius });
+    }
+
     // `package.json` routes `require` here; stripped CSS imports must not
     // leave it unparseable.
     expect(() => new Script(file("index.cjs"))).not.toThrow();
