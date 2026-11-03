@@ -86,7 +86,7 @@ function ScriptFile({
         />
         <span className="truncate">{entry.path}</span>
         {isEntrypoint ? (
-          <span className="shrink-0 rounded-md bg-surface-raised px-2 py-0.5 text-[10px] font-medium text-muted">
+          <span className="shrink-0 rounded-md bg-surface-raised px-2 py-0.5 text-3xs font-medium text-muted">
             {t(I18nKey.AUTOMATIONS$DETAIL$SCRIPT_ENTRYPOINT)}
           </span>
         ) : null}

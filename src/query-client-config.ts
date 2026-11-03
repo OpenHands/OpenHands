@@ -1,4 +1,9 @@
-import { QueryCache, MutationCache, QueryClient } from "@tanstack/react-query";
+import {
+  QueryCache,
+  MutationCache,
+  QueryClient,
+  type Query,
+} from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import i18n from "#/i18n";
 import { I18nKey } from "./i18n/declaration";
@@ -7,6 +12,7 @@ import { displayErrorToast } from "./utils/custom-toast-handlers";
 import { getActiveBackend } from "#/api/backend-registry/active-store";
 import { recordBackendSuccess } from "#/api/backend-registry/health-store";
 import { getQueryRetryDelay } from "./utils/rate-limit-retry";
+import { isTransientRequestError } from "./utils/transient-error-retry";
 
 const handle401Error = (error: AxiosError, client: QueryClient) => {
   if (error?.response?.status === 401 || error?.status === 401) {
@@ -30,6 +36,7 @@ const isActiveCloudBackendAuthError = (error: unknown) => {
 const shownErrors = new Set<string>();
 
 export const createAgentServerQueryClient = () => {
+  const reportedQueryErrors = new WeakMap<Query<unknown, unknown>, string>();
   const client = new QueryClient({
     defaultOptions: {
       queries: {
@@ -43,6 +50,7 @@ export const createAgentServerQueryClient = () => {
     },
     queryCache: new QueryCache({
       onSuccess: (_data, query) => {
+        reportedQueryErrors.delete(query);
         const backendId =
           query.meta?.backendId ?? query.options.meta?.backendId;
         if (typeof backendId === "string") {
@@ -59,8 +67,15 @@ export const createAgentServerQueryClient = () => {
         const disableToast =
           query.meta?.disableToast ?? query.options.meta?.disableToast;
 
+        // Keep cached content during a transient refresh failure; the query
+        // still exposes its error, and the next successful fetch clears it.
+        if (query.state.data !== undefined && isTransientRequestError(error))
+          return;
+
         if (!disableToast && !isActiveCloudBackendAuthError(error)) {
           const errorMessage = retrieveAxiosErrorMessage(error);
+          if (reportedQueryErrors.get(query) === (errorMessage || "")) return;
+          reportedQueryErrors.set(query, errorMessage || "");
 
           if (!shownErrors.has(errorMessage || "")) {
             displayErrorToast(errorMessage || i18n.t(I18nKey.ERROR$GENERIC));

@@ -1,58 +1,94 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { assertActiveEnvironment } from "#/utils/assert-active-environment";
+import {
+  useMutation,
+  useQueryClient,
+  type InfiniteData,
+} from "@tanstack/react-query";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import type {
+  AppConversation,
+  AppConversationPage,
+} from "#/api/conversation-service/agent-server-conversation-service.types";
+import { useActiveBackend } from "#/contexts/active-backend-context";
+import {
+  CONVERSATION_QUERY_KEYS,
+  DEFAULT_CONVERSATION_PAGE_SIZE,
+} from "../query/query-keys";
 
 export const useUpdateConversation = () => {
   const queryClient = useQueryClient();
+  const { backend, orgId } = useActiveBackend();
+  const listKey = CONVERSATION_QUERY_KEYS.paginated(
+    DEFAULT_CONVERSATION_PAGE_SIZE,
+    backend.id,
+    orgId,
+  );
+  const detailKey = (id: string) =>
+    CONVERSATION_QUERY_KEYS.detail(id, backend.id, orgId);
 
   return useMutation({
-    mutationFn: (variables: { conversationId: string; newTitle: string }) =>
-      AgentServerConversationService.updateConversationTitle(
+    mutationFn: (variables: { conversationId: string; newTitle: string }) => {
+      assertActiveEnvironment({ backend, orgId });
+      return AgentServerConversationService.updateConversationTitle(
         variables.conversationId,
         variables.newTitle,
-      ),
-    onMutate: async (variables) => {
-      await queryClient.cancelQueries({ queryKey: ["user", "conversations"] });
-      const previousConversations = queryClient.getQueryData([
-        "user",
-        "conversations",
+      );
+    },
+    onMutate: async ({ conversationId, newTitle }) => {
+      await Promise.all([
+        queryClient.cancelQueries({ queryKey: listKey, exact: true }),
+        queryClient.cancelQueries({
+          queryKey: detailKey(conversationId),
+          exact: true,
+        }),
       ]);
-
-      queryClient.setQueryData(
-        ["user", "conversations"],
-        (old: { id: string; title: string }[] | undefined) =>
-          old?.map((conv) =>
-            conv.id === variables.conversationId
-              ? { ...conv, title: variables.newTitle }
-              : conv,
-          ),
+      const previousList =
+        queryClient.getQueryData<InfiniteData<AppConversationPage>>(listKey);
+      const previousDetail = queryClient.getQueryData<AppConversation>(
+        detailKey(conversationId),
       );
-
-      // Also optimistically update the active conversation query
-      queryClient.setQueryData(
-        ["user", "conversation", variables.conversationId],
-        (old: { title: string } | undefined) =>
-          old ? { ...old, title: variables.newTitle } : old,
+      const rename = (conversation: AppConversation) =>
+        conversation.id === conversationId
+          ? {
+              ...conversation,
+              title: newTitle,
+              title_generation: null,
+              updated_at: new Date().toISOString(),
+            }
+          : conversation;
+      queryClient.setQueryData<InfiniteData<AppConversationPage>>(
+        listKey,
+        (old) =>
+          old
+            ? {
+                ...old,
+                pages: old.pages.map((page) => ({
+                  ...page,
+                  items: page.items.map(rename),
+                })),
+              }
+            : old,
       );
-
-      return { previousConversations };
+      queryClient.setQueryData<AppConversation>(
+        detailKey(conversationId),
+        (old) => (old ? rename(old) : old),
+      );
+      return { previousList, previousDetail };
     },
-    onError: (err, variables, context) => {
-      if (context?.previousConversations) {
+    onError: (_error, variables, context) => {
+      if (context?.previousList)
+        queryClient.setQueryData(listKey, context.previousList);
+      if (context?.previousDetail)
         queryClient.setQueryData(
-          ["user", "conversations"],
-          context.previousConversations,
+          detailKey(variables.conversationId),
+          context.previousDetail,
         );
-      }
     },
-    onSettled: (data, error, variables) => {
-      // Invalidate and refetch the conversation list to show the updated title
-      queryClient.invalidateQueries({
-        queryKey: ["user", "conversations"],
-      });
-
-      // Also invalidate the specific conversation query
-      queryClient.invalidateQueries({
-        queryKey: ["user", "conversation", variables.conversationId],
+    onSettled: (_data, _error, variables) => {
+      void queryClient.invalidateQueries({ queryKey: listKey, exact: true });
+      void queryClient.invalidateQueries({
+        queryKey: detailKey(variables.conversationId),
+        exact: true,
       });
     },
   });

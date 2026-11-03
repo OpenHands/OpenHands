@@ -14,19 +14,25 @@ import { useEventStore } from "#/stores/use-event-store";
 import useMetricsStore from "#/stores/metrics-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { useBrowserStore } from "#/stores/browser-store";
-import { useCommandStore } from "#/stores/command-store";
+import { getTerminalCommands } from "#/utils/terminal-commands";
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import { useConversationStateStore } from "#/stores/conversation-state-store";
 import { useGoalStore } from "#/stores/goal-store";
 import { ExecutionStatus } from "#/types/agent-server/core";
 import { useUserConversation } from "#/hooks/query/use-user-conversation";
 import { useWebSocket } from "#/hooks/use-websocket";
+import { useLoadOlderEvents } from "#/hooks/use-load-older-events";
 import EventService from "#/api/event-service/event-service.api";
 import {
   getStoredConversationMetadata,
   setStoredConversationMetadata,
 } from "#/api/conversation-metadata-store";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
+import {
+  setActiveSelection,
+  setRegisteredBackends,
+  __resetActiveStoreForTests,
+} from "#/api/backend-registry/active-store";
 import type { MessageEvent } from "#/types/agent-server/core";
 import { isStreamingDeltaEvent } from "#/types/agent-server/type-guards";
 
@@ -167,7 +173,6 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
     useOptimisticUserMessageStore.getState().clearPendingMessages();
     useBrowserStore.getState().reset();
     useMetricsStore.getState().resetMetrics();
-    useCommandStore.setState({ commands: [] });
     useErrorMessageStore.getState().removeErrorMessage();
     useConversationStateStore.getState().reset();
     useGoalStore.setState({ statusByConversation: {} });
@@ -241,6 +246,115 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
     expect(getStoredConversationMetadata("conv-switch")?.active_profile).toBe(
       "fast-opus",
     );
+  });
+
+  it("shows persisted Cloud messages while runtime count is pending without opening the socket early", async () => {
+    setRegisteredBackends([
+      {
+        id: "history-cloud",
+        name: "Cloud",
+        kind: "cloud",
+        host: "https://cloud.test",
+        apiKey: "test-key",
+      },
+    ]);
+    setActiveSelection({ backendId: "history-cloud", orgId: "org-a" });
+    let resolveCount!: (count: number) => void;
+    vi.mocked(EventService.getEventCount).mockReturnValue(
+      new Promise((resolve) => {
+        resolveCount = resolve;
+      }),
+    );
+    const first = createUserMessageEvent("persisted-first");
+    const later = createUserMessageEvent("persisted-later");
+    vi.mocked(EventService.searchEvents)
+      .mockResolvedValueOnce({ items: [first], next_page_id: null })
+      .mockResolvedValueOnce({ items: [later, first], next_page_id: null });
+    let loading = true;
+    let older: ReturnType<typeof useLoadOlderEvents>;
+    function Probe() {
+      older = useLoadOlderEvents("cloud-pending");
+      loading = useConversationWebSocket()?.isLoadingHistory ?? true;
+      return null;
+    }
+    const view = render(
+      <QueryClientProvider client={queryClient}>
+        <ConversationWebSocketProvider
+          conversationId="cloud-pending"
+          conversationUrl="https://runtime.test/api"
+        >
+          <Probe />
+        </ConversationWebSocketProvider>
+      </QueryClientProvider>,
+    );
+    try {
+      await waitFor(() => expect(eventIds()).toContain(first.id));
+      expect(loading).toBe(false);
+      await waitFor(() => expect(older.hasMore).toBe(false));
+      await act(async () => older.loadOlder());
+      expect(EventService.searchEvents).toHaveBeenCalledTimes(1);
+      expect(wsCapture.calls).toHaveLength(0);
+      await act(async () => resolveCount(80));
+      await waitFor(() => expect(wsCapture.mainOptions).not.toBeNull());
+      expect(resolveQueryParams(wsCapture.mainOptions)).toEqual({
+        after_seq: "29",
+      });
+      expect(eventIds()).toEqual([first.id, later.id]);
+    } finally {
+      view.unmount();
+      queryClient.clear();
+      window.localStorage.clear();
+      __resetActiveStoreForTests();
+    }
+  });
+
+  it("clears the displayed transcript when the organization changes for the same conversation id", async () => {
+    setRegisteredBackends([
+      {
+        id: "scoped-cloud",
+        name: "Cloud",
+        kind: "cloud",
+        host: "https://cloud.test",
+        apiKey: "test",
+      },
+    ]);
+    setActiveSelection({ backendId: "scoped-cloud", orgId: "org-a" });
+    const child = (
+      <QueryClientProvider client={queryClient}>
+        <ConversationWebSocketProvider
+          conversationId="same-id"
+          conversationUrl={null}
+        >
+          <div />
+        </ConversationWebSocketProvider>
+      </QueryClientProvider>
+    );
+    const view = render(child);
+    try {
+      await waitFor(() => expect(eventIds()).toContain("user-msg-same-id"));
+      vi.mocked(EventService.searchEvents).mockImplementation(
+        () => new Promise(() => {}),
+      );
+      act(() =>
+        setActiveSelection({ backendId: "scoped-cloud", orgId: "org-b" }),
+      );
+      view.rerender(
+        <QueryClientProvider client={queryClient}>
+          <ConversationWebSocketProvider
+            conversationId="same-id"
+            conversationUrl={null}
+          >
+            <div />
+          </ConversationWebSocketProvider>
+        </QueryClientProvider>,
+      );
+      expect(eventIds()).toEqual([]);
+    } finally {
+      view.unmount();
+      queryClient.clear();
+      window.localStorage.clear();
+      __resetActiveStoreForTests();
+    }
   });
 
   it("keeps the session key out of WebSocket query parameters", async () => {
@@ -651,7 +765,7 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
       deliver(action);
       deliver(observation);
 
-      expect(useCommandStore.getState().commands).toEqual([
+      expect(getTerminalCommands(useEventStore.getState().events)).toEqual([
         { content: "echo hi", type: "input" },
         { content: "hi\n", type: "output" },
       ]);

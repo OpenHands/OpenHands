@@ -6,4 +6,5 @@ export { InstallServerModal } from "./install-server-modal";
 export { SaveAsSecretToggle } from "./save-as-secret-toggle";
 export { CustomServerEditor } from "./custom-server-editor";
 export { McpToolbar } from "./mcp-toolbar";
+export { McpManagedInSettings } from "./mcp-managed-in-settings";
 export type { McpSectionFilter } from "./mcp-section-filter";

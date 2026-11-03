@@ -133,6 +133,7 @@ export default function AutomationSetupNew() {
             toolbarPortal={toolbarElement}
             showInlineHeader={false}
             reserveComposerSpace
+            onAskAgent={startConversationFromPrompt}
           />
         ) : (
           <div

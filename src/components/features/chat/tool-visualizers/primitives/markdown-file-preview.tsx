@@ -183,7 +183,7 @@ export function MarkdownFilePreview({
       <div className="flex h-10 items-center justify-between gap-2 border-t border-border px-3">
         <div className="flex min-w-0 items-center gap-1.5">
           <FileIcon className="h-3.5 w-3.5 flex-shrink-0 text-muted" />
-          <Typography.Text className="truncate font-mono text-[11px] leading-4 tracking-[0.11px] text-muted">
+          <Typography.Text className="truncate font-mono text-2xs leading-4 tracking-[0.11px] text-muted">
             {fileName}
           </Typography.Text>
         </div>
@@ -194,7 +194,7 @@ export function MarkdownFilePreview({
             className="flex shrink-0 cursor-pointer items-center gap-1 transition-opacity hover:opacity-80"
             data-testid="markdown-file-preview-view"
           >
-            <Typography.Text className="text-[11px] leading-4 tracking-[0.11px] text-contrast">
+            <Typography.Text className="text-2xs leading-4 tracking-[0.11px] text-contrast">
               {t(I18nKey.COMMON$VIEW)}
             </Typography.Text>
             <ArrowUpRight className="text-contrast" size={16} />
