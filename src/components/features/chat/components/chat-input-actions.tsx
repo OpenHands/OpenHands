@@ -252,7 +252,9 @@ export function ChatInputActions({
   const showModelInline = fitWithOverflow.showModelInline;
   const showAgentProfileInline = fitWithOverflow.showAgentProfileInline;
   const showAddFileInline = true;
-  const showAgentStatusInline = actionsRowWidth >= 360;
+  // Below this width the status label is visually hidden, but the status
+  // control itself (Stop, Resume, progress) always stays in the row.
+  const showAgentStatusLabel = actionsRowWidth >= 360;
 
   // Which chat-input LLM picker to show — the constrained ACP model picker or
   // the LLM-profile picker (unit-tested in `resolve-picker-kind.test.ts`).
@@ -576,8 +578,9 @@ export function ChatInputActions({
         ref={rightSectionRef}
         className="ml-auto flex shrink-0 items-center gap-2"
       >
-        {showAgentStatusInline && conversationId && (
+        {conversationId && (
           <AgentStatus
+            compact={!showAgentStatusLabel}
             handleStop={handlePauseAgent}
             handleResumeAgent={handleResumeAgentClick}
             disabled={disabled}
