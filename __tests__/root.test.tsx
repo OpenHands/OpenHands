@@ -158,6 +158,8 @@ describe("App root agent-server availability guard", () => {
       .__AGENT_CANVAS_AUTH_REQUIRED__;
     delete (window as unknown as Record<string, unknown>)
       .__AGENT_CANVAS_LOCK_TO_CLOUD__;
+    delete (window as unknown as Record<string, unknown>)
+      .__AGENT_CANVAS_SKIP_ONBOARDING__;
     (
       window as unknown as Record<string, unknown>
     ).__AGENT_CANVAS_SESSION_API_KEY__ = "test-session-key";
@@ -165,6 +167,8 @@ describe("App root agent-server availability guard", () => {
   });
 
   afterEach(() => {
+    delete (window as unknown as Record<string, unknown>)
+      .__AGENT_CANVAS_SKIP_ONBOARDING__;
     Object.defineProperty(window, "location", {
       configurable: true,
       value: ORIGINAL_LOCATION,
@@ -193,6 +197,28 @@ describe("App root agent-server availability guard", () => {
     expect(
       screen.queryByTestId("api-key-entry-screen"),
     ).not.toBeInTheDocument();
+  });
+
+  it("keeps public-mode API-key entry when the operator skips onboarding", async () => {
+    (
+      window as unknown as Record<string, unknown>
+    ).__AGENT_CANVAS_SKIP_ONBOARDING__ = true;
+    vi.stubEnv("VITE_AUTH_REQUIRED", "true");
+    vi.stubEnv("VITE_SESSION_API_KEY", "");
+    delete (window as unknown as Record<string, unknown>)
+      .__AGENT_CANVAS_SESSION_API_KEY__;
+    window.localStorage.clear();
+    __resetActiveStoreForTests();
+
+    await renderApp();
+
+    expect(
+      await screen.findByTestId("api-key-entry-screen"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("first-run-onboarding-screen"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("app-outlet")).not.toBeInTheDocument();
   });
 
   it("shows first-run onboarding before the recovery modal when no backend is configured", async () => {
@@ -745,79 +771,98 @@ describe("App root agent-server availability guard", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows first-run onboarding for the launcher-seeded default-local backend even when the agent-server reports a configured LLM", async () => {
-    // Regression for mock-llm-onboarding-regressions.spec.ts:16
-    // ("keeps the modal open on backdrop click and Escape") and
-    // mock-llm-auth-modes.spec.ts:57 ("reaches the onboarding modal
-    // without pre-seeded localStorage"). The shared mock-LLM
-    // agent-server retains a previously-configured LLM across browser
-    // sessions, so a genuinely fresh browser install (launcher-seeded
-    // default-local backend, no `openhands-onboarded` flag) must NOT
-    // have onboarding auto-marked complete by backend readiness.
-    vi.stubEnv("VITE_BACKEND_BASE_URL", "http://127.0.0.1:8000");
-    vi.stubEnv("VITE_SESSION_API_KEY", "test-session-key");
-    // The launcher-seeded default-local backend (id
-    // SEEDED_DEFAULT_BACKEND_ID) is created from these env stubs by
-    // readStoredBackends().
-    __resetActiveStoreForTests();
-    server.use(
-      http.get("*/api/settings", () =>
-        HttpResponse.json({
-          llm_api_key_is_set: true,
-          agent_settings: {
-            llm: { model: "openai/gpt-5.5", api_key: "stored" },
-          },
-        }),
-      ),
-      http.get("*/server_info", () =>
-        HttpResponse.json({ uptime: 0, idle_time: 0, version: "1.59.0" }),
-      ),
-    );
+  it.each([
+    {
+      skipOnboarding: false,
+      visible: "first-run-onboarding-screen",
+      hidden: "app-outlet",
+    },
+    {
+      skipOnboarding: true,
+      visible: "app-outlet",
+      hidden: "first-run-onboarding-screen",
+    },
+  ])(
+    "uses the operator opt-in for a configured launcher-seeded backend: $skipOnboarding",
+    async ({ skipOnboarding, visible, hidden }) => {
+      // Regression for mock-llm-onboarding-regressions.spec.ts:16
+      // ("keeps the modal open on backdrop click and Escape") and
+      // mock-llm-auth-modes.spec.ts:57 ("reaches the onboarding modal
+      // without pre-seeded localStorage"). The shared mock-LLM
+      // agent-server retains a previously-configured LLM across browser
+      // sessions, so a genuinely fresh browser install (launcher-seeded
+      // default-local backend, no `openhands-onboarded` flag) must NOT
+      // have onboarding auto-marked complete by backend readiness.
+      vi.stubEnv("VITE_BACKEND_BASE_URL", "http://127.0.0.1:8000");
+      vi.stubEnv("VITE_SESSION_API_KEY", "test-session-key");
+      (
+        window as unknown as Record<string, unknown>
+      ).__AGENT_CANVAS_SKIP_ONBOARDING__ = skipOnboarding;
+      // The launcher-seeded default-local backend (id
+      // SEEDED_DEFAULT_BACKEND_ID) is created from these env stubs by
+      // readStoredBackends().
+      __resetActiveStoreForTests();
+      server.use(
+        http.get("*/api/settings", () =>
+          HttpResponse.json({
+            llm_api_key_is_set: true,
+            agent_settings: {
+              llm: { model: "openai/gpt-5.5", api_key: "stored" },
+            },
+          }),
+        ),
+        http.get("*/server_info", () =>
+          HttpResponse.json({ uptime: 0, idle_time: 0, version: "1.59.0" }),
+        ),
+      );
 
-    await renderApp(["/"]);
+      await renderApp(["/"]);
 
-    await waitFor(() => {
+      expect(await screen.findByTestId(visible)).toBeInTheDocument();
+      expect(screen.queryByTestId(hidden)).not.toBeInTheDocument();
+
       expect(
-        screen.getByTestId("first-run-onboarding-screen"),
-      ).toBeInTheDocument();
-    });
-    expect(screen.queryByTestId("app-outlet")).not.toBeInTheDocument();
+        window.localStorage.getItem(ONBOARDING_COMPLETED_STORAGE_KEY),
+      ).toBeNull();
+    },
+  );
 
-    expect(
-      window.localStorage.getItem(ONBOARDING_COMPLETED_STORAGE_KEY),
-    ).toBeNull();
-  });
+  it.each([false, true])(
+    "renders Cloud login for a fresh locked first run with skip-onboarding=%s",
+    async (skipOnboarding) => {
+      (
+        window as unknown as Record<string, unknown>
+      ).__AGENT_CANVAS_SKIP_ONBOARDING__ = skipOnboarding;
+      vi.stubEnv("VITE_LOCK_TO_CLOUD", "https://app.all-hands.dev");
+      vi.stubEnv("VITE_SESSION_API_KEY", "");
+      delete (window as unknown as Record<string, unknown>)
+        .__AGENT_CANVAS_SESSION_API_KEY__;
+      __resetActiveStoreForTests();
 
-  it("renders Cloud login directly for a fresh locked-to-Cloud first run", async () => {
-    vi.stubEnv("VITE_LOCK_TO_CLOUD", "https://app.all-hands.dev");
-    vi.stubEnv("VITE_SESSION_API_KEY", "");
-    delete (window as unknown as Record<string, unknown>)
-      .__AGENT_CANVAS_SESSION_API_KEY__;
-    __resetActiveStoreForTests();
+      await renderApp(["/"]);
 
-    await renderApp(["/"]);
+      await waitFor(() => {
+        expect(
+          screen.getByTestId("first-run-onboarding-screen"),
+        ).toBeInTheDocument();
+      });
 
-    await waitFor(() => {
+      expect(await screen.findByTestId("onboarding-modal")).toBeInTheDocument();
+      expect(screen.getByTestId("add-backend-cloud-title")).toBeVisible();
+      expect(screen.getByTestId("add-backend-login-button")).toBeVisible();
       expect(
-        screen.getByTestId("first-run-onboarding-screen"),
-      ).toBeInTheDocument();
-    });
-
-    expect(await screen.findByTestId("onboarding-modal")).toBeInTheDocument();
-    expect(screen.getByTestId("add-backend-cloud-title")).toBeVisible();
-    expect(screen.getByTestId("add-backend-login-button")).toBeVisible();
-    expect(
-      screen.queryByTestId("onboarding-step-check-backend"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByTestId("onboarding-progress-bar"),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByTestId("add-backend-close")).not.toBeInTheDocument();
-    expect(
-      screen.queryByTestId("add-backend-advanced-toggle"),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByTestId("app-outlet")).not.toBeInTheDocument();
-  });
+        screen.queryByTestId("onboarding-step-check-backend"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("onboarding-progress-bar"),
+      ).not.toBeInTheDocument();
+      expect(screen.queryByTestId("add-backend-close")).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("add-backend-advanced-toggle"),
+      ).not.toBeInTheDocument();
+      expect(screen.queryByTestId("app-outlet")).not.toBeInTheDocument();
+    },
+  );
 
   it("redirects unauthenticated locked-cookie deployments to main app login", async () => {
     const assign = vi.fn();
