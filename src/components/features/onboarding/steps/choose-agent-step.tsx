@@ -119,6 +119,17 @@ export function ChooseAgentStep({
   }, [isSelectionOffered, onSelect]);
 
   const handleNext = () => {
+    // On a local backend, picking an ACP agent issues no settings write and
+    // advances immediately. The choice is finalized in the subsequent ACP step
+    // (use-apply-onboarding-agent-profile) when saving the default profile.
+    // If the user skips or closes onboarding before then, settings remain untouched.
+    // Choosing OpenHands still writes to restore settings previously left on ACP.
+    // On Cloud, global agent_settings is what launches run, so the write is preserved.
+    if (backendKind === "local" && selectedAgentId !== "openhands") {
+      onNext();
+      return;
+    }
+
     // The diff builder seeds the preferred default model (Vertex-safe for
     // Gemini) when none is passed.
     const diff = buildAcpAgentSettingsDiff(selectedAgentId);
