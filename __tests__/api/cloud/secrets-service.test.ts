@@ -79,6 +79,32 @@ describe("SecretsService against cloud backend", () => {
     expect(secrets.map((s) => s.name)).toEqual(["ALPHA", "BETA", "GAMMA"]);
   });
 
+  it("preserves the server-reported scope on listed secrets", async () => {
+    // The Cloud search endpoint tags each item personal or organization;
+    // personal keeps its stored name while a colliding org-shared secret
+    // is listed under a display-only suffixed name (issue #17710).
+    fetchMock.mockResolvedValue(
+      mockJsonResponse({
+        items: [
+          { name: "GITHUB_TOKEN", description: "personal", scope: "personal" },
+          {
+            name: "GITHUB_TOKEN_2",
+            description: "organization",
+            scope: "organization",
+          },
+        ],
+        next_page_id: null,
+      }),
+    );
+
+    const secrets = await SecretsService.getSecrets();
+
+    expect(secrets.map((s) => ({ name: s.name, scope: s.scope }))).toEqual([
+      { name: "GITHUB_TOKEN", scope: "personal" },
+      { name: "GITHUB_TOKEN_2", scope: "organization" },
+    ]);
+  });
+
   it("creates a secret via direct POST /api/v1/secrets", async () => {
     await SecretsService.createSecret(
       "OPENAI_API_KEY",
