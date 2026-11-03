@@ -9,6 +9,10 @@ Keep this adoption scoped: scanning every string can mistake program tags for
 color utilities. Review newly included findings before extending the file list;
 the shared exact legacy-token exceptions remain unchanged.
 
+## Arbitrary-value rollout
+
+`shadcn/no-arbitrary-values` warns globally. Four migrated owners reject arbitrary class values at error severity: `command-menu.tsx`, `backend-version.tsx`, `settings-nav-header.tsx`, and `backend-synced-settings-badge.tsx`. The rest of the repository retains warning severity during ongoing design-system migration.
+
 ## Inline-style rollout
 
 `shadcn/no-inline-styles` runs at warning severity across source, including UI
@@ -27,7 +31,6 @@ implementation must accept an opaque object. Other lint policies keep their scop
 Public skills are loaded from the `@openhands/extensions` npm package at build time through `SKILLS_CATALOG` from `@openhands/extensions/skills`. `SkillsService` maps catalog entries to `SkillInfo` and merges them with user and project skills fetched from the Agent Server using `load_public: false`.
 
 Bundled catalog skills use the persisted `enabled_skills` allow-list defaulted from `DEFAULT_ENABLED_SKILL_NAMES`. User and project skills remain enabled unless listed in `disabled_skills`. Keep this logic centralized in `src/utils/skill-enablement.ts`. The Agent Server no longer clones the extensions repository or uses `EXTENSIONS_REF` for public skills.
-
 
 ## Workspace files
 
@@ -112,7 +115,6 @@ if (backend.kind === "clould") { … }
 
 When adding code that needs a new string, decide up front which rule it falls under: if a user reads it → Rule 1; if the program reads it → Rule 2; if it tags a union → Rule 3. Do not commit code that fails any of these rules just because the linter happens not to catch it.
 
-
 - Vite dev mode can black-screen on first load with `504 Outdated Optimize Dep` if core client-entry deps are not prebundled; keep `react`, `react/jsx-runtime`, `react-dom/client`, and `react-router/dom` in `optimizeDeps.include`.
 - Vercel deployment note: React Router builds for this repo must keep `build/client` intact on actual Vercel builds and include `presets: [vercelPreset()]` from `@vercel/react-router/vite`; flattening `build/client` during a Vercel build produces deployments with empty outputs (`routes: null`, no static files) and a production 404.
 
@@ -184,7 +186,5 @@ When adding code that needs a new string, decide up front which rule it falls un
   - Conditional UI is `React.lazy`'d to keep eager graphs small. Current examples include `AlertBanner` and `CommandMenu` in `root-layout.tsx`, `SettingsModal` in the sidebar, and backend/onboarding modals in `root.tsx`. Tests that assert on these mounted nodes may need `await screen.findByTestId(...)` / `waitFor(...)` instead of synchronous `getByTestId(...)`.
   - The terminal tab (`components/features/terminal/terminal.tsx`) is `React.lazy`'d in `conversation-tab-content.tsx` alongside the other tabs, so xterm + addon-fit + xterm.css don't enter the conversation route's eager graph (they ship as a separate `terminal-*.js` chunk now).
   - `components/conversation-events/chat/` and `components/features/command-menu/` deliberately have no barrel `index.ts`. Import deep paths (`./messages`, `./event-message-components/<name>`, `./event-content-helpers/should-render-event`, `command-menu/command-menu`) so Vite dev doesn't fan out a barrel.
-
-
 
 - ESLint config (flat, ESLint 9): the project uses `eslint.config.js` (not `.eslintrc`) and runs on `eslint@9.x`, not 10. The constraint pinning us below 10 is `eslint-plugin-react@7.37.x`, which still calls `context.getFilename()` at rule-load time — that API was removed in ESLint 10 and `@eslint/compat`'s `fixupPluginRules` does NOT shim it. Don't try to bump eslint past 9 until eslint-plugin-react ships a v10-compatible release. Import rules come from `eslint-plugin-import-x` (the maintained fork of `eslint-plugin-import`) but are registered under both `import-x/` and `import/` prefixes via `plugins: { import: importXPlugin, ... }` so existing `// eslint-disable-next-line import/...` directives keep working. `linterOptions.reportUnusedDisableDirectives` is set to `"warn"` (not "off") so stale airbnb-era disable comments still surface in lint output without failing CI. The TS-overrides block has an `ignores: ["src/hooks/query/query-keys.ts"]` so the `no-restricted-syntax` rule banning raw `["settings", ...]` query keys doesn't fire on the file that defines the helpers themselves. No `.npmrc` / `legacy-peer-deps` flag is needed — all our plugins declare ESLint 9 peer compatibility.
