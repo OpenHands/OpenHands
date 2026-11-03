@@ -202,7 +202,7 @@ export function ChatInputModel() {
           position="top"
           alignment="left"
           spacing="none"
-          className="z-[60] mb-2 min-w-50 max-w-80 max-h-[60vh] overflow-y-auto"
+          className="z-60 mb-2 min-w-50 max-w-80 max-h-[60vh] overflow-y-auto"
         >
           <ChatInputModelMenuContent
             model={model}

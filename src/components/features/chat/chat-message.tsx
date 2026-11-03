@@ -246,7 +246,7 @@ export function ChatMessage({
           data-testid="chat-message-expand"
           aria-expanded={false}
           aria-label={t(I18nKey.COMMON$VIEW_MORE)}
-          className="absolute inset-0 z-[1] cursor-pointer rounded-xl border-0 bg-transparent p-0"
+          className="absolute inset-0 z-1 cursor-pointer rounded-xl border-0 bg-transparent p-0"
           onClick={() => setIsExpanded(true)}
         />
       ) : null}
