@@ -41,9 +41,15 @@ export function BtwMessages({ conversationId }: BtwMessagesProps) {
               </span>
             }
             details={
-              isPending
-                ? t(I18nKey.CHAT_INTERFACE$BTW_WAITING_FOR_ANSWER)
-                : (entry.response ?? "")
+              isPending ? (
+                t(I18nKey.CHAT_INTERFACE$BTW_WAITING_FOR_ANSWER)
+              ) : entry.status === "error" ? (
+                <span className="whitespace-pre-wrap break-words text-danger">
+                  {entry.response ?? t(I18nKey.ERROR$GENERIC)}
+                </span>
+              ) : (
+                (entry.response ?? "")
+              )
             }
             initiallyExpanded={!isPending}
             chevronPosition="before"
