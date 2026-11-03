@@ -27,6 +27,7 @@ import { BackLink } from "#/components/features/automations/detail/back-link";
 import { DetailHeader } from "#/components/features/automations/detail/detail-header";
 import { AutomationTagsEditor } from "#/components/features/automations/detail/automation-tags-editor";
 import { DisabledReasonBanner } from "#/components/features/automations/detail/disabled-reason-banner";
+import { DescriptionSection } from "#/components/features/automations/detail/description-section";
 import { PromptSection } from "#/components/features/automations/detail/prompt-section";
 import { ScriptSection } from "#/components/features/automations/detail/script-section";
 import { ConfigurationSection } from "#/components/features/automations/detail/configuration-section";
@@ -299,6 +300,9 @@ export default function AutomationDetail() {
             canEdit={isOwner && !isDraft}
           />
           <DisabledReasonBanner automation={automation} />
+          {automation.description ? (
+            <DescriptionSection description={automation.description} />
+          ) : null}
           {automation.prompt ? (
             <PromptSection prompt={automation.prompt} />
           ) : (

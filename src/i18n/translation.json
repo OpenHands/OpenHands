@@ -11843,6 +11843,24 @@
     "ca": "Connectors",
     "id": "Plugin"
   },
+  "AUTOMATIONS$DETAIL$DESCRIPTION": {
+    "en": "Description",
+    "ja": "説明",
+    "zh-CN": "描述",
+    "zh-TW": "描述",
+    "ko-KR": "설명",
+    "no": "Beskrivelse",
+    "it": "Descrizione",
+    "pt": "Descrição",
+    "es": "Descripción",
+    "ar": "الوصف",
+    "fr": "Description",
+    "tr": "Açıklama",
+    "de": "Beschreibung",
+    "uk": "Опис",
+    "ca": "Descripció",
+    "id": "Deskripsi"
+  },
   "AUTOMATIONS$DETAIL$PROMPT": {
     "en": "Prompt",
     "ja": "プロンプト",
