@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import AutomationSetupNew from "#/routes/automation-setup-new";
@@ -101,6 +101,23 @@ describe("AutomationSetupNew", () => {
     );
     expect(draft.editingAutomationId).toBe("auto-1");
     expect(draft.form.name).toBe("Daily digest");
+  });
+
+  it("keeps the loaded editor when the panel's unmount clears the session", async () => {
+    // Arrange
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue(automation);
+    renderRoute("/automations/setup?automationId=auto-1");
+    await screen.findByTestId("setup-panel-draft");
+
+    // Act: the panel clears its session on unmount, which a StrictMode or
+    // any other remount triggers while the route stays mounted.
+    act(() => clearAutomationFormSession(PENDING_AUTOMATION_SETUP_ID));
+
+    // Assert
+    const draft = JSON.parse(
+      screen.getByTestId("setup-panel-draft").textContent ?? "{}",
+    );
+    expect(draft.editingAutomationId).toBe("auto-1");
   });
 
   it("reloads a saved draft from the draftId query", async () => {

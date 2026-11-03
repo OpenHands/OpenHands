@@ -48,9 +48,12 @@ export default function AutomationSetupNew() {
   useEffect(
     () =>
       subscribeAutomationFormSession(PENDING_AUTOMATION_SETUP_ID, (next) => {
-        setDraft(next ?? (automationId || draftId ? null : BLANK_DRAFT));
+        // The panel clears the session when it unmounts, so a cleared session
+        // must not drop the draft: that would unmount the panel and leave the
+        // page on the loading state, since nothing loads the draft again.
+        if (next) setDraft(next);
       }),
-    [automationId, draftId],
+    [],
   );
 
   useEffect(() => {
