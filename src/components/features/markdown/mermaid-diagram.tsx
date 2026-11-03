@@ -66,7 +66,9 @@ export function MermaidDiagram({ source, fallback }: MermaidDiagramProps) {
   return (
     <div
       data-testid="mermaid-diagram"
-      className="flex justify-center overflow-x-auto rounded-lg border border-surface-raised p-4"
+      // Cap the height so a tall diagram scales down (the SVG keeps its
+      // aspect ratio) instead of filling the page.
+      className="flex justify-center overflow-x-auto rounded-lg border border-surface-raised p-4 [&_svg]:max-h-96"
       // The SVG comes from Mermaid in strict mode, which sanitizes it.
       dangerouslySetInnerHTML={{ __html: state.svg }}
     />
