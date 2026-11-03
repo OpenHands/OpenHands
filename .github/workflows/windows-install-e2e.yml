@@ -104,6 +104,14 @@ jobs:
           New-Item -Path $key -Force | Out-Null
           New-ItemProperty -Path $key -Name RemoteDebuggingAllowed -PropertyType DWord -Value 0 -Force | Out-Null
 
+      # Scratch only: agent-server from SDK v1.59.0 plus the #4502 fix.
+      - name: Build SDK v1.59.0 with the #4502 fix
+        run: |
+          git clone --quiet --depth 1 --branch v1.59.0 https://github.com/OpenHands/software-agent-sdk.git "$env:RUNNER_TEMP\sdk"
+          git -C "$env:RUNNER_TEMP\sdk" apply "$env:GITHUB_WORKSPACE\scratch\pr4502-on-1.59.0.patch"
+          git -C "$env:RUNNER_TEMP\sdk" diff --stat
+          "OH_AGENT_SERVER_LOCAL_PATH=$env:RUNNER_TEMP\sdk" >> $env:GITHUB_ENV
+
       # One step on purpose: the Windows runner kills processes a step started
       # when that step ends, so agent-canvas must live in the step that tests it.
       - name: Start agent-canvas like a user and run the specs
