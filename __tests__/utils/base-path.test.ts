@@ -82,6 +82,24 @@ describe("Agent Canvas absolute URLs", () => {
     ).toBe("https://app.example.com/canvas/settings");
   });
 
+  it("does not treat a hostname matching the base path as the mount point", () => {
+    vi.stubEnv("VITE_BASE_PATH", "/canvas");
+
+    // `https://canvas` ends with `/canvas` only because the scheme slash
+    // precedes the hostname; the hostname itself is not a path segment.
+    expect(buildAgentCanvasUrl("/settings", "https://canvas")).toBe(
+      "https://canvas/canvas/settings",
+    );
+  });
+
+  it("does not treat a localhost hostname matching the base path as the mount point", () => {
+    vi.stubEnv("VITE_BASE_PATH", "/localhost");
+
+    expect(buildAgentCanvasUrl("/settings", "http://localhost")).toBe(
+      "http://localhost/localhost/settings",
+    );
+  });
+
   it("returns a bare path when there is no origin available", () => {
     expect(buildAgentCanvasUrl("/settings", "")).toBe("/settings");
   });
@@ -103,6 +121,14 @@ describe("Agent Canvas base URL", () => {
 
     expect(getAgentCanvasBaseUrl("https://app.example.com/canvas")).toBe(
       "https://app.example.com/canvas",
+    );
+  });
+
+  it("does not treat a hostname matching the base path as the mount point", () => {
+    vi.stubEnv("VITE_BASE_PATH", "/canvas");
+
+    expect(getAgentCanvasBaseUrl("https://canvas")).toBe(
+      "https://canvas/canvas",
     );
   });
 
