@@ -19,6 +19,7 @@ import { useNativeGitIntegrations } from "#/hooks/query/use-native-git-integrati
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useSetupPreflight } from "#/hooks/use-manifest-preflight";
 import { useSetupAction } from "#/manifests/manifest-actions";
+import { MermaidDiagram } from "#/components/features/markdown/mermaid-diagram";
 import {
   supportedActionKinds,
   supportedTriggerKinds,
@@ -507,6 +508,15 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
           {!isLoading && !isUnsupported && currentStep === "form" && (
             <div className="flex flex-col gap-5">
               <p className="text-sm text-muted">{entry.description}</p>
+              {typeof entry.diagram === "string" && entry.diagram && (
+                // The dialog scrolls, so the diagram keeps its full height
+                // instead of shrinking its labels to fit the default cap.
+                <MermaidDiagram
+                  source={entry.diagram}
+                  fallback={null}
+                  className="[&_svg]:max-h-none"
+                />
+              )}
               {entry.setup.form.note && (
                 <p className="text-sm text-muted">{entry.setup.form.note}</p>
               )}
