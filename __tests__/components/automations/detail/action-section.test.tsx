@@ -11,6 +11,22 @@ vi.mock("#/hooks/query/use-automation-tarball-files", () => ({
   }),
 }));
 
+vi.mock("#/hooks/query/use-agent-profiles", () => ({
+  useAgentProfiles: () => ({
+    data: {
+      profiles: [
+        { id: "agent-reviewer", name: "Reviewer", llm_profile_ref: "fast" },
+        { id: "agent-plain", name: "Plain", llm_profile_ref: null },
+      ],
+    },
+    isLoading: false,
+  }),
+}));
+
+vi.mock("#/hooks/query/use-llm-profiles", () => ({
+  useLlmProfiles: () => ({ data: { active_profile: "everyday" } }),
+}));
+
 const automation: Automation = {
   id: "auto-1",
   name: "PR Review Bot",
@@ -39,14 +55,18 @@ describe("ActionSection", () => {
   it("shows the script instead of a prompt for a script automation", () => {
     render(
       <ActionSection
-        automation={{ ...automation, prompt: null, entrypoint: "python main.py" }}
+        automation={{
+          ...automation,
+          prompt: null,
+          entrypoint: "python main.py",
+        }}
       />,
     );
 
     expect(screen.getByText("AUTOMATIONS$DETAIL$SCRIPT")).toBeInTheDocument();
-    expect(screen.getByTestId("automation-script-entrypoint")).toHaveTextContent(
-      "python main.py",
-    );
+    expect(
+      screen.getByTestId("automation-script-entrypoint"),
+    ).toHaveTextContent("python main.py");
     expect(
       screen.queryByTestId("automation-prompt-content"),
     ).not.toBeInTheDocument();
@@ -97,5 +117,52 @@ describe("ActionSection", () => {
     expect(
       screen.queryByText("AUTOMATIONS$DETAIL$PLUGINS"),
     ).not.toBeInTheDocument();
+  });
+
+  it("shows the agent profile and the LLM profile it brings", () => {
+    render(
+      <ActionSection
+        automation={{
+          ...automation,
+          prompt: null,
+          model: null,
+          agent_profile_id: "agent-reviewer",
+        }}
+      />,
+    );
+
+    expect(
+      screen.getByTestId("automation-agent-profile-name"),
+    ).toHaveTextContent("Reviewer");
+    expect(
+      screen.getByTestId("automation-agent-profile-llm"),
+    ).toHaveTextContent("fast");
+    expect(
+      screen.getByText("AUTOMATIONS$DETAIL$FROM_AGENT_PROFILE"),
+    ).toBeInTheDocument();
+  });
+
+  it("names the active LLM profile for an agent profile without its own", () => {
+    render(
+      <ActionSection
+        automation={{ ...automation, agent_profile_id: "agent-plain" }}
+      />,
+    );
+
+    expect(
+      screen.getByTestId("automation-agent-profile-llm"),
+    ).toHaveTextContent("everyday");
+  });
+
+  it("flags a profile the library no longer has", () => {
+    render(
+      <ActionSection
+        automation={{ ...automation, agent_profile_id: "agent-gone" }}
+      />,
+    );
+
+    expect(
+      screen.getByTestId("automation-agent-profile-name"),
+    ).toHaveTextContent("AUTOMATIONS$UNAVAILABLE_AGENT_PROFILE");
   });
 });

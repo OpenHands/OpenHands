@@ -1862,6 +1862,136 @@ describe("AutomationSetupPanel", () => {
     expect(mockNavigate).toHaveBeenCalledWith("/automations/automation-custom");
   });
 
+  describe("agent profile or LLM profile", () => {
+    const withCapabilities = (features: string[]) =>
+      vi.mocked(useDeploymentCapabilities).mockReturnValue({
+        data: {
+          ready: true,
+          features,
+          triggerKinds: ["cron"],
+          eventSources: [],
+          eventTypes: [],
+          triggers: {},
+        },
+        isLoading: false,
+      } as never);
+
+    beforeEach(() => {
+      vi.mocked(AutomationService.uploadAutomationTarball).mockResolvedValue(
+        "oh-internal://uploads/custom-archive",
+      );
+      vi.mocked(AutomationService.createAutomationDraft).mockResolvedValue({
+        id: "automation-custom",
+      });
+    });
+
+    it("locks the LLM profile to the agent profile's and sends only the agent profile", async () => {
+      withCapabilities(["agentProfiles"]);
+      const user = userEvent.setup();
+      renderPanel({ prompt: "Run a custom security check", kind: "custom" });
+
+      await user.click(screen.getByTestId("automation-setup-agent-profile"));
+      await user.click(
+        screen.getByTestId(
+          "automation-setup-agent-profile-option-agent-reviewer",
+        ),
+      );
+
+      const modelPill = screen.getByTestId("automation-setup-model");
+      expect(modelPill).toHaveTextContent("fast");
+      expect(modelPill).toHaveAttribute("aria-disabled", "true");
+      await user.click(modelPill);
+      expect(
+        screen.queryByTestId("automation-setup-model-popover"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByTestId("automation-setup-model-lock"),
+      ).toHaveAccessibleName("AUTOMATION_SETUP$LLM_PROFILE_SET_BY_AGENT");
+
+      await user.click(screen.getByTestId("automation-setup-create"));
+      await waitFor(() =>
+        expect(AutomationService.createAutomationDraft).toHaveBeenCalled(),
+      );
+      const [body] = vi.mocked(AutomationService.createAutomationDraft).mock
+        .calls[0];
+      expect(body).toMatchObject({ agent_profile_id: "agent-reviewer" });
+      expect(body).not.toHaveProperty("model");
+    });
+
+    it("hands the LLM profile back when the agent profile is set to None", async () => {
+      withCapabilities(["agentProfiles"]);
+      const user = userEvent.setup();
+      renderPanel({ prompt: "Run a custom security check", kind: "custom" });
+
+      await user.click(screen.getByTestId("automation-setup-agent-profile"));
+      await user.click(
+        screen.getByTestId(
+          "automation-setup-agent-profile-option-agent-reviewer",
+        ),
+      );
+      await user.click(screen.getByTestId("automation-setup-agent-profile"));
+      await user.click(
+        screen.getByTestId("automation-setup-agent-profile-option-none"),
+      );
+      await user.click(screen.getByTestId("automation-setup-model"));
+      await user.click(
+        screen.getByTestId("automation-setup-model-option-fast"),
+      );
+      await user.click(screen.getByTestId("automation-setup-create"));
+
+      await waitFor(() =>
+        expect(AutomationService.createAutomationDraft).toHaveBeenCalled(),
+      );
+      const [body] = vi.mocked(AutomationService.createAutomationDraft).mock
+        .calls[0];
+      expect(body).toMatchObject({ model: "fast" });
+      expect(body).not.toHaveProperty("agent_profile_id");
+    });
+
+    it("clears a saved model when an edit moves the automation onto an agent profile", async () => {
+      withCapabilities(["agentProfiles"]);
+      vi.mocked(AutomationService.updateAutomation).mockResolvedValue({
+        id: "auto-1",
+      } as never);
+      const user = userEvent.setup();
+      renderPanel({
+        prompt: "",
+        kind: "custom",
+        editingAutomationId: "auto-1",
+        form: { kind: "custom", name: "Nightly check", model: "fast" },
+      });
+
+      await user.click(screen.getByTestId("automation-setup-agent-profile"));
+      await user.click(
+        screen.getByTestId(
+          "automation-setup-agent-profile-option-agent-reviewer",
+        ),
+      );
+      await user.click(screen.getByTestId("automation-setup-save"));
+
+      await waitFor(() =>
+        expect(AutomationService.updateAutomation).toHaveBeenCalledWith(
+          "auto-1",
+          expect.objectContaining({
+            model: null,
+            agent_profile_id: "agent-reviewer",
+          }),
+        ),
+      );
+    });
+
+    it("offers only the LLM profile when the service cannot run scripts from an agent profile", () => {
+      withCapabilities([]);
+
+      renderPanel({ prompt: "Run a custom security check", kind: "custom" });
+
+      expect(
+        screen.queryByTestId("automation-setup-agent-profile"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("automation-setup-model")).toBeInTheDocument();
+    });
+  });
+
   describe("server-backed drafts (PR OpenHands/automation#417)", () => {
     const dispatchableDraft: AutomationDraftApiResponse = {
       id: "draft-1",

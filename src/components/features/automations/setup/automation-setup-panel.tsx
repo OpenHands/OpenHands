@@ -68,6 +68,7 @@ import { OptionalTag } from "#/components/features/settings/optional-tag";
 import {
   AutomationSetupPromptStack,
   SetupModelPill,
+  SetupProfilePickers,
 } from "#/components/features/automations/setup/automation-setup-prompt-stack";
 import { ContextMenuListItem } from "#/components/features/context-menu/context-menu-list-item";
 import { formatTriggerSourceLabel } from "#/components/features/home/featured-automations/automation-run-health";
@@ -140,6 +141,7 @@ const DEFAULT_CUSTOM_SCHEDULE = "0 9 * * *";
 const DEFAULT_EVENT_SOURCE = "github";
 // Capability feature: preset repositories can be changed with PATCH.
 const REPO_UPDATE_FEATURE = "repoUpdate";
+const AGENT_PROFILES_FEATURE = "agentProfiles";
 /** Used when the deployment has not advertised its event sources yet. */
 const FALLBACK_EVENT_SOURCES = ["github", "gitlab", "slack", "linear", "jira"];
 const DEFAULT_EVENT_KEY = "issue_comment.created";
@@ -1038,6 +1040,15 @@ export function AutomationSetupPanel({
   const hasExistingCustomBundle = Boolean(
     isEditingExisting && kind === "custom" && existingCustomTarballPath.trim(),
   );
+  // Only uploaded-script automations run from an agent profile; the prompt
+  // and plugin presets reject the field (OpenHands/automation#615 tracks it).
+  const canSelectAgentProfile =
+    kind === "custom" &&
+    (deploymentCapabilities.data?.features ?? []).includes(
+      AGENT_PROFILES_FEATURE,
+    );
+  const selectedAgentProfileId =
+    (canSelectAgentProfile && agentProfileId.trim()) || null;
 
   useEffect(() => {
     if (isEventTestPayloadDirty) return;
@@ -1341,7 +1352,12 @@ export function AutomationSetupPanel({
       tarball_path: tarballPath,
       entrypoint: entrypoint.trim(),
       setup_script_path: setupScriptPath.trim(),
-      ...(model.trim() ? { model: model.trim() } : {}),
+      // An agent profile brings its own LLM profile; the service refuses both.
+      ...(selectedAgentProfileId
+        ? { agent_profile_id: selectedAgentProfileId }
+        : model.trim()
+          ? { model: model.trim() }
+          : {}),
       ...(showTimeout && timeoutSeconds.trim()
         ? { timeout: Number(timeoutSeconds) }
         : {}),
@@ -1813,9 +1829,14 @@ export function AutomationSetupPanel({
       timeout:
         showTimeout && timeoutSeconds.trim() ? Number(timeoutSeconds) : null,
     };
-    if (kind === "custom")
-      body.agent_profile_id = agentProfileId.trim() || null;
-    else body.prompt = prompt.trim();
+    if (kind === "custom") {
+      // Without the capability the picker is hidden; keep the stored profile.
+      body.agent_profile_id = canSelectAgentProfile
+        ? selectedAgentProfileId
+        : agentProfileId.trim() || null;
+      // Clear a saved model when a profile replaces it.
+      if (selectedAgentProfileId) body.model = null;
+    } else body.prompt = prompt.trim();
     const repositories = parseAutomationSetupRepositories(repository);
     if (
       repositoriesEditable &&
@@ -2333,7 +2354,17 @@ export function AutomationSetupPanel({
                           />
                         )}
                       </SetupKindCrossfade>
-                      {kind === "custom" ? (
+                      {kind === "custom" && canSelectAgentProfile ? (
+                        <SetupProfilePickers
+                          model={model}
+                          onModelChange={(value) => updateField("model", value)}
+                          agentProfileId={agentProfileId}
+                          onAgentProfileChange={(value) =>
+                            updateField("agentProfileId", value)
+                          }
+                        />
+                      ) : null}
+                      {kind === "custom" && !canSelectAgentProfile ? (
                         <SetupModelPill
                           value={model}
                           onChange={(value) => updateField("model", value)}
