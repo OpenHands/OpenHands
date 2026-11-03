@@ -202,9 +202,9 @@ test.describe("Windows known issues", () => {
         .click();
       await page.getByTestId("conversation-tabs-menu-open-planner").click();
     }
-    await expect(
-      page.getByRole("heading", { name: PLAN_HEADING }),
-    ).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("heading", { name: PLAN_HEADING })).toBeVisible(
+      { timeout: 20_000 },
+    );
   });
 
   test("an automation run completes (#15509)", async ({ page, request }) => {
@@ -282,7 +282,9 @@ test.describe("Windows known issues", () => {
         if (runs.some((r) => r.status === "COMPLETED")) break;
       }
       const summary = runs
-        .map((r) => `${r.status}${r.error_detail ? ` (${r.error_detail})` : ""}`)
+        .map(
+          (r) => `${r.status}${r.error_detail ? ` (${r.error_detail})` : ""}`,
+        )
         .join(", ");
       expect(
         runs.some((r) => r.status === "COMPLETED"),
@@ -305,9 +307,9 @@ test.describe("Windows known issues", () => {
       process.env.MOCK_LLM_BROWSER_TOOLS !== "1",
       "browser tools are disabled for this stack",
     );
-    // #16551 did not reproduce on windows-latest (the browser started in
-    // about 25 s, under browser_use's 30 s limit), so this passes there and
-    // guards the Windows browser path.
+    // #16551: the Windows workflow blocks remote debugging in system Chrome,
+    // which the SDK launches before Playwright's Chromium, so this fails
+    // there until the SDK prefers Playwright's Chromium.
     test.setTimeout(240_000);
     await ensureMockLLMProfile(page);
 
