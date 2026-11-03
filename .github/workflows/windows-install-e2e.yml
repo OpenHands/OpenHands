@@ -7,47 +7,16 @@ name: Windows npm install E2E
 # server, so no credentials are needed. See OpenHands/OpenHands#19119.
 #
 # The same job also runs one test per open Windows issue, so it stays red
-# until each is fixed and a fix PR shows its test turn green in the report.
-# The paths below include the source files those fixes are expected to touch.
+# until each is fixed; the per-test results show which test failed.
+#
+# It runs only on the release-please PR (the only PR that changes
+# .release-please-manifest.json) on every update, plus manual dispatch.
+# To check a fix branch, dispatch it on that branch.
 
 on:
   pull_request:
     paths:
-      - .github/workflows/windows-install-e2e.yml
-      - playwright.windows-install.config.ts
-      - bin/**
-      - config/defaults.json
-      - package.json
-      - package-lock.json
-      - scripts/dev-*.mjs
-      - scripts/ingress.mjs
-      - scripts/static-server.mjs
-      - scripts/runtime-services-info.mjs
-      - tools/**
-      - tests/e2e/mock-llm/**
-      # Files tab listing (#17773)
-      - src/hooks/query/use-workspace-files.ts
-      - src/utils/workspace-file-discovery.ts
-      # Planner tab path check (#17774)
-      - src/api/conversation-service/agent-server-conversation-service.api.ts
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/windows-install-e2e.yml
-      - playwright.windows-install.config.ts
-      - bin/**
-      - config/defaults.json
-      - package.json
-      - package-lock.json
-      - scripts/dev-*.mjs
-      - scripts/ingress.mjs
-      - scripts/static-server.mjs
-      - scripts/runtime-services-info.mjs
-      - tools/**
-      - tests/e2e/mock-llm/**
-      - src/hooks/query/use-workspace-files.ts
-      - src/utils/workspace-file-discovery.ts
-      - src/api/conversation-service/agent-server-conversation-service.api.ts
+      - .release-please-manifest.json
   workflow_dispatch:
 
 concurrency:
