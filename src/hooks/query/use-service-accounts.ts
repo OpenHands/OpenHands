@@ -1,9 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { listCloudServiceAccounts } from "#/api/cloud/organization-service.api";
-import { fetchCloudIntegrationsConfig } from "#/api/cloud/settings-service.api";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { SERVICE_ACCOUNT_RUN_AS_FEATURE } from "#/constants/automation-form";
 import { useAutomationPermissions } from "#/hooks/use-automation-permissions";
+import { useCloudIntegrationsConfig } from "./use-cloud-integrations-config";
 import { useDeploymentCapabilities } from "./use-manifest-capabilities";
 
 /**
@@ -19,18 +19,8 @@ export function useServiceAccountRunAsEnabled(): boolean {
     backend.kind === "cloud" && !!orgId && !!userId && orgId !== userId;
   // Skip the capabilities request where the answer would be discarded.
   const capabilities = useDeploymentCapabilities({ enabled: isTeamWorkspace });
-  // Same query as `useNativeGitIntegrations`, so both share one cached request.
-  const { data: config } = useQuery({
-    queryKey: [
-      "cloud-providers-configured",
-      backend.id,
-      backend.connectionRevision ?? 0,
-    ],
-    queryFn: fetchCloudIntegrationsConfig,
+  const { data: config } = useCloudIntegrationsConfig({
     enabled: isTeamWorkspace,
-    staleTime: 1000 * 60 * 5,
-    retry: false,
-    meta: { disableToast: true },
   });
 
   if (!isTeamWorkspace) return false;
