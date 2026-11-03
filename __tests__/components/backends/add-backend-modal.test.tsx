@@ -10,7 +10,12 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MockInstance } from "vitest";
 import { __resetActiveStoreForTests } from "#/api/backend-registry/active-store";
-import { ActiveBackendProvider } from "#/contexts/active-backend-context";
+import { createMemoryRouter, Outlet, RouterProvider } from "react-router";
+import {
+  ActiveBackendProvider,
+  useActiveBackend,
+} from "#/contexts/active-backend-context";
+import { ReactRouterNavigationProvider } from "#/routes/react-router-navigation-provider";
 import {
   NavigationProvider,
   type NavigationContextValue,
@@ -720,6 +725,98 @@ describe("AddBackendModal – redirect after adding a backend", () => {
 
     // Assert
     expect(navigate).not.toHaveBeenCalled();
+  });
+});
+
+// @spec BM-002 — the redirect is asynchronous while the destination route
+// module loads. The new backend must not become active until the detail page
+// has left, or that page would address the new backend with an id it does not
+// own.
+describe("AddBackendModal – activation order after adding a backend", () => {
+  it("leaves the conversation page before the added backend becomes active", async () => {
+    // Arrange — a conversation page that records which backend is active
+    // whenever it renders, and a conversations list that is still loading.
+    const backendsSeenByConversationPage = new Set<string>();
+    let finishLoadingList = () => {};
+    const listLoaded = new Promise<void>((resolve) => {
+      finishLoadingList = resolve;
+    });
+
+    function ConversationPage() {
+      backendsSeenByConversationPage.add(useActiveBackend().backend.id);
+      return <div data-testid="conversation-page" />;
+    }
+
+    function Shell() {
+      return (
+        <ReactRouterNavigationProvider>
+          <AddBackendModal onClose={vi.fn()} />
+          <Outlet />
+        </ReactRouterNavigationProvider>
+      );
+    }
+
+    const router = createMemoryRouter(
+      [
+        {
+          path: "/",
+          Component: Shell,
+          children: [
+            {
+              path: "conversations/:conversationId",
+              Component: ConversationPage,
+            },
+            {
+              path: "conversations",
+              lazy: async () => {
+                await listLoaded;
+                return {
+                  Component: () => <div data-testid="conversations-list" />,
+                };
+              },
+            },
+          ],
+        },
+      ],
+      { initialEntries: ["/conversations/conv-on-previous-backend"] },
+    );
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ActiveBackendProvider>
+          <RouterProvider router={router} />
+        </ActiveBackendProvider>
+      </QueryClientProvider>,
+    );
+    await screen.findByTestId("conversation-page");
+    const [previousBackendId] = backendsSeenByConversationPage;
+    const readActiveBackendId = () =>
+      JSON.parse(
+        window.localStorage.getItem("openhands-active-backend") ?? "null",
+      )?.backendId ?? previousBackendId;
+
+    // Act — connect a second backend while the list route is still loading.
+    const user = await selectAgentServer();
+    await user.type(screen.getByTestId("add-backend-name"), "Local Extra");
+    await user.type(
+      screen.getByTestId("add-backend-host"),
+      "http://127.0.0.1:18002",
+    );
+    await user.click(screen.getByTestId("add-backend-submit"));
+    await waitFor(() => expect(router.state.navigation.state).toBe("loading"));
+
+    // Assert — the page is still mounted, so the previous backend stays active.
+    expect(screen.getByTestId("conversation-page")).toBeInTheDocument();
+    expect(readActiveBackendId()).toBe(previousBackendId);
+
+    // Act — the list route finishes loading and the redirect lands.
+    finishLoadingList();
+    await screen.findByTestId("conversations-list");
+
+    // Assert — only now does the added backend take over.
+    await waitFor(() =>
+      expect(readActiveBackendId()).not.toBe(previousBackendId),
+    );
+    expect([...backendsSeenByConversationPage]).toEqual([previousBackendId]);
   });
 });
 

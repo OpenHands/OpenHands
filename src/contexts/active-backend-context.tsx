@@ -33,7 +33,14 @@ interface ActiveBackendContextValue {
   backends: Backend[];
   active: ResolvedActiveBackend;
   setActive: (backendId: string, orgId?: string | null) => void;
-  addBackend: (backend: BackendInput) => Backend;
+  /**
+   * Registers a backend and, unless `activate` is false, switches to it.
+   * Callers that defer the switch must follow up with `setActive`.
+   */
+  addBackend: (
+    backend: BackendInput,
+    options?: { activate?: boolean },
+  ) => Backend;
   updateBackend: (id: string, patch: Partial<BackendInput>) => void;
   removeBackend: (id: string) => void;
 }
@@ -123,10 +130,14 @@ export function ActiveBackendProvider({
 
   // @spec BM-001 — Auto-switch to newly connected backend
   const addBackend = React.useCallback(
-    (backend: BackendInput): Backend => {
+    (backend: BackendInput, options?: { activate?: boolean }): Backend => {
       const previousActive = getSnapshot().active;
       const next: Backend = { ...backend, id: generateId() };
       const list = [...getRegisteredBackends(), next];
+      if (options?.activate === false) {
+        setRegisteredBackends(list);
+        return next;
+      }
       applyTelemetrySelectionBoundary(previousActive, {
         backend: next,
         orgId: null,
