@@ -1,4 +1,8 @@
-import type { Automation, AutomationRepository } from "#/types/automation";
+import type {
+  Automation,
+  AutomationPluginSpec,
+  AutomationRepository,
+} from "#/types/automation";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -34,6 +38,35 @@ function readPresetPlugins(metadata: UnknownRecord): string[] {
     const source = readNonEmptyString(plugin.source);
     return source ? [source] : [];
   });
+}
+
+/**
+ * Read the plugin-spec payload only when the service marks this automation as
+ * plugin_spec. Invalid or older payloads keep using the existing script path.
+ */
+export function getAutomationPluginSpec(
+  automation: Pick<Automation, "preset_metadata" | "plugin_spec">,
+): AutomationPluginSpec | null {
+  const metadata = isRecord(automation.preset_metadata)
+    ? automation.preset_metadata
+    : {};
+  if (metadata.preset_type !== "plugin_spec") return null;
+
+  const payload = automation.plugin_spec;
+  if (!isRecord(payload) || !isRecord(payload.plugin)) return null;
+  const source = readNonEmptyString(payload.plugin.source);
+  if (!source) return null;
+
+  const ref = readNonEmptyString(payload.plugin.ref);
+  const repoPath = readNonEmptyString(payload.plugin.repo_path);
+  return {
+    plugin: {
+      source,
+      ...(ref && { ref }),
+      ...(repoPath && { repo_path: repoPath }),
+    },
+    config: isRecord(payload.config) ? payload.config : {},
+  };
 }
 
 /**

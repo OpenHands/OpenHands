@@ -107,6 +107,58 @@ describe("ConfigurationSection", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("renders plugin-spec source, configuration, and timeout", () => {
+    const automation: Automation = {
+      ...cronAutomation,
+      timeout: 300,
+      preset_metadata: { preset_type: "plugin_spec" },
+      plugin_spec: {
+        plugin: {
+          source: "github:openhands/pr-reviewer",
+          ref: "main",
+          repo_path: "plugins/pr-reviewer",
+        },
+        config: { event: "pull_request.opened", max_results: 12 },
+      },
+    };
+
+    render(<ConfigurationSection automation={automation} />);
+
+    expect(screen.getByTestId("automation-plugin-spec")).toHaveTextContent(
+      "github:openhands/pr-reviewer",
+    );
+    expect(screen.getByTestId("automation-plugin-spec")).toHaveTextContent(
+      "plugins/pr-reviewer",
+    );
+    expect(screen.getByTestId("automation-plugin-config")).toHaveTextContent(
+      "pull_request.opened",
+    );
+    expect(screen.getByTestId("automation-timeout")).toHaveTextContent("300");
+  });
+
+  it("expands long plugin configuration values", async () => {
+    const longValue = "qa-" + "x".repeat(120);
+    const automation: Automation = {
+      ...cronAutomation,
+      preset_metadata: { preset_type: "plugin_spec" },
+      plugin_spec: {
+        plugin: { source: "github:openhands/pr-reviewer" },
+        config: { description: longValue },
+      },
+    };
+
+    const user = userEvent.setup();
+    render(<ConfigurationSection automation={automation} />);
+
+    expect(
+      screen.getByTestId("automation-plugin-config"),
+    ).not.toHaveTextContent(longValue);
+    await user.click(screen.getByText("SETTINGS$SKILLS_SHOW_MORE"));
+    expect(screen.getByTestId("automation-plugin-config")).toHaveTextContent(
+      longValue,
+    );
+  });
+
   it("renders event trigger with source, event type, and filter", () => {
     render(<ConfigurationSection automation={eventAutomation} />);
 
@@ -156,6 +208,26 @@ describe("ConfigurationSection", () => {
     await user.click(screen.getByText("SETTINGS$SKILLS_SHOW_MORE"));
     expect(screen.getByText(longFilter)).toBeInTheDocument();
     expect(screen.getByText("SETTINGS$SKILLS_SHOW_LESS")).toBeInTheDocument();
+  });
+
+  it("renders plugin definition when its configuration is empty", () => {
+    const automation: Automation = {
+      ...cronAutomation,
+      preset_metadata: { preset_type: "plugin_spec" },
+      plugin_spec: {
+        plugin: { source: "github:openhands/pr-reviewer" },
+        config: {},
+      },
+    };
+
+    render(<ConfigurationSection automation={automation} />);
+
+    expect(screen.getByTestId("automation-plugin-spec")).toHaveTextContent(
+      "github:openhands/pr-reviewer",
+    );
+    expect(
+      screen.queryByTestId("automation-plugin-config"),
+    ).not.toBeInTheDocument();
   });
 
   it("does not render the filter field when the event trigger has no filter", () => {
