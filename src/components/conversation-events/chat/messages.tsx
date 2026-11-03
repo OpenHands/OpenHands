@@ -18,6 +18,7 @@ import {
 import { EventMessage } from "./event-message";
 import { usePlanPreviewEvents } from "./hooks/use-plan-preview-events";
 import { groupEvents } from "./group-events";
+import { getSingleToolEvent } from "./event-message-components/event-group-summary";
 import { EventGroup } from "./event-message-components/event-group";
 import { ThoughtEventMessage } from "./event-message-components/thought-event-message";
 import { getStepKey, StepDisclosureContext } from "./step-disclosure-context";
@@ -173,6 +174,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       event: OpenHandsEvent,
       index: number,
       suppressThought: boolean,
+      detailsOnly = false,
     ) => {
       const stepKey = getStepKey(event);
       return (
@@ -180,6 +182,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
           key={stepKey}
           value={{
             open: openRows.get(stepKey),
+            detailsOnly,
             setOpen: (open) => setRowOpen(stepKey, open),
           }}
         >
@@ -232,6 +235,11 @@ export const Messages: React.FC<MessagesProps> = React.memo(
             );
           }
 
+          const singleTool = getSingleToolEvent(item.events);
+          const showSingleToolDetails =
+            item.events.length === 1 &&
+            !item.session &&
+            !item.reasoning?.length;
           const groupKey =
             item.session?.id ??
             (item.reasoning?.[0] && item.reasoning[0].index <= item.startIndex
@@ -262,16 +270,19 @@ export const Messages: React.FC<MessagesProps> = React.memo(
                   isAgentRunning && itemIndex === renderedItems.length - 1
                 }
                 open={groupOpen}
-                onOpenChange={(open) =>
-                  item.session
-                    ? useSessionActivityStore
-                        .getState()
-                        .setOpen(sessionKey, item.session.id, open)
-                    : setRowOpen(`group:${groupKey}`, open)
-                }
+                onOpenChange={(open) => {
+                  if (item.session)
+                    useSessionActivityStore
+                      .getState()
+                      .setOpen(sessionKey, item.session.id, open);
+                  else setRowOpen(`group:${groupKey}`, open);
+                }}
               >
                 {item.session && (
-                  <SessionActivityDetails session={item.session} />
+                  <SessionActivityDetails
+                    session={item.session}
+                    nested={item.events.length > 0}
+                  />
                 )}
                 {[
                   ...item.events.map((event) => ({
@@ -281,6 +292,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
                       event,
                       eventIndexes.get(event)!,
                       true,
+                      event === singleTool && showSingleToolDetails,
                     ),
                   })),
                   ...(item.reasoning ?? []).map((reasoning) => ({
