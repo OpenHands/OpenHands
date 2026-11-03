@@ -1,0 +1,102 @@
+{
+  "label": "baseline",
+  "viewport": "phone",
+  "seededHistory": true,
+  "liveModel": false,
+  "probe": "read-only PerformanceObserver and input-to-second-animation-frame; includes 10ms Playwright key delay",
+  "measurement": {
+    "durationMs": 6501.400000095367,
+    "longTasks": {
+      "count": 12,
+      "median": 179,
+      "p95": 194,
+      "max": 194
+    },
+    "longTaskTotalMs": 2112,
+    "inputToSecondFrameMs": {
+      "count": 124,
+      "median": 26.300000071525574,
+      "p95": 185.09999990463257,
+      "max": 201.69999992847443
+    },
+    "frameGapMs": {
+      "count": 277,
+      "median": 16.69999999999709,
+      "p95": 33.400000000001455,
+      "max": 200
+    },
+    "domNodes": 1629,
+    "groups": 20,
+    "heapBefore": 39600000,
+    "heapAfter": 39600000,
+    "inputLength": 124,
+    "scroll": {
+      "top": 15606,
+      "height": 16256
+    }
+  },
+  "behavior": {
+    "draftMatches": true,
+    "composerFocused": true,
+    "oldestHistoryPresent": true,
+    "lastIncomingEventPresent": true
+  },
+  "typed": {
+    "elapsedMs": 4255.722833,
+    "ok": true,
+    "length": 124
+  },
+  "appends": [
+    {
+      "elapsedMs": 126.59970799999996,
+      "ok": true,
+      "status": 200
+    },
+    {
+      "elapsedMs": 128.436958,
+      "ok": true,
+      "status": 200
+    },
+    {
+      "elapsedMs": 141.79391699999996,
+      "ok": true,
+      "status": 200
+    },
+    {
+      "elapsedMs": 128.2683750000001,
+      "ok": true,
+      "status": 200
+    },
+    {
+      "elapsedMs": 150.40033399999993,
+      "ok": true,
+      "status": 200
+    },
+    {
+      "elapsedMs": 138.17154100000016,
+      "ok": true,
+      "status": 200
+    }
+  ],
+  "screenshot": {
+    "ok": true,
+    "path": "baseline-phone.png",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    }
+  },
+  "video": {
+    "ok": true,
+    "path": "baseline-phone.mp4",
+    "seconds": 7,
+    "recordedSeconds": 7,
+    "size": "390x844",
+    "fps": 10,
+    "captures": 50,
+    "changes": 23,
+    "misses": 0,
+    "capped": false,
+    "cutSeconds": 0
+  }
+}
