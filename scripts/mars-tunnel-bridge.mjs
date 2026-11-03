@@ -121,6 +121,8 @@ export function readMarsConfig(
  * @param {ReturnType<typeof createMarsApiClient>} [options.api] Override for tests
  * @param {string} [options.userDataPath] Where the credential store lives
  * @param {import("electron").SafeStorage | null} [options.safeStorage]
+ * @param {import("./mars-secret-store.mjs").SecretStore | null} [options.secrets]
+ *   Where the Agent Canvas server keeps tokens (keychain, encrypted file, memory)
  * @param {(url: string) => Promise<void>} [options.openExternal] Opens the OAuth page
  * @param {typeof ensureSessionAwake} [options.ensureAwake] Override for tests
  * @param {Record<string, string | undefined>} [options.env]
@@ -131,13 +133,15 @@ export function createMarsTunnelBridge({
   api,
   userDataPath,
   safeStorage = null,
+  secrets = null,
   openExternal = async () => {},
   ensureAwake = ensureSessionAwake,
   env = process.env,
 } = {}) {
   const config = readMarsConfig(env);
   const store =
-    credentials ?? createCredentialStore({ userDataPath, safeStorage });
+    credentials ??
+    createCredentialStore({ userDataPath, safeStorage, secrets });
   /** @param {() => string | null} getToken */
   const clientFor = (getToken) =>
     createMarsApiClient({
@@ -226,6 +230,7 @@ export function createMarsTunnelBridge({
       connections: store.list(),
       active: store.getActive(),
       isPersistent: store.isPersistent,
+      storage: store.storage,
       canUseOAuth: Boolean(config.oauthClientId),
     };
   }
@@ -242,17 +247,27 @@ export function createMarsTunnelBridge({
    * A well-formed token can still be refused by the MARS feature flippers, so
    * a new credential only sticks once a real API call has accepted it. A
    * rejected one leaves the previously active connection active.
+   *
+   * Once accepted, the account call names the team, and a team that already
+   * has a connection keeps it (see `setTeam`). A token that may not read the
+   * account keeps its label instead.
    */
   async function saveVerified(connection) {
     const previousId = store.getActive()?.id ?? null;
     const saved = store.save(connection);
+    // Ask about this token, not whichever connection is active when
+    // DigitalOcean answers: another tab or agent may switch teams meanwhile.
+    const pinned = api ?? clientFor(() => connection.token);
     try {
-      await client.verifyAccess();
+      await pinned.verifyAccess();
     } catch (error) {
-      store.remove(saved.id);
-      if (previousId) store.setActive(previousId);
+      const stillActive = store.getActive()?.id === saved.id;
+      if (!saved.reused) store.remove(saved.id);
+      if (previousId && stillActive) store.setActive(previousId);
       throw error;
     }
+    const account = await pinned.getAccount?.().catch(() => null);
+    if (account) store.setTeam(saved.id, account);
     return authState();
   }
 

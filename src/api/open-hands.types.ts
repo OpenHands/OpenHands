@@ -12,11 +12,6 @@ export interface GetVSCodeUrlResponse {
   error?: string;
 }
 
-export interface GetTrajectoryResponse {
-  trajectory: unknown[] | null;
-  error?: string;
-}
-
 export interface RepositorySelection {
   selected_repository: string | null;
   selected_branch: string | null;

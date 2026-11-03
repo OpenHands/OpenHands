@@ -749,7 +749,7 @@ export function InstallServerModal({
         data-testid="mcp-install-modal"
         data-marketplace-id={entry.id}
         onSubmit={handleSubmit}
-        className="relative bg-base-secondary p-6 rounded-xl flex flex-col gap-4 border border-border w-130 max-w-[90vw] max-h-[85vh] overflow-y-auto custom-scrollbar"
+        className="relative bg-base-secondary p-6 rounded-xl flex flex-col gap-4 border border-border w-130 extension-dialog-viewport overflow-y-auto custom-scrollbar"
       >
         <ModalCloseButton
           onClose={onClose}

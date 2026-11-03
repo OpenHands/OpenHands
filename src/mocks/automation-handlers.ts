@@ -198,7 +198,10 @@ export const AUTOMATION_HANDLERS = [
     const limit = Number(url.searchParams.get("limit") ?? "50");
     const offset = Number(url.searchParams.get("offset") ?? "0");
 
-    const all = Array.from(automations.values());
+    const tag = url.searchParams.get("tag");
+    const all = Array.from(automations.values()).filter(
+      (automation) => !tag || automation.tags?.includes(tag),
+    );
     const page = all.slice(offset, offset + limit);
 
     const response: AutomationsResponse = {
@@ -207,6 +210,21 @@ export const AUTOMATION_HANDLERS = [
     };
 
     return HttpResponse.json(response);
+  }),
+
+  // GET /api/automation/v1/tags — The org's tags with counts. Registered
+  // before /v1/:id so "tags" is not read as an automation id.
+  http.get("*/api/automation/v1/tags", async () => {
+    await delay(100);
+    const counts = new Map<string, number>();
+    automations.forEach((automation) =>
+      automation.tags?.forEach((tag) =>
+        counts.set(tag, (counts.get(tag) ?? 0) + 1),
+      ),
+    );
+    return HttpResponse.json({
+      tags: Array.from(counts, ([tag, count]) => ({ tag, count })),
+    });
   }),
 
   // GET /api/automation/v1/capabilities — What this deployment supports
@@ -564,11 +582,9 @@ export const AUTOMATION_HANDLERS = [
       conversation_id: null,
       bash_command_id: null,
       error_detail: null,
-      // A freshly dispatched run has not reported a phase yet — the service
-      // sends the fields as null rather than omitting them.
-      phase_code: null,
-      phase_label: null,
-      phase_updated_at: null,
+      // A freshly dispatched run has not reported a phase yet — the 1.9.0+
+      // service sends `current_phase: null`.
+      current_phase: null,
       started_at: new Date().toISOString(),
       completed_at: null,
     };

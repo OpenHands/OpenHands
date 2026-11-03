@@ -128,11 +128,7 @@ export function SayHelloStep({
       </form>
 
       {isPendingLaunch ? (
-        <p
-          role="status"
-          aria-live="polite"
-          className="mt-3 text-sm text-[var(--oh-muted)]"
-        >
+        <p role="status" aria-live="polite" className="mt-3 text-sm text-muted">
           {t(I18nKey.ONBOARDING$HELLO_LAUNCHING)}
         </p>
       ) : null}

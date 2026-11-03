@@ -64,7 +64,14 @@ export interface SendMessageRequest {
   content: MessageContent[];
 }
 
+export interface ConversationTitleGeneration {
+  status: "pending" | "generated" | "fallback";
+  title: string;
+  deadline_at: string;
+}
+
 export interface AppConversationStartRequest {
+  generate_title_on_submit?: boolean;
   // Re-provision an EXISTING conversation (waking a recycled sandbox) instead
   // of minting a new one. The backend keys the rebuilt conversation on this id
   // and, for ACP, resumes it from the durable event store with a bootstrap
@@ -117,6 +124,7 @@ export type AppConversationStartTaskStatus =
   | "ERROR";
 
 export interface AppConversationStartTask {
+  title_generation?: ConversationTitleGeneration | null;
   id: string;
   created_by_user_id: string | null;
   status: AppConversationStartTaskStatus;
@@ -145,6 +153,7 @@ export interface LaunchedAgentProfile {
 }
 
 export interface AppConversation {
+  title_generation?: ConversationTitleGeneration | null;
   id: string;
   created_by_user_id: string | null;
   selected_repository: string | null;
@@ -188,13 +197,17 @@ export interface AppConversation {
    * for attribution (e.g. ``origin=slack``, ``owner=alice``). Includes
    * reserved/internal keys such as ``acpserver`` — display consumers should
    * go through ``getDisplayConversationTags`` in ``agent-server-adapter.ts``
-   * rather than reading this raw. ``null``/absent for Cloud conversations
-   * and agent-servers that don't return tags.
+   * rather than reading this raw. Cloud conversations carry tags too, from
+   * the app-server's app-conversation. ``null``/absent for agent-servers
+   * that don't return tags. The sidebar's pin/archive state rides this map
+   * (see `conversation-tag-flags.ts`).
    *
-   * PATCH semantics: the agent-server replaces the **complete** ``tags`` map
-   * on every PATCH — it does not merge individual keys. A writer adding one
-   * tag must read the current map, merge, and send the full desired result,
-   * or it will silently drop every other tag (including ``acpserver``).
+   * PATCH semantics differ by backend: the agent-server replaces the
+   * **complete** ``tags`` map on every PATCH — it does not merge individual
+   * keys, so a writer adding one tag must read the current map, merge, and
+   * send the full desired result, or it will silently drop every other tag
+   * (including ``acpserver``). The Cloud app-server instead applies a merge
+   * patch (a `null` value deletes a key) and rejects server-managed keys.
    */
   tags?: Record<string, string> | null;
   llm_model: string | null;

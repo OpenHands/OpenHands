@@ -9,6 +9,12 @@ import {
 import { buildFrontendEnv } from "../../scripts/static-build.mjs";
 
 describe("dev-static CLI", () => {
+  it("parses the explicit LAN session-key opt-in", () => {
+    expect(parseArgs(["--allow-lan-session-key"]).allowLanSessionKey).toBe(
+      true,
+    );
+    expect(parseArgs([]).allowLanSessionKey).toBe(false);
+  });
   it.each([
     [["--host", "0.0.0.0"], "0.0.0.0"],
     [["-H", "::"], "::"],
@@ -38,6 +44,24 @@ describe("dev-static", () => {
         "phc_kBtz5nKmxVRRQ7HtPwr2QX9eMC5j65zE86QKocVNwb4U",
       AUTOMATION_POSTHOG_HOST: "https://us.i.posthog.com",
     });
+  });
+
+  it("allows the resolved frontend port, not a fixed 3001, in automation CORS", () => {
+    const env = buildAutomationBackendEnv(
+      {
+        agentServerPort: 18000,
+        ingressPort: 8000,
+        vitePort: 41234,
+        sessionApiKey: "shared-session-key",
+        stateDir: "/tmp/agent-canvas-state",
+      },
+      {},
+    );
+
+    expect(env.AUTOMATION_CORS_ORIGINS).toBe(
+      "http://localhost:8000,http://127.0.0.1:8000," +
+        "http://localhost:41234,http://127.0.0.1:41234",
+    );
   });
 
   it("keeps reusable frontend builds free of session credentials", () => {
@@ -71,6 +95,19 @@ describe("dev-static MARS web bridge env", () => {
       MARS_WEB_KEY: "stack-key",
     });
     expect(buildMarsWebEnv("static", config)).toEqual({ MARS_WEB: "0" });
+  });
+
+  it("tells the ingress bridge where to keep sign-ins and how to encrypt them", () => {
+    const config = {
+      sessionApiKey: "stack-key",
+      stateDir: "/state",
+      secretKey: "settings-key",
+    } as never;
+    expect(buildMarsWebEnv("ingress", config)).toEqual({
+      MARS_WEB_KEY: "stack-key",
+      MARS_STATE_DIR: "/state",
+      OH_SECRET_KEY: "settings-key",
+    });
   });
 
   it("mounts nothing when the stack has no session key", () => {

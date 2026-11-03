@@ -45,7 +45,7 @@ export function SaveAsSecretToggle({
       <span className="ml-auto flex min-w-0 max-w-full items-center gap-2">
         <code
           className={cn(
-            "min-w-0 break-all text-[11px] text-contrast font-mono tracking-tight border rounded px-1.5 py-0.5",
+            "min-w-0 break-all text-2xs text-contrast font-mono tracking-tight border rounded px-1.5 py-0.5",
             checked ? "border-contrast/25 bg-contrast/4" : "border-border",
           )}
         >

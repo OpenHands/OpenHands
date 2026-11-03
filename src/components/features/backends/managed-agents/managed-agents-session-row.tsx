@@ -87,7 +87,7 @@ export function ManagedAgentsSessionRow({
             data-testid={`managed-agents-session-status-${session.session_id}`}
           >
             {meta}
-            <span className="ml-2 font-mono text-[11px] text-text-tertiary">
+            <span className="ml-2 font-mono text-2xs text-text-tertiary">
               {shortSessionId(session)}
             </span>
           </span>
@@ -108,7 +108,7 @@ export function ManagedAgentsSessionRow({
 
           {!isConnecting && isConnected ? (
             <>
-              <span className="rounded-full border border-primary/40 px-2 py-0.5 text-[11px] uppercase tracking-wide text-primary">
+              <span className="rounded-full border border-primary/40 px-2 py-0.5 text-2xs uppercase tracking-wide text-primary">
                 {t(I18nKey.DO_AGENTS$CONNECTED)}
               </span>
               <button

@@ -168,7 +168,7 @@ export function ImportAutomationModal({
       <div
         data-testid="import-automation-modal"
         data-view={spec ? "preview" : "picker"}
-        className="relative flex max-h-[85vh] w-[min(36rem,calc(100vw-2rem))] flex-col rounded-xl border border-border bg-base-secondary"
+        className="relative flex setup-dialog-height automation-import-width flex-col rounded-xl border border-border bg-base-secondary"
       >
         <ModalCloseButton
           onClose={onClose}

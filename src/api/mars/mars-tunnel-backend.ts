@@ -31,16 +31,31 @@ export interface MarsConnection {
   kind: MarsCredentialKind;
   label: string;
   teamName: string | null;
+  /** The DigitalOcean account's email, once the bridge has looked it up. */
+  email?: string | null;
   /** ISO timestamp; OAuth grants expire after 30 days and cannot be refreshed. */
   expiresAt: string | null;
   isExpired: boolean;
+  /** False when the store refused the token; it lasts only for this run. */
+  isSaved?: boolean;
+}
+
+/** Where the bridge keeps tokens, so the UI can say whether a restart keeps them. */
+export interface MarsStorage {
+  kind: "keychain" | "encrypted-file" | "memory";
+  /** The store's own name, such as "macOS Keychain". */
+  label: string;
+  /** The machine that holds the tokens: the one running Canvas. */
+  host: string;
 }
 
 export interface MarsAuthState {
   connections: MarsConnection[];
   active: MarsConnection | null;
-  /** False when the OS keychain is unavailable, so tokens are session-only. */
+  /** False when nothing on the host keeps tokens, so they are session-only. */
   isPersistent: boolean;
+  /** Absent from older bridges, which report only `isPersistent`. */
+  storage?: MarsStorage;
   /** False when this build has no registered OAuth client; PAT still works. */
   canUseOAuth: boolean;
 }

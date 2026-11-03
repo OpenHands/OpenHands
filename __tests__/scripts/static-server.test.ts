@@ -136,6 +136,52 @@ describe("static-server.mjs", () => {
       expect(config.sessionApiKey).toBeNull();
     });
 
+    it("falls back to the SESSION_API_KEY env var when no flag is given", () => {
+      const previous = process.env.SESSION_API_KEY;
+      try {
+        process.env.SESSION_API_KEY = "env-key";
+        const config = parseArgs([]);
+        expect(config.sessionApiKey).toBe("env-key");
+      } finally {
+        if (previous === undefined) {
+          delete process.env.SESSION_API_KEY;
+        } else {
+          process.env.SESSION_API_KEY = previous;
+        }
+      }
+    });
+
+    it("prefers --session-api-key over the SESSION_API_KEY env var", () => {
+      const previous = process.env.SESSION_API_KEY;
+      try {
+        process.env.SESSION_API_KEY = "env-key";
+        const config = parseArgs(["--session-api-key", "argv-key"]);
+        expect(config.sessionApiKey).toBe("argv-key");
+      } finally {
+        if (previous === undefined) {
+          delete process.env.SESSION_API_KEY;
+        } else {
+          process.env.SESSION_API_KEY = previous;
+        }
+      }
+    });
+
+    it("ignores the SESSION_API_KEY env var in public mode (--auth-required)", () => {
+      const previous = process.env.SESSION_API_KEY;
+      try {
+        process.env.SESSION_API_KEY = "env-key";
+        const config = parseArgs(["--auth-required"]);
+        expect(config.sessionApiKey).toBeNull();
+        expect(config.authRequired).toBe(true);
+      } finally {
+        if (previous === undefined) {
+          delete process.env.SESSION_API_KEY;
+        } else {
+          process.env.SESSION_API_KEY = previous;
+        }
+      }
+    });
+
     it("defaults runtimeServicesInfo to null", () => {
       const config = parseArgs([]);
       expect(config.runtimeServicesInfo).toBeNull();
@@ -735,7 +781,7 @@ describe("static-server.mjs", () => {
       expect(response.headers.get("cache-control")).toBe("no-cache");
     });
 
-    it("does not inject the session key when bound off-loopback", async () => {
+    it("does not inject the env session key when bound off-loopback", async () => {
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
       const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
       tempDirs.push(buildDir);
@@ -746,11 +792,9 @@ describe("static-server.mjs", () => {
 
       try {
         const server = await startStaticServer({
+          ...parseArgs(["--host", "0.0.0.0"], { SESSION_API_KEY: "lan-secret" }),
           port: 0,
-          host: "0.0.0.0",
           dir: buildDir,
-          routes: {},
-          sessionApiKey: "lan-secret",
         });
         servers.push(server);
         const address = server.address();
@@ -1091,10 +1135,10 @@ describe("static-server.mjs MARS web bridge (Docker arguments)", () => {
     return `http://127.0.0.1:${address.port}`;
   }
 
-  // docker/entrypoint.sh runs `--host :: --session-api-key <key>` with no
-  // `--allow-lan-session-key`: the key is stripped from the HTML, but the
-  // opted-in bridge must still mount behind it.
-  it("mounts with MARS_WEB=1 and the entrypoint's `--host :: --session-api-key` arguments", async () => {
+  // docker/entrypoint.sh passes the key via SESSION_API_KEY with --host ::
+  // but no --allow-lan-session-key: HTML omits the key while the opted-in
+  // bridge still mounts behind it.
+  it("mounts with MARS_WEB=1 and the entrypoint's non-loopback host and key", async () => {
     vi.stubEnv("MARS_WEB", "1");
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const origin = await start({ host: "::", sessionApiKey: "docker-key" });
@@ -1133,7 +1177,7 @@ describe("static-server.mjs MARS web bridge (Docker arguments)", () => {
     expect(
       entrypoint.match(/^.*node \/opt\/agent-canvas\/static-server\.mjs/gm),
     ).toEqual([
-      "node /opt/agent-canvas/static-server.mjs",
+      'SESSION_API_KEY="$EFFECTIVE_SESSION_KEY" node /opt/agent-canvas/static-server.mjs',
       "  MARS_WEB=0 node /opt/agent-canvas/static-server.mjs",
     ]);
   });
